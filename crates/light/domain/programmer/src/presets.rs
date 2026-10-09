@@ -138,6 +138,12 @@ impl PresetAddress {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct Preset {
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub fixture_replacement_projections:
+        HashMap<FixtureId, HashMap<AttributeKey, light_core::ReplacementProgramProjection>>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub group_replacement_projections:
+        HashMap<String, HashMap<AttributeKey, light_core::ReplacementProjectionMap>>,
     /// Assigned once by portable migration/creation, preserved across edits and Move.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance_id: Option<uuid::Uuid>,
@@ -166,6 +172,13 @@ pub struct Preset {
 
 impl Preset {
     pub fn required_programming_contract(&self) -> u16 {
+        let projection_contract = if !self.fixture_replacement_projections.is_empty()
+            || !self.group_replacement_projections.is_empty()
+        {
+            light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT
+        } else {
+            0
+        };
         self.universal_values
             .values()
             .chain(self.values.values().flat_map(|v| v.values()))
@@ -173,6 +186,7 @@ impl Preset {
             .map(AttributeValue::required_programming_contract)
             .max()
             .unwrap_or(0)
+            .max(projection_contract)
     }
 
     pub fn reconcile_address(&mut self, storage_key: &str) -> Result<PresetAddress, String> {
@@ -204,6 +218,28 @@ impl Preset {
         }
         self.universal_values
             .retain(|attribute, _| family.accepts(attribute));
+        self.fixture_replacement_projections
+            .retain(|fixture, values| {
+                values.retain(|attribute, _| {
+                    family.accepts(attribute)
+                        && self
+                            .values
+                            .get(fixture)
+                            .is_some_and(|values| values.contains_key(attribute))
+                });
+                !values.is_empty()
+            });
+        self.group_replacement_projections.retain(|group, values| {
+            values.retain(|attribute, projections| {
+                family.accepts(attribute)
+                    && !projections.is_empty()
+                    && self
+                        .group_values
+                        .get(group)
+                        .is_some_and(|values| values.contains_key(attribute))
+            });
+            !values.is_empty()
+        });
     }
 
     /// Whether recall applies this preset to selected fixtures it does not name.
@@ -226,6 +262,45 @@ impl Preset {
     /// explicit per-fixture form, so deliberately different colours never auto-extend.
     pub fn validate_programming(&self) -> Result<(), light_core::programming::IntentError> {
         use light_core::programming::{ProgrammingValueScope, validate_programming_entries};
+        for (fixture, attributes) in &self.fixture_replacement_projections {
+            for (attribute, projection) in attributes {
+                projection.validate()?;
+                if *fixture != projection.source_owner
+                    || !self
+                        .values
+                        .get(fixture)
+                        .is_some_and(|values| values.contains_key(attribute))
+                {
+                    return Err(light_core::programming::IntentError(
+                        "Preset replacement projection requires its authored source address".into(),
+                    ));
+                }
+            }
+        }
+        for (group, attributes) in &self.group_replacement_projections {
+            for (attribute, projections) in attributes {
+                if !self
+                    .group_values
+                    .get(group)
+                    .is_some_and(|values| values.contains_key(attribute))
+                {
+                    return Err(light_core::programming::IntentError(
+                        "Group Preset replacement projection requires its authored source address"
+                            .into(),
+                    ));
+                }
+                for (member, projection) in projections {
+                    projection.validate()?;
+                    if *member != projection.source_owner {
+                        return Err(light_core::programming::IntentError(
+                            "Group Preset replacement projection requires its original member"
+                                .into(),
+                        ));
+                    }
+                }
+            }
+        }
+
         validate_programming_entries(ProgrammingValueScope::Universal, &self.universal_values)?;
         for values in self.values.values() {
             validate_programming_entries(ProgrammingValueScope::Fixture, values)?;
@@ -254,6 +329,11 @@ impl Preset {
     }
 
     pub fn consolidate_universal_color(&mut self) {
+        if !self.fixture_replacement_projections.is_empty()
+            || !self.group_replacement_projections.is_empty()
+        {
+            return;
+        }
         if self.family != PresetFamily::Color {
             return;
         }
@@ -320,8 +400,58 @@ impl Preset {
         {
             self.aim_at_fixture_number = None;
         }
+        // Metadata follows only the authored addresses actually replaced by this Store mode.
+        for (fixture, values) in &incoming.values {
+            if mode == PresetStoreMode::AddMissingFixtures && self.values.contains_key(fixture) {
+                continue;
+            }
+            for attribute in values.keys() {
+                let metadata = self
+                    .fixture_replacement_projections
+                    .entry(*fixture)
+                    .or_default();
+                match incoming
+                    .fixture_replacement_projections
+                    .get(fixture)
+                    .and_then(|values| values.get(attribute))
+                {
+                    Some(projection) => {
+                        metadata.insert(attribute.clone(), projection.clone());
+                    }
+                    None => {
+                        metadata.remove(attribute);
+                    }
+                }
+            }
+        }
+        for (group, values) in &incoming.group_values {
+            if mode == PresetStoreMode::AddMissingFixtures && self.group_values.contains_key(group)
+            {
+                continue;
+            }
+            for attribute in values.keys() {
+                let metadata = self
+                    .group_replacement_projections
+                    .entry(group.clone())
+                    .or_default();
+                match incoming
+                    .group_replacement_projections
+                    .get(group)
+                    .and_then(|values| values.get(attribute))
+                {
+                    Some(projection) => {
+                        metadata.insert(attribute.clone(), projection.clone());
+                    }
+                    None => {
+                        metadata.remove(attribute);
+                    }
+                }
+            }
+        }
         match mode {
             PresetStoreMode::Overwrite => {
+                self.fixture_replacement_projections = incoming.fixture_replacement_projections;
+                self.group_replacement_projections = incoming.group_replacement_projections;
                 self.values = incoming.values;
                 self.group_values = incoming.group_values;
                 self.universal_values = incoming.universal_values;

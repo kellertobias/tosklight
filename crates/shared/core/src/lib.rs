@@ -12,6 +12,11 @@ mod frame_address;
 mod physical;
 mod preset_reference;
 pub use preset_reference::{PresetValueOwner, PresetValueReference};
+mod replacement_projection;
+pub use replacement_projection::{
+    ReplacementHeadTarget, ReplacementProfileContext, ReplacementProgramProjection,
+    ReplacementProjectionMap, ReplacementRuntimeMigration,
+};
 pub mod programming;
 pub mod spatial;
 mod surface;

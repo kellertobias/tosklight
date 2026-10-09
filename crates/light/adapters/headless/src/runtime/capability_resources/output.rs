@@ -35,11 +35,19 @@ mod restore_tests;
 #[must_use]
 pub(crate) struct PreparedOutputSnapshot {
     engine: PreparedEngineSnapshot,
+    replacement_migrations: Vec<light_core::ReplacementRuntimeMigration>,
     definitions: light_dynamics::PreparedDynamicDefinitions,
     restored: Option<output_scheduler::RestoredDynamicCandidate>,
 }
 
 impl PreparedOutputSnapshot {
+    pub(in crate::runtime) fn with_replacement_migrations(
+        mut self,
+        migrations: Vec<light_core::ReplacementRuntimeMigration>,
+    ) -> Self {
+        self.replacement_migrations = migrations;
+        self
+    }
     pub(in crate::runtime) fn snapshot(&self) -> &EngineSnapshot {
         self.engine.snapshot()
     }
@@ -554,6 +562,7 @@ impl OutputResource {
             .prepare_definitions(engine.snapshot().dynamics.iter().cloned())
             .map_err(|error| EngineError::Invalid(error.to_string()))?;
         Ok(PreparedOutputSnapshot {
+            replacement_migrations: Vec::new(),
             engine,
             definitions,
             restored: None,

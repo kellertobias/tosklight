@@ -21,6 +21,7 @@ fn portable_group_master_seed_uses_lowest_physical_assignment_before_virtual() {
     engine
         .replace_snapshot(EngineSnapshot {
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 name: "Front".into(),
                 ..Default::default()
@@ -132,6 +133,7 @@ fn partial_intensity_freeze_is_not_changed_by_group_grand_master_or_blackout() {
             fixtures: vec![fixture].into(),
             playbacks: vec![group_playback(1, "front", 0.5)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 fixtures: vec![logical],
                 ..Default::default()
@@ -206,6 +208,7 @@ fn held_parameters_show_a_freeze_as_held_and_never_apply_a_master() {
                 fixtures: vec![fixture].into(),
                 playbacks: vec![group_playback(1, "front", 0.5)].into(),
                 groups: vec![GroupDefinition {
+                    replacement_projections: Default::default(),
                     id: "front".into(),
                     fixtures: vec![logical],
                     ..Default::default()
@@ -269,6 +272,7 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
         fixtures: vec![fixture].into(),
         playbacks: vec![group_playback(1, "front", 0.0)].into(),
         groups: vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "front".into(),
             fixtures: vec![logical],
             ..Default::default()
@@ -329,6 +333,7 @@ fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
             fixtures: vec![participating, ignores_grand, ignores_groups].into(),
             playbacks: vec![group_playback(1, "all", 0.25)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "all".into(),
                 fixtures: vec![participating_id, ignores_grand_id, ignores_groups_id],
                 ..Default::default()
@@ -387,12 +392,14 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
     let engine = Engine::new(programmers);
     let groups = vec![
         GroupDefinition {
+            replacement_projections: Default::default(),
             id: "all".into(),
             name: "All".into(),
             fixtures: logical_ids.clone(),
             ..Default::default()
         },
         GroupDefinition {
+            replacement_projections: Default::default(),
             id: "odd".into(),
             name: "Odd".into(),
             derived_from: Some(DerivedGroup {
@@ -402,6 +409,7 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
             ..Default::default()
         },
         GroupDefinition {
+            replacement_projections: Default::default(),
             id: "even".into(),
             name: "Even".into(),
             fixtures: logical_ids.iter().skip(1).step_by(2).copied().collect(),
@@ -488,11 +496,13 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
             playbacks: vec![group_playback(1, "front", 0.25)].into(),
             groups: vec![
                 GroupDefinition {
+                    replacement_projections: Default::default(),
                     id: "front".into(),
                     fixtures: vec![logical],
                     ..Default::default()
                 },
                 GroupDefinition {
+                    replacement_projections: Default::default(),
                     id: "unassigned".into(),
                     fixtures: vec![logical],
                     ..Default::default()
@@ -544,6 +554,7 @@ fn group_master_transition_advances_on_render_without_scheduler_updates() {
             fixtures: vec![fixture].into(),
             playbacks: vec![group_playback(1, "front", 0.25)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 fixtures: vec![logical],
                 ..Default::default()
@@ -591,6 +602,7 @@ fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
             fixtures: vec![fixture].into(),
             playbacks: vec![group_playback(1, "front", 0.25)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![logical],
@@ -733,6 +745,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
             fixtures: vec![fixture].into(),
             playbacks: vec![group_playback(1, "first", 0.5)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "first".into(),
                 name: "First".into(),
                 fixtures: vec![first],
@@ -793,6 +806,7 @@ fn masters_scale_the_default_level_of_an_unprogrammed_dimmer_and_virtual_dimmer_
             fixtures: vec![dimmer, rgb].into(),
             playbacks: vec![test_group_playback_with_master(3, "front", 0.5)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![dimmer_id, rgb_id],

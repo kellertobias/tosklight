@@ -24,6 +24,8 @@ fn a_universal_colour_reaches_selected_fixtures_the_preset_never_named() {
     let named = FixtureId::new();
     let unnamed = FixtureId::new();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         number: 1,
         universal_values: HashMap::from([(AttributeKey::color(), red())]),
@@ -51,6 +53,8 @@ fn fixture_specific_colours_never_extend_to_unrelated_fixtures() {
     let second = FixtureId::new();
     let unrelated = FixtureId::new();
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         number: 2,
         values: HashMap::from([
@@ -86,6 +90,8 @@ fn a_named_fixture_keeps_its_own_colour_over_the_universal_one() {
     let named = FixtureId::new();
     let other = FixtureId::new();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         number: 3,
         values: HashMap::from([(named, HashMap::from([(AttributeKey::color(), blue())]))]),
@@ -105,6 +111,8 @@ fn a_named_fixture_keeps_its_own_colour_over_the_universal_one() {
 #[test]
 fn a_universal_preset_without_a_selection_is_silent() {
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         number: 1,
         universal_values: HashMap::from([(AttributeKey::color(), red())]),
@@ -128,6 +136,8 @@ fn overlapping_fixture_and_group_values_have_deterministic_last_source_precedenc
     let intensity = AttributeKey::intensity();
     let pan = AttributeKey("pan".into());
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Mixed,
         aim_at_fixture_number: None,
         number: 1,
@@ -187,6 +197,8 @@ fn missing_empty_and_unresolved_groups_do_not_perturb_selection_order() {
     let second = FixtureId::new();
     let attribute = AttributeKey::intensity();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Intensity,
         aim_at_fixture_number: None,
         number: 1,
@@ -248,6 +260,8 @@ fn target_selection_expands_parents_deduplicates_unions_and_uses_desk_order() {
     let missing = FixtureId::new();
     let intensity = AttributeKey::intensity();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Mixed,
         aim_at_fixture_number: None,
         number: 1,
@@ -295,6 +309,8 @@ fn target_selection_expands_parents_deduplicates_unions_and_uses_desk_order() {
 fn target_selection_ignores_empty_values_and_empty_groups_without_warning() {
     let fixture = FixtureId::new();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         values: HashMap::from([(fixture, HashMap::new())]),
         group_values: HashMap::from([("empty".into(), HashMap::new())]),
         aim_at_fixture_number: None,
@@ -319,6 +335,8 @@ fn target_selection_is_shared_by_color_position_and_mixed_presets() {
         (PresetFamily::Mixed, AttributeKey::intensity()),
     ] {
         let preset = Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family,
             values: HashMap::from([(fixture, HashMap::from([(attribute, normalized(0.5))]))]),
             aim_at_fixture_number: None,
@@ -376,4 +394,168 @@ fn timing(mutation: &NormalProgrammerValueMutation) -> Option<NormalProgrammerVa
         | NormalProgrammerValueMutation::SetGroup { timing, .. } => Some(*timing),
         _ => None,
     }
+}
+
+fn replacement_projection(
+    source: FixtureId,
+    targets: &[FixtureId],
+) -> light_core::ReplacementProgramProjection {
+    let profile = light_core::ReplacementProfileContext {
+        profile_id: FixtureId::new(),
+        profile_revision: 1,
+        mode_id: uuid::Uuid::new_v4(),
+    };
+    light_core::ReplacementProgramProjection {
+        source_owner: source,
+        source_profile: profile.clone(),
+        source_head_id: uuid::Uuid::new_v4(),
+        target_profile: profile,
+        targets: targets
+            .iter()
+            .map(|fixture| light_core::ReplacementHeadTarget {
+                profile_head_id: uuid::Uuid::new_v4(),
+                fixture_id: *fixture,
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn replacement_projection_recall_targets_exact_selected_head_without_master_or_sibling() {
+    let source = FixtureId::new();
+    let heads = [FixtureId::new(), FixtureId::new()];
+    let attribute = AttributeKey::intensity();
+    let preset = Preset {
+        instance_id: Some(uuid::Uuid::new_v4()),
+        family: PresetFamily::Intensity,
+        values: HashMap::from([(
+            source,
+            HashMap::from([(attribute.clone(), AttributeValue::Normalized(0.4))]),
+        )]),
+        fixture_replacement_projections: HashMap::from([(
+            source,
+            HashMap::from([(attribute.clone(), replacement_projection(source, &heads))]),
+        )]),
+        ..Preset::default()
+    };
+    let selected = selection(vec![heads[1]]);
+    let planned = plan(&selected, &preset, &HashMap::new(), 0).unwrap();
+    assert_eq!(
+        fixture_writes(&planned),
+        vec![(source, "intensity".into(), AttributeValue::Normalized(0.4))]
+    );
+    let origins = replacement_value_origins(&selected, &preset, &HashMap::new());
+    assert_eq!(origins[0].2[&source].targets[0].fixture_id, heads[1]);
+    assert_eq!(origins[0].2[&source].targets.len(), 1);
+    let references = preset_value_origins(&selected, &preset, &HashMap::new(), &HashMap::new());
+    assert_eq!(
+        references[0].2.source_owner,
+        light_core::PresetValueOwner::Fixture { fixture_id: source }
+    );
+    assert!(
+        plan(&selection(vec![source]), &preset, &HashMap::new(), 0)
+            .unwrap()
+            .is_empty(),
+        "root .0 is not permission to address replacement heads"
+    );
+}
+
+#[test]
+fn replacement_projection_group_member_recall_keeps_original_rank_and_live_membership() {
+    let source = FixtureId::new();
+    let unrelated = FixtureId::new();
+    let child = FixtureId::new();
+    let attribute = AttributeKey::intensity();
+    let groups = HashMap::from([(
+        "Front".into(),
+        GroupDefinition {
+            id: "Front".into(),
+            fixtures: vec![source, unrelated],
+            ..Default::default()
+        },
+    )]);
+    let preset = Preset {
+        instance_id: Some(uuid::Uuid::new_v4()),
+        family: PresetFamily::Intensity,
+        group_values: HashMap::from([(
+            "Front".into(),
+            HashMap::from([(attribute.clone(), AttributeValue::Normalized(0.4))]),
+        )]),
+        group_replacement_projections: HashMap::from([(
+            "Front".into(),
+            HashMap::from([(
+                attribute.clone(),
+                HashMap::from([(source, replacement_projection(source, &[child]))]),
+            )]),
+        )]),
+        ..Preset::default()
+    };
+    let selected = selection(vec![child]);
+    let references = preset_value_origins(&selected, &preset, &groups, &HashMap::new());
+    assert_eq!(references[0].2.member_fixture, Some(source));
+    assert_eq!(references[0].2.sample_rank, Some((0, 2)));
+    let planned = plan(&selected, &preset, &groups, 0).unwrap();
+    assert_eq!(fixture_writes(&planned)[0].0, source);
+    let mut selected_group = selection(vec![source, unrelated]);
+    selected_group.expression = Some(SelectionExpression::LiveGroup {
+        group_id: "Front".into(),
+        rule: SelectionRule::All,
+    });
+    let origins = replacement_value_origins(&selected_group, &preset, &groups);
+    assert!(
+        matches!(&origins[0].0, light_core::PresetValueOwner::Group { group_id } if group_id == "Front")
+    );
+    assert_eq!(
+        origins[0].2.keys().copied().collect::<Vec<_>>(),
+        vec![source]
+    );
+    assert_eq!(
+        light_programmer::resolve_group("Front", &groups).unwrap(),
+        vec![source, unrelated]
+    );
+}
+
+#[test]
+fn replacement_projection_recall_orders_roots_by_selected_destinations_and_detaches_later_source() {
+    let roots = [FixtureId::new(), FixtureId::new()];
+    let children = [FixtureId::new(), FixtureId::new()];
+    let attribute = AttributeKey::intensity();
+    let mut preset = Preset {
+        values: roots
+            .iter()
+            .map(|root| (*root, HashMap::from([(attribute.clone(), normalized(0.4))])))
+            .collect(),
+        fixture_replacement_projections: roots
+            .iter()
+            .zip(children)
+            .map(|(root, child)| {
+                (
+                    *root,
+                    HashMap::from([(attribute.clone(), replacement_projection(*root, &[child]))]),
+                )
+            })
+            .collect(),
+        ..Default::default()
+    };
+    let selected = selection(vec![children[1], children[0]]);
+    let writes = fixture_writes(&plan(&selected, &preset, &HashMap::new(), 0).unwrap());
+    assert_eq!(
+        writes.iter().map(|value| value.0).collect::<Vec<_>>(),
+        vec![roots[1], roots[0]]
+    );
+    // An ordinary Group source wins over the earlier direct value at the same selected root.
+    // Its empty envelope must explicitly detach the earlier direct projection, never borrow it.
+    preset.group_values.insert(
+        "Later".into(),
+        HashMap::from([(attribute.clone(), normalized(0.7))]),
+    );
+    let groups = HashMap::from([("Later".into(), group("Later", vec![roots[0]]))]);
+    let selected = selection(vec![children[0], roots[0]]);
+    let writes = fixture_writes(&plan(&selected, &preset, &groups, 0).unwrap());
+    assert_eq!(
+        writes,
+        vec![(roots[0], "intensity".into(), normalized(0.7))]
+    );
+    let origins = replacement_value_origins(&selected, &preset, &groups);
+    assert!(origins.last().unwrap().2.is_empty());
 }

@@ -60,6 +60,7 @@ pub enum PatchFixtureUpdateAction {
     ReplaceProfile {
         profile: PatchedFixtureProfileReference,
         head_mapping: Vec<PatchHeadReplacement>,
+        root_programming_mapping: Vec<PatchRootProgramReplacement>,
     },
     SetMasters {
         group_masters_enabled: bool,
@@ -111,6 +112,15 @@ pub enum PatchFixtureUpdateAction {
 pub struct PatchHeadReplacement {
     pub fixture_id: FixtureId,
     pub target_profile_head_id: Option<Uuid>,
+}
+
+/// Migrates an existing root family source; empty destinations deliberately keep it dormant.
+/// Future root edits never inherit this correspondence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PatchRootProgramReplacement {
+    pub source_profile_head_id: Uuid,
+    pub attribute: light_core::AttributeKey,
+    pub target_profile_head_ids: Vec<Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

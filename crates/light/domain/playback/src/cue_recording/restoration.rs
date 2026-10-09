@@ -18,6 +18,8 @@ pub(super) fn regenerate_automatic_restorations(cue_list: &mut CueList) {
     strip_automatic_restorations(cue_list);
     let mut fixture_state = HashMap::new();
     let mut group_state = HashMap::new();
+    let mut fixture_projections = HashMap::new();
+    let mut group_projections = HashMap::new();
     let mut dynamic_state = HashMap::new();
     for index in 0..cue_list.cues.len() {
         // A preceding Cue-only event restores before this Cue's explicit events.
@@ -28,6 +30,7 @@ pub(super) fn regenerate_automatic_restorations(cue_list: &mut CueList) {
             .filter(|value| value.automatic_restore)
         {
             apply_fixture_changes(&mut fixture_state, std::slice::from_ref(change));
+            track_fixture_projection(&mut fixture_projections, change);
         }
         for change in cue_list.cues[index]
             .group_changes
@@ -35,6 +38,7 @@ pub(super) fn regenerate_automatic_restorations(cue_list: &mut CueList) {
             .filter(|value| value.automatic_restore)
         {
             apply_group_changes(&mut group_state, std::slice::from_ref(change));
+            track_group_projection(&mut group_projections, change);
         }
         for change in cue_list.cues[index]
             .dynamic_changes
@@ -49,11 +53,43 @@ pub(super) fn regenerate_automatic_restorations(cue_list: &mut CueList) {
             &fixture_state,
             &group_state,
             &dynamic_state,
+            &fixture_projections,
+            &group_projections,
         );
+        for change in &cue_list.cues[index].changes {
+            track_fixture_projection(&mut fixture_projections, change);
+        }
+        for change in &cue_list.cues[index].group_changes {
+            track_group_projection(&mut group_projections, change);
+        }
         apply_fixture_changes(&mut fixture_state, &cue_list.cues[index].changes);
         apply_group_changes(&mut group_state, &cue_list.cues[index].group_changes);
         apply_dynamic_changes(&mut dynamic_state, &cue_list.cues[index].dynamic_changes);
         append_restorations(cue_list, index + 1, restores);
+    }
+}
+
+fn track_fixture_projection(
+    state: &mut HashMap<AttributeAddress, Option<light_core::ReplacementProgramProjection>>,
+    change: &CueChange,
+) {
+    if change.value.is_some() {
+        state.insert(change.address(), change.replacement_projection.clone());
+    } else {
+        state.remove(&change.address());
+    }
+}
+fn track_group_projection(
+    state: &mut HashMap<GroupAddress, light_core::ReplacementProjectionMap>,
+    change: &GroupCueChange,
+) {
+    if change.value.is_some() {
+        state.insert(
+            group_address(change),
+            change.replacement_projections.clone(),
+        );
+    } else {
+        state.remove(&group_address(change));
     }
 }
 
@@ -72,14 +108,19 @@ fn restorations_after(
     fixture_state: &HashMap<AttributeAddress, AttributeValue>,
     group_state: &HashMap<GroupAddress, AttributeValue>,
     dynamic_state: &HashMap<DynamicTrackAddress, light_dynamics::DynamicSemanticValue>,
+    fixture_projections: &HashMap<
+        AttributeAddress,
+        Option<light_core::ReplacementProgramProjection>,
+    >,
+    group_projections: &HashMap<GroupAddress, light_core::ReplacementProjectionMap>,
 ) -> (Vec<CueChange>, Vec<GroupCueChange>, Vec<CueDynamicChange>) {
     let cue = &cue_list.cues[index];
     let Some(next) = cue_list.cues.get(index + 1).filter(|_| cue.cue_only) else {
         return (Vec::new(), Vec::new(), Vec::new());
     };
     (
-        fixture_restorations(cue, next, fixture_state),
-        group_restorations(cue, next, group_state),
+        fixture_restorations(cue, next, fixture_state, fixture_projections),
+        group_restorations(cue, next, group_state, group_projections),
         dynamic_restorations(cue, next, dynamic_state),
     )
 }
@@ -207,6 +248,7 @@ fn fixture_restorations(
     cue: &Cue,
     next: &Cue,
     state: &HashMap<AttributeAddress, AttributeValue>,
+    projections: &HashMap<AttributeAddress, Option<light_core::ReplacementProgramProjection>>,
 ) -> Vec<CueChange> {
     let explicit = next
         .changes
@@ -218,6 +260,11 @@ fn fixture_restorations(
         .iter()
         .filter(|change| !change.automatic_restore && !explicit.contains(&change.address()))
         .map(|change| CueChange {
+            replacement_projection: if state.contains_key(&change.address()) {
+                projections.get(&change.address()).cloned().flatten()
+            } else {
+                change.replacement_projection.clone()
+            },
             preset_reference: None,
             fixture_id: change.fixture_id,
             attribute: change.attribute.clone(),
@@ -233,6 +280,7 @@ fn group_restorations(
     cue: &Cue,
     next: &Cue,
     state: &HashMap<GroupAddress, AttributeValue>,
+    projections: &HashMap<GroupAddress, light_core::ReplacementProjectionMap>,
 ) -> Vec<GroupCueChange> {
     let explicit = next
         .group_changes
@@ -244,6 +292,14 @@ fn group_restorations(
         .iter()
         .filter(|change| !change.automatic_restore && !explicit.contains(&group_address(change)))
         .map(|change| GroupCueChange {
+            replacement_projections: if state.contains_key(&group_address(change)) {
+                projections
+                    .get(&group_address(change))
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                change.replacement_projections.clone()
+            },
             preset_reference: None,
             group_id: change.group_id.clone(),
             attribute: change.attribute.clone(),

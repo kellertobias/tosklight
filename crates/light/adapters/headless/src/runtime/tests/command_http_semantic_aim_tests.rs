@@ -4,6 +4,8 @@ use light_core::programming::{PositionIntent, TargetReference};
 
 fn legacy_aim(number: u32) -> light_programmer::Preset {
     light_programmer::Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: light_programmer::PresetFamily::Position,
         number: 7,
         aim_at_fixture_number: Some(number),

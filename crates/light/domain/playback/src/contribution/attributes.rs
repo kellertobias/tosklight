@@ -23,6 +23,7 @@ impl ContributionContext<'_> {
                 sequence_master
             };
             PlaybackContribution {
+                replacement_projection: retained.replacement_projection,
                 value,
                 family_evidence: retained.family_evidence,
                 authored_target: false,
@@ -246,6 +247,28 @@ fn attribute_contribution(
     let sequence_master = frame.master_for(snap);
     let value = apply_level_master(value, &attribute, sequence_master);
     PlaybackContribution {
+        replacement_projection: if frame
+            .compiled
+            .value(
+                fixture_id,
+                &attribute,
+                frame.target_index,
+                frame.target_tracking_wrap,
+            )
+            .is_some()
+        {
+            frame
+                .compiled
+                .replacement_projection(
+                    fixture_id,
+                    &attribute,
+                    frame.target_index,
+                    frame.target_tracking_wrap,
+                )
+                .cloned()
+        } else {
+            frame.previous_projection(fixture_id, &attribute).cloned()
+        },
         value: timed_value(frame, fixture_id, attribute, value),
         family_evidence,
         authored_target,

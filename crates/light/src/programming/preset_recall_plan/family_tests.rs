@@ -110,6 +110,8 @@ fn native_universal_spread_uses_original_source_and_predicts_each_exact_u32_and_
     let original = native_model();
     let targets = [FixtureId::new(), FixtureId::new(), FixtureId::new()];
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: light_programmer::PresetFamily::Color,
         number: 1,
         universal_values: HashMap::from([(
@@ -206,6 +208,8 @@ fn native_group_spread_materializes_only_selected_members_in_full_group_rank_dom
     let b = FixtureId::new();
     let c = FixtureId::new();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: light_programmer::PresetFamily::Color,
         number: 2,
         group_values: HashMap::from([(
@@ -324,6 +328,8 @@ fn fixture_preset_rejects_unsampled_curves_but_universal_materializes_them() {
         tilt_degrees: ScalarIntent::Value(0.0),
     }));
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         values: HashMap::from([(a, HashMap::from([(key.clone(), value.clone())]))]),
         ..Default::default()
     };

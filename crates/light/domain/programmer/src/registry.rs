@@ -481,6 +481,7 @@ impl ProgrammerRegistry {
             // Reference counts, not copies. A render reads this every frame and the operator's
             // programming can be the whole show.
             .map(|state| ProgrammerOutputState {
+                replacement_provenance: Arc::clone(&state.replacement_provenance),
                 id: state.id,
                 priority: state.priority,
                 values: Arc::clone(&state.values),
@@ -533,6 +534,7 @@ impl ProgrammerRegistry {
             };
         };
         let output_state = ProgrammerOutputState {
+            replacement_provenance: Arc::clone(&state.replacement_provenance),
             id: state.id,
             priority: state.priority,
             values: Arc::clone(&state.values),

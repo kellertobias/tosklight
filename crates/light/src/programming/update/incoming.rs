@@ -22,6 +22,21 @@ impl IncomingValue<'_> {
         }
     }
 
+    pub(super) fn replacement_projection(
+        &self,
+    ) -> Option<&light_core::ReplacementProgramProjection> {
+        match self {
+            Self::Fixture(value) => value.replacement_projection.as_ref(),
+            _ => None,
+        }
+    }
+    pub(super) fn replacement_projections(&self) -> Option<&light_core::ReplacementProjectionMap> {
+        match self {
+            Self::Group(value) => Some(&value.replacement_projections),
+            _ => None,
+        }
+    }
+
     pub(super) fn programmer_order(&self) -> u64 {
         match self {
             Self::Fixture(value) => value.programmer_order,

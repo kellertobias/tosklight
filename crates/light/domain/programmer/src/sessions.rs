@@ -28,6 +28,7 @@ impl ProgrammerRegistry {
         }
         let state = ProgrammerState {
             preset_provenance: Arc::default(),
+            replacement_provenance: Arc::default(),
             id: ProgrammerId::new(),
             session_id,
             priority: 100,
@@ -107,6 +108,7 @@ impl ProgrammerRegistry {
                     .map(|value| value.programmer_order),
             )
             .chain(state.preset_provenance.keys().copied())
+            .chain(state.replacement_provenance.keys().copied())
             .max()
             .unwrap_or(0);
         self.programmer_order

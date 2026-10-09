@@ -263,6 +263,7 @@ impl ProgrammingCueCommit {
                 .chain(self.capture.dynamic_values.iter().filter_map(|value| {
                     matches!(value.value, light_dynamics::DynamicSemanticValue::Release).then(
                         || CueChange {
+                            replacement_projection: None,
                             preset_reference: None,
                             fixture_id: value.fixture_id,
                             attribute: value.attribute.clone(),
@@ -284,6 +285,7 @@ impl ProgrammingCueCommit {
                         .group_release_values
                         .iter()
                         .map(|value| GroupCueChange {
+                            replacement_projections: Default::default(),
                             preset_reference: None,
                             group_id: value.group_id.clone(),
                             attribute: value.attribute.clone(),
@@ -322,6 +324,7 @@ fn fixture_change(value: &light_programmer::CueRecordingFixtureValue) -> CueChan
         value.value.clone(),
     );
     change.preset_reference = value.preset_reference.clone();
+    change.replacement_projection = value.replacement_projection.clone();
     change.fade_millis = value.fade_millis;
     change.delay_millis = value.delay_millis;
     change
@@ -329,6 +332,7 @@ fn fixture_change(value: &light_programmer::CueRecordingFixtureValue) -> CueChan
 
 fn group_change(value: &light_programmer::CueRecordingGroupValue) -> GroupCueChange {
     GroupCueChange {
+        replacement_projections: value.replacement_projections.clone(),
         preset_reference: value.preset_reference.clone(),
         group_id: value.group_id.clone(),
         attribute: value.attribute.clone(),

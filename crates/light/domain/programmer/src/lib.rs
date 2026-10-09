@@ -27,6 +27,7 @@ mod preset_provenance;
 mod presets;
 mod programming_validation;
 mod registry;
+mod replacement_provenance;
 mod selection;
 mod sessions;
 mod state;

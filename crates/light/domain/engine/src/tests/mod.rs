@@ -488,6 +488,7 @@ mod profile_head_colors;
 mod profile_visualization;
 
 mod patch_and_heads;
+mod replacement_projection;
 
 mod masters;
 

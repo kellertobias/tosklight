@@ -92,6 +92,8 @@ pub struct GroupDefinition {
     pub derived_from: Option<DerivedGroup>,
     pub frozen_from: Option<FrozenGroup>,
     pub programming: HashMap<AttributeKey, AttributeValue>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub replacement_projections: HashMap<AttributeKey, light_core::ReplacementProjectionMap>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -553,6 +555,18 @@ impl ProgrammerRegistry {
         state.checkpoint();
         let programmer_order = self.next_programmer_order();
         let preload = state.blind && state.preload_capture_programmer;
+        let replaced_order = if preload {
+            &state.preload_group_pending
+        } else {
+            state.group_values.as_ref()
+        }
+        .get(&group_id)
+        .and_then(|values| values.get(&attribute))
+        .map(|value| value.programmer_order);
+        if let Some(order) = replaced_order {
+            Arc::make_mut(&mut state.preset_provenance).remove(&order);
+            Arc::make_mut(&mut state.replacement_provenance).remove(&order);
+        }
         state.clear_group_release(preload, &group_id, &attribute);
         let target = if preload {
             &mut state.preload_group_pending

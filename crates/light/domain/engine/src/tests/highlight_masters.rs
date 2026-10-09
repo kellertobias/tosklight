@@ -110,6 +110,7 @@ fn highlight_scenario() -> HighlightScenario {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "1".into(),
                 name: "Master".into(),
                 fixtures: vec![physical],

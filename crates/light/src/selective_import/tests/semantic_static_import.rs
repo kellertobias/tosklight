@@ -62,6 +62,7 @@ fn static_changes(fixture: FixtureId, point: FixtureId) -> Vec<CueDynamicChange>
 
 fn group_change(group: &str, fixture: FixtureId) -> GroupCueChange {
     GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: group.into(),
         attribute: key_of(ProgrammingOwner::Color),
@@ -199,6 +200,7 @@ fn expected_changes(
         .collect();
     let group_change = group_change(GROUP, collision.fixture.fixture_id);
     let group_change = GroupCueChange {
+        replacement_projections: Default::default(),
         group_id: group.into(),
         value: group_change.value.as_ref().map(|value| remap(value, ids)),
         ..group_change

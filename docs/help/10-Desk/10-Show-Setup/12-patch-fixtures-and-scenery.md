@@ -202,6 +202,15 @@ programming identities even when the replacement mode orders its heads different
 remain stored, but cannot drive a missing head. New unmatched heads receive new identities.
 No correspondence is inferred from head names or indices.
 
+For an old shared physical head, choose the new destination owners separately for each
+programming family. Several destination heads may receive that existing source, or choose
+**Leave unmatched — keep dormant programming**. This correspondence applies to existing
+Preset, Cue, Group and held Programmer sources captured by this replacement. Group membership
+and its spread order remain unchanged; later membership edits still affect the Group.
+Fresh explicit master programming such as `FIXTURE 1.0` retains its ordinary master behavior.
+A saved show with these correspondences requires programming contract 4; an older engine
+must refuse to load or edit it rather than silently ignore the destinations.
+
 Review the new footprint before pressing **Set**. Root and multi-patch addresses are retained
 by split number; new splits start unpatched, and removed splits stop output. Overlaps or an
 invalid footprint reject the entire replacement. If the show changed while the dialog was

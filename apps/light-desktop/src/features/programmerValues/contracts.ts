@@ -1,3 +1,4 @@
+import type { ReplacementProgramProjection } from "../../api/generated/light-wire";
 import type {
 	ColorAdoptionInput,
 	ColorAdoptionOutcome,
@@ -20,6 +21,7 @@ export interface ProgrammerValueTiming {
 }
 
 export interface ProgrammerFixtureValue extends ProgrammerValueTiming {
+	replacementProjection?: ReplacementProgramProjection;
 	fixtureId: string;
 	attribute: string;
 	value: AttributeValue;
@@ -27,6 +29,7 @@ export interface ProgrammerFixtureValue extends ProgrammerValueTiming {
 }
 
 export interface ProgrammerGroupValue extends ProgrammerValueTiming {
+	replacementProjections?: Record<string, ReplacementProgramProjection>;
 	groupId: string;
 	attribute: string;
 	value: AttributeValue;

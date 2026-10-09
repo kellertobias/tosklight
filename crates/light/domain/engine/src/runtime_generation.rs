@@ -77,6 +77,18 @@ pub(crate) enum GroupMasterGenerationUpdate {
 }
 
 impl RuntimeGeneration {
+    pub(crate) fn replacement_destinations(
+        &self,
+        projection: &light_core::ReplacementProgramProjection,
+        attribute: &light_core::AttributeKey,
+    ) -> Vec<FixtureId> {
+        crate::replacement_projection::destinations(
+            &self.snapshot.fixtures,
+            &self.profile_projections,
+            projection,
+            attribute,
+        )
+    }
     pub(crate) fn physical_projection(
         &self,
     ) -> &crate::physical_projection::PhysicalProjectionIndex {
@@ -108,6 +120,8 @@ impl RuntimeGeneration {
             &snapshot.groups,
             &group_rankings,
             &slots,
+            &snapshot.fixtures,
+            &profile_projections,
         ));
         let point_projection = Arc::new(crate::point_projection::PointProjectionIndex::compile(
             &snapshot.fixtures,
@@ -223,6 +237,8 @@ impl RuntimeGeneration {
                 &snapshot.groups,
                 &group_rankings,
                 &slots,
+                &snapshot.fixtures,
+                &profile_projections,
             ))
         } else {
             Arc::clone(&current.group_plan)

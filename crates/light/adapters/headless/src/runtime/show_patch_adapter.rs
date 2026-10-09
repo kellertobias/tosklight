@@ -1,4 +1,5 @@
 mod errors;
+mod programming_replacement;
 
 use self::errors::{engine_error, fixture_error, store_error};
 use super::PreparedOutputSnapshot;
@@ -28,6 +29,7 @@ pub(super) struct ServerShowPatchPorts {
     state: AppState,
     current_patch_revision: Arc<RwLock<Option<u64>>>,
     activation_held: bool,
+    programming_replacement: Arc<RwLock<programming_replacement::PreparedProgrammingReplacement>>,
 }
 
 impl ServerShowPatchPorts {
@@ -36,6 +38,7 @@ impl ServerShowPatchPorts {
             state,
             current_patch_revision: Arc::new(RwLock::new(None)),
             activation_held: false,
+            programming_replacement: Arc::new(RwLock::new(Default::default())),
         }
     }
 
@@ -44,6 +47,7 @@ impl ServerShowPatchPorts {
             state,
             current_patch_revision: Arc::new(RwLock::new(None)),
             activation_held: true,
+            programming_replacement: Arc::new(RwLock::new(Default::default())),
         }
     }
 
@@ -174,6 +178,7 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         _context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
+        *self.programming_replacement.write() = Default::default();
         let unit =
             ServerActiveShowUnitOfWork::begin(&self.state, show_id, ActiveShowBackupKind::Patch)?;
         let patch_revision = unit.document().patch_revision().value();
@@ -203,6 +208,10 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         self.state
             .output
             .prepare_snapshot(snapshot)
+            .map(|prepared| {
+                prepared
+                    .with_replacement_migrations(self.programming_replacement.read().plans.clone())
+            })
             .map_err(|error| engine_error(error, self.current_patch_revision()))
     }
 
@@ -223,18 +232,45 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         prepared: Self::PreparedRuntime,
         persist: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
-        super::engine_selection_refresh::finalize_prepared_snapshot_with_selection_refresh(
-            &self.state,
-            context,
-            prepared,
-            None,
-            persist,
-        )
-        .map_err(|error| at_current_patch_revision(error, self.current_patch_revision()))
+        let committed =
+            super::engine_selection_refresh::finalize_prepared_snapshot_with_selection_refresh(
+                &self.state,
+                context,
+                prepared,
+                None,
+                || {
+                    let committed = persist()?;
+                    // The enclosing lifecycle still holds the Programmer mutation gate. Captured
+                    // exact IDs/orders cannot change between preflight and this post-commit step.
+                    for migration in &self.programming_replacement.read().programmers {
+                        self.state.programming.apply_replacement_migration_with_history(
+                            migration.before.id, &migration.current, &migration.undo, &migration.redo,
+                        ).expect("replacement programmer/history migration was validated under the held mutation boundary");
+                    }
+                    Ok(committed)
+                },
+            )
+            .map_err(|error| at_current_patch_revision(error, self.current_patch_revision()))?;
+        // Publish sparse read-model updates only after the coherent output generation is live.
+        for migration in &self.programming_replacement.read().programmers {
+            self.state
+                .programming
+                .publish_replacement_migration_values(context, &migration.before);
+        }
+        Ok(committed)
     }
 }
 
 impl ShowPatchPorts for ServerShowPatchPorts {
+    fn prepare_programming_replacements(
+        &self,
+        plans: &[light_application::PatchProgrammingReplacement],
+    ) -> Result<(), ActionError> {
+        *self.programming_replacement.write() =
+            programming_replacement::capture(&self.state, plans)?;
+        Ok(())
+    }
+
     fn resolve_profile_revision(
         &self,
         profile_id: FixtureId,

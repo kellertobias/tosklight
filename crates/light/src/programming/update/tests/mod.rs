@@ -38,6 +38,7 @@ pub(super) fn fixture_update(
     programmer_order: u64,
 ) -> ProgrammerFixtureUpdate {
     ProgrammerFixtureUpdate {
+        replacement_projection: None,
         preset_reference: None,
         fixture_id,
         attribute: attribute(name),
@@ -132,3 +133,5 @@ pub(super) fn stored_value(cue: &Cue, fixture_id: FixtureId, name: &str) -> Opti
         .and_then(|change| change.value.as_ref())
         .and_then(AttributeValue::normalized)
 }
+
+mod replacement_cases;

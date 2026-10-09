@@ -1,3 +1,4 @@
+import type { ReplacementProgramProjection } from "./generated/light-wire";
 import type { PresetFamily } from "../presetFamilies";
 import type { GroupSpatialSelectionMapping } from "./generated/light-wire";
 import type { ShowEntry } from "./types/desk";
@@ -316,7 +317,12 @@ export interface TextDocument {
 }
 
 export interface MvrImportPreview {
-    profile_conflicts?: Array<{profile_id:string;revision:number;name:string;fixtures:string[]}>;
+	profile_conflicts?: Array<{
+		profile_id: string;
+		revision: number;
+		name: string;
+		fixtures: string[];
+	}>;
 	token: string;
 	fixtures: Array<{
 		uuid: string;
@@ -373,6 +379,10 @@ export interface StoredGroup {
 	source?: GroupFixtureSource;
 	mapping?: GroupSpatialSelectionMapping;
 	programming?: Record<string, unknown>;
+	replacement_projections?: Record<
+		string,
+		Record<string, ReplacementProgramProjection>
+	>;
 	derived_from?: {
 		source_group_id: string;
 		rule: { type: string; n?: number; offset?: number };
@@ -400,6 +410,14 @@ export type GroupFixtureSource =
 	| { type: "references"; references: GroupReference[] };
 
 export interface StoredPreset {
+	fixture_replacement_projections?: Record<
+		string,
+		Record<string, ReplacementProgramProjection>
+	>;
+	group_replacement_projections?: Record<
+		string,
+		Record<string, Record<string, ReplacementProgramProjection>>
+	>;
 	/** Legacy derived Aim source; semantic recording stores Position directly. */
 	aim_at_fixture_number?: number | null;
 	instance_id?: string | null;

@@ -59,7 +59,9 @@ pub const PROGRAMMING_CONTRACT_VERSION: u16 = 1;
 pub const LIVE_PRESET_REFERENCE_CONTRACT: u16 = 2;
 /// Independent Cuelist numbering, distinct from physical Playback definitions.
 pub const INDEPENDENT_CUELIST_POOL_CONTRACT: u16 = 3;
-pub const SUPPORTED_PROGRAMMING_CONTRACT: u16 = INDEPENDENT_CUELIST_POOL_CONTRACT;
+/// Explicit operator-consented projection of already-authored replacement programming.
+pub const REPLACEMENT_PROGRAM_PROJECTION_CONTRACT: u16 = 4;
+pub const SUPPORTED_PROGRAMMING_CONTRACT: u16 = REPLACEMENT_PROGRAM_PROJECTION_CONTRACT;
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]

@@ -9,7 +9,15 @@ impl crate::ActivePlayback {
             .iter()
             .flat_map(|hold| hold.contributions.iter())
             .chain(self.deleted_cue_transition_source.iter().flatten())
-            .map(|value| value.value.required_programming_contract())
+            .map(|value| {
+                value.value.required_programming_contract().max(
+                    if value.replacement_projection.is_some() {
+                        light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT
+                    } else {
+                        0
+                    },
+                )
+            })
             .max()
             .unwrap_or(0)
     }
@@ -42,6 +50,22 @@ impl CueList {
                             .filter(|change| change.preset_reference.is_some())
                             .map(|_| light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT),
                     )
+                    .chain(
+                        cue.changes
+                            .iter()
+                            .filter(|change| change.replacement_projection.is_some())
+                            .map(|_| {
+                                light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT
+                            }),
+                    )
+                    .chain(
+                        cue.group_changes
+                            .iter()
+                            .filter(|change| !change.replacement_projections.is_empty())
+                            .map(|_| {
+                                light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT
+                            }),
+                    )
                     .max()
                     .unwrap_or(0)
             })
@@ -60,6 +84,19 @@ impl CueList {
     pub fn validate_programming(&self) -> Result<(), IntentError> {
         for cue in &self.cues {
             for change in &cue.changes {
+                if let Some(projection) = &change.replacement_projection {
+                    projection.validate()?;
+                    if projection.source_owner != change.fixture_id
+                        && !projection
+                            .targets
+                            .iter()
+                            .any(|target| target.fixture_id == change.fixture_id)
+                    {
+                        return Err(IntentError(
+                            "replacement projection requires its authored source value".into(),
+                        ));
+                    }
+                }
                 if let Some(reference) = &change.preset_reference {
                     reference.validate(&change.attribute)?;
                     if change.value.is_none() {
@@ -70,6 +107,12 @@ impl CueList {
                 }
             }
             for change in &cue.group_changes {
+                for (member, projection) in &change.replacement_projections {
+                    projection.validate()?;
+                    if *member != projection.source_owner {
+                        return Err(IntentError("Group replacement projection requires its original member and authored source value".into()));
+                    }
+                }
                 if let Some(reference) = &change.preset_reference {
                     reference.validate(&change.attribute)?;
                     if change.value.is_none() {

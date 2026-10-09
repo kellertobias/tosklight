@@ -55,6 +55,7 @@ fn invalid_snapshot_preparation_does_not_change_live_state() {
     engine.replace_snapshot(snapshot(1)).unwrap();
     let invalid = EngineSnapshot {
         groups: vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "invalid".into(),
             name: "Invalid".into(),
             ..GroupDefinition::default()
@@ -193,6 +194,7 @@ fn reassignment_releases_the_final_reference_to_the_old_target() {
 #[test]
 fn final_group_assignment_removes_transient_master_state() {
     let group = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "front".into(),
         name: "Front".into(),
         ..GroupDefinition::default()

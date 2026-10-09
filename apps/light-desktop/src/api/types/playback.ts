@@ -1,5 +1,6 @@
 import type {
 	CueTimingRuntimeProjection,
+	ReplacementProgramProjection,
 	PlaybackCueTransition as GeneratedPlaybackCueTransition,
 } from "../generated/light-wire";
 import type { SpeedSnapshot } from "./configuration";
@@ -34,6 +35,7 @@ export interface Cue {
 	trigger: { type: string; [key: string]: unknown };
 	changes: Array<{
 		preset_reference?: PresetValueReference | null;
+		replacement_projection?: ReplacementProgramProjection | null;
 		fixture_id: string;
 		attribute: string;
 		value: AttributeValue | null;
@@ -43,6 +45,7 @@ export interface Cue {
 	}>;
 	group_changes?: Array<{
 		preset_reference?: PresetValueReference | null;
+		replacement_projections?: Record<string, ReplacementProgramProjection>;
 		group_id: string;
 		attribute: string;
 		value: AttributeValue | null;

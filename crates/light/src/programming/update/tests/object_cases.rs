@@ -4,6 +4,8 @@ use super::*;
 fn preset_update_existing_and_add_new_follow_exact_addresses() {
     let fixtures = [fixture(1), fixture(2), fixture(3), fixture(4)];
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Color 1".into(),
         family: light_programmer::PresetFamily::Color,
@@ -119,6 +121,8 @@ fn group_add_new_preserves_order_and_existing_only_never_mutates_membership() {
 fn stale_and_no_op_updates_produce_no_mutation_plan() {
     let fixture = fixture(1);
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Intensity".into(),
         family: light_programmer::PresetFamily::Intensity,
@@ -169,6 +173,8 @@ fn stale_and_no_op_updates_produce_no_mutation_plan() {
 fn preset_update_ignores_attributes_outside_the_stored_family() {
     let fixture = fixture(1);
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Color".into(),
         family: light_programmer::PresetFamily::Color,

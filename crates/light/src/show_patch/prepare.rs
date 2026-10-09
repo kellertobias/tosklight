@@ -91,6 +91,7 @@ pub(super) fn prepare_patch<P: ShowPatchPorts>(
     if staged.is_empty() {
         return staged.noop_change(document).map(PreparedPatch::Noop);
     }
+    ports.prepare_programming_replacements(&staged.programming_replacements)?;
     let transaction = staged.take_transaction();
     let compile_started = Instant::now();
     let candidate = prepare_show_candidate(document, transaction);
@@ -118,6 +119,8 @@ pub(crate) struct StagedPatch {
     modes: ResolvedModes,
     pruned_groups: Vec<String>,
     command: PatchFixturesCommand,
+    programming_objects: BTreeSet<PortableShowObjectKey>,
+    programming_replacements: Vec<super::PatchProgrammingReplacement>,
 }
 
 fn stage_patch(
@@ -142,6 +145,14 @@ fn stage_patch(
     stage_records(&mut transaction, &fixtures);
     let removed = stage_removals(&stored, &mut transaction, &command.remove_fixture_ids);
     let pruned_groups = stage_group_pruning(document, &mut transaction, &removed);
+    let projection = document.candidate(&transaction).map_err(candidate_error)?;
+    let programming_replacements =
+        super::programming_replacement::build(document, projection, command, &fixtures)?;
+    let programming_objects = super::programming_replacement::stage(
+        document,
+        &mut transaction,
+        &programming_replacements,
+    )?;
     if !transaction.is_empty() {
         transaction.mark_patch_changed();
     }
@@ -151,6 +162,8 @@ fn stage_patch(
         removed,
         modes,
         pruned_groups,
+        programming_objects,
+        programming_replacements,
         command: assigned_command,
     })
 }
@@ -163,7 +176,9 @@ pub(crate) fn stage_patch_command<P: ShowPatchPorts>(
     ports: &P,
 ) -> Result<StagedPatch, ActionError> {
     let plan = plan_patch(document, command, ports)?;
-    stage_patch(document, command, plan)
+    let staged = stage_patch(document, command, plan)?;
+    ports.prepare_programming_replacements(&staged.programming_replacements)?;
+    Ok(staged)
 }
 
 impl StagedPatch {
@@ -196,15 +211,46 @@ impl StagedPatch {
         projection: PortableShowCandidate<'_>,
         extra: &BTreeSet<PortableShowObjectKey>,
     ) -> Result<(PatchChange, Vec<ActiveShowObjectChange>), ActionError> {
+        let mut allowed = extra.clone();
+        allowed.extend(self.programming_objects.iter().cloned());
         ensure_patch_scoped_candidate(
             document,
             projection,
             &self.command,
             &self.pruned_groups,
-            extra,
+            &allowed,
         )?;
         let change = build_change(projection, &self.fixtures, &self.removed, &self.modes)?;
-        let group_changes = pruned_group_changes(projection, &self.pruned_groups)?;
+        let mut group_changes = pruned_group_changes(projection, &self.pruned_groups)?;
+        for key in &self.programming_objects {
+            let kind = match key.kind() {
+                "group" => ActiveShowObjectKind::Group,
+                "preset" => ActiveShowObjectKind::Preset,
+                "cue_list" => ActiveShowObjectKind::CueList,
+                _ => unreachable!(),
+            };
+            if group_changes
+                .iter()
+                .any(|change| change.object_id == key.id() && change.kind == kind)
+            {
+                continue;
+            }
+            let object = projection.object(key.kind(), key.id()).ok_or_else(|| {
+                ActionError::new(
+                    ActionErrorKind::Internal,
+                    "replacement source object is missing",
+                )
+            })?;
+            group_changes.push(
+                ActiveShowObjectChange::present(
+                    kind,
+                    key.id().to_owned(),
+                    object.revision(),
+                    object.body().clone(),
+                )
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))?,
+            );
+        }
         Ok((change, group_changes))
     }
 }

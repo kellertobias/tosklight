@@ -23,6 +23,8 @@ pub use frame_token::{CapturedFrameLane, CapturedFrameToken};
 mod frame_values;
 mod group_plan;
 mod group_programming;
+mod replacement_projection;
+pub use replacement_projection::ReplacementDestinationPlan;
 mod lifecycle;
 mod model;
 mod native_position_projection;

@@ -236,9 +236,9 @@ pub use show_patch::{
     PatchChange, PatchFixtureAxis, PatchFixtureCandidate, PatchFixtureProjection,
     PatchFixtureUpdateAction, PatchFixtureUpdateIntent, PatchFixturesCommand, PatchFixturesResult,
     PatchHeadReplacement, PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase,
-    PatchPlacementIntent, PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
-    PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
-    ShowPatchPorts, ShowPatchService,
+    PatchPlacementIntent, PatchProfileRevisionProjection, PatchProgrammingReplacement,
+    PatchRootProgramReplacement, PatchSnapshot, PatchSplitPlacementIntent, PatchSplitPlacementMode,
+    PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent, ShowPatchPorts, ShowPatchService,
 };
 pub use show_sync::{
     ShowSyncAppliedObject, ShowSyncCommand, ShowSyncConflict, ShowSyncConflictReason,

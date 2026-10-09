@@ -5,6 +5,7 @@ mod native_sources;
 mod objects;
 mod patch;
 mod prepare;
+mod replacement_projection;
 
 #[cfg(test)]
 mod tests;
@@ -41,6 +42,7 @@ pub(crate) struct ShowCompileDirty {
 pub(crate) fn compile_show_candidate(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<EngineSnapshot, ActionError> {
+    replacement_projection::validate(candidate)?;
     let fixtures = patch::compile_patch(candidate)?;
     let cue_lists = objects::decode_cue_lists(candidate)?;
     let groups = objects::decode_groups(candidate)?;
@@ -95,6 +97,9 @@ fn compile_show_candidate_incremental(
     previous: &EngineSnapshot,
     dirty: ShowCompileDirty,
 ) -> Result<EngineSnapshot, ActionError> {
+    if dirty.cue_lists || dirty.presets || dirty.groups {
+        replacement_projection::validate(candidate)?;
+    }
     let mut snapshot = previous.clone();
     snapshot.revision = candidate.revision().value();
 
@@ -120,7 +125,7 @@ fn compile_show_candidate_incremental(
     {
         snapshot.cue_lists = objects::decode_cue_lists(candidate)?.into();
     }
-    if dirty.dynamics || dirty.presets || dirty.groups {
+    if dirty.dynamics || dirty.presets || dirty.groups || dirty.cue_lists {
         let groups = if dirty.groups {
             objects::decode_groups(candidate)?
         } else {

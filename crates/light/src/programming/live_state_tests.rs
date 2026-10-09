@@ -37,6 +37,8 @@ mod preset_recall;
 mod preset_recording;
 #[path = "live_state_tests/priority.rs"]
 mod priority;
+#[path = "live_state_tests/replacement_publication.rs"]
+mod replacement_publication;
 #[path = "live_state_tests/routing.rs"]
 mod routing;
 #[path = "live_state_tests/selection_refresh.rs"]

@@ -134,6 +134,7 @@ fn validate_fixture_update(action: &PatchFixtureUpdateAction) -> Result<(), Acti
         PatchFixtureUpdateAction::ReplaceProfile {
             profile,
             head_mapping,
+            root_programming_mapping,
         } => {
             if profile.profile_id.0.is_nil()
                 || profile.mode_id.is_nil()
@@ -142,6 +143,27 @@ fn validate_fixture_update(action: &PatchFixtureUpdateAction) -> Result<(), Acti
                 return Err(invalid(
                     "replacement profile requires non-nil IDs and a positive revision",
                 ));
+            }
+            let mut roots = std::collections::HashSet::new();
+            for mapping in root_programming_mapping {
+                if mapping.source_profile_head_id.is_nil()
+                    || mapping.attribute.0.is_empty()
+                    || !roots.insert((mapping.source_profile_head_id, mapping.attribute.clone()))
+                {
+                    return Err(invalid(
+                        "root programming mappings require unique non-nil source heads and attributes",
+                    ));
+                }
+                let mut targets = std::collections::HashSet::new();
+                if mapping
+                    .target_profile_head_ids
+                    .iter()
+                    .any(|id| id.is_nil() || !targets.insert(*id))
+                {
+                    return Err(invalid(
+                        "root programming mapping targets must be non-nil and unique",
+                    ));
+                }
             }
             let mut old = std::collections::HashSet::new();
             let mut new = std::collections::HashSet::new();

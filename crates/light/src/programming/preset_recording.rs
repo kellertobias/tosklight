@@ -71,6 +71,8 @@ impl ProgrammingPresetCommit {
 
     fn empty_target(&self) -> Preset {
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family: self.address.family,
             aim_at_fixture_number: None,
             number: self.address.number,

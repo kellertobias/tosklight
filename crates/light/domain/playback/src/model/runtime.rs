@@ -458,6 +458,7 @@ impl ActivePlayback {
 
 #[derive(Clone, Debug)]
 pub struct PlaybackContribution {
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
     pub value: TimedValue,
     pub family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
     /// Output-only proof that this value is the complete authored target endpoint. Intermediate

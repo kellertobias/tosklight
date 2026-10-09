@@ -53,6 +53,8 @@ fn universal_only(
     value: light_core::AttributeValue,
 ) -> Preset {
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         values: HashMap::new(),
         group_values: HashMap::new(),
         universal_values: HashMap::from([(key_of(owner), value)]),
@@ -256,6 +258,8 @@ fn semantic_import_undo_restores_replaced_intent_removes_added_objects_and_keeps
     // new semantic Preset is recorded. Neither is part of the import undo target.
     put_preset(&rig, UNRELATED, &unrelated_beam(false));
     let recorded = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         number: 9,
         name: "Recorded after import".into(),
         ..universal_only(

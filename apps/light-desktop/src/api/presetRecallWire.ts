@@ -1,3 +1,4 @@
+import { decodePresetReplacementFields } from "./replacementProjectionWire";
 import type {
 	PresetRecallOutcome,
 	PresetRecallRequest,
@@ -345,7 +346,11 @@ function decodePresetBody(
 	valuesAt(body.values, "$.preset.body.values");
 	if ("group_values" in body)
 		valuesAt(body.group_values, "$.preset.body.group_values");
-	return { ...body, family } as ShowObject<"preset">["body"];
+	return {
+		...body,
+		...decodePresetReplacementFields(body, "$.preset.body"),
+		family,
+	} as ShowObject<"preset">["body"];
 }
 
 function valuesAt(value: unknown, path: string) {

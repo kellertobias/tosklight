@@ -14,6 +14,7 @@ pub(super) fn prepare_preload_preset(
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,
+    programmer: &light_programmer::ProgrammerState,
 ) -> Result<PreparedPreloadTarget, ApiError> {
     let hinted_family = input.family.unwrap_or_else(|| {
         command_preset_family(&input.target_id).unwrap_or(light_programmer::PresetFamily::Mixed)
@@ -50,6 +51,7 @@ pub(super) fn prepare_preload_preset(
             attributes.insert(attribute.clone(), scoped.value.clone());
         }
     }
+    carry_preset_replacement_metadata(&mut preset, programmer, fixtures, groups);
     preset.retain_family_attributes();
     let existing = store
         .objects("preset")
@@ -97,6 +99,7 @@ pub(super) fn prepare_preload_cue(
     input: &PreloadStoreInput,
     fixtures: &[light_core::TimedValue],
     groups: &PreloadGroupValues,
+    programmer: &light_programmer::ProgrammerState,
 ) -> Result<PreparedPreloadTarget, ApiError> {
     let object = store
         .objects("cue_list")
@@ -123,18 +126,36 @@ pub(super) fn prepare_preload_cue(
         cue.changes.retain(|change| {
             change.fixture_id != value.fixture_id || change.attribute != value.attribute
         });
-        cue.changes.push(light_playback::CueChange::set(
+        let mut change = light_playback::CueChange::set(
             value.fixture_id,
             value.attribute.clone(),
             value.value.clone(),
-        ));
+        );
+        change.replacement_projection = programmer
+            .replacement_provenance
+            .get(&value.programmer_order)
+            .and_then(|map| map.get(&value.fixture_id))
+            .cloned();
+        change.preset_reference = programmer
+            .preset_provenance
+            .get(&value.programmer_order)
+            .cloned();
+        cue.changes.push(change);
     }
     for (group_id, pending) in groups {
         for (attribute, scoped) in pending {
             cue.group_changes
                 .retain(|change| change.group_id != *group_id || change.attribute != *attribute);
             cue.group_changes.push(light_playback::GroupCueChange {
-                preset_reference: None,
+                replacement_projections: programmer
+                    .replacement_provenance
+                    .get(&scoped.programmer_order)
+                    .cloned()
+                    .unwrap_or_default(),
+                preset_reference: programmer
+                    .preset_provenance
+                    .get(&scoped.programmer_order)
+                    .cloned(),
                 group_id: group_id.clone(),
                 attribute: attribute.clone(),
                 value: Some(scoped.value.clone()),

@@ -120,6 +120,22 @@ impl<'a> PlaybackFrame<'a> {
     }
 
     /// The live Position crossing a captured interrupted source was held for (TL-544 G1).
+    pub(super) fn previous_projection(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+    ) -> Option<&light_core::ReplacementProgramProjection> {
+        match &self.previous {
+            PreviousState::Tracked(index) => self
+                .compiled
+                .replacement_projection(fixture_id, attribute, *index, false),
+            PreviousState::Deleted(values) => values
+                .get(&(fixture_id, attribute.clone()))
+                .and_then(|value| value.replacement_projection.as_ref()),
+            PreviousState::Empty => None,
+        }
+    }
+
     pub(super) fn previous_pending(
         &self,
         attribute: &CompiledAttribute,

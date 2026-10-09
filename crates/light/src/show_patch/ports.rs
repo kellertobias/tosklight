@@ -26,6 +26,15 @@ pub enum PatchPerformancePhase {
 
 /// Adapters for active-show ownership, exact library reads, and live runtime installation.
 pub trait ShowPatchPorts: ActiveShowPorts {
+    /// Capture transient, generation-scoped source migrations under the active-show boundary.
+    /// Persisted programming has already been staged into the same candidate transaction.
+    fn prepare_programming_replacements(
+        &self,
+        _plans: &[super::PatchProgrammingReplacement],
+    ) -> Result<(), ActionError> {
+        Ok(())
+    }
+
     fn authorize_patch_read(&self, _context: &ActionContext) -> Result<(), ActionError> {
         Ok(())
     }

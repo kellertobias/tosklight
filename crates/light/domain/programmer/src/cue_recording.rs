@@ -39,6 +39,8 @@ impl Error for CueRecordingCaptureError {}
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueRecordingFixtureValue {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub preset_reference: Option<light_core::PresetValueReference>,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
@@ -51,6 +53,8 @@ pub struct CueRecordingFixtureValue {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CueRecordingGroupValue {
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub replacement_projections: light_core::ReplacementProjectionMap,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preset_reference: Option<light_core::PresetValueReference>,
     pub group_id: String,
@@ -114,12 +118,22 @@ fn capture(state: &ProgrammerState, requested: CueRecordingSource) -> CueRecordi
     let mut fixture_values = ordered_fixture_values(fixture_values);
     let mut group_values = ordered_group_values(group_values);
     for value in &mut fixture_values {
+        value.replacement_projection = state
+            .replacement_provenance
+            .get(&value.programmer_order)
+            .and_then(|map| map.get(&value.fixture_id))
+            .cloned();
         value.preset_reference = state
             .preset_provenance
             .get(&value.programmer_order)
             .cloned();
     }
     for value in &mut group_values {
+        value.replacement_projections = state
+            .replacement_provenance
+            .get(&value.programmer_order)
+            .cloned()
+            .unwrap_or_default();
         value.preset_reference = state
             .preset_provenance
             .get(&value.programmer_order)
@@ -259,6 +273,7 @@ fn ordered_group_values(
 
 fn fixture_value(value: &TimedValue) -> CueRecordingFixtureValue {
     CueRecordingFixtureValue {
+        replacement_projection: None,
         preset_reference: None,
         fixture_id: value.fixture_id,
         attribute: value.attribute.clone(),
@@ -276,6 +291,7 @@ fn group_value(
     value: &GroupProgrammerValue,
 ) -> CueRecordingGroupValue {
     CueRecordingGroupValue {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: group_id.to_owned(),
         attribute: attribute.clone(),

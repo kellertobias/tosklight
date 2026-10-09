@@ -11,6 +11,7 @@ fn fixture_change(fixture_id: FixtureId, attribute: &str, value: f32) -> CueChan
 
 fn group_change(group_id: &str, attribute: &str, value: f32) -> GroupCueChange {
     GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: group_id.into(),
         attribute: AttributeKey(attribute.into()),
@@ -167,6 +168,7 @@ fn cue_list(cues: Vec<Cue>) -> CueList {
 
 fn automatic_fixture(fixture_id: FixtureId, attribute: &str, value: Option<f32>) -> CueChange {
     CueChange {
+        replacement_projection: None,
         preset_reference: None,
         fixture_id,
         attribute: AttributeKey(attribute.into()),
@@ -179,6 +181,7 @@ fn automatic_fixture(fixture_id: FixtureId, attribute: &str, value: Option<f32>)
 
 fn automatic_group(group_id: &str, attribute: &str, value: Option<f32>) -> GroupCueChange {
     GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: group_id.into(),
         attribute: AttributeKey(attribute.into()),
@@ -794,6 +797,7 @@ fn authored_release_records_both_ordinary_and_scalar_track_removal_without_zero(
     let list = cue_list(vec![first]);
     let release = CueRecordingContent {
         changes: vec![CueChange {
+            replacement_projection: None,
             preset_reference: None,
             fixture_id: fixture,
             attribute: attribute.clone(),

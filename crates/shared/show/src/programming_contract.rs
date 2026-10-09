@@ -34,6 +34,36 @@ pub const PROGRAMMING_OBJECT_KINDS: &[&str] = &[
 
 /// Required feature contract of authored payload, independent of runtime capability.
 pub fn required_object_programming_contract(body: &Value) -> u16 {
+    let nonempty_map = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_object)
+            .is_some_and(|map| !map.is_empty())
+    };
+    let replacement = nonempty_map(body.get("fixture_replacement_projections"))
+        || nonempty_map(body.get("group_replacement_projections"))
+        || nonempty_map(body.get("replacement_projections"))
+        || body
+            .get("cues")
+            .and_then(Value::as_array)
+            .is_some_and(|cues| {
+                cues.iter().any(|cue| {
+                    ["changes", "group_changes"].iter().any(|key| {
+                        cue.get(*key)
+                            .and_then(Value::as_array)
+                            .is_some_and(|changes| {
+                                changes.iter().any(|change| {
+                                    change
+                                        .get("replacement_projection")
+                                        .is_some_and(|value| !value.is_null())
+                                        || nonempty_map(change.get("replacement_projections"))
+                                })
+                            })
+                    })
+                })
+            });
+    if replacement {
+        return light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT;
+    }
     let referenced = body
         .get("cues")
         .and_then(Value::as_array)
@@ -228,10 +258,11 @@ pub fn check_programming_object_writes<'a>(
     let mut legacy = Vec::new();
     for (kind, id, body) in writes {
         if PROGRAMMING_OBJECT_KINDS.contains(&kind) {
-            if required_object_programming_contract(body) > supported {
+            let required = required_object_programming_contract(body);
+            if required > supported {
                 return Err(ProgrammingContractRejection {
                     message: format!(
-                        "{kind} {id} contains live Preset references requiring programming contract 2; this reader supports {supported}. Nothing was changed."
+                        "{kind} {id} requires programming contract {required}; this reader supports {supported}. Nothing was changed."
                     ),
                 });
             }

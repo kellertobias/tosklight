@@ -870,6 +870,8 @@ fn preset_body(fixture: FixtureId, level: f32) -> Value {
 
 fn preset_body_number(fixture: FixtureId, level: f32, number: u32) -> Value {
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: format!("Intensity {number}"),
         family: PresetFamily::Intensity,

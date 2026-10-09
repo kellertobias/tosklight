@@ -135,6 +135,8 @@ fn preset_store_modes_are_explicit() {
     let fixture = FixtureId::new();
     let other = FixtureId::new();
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "A".into(),
         family: PresetFamily::Intensity,
@@ -149,6 +151,8 @@ fn preset_store_modes_are_explicit() {
     };
     preset.store(
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             instance_id: None,
             name: String::new(),
             family: PresetFamily::Intensity,
@@ -170,6 +174,8 @@ fn preset_store_modes_are_explicit() {
     assert!(preset.values.contains_key(&other));
     preset.store(
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             instance_id: None,
             name: "B".into(),
             family: PresetFamily::Mixed,
@@ -216,6 +222,8 @@ fn preset_addresses_use_pool_local_numbers() {
 #[test]
 fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
     let mut legacy_color = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         name: "Red".into(),
         aim_at_fixture_number: None,
         family: PresetFamily::Color,
@@ -228,6 +236,8 @@ fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
     assert_eq!(legacy_color.number, 1);
 
     let mut mismatched = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         aim_at_fixture_number: None,
         number: 1,
@@ -434,6 +444,8 @@ fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
     });
     let [first, second] = [FixtureId::new(), FixtureId::new()];
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         number: 1,
         values: HashMap::from([
@@ -469,6 +481,8 @@ fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
         let mut values = HashMap::from([(color.clone(), red.clone())]);
         values.extend(extra);
         let mut preset = Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family,
             number: 2,
             values: HashMap::from([(first, values)]),
@@ -637,6 +651,8 @@ fn persisted_clear_cannot_reuse_an_old_reference_edit_identity() {
 fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
     let identity = uuid::Uuid::new_v4();
     let original = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: Some(identity),
         name: "Follow target".into(),
         family: PresetFamily::Position,
@@ -653,6 +669,8 @@ fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
     for mode in [PresetStoreMode::Overwrite, PresetStoreMode::Merge] {
         for owner in [0, 1, 2] {
             let mut incoming = Preset {
+                fixture_replacement_projections: Default::default(),
+                group_replacement_projections: Default::default(),
                 family: PresetFamily::Position,
                 number: 7,
                 ..Default::default()
@@ -681,6 +699,8 @@ fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
         let mut stored = original.clone();
         stored.store(
             Preset {
+                fixture_replacement_projections: Default::default(),
+                group_replacement_projections: Default::default(),
                 family: PresetFamily::Position,
                 ..Default::default()
             },
@@ -695,6 +715,8 @@ fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
     let mut stored = original.clone();
     stored.store(
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family: PresetFamily::Position,
             universal_values: [(AttributeKey("position".into()), position)].into(),
             ..Default::default()
@@ -709,6 +731,8 @@ fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
     let mut stored = original.clone();
     stored.store(
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family: PresetFamily::Position,
             aim_at_fixture_number: Some(6),
             ..Default::default()

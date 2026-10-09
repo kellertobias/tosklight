@@ -195,6 +195,7 @@ mod tests {
             revision: 1,
             fixture_values: Vec::new(),
             group_values: vec![ProgrammerGroupUpdate {
+                replacement_projections: Default::default(),
                 preset_reference: None,
                 group_id: "front".into(),
                 attribute: AttributeKey::intensity(),

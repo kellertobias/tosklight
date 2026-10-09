@@ -169,6 +169,8 @@ fn media_color() -> Family {
 fn preset_body(family: &Family) -> serde_json::Value {
     let attribute = AttributeKey(family.attribute.into());
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         name: format!("TL-560 {}", family.label),
         family: PresetFamily::Mixed,
         number: 1,
@@ -830,6 +832,8 @@ async fn record_first_live_cue_with_target(
     show.patch(&fixture);
     let instance = Uuid::from_u128(0x685100);
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: Some(instance),
         family: PresetFamily::Intensity,
         number: 1,

@@ -141,6 +141,8 @@ pub(super) fn generate_profile_presets_action(
         let storage_key = address.storage_key();
         family_used.insert(number);
         let mut body = serde_json::to_value(light_programmer::Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             instance_id: None,
             name: preset.name.clone(),
             family,

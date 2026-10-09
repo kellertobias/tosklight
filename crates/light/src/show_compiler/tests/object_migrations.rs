@@ -1760,6 +1760,7 @@ fn legacy_cmy_static_values_migrate_inverse_to_rgb_without_losing_unknown_data()
         light_core::AttributeValue::Normalized(0.2),
     ));
     cue.group_changes.push(light_playback::GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: "front".into(),
         attribute: cyan.clone(),

@@ -12,7 +12,6 @@
 //! so an equal version proves equal content. An evaluation is kept only when it left the
 //! history unchanged, which makes reusing it exactly the same as evaluating again.
 use crate::{
-    ContributionSourceId,
     programmer_fade::{ProgrammerTransition, ProgrammerTransitionKey},
     programmer_resolution::Addressed,
 };
@@ -110,7 +109,10 @@ impl ProgrammerTransitions {
 }
 
 /// One Programmer's resolved values in order, each with the source a sampled batch may replace.
-pub(crate) type ResolvedProgrammerValues = Vec<(Addressed, Option<ContributionSourceId>)>;
+pub(crate) type ResolvedProgrammerValues = Vec<(
+    Addressed,
+    Option<crate::programmer_resolution::SourceReplacement>,
+)>;
 
 /// TL-639 round 2: the arbitrated contributions of one kept evaluation. The replacement filter
 /// still runs against each call's own samples; the winners are a pure function of the evaluation
@@ -177,6 +179,7 @@ fn same_states(left: &[ProgrammerOutputState], right: &[ProgrammerOutputState]) 
                 && Arc::ptr_eq(&left.values, &right.values)
                 && Arc::ptr_eq(&left.transient_values, &right.transient_values)
                 && Arc::ptr_eq(&left.group_values, &right.group_values)
+                && Arc::ptr_eq(&left.replacement_provenance, &right.replacement_provenance)
                 && Arc::ptr_eq(&left.preload_active, &right.preload_active)
                 && Arc::ptr_eq(&left.preload_group_active, &right.preload_group_active)
                 && Arc::ptr_eq(&left.preload_dynamic_active, &right.preload_dynamic_active)

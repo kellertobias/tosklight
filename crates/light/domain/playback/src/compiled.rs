@@ -34,6 +34,7 @@ pub(crate) struct CompiledAttribute {
 
 #[derive(Clone, Debug)]
 struct CompiledChange {
+    replacement_projection: Option<light_core::ReplacementProgramProjection>,
     cue_index: usize,
     cue_id: Uuid,
     /// Generated restoration and expanded Group rows have no proven original author mapping.
@@ -104,12 +105,25 @@ impl CompiledCueList {
             .map(|(fixture_id, _)| *fixture_id)
     }
 
+    pub(crate) fn replacement_projection(
+        &self,
+        fixture_id: FixtureId,
+        attribute: &AttributeKey,
+        cue_index: usize,
+        tracking_wrap: bool,
+    ) -> Option<&light_core::ReplacementProgramProjection> {
+        let index = self.by_address.get(&(fixture_id, attribute.clone()))?;
+        self.attributes[*index]
+            .effective_change(cue_index, tracking_wrap)?
+            .replacement_projection
+            .as_ref()
+    }
+
     pub(crate) fn contains(&self, fixture_id: FixtureId, attribute: &AttributeKey) -> bool {
         self.by_address
             .contains_key(&(fixture_id, attribute.clone()))
     }
 
-    #[cfg(test)]
     pub(crate) fn value(
         &self,
         fixture_id: FixtureId,
@@ -155,6 +169,7 @@ impl CompiledCueList {
         self.attributes[attribute_index]
             .history
             .push(CompiledChange {
+                replacement_projection: change.replacement_projection.clone(),
                 cue_index,
                 cue_id,
                 source_unknown: change.automatic_restore || group_origin_unknown,
@@ -242,6 +257,7 @@ mod tests {
         ));
         let mut second = Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap());
         second.changes.push(CueChange {
+            replacement_projection: None,
             preset_reference: None,
             fixture_id: fixture,
             attribute: attribute.clone(),

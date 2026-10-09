@@ -19,6 +19,7 @@ fn explicit_off_after_automatic_empty_release_resets_jump_history_for_every_alia
     });
     let mut release = Cue::new(3_u16.into());
     release.changes.push(CueChange {
+        replacement_projection: None,
         preset_reference: None,
         fixture_id: logical,
         attribute: AttributeKey::intensity(),

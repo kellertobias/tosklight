@@ -48,6 +48,7 @@ fn live_group_spread_re_resolves_after_membership_add_remove_and_reorder() {
     let snapshot = |members: Vec<FixtureId>, revision| EngineSnapshot {
         fixtures: patched.clone().into(),
         groups: vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "wave".into(),
             name: "Wave".into(),
             fixtures: members,
@@ -106,6 +107,7 @@ fn mapped_group_spread_uses_shared_ranks_and_reacts_to_stage_moves() {
     );
     let (patched, logical) = dimmer_rig(4);
     let group = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "mapped".into(),
         name: "Mapped".into(),
         fixtures: logical.clone(),
@@ -159,6 +161,7 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
     let list_id = light_core::CueListId::new();
     let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: "wave".into(),
         attribute: AttributeKey::intensity(),
@@ -194,6 +197,7 @@ fn cue_group_spread_re_resolves_against_current_membership_on_recall() {
         fixtures: patched.clone().into(),
         cue_lists: vec![list.clone()].into(),
         groups: vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "wave".into(),
             name: "Wave".into(),
             fixtures: members,
@@ -232,6 +236,7 @@ fn cue_group_spread_uses_shared_spatial_ranks() {
     let list_id = light_core::CueListId::new();
     let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: "mapped".into(),
         attribute: AttributeKey::intensity(),
@@ -263,6 +268,7 @@ fn cue_group_spread_uses_shared_spatial_ranks() {
         cues: vec![cue],
     };
     let group = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "mapped".into(),
         name: "Mapped".into(),
         source: Some(light_programmer::GroupFixtureSource::Explicit {

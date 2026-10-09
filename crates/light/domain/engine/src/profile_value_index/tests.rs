@@ -31,6 +31,7 @@ fn contribution(
     match master {
         Some(scale) => EngineContribution::from_playback(
             PlaybackContribution {
+                replacement_projection: None,
                 value: timed(fixture, attribute, level),
                 family_evidence: None,
                 authored_target: true,

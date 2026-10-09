@@ -5,6 +5,7 @@ import {
 } from "./scenerySize";
 import { isSceneryOptionEdit, sceneryOptionChange } from "./sceneryOptions";
 import { modelScaleChange } from "./modelScale";
+import { rootProgrammingCorrespondences, rootProgrammingDecision } from "./replacementProgramming";
 import type { SplitPatch } from "../../../api/types";
 import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -142,8 +143,15 @@ export function saveEdit(
 			controller.ui.setEditError("Choose a target head or explicitly leave unmatched for every existing logical head.");
 			return;
 		}
+        const rootRows = rootProgrammingCorrespondences(selected.definition, definition);
+        const rootDecisions = rootRows.map(row => rootProgrammingDecision(row, controller.ui.replacementHeads[row.key]));
+        if (rootDecisions.some(decision => decision === null)) {
+            controller.ui.setEditError("Choose replacement owners or explicitly leave unmatched for every existing shared-head programming family.");
+            return;
+        }
 		void applyFixtureIntent(controller, {type: "replace_profile", profileId: profile.id,
 			profileRevision: profile.revision, modeId: definition.mode_id, headMapping,
+            rootProgrammingMapping: rootDecisions.filter(decision => decision !== null),
 			expectedShowRevision: revision.show, expectedPatchRevision: revision.patch });
 		return;
 	}

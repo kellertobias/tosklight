@@ -24,6 +24,9 @@ pub(crate) struct ProgrammerValueTiming {
 pub struct ProgrammerSnapshot {
     #[serde(default)]
     pub preset_provenance: Arc<std::collections::HashMap<u64, light_core::PresetValueReference>>,
+    #[serde(default)]
+    pub replacement_provenance:
+        Arc<std::collections::HashMap<u64, light_core::ReplacementProjectionMap>>,
     pub selected: Vec<FixtureId>,
     pub selection_expression: Option<SelectionExpression>,
     /// Shared with the live state, so taking an Undo checkpoint costs a reference count rather
@@ -53,6 +56,9 @@ pub struct ProgrammerSnapshot {
 pub struct ProgrammerState {
     #[serde(default)]
     pub preset_provenance: Arc<std::collections::HashMap<u64, light_core::PresetValueReference>>,
+    #[serde(default)]
+    pub replacement_provenance:
+        Arc<std::collections::HashMap<u64, light_core::ReplacementProjectionMap>>,
     pub id: ProgrammerId,
     pub session_id: SessionId,
     pub priority: i16,
@@ -136,6 +142,8 @@ pub struct ProgrammerState {
 /// command, pending Preload, and up to 100 Undo snapshots while it holds the registry read lock.
 #[derive(Clone, Debug)]
 pub struct ProgrammerOutputState {
+    pub replacement_provenance:
+        Arc<std::collections::HashMap<u64, light_core::ReplacementProjectionMap>>,
     pub id: ProgrammerId,
     pub priority: i16,
     pub values: Arc<Vec<TimedValue>>,
@@ -204,6 +212,11 @@ impl ProgrammerState {
             .iter()
             .map(|value| ProgrammerFixtureUpdate {
                 preset_reference: self.preset_provenance.get(&value.programmer_order).cloned(),
+                replacement_projection: self
+                    .replacement_provenance
+                    .get(&value.programmer_order)
+                    .and_then(|map| map.get(&value.fixture_id))
+                    .cloned(),
                 fixture_id: value.fixture_id,
                 attribute: value.attribute.clone(),
                 value: value.value.clone(),
@@ -231,6 +244,11 @@ impl ProgrammerState {
                             .preset_provenance
                             .get(&value.programmer_order)
                             .cloned(),
+                        replacement_projections: self
+                            .replacement_provenance
+                            .get(&value.programmer_order)
+                            .cloned()
+                            .unwrap_or_default(),
                         group_id: group_id.clone(),
                         attribute: attribute.clone(),
                         value: value.value.clone(),
@@ -256,6 +274,9 @@ impl ProgrammerState {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgrammerFixtureUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub preset_reference: Option<light_core::PresetValueReference>,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
@@ -272,6 +293,9 @@ pub struct ProgrammerFixtureUpdate {
 /// One exact Group/attribute value authored in the normal programmer.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProgrammerGroupUpdate {
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub replacement_projections: light_core::ReplacementProjectionMap,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preset_reference: Option<light_core::PresetValueReference>,
     pub group_id: String,

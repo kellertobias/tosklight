@@ -28,6 +28,8 @@ impl GroupContributionPlan {
         groups: &[GroupDefinition],
         rankings: &HashMap<String, light_dynamics::RankedSelection>,
         slots: &crate::SlotTable,
+        fixtures: &[light_fixture::PatchedFixture],
+        profiles: &crate::profile_projection_plan::ProfileProjectionIndex,
     ) -> Self {
         let mut entries = Vec::new();
         for group in groups {
@@ -42,6 +44,7 @@ impl GroupContributionPlan {
                 .iter()
                 .filter_map(|(attribute, value)| {
                     Some((
+                        attribute,
                         slots.attribute_id(attribute)?,
                         value,
                         if attribute.is_intensity() {
@@ -52,21 +55,33 @@ impl GroupContributionPlan {
                     ))
                 })
                 .collect::<Vec<_>>();
-            for (attribute, value, merge_mode) in programming {
+            for (key, attribute, value, merge_mode) in programming {
                 let Ok(values) = crate::group_programming::compile_group_values(value, ranking)
                 else {
                     // Unresolved source models must never emit an unsampled native recipe.
                     continue;
                 };
                 for (fixture_id, value) in values {
-                    let Some(slot) = slots.slot_of(fixture_id, attribute) else {
-                        continue;
-                    };
-                    entries.push(GroupContributionEntry {
-                        slot,
-                        value,
-                        merge_mode,
-                    });
+                    let destinations = group
+                        .replacement_projections
+                        .get(key)
+                        .and_then(|members| members.get(&fixture_id))
+                        .map(|projection| {
+                            crate::replacement_projection::destinations(
+                                fixtures, profiles, projection, key,
+                            )
+                        })
+                        .unwrap_or_else(|| vec![fixture_id]);
+                    for destination in destinations {
+                        let Some(slot) = slots.slot_of(destination, attribute) else {
+                            continue;
+                        };
+                        entries.push(GroupContributionEntry {
+                            slot,
+                            value: value.clone(),
+                            merge_mode,
+                        });
+                    }
                 }
             }
         }

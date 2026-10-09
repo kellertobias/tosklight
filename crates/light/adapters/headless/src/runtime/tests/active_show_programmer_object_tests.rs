@@ -787,6 +787,8 @@ fn preset_body(
     number: u32,
 ) -> serde_json::Value {
     serde_json::to_value(light_programmer::Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: Some(Uuid::from_u128(
             0x70000000000040008000000000000000
                 | ((family.type_number() as u128) << 32)

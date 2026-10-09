@@ -163,8 +163,52 @@ pub(super) fn programmer_preset(
                 .insert(attribute.clone(), value.value.clone());
         }
     }
+    carry_preset_replacement_metadata(
+        &mut preset,
+        programmer,
+        &programmer.values,
+        &programmer.group_values,
+    );
     preset.retain_family_attributes();
     preset
+}
+
+pub(super) fn carry_preset_replacement_metadata(
+    preset: &mut light_programmer::Preset,
+    programmer: &light_programmer::ProgrammerState,
+    fixtures: &[light_core::TimedValue],
+    groups: &HashMap<
+        String,
+        HashMap<light_core::AttributeKey, light_programmer::GroupProgrammerValue>,
+    >,
+) {
+    for value in fixtures {
+        if let Some(projection) = programmer
+            .replacement_provenance
+            .get(&value.programmer_order)
+            .and_then(|map| map.get(&value.fixture_id))
+        {
+            preset
+                .fixture_replacement_projections
+                .entry(value.fixture_id)
+                .or_default()
+                .insert(value.attribute.clone(), projection.clone());
+        }
+    }
+    for (group, attributes) in groups {
+        for (attribute, value) in attributes {
+            if let Some(map) = programmer
+                .replacement_provenance
+                .get(&value.programmer_order)
+            {
+                preset
+                    .group_replacement_projections
+                    .entry(group.clone())
+                    .or_default()
+                    .insert(attribute.clone(), map.clone());
+            }
+        }
+    }
 }
 
 pub(super) fn programmer_cue(
@@ -188,6 +232,15 @@ pub(super) fn programmer_cue(
                 value.attribute.clone(),
                 value.value.clone(),
             );
+            change.replacement_projection = programmer
+                .replacement_provenance
+                .get(&value.programmer_order)
+                .and_then(|map| map.get(&value.fixture_id))
+                .cloned();
+            change.preset_reference = programmer
+                .preset_provenance
+                .get(&value.programmer_order)
+                .cloned();
             change.fade_millis = value.fade_millis;
             change.delay_millis = value.delay_millis;
             change
@@ -200,7 +253,15 @@ pub(super) fn programmer_cue(
             attributes
                 .iter()
                 .map(|(attribute, value)| light_playback::GroupCueChange {
-                    preset_reference: None,
+                    replacement_projections: programmer
+                        .replacement_provenance
+                        .get(&value.programmer_order)
+                        .cloned()
+                        .unwrap_or_default(),
+                    preset_reference: programmer
+                        .preset_provenance
+                        .get(&value.programmer_order)
+                        .cloned(),
                     group_id: group.clone(),
                     attribute: attribute.clone(),
                     value: Some(value.value.clone()),

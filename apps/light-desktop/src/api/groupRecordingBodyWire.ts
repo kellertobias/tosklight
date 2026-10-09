@@ -1,11 +1,7 @@
+import { decodeReplacementMap } from "./replacementProjectionWire";
 import { decodeAttributeValue } from "./programmerValuesWireProjection";
 import type { ShowObject } from "../features/showObjects/contracts";
-import {
-	arrayAt,
-	enumAt,
-	integerAt,
-	recordAt,
-} from "./playbackWirePrimitives";
+import { arrayAt, enumAt, integerAt, recordAt } from "./playbackWirePrimitives";
 import { WireValidationError } from "./wireValidation";
 
 export function decodeRecordedGroupBody(
@@ -43,6 +39,24 @@ export function decodeRecordedGroupBody(
 	delete canonicalBody.grid;
 	return {
 		...canonicalBody,
+		...(body.replacement_projections === undefined
+			? {}
+			: {
+					replacement_projections: Object.fromEntries(
+						Object.entries(
+							recordAt(
+								body.replacement_projections,
+								"$.group.body.replacement_projections",
+							),
+						).map(([attribute, map]) => [
+							attribute,
+							decodeReplacementMap(
+								map,
+								`$.group.body.replacement_projections.${attribute}`,
+							),
+						]),
+					),
+				}),
 		fixtures,
 	} as ShowObject<"group">["body"];
 }
@@ -94,7 +108,9 @@ function programmingAt(value: unknown, path: string) {
 		attributeValueAt(rawValue, `${path}.${attribute}`);
 }
 
-function attributeValueAt(value: unknown, path: string) { return decodeAttributeValue(value, path, "group"); }
+function attributeValueAt(value: unknown, path: string) {
+	return decodeAttributeValue(value, path, "group");
+}
 
 function nullableStringAt(value: unknown, path: string) {
 	if (value != null) stringValueAt(value, path);

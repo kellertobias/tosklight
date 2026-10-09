@@ -17,6 +17,7 @@ pub(crate) fn take_occurrence_ordinal(next: &mut u64) -> Option<u64> {
 }
 
 mod legs;
+mod replacement;
 use legs::ManualLeg;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -122,6 +123,8 @@ impl<'de> Deserialize<'de> for PlaybackFamilyEvidence {
 /// Flattening preserves the old TimedValue row shape. Missing producer history is unknown.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PlaybackRetainedValue {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
     #[serde(flatten)]
     pub timed: TimedValue,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -136,6 +139,8 @@ impl<'de> Deserialize<'de> for PlaybackRetainedValue {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         struct Wire {
+            #[serde(default)]
+            replacement_projection: Option<light_core::ReplacementProgramProjection>,
             #[serde(flatten)]
             timed: TimedValue,
             #[serde(default)]
@@ -160,7 +165,11 @@ impl<'de> Deserialize<'de> for PlaybackRetainedValue {
                 }
             }
         }
+        if let Some(projection) = &row.replacement_projection {
+            projection.validate().map_err(serde::de::Error::custom)?;
+        }
         Ok(Self {
+            replacement_projection: row.replacement_projection,
             timed: row.timed,
             family_evidence: row.family_evidence,
             pending_transition: None,
@@ -178,6 +187,7 @@ impl std::ops::Deref for PlaybackRetainedValue {
 impl From<PlaybackContribution> for PlaybackRetainedValue {
     fn from(value: PlaybackContribution) -> Self {
         Self {
+            replacement_projection: value.replacement_projection,
             timed: value.value,
             family_evidence: value.family_evidence,
             pending_transition: value.pending_transition,
@@ -382,7 +392,7 @@ pub(crate) struct EndpointEvidence {
     pub(crate) evidence: Option<Arc<PlaybackFamilyEvidence>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct PlaybackEvidenceCache {
     pub(crate) generation: Weak<()>,
     pub(crate) target_index: usize,
@@ -391,7 +401,7 @@ pub(crate) struct PlaybackEvidenceCache {
     pub(crate) phases: HashMap<AttributeAddress, EvidencePhases>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct EvidencePhases {
     from: Option<Arc<PlaybackFamilyEvidence>>,
     interior: Option<Arc<PlaybackFamilyEvidence>>,

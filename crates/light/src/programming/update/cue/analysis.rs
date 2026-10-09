@@ -188,6 +188,7 @@ fn event_matches(
             let change = &cue_list.cues[location.cue_index].changes[location.change_index];
             change.value.as_ref() == incoming.ordinary_value()
                 && change.preset_reference.as_ref() == incoming.preset_reference()
+                && change.replacement_projection.as_ref() == incoming.replacement_projection()
                 && !change.automatic_restore
                 && change.fade_millis == incoming.fade_millis()
                 && change.delay_millis == incoming.delay_millis()
@@ -196,6 +197,7 @@ fn event_matches(
             let change = &cue_list.cues[location.cue_index].group_changes[location.change_index];
             change.value.as_ref() == incoming.ordinary_value()
                 && change.preset_reference.as_ref() == incoming.preset_reference()
+                && Some(&change.replacement_projections) == incoming.replacement_projections()
                 && !change.automatic_restore
                 && change.fade_millis == incoming.fade_millis()
                 && change.delay_millis == incoming.delay_millis()

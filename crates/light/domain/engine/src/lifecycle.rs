@@ -274,7 +274,22 @@ impl Engine {
         prepared: PreparedEngineSnapshot,
         preserve_playback: bool,
     ) -> Result<FinalizedEngineSnapshot, EngineError> {
-        self.finalize_snapshot_playback_with_restored_dynamics(prepared, preserve_playback, None)
+        self.finalize_snapshot_playback_with_restored_dynamics(
+            prepared,
+            preserve_playback,
+            None,
+            &[],
+        )
+    }
+
+    /// Validates and migrates captured replacement sources in detached Playback before commit.
+    /// This policy is consumed once; future authored root writes retain ordinary semantics.
+    pub fn finalize_snapshot_playback_with_replacement_migrations(
+        &self,
+        prepared: PreparedEngineSnapshot,
+        migrations: &[light_core::ReplacementRuntimeMigration],
+    ) -> Result<FinalizedEngineSnapshot, EngineError> {
+        self.finalize_snapshot_playback_with_restored_dynamics(prepared, true, None, migrations)
     }
 
     /// Finalizes a destination show with Release policy and its saved Dynamic Playback owners.
@@ -328,6 +343,7 @@ impl Engine {
             prepared,
             false,
             Some((saved, paused_since)),
+            &[],
         )
     }
 
@@ -339,8 +355,14 @@ impl Engine {
             &[light_playback::ActiveDynamicPlayback],
             Option<DateTime<Utc>>,
         )>,
+        migrations: &[light_core::ReplacementRuntimeMigration],
     ) -> Result<FinalizedEngineSnapshot, EngineError> {
         let current = self.generation.load_full();
+        crate::replacement_projection::validate_migrations(
+            current.snapshot(),
+            &prepared.snapshot,
+            migrations,
+        )?;
         let current_playback = current.playback_arc();
         let sampled_at = self.clock.now();
         let reuse_current = prepared.runtime.playback_reused
@@ -363,6 +385,11 @@ impl Engine {
             );
             playback
         };
+        for migration in migrations {
+            playback
+                .apply_replacement_runtime_migration(migration)
+                .map_err(EngineError::Invalid)?;
+        }
         if let Some((saved, paused_since)) = restored {
             playback.restore_active_dynamics(saved.iter().cloned());
             playback.restore_dynamics_paused_since(paused_since);
@@ -556,8 +583,24 @@ impl Engine {
         let groups = snapshot_groups(snapshot);
         let stage_positions = group_stage_positions(snapshot);
         let mut playback = self.playback_for_current_controls();
+        let replacements = snapshot
+            .cue_lists
+            .iter()
+            .flat_map(|list| &list.cues)
+            .any(|cue| {
+                cue.changes
+                    .iter()
+                    .any(|change| change.replacement_projection.is_some())
+                    || cue
+                        .group_changes
+                        .iter()
+                        .any(|change| !change.replacement_projections.is_empty())
+            })
+            .then(|| crate::ReplacementDestinationPlan::compile(&snapshot.fixtures))
+            .transpose()?;
         for source in snapshot.cue_lists.iter() {
-            let cue_list = expand_group_references(source, &groups, &stage_positions);
+            let cue_list =
+                expand_group_references(source, &groups, &stage_positions, replacements.as_ref());
             playback.register(cue_list).map_err(EngineError::Invalid)?;
         }
         register_playback_definitions(&mut playback, snapshot)?;
@@ -670,18 +713,68 @@ pub(crate) fn expand_group_references_for_preview(
     source: &CueList,
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+    replacements: Option<&crate::ReplacementDestinationPlan>,
 ) -> CueList {
-    expand_group_references(source, groups, stage_positions)
+    expand_group_references(source, groups, stage_positions, replacements)
 }
 
 fn expand_group_references(
     source: &CueList,
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+    replacements: Option<&crate::ReplacementDestinationPlan>,
 ) -> CueList {
     let mut cue_list = source.clone();
+    let mut fixture_context = HashMap::new();
+    let mut group_context = HashMap::new();
     for cue in &mut cue_list.cues {
-        expand_group_changes(cue, groups, stage_positions);
+        for change in cue
+            .changes
+            .iter_mut()
+            .filter(|change| !change.automatic_restore)
+        {
+            let address = (change.fixture_id, change.attribute.clone());
+            if change.value.is_none() {
+                if change.replacement_projection.is_none() {
+                    change.replacement_projection = fixture_context.remove(&address).flatten();
+                } else {
+                    fixture_context.remove(&address);
+                }
+            } else {
+                fixture_context.insert(address, change.replacement_projection.clone());
+            }
+        }
+        for change in cue
+            .group_changes
+            .iter_mut()
+            .filter(|change| !change.automatic_restore)
+        {
+            let address = (change.group_id.clone(), change.attribute.clone());
+            if change.value.is_none() {
+                if change.replacement_projections.is_empty() {
+                    change.replacement_projections =
+                        group_context.remove(&address).unwrap_or_default();
+                } else {
+                    group_context.remove(&address);
+                }
+            } else {
+                group_context.insert(address, change.replacement_projections.clone());
+            }
+        }
+        expand_group_changes(cue, groups, stage_positions, replacements);
+    }
+    if source.cues.iter().any(|cue| {
+        cue.changes
+            .iter()
+            .any(|change| change.replacement_projection.is_some())
+            || cue
+                .group_changes
+                .iter()
+                .any(|change| !change.replacement_projections.is_empty())
+    }) {
+        // Rebuild Cue-only baselines from effective addresses. A fresh root-master temporary
+        // change and prior projected child values are distinct owners, even with one stored root.
+        light_playback::refresh_cue_only_restorations(&mut cue_list);
     }
     cue_list
 }
@@ -690,20 +783,50 @@ fn expand_group_changes(
     cue: &mut Cue,
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+    replacements: Option<&crate::ReplacementDestinationPlan>,
 ) {
+    // Register effective addresses before tracking/fades. The stored root address and envelope
+    // remain unchanged; a future untagged root-master change is a different destination.
+    cue.changes = std::mem::take(&mut cue.changes)
+        .into_iter()
+        .flat_map(|change| projected_cue_change(change, replacements))
+        .collect();
     let mut addresses = cue
         .changes
         .iter()
         .map(|change| (change.fixture_id, change.attribute.clone()))
         .collect::<HashSet<_>>();
     for change in &cue.group_changes {
-        for expanded in resolved_group_changes(change, groups, stage_positions) {
+        for expanded in resolved_group_changes(change, groups, stage_positions)
+            .into_iter()
+            .flat_map(|change| projected_cue_change(change, replacements))
+        {
             let address = (expanded.fixture_id, expanded.attribute.clone());
             if addresses.insert(address) {
                 cue.changes.push(expanded);
             }
         }
     }
+}
+
+fn projected_cue_change(
+    change: CueChange,
+    replacements: Option<&crate::ReplacementDestinationPlan>,
+) -> Vec<CueChange> {
+    let Some(projection) = &change.replacement_projection else {
+        return vec![change];
+    };
+    let destinations = replacements
+        .map(|plan| plan.destinations(projection, &change.attribute))
+        .unwrap_or_default();
+    destinations
+        .into_iter()
+        .map(|fixture_id| {
+            let mut effective = change.clone();
+            effective.fixture_id = fixture_id;
+            effective
+        })
+        .collect()
 }
 
 fn resolved_group_changes(
@@ -732,6 +855,7 @@ fn resolved_group_changes(
     values
         .into_iter()
         .map(|(fixture_id, value)| CueChange {
+            replacement_projection: change.replacement_projections.get(&fixture_id).cloned(),
             preset_reference: change.preset_reference.clone(),
             fixture_id,
             attribute: change.attribute.clone(),

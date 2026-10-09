@@ -91,6 +91,14 @@ impl ProgrammingService {
             environment.programmer_fade_millis,
         )?;
         let preset_context = format!("preset:{}", action.command.address.storage_key());
+        let replacement_origins = super::super::preset_recall_plan::replacement_value_origins(
+            &selection,
+            environment
+                .resolved_aim
+                .as_deref()
+                .unwrap_or(&environment.preset),
+            &environment.groups,
+        );
         let required = mutations
             .iter()
             .filter_map(|mutation| match mutation {
@@ -101,7 +109,17 @@ impl ProgrammingService {
                 _ => None,
             })
             .max()
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .max(
+                if replacement_origins
+                    .iter()
+                    .any(|(_, _, map)| !map.is_empty())
+                {
+                    light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT
+                } else {
+                    0
+                },
+            );
         if required > environment.supported_programming_contract {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
@@ -143,6 +161,73 @@ impl ProgrammingService {
             target == ProgrammingPresetRecallTarget::Preload,
             !normal_changed && !preload_changed,
         );
+        let captured = self
+            .programmers
+            .get(identity.session_id)
+            .ok_or_else(recall_unavailable)?;
+        let preload = target == ProgrammingPresetRecallTarget::Preload;
+        let fixture_values = if preload {
+            captured.preload_pending.as_slice()
+        } else {
+            captured.values.as_slice()
+        };
+        let group_values = if preload {
+            &captured.preload_group_pending
+        } else {
+            captured.group_values.as_ref()
+        };
+        let mut replacement_orders = Vec::new();
+        for mutation in &mutations {
+            let (owner, attribute, order) = match mutation {
+                light_programmer::NormalProgrammerValueMutation::SetFixture {
+                    fixture_id,
+                    attribute,
+                    ..
+                } => (
+                    light_core::PresetValueOwner::Fixture {
+                        fixture_id: *fixture_id,
+                    },
+                    attribute,
+                    fixture_values
+                        .iter()
+                        .find(|value| {
+                            value.fixture_id == *fixture_id && value.attribute == *attribute
+                        })
+                        .map(|value| value.programmer_order),
+                ),
+                light_programmer::NormalProgrammerValueMutation::SetGroup {
+                    group_id,
+                    attribute,
+                    ..
+                } => (
+                    light_core::PresetValueOwner::Group {
+                        group_id: group_id.clone(),
+                    },
+                    attribute,
+                    group_values
+                        .get(group_id)
+                        .and_then(|values| values.get(attribute))
+                        .map(|value| value.programmer_order),
+                ),
+                _ => continue,
+            };
+            if let Some(order) = order {
+                let map = replacement_origins
+                    .iter()
+                    .rev()
+                    .find(|(target, key, _)| target == &owner && key == attribute)
+                    .map(|(_, _, map)| map.clone())
+                    .unwrap_or_default();
+                replacement_orders.push((order, map));
+            }
+        }
+        let replacement_changed = self.programmers.attach_replacement_provenance(
+            identity.session_id,
+            &replacement_orders,
+            preload,
+            !normal_changed && !preload_changed && !provenance_changed,
+        );
+        let provenance_changed = provenance_changed || replacement_changed;
         let after = Snapshot::read(
             &self.programmers,
             action.context.desk_id,

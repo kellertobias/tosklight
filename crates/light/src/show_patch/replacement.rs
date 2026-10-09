@@ -20,6 +20,7 @@ pub(super) fn reconcile_replacements(
         let PatchFixtureUpdateAction::ReplaceProfile {
             profile,
             head_mapping,
+            ..
         } = &update.action
         else {
             continue;

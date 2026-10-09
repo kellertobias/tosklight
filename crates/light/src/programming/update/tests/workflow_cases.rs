@@ -110,6 +110,7 @@ fn preview_preserves_global_programmer_order_across_fixture_and_group_values() {
         dynamic_values: Vec::new(),
         fixture_values: vec![fixture_update(fixture, "intensity", 0.8, 2)],
         group_values: vec![ProgrammerGroupUpdate {
+            replacement_projections: Default::default(),
             preset_reference: None,
             group_id: "front".into(),
             attribute: attribute("pan"),
@@ -194,6 +195,8 @@ fn cue_update_preserves_first_class_dynamic_and_fix_at_values() {
 fn eligible_menu_filter_excludes_no_ops_but_show_all_keeps_them_distinguishable() {
     let fixture = fixture(1);
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Intensity".into(),
         family: light_programmer::PresetFamily::Intensity,

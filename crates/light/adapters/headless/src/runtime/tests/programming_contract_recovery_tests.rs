@@ -217,6 +217,7 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
         let show_id = initial.persistent.active_show.as_ref().unwrap().id;
         let list_id = light_core::CueListId::new();
         let row = PlaybackRetainedValue {
+            replacement_projection: None,
             timed: light_core::TimedValue {
                 fixture_id: light_core::FixtureId::new(),
                 attribute: light_core::AttributeKey("focus".into()),

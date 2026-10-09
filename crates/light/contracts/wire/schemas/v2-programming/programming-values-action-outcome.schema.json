@@ -2670,6 +2670,16 @@
           "format": "uint64",
           "minimum": 0
         },
+        "replacement_projection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReplacementProgramProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "value": {
           "$ref": "#/$defs/ProgrammingAttributeValue"
         }
@@ -2737,6 +2747,15 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "replacement_projections": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/ReplacementProgramProjection"
+          }
         },
         "value": {
           "$ref": "#/$defs/ProgrammingAttributeValue"
@@ -3260,6 +3279,81 @@
       "required": [
         "opening_degrees",
         "convention"
+      ]
+    },
+    "ReplacementHeadTarget": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_head_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "profile_head_id",
+        "fixture_id"
+      ]
+    },
+    "ReplacementProfileContext": {
+      "type": "object",
+      "properties": {
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "mode_id"
+      ]
+    },
+    "ReplacementProgramProjection": {
+      "type": "object",
+      "properties": {
+        "source_head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_owner": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_profile": {
+          "$ref": "#/$defs/ReplacementProfileContext"
+        },
+        "target_profile": {
+          "$ref": "#/$defs/ReplacementProfileContext"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReplacementHeadTarget"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_owner",
+        "source_profile",
+        "source_head_id",
+        "target_profile",
+        "targets"
       ]
     }
   }

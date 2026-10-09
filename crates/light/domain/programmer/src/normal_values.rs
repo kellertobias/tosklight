@@ -294,6 +294,7 @@ fn apply_mutation(
 ) {
     if let Some(order) = referenced_order(state, mutation) {
         Arc::make_mut(&mut state.preset_provenance).remove(&order);
+        Arc::make_mut(&mut state.replacement_provenance).remove(&order);
     }
     match mutation {
         NormalProgrammerValueMutation::SetFixture {
@@ -426,5 +427,8 @@ fn referenced_order(
             .and_then(|values| values.get(attribute))
             .map(|stored| stored.programmer_order),
     };
-    order.filter(|order| state.preset_provenance.contains_key(order))
+    order.filter(|order| {
+        state.preset_provenance.contains_key(order)
+            || state.replacement_provenance.contains_key(order)
+    })
 }

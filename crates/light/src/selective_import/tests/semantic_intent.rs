@@ -31,6 +31,8 @@ pub(super) fn key_of(owner: ProgrammingOwner) -> AttributeKey {
 
 pub(super) fn color_preset(fixture: FixtureId) -> Preset {
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: Some(Uuid::from_u128(fixture.0.as_u128() ^ (2_u128 << 96))),
         name: "Semantic color".into(),
         family: PresetFamily::Color,
@@ -57,6 +59,8 @@ pub(super) fn color_preset(fixture: FixtureId) -> Preset {
 
 pub(super) fn position_preset(fixture: FixtureId, point: Uuid) -> Preset {
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: Some(Uuid::from_u128(fixture.0.as_u128() ^ (3_u128 << 96))),
         name: "Semantic position".into(),
         family: PresetFamily::Position,
@@ -84,6 +88,8 @@ pub(super) fn position_preset(fixture: FixtureId, point: Uuid) -> Preset {
 /// Focus and Zoom are separate owners: the fixture stores Focus only, universal stores Zoom only.
 pub(super) fn beam_preset(fixture: FixtureId) -> Preset {
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: Some(Uuid::from_u128(fixture.0.as_u128() ^ (4_u128 << 96))),
         name: "Semantic beam".into(),
         family: PresetFamily::Beam,
@@ -111,6 +117,7 @@ pub(super) fn cue_changes(
     let fixture_change =
         |owner: ProgrammingOwner, value| CueChange::set(fixture, key_of(owner), value);
     let group_change = |owner: ProgrammingOwner, value| GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: GROUP.into(),
         attribute: key_of(owner),
@@ -314,6 +321,8 @@ fn remapped(preset: &Preset, fixtures: &BTreeMap<Uuid, Uuid>, group: &str) -> Pr
             .collect::<HashMap<_, _>>()
     };
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         values: preset
             .values
             .iter()
@@ -480,6 +489,7 @@ fn assert_loaded_cue_list(
     let expected = group_changes
         .into_iter()
         .map(|change| GroupCueChange {
+            replacement_projections: Default::default(),
             group_id: group.into(),
             value: change.value.as_ref().map(|value| remap(value, fixtures)),
             ..change

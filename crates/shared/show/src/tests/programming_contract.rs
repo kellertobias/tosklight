@@ -2,7 +2,8 @@
 use super::temporary;
 use crate::{
     LegacyProgrammingFamily, PROGRAMMING_CONTRACT_METADATA_KEY, ProgrammingContractMarker,
-    ShowStore, inspect_show_programming_contract, legacy_programming_attributes,
+    ShowStore, check_programming_object_writes, inspect_show_programming_contract,
+    legacy_programming_attributes, required_object_programming_contract,
     validate_show_programming_contract,
 };
 use light_core::{
@@ -711,4 +712,47 @@ fn independent_cuelist_pool_requires_three_without_upgrading_literal_or_dynamic_
     );
     drop(reopened);
     remove(&path);
+}
+
+#[test]
+fn replacement_projection_feature_is_gated_even_when_destinations_are_dormant() {
+    let projection = json!({"source_owner":"old", "targets":[]});
+    let bodies = [
+        (
+            "preset",
+            json!({"fixture_replacement_projections":{"old":{"intensity":projection.clone()}}}),
+        ),
+        (
+            "preset",
+            json!({"group_replacement_projections":{"1":{"intensity":{"old":projection.clone()}}}}),
+        ),
+        (
+            "group",
+            json!({"replacement_projections":{"intensity":{"old":projection.clone()}}}),
+        ),
+        (
+            "cue_list",
+            json!({"cues":[{"changes":[{"replacement_projection":projection.clone()}]}]}),
+        ),
+        (
+            "cue_list",
+            json!({"cues":[{"group_changes":[{"replacement_projections":{"old":projection}}]}]}),
+        ),
+    ];
+    for (kind, body) in &bodies {
+        assert_eq!(required_object_programming_contract(body), 4);
+        let error = check_programming_object_writes(3, [(*kind, "1", body)]).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("requires programming contract 4")
+        );
+        check_programming_object_writes(4, [(*kind, "1", body)]).unwrap();
+    }
+    assert_eq!(
+        required_object_programming_contract(
+            &json!({"fixture_replacement_projections":{},"replacement_projections":{},"cues":[]})
+        ),
+        1
+    );
 }

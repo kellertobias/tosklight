@@ -71,6 +71,8 @@ impl RecallSetup {
         let intensity = AttributeKey::intensity();
         let pan = AttributeKey("pan".into());
         let preset = Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             instance_id: None,
             name: "Look".into(),
             aim_at_fixture_number: None,
@@ -175,6 +177,66 @@ impl RecallSetup {
         let revision = self.registry.select(session, []);
         self.request.expected_selection_revision = exact(revision);
         self.request.clone()
+    }
+}
+
+#[test]
+fn replacement_projection_recall_rejects_unsupported_runtime_before_either_lane_changes() {
+    use light_core::{
+        ReplacementHeadTarget, ReplacementProfileContext, ReplacementProgramProjection,
+    };
+    for preload in [false, true] {
+        let mut setup = RecallSetup::new();
+        setup.ports.environment.supported_programming_contract = 3;
+        let owner = setup.fixtures[0];
+        let context = ReplacementProfileContext {
+            profile_id: FixtureId::new(),
+            profile_revision: 1,
+            mode_id: Uuid::new_v4(),
+        };
+        let projection = ReplacementProgramProjection {
+            source_owner: owner,
+            source_profile: context.clone(),
+            source_head_id: Uuid::new_v4(),
+            target_profile: context,
+            targets: vec![ReplacementHeadTarget {
+                profile_head_id: Uuid::new_v4(),
+                fixture_id: owner,
+            }],
+        };
+        let preset = Arc::make_mut(&mut setup.ports.environment.preset);
+        preset.group_values.clear();
+        preset.fixture_replacement_projections.insert(
+            owner,
+            HashMap::from([(AttributeKey::intensity(), projection)]),
+        );
+        let session = SessionId(setup.context.session_id.unwrap());
+        if preload {
+            assert!(setup.registry.arm_preload(session, true));
+            setup.request.expected_capture_mode_revision =
+                exact(setup.registry.capture_mode_revision());
+        }
+        let before = serde_json::to_value(setup.registry.get(session).unwrap()).unwrap();
+        let error = setup
+            .service
+            .handle_preset_recall(
+                ActionEnvelope {
+                    context: setup
+                        .context
+                        .clone()
+                        .with_request_id("unsupported-projection"),
+                    command: setup.request.clone(),
+                },
+                &setup.ports,
+            )
+            .unwrap_err();
+        assert!(error.message.contains("programming contract 4"));
+        assert_eq!(
+            serde_json::to_value(setup.registry.get(session).unwrap()).unwrap(),
+            before
+        );
+        assert_eq!(setup.events.latest_sequence(), 0);
+        assert!(setup.ports.persisted.lock().is_empty());
     }
 }
 

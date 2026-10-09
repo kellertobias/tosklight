@@ -873,6 +873,7 @@ fn patch(config: &Config) -> Vec<String> {
         PatchFixturePolicyAction::decl(config),
         PatchFixturePolicyActionRequest::decl(config),
         PatchHeadReplacement::decl(config),
+        PatchRootProgramReplacement::decl(config),
         PatchFixtureUpdateAction::decl(config),
         PatchFixtureUpdateRequest::decl(config),
         PatchErrorResponse::decl(config),

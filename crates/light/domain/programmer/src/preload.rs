@@ -447,6 +447,15 @@ fn restamp_pending_orders(registry: &ProgrammerRegistry, state: &mut crate::Prog
         .into_iter()
         .map(|index| (edits[index].key, registry.next_programmer_order()))
         .collect::<BTreeMap<_, _>>();
+    // The commit reorders edits, but their recalled source identity survives that boundary.
+    for (key, new_order) in &orders {
+        if let Some(origin) = state.preset_provenance.get(&key.0).cloned() {
+            Arc::make_mut(&mut state.preset_provenance).insert(*new_order, origin);
+        }
+        if let Some(origin) = state.replacement_provenance.get(&key.0).cloned() {
+            Arc::make_mut(&mut state.replacement_provenance).insert(*new_order, origin);
+        }
+    }
     for value in &mut state.preload_pending {
         value.programmer_order = orders[&timed_key(value.programmer_order, value.changed_at)];
     }

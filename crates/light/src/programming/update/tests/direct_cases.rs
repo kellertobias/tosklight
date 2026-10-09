@@ -70,6 +70,7 @@ fn color_update(
     order: u64,
 ) -> ProgrammerFixtureUpdate {
     ProgrammerFixtureUpdate {
+        replacement_projection: None,
         preset_reference: None,
         fixture_id,
         attribute: ProgrammingOwner::Color.key(),
@@ -86,6 +87,8 @@ fn preset_update_stores_tagged_direct_and_keeps_semantic_neighbours_portable() {
     let (a, b) = (fixture(1), fixture(2));
     let color = ProgrammingOwner::Color.key();
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Color 5".into(),
         family: light_programmer::PresetFamily::Color,
@@ -178,6 +181,8 @@ fn preset_recall_materializes_tagged_direct_without_baking_destination_values() 
     let unknown = direct_value(None, None, 77);
     let universal = direct_value(Some(DIM), Some(0.), 5);
     let preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Direct".into(),
         family: light_programmer::PresetFamily::Color,

@@ -15,6 +15,7 @@ impl ProgrammerState {
     pub(crate) fn snapshot(&self) -> ProgrammerSnapshot {
         ProgrammerSnapshot {
             preset_provenance: Arc::clone(&self.preset_provenance),
+            replacement_provenance: Arc::clone(&self.replacement_provenance),
             selected: self.selected.clone(),
             selection_expression: self.selection_expression.clone(),
             values: self.values.clone(),
@@ -41,6 +42,7 @@ impl ProgrammerState {
 
     pub(crate) fn restore_snapshot(&mut self, snapshot: ProgrammerSnapshot, now: DateTime<Utc>) {
         self.preset_provenance = snapshot.preset_provenance;
+        self.replacement_provenance = snapshot.replacement_provenance;
         self.selected = snapshot.selected;
         self.selection_expression = snapshot.selection_expression;
         self.values = snapshot.values;
@@ -115,12 +117,14 @@ impl ProgrammerRegistry {
             let values_changed = state.values != previous.values
                 || state.group_values != previous.group_values
                 || state.group_release_values != previous.group_release_values
-                || state.dynamic_values != previous.dynamic_values;
+                || state.dynamic_values != previous.dynamic_values
+                || state.replacement_provenance != previous.replacement_provenance;
             let preload_values_changed = state.preload_pending != previous.preload_pending
                 || state.preload_released_colors != previous.preload_released_colors
                 || state.preload_group_pending != previous.preload_group_pending
                 || state.preload_group_release_pending != previous.preload_group_release_pending
-                || state.preload_dynamic_pending != previous.preload_dynamic_pending;
+                || state.preload_dynamic_pending != previous.preload_dynamic_pending
+                || state.replacement_provenance != previous.replacement_provenance;
             let queue_changed = state.preload_playback_pending != previous.preload_playback_pending;
             state.redo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(previous), self.clock.now());
@@ -163,12 +167,14 @@ impl ProgrammerRegistry {
             let values_changed = state.values != next.values
                 || state.group_values != next.group_values
                 || state.group_release_values != next.group_release_values
-                || state.dynamic_values != next.dynamic_values;
+                || state.dynamic_values != next.dynamic_values
+                || state.replacement_provenance != next.replacement_provenance;
             let preload_values_changed = state.preload_pending != next.preload_pending
                 || state.preload_released_colors != next.preload_released_colors
                 || state.preload_group_pending != next.preload_group_pending
                 || state.preload_group_release_pending != next.preload_group_release_pending
-                || state.preload_dynamic_pending != next.preload_dynamic_pending;
+                || state.preload_dynamic_pending != next.preload_dynamic_pending
+                || state.replacement_provenance != next.replacement_provenance;
             let queue_changed = state.preload_playback_pending != next.preload_playback_pending;
             state.undo.push(Arc::new(state.snapshot()));
             state.restore_snapshot(Arc::unwrap_or_clone(next), self.clock.now());

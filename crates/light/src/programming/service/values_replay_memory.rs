@@ -55,6 +55,11 @@ pub(super) fn programming_values_projection_retained_bytes(
         .saturating_add(projection.group_values.capacity() * size_of::<ProgrammerGroupUpdate>());
     for value in &projection.fixture_values {
         bytes = bytes.saturating_add(value.attribute.0.len() + attribute_value_bytes(&value.value));
+        if let Some(projection) = &value.replacement_projection {
+            bytes = bytes.saturating_add(
+                projection.targets.capacity() * size_of::<light_core::ReplacementHeadTarget>(),
+            );
+        }
     }
     bytes = bytes.saturating_add(
         projection.dynamic_values.capacity()
@@ -66,6 +71,17 @@ pub(super) fn programming_values_projection_retained_bytes(
                 + value.attribute.0.len()
                 + attribute_value_bytes(&value.value),
         );
+        bytes = bytes.saturating_add(
+            value.replacement_projections.capacity()
+                * (size_of::<light_core::FixtureId>()
+                    + size_of::<light_core::ReplacementProgramProjection>()
+                    + 32),
+        );
+        for projection in value.replacement_projections.values() {
+            bytes = bytes.saturating_add(
+                projection.targets.capacity() * size_of::<light_core::ReplacementHeadTarget>(),
+            );
+        }
     }
     bytes
 }

@@ -715,6 +715,8 @@ fn core_owned_store_modes_cover_fixture_and_group_semantics() {
 
 fn preset_with_values(fixture: FixtureId, intensity: f32, group_value: &str) -> Preset {
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         instance_id: None,
         name: "Existing".into(),
         aim_at_fixture_number: None,

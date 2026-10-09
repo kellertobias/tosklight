@@ -31,6 +31,30 @@ macro_rules! required_contract {
                     .map(|v| v.value.required_programming_contract()),
             )
             .chain([state.preload_released_colors.required_contract()])
+            .chain(
+                state
+                    .values
+                    .iter()
+                    .chain(state.preload_pending.iter())
+                    .chain(state.preload_active.iter())
+                    .map(|value| value.programmer_order)
+                    .chain(
+                        state
+                            .group_values
+                            .values()
+                            .chain(state.preload_group_pending.values())
+                            .chain(state.preload_group_active.values())
+                            .flat_map(|values| values.values())
+                            .map(|value| value.programmer_order),
+                    )
+                    .filter(|order| {
+                        state
+                            .replacement_provenance
+                            .get(order)
+                            .is_some_and(|map| !map.is_empty())
+                    })
+                    .map(|_| light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT),
+            )
             .max()
             .unwrap_or(0)
     }};
@@ -39,6 +63,16 @@ macro_rules! required_contract {
 macro_rules! validate_content {
     ($value:expr) => {{
         let state = $value;
+        for projections in state.replacement_provenance.values() {
+            for (member, projection) in projections {
+                projection.validate()?;
+                if *member != projection.source_owner {
+                    return Err(IntentError(
+                        "replacement provenance requires its original member identity".into(),
+                    ));
+                }
+            }
+        }
         state.preload_released_colors.validate(
             &state.preload_dynamic_pending,
             &state.preload_group_release_pending,

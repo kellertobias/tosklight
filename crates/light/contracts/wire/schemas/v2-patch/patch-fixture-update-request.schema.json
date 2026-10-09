@@ -59,6 +59,13 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "root_programming_mapping": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PatchRootProgramReplacement"
+          }
         }
       },
       "required": [
@@ -895,6 +902,31 @@
         "profile_id",
         "mode_id",
         "geometry_digest"
+      ]
+    },
+    "PatchRootProgramReplacement": {
+      "description": "Explicit routing of existing shared-root programming for one canonical attribute.\nEmpty destinations retain that existing programming as dormant.",
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "source_profile_head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_profile_head_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "source_profile_head_id",
+        "attribute",
+        "target_profile_head_ids"
       ]
     },
     "PatchVectorAxis": {

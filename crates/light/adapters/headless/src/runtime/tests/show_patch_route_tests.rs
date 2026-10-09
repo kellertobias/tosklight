@@ -1246,3 +1246,291 @@ async fn v2_patch_replacement_is_sparse_guarded_and_replay_safe() {
     assert_eq!(after["fixtures"][0], changed["fixtures"][0]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn v2_patch_shared_root_replacement_migrates_existing_programmer_only_and_rejects_missing_consent()
+ {
+    let (state, data_dir) = test_state();
+    let (source_id, source_mode) = install_patch_route_profile(&state);
+    let source = state
+        .installation
+        .fixture_profile(light_core::FixtureId(source_id), 1)
+        .unwrap()
+        .unwrap();
+    assert!(source.modes[0].heads[0].master_shared);
+    let source_head = source.modes[0].heads[0].id;
+    let mut target = source.clone();
+    target.id = light_core::FixtureId::new();
+    target.modes[0].id = Uuid::new_v4();
+    target.modes[0].heads[0].id = Uuid::new_v4();
+    target.modes[0].heads[0].master_shared = false;
+    let mut second = target.modes[0].heads[0].clone();
+    second.id = Uuid::new_v4();
+    target.modes[0].heads.push(second);
+    let heads = target.modes[0]
+        .heads
+        .iter()
+        .map(|head| head.id)
+        .collect::<Vec<_>>();
+    target.modes[0].channels[0].head_id = heads[0];
+    let mut channel = target.modes[0].channels[0].clone();
+    channel.id = Uuid::new_v4();
+    channel.head_id = heads[1];
+    target.modes[0].channels.push(channel);
+    target.modes[0].splits[0].footprint = 2;
+    let target = state.installation.save_fixture_profile(target, 0).unwrap();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    let show = create_show(&app, &token, "Existing shared-root replacement route").await;
+    let show_id = show["id"].as_str().unwrap();
+    open_show_for_patch_test(&app, &token, show_id).await;
+    let mut initial = valid_patch_request_for(source_id, source_mode, "shared-root-seed");
+    initial["fixtures"][0]["split_patches"][0]["universe"] = serde_json::json!(1);
+    initial["fixtures"][0]["split_patches"][0]["address"] = serde_json::json!(1);
+    let initial = post_patch(&app, &token, show_id, Some(0), initial).await;
+    assert_eq!(initial.status(), StatusCode::OK);
+    let initial = json(initial).await;
+    let fixture = &initial["fixtures"][0];
+    let fixture_id = fixture["fixture_id"].as_str().unwrap();
+    let initial_edit = execute_freeze_command(
+        &app,
+        &token,
+        session.desk.id,
+        "root-earlier-edit",
+        "FIXTURE 1 AT 20",
+    )
+    .await;
+    assert_eq!(
+        initial_edit.status(),
+        StatusCode::OK,
+        "{}",
+        json(initial_edit).await
+    );
+    let command = execute_freeze_command(
+        &app,
+        &token,
+        session.desk.id,
+        "root-held",
+        "FIXTURE 1 AT 40",
+    )
+    .await;
+    assert_eq!(command.status(), StatusCode::OK, "{}", json(command).await);
+    let before = state.programming.get(session.id).unwrap();
+    assert_eq!(
+        state.output.render(Default::default()).unwrap().universes[&1][0],
+        102
+    );
+    // The real adapter captures metadata under the same boundary, but failed persistence
+    // must leave both held Programmer and installed physical generation untouched.
+    let previous = state.output.snapshot();
+    let old = previous
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.fixture_id.0.to_string() == fixture_id)
+        .unwrap();
+    let root = old.fixture_id;
+    let mut new = old.clone();
+    new.definition = target.resolved_definition(target.modes[0].id).unwrap();
+    new.logical_heads = heads
+        .iter()
+        .enumerate()
+        .map(|(index, head)| light_fixture::PatchedHead {
+            fixture_id: light_core::FixtureId::new(),
+            head_index: index as u16,
+            profile_head_id: Some(*head),
+        })
+        .collect();
+    let source_context = light_core::ReplacementProfileContext {
+        profile_id: source.id,
+        profile_revision: source.revision.into(),
+        mode_id: source_mode,
+    };
+    let target_context = light_core::ReplacementProfileContext {
+        profile_id: target.id,
+        profile_revision: target.revision.into(),
+        mode_id: target.modes[0].id,
+    };
+    let projection = light_core::ReplacementProgramProjection {
+        source_owner: root,
+        source_profile: source_context.clone(),
+        source_head_id: source_head,
+        target_profile: target_context.clone(),
+        targets: new
+            .logical_heads
+            .iter()
+            .map(|head| light_core::ReplacementHeadTarget {
+                fixture_id: head.fixture_id,
+                profile_head_id: head.profile_head_id.unwrap(),
+            })
+            .collect(),
+    };
+    let plan = light_core::ReplacementRuntimeMigration {
+        source_owner: root,
+        source_profile: source_context,
+        target_profile: target_context,
+        root_attributes: [light_core::AttributeKey::intensity()].into(),
+        root_projections: [(light_core::AttributeKey::intensity(), projection)].into(),
+        head_targets: Default::default(),
+        source_head_owners: [(source_head, root)].into(),
+    };
+    let mut candidate = previous.as_ref().clone();
+    candidate.revision += 1;
+    candidate.fixtures = vec![new].into();
+    let ports = super::super::show_patch_adapter::ServerShowPatchPorts::new(state.clone());
+    let context = light_application::ActionContext::operator(
+        session.desk.id,
+        session.id.0,
+        light_application::ActionSource::Http,
+    );
+    let failed: Result<(), light_application::ActionError> =
+        light_application::ActiveShowPorts::run_active_show_lifecycle(
+            &ports,
+            &context,
+            light_core::ShowId(Uuid::parse_str(show_id).unwrap()),
+            || {
+                light_application::ShowPatchPorts::prepare_programming_replacements(
+                    &ports,
+                    &[plan],
+                )?;
+                let prepared =
+                    light_application::ActiveShowPorts::prepare_runtime(&ports, candidate)?;
+                light_application::ActiveShowPorts::finalize_runtime(
+                    &ports,
+                    &context,
+                    prepared,
+                    || {
+                        Err(light_application::ActionError::new(
+                            light_application::ActionErrorKind::Unavailable,
+                            "injected replacement persistence failure",
+                        ))
+                    },
+                )
+            },
+        );
+    assert_eq!(
+        failed.unwrap_err().kind,
+        light_application::ActionErrorKind::Unavailable
+    );
+    assert_eq!(state.output.snapshot().revision, previous.revision);
+    assert_eq!(
+        state
+            .programming
+            .get(session.id)
+            .unwrap()
+            .replacement_provenance,
+        before.replacement_provenance
+    );
+    assert_eq!(
+        state.programming.get(session.id).unwrap().values,
+        before.values
+    );
+    let after_failed = state.programming.get(session.id).unwrap();
+    assert_eq!(after_failed.undo.len(), before.undo.len());
+    assert_eq!(after_failed.redo.len(), before.redo.len());
+    for (actual, original) in after_failed.undo.iter().zip(&before.undo) {
+        assert!(
+            std::sync::Arc::ptr_eq(actual, original),
+            "failed persistence must not rebase history"
+        );
+    }
+    assert_eq!(
+        state.output.render(Default::default()).unwrap().universes[&1][0],
+        102
+    );
+    let request = serde_json::json!({"request_id":"root-no-consent","expected_fixture_revision":fixture["fixture_revision"],"expected_patch_revision":initial["patch_revision"],"expected_show_revision":initial["show_revision"],"multipatch_instance_id":null,"action":"replace_profile","profile_id":target.id.0,"profile_revision":target.revision,"mode_id":target.modes[0].id,"head_mapping":[],"root_programming_mapping":[]});
+    let refused = post_patch_update(&app, &token, show_id, fixture_id, request.clone()).await;
+    let status = refused.status();
+    let refused = json(refused).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+    assert_eq!(
+        state
+            .programming
+            .get(session.id)
+            .unwrap()
+            .replacement_provenance,
+        before.replacement_provenance
+    );
+    assert_eq!(
+        state.output.render(Default::default()).unwrap().universes[&1][0],
+        102
+    );
+    let mut request = request;
+    request["request_id"] = serde_json::json!("root-explicit-consent");
+    request["root_programming_mapping"] = serde_json::json!([{"source_profile_head_id":source_head,"attribute":"intensity","target_profile_head_ids":heads}]);
+    let accepted = post_patch_update(&app, &token, show_id, fixture_id, request).await;
+    let status = accepted.status();
+    let accepted = json(accepted).await;
+    assert_eq!(status, StatusCode::OK, "{accepted}");
+    let after = state.programming.get(session.id).unwrap();
+    assert_eq!(after.id, before.id);
+    assert_eq!(after.values, before.values);
+    assert_eq!(after.selected, before.selected);
+    assert_eq!(after.replacement_provenance.len(), 1);
+    assert_eq!(
+        &state.output.render(Default::default()).unwrap().universes[&1][..2],
+        &[102, 102]
+    );
+    // Physical migration rebases retained edit history; it is not an operator edit.
+    assert_eq!(after.undo.len(), before.undo.len());
+    assert_eq!(after.redo.len(), before.redo.len());
+    assert!(state.programming.undo(session.id));
+    assert_eq!(
+        &state.output.render(Default::default()).unwrap().universes[&1][..2],
+        &[51, 51],
+        "Undo must restore the earlier value through the installed consented topology",
+    );
+    assert!(state.programming.redo(session.id));
+    assert_eq!(
+        &state.output.render(Default::default()).unwrap().universes[&1][..2],
+        &[102, 102],
+        "Redo must restore the held value without routing back to a silent root",
+    );
+    let fresh = execute_freeze_command(
+        &app,
+        &token,
+        session.desk.id,
+        "fresh-root-master",
+        "FIXTURE 1.0 AT 40",
+    )
+    .await;
+    let status = fresh.status();
+    let fresh = json(fresh).await;
+    assert_eq!(status, StatusCode::OK, "{fresh}");
+    let fresh_state = state.programming.get(session.id).unwrap();
+    let live = fresh_state
+        .values
+        .iter()
+        .find(|value| value.fixture_id.0.to_string() == fixture_id)
+        .unwrap();
+    assert_ne!(live.programmer_order, before.values[0].programmer_order);
+    assert!(
+        !fresh_state
+            .replacement_provenance
+            .contains_key(&live.programmer_order)
+    );
+    assert_eq!(
+        &state.output.render(Default::default()).unwrap().universes[&1][..2],
+        &[0, 0]
+    );
+    assert!(
+        state
+            .programming
+            .get(session.id)
+            .unwrap()
+            .replacement_provenance
+            .is_empty(),
+        "fresh={fresh}; state={}",
+        serde_json::to_string(&state.programming.get(session.id).unwrap()).unwrap()
+    );
+    assert_eq!(
+        &state.output.render(Default::default()).unwrap().universes[&1][..2],
+        &[0, 0]
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

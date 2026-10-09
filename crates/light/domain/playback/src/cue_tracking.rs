@@ -633,6 +633,7 @@ impl PlaybackEngine {
                     _ => false,
                 };
                 compatible.then(|| PlaybackRetainedValue {
+                    replacement_projection: None,
                     timed: TimedValue {
                         fixture_id: address.0,
                         attribute: address.1,

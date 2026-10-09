@@ -1,4 +1,8 @@
 import {
+	decodeReplacementProjection,
+	decodeReplacementMap,
+} from "./replacementProjectionWire";
+import {
 	arrayAt,
 	booleanAt,
 	enumAt,
@@ -148,6 +152,23 @@ function decodeCueChange(
 	const change = recordAt(value, path);
 	return {
 		...change,
+		...(idKey === "fixture_id" && change.replacement_projection != null
+			? {
+					replacement_projection: decodeReplacementProjection(
+						change.replacement_projection,
+						`${path}.replacement_projection`,
+						stringAt(change.fixture_id, `${path}.fixture_id`),
+					),
+				}
+			: {}),
+		...(idKey === "group_id" && change.replacement_projections !== undefined
+			? {
+					replacement_projections: decodeReplacementMap(
+						change.replacement_projections,
+						`${path}.replacement_projections`,
+					),
+				}
+			: {}),
 		[idKey]: stringAt(change[idKey], `${path}.${idKey}`),
 		attribute: stringAt(change.attribute, `${path}.attribute`),
 		...(change.preset_reference == null

@@ -36,6 +36,7 @@ import {
 	saveMultipatchVectorInput,
 } from "./multipatchActions";
 import { definitionSplits, fixturePolicyApplicability } from "./patchModel";
+import { rootProgrammingCorrespondences } from "./replacementProgramming";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
@@ -577,6 +578,20 @@ function ModeField() {
 		{ui.replacingFixture && <>
 			<p>The fixture number, placement, groups and stored programming stay attached to this fixture. Choose each logical head correspondence explicitly. Unmatched heads keep dormant programming; new heads receive new identities.</p>
 			<p>Existing root and copy addresses are retained by split number and checked against the new footprint. New splits start unpatched. Incompatible installed calibration remains stored with its original identity and needs revalidation. Direct colors may only approximate on another model; unsupported attributes remain passive.</p>
+			{rootProgrammingCorrespondences(selected?.definition, target).map(row => {
+				const choice = ui.replacementHeads[row.key] ?? "";
+				const destinations = choice === "__unmapped" ? [] : choice.split(",").filter(Boolean);
+				return <fieldset key={row.key}>
+					<legend>Existing shared head {row.sourceName} · {row.attribute}</legend>
+					<p>Route existing programming to the selected owners. New master-only edits keep their normal meaning.</p>
+					<label><input type="checkbox" aria-label={`Leave ${row.sourceName} ${row.attribute} unmatched`} checked={choice === "__unmapped"}
+						onChange={event => ui.setReplacementHeads({...ui.replacementHeads, [row.key]: event.target.checked ? "__unmapped" : ""})} /> Leave unmatched — keep dormant programming</label>
+					{row.targets.map(target => <label key={target.id}><input type="checkbox"
+						aria-label={`Route ${row.sourceName} ${row.attribute} to ${target.name}`} checked={destinations.includes(target.id)}
+						onChange={event => ui.setReplacementHeads({...ui.replacementHeads, [row.key]: (event.target.checked
+							? [...destinations, target.id] : destinations.filter(id => id !== target.id)).join(",")})} /> {target.name}</label>)}
+				</fieldset>;
+			})}
 			{(selected?.logical_heads ?? []).map(head => <label key={head.fixture_id}>
 				Existing head {head.head_index + 1}
 				<Select aria-label={`Replacement for head ${head.head_index + 1}`} value={ui.replacementHeads[head.fixture_id] ?? ""}

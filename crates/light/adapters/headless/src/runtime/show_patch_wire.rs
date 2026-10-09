@@ -50,12 +50,21 @@ pub(crate) fn application_update_command(
             profile_revision,
             mode_id,
             head_mapping,
+            root_programming_mapping,
         } => application::PatchFixtureUpdateAction::ReplaceProfile {
             profile: fixture::PatchedFixtureProfileReference {
                 profile_id: FixtureId(profile_id),
                 profile_revision,
                 mode_id,
             },
+            root_programming_mapping: root_programming_mapping
+                .into_iter()
+                .map(|entry| application::PatchRootProgramReplacement {
+                    source_profile_head_id: entry.source_profile_head_id,
+                    attribute: light_core::AttributeKey(entry.attribute.into()),
+                    target_profile_head_ids: entry.target_profile_head_ids,
+                })
+                .collect(),
             head_mapping: head_mapping
                 .into_iter()
                 .map(|entry| application::PatchHeadReplacement {

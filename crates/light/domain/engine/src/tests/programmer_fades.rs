@@ -175,12 +175,14 @@ fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
             fixtures: vec![fixture].into(),
             groups: vec![
                 GroupDefinition {
+                    replacement_projections: Default::default(),
                     id: "1".into(),
                     name: "Broad".into(),
                     fixtures: vec![logical],
                     ..Default::default()
                 },
                 GroupDefinition {
+                    replacement_projections: Default::default(),
                     id: "2".into(),
                     name: "Subset".into(),
                     fixtures: vec![logical],

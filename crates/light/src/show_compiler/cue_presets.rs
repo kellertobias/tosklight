@@ -53,10 +53,189 @@ pub(super) fn resolve(
         .cloned()
 }
 
+/// Call only after value resolution succeeds: an empty source envelope is an authoritative
+/// detachment, whereas a missing source keeps the Cue's recorded fallback unchanged.
+pub(super) fn replacement_projections(
+    reference: &PresetValueReference,
+    presets: &HashMap<uuid::Uuid, Preset>,
+) -> light_core::ReplacementProjectionMap {
+    let Some(preset) = presets.get(&reference.preset_instance_id) else {
+        return HashMap::new();
+    };
+    match &reference.source_owner {
+        PresetValueOwner::Universal => HashMap::new(),
+        PresetValueOwner::Fixture { fixture_id } => preset
+            .fixture_replacement_projections
+            .get(fixture_id)
+            .and_then(|values| values.get(&reference.source_attribute))
+            .map(|projection| HashMap::from([(*fixture_id, projection.clone())]))
+            .unwrap_or_default(),
+        PresetValueOwner::Group { group_id } => {
+            let map = preset
+                .group_replacement_projections
+                .get(group_id)
+                .and_then(|values| values.get(&reference.source_attribute))
+                .cloned()
+                .unwrap_or_default();
+            if let Some(member) = reference.member_fixture {
+                map.into_iter()
+                    .filter(|(owner, _)| *owner == member)
+                    .collect()
+            } else {
+                map
+            }
+        }
+    }
+}
+
+pub(super) fn replacement_projection(
+    reference: &PresetValueReference,
+    presets: &HashMap<uuid::Uuid, Preset>,
+    captured: Option<&light_core::ReplacementProgramProjection>,
+) -> Option<light_core::ReplacementProgramProjection> {
+    let map = replacement_projections(reference, presets);
+    let owner = match &reference.source_owner {
+        PresetValueOwner::Fixture { fixture_id } => Some(*fixture_id),
+        PresetValueOwner::Group { .. } => reference.member_fixture,
+        PresetValueOwner::Universal => None,
+    }?;
+    let mut projection = map.get(&owner)?.clone();
+    if let Some(captured) =
+        captured.filter(|captured| captured.target_profile == projection.target_profile)
+    {
+        let selected = captured
+            .targets
+            .iter()
+            .map(|target| target.fixture_id)
+            .collect::<std::collections::HashSet<_>>();
+        // Keep an explicit empty result dormant, never turn it into ordinary root programming.
+        projection
+            .targets
+            .retain(|target| selected.contains(&target.fixture_id));
+    }
+    Some(projection)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use light_core::{AttributeKey, FixtureId};
+
+    fn envelope(
+        owner: FixtureId,
+        targets: &[FixtureId],
+    ) -> light_core::ReplacementProgramProjection {
+        let profile = light_core::ReplacementProfileContext {
+            profile_id: FixtureId::new(),
+            profile_revision: 1,
+            mode_id: uuid::Uuid::new_v4(),
+        };
+        light_core::ReplacementProgramProjection {
+            source_owner: owner,
+            source_profile: profile.clone(),
+            source_head_id: uuid::Uuid::new_v4(),
+            target_profile: profile,
+            targets: targets
+                .iter()
+                .map(|fixture| light_core::ReplacementHeadTarget {
+                    profile_head_id: uuid::Uuid::new_v4(),
+                    fixture_id: *fixture,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn replacement_projection_live_source_detachment_subset_dormancy_and_group_member_identity() {
+        let root = FixtureId::new();
+        let heads = [FixtureId::new(), FixtureId::new()];
+        let id = uuid::Uuid::new_v4();
+        let attribute = AttributeKey::intensity();
+        let source = envelope(root, &heads);
+        let mut preset = Preset {
+            instance_id: Some(id),
+            values: HashMap::from([(
+                root,
+                HashMap::from([(attribute.clone(), AttributeValue::Normalized(0.4))]),
+            )]),
+            fixture_replacement_projections: HashMap::from([(
+                root,
+                HashMap::from([(attribute.clone(), source.clone())]),
+            )]),
+            ..Default::default()
+        };
+        let reference = PresetValueReference {
+            preset_instance_id: id,
+            source_owner: PresetValueOwner::Fixture { fixture_id: root },
+            source_attribute: attribute.clone(),
+            sample_rank: None,
+            member_fixture: None,
+        };
+        let mut captured = source.clone();
+        captured.targets.truncate(1);
+        let catalog = HashMap::from([(id, preset.clone())]);
+        assert_eq!(
+            replacement_projection(&reference, &catalog, Some(&captured)),
+            Some(captured.clone())
+        );
+        let mut remaining = preset.clone();
+        remaining
+            .fixture_replacement_projections
+            .get_mut(&root)
+            .unwrap()
+            .get_mut(&attribute)
+            .unwrap()
+            .targets
+            .remove(0);
+        let dormant = replacement_projection(
+            &reference,
+            &HashMap::from([(id, remaining)]),
+            Some(&captured),
+        )
+        .unwrap();
+        assert!(
+            dormant.targets.is_empty(),
+            "lost subset stays consented dormant rather than ordinary master"
+        );
+        preset.fixture_replacement_projections.clear();
+        assert_eq!(
+            replacement_projection(
+                &reference,
+                &HashMap::from([(id, preset.clone())]),
+                Some(&captured)
+            ),
+            None
+        );
+        let group_ref = PresetValueReference {
+            source_owner: PresetValueOwner::Group {
+                group_id: "Front".into(),
+            },
+            member_fixture: Some(root),
+            ..reference
+        };
+        let other = FixtureId::new();
+        preset.group_replacement_projections.insert(
+            "Front".into(),
+            HashMap::from([(
+                attribute,
+                HashMap::from([(root, source.clone()), (other, envelope(other, &heads))]),
+            )]),
+        );
+        let catalog = HashMap::from([(id, preset)]);
+        assert_eq!(
+            replacement_projections(&group_ref, &catalog),
+            HashMap::from([(root, source)])
+        );
+        assert_eq!(
+            resolve(
+                &group_ref,
+                &HashMap::new(),
+                &NativeColorSourceCatalog::default()
+            ),
+            None,
+            "missing source leaves materialized Cue fallback untouched in decoder"
+        );
+    }
 
     #[test]
     fn identity_owner_and_rank_survive_edit_move_but_never_rebind_recreated_number() {

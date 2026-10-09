@@ -184,10 +184,12 @@ fn plan_with_positions_and_native_models(
             }
         }
     }
-    for fixture_id in &selection.selected {
-        append_fixture_values(&mut planned, preset, *fixture_id, timing);
-    }
     let selected = selection.selected.iter().copied().collect::<HashSet<_>>();
+    let mut sources = preset.values.keys().copied().collect::<Vec<_>>();
+    sources.sort_by_key(|id| id.0);
+    for fixture_id in sources {
+        append_fixture_values(&mut planned, preset, fixture_id, timing, &selected);
+    }
     let mut ids = preset
         .group_values
         .keys()
@@ -203,10 +205,16 @@ fn plan_with_positions_and_native_models(
         let members = ranking
             .ordered_fixture_ids
             .iter()
-            .filter(|id| selected.contains(id))
             .map(|id| (*id, ranking.rank_by_fixture[id]))
             .collect::<Vec<_>>();
         for attribute in sorted_attributes(&preset.group_values[id]) {
+            let members = members
+                .iter()
+                .copied()
+                .filter(|(member, _)| {
+                    group_source_selected(preset, id, attribute, *member, &selected)
+                })
+                .collect::<Vec<_>>();
             let value = &preset.group_values[id][attribute];
             let native =
                 group_native_models(value, &members, native_models).map_err(invalid_intent)?;
@@ -240,13 +248,39 @@ fn plan_with_positions_and_native_models(
         .enumerate()
         .map(|(rank, id)| (*id, rank))
         .collect::<HashMap<_, _>>();
-    // Rank compilation is batched by source, but mutations retain the operator's selection
-    // order and the established per-fixture last-source precedence.
+    let projection_order = replacement_value_origins(selection, preset, groups)
+        .into_iter()
+        .filter_map(|(owner, attribute, map)| {
+            let light_core::PresetValueOwner::Fixture { fixture_id } = owner else {
+                return None;
+            };
+            let rank = map
+                .get(&fixture_id)
+                .into_iter()
+                .flat_map(|projection| &projection.targets)
+                .filter_map(|target| order.get(&target.fixture_id).copied())
+                .min();
+            Some(((fixture_id, attribute), rank))
+        })
+        .collect::<HashMap<_, _>>();
+    // Replacement values remain authored on their root, ordered by the first selected explicit
+    // destination. Group rank compilation still uses the original membership domain.
     planned.sort_by_key(|mutation| match mutation {
-        NormalProgrammerValueMutation::SetFixture { fixture_id, .. }
-        | NormalProgrammerValueMutation::ReleaseFixture { fixture_id, .. } => {
-            order.get(fixture_id).copied().unwrap_or(usize::MAX)
+        NormalProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute,
+            ..
         }
+        | NormalProgrammerValueMutation::ReleaseFixture {
+            fixture_id,
+            attribute,
+            ..
+        } => projection_order
+            .get(&(*fixture_id, attribute.clone()))
+            .copied()
+            .flatten()
+            .or_else(|| order.get(fixture_id).copied())
+            .unwrap_or(usize::MAX),
         _ => usize::MAX,
     });
     Ok(planned)
@@ -444,11 +478,15 @@ fn append_fixture_values(
     preset: &Preset,
     fixture_id: FixtureId,
     timing: NormalProgrammerValueTiming,
+    selected: &HashSet<FixtureId>,
 ) {
     let Some(attributes) = preset.values.get(&fixture_id) else {
         return;
     };
     for attribute in sorted_attributes(attributes) {
+        if !fixture_source_selected(preset, fixture_id, attribute, selected) {
+            continue;
+        }
         planned.push(NormalProgrammerValueMutation::SetFixture {
             fixture_id,
             attribute: attribute.clone(),
@@ -594,9 +632,15 @@ pub fn preset_value_origins(
             }
         }
     }
-    for fixture in &selection.selected {
+    let selected = selection.selected.iter().copied().collect::<HashSet<_>>();
+    let mut fixtures = preset.values.keys().collect::<Vec<_>>();
+    fixtures.sort_by_key(|fixture| fixture.0);
+    for fixture in fixtures {
         if let Some(values) = preset.values.get(fixture) {
             for attribute in sorted_attributes(values) {
+                if !fixture_source_selected(preset, *fixture, attribute, &selected) {
+                    continue;
+                }
                 append(
                     Owner::Fixture {
                         fixture_id: *fixture,
@@ -621,12 +665,11 @@ pub fn preset_value_origins(
     for group in group_ids {
         if let Ok(resolved) = light_programmer::resolve_group_spatial(group, groups, positions) {
             let ranking = resolved.ranked_selection;
-            for fixture in ranking
-                .ordered_fixture_ids
-                .iter()
-                .filter(|fixture| selected.contains(fixture))
-            {
+            for fixture in ranking.ordered_fixture_ids.iter() {
                 for attribute in sorted_attributes(&preset.group_values[group]) {
+                    if !group_source_selected(preset, group, attribute, *fixture, &selected) {
+                        continue;
+                    }
                     append(
                         Owner::Fixture {
                             fixture_id: *fixture,
@@ -667,6 +710,143 @@ pub fn preset_value_origins(
                     None,
                     None,
                 );
+            }
+        }
+    }
+    origins
+}
+
+fn fixture_source_selected(
+    preset: &Preset,
+    fixture: FixtureId,
+    attribute: &AttributeKey,
+    selected: &HashSet<FixtureId>,
+) -> bool {
+    preset
+        .fixture_replacement_projections
+        .get(&fixture)
+        .and_then(|values| values.get(attribute))
+        .map_or_else(
+            || selected.contains(&fixture),
+            |projection| {
+                projection
+                    .targets
+                    .iter()
+                    .any(|target| selected.contains(&target.fixture_id))
+            },
+        )
+}
+fn group_source_selected(
+    preset: &Preset,
+    group: &str,
+    attribute: &AttributeKey,
+    member: FixtureId,
+    selected: &HashSet<FixtureId>,
+) -> bool {
+    preset
+        .group_replacement_projections
+        .get(group)
+        .and_then(|values| values.get(attribute))
+        .and_then(|projections| projections.get(&member))
+        .map_or_else(
+            || selected.contains(&member),
+            |projection| {
+                projection
+                    .targets
+                    .iter()
+                    .any(|target| selected.contains(&target.fixture_id))
+            },
+        )
+}
+
+pub(super) fn replacement_value_origins(
+    selection: &ProgrammerSelection,
+    preset: &Preset,
+    groups: &HashMap<String, light_programmer::GroupDefinition>,
+) -> Vec<(
+    light_core::PresetValueOwner,
+    AttributeKey,
+    light_core::ReplacementProjectionMap,
+)> {
+    use light_core::PresetValueOwner as Owner;
+    let selected = selection.selected.iter().copied().collect::<HashSet<_>>();
+    let live = live_group_targets(selection);
+    let mut origins = Vec::new();
+    if live.is_empty() {
+        for fixture in &selection.selected {
+            for attribute in sorted_attributes(&preset.universal_values) {
+                origins.push((
+                    Owner::Fixture {
+                        fixture_id: *fixture,
+                    },
+                    attribute.clone(),
+                    HashMap::new(),
+                ));
+            }
+        }
+    }
+    let mut fixtures = preset.values.keys().copied().collect::<Vec<_>>();
+    fixtures.sort_by_key(|id| id.0);
+    for fixture in fixtures {
+        for attribute in sorted_attributes(&preset.values[&fixture]) {
+            if fixture_source_selected(preset, fixture, attribute, &selected) {
+                let projection = preset
+                    .fixture_replacement_projections
+                    .get(&fixture)
+                    .and_then(|values| values.get(attribute))
+                    .and_then(|projection| projection.restricted_to(&selected));
+                origins.push((
+                    Owner::Fixture {
+                        fixture_id: fixture,
+                    },
+                    attribute.clone(),
+                    projection
+                        .map(|projection| HashMap::from([(fixture, projection)]))
+                        .unwrap_or_default(),
+                ));
+            }
+        }
+    }
+    let mut group_ids = preset.group_values.keys().collect::<Vec<_>>();
+    group_ids.sort();
+    for group in group_ids {
+        let members = light_programmer::resolve_group(group, groups).unwrap_or_default();
+        for attribute in sorted_attributes(&preset.group_values[group]) {
+            let projections = preset
+                .group_replacement_projections
+                .get(group)
+                .and_then(|values| values.get(attribute));
+            if live.contains(group) {
+                let map = projections
+                    .into_iter()
+                    .flat_map(|map| map.iter())
+                    .filter(|(member, _)| members.contains(member))
+                    .map(|(member, projection)| (*member, projection.clone()))
+                    .collect();
+                origins.push((
+                    Owner::Group {
+                        group_id: group.clone(),
+                    },
+                    attribute.clone(),
+                    map,
+                ));
+            } else {
+                for member in &members {
+                    if group_source_selected(preset, group, attribute, *member, &selected) {
+                        let projection = projections
+                            .and_then(|map| map.get(member))
+                            .and_then(|projection| projection.restricted_to(&selected));
+                        origins.push((
+                            Owner::Fixture {
+                                fixture_id: *member,
+                            },
+                            attribute.clone(),
+                            projection
+                                .map(|projection| HashMap::from([(*member, projection)]))
+                                .unwrap_or_default(),
+                        ));
+                    }
+                }
             }
         }
     }

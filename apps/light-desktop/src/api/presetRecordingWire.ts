@@ -1,3 +1,4 @@
+import { decodePresetReplacementFields } from "./replacementProjectionWire";
 import type {
 	PresetRecordingOutcome,
 	PresetRecordingRequest,
@@ -104,10 +105,7 @@ export function decodePresetRecordingOutcome(
 		? {
 				...base,
 				status,
-				eventSequence: integerAt(
-					response.event_sequence,
-					"$.event_sequence",
-				),
+				eventSequence: integerAt(response.event_sequence, "$.event_sequence"),
 			}
 		: { ...base, status };
 }
@@ -199,7 +197,11 @@ function decodePresetBody(
 	valuesAt(body.values, "$.preset.body.values");
 	if ("group_values" in body)
 		valuesAt(body.group_values, "$.preset.body.group_values");
-	return { ...body, family } as ShowObject<"preset">["body"];
+	return {
+		...body,
+		...decodePresetReplacementFields(body, "$.preset.body"),
+		family,
+	} as ShowObject<"preset">["body"];
 }
 
 function validateRequest(request: PresetRecordingRequest) {
@@ -257,13 +259,21 @@ function validatePrintable(
 		new TextEncoder().encode(value).length > byteLimit ||
 		/\p{Cc}/u.test(value)
 	)
-		throw new WireValidationError(path, `1-${byteLimit} printable ${label} bytes`, value);
+		throw new WireValidationError(
+			path,
+			`1-${byteLimit} printable ${label} bytes`,
+			value,
+		);
 	return value;
 }
 
 function uuidAt(value: unknown, path: string) {
 	const decoded = stringAt(value, path);
-	if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(decoded))
+	if (
+		!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+			decoded,
+		)
+	)
 		throw new WireValidationError(path, "hyphenated UUID", value);
 	return decoded;
 }

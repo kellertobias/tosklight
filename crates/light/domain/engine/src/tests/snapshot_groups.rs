@@ -9,6 +9,7 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     let list_id = light_core::CueListId::new();
     let mut cue = light_playback::Cue::new(1_u16.into());
     cue.group_changes.push(light_playback::GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: "live".into(),
         attribute: AttributeKey::intensity(),
@@ -45,6 +46,7 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
         cue_lists: vec![list.clone()].into(),
         playbacks: vec![test_group_playback_with_master(1, "live", 0.5)].into(),
         groups: vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "live".into(),
             name: "Live".into(),
             fixtures: members,
@@ -105,6 +107,7 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
     unpatched.universe = None;
     unpatched.address = None;
     let group = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "look".into(),
         name: "Look".into(),
         fixtures: vec![patched_logical, unpatched_logical],
@@ -151,6 +154,7 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
 #[test]
 fn canonical_group_rules_and_spatial_mappings_are_validated() {
     let source = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "source".into(),
         name: "Source".into(),
         source: Some(GroupFixtureSource::Explicit {
@@ -159,6 +163,7 @@ fn canonical_group_rules_and_spatial_mappings_are_validated() {
         ..Default::default()
     };
     let mut derived = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "derived".into(),
         name: "Derived".into(),
         source: Some(GroupFixtureSource::References {

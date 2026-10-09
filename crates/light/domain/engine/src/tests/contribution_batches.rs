@@ -752,6 +752,7 @@ fn grouped_source_engine(
     let groups = group_ids
         .iter()
         .map(|id| GroupDefinition {
+            replacement_projections: Default::default(),
             id: (*id).into(),
             name: (*id).into(),
             fixtures: vec![fixture_id],

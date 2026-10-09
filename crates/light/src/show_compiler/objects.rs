@@ -102,6 +102,11 @@ pub(super) fn decode_cue_lists(
                     && let Some(reference) = &change.preset_reference
                     && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
                 {
+                    change.replacement_projection = super::cue_presets::replacement_projection(
+                        reference,
+                        &presets,
+                        change.replacement_projection.as_ref(),
+                    );
                     change.value = Some(value);
                 }
             }
@@ -110,6 +115,8 @@ pub(super) fn decode_cue_lists(
                     && let Some(reference) = &change.preset_reference
                     && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
                 {
+                    change.replacement_projections =
+                        super::cue_presets::replacement_projections(reference, &presets);
                     change.value = Some(value);
                 }
             }
@@ -207,10 +214,11 @@ pub(super) fn decode_dynamics(
         .chain(
             candidate
                 .objects_of_kind("cue_list")
-                .filter(|object| {
-                    light_show::required_object_programming_contract(object.body()) > 1
-                })
-                .map(|_| light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT),
+                .chain(candidate.objects_of_kind("group"))
+                .map(|object| light_show::required_object_programming_contract(object.body()))
+                // Portable literal writers advertise1 even with no semantic values. Here only
+                // additive addressing/reference features augment the decoded value requirement.
+                .filter(|required| *required > 1),
         )
         .max()
         .unwrap_or(0);

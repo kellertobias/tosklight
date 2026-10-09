@@ -13,6 +13,8 @@ use super::*;
 fn recorded_universal_color(value: AttributeValue) -> Preset {
     let color_key = key(ProgrammingOwner::Color);
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         name: "TL-638 shared colour".into(),
         family: PresetFamily::Color,
         number: 1,
@@ -30,6 +32,8 @@ fn recorded_universal_color(value: AttributeValue) -> Preset {
 
 fn universal(family: PresetFamily, owner: ProgrammingOwner, value: AttributeValue) -> Preset {
     Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         name: format!("TL-638 universal {family:?}"),
         family,
         number: 1,
@@ -387,6 +391,8 @@ fn mixed_preset_update_changes_each_address_at_its_own_source() {
         color(uv_only_black()),
     );
     let mixed = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         name: "TL-638 mixed".into(),
         family,
         number: 1,

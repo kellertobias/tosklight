@@ -153,6 +153,17 @@ impl TestRig {
             .unwrap();
     }
 
+    pub fn accepts_programming_contract(&self, supported: u16) -> bool {
+        light_show::validate_show_programming_contract(&self.ports.path, supported).is_ok()
+    }
+
+    pub fn seed_programming_object(&self, kind: &str, id: &str, body: &serde_json::Value) {
+        ShowStore::open(&self.ports.path)
+            .unwrap()
+            .put_object(kind, id, body, 0)
+            .unwrap();
+    }
+
     pub fn portable_document(&self) -> PortableShowDocument {
         ShowStore::open(&self.ports.path)
             .unwrap()
@@ -203,6 +214,10 @@ pub struct CounterPorts {
 }
 
 impl CounterPorts {
+    pub fn set_failure(&mut self, failure: FailurePoint) {
+        self.failure = failure;
+    }
+
     fn new(profile: FixtureProfileRevision, failure: FailurePoint) -> Self {
         let path = temporary_show_path();
         let (show, show_id) = ShowStore::create(&path, "Patch service counter test").unwrap();
@@ -320,7 +335,7 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
 
     fn commit(
         &mut self,
-        transaction: PortableShowTransaction,
+        mut transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
         self.counters.commits.fetch_add(1, Ordering::SeqCst);
         if self.failure == FailurePoint::Commit {
@@ -329,6 +344,8 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
                 "injected commit failure",
             ));
         }
+        // Match the real active-show adapter's atomic feature marker stamping.
+        transaction.stamp_programming_contract(light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT);
         let commit = self
             .show
             .apply_portable_transaction(transaction)

@@ -203,7 +203,10 @@ fn preset_copy_and_move_remain_owned_by_preset_mutation() {
         .clone();
     let store = ShowStore::open(&show_path).unwrap();
     let preset = serde_json::to_value(light_programmer::Preset {
-        name: "Legacy color".into(),
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+name: "Legacy color".into(),
         family: light_programmer::PresetFamily::Color,
         number: 1,
         aim_at_fixture_number: None,

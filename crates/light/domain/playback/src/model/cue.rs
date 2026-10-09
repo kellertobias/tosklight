@@ -3,6 +3,8 @@ use crate::*;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CueChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_reference: Option<light_core::PresetValueReference>,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
@@ -20,6 +22,7 @@ pub struct CueChange {
 impl CueChange {
     pub fn set(fixture_id: FixtureId, attribute: AttributeKey, value: AttributeValue) -> Self {
         Self {
+            replacement_projection: None,
             preset_reference: None,
             fixture_id,
             attribute,
@@ -127,6 +130,8 @@ pub struct CueDynamicChange {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GroupCueChange {
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub replacement_projections: light_core::ReplacementProjectionMap,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_reference: Option<light_core::PresetValueReference>,
     pub group_id: String,
@@ -685,6 +690,7 @@ impl CueList {
                 .collect();
             for address in addresses.difference(&explicit) {
                 next.changes.push(CueChange {
+                    replacement_projection: None,
                     preset_reference: None,
                     fixture_id: address.0,
                     attribute: address.1.clone(),

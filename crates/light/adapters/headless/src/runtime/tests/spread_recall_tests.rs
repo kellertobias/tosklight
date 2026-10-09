@@ -189,7 +189,10 @@ fn live_group_spread_recall_re_resolves_after_ordered_membership_edits() {
 fn preset_recall_of_live_group_spread_re_resolves_after_membership_edit() {
     let rig = SpreadRecallRig::new("preset-group-spread");
     let preset = light_programmer::Preset {
-        instance_id: None,
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+instance_id: None,
         name: "Wave".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,

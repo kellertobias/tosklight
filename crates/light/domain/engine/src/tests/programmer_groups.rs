@@ -26,6 +26,7 @@ fn group_ltp_uses_operator_edit_time_not_render_time() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "position".into(),
                 name: "Position".into(),
                 fixtures: vec![logical],
@@ -76,6 +77,7 @@ fn programmer_intensity_is_ltp_however_many_surfaces_program_it() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "wash".into(),
                 name: "Wash".into(),
                 fixtures: vec![logical],
@@ -123,6 +125,7 @@ fn empty_group_programming_becomes_effective_when_members_are_added() {
     let (fixture, logical) = fixture();
     let engine = Engine::new(programmers);
     let group = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "template".into(),
         name: "Template".into(),
         programming: HashMap::from([(AttributeKey::intensity(), AttributeValue::Normalized(0.6))]),
@@ -145,6 +148,7 @@ fn empty_group_programming_becomes_effective_when_members_are_added() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 fixtures: vec![logical],
                 ..group
             }]
@@ -181,6 +185,7 @@ fn a_live_group_selection_remains_live_across_membership_changes() {
     let observed = programmers.clone();
     let engine = Engine::new(programmers);
     let group = GroupDefinition {
+        replacement_projections: Default::default(),
         id: "template".into(),
         name: "Template".into(),
         fixtures: vec![],
@@ -202,6 +207,7 @@ fn a_live_group_selection_remains_live_across_membership_changes() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 fixtures: vec![logical],
                 ..group
             }]
@@ -235,6 +241,7 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
         AttributeValue::Normalized(1.0),
     ));
     cue.group_changes.push(light_playback::GroupCueChange {
+        replacement_projections: Default::default(),
         preset_reference: None,
         group_id: "group".into(),
         attribute: AttributeKey::intensity(),
@@ -271,6 +278,7 @@ fn explicit_cue_change_wins_when_group_expansion_targets_same_attribute() {
             fixtures: vec![fixture].into(),
             cue_lists: vec![cue_list].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "group".into(),
                 name: "Group".into(),
                 fixtures: vec![logical],
