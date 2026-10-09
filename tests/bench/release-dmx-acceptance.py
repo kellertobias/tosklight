@@ -186,6 +186,7 @@ def main():
     parser.add_argument("--interface", help="IPv4 interface for sACN multicast membership")
     parser.add_argument("--artnet-port", type=udp_port, default=6454, help="Art-Net listening port; custom port requires matching UI Unicast route")
     parser.add_argument("--sacn-port", type=udp_port, default=5568, help="sACN listening port; custom port requires matching UI Unicast route")
+    parser.add_argument("--shared-receiver", action="store_true", help="Opt into UDP address/port sharing with a running visualizer; capture may temporarily divert unicast packets from its wildcard listener")
     parser.add_argument("--seconds", type=float, default=3)
     parser.add_argument("--settle-seconds", type=float, default=0)
     parser.add_argument("--min-frames", type=int, default=3)
@@ -211,6 +212,10 @@ def main():
         for protocol in sorted({case["protocol"] for case in cases}):
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sockets.append(sock)
+            if args.shared_receiver:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if hasattr(socket, "SO_REUSEPORT"):
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             sock.bind((args.bind, args.artnet_port if protocol == "artnet" else args.sacn_port))
             if protocol == "sacn" and args.interface:
                 for universe in sorted({case["universe"] for case in cases if case["protocol"] == "sacn"}):
@@ -250,6 +255,7 @@ def main():
     result = dict(passed=not failures, cases=cases, counts=counts, received_datagrams=received,
                   failures=failures, bind=args.bind, multicast_interface=args.interface,
                   artnet_port=args.artnet_port, sacn_port=args.sacn_port,
+                  shared_receiver=args.shared_receiver,
                   duration_seconds=args.seconds, settle_seconds=args.settle_seconds)
     (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(dict(passed=result["passed"], counts=counts, failures=len(failures), output=str(out))))
