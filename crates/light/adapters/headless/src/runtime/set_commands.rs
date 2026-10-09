@@ -1,5 +1,27 @@
 use super::*;
 
+pub(super) fn request_cuelist_editor_from_command_line(
+    state: &AppState,
+    session: &Session,
+    number: u16,
+) -> Result<(), String> {
+    if state.active_show.current().is_none() {
+        return Err("no show is open".into());
+    }
+    let id = super::show_command_update::cuelist_pool_id(&state.output.snapshot(), number)?;
+    emit(
+        state,
+        "desk_action",
+        serde_json::json!({
+            "action": "open-object-editor",
+            "control": "cuelist",
+            "value": id.0.to_string(),
+            "desk_id": session.desk.id,
+        }),
+    );
+    Ok(())
+}
+
 pub(super) fn execute_set_command(
     state: &AppState,
     session: &Session,
@@ -13,6 +35,18 @@ pub(super) fn execute_set_command(
             "SET does not assign objects; use ASSIGN <source> AT PBK <address> or ASSIGN <source> AT VPBK <number>"
                 .into(),
         );
+    }
+    if tokens.first().is_some_and(|token| token == "CUELIST") {
+        if tokens.len() != 2 {
+            return Err("expected SET CUELIST <positive pool number>".into());
+        }
+        let number = tokens[1]
+            .parse::<u16>()
+            .ok()
+            .filter(|number| *number > 0)
+            .ok_or_else(|| "CUELIST pool number must be between 1 and 65535".to_owned())?;
+        request_cuelist_editor_from_command_line(state, session, number)?;
+        return Ok(0);
     }
     if tokens.first().is_some_and(|token| token == "GROUP") {
         if tokens.len() != 2 {

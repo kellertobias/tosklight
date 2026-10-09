@@ -1,5 +1,5 @@
 export interface ObjectEditorRequest {
-	kind: "macro" | "timecode";
+	kind: "macro" | "timecode" | "cuelist";
 	objectId: string;
 }
 

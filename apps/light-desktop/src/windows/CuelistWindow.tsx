@@ -1,4 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+	consumeObjectEditorRequest,
+	currentObjectEditorRequest,
+	subscribeObjectEditorRequest,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
 import { useSpeedGroupsBpm } from "../features/configuration/ConfigurationState";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
@@ -77,6 +82,23 @@ export function CuelistWindow({
 			setLocalTab("cues");
 		}
 	};
+	useEffect(() => {
+		if (!active || !builtIn) return;
+		const openRequested = (
+			request: NonNullable<ReturnType<typeof currentObjectEditorRequest>>,
+		) => {
+			if (request.kind !== "cuelist") return;
+			const entry = pool.find(
+				(candidate) => candidate.cueList.id === request.objectId,
+			);
+			if (!entry) return;
+			dispatch({ type: "OPEN_BUILTIN_CUELIST", number: entry.canonicalNumber });
+			consumeObjectEditorRequest(request);
+		};
+		const request = currentObjectEditorRequest();
+		if (request) openRequested(request);
+		return subscribeObjectEditorRequest(openRequested);
+	}, [active, builtIn, dispatch, pool]);
 	const openPool = () => {
 		if (builtIn) dispatch({ type: "SET_BUILTIN_CUELIST_VIEW", value: "pool" });
 		else setLocalTab("pool");

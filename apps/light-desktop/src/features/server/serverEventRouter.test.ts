@@ -473,6 +473,7 @@ describe("server event routing", () => {
 	it.each([
 		["macro", "macros"],
 		["timecode", "timecodes"],
+		["cuelist", "cues"],
 	] as const)("opens the exact %s editor requested by a desk-scoped command", (control, command) => {
 		const commands: unknown[] = [];
 		const release = registerControlSurfaceTarget({

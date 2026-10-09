@@ -17,6 +17,11 @@ import type {
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
+import {
+	publishObjectEditorRequest,
+	currentObjectEditorRequest,
+	resetObjectEditorRequestsForTests,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
 
 const render = (ui: Parameters<typeof rtlRender>[0]) =>
 	rtlRender(ui, { wrapper: ModalProvider });
@@ -36,6 +41,8 @@ const mocks = vi.hoisted(() => ({
 		presetFamily: "Mixed" as const,
 		storeArmed: true,
 		cueListSetArmed: false,
+		cuelistBuiltInView: "pool" as "pool" | "cues",
+		cuelistBuiltInNumber: null as number | null,
 		cueListSetTarget: null as number | null,
 		desks: [
 			{
@@ -164,6 +171,9 @@ vi.mock("./stage3dScene", () => ({
 }));
 
 function resetCuelistWindowMocks() {
+	resetObjectEditorRequestsForTests();
+	mocks.state.cuelistBuiltInView = "pool";
+	mocks.state.cuelistBuiltInNumber = null;
 	cleanup();
 	mocks.dispatch.mockReset();
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
@@ -1407,5 +1417,42 @@ describe("CuelistWindow pool recording", () => {
 			container.querySelector(".ui-window-info small"),
 		);
 		expect(container.querySelector(".pool-message")).toBeNull();
+	});
+});
+
+describe("command requested Cuelist editor", () => {
+	beforeEach(resetCuelistWindowMocks);
+	it("opens the exact unassigned Cuelist detail after objects load and preserves programmer state", async () => {
+		mocks.state.storeArmed = false;
+		mocks.dispatch.mockImplementation((action) => {
+			if (action.type === "OPEN_BUILTIN_CUELIST") {
+				mocks.state.cuelistBuiltInView = "cues";
+				mocks.state.cuelistBuiltInNumber = action.number;
+			}
+		});
+		const request = { kind: "cuelist" as const, objectId: "independent-15" };
+		publishObjectEditorRequest(request);
+		const view = render(<CuelistWindow builtIn />);
+		expect(currentObjectEditorRequest()).toBe(request);
+		expect(mocks.dispatch).not.toHaveBeenCalled();
+		const list = {
+			...editableCueList(),
+			id: request.objectId,
+			pool_number: 15,
+			name: "Independent fifteen",
+		};
+		mocks.playbacks.cue_lists = [list];
+		view.rerender(<CuelistWindow builtIn />);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN_CUELIST",
+			number: 15,
+		});
+		expect(currentObjectEditorRequest()).toBeNull();
+		view.rerender(<CuelistWindow builtIn />);
+		expect(screen.getByText("Opening")).toBeTruthy();
+		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
+		expect(mocks.recordCue).not.toHaveBeenCalled();
+		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 });

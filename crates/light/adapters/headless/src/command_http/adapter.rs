@@ -242,6 +242,7 @@ enum ObjectCommand {
     ArmTimecode(u32),
     DisarmTimecode(u32),
     EditTimecode(u32),
+    EditCuelist(u16),
 }
 
 fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
@@ -249,6 +250,11 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
         .collect::<Vec<_>>();
+    if matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && family == "CUELIST")
+        && tokens.len() != 3
+    {
+        return Err("expected SET CUELIST <positive pool number>".into());
+    }
     let (family, number, suffix, edit) = match tokens.as_slice() {
         [family, number] => (family.as_str(), number.as_str(), None, false),
         [family, number, suffix] if family == "TIMECODE" => (
@@ -261,13 +267,13 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         _ if matches!(
             tokens.first().map(String::as_str),
             Some("MACRO" | "TIMECODE")
-        ) || matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && matches!(family.as_str(), "MACRO" | "TIMECODE")) =>
+        ) || matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && matches!(family.as_str(), "MACRO" | "TIMECODE" | "CUELIST")) =>
         {
-            return Err("expected [SET] MACRO|TIMECODE <positive pool number> [+|-]".into());
+            return Err("expected [SET] MACRO|TIMECODE <positive pool number> [+|-], or SET CUELIST <positive pool number>".into());
         }
         _ => return Ok(None),
     };
-    if !matches!(family, "MACRO" | "TIMECODE") {
+    if !matches!(family, "MACRO" | "TIMECODE") && !(family == "CUELIST" && edit) {
         return Ok(None);
     }
     let number = number
@@ -284,6 +290,10 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         ("TIMECODE", false, Some("+")) => Ok(Some(ObjectCommand::ArmTimecode(number))),
         ("TIMECODE", false, Some("-")) => Ok(Some(ObjectCommand::DisarmTimecode(number))),
         ("TIMECODE", true, None) => Ok(Some(ObjectCommand::EditTimecode(number))),
+        ("CUELIST", true, None) => Ok(Some(ObjectCommand::EditCuelist(
+            u16::try_from(number)
+                .map_err(|_| "CUELIST pool number cannot exceed 65535".to_owned())?,
+        ))),
         ("MACRO", _, Some(_)) => Err("MACRO does not accept + or -".into()),
         ("TIMECODE", true, Some(_)) => Err("SET TIMECODE does not accept + or -".into()),
         ("TIMECODE", false, Some(_)) => Err("TIMECODE accepts only + or - after its number".into()),
@@ -299,6 +309,13 @@ fn execute_object_command(
 ) -> Result<(usize, String), ApiError> {
     use crate::runtime::timecode_v2::CommandLineTimecodeAction as Timecode;
     match command {
+        ObjectCommand::EditCuelist(number) => {
+            crate::runtime::set_commands::request_cuelist_editor_from_command_line(
+                state, session, number,
+            )
+            .map_err(ApiError::bad_request)?;
+            Ok((0, format!("Opened Cuelist {number} editor")))
+        }
         ObjectCommand::RunMacro(number) => {
             let execution_id =
                 crate::runtime::macros_v2::start_macro_from_command_line(state, session, number)?;
@@ -833,6 +850,25 @@ fn action_error(error: ActionError) -> ApiError {
 #[cfg(test)]
 mod object_command_tests {
     use super::{ObjectCommand, object_command};
+
+    #[test]
+    fn set_cuelist_editor_is_typed_without_consuming_cuelist_programming() {
+        assert!(object_command("SET CUELIST 15").unwrap().is_some());
+        for command in [
+            "SET CUELIST",
+            "SET CUELIST 0",
+            "SET CUELIST 65536",
+            "SET CUELIST 15 AT PBK 1",
+        ] {
+            assert!(object_command(command).is_err(), "{command}");
+        }
+        assert_eq!(object_command("CUELIST 15").unwrap(), None);
+        assert_eq!(object_command("SET 2.3").unwrap(), None);
+        assert_eq!(
+            object_command("ASSIGN CUELIST 15 AT PBK 2.3").unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn object_commands_require_one_positive_pool_number() {

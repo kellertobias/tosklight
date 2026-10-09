@@ -105,7 +105,7 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 	useEffect(() => {
 		if (!active) return;
 		const openRequested = (request: {
-			kind: "macro" | "timecode";
+			kind: "macro" | "timecode" | "cuelist";
 			objectId: string;
 		}) => {
 			if (request.kind !== "macro") return;
