@@ -1,7 +1,7 @@
-import { act, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import type { PropsWithChildren } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	AttributeConfigurationApiClient,
 	AttributeConfigurationSnapshot,
@@ -65,7 +65,64 @@ async function gdtfFile(_attribute: string) {
 	return new File([new Uint8Array([80, 75, 3, 4])], "mapped.gdtf");
 }
 
+afterEach(cleanup);
+
 describe("useFixtureLibraryTransfers", () => {
+	it("dismisses the mapping popup before outer GDTF cancellation and preserves its draft", () => {
+		const close = vi.fn();
+		render(
+			<FixtureImportDialogs
+				busy={false}
+				error={null}
+				modal="gdtf"
+				pendingGdtf={{ ...gdtfPreview(), source: new Uint8Array([80, 75]), expectedRevision: 0 }}
+				close={close}
+				confirmGdtfMappings={vi.fn()}
+				confirmPackageMappings={vi.fn()}
+				importGdtfFile={vi.fn()}
+				importPackage={vi.fn()}
+				mappingCandidates={[]}
+				mappings={{}}
+				requirements={[
+					{ attribute: "vendor.test.feature", value_type: "indexed" },
+				]}
+				setMapping={vi.fn()}
+				activationGroupOptions={[
+					{ value: "activation.beam", label: "Beam mode" },
+				]}
+				beginCustomAttribute={vi.fn()}
+				cancelCustomAttribute={vi.fn()}
+				createCustomAttribute={vi.fn()}
+				customAttributeDraft={{
+					sourceAttribute: "vendor.test.feature",
+					label: "Vendor Feature",
+					valueType: "indexed",
+					encoderGroup: "beam",
+					encoderPage: 2,
+					encoderSlot: 3,
+					activationGroupId: "activation.beam",
+					displayUnit: "mode",
+					physicalUnit: "vendor-mode",
+				}}
+				editCustomAttribute={vi.fn()}
+				placementOptions={[{ value: "2:3", label: "Page 2, encoder 3" }]}
+			/>,
+			{ wrapper: ModalProvider },
+		);
+
+		const trigger = screen.getByLabelText("Map vendor.test.feature");
+		fireEvent.click(trigger);
+		expect(screen.getByRole("listbox")).toBeInTheDocument();
+		fireEvent.keyDown(trigger, { key: "Escape" });
+		expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+		expect(close).not.toHaveBeenCalled();
+		expect(screen.getByLabelText("Display label")).toHaveValue("Vendor Feature");
+		fireEvent.keyDown(trigger, { key: "Escape" });
+		expect(close).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("button", { name: "Close Import GDTF" }));
+		expect(close).toHaveBeenCalledTimes(2);
+	});
+
 	it("renders the complete imported custom-attribute authoring form", () => {
 		render(
 			<FixtureImportDialogs
