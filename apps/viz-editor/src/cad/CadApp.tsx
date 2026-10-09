@@ -130,54 +130,11 @@ export function keepNewerHalves(
 	};
 }
 
-export function CadApp() {
-	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
-	const viewportElements = useRef(new Map<string, HTMLCanvasElement>());
-	const registerViewport = useCallback((id: string, element: HTMLCanvasElement | null) => {
-		if (element) viewportElements.current.set(id, element);
-		else viewportElements.current.delete(id);
-	}, []);
-	const [layout, setLayout] = useState<TileNode>(restoreLayout);
-	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
-	const [settingsOpen, setSettingsOpen] = useState(false);
-	// Each Delete or Backspace press, for Info to delete the selection as its trash button does.
-	const [deleteRequest, setDeleteRequest] = useState(0);
-	// Which side panel is open, and nothing when neither is. Print and Elements are two independent
-	// choices rather than a mode with a tab strip inside it, so each title button opens its own
-	// panel and closes it again when it is already the one showing.
-	const [printPanel, setPrintPanel] = useState<"print" | "elements" | null>(
-		null,
-	);
-	// Sheets belong to the Print panel; the others open the sidebar without papering the views.
-	const printMode = printPanel === "print";
-	const panelOpen = printPanel !== null;
-	const printPageState = useCadPrintPages();
-	const { pages: printPages, selectedId: selectedPrintPageId } = printPageState;
-	const [exporting, setExporting] = useState(false);
-	const [activeTileId, setActiveTileId] = useState<string | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	// A short confirmation that an action did something, so a copy is not a silent change.
-	const [notice, setNotice] = useState<string | null>(null);
-	useEffect(() => {
-		if (!notice) return;
-		const clear = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
-		return () => clearTimeout(clear);
-	}, [notice]);
-	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
-		null,
-	);
-	const tools = useCadTools();
-	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
-	const venueGroups = useCadVenueGroups(documentInfo?.showId ?? null);
-	const sceneRef = useRef<CadSceneSnapshot | null>(null);
-	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
-
-	function applyScene(next: CadSceneSnapshot | null) {
-		const merged = next && sceneRef.current ? keepNewerHalves(sceneRef.current, next) : next;
-		sceneRef.current = merged;
-		setScene(merged);
-	}
-
+function useCadSceneSubscriptions(
+	sceneRef: { current: CadSceneSnapshot | null },
+	applyScene: (next: CadSceneSnapshot | null) => void,
+	setError: (message: string) => void,
+) {
 	useEffect(() => {
 		let disposed = false;
 		let sceneUnlisten: (() => void) | undefined;
@@ -231,6 +188,57 @@ export function CadApp() {
 			selectionUnlisten?.();
 		};
 	}, []);
+}
+
+export function CadApp() {
+	const [scene, setScene] = useState<CadSceneSnapshot | null>(null);
+	const viewportElements = useRef(new Map<string, HTMLCanvasElement>());
+	const registerViewport = useCallback((id: string, element: HTMLCanvasElement | null) => {
+		if (element) viewportElements.current.set(id, element);
+		else viewportElements.current.delete(id);
+	}, []);
+	const [layout, setLayout] = useState<TileNode>(restoreLayout);
+	const [settings, setSettings] = useState<CadSettings>(restoreSettings);
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	// Each Delete or Backspace press, for Info to delete the selection as its trash button does.
+	const [deleteRequest, setDeleteRequest] = useState(0);
+	// Which side panel is open, and nothing when neither is. Print and Elements are two independent
+	// choices rather than a mode with a tab strip inside it, so each title button opens its own
+	// panel and closes it again when it is already the one showing.
+	const [printPanel, setPrintPanel] = useState<"print" | "elements" | null>(
+		null,
+	);
+	// Sheets belong to the Print panel; the others open the sidebar without papering the views.
+	const printMode = printPanel === "print";
+	const panelOpen = printPanel !== null;
+	const printPageState = useCadPrintPages();
+	const { pages: printPages, selectedId: selectedPrintPageId } = printPageState;
+	const [exporting, setExporting] = useState(false);
+	const [activeTileId, setActiveTileId] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	// A short confirmation that an action did something, so a copy is not a silent change.
+	const [notice, setNotice] = useState<string | null>(null);
+	useEffect(() => {
+		if (!notice) return;
+		const clear = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
+		return () => clearTimeout(clear);
+	}, [notice]);
+	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
+		null,
+	);
+	const tools = useCadTools();
+	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
+	const venueGroups = useCadVenueGroups(documentInfo?.showId ?? null);
+	const sceneRef = useRef<CadSceneSnapshot | null>(null);
+	const selectionQueue = useRef<Promise<void>>(Promise.resolve());
+
+	function applyScene(next: CadSceneSnapshot | null) {
+		const merged = next && sceneRef.current ? keepNewerHalves(sceneRef.current, next) : next;
+		sceneRef.current = merged;
+		setScene(merged);
+	}
+
+	useCadSceneSubscriptions(sceneRef, applyScene, setError);
 
 	useEffect(() => {
 		const refreshDocument = () =>
