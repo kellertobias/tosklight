@@ -162,12 +162,10 @@ function nearestFit(
 /**
  * A lamp hanging from a truss pipe its clamp has reached across on the page.
  *
- * This is the rigging gesture: drag a lamp over a truss seen from above and it goes up onto the
- * pipe, however far below it started. So the test is an overlap in the plane the drag is happening
- * on — the clamp's footprint against the pipe's — and not a distance in the show, which would put
- * a truss at five metres permanently out of reach of a lamp on the floor. The correction then
- * carries every axis, including the one the drag itself cannot move, so the clamp meets the pipe
- * rather than the lamp's origin landing on the pipe's centre line.
+ * The clamp's footprint must reach the pipe on the axes the drag can move. Other axes retain
+ * their positions, and a pipe more than half a metre off that plane is out of reach. An elevation
+ * can therefore adjust height while a plan cannot; a caller allowing all three axes can fit the
+ * complete clamp to the pipe. Fixture rotation places the clamp, but never rotates the drag axes.
  */
 function nearestMount(
 	movers: readonly CadEntity[],
@@ -195,6 +193,11 @@ function nearestMount(
 		);
 		for (const { segment, radius } of pipes) {
 			const on = closestOnSegment(centre, segment);
+			if (
+				[0, 1, 2].some(
+					(axis) => !free[axis] && Math.abs(on[axis] - top[axis]) > SNAP_REACH_MILLIMETRES,
+				)
+			) continue;
 			let squared = 0;
 			for (const axis of [0, 1, 2] as const)
 				if (free[axis]) squared += (on[axis] - centre[axis]) ** 2;
@@ -202,7 +205,11 @@ function nearestMount(
 			if (distance > reach + radius) continue;
 			if (best && distance >= best.distance) continue;
 			best = {
-				correction: [on[0] - top[0], on[1] - top[1], on[2] - top[2]],
+				correction: [
+					free[0] ? on[0] - top[0] : 0,
+					free[1] ? on[1] - top[1] : 0,
+					free[2] ? on[2] - top[2] : 0,
+				],
 				distance,
 				target: on,
 			};
@@ -260,8 +267,7 @@ export function snapMove(
 	const movers = entities.filter((entity) => moving.has(entity.logicalFixtureId));
 	const still = entities.filter((entity) => !moving.has(entity.logicalFixtureId));
 	const start: Vec3 = [...delta];
-	// Hanging a lamp on a pipe beats every other fit: it is the one the operator is reaching for,
-	// and it is the only one that may move an axis the drag itself cannot.
+	// Fitting the declared clamp to a reachable pipe takes precedence, within the drag's axes.
 	const mount = nearestMount(movers, still, start, free);
 	if (mount)
 		return {

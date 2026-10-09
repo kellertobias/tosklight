@@ -4,7 +4,7 @@ import { entityBounds } from "./marqueeSelection";
 import { type FreeAxes, snapMove, snapPlanPoint } from "./snapping";
 import { trussParts } from "./trussPlan";
 import type { CadEntity } from "./types";
-import { trussConnectors } from "./venueShapes";
+import { mountingVolume, trussConnectors } from "./venueShapes";
 
 type V3 = [number, number, number];
 
@@ -263,18 +263,56 @@ describe("CAD snapping", () => {
 		expectVector(snapMove([neighbour, next], ["m"], [0, 10, 0], PLAN, 150).delta, [-40, 0, 0]);
 	});
 
-	it("hangs a lamp on the pipe its clamp reaches across, however far below it started", () => {
+	it("keeps constrained lamp mount drags on world axes despite a rotated fixture", () => {
+		const pipe = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
+		const rotated = {
+			...lamp("l", [500, 100, 4800]),
+			rotationDegrees: [-35.86285, 7.78395, 0] as V3,
+		};
+		for (const [free, delta] of [
+			[[true, false, false], [80, 0, 0]],
+			[PLAN, [80, 5, 0]],
+			[FRONT, [80, 0, 5]],
+		] as [FreeAxes, V3][]) {
+			const snapped = snapMove([pipe, rotated], ["l"], delta, free, 150);
+			expect(snapped.targets).toHaveLength(1);
+			for (const axis of [0, 1, 2] as const)
+				if (!free[axis]) expect(snapped.delta[axis]).toBe(delta[axis]);
+			if (free[2]) expect(Math.abs(snapped.delta[2])).toBeGreaterThan(1);
+		}
+	});
+
+	it("keeps a mount outside the drag plane's half-metre reach unchanged", () => {
+		const pipe = truss("t", [0, 0, 5000]);
+		const floor = lamp("l", [500, 100, 0]);
+		expectVector(snapMove([pipe, floor], ["l"], [80, 0, 0], [true, false, false], 150).delta, [80, 0, 0]);
+		expectVector(snapMove([pipe, floor], ["l"], [0, 5, 0], PLAN, 150).delta, [0, 5, 0]);
+	});
+
+	it("retains complete clamp-to-pipe fitting when all three axes participate", () => {
+		const pipe = truss("t", [0, 0, 5000]);
+		const rotated = {
+			...lamp("l", [500, 100, 4800]),
+			rotationDegrees: [-35.86285, 7.78395, 0] as V3,
+		};
+		const snapped = snapMove([pipe, rotated], ["l"], [80, 5, 0], [true, true, true], 150);
+		expect(snapped.targets).toHaveLength(1);
+		const top = mountingVolume(rotated)!.top;
+		expectVector(top.map((value, axis) => value + snapped.delta[axis]), snapped.targets[0]);
+	});
+
+	it("fits a reachable clamp across the plan without lifting it onto a distant pipe", () => {
 		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
 		const half = trussParts(290, 4).spacing / 2;
 		// The lamp is a metre square, so its clamp reaches the near chord from 100 mm away.
 		const hung = lamp("l", [500, 100, 4800]);
 		const near = snapMove([box, hung], ["l"], [0, 5, 0], PLAN, 150).delta;
 		expectVector([near[0], near[1]], [0, half - 100]);
-		// The whole point: a lamp on the floor goes up onto the truss rather than staying put.
+		expect(near[2]).toBe(0);
+		// A floor fixture cannot reach a five-metre truss through a plan translation.
 		const floor = { ...hung, positionMillimetres: [500, 100, 0] as V3 };
 		const risen = snapMove([box, floor], ["l"], [0, 5, 0], PLAN, 150).delta;
-		expectVector([risen[0], risen[1]], [0, half - 100]);
-		expect(risen[2]).toBeGreaterThan(4000);
+		expectVector(risen, [0, 5, 0]);
 	});
 
 	it("leaves a lamp alone when its clamp is nowhere near a pipe on the page", () => {
@@ -301,11 +339,11 @@ describe("CAD snapping", () => {
 
 	it("moves several lamps rigidly onto a pipe, keeping the spacing between them", () => {
 		const box = truss("t", [0, 0, 5000], [4000, 290, 290], 4);
-		const one = lamp("a", [0, 100, 0]);
-		const two = lamp("b", [1500, 100, 0]);
+		const one = lamp("a", [0, 100, 4800]);
+		const two = lamp("b", [1500, 100, 4800]);
 		const { delta } = snapMove([box, one, two], ["a", "b"], [0, 5, 0], PLAN, 150);
 		// One correction for the pair: whatever it is, both move by it and stay 1500 apart.
-		expect(delta[2]).toBeGreaterThan(4000);
+		expect(delta[2]).toBe(0);
 		const movedOne = one.positionMillimetres[0] + delta[0];
 		const movedTwo = two.positionMillimetres[0] + delta[0];
 		expect(movedTwo - movedOne).toBe(1500);
