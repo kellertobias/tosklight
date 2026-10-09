@@ -36,67 +36,7 @@ pub(in crate::show_patch) fn stage(
     {
         let mut body = object.body().clone();
         match object.key().kind() {
-            "cue_list" => {
-                if let Some(cues) = body.get_mut("cues").and_then(Value::as_array_mut) {
-                    for cue in cues {
-                        if let Some(changes) = cue.get_mut("changes").and_then(Value::as_array_mut)
-                        {
-                            for change in changes {
-                                let Some(owner) = change
-                                    .get("fixture_id")
-                                    .and_then(Value::as_str)
-                                    .and_then(|id| id.parse::<uuid::Uuid>().ok())
-                                    .map(FixtureId)
-                                else {
-                                    continue;
-                                };
-                                let Some(attribute) = attribute(change.get("attribute")) else {
-                                    continue;
-                                };
-                                let mut projection: Option<ReplacementProgramProjection> = change
-                                    .get("replacement_projection")
-                                    .filter(|value| !value.is_null())
-                                    .cloned()
-                                    .map(serde_json::from_value)
-                                    .transpose()
-                                    .map_err(invalid)?;
-                                for plan in plans {
-                                    projection = plan
-                                        .project_existing(&attribute, owner, projection.as_ref())
-                                        .map_err(invalid)?;
-                                }
-                                if let Some(projection) = projection {
-                                    map(change)?.insert(
-                                        "replacement_projection".into(),
-                                        serde_json::to_value(projection).map_err(invalid)?,
-                                    );
-                                }
-                            }
-                        }
-                        if let Some(changes) =
-                            cue.get_mut("group_changes").and_then(Value::as_array_mut)
-                        {
-                            for change in changes {
-                                let Some(attribute) = attribute(change.get("attribute")) else {
-                                    continue;
-                                };
-                                let members = change
-                                    .get("group_id")
-                                    .and_then(Value::as_str)
-                                    .and_then(|id| membership.get(id));
-                                let existing = change.get("replacement_projections");
-                                let migrated = member_map(existing, &attribute, members, plans)?;
-                                if !migrated.is_empty() {
-                                    map(change)?.insert(
-                                        "replacement_projections".into(),
-                                        serde_json::to_value(migrated).map_err(invalid)?,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            "cue_list" => migrate_cue_list(&mut body, &membership, plans)?,
             "preset" => {
                 // Mutate metadata only. Preserve immutable source identity and every exact value,
                 // live Group owner, unknown extension field, timing and reference.
@@ -197,6 +137,70 @@ pub(in crate::show_patch) fn stage(
         }
     }
     Ok(changed)
+}
+
+fn migrate_cue_list(
+    body: &mut Value,
+    membership: &HashMap<String, HashSet<FixtureId>>,
+    plans: &[PatchProgrammingReplacement],
+) -> Result<(), ActionError> {
+    if let Some(cues) = body.get_mut("cues").and_then(Value::as_array_mut) {
+        for cue in cues {
+            if let Some(changes) = cue.get_mut("changes").and_then(Value::as_array_mut) {
+                for change in changes {
+                    let Some(owner) = change
+                        .get("fixture_id")
+                        .and_then(Value::as_str)
+                        .and_then(|id| id.parse::<uuid::Uuid>().ok())
+                        .map(FixtureId)
+                    else {
+                        continue;
+                    };
+                    let Some(attribute) = attribute(change.get("attribute")) else {
+                        continue;
+                    };
+                    let mut projection: Option<ReplacementProgramProjection> = change
+                        .get("replacement_projection")
+                        .filter(|value| !value.is_null())
+                        .cloned()
+                        .map(serde_json::from_value)
+                        .transpose()
+                        .map_err(invalid)?;
+                    for plan in plans {
+                        projection = plan
+                            .project_existing(&attribute, owner, projection.as_ref())
+                            .map_err(invalid)?;
+                    }
+                    if let Some(projection) = projection {
+                        map(change)?.insert(
+                            "replacement_projection".into(),
+                            serde_json::to_value(projection).map_err(invalid)?,
+                        );
+                    }
+                }
+            }
+            if let Some(changes) = cue.get_mut("group_changes").and_then(Value::as_array_mut) {
+                for change in changes {
+                    let Some(attribute) = attribute(change.get("attribute")) else {
+                        continue;
+                    };
+                    let members = change
+                        .get("group_id")
+                        .and_then(Value::as_str)
+                        .and_then(|id| membership.get(id));
+                    let existing = change.get("replacement_projections");
+                    let migrated = member_map(existing, &attribute, members, plans)?;
+                    if !migrated.is_empty() {
+                        map(change)?.insert(
+                            "replacement_projections".into(),
+                            serde_json::to_value(migrated).map_err(invalid)?,
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn member_map(

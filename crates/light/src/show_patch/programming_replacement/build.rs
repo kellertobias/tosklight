@@ -97,58 +97,19 @@ pub(in crate::show_patch) fn build(
                     .cloned(),
             );
         }
-        let mut root_projections = HashMap::new();
-        for mapping in root_programming_mapping {
-            let head = old_mode.heads.iter().find(|head| head.id == mapping.source_profile_head_id && head.master_shared)
-                .ok_or_else(|| invalid("root programming mapping source must be an authored shared head of the old mode"))?;
-            let old_projection = ReplacementProgramProjection {
+        let root_projections = root_projections(
+            RootMappingContext {
                 source_owner: update.fixture_id,
-                source_profile: source_profile.clone(),
-                source_head_id: head.id,
-                target_profile: source_profile.clone(),
-                targets: vec![ReplacementHeadTarget {
-                    profile_head_id: head.id,
-                    fixture_id: update.fixture_id,
-                }],
-            };
-            if source_plan
-                .destinations(&old_projection, &mapping.attribute)
-                .is_empty()
-            {
-                return Err(invalid(
-                    "root programming mapping attribute is not physically owned by its old shared head",
-                ));
-            }
-            let targets = mapping
-                .target_profile_head_ids
-                .iter()
-                .map(|id| target(&new, new_mode, *id))
-                .collect::<Result<Vec<_>, _>>()?;
-            let projection = ReplacementProgramProjection {
-                source_owner: update.fixture_id,
-                source_profile: source_profile.clone(),
-                source_head_id: head.id,
-                target_profile: target_profile.clone(),
-                targets,
-            };
-            if target_plan
-                .destinations(&projection, &mapping.attribute)
-                .len()
-                != projection.targets.len()
-            {
-                return Err(invalid(
-                    "replacement destination cannot execute the selected programming attribute",
-                ));
-            }
-            if root_projections
-                .insert(mapping.attribute.clone(), projection)
-                .is_some()
-            {
-                return Err(invalid(
-                    "choose exactly one source correspondence for each root programming attribute",
-                ));
-            }
-        }
+                source_profile: &source_profile,
+                target_profile: &target_profile,
+                old_mode,
+                new_mode,
+                new: &new,
+                source_plan: &source_plan,
+                target_plan: &target_plan,
+            },
+            root_programming_mapping,
+        )?;
         let head_targets = head_mapping
             .iter()
             .filter_map(|mapping| {
@@ -174,6 +135,78 @@ pub(in crate::show_patch) fn build(
         });
     }
     Ok(plans)
+}
+
+struct RootMappingContext<'a> {
+    source_owner: FixtureId,
+    source_profile: &'a ReplacementProfileContext,
+    target_profile: &'a ReplacementProfileContext,
+    old_mode: &'a light_fixture::FixtureMode,
+    new_mode: &'a light_fixture::FixtureMode,
+    new: &'a PatchedFixture,
+    source_plan: &'a ReplacementDestinationPlan,
+    target_plan: &'a ReplacementDestinationPlan,
+}
+
+fn root_projections(
+    context: RootMappingContext<'_>,
+    root_programming_mapping: &[crate::PatchRootProgramReplacement],
+) -> Result<HashMap<AttributeKey, ReplacementProgramProjection>, ActionError> {
+    let mut root_projections = HashMap::new();
+    for mapping in root_programming_mapping {
+        let head = context.old_mode.heads.iter().find(|head| head.id == mapping.source_profile_head_id && head.master_shared)
+            .ok_or_else(|| invalid("root programming mapping source must be an authored shared head of the old mode"))?;
+        let old_projection = ReplacementProgramProjection {
+            source_owner: context.source_owner,
+            source_profile: context.source_profile.clone(),
+            source_head_id: head.id,
+            target_profile: context.source_profile.clone(),
+            targets: vec![ReplacementHeadTarget {
+                profile_head_id: head.id,
+                fixture_id: context.source_owner,
+            }],
+        };
+        if context
+            .source_plan
+            .destinations(&old_projection, &mapping.attribute)
+            .is_empty()
+        {
+            return Err(invalid(
+                "root programming mapping attribute is not physically owned by its old shared head",
+            ));
+        }
+        let targets = mapping
+            .target_profile_head_ids
+            .iter()
+            .map(|id| target(context.new, context.new_mode, *id))
+            .collect::<Result<Vec<_>, _>>()?;
+        let projection = ReplacementProgramProjection {
+            source_owner: context.source_owner,
+            source_profile: context.source_profile.clone(),
+            source_head_id: head.id,
+            target_profile: context.target_profile.clone(),
+            targets,
+        };
+        if context
+            .target_plan
+            .destinations(&projection, &mapping.attribute)
+            .len()
+            != projection.targets.len()
+        {
+            return Err(invalid(
+                "replacement destination cannot execute the selected programming attribute",
+            ));
+        }
+        if root_projections
+            .insert(mapping.attribute.clone(), projection)
+            .is_some()
+        {
+            return Err(invalid(
+                "choose exactly one source correspondence for each root programming attribute",
+            ));
+        }
+    }
+    Ok(root_projections)
 }
 
 fn context(
