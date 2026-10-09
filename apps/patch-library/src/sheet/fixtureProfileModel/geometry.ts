@@ -224,3 +224,96 @@ export function liftMotionAttributes<T extends Pick<FixtureProfile, "geometry" |
 		}),
 	};
 }
+
+/** Move template-only geometry owners into the mode-owned binding contract. */
+export function liftGeometryBindings<
+	T extends Pick<FixtureProfile, "geometry" | "modes">,
+>(profile: T): T {
+	const geometry = profile.geometry;
+	if (!geometry) return profile;
+	const named = geometry.emitters.filter((emitter) => emitter.head_id);
+	const emitterIds = new Set(geometry.emitters.map((emitter) => emitter.id));
+	const nodeIds = new Set(geometry.nodes.map((node) => node.id));
+	const source = new Map(
+		named.flatMap((emitter) => {
+			const sourceMode = profile.modes.find((mode) =>
+				mode.heads.some((head) => head.id === emitter.head_id),
+			);
+			const head = sourceMode?.heads.find(
+				(head) => head.id === emitter.head_id,
+			);
+			return head
+				? [
+						[
+							emitter.id,
+							{
+								head,
+								unique:
+									sourceMode!.heads.filter(
+										(candidate) => candidate.name === head.name,
+									).length === 1,
+							},
+						] as const,
+					]
+				: [];
+		}),
+	);
+	let changed = source.size > 0;
+	const modes = profile.modes.map((mode) => {
+		// A legacy mode's own graph is retained, including bindings into that graph.
+		const ownEmitters = new Set(
+			mode.geometry.emitters.map((emitter) => emitter.id),
+		);
+		const ownNodes = new Set(mode.geometry.nodes.map((node) => node.id));
+		const kept = (mode.emitter_heads ?? []).filter(
+			(binding) =>
+				emitterIds.has(binding.emitter_id) ||
+				ownEmitters.has(binding.emitter_id),
+		);
+		const motions = (mode.motion_attributes ?? []).filter(
+			(binding) =>
+				nodeIds.has(binding.node_id) || ownNodes.has(binding.node_id),
+		);
+		const bound = new Set(kept.map((binding) => binding.emitter_id));
+		const added = named.flatMap((emitter) => {
+			if (bound.has(emitter.id)) return [];
+			const owner = source.get(emitter.id);
+			if (!owner) return [];
+			const exact = mode.heads.find((head) => head.id === owner.head.id);
+			const matches = mode.heads.filter(
+				(head) => head.name === owner.head.name,
+			);
+			const head =
+				exact ??
+				(owner.unique && matches.length === 1 ? matches[0] : undefined);
+			// No index fallback: an unmatched personality is explicitly not driven.
+			return head ? [{ emitter_id: emitter.id, head_id: head.id }] : [];
+		});
+		const modeChanged =
+			added.length > 0 ||
+			kept.length !== (mode.emitter_heads?.length ?? 0) ||
+			motions.length !== (mode.motion_attributes?.length ?? 0);
+		changed ||= modeChanged;
+		return modeChanged
+			? {
+					...mode,
+					emitter_heads: [...kept, ...added],
+					motion_attributes: motions,
+				}
+			: mode;
+	});
+	return liftMotionAttributes(
+		changed
+			? {
+					...profile,
+					geometry: {
+						...geometry,
+						emitters: geometry.emitters.map((emitter) =>
+							source.has(emitter.id) ? { ...emitter, head_id: null } : emitter,
+						),
+					},
+					modes,
+				}
+			: profile,
+	);
+}

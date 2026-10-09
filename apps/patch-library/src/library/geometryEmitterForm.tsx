@@ -37,15 +37,7 @@ export function GeometryEmitterForm({
 				}))}
 				onChange={(node_id) => onChange({ ...emitter, node_id })}
 			/>
-			<SelectField
-				label="Logical head"
-				value={emitter.head_id ?? ""}
-				options={mode.heads.map((head) => ({
-					value: head.id,
-					label: head.name,
-				}))}
-				onChange={(head_id) => onChange({ ...emitter, head_id })}
-			/>
+            <p className="field-hint">Assign this emitter's Logical head for each mode under Modes → Emitters &amp; Motion.</p>
 			<VectorFields
 				label="Origin"
 				value={emitter.origin}

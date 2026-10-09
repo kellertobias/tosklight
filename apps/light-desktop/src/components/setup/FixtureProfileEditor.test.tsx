@@ -1595,3 +1595,101 @@ describe("FixtureProfileEditor color and geometry editing", () => {
 		).toBeInTheDocument();
 	});
 });
+
+
+describe("TL686 shared moving-head template save", () => {
+	it("creates and reopens one revision with shared yoke/optical ownership in every mode", async () => {
+		const profile = validProfile(1);
+		profile.modes[0].heads = [
+			{ ...blankHead(), name: "Yoke", master_shared: true },
+			{ ...blankHead(1), name: "Head" },
+		];
+		const extended = structuredClone(profile.modes[0]);
+		extended.id = crypto.randomUUID();
+		extended.name = "Extended";
+		extended.heads = extended.heads.map((head) => ({
+			...head,
+			id: crypto.randomUUID(),
+		}));
+		extended.emitter_heads = [];
+		profile.modes.push(extended);
+		const save = vi.fn(async (draft: FixtureProfile, revision: number) => {
+			expect(revision).toBe(1);
+			expect(
+				draft.geometry?.emitters.every((emitter) => emitter.head_id == null),
+			).toBe(true);
+			for (const mode of draft.modes) {
+				expect(mode.emitter_heads?.map((binding) => binding.head_id)).toEqual(
+					mode.heads.map((head) => head.id),
+				);
+				expect(
+					mode.emitter_heads?.every((binding) =>
+						draft.geometry?.emitters.some(
+							(emitter) => emitter.id === binding.emitter_id,
+						),
+					),
+				).toBe(true);
+			}
+			return { ...structuredClone(draft), revision: 2 };
+		});
+		const view = render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
+		fireEvent.click(screen.getByRole("button", { name: "Moving head" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Save and create revision" }),
+		);
+		await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+		const reopened = await save.mock.results[0].value;
+		view.unmount();
+		render(
+			<FixtureProfileEditor
+				initialProfile={reopened}
+				manufacturers={[]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("tab", { name: "Geometry" }));
+		fireEvent.click(screen.getByRole("treeitem", { name: /Beam 2/ }));
+		expect(
+			screen.queryByText("Logical head", { selector: "label" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByText(/Assign this emitter's Logical head for each mode/),
+		).toBeInTheDocument();
+	});
+	it("keeps invalid emitter correction in the editor and sends no save", () => {
+		const profile = validProfile(1);
+		const emitter = profile.geometry!.emitters[0];
+		emitter.name = "Lens";
+		emitter.field_angle_degrees = 10;
+		emitter.beam_angle_degrees = 30;
+		const save = vi.fn();
+		render(
+			<FixtureProfileEditor
+				initialProfile={profile}
+				manufacturers={[]}
+				onSave={save}
+				onClose={vi.fn()}
+			/>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Save fixture" }));
+		expect(
+			screen.getByText(/emitter "Lens": Field angle must/),
+		).toBeInTheDocument();
+		expect(save).not.toHaveBeenCalled();
+		expect(
+			screen.queryByRole("alertdialog", {
+				name: "Create a new fixture revision?",
+			}),
+		).not.toBeInTheDocument();
+	});
+});
