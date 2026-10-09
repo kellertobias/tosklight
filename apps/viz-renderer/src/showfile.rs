@@ -71,7 +71,15 @@ impl HostedShow {
     /// Whether the server is still running. A server that exited is reported rather than left to
     /// look like a connection that is merely slow.
     pub fn exited(&mut self) -> bool {
-        matches!(self.child.try_wait(), Ok(Some(_)))
+        if let Ok(Some(status)) = self.child.try_wait() {
+            eprintln!(
+                "private show server exited ({status}); startup diagnostics: {}",
+                self._workspace.directory.display()
+            );
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -283,21 +291,65 @@ impl PreviewWorkspace {
     }
 
     fn start(&self, binary: &Path, port: u16) -> Result<Child, String> {
+        let stdout = self.diagnostic_file("child.stdout.log")?;
+        let stderr = self.diagnostic_file("child.stderr.log")?;
+        eprintln!(
+            "private show server startup diagnostics: {}",
+            self.directory.display()
+        );
         private_server_command(binary, &self.directory, &self.snapshot, port)
             // The held parent writer is the preview lifetime lease; OS closure also covers
             // native terminate/abnormal parent exit that bypasses Rust destructors.
             .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(stdout)
+            .stderr(stderr)
             .spawn()
-            .map_err(|error| format!("could not start {}: {error}", binary.display()))
+            .map_err(|error| {
+                format!(
+                    "could not start {}: {error}; startup diagnostics: {}",
+                    binary.display(),
+                    self.directory.display()
+                )
+            })
+    }
+
+    fn diagnostic_file(&self, name: &str) -> Result<std::fs::File, String> {
+        let path = self.directory.join(name);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|error| {
+                format!(
+                    "could not create startup diagnostics {}: {error}",
+                    path.display()
+                )
+            })
     }
 }
 
 impl Drop for PreviewWorkspace {
     fn drop(&mut self) {
-        // Never remove the parent, original document or another opening's private files.
-        let _ = std::fs::remove_dir_all(&self.directory);
+        // Retain only this opening's startup logs; copied shows and runtime data are private
+        // scratch, not recovery files. Never remove the parent or another opening's files.
+        if let Ok(entries) = std::fs::read_dir(&self.directory) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let retained_log = matches!(
+                    entry.file_name().to_str(),
+                    Some("child.stdout.log" | "child.stderr.log")
+                ) && entry.file_type().is_ok_and(|kind| kind.is_file());
+                if !retained_log {
+                    if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                        let _ = std::fs::remove_dir_all(path);
+                    } else {
+                        let _ = std::fs::remove_file(path);
+                    }
+                }
+            }
+        }
+        // A workspace that never attempted startup has no logs and disappears completely.
+        let _ = std::fs::remove_dir(&self.directory);
     }
 }
 
@@ -427,9 +479,13 @@ mod tests {
         assert_ne!(first.snapshot, source);
         assert_eq!(first.snapshot.file_name(), source.file_name());
         let failed_directory = first.directory.clone();
-        assert!(first.start(&parent.join("missing-headless"), 5311).is_err());
+        let error = first
+            .start(&parent.join("missing-headless"), 5311)
+            .unwrap_err();
+        assert!(error.contains(&failed_directory.display().to_string()));
         drop(first);
-        assert!(!failed_directory.exists());
+        assert!(failed_directory.join("child.stderr.log").is_file());
+        assert!(!failed_directory.join("Original.show").exists());
         assert!(second.snapshot.is_file());
         assert_eq!(std::fs::read(&source).unwrap(), original);
         let second_directory = second.directory.clone();
@@ -474,10 +530,58 @@ mod tests {
         assert_eq!(hosted.label(), "Operator show.show");
         assert!(hosted.exited());
         drop(hosted);
-        assert!(!directory.exists());
+        assert!(directory.join("child.stdout.log").is_file());
+        assert!(directory.join("child.stderr.log").is_file());
+        assert!(!directory.join("Operator show.show").exists());
         assert_eq!(std::fs::read(&original).unwrap(), bytes);
         std::fs::remove_dir_all(parent).unwrap();
     }
+    #[cfg(unix)]
+    #[test]
+    fn startup_diagnostics_survive_close_without_retaining_private_runtime_data() {
+        use std::os::unix::fs::PermissionsExt;
+        let parent = scratch_directory(Path::new("preview-diagnostics-regression"))
+            .unwrap()
+            .join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir_all(&parent).unwrap();
+        let original = parent.join("Original.show");
+        let connection = rusqlite::Connection::open(&original).unwrap();
+        connection
+            .execute_batch("CREATE TABLE metadata(value TEXT);")
+            .unwrap();
+        drop(connection);
+        let original_bytes = std::fs::read(&original).unwrap();
+        let script = parent.join("diagnostic-child");
+        std::fs::write(&script, "#!/bin/sh\nprintf 'startup stdout\\n'\nprintf 'startup stderr\\n' >&2\nwhile read -r line; do :; done\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let workspace = PreviewWorkspace::create(&parent, &original).unwrap();
+        let directory = workspace.directory.clone();
+        let other = PreviewWorkspace::create(&parent, &original).unwrap();
+        std::fs::create_dir(directory.join("shows")).unwrap();
+        std::fs::write(directory.join("shows/private.show"), b"private runtime").unwrap();
+        std::fs::write(directory.join("desk.sqlite"), b"private desk").unwrap();
+        let mut child = workspace.start(&script, 5311).unwrap();
+        // Closing the parent writer still supplies EOF to the child, without a log pipe.
+        drop(child.stdin.take());
+        assert!(child.wait().unwrap().success());
+        let error = workspace.start(&script, 5311).unwrap_err();
+        assert!(error.contains(&directory.join("child.stdout.log").display().to_string()));
+        drop(workspace);
+        assert_eq!(
+            std::fs::read_to_string(directory.join("child.stdout.log")).unwrap(),
+            "startup stdout\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(directory.join("child.stderr.log")).unwrap(),
+            "startup stderr\n"
+        );
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 2);
+        assert!(other.snapshot.is_file());
+        assert_eq!(std::fs::read(&original).unwrap(), original_bytes);
+        drop(other);
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
     #[test]
     fn standalone_scratch_without_wrapper_is_absolute_and_app_owned() {
         let root = std::env::current_dir().unwrap();
