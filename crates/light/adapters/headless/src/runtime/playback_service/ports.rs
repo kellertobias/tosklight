@@ -592,35 +592,7 @@ impl ServerPlaybackPorts<'_> {
                     | light_playback::PlaybackTarget::Dynamic { .. }
             )
         {
-            let transition = self
-                .state
-                .output
-                .execute_pool_playback_with_activation(
-                    number,
-                    light_engine::PoolPlaybackAction::SetMasterWithExplicitActivation(
-                        level.value(),
-                    ),
-                    &[],
-                    Some(light_playback::PlaybackActivationOrigin {
-                        at: self.state.output.application_time(),
-                        desk_id: None,
-                        surface: light_playback::PlaybackActivationSurface::Matter,
-                        exclusion_scope: light_playback::PlaybackExclusionScope::None,
-                    }),
-                )
-                .map_err(invalid)?;
-            let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
-                return Err(invalid("unexpected explicit Matter fader outcome"));
-            };
-            if effect.durable()
-                && let Err(error) = persist_active_playbacks(self.state)
-            {
-                self.mark_persistence_pending(context, "active_playbacks", error);
-            }
-            return Ok(PlaybackExecution::Pool {
-                changed: effect.changed(),
-                pending: None,
-            });
+            return self.execute_pool_matter_master(context, number, level);
         }
         let (action_name, input) = legacy_action(action.clone());
         if !matches!(action, PlaybackAction::Release)
@@ -672,6 +644,41 @@ impl ServerPlaybackPorts<'_> {
         }
         Ok(PlaybackExecution::Pool {
             changed: dispatch.changed,
+            pending: None,
+        })
+    }
+
+    fn execute_pool_matter_master(
+        &self,
+        context: &ActionContext,
+        number: u16,
+        level: light_application::PlaybackLevel,
+    ) -> Result<PlaybackExecution, ActionError> {
+        let transition = self
+            .state
+            .output
+            .execute_pool_playback_with_activation(
+                number,
+                light_engine::PoolPlaybackAction::SetMasterWithExplicitActivation(level.value()),
+                &[],
+                Some(light_playback::PlaybackActivationOrigin {
+                    at: self.state.output.application_time(),
+                    desk_id: None,
+                    surface: light_playback::PlaybackActivationSurface::Matter,
+                    exclusion_scope: light_playback::PlaybackExclusionScope::None,
+                }),
+            )
+            .map_err(invalid)?;
+        let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
+            return Err(invalid("unexpected explicit Matter fader outcome"));
+        };
+        if effect.durable()
+            && let Err(error) = persist_active_playbacks(self.state)
+        {
+            self.mark_persistence_pending(context, "active_playbacks", error);
+        }
+        Ok(PlaybackExecution::Pool {
+            changed: effect.changed(),
             pending: None,
         })
     }

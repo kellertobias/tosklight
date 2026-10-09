@@ -50,7 +50,6 @@
     "apps/viz-renderer/src/ui/quick_settings.rs::rust:function:adjust:4bba6c4637c2:1": 194,
     "apps/viz-renderer/src/ui/quick_settings.rs::rust:function:build_quick_settings:141defb9c9b7:1": 183,
     "crates/light/adapters/headless/src/runtime/osc_playback.rs::rust:function:handle_playback_osc:a8fd28f480df:1": 154,
-    "crates/light/adapters/headless/src/runtime/playback_service/ports.rs::rust:function:execute_pool:b11926a5c17d:1": 160,
     "crates/light/adapters/headless/src/runtime/set_commands.rs::rust:function:assignment_playback:18981ad4ac3a:1": 174,
     "crates/light/adapters/headless/src/runtime/ws_dispatch.rs::rust:function:dispatch_action:e4333a15440b:1": 168,
     "crates/light/domain/programmer/src/command_line.rs::rust:function:edit_text:673d96af3ba3:1": 159,
