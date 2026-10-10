@@ -43,7 +43,12 @@ impl FixtureMode {
             .map(|channel| channel.head_id)
             .collect();
         for channel in &mut self.channels {
-            if !dimmed.contains(&channel.head_id) && channel.fixture_attribute.is_color_emitter() {
+            // A fresh GDTF may need an explicit mapping before its source emitter is known
+            // to the desk. Known subtractive channels keep their native non-emitter meaning.
+            let emitter = channel.fixture_attribute.is_color_emitter()
+                || (channel.fixture_attribute.0.starts_with("gdtf.")
+                    && channel.attribute.is_color_emitter());
+            if !dimmed.contains(&channel.head_id) && emitter {
                 channel.reacts_to_virtual_intensity = true;
                 channel.virtual_intensity_inverted = false;
             }

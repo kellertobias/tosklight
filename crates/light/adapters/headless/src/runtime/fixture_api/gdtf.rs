@@ -77,6 +77,15 @@ pub(super) async fn import(
                 &unknown,
                 request.attribute_mappings,
             )?;
+            // Only this freshly parsed GDTF gets creation defaults after explicit mappings.
+            // Loading/editing/transferring authored profiles must retain Ignore and Inverse.
+            for mode in &mut profile.modes {
+                for channel in &mut mode.channels {
+                    channel.reacts_to_virtual_intensity = false;
+                    channel.virtual_intensity_inverted = false;
+                }
+                mode.default_virtual_dimmer_reactions();
+            }
             let stored = state
                 .installation
                 .save_fixture_profile_with_gdtf(profile, request.expected_revision, &source)

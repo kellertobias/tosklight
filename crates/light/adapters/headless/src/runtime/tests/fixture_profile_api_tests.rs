@@ -968,3 +968,147 @@ async fn canonical_gdtf_preview_and_import_preserve_precision_and_retry_identity
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+fn mapped_emitter_gdtf(physical_dimmer: bool) -> Vec<u8> {
+    let (fixture, _, _) = schema_v2_direct_fixture();
+    let mut profile = std::sync::Arc::unwrap_or_clone(fixture.definition.profile_snapshot.unwrap());
+    profile.revision = 0;
+    let mode = &mut profile.modes[0];
+    mode.control_actions.clear();
+    let template = mode.channels[0].clone();
+    let mut attributes = vec![
+        "color.red",
+        "color.green",
+        "color.blue",
+        "color.white",
+        "ColorAdd_RY",
+        "color.uv",
+        "DimmerCurve",
+    ];
+    if physical_dimmer {
+        attributes.push("intensity");
+    }
+    mode.channels = attributes
+        .into_iter()
+        .map(|attribute| {
+            let mut channel = template.clone();
+            channel.id = Uuid::new_v4();
+            channel.fixture_attribute = light_core::AttributeKey(attribute.into());
+            channel.attribute = channel.fixture_attribute.clone();
+            channel.snap = false;
+            channel.functions = vec![light_fixture::ChannelFunction::continuous(
+                attribute,
+                channel.attribute.clone(),
+                255,
+            )];
+            channel
+        })
+        .collect();
+    mode.splits[0].footprint = mode.channels.len() as u16;
+    light_fixture::gdtf::profile::package_profile(&profile).unwrap()
+}
+
+#[tokio::test]
+async fn mapped_gdtf_virtual_intensity_defaults_follow_emitters_only_and_preserve_authored_flags() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    for physical_dimmer in [false, true] {
+        let source = mapped_emitter_gdtf(physical_dimmer);
+        let preview = light_fixture::gdtf::read::preview_profile(&source)
+            .unwrap()
+            .profile;
+        let mode_id = preview.modes[0].id;
+        let path = format!("/api/v2/fixture-library/profiles/{}/update", preview.id.0);
+        let mappings = vec![
+            serde_json::json!({"source_attribute":"gdtf.ColorAdd_RY", "target_attribute":"color.amber"}),
+            serde_json::json!({"source_attribute":"gdtf.DimmerCurve", "target_attribute":"gobo.1"}),
+        ];
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(path)
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "request_id": format!("mapped-emitter-{physical_dimmer}"),
+                            "source_base64": STANDARD.encode(&source), "expected_revision": 0,
+                            "attribute_mappings": mappings
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "{}",
+            json(response).await
+        );
+        let saved = state
+            .installation
+            .fixture_profile(preview.id, 1)
+            .unwrap()
+            .unwrap();
+        let mode = saved.mode(mode_id).unwrap();
+        for (old, channel) in preview.modes[0].channels.iter().zip(&mode.channels) {
+            assert_eq!(channel.id, old.id);
+            assert_eq!(channel.fixture_attribute, old.fixture_attribute);
+            assert_eq!(channel.default_raw, old.default_raw);
+            assert_eq!(
+                channel.reacts_to_virtual_intensity,
+                !physical_dimmer && channel.attribute.is_color_emitter(),
+                "{} must get its creation-time virtual dimmer default",
+                channel.attribute.0
+            );
+            assert!(!channel.virtual_intensity_inverted);
+        }
+        assert_eq!(
+            saved
+                .source_gdtf
+                .as_ref()
+                .unwrap()
+                .decoded_archive()
+                .unwrap(),
+            source
+        );
+        assert!(
+            saved
+                .source_gdtf
+                .as_ref()
+                .unwrap()
+                .matches_profile(&saved)
+                .unwrap()
+        );
+        // Transferred operator-authored profiles must keep Ignore/Inverse; no load-time repair.
+        let mut authored = saved.clone();
+        authored.id = light_core::FixtureId::new();
+        authored.revision = 0;
+        authored.source_gdtf = None;
+        authored.name.push_str(" authored flags");
+        authored.modes[0].channels[0].reacts_to_virtual_intensity = false;
+        authored.modes[0].channels[1].reacts_to_virtual_intensity = true;
+        authored.modes[0].channels[1].virtual_intensity_inverted = true;
+        let package = light_fixture::write_fixture_package(&authored).unwrap();
+        let response = app.clone().oneshot(Request::post("/api/v2/fixture-library")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(serde_json::json!({
+                "request_id":format!("authored-flags-{physical_dimmer}"),
+                "action":{"type":"import_package","package_base64":STANDARD.encode(&package),"attribute_mappings":[]}
+            }).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let retained = state
+            .installation
+            .fixture_profile(authored.id, 1)
+            .unwrap()
+            .unwrap();
+        assert!(!retained.modes[0].channels[0].reacts_to_virtual_intensity);
+        assert!(retained.modes[0].channels[1].reacts_to_virtual_intensity);
+        assert!(retained.modes[0].channels[1].virtual_intensity_inverted);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
