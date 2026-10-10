@@ -741,4 +741,132 @@ describe("fixture import busy ownership", () => {
 			screen.getByRole("button", { name: "Close Import GDTF" }),
 		).toBeEnabled();
 	});
+	it("keeps a concise failure in the fixed GDTF footer and copies the full diagnostic", async () => {
+		const diagnostic =
+			"Mapping store is locked\n    at nativeStorage (fixture.rs:10)";
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText },
+		});
+		try {
+			const props = gdtfDialogProps({
+				error: diagnostic,
+				mappings: { "gdtf.Gobo": "gobo.1" },
+			});
+			render(<FixtureImportDialogs {...props} />);
+			const body = screen
+				.getByRole("dialog", { name: "Import GDTF" })
+				.querySelector(".import-workflow__body");
+			if (!(body instanceof HTMLElement))
+				throw new Error("Import body missing");
+			body.scrollTop = 1000;
+			fireEvent.scroll(body);
+			const alert = screen.getByRole("alert");
+			expect(alert.closest(".import-workflow__footer")).not.toBeNull();
+			expect(body.contains(alert)).toBe(false);
+			expect(alert).toHaveTextContent(
+				"Import failed. Source and mappings are retained.",
+			);
+			expect(alert).toHaveTextContent("Mapping store is locked");
+			expect(alert).not.toHaveTextContent("nativeStorage");
+			expect(
+				screen.queryByText("Ready to import. Review any import limitations."),
+			).toBeNull();
+			fireEvent.click(screen.getByRole("button", { name: "Copy error" }));
+			await waitFor(() => expect(writeText).toHaveBeenCalledWith(diagnostic));
+			expect(
+				screen.getByRole("button", { name: "Retry import" }),
+			).toBeEnabled();
+		} finally {
+			if (original) Object.defineProperty(navigator, "clipboard", original);
+			else Reflect.deleteProperty(navigator, "clipboard");
+		}
+	});
+	it("retries an actual failed GDTF save with retained source and mappings and no duplicate request", async () => {
+		const preview = gdtfPreview();
+		let finish: (profile: typeof preview.profile) => void = () => {};
+		const save = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("Mapping store is locked"))
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve;
+					}),
+			);
+		const library = fixtureLibrary(vi.fn(), {
+			previewFixtureGdtf: vi.fn(async () => preview),
+			importFixtureGdtf: save,
+			fixtureSourceMappings: vi.fn(async () => [
+				{
+					source_format: "gdtf",
+					source_attribute: "Gobo",
+					target_attribute: "gobo.1",
+				},
+			]),
+			rememberFixtureSourceMapping: vi.fn(async () => null),
+		});
+		picker.open.mockResolvedValue({
+			source: "system",
+			target: "files",
+			files: [await gdtfFile("Gobo")],
+		});
+		function Workflow() {
+			const transfer = useFixtureLibraryTransfers({
+				selectedMode: null,
+				setSelectedFamilyKey: vi.fn(),
+				setSelectedModeKey: vi.fn(),
+			});
+			return (
+				<>
+					<button type="button" onClick={() => transfer.setModal("gdtf")}>
+						Start import
+					</button>
+					<FixtureImportDialogs
+						{...transfer}
+						close={() => transfer.setModal(null)}
+					/>
+				</>
+			);
+		}
+		render(
+			<FixtureLibraryProvider library={library}>
+				<Workflow />
+			</FixtureLibraryProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Start import" }));
+		fireEvent.click(screen.getByRole("button", { name: "Choose GDTF file" }));
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Import and remember mappings",
+			}),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Retry import" }),
+			).toBeEnabled(),
+		);
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Mapping store is locked",
+		);
+		expect(screen.getByLabelText("Map gdtf.Gobo")).toHaveTextContent("Gobo 1");
+		const retry = screen.getByRole("button", { name: "Retry import" });
+		fireEvent.click(retry);
+		fireEvent.click(retry);
+		await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(
+			screen.getByRole("status", { name: "Importing fixture…" }),
+		).toBeVisible();
+		expect(save.mock.calls[1][0]).toEqual(save.mock.calls[0][0]);
+		await act(async () => {
+			finish({ ...preview.profile, revision: 1 });
+		});
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Import GDTF" })).toBeNull(),
+		);
+		expect(save).toHaveBeenCalledTimes(2);
+	});
 });

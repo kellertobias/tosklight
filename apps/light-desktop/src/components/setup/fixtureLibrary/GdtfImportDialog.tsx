@@ -104,6 +104,71 @@ function GdtfBusyProgress({
 	);
 }
 
+function GdtfImportFooter({
+	pendingGdtf,
+	busy,
+	error,
+	confirmGdtfMappings,
+	requirements,
+	readingFile,
+	unresolved,
+	requestClose,
+}: Pick<
+	Props,
+	"pendingGdtf" | "busy" | "error" | "confirmGdtfMappings" | "requirements"
+> & { readingFile: boolean; unresolved: number; requestClose: () => void }) {
+	const operationBusy = busy || readingFile;
+	const summary =
+		error?.split(/\r?\n/).find((line) => line.trim()) ?? "GDTF import failed.";
+	return (
+		<div className="import-workflow__footer">
+			{error && !operationBusy ? (
+				<ErrorAlert as="p" copyText={error}>
+					<strong>
+						{pendingGdtf
+							? "Import failed. Source and mappings are retained."
+							: "GDTF preview failed."}
+					</strong>
+					<br />
+					{summary}
+				</ErrorAlert>
+			) : (
+				<p>
+					{readingFile
+						? "Reading the selected archive…"
+						: busy
+							? pendingGdtf
+								? "Importing fixture…"
+								: "Reading GDTF…"
+							: unresolved > 0
+								? `Choose a destination for ${unresolved} remaining ${unresolved === 1 ? "attribute" : "attributes"} to enable import.`
+								: pendingGdtf
+									? "Ready to import. Review any import limitations."
+									: "Choose a GDTF archive to preview."}
+				</p>
+			)}
+			<Button disabled={operationBusy} onClick={requestClose}>
+				Cancel
+			</Button>
+			{pendingGdtf && (
+				<Button
+					variant="primary"
+					disabled={operationBusy || unresolved > 0}
+					onClick={() => void confirmGdtfMappings()}
+				>
+					{busy
+						? "Importing…"
+						: error
+							? "Retry import"
+							: requirements.length
+								? "Import and remember mappings"
+								: "Import fixture"}
+				</Button>
+			)}
+		</div>
+	);
+}
+
 export function GdtfImportDialog({
 	pendingGdtf,
 	busy,
@@ -155,11 +220,6 @@ export function GdtfImportDialog({
 						{pendingGdtf && <GdtfSourceSummary pending={pendingGdtf} />}
 					</div>
 					<div className="import-workflow__body">
-						{error && (
-							<ErrorAlert as="p" role="alert">
-								{error}
-							</ErrorAlert>
-						)}
 						{!pendingGdtf ? (
 							<>
 								<p>
@@ -208,37 +268,16 @@ export function GdtfImportDialog({
 							</>
 						)}
 					</div>
-					<div className="import-workflow__footer">
-						<p>
-							{busy
-								? readingFile
-									? "Reading the selected archive. Wait for the read to finish; it cannot be cancelled here."
-									: pendingGdtf
-										? "Importing fixture…"
-										: "Reading GDTF…"
-								: unresolved > 0
-									? `Choose a destination for ${unresolved} remaining ${unresolved === 1 ? "attribute" : "attributes"} to enable import.`
-									: pendingGdtf
-										? "Ready to import. Review any import limitations."
-										: "Choose a GDTF archive to preview."}
-						</p>
-						<Button disabled={operationBusy} onClick={requestClose}>
-							Cancel
-						</Button>
-						{pendingGdtf && (
-							<Button
-								variant="primary"
-								disabled={operationBusy || unresolved > 0}
-								onClick={() => void confirmGdtfMappings()}
-							>
-								{busy
-									? "Importing…"
-									: requirements.length
-										? "Import and remember mappings"
-										: "Import fixture"}
-							</Button>
-						)}
-					</div>
+					<GdtfImportFooter
+						pendingGdtf={pendingGdtf}
+						busy={busy}
+						error={error}
+						confirmGdtfMappings={confirmGdtfMappings}
+						requirements={requirements}
+						readingFile={readingFile}
+						unresolved={unresolved}
+						requestClose={requestClose}
+					/>
 					{operationBusy && (
 						<GdtfBusyProgress
 							readingFile={readingFile}
