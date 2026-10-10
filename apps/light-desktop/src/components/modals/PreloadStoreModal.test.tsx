@@ -14,6 +14,22 @@ const CUE_LIST_ID = "11111111-1111-4111-8111-111111111111";
 const mocks = vi.hoisted(() => ({
 	state: { preloadStoreOpen: true },
 	fixtures: [] as PatchedFixture[],
+	topology: {
+		ready: true,
+		playbacks: [] as Array<{
+			body: {
+				number: number;
+				name: string;
+				target?: { type: string; cue_list_id: string };
+			};
+		}>,
+		pages: [] as Array<{
+			body: {
+				number: number;
+				virtual_playbacks: Record<string, { number: number; name: string }>;
+			};
+		}>,
+	},
 	dispatch: vi.fn(),
 	storePreload: vi.fn(),
 	recordCue: vi.fn(),
@@ -51,8 +67,18 @@ const mocks = vi.hoisted(() => ({
 	queue: {
 		revision: 12,
 		actions: [
-			{ playbackNumber: 4, page: 2, action: "go", surface: "physical" },
-			{ playbackNumber: 4, page: 2, action: "go", surface: "physical" },
+			{
+				playbackNumber: 4,
+				page: 2 as number | null,
+				action: "go",
+				surface: "physical",
+			},
+			{
+				playbackNumber: 4,
+				page: 2 as number | null,
+				action: "go",
+				surface: "physical",
+			},
 		],
 	},
 	presets: [
@@ -95,6 +121,10 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 }));
 vi.mock("../../features/showObjects/ShowObjectsView", () => ({
 	useShowObjectView: mocks.views,
+}));
+
+vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
+	usePlaybackTopologyView: () => mocks.topology,
 }));
 
 vi.mock("../../features/patch/PatchState", () => ({
@@ -146,6 +176,11 @@ beforeEach(() => {
 			definition: { name: "Wash", model: "Wash", heads: [] },
 		} as unknown as PatchedFixture,
 	];
+	mocks.topology = { ready: true, playbacks: [], pages: [] };
+	mocks.queue.actions = [
+		{ playbackNumber: 4, page: 2, action: "go", surface: "physical" },
+		{ playbackNumber: 4, page: 2, action: "go", surface: "physical" },
+	];
 	mocks.removeDynamic.mockClear();
 	mocks.removeGroupRelease.mockClear();
 	mocks.state.preloadStoreOpen = true;
@@ -179,7 +214,9 @@ describe("PreloadStoreModal", () => {
 			.map((row) => row.textContent);
 		expect(labels[0]).toContain("Group 3 · Front · pan · 25%");
 		expect(labels[1]).toContain("Fixture 7 · Wash · intensity · 50%");
-		expect(labels[2]).toContain("Playback 2.4 · GO · physical");
+		expect(labels[2]).toContain(
+			"Physical Playback pool 4 · captured page 2 · GO · physical",
+		);
 		fireEvent.click(
 			screen.getByRole("button", { name: "Remove playback action 2" }),
 		);
@@ -188,6 +225,75 @@ describe("PreloadStoreModal", () => {
 		);
 		expect(mocks.recordCue).not.toHaveBeenCalled();
 		expect(mocks.storePreload).not.toHaveBeenCalled();
+	});
+
+	it("labels the captured physical pool identity, not its cue target or current slot", () => {
+		mocks.topology.playbacks = [
+			{
+				body: {
+					number: 11,
+					name: "White base",
+					target: { type: "cue_list", cue_list_id: "cue-99" },
+				},
+			},
+		];
+		mocks.queue.actions = [
+			{ playbackNumber: 11, page: null, action: "on", surface: "physical" },
+		];
+		render(<PreloadStoreModal />);
+		expect(
+			screen.getByText(
+				"Physical Playback pool 11 · current name: White base · ON · physical",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByText(/Cuelist 11|Playback 2\.1|cue-99/),
+		).not.toBeInTheDocument();
+	});
+
+	it("resolves virtual names only from the captured page and preserves number fallback", () => {
+		mocks.topology.playbacks = [
+			{ body: { number: 1001, name: "Wrong pool name" } },
+		];
+		mocks.topology.pages = [
+			{
+				body: {
+					number: 1,
+					virtual_playbacks: { "1001": { number: 1001, name: "Blue look" } },
+				},
+			},
+		];
+		mocks.queue.actions = [
+			{ playbackNumber: 1001, page: 1, action: "go", surface: "virtual" },
+			{ playbackNumber: 12, page: null, action: "on", surface: "physical" },
+			{ playbackNumber: 1002, page: null, action: "on", surface: "virtual" },
+		];
+		render(<PreloadStoreModal />);
+		expect(
+			screen.getByText(
+				"Virtual Playback pool 1001 · captured page 1 · current name: Blue look · GO · virtual",
+			),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText("Physical Playback pool 12 · ON · physical"),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText("Virtual Playback pool 1002 · ON · virtual"),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/Wrong pool name/)).not.toBeInTheDocument();
+	});
+
+	it("keeps number fallback while topology names are not authoritative", () => {
+		mocks.topology.ready = false;
+		mocks.topology.playbacks = [{ body: { number: 11, name: "Stale name" } }];
+		mocks.queue.actions = [
+			{ playbackNumber: 11, page: null, action: "on", surface: "physical" },
+		];
+		render(<PreloadStoreModal />);
+		expect(
+			screen.getByText("Physical Playback pool 11 · ON · physical"),
+		).toBeInTheDocument();
+		expect(screen.queryByText(/Stale name/)).not.toBeInTheDocument();
 	});
 
 	it("removes fixture and group pending changes through exact displayed lifecycle authority", async () => {

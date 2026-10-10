@@ -1,9 +1,13 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useState } from "react";
 import type { AttributeValue } from "../../api/types/playback";
+import { virtualPlaybackPage } from "../../api/virtualPlaybackAddress";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
+import type { PlaybackTopologyView } from "../../features/playbackTopology/contracts";
+import { usePlaybackTopologyView } from "../../features/playbackTopology/PlaybackTopologyView";
 import type { ProgrammerPreloadLifecycleActions } from "../../features/programmerPreloadLifecycle/contracts";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
+import type { ProgrammerPreloadPlaybackQueueEntry } from "../../features/programmerPreloadPlaybackQueue/contracts";
 import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import type { ProgrammerPreloadValuesProjection } from "../../features/programmerPreloadValues/contracts";
 import { useProgrammerPreloadInspectionValuesView } from "../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
@@ -33,6 +37,22 @@ type PendingProgrammingComponent = NonNullable<
 	>["component"]
 >;
 
+function pendingPlaybackLabel(
+	entry: ProgrammerPreloadPlaybackQueueEntry,
+	topology: PlaybackTopologyView,
+) {
+	const virtual = virtualPlaybackPage(entry.playbackNumber) !== null;
+	const definition = !topology.ready
+		? undefined
+		: virtual
+			? topology.pages.find((page) => page.body.number === entry.page)?.body
+					.virtual_playbacks[String(entry.playbackNumber)]
+			: topology.playbacks.find(
+					(playback) => playback.body.number === entry.playbackNumber,
+				)?.body;
+	return `${virtual ? "Virtual" : "Physical"} Playback pool ${entry.playbackNumber}${entry.page == null ? "" : ` · captured page ${entry.page}`}${definition?.name?.trim() ? ` · current name: ${definition.name}` : ""} · ${entry.action.replaceAll("_", " ").toUpperCase()} · ${entry.surface}`;
+}
+
 export function PendingPreloadInspection({
 	onClose,
 	onRecord,
@@ -42,6 +62,7 @@ export function PendingPreloadInspection({
 }) {
 	const values = useProgrammerPreloadInspectionValuesView();
 	const queue = useProgrammerPreloadPlaybackQueueView();
+	const topology = usePlaybackTopologyView();
 	const lifecycle = useProgrammerPreloadLifecycleView();
 	const fixtures = usePatchedFixturesView();
 	const groups = usePortableGroups();
@@ -120,16 +141,7 @@ export function PendingPreloadInspection({
 						<ol>
 							{queue?.actions.map((entry, index) => (
 								<li key={`${queue.revision}:${index}`}>
-									<span>
-										{entry.surface === "virtual"
-											? "Virtual Playback"
-											: "Playback"}{" "}
-										{entry.page == null
-											? entry.playbackNumber
-											: `${entry.page}.${entry.playbackNumber}`}{" "}
-										· {entry.action.replaceAll("_", " ").toUpperCase()} ·{" "}
-										{entry.surface}
-									</span>{" "}
+									<span>{pendingPlaybackLabel(entry, topology)}</span>{" "}
 									<Button
 										disabled={!ready || busy || lifecycle.pending}
 										onClick={() =>
