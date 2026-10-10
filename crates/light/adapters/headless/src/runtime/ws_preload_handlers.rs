@@ -29,8 +29,7 @@ pub(super) fn ws_programmer_preload_lifecycle_action(
             ports,
         )
         .map_err(|error| error.message)?;
-    let payload = serde_json::to_value(command_http::preload_lifecycle_outcome(result))
-        .map_err(|error| error.to_string())?;
+    let payload = preload_wire_payload(&command_http::preload_lifecycle_outcome(result))?;
     Ok(WsTypedProgrammingAction { payload })
 }
 
@@ -71,8 +70,7 @@ pub(super) fn ws_programmer_preload_values_action(
         .programming
         .handle_preload_values(action, ports)
         .map_err(|error| error.message)?;
-    let payload = serde_json::to_value(command_http::preload_values_outcome(request_id, result))
-        .map_err(|error| error.to_string())?;
+    let payload = preload_wire_payload(&command_http::preload_values_outcome(request_id, result))?;
     Ok(WsTypedProgrammingAction { payload })
 }
 
@@ -228,4 +226,11 @@ fn ws_typed_recording(
             command_http::ExistingCommandOutcome::Rejected { error }
         }
     })
+}
+
+/// Match typed event/snapshot JSON spelling: to_value widens f32 to f64 and would
+/// make an identical same-sequence pending projection look like a conflicting event.
+fn preload_wire_payload(value: &impl serde::Serialize) -> Result<serde_json::Value, String> {
+    let json = serde_json::to_string(value).map_err(|error| error.to_string())?;
+    serde_json::from_str(&json).map_err(|error| error.to_string())
 }
