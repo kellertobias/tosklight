@@ -4,7 +4,7 @@ Groups store ordered fixture selections. Presets store reusable attribute values
 
 ## Groups
 
-Select fixtures, press `[REC]`, and choose a Group target or enter its number. Normal record overwrites; `[REC] [+]` merges; `[REC] [-]` subtracts. Intentionally empty Groups remain valid stored objects and differ from absent Group numbers. Missing Groups in a range are skipped.
+Select fixtures, press `[REC]`, and choose a Group target or enter its number. Normal record merges the selection into the Group and keeps existing members in order. Populated tiles show **REC MRG**; empty Groups and unused slots show **REC**. `[REC] [+]` explicitly merges; `[REC] [-]` subtracts. Choose one-off **Smart** before touching a populated Group to choose Merge or Overwrite; `RECORD SMART GROUP 22` explicitly overwrites Group 22. Intentionally empty Groups remain valid stored objects and differ from absent Group numbers. Missing Groups in a range are skipped.
 
 The Group Pool prominently highlights the live Group references selected for programming, including multiple Groups. Other Groups show a filled white dot in the bottom-left corner when all their fixtures are selected, or a hollow white dot when only some are selected. These dots indicate selected lamps without selecting the Group itself. Double-pressing a Group selects its frozen fixtures, so it shows a filled dot rather than the live Group highlight. Clearing selection removes the indicators.
 

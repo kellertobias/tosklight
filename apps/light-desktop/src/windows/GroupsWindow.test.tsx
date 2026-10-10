@@ -410,7 +410,7 @@ describe("GroupsWindow action routing", () => {
 		await waitFor(() =>
 			expect(mocks.recordGroup).toHaveBeenCalledWith({
 				objectId: "4",
-				operation: "overwrite",
+				operation: "merge",
 				expectedObjectRevision: 1,
 			}),
 		);
@@ -443,8 +443,19 @@ describe("GroupsWindow action routing", () => {
 		expect(mocks.refresh).not.toHaveBeenCalled();
 	});
 
-	it("captures the Group revision when the dialog opens and records Merge", async () => {
+ it("merges a populated Group directly by default and labels empty targets REC", async () => {
+  mocks.state.storeArmed = true;
+  render(<GroupsWindow />);
+  expect(buttonForText("Stored Populated").querySelector('[data-pool-workflow="record"]')).toHaveTextContent("REC MRG");
+  expect(buttonForText("Stored Empty").querySelector('[data-pool-workflow="record"]')).toHaveTextContent(/^REC$/);
+  fireEvent.click(buttonForText("Stored Populated"));
+  await waitFor(() => expect(mocks.recordGroup).toHaveBeenCalledWith({objectId:"5",operation:"merge",expectedObjectRevision:1}));
+  expect(screen.queryByRole("dialog")).toBeNull();
+ });
+
+	it("captures the Group revision when explicit Smart opens the dialog and records Merge", async () => {
 		mocks.state.storeArmed = true;
+ mocks.commandLine = "RECORD SMART";
 		const view = render(<GroupsWindow />);
 		fireEvent.click(buttonForText("Stored Populated"));
 		// A single pool press intentionally waits out the 240 ms double-press window.

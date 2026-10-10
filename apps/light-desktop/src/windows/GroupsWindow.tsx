@@ -10,6 +10,7 @@ import {
 	RecordModeDialog,
 } from "../components/shared/RecordModeDialog";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
+import type { GroupRecordOperation } from "../features/groupRecording/contracts";
 import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
 import type { GroupRecordingTarget } from "../features/groupRecording/target";
 import { useApp } from "../state/AppContext";
@@ -105,7 +106,7 @@ export function GroupsWindow({
 
 	const recordGroupAction = async (
 		target: GroupRecordingTarget,
-		mode: RecordMode = "overwrite",
+		mode: GroupRecordOperation = "merge",
 	) => {
 		if (!groupRecording) return null;
 		const outcome = await groupRecording.record({

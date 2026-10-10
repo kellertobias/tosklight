@@ -38,6 +38,10 @@ On an attached desk, a second Record key press while Record is armed opens the s
 retired browser settings are migrated once: **Merge into active Cue** on becomes the Merge default,
 and the never-applied **Record mode** is dropped.
 
+### Default Group recording
+
+Select fixtures, press Record, and touch a populated Group. It shows **REC MRG** and merges directly, retaining existing ordered members and adding the selection. An intentionally stored empty Group or an unused slot shows **REC** and records directly. With one-off Smart, a populated Group instead shows **REC** and offers Merge / Overwrite / Cancel. `RECORD GROUP 22` and `RECORD MERGE GROUP 22` merge; `RECORD SMART GROUP 22` overwrites; `RECORD - GROUP 22` subtracts. Verify software command/keypad and attached OSC paths agree.
+
 ## RECUPD-002 — UPDATE UPDATE: the same layout and a stored Update default
 
 Given the same Cuelist, holding Shift and pressing `[REC]` twice opens a modal titled **Update**

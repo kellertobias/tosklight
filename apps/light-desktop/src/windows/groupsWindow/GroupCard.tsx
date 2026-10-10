@@ -63,6 +63,7 @@ export function GroupCard({
 	fullySelected = false,
 	selectedFixtureCount,
 	storeArmed,
+	recordLabel,
 	updateArmed,
 	setTarget,
 	mutationOperation,
@@ -86,6 +87,7 @@ export function GroupCard({
 	fullySelected?: boolean;
 	selectedFixtureCount: number;
 	storeArmed: boolean;
+	recordLabel?: string;
 	updateArmed: boolean;
 	setTarget: boolean;
 	mutationOperation: PoolMutationOperation | null;
@@ -165,6 +167,7 @@ export function GroupCard({
 				iconColor: group?.body.color,
 				color: group?.body.color,
 				kind: "group",
+				workflow: storeArmed ? recordLabel ?? (group?.body.fixtures.length ? "REC MRG" : "REC") : undefined,
 				states: presentation.states,
 				derived:
 					canonicalReferences.length > 0 || Boolean(group?.body.derived_from),

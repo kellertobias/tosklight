@@ -166,7 +166,7 @@ An unpatched, visual-only, or internal fixture never owns a DMX address. If no f
 
 To be able to reuse selections over and over, you can store groups. For that, you select the fixtures first, then press `[REC]` and then either a group tile in the group pool or stay fully in the command line: `[REC][GRP][22][ENT]`. This stores the fixtures including their selection order in that group.
 
-When the group is already occupied, you get asked if you want to overwrite the group (if recording via touch) or you can explicitly merge with the existing group: `[REC][+][GRP][22][ENT]`
+When the Group is already occupied, normal recording merges the current selection and retains its existing ordered members. `[REC][+][GRP][22][ENT]` explicitly merges. Choose one-off Smart before touching the Group for the Merge/Overwrite choice, or enter `RECORD SMART GROUP 22` to overwrite it.
 
 You can also remove a selection from a stored group. That only works via command line: `[REC][-][GRP][22][ENT]` removes the current selection from group 22.
 

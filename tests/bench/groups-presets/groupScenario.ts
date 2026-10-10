@@ -240,20 +240,31 @@ export class BrowserGroups {
 				throw new Error(
 					"Group pool does not expose Subtract; use keypad, API, or OSC",
 				);
-			await this.desk.click(
-				this.page.locator(".global-store-button:visible").first(),
-			);
+			const record = this.page.locator(".global-store-button:visible").first();
+			await this.desk.click(record);
+			if (mode === StoreMode.Overwrite) {
+				await this.desk.click(record);
+				await this.chooseOneOffSmart();
+			}
 			await this.desk.click(this.groupCard(number));
-			const choice = this.page.getByRole("button", {
-				name: mode === StoreMode.Merge ? "Merge" : "Overwrite",
-				exact: true,
-			});
-			if (before?.body.fixtures.length) {
+			if (mode === StoreMode.Overwrite && before?.body.fixtures.length) {
+				const choice = this.page.getByRole("button", {
+					name: "Overwrite",
+					exact: true,
+				});
 				await expect(choice).toBeVisible();
 				await this.desk.click(choice);
 			}
 		} else if (route === "keypad") {
 			await this.commands.via.ui.execute(groupRecordCommand(number, mode));
+		} else if (mode === StoreMode.Overwrite) {
+			await this.sendOsc(["record"]);
+			// The second REC opens a modal without changing the command line, so wait
+			// for its visible operator state rather than nonexistent line feedback.
+			await this.hardware.send("/light/desk/programmer/record", [true]);
+			await this.hardware.send("/light/desk/programmer/record", [false]);
+			await this.chooseOneOffSmart();
+			await this.sendOsc(["group", ...digits(number), "enter"]);
 		} else {
 			await this.sendOsc(groupRecordKeys(number, mode));
 		}
@@ -424,6 +435,15 @@ export class BrowserGroups {
 			.nth(number - 1);
 	}
 
+	private async chooseOneOffSmart() {
+		const dialog = this.page.getByRole("dialog", { name: "Record", exact: true });
+		await expect(dialog).toBeVisible();
+		await expect(dialog.getByRole("switch", { name: "Set as default" })).not.toBeChecked();
+		await this.desk.click(dialog.getByRole("radio", { name: "Smart", exact: true }));
+		await this.desk.click(dialog.getByRole("button", { name: "Record", exact: true }));
+		await expect(dialog).toBeHidden();
+	}
+
 	private async sendOsc(keys: string[]) {
 		if (!this.hardware.connected)
 			throw new Error("Group OSC route requires hardware.connect()");
@@ -482,7 +502,7 @@ function validNumber(number: number) {
 }
 
 function groupRecordCommand(number: number, mode: StoreMode) {
-	return `RECORD ${mode === StoreMode.Merge ? "+ " : mode === StoreMode.Subtract ? "- " : ""}GROUP ${number}`;
+	return `RECORD ${mode === StoreMode.Merge ? "+ " : mode === StoreMode.Subtract ? "- " : "SMART "}GROUP ${number}`;
 }
 
 function groupRecordKeys(number: number, mode: StoreMode) {

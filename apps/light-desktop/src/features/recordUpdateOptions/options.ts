@@ -23,7 +23,7 @@ export const RECORD_UPDATE_OPTIONS: readonly RecordUpdateOptionDefinition[] = [
 		label: "Smart",
 		keyword: "SMART",
 		record:
-			"The regular behaviour. Presets merge by default; one-off Smart offers a choice. A Cuelist with one Cue asks whether to add, merge, or overwrite; otherwise a new Cue is added.",
+			"The regular behaviour. Groups and Presets merge by default; one-off Smart offers a choice. A Cuelist with one Cue asks whether to add, merge, or overwrite; otherwise a new Cue is added.",
 		update:
 			"The regular behaviour. A touched target opens the Update preview with its configured mode; a command uses Update.",
 	},
