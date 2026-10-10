@@ -73,6 +73,7 @@ fn calibrated_visual_engine() -> (Engine, FixtureId) {
             fixtures: vec![fixture].into(),
             playbacks: vec![test_group_playback_with_master(1, "front", 0.5)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![fixture_id],

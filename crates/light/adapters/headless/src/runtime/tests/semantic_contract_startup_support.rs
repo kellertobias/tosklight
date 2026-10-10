@@ -64,6 +64,7 @@ impl ContractDesk {
             extensions_dir: Some(self.data_dir.join("extensions")),
             bind: "127.0.0.1:0".parse().unwrap(),
             test_bench: true,
+            visualizer_preview: false,
             osc_bind_override: None,
             output_bind_override: None,
         }

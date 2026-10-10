@@ -293,6 +293,24 @@ impl InstallationResource {
         self.desk.lock().set_desk_page(desk_id, show_id, page)
     }
 
+    pub(in crate::runtime) fn selected_cue_list(
+        &self,
+        desk_id: Uuid,
+        show_id: light_core::ShowId,
+    ) -> Result<Option<light_core::CueListId>, light_show::StoreError> {
+        self.desk.lock().selected_cue_list(desk_id, show_id)
+    }
+    pub(in crate::runtime) fn set_selected_cue_list(
+        &self,
+        desk_id: Uuid,
+        show_id: light_core::ShowId,
+        selected: Option<light_core::CueListId>,
+    ) -> Result<(), light_show::StoreError> {
+        self.desk
+            .lock()
+            .set_selected_cue_list(desk_id, show_id, selected)
+    }
+
     pub(in crate::runtime) fn selected_playback(
         &self,
         desk_id: Uuid,

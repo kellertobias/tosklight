@@ -16,6 +16,8 @@ import {
 	TextField,
 } from "@tosklight/ui";
 
+import { PendingPreloadInspection } from "./PendingPreloadInspection";
+
 type StoreTarget = "preset" | "cue";
 type PresetRecordMode = "merge" | "overwrite" | "add_missing_fixtures";
 
@@ -32,10 +34,14 @@ export function PreloadStoreModal() {
 	const [name, setName] = useState("");
 	const [mode, setMode] = useState<PresetRecordMode>("merge");
 	const open = state.preloadStoreOpen;
+	const [recording, setRecording] = useState(false);
+	useEffect(() => {
+		if (!open) setRecording(false);
+	}, [open]);
 	const targetId = target === "preset" ? presetId : cueListId;
 
-	useShowObjectView("preset", open && target === "preset");
-	useShowObjectView("cue_list", open && target === "cue");
+	useShowObjectView("preset", open && recording && target === "preset");
+	useShowObjectView("cue_list", open && recording && target === "cue");
 	useDefaultCueList(target, cueListId, cueLists, setCueListId);
 
 	const targetObject = useMemo(
@@ -47,8 +53,10 @@ export function PreloadStoreModal() {
 	);
 	if (!open) return null;
 
-	const close = () =>
+	const close = () => {
+		setRecording(false);
 		dispatch({ type: "SET_MODAL", modal: "preloadStoreOpen", value: false });
+	};
 	const submit = async () => {
 		const stored =
 			target === "cue"
@@ -65,6 +73,13 @@ export function PreloadStoreModal() {
 		if (stored) close();
 	};
 
+	if (!recording)
+		return (
+			<PendingPreloadInspection
+				onClose={close}
+				onRecord={() => setRecording(true)}
+			/>
+		);
 	return (
 		<ModalPortal onClose={close}>
 			<div
@@ -75,7 +90,10 @@ export function PreloadStoreModal() {
 			>
 				<section className="modal-card preload-store-card">
 					<ModalTitleBar title="Record Pending Preload" onClose={close} />
-					<p>The active preload scene remains live. Only the pending scene will be stored.</p>
+					<p>
+						The active preload scene remains live. Only the pending scene will
+						be stored.
+					</p>
 					<TargetSelector target={target} onChange={setTarget} />
 					<FormLayout className="preload-target-form" labelPlacement="side">
 						{target === "preset" ? (
@@ -119,14 +137,19 @@ export function PreloadStoreModal() {
 						/>
 					</FormLayout>
 					<div className="modal-actions">
+						<Button onClick={() => setRecording(false)}>
+							Back to pending entries
+						</Button>
 						<Button onClick={close}>Cancel</Button>
 						<Button disabled={!targetId} onClick={() => void submit()}>
-							Record to {target === "preset" ? `Preset ${targetId}` : `Cue ${cueNumber}`}
+							Record to{" "}
+							{target === "preset" ? `Preset ${targetId}` : `Cue ${cueNumber}`}
 						</Button>
 					</div>
 					{targetObject && (
 						<small>
-							Existing target revision {targetObject.revision}; normal conflict protection applies.
+							Existing target revision {targetObject.revision}; normal conflict
+							protection applies.
 						</small>
 					)}
 				</section>
@@ -142,7 +165,10 @@ function useDefaultCueList(
 	setCueListId: (id: string) => void,
 ) {
 	useEffect(() => {
-		if (target !== "cue" || cueLists.some((cueList) => cueList.id === cueListId))
+		if (
+			target !== "cue" ||
+			cueLists.some((cueList) => cueList.id === cueListId)
+		)
 			return;
 		setCueListId(cueLists[0]?.id ?? "");
 	}, [cueListId, cueLists, setCueListId, target]);

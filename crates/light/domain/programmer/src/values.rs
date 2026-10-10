@@ -187,6 +187,19 @@ impl ProgrammerRegistry {
                 .map(|(fixture_id, attribute, _)| (*fixture_id, attribute.clone()))
                 .collect::<HashSet<_>>();
             let preload = state.blind && state.preload_capture_programmer;
+            let replaced_orders = if preload {
+                state.preload_pending.as_slice()
+            } else {
+                state.values.as_slice()
+            }
+            .iter()
+            .filter(|value| touched.contains(&(value.fixture_id, value.attribute.clone())))
+            .map(|value| value.programmer_order)
+            .collect::<Vec<_>>();
+            for order in replaced_orders {
+                Arc::make_mut(&mut state.preset_provenance).remove(&order);
+                Arc::make_mut(&mut state.replacement_provenance).remove(&order);
+            }
             for (fixture_id, attribute) in &touched {
                 state.clear_fixture_release(preload, *fixture_id, attribute);
             }
@@ -307,6 +320,19 @@ impl ProgrammerRegistry {
             state.checkpoint();
             let merge_mode = light_core::MergeMode::Ltp;
             let preload = state.blind && state.preload_capture_programmer;
+            let replaced_orders = if preload {
+                state.preload_pending.as_slice()
+            } else {
+                state.values.as_slice()
+            }
+            .iter()
+            .filter(|value| value.fixture_id == fixture_id && value.attribute == attribute)
+            .map(|value| value.programmer_order)
+            .collect::<Vec<_>>();
+            for order in replaced_orders {
+                Arc::make_mut(&mut state.preset_provenance).remove(&order);
+                Arc::make_mut(&mut state.replacement_provenance).remove(&order);
+            }
             state.clear_fixture_release(preload, fixture_id, &attribute);
             let values = if preload {
                 &mut state.preload_pending

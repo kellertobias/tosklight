@@ -171,6 +171,10 @@ fn template_group_preset() -> light_programmer::Preset {
             .collect()
     };
     light_programmer::Preset {
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+instance_id: None,
         name: "All white at full".into(),
         family: light_programmer::PresetFamily::Mixed,
         number: 1,
@@ -205,6 +209,9 @@ fn template_cue_list(
             values
                 .iter()
                 .map(move |(attribute, value)| light_playback::GroupCueChange {
+
+replacement_projections: Default::default(),
+preset_reference: None,
                     group_id: group_id.clone(),
                     attribute: attribute.clone(),
                     value: Some(value.clone()),
@@ -215,6 +222,8 @@ fn template_cue_list(
         })
         .collect();
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: "Main".into(),
         priority: 0,

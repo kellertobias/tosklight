@@ -1,4 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+	consumeObjectEditorRequest,
+	currentObjectEditorRequest,
+	subscribeObjectEditorRequest,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
 import { useSpeedGroupsBpm } from "../features/configuration/ConfigurationState";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
@@ -52,15 +57,16 @@ export function CuelistWindow({
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const hasFixedCueListId = fixedCueListId !== undefined;
 	const fixedDefinition = hasFixedCueListId
-		? pool.find(
-				(definition) =>
-					definition.target.type === "cue_list" &&
-					definition.target.cue_list_id === fixedCueListId,
-			)
+		? pool.find((definition) => definition.cueList.id === fixedCueListId)
 		: undefined;
+	const selectedByDesk = playbackDesk?.selected_cue_list
+		? pool.find((entry) => entry.cueList.id === playbackDesk.selected_cue_list)
+		: pool.find(
+				(entry) => entry.assignment?.number === playbackDesk?.selected_playback,
+			);
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
-			? (playbackDesk?.selected_playback ?? null)
+			? (selectedByDesk?.canonicalNumber ?? null)
 			: hasFixedCueListId
 				? (fixedDefinition?.number ?? null)
 				: (fixedCueListNumber ?? firstAvailableCuelist);
@@ -76,6 +82,23 @@ export function CuelistWindow({
 			setLocalTab("cues");
 		}
 	};
+	useEffect(() => {
+		if (!active || !builtIn) return;
+		const openRequested = (
+			request: NonNullable<ReturnType<typeof currentObjectEditorRequest>>,
+		) => {
+			if (request.kind !== "cuelist") return;
+			const entry = pool.find(
+				(candidate) => candidate.cueList.id === request.objectId,
+			);
+			if (!entry) return;
+			dispatch({ type: "OPEN_BUILTIN_CUELIST", number: entry.canonicalNumber });
+			consumeObjectEditorRequest(request);
+		};
+		const request = currentObjectEditorRequest();
+		if (request) openRequested(request);
+		return subscribeObjectEditorRequest(openRequested);
+	}, [active, builtIn, dispatch, pool]);
 	const openPool = () => {
 		if (builtIn) dispatch({ type: "SET_BUILTIN_CUELIST_VIEW", value: "pool" });
 		else setLocalTab("pool");
@@ -88,10 +111,7 @@ export function CuelistWindow({
 		(definition) => definition.number === settingsCuelist,
 	);
 	const speedGroupsBpm = useSpeedGroupsBpm() ?? DEFAULT_SPEED_GROUPS_BPM;
-	const settingsCueListId =
-		settingsDefinition?.target.type === "cue_list"
-			? settingsDefinition.target.cue_list_id
-			: null;
+	const settingsCueListId = settingsDefinition?.cueList.id ?? null;
 	const settingsCueObject = settingsCueListId
 		? cueLists.find((candidate) => candidate.body.id === settingsCueListId)
 		: undefined;
@@ -135,6 +155,13 @@ export function CuelistWindow({
 			onOpenSettings={() => openSettings(selectedCuelist)}
 			thumbnails={thumbnails}
 			fixedCueListId={fixedCueListId}
+			assignmentNumber={
+				cueListSource === "follow-selection"
+					? playbackDesk?.selected_cue_list
+						? null
+						: (playbackDesk?.selected_playback ?? undefined)
+					: undefined
+			}
 			viewOnly={viewOnly}
 		/>
 	);

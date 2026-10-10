@@ -124,7 +124,9 @@ fn changed_identities(prepared: &light_engine::PreparedPlaybackBatch) -> Vec<Pla
     identities.sort_by_key(|identity| match identity {
         PlaybackIdentity::Playback(number) => (0_u8, 0_u8, *number),
         PlaybackIdentity::Virtual(address) => (1, address.page(), address.number().get()),
-        PlaybackIdentity::CueList(_) | PlaybackIdentity::Group(_) => (2, 0, 0),
+        PlaybackIdentity::CueList(_)
+        | PlaybackIdentity::DirectCueList(_)
+        | PlaybackIdentity::Group(_) => (2, 0, 0),
     });
     identities.dedup();
     identities

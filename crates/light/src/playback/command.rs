@@ -67,6 +67,11 @@ pub enum PlaybackAction {
         pressed: bool,
     },
     Release,
+    RuntimeStopDynamic {
+        dynamic_id: uuid::Uuid,
+        instance_id: uuid::Uuid,
+        controller_id: uuid::Uuid,
+    },
     On {
         pressed: bool,
     },
@@ -158,6 +163,7 @@ impl PlaybackAction {
     pub fn pressed(self) -> Option<bool> {
         match self {
             Self::Release
+            | Self::RuntimeStopDynamic { .. }
             | Self::Master(_)
             | Self::MasterTransition { .. }
             | Self::GoTo(_)

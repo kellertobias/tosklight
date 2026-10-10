@@ -23,6 +23,7 @@ impl SpreadRecallRig {
             connected: true,
             desk: test_control_desk(),
         };
+        state.sessions.insert_session(session.clone());
         state.programming.start(session.id);
         attach_session_command_context(&state, &session);
         // Resolve command values instantly; the spread rule under test is fade-independent.
@@ -188,6 +189,10 @@ fn live_group_spread_recall_re_resolves_after_ordered_membership_edits() {
 fn preset_recall_of_live_group_spread_re_resolves_after_membership_edit() {
     let rig = SpreadRecallRig::new("preset-group-spread");
     let preset = light_programmer::Preset {
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+instance_id: None,
         name: "Wave".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 1,
@@ -242,10 +247,11 @@ fn cue_recall_of_live_group_spread_re_resolves_after_membership_edit() {
     let rig = SpreadRecallRig::new("cue-group-spread");
     assert_eq!(rig.command("GROUP 1 AT 100 THRU 0 THRU 100"), 5);
     rig.command("RECORD CUELIST 25");
+    rig.command("ASSIGN CUELIST 25 AT PBK 25");
     // The recorded cue stores the control points, not frozen per-fixture values.
     let store = ActiveShowRepository::open(&rig.entry.path).unwrap();
     let (_, _, cue_list) =
-        cue_list_for_playback(&store, &rig.state.output.snapshot(), 25).unwrap();
+        stored_cuelist_pool(&store, &rig.state.output.snapshot(), 25).unwrap();
     assert_eq!(cue_list.cues.len(), 1);
     assert_eq!(cue_list.cues[0].group_changes.len(), 1);
     assert_eq!(cue_list.cues[0].group_changes[0].group_id, "1");
@@ -262,7 +268,7 @@ fn cue_recall_of_live_group_spread_re_resolves_after_membership_edit() {
     assert_eq!(rig.resolved(&rig.fixtures), vec![None; 6]);
     rig.state
         .output.execute_playback(EnginePlaybackCommand::Pool {
-            number: 25,
+            number: rig.state.output.snapshot().playback_pages.iter().find(|page| page.number == 1).unwrap().slots[&25],
             action: PoolPlaybackAction::Go,
         })
         .unwrap();

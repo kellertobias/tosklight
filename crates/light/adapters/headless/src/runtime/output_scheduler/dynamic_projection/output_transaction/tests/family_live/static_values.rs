@@ -6,6 +6,9 @@ use crate::runtime::AppState;
 use crate::runtime::output_scheduler::dynamic_projection::output_transaction::family_frame::PublishedFamilyWrites;
 use crate::runtime::tests::test_state_with_family_adapters;
 
+#[path = "static_values/physical_start.rs"]
+mod physical_start;
+
 /// Wash A layout: 0 Intensity, 1 U16 Zoom, 2 U8 Focus (100 % at raw 10 → 0 % at raw 200).
 const ZOOM: u32 = 1;
 const FOCUS: u32 = 2;

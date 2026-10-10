@@ -119,8 +119,27 @@ pub(super) fn prepare_recording_undo(
                         "prepared recording undo does not match its object",
                     ));
                 }
-                let body = undo.body().clone();
-                transaction.undo_object(undo);
+                let mut body = undo.body().clone();
+                // A recording Undo restores literal cue contents, but cannot undo the show-wide
+                // address migration while companion lists retain their explicit addresses.
+                // Explicit historical addressing (including Move history) is never rewritten.
+                if object.kind.as_str() == "cue_list"
+                    && body
+                        .get("pool_number")
+                        .is_none_or(serde_json::Value::is_null)
+                    && let Some(current) = current
+                    && current
+                        .body()
+                        .get("pool_number")
+                        .is_some_and(|value| !value.is_null())
+                    && let Some(restored) = body.as_object_mut()
+                {
+                    restored.insert("pool_number".into(), current.body()["pool_number"].clone());
+                    if let Some(aliases) = current.body().get("legacy_pool_aliases") {
+                        restored.insert("legacy_pool_aliases".into(), aliases.clone());
+                    }
+                }
+                transaction.undo_object(undo.with_migrated_body(body.clone()));
                 Some(
                     super::ActiveShowObjectBody::decode(object.kind, body)
                         .map_err(|error| invalid(error.to_string()))?,

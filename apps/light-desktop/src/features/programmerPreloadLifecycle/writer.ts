@@ -67,7 +67,9 @@ export class ProgrammerPreloadLifecycleWriter
 	private stopped = false;
 	private tail = Promise.resolve();
 
-	constructor(private readonly options: ProgrammerPreloadLifecycleWriterOptions) {}
+	constructor(
+		private readonly options: ProgrammerPreloadLifecycleWriterOptions,
+	) {}
 
 	enter(requestId: string = crypto.randomUUID()) {
 		return this.enqueue("enter", requestId);
@@ -79,6 +81,73 @@ export class ProgrammerPreloadLifecycleWriter
 
 	clearPending(requestId: string = crypto.randomUUID()) {
 		return this.enqueue("clear_pending", requestId);
+	}
+
+	removePendingDynamic(
+		index: number,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(
+			{ type: "remove_pending_dynamic", index, expectedValuesRevision },
+			requestId,
+		);
+	}
+
+	removePendingGroupRelease(
+		index: number,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(
+			{ type: "remove_pending_group_release", index, expectedValuesRevision },
+			requestId,
+		);
+	}
+
+	removePendingFixtureValue(
+		fixtureId: string,
+		attribute: string,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(
+			{
+				type: "remove_pending_fixture_value",
+				fixtureId,
+				attribute,
+				expectedValuesRevision,
+			},
+			requestId,
+		);
+	}
+
+	removePendingGroupValue(
+		groupId: string,
+		attribute: string,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(
+			{
+				type: "remove_pending_group_value",
+				groupId,
+				attribute,
+				expectedValuesRevision,
+			},
+			requestId,
+		);
+	}
+
+	removePendingPlayback(
+		index: number,
+		expectedQueueRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(
+			{ type: "remove_pending_playback", index, expectedQueueRevision },
+			requestId,
+		);
 	}
 
 	release(requestId: string = crypto.randomUUID()) {
@@ -132,7 +201,12 @@ export class ProgrammerPreloadLifecycleWriter
 			);
 			if (!this.isCurrent(authority)) return this.abandon(authority);
 			if (!(await this.reconcile(authority, outcome))) return null;
-			if (!this.options.store.settle(authority.request.requestId, authority.storeScope))
+			if (
+				!this.options.store.settle(
+					authority.request.requestId,
+					authority.storeScope,
+				)
+			)
 				return null;
 			this.options.onError?.(
 				outcome.warning ? new Error(outcome.warning) : null,
@@ -202,9 +276,10 @@ export class ProgrammerPreloadLifecycleWriter
 		authority: LifecycleAuthority,
 		outcome: ProgrammerPreloadLifecycleOutcome,
 	) {
-		const currentSelection = this.options.selectionStore.authoritativeSelectionRevision(
-			authority.selectionScope,
-		);
+		const currentSelection =
+			this.options.selectionStore.authoritativeSelectionRevision(
+				authority.selectionScope,
+			);
 		if (currentSelection !== outcome.selectionRevision)
 			await this.options.repair.selection(
 				new Error("Preload lifecycle selection outcome requires repair"),
@@ -214,13 +289,12 @@ export class ProgrammerPreloadLifecycleWriter
 				new Error("Preload lifecycle status outcome requires repair"),
 			);
 		if (this.options.readPreloadActive() !== outcome.active)
-			throw new Error("Authoritative Preload lifecycle status did not reconcile");
+			throw new Error(
+				"Authoritative Preload lifecycle status did not reconcile",
+			);
 	}
 
-	private async fail(
-		error: Error,
-		authority: LifecycleAuthority,
-	) {
+	private async fail(error: Error, authority: LifecycleAuthority) {
 		if (!this.isCurrent(authority)) return this.abandon(authority);
 		await this.repairAll(error, authority);
 		if (!this.isCurrent(authority)) return this.abandon(authority);
@@ -251,7 +325,9 @@ export class ProgrammerPreloadLifecycleWriter
 		return (
 			!this.stopped &&
 			this.options.store.isScopeCurrent(authority.storeScope) &&
-			this.options.captureModeStore.isScopeCurrent(authority.captureModeScope) &&
+			this.options.captureModeStore.isScopeCurrent(
+				authority.captureModeScope,
+			) &&
 			this.options.valuesStore.isScopeCurrent(authority.valuesScope) &&
 			this.options.queueStore.isScopeCurrent(authority.queueScope) &&
 			this.options.selectionStore.isScopeCurrent(authority.selectionScope) &&
@@ -264,7 +340,10 @@ export class ProgrammerPreloadLifecycleWriter
 	}
 
 	private abandon(authority: LifecycleAuthority) {
-		this.options.store.abandon(authority.request.requestId, authority.storeScope);
+		this.options.store.abandon(
+			authority.request.requestId,
+			authority.storeScope,
+		);
 		return null;
 	}
 

@@ -39,10 +39,49 @@ pub(super) async fn run() -> anyhow::Result<()> {
     let Some(options) = process_options()? else {
         return Ok(());
     };
-    RunningServer::start(StartupState::load(options)?)
-        .await?
-        .serve()
-        .await
+    let parent_closed = CancellationToken::new();
+    let preview = options.visualizer_preview;
+    let _parent_watch = watch_preview_parent(preview, std::io::stdin(), parent_closed.clone());
+    let startup = StartupState::load(options)?;
+    if parent_closed.is_cancelled() {
+        return Ok(());
+    }
+    let server = RunningServer::start(startup).await?;
+    if preview {
+        let shutdown = server.supervisors.cancellation();
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = parent_closed.cancelled() => shutdown.cancel(),
+                _ = shutdown.cancelled() => {},
+            }
+        });
+    }
+    server.serve().await
+}
+
+/// The private preview owns no independent lifetime. Pipe closure on any parent exit shuts it
+/// down, without PID lookup or touching another desk. A standard detached reader avoids Tokio's
+/// uncancellable blocking stdin task holding runtime shutdown open while the parent is alive.
+fn watch_preview_parent<R: std::io::Read + Send + 'static>(
+    preview: bool,
+    mut reader: R,
+    cancellation: CancellationToken,
+) -> Option<std::thread::JoinHandle<()>> {
+    if !preview {
+        return None;
+    }
+    Some(std::thread::spawn(move || {
+        let mut bytes = [0_u8; 64];
+        loop {
+            match reader.read(&mut bytes) {
+                Ok(0) => break,
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
+            }
+        }
+        cancellation.cancel();
+    }))
 }
 
 /// The desk's default log level, and how to raise it.
@@ -161,6 +200,7 @@ impl RuntimeResources {
             visualization_frames: Arc::clone(&visualization_frames),
             action_timing: action_timing.clone(),
             test_bench: startup.persistent.test_bench,
+            visualizer_preview: startup.persistent.visualizer_preview,
             data_dir: startup.persistent.data_dir.clone(),
             internal_audio: Arc::clone(&internal_audio),
         })
@@ -718,6 +758,9 @@ fn build_app_state(
 /// `LIGHT_DISCOVERY=off` is for the installation that does not want its desk answering on mDNS at
 /// all; everything else about the desk behaves the same either way.
 fn start_discovery(startup: &StartupState) -> discovery_http::DiscoveryResource {
+    if startup.persistent.visualizer_preview {
+        return discovery_http::DiscoveryResource::default();
+    }
     if env::var("LIGHT_DISCOVERY").is_ok_and(|value| value.eq_ignore_ascii_case("off")) {
         return discovery_http::DiscoveryResource::default();
     }
@@ -806,5 +849,85 @@ impl ServedStartupForTests {
 
     pub(in crate::runtime) async fn close(self) {
         discard_unstarted_runtime(&self.state, self.resources).await;
+    }
+}
+
+#[cfg(test)]
+mod preview_parent_tests {
+    use super::*;
+
+    #[test]
+    fn visualizer_preview_eof_cancels_only_explicit_preview() {
+        let token = CancellationToken::new();
+        let watcher =
+            watch_preview_parent(false, std::io::Cursor::new(Vec::<u8>::new()), token.clone());
+        assert!(watcher.is_none());
+        assert!(!token.is_cancelled());
+        watch_preview_parent(true, std::io::Cursor::new(Vec::<u8>::new()), token.clone())
+            .unwrap()
+            .join()
+            .unwrap();
+        assert!(token.is_cancelled());
+    }
+
+    #[test]
+    fn visualizer_preview_portable_reader_keeps_alive_until_owner_disconnects() {
+        struct Reader {
+            input: std::sync::mpsc::Receiver<u8>,
+            read: std::sync::mpsc::Sender<()>,
+        }
+        impl std::io::Read for Reader {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                match self.input.recv() {
+                    Ok(value) => {
+                        buffer[0] = value;
+                        self.read.send(()).unwrap();
+                        Ok(1)
+                    }
+                    Err(_) => Ok(0),
+                }
+            }
+        }
+        let (owner, input) = std::sync::mpsc::channel();
+        let (read, ready) = std::sync::mpsc::channel();
+        let token = CancellationToken::new();
+        let watcher = watch_preview_parent(true, Reader { input, read }, token.clone()).unwrap();
+        owner.send(7).unwrap();
+        ready
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap();
+        assert!(!token.is_cancelled());
+        drop(owner);
+        watcher.join().unwrap();
+        assert!(token.is_cancelled());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn visualizer_preview_pipe_stays_alive_until_the_parent_writer_closes() {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        let mut child = Command::new("/bin/cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let token = CancellationToken::new();
+        let watcher =
+            watch_preview_parent(true, child.stdout.take().unwrap(), token.clone()).unwrap();
+        let mut writer = child.stdin.take().unwrap();
+        writer.write_all(b"alive").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(
+            !token.is_cancelled(),
+            "an open owner pipe must not stop the preview"
+        );
+        drop(writer);
+        assert!(child.wait().unwrap().success());
+        watcher.join().unwrap();
+        assert!(
+            token.is_cancelled(),
+            "parent EOF must stop its owned preview"
+        );
     }
 }

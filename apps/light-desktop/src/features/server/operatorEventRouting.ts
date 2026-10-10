@@ -83,13 +83,20 @@ function routeDeskAction(
 			return;
 		} else if (
 			payload.action === "open-object-editor" &&
-			(payload.control === "macro" || payload.control === "timecode") &&
+			(payload.control === "macro" ||
+				payload.control === "timecode" ||
+				payload.control === "cuelist") &&
 			payload.value
 		) {
 			routeControlSurfaceIntentWithFeedback({
 				type: "desk_command",
 				source: "server",
-				command: payload.control === "macro" ? "macros" : "timecodes",
+				command:
+					payload.control === "macro"
+						? "macros"
+						: payload.control === "timecode"
+							? "timecodes"
+							: "cues",
 			});
 			publishObjectEditorRequest({
 				kind: payload.control,

@@ -24,6 +24,7 @@ import type {
 	ProgrammingUpdateTransport,
 	UpdatePreviewAuthority,
 } from "./contracts";
+import { programmingUpdateSettingsView } from "./settingsView";
 import {
 	asError,
 	assertConfirmedProjection,
@@ -66,7 +67,9 @@ export class ProgrammingUpdateWriter implements ProgrammingUpdateCapability {
 		const query = this.beginQuery("settings");
 		try {
 			const response = await this.options.transport.loadSettings();
-			return this.isQueryCurrent(query) ? response.settings : null;
+			if (!this.isQueryCurrent(query)) return null;
+			programmingUpdateSettingsView(this).install(response.settings);
+			return response.settings;
 		} catch (reason) {
 			return this.finishQueryError(query, reason);
 		}
@@ -78,7 +81,9 @@ export class ProgrammingUpdateWriter implements ProgrammingUpdateCapability {
 			const response = await this.retry(() =>
 				this.options.transport.saveSettings(settings),
 			);
-			return this.isQueryCurrent(query) ? response.settings : null;
+			if (!this.isQueryCurrent(query)) return null;
+			programmingUpdateSettingsView(this).install(response.settings);
+			return response.settings;
 		} catch (reason) {
 			return this.finishQueryError(query, reason);
 		}

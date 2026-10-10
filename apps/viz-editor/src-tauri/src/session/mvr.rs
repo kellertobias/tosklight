@@ -26,8 +26,13 @@ pub fn import_mvr(
     session: tauri::State<'_, Session>,
     token: String,
     resolutions: HashMap<String, ResolutionDto>,
+    copy_conflicting_profiles: Option<bool>,
 ) -> Answer<MvrImportReport> {
-    let report = session.apply_mvr(&token, decode_resolutions(resolutions)?)?;
+    let report = session.apply_mvr_with_identity_copies(
+        &token,
+        decode_resolutions(resolutions)?,
+        copy_conflicting_profiles.unwrap_or(false),
+    )?;
     Ok(super::mvr_preview::after_notification(
         report,
         announce_document_change(&app, &window),
@@ -80,6 +85,7 @@ pub struct ResolutionDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MvrPreviewDto {
+    pub profile_conflicts: Vec<MvrProfileConflictDto>,
     pub token: String,
     pub warnings: Vec<String>,
     pub fixtures: Vec<MvrPreviewFixtureDto>,
@@ -107,4 +113,13 @@ pub struct MvrImportReport {
     pub imported_fixtures: usize,
     pub unresolved_fixtures: usize,
     pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MvrProfileConflictDto {
+    pub profile_id: String,
+    pub revision: u32,
+    pub name: String,
+    pub fixtures: Vec<String>,
 }

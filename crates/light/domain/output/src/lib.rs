@@ -20,9 +20,10 @@ pub use codec::{
     sacn_data_packet, sacn_multicast_destination, tosklight_software,
 };
 pub use delivery::{
-    ArtNetDriver, EncodedPacket, NetworkActivity, NetworkOutput, ObservedArtNetSender,
-    ObservedArtPoller, ObservedSacnSource, OutputDriver, PEER_TIMEOUT, RouteActivity,
-    RouteDiagnostic, RouteSendError, SacnDriver, encode_routes, next_sequence,
+    ArtNetDriver, CurrentRouteDelivery, EncodedPacket, NetworkActivity, NetworkOutput,
+    ObservedArtNetSender, ObservedArtPoller, ObservedSacnSource, OutputDriver, PEER_TIMEOUT,
+    RouteActivity, RouteDeliveryState, RouteDiagnostic, RouteSendError, SacnDriver, encode_routes,
+    next_sequence,
 };
 pub use external::{
     ExternalAdapterError, ExternalAdapterId, ExternalBindingId, ExternalDeviceAdapter,

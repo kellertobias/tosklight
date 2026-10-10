@@ -10,6 +10,7 @@ import type {
 import {
 	useVirtualPlaybackZones,
 	VirtualPlaybackZonesProvider,
+	VirtualPlaybackZonesController,
 } from "./VirtualPlaybackZonesContext";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
@@ -45,7 +46,138 @@ function harness(transport: VirtualPlaybackZonesTransport) {
 	return current;
 }
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.useRealTimers();
+});
+
+describe("Virtual Playback zone event recovery", () => {
+	function eventHarness() {
+		const observers: VirtualPlaybackZonesEventObserver[] = [];
+		const close = vi.fn();
+		const report = vi.fn();
+		const loadSnapshot = vi.fn(async () => snapshot(UPDATED, 5));
+		let current = true;
+		const subscribe = vi.fn(
+			(_scope, observer: VirtualPlaybackZonesEventObserver) => {
+				observers.push(observer);
+				return { close };
+			},
+		);
+		const controller = new VirtualPlaybackZonesController(
+			AUTHORITY.scope,
+			{ loadSnapshot, save: vi.fn(), subscribe },
+			() => current,
+			report,
+		);
+		return {
+			controller,
+			observers,
+			close,
+			report,
+			loadSnapshot,
+			subscribe,
+			replaceAuthority: () => {
+				current = false;
+			},
+		};
+	}
+
+	it("reconnects and repairs missed zones before retiring the local connection error", async () => {
+		vi.useFakeTimers();
+		const test = eventHarness();
+		const deactivate = test.controller.activate();
+		test.observers[0].error(new Error("socket failed"));
+		await vi.advanceTimersByTimeAsync(250);
+		expect(test.subscribe).toHaveBeenCalledTimes(2);
+		test.observers[0].closed(); // late callback from the replaced stream
+		test.observers[1].ready?.();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(test.controller.getZones()).toEqual(UPDATED);
+		expect(test.report).toHaveBeenLastCalledWith(null);
+		test.loadSnapshot.mockResolvedValueOnce(snapshot(ZONES, 6));
+		test.observers[1].changed({ showId: SHOW_ID, revision: 6 });
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(test.controller.getZones()).toEqual(ZONES);
+		deactivate();
+	});
+
+	it("cancels retry and ignores stale callbacks when the pane deactivates", async () => {
+		vi.useFakeTimers();
+		const test = eventHarness();
+		const deactivate = test.controller.activate();
+		test.observers[0].closed();
+		deactivate();
+		test.report.mockClear();
+		test.observers[0].error(new Error("late teardown error"));
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(test.subscribe).toHaveBeenCalledOnce();
+		expect(test.report).not.toHaveBeenCalled();
+	});
+
+	it("stops retries after five failed attempts and offers explicit pane retry", async () => {
+		vi.useFakeTimers();
+		const test = eventHarness();
+		const deactivate = test.controller.activate();
+		for (const delay of [250, 500, 1000, 2000, 4000]) {
+			test.observers.at(-1)?.closed();
+			await vi.advanceTimersByTimeAsync(delay);
+		}
+		test.observers.at(-1)?.closed();
+		await vi.advanceTimersByTimeAsync(20_000);
+		expect(test.subscribe).toHaveBeenCalledTimes(6);
+		expect(test.report.mock.lastCall?.[0]?.message).toContain(
+			"Reopen the pane",
+		);
+		deactivate();
+	});
+
+	it("does not reconnect after authenticated authority replacement", async () => {
+		vi.useFakeTimers();
+		const test = eventHarness();
+		const deactivate = test.controller.activate();
+		test.observers[0].closed();
+		test.replaceAuthority();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(test.subscribe).toHaveBeenCalledOnce();
+		deactivate();
+	});
+
+	it("drops an in-flight repair after the pane deactivates", async () => {
+		const test = eventHarness();
+		let resolve!: (value: VirtualPlaybackZonesSnapshot) => void;
+		test.loadSnapshot.mockReturnValueOnce(
+			new Promise((done) => {
+				resolve = done;
+			}),
+		);
+		const deactivate = test.controller.activate();
+		test.observers[0].ready?.();
+		deactivate();
+		test.report.mockClear();
+		resolve(snapshot(UPDATED, 5));
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(test.controller.getZones()).toBeNull();
+		expect(test.report).not.toHaveBeenCalled();
+	});
+
+	it("does not hide an outstanding event failure behind a successful snapshot read", async () => {
+		vi.useFakeTimers();
+		const test = eventHarness();
+		const deactivate = test.controller.activate();
+		const failure = new Error("socket failed");
+		test.observers[0].error(failure);
+		await test.controller.load();
+		expect(test.report).toHaveBeenLastCalledWith(failure);
+		deactivate();
+	});
+});
 
 describe("VirtualPlaybackZonesProvider", () => {
 	it("is dormant until explicitly loaded and coalesces reads", async () => {

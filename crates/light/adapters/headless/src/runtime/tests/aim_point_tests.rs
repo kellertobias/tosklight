@@ -177,6 +177,8 @@ fn empty_source_aim_validates_the_explicit_target_before_the_quiet_no_op() {
     let repository = ActiveShowRepository::open(&entry.path).unwrap();
     for (number, aim_at) in [(5, 998), (6, 2)] {
         let preset = light_programmer::Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family: light_programmer::PresetFamily::Position,
             number,
             aim_at_fixture_number: Some(aim_at),

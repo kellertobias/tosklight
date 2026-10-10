@@ -25,6 +25,7 @@ export type ShowOpenTransition =
 	| "safe_blackout";
 
 export interface MvrApplyInput {
+    copy_conflicting_profiles?: boolean;
 	new_show?: { name: string; open_after_import: boolean };
 	existing_show_id?: string;
 	resolutions?: Record<
@@ -205,13 +206,14 @@ export class ShowApiClient {
 		return this.transport.blob(`/api/v2/shows/${id}/download`);
 	}
 
-	previewMvr(file: File, showId?: string): Promise<MvrImportPreview> {
+	previewMvr(file: File, showId?: string, signal?: AbortSignal): Promise<MvrImportPreview> {
 		const query = showId ? `?show_id=${encodeURIComponent(showId)}` : "";
 		return this.transport.request(`/api/v2/mvr/imports/preview${query}`, {
 			method: "POST",
 			headers: { "content-type": "application/octet-stream" },
 			body: file,
-		});
+            signal,
+        });
 	}
 
 	applyMvr(token: string, input: MvrApplyInput): Promise<MvrApplyResult> {
@@ -229,6 +231,7 @@ export class ShowApiClient {
 		);
 		return this.action({
 			type: "apply_mvr",
+            copy_conflicting_profiles: input.copy_conflicting_profiles ?? false,
 			token,
 			destination,
 			resolutions,

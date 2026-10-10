@@ -344,6 +344,8 @@ fn execution_cue_list() -> crate::CueList {
     cues[2].trigger = crate::CueTrigger::Wait { delay_millis: 200 };
     cues[3].trigger = crate::CueTrigger::Follow { delay_millis: 0 };
     crate::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId(id(30)),
         name: "Timeline".into(),
         priority: 0,

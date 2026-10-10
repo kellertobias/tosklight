@@ -600,9 +600,20 @@ pub struct DynamicRuntimeInstanceProjection {
     pub controllers: Vec<DynamicRuntimeControllerProjection>,
 }
 
+/// Current operational Playback owner; never inferred from display labels.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DynamicRuntimeStopOwner {
+    PhysicalPlayback { playback_number: u16 },
+    VirtualPlayback { page: u8, playback_number: u16 },
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicRuntimeControllerProjection {
     pub controller_id: Uuid,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub stop_owner: Option<DynamicRuntimeStopOwner>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub programmer_id: Option<Uuid>,

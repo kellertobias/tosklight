@@ -181,6 +181,9 @@ pub enum ManualXFadeDirection {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct PlaybackRuntimeStatus {
+    /// Original activation owner, before assignment-local projection rewrites.
+    #[serde(skip)]
+    pub source: SequenceMasterSource,
     #[serde(flatten)]
     pub playback: ActivePlayback,
     pub normal_next_cue_id: Option<Uuid>,
@@ -455,6 +458,7 @@ impl ActivePlayback {
 
 #[derive(Clone, Debug)]
 pub struct PlaybackContribution {
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
     pub value: TimedValue,
     pub family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
     /// Output-only proof that this value is the complete authored target endpoint. Intermediate

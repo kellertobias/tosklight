@@ -40,6 +40,22 @@ describe("ProgrammerLifecycleStore deltas", () => {
 		});
 	});
 
+	it("Clear replacement retires the one-value identity before adding the empty shared Programmer", () => {
+		const store = new ProgrammerLifecycleStore();
+		store.reset(AUTHORITY_A);
+		const sessions = [{ sessionId: "surface-one" }, { sessionId: "surface-two" }];
+		store.installSnapshot(lifecycleSnapshot({ programmers: [lifecycleRow({ selectedFixtureCount: 1, normalValueCount: 1, sessions })] }));
+		store.applyChange(removalChange(PROGRAMMER_A, 5), 11);
+		expect(store.getSnapshot().projection?.programmers).toHaveLength(0);
+		store.applyChange(upsertChange(otherLifecycleRow({ selectedFixtureCount: 1, normalValueCount: 0, sessions }), 6), 12);
+		expect(store.getSnapshot().projection?.programmers).toEqual([expect.objectContaining({ programmerId: PROGRAMMER_B, selectedFixtureCount: 1, normalValueCount: 0, sessions })]);
+		expect(store.getSnapshot().repairRequired).toBe(false);
+		// Replayed frames cannot bring the replaced Programmer back.
+		store.applyChange(upsertChange(lifecycleRow({ normalValueCount: 1 }), 4), 10);
+		expect(store.getSnapshot().projection?.programmers).toHaveLength(1);
+		expect(store.getSnapshot().projection?.programmers[0].programmerId).toBe(PROGRAMMER_B);
+	});
+
 	it("canonicalizes row and session order", () => {
 		const store = new ProgrammerLifecycleStore();
 		store.reset(AUTHORITY_A);

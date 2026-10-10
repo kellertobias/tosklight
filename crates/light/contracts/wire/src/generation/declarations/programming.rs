@@ -42,6 +42,9 @@ pub(super) fn programming_update(config: &Config) -> Vec<String> {
 pub(in crate::generation) fn programming_values(config: &Config) -> Vec<String> {
     vec![
         ProgrammingColorXyz::decl(config),
+        ReplacementProfileContext::decl(config),
+        ReplacementHeadTarget::decl(config),
+        ReplacementProgramProjection::decl(config),
         ProgrammingPhysicalDataQuality::decl(config),
         ProgrammingOpeningConvention::decl(config),
         ProgrammingNativeColorBinding::decl(config),
@@ -225,6 +228,7 @@ fn programming_preload(config: &Config) -> Vec<String> {
         ProgrammingPreloadAttributeValue::decl(config),
         ProgrammingPreloadFixtureValue::decl(config),
         ProgrammingPreloadGroupValue::decl(config),
+        ProgrammingPreloadGroupReleaseValue::decl(config),
         ProgrammingPreloadValuesProjection::decl(config),
         ProgrammingPreloadValuesChange::decl(config),
         ProgrammingPreloadValuesSnapshot::decl(config),

@@ -34,6 +34,13 @@ pub(crate) struct DeclaredFamilyStarts {
     snapshot: Arc<EngineSnapshot>,
     projections: Arc<ProfileProjectionIndex>,
     cache: parking_lot::Mutex<HashMap<(FixtureId, ProgrammingOwner), Option<AttributeValue>>>,
+    native_transitions: parking_lot::Mutex<
+        Vec<(
+            AttributeValue,
+            AttributeValue,
+            Option<light_core::programming::CompiledProgrammingTransition>,
+        )>,
+    >,
 }
 
 impl DeclaredFamilyStarts {
@@ -47,6 +54,7 @@ impl DeclaredFamilyStarts {
             snapshot,
             projections,
             cache: Default::default(),
+            native_transitions: Default::default(),
         }
     }
 
@@ -226,6 +234,52 @@ fn declared_optics(
 
 /// Position keeps its declared pose; Color, Zoom and Focus start from their declared default.
 impl light_playback::FamilyStartSource for DeclaredFamilyStarts {
+    fn sample_native_transition(
+        &self,
+        from: &AttributeValue,
+        to: &AttributeValue,
+        progress: f32,
+    ) -> Option<AttributeValue> {
+        let (AttributeValue::ColorProgram(a), AttributeValue::ColorProgram(b)) = (from, to) else {
+            return None;
+        };
+        let (ColorProgram::Direct { recipe: a, .. }, ColorProgram::Direct { recipe: b, .. }) =
+            (a.as_ref(), b.as_ref())
+        else {
+            return None;
+        };
+        if a.source != b.source {
+            return None;
+        }
+        // Bounded generation-local cache pins ORIGINAL models and endpoint correspondence.
+        // Samples predict the varied recipe, never substitute a destination profile.
+        let mut cache = self.native_transitions.lock();
+        if let Some((_, _, compiled)) = cache.iter().find(|(a, b, _)| a == from && b == to) {
+            return compiled.as_ref()?.sample(progress).ok();
+        }
+        let compiled = self
+            .snapshot
+            .native_color_sources
+            .resolve(&a.source)
+            .ok()
+            .and_then(|model| {
+                light_core::programming::CompiledProgrammingTransition::new(
+                    from.clone(),
+                    to.clone(),
+                    Some(model),
+                )
+                .ok()
+            });
+        let sample = compiled
+            .as_ref()
+            .and_then(|compiled| compiled.sample(progress).ok());
+        if cache.len() >= 128 {
+            cache.remove(0);
+        }
+        cache.push((from.clone(), to.clone(), compiled));
+        sample
+    }
+
     fn family_start(&self, fixture: FixtureId, attribute: &AttributeKey) -> Option<AttributeValue> {
         match attribute.0.as_ref() {
             "position" => self.positions.family_start(fixture, attribute),

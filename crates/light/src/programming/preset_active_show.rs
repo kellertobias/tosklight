@@ -408,6 +408,9 @@ mod tests {
 
     fn preset_body(name: &str, value: f32) -> Value {
         serde_json::to_value(Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
+            instance_id: None,
             name: name.into(),
             family: PresetFamily::Color,
             number: 1,
@@ -435,6 +438,9 @@ mod tests {
             expected_show_revision: None,
         };
         let captured = Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
+            instance_id: None,
             name: request.name.clone(),
             family: PresetFamily::Color,
             number: 1,

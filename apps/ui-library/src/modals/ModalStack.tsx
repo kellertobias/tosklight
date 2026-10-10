@@ -135,7 +135,8 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => {
 		const handleEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
+			// An inner popup may already have consumed this Escape at window capture.
+			if (event.key !== "Escape" || event.defaultPrevented) return;
 			const target = entriesRef.current.at(-1);
 			if (!target?.policy.escape) return;
 			event.preventDefault();

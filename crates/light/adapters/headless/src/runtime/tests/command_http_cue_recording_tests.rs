@@ -657,7 +657,8 @@ async fn explicit_and_implicit_cue_merges_use_the_one_shared_active_cue() {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
     }
-    let (mut second, _, cue_list) = stored_cue_list(&scenario, 50);
+    let (second, _, cue_list) = stored_cue_list(&scenario, 50);
+    let mut second = second.expect("legacy physical Pool target must create its Playback assignment");
     second.number = 51;
     second.name = "Second active instance".into();
     let response = scenario

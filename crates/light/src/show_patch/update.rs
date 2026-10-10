@@ -22,13 +22,22 @@ fn resolve_fixture_update(
     let existing = stored
         .get(update.fixture_id)
         .ok_or_else(|| not_found("patched fixture does not exist"))?;
-    let profile = existing
+    let mut profile = existing
         .record
         .selected_profile_reference()
         .map_err(patch_error)?
         .ok_or_else(|| invalid("patched fixture has no portable profile reference"))?;
     let mut patch = existing.record.patch().map_err(patch_error)?;
-    apply_update(&mut patch, update)?;
+    if let PatchFixtureUpdateAction::ReplaceProfile {
+        profile: replacement,
+        ..
+    } = &update.action
+    {
+        require_root(update)?;
+        profile = *replacement;
+    } else {
+        apply_update(&mut patch, update)?;
+    }
     Ok(PatchFixtureCandidate { profile, patch })
 }
 
@@ -37,6 +46,9 @@ fn apply_update(
     update: &PatchFixtureUpdateIntent,
 ) -> Result<(), ActionError> {
     match &update.action {
+        PatchFixtureUpdateAction::ReplaceProfile { .. } => {
+            unreachable!("replacement is resolved separately")
+        }
         PatchFixtureUpdateAction::SetMasters {
             group_masters_enabled,
             grand_master_enabled,

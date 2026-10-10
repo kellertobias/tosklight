@@ -36,6 +36,14 @@ pub(crate) fn record_default(state: &AppState) -> RecordUpdateOption {
         .record_default
 }
 
+/// Presets merge by default; explicit command options are resolved before this fallback.
+pub(crate) fn preset_record_default(state: &AppState) -> RecordUpdateOption {
+    match record_default(state) {
+        RecordUpdateOption::Smart => RecordUpdateOption::Merge,
+        option => option,
+    }
+}
+
 pub(crate) fn update_default(state: &AppState) -> RecordUpdateOption {
     state
         .installation

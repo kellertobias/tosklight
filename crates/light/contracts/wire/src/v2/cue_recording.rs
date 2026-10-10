@@ -11,6 +11,10 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CueRecordTarget {
+    CuelistPool {
+        #[schemars(range(min = 1, max = 1000))]
+        number: u16,
+    },
     Pool {
         #[schemars(range(min = 1, max = 1000))]
         playback_number: u16,

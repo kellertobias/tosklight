@@ -82,14 +82,50 @@ fn automatic_transitions(
     state: &AppState,
     after: u64,
 ) -> Vec<light_application::PlaybackCueTransition> {
-    retained_events(state, after)
+    let events = retained_events(state, after);
+    let changes: Vec<_> = events
         .iter()
         .filter_map(|event| match &event.payload {
-            ApplicationEvent::Playback(PlaybackEvent::RuntimeChanged(change)) => {
-                change.transition.clone()
+            ApplicationEvent::Playback(PlaybackEvent::RuntimeChanged(change))
+                if change.transition.is_some() =>
+            {
+                Some(change.as_ref())
             }
             _ => None,
         })
+        .collect();
+    // Capturing one transition publishes its aggregate and exact owner once each;
+    // retries and output recovery must not replay either subscriber's event.
+    assert_eq!(changes.len(), 2);
+    let transition = changes[0].transition.as_ref().unwrap();
+    let id = light_core::CueListId(transition.cue_list_id);
+    for identity in [
+        light_application::PlaybackRuntimeIdentity::CueList(id),
+        light_application::PlaybackRuntimeIdentity::DirectCueList(id),
+    ] {
+        assert_eq!(
+            changes
+                .iter()
+                .filter(|change| change.projection.requested == identity)
+                .count(),
+            1
+        );
+    }
+    assert_eq!(changes[0].transition, changes[1].transition);
+    for change in &changes {
+        let runtime = change.projection.cue_list_runtime().unwrap();
+        assert_eq!(
+            runtime.owner,
+            Some(light_application::PlaybackRuntimeIdentity::DirectCueList(
+                id
+            ))
+        );
+        assert_eq!(runtime.current, transition.current);
+        assert_eq!(runtime.transition_ordinal, transition.transition_ordinal);
+    }
+    changes
+        .into_iter()
+        .map(|change| change.transition.clone().unwrap())
         .collect()
 }
 
@@ -264,7 +300,7 @@ fn assert_failed_capture_preserves_transition_and_retained_output(supersession: 
     );
     let events = retained_events(&state, before_events);
     let transitions = automatic_transitions(&state, before_events);
-    assert_eq!(transitions.len(), 1, "{supersession:?}");
+    assert_eq!(transitions.len(), 2, "{supersession:?}");
     assert_eq!(
         transitions[0].cause,
         light_application::PlaybackTransitionCause::Chaser
@@ -304,7 +340,7 @@ fn assert_failed_capture_preserves_transition_and_retained_output(supersession: 
         "{supersession:?}"
     );
     assert_eq!(state.events.latest_sequence(), after_first_attempt);
-    assert_eq!(automatic_transitions(&state, before_events).len(), 1);
+    assert_eq!(automatic_transitions(&state, before_events).len(), 2);
     assert_eq!(
         state
             .installation
@@ -339,7 +375,7 @@ fn assert_failed_capture_preserves_transition_and_retained_output(supersession: 
         Some(&persistence),
     )
     .unwrap();
-    assert_eq!(automatic_transitions(&state, before_events).len(), 1);
+    assert_eq!(automatic_transitions(&state, before_events).len(), 2);
     assert_eq!(
         state
             .installation

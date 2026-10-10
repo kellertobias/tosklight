@@ -64,8 +64,13 @@ export function CadTileViewport({
 		(camera: TileCamera) => onTile(node.id, (tile) => ({ ...tile, camera })),
 		[onTile, node.id],
 	);
+	const onViewportElement = useCallback((element: HTMLCanvasElement | null) => {
+		props.onViewportElement?.(node.id, element);
+	}, [props.onViewportElement, node.id]);
+
 	return (
 		<CadViewport
+			onViewportElement={onViewportElement}
 			entities={entities}
 			drawings={scene.drawings}
 			selectedIds={scene.selectedIds}

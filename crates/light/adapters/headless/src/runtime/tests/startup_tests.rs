@@ -498,6 +498,8 @@ fn automatic_chaser_transition_checkpoints_its_order_before_restart() {
     };
     state.active_show.replace_current(Some(show.clone()));
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Automatic persistence Chaser".into(),
         priority: 0,
@@ -764,6 +766,8 @@ fn restored_exclusion_snapshot(cue_list_id: light_core::CueListId) -> EngineSnap
         revision: 7,
         cue_lists: (1..=4)
             .map(|cell| light_playback::CueList {
+                pool_number: None,
+                legacy_pool_aliases: Vec::new(),
                 id: restored_exclusion_cue_list_id(cue_list_id, cell),
                 name: format!("Restored exclusion look {cell}"),
                 priority: 0,

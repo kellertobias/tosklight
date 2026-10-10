@@ -427,10 +427,14 @@ fn route_programmer_osc_action(
     if action == "align" {
         return apply_align_osc(state, session, request_id, false);
     }
+    // An empty SET is the documented editor prefix, so it must use the authoritative
+    // keypad path (SET CUE CUE …). Only explicit selection contexts retain the local
+    // configuration action; file-manager contexts were already consumed by the caller.
     if action == "set"
-        && state.programming.get(session.id).is_some_and(|programmer| {
-            matches!(programmer.command_line.trim(), "" | "FIXTURE" | "GROUP")
-        })
+        && state
+            .programming
+            .get(session.id)
+            .is_some_and(|programmer| matches!(programmer.command_line.trim(), "FIXTURE" | "GROUP"))
     {
         emit(
             state,

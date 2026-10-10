@@ -405,6 +405,8 @@ pub(super) fn cue_list_playback_body(
 
 pub(super) fn cue_list(name: &str) -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: name.into(),
         priority: 0,

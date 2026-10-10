@@ -1,4 +1,5 @@
 import { ApiRequestError } from "../ApiRequestError";
+import { decodeOutputDeliveryStatus } from "../runtimeDiagnosticsWire";
 import type {
 	EventPayload,
 	EventServerMessage,
@@ -133,7 +134,12 @@ export class LightClientRuntime {
 		const snapshot = await this.request<RuntimeDiagnosticsSnapshot>(
 			"/api/v2/diagnostics",
 		);
-		return { outputRoutes: snapshot.output_routes };
+		return {
+			outputRoutes: snapshot.output_routes,
+			outputDeliveryStatus: decodeOutputDeliveryStatus(
+				snapshot.output_delivery_status,
+			),
+		};
 	}
 
 	async login(): Promise<SessionResponse> {
@@ -386,7 +392,9 @@ function isJsonResponse(response: Response): boolean {
 		?.split(";", 1)[0]
 		.trim()
 		.toLowerCase();
-	return mediaType === "application/json" || mediaType?.endsWith("+json") === true;
+	return (
+		mediaType === "application/json" || mediaType?.endsWith("+json") === true
+	);
 }
 
 /**

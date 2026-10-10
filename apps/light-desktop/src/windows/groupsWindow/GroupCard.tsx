@@ -5,6 +5,7 @@ import type { PoolMutationOperation } from "../../features/controlSurfaceInterac
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import { canonicalGroupSource } from "../../features/showObjects/groupProjection";
 import type { Group } from "./model";
+import { groupFixtureCountLabel } from "./groupFixtureCount";
 
 function missingFixtureCount(
 	group: Group | null,
@@ -60,7 +61,9 @@ export function GroupCard({
 	selected,
 	partiallySelected,
 	fullySelected = false,
+	selectedFixtureCount,
 	storeArmed,
+	recordLabel,
 	updateArmed,
 	setTarget,
 	mutationOperation,
@@ -82,7 +85,9 @@ export function GroupCard({
 	selected: boolean;
 	partiallySelected: boolean;
 	fullySelected?: boolean;
+	selectedFixtureCount: number;
 	storeArmed: boolean;
+	recordLabel?: string;
 	updateArmed: boolean;
 	setTarget: boolean;
 	mutationOperation: PoolMutationOperation | null;
@@ -155,15 +160,14 @@ export function GroupCard({
 				number: index + 1,
 				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
 				secondary: group
-					? updateArmed
-						? "Touch to choose Update mode"
-						: `${group.body.fixtures.length} fx`
-					: emptyGroupHint(storeArmed, updateArmed),
-				details,
+					? groupFixtureCountLabel(group.body.fixtures.length, selectedFixtureCount)
+					: undefined,
+				details: group ? details : [...details, emptyGroupHint(storeArmed, updateArmed)],
 				icon: group?.body.icon,
 				iconColor: group?.body.color,
 				color: group?.body.color,
 				kind: "group",
+				workflow: storeArmed ? recordLabel ?? (group?.body.fixtures.length ? "REC MRG" : "REC") : undefined,
 				states: presentation.states,
 				derived:
 					canonicalReferences.length > 0 || Boolean(group?.body.derived_from),

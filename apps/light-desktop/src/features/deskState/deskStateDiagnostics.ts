@@ -1,9 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export type SystemControlsTab =
-	| "running"
-	| "desk-state"
-	| "active-programmers";
+export type SystemControlsTab = "running" | "desk-state" | "active-programmers";
 
 let requestedTab: SystemControlsTab = "running";
 const listeners = new Set<() => void>();
@@ -26,6 +23,8 @@ export function useRequestedSystemControlsTab(): SystemControlsTab {
 }
 
 export interface DeskStateDiagnostic {
+	/** Authoritatively suppressed capability, rather than a failed UI request. */
+	capabilityLoss?: "dmx_output";
 	id: string;
 	title: string;
 	summary: string;

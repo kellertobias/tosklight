@@ -13,6 +13,10 @@ import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
 import type { ExecuteCommandLine } from "./commandExecution";
 import {
+	clearProgrammingCommandError,
+	reportProgrammingCommandError,
+} from "./commandError";
+import {
 	type ProgrammingCommandLineActions,
 	useProgrammingCommandLineActionsValue,
 } from "./commandLineActionsValue";
@@ -139,14 +143,14 @@ export function ProgrammingInteractionViewProvider({
 						store,
 						replace: replaceCommandLine,
 						loadSnapshot: measuredLoadSnapshot,
-						onError: onMutationError,
+						onError: reportProgrammingCommandError,
+						onEdit: clearProgrammingCommandError,
 					})
 				: null,
 		[
 			authorityKey,
 			deskId,
 			measuredLoadSnapshot,
-			onMutationError,
 			replaceCommandLine,
 			showId,
 			store,
@@ -301,7 +305,8 @@ export function useProgrammingAlignmentView(enabled = true) {
 	useProgrammingCapabilityView("alignment", enabled);
 	return useProgrammingSelector(
 		useCallback(
-			(state: ProgrammingInteractionState) => enabled ? state.alignment : null,
+			(state: ProgrammingInteractionState) =>
+				enabled ? state.alignment : null,
 			[enabled],
 		),
 		Object.is,

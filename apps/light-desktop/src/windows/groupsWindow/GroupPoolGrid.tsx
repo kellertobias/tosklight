@@ -25,7 +25,10 @@ import {
 	usePoolPresentationConfiguration,
 } from "../../features/poolPresentation/poolPresentation";
 import { useApp } from "../../state/AppContext";
+import { groupRecordLabel, groupRecordOperation } from "../../features/groupRecording/options";
+import type { GroupRecordOperation } from "../../features/groupRecording/contracts";
 import { GroupCard } from "./GroupCard";
+import { groupFixtureSelection } from "./groupFixtureCount";
 import type { FixtureMetadata, Group } from "./model";
 
 interface GroupPoolCardSlotProps
@@ -35,7 +38,9 @@ interface GroupPoolCardSlotProps
 	selected: boolean;
 	partiallySelected: boolean;
 	fullySelected: boolean;
+	selectedFixtureCount: number;
 	storeArmed: boolean;
+	recordLabel: string;
 	updateArmed: boolean;
 	setTarget: boolean;
 	mutationOperation: PoolMutationOperation | null;
@@ -57,7 +62,9 @@ function GroupPoolCardSlot({
 	selected,
 	partiallySelected,
 	fullySelected,
+	selectedFixtureCount,
 	storeArmed,
+	recordLabel,
 	updateArmed,
 	setTarget,
 	mutationOperation,
@@ -99,7 +106,9 @@ function GroupPoolCardSlot({
 			selected={selected}
 			partiallySelected={partiallySelected}
 			fullySelected={fullySelected}
+			selectedFixtureCount={selectedFixtureCount}
 			storeArmed={storeArmed}
+			recordLabel={recordLabel}
 			updateArmed={updateArmed}
 			setTarget={setTarget}
 			mutationOperation={mutationOperation}
@@ -200,7 +209,7 @@ export function GroupPoolGrid({
 	command: CommandLineSurface;
 	onOpenSettings: (id: string) => void;
 	onOpenRecord: (target: GroupRecordingTarget) => void;
-	recordGroup: (target: GroupRecordingTarget) => Promise<unknown>;
+	recordGroup: (target: GroupRecordingTarget, mode?: GroupRecordOperation) => Promise<unknown>;
 	paneId?: string;
 	columns?: number;
 }) {
@@ -276,7 +285,8 @@ export function GroupPoolGrid({
 			return;
 		}
 		if (!state.storeArmed) return;
-		if (group?.body.fixtures.length) {
+		const operation = groupRecordOperation(command.read().text);
+		if (group?.body.fixtures.length && operation === null) {
 			onOpenRecord(captureGroupRecordingTarget(group));
 			return;
 		}
@@ -284,6 +294,7 @@ export function GroupPoolGrid({
 			group
 				? captureGroupRecordingTarget(group)
 				: emptyGroupRecordingTarget(id),
+			!group && operation === "merge" ? "overwrite" : operation ?? "overwrite",
 		).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
 	};
 	const selectionFor = groupSelectionResolver(command);
@@ -307,6 +318,7 @@ export function GroupPoolGrid({
 							index={index}
 							{...selectionFor(group)}
 							storeArmed={state.storeArmed}
+								recordLabel={groupRecordLabel(Boolean(group?.body.fixtures.length), command.text)}
 							updateArmed={state.updateArmed}
 							setTarget={Boolean(group && setTargetArmed)}
 							mutationOperation={
@@ -339,18 +351,8 @@ export function GroupPoolGrid({
 	);
 }
 
-function groupSelectionState(group: Group | null, selectedFixtures: Set<string>, selectedGroups: Set<string>) {
-	const members = group?.body.fixtures ?? [];
-	const selectedCount = members.filter((id) => selectedFixtures.has(id)).length;
-	return {
-		selected: Boolean(group && selectedGroups.has(group.id)),
-		fullySelected: members.length > 0 && selectedCount === members.length,
-		partiallySelected: selectedCount > 0 && selectedCount < members.length,
-	};
-}
-
 function groupSelectionResolver(command: CommandLineSurface) {
 	const fixtures = new Set(command.selected);
 	const groups = new Set(command.selectedGroupIds);
-	return (group: Group | null) => groupSelectionState(group, fixtures, groups);
+	return (group: Group | null) => groupFixtureSelection(group, fixtures, groups);
 }

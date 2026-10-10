@@ -185,7 +185,22 @@ struct SourceContext {
     replacement: Option<ContributionSourceId>,
 }
 
+#[derive(Clone)]
+pub(crate) struct SourceReplacement {
+    source: ContributionSourceId,
+    authored_fixture: FixtureId,
+}
+
+impl SourceReplacement {
+    fn replaces(&self, sampled: &[ContributionBatch], value: &TimedValue) -> bool {
+        let mut authored = value.clone();
+        authored.fixture_id = self.authored_fixture;
+        replaces_source(sampled, &self.source, &authored)
+    }
+}
+
 struct ProgrammerValueResolver<'a, 'continuity> {
+    replacement_provenance: Arc<HashMap<u64, light_core::ReplacementProjectionMap>>,
     addresses: &'a parking_lot::Mutex<ProgrammerAddressMemo>,
     generation: &'a RuntimeGeneration,
     /// Where this generation keeps each pair. Values the memo could not cover — Group and
@@ -359,6 +374,7 @@ impl Engine {
         addresses: &parking_lot::Mutex<ProgrammerAddressMemo>,
     ) -> crate::programmer_memo::ResolvedProgrammerValues {
         let ProgrammerOutputState {
+            replacement_provenance,
             id,
             priority,
             values,
@@ -369,6 +385,7 @@ impl Engine {
             ..
         } = programmer;
         let mut resolver = ProgrammerValueResolver {
+            replacement_provenance,
             addresses,
             generation,
             addresser,
@@ -487,39 +504,18 @@ impl ProgrammerValueResolver<'_, '_> {
         source: ProgrammerValueSource<'_>,
     ) -> crate::programmer_memo::ResolvedProgrammerValues {
         let context = self.source_context(source);
-        // A remembered slice answers for its vector, absent addresses included; only a lane
-        // nobody remembers asks the generation.
         let remembered = !addresses.is_empty();
-        values
-            .iter()
-            .enumerate()
-            .filter_map(|(index, value)| {
-                let address = if remembered {
-                    addresses.get(index).copied().flatten()
-                } else {
-                    self.addresser
-                        .frame_address(value.fixture_id, &value.attribute)
-                };
-                self.resolve_value(value.clone(), &context)
-                    .map(|(value, evidence, pending)| {
-                        let origin = self
-                            .trace_sources
-                            .then(|| context.replacement.as_ref())
-                            .flatten()
-                            .map(|source| {
-                                crate::contribution_batch::ContributionOrigin::new(
-                                    source.clone(),
-                                    &value,
-                                )
-                            });
-                        let evidence = self.trace_sources.then_some(evidence).flatten();
-                        (
-                            (value, address, origin, evidence, pending),
-                            context.replacement.clone(),
-                        )
-                    })
-            })
-            .collect()
+        let mut resolved = Vec::new();
+        for (index, value) in values.iter().enumerate() {
+            let address = if remembered {
+                addresses.get(index).copied().flatten()
+            } else {
+                self.addresser
+                    .frame_address(value.fixture_id, &value.attribute)
+            };
+            resolved.extend(self.resolve_projected_value(value.clone(), address, &context));
+        }
+        resolved
     }
 
     fn group_values(
@@ -557,23 +553,62 @@ impl ProgrammerValueResolver<'_, '_> {
                     fade_millis: scoped.fade_millis,
                     delay_millis: scoped.delay_millis,
                 };
-                if let Some((value, evidence, pending)) = self.resolve_value(value, &context) {
-                    let origin = self
-                        .trace_sources
-                        .then(|| context.replacement.as_ref())
-                        .flatten()
-                        .map(|source| {
-                            crate::contribution_batch::ContributionOrigin::new(
-                                source.clone(),
-                                &value,
-                            )
-                        });
-                    let evidence = self.trace_sources.then_some(evidence).flatten();
-                    resolved.push((
-                        (value, entry.address, origin, evidence, pending),
-                        context.replacement.clone(),
-                    ));
-                }
+                // group_entries has already sampled the current original-member rank. Routing
+                // that sample cannot insert children into the Group or alter its spread/phase.
+                resolved.extend(self.resolve_projected_value(value, entry.address, &context));
+            }
+        }
+        resolved
+    }
+
+    fn resolve_projected_value(
+        &mut self,
+        authored: TimedValue,
+        address: Option<FrameAddress>,
+        context: &SourceContext,
+    ) -> crate::programmer_memo::ResolvedProgrammerValues {
+        let projection = self
+            .replacement_provenance
+            .get(&authored.programmer_order)
+            .and_then(|members| members.get(&authored.fixture_id));
+        let destinations = projection
+            .map(|projection| {
+                self.generation
+                    .replacement_destinations(projection, &authored.attribute)
+            })
+            .unwrap_or_else(|| vec![authored.fixture_id]);
+        let mut resolved = Vec::new();
+        for fixture_id in destinations {
+            let mut effective = authored.clone();
+            effective.fixture_id = fixture_id;
+            let address = if fixture_id == authored.fixture_id {
+                address
+            } else {
+                self.addresser
+                    .frame_address(fixture_id, &authored.attribute)
+            };
+            if let Some((value, evidence, pending)) = self.resolve_value(effective, context) {
+                let origin = self
+                    .trace_sources
+                    .then(|| context.replacement.as_ref())
+                    .flatten()
+                    .map(|source| {
+                        let mut original = value.clone();
+                        original.fixture_id = authored.fixture_id;
+                        crate::contribution_batch::ContributionOrigin::new(
+                            source.clone(),
+                            &original,
+                        )
+                    });
+                let evidence = self.trace_sources.then_some(evidence).flatten();
+                let replacement = context
+                    .replacement
+                    .as_ref()
+                    .map(|source| SourceReplacement {
+                        source: source.clone(),
+                        authored_fixture: authored.fixture_id,
+                    });
+                resolved.push(((value, address, origin, evidence, pending), replacement));
             }
         }
         resolved
@@ -678,7 +713,7 @@ fn removed_by(
         .filter(|(_, ((value, ..), replacement))| {
             replacement
                 .as_ref()
-                .is_some_and(|source| replaces_source(sampled, source, value))
+                .is_some_and(|source| source.replaces(sampled, value))
         })
         .map(|(index, _)| index as u32)
         .collect()
@@ -698,7 +733,7 @@ fn arbitrate(
                     .filter(|((value, ..), replacement)| {
                         !replacement
                             .as_ref()
-                            .is_some_and(|source| replaces_source(sampled, source, value))
+                            .is_some_and(|source| source.replaces(sampled, value))
                     })
                     .map(|(addressed, _)| addressed.clone())
                     .collect(),
@@ -917,6 +952,7 @@ mod group_memo_tests {
     use light_programmer::GroupDefinition;
     fn generation(members: Vec<FixtureId>) -> Arc<RuntimeGeneration> {
         let groups = vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "1".into(),
             fixtures: members,
             ..Default::default()
@@ -1013,6 +1049,7 @@ mod group_memo_tests {
         ));
         let mut snapshot = generation.snapshot().clone();
         snapshot.groups = vec![GroupDefinition {
+            replacement_projections: Default::default(),
             id: "1".into(),
             fixtures: vec![b, c],
             ..Default::default()

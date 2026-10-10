@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { artifactPaths } from "./artifact-paths.mjs";
 
 const repositoryRoot = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -626,7 +628,15 @@ test("build:viz:open builds every helper before using launch-only open", () => {
 
 	assert.match(buildAndOpen, /build_visualizer/u);
 	assert.match(buildAndOpen, /build_viz_editor/u);
-	assert.match(buildAndOpen, /build_visualizer_headless/u);
+	const buildVisualizer = buildScript.slice(
+		buildScript.indexOf("build_visualizer() {"),
+		buildScript.indexOf("\nvisualizer_executable() {"),
+	);
+	assert.match(
+		buildVisualizer,
+		/build_visualizer_headless[\s\S]*bundle-visualizer-macos\.sh/u,
+	);
+	assert.match(buildVisualizer, /release\/light-headless/u);
 	assert.match(buildAndOpen, /open_visualizer/u);
 });
 
@@ -846,3 +856,62 @@ test("the release verification greps for product names the assembler writes", ()
 			`the assembler writes no tosklight-${product}- asset, so the release check greps for something that cannot exist`,
 		);
 });
+test(
+	"Architect bundle contains its exact private show helper and missing input preserves existing bundle",
+	{ skip: process.platform !== "darwin" },
+	() => {
+		fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+		const directory = fs.mkdtempSync(
+			path.join(artifactPaths.tmp, "architect-helper-bundle-"),
+		);
+		try {
+			const editor = path.join(directory, "editor");
+			const renderer = path.join(directory, "renderer");
+			const helper = path.join(directory, "headless");
+			const mcp = path.join(directory, "mcp.mjs");
+			for (const [file, contents] of [
+				[editor, "exact editor"],
+				[renderer, "exact renderer"],
+				[helper, "exact matching private helper"],
+				[mcp, "export {};"],
+			]) fs.writeFileSync(file, contents);
+			const output = path.join(directory, "output");
+			const app = path.join(output, "ToskLight Architect.app");
+			const bundledHelper = path.join(app, "Contents/MacOS/light-headless");
+			const argumentsFor = (namedHelper) => [
+				path.join(repositoryRoot, "tools/bundle-visualizer-macos.sh"),
+				editor,
+				renderer,
+				namedHelper,
+				mcp,
+				output,
+				"1.2.3",
+			];
+			const assembled = spawnSync("bash", argumentsFor(helper), {
+				encoding: "utf8",
+			});
+			assert.equal(assembled.status, 0, assembled.stderr);
+			assert.equal(
+				fs.readFileSync(bundledHelper, "utf8"),
+				fs.readFileSync(helper, "utf8"),
+			);
+			assert.equal(fs.statSync(bundledHelper).mode & 0o111, 0o111);
+			const marker = path.join(app, "keep-existing-bundle");
+			fs.writeFileSync(marker, "keep");
+			const failed = spawnSync(
+				"bash",
+				argumentsFor(path.join(directory, "missing-headless")),
+				{ encoding: "utf8" },
+			);
+			assert.notEqual(failed.status, 0);
+			assert.match(failed.stderr, /private show server/u);
+			assert.equal(fs.readFileSync(marker, "utf8"), "keep");
+			assert.equal(
+				fs.readFileSync(bundledHelper, "utf8"),
+				"exact matching private helper",
+			);
+		} finally {
+			fs.rmSync(directory, { recursive: true, force: true });
+		}
+	},
+);

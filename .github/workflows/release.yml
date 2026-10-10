@@ -1212,10 +1212,8 @@ jobs:
               mkdir -p "$accessory/resources"
               cp -R "$editor_app/Contents/Resources/." "$accessory/resources/"
               bash tools/bundle-visualizer-macos.sh \
-                "$accessory/viz-editor" "$release/viz-renderer" \
+                "$accessory/viz-editor" "$release/viz-renderer" "$release/light-headless" \
                 ".artifacts/build/patch-mcp/tosklight-patch-mcp.mjs" "$bundle/macos"
-              cp "$release/light-headless" \
-                "$bundle/macos/ToskLight Architect.app/Contents/MacOS/light-headless"
               cp -R "$accessory/resources/." \
                 "$bundle/macos/ToskLight Architect.app/Contents/Resources/"
               bash tools/seal-macos-app.sh \

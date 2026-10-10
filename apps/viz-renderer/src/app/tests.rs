@@ -258,3 +258,250 @@ fn stale_or_absent_dmx_holds_the_last_pose_and_cannot_fake_a_release() {
         ui::DmxCameraControlStatus::Local { can_release: false }
     );
 }
+
+#[test]
+fn source_connect_overrides_local_ports_for_same_and_changed_kind() {
+    for old_authority in [SourceAuthority::LocalShow, SourceAuthority::LocalPlanner] {
+        for old_kind in [ProviderKind::PlanningSoftware, ProviderKind::LightingDesk] {
+            let mut application = Application::new(Options {
+                planning_server_requested: true,
+                ..Options::default()
+            });
+            application.preferences.source = old_kind;
+            application.preferences.host = "127.0.0.1".into();
+            application.preferences.port = 1; // Refused test-only endpoint; never the running desk.
+            application.source_authority = old_authority;
+            application.quick_settings.toggle(&application.preferences);
+            application.quick_settings.move_tab(-1);
+            application.quick_settings.staged.source = ProviderKind::PlanningSoftware;
+            application.quick_settings.staged.host = "127.0.0.1".into();
+            application.quick_settings.staged.port_text = "1".into();
+            application.quick_settings.selected = application
+                .quick_settings
+                .rows()
+                .iter()
+                .position(|row| *row == ui::Row::Connect)
+                .unwrap();
+            let outcome = application
+                .quick_settings
+                .activate(&mut application.preferences);
+            application.apply_outcome(outcome);
+            application.session.as_mut().unwrap().shutdown();
+            assert_eq!(application.source_authority, SourceAuthority::External);
+            assert_eq!(
+                application.connection_endpoint(Some(50691), Some(64025)),
+                ("127.0.0.1".into(), 1)
+            );
+        }
+    }
+}
+
+#[test]
+fn source_selection_cancel_and_invalid_preserve_local_authority() {
+    let mut application = Application::new(Options {
+        planning_server_requested: true,
+        ..Options::default()
+    });
+    application.source_authority = SourceAuthority::LocalShow;
+    application.quick_settings.toggle(&application.preferences);
+    application.quick_settings.move_tab(-1);
+    application.quick_settings.staged.port_text = "0".into();
+    application.quick_settings.selected = application
+        .quick_settings
+        .rows()
+        .iter()
+        .position(|row| *row == ui::Row::Connect)
+        .unwrap();
+    let outcome = application
+        .quick_settings
+        .activate(&mut application.preferences);
+    assert!(matches!(outcome, QuickSettingsOutcome::Invalid(_)));
+    application.apply_outcome(outcome);
+    application.quick_settings.selected = application
+        .quick_settings
+        .rows()
+        .iter()
+        .position(|row| *row == ui::Row::Cancel)
+        .unwrap();
+    let cancelled = application
+        .quick_settings
+        .activate(&mut application.preferences);
+    assert_eq!(cancelled, QuickSettingsOutcome::Close);
+    application.apply_outcome(cancelled);
+    assert_eq!(application.source_authority, SourceAuthority::LocalShow);
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 50691)
+    );
+    assert!(application.session.is_none());
+}
+
+#[test]
+fn source_selection_cli_and_local_return_choose_only_active_endpoint() {
+    let options = Options::from_arguments(
+        ["--planning-server", "127.0.0.1", "--port", "56084"]
+            .into_iter()
+            .map(str::to_owned),
+    )
+    .unwrap();
+    let mut application = Application::new(options);
+    assert_eq!(application.source_authority, SourceAuthority::External);
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 56084)
+    );
+    application.source_authority = SourceAuthority::LocalShow;
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 50691)
+    );
+    application.source_authority = SourceAuthority::LocalPlanner;
+    assert_eq!(
+        application.connection_endpoint(Some(50691), Some(64025)),
+        ("127.0.0.1".into(), 64025)
+    );
+}
+
+#[test]
+fn source_selection_external_rejects_connected_endpoint_override_but_accepts_fog() {
+    struct SettingsProvider(Option<viz_scene::RendererSettingsUpdate>);
+    impl viz_scene::SceneProvider for SettingsProvider {
+        fn capabilities(&self) -> viz_scene::ProviderCapabilities {
+            viz_scene::ProviderCapabilities {
+                kind: ProviderKind::PlanningSoftware,
+                available: true,
+                unavailable_reason: None,
+                default_host: "127.0.0.1".into(),
+                default_port: 5310,
+                uses_network_input: true,
+            }
+        }
+        fn poll(&mut self) -> Vec<viz_scene::ProviderEvent> {
+            self.0
+                .take()
+                .map(viz_scene::ProviderEvent::RendererSettings)
+                .into_iter()
+                .collect()
+        }
+        fn request_resync(&mut self) {}
+        fn shutdown(&mut self) {}
+    }
+
+    let mut application = Application::new(Options::default());
+    application.source_authority = SourceAuthority::External;
+    application.preferences.source = ProviderKind::PlanningSoftware;
+    application.preferences.host = "127.0.0.1".into();
+    application.preferences.port = 56084;
+    let launch_options = application.options.clone();
+    let settings = viz_scene::RendererSettings {
+        source: "lighting_desk".into(),
+        host: "other-endpoint.invalid".into(),
+        port: 64025,
+        quality: Some("draft".into()),
+        fog: 0.02,
+        ..application.preferences.renderer_settings()
+    };
+    let mut session = Session::new(
+        Box::new(SettingsProvider(Some(viz_scene::RendererSettingsUpdate {
+            revision: 2,
+            source: "editor".into(),
+            changed: vec!["quality".into(), "fog".into()],
+            settings,
+        }))),
+        ProviderKind::PlanningSoftware,
+        Instant::now(),
+    );
+    session.pump(Instant::now());
+    application.adopt_connected_renderer_settings(&mut session);
+
+    assert_eq!(
+        application.preferences.quality_override,
+        Some(viz_scene::RenderQuality::Draft)
+    );
+    assert_eq!(application.preferences.atmosphere.amount, 0.02);
+    assert_eq!(
+        application.preferences.source,
+        ProviderKind::PlanningSoftware
+    );
+    assert_eq!(application.preferences.host, "127.0.0.1");
+    assert_eq!(application.preferences.port, 56084);
+    assert_eq!(
+        application.options.desk_requested,
+        launch_options.desk_requested
+    );
+    assert_eq!(application.options.host, launch_options.host);
+    assert_eq!(application.options.port, launch_options.port);
+}
+
+#[cfg(unix)]
+#[test]
+fn native_exit_cleanup_stops_retained_preview_without_stopping_unrelated_process() {
+    struct TestChild(std::process::Child);
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let mut unrelated = TestChild(
+        std::process::Command::new("/bin/sleep")
+            .arg("60")
+            .spawn()
+            .unwrap(),
+    );
+    let child = std::process::Command::new("/bin/sleep")
+        .arg("60")
+        .spawn()
+        .unwrap();
+    let owned_id = child.id();
+    let directory = std::path::PathBuf::from(std::env::var_os("LIGHT_TMP_DIR").unwrap())
+        .join(format!("renderer-exit-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("preview.show");
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE metadata(value TEXT); INSERT INTO metadata VALUES('original');",
+        )
+        .unwrap();
+    drop(connection);
+    let mut application = Application::new(Options {
+        helper: true,
+        ..Default::default()
+    });
+    application.hosted_show = Some(crate::showfile::HostedShow::for_test_child(child, &path));
+    application.source_authority = SourceAuthority::External;
+    application.shutdown_owned_sources();
+    assert!(application.hosted_show.is_none());
+    let still_alive = std::process::Command::new("/bin/kill")
+        .args(["-0", &owned_id.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap()
+        .success();
+    assert!(!still_alive, "owned preview must be reaped at native exit");
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    application.shutdown_owned_sources();
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    let second = std::process::Command::new("/bin/sleep")
+        .arg("60")
+        .spawn()
+        .unwrap();
+    let second_id = second.id();
+    application.hosted_show = Some(crate::showfile::HostedShow::for_test_child(second, &path));
+    application.close_show_file();
+    assert!(application.hosted_show.is_none());
+    assert!(
+        !std::process::Command::new("/bin/kill")
+            .args(["-0", &second_id.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success(),
+        "Close Show must reap the same owned child even after reconnecting externally"
+    );
+    assert!(unrelated.0.try_wait().unwrap().is_none());
+    std::fs::remove_dir_all(directory).unwrap();
+}

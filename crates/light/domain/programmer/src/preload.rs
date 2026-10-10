@@ -219,6 +219,68 @@ impl ProgrammerRegistry {
         true
     }
 
+    /// Remove exactly one displayed pending action. The application guards the queue revision
+    /// under the shared mutation gate; duplicate actions and every remaining origin stay intact.
+    pub fn remove_preload_dynamic_value(&self, _session: SessionId, index: usize) -> bool {
+        let gate = self.mutation_gate();
+        let _guard = gate.lock();
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
+            return false;
+        };
+        if index >= state.preload_dynamic_pending.len() {
+            return false;
+        }
+        state.checkpoint();
+        Arc::make_mut(&mut state.preload_dynamic_pending).remove(index);
+        state.prune_released_fixture_colors();
+        state.last_activity = self.clock.now();
+        drop(states);
+        self.mark_preload_values_changed();
+        true
+    }
+    pub fn remove_preload_group_release(&self, _session: SessionId, index: usize) -> bool {
+        let gate = self.mutation_gate();
+        let _guard = gate.lock();
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
+            return false;
+        };
+        if index >= state.preload_group_release_pending.len() {
+            return false;
+        }
+        state.checkpoint();
+        let removed = state.preload_group_release_pending.remove(index);
+        if !state
+            .preload_group_release_pending
+            .iter()
+            .any(|entry| entry.group_id == removed.group_id && entry.attribute == removed.attribute)
+        {
+            state.clear_released_group_color(&removed.group_id, &removed.attribute);
+        }
+        state.last_activity = self.clock.now();
+        drop(states);
+        self.mark_preload_values_changed();
+        true
+    }
+    pub fn remove_preload_playback_action(&self, _session: SessionId, index: usize) -> bool {
+        let mutation_gate = self.mutation_gate();
+        let _mutation_guard = mutation_gate.lock();
+        let mut states = self.state.write();
+        let Some(state) = states.as_mut() else {
+            return false;
+        };
+        if index >= state.preload_playback_pending.len() {
+            return false;
+        }
+        state.checkpoint();
+        state.preload_playback_pending.remove(index);
+        state.last_activity = self.clock.now();
+        drop(states);
+        self.mark_preload_playback_queue_changed();
+        true
+    }
+
     /// Clone only the ordered queued playback actions, without materializing a Programmer state.
     pub fn preload_playback_actions(
         &self,
@@ -447,6 +509,15 @@ fn restamp_pending_orders(registry: &ProgrammerRegistry, state: &mut crate::Prog
         .into_iter()
         .map(|index| (edits[index].key, registry.next_programmer_order()))
         .collect::<BTreeMap<_, _>>();
+    // The commit reorders edits, but their recalled source identity survives that boundary.
+    for (key, new_order) in &orders {
+        if let Some(origin) = state.preset_provenance.get(&key.0).cloned() {
+            Arc::make_mut(&mut state.preset_provenance).insert(*new_order, origin);
+        }
+        if let Some(origin) = state.replacement_provenance.get(&key.0).cloned() {
+            Arc::make_mut(&mut state.replacement_provenance).insert(*new_order, origin);
+        }
+    }
     for value in &mut state.preload_pending {
         value.programmer_order = orders[&timed_key(value.programmer_order, value.changed_at)];
     }

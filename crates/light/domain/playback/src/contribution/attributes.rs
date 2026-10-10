@@ -23,6 +23,7 @@ impl ContributionContext<'_> {
                 sequence_master
             };
             PlaybackContribution {
+                replacement_projection: retained.replacement_projection,
                 value,
                 family_evidence: retained.family_evidence,
                 authored_target: false,
@@ -100,14 +101,20 @@ impl ContributionContext<'_> {
             _ => None,
         };
         // TL-544 G1: an interrupted crossing starts from its live pose, not its held source.
-        let Some((value, pending)) = interpolate_pending(
-            previous.or(declared.as_ref()),
-            frame
-                .previous_pending(attribute)
-                .filter(|_| declared.is_none()),
-            target,
-            progress,
-        ) else {
+        let native_sample = previous.zip(target).and_then(|(from, to)| {
+            self.family_start?
+                .sample_native_transition(from, to, progress)
+        });
+        let Some((value, pending)) = native_sample.map(|value| (value, None)).or_else(|| {
+            interpolate_pending(
+                previous.or(declared.as_ref()),
+                frame
+                    .previous_pending(attribute)
+                    .filter(|_| declared.is_none()),
+                target,
+                progress,
+            )
+        }) else {
             return;
         };
         let family_evidence = crate::source_evidence::family_owner(key, &value)
@@ -240,6 +247,28 @@ fn attribute_contribution(
     let sequence_master = frame.master_for(snap);
     let value = apply_level_master(value, &attribute, sequence_master);
     PlaybackContribution {
+        replacement_projection: if frame
+            .compiled
+            .value(
+                fixture_id,
+                &attribute,
+                frame.target_index,
+                frame.target_tracking_wrap,
+            )
+            .is_some()
+        {
+            frame
+                .compiled
+                .replacement_projection(
+                    fixture_id,
+                    &attribute,
+                    frame.target_index,
+                    frame.target_tracking_wrap,
+                )
+                .cloned()
+        } else {
+            frame.previous_projection(fixture_id, &attribute).cloned()
+        },
         value: timed_value(frame, fixture_id, attribute, value),
         family_evidence,
         authored_target,

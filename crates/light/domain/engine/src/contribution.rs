@@ -12,6 +12,7 @@ pub(crate) use parallel_offers::OfferScratch;
 pub(crate) use playback_evidence::PlaybackEvidenceCache;
 
 pub(crate) struct EngineContribution {
+    authored_fixture_id: Option<FixtureId>,
     value: TimedValue,
     transition_ordinal: Option<u64>,
     /// The Playback this value came from, for source replacement and tracing. None for every
@@ -159,6 +160,7 @@ impl<'a> ResolvedContributionIndex<'a> {
 impl EngineContribution {
     pub(crate) fn unscaled(value: TimedValue) -> Self {
         Self {
+            authored_fixture_id: None,
             value,
             transition_ordinal: None,
             playback_source: None,
@@ -210,12 +212,26 @@ impl EngineContribution {
             .family_evidence
             .as_ref()
             .map(|evidence| evidence_cache.project(evidence));
+        let authored_fixture_id = contribution
+            .replacement_projection
+            .as_ref()
+            .map(|projection| projection.source_owner);
+        let origin = authored_fixture_id.map(|fixture_id| {
+            let mut authored = contribution.value.clone();
+            authored.fixture_id = fixture_id;
+            crate::contribution_batch::ContributionOrigin::with_transition_ordinal(
+                crate::ContributionSourceId::playback(contribution.source),
+                &authored,
+                Some(contribution.transition_ordinal),
+            )
+        });
         Self {
+            authored_fixture_id,
             value: contribution.value,
             transition_ordinal: Some(contribution.transition_ordinal),
             playback_source: Some(contribution.source),
             address: contribution.address,
-            origin: None,
+            origin,
             family_evidence,
             pending_transition: contribution.pending_transition,
         }
@@ -231,10 +247,14 @@ impl EngineContribution {
 
     pub(crate) fn replaced_by(&self, sampled: &[crate::ContributionBatch]) -> bool {
         self.playback_source.is_some_and(|source| {
+            let mut authored = self.value.clone();
+            if let Some(fixture_id) = self.authored_fixture_id {
+                authored.fixture_id = fixture_id;
+            }
             crate::replaces_source(
                 sampled,
                 &crate::ContributionSourceId::playback(source),
-                &self.value,
+                &authored,
             )
         })
     }
@@ -673,6 +693,7 @@ impl<'a> EngineContributionResolver<'a> {
 
     pub(crate) fn add_playback_unscaled(&mut self, value: TimedValue, transition_ordinal: u64) {
         self.add(EngineContribution {
+            authored_fixture_id: None,
             value,
             transition_ordinal: Some(transition_ordinal),
             playback_source: None,
@@ -810,6 +831,7 @@ impl<'a> EngineContributionResolver<'a> {
 
     fn add(&mut self, candidate: EngineContribution) {
         let EngineContribution {
+            authored_fixture_id: _,
             value,
             transition_ordinal,
             playback_source,

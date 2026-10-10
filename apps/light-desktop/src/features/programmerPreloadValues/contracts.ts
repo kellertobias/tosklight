@@ -5,6 +5,7 @@ import type {
 } from "../../api/colorAdoptionWire";
 import type { DisplayedSource } from "../programmerValues/displayedSource";
 import type { ProgrammerValueIntentOperation } from "../../api/programmingComponentEditWire";
+import type { ProgrammerDynamicValue } from "../programmerValues/contracts";
 import type { AttributeValue } from "../../api/types/playback";
 
 export interface ProgrammerPreloadValueTiming {
@@ -29,11 +30,20 @@ export interface ProgrammerPreloadGroupValue
 	programmerOrder: number;
 }
 
+export interface ProgrammerPreloadGroupReleaseValue {
+	groupId: string;
+	attribute: string;
+	programmerOrder: number;
+	changedAtMillis: number;
+}
+
 /** The Programmer's pending Preload values. */
 export interface ProgrammerPreloadValuesProjection {
 	revision: number;
 	fixtureValues: readonly ProgrammerPreloadFixtureValue[];
 	groupValues: readonly ProgrammerPreloadGroupValue[];
+	dynamicValues?: readonly ProgrammerDynamicValue[];
+	groupReleaseValues?: readonly ProgrammerPreloadGroupReleaseValue[];
 }
 
 export interface ProgrammerPreloadValuesSnapshot {

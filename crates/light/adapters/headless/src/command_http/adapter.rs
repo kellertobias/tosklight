@@ -24,7 +24,7 @@ pub(crate) enum ExistingCommandOutcome {
 
 pub(crate) fn prevalidate_typed_command(
     state: &AppState,
-    _session: &Session,
+    session: &Session,
     command: &str,
     context: &ActionContext,
 ) -> Result<bool, String> {
@@ -34,6 +34,21 @@ pub(crate) fn prevalidate_typed_command(
             return Err("no show is open".into());
         }
         return Ok(true);
+    }
+    if let Some((selection, _)) = selection_prefixed_group_record(command)? {
+        state
+            .programming
+            .with_detached_command(session.id, |programming| {
+                let mut detached_state = state.clone();
+                detached_state.programming = programming.clone();
+                super::super::programmer_commands::execute_programmer_command_from(
+                    &detached_state,
+                    session,
+                    &selection,
+                    context,
+                )
+                .map(|_| ())
+            })?;
     }
     let object = object_command(command)?;
     if object.is_some_and(|command| {
@@ -227,6 +242,7 @@ enum ObjectCommand {
     ArmTimecode(u32),
     DisarmTimecode(u32),
     EditTimecode(u32),
+    EditCuelist(u16),
 }
 
 fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
@@ -234,6 +250,11 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
         .collect::<Vec<_>>();
+    if matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && family == "CUELIST")
+        && tokens.len() != 3
+    {
+        return Err("expected SET CUELIST <positive pool number>".into());
+    }
     let (family, number, suffix, edit) = match tokens.as_slice() {
         [family, number] => (family.as_str(), number.as_str(), None, false),
         [family, number, suffix] if family == "TIMECODE" => (
@@ -246,13 +267,13 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         _ if matches!(
             tokens.first().map(String::as_str),
             Some("MACRO" | "TIMECODE")
-        ) || matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && matches!(family.as_str(), "MACRO" | "TIMECODE")) =>
+        ) || matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && matches!(family.as_str(), "MACRO" | "TIMECODE" | "CUELIST")) =>
         {
-            return Err("expected [SET] MACRO|TIMECODE <positive pool number> [+|-]".into());
+            return Err("expected [SET] MACRO|TIMECODE <positive pool number> [+|-], or SET CUELIST <positive pool number>".into());
         }
         _ => return Ok(None),
     };
-    if !matches!(family, "MACRO" | "TIMECODE") {
+    if !matches!(family, "MACRO" | "TIMECODE") && !(family == "CUELIST" && edit) {
         return Ok(None);
     }
     let number = number
@@ -269,6 +290,10 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         ("TIMECODE", false, Some("+")) => Ok(Some(ObjectCommand::ArmTimecode(number))),
         ("TIMECODE", false, Some("-")) => Ok(Some(ObjectCommand::DisarmTimecode(number))),
         ("TIMECODE", true, None) => Ok(Some(ObjectCommand::EditTimecode(number))),
+        ("CUELIST", true, None) => Ok(Some(ObjectCommand::EditCuelist(
+            u16::try_from(number)
+                .map_err(|_| "CUELIST pool number cannot exceed 65535".to_owned())?,
+        ))),
         ("MACRO", _, Some(_)) => Err("MACRO does not accept + or -".into()),
         ("TIMECODE", true, Some(_)) => Err("SET TIMECODE does not accept + or -".into()),
         ("TIMECODE", false, Some(_)) => Err("TIMECODE accepts only + or - after its number".into()),
@@ -284,6 +309,13 @@ fn execute_object_command(
 ) -> Result<(usize, String), ApiError> {
     use crate::runtime::timecode_v2::CommandLineTimecodeAction as Timecode;
     match command {
+        ObjectCommand::EditCuelist(number) => {
+            crate::runtime::set_commands::request_cuelist_editor_from_command_line(
+                state, session, number,
+            )
+            .map_err(ApiError::bad_request)?;
+            Ok((0, format!("Opened Cuelist {number} editor")))
+        }
         ObjectCommand::RunMacro(number) => {
             let execution_id =
                 crate::runtime::macros_v2::start_macro_from_command_line(state, session, number)?;
@@ -356,11 +388,14 @@ pub(super) fn preset_record_address(
         .is_some_and(|token| matches!(token.as_str(), "RECORD" | "REC"))
         || timing.fade_millis.is_some()
         || timing.delay_millis.is_some()
-        || !(tokens.len() == 4 || preset_record_aim_target(command)?.is_some())
     {
         return Ok(None);
     }
-    Ok(super::super::command_preset_address(&tokens[1..4]).ok())
+    let (_, body) = super::record_update_option::parse_option(&tokens[1..]);
+    if preset_record_aim_target(command)?.is_some() {
+        return Ok(super::super::command_preset_address(&tokens[1..4]).ok());
+    }
+    Ok(super::super::command_preset_address(body).ok())
 }
 
 /// Only the exact existing Aim suffix is a typed relation recording command.
@@ -388,17 +423,20 @@ pub(super) fn preset_record_aim_target(command: &str) -> Result<Option<u32>, Str
 pub(super) fn group_record_command(
     command: &str,
 ) -> Result<Option<(String, light_application::ProgrammingGroupRecordOperation)>, String> {
+    let command = selection_prefixed_group_record(command)?
+        .map_or_else(|| command.to_owned(), |(_, record)| record);
     let tokens = command.split_whitespace().collect::<Vec<_>>();
     let parsed = match tokens.as_slice() {
         [record, group, id] if is_record(record) && group.eq_ignore_ascii_case("GROUP") => Some((
             (*id).to_owned(),
-            light_application::ProgrammingGroupRecordOperation::Overwrite,
+            light_application::ProgrammingGroupRecordOperation::Merge,
         )),
         [record, operation, group, id]
             if is_record(record) && group.eq_ignore_ascii_case("GROUP") =>
         {
-            let operation = match *operation {
-                "+" => light_application::ProgrammingGroupRecordOperation::Merge,
+            let operation = match operation.to_ascii_uppercase().as_str() {
+                "SMART" => light_application::ProgrammingGroupRecordOperation::Overwrite,
+                "MERGE" | "+" => light_application::ProgrammingGroupRecordOperation::Merge,
                 "-" => light_application::ProgrammingGroupRecordOperation::Subtract,
                 _ => return Ok(None),
             };
@@ -411,6 +449,42 @@ pub(super) fn group_record_command(
         _ => None,
     };
     Ok(parsed)
+}
+
+/// Only a selection may precede Group recording; do not turn value/show commands into a pipeline.
+pub(super) fn selection_prefixed_group_record(
+    command: &str,
+) -> Result<Option<(String, String)>, String> {
+    let words = command.split_whitespace().collect::<Vec<_>>();
+    let Some(index) = words.iter().position(|word| is_record(word)) else {
+        return Ok(None);
+    };
+    if index == 0 {
+        return Ok(None);
+    }
+    let record = words[index..].join(" ");
+    if group_record_command(&record)?.is_none() {
+        return Ok(None);
+    }
+    let selection = words[..index].join(" ");
+    let (tokens, timing) = super::super::tokenize_programmer_command(&selection)?;
+    let first = tokens.first().map(String::as_str).unwrap_or("");
+    if !matches!(
+        first,
+        "FIXTURE" | "FIXTURES" | "CHANNEL" | "CHANNELS" | "GROUP" | "DEGROUP" | "DEGRP" | "+"
+    ) && first.parse::<u32>().is_err()
+    {
+        return Ok(None);
+    }
+    if timing.fade
+        || timing.delay_millis.is_some()
+        || tokens
+            .iter()
+            .any(|token| matches!(token.as_str(), "AT" | "FIXAT" | "RELEASE" | "DYNAMIC"))
+    {
+        return Err("only a fixture or Group selection may precede RECORD GROUP".into());
+    }
+    Ok(Some((selection, record)))
 }
 
 fn is_record(token: &str) -> bool {
@@ -544,6 +618,14 @@ fn accepted_command(
 pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static str>, String> {
     if super::speed_group_binding_command::parse(command)?.is_some() {
         return Ok(Some("Speed Group binding"));
+    }
+    // Assignment is an atomic show-object action, even when its source is a Dynamic.
+    if command
+        .split_whitespace()
+        .next()
+        .is_some_and(|token| token.eq_ignore_ascii_case("ASSIGN"))
+    {
+        return Ok(Some("ASSIGN"));
     }
     if command
         .split_whitespace()
@@ -771,6 +853,25 @@ mod object_command_tests {
     use super::{ObjectCommand, object_command};
 
     #[test]
+    fn set_cuelist_editor_is_typed_without_consuming_cuelist_programming() {
+        assert!(object_command("SET CUELIST 15").unwrap().is_some());
+        for command in [
+            "SET CUELIST",
+            "SET CUELIST 0",
+            "SET CUELIST 65536",
+            "SET CUELIST 15 AT PBK 1",
+        ] {
+            assert!(object_command(command).is_err(), "{command}");
+        }
+        assert_eq!(object_command("CUELIST 15").unwrap(), None);
+        assert_eq!(object_command("SET 2.3").unwrap(), None);
+        assert_eq!(
+            object_command("ASSIGN CUELIST 15 AT PBK 2.3").unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn object_commands_require_one_positive_pool_number() {
         assert_eq!(
             object_command("MACRO 17").unwrap(),
@@ -805,5 +906,40 @@ mod object_command_tests {
         assert!(object_command("MACRO 0").is_err());
         assert!(object_command("MACRO 1 GO").is_err());
         assert!(object_command("MACRO 70000").is_err());
+    }
+}
+
+#[cfg(test)]
+mod named_preset_record_tests {
+    use super::*;
+
+    #[test]
+    fn typed_record_routes_named_numeric_and_merge_addresses_without_swallowing_cues() {
+        for command in [
+            "RECORD INTENSITY 190",
+            "RECORD INTENSITY190",
+            "RECORD INTENSITY PRESET 190",
+            "RECORD 1.190",
+            "RECORD MERGE INTENSITY 190",
+        ] {
+            let address = preset_record_address(command).unwrap().unwrap();
+            assert_eq!(address.family, light_programmer::PresetFamily::Intensity);
+            assert_eq!(address.number, 190);
+        }
+        assert!(
+            preset_record_address("RECORD CUELIST 190")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            preset_record_address("RECORD MERGE CUE 1")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            preset_record_address("RECORD COLOR 12 FADE 1")
+                .unwrap()
+                .is_none()
+        );
     }
 }

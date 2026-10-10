@@ -26,9 +26,12 @@ class Events implements RunningDynamicsEventSource {
 	}
 }
 
-function runtime(controllerIds = ["controller-a", "controller-b"]) {
+function runtime(
+	controllerIds = ["controller-a", "controller-b"],
+): RunningDynamicsSnapshot {
 	return {
 		global_paused: false,
+		programmer_id: "programmer-current",
 		definitions: [],
 		instances: [
 			{
@@ -50,6 +53,14 @@ function runtime(controllerIds = ["controller-a", "controller-b"]) {
 				controllers: controllerIds.map((controllerId, index) => ({
 					controller_id: controllerId,
 					source: index === 0 ? "Programmer" : "Playback 12",
+					...(index === 0
+						? { programmer_id: "programmer-current" }
+						: {
+								stop_owner: {
+									kind: "physical_playback" as const,
+									playback_number: 12,
+								},
+							}),
 					priority: 10 - index,
 					size: 1,
 					speed_multiplier: 1,
@@ -68,6 +79,7 @@ function runtime(controllerIds = ["controller-a", "controller-b"]) {
 function api(initial = runtime()) {
 	return {
 		runtime: vi.fn(async () => initial),
+		stopRuntimeLive: vi.fn(async () => undefined),
 		offLive: vi.fn(async (controllerId: string) => ({
 			request_id: "request",
 			runtime_instance_id: "instance-a",
@@ -180,8 +192,15 @@ describe("useRunningDynamicsAuthority", () => {
 
 		await act(() => rendered.result.current.off(row));
 
-		expect(backend.offLive).toHaveBeenCalledOnce();
-		expect(backend.offLive).toHaveBeenCalledWith("controller-b");
+		expect(backend.offLive).not.toHaveBeenCalled();
+		expect(backend.stopRuntimeLive).toHaveBeenCalledWith(
+			{ kind: "physical_playback", playback_number: 12 },
+			{
+				dynamicId: "dynamic-a",
+				instanceId: "instance-a",
+				controllerId: "controller-b",
+			},
+		);
 		expect(backend.runtime).toHaveBeenCalledTimes(2);
 		expect(rendered.result.current.stoppingControllerIds.size).toBe(0);
 	});
@@ -206,4 +225,95 @@ describe("useRunningDynamicsAuthority", () => {
 		expect(rendered.result.current.error).toContain("controller rejected");
 		expect(rendered.result.current.stoppingControllerIds.size).toBe(0);
 	});
+});
+
+it("routes virtual source Stop with exact identity and guards while pending", async () => {
+	const initial = runtime(["controller-virtual"]);
+	initial.instances[0].controllers[0] = {
+		...initial.instances[0].controllers[0],
+		programmer_id: undefined,
+		source: "renamed source label",
+		stop_owner: { kind: "virtual_playback", page: 2, playback_number: 1303 },
+	} as never;
+	const backend = api(initial);
+	const events = new Events();
+	const rendered = renderHook(() =>
+		useRunningDynamicsAuthority(true, SHOW_ID, backend, events),
+	);
+	await waitFor(() => expect(rendered.result.current.ready).toBe(true));
+	const row = rendered.result.current.rows[0];
+	await act(() => rendered.result.current.off(row));
+	expect(backend.offLive).not.toHaveBeenCalled();
+	expect(backend.stopRuntimeLive).toHaveBeenCalledWith(
+		{ kind: "virtual_playback", page: 2, playback_number: 1303 },
+		{
+			dynamicId: "dynamic-a",
+			instanceId: "instance-a",
+			controllerId: "controller-virtual",
+		},
+	);
+});
+
+it("retains trusted current-Programmer authoring Off and refuses unknown sources", async () => {
+	const initial = runtime();
+	initial.instances[0].controllers.push({
+		...initial.instances[0].controllers[0],
+		controller_id: "foreign",
+		programmer_id: "other-programmer",
+		source: "Programmer",
+	});
+	initial.instances[0].controllers.push({
+		...initial.instances[0].controllers[0],
+		controller_id: "cue",
+		programmer_id: undefined,
+		source: "Cue 1",
+	});
+	const backend = api(initial);
+	const events = new Events();
+	const rendered = renderHook(() =>
+		useRunningDynamicsAuthority(true, SHOW_ID, backend, events),
+	);
+	await waitFor(() => expect(rendered.result.current.ready).toBe(true));
+	const rows = rendered.result.current.rows;
+	await act(() => rendered.result.current.off(rows[0]));
+	expect(backend.offLive).toHaveBeenCalledExactlyOnceWith("controller-a");
+	for (const row of rows.slice(2)) {
+		expect(row.stopMode).toBeUndefined();
+		await act(async () => {
+			expect(await rendered.result.current.off(row)).toBe(false);
+		});
+	}
+	expect(backend.stopRuntimeLive).not.toHaveBeenCalled();
+	expect(backend.offLive).toHaveBeenCalledTimes(1);
+});
+it("issues one guarded playback Stop while pending and keeps rejection concise", async () => {
+	const backend = api();
+	const events = new Events();
+	let reject!: (e: Error) => void;
+	backend.stopRuntimeLive.mockImplementationOnce(
+		() =>
+			new Promise((_, r) => {
+				reject = r;
+			}),
+	);
+	const rendered = renderHook(() =>
+		useRunningDynamicsAuthority(true, SHOW_ID, backend, events),
+	);
+	await waitFor(() => expect(rendered.result.current.ready).toBe(true));
+	const row = rendered.result.current.rows[1];
+	let first!: Promise<boolean>;
+	await act(async () => {
+		first = rendered.result.current.off(row);
+		expect(await rendered.result.current.off(row)).toBe(false);
+	});
+	expect(backend.stopRuntimeLive).toHaveBeenCalledTimes(1);
+	await act(async () => {
+		reject(new Error("This source changed. Refresh Running and try again."));
+		expect(await first).toBe(false);
+	});
+	expect(rendered.result.current.error).toBe(
+		"This source changed. Refresh Running and try again.",
+	);
+	expect(rendered.result.current.error).not.toContain(" at ");
+	expect(rendered.result.current.stoppingControllerIds.size).toBe(0);
 });

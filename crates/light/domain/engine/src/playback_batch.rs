@@ -142,11 +142,43 @@ impl Engine {
         started_at: DateTime<Utc>,
         fallback_millis: u64,
     ) -> Result<PreparedPlaybackBatch, String> {
+        self.prepare_playback_batch_from_published(commands, started_at, fallback_millis, None)
+    }
+
+    pub fn prepare_playback_batch_from_published(
+        &self,
+        commands: &[PlaybackBatchCommand],
+        started_at: DateTime<Utc>,
+        fallback_millis: u64,
+        start: Option<&crate::PlaybackStartFrame>,
+    ) -> Result<PreparedPlaybackBatch, String> {
         let generation = self.generation.load_full();
+        let start = start.filter(|start| start.matches(&generation));
         let mut playback = generation.playback().read().clone();
         let outcomes: Vec<PlaybackBatchOutcome> = commands
             .iter()
-            .map(|command| apply_command(&mut playback, command, started_at, fallback_millis))
+            .map(|command| {
+                let identity = (command.number < light_playback::MIN_VIRTUAL_PLAYBACK)
+                    .then(|| PlaybackIdentity::physical(command.number))
+                    .transpose()?;
+                let seed = start
+                    .filter(|_| {
+                        matches!(
+                            command.action,
+                            PlaybackBatchAction::On
+                                | PlaybackBatchAction::Go
+                                | PlaybackBatchAction::Toggle
+                        )
+                    })
+                    .filter(|_| {
+                        identity.is_some_and(|id| !crate::playback_start::enabled(&playback, id))
+                    });
+                let outcome = apply_command(&mut playback, command, started_at, fallback_millis)?;
+                if let (Some(start), Some(identity)) = (seed, identity) {
+                    start.adopt(&mut playback, identity)?;
+                }
+                Ok::<_, String>(outcome)
+            })
             .collect::<Result<_, _>>()?;
         let before = generation.playback().read();
         let effect = playback.retained_runtime_effect_since(&before);

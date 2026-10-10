@@ -24,6 +24,7 @@ import type {
 import { type ReactNode, useEffect, useState } from "react";
 import { documentSession, type ProfileUpdate } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
+import { cadSession } from "./session";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
 import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
 import { hasAdjustableSize, placedSize, sizedScenery, sizeMeasures, storedSize } from "./sceneryAxes";
@@ -265,16 +266,28 @@ export function CadInfoPanel({
 			</section>
 		);
 
-	async function write(next: PatchFixtureProjection) {
+	const editedEntityId = entity.id;
+	async function write(next: PatchFixtureProjection, numeric = false) {
 		if (!fixture) return;
 		const before = fixture;
 		setFixture(next);
 		try {
-			await transport.patchFixtures("", 0, {
-				requestId: crypto.randomUUID(),
-				fixtures: [next],
-				removeFixtureIds: [],
-			});
+			if (numeric) {
+				const pose = editedEntityId === next.fixtureId ? next : next.multipatch.find((copy) => copy.id === editedEntityId);
+				if (!pose) throw new Error("The selected placement no longer exists");
+				await cadSession.setNumericTransforms(sceneRevision, [
+					{
+						id: editedEntityId,
+						positionMillimetres: [pose.location.x, pose.location.y, pose.location.z],
+						rotationDegrees: [pose.rotation.x, pose.rotation.y, pose.rotation.z],
+					},
+				]);
+			} else
+				await transport.patchFixtures("", 0, {
+					requestId: crypto.randomUUID(),
+					fixtures: [next],
+					removeFixtureIds: [],
+				});
 		} catch (reason) {
 			setFixture(before);
 			onError(reason);
@@ -285,7 +298,7 @@ export function CadInfoPanel({
 	const copy = copyId ? fixture?.multipatch?.find((each) => each.id === copyId) : undefined;
 	const placement: Placement | null = fixture ? (copyId ? (copy ?? null) : fixture) : null;
 	const place = (change: Partial<Placement>) => {
-		if (fixture && placement) void write(withPlacement(fixture, copyId, change));
+		if (fixture && placement) void write(withPlacement(fixture, copyId, change), !!(change.location || change.rotation));
 	};
 	const shared = placements.length > 1 ? " (all copies)" : "";
 	// A copy with no name of its own is shown under the fixture's name.

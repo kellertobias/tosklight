@@ -35,6 +35,7 @@ mod model_store;
 pub mod off_screen;
 mod opacity_cycle;
 mod outline_beat;
+mod output_device_inventory;
 pub mod pixel_output;
 pub mod presentation;
 mod preview;
@@ -139,6 +140,9 @@ fn run_inner() -> anyhow::Result<()> {
     let speed_groups = speed_groups::shared();
     let active_configuration =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(configuration.clone()));
+    let output_devices = output_device_inventory::Inventory::start(std::sync::Arc::new(
+        media_audio::try_output_devices,
+    ));
     let diagnostics = diagnostics_of(
         &models,
         &live,
@@ -153,6 +157,7 @@ fn run_inner() -> anyhow::Result<()> {
         &network_warnings,
         &console_identity,
         &available_monitors,
+        &output_devices,
         &speed_groups,
         started,
     );
@@ -223,11 +228,7 @@ fn run_inner() -> anyhow::Result<()> {
         result
     });
 
-    // Release the diagnostics lock before entering the long-lived native event loop.
-    let has_network_warnings = !network_warnings
-        .lock()
-        .unwrap_or_else(|error| error.into_inner())
-        .is_empty();
+    let has_network_warnings = has_network_warnings(&network_warnings);
     let presented = presentation::run_event_loop(
         &configuration,
         shared,
@@ -245,6 +246,14 @@ fn run_inner() -> anyhow::Result<()> {
     stop_background(importer, off_screen, audio);
     presented?;
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
+}
+
+fn has_network_warnings(warnings: &dmx_listeners::SharedWarnings) -> bool {
+    // Release the diagnostics lock before entering the long-lived native event loop.
+    !warnings
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .is_empty()
 }
 
 /// The picker, API and compositor share one discovered catalog.
@@ -575,6 +584,7 @@ fn diagnostics_of(
     network_warnings: &std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     console_identity: &citp::ConsoleIdentity,
     available_monitors: &std::sync::Arc<std::sync::RwLock<Vec<media_http::MonitorDevice>>>,
+    output_devices: &output_device_inventory::Inventory,
     received_speed_groups: &speed_groups::SharedSpeedGroups,
     started: std::time::Instant,
 ) -> media_http::Diagnostics {
@@ -583,6 +593,7 @@ fn diagnostics_of(
     let network_warnings = network_warnings.clone();
     let console_identity = console_identity.clone();
     let available_monitors = available_monitors.clone();
+    let output_devices = output_devices.clone();
     media_http::Diagnostics {
         models: models.access(live),
         audio: audio_input::telemetry(audio, analysis),
@@ -591,7 +602,7 @@ fn diagnostics_of(
             audio_input::permission_view(media_audio::permission::status())
         }),
         request_microphone_permission: audio_input::permission_request(audio, analysis, live),
-        output_devices: std::sync::Arc::new(media_audio::output_devices),
+        output_devices: std::sync::Arc::new(move || output_devices.snapshot()),
         monitors: std::sync::Arc::new(move || {
             available_monitors
                 .read()

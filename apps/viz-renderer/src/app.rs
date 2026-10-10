@@ -6,9 +6,10 @@ use crate::settings::{Options, Preferences, Startup};
 use crate::ui::{self, QuickSettings, QuickSettingsOutcome};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use viz_desk::{DeskConnection, DeskProvider};
 use viz_render::{CameraControl, FrameStats, Overlay, Renderer};
-use viz_scene::{Camera, ConnectionState, ProviderKind, ViewMode};
+#[cfg(test)]
+use viz_scene::ConnectionState;
+use viz_scene::{Camera, ProviderKind, ViewMode};
 use winit::application::ApplicationHandler;
 use winit::event::{
     DeviceEvent, DeviceId, ElementState, MouseButton, MouseScrollDelta, WindowEvent,
@@ -65,6 +66,9 @@ mod benchmark;
 mod draw;
 mod input;
 mod renderer_settings;
+mod sources;
+
+use sources::canonical_demo_show_path;
 
 use benchmark::BenchmarkSample;
 use draw::gpu_label;
@@ -132,6 +136,7 @@ pub struct Application {
     helper_source: Option<crate::helper_source::HelperSource>,
     /// The planning window opened when the visualizer was started with nothing to look at.
     planning_window: Option<crate::planner::PlanningWindow>,
+    source_authority: SourceAuthority,
     menu: Option<crate::menu::ApplicationMenu>,
     /// Scene revision the camera was last framed for, so a newly loaded scene is framed once.
     framed_revision: Option<u64>,
@@ -253,38 +258,12 @@ struct Measured {
     scene_ready: bool,
 }
 
-fn canonical_demo_show_path() -> Result<std::path::PathBuf, String> {
-    if let Some(path) = std::env::var_os("TOSKLIGHT_VIZ_DEMO_SHOW")
-        .filter(|value| !value.is_empty())
-        .map(std::path::PathBuf::from)
-    {
-        return path
-            .is_file()
-            .then_some(path.clone())
-            .ok_or_else(|| format!("{} is not a file", path.display()));
-    }
-    let checkout = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join("assets/demo.show");
-    if checkout.is_file() {
-        return Ok(checkout);
-    }
-    let executable = std::env::current_exe()
-        .map_err(|error| format!("resolve visualizer executable: {error}"))?;
-    let parent = executable
-        .parent()
-        .ok_or_else(|| "visualizer executable has no parent directory".to_owned())?;
-    for candidate in [
-        parent.join("demo-show/demo-show.show"),
-        parent.join("demo-show/demo.show"),
-        parent.join("../Resources/demo-show/demo-show.show"),
-        parent.join("../Resources/demo-show/demo.show"),
-    ] {
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-    }
-    Err("this build has no assets/demo.show or packaged demo-show/demo-show.show".to_owned())
+/// Which source the operator explicitly selected; inactive local documents stay recoverable.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SourceAuthority {
+    External,
+    LocalShow,
+    LocalPlanner,
 }
 
 impl Application {
@@ -345,6 +324,11 @@ impl Application {
             hosted_show: None,
             helper_source: None,
             planning_window: None,
+            source_authority: if options_for_paths.desk_requested {
+                SourceAuthority::External
+            } else {
+                SourceAuthority::LocalPlanner
+            },
             menu: None,
             framed_revision: None,
             adopted_source_view: 0,
@@ -369,143 +353,6 @@ impl Application {
             .as_ref()
             .map(gpu_label)
             .unwrap_or_else(|| "no renderer".into())
-    }
-
-    fn start_session(&mut self) {
-        let (provider, kind) = self.build_provider();
-        self.session = Some(Session::new(provider, kind, self.epoch));
-    }
-
-    /// Build the provider the current preferences select. Demo mode hosts the canonical show file
-    /// through the same path as every other standalone show.
-    fn build_provider(&mut self) -> (Box<dyn viz_scene::SceneProvider>, ProviderKind) {
-        // Started by the desk: everything drawn arrives over the channel on stdin, and this
-        // process chooses nothing. Taken once — the pipe cannot be read from twice — so a rebuild
-        // after the desk has gone falls through to the built-in scene rather than hanging on a
-        // channel nobody is writing to.
-        if self.options.helper
-            && let Some(source) = self.helper_source.take()
-        {
-            return (Box::new(source), ProviderKind::LightingDesk);
-        }
-        // The planning source is a document held by the Viz editor, so choosing it opens that
-        // window if it is not already open and connects to what it serves.
-        if self.preferences.source == ProviderKind::PlanningSoftware
-            && self.planning_window.is_none()
-            && !self.options.planning_server_requested
-            // An opened show file is the source for as long as it is open; nothing else is being
-            // asked for, and a planning window nobody wanted must not appear beside it.
-            && self.hosted_show.is_none()
-        {
-            match crate::planner::PlanningWindow::open() {
-                Ok(window) => {
-                    self.planning_window = Some(window);
-                    self.lasting_failure = None;
-                }
-                Err(error) => {
-                    eprintln!("open the planning window: {error}");
-                    self.lasting_failure = Some(format!("planning window: {error}"));
-                }
-            }
-        }
-        // An opened show file takes the place of the desk entirely: while one is open the
-        // visualizer talks to its own private server and never to the running desk.
-        // An opened show file or planning window takes the place of the desk entirely: while one
-        // is open the visualizer talks to its own private source and never to a running desk.
-        let local_port = self
-            .hosted_show
-            .as_ref()
-            .map(crate::showfile::HostedShow::port)
-            .or_else(|| self.planning_window.as_ref().map(|window| window.port()));
-        let local_port = local_port.filter(|_| {
-            self.hosted_show.is_some() || self.preferences.source == ProviderKind::PlanningSoftware
-        });
-        let (host, port) = match local_port {
-            Some(port) => ("127.0.0.1".to_owned(), port),
-            None => (self.preferences.host.clone(), self.preferences.port),
-        };
-        (
-            Box::new(DeskProvider::start(
-                DeskConnection {
-                    host,
-                    port,
-                    input_overrides: self
-                        .preferences
-                        .applied_input_overrides(self.hosted_show.is_some()),
-                    listen_interfaces: self.preferences.listen_interfaces.clone(),
-                    target: self.options.target.clone(),
-                    ..DeskConnection::default()
-                },
-                self.epoch,
-            )),
-            ProviderKind::LightingDesk,
-        )
-    }
-
-    /// Open a show file: start its private server, then point the session at it.
-    pub fn open_show_file(&mut self, path: &std::path::Path) {
-        match crate::showfile::HostedShow::open(path) {
-            Ok(hosted) => {
-                self.hosted_show = Some(hosted);
-                self.lasting_failure = None;
-                self.framed_revision = None;
-                self.camera_is_local = false;
-                self.reconnect();
-            }
-            Err(error) => {
-                if let Some(session) = self.session.as_mut() {
-                    session.connection = viz_scene::ConnectionState::Failed {
-                        boundary: path.display().to_string(),
-                        detail: error.clone(),
-                    };
-                }
-                eprintln!("open show file: {error}");
-            }
-        }
-    }
-
-    /// Close an opened show file and return to the desk the preferences name.
-    pub fn close_show_file(&mut self) {
-        self.lasting_failure = None;
-        if self.hosted_show.take().is_some() {
-            self.framed_revision = None;
-            self.camera_is_local = false;
-            self.reconnect();
-        }
-    }
-
-    /// Ask the operator for a show file and open it.
-    pub fn prompt_for_show_file(&mut self) {
-        let mut dialog = rfd::FileDialog::new()
-            .set_title("Open Show File")
-            .add_filter("ToskLight show", &["show"]);
-        if let Some(hosted) = self.hosted_show.as_ref()
-            && let Some(parent) = hosted.path().parent()
-        {
-            dialog = dialog.set_directory(parent);
-        }
-        if let Some(path) = dialog.pick_file() {
-            self.open_show_file(&path);
-        }
-    }
-
-    /// Open the product's rig-planning window and make its document the rendered source.
-    fn open_rig_editor(&mut self) {
-        self.lasting_failure = None;
-        if self.planning_window.is_none() {
-            match crate::planner::PlanningWindow::open() {
-                Ok(window) => self.planning_window = Some(window),
-                Err(error) => {
-                    self.lasting_failure = Some(format!("rig editor: {error}"));
-                    return;
-                }
-            }
-        }
-        self.hosted_show = None;
-        self.preferences.source = ProviderKind::PlanningSoftware;
-        self.framed_revision = None;
-        self.camera_is_local = false;
-        self.reconnect();
     }
 
     /// Open or close Quick Settings, with the source control saying what this build can connect.
@@ -567,57 +414,6 @@ impl Application {
                 }
                 self.stored_preferences = text;
             }
-        }
-    }
-
-    /// Notice a private server or planning window that has exited.
-    ///
-    /// Either one dying looks exactly like a slow connection from the inside, and an operator
-    /// staring at an empty picture deserves to be told which process is gone rather than left
-    /// watching a connection retry something that will never answer again.
-    fn watch_children(&mut self) {
-        let now = Instant::now();
-        if now < self.next_child_check {
-            return;
-        }
-        self.next_child_check = now + Duration::from_secs(1);
-        let mut gone: Option<(String, String)> = None;
-        if let Some(hosted) = self.hosted_show.as_mut()
-            && hosted.exited()
-        {
-            gone = Some((
-                hosted.label(),
-                "the private server for this show file exited".to_owned(),
-            ));
-            self.hosted_show = None;
-        }
-        if let Some(planning) = self.planning_window.as_mut()
-            && planning.exited()
-        {
-            gone = Some((
-                "planning window".to_owned(),
-                "the Viz editor was closed; open a show file or connect to a desk".to_owned(),
-            ));
-            self.planning_window = None;
-        }
-        if let Some((boundary, detail)) = gone {
-            // The connection keeps its own states, and it will go on reporting a refused socket
-            // over the top of this, so the reason is kept where it stays put until it is dealt
-            // with. The picture that was last drawn stays on screen underneath it.
-            self.lasting_failure = Some(format!("{boundary}: {detail}"));
-            if let Some(session) = self.session.as_mut() {
-                session.connection = ConnectionState::Failed { boundary, detail };
-            }
-        }
-    }
-
-    /// Stage a new connection. The current scene stays on screen until the candidate validates.
-    fn reconnect(&mut self) {
-        let (provider, kind) = self.build_provider();
-        if let Some(session) = self.session.as_mut() {
-            session.replace_provider(provider, kind);
-        } else {
-            self.session = Some(Session::new(provider, kind, self.epoch));
         }
     }
 
@@ -837,10 +633,18 @@ impl Application {
     fn apply_outcome(&mut self, outcome: QuickSettingsOutcome) {
         match outcome {
             QuickSettingsOutcome::Connect { host, port } => {
+                self.source_authority = SourceAuthority::External;
+                self.lasting_failure = None;
+                self.framed_revision = None;
+                self.camera_is_local = false;
                 self.quick_settings.message = format!("Connecting to {host}:{port}");
                 self.reconnect();
             }
             QuickSettingsOutcome::SourceChanged(kind) => {
+                self.source_authority = SourceAuthority::External;
+                self.lasting_failure = None;
+                self.framed_revision = None;
+                self.camera_is_local = false;
                 self.quick_settings.message = format!("Switching to {}", kind.label());
                 self.reconnect();
             }
@@ -1015,7 +819,10 @@ impl ApplicationHandler for Application {
         let mut lasting_failure = None;
         match self.options.startup() {
             Startup::Show(path) => match crate::showfile::HostedShow::open(&path) {
-                Ok(hosted) => self.hosted_show = Some(hosted),
+                Ok(hosted) => {
+                    self.hosted_show = Some(hosted);
+                    self.source_authority = SourceAuthority::LocalShow;
+                }
                 Err(error) => {
                     eprintln!("open show file: {error}");
                     lasting_failure = Some((path.display().to_string(), error));
@@ -1023,7 +830,10 @@ impl ApplicationHandler for Application {
             },
             Startup::Demo => match canonical_demo_show_path() {
                 Ok(path) => match crate::showfile::HostedShow::open(&path) {
-                    Ok(hosted) => self.hosted_show = Some(hosted),
+                    Ok(hosted) => {
+                        self.hosted_show = Some(hosted);
+                        self.source_authority = SourceAuthority::LocalShow;
+                    }
                     Err(error) => {
                         eprintln!("open canonical demo show: {error}");
                         lasting_failure = Some((path.display().to_string(), error));
@@ -1038,6 +848,7 @@ impl ApplicationHandler for Application {
                 // Nothing was named, so this launch is looking at a planning document: the source
                 // control has to say so, and switching away from it has to mean something.
                 self.preferences.source = ProviderKind::PlanningSoftware;
+                self.source_authority = SourceAuthority::LocalPlanner;
                 match crate::planner::PlanningWindow::open() {
                     Ok(window) => self.planning_window = Some(window),
                     Err(error) => {
@@ -1063,7 +874,7 @@ impl ApplicationHandler for Application {
                     }
                 }
             }
-            Startup::Desk => {}
+            Startup::Desk => self.source_authority = SourceAuthority::External,
         }
         // The connection the session then makes has its own states to report, so the reason this
         // launch could not open what it was asked for is kept beside them until it is fixed.
@@ -1304,9 +1115,7 @@ impl ApplicationHandler for Application {
         // made in the final seconds before they closed the window.
         self.next_preferences_save = Instant::now();
         self.save_preferences();
-        if let Some(session) = self.session.as_mut() {
-            session.shutdown();
-        }
+        self.shutdown_owned_sources();
     }
 }
 

@@ -42,6 +42,19 @@ export const cadSession = {
 		}>,
 	) =>
 		invoke<CadTransformOutcome>("cad_set_transforms", { expectedSceneRevision, transforms }),
+	/** Exact numeric poses: base and copy edits never shift other physical placements. */
+	setNumericTransforms: (
+		expectedSceneRevision: number,
+		transforms: ReadonlyArray<{
+			id: string;
+			positionMillimetres: [number, number, number];
+			rotationDegrees: [number, number, number];
+		}>,
+	) =>
+		invoke<CadTransformOutcome>("cad_set_numeric_transforms", {
+			expectedSceneRevision,
+			transforms,
+		}),
 	/** Adds whole fixtures, such as copies, as one step that `undo` takes away again. */
 	add: (expectedSceneRevision: number, fixtures: readonly unknown[]) =>
 		invoke<{ sceneRevision: number; addedIds: string[] }>("cad_add", {

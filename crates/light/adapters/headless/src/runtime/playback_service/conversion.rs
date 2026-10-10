@@ -126,7 +126,9 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Go { .. } => "go",
         PlaybackAction::Back { .. } => "go-minus",
         PlaybackAction::Pause { .. } => "pause",
-        PlaybackAction::Release => "release",
+        // The numbered control dispatcher exposes the immediate release as Off.
+        // Direct Cuelist and dedicated virtual runtimes handle Release as a typed action.
+        PlaybackAction::Release => "off",
         PlaybackAction::On { .. } => "on",
         PlaybackAction::Off { .. } => "off",
         PlaybackAction::Toggle { .. } => "toggle",
@@ -152,7 +154,8 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Crossfade { enabled: false } => "xfade-off",
         PlaybackAction::Temporary { enabled: true, .. } => "temp-on",
         PlaybackAction::Temporary { enabled: false, .. } => "temp-off",
-        PlaybackAction::Master(_)
+        PlaybackAction::RuntimeStopDynamic { .. }
+        | PlaybackAction::Master(_)
         | PlaybackAction::MasterTransition { .. }
         | PlaybackAction::GoTo(_)
         | PlaybackAction::Load(_)

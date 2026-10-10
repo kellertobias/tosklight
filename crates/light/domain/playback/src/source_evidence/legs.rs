@@ -6,10 +6,10 @@ type EndpointMap = HashMap<AttributeAddress, EndpointEvidence>;
 /// The underlying timed route remains available if an existing control cancels the manual leg.
 #[derive(Clone, Debug)]
 pub(super) struct ManualLeg {
-    base: Option<Box<PlaybackSourceHistory>>,
+    pub(super) base: Option<Box<PlaybackSourceHistory>>,
     from_index: usize,
     to_index: usize,
-    from: Arc<EndpointMap>,
+    pub(super) from: Arc<EndpointMap>,
 }
 
 impl PlaybackSourceHistory {

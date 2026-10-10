@@ -433,3 +433,190 @@ fn profile_with_modes(count: usize) -> crate::FixtureProfile {
         .collect();
     profile
 }
+
+/// Exercise the same retained legacy optical model that the runtime importer projects.
+fn assert_projected_color_context_keeps_original_recipe(profile: crate::FixtureProfile) {
+    use light_core::NativeColorValue;
+    use light_core::programming::{
+        ColorProgram, DirectDestination, DirectReplay, NativeColorEditModel, NativeColorRecipe,
+        plan_direct_replay,
+    };
+    let mode = &profile.modes[0];
+    let mode_id = mode.id;
+    let original = crate::CompiledNativeColorEditModel::compile_mode(&profile, mode_id)
+        .unwrap()
+        .remove(0)
+        .1
+        .unwrap();
+    let original_identity = original.source().clone();
+    let mut placed = fixture(&profile);
+    placed.logical_heads[0].head_index = 0;
+    placed.logical_heads[0].profile_head_id = Some(mode.heads[0].id);
+    let record = PortablePatchedFixtureRecord::from_profile_reference(
+        PatchedFixtureProfileReference {
+            profile_id: profile.id,
+            profile_revision: profile.revision.into(),
+            mode_id,
+        },
+        PatchedFixturePatch::from_fixture(&placed),
+    )
+    .unwrap();
+    let compiled = PatchedFixtureCompiler::new(CountingResolver {
+        source: Some(source(&profile)),
+        calls: 0,
+    })
+    .compile(&record)
+    .unwrap();
+    let runtime = compiled.definition.profile_snapshot.as_ref().unwrap();
+    let context = compiled.definition.runtime_color_context.as_ref().unwrap();
+    assert_eq!(
+        context.identities(),
+        std::slice::from_ref(&original_identity)
+    );
+    assert_ne!(
+        serde_json::to_value(&mode.color_physical).unwrap(),
+        serde_json::to_value(&runtime.mode(mode_id).unwrap().color_physical).unwrap(),
+        "fixture must exercise a real compatibility projection"
+    );
+    context.validate_runtime_profile(runtime, mode_id).unwrap();
+    let forward = crate::forward::CompiledColorForward::compile_with_context(
+        runtime,
+        mode_id,
+        None,
+        Some(context),
+    )
+    .unwrap()
+    .unwrap();
+    assert!(crate::forward::CompiledColorFitting::from_forward(runtime, mode_id, forward).is_ok());
+    let destination = crate::CompiledNativeColorEditModel::compile_mode(runtime, mode_id)
+        .unwrap()
+        .remove(0)
+        .1
+        .unwrap();
+    for (family, raw) in [("color.red", 32), ("color.blue", 64)] {
+        let path = &mode.color_physical.as_ref().unwrap().paths[0];
+        if !mode
+            .channels
+            .iter()
+            .any(|channel| &*channel.attribute.0 == family)
+        {
+            continue;
+        }
+        let channels = path
+            .controls
+            .iter()
+            .map(|id| {
+                let channel = mode
+                    .channels
+                    .iter()
+                    .find(|channel| channel.id == *id)
+                    .unwrap();
+                let function = &channel.functions[0];
+                NativeColorValue {
+                    channel_id: channel.id,
+                    function_id: function.id,
+                    raw: if &*channel.attribute.0 == family {
+                        raw
+                    } else {
+                        0
+                    },
+                }
+            })
+            .collect();
+        let recipe = NativeColorRecipe {
+            source: original_identity.clone(),
+            channels,
+            spreads: vec![],
+        };
+        let portable = original.predict(&recipe).unwrap();
+        let program = ColorProgram::Direct {
+            recipe: recipe.clone(),
+            portable,
+        };
+        assert!(
+            matches!(plan_direct_replay(&program, &DirectDestination::Verified(&destination)).unwrap(),
+            DirectReplay::Exact { recipe: exact } if exact == recipe)
+        );
+    }
+    let mut forged = runtime.as_ref().clone();
+    forged
+        .modes
+        .iter_mut()
+        .find(|mode| mode.id == mode_id)
+        .unwrap()
+        .color_physical
+        .as_mut()
+        .unwrap()
+        .revision += 1;
+    assert!(
+        context.validate_runtime_profile(&forged, mode_id).is_err(),
+        "generic context validation must continue rejecting an unapproved optical model"
+    );
+    let mut forged_physical = runtime.as_ref().clone();
+    forged_physical
+        .modes
+        .iter_mut()
+        .find(|mode| mode.id == mode_id)
+        .unwrap()
+        .channels[0]
+        .physical_min = Some(0.5);
+    assert_eq!(
+        forged_physical.native_color_identities(mode_id).unwrap()[0].native_layout_signature,
+        runtime.native_color_identities(mode_id).unwrap()[0].native_layout_signature,
+        "physical fields are deliberately excluded from the compact native layout signature"
+    );
+    let mut physical_rebound = context.as_ref().clone();
+    let before_physical_mode = serde_json::to_value(physical_rebound.mode()).unwrap();
+    assert!(
+        physical_rebound
+            .rebind_verified_runtime_projection(&forged_physical, mode_id)
+            .is_err()
+    );
+    assert_eq!(
+        serde_json::to_value(physical_rebound.mode()).unwrap(),
+        before_physical_mode
+    );
+    let mut forged_layout = runtime.as_ref().clone();
+    let channel = &mut forged_layout
+        .modes
+        .iter_mut()
+        .find(|mode| mode.id == mode_id)
+        .unwrap()
+        .channels[0];
+    channel.default_raw = 1;
+    let mut rebound = context.as_ref().clone();
+    let before_mode = serde_json::to_value(rebound.mode()).unwrap();
+    assert!(
+        rebound
+            .rebind_verified_runtime_projection(&forged_layout, mode_id)
+            .is_err()
+    );
+    assert_eq!(
+        serde_json::to_value(rebound.mode()).unwrap(),
+        before_mode,
+        "rejected native layout must not partially replace the context"
+    );
+}
+
+#[test]
+fn projected_legacy_gdtf_color_context_preserves_exact_native_recipe() {
+    use std::io::Write;
+    let xml = r#"<GDTF DataVersion="1.2"><FixtureType Name="Optical context" Manufacturer="Contract" FixtureTypeID="684af0b8-5e84-4e28-a8a2-687647b2b515"><AttributeDefinitions><Attributes><Attribute Name="ColorAdd_R"/><Attribute Name="ColorAdd_B"/></Attributes></AttributeDefinitions><PhysicalDescriptions><Emitters><Emitter Name="Red" Color="0.64,0.33,21.26729"/><Emitter Name="Blue" Color="0.15,0.06,7.2175"/></Emitters></PhysicalDescriptions><DMXModes><DMXMode Name="RB"><DMXChannels><DMXChannel Offset="1" Geometry="Head"><LogicalChannel Attribute="ColorAdd_R"><ChannelFunction Name="Red" Attribute="ColorAdd_R" DMXFrom="0/1" PhysicalFrom="0" PhysicalTo="1" Emitter="Red"/></LogicalChannel></DMXChannel><DMXChannel Offset="2" Geometry="Head"><LogicalChannel Attribute="ColorAdd_B"><ChannelFunction Name="Blue" Attribute="ColorAdd_B" DMXFrom="0/1" PhysicalFrom="0" PhysicalTo="1" Emitter="Blue"/></LogicalChannel></DMXChannel></DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>"#;
+    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    archive
+        .start_file("description.xml", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    archive.write_all(xml.as_bytes()).unwrap();
+    let bytes = archive.finish().unwrap().into_inner();
+    let mut profile = crate::gdtf::read::import_legacy_optical_profile(&bytes).unwrap();
+    profile.source_gdtf = Some(crate::ProfileGdtfSource::associate(&profile, &bytes).unwrap());
+    assert_projected_color_context_keeps_original_recipe(profile);
+}
+
+#[test]
+#[ignore = "explicit local retained manufacturer acceptance profile; not shipped fixture data"]
+fn projected_retained_brighter_color_context_preserves_exact_native_recipe() {
+    let path = std::env::var("LIGHT_FIXTURE_ACCEPTANCE_PROFILE").unwrap();
+    let profile = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    assert_projected_color_context_keeps_original_recipe(profile);
+}

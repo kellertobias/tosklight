@@ -39,11 +39,13 @@ export interface ServerShowContext {
 	previewMvr: (
 		file: File,
 		showId?: string,
+        signal?: AbortSignal,
 	) => Promise<import("../../api/types").MvrImportPreview>;
 	applyMvr: (
 		token: string,
 		input: {
 			new_show?: { name: string; open_after_import: boolean };
+            copy_conflicting_profiles?: boolean;
 			existing_show_id?: string;
 			resolutions?: Record<
 				string,

@@ -34,6 +34,23 @@ const OPTIMISTIC_RESET = {
 };
 
 describe("ProgrammingCommandLineWriter", () => {
+	it("retires command feedback on the next edit before its request completes", async () => {
+		const store = readyStore();
+		const request = deferred<CommandLineProjection>();
+		const onEdit = vi.fn();
+		const writer = new ProgrammingCommandLineWriter({
+			deskId: DESK_ID,
+			store,
+			onEdit,
+			replace: vi.fn().mockReturnValue(request.promise),
+			loadSnapshot: vi.fn(),
+		});
+		const pending = writer.replace("FIXTURE 8");
+		expect(onEdit).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().commandLine?.text).toBe("FIXTURE 8");
+		request.resolve(commandLine(2, "FIXTURE 8"));
+		await expect(pending).resolves.toBe(true);
+	});
 	it("coalesces unsent edits and chooses each revision immediately before sending", async () => {
 		const store = readyStore();
 		const firstRequest = deferred<CommandLineProjection>();
@@ -59,12 +76,7 @@ describe("ProgrammingCommandLineWriter", () => {
 		firstRequest.resolve(commandLine(2, "FIXTURE 1"));
 		await expect(first).resolves.toBe(true);
 		await vi.waitFor(() => expect(replace).toHaveBeenCalledTimes(2));
-		expect(replace).toHaveBeenNthCalledWith(
-			2,
-			DESK_ID,
-			"FIXTURE 123",
-			2,
-		);
+		expect(replace).toHaveBeenNthCalledWith(2, DESK_ID, "FIXTURE 123", 2);
 		expect(store.getSnapshot().commandLine).toMatchObject({
 			text: "FIXTURE 123",
 			revision: 2,
@@ -162,9 +174,11 @@ describe("ProgrammingCommandLineWriter", () => {
 			deskId: DESK_ID,
 			store,
 			replace,
-			loadSnapshot: vi.fn().mockResolvedValue(
-				programmingSnapshot({ sequence: 11, command: commandLine(1) }),
-			),
+			loadSnapshot: vi
+				.fn()
+				.mockResolvedValue(
+					programmingSnapshot({ sequence: 11, command: commandLine(1) }),
+				),
 			onError,
 		});
 
@@ -228,14 +242,9 @@ describe("ProgrammingCommandLineWriter", () => {
 		const execute = vi.fn(() => execution.promise);
 
 		const before = writer.replace("FIXTURE 1");
-		const outcome = writer.executeAfterPendingWrites(
-			execute,
-			OPTIMISTIC_RESET,
-		);
+		const outcome = writer.executeAfterPendingWrites(execute, OPTIMISTIC_RESET);
 		expect(store.getSnapshot().commandLine?.text).toBe("FIXTURE");
-		const after = writer.replace(
-			`${store.getSnapshot().commandLine?.text} 2`,
-		);
+		const after = writer.replace(`${store.getSnapshot().commandLine?.text} 2`);
 		expect(store.getSnapshot().commandLine?.text).toBe("FIXTURE 2");
 		expect(replace).toHaveBeenCalledTimes(1);
 
@@ -263,18 +272,17 @@ describe("ProgrammingCommandLineWriter", () => {
 			deskId: DESK_ID,
 			store,
 			replace,
-			loadSnapshot: vi.fn().mockResolvedValue(
-				programmingSnapshot({ sequence: 12, command: commandLine(3) }),
-			),
+			loadSnapshot: vi
+				.fn()
+				.mockResolvedValue(
+					programmingSnapshot({ sequence: 12, command: commandLine(3) }),
+				),
 		});
 		const execute = vi.fn().mockResolvedValue(true);
 
 		const failed = writer.replace("FIXTURE 1");
 		const latest = writer.replace("FIXTURE 12");
-		const outcome = writer.executeAfterPendingWrites(
-			execute,
-			OPTIMISTIC_RESET,
-		);
+		const outcome = writer.executeAfterPendingWrites(execute, OPTIMISTIC_RESET);
 		obsolete.reject(new Error("offline"));
 
 		await expect(failed).resolves.toBe(false);
@@ -330,10 +338,7 @@ describe("ProgrammingCommandLineWriter", () => {
 		const execute = vi.fn().mockResolvedValue(true);
 
 		const write = writer.replace("FIXTURE 1");
-		const outcome = writer.executeAfterPendingWrites(
-			execute,
-			OPTIMISTIC_RESET,
-		);
+		const outcome = writer.executeAfterPendingWrites(execute, OPTIMISTIC_RESET);
 		const after = writer.replace("FIXTURE 2");
 		request.reject(new Error("response lost"));
 
@@ -355,9 +360,11 @@ describe("ProgrammingCommandLineWriter", () => {
 			deskId: DESK_ID,
 			store,
 			replace: vi.fn(),
-			loadSnapshot: vi.fn().mockResolvedValue(
-				programmingSnapshot({ sequence: 12, command: commandLine(3) }),
-			),
+			loadSnapshot: vi
+				.fn()
+				.mockResolvedValue(
+					programmingSnapshot({ sequence: 12, command: commandLine(3) }),
+				),
 		});
 
 		const first = writer.executeAfterPendingWrites(execute, OPTIMISTIC_RESET);
@@ -413,9 +420,11 @@ describe("ProgrammingCommandLineWriter", () => {
 			deskId: DESK_ID,
 			store,
 			replace: vi.fn(),
-			loadSnapshot: vi.fn().mockResolvedValue(
-				programmingSnapshot({ sequence: 12, command: commandLine(3) }),
-			),
+			loadSnapshot: vi
+				.fn()
+				.mockResolvedValue(
+					programmingSnapshot({ sequence: 12, command: commandLine(3) }),
+				),
 			onError,
 		});
 
@@ -446,7 +455,9 @@ describe("ProgrammingCommandLineWriter", () => {
 		await Promise.resolve();
 
 		writer.stop();
-		request.reject(Object.assign(new Error("revision conflict"), { status: 409 }));
+		request.reject(
+			Object.assign(new Error("revision conflict"), { status: 409 }),
+		);
 
 		await expect(write).resolves.toBe(false);
 		await Promise.resolve();

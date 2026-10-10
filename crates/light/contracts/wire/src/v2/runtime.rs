@@ -331,10 +331,31 @@ pub struct RuntimeVisualizationDiagnostics {
     pub stream_queue_drops: u64,
 }
 
+#[derive(Clone, Copy, Debug, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeRouteDeliveryState {
+    AwaitingFirstSend,
+    Sending,
+    SendFailed,
+}
+
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeOutputDeliveryStatus {
+    pub protocol: String,
+    pub universe: u16,
+    pub destination: String,
+    pub delivery_state: RuntimeRouteDeliveryState,
+    pub current_error: Option<String>,
+}
+
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeDiagnosticsSnapshot {
     pub output: RuntimeOutputHealth,
     pub output_bind_ip: String,
+    /// Absent on older servers. OS send acceptance does not prove receiver health.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub output_delivery_status: Option<Vec<RuntimeOutputDeliveryStatus>>,
     #[ts(type = "unknown")]
     pub output_routes: serde_json::Value,
     #[ts(type = "unknown")]

@@ -18,6 +18,7 @@ pub(super) async fn apply_legacy_mvr_import(
     } = legacy;
     let ActiveMvrImport {
         entry,
+        destination_revision,
         document,
         definitions,
         new_profiles,
@@ -31,7 +32,15 @@ pub(super) async fn apply_legacy_mvr_import(
         .join("shows")
         .join(format!(".mvr-{}.show", Uuid::new_v4()));
     let source_store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
-    let source_revision = source_store.portable_revision().map_err(ApiError::store)?;
+    let source = source_store.portable_document().map_err(ApiError::store)?;
+    let source_revision = source.revision();
+    if let Some(expected) = destination_revision
+        && expected != (source.revision(), source.patch_revision())
+    {
+        return Err(ApiError::conflict(
+            "MVR destination changed after preview. Inspect the archive again before importing.",
+        ));
+    }
     source_store
         .backup_to(&temporary)
         .map_err(ApiError::store)?;
@@ -59,6 +68,7 @@ pub(super) async fn apply_legacy_mvr_import(
             &session,
             ActiveMvrImport {
                 entry,
+                destination_revision,
                 document,
                 definitions,
                 new_profiles,

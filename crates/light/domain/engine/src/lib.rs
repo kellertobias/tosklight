@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 //! Deterministic bridge from fixture attributes and playbacks to immutable DMX universe frames.
 
+mod aim_target;
+pub use aim_target::{aim_target_from_geometry, saved_aim_targets};
+
 mod physical_projection;
 pub use physical_projection::{PhysicalForwardFrame, PhysicalInstanceOutput, PhysicalModelSupport};
 mod channel_slots;
@@ -20,6 +23,8 @@ pub use frame_token::{CapturedFrameLane, CapturedFrameToken};
 mod frame_values;
 mod group_plan;
 mod group_programming;
+mod replacement_projection;
+pub use replacement_projection::ReplacementDestinationPlan;
 mod lifecycle;
 mod model;
 mod native_position_projection;
@@ -45,6 +50,7 @@ mod move_in_black_runtime;
 mod playback;
 mod playback_batch;
 mod playback_exclusion;
+mod playback_start;
 mod point_projection;
 mod position_adoption;
 pub use position_adoption::{PositionCommandedOwnerReadout, PositionCommandedReadout};
@@ -113,6 +119,7 @@ pub use playback_batch::{
     PreparedPreloadPlaybackBatch,
 };
 pub use playback_exclusion::PoolPlaybackTransition;
+pub use playback_start::PlaybackStartFrame;
 pub use point_projection::{POINT_AXIS_METRES, ResolvedPointPose};
 pub use render_phases::{
     accumulated_microseconds, enabled as render_phases_enabled, reset as reset_render_phases,

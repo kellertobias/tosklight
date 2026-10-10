@@ -1,9 +1,11 @@
+mod cue_presets;
 mod dynamic_presets;
 mod migrations;
 mod native_sources;
 mod objects;
 mod patch;
 mod prepare;
+mod replacement_projection;
 
 #[cfg(test)]
 mod tests;
@@ -40,6 +42,7 @@ pub(crate) struct ShowCompileDirty {
 pub(crate) fn compile_show_candidate(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<EngineSnapshot, ActionError> {
+    replacement_projection::validate(candidate)?;
     let fixtures = patch::compile_patch(candidate)?;
     let cue_lists = objects::decode_cue_lists(candidate)?;
     let groups = objects::decode_groups(candidate)?;
@@ -49,6 +52,9 @@ pub(crate) fn compile_show_candidate(
     let mut playback_pages = objects::decode(candidate, "playback_page")?;
     let routes = objects::decode(candidate, "route")?;
     let control_mappings = objects::decode(candidate, "control_mapping")?;
+    validate_cuelist_namespace(&cue_lists)?;
+    light_playback::CueListPoolCatalog::build(&cue_lists, &playbacks, playback_pages.is_empty())
+        .map_err(|error| crate::ActionError::new(crate::ActionErrorKind::Invalid, error))?;
     objects::supply_playback_defaults(&cue_lists, &mut playbacks, &mut playback_pages);
     Ok(EngineSnapshot {
         required_programming_contract,
@@ -66,6 +72,17 @@ pub(crate) fn compile_show_candidate(
     })
 }
 
+fn validate_cuelist_namespace(lists: &[light_playback::CueList]) -> Result<(), ActionError> {
+    if lists.iter().any(|list| list.pool_number.is_some())
+        && lists.iter().any(|list| list.pool_number.is_none())
+    {
+        return Err(invalid_candidate(
+            "Cuelist address metadata must migrate atomically for every Cuelist",
+        ));
+    }
+    Ok(())
+}
+
 fn invalid_candidate(message: impl Into<String>) -> ActionError {
     ActionError::new(ActionErrorKind::Invalid, message)
 }
@@ -80,6 +97,9 @@ fn compile_show_candidate_incremental(
     previous: &EngineSnapshot,
     dirty: ShowCompileDirty,
 ) -> Result<EngineSnapshot, ActionError> {
+    if dirty.cue_lists || dirty.presets || dirty.groups {
+        replacement_projection::validate(candidate)?;
+    }
     let mut snapshot = previous.clone();
     snapshot.revision = candidate.revision().value();
 
@@ -88,10 +108,24 @@ fn compile_show_candidate_incremental(
             native_sources::compile(candidate, Some(&previous.native_color_sources))?;
     }
 
-    if dirty.cue_lists {
+    if dirty.cue_lists
+        || ((dirty.presets
+            || dirty.native_sources
+            || (dirty.fixtures
+                && candidate.objects_of_kind("preset").any(|object| {
+                    object
+                        .body()
+                        .get("aim_at_fixture_number")
+                        .is_some_and(|value| value.is_number())
+                })))
+            && previous.cue_lists.iter().any(|list| {
+                list.required_programming_contract()
+                    >= light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT
+            }))
+    {
         snapshot.cue_lists = objects::decode_cue_lists(candidate)?.into();
     }
-    if dirty.dynamics || dirty.presets || dirty.groups {
+    if dirty.dynamics || dirty.presets || dirty.groups || dirty.cue_lists {
         let groups = if dirty.groups {
             objects::decode_groups(candidate)?
         } else {
@@ -123,6 +157,13 @@ fn compile_show_candidate_incremental(
     if dirty.cue_lists || dirty.playbacks || dirty.playback_pages {
         let mut playbacks = objects::decode(candidate, "playback")?;
         let mut playback_pages = objects::decode(candidate, "playback_page")?;
+        validate_cuelist_namespace(snapshot.cue_lists.as_slice())?;
+        light_playback::CueListPoolCatalog::build(
+            snapshot.cue_lists.as_slice(),
+            &playbacks,
+            playback_pages.is_empty(),
+        )
+        .map_err(|error| crate::ActionError::new(crate::ActionErrorKind::Invalid, error))?;
         objects::supply_playback_defaults(
             snapshot.cue_lists.as_slice(),
             &mut playbacks,

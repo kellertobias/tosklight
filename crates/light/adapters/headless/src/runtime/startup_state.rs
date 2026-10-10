@@ -142,6 +142,7 @@ pub(super) struct PersistentState {
     pub(super) extensions_dir: PathBuf,
     pub(super) bind: SocketAddr,
     pub(super) test_bench: bool,
+    pub(super) visualizer_preview: bool,
     pub(super) desk: DeskStore,
     pub(super) fixture_library: FixtureLibrary,
     pub(super) configuration: DeskConfiguration,
@@ -157,6 +158,7 @@ impl PersistentState {
             extensions_dir,
             bind,
             test_bench,
+            visualizer_preview,
             osc_bind_override,
             output_bind_override,
         } = options;
@@ -184,6 +186,7 @@ impl PersistentState {
             extensions_dir,
             bind,
             test_bench,
+            visualizer_preview,
             desk,
             fixture_library,
             configuration,

@@ -87,7 +87,8 @@ function assertRuntimeRoute(
 		projection.playback_number == null
 			? projection.target === "cue_list"
 				? `cuelist:${projection.cue_list_id}`
-				: projection.requested.kind === "cue_list"
+				: projection.requested.kind === "cue_list" ||
+						projection.requested.kind === "direct_cue_list"
 					? `cuelist:${projection.requested.cue_list_id}`
 					: projection.requested.kind === "playback"
 						? `playback:${projection.requested.playback_number}`

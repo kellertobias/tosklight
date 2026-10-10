@@ -30,6 +30,7 @@ export function MvrImport({
 		() => defaultResolutions(preview),
 	);
 	const [busy, setBusy] = useState(false);
+    const [copyConflictingProfiles,setCopyConflictingProfiles] = useState(false);
 	const [completed, setCompleted] = useState<{
 		summary: string;
 		warnings: string[];
@@ -40,9 +41,10 @@ export function MvrImport({
 	const undecided = preview.fixtures.filter(needsDecision);
 
 	async function apply() {
+        if ((preview.profileConflicts?.length ?? 0)>0 && !copyConflictingProfiles) return;
 		setBusy(true);
 		try {
-			const report = await documentSession.importMvr(preview.token, resolutions);
+			const report = await documentSession.importMvr(preview.token, resolutions, copyConflictingProfiles);
 			const unresolved = report.unresolvedFixtures
 				? `, ${report.unresolvedFixtures} unresolved`
 				: "";
@@ -102,6 +104,32 @@ export function MvrImport({
 					))}
 				</ul>
 			)}
+			{(preview.profileConflicts?.length ?? 0) > 0 && (
+				<div className="viz-editor-mvr-warning">
+					<p>These immutable fixture profiles differ from existing revisions:</p>
+					<ul>
+						{preview.profileConflicts?.map((conflict) => (
+							<li key={`${conflict.profileId}:${conflict.revision}`}>
+								{conflict.name} · revision {conflict.revision} · {conflict.fixtures.length} fixtures
+							</li>
+						))}
+					</ul>
+					<label>
+						<input
+							type="checkbox"
+							checked={copyConflictingProfiles}
+							onChange={(event) => setCopyConflictingProfiles(event.target.checked)}
+							disabled={busy}
+						/> Import conflicting profiles as new identities
+					</label>
+					<p>
+						The exact archive profiles are copied. Existing profiles and unrelated fixtures stay unchanged.
+						Identity-bound installed calibration is retained and becomes inactive until revalidated for the new
+						profile identity. Retained GDTF source evidence keeps its original association; export generates
+						GDTF if it no longer matches.
+					</p>
+				</div>
+			)}
 			<ImportWarnings warnings={preview.warnings} />
 			{undecided.length === 0 ? (
 				<p className="viz-editor-mvr-clean">
@@ -120,7 +148,7 @@ export function MvrImport({
 				</ul>
 			)}
 			<div className="viz-editor-mvr-actions">
-				<Button variant="primary" disabled={busy} onClick={() => void apply()}>
+				<Button variant="primary" disabled={busy || ((preview.profileConflicts?.length ?? 0)>0 && !copyConflictingProfiles)} onClick={() => void apply()}>
 					{busy ? "Importing…" : "Import"}
 				</Button>
 				<Button disabled={busy} onClick={() => void cancel()}>

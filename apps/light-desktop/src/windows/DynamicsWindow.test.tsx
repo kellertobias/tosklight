@@ -181,6 +181,18 @@ function dynamicObject({
 }
 
 describe("DynamicsWindow", () => {
+	it("derives the pool symbol from configured lanes and updates it after editing", () => {
+		const object = dynamicObject({ multipleLanes: true });
+		object.body.icon = "star";
+		dynamics = [object];
+		const view = renderWindow();
+		expect(screen.getByRole("img", { name: "Lanes: Intensity, Position" })).toBeTruthy();
+		object.body.lanes = [createDefaultDynamicLane("color.hue", "color-lane"), createDefaultDynamicLane("zoom", "zoom-lane")];
+		view.rerender(windowView());
+		expect(screen.getByRole("img", { name: "Lanes: Color, Other" })).toBeTruthy();
+		expect(screen.queryByRole("img", { name: "Lanes: Intensity, Position" })).toBeNull();
+	});
+
 	afterEach(cleanup);
 	beforeEach(() => {
 		Object.defineProperty(window, "localStorage", {
@@ -383,7 +395,7 @@ describe("DynamicsWindow", () => {
 		expect(toggleDynamic).not.toHaveBeenCalled();
 	});
 
-	it("shows only the concise target scope as populated card metadata", () => {
+	it("shows running fixture counts instead of target binding metadata", () => {
 		const groupDynamic = dynamicObject({ multipleLanes: true });
 		groupDynamic.id = "dynamic-group";
 		groupDynamic.body.id = "dynamic-group";
@@ -407,15 +419,19 @@ describe("DynamicsWindow", () => {
 		renderWindow();
 
 		const groupCard = screen.getByRole("button", { name: /Group Pulse/i });
-		expect(within(groupCard).getByText("G18")).toBeInTheDocument();
+		expect(
+			groupCard.querySelector(".pool-card-information > small"),
+		).toHaveTextContent("0");
 		expect(within(groupCard).queryByText(/Live Group/i)).toBeNull();
-		expect(within(groupCard).queryByText(/lanes?/i)).toBeNull();
+		expect(groupCard.querySelector(".pool-card-information")).not.toHaveTextContent(/lanes?/i);
 		const selectionCard = screen.getByRole("button", {
 			name: /Selection Pulse/i,
 		});
-		expect(within(selectionCard).getByText("Live")).toBeInTheDocument();
+		expect(
+			selectionCard.querySelector(".pool-card-information > small"),
+		).toHaveTextContent("0");
 		expect(within(selectionCard).queryByText(/targets?/i)).toBeNull();
-		expect(within(selectionCard).queryByText(/lanes?/i)).toBeNull();
+		expect(selectionCard.querySelector(".pool-card-information")).not.toHaveTextContent(/lanes?/i);
 	});
 
 	it("uses the shared pool without pagination or implementation legend", () => {

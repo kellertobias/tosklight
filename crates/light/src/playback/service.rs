@@ -1,8 +1,8 @@
 use super::{
-    PlaybackAddress, PlaybackCommand, PlaybackExecution, PlaybackOperationResult, PlaybackOutcome,
-    PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity, PlaybackRuntimeProjection,
-    PlaybackRuntimeSnapshot, PlaybackUnitOfWork, ResolvedPlaybackAddress,
-    committed_playback_effect_event,
+    PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackExecution, PlaybackOperationResult,
+    PlaybackOutcome, PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity,
+    PlaybackRuntimeProjection, PlaybackRuntimeSnapshot, PlaybackUnitOfWork,
+    ResolvedPlaybackAddress, committed_playback_effect_event,
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind, EventBus, EventDraft};
 use parking_lot::Mutex;
@@ -64,6 +64,36 @@ impl PlaybackService {
         envelope: &ActionEnvelope<PlaybackCommand>,
         ports: &dyn PlaybackPorts,
     ) -> Result<PlaybackResult, ActionError> {
+        let normalized = if let PlaybackAction::RuntimeStopDynamic {
+            dynamic_id,
+            instance_id,
+            controller_id,
+        } = envelope.command.action
+        {
+            if !matches!(
+                envelope.command.address,
+                PlaybackAddress::Pool(_) | PlaybackAddress::Virtual(_)
+            ) {
+                return Err(ActionError::new(
+                    ActionErrorKind::Invalid,
+                    "Runtime Dynamic Stop requires an exact Playback owner address",
+                ));
+            }
+            let address = resolve(&envelope.command.address, &envelope.context, ports)?;
+            ports.validate_runtime_dynamic_stop(
+                &envelope.context,
+                &address,
+                dynamic_id,
+                instance_id,
+                controller_id,
+            )?;
+            let mut normalized = envelope.clone();
+            normalized.command.action = PlaybackAction::Release;
+            Some(normalized)
+        } else {
+            None
+        };
+        let envelope = normalized.as_ref().unwrap_or(envelope);
         validate_address_action(&envelope.command.address, envelope.command.action.clone())?;
         let resolved = resolve(&envelope.command.address, &envelope.context, ports)?;
         let identity = runtime_identity(&resolved);

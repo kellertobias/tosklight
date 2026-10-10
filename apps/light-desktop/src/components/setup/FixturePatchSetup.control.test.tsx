@@ -1157,7 +1157,9 @@ describe("installed light-source appearance", () => {
 		expect(
 			within(dialog).getByRole("button", { name: "Touring · 4ch" }),
 		).toBeInTheDocument();
-		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+		fireEvent.click(
+			within(dialog.querySelector("header")!).getByRole("button", { name: "Set" }),
+		);
 
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledOnce(),
@@ -3441,4 +3443,59 @@ describe("installed Color calibration through setup", () => {
   fireEvent.click(within(reopened).getByRole("button", {name:"Close Color calibration"}));
   expect(screen.queryByRole("dialog", {name})).not.toBeInTheDocument();
  });
+});
+
+
+it("requires explicit cross-family head correspondence and submits one sparse replacement", async () => {
+	const fixture = splitFixture();
+	const source = fixture.definition.profile_snapshot!;
+	source.modes[0].heads[0].master_shared = false;
+	fixture.logical_heads = [{fixture_id: "old-logical", profile_head_id: source.modes[0].heads[0].id, head_index: 0}];
+	const replacement = blankFixtureProfile(); replacement.id = "replacement-profile"; replacement.revision = 1;
+	replacement.manufacturer = "Other manufacturer"; replacement.name = "Wheel mover";
+	replacement.modes[0].id = "replacement-mode"; replacement.modes[0].heads[0].master_shared = false;
+	replacement.modes[0].heads[0].name = "Optical head";
+	server.fixtureProfiles = [source, replacement]; server.patch.fixtures = [fixture];
+	state.patchSetArmed = true;
+	render(<FixturePatchSetup />);
+	const row = screen.getByRole("row", {name:/17 Split Wash 17/}) as HTMLTableRowElement;
+	fireEvent.click(within(row.cells[3]).getByRole("button"));
+	fireEvent.click(screen.getByRole("button", {name:"Replace fixture with another product"}));
+	const picker = screen.getByRole("button", {name:/Acme.*Split Wash.*Default.*4ch/});
+	fireEvent.click(picker);
+	const option = screen.getByRole("option", {name:/Other manufacturer.*Wheel mover/}) as HTMLOptionElement;
+	fireEvent.click(option);
+	const dialog = document.querySelector(".patch-edit-modal") as HTMLElement;
+	const set = within(dialog.querySelector("header")!).getByRole("button", { name: "Set" });
+	fireEvent.click(set);
+	expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+	expect(set).toBeDisabled();
+	expect(
+		within(dialog.querySelector(".import-workflow__footer")!).getByRole("status"),
+	).toHaveTextContent("Resolve 1 correspondence before Set.");
+	fireEvent.click(screen.getByRole("button", {name:/Choose correspondence/}));
+	fireEvent.click(screen.getByRole("option", {name:/Optical head/}));
+	expect(set).toBeEnabled();
+	fireEvent.click(set);
+	await waitFor(() => expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", null,
+		{type:"replace_profile",profileId:"replacement-profile",profileRevision:replacement.revision,modeId:"replacement-mode",
+		 headMapping:[{fixtureId:"old-logical",targetProfileHeadId:replacement.modes[0].heads[0].id}],
+		 rootProgrammingMapping:[],expectedShowRevision:1,expectedPatchRevision:1}));
+	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+});
+
+
+it("cancels cross-family replacement without sending any patch mutation", () => {
+	const fixture = splitFixture(); server.fixtureProfiles = [fixture.definition.profile_snapshot!];
+	server.patch.fixtures = [fixture]; state.patchSetArmed = true;
+	render(<FixturePatchSetup />);
+	const row = screen.getByRole("row", {name:/17 Split Wash 17/}) as HTMLTableRowElement;
+	fireEvent.click(within(row.cells[3]).getByRole("button"));
+	fireEvent.click(screen.getByRole("button", {name:"Replace fixture with another product"}));
+	fireEvent.click(screen.getByRole("button", {name:"Cancel fixture mode"}));
+	expect(document.querySelector(".patch-edit-modal")).toBeNull();
+	expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
 });

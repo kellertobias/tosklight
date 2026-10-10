@@ -37,7 +37,34 @@ pub enum ProgrammingAttributeValue {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReplacementProfileContext {
+    pub profile_id: Uuid,
+    #[ts(type = "number")]
+    pub profile_revision: u64,
+    pub mode_id: Uuid,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReplacementHeadTarget {
+    pub profile_head_id: Uuid,
+    pub fixture_id: Uuid,
+}
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReplacementProgramProjection {
+    pub source_owner: Uuid,
+    pub source_profile: ReplacementProfileContext,
+    pub source_head_id: Uuid,
+    pub target_profile: ReplacementProfileContext,
+    pub targets: Vec<ReplacementHeadTarget>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingFixtureValue {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub replacement_projection: Option<ReplacementProgramProjection>,
     pub fixture_id: Uuid,
     pub attribute: String,
     pub value: ProgrammingAttributeValue,
@@ -54,6 +81,10 @@ pub struct ProgrammingFixtureValue {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ProgrammingGroupValue {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub replacement_projections:
+        Option<std::collections::HashMap<Uuid, ReplacementProgramProjection>>,
     pub group_id: String,
     pub attribute: String,
     pub value: ProgrammingAttributeValue,
@@ -489,8 +520,70 @@ mod tests {
     use super::*;
 
     #[test]
+    fn replacement_projection_wire_preserves_dormant_mapping_and_legacy_absence() {
+        let profile = ReplacementProfileContext {
+            profile_id: Uuid::from_u128(1),
+            profile_revision: 1,
+            mode_id: Uuid::from_u128(2),
+        };
+        let projection = ReplacementProgramProjection {
+            source_owner: Uuid::from_u128(3),
+            source_profile: profile.clone(),
+            source_head_id: Uuid::from_u128(4),
+            target_profile: profile,
+            targets: Vec::new(),
+        };
+        let value = ProgrammingFixtureValue {
+            replacement_projection: Some(projection.clone()),
+            fixture_id: projection.source_owner,
+            attribute: "intensity".into(),
+            value: ProgrammingAttributeValue::Normalized(0.5),
+            programmer_order: 9,
+            fade: false,
+            fade_millis: None,
+            delay_millis: None,
+        };
+        let raw = serde_json::to_value(&value).unwrap();
+        assert_eq!(
+            raw["replacement_projection"]["targets"],
+            serde_json::json!([])
+        );
+        assert_eq!(
+            serde_json::from_value::<ProgrammingFixtureValue>(raw).unwrap(),
+            value
+        );
+        let mut legacy = value.clone();
+        legacy.replacement_projection = None;
+        let raw = serde_json::to_value(&legacy).unwrap();
+        assert!(raw.get("replacement_projection").is_none());
+        assert_eq!(
+            serde_json::from_value::<ProgrammingFixtureValue>(raw).unwrap(),
+            legacy
+        );
+        let group = ProgrammingGroupValue {
+            replacement_projections: Some(std::collections::HashMap::from([(
+                projection.source_owner,
+                projection,
+            )])),
+            group_id: "Front".into(),
+            attribute: "intensity".into(),
+            value: ProgrammingAttributeValue::Normalized(0.7),
+            programmer_order: 10,
+            fade: true,
+            fade_millis: Some(100),
+            delay_millis: Some(20),
+        };
+        assert_eq!(
+            serde_json::from_value::<ProgrammingGroupValue>(serde_json::to_value(&group).unwrap())
+                .unwrap(),
+            group
+        );
+    }
+
+    #[test]
     fn projection_keeps_addresses_order_and_timing() {
         let value = ProgrammingFixtureValue {
+            replacement_projection: None,
             fixture_id: Uuid::from_u128(1),
             attribute: "intensity".into(),
             value: ProgrammingAttributeValue::Normalized(0.5),

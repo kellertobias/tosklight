@@ -18,6 +18,8 @@ impl ProgrammerRegistry {
         let states = self.state.read();
         let state = states.as_ref()?;
         let mut preset = Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             name,
             family: address.family,
             aim_at_fixture_number: None,
@@ -26,6 +28,17 @@ impl ProgrammerRegistry {
         };
         for value in state.values.iter() {
             if address.family.accepts(&value.attribute) {
+                if let Some(projection) = state
+                    .replacement_provenance
+                    .get(&value.programmer_order)
+                    .and_then(|map| map.get(&value.fixture_id))
+                {
+                    preset
+                        .fixture_replacement_projections
+                        .entry(value.fixture_id)
+                        .or_default()
+                        .insert(value.attribute.clone(), projection.clone());
+                }
                 preset
                     .values
                     .entry(value.fixture_id)
@@ -36,6 +49,15 @@ impl ProgrammerRegistry {
         for (group_id, values) in state.group_values.iter() {
             for (attribute, value) in values {
                 if address.family.accepts(attribute) {
+                    if let Some(projections) =
+                        state.replacement_provenance.get(&value.programmer_order)
+                    {
+                        preset
+                            .group_replacement_projections
+                            .entry(group_id.clone())
+                            .or_default()
+                            .insert(attribute.clone(), projections.clone());
+                    }
                     preset
                         .group_values
                         .entry(group_id.clone())

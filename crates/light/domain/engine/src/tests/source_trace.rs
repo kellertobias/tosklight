@@ -16,6 +16,7 @@ fn observed_source_identity_distinguishes_equal_group_values_and_sample_replacem
             groups: ["a", "b"]
                 .into_iter()
                 .map(|id| GroupDefinition {
+                    replacement_projections: Default::default(),
                     id: id.into(),
                     name: id.into(),
                     fixtures: vec![fixture],

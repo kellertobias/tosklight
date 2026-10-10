@@ -24,6 +24,7 @@ fn playback_value(
 ) -> EngineContribution {
     EngineContribution::from_playback(
         PlaybackContribution {
+            replacement_projection: None,
             authored_target: true,
             family_evidence: None,
             value: TimedValue {

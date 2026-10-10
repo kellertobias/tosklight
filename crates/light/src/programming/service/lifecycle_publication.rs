@@ -91,6 +91,20 @@ impl ProgrammingService {
         {
             return None;
         }
+        // An upsert only replaces the same identity. Retire the old identity first when
+        // Clear/recovery replaces the desk's Programmer, under this same publication lock.
+        // Snapshot readers cannot observe a revision between these two coherent deltas.
+        if let (Some(before), Some(after)) = (&before, &after)
+            && before.programmer_id != after.programmer_id
+        {
+            publication.revision = publication.revision.saturating_add(1);
+            self.events
+                .publish(EventDraft::programming_lifecycle_changed(
+                    ProgrammingLifecycleChange::remove(publication.revision, before.programmer_id),
+                    source,
+                    correlation_id,
+                ));
+        }
         publication.revision = publication.revision.saturating_add(1);
         let change = lifecycle_change(publication.revision, before, after.clone())?;
         let sequence = self

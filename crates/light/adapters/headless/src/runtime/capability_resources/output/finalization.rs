@@ -36,7 +36,10 @@ impl OutputResource {
         let previous = self.engine.snapshot();
         let engine = self
             .engine
-            .finalize_snapshot_playback(prepared.engine, true)
+            .finalize_snapshot_playback_with_replacement_migrations(
+                prepared.engine,
+                &prepared.replacement_migrations,
+            )
             .map_err(|error| invalid(error.to_string()))?;
         let snapshot = engine.snapshot_arc();
         let programmer_values = self.engine.dynamic_programmer_values();

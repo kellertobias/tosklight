@@ -103,6 +103,17 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         resolve_group_playback(&self.state.output.snapshot(), group_id.as_str())
     }
 
+    fn validate_runtime_dynamic_stop(
+        &self,
+        _context: &ActionContext,
+        address: &ResolvedPlaybackAddress,
+        dynamic_id: uuid::Uuid,
+        instance_id: uuid::Uuid,
+        controller_id: uuid::Uuid,
+    ) -> Result<(), ActionError> {
+        runtime_dynamic_stop::validate(self.state, address, dynamic_id, instance_id, controller_id)
+    }
+
     fn execute(
         &self,
         context: &ActionContext,
@@ -200,6 +211,9 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             (_, None) => return Ok(Vec::new()),
         };
         let mut related = Vec::new();
+        if let SharedTarget::CueList(cue_list_id) = &shared_target {
+            related.push(PlaybackRuntimeIdentity::DirectCueList(*cue_list_id));
+        }
         let snapshot = self.state.output.snapshot();
         related.extend(
             snapshot
@@ -320,7 +334,8 @@ impl ServerPlaybackPorts<'_> {
         let definition = virtual_playback_definition(self.state, address)?;
         let (definition, action) = configured_control_definition(&definition, action)?;
         let (action_name, input) = legacy_action(action.clone());
-        if captures_preload(context.source)
+        if !matches!(action, PlaybackAction::Release)
+            && captures_preload(context.source)
             && let Some(pending) = self.capture(
                 context,
                 &definition,
@@ -441,7 +456,38 @@ impl ServerPlaybackPorts<'_> {
         id: light_core::CueListId,
         action: PlaybackAction,
     ) -> Result<PlaybackExecution, ActionError> {
+        if matches!(action, PlaybackAction::Select { pressed: true }) {
+            if !self
+                .state
+                .output
+                .snapshot()
+                .cue_lists
+                .iter()
+                .any(|list| list.id == id)
+            {
+                return Err(invalid("Cuelist does not exist"));
+            }
+            let show = self
+                .state
+                .active_show
+                .current()
+                .clone()
+                .ok_or_else(|| invalid("no show is open"))?;
+            let before = self
+                .state
+                .installation
+                .selected_cue_list(context.desk_id, show.id)
+                .map_err(|error| invalid(error.to_string()))?;
+            self.state
+                .installation
+                .set_selected_cue_list(context.desk_id, show.id, Some(id))
+                .map_err(|error| invalid(error.to_string()))?;
+            return Ok(PlaybackExecution::Target {
+                changed: before != Some(id),
+            });
+        }
         let command = match action {
+            PlaybackAction::GoTo(cue_number) => CueListPlaybackAction::Jump(cue_number),
             PlaybackAction::Go { pressed: true } => CueListPlaybackAction::Go,
             PlaybackAction::Back { pressed: true } => CueListPlaybackAction::Back,
             PlaybackAction::Pause { pressed: true } => CueListPlaybackAction::Pause,
@@ -557,38 +603,11 @@ impl ServerPlaybackPorts<'_> {
                     | light_playback::PlaybackTarget::Dynamic { .. }
             )
         {
-            let transition = self
-                .state
-                .output
-                .execute_pool_playback_with_activation(
-                    number,
-                    light_engine::PoolPlaybackAction::SetMasterWithExplicitActivation(
-                        level.value(),
-                    ),
-                    &[],
-                    Some(light_playback::PlaybackActivationOrigin {
-                        at: self.state.output.application_time(),
-                        desk_id: None,
-                        surface: light_playback::PlaybackActivationSurface::Matter,
-                        exclusion_scope: light_playback::PlaybackExclusionScope::None,
-                    }),
-                )
-                .map_err(invalid)?;
-            let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
-                return Err(invalid("unexpected explicit Matter fader outcome"));
-            };
-            if effect.durable()
-                && let Err(error) = persist_active_playbacks(self.state)
-            {
-                self.mark_persistence_pending(context, "active_playbacks", error);
-            }
-            return Ok(PlaybackExecution::Pool {
-                changed: effect.changed(),
-                pending: None,
-            });
+            return self.execute_pool_matter_master(context, number, level);
         }
         let (action_name, input) = legacy_action(action.clone());
-        if captures_preload(context.source)
+        if !matches!(action, PlaybackAction::Release)
+            && captures_preload(context.source)
             && let Some(pending) =
                 self.capture(context, &definition, action_name, &input, surface, page)?
         {
@@ -597,7 +616,9 @@ impl ServerPlaybackPorts<'_> {
                 pending: Some(pending),
             });
         }
-        if self.intercept_update(context, &definition, action) {
+        if !matches!(action, PlaybackAction::Release)
+            && self.intercept_update(context, &definition, action)
+        {
             return Ok(PlaybackExecution::Pool {
                 changed: false,
                 pending: None,
@@ -634,6 +655,41 @@ impl ServerPlaybackPorts<'_> {
         }
         Ok(PlaybackExecution::Pool {
             changed: dispatch.changed,
+            pending: None,
+        })
+    }
+
+    fn execute_pool_matter_master(
+        &self,
+        context: &ActionContext,
+        number: u16,
+        level: light_application::PlaybackLevel,
+    ) -> Result<PlaybackExecution, ActionError> {
+        let transition = self
+            .state
+            .output
+            .execute_pool_playback_with_activation(
+                number,
+                light_engine::PoolPlaybackAction::SetMasterWithExplicitActivation(level.value()),
+                &[],
+                Some(light_playback::PlaybackActivationOrigin {
+                    at: self.state.output.application_time(),
+                    desk_id: None,
+                    surface: light_playback::PlaybackActivationSurface::Matter,
+                    exclusion_scope: light_playback::PlaybackExclusionScope::None,
+                }),
+            )
+            .map_err(invalid)?;
+        let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
+            return Err(invalid("unexpected explicit Matter fader outcome"));
+        };
+        if effect.durable()
+            && let Err(error) = persist_active_playbacks(self.state)
+        {
+            self.mark_persistence_pending(context, "active_playbacks", error);
+        }
+        Ok(PlaybackExecution::Pool {
+            changed: effect.changed(),
             pending: None,
         })
     }

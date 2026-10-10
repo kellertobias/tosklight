@@ -1,3 +1,4 @@
+mod replacement;
 mod support;
 
 use super::{PatchFixtureUpdateAction, PatchFixtureUpdateIntent};

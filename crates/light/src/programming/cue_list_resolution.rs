@@ -10,6 +10,8 @@ use serde_json::Value;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::programming) enum CueListAddress {
     Pool { playback_number: u16 },
+    CuelistPool { number: u16 },
+    CueList { id: CueListId },
     PageSlot { page: u8, slot: u8 },
 }
 
@@ -30,6 +32,31 @@ pub(in crate::programming) fn resolve_cue_list(
     document: &PortableShowDocument,
     address: CueListAddress,
 ) -> Result<ResolvedCueList, ActionError> {
+    if matches!(
+        address,
+        CueListAddress::CuelistPool { .. } | CueListAddress::CueList { .. }
+    ) {
+        let catalog = crate::cuelist_pool_catalog(document)?;
+        let (number, id) = match address {
+            CueListAddress::CuelistPool { number } => (
+                number,
+                catalog
+                    .resolve(number)
+                    .ok_or_else(|| missing(format!("Cuelist {number} does not exist")))?,
+            ),
+            CueListAddress::CueList { id } => (
+                catalog
+                    .canonical_number(id)
+                    .ok_or_else(|| missing("selected Cuelist does not exist"))?,
+                id,
+            ),
+            _ => unreachable!(),
+        };
+        return Ok(ResolvedCueList {
+            playback_number: number,
+            stored: find_cue_list(document, id)?,
+        });
+    }
     let playback_number = resolve_playback_number(document, address)?;
     let playback = find_playback(document, playback_number)?;
     let PlaybackTarget::CueList { cue_list_id } = playback.target else {
@@ -76,6 +103,9 @@ fn resolve_playback_number(
 ) -> Result<u16, ActionError> {
     match address {
         CueListAddress::Pool { playback_number } => Ok(playback_number),
+        CueListAddress::CuelistPool { .. } | CueListAddress::CueList { .. } => {
+            unreachable!("independent addresses are resolved before physical topology")
+        }
         CueListAddress::PageSlot { page, slot } => find_page(document, page)?
             .slots
             .get(&slot)

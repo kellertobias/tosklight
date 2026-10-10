@@ -2,6 +2,9 @@
 // Do not edit it by hand.
 
 export type ProgrammingColorXyz = { x: number, y: number, z: number, };
+export type ReplacementProfileContext = { profile_id: string, profile_revision: number, mode_id: string, };
+export type ReplacementHeadTarget = { profile_head_id: string, fixture_id: string, };
+export type ReplacementProgramProjection = { source_owner: string, source_profile: ReplacementProfileContext, source_head_id: string, target_profile: ReplacementProfileContext, targets: Array<ReplacementHeadTarget>, };
 export type ProgrammingPhysicalDataQuality = "unknown" | "estimated" | "manufacturer" | "measured";
 export type ProgrammingOpeningConvention = "beam" | "field";
 export type ProgrammingNativeColorBinding = { channel_id: string, function_id: string, };

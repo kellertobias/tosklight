@@ -2,7 +2,8 @@
 use super::temporary;
 use crate::{
     LegacyProgrammingFamily, PROGRAMMING_CONTRACT_METADATA_KEY, ProgrammingContractMarker,
-    ShowStore, inspect_show_programming_contract, legacy_programming_attributes,
+    ShowStore, check_programming_object_writes, inspect_show_programming_contract,
+    legacy_programming_attributes, required_object_programming_contract,
     validate_show_programming_contract,
 };
 use light_core::{
@@ -614,4 +615,144 @@ fn contract_one_writers_refuse_legacy_programming_before_storing_it() {
 
 fn marker_of(store: &ShowStore) -> ProgrammingContractMarker {
     store.programming_contract_marker().unwrap()
+}
+
+#[test]
+fn feature_two_only_for_live_references_and_never_downgrades_after_reopen() {
+    let (path, store) = create("live-preset-contract");
+    let mut document = store.portable_document().unwrap();
+    let mut literal = document.transaction();
+    literal.put("cue_list", "literal", json!({"cues": [{"changes": []}]}));
+    literal.check_programming_contract(2).unwrap();
+    literal.stamp_programming_contract(2);
+    let commit = store.apply_portable_transaction(literal).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(1)
+    );
+    validate_show_programming_contract(&path, 1).unwrap();
+
+    let reference = json!({"preset_instance_id": uuid::Uuid::new_v4(), "source_owner": {"type": "universal"}, "source_attribute": "intensity"});
+    let mut linked = document.transaction();
+    linked.put("cue_list", "linked", json!({"cues": [{"changes": [{"attribute":"intensity", "value":normalized(0.5), "preset_reference":reference}]}]}));
+    assert!(linked.check_programming_contract(1).is_err());
+    linked.check_programming_contract(2).unwrap();
+    linked.stamp_programming_contract(2);
+    let commit = store.apply_portable_transaction(linked).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(2)
+    );
+    assert!(validate_show_programming_contract(&path, 1).is_err());
+    validate_show_programming_contract(&path, 2).unwrap();
+    drop(store);
+    let reopened = ShowStore::open(&path).unwrap();
+    let mut document = reopened.portable_document().unwrap();
+    let mut later = document.transaction();
+    later.put("preset", "1.9", json!({"values":{}, "universal_values":{}}));
+    later.stamp_programming_contract(2);
+    let commit = reopened.apply_portable_transaction(later).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(2)
+    );
+    drop(reopened);
+    remove(&path);
+}
+
+#[test]
+fn independent_cuelist_pool_requires_three_without_upgrading_literal_or_dynamic_files() {
+    let (path, store) = create("independent-cuelist-contract");
+    let mut document = store.portable_document().unwrap();
+    let mut literal = document.transaction();
+    literal.put("cue_list", "literal", json!({"cues": []}));
+    literal.put("dynamic", "dynamic", json!({"pool_number":101, "lanes":[]}));
+    literal.check_programming_contract(3).unwrap();
+    literal.stamp_programming_contract(3);
+    let commit = store.apply_portable_transaction(literal).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(1)
+    );
+    validate_show_programming_contract(&path, 1).unwrap();
+
+    let body = json!({"pool_number":101,"legacy_pool_aliases":[190],"cues":[]});
+    let mut independent = document.transaction();
+    independent.put("cue_list", "literal", body.clone());
+    assert!(independent.check_programming_contract(2).is_err());
+    independent.check_programming_contract(3).unwrap();
+    independent.stamp_programming_contract(3);
+    let commit = store.apply_portable_transaction(independent).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(3)
+    );
+    assert!(validate_show_programming_contract(&path, 2).is_err());
+    validate_show_programming_contract(&path, 3).unwrap();
+    drop(store);
+    let reopened = ShowStore::open(&path).unwrap();
+    let mut document = reopened.portable_document().unwrap();
+    assert_eq!(
+        document.objects_of_kind("cue_list").next().unwrap().body(),
+        &body
+    );
+    let mut later = document.transaction();
+    later.put("preset", "1.9", json!({"values":{}}));
+    later.stamp_programming_contract(3);
+    let commit = reopened.apply_portable_transaction(later).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(
+        document.programming_contract_marker(),
+        ProgrammingContractMarker::Declared(3)
+    );
+    drop(reopened);
+    remove(&path);
+}
+
+#[test]
+fn replacement_projection_feature_is_gated_even_when_destinations_are_dormant() {
+    let projection = json!({"source_owner":"old", "targets":[]});
+    let bodies = [
+        (
+            "preset",
+            json!({"fixture_replacement_projections":{"old":{"intensity":projection.clone()}}}),
+        ),
+        (
+            "preset",
+            json!({"group_replacement_projections":{"1":{"intensity":{"old":projection.clone()}}}}),
+        ),
+        (
+            "group",
+            json!({"replacement_projections":{"intensity":{"old":projection.clone()}}}),
+        ),
+        (
+            "cue_list",
+            json!({"cues":[{"changes":[{"replacement_projection":projection.clone()}]}]}),
+        ),
+        (
+            "cue_list",
+            json!({"cues":[{"group_changes":[{"replacement_projections":{"old":projection}}]}]}),
+        ),
+    ];
+    for (kind, body) in &bodies {
+        assert_eq!(required_object_programming_contract(body), 4);
+        let error = check_programming_object_writes(3, [(*kind, "1", body)]).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("requires programming contract 4")
+        );
+        check_programming_object_writes(4, [(*kind, "1", body)]).unwrap();
+    }
+    assert_eq!(
+        required_object_programming_contract(
+            &json!({"fixture_replacement_projections":{},"replacement_projections":{},"cues":[]})
+        ),
+        1
+    );
 }

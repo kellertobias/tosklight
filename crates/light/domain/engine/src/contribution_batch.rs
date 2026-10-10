@@ -382,12 +382,18 @@ impl ContributionFamilyEvidence {
 /// Observer-only provenance of a winning contribution. Regular output leaves this unallocated.
 #[derive(Clone, Debug)]
 pub struct ContributionOrigin {
+    authored_fixture_id: light_core::FixtureId,
     pub(crate) source: ContributionSourceId,
     pub(crate) stamp: light_core::ProgrammerEditStamp,
     transition_ordinal: Option<u64>,
 }
 
 impl ContributionOrigin {
+    /// Authored fixture/member identity. A replacement can offer this source on another head
+    /// without pretending that head authored it.
+    pub const fn authored_fixture_id(&self) -> light_core::FixtureId {
+        self.authored_fixture_id
+    }
     pub fn source(&self) -> &ContributionSourceId {
         &self.source
     }
@@ -405,6 +411,7 @@ impl ContributionOrigin {
         transition_ordinal: Option<u64>,
     ) -> bool {
         self.source == *source
+            && self.authored_fixture_id == value.fixture_id
             && self.stamp.changed_at == value.changed_at
             && self.stamp.programmer_order == value.programmer_order
             && self.transition_ordinal == transition_ordinal
@@ -418,6 +425,7 @@ impl ContributionOrigin {
         transition_ordinal: Option<u64>,
     ) -> Arc<Self> {
         Arc::new(Self {
+            authored_fixture_id: value.fixture_id,
             source,
             stamp: light_core::ProgrammerEditStamp {
                 changed_at: value.changed_at,

@@ -138,6 +138,7 @@ fn cue_list_runtime(
     runtime: &application::CueListRuntimeProjection,
 ) -> wire::CueListRuntimeProjection {
     wire::CueListRuntimeProjection {
+        owner: runtime.owner.clone().map(super::wire_identity),
         cue_index: runtime.cue_index,
         previous_index: runtime.previous_index,
         current: runtime.current.as_ref().map(cue_reference),

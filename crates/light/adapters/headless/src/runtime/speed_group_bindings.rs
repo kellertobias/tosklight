@@ -31,13 +31,10 @@ fn resolve_binding_target(
 ) -> Result<BindingTarget, String> {
     let snapshot = state.output.snapshot();
     match source {
-        SpeedGroupBindingSource::CueList(number) => snapshot
-            .playbacks
-            .iter()
-            .find(|playback| playback.number == number)
-            .and_then(playback_binding_target)
-            .filter(|target| matches!(target, BindingTarget::CueList(_)))
-            .ok_or_else(|| format!("Cuelist {number} does not exist")),
+        SpeedGroupBindingSource::CueList(number) => {
+            super::show_command_update::cuelist_pool_id(&snapshot, number)
+                .map(BindingTarget::CueList)
+        }
         SpeedGroupBindingSource::Dynamic(number) => snapshot
             .dynamics
             .iter()

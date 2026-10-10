@@ -14,6 +14,7 @@ mod preload_commit;
 mod restored_owners;
 mod runtime;
 mod transition;
+mod visualization;
 
 pub(in crate::runtime) use transition::{OutputTransitionLease, OutputTransitionOverlay};
 
@@ -35,11 +36,19 @@ mod restore_tests;
 #[must_use]
 pub(crate) struct PreparedOutputSnapshot {
     engine: PreparedEngineSnapshot,
+    replacement_migrations: Vec<light_core::ReplacementRuntimeMigration>,
     definitions: light_dynamics::PreparedDynamicDefinitions,
     restored: Option<output_scheduler::RestoredDynamicCandidate>,
 }
 
 impl PreparedOutputSnapshot {
+    pub(in crate::runtime) fn with_replacement_migrations(
+        mut self,
+        migrations: Vec<light_core::ReplacementRuntimeMigration>,
+    ) -> Self {
+        self.replacement_migrations = migrations;
+        self
+    }
     pub(in crate::runtime) fn snapshot(&self) -> &EngineSnapshot {
         self.engine.snapshot()
     }
@@ -104,12 +113,24 @@ struct CachedVisualizationOrdinary {
 
 #[derive(Clone)]
 pub(in crate::runtime) struct OutputControlCapability {
+    delivery_policy: output_scheduler::PhysicalDeliveryPolicy,
     control: Arc<Mutex<OutputControl>>,
 }
 
 impl OutputControlCapability {
     pub(in crate::runtime) fn new(control: Arc<Mutex<OutputControl>>) -> Self {
-        Self { control }
+        Self {
+            control,
+            delivery_policy: Default::default(),
+        }
+    }
+
+    pub(in crate::runtime) fn with_delivery_policy(
+        mut self,
+        policy: output_scheduler::PhysicalDeliveryPolicy,
+    ) -> Self {
+        self.delivery_policy = policy;
+        self
     }
 
     fn lock(&self) -> parking_lot::MutexGuard<'_, OutputControl> {
@@ -251,118 +272,9 @@ impl OutputResource {
         health.clone()
     }
 
-    pub(in crate::runtime) fn latest_visualization_frame(
-        &self,
-    ) -> Option<Arc<super::visualization_frame::PublishedVisualizationFrame>> {
-        self.visualization_frames.latest()
-    }
-
-    /// Pending (Preload) Position readouts come only from this slot, never from Live frames.
-    pub(in crate::runtime) fn pending_position_readouts(
-        &self,
-    ) -> &crate::runtime::position_readout::PendingPositionReadoutSlot {
-        &self.pending_position_readouts
-    }
-
-    pub(in crate::runtime) fn sampled_visualization_frame(
-        &self,
-    ) -> Option<Arc<super::visualization_frame::PublishedVisualizationFrame>> {
-        self.visualization_frames.sampled()
-    }
-
-    pub(in crate::runtime) async fn wait_for_visualization_sample_after(
-        &self,
-        sequence: u64,
-    ) -> Arc<super::visualization_frame::PublishedVisualizationFrame> {
-        self.visualization_frames
-            .wait_for_sample_after(sequence)
-            .await
-    }
-
-    pub(in crate::runtime) fn visualization_frame_hub(
-        &self,
-    ) -> Arc<super::visualization_frame::VisualizationFrameHub> {
-        Arc::clone(&self.visualization_frames)
-    }
-
-    pub(in crate::runtime) fn visualization_projection(
-        &self,
-        key: super::visualization_frame::VisualizationProjectionKey,
-        source: &super::visualization_frame::PublishedVisualizationFrame,
-        build: impl FnOnce(
-            bool,
-        )
-            -> Result<light_wire::v2::visualization::VisualizationLaneSnapshot, ApiError>,
-    ) -> Result<Arc<super::visualization_frame::ProjectedVisualizationFrame>, ApiError> {
-        self.visualization_frames.projection(key, source, build)
-    }
-
-    pub(in crate::runtime) fn change_visualization_subscribers(
-        &self,
-        lane: light_wire::v2::visualization::VisualizationLane,
-        delta: i8,
-    ) {
-        self.visualization_frames.change_subscribers(lane, delta);
-    }
-
-    pub(in crate::runtime) fn change_visualization_projection_claim(
-        &self,
-        key: super::visualization_frame::VisualizationProjectionKey,
-        delta: i8,
-    ) {
-        self.visualization_frames
-            .change_projection_claim(key, delta);
-    }
-
-    pub(in crate::runtime) fn visualization_metrics(
-        &self,
-    ) -> super::visualization_frame::VisualizationMetrics {
-        self.visualization_frames.metrics()
-    }
-
-    pub(in crate::runtime) fn record_visualization_snapshot_route(
-        &self,
-        projection_duration: Duration,
-        serialization_duration: Duration,
-        payload_bytes: u64,
-        source: Option<&super::visualization_frame::PublishedVisualizationFrame>,
-    ) {
-        self.visualization_frames.record_snapshot_route(
-            projection_duration,
-            serialization_duration,
-            payload_bytes,
-            source,
-        );
-    }
-
-    pub(in crate::runtime) fn record_visualization_stream_serialization(
-        &self,
-        duration: Duration,
-        payload_bytes: u64,
-    ) {
-        self.visualization_frames
-            .record_stream_serialization(duration, payload_bytes);
-    }
-
-    pub(in crate::runtime) fn record_visualization_stream_queue_push(
-        &self,
-        replaced_pending: bool,
-    ) {
-        self.visualization_frames
-            .record_stream_queue_push(replaced_pending);
-    }
-
-    pub(in crate::runtime) fn record_visualization_stream_queue_take(&self) {
-        self.visualization_frames.record_stream_queue_take();
-    }
-
-    pub(in crate::runtime) fn record_visualization_stream_send(
-        &self,
-        duration: Duration,
-        succeeded: bool,
-    ) {
-        self.visualization_frames
-            .record_stream_send(duration, succeeded);
+    /// Process authority, unaffected by copied show or mutable desk configuration.
+    pub(in crate::runtime) fn permits_external_delivery(&self) -> bool {
+        self.control.delivery_policy == output_scheduler::PhysicalDeliveryPolicy::Live
     }
 
     pub(in crate::runtime) fn snapshot(&self) -> Arc<EngineSnapshot> {
@@ -554,6 +466,7 @@ impl OutputResource {
             .prepare_definitions(engine.snapshot().dynamics.iter().cloned())
             .map_err(|error| EngineError::Invalid(error.to_string()))?;
         Ok(PreparedOutputSnapshot {
+            replacement_migrations: Vec::new(),
             engine,
             definitions,
             restored: None,
@@ -728,6 +641,14 @@ impl OutputResource {
             .playback_runtime_status_for_cue_list(cue_list_id)
     }
 
+    pub(in crate::runtime) fn playback_runtime_status_for_direct_cue_list(
+        &self,
+        cue_list_id: light_core::CueListId,
+    ) -> Option<light_playback::PlaybackRuntimeStatus> {
+        self.engine
+            .playback_runtime_status_for_direct_cue_list(cue_list_id)
+    }
+
     pub(in crate::runtime) fn set_cue_external_completion_millis(
         &self,
         cue_list_id: light_core::CueListId,
@@ -858,8 +779,13 @@ impl OutputResource {
         started_at: chrono::DateTime<chrono::Utc>,
         fallback_millis: u64,
     ) -> Result<light_engine::PreparedPlaybackBatch, String> {
-        self.engine
-            .prepare_playback_batch(commands, started_at, fallback_millis)
+        let start = self.published_playback_start();
+        self.engine.prepare_playback_batch_from_published(
+            commands,
+            started_at,
+            fallback_millis,
+            start.as_ref(),
+        )
     }
 
     pub(in crate::runtime) fn install_prepared_playback_batch(
@@ -920,7 +846,18 @@ impl OutputResource {
         &self,
         command: EnginePlaybackCommand,
     ) -> Result<EnginePlaybackOutcome, String> {
-        self.engine.execute_playback(command)
+        let start = self.published_playback_start();
+        self.engine
+            .execute_playback_from_published(command, start.as_ref())
+    }
+
+    // Read the immutable publisher before acquiring any Playback or Dynamic guard.
+    fn published_playback_start(&self) -> Option<light_engine::PlaybackStartFrame> {
+        let frame = self.latest_visualization_frame()?;
+        Some(light_engine::PlaybackStartFrame::from_published(
+            frame.source_snapshot.clone(),
+            frame.values.clone(),
+        ))
     }
 
     pub(in crate::runtime) fn playback_control_state_at(
@@ -937,11 +874,13 @@ impl OutputResource {
         exclusion_zones: &[Vec<u16>],
         activation_origin: Option<light_playback::PlaybackActivationOrigin>,
     ) -> Result<light_engine::PoolPlaybackTransition, String> {
-        self.engine.execute_pool_playback_with_activation(
+        let start = self.published_playback_start();
+        self.engine.execute_pool_playback_with_published_activation(
             number,
             action,
             exclusion_zones,
             activation_origin,
+            start.as_ref(),
         )
     }
 
@@ -1122,6 +1061,15 @@ impl OutputResource {
             .unwrap_or_default()
     }
 
+    pub(in crate::runtime) fn current_route_delivery(
+        &self,
+    ) -> Vec<light_output::CurrentRouteDelivery> {
+        self.network
+            .as_ref()
+            .map(|output| output.current_route_delivery(&self.snapshot().routes))
+            .unwrap_or_default()
+    }
+
     /// What the network output sent and heard, or `None` without a network output.
     pub(in crate::runtime) fn network_activity(&self) -> Option<light_output::NetworkActivity> {
         self.network
@@ -1137,7 +1085,9 @@ impl OutputResource {
         &self,
         document: &light_output::UsbEndpointDocument,
     ) -> Result<(), String> {
-        self.usb.configure(document)
+        self.control
+            .delivery_policy
+            .configure_usb(&self.usb, document)
     }
 
     pub(in crate::runtime) async fn lock_usb_configuration(

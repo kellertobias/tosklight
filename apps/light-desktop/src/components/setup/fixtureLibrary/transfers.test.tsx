@@ -1,7 +1,16 @@
-import { act, render, renderHook, screen } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	renderHook,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
-import type { PropsWithChildren } from "react";
-import { describe, expect, it, vi } from "vitest";
+import type { ComponentProps, PropsWithChildren } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	AttributeConfigurationApiClient,
 	AttributeConfigurationSnapshot,
@@ -11,8 +20,16 @@ import {
 	FixtureLibraryProvider,
 	type FixtureLibraryState,
 } from "../../../features/fixtureLibrary/FixtureLibraryContext";
-import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
 import { blankFixtureProfile } from "../fixtureProfileModel";
+import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
+
+const picker = vi.hoisted(() => ({ open: vi.fn(), content: vi.fn() }));
+vi.mock("../../../windows/FileManagerPickerHost", () => ({
+	openFileManagerPicker: picker.open,
+}));
+vi.mock("../../../features/files/FilesContext", () => ({
+	useFiles: () => ({ fileContent: picker.content }),
+}));
 
 vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useAttributeRegistry: () => [
@@ -65,7 +82,70 @@ async function gdtfFile(_attribute: string) {
 	return new File([new Uint8Array([80, 75, 3, 4])], "mapped.gdtf");
 }
 
+afterEach(cleanup);
+
 describe("useFixtureLibraryTransfers", () => {
+	it("dismisses the mapping popup before outer GDTF cancellation and preserves its draft", () => {
+		const close = vi.fn();
+		render(
+			<FixtureImportDialogs
+				busy={false}
+				error={null}
+				modal="gdtf"
+				pendingGdtf={{
+					...gdtfPreview(),
+					source: new Uint8Array([80, 75]),
+					expectedRevision: 0,
+				}}
+				close={close}
+				confirmGdtfMappings={vi.fn()}
+				confirmPackageMappings={vi.fn()}
+				importGdtfFile={vi.fn()}
+				importPackage={vi.fn()}
+				mappingCandidates={[]}
+				mappings={{}}
+				requirements={[
+					{ attribute: "vendor.test.feature", value_type: "indexed" },
+				]}
+				setMapping={vi.fn()}
+				activationGroupOptions={[
+					{ value: "activation.beam", label: "Beam mode" },
+				]}
+				beginCustomAttribute={vi.fn()}
+				cancelCustomAttribute={vi.fn()}
+				createCustomAttribute={vi.fn()}
+				customAttributeDraft={{
+					sourceAttribute: "vendor.test.feature",
+					label: "Vendor Feature",
+					valueType: "indexed",
+					encoderGroup: "beam",
+					encoderPage: 2,
+					encoderSlot: 3,
+					activationGroupId: "activation.beam",
+					displayUnit: "mode",
+					physicalUnit: "vendor-mode",
+				}}
+				editCustomAttribute={vi.fn()}
+				placementOptions={[{ value: "2:3", label: "Page 2, encoder 3" }]}
+			/>,
+			{ wrapper: ModalProvider },
+		);
+
+		const trigger = screen.getByLabelText("Map vendor.test.feature");
+		fireEvent.click(trigger);
+		expect(screen.getByRole("listbox")).toBeInTheDocument();
+		fireEvent.keyDown(trigger, { key: "Escape" });
+		expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+		expect(close).not.toHaveBeenCalled();
+		expect(screen.getByLabelText("Display label")).toHaveValue(
+			"Vendor Feature",
+		);
+		fireEvent.keyDown(trigger, { key: "Escape" });
+		expect(close).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("button", { name: "Close Import GDTF" }));
+		expect(close).toHaveBeenCalledTimes(2);
+	});
+
 	it("renders the complete imported custom-attribute authoring form", () => {
 		render(
 			<FixtureImportDialogs
@@ -423,3 +503,370 @@ function attributeSnapshot(): AttributeConfigurationSnapshot {
 		validation_error: null,
 	};
 }
+
+function gdtfDialogProps(
+	overrides: Partial<ComponentProps<typeof FixtureImportDialogs>> = {},
+): ComponentProps<typeof FixtureImportDialogs> {
+	return {
+		busy: false,
+		error: null,
+		modal: "gdtf",
+		pendingGdtf: {
+			...gdtfPreview(),
+			source: new Uint8Array([80, 75]),
+			expectedRevision: 0,
+		},
+		close: vi.fn(),
+		confirmGdtfMappings: vi.fn(),
+		confirmPackageMappings: vi.fn(),
+		importGdtfFile: vi.fn(),
+		importPackage: vi.fn(),
+		mappingCandidates: [
+			{ id: "gobo.1", label: "Gobo 1", value_type: "indexed" },
+		],
+		mappings: {},
+		requirements: [{ attribute: "gdtf.Gobo", value_type: "indexed" }],
+		setMapping: vi.fn(),
+		activationGroupOptions: [],
+		beginCustomAttribute: vi.fn(),
+		cancelCustomAttribute: vi.fn(),
+		createCustomAttribute: vi.fn(),
+		customAttributeDraft: null,
+		editCustomAttribute: vi.fn(),
+		placementOptions: [],
+		...overrides,
+	};
+}
+
+describe("GDTF import decision hierarchy", () => {
+	it("navigates past a remembered mapping to the actual unresolved destination control", () => {
+		const props = gdtfDialogProps({
+			requirements: [
+				{ attribute: "gdtf.Remembered", value_type: "indexed" },
+				{ attribute: "gdtf.Next", value_type: "indexed" },
+			],
+			mappings: { "gdtf.Remembered": "gobo.1" },
+		});
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		const target = screen.getByLabelText("Map gdtf.Next");
+		const scroll = vi.fn();
+		Object.defineProperty(target, "scrollIntoView", { value: scroll });
+		expect(
+			screen.getByText("1 unresolved of 2 required mappings"),
+		).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: "Import and remember mappings" }),
+		).toBeDisabled();
+		fireEvent.click(screen.getByRole("button", { name: "Next unresolved" }));
+		expect(scroll).toHaveBeenCalledWith({ block: "center" });
+		expect(target).toHaveFocus();
+		expect(
+			screen.getByText(
+				"Choose a destination for 1 remaining attribute to enable import.",
+			),
+		).toBeVisible();
+		expect(props.confirmGdtfMappings).not.toHaveBeenCalled();
+	});
+
+	it("keeps compatible remembered mappings editable and enables import without reconfirmation", () => {
+		const props = gdtfDialogProps({ mappings: { "gdtf.Gobo": "gobo.1" } });
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(
+			screen.getByText("0 unresolved of 1 required mappings"),
+		).toBeVisible();
+		expect(screen.getByText("Mapped")).toBeVisible();
+		expect(screen.getByLabelText("Map gdtf.Gobo")).toBeEnabled();
+		expect(
+			screen.queryByRole("button", { name: "Next unresolved" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Import and remember mappings" }),
+		);
+		expect(props.confirmGdtfMappings).toHaveBeenCalledOnce();
+	});
+
+	it("retains every diagnostic in expandable details and a visible limitation summary", () => {
+		const preview = gdtfPreview();
+		preview.diagnostics.push({
+			node: "Geometry",
+			message: "Model retained only in the source archive.",
+		});
+		const props = gdtfDialogProps({
+			pendingGdtf: {
+				...preview,
+				source: new Uint8Array(),
+				expectedRevision: 2,
+			},
+		});
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(
+			screen.getByText(
+				"2 import limitations. Review the source details before importing.",
+			),
+		).toBeVisible();
+		const summary = screen.getByText("Import limitations — show all 2");
+		const details = summary.closest("details");
+		expect(details).not.toHaveAttribute("open");
+		expect(details).toHaveTextContent(
+			"Optics: Optical calibration remains unknown.",
+		);
+		expect(details).toHaveTextContent(
+			"Geometry: Model retained only in the source archive.",
+		);
+		fireEvent.click(summary);
+		expect(
+			within(details as HTMLElement).getByText(
+				"Model retained only in the source archive.",
+				{
+					exact: false,
+				},
+			),
+		).toBeVisible();
+		expect(
+			screen.getByText(
+				"Creates a new library revision. Patched fixtures keep their current revision.",
+			),
+		).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(props.close).toHaveBeenCalledOnce();
+	});
+
+	it("keeps the public import guard and mapping control disabled while importing", () => {
+		const props = gdtfDialogProps({
+			busy: true,
+			mappings: { "gdtf.Gobo": "gobo.1" },
+		});
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(screen.getByRole("button", { name: "Importing…" })).toBeDisabled();
+		expect(screen.getByLabelText("Map gdtf.Gobo")).toBeDisabled();
+		expect(props.confirmGdtfMappings).not.toHaveBeenCalled();
+	});
+});
+
+describe("fixture import busy ownership", () => {
+	it("blocks close and duplicate package work while a potentially committing request is pending, then closes only on owned success", async () => {
+		let finish: (
+			value: Awaited<ReturnType<FixtureLibraryState["importFixturePackage"]>>,
+		) => void = () => undefined;
+		const request = vi.fn(
+			() =>
+				new Promise<
+					Awaited<ReturnType<FixtureLibraryState["importFixturePackage"]>>
+				>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const library = fixtureLibrary(request);
+		const wrapper = ({ children }: PropsWithChildren) => (
+			<FixtureLibraryProvider library={library}>
+				{children}
+			</FixtureLibraryProvider>
+		);
+		const { result } = renderHook(
+			() =>
+				useFixtureLibraryTransfers({
+					selectedMode: null,
+					setSelectedFamilyKey: vi.fn(),
+					setSelectedModeKey: vi.fn(),
+				}),
+			{ wrapper },
+		);
+		act(() => result.current.setModal("package"));
+		const file = new File([new Uint8Array([1, 2, 3])], "owned.toskfixture");
+		let running: Promise<void> = Promise.resolve();
+		await act(async () => {
+			running = result.current.importPackage(file);
+			await Promise.resolve();
+		});
+		act(() => result.current.setModal(null));
+		expect(result.current.modal).toBe("package");
+		expect(result.current.busy).toBe(true);
+		await act(() => result.current.importPackage(file));
+		expect(request).toHaveBeenCalledOnce();
+		await act(async () => {
+			finish({ type: "profile", profile: blankFixtureProfile() });
+			await running;
+		});
+		expect(result.current.modal).toBeNull();
+		expect(result.current.busy).toBe(false);
+	});
+	it("guards every GDTF dialog close route while reading and importing", () => {
+		const props = gdtfDialogProps({ busy: true });
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(
+			screen.getByRole("status", { name: "Importing fixture…" }),
+		).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: "Close Import GDTF", hidden: true }),
+		).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Cancel", hidden: true }),
+		).toBeDisabled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(props.close).not.toHaveBeenCalled();
+	});
+	it("shows the GDTF selected-file read overlay before import starts and blocks closing until a failed read settles", async () => {
+		let fail: (reason: Error) => void = () => {};
+		picker.open.mockResolvedValue([
+			{ rootId: "fixtures", entry: { name: "tour.gdtf", path: "tour.gdtf" } },
+		]);
+		picker.content.mockImplementation(
+			() =>
+				new Promise((_resolve, reject) => {
+					fail = reject;
+				}),
+		);
+		const props = gdtfDialogProps({ pendingGdtf: null, requirements: [] });
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		fireEvent.click(screen.getByRole("button", { name: "Choose GDTF file" }));
+		await waitFor(() =>
+			expect(
+				screen.getByRole("status", { name: "Loading selected GDTF file…" }),
+			).toBeVisible(),
+		);
+		expect(props.importGdtfFile).not.toHaveBeenCalled();
+		expect(
+			screen.getByRole("button", { name: "Close Import GDTF", hidden: true }),
+		).toBeDisabled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(props.close).not.toHaveBeenCalled();
+		await act(async () => {
+			fail(new Error("Read failed"));
+		});
+		expect(screen.getByRole("alert")).toHaveTextContent("Read failed");
+		expect(
+			screen.queryByRole("status", { name: "Loading selected GDTF file…" }),
+		).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "Close Import GDTF" }),
+		).toBeEnabled();
+	});
+	it("keeps a concise failure in the fixed GDTF footer and copies the full diagnostic", async () => {
+		const diagnostic =
+			"Mapping store is locked\n    at nativeStorage (fixture.rs:10)";
+		const writeText = vi.fn().mockResolvedValue(undefined);
+		const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText },
+		});
+		try {
+			const props = gdtfDialogProps({
+				error: diagnostic,
+				mappings: { "gdtf.Gobo": "gobo.1" },
+			});
+			render(<FixtureImportDialogs {...props} />);
+			const body = screen
+				.getByRole("dialog", { name: "Import GDTF" })
+				.querySelector(".import-workflow__body");
+			if (!(body instanceof HTMLElement))
+				throw new Error("Import body missing");
+			body.scrollTop = 1000;
+			fireEvent.scroll(body);
+			const alert = screen.getByRole("alert");
+			expect(alert.closest(".import-workflow__footer")).not.toBeNull();
+			expect(body.contains(alert)).toBe(false);
+			expect(alert).toHaveTextContent(
+				"Import failed. Source and mappings are retained.",
+			);
+			expect(alert).toHaveTextContent("Mapping store is locked");
+			expect(alert).not.toHaveTextContent("nativeStorage");
+			expect(
+				screen.queryByText("Ready to import. Review any import limitations."),
+			).toBeNull();
+			fireEvent.click(screen.getByRole("button", { name: "Copy error" }));
+			await waitFor(() => expect(writeText).toHaveBeenCalledWith(diagnostic));
+			expect(
+				screen.getByRole("button", { name: "Retry import" }),
+			).toBeEnabled();
+		} finally {
+			if (original) Object.defineProperty(navigator, "clipboard", original);
+			else Reflect.deleteProperty(navigator, "clipboard");
+		}
+	});
+	it("retries an actual failed GDTF save with retained source and mappings and no duplicate request", async () => {
+		const preview = gdtfPreview();
+		let finish: (profile: typeof preview.profile) => void = () => {};
+		const save = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("Mapping store is locked"))
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve;
+					}),
+			);
+		const library = fixtureLibrary(vi.fn(), {
+			previewFixtureGdtf: vi.fn(async () => preview),
+			importFixtureGdtf: save,
+			fixtureSourceMappings: vi.fn(async () => [
+				{
+					source_format: "gdtf",
+					source_attribute: "Gobo",
+					target_attribute: "gobo.1",
+				},
+			]),
+			rememberFixtureSourceMapping: vi.fn(async () => null),
+		});
+		picker.open.mockResolvedValue({
+			source: "system",
+			target: "files",
+			files: [await gdtfFile("Gobo")],
+		});
+		function Workflow() {
+			const transfer = useFixtureLibraryTransfers({
+				selectedMode: null,
+				setSelectedFamilyKey: vi.fn(),
+				setSelectedModeKey: vi.fn(),
+			});
+			return (
+				<>
+					<button type="button" onClick={() => transfer.setModal("gdtf")}>
+						Start import
+					</button>
+					<FixtureImportDialogs
+						{...transfer}
+						close={() => transfer.setModal(null)}
+					/>
+				</>
+			);
+		}
+		render(
+			<FixtureLibraryProvider library={library}>
+				<Workflow />
+			</FixtureLibraryProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Start import" }));
+		fireEvent.click(screen.getByRole("button", { name: "Choose GDTF file" }));
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Import and remember mappings",
+			}),
+		);
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Retry import" }),
+			).toBeEnabled(),
+		);
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Mapping store is locked",
+		);
+		expect(screen.getByLabelText("Map gdtf.Gobo")).toHaveTextContent("Gobo 1");
+		const retry = screen.getByRole("button", { name: "Retry import" });
+		fireEvent.click(retry);
+		fireEvent.click(retry);
+		await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(
+			screen.getByRole("status", { name: "Importing fixture…" }),
+		).toBeVisible();
+		expect(save.mock.calls[1][0]).toEqual(save.mock.calls[0][0]);
+		await act(async () => {
+			finish({ ...preview.profile, revision: 1 });
+		});
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Import GDTF" })).toBeNull(),
+		);
+		expect(save).toHaveBeenCalledTimes(2);
+	});
+});

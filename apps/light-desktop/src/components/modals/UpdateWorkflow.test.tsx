@@ -95,7 +95,7 @@ describe("Update workflow", () => {
 		expect(dialog).toHaveClass("workflow-theme", "update-workflow");
 		expect(within(dialog).getByText("UPDATE")).toBeInTheDocument();
 		expect(
-			within(dialog).getByText("Cuelist · Playback 7 · Current Cue 2"),
+			within(dialog).getByText("Cuelist · Current Cue 2"),
 		).toBeInTheDocument();
 		for (const label of ["Update", "Tracked", "Known", "All"])
 			expect(
@@ -300,7 +300,9 @@ describe("Update workflow", () => {
 		expect(titleBar.getByRole("button", { name: "Cancel" })).toBeEnabled();
 		expect(dialog.querySelector(".modal-actions")).toBeNull();
 		expect(
-			within(dialog).getByText("Cuelist · Playback 7 · Current Cue 2"),
+			within(
+				within(dialog).getByText(target.name).closest("article")!,
+			).getByText("Cuelist · Current Cue 2"),
 		).toBeInTheDocument();
 		expect(
 			within(dialog).getByText("No-op Cuelist").closest("article"),

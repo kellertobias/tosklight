@@ -241,10 +241,16 @@ export class FixtureApiClient {
 			throw new Error(
 				`Expected fixture profile result, received ${outcome.result.type}`,
 			);
-		return this.profileFromAuthority(
-			outcome.result.profile_id,
-			outcome.result.revision,
+		const { profile_id, revision } = outcome.result;
+		const profiles = await this.fixtureProfileRevisions(profile_id);
+		const profile = profiles.find(
+			(candidate) =>
+				candidate.id === profile_id && candidate.revision === revision,
 		);
+		if (!profile) {
+			throw new Error("Saved fixture profile is missing from the snapshot");
+		}
+		return profile;
 	}
 
 	async importFixturePackage(

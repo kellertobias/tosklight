@@ -146,6 +146,78 @@ fn empty_virtual_playback_creates_cuelist_and_embedded_assignment_atomically() {
 }
 
 #[test]
+fn recording_first_cue_at_unallocated_pool_number_needs_no_page_assignment() {
+    let rig = TestRig::new();
+    let commit = rig.commit(
+        ProgrammingCueRecordTarget::Pool {
+            playback_number: 101,
+        },
+        ProgrammingCueResolvedTarget::Playback {
+            playback_number: 101,
+            page_slot: None,
+        },
+        ProgrammingCueRecordOperation::Overwrite,
+        None,
+        capture(0.5),
+    );
+    let result = rig
+        .service
+        .commit_programming_cue(&rig.context(), &commit, &rig.ports)
+        .unwrap();
+    assert!(result.changed);
+    assert!(result.created_topology);
+    assert_eq!(result.recorded_cue.number.to_string(), "1");
+    assert_eq!(result.concrete_playback_number, Some(101));
+    assert!(result.projections.page.is_none());
+    assert_eq!(rig.document().objects_of_kind("playback_page").count(), 0);
+    assert_eq!(rig.document().objects_of_kind("cue_list").count(), 1);
+    assert_eq!(
+        result.projections.playback.as_ref().unwrap().raw_body["target"]["type"],
+        "cue_list"
+    );
+}
+
+#[test]
+fn reserved_pool_identity_rejects_recording_without_mutating_special_assignment() {
+    let rig = TestRig::new();
+    let mut playback =
+        light_playback::PlaybackDefinition::new_cue_list(101, "Speed A", CueListId::new());
+    playback.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
+    let body = serde_json::to_value(&playback).unwrap();
+    rig.seed("playback", "101", body.clone());
+    let revision = rig.document().revision();
+    let commit = rig.commit(
+        ProgrammingCueRecordTarget::Pool {
+            playback_number: 101,
+        },
+        ProgrammingCueResolvedTarget::Playback {
+            playback_number: 101,
+            page_slot: None,
+        },
+        ProgrammingCueRecordOperation::Overwrite,
+        None,
+        capture(0.5),
+    );
+    let error = rig
+        .service
+        .commit_programming_cue(&rig.context(), &commit, &rig.ports)
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("Choose an empty Cuelist number"));
+    assert_eq!(rig.document().revision(), revision);
+    assert_eq!(rig.document().objects_of_kind("cue_list").count(), 0);
+    assert_eq!(
+        rig.document()
+            .objects_of_kind("playback")
+            .next()
+            .unwrap()
+            .body(),
+        &body
+    );
+    assert_eq!(rig.service.events().latest_sequence(), 0);
+}
+
+#[test]
 fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
     let rig = TestRig::new();
     let commit = rig.commit(
@@ -664,6 +736,8 @@ fn capture(level: f32) -> CueRecordingCapture {
         dynamic_values: Vec::new(),
         source: CueRecordingCapturedSource::Normal,
         fixture_values: vec![CueRecordingFixtureValue {
+            replacement_projection: None,
+            preset_reference: None,
             fixture_id: FixtureId(Uuid::from_u128(10)),
             attribute: AttributeKey::intensity(),
             value: AttributeValue::Normalized(level),
@@ -696,6 +770,8 @@ fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
         AttributeValue::Normalized(level),
     )];
     serde_json::to_value(CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: "Existing".into(),
         priority: 0,
@@ -720,3 +796,40 @@ fn cue_list(id: CueListId, cue_id: Uuid, level: f32) -> Value {
 
 #[path = "cue_semantic_storage_tests.rs"]
 mod semantic_storage;
+
+#[test]
+fn independent_empty_cuelist_101_preserves_reserved_playback_and_creates_no_assignment() {
+    let rig = TestRig::new();
+    let mut definition =
+        light_playback::PlaybackDefinition::new_cue_list(101, "Reserved speed", CueListId::new());
+    definition.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
+    definition.reset_incompatible_layout();
+    let speed = serde_json::to_value(definition).unwrap();
+    rig.seed("playback", "101", speed.clone());
+    let commit = rig.commit(
+        ProgrammingCueRecordTarget::CuelistPool { number: 101 },
+        ProgrammingCueResolvedTarget::CuelistPool { number: 101 },
+        ProgrammingCueRecordOperation::Overwrite,
+        None,
+        capture(0.75),
+    );
+    let result = rig
+        .service
+        .commit_programming_cue(&rig.context(), &commit, &rig.ports)
+        .unwrap();
+    assert!(result.created_topology);
+    assert!(result.projections.playback.is_none());
+    assert!(result.projections.page.is_none());
+    assert_eq!(result.concrete_playback_number, None);
+    assert_eq!(result.projections.cue_list.raw_body["pool_number"], 101);
+    assert_eq!(
+        result.projections.cue_list.raw_body["cues"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let document = rig.document();
+    assert_eq!(document.object("playback", "101").unwrap().body(), &speed);
+    assert_eq!(document.objects_of_kind("playback").count(), 1);
+}

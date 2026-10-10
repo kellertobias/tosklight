@@ -313,6 +313,7 @@ fn dynamics(config: &Config) -> Vec<String> {
         DynamicSpeedGroupTransportProjection::decl(config),
         DynamicDefinitionStatusProjection::decl(config),
         DynamicRuntimeInstanceProjection::decl(config),
+        DynamicRuntimeStopOwner::decl(config),
         DynamicRuntimeControllerProjection::decl(config),
         DynamicStartLiveActionRequest::decl(config),
         DynamicOffLiveActionRequest::decl(config),
@@ -544,6 +545,7 @@ fn show_library(config: &Config) -> Vec<String> {
         MvrApplyOutcome::decl(config),
         MvrImportPreview::decl(config),
         MvrPreviewFixture::decl(config),
+        MvrProfileConflict::decl(config),
         MvrExportSummary::decl(config),
         ShowObjectRecord::decl(config),
         ShowObjectCollectionSnapshot::decl(config),
@@ -589,6 +591,8 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeReadinessSnapshot::decl(config),
         RuntimeVisualizationDiagnostics::decl(config),
         RuntimeDiagnosticsSnapshot::decl(config),
+        RuntimeRouteDeliveryState::decl(config),
+        RuntimeOutputDeliveryStatus::decl(config),
         RuntimePerformanceDiagnosticsSnapshot::decl(config),
     ]
 }
@@ -869,6 +873,8 @@ fn patch(config: &Config) -> Vec<String> {
         PatchFixtureAxis::decl(config),
         PatchFixturePolicyAction::decl(config),
         PatchFixturePolicyActionRequest::decl(config),
+        PatchHeadReplacement::decl(config),
+        PatchRootProgramReplacement::decl(config),
         PatchFixtureUpdateAction::decl(config),
         PatchFixtureUpdateRequest::decl(config),
         PatchErrorResponse::decl(config),

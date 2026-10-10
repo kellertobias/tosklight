@@ -5,6 +5,7 @@ import { useCommandLineSurface } from "../../components/control/commandLine/useC
 import type { Cue } from "../../api/types";
 import type { WindowProps } from "../windowTypes";
 import { CuePropertyModal } from "./CueProperties";
+import { CuePresetWarnings } from "./CuePresetWarnings";
 import {
 	type CueEditableProperty,
 	CueTable,
@@ -75,7 +76,44 @@ interface CuelistDetailProps {
 	onOpenSettings: () => void;
 	thumbnails?: Record<number, string>;
 	fixedCueListId?: string;
+	assignmentNumber?: number | null;
 	viewOnly?: boolean;
+}
+
+function CuelistDetailHeader({
+	props,
+	selection,
+}: {
+	props: CuelistDetailProps;
+	selection: ReturnType<typeof useSelectedCuelist>;
+}) {
+	if (props.compact) return null;
+	return (
+		<WindowHeader
+			title={`Cuelist View · Cuelist ${props.selectedCuelist}${selection.cueList?.name ? ` · ${selection.cueList.name}` : ""}`}
+			info={{
+				primary: selection.active ? "Running" : "Ready",
+				secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
+			}}
+			groups={[
+				{
+					id: "cuelist-navigation",
+					actions: [
+						{
+							id: "pool",
+							label: "← Cuelist Pool",
+							onPress: props.onOpenPool,
+						},
+						{
+							id: "settings",
+							label: "Cuelist Settings",
+							onPress: props.onOpenSettings,
+						},
+					],
+				},
+			]}
+		/>
+	);
 }
 
 export function CuelistDetail(props: CuelistDetailProps) {
@@ -88,6 +126,7 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		props.selectedCuelist,
 		props.active,
 		props.fixedCueListId,
+		props.assignmentNumber,
 	);
 	const cues = selection.cueList?.cues ?? NO_CUES;
 	const editor = useCueEditor({
@@ -109,37 +148,15 @@ export function CuelistDetail(props: CuelistDetailProps) {
 			? cues[selection.active?.cue_index ?? -1]
 			: props.cueInformationBlock === "next"
 				? cues.find(
-						(cue) =>
-							cue.number === selection.active?.effective_next_cue_number,
+						(cue) => cue.number === selection.active?.effective_next_cue_number,
 					)
 				: undefined;
 	const informationLabel =
 		props.cueInformationBlock === "current" ? "Current Cue" : "Next Cue";
 	return (
 		<div className="cuelist-window">
-			{!props.compact && (
-				<WindowHeader
-					title={`Cuelist View · Cuelist ${props.selectedCuelist}${selection.cueList?.name ? ` · ${selection.cueList.name}` : ""}`}
-					info={{
-						primary: selection.active ? "Running" : "Ready",
-						secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
-					}}
-					groups={[
-						{ id: "cuelist-navigation", actions: [
-							{
-								id: "pool",
-								label: "← Cuelist Pool",
-								onPress: props.onOpenPool,
-							},
-							{
-								id: "settings",
-								label: "Cuelist Settings",
-								onPress: props.onOpenSettings,
-							},
-						] },
-					]}
-				/>
-			)}
+			<CuelistDetailHeader props={props} selection={selection} />
+			<CuePresetWarnings cues={cues} active={props.active} />
 			<div
 				className={`sequence-layout ${props.cueInformationBlock !== "off" ? "with-cue-information" : ""}`.trim()}
 			>

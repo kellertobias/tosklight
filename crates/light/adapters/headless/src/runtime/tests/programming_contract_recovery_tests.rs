@@ -8,6 +8,7 @@ fn contract_recovery_options(data_dir: &std::path::Path) -> startup_options::Sta
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     }
@@ -217,6 +218,7 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
         let show_id = initial.persistent.active_show.as_ref().unwrap().id;
         let list_id = light_core::CueListId::new();
         let row = PlaybackRetainedValue {
+            replacement_projection: None,
             timed: light_core::TimedValue {
                 fixture_id: light_core::FixtureId::new(),
                 attribute: light_core::AttributeKey("focus".into()),

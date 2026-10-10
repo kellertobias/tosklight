@@ -1,4 +1,5 @@
 import { formatErrorDetails } from "@tosklight/ui";
+import { ApiRequestError } from "../../api/ApiRequestError";
 import type { ShowEntry } from "../../api/types";
 import type { ServerController } from "./model";
 import type { ServerCapabilities } from "./capabilityContracts";
@@ -127,15 +128,35 @@ function createShowCreationActions(
 		},
 		initializeEmptyShow: async (baseShowId) => {
 			try {
-				const names = new Set(shows.map((show) => show.name.toLowerCase()));
 				const prefix = baseShowId ? "New Show from Base" : "New Empty Show";
-				let name = prefix;
-				for (let suffix = 2; names.has(name.toLowerCase()); suffix += 1)
-					name = `${prefix} ${suffix}`;
-				await whileLoadingShow(model, `Initializing show ${name}…`, async () => {
-					const created = baseShowId ? await api.shows.createFromBase(baseShowId, name) : await api.shows.createShow(name);
-					await api.shows.openShow(created.id, "hold_current");
-					await refresh();
+				await whileLoadingShow(model, `Initializing ${prefix.toLowerCase()}…`, async () => {
+					for (let attempt = 0; attempt < 3; attempt += 1) {
+						let library: ShowEntry[];
+						try {
+							library = await api.shows.shows();
+						} catch (reason) {
+							throw new Error(`Could not read the saved show library. Retry creating the empty show. ${formatErrorDetails(reason)}`);
+						}
+						setShows(library);
+						const names = new Set(library.map((show) => show.name.toLowerCase()));
+						let name = prefix;
+						for (let suffix = 2; names.has(name.toLowerCase()); suffix += 1)
+							name = `${prefix} ${suffix}`;
+						let created: ShowEntry;
+						try {
+							created = baseShowId ? await api.shows.createFromBase(baseShowId, name) : await api.shows.createShow(name);
+						} catch (reason) {
+							// Only a definite name collision permits another creation attempt.
+							// Network/unknown failures must not duplicate a possibly created show.
+							if (reason instanceof ApiRequestError && (reason.status === 400 || reason.status === 409)
+								&& reason.message.toLowerCase().includes("a show with that name already exists")) continue;
+							throw reason;
+						}
+						await api.shows.openShow(created.id, "hold_current");
+						await refresh();
+						return;
+					}
+					throw new Error("Another desk is creating shows with the same names. Retry creating the empty show.");
 				});
 				setError(null);
 				return true;

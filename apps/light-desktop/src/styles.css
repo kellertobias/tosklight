@@ -8,6 +8,7 @@
 @import "./styles/touch-and-debug.css";
 @import "./styles/workflows.css";
 @import "./styles/setup-and-editors.css";
+@import "./styles/import-mapping.css";
 
 .migration-notice {
 	display: flex;

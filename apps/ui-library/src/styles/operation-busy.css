@@ -1,0 +1,34 @@
+.ui-operation-busy-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 100;
+	display: grid;
+	place-items: center;
+	padding: 24px;
+	background: rgb(0 0 0 / 65%);
+}
+.ui-operation-busy-panel {
+	display: grid;
+	justify-items: center;
+	gap: 12px;
+	width: min(560px, 100%);
+	max-height: calc(100dvh - 48px);
+	overflow: auto;
+	padding: 28px;
+	color: var(--text);
+	background: var(--panel);
+	border: 1px solid var(--line2);
+	border-radius: 12px;
+	text-align: center;
+}
+.ui-operation-busy-panel h2,
+.ui-operation-busy-panel p {
+	margin: 0;
+}
+.ui-operation-busy-panel progress {
+	width: 100%;
+}
+.ui-operation-busy-panel .ui-spinner {
+	width: 28px;
+	height: 28px;
+}

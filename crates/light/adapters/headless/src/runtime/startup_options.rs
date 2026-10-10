@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-pub(super) const HELP: &str = "light-headless [--data-dir PATH] [--show PATH] [--fixture-package-dir PATH] [--extensions-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS]";
+pub(super) const HELP: &str = "light-headless [--data-dir PATH] [--show PATH] [--fixture-package-dir PATH] [--extensions-dir PATH] [--bind ADDRESS] [--test-bench] [--osc-bind ADDRESS] [--output-bind-ip ADDRESS] [--visualizer-preview]";
 
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum StartupAction {
@@ -22,6 +22,8 @@ pub(super) struct StartupOptions {
     pub(super) extensions_dir: Option<PathBuf>,
     pub(super) bind: SocketAddr,
     pub(super) test_bench: bool,
+    /// Owned preview: inhibit all physical output and stop when its parent stdin closes.
+    pub(super) visualizer_preview: bool,
     pub(super) osc_bind_override: Option<SocketAddr>,
     pub(super) output_bind_override: Option<IpAddr>,
 }
@@ -73,6 +75,7 @@ fn apply_argument(
         }
         "--bind" => options.bind = required(values, "--bind requires an address")?.parse()?,
         "--test-bench" => options.test_bench = true,
+        "--visualizer-preview" => options.visualizer_preview = true,
         "--osc-bind" => {
             options.osc_bind_override =
                 Some(required(values, "--osc-bind requires an address")?.parse()?);
@@ -95,6 +98,9 @@ fn required(
 }
 
 fn validate(options: &StartupOptions) -> anyhow::Result<()> {
+    if options.visualizer_preview && !options.bind.ip().is_loopback() {
+        anyhow::bail!("--visualizer-preview requires a loopback HTTP bind");
+    }
     if options.test_bench && !options.bind.ip().is_loopback() {
         anyhow::bail!("--test-bench requires a loopback HTTP bind");
     }
@@ -113,6 +119,7 @@ impl StartupOptions {
             extensions_dir: environment_extensions_dir,
             bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 5000)),
             test_bench: false,
+            visualizer_preview: false,
             osc_bind_override: None,
             output_bind_override: None,
         }
@@ -206,6 +213,29 @@ mod tests {
         let error = parse(strings(&["--unknown"]), None, None).unwrap_err();
 
         assert_eq!(error.to_string(), "unknown option: --unknown");
+    }
+
+    #[test]
+    fn visualizer_preview_is_explicit_and_requires_loopback() {
+        assert!(!run_options(&[], None, None).visualizer_preview);
+        assert!(
+            run_options(
+                &["--visualizer-preview", "--bind", "127.0.0.1:0"],
+                None,
+                None
+            )
+            .visualizer_preview
+        );
+        let error = parse(
+            strings(&["--visualizer-preview", "--bind", "0.0.0.0:5000"]),
+            None,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "--visualizer-preview requires a loopback HTTP bind"
+        );
     }
 
     #[test]

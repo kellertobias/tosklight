@@ -2,7 +2,34 @@ export type ProgrammerPreloadLifecycleMutation =
 	| "enter"
 	| "go"
 	| "clear_pending"
-	| "release";
+	| "release"
+	| {
+			type: "remove_pending_fixture_value";
+			fixtureId: string;
+			attribute: string;
+			expectedValuesRevision: number;
+	  }
+	| {
+			type: "remove_pending_group_value";
+			groupId: string;
+			attribute: string;
+			expectedValuesRevision: number;
+	  }
+	| {
+			type: "remove_pending_playback";
+			index: number;
+			expectedQueueRevision: number;
+	  }
+	| {
+			type: "remove_pending_dynamic";
+			index: number;
+			expectedValuesRevision: number;
+	  }
+	| {
+			type: "remove_pending_group_release";
+			index: number;
+			expectedValuesRevision: number;
+	  };
 
 export interface ProgrammerPreloadLifecyclePending {
 	requestId: string;
@@ -70,11 +97,7 @@ export class ProgrammerPreloadLifecycleStore {
 		return true;
 	}
 
-	rollback(
-		requestId: string,
-		error: Error,
-		expectedScope = this.scope,
-	) {
+	rollback(requestId: string, error: Error, expectedScope = this.scope) {
 		if (!this.matchesPending(requestId, expectedScope)) return false;
 		this.publish({ pending: null, error });
 		return true;

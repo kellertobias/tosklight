@@ -184,6 +184,9 @@ fn transfer_cue(
 
 fn transfer_group_change(group_id: &str, value: f32) -> light_playback::GroupCueChange {
     light_playback::GroupCueChange {
+
+replacement_projections: Default::default(),
+preset_reference: None,
         group_id: group_id.into(),
         attribute: light_core::AttributeKey::intensity(),
         value: Some(light_core::AttributeValue::Normalized(value)),
@@ -199,6 +202,8 @@ fn transfer_cue_list(
     cues: Vec<light_playback::Cue>,
 ) -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: name.into(),
         priority: 0,

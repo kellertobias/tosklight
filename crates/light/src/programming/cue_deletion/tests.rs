@@ -323,6 +323,8 @@ fn seed_show(store: &ShowStore, cue_list_id: CueListId, cue_count: usize) {
 
 fn cue_list(id: CueListId, cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: "Lossless".into(),
         priority: 0,

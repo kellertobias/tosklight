@@ -38,6 +38,8 @@ pub(super) fn fixture_update(
     programmer_order: u64,
 ) -> ProgrammerFixtureUpdate {
     ProgrammerFixtureUpdate {
+        replacement_projection: None,
+        preset_reference: None,
         fixture_id,
         attribute: attribute(name),
         value: normalized(value),
@@ -67,6 +69,8 @@ pub(super) fn change(fixture_id: FixtureId, name: &str, value: f32) -> CueChange
 
 pub(super) fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId(Uuid::from_u128(900)),
         name: "Cuelist 1".into(),
         priority: 0,
@@ -129,3 +133,5 @@ pub(super) fn stored_value(cue: &Cue, fixture_id: FixtureId, name: &str) -> Opti
         .and_then(|change| change.value.as_ref())
         .and_then(AttributeValue::normalized)
 }
+
+mod replacement_cases;

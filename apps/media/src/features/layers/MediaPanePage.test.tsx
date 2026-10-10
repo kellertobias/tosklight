@@ -275,7 +275,9 @@ describe("the production Media pane", () => {
 
 		await within(dock).findByRole("switch", { name: "Take over playback" });
 		expect(within(dock).getAllByRole("switch")).toHaveLength(1);
-		expect(dock).toHaveTextContent(/^Take over playbackWeb playback control off$/u);
+		expect(dock).toHaveTextContent(
+			/^Take over playbackWeb playback control off$/u,
+		);
 		expect(within(dock).getByText("Web playback control off")).toBeVisible();
 		expect(dock).not.toHaveTextContent("Release");
 	});
@@ -448,6 +450,16 @@ describe("the production Media pane", () => {
 			"takeover refused",
 		);
 		expect(server.outputs[0].playbackTakeover).toBe(false);
+	});
+
+	it("summarizes an active canonical bank when all legacy effects are None", async () => {
+		const server = stubServer();
+		server.outputs[0].layers[0].effectBanks[0].select = 9;
+		server.outputs[0].layers[0].effectBanks[0].strength = 1;
+		render(<MediaPanePage />);
+		const layer = await screen.findByRole("button", { name: /Layer 1/iu });
+		expect(layer).toHaveTextContent("Effect: Bank 1 · Slot 9");
+		expect(layer).not.toHaveTextContent("Effect: None");
 	});
 
 	it("controls exactly two effect banks and the fixed master opacity cycle", async () => {
@@ -718,11 +730,15 @@ describe("the production Media pane", () => {
 			within(playback).getByRole("button", { name: /^Out point: End of clip/ }),
 		);
 		typeInModal("Out point (mm:ss.ff before end)", "00:04.00", 8);
-		await waitFor(() => expect([layer.inPoint, layer.outPoint]).toEqual([300, 100]));
+		await waitFor(() =>
+			expect([layer.inPoint, layer.outPoint]).toEqual([300, 100]),
+		);
 		await waitFor(() => expect(clear).toBeEnabled());
 
 		fireEvent.click(clear);
-		await waitFor(() => expect([layer.inPoint, layer.outPoint]).toEqual([0, 0]));
+		await waitFor(() =>
+			expect([layer.inPoint, layer.outPoint]).toEqual([0, 0]),
+		);
 		expect(within(playback).getByText("End of clip")).toBeInTheDocument();
 		expect(within(playback).getByText("00:00.00")).toBeInTheDocument();
 		await waitFor(() => expect(clear).toBeDisabled());
@@ -748,7 +764,9 @@ describe("the production Media pane", () => {
 			name: "Playback controls",
 		});
 		const length = () =>
-			within(playback).getByText("Clip length").closest(".media-control-readout");
+			within(playback)
+				.getByText("Clip length")
+				.closest(".media-control-readout");
 		expect(length()).toHaveTextContent("00:24.00");
 
 		// Trimming the range leaves the clip's own length alone.
@@ -943,9 +961,9 @@ describe("the production Media pane", () => {
 			target: { value: "2.5" },
 		});
 		await waitFor(() =>
-			expect(
-				server.outputs[0].layers[0].visualizerParameters?.audioGain,
-			).toBe(2.5),
+			expect(server.outputs[0].layers[0].visualizerParameters?.audioGain).toBe(
+				2.5,
+			),
 		);
 		// The tuning belongs to the layer: no effect slot is addressed or changed.
 		expect(server.writeBodies.at(-1)).not.toHaveProperty("effectSlot");

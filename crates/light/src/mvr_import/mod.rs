@@ -30,4 +30,7 @@ pub use sources::{MVR_SOURCE_ARCHIVE_KIND, RetainedMvrSources};
 mod tests;
 
 pub use bindings::{MvrDefinitions, bind_mvr_sources};
-pub use revisions::{MvrProfileSlots, mvr_profile_identity, reserve_mvr_profiles};
+pub use revisions::{
+    MvrProfileConflict, MvrProfileSlots, mvr_native_profile_slots, mvr_profile_conflicts,
+    mvr_profile_identity, reserve_mvr_profiles, reserve_mvr_profiles_with_identity_copies,
+};

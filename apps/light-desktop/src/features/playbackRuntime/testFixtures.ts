@@ -94,7 +94,7 @@ export function playbackSnapshot(
 						...cueProjection(identity.playback_number),
 						requested: identity,
 					}
-				: identity.kind === "cue_list"
+				: identity.kind === "cue_list" || identity.kind === "direct_cue_list"
 					? {
 							...cueProjection(1),
 							requested: identity,

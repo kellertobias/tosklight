@@ -2,6 +2,7 @@ use super::*;
 use light_core::spatial::RigidTransform;
 use light_fixture::{FixtureLocation, FixtureVector};
 
+mod aim_targets;
 mod unused_points;
 
 const AXES: [&str; 6] = [

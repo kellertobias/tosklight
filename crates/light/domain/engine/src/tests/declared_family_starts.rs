@@ -15,6 +15,9 @@ use light_fixture::{
 };
 use uuid::Uuid;
 
+#[path = "declared_family_starts/solo_native.rs"]
+mod solo_native;
+
 /// Channel order: intensity, red, green, blue, zoom, focus.
 const RED: usize = 1;
 const ZOOM: usize = 4;

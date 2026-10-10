@@ -109,6 +109,8 @@ fn new_cue_list(
 ) -> (light_playback::CueList, light_playback::PlaybackDefinition) {
     let cue_list_id = light_core::CueListId::new();
     let list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: format!("Cuelist {playback}"),
         priority: 0,

@@ -7,7 +7,7 @@
 use super::{
     GdtfImportDiagnostic, channels::resolve_attribute, diagnostic, dmx, identity, xml::Node,
 };
-use crate::gdtf::physical::{band_from_name, derived_band, is_color, xyz};
+use crate::gdtf::physical::{band_from_name, derived_band, is_color, xyz, xyz_with_optical_scale};
 use crate::{
     ChannelFunction, ChannelFunctionBehavior, ColorPhysicalModel, FilterSpectrum, FixtureMode,
     FixtureProfile, HeadOpticalPath, NativeColorBinding, OpticalEmitter, OpticalFilter,
@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 /// The fixture-level nodes channel functions and beams link to.
 pub(super) struct Descriptions<'a> {
+    optical_scale: f64,
     emitters: BTreeMap<&'a str, &'a Node>,
     filters: BTreeMap<&'a str, &'a Node>,
     wheels: BTreeMap<&'a str, &'a Node>,
@@ -35,13 +36,14 @@ fn named<'a>(parent: Option<&'a Node>, kind: &'static str) -> BTreeMap<&'a str, 
         .unwrap_or_default()
 }
 
-pub(super) fn descriptions(fixture: &Node) -> Descriptions<'_> {
+pub(super) fn descriptions(fixture: &Node, optical_scale: f64) -> Descriptions<'_> {
     let physical = fixture.child("PhysicalDescriptions");
     let mut beams = Vec::new();
     if let Some(geometries) = fixture.child("Geometries") {
         collect_beams(geometries, &mut beams);
     }
     Descriptions {
+        optical_scale,
         emitters: named(physical.and_then(|node| node.child("Emitters")), "Emitter"),
         filters: named(physical.and_then(|node| node.child("Filters")), "Filter"),
         wheels: named(fixture.child("Wheels"), "Wheel"),
@@ -281,7 +283,7 @@ fn path(mode: &FixtureMode, geometry: &str, draft: Draft) -> HeadOpticalPath {
 }
 
 /// CIE `x,y,Y` text as XYZ; absent or malformed colour is unknown, never black.
-fn color(node: &Node) -> Option<light_core::Xyz> {
+fn color(node: &Node, optical_scale: f64) -> Option<light_core::Xyz> {
     let values = node
         .attr("Color")?
         .split(',')
@@ -293,7 +295,12 @@ fn color(node: &Node) -> Option<light_core::Xyz> {
                 .filter(|value| value.is_finite())
         })
         .collect::<Option<Vec<_>>>()?;
-    xyz(<[f64; 3]>::try_from(values).ok()?)
+    let values = <[f64; 3]>::try_from(values).ok()?;
+    if optical_scale == 0.01 {
+        xyz(values)
+    } else {
+        xyz_with_optical_scale(values, optical_scale)
+    }
 }
 
 /// `(physical, interpolation is Step, spectrum)` of every measurement with a usable spectrum.
@@ -360,7 +367,7 @@ fn emitter(
             channel_id: linked.channel_id,
             function_id: linked.function.id,
         },
-        xyz: color(node),
+        xyz: color(node, descriptions.optical_scale),
         spectrum: measurements(node)
             .pop()
             .map(|(_, _, spectrum)| spectrum)
@@ -471,7 +478,7 @@ fn beam_spectra(
             continue;
         };
         drafts.entry(geometry.to_owned()).or_default().fixed = Some(OpticalSource::Fixed {
-            xyz: color(node),
+            xyz: color(node, descriptions.optical_scale),
             spectrum: measurements(node)
                 .pop()
                 .map(|(_, _, spectrum)| spectrum)

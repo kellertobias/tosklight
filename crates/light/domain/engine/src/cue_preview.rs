@@ -51,8 +51,27 @@ pub fn cue_preview_state(
         .iter()
         .map(|group| (group.id.clone(), group.clone()))
         .collect();
-    let expanded =
-        expand_group_references_for_preview(source, &groups, &group_stage_positions(snapshot));
+    let replacements = source
+        .cues
+        .iter()
+        .any(|cue| {
+            cue.changes
+                .iter()
+                .any(|change| change.replacement_projection.is_some())
+                || cue
+                    .group_changes
+                    .iter()
+                    .any(|change| !change.replacement_projections.is_empty())
+        })
+        .then(|| crate::ReplacementDestinationPlan::compile(&snapshot.fixtures))
+        .transpose()
+        .ok()?;
+    let expanded = expand_group_references_for_preview(
+        source,
+        &groups,
+        &group_stage_positions(snapshot),
+        replacements.as_ref(),
+    );
     let mut order: Vec<(FixtureId, AttributeKey)> = Vec::new();
     let mut values: HashMap<(FixtureId, AttributeKey), AttributeValue> = HashMap::new();
     for cue in &expanded.cues[..=target] {

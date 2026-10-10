@@ -16,7 +16,6 @@ import {
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
-	PlaybackDefinition,
 	PlaybackPage,
 	PoolPresentationConfiguration,
 } from "../../api/types";
@@ -41,6 +40,7 @@ import {
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
 import { runtimeMaster } from "../../features/playbackRuntime/legacy";
 import {
+	useDirectCueListProjectionMap,
 	usePlaybackProjectionMap,
 	usePlaybackRuntimeActions,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
@@ -51,11 +51,14 @@ import {
 } from "../../features/poolPresentation/poolPresentation";
 import {
 	useCueLists,
+	usePlaybackDefinitions,
 	usePlaybackPages,
 } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
+import type { CuelistPoolEntry } from "../../features/playbackTopology/cuelistPoolCatalog";
 import { useCuelistPool } from "./useCuelistSelection";
+import { usePoolRecordLabel } from "../../features/recordUpdateOptions/usePoolRecordLabel";
 
 interface CuelistPoolProps {
 	active: boolean;
@@ -72,9 +75,10 @@ interface CuelistPoolProps {
 }
 
 interface PoolSlotProps {
+	recordLabel?: string;
 	number: number;
 	poolPosition: number;
-	playback: PlaybackDefinition | null;
+	playback: CuelistPoolEntry | null;
 	selectedCuelist: number | null;
 	runtimeMaster: number | null;
 	usage: number[];
@@ -94,6 +98,7 @@ const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
+
 	return (
 		<div className="cuelist-card-slot">
 			<PoolCard
@@ -104,40 +109,39 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 				aria-pressed={props.selectedCuelist === number && Boolean(playback)}
 				model={{
 					number,
-					primary: playback?.name ?? "Empty",
-					secondary: playback
-						? props.offPending
-							? "Tap to release Cuelist"
-							: props.updateArmed
-								? "Touch to choose Update mode"
-								: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
-						: props.updateArmed
-							? "Touch to check Update eligibility"
-							: props.storeArmed
-								? "Tap to record Cuelist"
-								: "Press Rec first",
+					primary: playback?.cueList.name ?? "Empty",
+					secondary: playback ? (
+						<span>
+							{playback.cueList.cues.length}
+							{runtimeMaster != null && (
+								<span role="img" aria-label="Running">
+									{" "}
+									▶
+								</span>
+							)}
+						</span>
+					) : undefined,
 					details: playback
 						? [
-								usage.length
-									? `Playbacks on pages ${usage.join(", ")}`
+								...(playback.legacyAlias
+									? [`Alias of Cuelist ${playback.canonicalNumber}`]
+									: []),
+								playback.assignment
+									? `Playback ${playback.assignment.number}${usage.length ? ` · pages ${usage.join(", ")}` : " · no page assignment"}`
 									: "Not assigned to a playback",
 							]
 						: undefined,
-					color: playback?.color,
-					icon: playback?.presentation_icon,
-					image: playback?.presentation_image
+					color: playback?.assignment?.color,
+					icon: playback?.assignment?.presentation_icon,
+					image: playback?.assignment?.presentation_image
 						? {
-								src: playback.presentation_image,
-								alt: `${playback.name} presentation`,
+								src: playback.assignment?.presentation_image,
+								alt: `${playback.cueList.name} presentation`,
 							}
 						: undefined,
 					kind: "cuelist",
-					status:
-						runtimeMaster != null
-							? `Active · ${Math.round(runtimeMaster * 100)}%`
-							: undefined,
 					states: props.presentation.states,
-					workflow: props.offPending && playback ? "Off" : undefined,
+					workflow: props.offPending && playback ? "Off" : props.recordLabel,
 				}}
 				onPointerDown={props.onPointerDown}
 				onPointerUp={props.onPointerEnd}
@@ -148,18 +152,18 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 				}}
 				onClick={props.onClick}
 			/>
-			{playback?.presentation_image && (
+			{playback?.assignment?.presentation_image && (
 				<Button
 					type="button"
 					className="cuelist-preview-button"
-					aria-label={`Open ${playback.name} preview`}
+					aria-label={`Open ${playback.cueList.name} preview`}
 					onClick={props.onPreviewImage}
 					onContextMenu={(event) => {
 						event.preventDefault();
 						props.onContextMenu();
 					}}
 				>
-					<img src={playback.presentation_image} alt="" />
+					<img src={playback.assignment?.presentation_image} alt="" />
 				</Button>
 			)}
 		</div>
@@ -168,12 +172,73 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 
 function poolCueNumbers(
 	cueLists: ReturnType<typeof useCueLists>,
-	playback: PlaybackDefinition | null,
+	playback: CuelistPoolEntry | null,
 ) {
-	if (playback?.target.type !== "cue_list") return [];
-	const cueListId = playback.target.cue_list_id;
+	if (!playback) return [];
+	const cueListId = playback.cueList.id;
 	const cueList = cueLists.find((item) => item.body.id === cueListId)?.body;
 	return cueList?.cues.map((cue) => cue.number) ?? [];
+}
+
+function selectPoolSetSource(
+	number: number,
+	playback: CuelistPoolEntry | null,
+	props: CuelistPoolProps,
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+) {
+	if (!playback) {
+		props.onMessage(
+			`Cuelist ${number} is empty · record it before assigning it to a playback.`,
+		);
+		return;
+	}
+	if (!props.builtIn) props.onSelectLocalCuelist(number);
+	dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
+	dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
+}
+
+function releasePoolCueList(
+	playback: CuelistPoolEntry | null,
+	runtimeActions: ReturnType<typeof usePlaybackRuntimeActions>,
+	directRuntimes: ReturnType<typeof useDirectCueListProjectionMap>,
+	assignedRuntimes: ReturnType<typeof usePlaybackProjectionMap>,
+	props: CuelistPoolProps,
+	command: ReturnType<typeof useCommandLineSurface>,
+) {
+	if (!playback) return;
+	if (!runtimeActions) {
+		props.onMessage(
+			"Cuelist Off is unavailable while Playback authority is loading.",
+		);
+		return;
+	}
+	void runtimeActions
+		.releaseCueListSource({
+			identity:
+				runtimeMaster(
+					directRuntimes.projections.get(playback.cueList.id),
+				) == null &&
+				playback.assignment &&
+				runtimeMaster(assignedRuntimes.get(playback.assignment.number)) !=
+					null
+					? {
+							kind: "playback",
+							playback_number: playback.assignment.number,
+						}
+					: { kind: "direct_cue_list", cue_list_id: playback.cueList.id },
+			cueListId: playback.cueList.id,
+		})
+		.then(async (outcome) => {
+			if (outcome) {
+				props.onMessage("");
+				await command.reset();
+			} else {
+				props.onMessage(
+					"Cuelist Off was rejected; the OFF target remains armed.",
+				);
+			}
+		});
+	return;
 }
 
 function useCuelistPoolActions(props: CuelistPoolProps) {
@@ -184,11 +249,23 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	const cueRecording = useCueRecording();
 	const programmingUpdate = useProgrammingUpdate();
 	const runtimeActions = usePlaybackRuntimeActions();
+	const catalog = useCuelistPool();
+	const directRuntimes = useDirectCueListProjectionMap(
+		catalog.map((entry) => entry.cueList.id),
+		props.active,
+	);
+	const assignedRuntimes = usePlaybackProjectionMap(
+		props.active
+			? catalog.flatMap((entry) =>
+					entry.assignment ? [entry.assignment.number] : [],
+				)
+			: [],
+	);
 	const cueLists = useCueLists();
 	const { state, dispatch } = useApp();
 	const [recordChoice, setRecordChoice] = useState<{
 		number: number;
-		playback: PlaybackDefinition;
+		playback: CuelistPoolEntry;
 		cueNumber: string;
 	} | null>(null);
 	const holdTimer = useRef<number | null>(null);
@@ -199,31 +276,17 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 		if (holdTimer.current) window.clearTimeout(holdTimer.current);
 		holdTimer.current = null;
 	};
-	const startHold = (number: number, playback: PlaybackDefinition | null) => {
-		if (!playback || state.updateArmed || offPending) return;
+	const startHold = (number: number, playback: CuelistPoolEntry | null) => {
+		if (!playback || !playback || state.updateArmed || offPending) return;
 		held.current = false;
 		holdTimer.current = window.setTimeout(() => {
 			held.current = true;
 			props.onOpenSettings(number);
 		}, 650);
 	};
-	const selectSetSource = (
-		number: number,
-		playback: PlaybackDefinition | null,
-	) => {
-		if (!playback) {
-			props.onMessage(
-				`Cuelist ${number} is empty · record it before assigning it to a playback.`,
-			);
-			return;
-		}
-		if (!props.builtIn) props.onSelectLocalCuelist(number);
-		dispatch({ type: "SET_CUELIST_SET_TARGET", value: number });
-		dispatch({ type: "SET_PRESET_SET_ARMED", value: false });
-	};
 	const openContextSettings = (
 		number: number,
-		playback: PlaybackDefinition | null,
+		playback: CuelistPoolEntry | null,
 	) => {
 		if (!playback) {
 			props.onMessage(
@@ -236,18 +299,14 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	};
 	const record = (
 		number: number,
-		playback: PlaybackDefinition | null,
+		playback: CuelistPoolEntry | null,
 		plan: CueRecordPlan,
 	) => {
 		const settings = loadRecordSettings();
-		const cueListId =
-			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
+
 		void cueRecording
 			?.record({
-				target:
-					cueListId !== null
-						? { kind: "cue_list", cueListId }
-						: { kind: "pool", playbackNumber: number },
+				target: { kind: "cuelist_pool", number },
 				operation: plan.operation,
 				...(plan.cueNumber ? { cueNumber: plan.cueNumber } : {}),
 				timing: {},
@@ -261,7 +320,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 				await command.reset();
 			});
 	};
-	const recordTouched = (number: number, playback: PlaybackDefinition | null) =>
+	const recordTouched = (number: number, playback: CuelistPoolEntry | null) =>
 		recordTouchedTarget({
 			commandText: command.read().text,
 			update: programmingUpdate,
@@ -270,44 +329,24 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			ask: (cueNumber) =>
 				playback && setRecordChoice({ number, playback, cueNumber }),
 		});
-	const click = (number: number, playback: PlaybackDefinition | null) => {
+	const click = (number: number, playback: CuelistPoolEntry | null) => {
 		if (held.current) {
 			held.current = false;
 			return;
 		}
 		if (offPending) {
-			if (!playback || playback.target.type !== "cue_list") return;
-			if (!runtimeActions) {
-				props.onMessage(
-					"Cuelist Off is unavailable while Playback authority is loading.",
-				);
-				return;
-			}
-			void runtimeActions
-				.releaseCueListSource({
-					identity: {
-						kind: "playback",
-						playback_number: playback.number,
-					},
-					cueListId: playback.target.cue_list_id,
-				})
-				.then(async (outcome) => {
-					if (outcome) {
-						props.onMessage("");
-						await command.reset();
-					} else {
-						props.onMessage(
-							"Cuelist Off was rejected; the OFF target remains armed.",
-						);
-					}
-				});
+			releasePoolCueList(
+				playback,
+				runtimeActions,
+				directRuntimes,
+				assignedRuntimes,
+				props,
+				command,
+			);
 			return;
 		}
 		if (state.updateArmed) {
-			const objectId =
-				playback?.target.type === "cue_list"
-					? playback.target.cue_list_id
-					: String(number);
+			const objectId = playback ? playback.cueList.id : String(number);
 			requestUpdateTarget(cueUpdateTarget(objectId));
 			return;
 		}
@@ -337,7 +376,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 			return;
 		}
 		if (state.cueListSetArmed) {
-			selectSetSource(number, playback);
+			selectPoolSetSource(number, playback, props, dispatch);
 			return;
 		}
 		if (!playback) return;
@@ -368,10 +407,16 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 }
 
 function usePoolSlots(
-	pool: PlaybackDefinition[],
+	pool: CuelistPoolEntry[],
 	search: string,
 	pages: PlaybackPage[] | undefined,
-	runtimes: ReturnType<typeof usePlaybackProjectionMap>,
+	runtimes: ReadonlyMap<
+		string,
+		| import("../../features/playbackRuntime/contracts").PlaybackProjection
+		| undefined
+	>,
+	assignedRuntimes: ReturnType<typeof usePlaybackProjectionMap>,
+	playbackDefinitions: ReturnType<typeof usePlaybackDefinitions>,
 ) {
 	return useMemo(() => {
 		const byNumber = new Map(
@@ -385,19 +430,42 @@ function usePoolSlots(
 				usageByNumber.set(playbackNumber, pages);
 			}
 		}
+		const assignedMasterByCueList = new Map<string, number>();
+		for (const definition of playbackDefinitions) {
+			const target = definition.body.target;
+			const projection = assignedRuntimes.get(definition.body.number);
+			if (
+				target.type !== "cue_list" ||
+				projection?.target !== "cue_list" ||
+				projection.cue_list_id !== target.cue_list_id
+			)
+				continue;
+			const master = runtimeMaster(projection);
+			if (master != null)
+				assignedMasterByCueList.set(target.cue_list_id, master);
+		}
 		const normalizedSearch = search.toLowerCase();
 		return Array.from({ length: 1000 }, (_, index) => ({
 			number: index + 1,
 			playback: byNumber.get(index + 1) ?? null,
-			runtimeMaster: runtimeMaster(runtimes.get(index + 1)) ?? null,
-			usage: usageByNumber.get(index + 1) ?? [],
+			runtimeMaster:
+				runtimeMaster(
+					runtimes.get(byNumber.get(index + 1)?.cueList.id ?? ""),
+				) ??
+				assignedMasterByCueList.get(
+					byNumber.get(index + 1)?.cueList.id ?? "",
+				) ??
+				null,
+			usage:
+				usageByNumber.get(byNumber.get(index + 1)?.assignment?.number ?? -1) ??
+				[],
 		})).filter(
 			({ number, playback }) =>
 				!search ||
-				playback?.name.toLowerCase().includes(normalizedSearch) ||
+				playback?.cueList.name.toLowerCase().includes(normalizedSearch) ||
 				String(number).includes(search),
 		);
-	}, [pages, pool, runtimes, search]);
+	}, [pages, pool, runtimes, assignedRuntimes, search, playbackDefinitions]);
 }
 
 type CuelistPoolItem = ReturnType<typeof usePoolSlots>[number];
@@ -410,7 +478,7 @@ function poolSlotViewModels(
 		position: slot.number - 1,
 		card: {
 			number: slot.number,
-			primary: slot.playback?.name ?? "Empty",
+			primary: slot.playback?.cueList.name ?? "Empty",
 		},
 	}));
 }
@@ -438,24 +506,25 @@ function resolveCuelistPresentation({
 	setArmed: boolean;
 	mutationTarget: ReturnType<typeof poolMutationTarget>;
 }) {
-	const itemId =
-		slot.playback?.target.type === "cue_list"
-			? slot.playback.target.cue_list_id
-			: String(slot.number);
+	const itemId = slot.playback ? slot.playback.cueList.id : String(slot.number);
 	return resolveConfiguredPoolPresentation(configuration, {
 		showId,
 		surfaceKey,
 		objectType: "cuelist",
 		itemColorKey: itemId,
-		itemColor: slot.playback?.color,
+		itemColor: slot.playback?.assignment?.color,
 		states: [
 			...(!slot.playback ? (["empty"] as const) : []),
 			...(slot.runtimeMaster != null ? (["active"] as const) : []),
 			...(selectedCuelist === slot.number && slot.playback
 				? (["selected"] as const)
 				: []),
-			...(storeArmed ? (["record-target"] as const) : []),
-			...(storeArmed ? (["store-target"] as const) : []),
+			...(storeArmed && (!slot.playback || slot.playback)
+				? (["record-target"] as const)
+				: []),
+			...(storeArmed && (!slot.playback || slot.playback)
+				? (["store-target"] as const)
+				: []),
 			...(updateArmed ? (["update-target"] as const) : []),
 			...(slot.playback && (setArmed || setTarget)
 				? (["set-target"] as const)
@@ -505,16 +574,17 @@ function CuelistPoolCards({
 	setArmed: boolean;
 	mutationTarget: ReturnType<typeof poolMutationTarget>;
 	offPending: boolean;
-	startHold: (number: number, playback: PlaybackDefinition | null) => void;
+	startHold: (number: number, playback: CuelistPoolEntry | null) => void;
 	clearHold: () => void;
-	click: (number: number, playback: PlaybackDefinition | null) => void;
+	click: (number: number, playback: CuelistPoolEntry | null) => void;
 	openContextSettings: (
 		number: number,
-		playback: PlaybackDefinition | null,
+		playback: CuelistPoolEntry | null,
 	) => void;
-	onPreviewImage: (number: number, playback: PlaybackDefinition) => void;
+	onPreviewImage: (number: number, playback: CuelistPoolEntry) => void;
 }) {
 	const poolSlots = poolSlotViewModels(slots);
+	const recordLabel = usePoolRecordLabel({ active: storeArmed });
 	const renderSlot = (slot: CuelistPoolItem, poolPosition: number) => {
 		const isSetTarget = setTarget === slot.number;
 		const presentation = resolveCuelistPresentation({
@@ -535,6 +605,15 @@ function CuelistPoolCards({
 				{...slot}
 				poolPosition={poolPosition}
 				selectedCuelist={selectedCuelist}
+				recordLabel={
+					storeArmed && !updateArmed
+						? recordLabel({
+								kind: "cuelist",
+								exists: Boolean(slot.playback),
+								cueCount: slot.playback?.cueList.cues.length ?? 0,
+							})
+						: undefined
+				}
 				storeArmed={storeArmed}
 				updateArmed={updateArmed}
 				setTarget={isSetTarget}
@@ -675,14 +754,25 @@ export function CuelistPool(props: CuelistPoolProps) {
 	const surfaceKey = poolSurfaceKey(showId, "cuelist", props.paneId);
 	const pages = usePlaybackPages();
 	useShowObjectKindsView(CUELIST_POOL_KINDS, props.active);
-	const runtimes = usePlaybackProjectionMap(
-		props.active ? pool.map((playback) => playback.number) : [],
+	const runtimes = useDirectCueListProjectionMap(
+		pool.map((entry) => entry.cueList.id),
+		props.active,
+	).projections;
+	const playbackDefinitions = usePlaybackDefinitions(props.active);
+	const assignedRuntimes = usePlaybackProjectionMap(
+		props.active
+			? playbackDefinitions
+					.filter((definition) => definition.body.target.type === "cue_list")
+					.map((definition) => definition.body.number)
+			: [],
 	);
 	const filteredPool = usePoolSlots(
 		pool,
 		search,
 		pages.map((object) => object.body),
 		runtimes,
+		assignedRuntimes,
+		playbackDefinitions,
 	);
 	const workflowMessage =
 		state.cueListSetTarget != null
@@ -725,11 +815,11 @@ export function CuelistPool(props: CuelistPoolProps) {
 				click={click}
 				openContextSettings={openContextSettings}
 				onPreviewImage={(number, playback) => {
-					if (!playback.presentation_image) return;
+					if (!playback.assignment?.presentation_image) return;
 					setPreview({
 						number,
-						name: playback.name,
-						src: playback.presentation_image,
+						name: playback.cueList.name,
+						src: playback.assignment?.presentation_image,
 					});
 				}}
 			/>

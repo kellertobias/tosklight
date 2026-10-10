@@ -4,6 +4,7 @@
 //! place and turn — and the rig attachments it had, so Undo patches the very same fixture back
 //! under the same identity. Moves recorded before the deletion then find their fixture again.
 
+use super::numeric_placement::{NumericPoseRecord, write_poses};
 use super::{
     CadState, EntityTransform, RigAttachment, TransformOutcome, apply_transforms, attachments,
     emit_scene_delta, restore_attachments, selectable_ids, selected_transforms,
@@ -24,6 +25,7 @@ pub(super) struct History {
 #[derive(Clone)]
 enum Step {
     Move(TransformRecord),
+    NumericPose(NumericPoseRecord),
     Delete(DeleteRecord),
     /// New fixtures, such as copies: Undo removes them and Redo patches them back.
     Add(DeleteRecord),
@@ -54,6 +56,10 @@ pub(super) struct DeleteRecord {
 }
 
 impl History {
+    pub(super) fn record_numeric(&mut self, record: NumericPoseRecord) {
+        self.undo.push(Step::NumericPose(record));
+        self.redo.clear();
+    }
     /// A new move: it goes on the undo stack and ends any redo.
     pub(super) fn record_move(&mut self, record: TransformRecord) {
         self.undo.push(Step::Move(record));
@@ -349,8 +355,18 @@ fn take(
     expected_scene_revision: u64,
     direction: Direction,
 ) -> Result<TransformOutcome, String> {
+    take_with(&cad.history, direction, |step| {
+        apply_step(app, session, cad, expected_scene_revision, step, direction)
+    })
+}
+
+fn take_with<T>(
+    history: &parking_lot::Mutex<History>,
+    direction: Direction,
+    apply: impl FnOnce(&Step) -> Result<T, String>,
+) -> Result<T, String> {
     let step = {
-        let mut history = cad.history.lock();
+        let mut history = history.lock();
         let stack = match direction {
             Direction::Back => &mut history.undo,
             Direction::Forward => &mut history.redo,
@@ -360,8 +376,8 @@ fn take(
             Direction::Forward => "There is nothing in the CAD to redo".to_owned(),
         })?
     };
-    let result = apply_step(app, session, cad, expected_scene_revision, &step, direction);
-    let mut history = cad.history.lock();
+    let result = apply(&step);
+    let mut history = history.lock();
     // A step that could not be taken stays where it was; one that was taken crosses over.
     let target = match (direction, result.is_ok()) {
         (Direction::Back, true) | (Direction::Forward, false) => &mut history.redo,
@@ -390,6 +406,19 @@ fn apply_step(
             Ok(TransformOutcome {
                 scene_revision: current_revision(session)?,
                 transforms: Vec::new(),
+                attachments: attachments(session)?,
+            })
+        }
+        Step::NumericPose(record) => {
+            let transforms = match direction {
+                Direction::Back => &record.before,
+                Direction::Forward => &record.after,
+            };
+            let (revision, _) = write_poses(session, expected_scene_revision, transforms)?;
+            emit_scene_delta(app, session, cad, revision, Vec::new())?;
+            Ok(TransformOutcome {
+                scene_revision: revision,
+                transforms: transforms.clone(),
                 attachments: attachments(session)?,
             })
         }
@@ -493,6 +522,124 @@ mod tests {
                     .map_err(|error| error.to_string())
             })
             .unwrap()
+    }
+
+    #[test]
+    fn numeric_history_interleaves_with_gizmo_and_retains_failed_steps_and_redo() {
+        use super::{Direction, Step, TransformRecord, take_with};
+        use crate::cad::{
+            CadState,
+            numeric_placement::{commit_numeric, write_poses},
+            selected_transforms,
+        };
+        let (session, path, ids) = transform_session();
+        let cad = CadState::default();
+        let pose_snapshot = || {
+            patched(&session)
+                .into_iter()
+                .map(|mut body| {
+                    body.as_object_mut().unwrap().remove("fixtureRevision");
+                    body
+                })
+                .collect::<Vec<_>>()
+        };
+        let initial = pose_snapshot();
+        let rev = || {
+            session
+                .with(|d| d.patch_revision().map_err(|e| e.to_string()))
+                .unwrap()
+        };
+        let before = session
+            .with(|d| {
+                selected_transforms(
+                    &d.patch_snapshot().map_err(|e| e.to_string())?,
+                    &std::collections::BTreeSet::from([ids[0]]),
+                )
+            })
+            .unwrap();
+        let after = vec![EntityTransform {
+            id: ids[0],
+            position_millimetres: [500, 2000, 3000],
+            rotation_degrees: [0., 0., 0.],
+        }];
+        apply_transforms(&session, rev(), &after).unwrap();
+        cad.history.lock().record_move(TransformRecord {
+            before,
+            after: after.clone(),
+            before_attachments: vec![],
+            after_attachments: vec![],
+        });
+        let gizmo = pose_snapshot();
+        let numeric = vec![
+            EntityTransform {
+                id: ids[0],
+                position_millimetres: [-2500, 2000, 3000],
+                rotation_degrees: [0., 0., 30.],
+            },
+            EntityTransform {
+                id: ids[1],
+                position_millimetres: [7000, 2000, 3000],
+                rotation_degrees: [0., 0., 60.],
+            },
+        ];
+        commit_numeric(&session, &cad, rev(), &numeric).unwrap();
+        let final_pose = pose_snapshot();
+        let apply_step = |step: &Step, direction: Direction| -> Result<u64, String> {
+            match step {
+                Step::NumericPose(record) => write_poses(
+                    &session,
+                    rev(),
+                    match direction {
+                        Direction::Back => &record.before,
+                        Direction::Forward => &record.after,
+                    },
+                )
+                .map(|(r, _)| r),
+                Step::Move(record) => apply_transforms(
+                    &session,
+                    rev(),
+                    match direction {
+                        Direction::Back => &record.before,
+                        Direction::Forward => &record.after,
+                    },
+                ),
+                _ => panic!("unexpected history step"),
+            }
+        };
+        let result: Result<(), String> =
+            take_with(&cad.history, Direction::Back, |_| Err("stale".into()));
+        assert!(result.is_err());
+        assert_eq!(cad.history.lock().undo.len(), 2);
+        assert_eq!(pose_snapshot(), final_pose);
+        take_with(&cad.history, Direction::Back, |s| {
+            apply_step(s, Direction::Back)
+        })
+        .unwrap();
+        assert_eq!(pose_snapshot(), gizmo);
+        let no_op = vec![EntityTransform {
+            id: ids[0],
+            position_millimetres: [500, 2000, 3000],
+            rotation_degrees: [0., 0., 0.],
+        }];
+        commit_numeric(&session, &cad, rev(), &no_op).unwrap();
+        assert_eq!(cad.history.lock().redo.len(), 1);
+        assert_eq!(cad.history.lock().undo.len(), 1);
+        take_with(&cad.history, Direction::Back, |s| {
+            apply_step(s, Direction::Back)
+        })
+        .unwrap();
+        assert_eq!(pose_snapshot(), initial);
+        take_with(&cad.history, Direction::Forward, |s| {
+            apply_step(s, Direction::Forward)
+        })
+        .unwrap();
+        assert_eq!(pose_snapshot(), gizmo);
+        take_with(&cad.history, Direction::Forward, |s| {
+            apply_step(s, Direction::Forward)
+        })
+        .unwrap();
+        assert_eq!(pose_snapshot(), final_pose);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

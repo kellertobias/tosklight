@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import type { SelectedElement } from "./CadDeleteSelection";
+import { cadSession } from "./session";
 import { CommitText } from "./cadFields";
 import { CadPlacementAssistant } from "./CadPlacementAssistant";
 import { SceneryParameters } from "./CadInfoFields";
@@ -199,17 +200,27 @@ export function SeveralPlacement({
 	const allVenue = elements.length > 0 && elements.every((element) => !element.isFixture);
 	const modelFields = model ? sharedModelFields(model, allVenue) : [];
 
-	async function write(next: PatchFixtureProjection[]) {
+	async function write(next: PatchFixtureProjection[], numeric = false) {
 		if (!next.length) return;
 		const before = fixtures;
 		const written = new Map(next.map((fixture) => [fixture.fixtureId, fixture]));
 		setFixtures(fixtures.map((fixture) => written.get(fixture.fixtureId) ?? fixture));
 		try {
-			await transport.patchFixtures("", 0, {
-				requestId: crypto.randomUUID(),
-				fixtures: next,
-				removeFixtureIds: [],
-			});
+			if (numeric)
+				await cadSession.setNumericTransforms(
+					sceneRevision,
+					next.map((fixture) => ({
+						id: fixture.fixtureId,
+						positionMillimetres: [fixture.location.x, fixture.location.y, fixture.location.z],
+						rotationDegrees: [fixture.rotation.x, fixture.rotation.y, fixture.rotation.z],
+					})),
+				);
+			else
+				await transport.patchFixtures("", 0, {
+					requestId: crypto.randomUUID(),
+					fixtures: next,
+					removeFixtureIds: [],
+				});
 		} catch (reason) {
 			setFixtures(before);
 			onError(reason);
@@ -224,7 +235,7 @@ export function SeveralPlacement({
 						? fixtures.filter((fixture) => lamps.has(fixture.fixtureId))
 						: fixtures;
 					return targets.length ? (
-						<ThruField key={spec.id} spec={spec} targets={targets} onWrite={(next) => void write(next)} />
+						<ThruField key={spec.id} spec={spec} targets={targets} onWrite={(next) => void write(next, spec.id.startsWith("position-") || spec.id.startsWith("rotation-"))} />
 					) : null;
 				})}
 			</div>

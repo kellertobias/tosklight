@@ -9,6 +9,8 @@ use light_playback::{
 
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Release test".into(),
         priority: 0,

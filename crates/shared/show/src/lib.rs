@@ -39,7 +39,8 @@ pub use programming_contract::{
     ShowProgrammingContractReport, check_programming_object_writes,
     inspect_show_programming_contract, legacy_attribute_value, legacy_live_write_message,
     legacy_programming_address, legacy_programming_attributes, legacy_programming_family,
-    validate_show_programming_contract, writer_stamps_programming_contract,
+    required_object_programming_contract, validate_show_programming_contract,
+    writer_stamps_programming_contract,
 };
 pub use show_store::{
     AtomicObjectDelete, AtomicObjectWrite, ObjectStamp, ShowStore, initialise_show,

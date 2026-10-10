@@ -62,8 +62,8 @@ fn endpoint(tokens: &[String], label: &str) -> Result<ProgrammingCueTransferEndp
     let (address, cue_index) = match tokens.first().map(String::as_str) {
         Some("CUE") => (ProgrammingCueTransferAddress::SelectedCuelist, 0),
         Some("CUELIST") => (
-            ProgrammingCueTransferAddress::Pool {
-                playback_number: number::<u16>(tokens.get(1), "Cuelist number")?,
+            ProgrammingCueTransferAddress::CuelistPool {
+                number: number::<u16>(tokens.get(1), "Cuelist number")?,
             },
             2,
         ),
@@ -149,7 +149,7 @@ mod tests {
         assert_eq!(parsed.request.source.cue_number.to_string(), "1.2");
         assert!(matches!(
             parsed.request.destination.address,
-            ProgrammingCueTransferAddress::Pool { playback_number: 2 }
+            ProgrammingCueTransferAddress::CuelistPool { number: 2 }
         ));
         assert_eq!(parsed.mode, None);
 

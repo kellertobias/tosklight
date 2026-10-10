@@ -6,12 +6,14 @@ mod automatic;
 mod compiled;
 mod contribution;
 mod controls;
+mod cue_pool;
 mod cue_recording;
 mod cue_tracking;
 mod cue_transfer;
 mod engine;
 mod model;
 mod programming_validation;
+mod replacement_runtime;
 mod runtime;
 mod source_evidence;
 mod timecode;
@@ -24,6 +26,7 @@ pub use automatic::{
 };
 pub use contribution::FamilyStartSource;
 pub use controls::{PlaybackMutation, PlaybackRuntimeEffect, dynamic_playback_controller_id};
+pub use cue_pool::CueListPoolCatalog;
 pub use cue_recording::{
     CueListRecordingPlan, CueRecordOperation, CueRecordingContent, CueRecordingPlanError,
     CueRecordingTiming, refresh_cue_only_restorations,

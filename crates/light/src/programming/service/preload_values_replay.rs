@@ -207,6 +207,7 @@ mod tests {
     ) -> ProgrammingPreloadValuesResult {
         let projection = ProgrammingPreloadValuesProjection {
             dynamic_values: Vec::new(),
+            group_release_values: Vec::new(),
             revision: 1,
             fixture_values: Vec::new(),
             group_values: vec![PreloadProgrammerGroupValue {

@@ -41,7 +41,10 @@ fn preset_preview_item(
     let address = incoming.address();
     let existing = stored_value(preset, &address).map(StoredValue::value);
     let outcome = match (mode, existing) {
-        (_, Some(value)) if Some(value) == incoming.ordinary_value() => {
+        (_, Some(value))
+            if Some(value) == incoming.ordinary_value()
+                && projection_matches(preset, &address, incoming) =>
+        {
             UpdateItemOutcome::Unchanged { source: None }
         }
         (_, Some(_)) => UpdateItemOutcome::UpdateExisting,
@@ -51,6 +54,40 @@ fn preset_preview_item(
         (ExistingContentMode::AddNew, None) => UpdateItemOutcome::AddNew,
     };
     UpdatePreviewItem { address, outcome }
+}
+
+fn projection_matches(
+    preset: &Preset,
+    address: &UpdateAddress,
+    incoming: IncomingValue<'_>,
+) -> bool {
+    match address {
+        UpdateAddress::FixtureAttribute {
+            fixture_id,
+            attribute,
+        } => {
+            preset
+                .fixture_replacement_projections
+                .get(fixture_id)
+                .and_then(|values| values.get(attribute))
+                == incoming.replacement_projection()
+        }
+        UpdateAddress::GroupAttribute {
+            group_id,
+            attribute,
+        } => {
+            let stored = preset
+                .group_replacement_projections
+                .get(group_id)
+                .and_then(|values| values.get(attribute));
+            match (stored, incoming.replacement_projections()) {
+                (None, Some(incoming)) => incoming.is_empty(),
+                (Some(stored), Some(incoming)) => stored == incoming,
+                _ => false,
+            }
+        }
+        _ => true,
+    }
 }
 
 /// Where an address's existing Preset content comes from.
@@ -126,7 +163,12 @@ fn shared_universal_updates(
         };
         // A live Group family assignment (template plus member exceptions) is valid only on its
         // Group owner, never as a universal value; it stays the Group's explicit value.
-        let candidate = (!matches!(requested, AttributeValue::GroupFamily(_))).then_some(requested);
+        let candidate = (!matches!(requested, AttributeValue::GroupFamily(_))
+            && value.replacement_projection().is_none()
+            && value
+                .replacement_projections()
+                .is_none_or(|map| map.is_empty()))
+        .then_some(requested);
         shared
             .entry(attribute.clone())
             .and_modify(|current| {
@@ -153,6 +195,15 @@ fn ordinary_attribute(address: &UpdateAddress) -> Option<&AttributeKey> {
 fn write_preset_value(preset: &mut Preset, incoming: IncomingValue<'_>) {
     match incoming {
         IncomingValue::Fixture(value) => {
+            let metadata = preset
+                .fixture_replacement_projections
+                .entry(value.fixture_id)
+                .or_default();
+            if let Some(projection) = &value.replacement_projection {
+                metadata.insert(value.attribute.clone(), projection.clone());
+            } else {
+                metadata.remove(&value.attribute);
+            }
             preset
                 .values
                 .entry(value.fixture_id)
@@ -160,6 +211,18 @@ fn write_preset_value(preset: &mut Preset, incoming: IncomingValue<'_>) {
                 .insert(value.attribute.clone(), value.value.clone());
         }
         IncomingValue::Group(value) => {
+            let metadata = preset
+                .group_replacement_projections
+                .entry(value.group_id.clone())
+                .or_default();
+            if value.replacement_projections.is_empty() {
+                metadata.remove(&value.attribute);
+            } else {
+                metadata.insert(
+                    value.attribute.clone(),
+                    value.replacement_projections.clone(),
+                );
+            }
             preset
                 .group_values
                 .entry(value.group_id.clone())
@@ -211,6 +274,7 @@ pub fn plan_preset_update(
     if preset.is_universal() {
         updated.consolidate_universal_color();
     }
+    updated.retain_family_attributes();
     Ok(AtomicUpdatePlan {
         target: preview.target.clone(),
         expected_revision,

@@ -1,5 +1,11 @@
 use super::*;
 
+#[path = "playback_release_routes.rs"]
+mod release_routes;
+
+#[path = "runtime_dynamic_stop_tests.rs"]
+mod runtime_dynamic_stop_tests;
+
 #[tokio::test]
 async fn v2_playback_overview_is_authenticated_and_keeps_desk_scope() {
     let (state, data_dir) = test_state();
@@ -2994,6 +3000,8 @@ fn programming_selection(
 
 fn playback_test_cue_list() -> light_playback::CueList {
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Main".into(),
         priority: 0,

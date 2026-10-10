@@ -36,6 +36,7 @@ import { effectLayerChange } from "./effectLayerChange";
 import {
 	blendSection,
 	effectBankSection,
+	effectBankSummary,
 	frameSection,
 	layerDmxChange,
 	playbackRangeControls,
@@ -257,11 +258,7 @@ function MediaPanePageContent() {
 						? "None"
 						: `${layer.mask.address.folder}/${layer.mask.address.file}`,
 				grayscalePercent: Math.round((1 - layer.grayscale) * 100),
-				effectLabel:
-					layer.effects
-						.filter((effect) => effect.enabled && effect.effectType)
-						.map((effect) => effect.label)
-						.join(" · ") || "None",
+				effectLabel: effectBankSummary(layer.effectBanks, effects.data ?? []),
 			};
 		}),
 		browserMode,
@@ -410,11 +407,7 @@ function MediaPanePageContent() {
 										!takeover,
 										"%",
 									),
-									...playbackRangeControls(
-										selected,
-										!takeover,
-										catalog.data,
-									),
+									...playbackRangeControls(selected, !takeover, catalog.data),
 								],
 							},
 							frameSection(selected.layer, models.data ?? [], !takeover),

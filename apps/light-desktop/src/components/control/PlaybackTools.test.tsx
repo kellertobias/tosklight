@@ -687,6 +687,77 @@ describe("PlaybackTools", () => {
 		expect(runtimeActions.setActivePage).not.toHaveBeenCalled();
 	});
 
+	it("recovers a loaded show with no playback pages through Add new page", async () => {
+		pageObjects = [];
+		render(<PlaybackTools />);
+		const picker = screen.getByRole("button", {
+			name: "Select playback page. Page 1 Not available",
+		});
+		expect(picker).toBeEnabled();
+		expect(screen.queryByText("Loading…")).toBeNull();
+		fireEvent.click(picker);
+		fireEvent.click(
+			within(screen.getByRole("dialog", { name: "Playback pages" })).getByRole(
+				"button",
+				{ name: "Add new page" },
+			),
+		);
+		await waitFor(() =>
+			expect(topologyActions.createPage).toHaveBeenCalledWith(1),
+		);
+		await waitFor(() =>
+			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(1),
+		);
+		expect(screen.queryByRole("dialog", { name: "Playback pages" })).toBeNull();
+	});
+
+	it("can select an existing sparse page when the active page is absent", async () => {
+		pageObjects = [
+			{
+				...pageObjects[0],
+				id: "page-two",
+				body: { number: 2, name: "Sparse", slots: {} },
+			},
+		];
+		render(<PlaybackTools />);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: "Select playback page. Page 1 Not available",
+			}),
+		);
+		fireEvent.click(
+			within(screen.getByRole("dialog", { name: "Playback pages" })).getByRole(
+				"button",
+				{ name: /Sparse/ },
+			),
+		);
+		await waitFor(() =>
+			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2),
+		);
+		expect(topologyActions.createPage).not.toHaveBeenCalled();
+	});
+
+	it("uses the missing-page picker with SET armed and does not rename an absent page", () => {
+		pageObjects = [];
+		state.playbackSetArmed = true;
+		render(<PlaybackTools />);
+		const picker = screen.getByRole("button", {
+			name: "Select playback page. Page 1 Not available",
+		});
+		fireEvent.contextMenu(picker);
+		expect(
+			screen.queryByRole("dialog", { name: "Playback page name" }),
+		).toBeNull();
+		fireEvent.click(picker);
+		expect(
+			screen.getByRole("dialog", { name: "Playback pages" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("dialog", { name: "Playback page name" }),
+		).toBeNull();
+		expect(state.playbackSetArmed).toBe(false);
+	});
+
 	it("does not fall back to stale bootstrap Pages while scoped authority loads", () => {
 		playbackDesk = null;
 		topologyReady = false;

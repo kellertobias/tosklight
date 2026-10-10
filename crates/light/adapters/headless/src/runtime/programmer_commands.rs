@@ -267,7 +267,7 @@ pub(super) fn execute_programmer_command_effect_from(
         )
         .map(ProgrammerCommandExecution::Applied);
     }
-    if tokens.iter().any(|token| token == "DYNAMIC") {
+    if first != "ASSIGN" && tokens.iter().any(|token| token == "DYNAMIC") {
         return super::programmer_dynamic_commands::execute_dynamic_command(
             state,
             session,

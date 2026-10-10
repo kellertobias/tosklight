@@ -188,3 +188,31 @@ describe("ProgrammerPreloadValuesStore reconciliation", () => {
 		});
 	});
 });
+
+it("keeps original pending dynamic and Group Release indices across canonicalization", () => {
+	const store = readyStore({
+		...preloadProjection(),
+		dynamicValues: [9, 2].map((programmerOrder) => ({
+			fixtureId: FIXTURE_1,
+			attribute: "intensity",
+			programmerOrder,
+			changedAtMillis: 0,
+			value: { type: "release" as const },
+		})),
+		groupReleaseValues: [8, 1].map((programmerOrder) => ({
+			groupId: "3",
+			attribute: "intensity",
+			programmerOrder,
+			changedAtMillis: 0,
+		})),
+	});
+	const projection = store.getSnapshot().projection!;
+	expect(
+		projection.dynamicValues?.map((entry) => entry.programmerOrder),
+	).toEqual([9, 2]);
+	expect(
+		projection.groupReleaseValues?.map((entry) => entry.programmerOrder),
+	).toEqual([8, 1]);
+	expect(Object.isFrozen(projection.dynamicValues)).toBe(true);
+	expect(Object.isFrozen(projection.groupReleaseValues?.[0])).toBe(true);
+});

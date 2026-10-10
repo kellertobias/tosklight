@@ -244,67 +244,39 @@ fn pool_object_move_copy_requires_typed_compatible_addresses_and_is_atomic() {
         "COPY CUELIST 1 AT CUELIST 3",
     )
     .unwrap();
-    let copied = ActiveShowRepository::open(&scenario.show_path)
-        .unwrap()
-        .objects("playback")
-        .unwrap();
-    let source_target = copied
-        .iter()
-        .find(|object| object.id == "1")
-        .unwrap()
-        .body["target"]["cue_list_id"]
-        .clone();
-    let copied_target = copied
-        .iter()
-        .find(|object| object.id == "3")
-        .unwrap()
-        .body["target"]["cue_list_id"]
-        .clone();
-    assert_ne!(source_target, copied_target);
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
+    let physical_before = store.objects("playback").unwrap();
+    let copied = store.objects("cue_list").unwrap();
+    let source = copied.iter().find(|object| object.body["pool_number"] == 1).unwrap();
+    let copy = copied.iter().find(|object| object.body["pool_number"] == 3).unwrap();
+    let copied_target = copy.body["id"].clone();
+    assert_ne!(source.body["id"], copied_target);
+    assert_ne!(source.body["cues"][0]["id"], copy.body["cues"][0]["id"]);
+    assert!(copy.body.get("legacy_pool_aliases").is_none_or(|aliases| aliases.as_array().unwrap().is_empty()));
+    assert!(!physical_before.iter().any(|object| object.id == "3"));
 
     let page = light_playback::PlaybackPage {
         number: 1,
         name: "Main".into(),
-        slots: std::collections::HashMap::from([(1, 3)]),
+        slots: std::collections::HashMap::from([(1, 1)]),
         virtual_playbacks: std::collections::HashMap::new(),
     };
-    ActiveShowRepository::open(&scenario.show_path)
-        .unwrap()
-        .put_object(
-            "playback_page",
-            "1",
-            &serde_json::to_value(page).unwrap(),
-            0,
-        )
-        .unwrap();
-
+    let page_body = serde_json::to_value(page).unwrap();
+    store.put_object("playback_page", "1", &page_body, 0).unwrap();
     execute_programmer_command(
         &scenario.state,
         &scenario.session,
         "MOVE CUELIST 3 AT CUELIST 4",
-    )
-    .unwrap();
-    let moved = ActiveShowRepository::open(&scenario.show_path)
-        .unwrap()
-        .objects("playback")
-        .unwrap();
-    assert!(!moved.iter().any(|object| object.id == "3"));
+    ).unwrap();
+    let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
+    let moved = store.objects("cue_list").unwrap();
+    assert!(!moved.iter().any(|object| object.body["pool_number"] == 3));
+    assert_eq!(moved.iter().find(|object| object.body["pool_number"] == 4).unwrap().body["id"], copied_target);
     assert_eq!(
-        moved
-            .iter()
-            .find(|object| object.id == "4")
-            .unwrap()
-            .body["target"]["cue_list_id"],
-        copied_target
+        store.objects("playback").unwrap().iter().map(|object| (&object.id, object.revision, &object.body)).collect::<Vec<_>>(),
+        physical_before.iter().map(|object| (&object.id, object.revision, &object.body)).collect::<Vec<_>>(),
     );
-    let page = ActiveShowRepository::open(&scenario.show_path)
-        .unwrap()
-        .objects("playback_page")
-        .unwrap()
-        .into_iter()
-        .find(|object| object.id == "1")
-        .unwrap();
-    assert_eq!(page.body["slots"]["1"], 4);
+    assert_eq!(store.objects("playback_page").unwrap().iter().find(|object| object.id == "1").unwrap().body, page_body);
 
     let before = ActiveShowRepository::open(&scenario.show_path)
         .unwrap()

@@ -77,6 +77,34 @@ pub(super) async fn diagnostics(
             state.output.change_lead_snapshot(),
         ),
         output_bind_ip: output_bind_ip.to_string(),
+        output_delivery_status: Some(
+            state
+                .output
+                .current_route_delivery()
+                .into_iter()
+                .map(|route| wire::RuntimeOutputDeliveryStatus {
+                    protocol: match route.protocol {
+                        light_output::Protocol::ArtNet => "art_net",
+                        light_output::Protocol::Sacn => "sacn",
+                    }
+                    .into(),
+                    universe: route.universe,
+                    destination: route.destination.to_string(),
+                    delivery_state: match route.delivery_state {
+                        light_output::RouteDeliveryState::AwaitingFirstSend => {
+                            wire::RuntimeRouteDeliveryState::AwaitingFirstSend
+                        }
+                        light_output::RouteDeliveryState::Sending => {
+                            wire::RuntimeRouteDeliveryState::Sending
+                        }
+                        light_output::RouteDeliveryState::SendFailed => {
+                            wire::RuntimeRouteDeliveryState::SendFailed
+                        }
+                    },
+                    current_error: route.current_error,
+                })
+                .collect(),
+        ),
         output_routes: serde_json::to_value(output_routes)
             .map_err(|error| ApiError::internal(error.to_string()))?,
         route_send_errors: serde_json::to_value(route_send_errors)

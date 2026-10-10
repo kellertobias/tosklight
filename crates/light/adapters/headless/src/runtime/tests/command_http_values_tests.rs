@@ -457,7 +457,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
     else {
         panic!("the lifecycle events should remain replayable")
     };
-    assert_eq!(events.len(), 4);
+    assert_eq!(events.len(), 5);
     assert!(events.iter().all(|event| event.desk_id.is_none()));
     let mut values_events = 0;
     let mut capture_events = 0;
@@ -484,13 +484,19 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
                 light_application::ProgrammingEvent::LifecycleChanged(change),
             ) => {
                 lifecycle_events += 1;
-                let light_application::ProgrammingLifecycleDelta::Upsert { programmer } =
-                    &change.delta
-                else {
-                    panic!("replacement should upsert one new Programmer identity")
-                };
-                assert_ne!(programmer.programmer_id, old_programmer_id);
-                assert_eq!(programmer.sessions.len(), 2);
+                match &change.delta {
+                    light_application::ProgrammingLifecycleDelta::Remove { programmer_id } => {
+                        assert_eq!(lifecycle_events, 1, "retire the old row before adding its replacement");
+                        assert_eq!(*programmer_id, old_programmer_id);
+                    }
+                    light_application::ProgrammingLifecycleDelta::Upsert { programmer } => {
+                        assert_eq!(lifecycle_events, 2);
+                        assert_ne!(programmer.programmer_id, old_programmer_id);
+                        assert_eq!(programmer.sessions.len(), 2);
+                        assert_eq!(programmer.normal_value_count, 0);
+                        assert_eq!(programmer.programmer_id, scenario.state.programming.get(scenario.session.id).unwrap().id);
+                    }
+                }
             }
             light_application::ApplicationEvent::Programming(
                 light_application::ProgrammingEvent::PriorityChanged(
@@ -504,7 +510,7 @@ async fn programmer_delete_recreates_same_user_desks_with_monotonic_exact_user_a
             _ => panic!("unexpected Programmer lifecycle event"),
         }
     }
-    assert_eq!((values_events, capture_events, lifecycle_events), (1, 1, 1));
+    assert_eq!((values_events, capture_events, lifecycle_events), (1, 1, 2));
     assert_eq!(priority_events, 1);
     assert_eq!(
         scenario

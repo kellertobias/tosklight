@@ -61,6 +61,12 @@ pub(super) struct SpeedGroupActionInput {
 
 #[derive(Clone)]
 pub(super) struct StagedMvrImport {
+    pub(super) profile_slots: light_application::mvr_import::MvrProfileSlots,
+    pub(super) destination_id: Option<Uuid>,
+    pub(super) destination_revision: Option<(
+        light_show::PortableShowRevision,
+        light_show::PortablePatchRevision,
+    )>,
     pub(super) document: light_mvr::MvrDocument,
     pub(super) definitions: MvrDefinitions,
     pub(super) created: Instant,
@@ -79,6 +85,7 @@ pub(super) struct MvrImportPreview {
     pub(super) missing_profiles: Vec<String>,
     pub(super) warnings: Vec<String>,
     pub(super) address_conflicts: Vec<String>,
+    pub(super) profile_conflicts: Vec<light_wire::v2::show_library::MvrProfileConflict>,
 }
 #[derive(Clone, Serialize)]
 pub(super) struct MvrPreviewFixture {
@@ -93,6 +100,8 @@ pub(super) struct MvrPreviewFixture {
 
 #[derive(Deserialize)]
 pub(super) struct ApplyMvrImport {
+    #[serde(default)]
+    pub(super) copy_conflicting_profiles: bool,
     pub(super) new_show: Option<NewMvrShow>,
     pub(super) existing_show_id: Option<Uuid>,
     #[serde(default)]

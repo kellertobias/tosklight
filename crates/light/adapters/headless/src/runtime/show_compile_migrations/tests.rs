@@ -318,6 +318,7 @@ fn startup_state_carries_prepared_runtime_at_the_production_contract() {
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })
@@ -325,7 +326,7 @@ fn startup_state_carries_prepared_runtime_at_the_production_contract() {
     assert_eq!(startup.active_show_error, None);
     assert_eq!(
         startup.engine.supported_programming_contract(),
-        light_core::programming::PROGRAMMING_CONTRACT_VERSION
+        light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT
     );
     let mode = &profile.modes[0];
     let source = profile
@@ -371,6 +372,7 @@ fn startup_recovery_does_not_retain_rejected_show_models() {
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })

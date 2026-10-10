@@ -84,38 +84,108 @@ pub enum PlaybackSurface {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PlaybackAction {
-    Go { pressed: bool },
-    Back { pressed: bool },
-    Pause { pressed: bool },
+    Go {
+        pressed: bool,
+    },
+    Back {
+        pressed: bool,
+    },
+    Pause {
+        pressed: bool,
+    },
     Release,
-    On { pressed: bool },
-    Off { pressed: bool },
-    Toggle { pressed: bool },
-    FastForward { pressed: bool },
-    FastRewind { pressed: bool },
-    Flash { pressed: bool },
-    Temp { pressed: bool },
-    Swap { pressed: bool },
-    Select { pressed: bool },
-    SelectContents { pressed: bool },
-    SelectDereferenced { pressed: bool },
-    Learn { pressed: bool },
-    Double { pressed: bool },
-    Half { pressed: bool },
-    Blackout { pressed: bool },
-    PauseDynamics { pressed: bool },
-    DynamicRestart { pressed: bool },
-    DynamicDoubleSpeed { pressed: bool },
-    DynamicHalfSpeed { pressed: bool },
-    DynamicLearnSpeed { pressed: bool },
-    None { pressed: bool },
-    Master { value: f32 },
-    GoTo { cue_number: String },
-    Load { cue_number: String },
-    Crossfade { enabled: bool },
-    Temporary { enabled: bool, pressed: bool },
-    ConfiguredButton { number: u8, pressed: bool },
-    ConfiguredFader { number: u8, level: f32 },
+    RuntimeStopDynamic {
+        dynamic_id: Uuid,
+        instance_id: Uuid,
+        controller_id: Uuid,
+    },
+    On {
+        pressed: bool,
+    },
+    Off {
+        pressed: bool,
+    },
+    Toggle {
+        pressed: bool,
+    },
+    FastForward {
+        pressed: bool,
+    },
+    FastRewind {
+        pressed: bool,
+    },
+    Flash {
+        pressed: bool,
+    },
+    Temp {
+        pressed: bool,
+    },
+    Swap {
+        pressed: bool,
+    },
+    Select {
+        pressed: bool,
+    },
+    SelectContents {
+        pressed: bool,
+    },
+    SelectDereferenced {
+        pressed: bool,
+    },
+    Learn {
+        pressed: bool,
+    },
+    Double {
+        pressed: bool,
+    },
+    Half {
+        pressed: bool,
+    },
+    Blackout {
+        pressed: bool,
+    },
+    PauseDynamics {
+        pressed: bool,
+    },
+    DynamicRestart {
+        pressed: bool,
+    },
+    DynamicDoubleSpeed {
+        pressed: bool,
+    },
+    DynamicHalfSpeed {
+        pressed: bool,
+    },
+    DynamicLearnSpeed {
+        pressed: bool,
+    },
+    None {
+        pressed: bool,
+    },
+    Master {
+        value: f32,
+    },
+    GoTo {
+        cue_number: String,
+    },
+    Load {
+        cue_number: String,
+    },
+    Crossfade {
+        enabled: bool,
+    },
+    Temporary {
+        enabled: bool,
+        pressed: bool,
+    },
+    ConfiguredButton {
+        number: u8,
+        pressed: bool,
+    },
+    ConfiguredFader {
+        number: u8,
+        level: f32,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

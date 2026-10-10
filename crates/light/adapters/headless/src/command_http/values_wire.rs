@@ -596,6 +596,10 @@ fn fixture_value(
     value: &light_programmer::ProgrammerFixtureUpdate,
 ) -> wire::ProgrammingFixtureValue {
     wire::ProgrammingFixtureValue {
+        replacement_projection: value
+            .replacement_projection
+            .as_ref()
+            .map(replacement_projection),
         fixture_id: value.fixture_id.0,
         attribute: value.attribute.0.to_string(),
         value: attribute_value(&value.value),
@@ -608,6 +612,13 @@ fn fixture_value(
 
 fn group_value(value: &light_programmer::ProgrammerGroupUpdate) -> wire::ProgrammingGroupValue {
     wire::ProgrammingGroupValue {
+        replacement_projections: (!value.replacement_projections.is_empty()).then(|| {
+            value
+                .replacement_projections
+                .iter()
+                .map(|(owner, projection)| (owner.0, replacement_projection(projection)))
+                .collect()
+        }),
         group_id: value.group_id.clone(),
         attribute: value.attribute.0.to_string(),
         value: attribute_value(&value.value),
@@ -615,6 +626,30 @@ fn group_value(value: &light_programmer::ProgrammerGroupUpdate) -> wire::Program
         fade: value.fade,
         fade_millis: value.fade_millis,
         delay_millis: value.delay_millis,
+    }
+}
+
+fn replacement_projection(
+    value: &light_core::ReplacementProgramProjection,
+) -> wire::ReplacementProgramProjection {
+    let context = |value: &light_core::ReplacementProfileContext| wire::ReplacementProfileContext {
+        profile_id: value.profile_id.0,
+        profile_revision: value.profile_revision,
+        mode_id: value.mode_id,
+    };
+    wire::ReplacementProgramProjection {
+        source_owner: value.source_owner.0,
+        source_profile: context(&value.source_profile),
+        source_head_id: value.source_head_id,
+        target_profile: context(&value.target_profile),
+        targets: value
+            .targets
+            .iter()
+            .map(|target| wire::ReplacementHeadTarget {
+                profile_head_id: target.profile_head_id,
+                fixture_id: target.fixture_id.0,
+            })
+            .collect(),
     }
 }
 

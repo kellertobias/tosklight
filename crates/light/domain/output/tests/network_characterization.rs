@@ -25,6 +25,12 @@ async fn local_receiver() -> UdpSocket {
 
 #[tokio::test]
 async fn route_scoped_failure_is_observable_without_stopping_healthy_output() {
+    for protocol in [Protocol::ArtNet, Protocol::Sacn] {
+        characterize_route_failure_and_recovery(protocol).await;
+    }
+}
+
+async fn characterize_route_failure_and_recovery(protocol: Protocol) {
     let output = NetworkOutput::bind(IpAddr::V4(Ipv4Addr::LOCALHOST), [7; 16], "Light")
         .await
         .unwrap();
@@ -33,9 +39,14 @@ async fn route_scoped_failure_is_observable_without_stopping_healthy_output() {
     let healthy_destination = healthy.local_addr().unwrap();
     let failing_destination = failing.local_addr().unwrap();
     let routes = [
-        unicast_route(Protocol::ArtNet, 10, healthy_destination),
-        unicast_route(Protocol::ArtNet, 11, failing_destination),
+        unicast_route(protocol, 10, healthy_destination),
+        unicast_route(protocol, 11, failing_destination),
     ];
+    assert!(
+        output.current_route_delivery(&routes).iter().all(
+            |route| route.delivery_state == light_output::RouteDeliveryState::AwaitingFirstSend
+        )
+    );
     let frames = HashMap::from([(1, [0x44; DMX_SLOTS])]);
     let mut sequences = HashMap::new();
 
@@ -45,15 +56,29 @@ async fn route_scoped_failure_is_observable_without_stopping_healthy_output() {
         .await
         .unwrap();
     assert_eq!(sent, 1);
-    assert_payload(&healthy, 18, 0x44).await;
+    assert_payload(&healthy, payload_offset(protocol), 0x44).await;
 
     let errors = output.route_send_errors();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].protocol, Protocol::ArtNet);
+    assert_eq!(errors[0].protocol, protocol);
     assert_eq!(errors[0].universe, 11);
     assert_eq!(errors[0].destination, failing_destination);
     assert_eq!(errors[0].errors, 1);
     assert_eq!(output.take_send_errors(), 1);
+    let status = output.current_route_delivery(&routes);
+    assert_eq!(
+        status[0].delivery_state,
+        light_output::RouteDeliveryState::Sending
+    );
+    assert_eq!(
+        status[1].delivery_state,
+        light_output::RouteDeliveryState::SendFailed
+    );
+    assert!(status[1].current_error.is_some());
+    let mut disabled = routes.clone();
+    disabled[1].enabled = false;
+    assert_eq!(output.current_route_delivery(&disabled).len(), 1);
+    assert!(output.current_route_delivery(&[]).is_empty());
 
     output.inject_failure(failing_destination, false);
     let sent = output
@@ -61,8 +86,24 @@ async fn route_scoped_failure_is_observable_without_stopping_healthy_output() {
         .await
         .unwrap();
     assert_eq!(sent, 2);
-    assert_payload(&failing, 18, 0x44).await;
+    assert_payload(&failing, payload_offset(protocol), 0x44).await;
     assert_eq!(output.route_send_errors()[0].errors, 1);
+    assert!(
+        output
+            .current_route_delivery(&routes)
+            .iter()
+            .all(
+                |route| route.delivery_state == light_output::RouteDeliveryState::Sending
+                    && route.current_error.is_none()
+            )
+    );
+}
+
+fn payload_offset(protocol: Protocol) -> usize {
+    match protocol {
+        Protocol::ArtNet => 18,
+        Protocol::Sacn => 126,
+    }
 }
 
 #[tokio::test]

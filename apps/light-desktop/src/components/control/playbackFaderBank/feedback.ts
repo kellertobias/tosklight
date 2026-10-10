@@ -86,7 +86,8 @@ export function buttonFeedbackClass(
 export function playbackFaderValue(
 	playback: PlaybackDefinition | null,
 	active: PlaybackSnapshotActive | undefined,
-	projection?: PlaybackRuntimeProjection,
+	projection: PlaybackRuntimeProjection | undefined,
+	hardware: boolean,
 ) {
 	if (!playback) return 0;
 	if (playback.target.type === "group")
@@ -121,7 +122,14 @@ export function playbackFaderValue(
 		return Math.round((active?.manual_xfade_position ?? 0) * 100);
 	if (playback.fader === "temp")
 		return Math.round((active?.temporary_master ?? 0) * 100);
-	return Math.round((active?.fader_position ?? active?.master ?? 0) * 100);
+	// Software touch controls set the shared master absolutely. The physical input position
+	// remains independent and may be zero while an assigned/virtual owner runs at full master.
+	// Only the hardware representation should show that physical position and pickup feedback.
+	return Math.round(
+		(hardware
+			? (active?.fader_position ?? active?.master ?? 0)
+			: (active?.master ?? 0)) * 100,
+	);
 }
 
 export function playbackFaderLabel(playback: PlaybackDefinition | null) {

@@ -153,6 +153,17 @@ impl TestRig {
             .unwrap();
     }
 
+    pub fn accepts_programming_contract(&self, supported: u16) -> bool {
+        light_show::validate_show_programming_contract(&self.ports.path, supported).is_ok()
+    }
+
+    pub fn seed_programming_object(&self, kind: &str, id: &str, body: &serde_json::Value) {
+        ShowStore::open(&self.ports.path)
+            .unwrap()
+            .put_object(kind, id, body, 0)
+            .unwrap();
+    }
+
     pub fn portable_document(&self) -> PortableShowDocument {
         ShowStore::open(&self.ports.path)
             .unwrap()
@@ -196,12 +207,17 @@ pub struct CounterPorts {
     path: PathBuf,
     show_id: ShowId,
     profile: FixtureProfileRevision,
+    extra_profiles: Vec<FixtureProfileRevision>,
     failure: FailurePoint,
     counters: Arc<Counters>,
     profile_resolution: Arc<ProfileResolutionControl>,
 }
 
 impl CounterPorts {
+    pub fn set_failure(&mut self, failure: FailurePoint) {
+        self.failure = failure;
+    }
+
     fn new(profile: FixtureProfileRevision, failure: FailurePoint) -> Self {
         let path = temporary_show_path();
         let (show, show_id) = ShowStore::create(&path, "Patch service counter test").unwrap();
@@ -210,10 +226,15 @@ impl CounterPorts {
             path,
             show_id,
             profile,
+            extra_profiles: Vec::new(),
             failure,
             counters: Arc::new(Counters::default()),
             profile_resolution: Arc::new(ProfileResolutionControl::default()),
         }
+    }
+
+    pub fn add_profile(&mut self, profile: FixtureProfileRevision) {
+        self.extra_profiles.push(profile);
     }
 
     pub const fn show_id(&self) -> ShowId {
@@ -314,7 +335,7 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
 
     fn commit(
         &mut self,
-        transaction: PortableShowTransaction,
+        mut transaction: PortableShowTransaction,
     ) -> Result<PortableShowCommit, ActionError> {
         self.counters.commits.fetch_add(1, Ordering::SeqCst);
         if self.failure == FailurePoint::Commit {
@@ -323,6 +344,9 @@ impl ActiveShowUnitOfWork for CounterUnitOfWork {
                 "injected commit failure",
             ));
         }
+        // Match the real active-show adapter's atomic feature marker stamping.
+        transaction
+            .stamp_programming_contract(light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT);
         let commit = self
             .show
             .apply_portable_transaction(transaction)
@@ -405,12 +429,19 @@ impl ActiveShowPorts for CounterPorts {
 impl ShowPatchPorts for CounterPorts {
     fn resolve_profile_revision(
         &self,
-        _profile_id: FixtureId,
-        _revision: Revision,
+        profile_id: FixtureId,
+        revision: Revision,
     ) -> Result<FixtureProfileRevision, ActionError> {
         self.counters.library_reads.fetch_add(1, Ordering::SeqCst);
         self.profile_resolution.pause_if_enabled();
-        Ok(self.profile.clone())
+        Ok(self
+            .extra_profiles
+            .iter()
+            .find(|profile| {
+                profile.id().profile_id() == profile_id && profile.id().revision() == revision
+            })
+            .unwrap_or(&self.profile)
+            .clone())
     }
 
     fn reconcile_patch_change(&self, _change: &PatchChange) {

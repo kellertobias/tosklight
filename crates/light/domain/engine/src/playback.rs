@@ -301,6 +301,17 @@ impl Engine {
             .runtime_status_for_cue_list(cue_list_id)
     }
 
+    pub fn playback_runtime_status_for_direct_cue_list(
+        &self,
+        cue_list_id: light_core::CueListId,
+    ) -> Option<PlaybackRuntimeStatus> {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .runtime_status_for_direct_cue_list(cue_list_id)
+    }
+
     pub fn set_cue_external_completion_millis(
         &self,
         cue_list_id: light_core::CueListId,
@@ -433,7 +444,7 @@ impl Engine {
     }
 }
 
-fn execute(
+pub(crate) fn execute(
     playback: &mut PlaybackEngine,
     command: EnginePlaybackCommand,
 ) -> Result<EnginePlaybackOutcome, String> {
@@ -618,12 +629,13 @@ pub(crate) fn execute_virtual(
         if let Some(origin) = activation_origin {
             playback.record_activation_at(identity, origin);
         }
-        for peer in virtual_exclusion_peers(exclusion_zones, address) {
-            peer_effect = peer_effect.combine(
-                playback
-                    .release_at_mutation(PlaybackIdentity::Virtual(peer))?
-                    .effect,
-            );
+        let peers: Vec<_> = virtual_exclusion_peers(exclusion_zones, address)
+            .into_iter()
+            .map(PlaybackIdentity::Virtual)
+            .collect();
+        playback.adopt_solo_handover(identity, &peers)?;
+        for peer in peers {
+            peer_effect = peer_effect.combine(playback.release_at_mutation(peer)?.effect);
         }
     }
     Ok(EnginePlaybackOutcome::Changed(
@@ -713,7 +725,7 @@ fn execute_cue_list(
     }
 }
 
-fn execute_pool(
+pub(crate) fn execute_pool(
     playback: &mut PlaybackEngine,
     number: u16,
     action: PoolPlaybackAction,

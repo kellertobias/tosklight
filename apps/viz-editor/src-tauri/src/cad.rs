@@ -8,6 +8,7 @@
 mod aim;
 pub mod history;
 mod layer_visibility;
+pub mod numeric_placement;
 mod profile_drawing;
 mod profile_lookup;
 mod scenery;

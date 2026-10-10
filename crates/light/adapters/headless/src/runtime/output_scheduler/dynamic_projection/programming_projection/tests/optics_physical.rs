@@ -657,6 +657,9 @@ fn two_heads_driving_one_shared_zoom_control_are_rejected_never_last_writer_wins
 fn a_recalled_zoom_preset_reaches_its_opening_on_differing_optics_and_leaves_focus() {
     // One universal Zoom preset (25° Field); a Zoom effect reads it through Current.
     let preset = light_programmer::Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
+        instance_id: None,
         name: "Zoom 25".into(),
         family: light_programmer::PresetFamily::Beam,
         number: 1,
@@ -737,6 +740,8 @@ fn install_optics_cues(live: &Live) {
     second.changes = vec![focus_change, zoom_change];
     second.fade_millis = 0;
     let list = CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Optics".into(),
         priority: 10,

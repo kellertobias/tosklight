@@ -112,9 +112,13 @@ function PlaybackRow({
 			<span>
 				<b>{playback.label}</b>
 				<small>
-					{playback.playbackNumber == null
-						? "Virtual playback"
-						: `Playback ${playback.playbackNumber}`} {" "}
+					{playback.identity.kind === "virtual"
+						? `Page ${playback.identity.page} · Virtual playback ${playback.identity.playback_number}`
+						: playback.playbackNumber == null
+							? "Direct Cuelist"
+							: playback.locations?.length
+								? `${playback.locations.map(({ page, slot }) => `Page ${page} · Playback ${slot}`).join(", ")}`
+								: `Playback assignment ${playback.playbackNumber}`}{" "}
 					· Cue {cueNumber} · {Math.round(playback.runtime.master * 100)}% ·{" "}
 					{playback.runtime.paused ? "Paused" : "Running"}
 				</small>
@@ -122,7 +126,11 @@ function PlaybackRow({
 			<Button
 				className="danger"
 				aria-label={`Turn off ${
-					playback.playbackNumber == null ? "Virtual playback" : "Playback"
+					playback.identity.kind === "virtual"
+						? "Virtual playback"
+						: playback.playbackNumber == null
+							? "Direct Cuelist"
+							: "Playback"
 				} ${playback.label}`}
 				disabled={!releaseAvailable}
 				onClick={() => onRelease(playback)}
@@ -208,11 +216,18 @@ function DynamicRow({
 			<Button
 				className="danger"
 				aria-label={`Turn off Dynamic ${dynamic.poolNumber} ${dynamic.name} from ${dynamic.source}`}
-				disabled={!canStop || stopping || dynamic.releasing}
+				disabled={
+					!canStop || stopping || dynamic.releasing || !dynamic.stopMode
+				}
 				onClick={() => onTurnOff(dynamic)}
 			>
-				{stopping ? "Turning off…" : "Off"}
+				{stopping
+					? "Turning off…"
+					: dynamic.stopMode === "programmer"
+						? "Off in Programmer"
+						: "Off"}
 			</Button>
+			{dynamic.stopGuidance && <small>{dynamic.stopGuidance}</small>}
 		</article>
 	);
 }

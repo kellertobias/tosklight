@@ -239,8 +239,12 @@ describe("SelectiveShowImportModal", () => {
 			}),
 		);
 
-		expect(await screen.findByText(/cannot be cancelled/)).toBeVisible();
-		expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+		expect(
+			await screen.findByText("Saving the selected items to your show…"),
+		).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: "Cancel", hidden: true }),
+		).toBeDisabled();
 		expect(screen.getByLabelText("Resolve group front")).toBeDisabled();
 		fireEvent.click(
 			within(

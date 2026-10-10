@@ -331,3 +331,117 @@ async fn open_values_test_show(app: &Router, token: &str) {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn preload_remove_action_and_event_keep_identical_remaining_f32_values() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    open_values_test_show(&app, &token).await;
+    let dispatch = |id: &str, request: serde_json::Value| {
+        dispatch_live_action(
+            &state,
+            &session,
+            live_action_frame(&session, id, serde_json::from_value(request).unwrap()),
+        )
+    };
+    let enter = dispatch(
+        "f32-enter",
+        serde_json::json!({"type":"programmer_preload_lifecycle","request":{
+            "request_id":"f32-enter","expected_capture_mode_revision":0,"expected_values_revision":0,"expected_queue_revision":0,"expected_selection_revision":0,"action":{"type":"enter"}
+        }}),
+    );
+    assert!(enter.ok, "{:?}", enter.error);
+    let fixture_ids = state
+        .output
+        .snapshot()
+        .fixtures
+        .iter()
+        .take(2)
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    assert_eq!(fixture_ids.len(), 2);
+    let mut stream = super::super::event_transport::EventStream::subscribe(
+        &state.events,
+        &session,
+        Ok(light_wire::v2::events::EventClientMessage::Subscribe {
+            filter: Default::default(),
+            after_sequence: Some(state.events.latest_sequence()),
+            capacity: None,
+            rate_limits: vec![],
+        }),
+    )
+    .unwrap();
+    let values = dispatch(
+        "f32-values",
+        serde_json::json!({"type":"programmer_preload_values","request":{
+            "request_id":"f32-values","expected_revision":0,"expected_capture_mode_revision":1,"action":{"type":"batch","mutations":fixture_ids.iter().map(|fixture| serde_json::json!({"type":"set_fixture","fixture_id":fixture.0,"attribute":"intensity","value":{"kind":"normalized","value":0.37},"timing":{"fade":false}})).collect::<Vec<_>>()}
+        }}),
+    );
+    assert!(values.ok, "{:?}", values.error);
+    let values_payload = values.payload.unwrap();
+    let values_message = tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let values_event_json: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&values_message).unwrap()).unwrap();
+    assert_eq!(
+        values_event_json["event"]["sequence"],
+        values_payload["event_sequence"]
+    );
+    assert_eq!(
+        values_payload["projection"], values_event_json["event"]["payload"]["change"]["projection"],
+        "pending authoring action must match its typed event without f32 widening"
+    );
+
+    let output_before = state.output.snapshot().revision;
+    let remove_request = serde_json::json!({"type":"programmer_preload_lifecycle","request":{
+        "request_id":"f32-remove","expected_capture_mode_revision":1,"expected_values_revision":1,"expected_queue_revision":0,"expected_selection_revision":0,"action":{"type":"remove_pending_fixture_value","fixture_id":fixture_ids[0].0,"attribute":"intensity"}
+    }});
+    let removed = dispatch("f32-remove", remove_request.clone());
+    assert!(removed.ok, "{:?}", removed.error);
+    let action_payload = removed.payload.unwrap();
+    let message = tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+        .await
+        .unwrap()
+        .unwrap();
+    // Exercise the production event serializer, rather than widening f32 through to_value.
+    let event_json: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&message).unwrap()).unwrap();
+    assert_eq!(
+        event_json["event"]["sequence"],
+        action_payload["values_event_sequence"]
+    );
+    let event_projection = &event_json["event"]["payload"]["change"]["projection"];
+    assert_eq!(
+        event_projection["fixture_values"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        event_projection["fixture_values"][0]["fixture_id"],
+        fixture_ids[1].0.to_string()
+    );
+    assert_eq!(
+        event_projection["fixture_values"][0]["value"]["value"],
+        serde_json::json!(0.37)
+    );
+    assert_eq!(
+        &action_payload["values_projection"], event_projection,
+        "same-sequence event and action must carry exactly equal JSON values"
+    );
+    assert_eq!(state.output.snapshot().revision, output_before);
+    let replay = dispatch("f32-remove", remove_request);
+    assert!(replay.ok, "{:?}", replay.error);
+    assert_eq!(
+        replay.payload.unwrap()["values_projection"],
+        *event_projection
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

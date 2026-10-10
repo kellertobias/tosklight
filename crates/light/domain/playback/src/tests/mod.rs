@@ -13,6 +13,8 @@ fn value(fixture: FixtureId, attribute: &str, value: f32) -> CueChange {
 }
 fn list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Main".into(),
         priority: 10,
@@ -74,6 +76,7 @@ mod controls;
 mod cue_dynamic_sources;
 mod cue_recording;
 mod cue_tracking;
+mod direct_projection;
 mod identity;
 mod macro_target;
 mod master;
@@ -83,3 +86,5 @@ mod runtime;
 mod scheduling;
 mod source_evidence;
 mod timecode_target;
+
+mod replacement_projection;

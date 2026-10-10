@@ -23,6 +23,26 @@ pub enum ProgrammingPreloadLifecycleAction {
         expected_playback_event_sequence: u64,
     },
     ClearPending {},
+    RemovePendingPlayback {
+        #[ts(type = "number")]
+        index: usize,
+    },
+    RemovePendingDynamic {
+        #[ts(type = "number")]
+        index: usize,
+    },
+    RemovePendingGroupRelease {
+        #[ts(type = "number")]
+        index: usize,
+    },
+    RemovePendingFixtureValue {
+        fixture_id: Uuid,
+        attribute: String,
+    },
+    RemovePendingGroupValue {
+        group_id: String,
+        attribute: String,
+    },
     Release {},
 }
 

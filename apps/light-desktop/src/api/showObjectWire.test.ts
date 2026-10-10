@@ -44,6 +44,69 @@ function cueListBody() {
 }
 
 describe("show-object wire decoders", () => {
+	it("keeps stored Cue replacement authorship strict while preserving dormant intent", () => {
+		const owner = "33333333-3333-4333-8333-333333333333";
+		const child = "44444444-4444-4444-8444-444444444444";
+		const projection = {
+			source_owner: owner,
+			source_profile: {
+				profile_id: CUE_LIST_ID,
+				profile_revision: 1,
+				mode_id: CUE_ID,
+			},
+			source_head_id: "55555555-5555-4555-8555-555555555555",
+			target_profile: {
+				profile_id: CUE_LIST_ID,
+				profile_revision: 2,
+				mode_id: CUE_ID,
+			},
+			targets: [
+				{
+					fixture_id: child,
+					profile_head_id: "66666666-6666-4666-8666-666666666666",
+				},
+			],
+		};
+		const bodyWith = (fixtureId: string, targets = projection.targets) => {
+			const body = cueListBody();
+			return versioned("cue_list", CUE_LIST_ID, {
+				...body,
+				cues: [
+					{
+						...body.cues[0],
+						changes: [
+							{
+								...body.cues[0].changes[0],
+								fixture_id: fixtureId,
+								replacement_projection: { ...projection, targets },
+							},
+						],
+					},
+				],
+			});
+		};
+		const authored = decodeShowObject(bodyWith(owner), "cue_list");
+		expect(authored.body.cues[0].changes[0]).toMatchObject({
+			fixture_id: owner,
+			replacement_projection: projection,
+		});
+		const dormant = decodeShowObject(bodyWith(owner, []), "cue_list");
+		expect(dormant.body.cues[0].changes[0]).toMatchObject({
+			fixture_id: owner,
+			replacement_projection: { ...projection, targets: [] },
+		});
+		// Effective children exist only inside compiled playback; the portable public object
+		// retains the authored source row even when its explicit destinations include this child.
+		expect(() => decodeShowObject(bodyWith(child), "cue_list")).toThrow(
+			WireValidationError,
+		);
+		expect(() =>
+			decodeShowObject(
+				bodyWith("77777777-7777-4777-8777-777777777777"),
+				"cue_list",
+			),
+		).toThrow(WireValidationError);
+	});
 	it("strictly decodes CueList bodies while retaining unknown fields", () => {
 		const decoded = decodeShowObject(
 			versioned("cue_list", CUE_LIST_ID, cueListBody()),

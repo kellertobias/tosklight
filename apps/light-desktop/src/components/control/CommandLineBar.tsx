@@ -20,6 +20,7 @@ import {
 	useHardwareConnected,
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useHighlightSnapshot } from "../../features/highlight/HighlightState";
+import { COMMAND_ERROR_EVENT } from "../../features/programmingInteraction/commandError";
 import { useOutputRuntimeBlackout } from "../../features/outputRuntime/OutputRuntimeView";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
 import {
@@ -69,7 +70,6 @@ function pendingCommandSummary(
 
 function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const shellStatus = useShellStatusActions();
-	const serverError = useServerError();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const commandErrorRef = useRef<string | null>(null);
 	const updateCommandError = useCallback((error: string | null) => {
@@ -79,22 +79,16 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const [persistentError, setPersistentError] = useState<string | null>(null);
 	const [errorOpen, setErrorOpen] = useState(false);
 	useEffect(() => {
-		if (serverError) setPersistentError(serverError);
-	}, [serverError]);
-	useEffect(() => {
-		if (commandError && serverError) updateCommandError(serverError);
-	}, [serverError, commandError, updateCommandError]);
-	useEffect(() => {
 		const showCommandError = (event: Event) => {
-			setCompleted(false);
+			const detail = (event as CustomEvent<string | null>).detail;
+			if (detail !== null) setCompleted(false);
 			updateCommandError(
-				(event as CustomEvent<string>).detail ||
-					"The command could not be executed.",
+				detail === null ? null : detail || "The command could not be executed.",
 			);
 		};
-		window.addEventListener("light:command-error", showCommandError);
+		window.addEventListener(COMMAND_ERROR_EVENT, showCommandError);
 		return () =>
-			window.removeEventListener("light:command-error", showCommandError);
+			window.removeEventListener(COMMAND_ERROR_EVENT, showCommandError);
 	}, [setCompleted, updateCommandError]);
 	const acknowledgeCommand = () => {
 		updateCommandError(null);
@@ -123,6 +117,55 @@ function openSystemControlsModal(
 ) {
 	requestSystemControlsTab(hasDeskDiagnostics ? "desk-state" : "running");
 	dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
+}
+
+function useProgrammerHardwareKeys(
+	numericPad: ReturnType<typeof useNumericPadController>,
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+	toggleControlMode: () => void,
+) {
+	useEffect(() => {
+		const toggle = () => toggleControlMode();
+		const programmerKey = (event: Event) => {
+			const key = (event as CustomEvent<string>).detail;
+			const shiftedKey = {
+				"shift-cue": "CUE",
+				"shift-playback": "PLAYBACK",
+				"shift-escape": "ESC",
+				"shift-enter": "ENT",
+				"shift-preload": "PRE",
+				"shift-mov": "MOV",
+			} as const;
+			if (key in shiftedKey) {
+				numericPad.pressShifted(shiftedKey[key as keyof typeof shiftedKey]);
+				return;
+			}
+			if (key === "running-output") {
+				dispatch({
+					type: "SET_MODAL",
+					modal: "systemControlsOpen",
+					value: true,
+				});
+				return;
+			}
+			if (key === "playback") numericPad.press("PLAYBACK", "hardware");
+			if (key === "off") numericPad.press("OFF", "hardware");
+			if (key === "diff") numericPad.press("DIFF", "hardware");
+			if (key === "cue") numericPad.press("CUE", "hardware");
+			if (key === "escape") numericPad.press("ESC", "hardware");
+			if (key === "enter") numericPad.press("ENT", "hardware");
+			if (key === "preload") numericPad.press("PRE", "hardware");
+			if (key === "mov") numericPad.press("MOV", "hardware");
+		};
+		window.addEventListener("light:control-mode-toggle", toggle);
+		window.addEventListener("light:programmer-key", programmerKey);
+		const stopRecordModals = listenForRecordModals(dispatch);
+		return () => {
+			stopRecordModals();
+			window.removeEventListener("light:control-mode-toggle", toggle);
+			window.removeEventListener("light:programmer-key", programmerKey);
+		};
+	});
 }
 
 function useCommandLineBarModel() {
@@ -220,44 +263,7 @@ function useCommandLineBarModel() {
 	const openSystemControls = () =>
 		openSystemControlsModal(dispatch, deskDiagnostics.length > 0);
 	const toggleControlMode = () => dispatch({ type: "TOGGLE_CONTROL_MODE" });
-	useEffect(() => {
-		const toggle = () => toggleControlMode();
-		const programmerKey = (event: Event) => {
-			const key = (event as CustomEvent<string>).detail;
-			const shiftedKey = {
-				"shift-cue": "CUE",
-				"shift-playback": "PLAYBACK",
-				"shift-escape": "ESC",
-				"shift-enter": "ENT",
-				"shift-preload": "PRE",
-				"shift-mov": "MOV",
-			} as const;
-			if (key in shiftedKey) {
-				numericPad.pressShifted(shiftedKey[key as keyof typeof shiftedKey]);
-				return;
-			}
-			if (key === "running-output") {
-				dispatch({ type: "SET_MODAL", modal: "systemControlsOpen", value: true });
-				return;
-			}
-			if (key === "playback") numericPad.press("PLAYBACK", "hardware");
-			if (key === "off") numericPad.press("OFF", "hardware");
-			if (key === "diff") numericPad.press("DIFF", "hardware");
-			if (key === "cue") numericPad.press("CUE", "hardware");
-			if (key === "escape") numericPad.press("ESC", "hardware");
-			if (key === "enter") numericPad.press("ENT", "hardware");
-			if (key === "preload") numericPad.press("PRE", "hardware");
-			if (key === "mov") numericPad.press("MOV", "hardware");
-		};
-		window.addEventListener("light:control-mode-toggle", toggle);
-		window.addEventListener("light:programmer-key", programmerKey);
-		const stopRecordModals = listenForRecordModals(dispatch);
-		return () => {
-			stopRecordModals();
-			window.removeEventListener("light:control-mode-toggle", toggle);
-			window.removeEventListener("light:programmer-key", programmerKey);
-		};
-	});
+	useProgrammerHardwareKeys(numericPad, dispatch, toggleControlMode);
 	useCommandLineShortcuts(hardware, {
 		completed,
 		commandLine: command.text,

@@ -1035,6 +1035,16 @@ precedence; a broken embedded GDTF cannot silently use an installed fixture with
 Read **Import limitations** before applying. Fixtures without usable profiles can be kept unresolved
 for recovery or skipped; choosing a different DMX address cannot resolve missing profile data.
 
+Conflicting immutable native profile revisions are listed with affected fixture counts. Import is
+blocked by default. Choose **Import conflicting profiles as new identities** to copy the exact
+archive profiles without overwriting existing profiles or changing unrelated fixtures. Imported
+fixtures are bound to the copied identities. Mode,
+channel, geometry and profile-authored calibration identities inside each copied profile remain consistent.
+Per-fixture identity-bound corrections keep their original source identity and become inactive until
+revalidated for the new profile identity; they are never silently rebound. Retained
+GDTF bytes keep their original association evidence; export generates GDTF if that association no
+longer matches the new identity. The source is never silently revalidated.
+
 Apply uses the data captured by the preview, even if the picked file changes. Opening another
 show or preparing another archive replaces that preview. If the destination patch changes, preview
 again. An invalid address leaves the preview available so you can correct it. Reimporting the same

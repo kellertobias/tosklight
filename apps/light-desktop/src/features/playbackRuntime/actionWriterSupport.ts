@@ -6,7 +6,10 @@ import type {
 import type { PlaybackIdentity } from "./contracts";
 
 type CueListRuntimeSource = {
-	identity: Extract<PlaybackIdentity, { kind: "playback" | "cue_list" }>;
+	identity: Extract<
+		PlaybackIdentity,
+		{ kind: "playback" | "cue_list" | "direct_cue_list" }
+	>;
 };
 
 export function cueListReleaseRequest(

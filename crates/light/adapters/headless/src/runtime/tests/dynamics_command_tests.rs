@@ -203,6 +203,10 @@ fn fix_at_command_accepts_a_named_preset_batch_with_timing() {
     };
     state.active_show.replace_current(Some(entry.clone()));
     let preset = light_programmer::Preset {
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+instance_id: None,
         name: "Half".into(),
         family: light_programmer::PresetFamily::Intensity,
         number: 7,
@@ -466,6 +470,7 @@ fn startup_load_restores_persisted_dynamic_runtime_and_programmer_identity() {
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })
@@ -553,6 +558,7 @@ fn startup_loads_legacy_dynamic_phase_spread_as_uniform() {
         extensions_dir: Some(data_dir.join("extensions")),
         bind: "127.0.0.1:0".parse().unwrap(),
         test_bench: true,
+        visualizer_preview: false,
         osc_bind_override: None,
         output_bind_override: None,
     })
@@ -1426,7 +1432,10 @@ fn quiet_command_guards_preserve_empty_live_groups_and_explicit_noops() {
     let entry = ShowEntry { is_base_show: false, id: show_id, name: "Quiet group".into(), path: show_path.display().to_string(), revision: 0, updated_at: String::new(), created_at: None, last_loaded_at: None, revision_copy: None };
     state.active_show.replace_current(Some(entry.clone()));
     let preset = light_programmer::Preset {
-        family: light_programmer::PresetFamily::Intensity, number: 7,
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+family: light_programmer::PresetFamily::Intensity, number: 7,
         group_values: HashMap::from([("1".into(), HashMap::from([(light_core::AttributeKey::intensity(), light_core::AttributeValue::Normalized(0.8))]))]),
         ..Default::default()
     };

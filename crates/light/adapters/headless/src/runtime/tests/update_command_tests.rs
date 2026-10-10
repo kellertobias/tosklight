@@ -15,6 +15,8 @@ fn update_undo_snapshot(
         light_core::AttributeValue::Normalized(0.3),
     ));
     let cue_list = light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Update undo".into(),
         priority: 0,

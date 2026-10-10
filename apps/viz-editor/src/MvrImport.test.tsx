@@ -171,3 +171,27 @@ describe("MVR source limitations and preview lifecycle", () => {
         expect(onCancel).toHaveBeenCalledOnce();
     });
 });
+
+
+describe("immutable profile identity collision consent",()=>{
+    it("lists affected profiles and blocks Import until explicit new identity consent",async()=>{
+        const user=userEvent.setup();
+        renderImport({...preview([CLEAN]),profileConflicts:[{profileId:"profile",revision:1,name:"JB-Lighting JBLED A7",fixtures:[CLEAN.uuid,CONFLICTED.uuid]}]});
+        expect(screen.getByText(/JB-Lighting JBLED A7.*revision 1.*2 fixtures/)).toBeInTheDocument();
+        expect(screen.getByText(/Existing profiles and unrelated fixtures stay unchanged/)).toBeInTheDocument();
+        const button=screen.getByRole("button",{name:"Import"});
+        expect(button).toBeDisabled();
+        expect(invoke).not.toHaveBeenCalled();
+        await user.click(screen.getByRole("checkbox",{name:"Import conflicting profiles as new identities"}));
+        expect(button).toBeEnabled();
+        await user.click(button);
+        await waitFor(()=>expect(invoke).toHaveBeenCalledWith("import_mvr",{token:"preview-token",resolutions:{},copyConflictingProfiles:true}));
+    });
+    it("cancels a collision preview without performing any import",async()=>{
+        const user=userEvent.setup();
+        renderImport({...preview([CLEAN]),profileConflicts:[{profileId:"profile",revision:1,name:"Conflicting",fixtures:[CLEAN.uuid]}]});
+        await user.click(screen.getByRole("button",{name:"Cancel"}));
+        expect(invoke).toHaveBeenCalledWith("cancel_mvr_preview",{token:"preview-token"});
+        expect(invoke.mock.calls.some(([command])=>command==="import_mvr")).toBe(false);
+    });
+});

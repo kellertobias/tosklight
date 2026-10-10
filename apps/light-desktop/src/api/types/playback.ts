@@ -1,3 +1,4 @@
+import type { ReplacementProgramProjection } from "./replacementProjection";
 import type {
 	CueTimingRuntimeProjection,
 	PlaybackCueTransition as GeneratedPlaybackCueTransition,
@@ -7,6 +8,17 @@ import type { ControlDesk } from "./desk";
 import type { AttributeValue } from "@tosklight/patch/stage-geometry";
 
 export type PlaybackCueTransition = GeneratedPlaybackCueTransition;
+
+export interface PresetValueReference {
+	preset_instance_id: string;
+	source_owner:
+		| { type: "universal" }
+		| { type: "fixture"; fixture_id: string }
+		| { type: "group"; group_id: string };
+	source_attribute: string;
+	sample_rank?: [number, number] | null;
+	member_fixture?: string | null;
+}
 
 export interface Cue {
 	id?: string;
@@ -22,6 +34,8 @@ export interface Cue {
 	out_delay_link?: "in_fade";
 	trigger: { type: string; [key: string]: unknown };
 	changes: Array<{
+		preset_reference?: PresetValueReference | null;
+		replacement_projection?: ReplacementProgramProjection | null;
 		fixture_id: string;
 		attribute: string;
 		value: AttributeValue | null;
@@ -30,6 +44,8 @@ export interface Cue {
 		delay_millis?: number;
 	}>;
 	group_changes?: Array<{
+		preset_reference?: PresetValueReference | null;
+		replacement_projections?: Record<string, ReplacementProgramProjection>;
 		group_id: string;
 		attribute: string;
 		value: AttributeValue | null;
@@ -110,6 +126,8 @@ export interface VisualizationSnapshot {
 }
 
 export interface CueList {
+	pool_number?: number | null;
+	legacy_pool_aliases?: number[];
 	id: string;
 	name: string;
 	cues: Cue[];

@@ -3,6 +3,7 @@ import type { ShowObject } from "../showObjects/contracts";
 
 export type CueRecordTarget =
 	| { kind: "pool"; playbackNumber: number }
+	| { kind: "cuelist_pool"; number: number }
 	| { kind: "selected_playback" }
 	| { kind: "page_slot"; page: number; slot: number }
 	| { kind: "cue_list"; cueListId: string }

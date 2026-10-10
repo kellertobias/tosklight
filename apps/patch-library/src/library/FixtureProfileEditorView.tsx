@@ -6,7 +6,7 @@ import type {
 	FixtureProfile,
 } from "../wire";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
-import { liftMotionAttributes } from "../sheet/fixtureProfileModel";
+import { liftGeometryBindings } from "../sheet/fixtureProfileModel";
 import {
 	EditorBreadcrumbs,
 	EditorTrailProvider,
@@ -112,9 +112,9 @@ function ProfileEditorBody({
 						geometry: editor.draft.geometry ?? { nodes: [], emitters: [] },
 					}}
 					onChange={(carrier) =>
-						// A template names the attribute on its moving parts; every mode takes it over.
+						// Template owners and axis attributes become explicit per-mode bindings.
 						editor.setDraft((current) =>
-							liftMotionAttributes({ ...current, geometry: carrier.geometry }),
+							liftGeometryBindings({ ...current, geometry: carrier.geometry }),
 						)
 					}
 				/>

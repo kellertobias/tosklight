@@ -158,6 +158,16 @@ pub(super) fn projection_from_application(
 ) -> wire::ProgrammingPreloadValuesProjection {
     wire::ProgrammingPreloadValuesProjection {
         revision: projection.revision,
+        group_release_values: projection
+            .group_release_values
+            .iter()
+            .map(|entry| wire::ProgrammingPreloadGroupReleaseValue {
+                group_id: entry.group_id.clone(),
+                attribute: entry.attribute.0.to_string(),
+                programmer_order: entry.programmer_order,
+                changed_at_millis: entry.changed_at_millis,
+            })
+            .collect(),
         fixture_values: projection
             .fixture_values
             .iter()
@@ -167,9 +177,28 @@ pub(super) fn projection_from_application(
         dynamic_values: projection
             .dynamic_values
             .iter()
-            .map(super::dynamics_wire::programming_value)
+            .map(preload_dynamic_value)
             .collect(),
     }
+}
+
+/// Preload has no shared-definition table: each retained On row carries its exact fallback.
+fn preload_dynamic_value(
+    value: &light_dynamics::DynamicAddressValue,
+) -> light_wire::v2::programming::ProgrammingDynamicValue {
+    let mut projected = super::dynamics_wire::programming_value(value);
+    if let (
+        light_dynamics::DynamicSemanticValue::DynamicOn {
+            dynamic: retained, ..
+        },
+        light_wire::v2::programming::ProgrammingDynamicSemanticValue::DynamicOn { dynamic, .. },
+    ) = (&value.value, &mut projected.value)
+    {
+        dynamic.embedded_fallback = Some(super::dynamics_wire::definition(
+            retained.embedded_fallback.definition.as_ref(),
+        ));
+    }
+    projected
 }
 
 fn application_mutation(
@@ -320,3 +349,7 @@ pub(crate) fn attribute_value(value: &AttributeValue) -> wire::ProgrammingPreloa
         }
     }
 }
+
+#[cfg(test)]
+#[path = "preload_values_wire_tests.rs"]
+mod tests;

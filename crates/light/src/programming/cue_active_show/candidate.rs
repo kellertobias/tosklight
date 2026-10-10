@@ -19,7 +19,36 @@ pub(super) fn prepare_candidate(
     commit: &ProgrammingCueCommit,
     mut target: ResolvedCueTarget,
 ) -> Result<PreparedActiveShowTransaction<PreparedRecording>, ActionError> {
-    let (plan, cue_list_id) = plan_recording(commit, &target)?;
+    let (mut plan, cue_list_id) = plan_recording(commit, &target)?;
+    let catalog = crate::cuelist_pool_catalog(document)?;
+    let independent = target.pool_number.is_some()
+        || matches!(document.programming_contract_marker(), light_show::ProgrammingContractMarker::Declared(version) if version >= light_core::programming::INDEPENDENT_CUELIST_POOL_CONTRACT);
+    if let Some(number) = target.pool_number {
+        if target.cue_list.is_some() {
+            catalog.migrate(&mut plan.cue_list).map_err(invalid)?;
+        } else {
+            plan.cue_list.pool_number = Some(number);
+        }
+        plan.changed |= target
+            .cue_list
+            .as_ref()
+            .is_none_or(|stored| stored.typed != plan.cue_list);
+    }
+    if independent && target.pool_number.is_none() {
+        if target.cue_list.is_some() {
+            catalog.migrate(&mut plan.cue_list).map_err(invalid)?;
+        } else {
+            plan.cue_list.pool_number = Some(
+                (1..=1000)
+                    .find(|number| catalog.resolve(*number).is_none())
+                    .ok_or_else(|| invalid("no free Cuelist address is available"))?,
+            );
+        }
+        plan.changed |= target
+            .cue_list
+            .as_ref()
+            .is_none_or(|stored| stored.typed != plan.cue_list);
+    }
     if !plan.changed && !target.creates_topology() {
         return Ok(no_change(document, &target, plan));
     }
@@ -27,6 +56,16 @@ pub(super) fn prepare_candidate(
     let playback = playback_body(&target, cue_list_id)?;
     let page = page_body(&mut target, cue_list_id)?;
     let mut transaction = document.transaction();
+    let companions = if independent {
+        crate::cuelist_pool::migrate_cuelist_pool(
+            document,
+            &mut transaction,
+            &catalog,
+            cue_list_id,
+        )?
+    } else {
+        Vec::new()
+    };
     transaction.put("cue_list", cue_list.object_id.clone(), cue_list.raw_body);
     if let Some(playback) = &playback {
         transaction.put(
@@ -55,6 +94,13 @@ pub(super) fn prepare_candidate(
             page: page.as_ref().map(|body| body.object_id.as_str()),
         },
     )?;
+    let candidate = document
+        .candidate(prepared.transaction())
+        .map_err(invalid)?;
+    let companion_projections = companions
+        .iter()
+        .map(|id| candidate_projection(&candidate, ActiveShowObjectKind::CueList, id))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut changed_kinds = vec![ActiveShowObjectKind::CueList];
     if playback.is_some() {
         changed_kinds.push(ActiveShowObjectKind::Playback);
@@ -67,6 +113,7 @@ pub(super) fn prepare_candidate(
         state: PreparedRecording {
             result,
             changed_kinds,
+            companion_projections,
         },
     })
 }
@@ -93,7 +140,8 @@ fn plan_recording(
             .map_err(plan_error),
         None => {
             let playback = target
-                .concrete_playback_number
+                .pool_number
+                .or(target.concrete_playback_number)
                 .ok_or_else(invalid_topology)?;
             let id = CueListId::new();
             commit
@@ -143,7 +191,7 @@ fn page_body(
     target: &mut ResolvedCueTarget,
     cue_list_id: CueListId,
 ) -> Result<Option<PendingBody>, ActionError> {
-    if !target.creates_topology() {
+    if !target.creates_topology() || target.pool_number.is_some() {
         return Ok(None);
     }
     let playback = target
@@ -236,6 +284,7 @@ fn no_change(
             concrete_playback_number: target.concrete_playback_number,
         },
         changed_kinds: Vec::new(),
+        companion_projections: Vec::new(),
     })
 }
 

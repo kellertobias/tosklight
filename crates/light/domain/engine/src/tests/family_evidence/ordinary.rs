@@ -142,6 +142,7 @@ fn equal_group_family_values_retain_the_actual_winner_across_same_capture_releas
     snapshot.groups = ["first", "second"]
         .into_iter()
         .map(|id| GroupDefinition {
+            replacement_projections: Default::default(),
             id: id.into(),
             name: id.into(),
             fixtures: vec![fixture],

@@ -89,7 +89,7 @@ export function updateOutcomeLabel(item: UpdatePreviewItem) {
 
 export function updateTargetContext(target: UpdateTargetIdentity) {
 	const parts = [targetFamilyLabel(target)];
-	if (target.playback_number != null) {
+	if (target.playback_number != null && target.family.type !== "cue") {
 		parts.push(`Playback ${target.playback_number}`);
 	}
 	if (target.cue) parts.push(`Current Cue ${target.cue.number}`);

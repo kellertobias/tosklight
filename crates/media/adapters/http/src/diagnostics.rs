@@ -481,6 +481,38 @@ pub struct LogPage {
 pub type AudioSource = Arc<dyn Fn() -> AudioTelemetry + Send + Sync>;
 /// The machine's audio inputs, by name. A platform capability, so the process owns it.
 pub type DeviceLister = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
+
+/// A nonblocking machine inventory snapshot. Hardware discovery belongs to the runtime worker.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum OutputDeviceDiscoveryState {
+    Loading,
+    #[default]
+    Ready,
+    Failed,
+    Stalled,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputDeviceInventory {
+    pub devices: Vec<String>,
+    pub state: OutputDeviceDiscoveryState,
+    pub has_successful_snapshot: bool,
+    pub error: Option<String>,
+}
+
+impl Default for OutputDeviceInventory {
+    fn default() -> Self {
+        Self {
+            devices: Vec::new(),
+            state: OutputDeviceDiscoveryState::Ready,
+            has_successful_snapshot: true,
+            error: None,
+        }
+    }
+}
+
+pub type OutputDeviceInventorySource = Arc<dyn Fn() -> OutputDeviceInventory + Send + Sync>;
+
 /// One monitor the presentation event loop currently sees.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonitorDevice {
@@ -535,7 +567,7 @@ pub struct Diagnostics {
     pub microphone_permission: Arc<dyn Fn() -> crate::wire::MicrophonePermissionView + Send + Sync>,
     pub request_microphone_permission:
         Arc<dyn Fn() -> Result<crate::wire::MicrophonePermissionView, String> + Send + Sync>,
-    pub output_devices: DeviceLister,
+    pub output_devices: OutputDeviceInventorySource,
     pub monitors: MonitorLister,
     pub logs: LogSource,
     pub log_level: LogLevelControl,
@@ -561,7 +593,7 @@ impl Default for Diagnostics {
             request_microphone_permission: Arc::new(|| {
                 Ok(crate::wire::MicrophonePermissionView::NotRequired)
             }),
-            output_devices: Arc::new(Vec::new),
+            output_devices: Arc::new(OutputDeviceInventory::default),
             monitors: Arc::new(Vec::new),
             logs: Arc::new(|_| LogPage::default()),
             log_level: LogLevelControl::default(),

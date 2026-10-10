@@ -68,6 +68,15 @@ impl ProgrammingService {
         let completion = ports.commit_cue(&envelope.context, &commit)?;
         validate_completion(&envelope.command, &commit, &completion)?;
         self.finish_alignment(&envelope.context, identity.session_id);
+        if matches!(
+            envelope.command.target,
+            crate::ProgrammingCueRecordTarget::CuelistPool { .. }
+        ) {
+            let list: light_playback::CueList =
+                serde_json::from_value(completion.projections.cue_list.raw_body.as_ref().clone())
+                    .map_err(|_| invalid_completion())?;
+            ports.select_recorded_cuelist(&envelope.context, list.id);
+        }
         let activation =
             activate_if_authorized(&envelope, &commit, &completion, captured_source, ports)?;
         if activation.succeeded {
@@ -274,20 +283,43 @@ fn activate_if_authorized(
             succeeded: false,
         });
     }
-    let playback = completion
-        .concrete_playback_number
-        .ok_or_else(invalid_completion)?;
-    let Some(activation) = ports.activate_recorded_cue(
-        &envelope.context,
-        playback,
-        completion.recorded_cue.number.clone(),
-    ) else {
-        return Ok(FirstRecordActivation {
-            runtime: None,
-            succeeded: false,
-        });
+    let activation = if let Some(playback) = completion.concrete_playback_number {
+        let Some(activation) = ports.activate_recorded_cue(
+            &envelope.context,
+            playback,
+            completion.recorded_cue.number.clone(),
+        ) else {
+            return Ok(FirstRecordActivation {
+                runtime: None,
+                succeeded: false,
+            });
+        };
+        validate_activation(playback, completion, &activation)?;
+        activation
+    } else {
+        let list: light_playback::CueList =
+            serde_json::from_value(completion.projections.cue_list.raw_body.as_ref().clone())
+                .map_err(|_| invalid_completion())?;
+        let Some(activation) = ports.activate_recorded_cuelist(
+            &envelope.context,
+            list.id,
+            completion.recorded_cue.number.clone(),
+        ) else {
+            return Ok(FirstRecordActivation {
+                runtime: None,
+                succeeded: false,
+            });
+        };
+        if !matches!(activation.projection.requested, crate::PlaybackRuntimeIdentity::CueList(id) | crate::PlaybackRuntimeIdentity::DirectCueList(id) if id == list.id)
+            || activation.projection.playback_number.is_some()
+            || !activation.projection.current_cue().is_some_and(|cue| {
+                cue.id == completion.recorded_cue.id && cue.number == completion.recorded_cue.number
+            })
+        {
+            return Err(invalid_completion());
+        }
+        activation
     };
-    validate_activation(playback, completion, &activation)?;
     Ok(FirstRecordActivation {
         runtime: emitted_activation(activation),
         succeeded: true,
@@ -315,7 +347,11 @@ fn should_activate(
         && !completion.recorded_cue.deleted
         && source == CueRecordingCapturedSource::Normal
         && commit.environment().start_after_first_recording
-        && completion.concrete_playback_number.is_some()
+        && (completion.concrete_playback_number.is_some()
+            || matches!(
+                commit.environment().target,
+                crate::ProgrammingCueResolvedTarget::CuelistPool { .. }
+            ))
 }
 
 fn recording_identity(

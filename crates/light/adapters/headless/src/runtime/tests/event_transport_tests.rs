@@ -735,6 +735,7 @@ fn programmer_preload_values_draft(_user_id: Uuid, revision: u64) -> EventDraft 
         ProgrammingPreloadValuesChange {
             projection: ProgrammingPreloadValuesProjection {
                 dynamic_values: Vec::new(),
+                group_release_values: Vec::new(),
                 revision,
                 fixture_values: Vec::new(),
                 group_values: Vec::new(),
@@ -812,6 +813,8 @@ fn test_playback_scope() -> PlaybackShowScope {
 
 fn chaser() -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Event transport Chaser".into(),
         priority: 0,

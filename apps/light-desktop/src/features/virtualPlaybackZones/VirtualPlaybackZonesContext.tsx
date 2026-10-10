@@ -59,7 +59,10 @@ export function VirtualPlaybackZonesProvider({
 						(error) =>
 							setReportedError(
 								error
-									? { generation: epoch.generation, message: formatErrorDetails(error) }
+									? {
+											generation: epoch.generation,
+											message: formatErrorDetails(error),
+										}
 									: null,
 							),
 					)
@@ -110,6 +113,11 @@ export class VirtualPlaybackZonesController {
 	private activeCount = 0;
 	private saveCount = 0;
 	private mutationVersion = 0;
+	private eventGeneration = 0;
+	private reconnectAttempt = 0;
+	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
+		null;
+	private eventFailure: Error | null = null;
 
 	constructor(
 		private readonly scope: VirtualPlaybackZonesScope,
@@ -148,6 +156,10 @@ export class VirtualPlaybackZonesController {
 			active = false;
 			this.activeCount = Math.max(0, this.activeCount - 1);
 			if (this.activeCount === 0) {
+				this.eventGeneration += 1;
+				if (this.reconnectTimer !== null)
+					globalThis.clearTimeout(this.reconnectTimer);
+				this.reconnectTimer = null;
 				this.eventStream?.close();
 				this.eventStream = null;
 			}
@@ -156,30 +168,77 @@ export class VirtualPlaybackZonesController {
 
 	private openWindow() {
 		this.snapshot = null;
+		this.reconnectAttempt = 0;
 		this.notify();
-		this.eventStream =
-			this.transport.subscribe?.(this.scope, {
-				changed: (change) => {
-					if (
-						this.isCurrent() &&
-						change.showId === this.scope.showId &&
-						change.revision !== this.snapshot?.revision
-					)
-						void this.reloadSnapshot();
-				},
-				gap: () => {
-					if (this.isCurrent()) void this.reloadSnapshot();
-				},
-				error: (error) => {
-					if (this.isCurrent()) this.reportError(error);
-				},
-				closed: () => {
-					if (this.isCurrent() && this.activeCount > 0)
-						this.reportError(
-							new Error("Virtual Playback zone event connection closed"),
-						);
-				},
-			}) ?? null;
+		this.openEvents();
+	}
+
+	private openEvents() {
+		const generation = ++this.eventGeneration;
+		const current = () =>
+			this.isCurrent() &&
+			this.activeCount > 0 &&
+			generation === this.eventGeneration;
+		try {
+			const stream =
+				this.transport.subscribe?.(this.scope, {
+					ready: () => {
+						if (!current()) return;
+						void this.reloadSnapshot(current).then((snapshot) => {
+							if (!snapshot || !current()) return;
+							this.reconnectAttempt = 0;
+							this.eventFailure = null;
+							this.reportError(null);
+						});
+					},
+					changed: (change) => {
+						if (
+							current() &&
+							change.showId === this.scope.showId &&
+							change.revision !== this.snapshot?.revision
+						)
+							void this.reloadSnapshot(current);
+					},
+					gap: () => {
+						if (current()) void this.reloadSnapshot(current);
+					},
+					error: (error) => {
+						if (current()) this.reconnect(error);
+					},
+					closed: () => {
+						if (current())
+							this.reconnect(
+								new Error("Virtual Playback zone event connection closed"),
+							);
+					},
+				}) ?? null;
+			if (current()) this.eventStream = stream;
+			else stream?.close();
+		} catch (reason) {
+			if (current()) this.reconnect(asError(reason));
+		}
+	}
+
+	private reconnect(error: Error) {
+		this.eventFailure = error;
+		this.reportError(error);
+		this.eventGeneration += 1;
+		this.eventStream?.close();
+		this.eventStream = null;
+		if (this.reconnectTimer !== null) return;
+		const delays = [250, 500, 1000, 2000, 4000];
+		const delay = delays[this.reconnectAttempt++];
+		if (delay === undefined) {
+			this.eventFailure = new Error(
+				"Virtual Playback zone connection could not be restored. Reopen the pane to retry.",
+			);
+			this.reportError(this.eventFailure);
+			return;
+		}
+		this.reconnectTimer = globalThis.setTimeout(() => {
+			this.reconnectTimer = null;
+			if (this.isCurrent() && this.activeCount > 0) this.openEvents();
+		}, delay);
 	}
 
 	save(zones: readonly VirtualPlaybackZone[]) {
@@ -203,7 +262,7 @@ export class VirtualPlaybackZonesController {
 			if (!this.isCurrent()) return null;
 			this.mutationVersion += 1;
 			this.storeSnapshot(outcome);
-			this.reportError(null);
+			this.reportError(this.eventFailure);
 			return outcome.zones;
 		} catch (reason) {
 			if (conflictStatus(reason) === 409) await this.reloadSnapshot();
@@ -222,14 +281,14 @@ export class VirtualPlaybackZonesController {
 		return result;
 	}
 
-	private reloadSnapshot() {
+	private reloadSnapshot(accept?: () => boolean) {
 		this.pendingSnapshot = null;
-		return this.loadSnapshot();
+		return this.loadSnapshot(accept);
 	}
 
-	private loadSnapshot() {
+	private loadSnapshot(accept?: () => boolean) {
 		if (this.pendingSnapshot) return this.pendingSnapshot;
-		const load = this.performLoad();
+		const load = this.performLoad(accept);
 		this.pendingSnapshot = load;
 		void load.finally(() => {
 			if (this.pendingSnapshot === load) this.pendingSnapshot = null;
@@ -237,19 +296,20 @@ export class VirtualPlaybackZonesController {
 		return load;
 	}
 
-	private async performLoad() {
+	private async performLoad(accept?: () => boolean) {
 		const loadVersion = this.mutationVersion;
 		try {
 			const snapshot = await this.transport.loadSnapshot(this.scope);
-			if (!this.isCurrent()) return null;
+			if (!this.isCurrent() || (accept && !accept())) return null;
 			if (snapshot.showId !== this.scope.showId)
 				throw new Error(
 					"Virtual Playback zone response changed authority scope",
 				);
 			if (loadVersion === this.mutationVersion) this.storeSnapshot(snapshot);
-			this.reportError(null);
+			this.reportError(this.eventFailure);
 			return snapshot;
 		} catch (reason) {
+			if (accept && !accept()) return null;
 			return this.failure(reason);
 		}
 	}

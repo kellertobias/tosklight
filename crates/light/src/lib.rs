@@ -7,6 +7,7 @@ pub mod action;
 pub mod active_show;
 pub mod command_macro;
 pub mod command_macro_runtime;
+pub mod cuelist_pool;
 pub mod dynamics;
 pub mod event;
 pub mod fixture_position;
@@ -58,6 +59,7 @@ pub use command_macro_runtime::{
     CommandMacroRunRequest, CommandMacroRuntimeSnapshot, CommandMacroSequenceOutcome,
     CommandMacroTrigger, DEFAULT_MACRO_HISTORY_LIMIT, wait_for_macro_delay,
 };
+pub use cuelist_pool::cuelist_pool_catalog;
 pub use dynamics::{
     DynamicControllerUpdate, DynamicFixAtBatchCommand, DynamicFixAtCaptureCommand,
     DynamicFixAtCommand, DynamicFixAtEnvironment, DynamicFixAtValue, DynamicOffCommand,
@@ -233,10 +235,10 @@ pub use show_compiler::{PreparedShowCandidate, prepare_show_candidate};
 pub use show_patch::{
     PatchChange, PatchFixtureAxis, PatchFixtureCandidate, PatchFixtureProjection,
     PatchFixtureUpdateAction, PatchFixtureUpdateIntent, PatchFixturesCommand, PatchFixturesResult,
-    PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase, PatchPlacementIntent,
-    PatchProfileRevisionProjection, PatchSnapshot, PatchSplitPlacementIntent,
-    PatchSplitPlacementMode, PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent,
-    ShowPatchPorts, ShowPatchService,
+    PatchHeadReplacement, PatchModeProjection, PatchOperatorAddressOverride, PatchPerformancePhase,
+    PatchPlacementIntent, PatchProfileRevisionProjection, PatchProgrammingReplacement,
+    PatchRootProgramReplacement, PatchSnapshot, PatchSplitPlacementIntent, PatchSplitPlacementMode,
+    PatchVectorAxis, PatchVectorKind, PatchVectorSpreadIntent, ShowPatchPorts, ShowPatchService,
 };
 pub use show_sync::{
     ShowSyncAppliedObject, ShowSyncCommand, ShowSyncConflict, ShowSyncConflictReason,
@@ -262,5 +264,5 @@ pub use dynamics::{
 };
 pub use programming::{
     materialize_preset_fixture_values, materialize_preset_fixture_values_with_native_models,
-    plan_preset_selection_values, preload_preset_mutations,
+    plan_preset_selection_values, preload_preset_mutations, preset_value_origins,
 };

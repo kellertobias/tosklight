@@ -39,6 +39,7 @@ impl ProgrammingService {
             identity.session_id,
             action.command.expected_capture_mode_revision,
         )?;
+        let preload = target == ProgrammingPresetRecallTarget::Preload;
         let values_revision =
             self.assert_recall_values_revision(action.command.expected_values_revision)?;
         let preload_values_revision = self.assert_recall_preload_values_revision(
@@ -80,28 +81,24 @@ impl ProgrammingService {
                 target,
             );
         }
+        let preset = environment
+            .resolved_aim
+            .as_deref()
+            .unwrap_or(&environment.preset);
         let mutations = super::super::preset_recall_plan::plan_with_positions(
             &selection,
-            environment
-                .resolved_aim
-                .as_deref()
-                .unwrap_or(&environment.preset),
+            preset,
             &environment.groups,
             &environment.stage_positions,
             environment.programmer_fade_millis,
         )?;
         let preset_context = format!("preset:{}", action.command.address.storage_key());
-        let required = mutations
-            .iter()
-            .filter_map(|mutation| match mutation {
-                light_programmer::NormalProgrammerValueMutation::SetFixture { value, .. }
-                | light_programmer::NormalProgrammerValueMutation::SetGroup { value, .. } => {
-                    Some(value.required_programming_contract())
-                }
-                _ => None,
-            })
-            .max()
-            .unwrap_or(0);
+        let replacement_origins = super::super::preset_recall_plan::replacement_value_origins(
+            &selection,
+            preset,
+            &environment.groups,
+        );
+        let required = required_recall_contract(&mutations, &replacement_origins);
         if required > environment.supported_programming_contract {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
@@ -111,9 +108,7 @@ impl ProgrammingService {
                 ),
             ));
         }
-        let normal_changed = if !mutations.is_empty()
-            && target == ProgrammingPresetRecallTarget::Programmer
-        {
+        let normal_changed = if !mutations.is_empty() && !preload {
             self.programmers
                 .apply_normal_preset_recall(identity.session_id, &mutations, preset_context.clone())
                 .ok_or_else(recall_unavailable)?
@@ -121,13 +116,38 @@ impl ProgrammingService {
         } else {
             false
         };
-        let preload_changed = if target == ProgrammingPresetRecallTarget::Preload {
+        let preload_changed = if preload {
             let mutations = super::super::preset_recall_plan::as_preload(&mutations);
             self.programmers
                 .apply_preload_values(identity.session_id, &mutations)
         } else {
             false
         };
+        let origins = super::super::preset_recall_plan::preset_value_origins(
+            &selection,
+            preset,
+            &environment.groups,
+            &environment.stage_positions,
+        );
+        let provenance_changed = self.programmers.attach_preset_provenance(
+            identity.session_id,
+            &origins,
+            preload,
+            !normal_changed && !preload_changed,
+        );
+        let captured = self
+            .programmers
+            .get(identity.session_id)
+            .ok_or_else(recall_unavailable)?;
+        let replacement_orders =
+            replacement_order_attachments(&captured, preload, &mutations, &replacement_origins);
+        let replacement_changed = self.programmers.attach_replacement_provenance(
+            identity.session_id,
+            &replacement_orders,
+            preload,
+            !normal_changed && !preload_changed && !provenance_changed,
+        );
+        let provenance_changed = provenance_changed || replacement_changed;
         let after = Snapshot::read(
             &self.programmers,
             action.context.desk_id,
@@ -149,8 +169,8 @@ impl ProgrammingService {
             preload_values_revision,
             capture_mode_revision,
             target,
-            normal_changed,
-            preload_changed,
+            normal_changed || (provenance_changed && !preload),
+            preload_changed || (provenance_changed && preload),
         )
     }
 
@@ -423,6 +443,101 @@ impl ProgrammingService {
             },
         ))
     }
+}
+
+type ReplacementRecallOrigin = (
+    light_core::PresetValueOwner,
+    light_core::AttributeKey,
+    light_core::ReplacementProjectionMap,
+);
+
+fn required_recall_contract(
+    mutations: &[light_programmer::NormalProgrammerValueMutation],
+    replacement_origins: &[ReplacementRecallOrigin],
+) -> u16 {
+    mutations
+        .iter()
+        .filter_map(|mutation| match mutation {
+            light_programmer::NormalProgrammerValueMutation::SetFixture { value, .. }
+            | light_programmer::NormalProgrammerValueMutation::SetGroup { value, .. } => {
+                Some(value.required_programming_contract())
+            }
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0)
+        .max(
+            if replacement_origins
+                .iter()
+                .any(|(_, _, map)| !map.is_empty())
+            {
+                light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT
+            } else {
+                0
+            },
+        )
+}
+
+fn replacement_order_attachments(
+    captured: &light_programmer::ProgrammerState,
+    preload: bool,
+    mutations: &[light_programmer::NormalProgrammerValueMutation],
+    replacement_origins: &[ReplacementRecallOrigin],
+) -> Vec<(u64, light_core::ReplacementProjectionMap)> {
+    let fixture_values = if preload {
+        captured.preload_pending.as_slice()
+    } else {
+        captured.values.as_slice()
+    };
+    let group_values = if preload {
+        &captured.preload_group_pending
+    } else {
+        captured.group_values.as_ref()
+    };
+    let mut replacement_orders = Vec::new();
+    for mutation in mutations {
+        let (owner, attribute, order) = match mutation {
+            light_programmer::NormalProgrammerValueMutation::SetFixture {
+                fixture_id,
+                attribute,
+                ..
+            } => (
+                light_core::PresetValueOwner::Fixture {
+                    fixture_id: *fixture_id,
+                },
+                attribute,
+                fixture_values
+                    .iter()
+                    .find(|value| value.fixture_id == *fixture_id && value.attribute == *attribute)
+                    .map(|value| value.programmer_order),
+            ),
+            light_programmer::NormalProgrammerValueMutation::SetGroup {
+                group_id,
+                attribute,
+                ..
+            } => (
+                light_core::PresetValueOwner::Group {
+                    group_id: group_id.clone(),
+                },
+                attribute,
+                group_values
+                    .get(group_id)
+                    .and_then(|values| values.get(attribute))
+                    .map(|value| value.programmer_order),
+            ),
+            _ => continue,
+        };
+        if let Some(order) = order {
+            let map = replacement_origins
+                .iter()
+                .rev()
+                .find(|(target, key, _)| target == &owner && key == attribute)
+                .map(|(_, _, map)| map.clone())
+                .unwrap_or_default();
+            replacement_orders.push((order, map));
+        }
+    }
+    replacement_orders
 }
 
 fn recall_identity(

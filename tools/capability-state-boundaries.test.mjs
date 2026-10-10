@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
 	appStateRawFields,
 	capabilityStateBoundaryFailures,
@@ -320,5 +321,23 @@ test("bounded request and benchmark-local task owners are not application lifecy
 		capabilityStateBoundaryFailures(unownedRuntimeTask, {
 			debt: emptyDebt(),
 		}).some((failure) => failure.includes("tokio-spawn")),
+	);
+});
+
+test("patch runtime preparation uses the output capability and retains raw-lock rejection", () => {
+	const path = "crates/light/adapters/headless/src/runtime/show_patch_adapter.rs";
+	const source = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+	const entries = [{ path, source }];
+	assert.deepEqual(
+		capabilityStateBoundaryFailures(entries, { debt: emptyDebt() }),
+		[],
+	);
+	const unsafe = [
+		{ path, source: "fn prepare(state: &AppState) { state.desk.lock(); }" },
+	];
+	assert(
+		capabilityStateBoundaryFailures(unsafe, { debt: emptyDebt() }).some(
+			(failure) => failure.includes("|state-lock"),
+		),
 	);
 });

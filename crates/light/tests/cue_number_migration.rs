@@ -10,6 +10,8 @@ fn number(value: &str) -> CueNumber {
 
 fn cue_list(numbers: &[&str]) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Migration".into(),
         priority: 0,

@@ -4,7 +4,7 @@ Groups store ordered fixture selections. Presets store reusable attribute values
 
 ## Groups
 
-Select fixtures, press `[REC]`, and choose a Group target or enter its number. Normal record overwrites; `[REC] [+]` merges; `[REC] [-]` subtracts. Intentionally empty Groups remain valid stored objects and differ from absent Group numbers. Missing Groups in a range are skipped.
+Select fixtures, press `[REC]`, and choose a Group target or enter its number. Normal record merges the selection into the Group and keeps existing members in order. Populated tiles show **REC MRG**; empty Groups and unused slots show **REC**. `[REC] [+]` explicitly merges; `[REC] [-]` subtracts. Choose one-off **Smart** before touching a populated Group to choose Merge or Overwrite; `RECORD SMART GROUP 22` explicitly overwrites Group 22. Intentionally empty Groups remain valid stored objects and differ from absent Group numbers. Missing Groups in a range are skipped.
 
 The Group Pool prominently highlights the live Group references selected for programming, including multiple Groups. Other Groups show a filled white dot in the bottom-left corner when all their fixtures are selected, or a hollow white dot when only some are selected. These dots indicate selected lamps without selecting the Group itself. Double-pressing a Group selects its frozen fixtures, so it shows a filled dot rather than the live Group highlight. Clearing selection removes the indicators.
 
@@ -65,6 +65,22 @@ contributors. Changing a Playback to **None** removes that assignment without ch
 Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity stores only intensity attributes, including Shutter and Strobe. Color stores RGB, CMY, color-wheel, and other Color attributes. Position stores only Position attributes. Beam stores Beam and Focus attributes such as Zoom, Iris, Gobo, Prism and Frost. Mixed stores any attributes the operator chooses; it does not mean a combined list of every preset family. Recalling a Preset applies compatible values to the current selection while retaining the relationship needed for later updates where supported.
 
 Each family is a separate pool with its own local preset numbers. The command-line address combines type and number: `0.1` is Mixed 1, `1.1` is Intensity 1, `2.1` is Color 1, `3.1` is Position 1, and `4.1` is Beam 1. The dotted address is not a global preset ID, so all five presets numbered 1 can coexist.
+
+For quick recording, press `[REC]` and touch a Preset. With the normal **Smart** desk default, an existing Preset merges the Programmer and shows **REC MRG**; an empty slot creates a Preset and shows **REC**.
+
+Merging keeps other stored values and replaces matching values with the Programmer's values. A saved alternative Record default or a one-off option still applies. To replace the entire existing Preset, choose the one-off **Smart** option, touch the tile, then choose **Overwrite**. On the command line, `RECORD SMART 2.1` explicitly overwrites Color Preset 1.
+
+When you recall a Preset and record its values into a Cue, those addresses retain their source
+Preset. Merging or updating that Preset changes the linked Cue values, including a Cue that is
+already running. Clear the Programmer to see playback alone. Editing a recalled value directly
+before recording stores that address independently; the other recalled addresses keep their links.
+Older Cues containing only recorded values remain independent.
+
+Moving a Preset preserves its links. Copying it creates a separate source. Deleting the source,
+or removing an attribute it supplied, makes a Cue use its recorded fallback; Cuelist View explains
+the missing source and how to restore or re-record it. A new Preset at the old number does not
+take over that link. Shows containing these links require a runtime that supports live Preset
+references; an older runtime refuses the show rather than silently changing its behavior.
 
 The lower-left corner of every stored Group and Preset tile shows how many fixtures it holds. A Group
 tile reads its member count, for example `8 fx`. A Preset tile reads `active/defined`, for example

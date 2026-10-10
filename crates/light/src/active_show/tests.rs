@@ -339,6 +339,8 @@ fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
     let mut cue = light_playback::Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.id = Uuid::from_u128(0x602);
     let body = serde_json::to_value(light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Main".into(),
         priority: 0,
@@ -753,6 +755,117 @@ fn object_undo_accepts_cue_list_and_preset_families() {
 }
 
 #[test]
+fn partial_namespace_write_is_rejected_before_commit_and_keeps_legacy_addresses() {
+    let rig = TestRig::new();
+    let a = light_core::CueListId(Uuid::from_u128(0x811));
+    let b = light_core::CueListId(Uuid::from_u128(0x812));
+    let key = a.0.to_string();
+    let original = cue_list_body(a, "Original");
+    let companion = cue_list_body(b, "Companion");
+    rig.seed_object("cue_list", &key, original.clone());
+    rig.seed_object("cue_list", &b.0.to_string(), companion.clone());
+    let mut partial = original.clone();
+    partial["pool_number"] = json!(101);
+    let before = rig.document().revision();
+    let error = rig
+        .service
+        .mutate_objects(
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::CueList,
+                object_id: key.clone(),
+                expected_object_revision: 1,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: Box::new(typed(ActiveShowObjectKind::CueList, partial)),
+                },
+            }]),
+            &rig.ports,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, ActionErrorKind::Invalid);
+    assert!(error.message.contains("migrate atomically"));
+    assert_eq!(rig.document().revision(), before);
+    assert_eq!(rig.object_body("cue_list", &key), original);
+    assert_eq!(rig.object_body("cue_list", &b.0.to_string()), companion);
+    assert_eq!(rig.steps(), ["begin"]);
+    assert_eq!(rig.service.events().latest_sequence(), 0);
+}
+
+#[test]
+fn recording_undo_preserves_atomic_namespace_and_exact_historical_cue_contents() {
+    let rig = TestRig::new();
+    let a = light_core::CueListId(Uuid::from_u128(0x801));
+    let b = light_core::CueListId(Uuid::from_u128(0x802));
+    let key = a.0.to_string();
+    let mut original = cue_list_body(a, "Historic");
+    original["future_extension"] = json!({"literal":[3, 1, 2]});
+    rig.seed_object("cue_list", &key, original.clone());
+    let mut companion = cue_list_body(b, "Companion");
+    companion["pool_number"] = json!(202);
+    rig.seed_object("cue_list", &b.0.to_string(), companion.clone());
+    let physical = serde_json::to_value(light_playback::PlaybackDefinition::new_cue_list(
+        101,
+        "Assignment",
+        a,
+    ))
+    .unwrap();
+    rig.seed_object("playback", "101", physical.clone());
+    let mut recorded = cue_list_body(a, "Recorded");
+    recorded["pool_number"] = json!(101);
+    recorded["legacy_pool_aliases"] = json!([190]);
+    rig.write_object("cue_list", &key, recorded.clone(), 1);
+    // This low-level test rig does not advertise a runtime writer capability. Seed the
+    // already-completed feature upgrade, as the production recording repository does.
+    ShowStore::open(&rig.ports.path)
+        .unwrap()
+        .set_metadata_values(&[(light_show::PROGRAMMING_CONTRACT_METADATA_KEY, "3")])
+        .unwrap();
+
+    let result = rig
+        .service
+        .undo_recording(
+            ActionEnvelope {
+                context: rig
+                    .undo_action(ActiveShowObjectKind::CueList, &key, 2)
+                    .context,
+                command: UndoActiveShowRecordingCommand {
+                    show_id: rig.show_id,
+                    objects: vec![UndoActiveShowRecordingObject {
+                        kind: ActiveShowObjectKind::CueList,
+                        object_id: key.clone(),
+                        expected_object_revision: 2,
+                        operation: UndoActiveShowRecordingOperation::RestorePrevious,
+                    }],
+                },
+            },
+            &rig.ports,
+        )
+        .unwrap();
+    original["pool_number"] = json!(101);
+    original["legacy_pool_aliases"] = json!([190]);
+    assert_eq!(rig.object_body("cue_list", &key), original);
+    assert_eq!(rig.object_body("cue_list", &b.0.to_string()), companion);
+    assert_eq!(rig.object_body("playback", "101"), physical);
+    let store = ShowStore::open(&rig.ports.path).unwrap();
+    let redo = store
+        .prepare_object_redo("cue_list", &key, result.changes[0].object_revision)
+        .unwrap();
+    assert_eq!(redo.body(), &recorded);
+    let document = store.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    transaction.redo_object(redo);
+    store.apply_portable_transaction(transaction).unwrap();
+    assert_eq!(rig.object_body("cue_list", &key), recorded);
+
+    assert_eq!(
+        rig.document()
+            .metadata()
+            .get(light_show::PROGRAMMING_CONTRACT_METADATA_KEY)
+            .map(String::as_str),
+        Some("3")
+    );
+}
+
+#[test]
 fn stale_or_missing_history_undo_has_no_side_effects_and_preserves_history() {
     let stale = TestRig::new();
     let original = json!({"id":"1","name":"Original","fixtures":[]});
@@ -1121,6 +1234,8 @@ fn test_store_error(error: StoreError) -> ActionError {
 
 fn cue_list_body(id: light_core::CueListId, name: &str) -> Value {
     serde_json::to_value(light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id,
         name: name.into(),
         priority: 0,

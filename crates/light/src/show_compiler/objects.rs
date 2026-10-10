@@ -27,8 +27,109 @@ pub(super) fn decode<T: DeserializeOwned>(
 pub(super) fn decode_cue_lists(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<Vec<CueList>, ActionError> {
-    let lists: Vec<CueList> = decode(candidate, "cue_list")?;
-    for list in &lists {
+    let mut lists: Vec<CueList> = decode(candidate, "cue_list")?;
+    if lists.iter().flat_map(|list| &list.cues).any(|cue| {
+        cue.changes
+            .iter()
+            .any(|change| change.preset_reference.is_some())
+            || cue
+                .group_changes
+                .iter()
+                .any(|change| change.preset_reference.is_some())
+    }) {
+        let presets: Vec<Preset> = decode(candidate, "preset")?;
+        let mut catalog = HashMap::new();
+        for preset in presets {
+            if let Some(id) = preset.instance_id
+                && catalog.insert(id, preset).is_some()
+            {
+                return Err(invalid_candidate(format!(
+                    "duplicate Preset instance identity {id}; recreate the copied Preset before linking Cues"
+                )));
+            }
+        }
+        // Derived Aim bodies intentionally have no literal Position map. Materialize only this
+        // runtime projection; preserve the portable body and immutable live-reference identity.
+        let requested = lists
+            .iter()
+            .flat_map(|list| &list.cues)
+            .flat_map(|cue| {
+                cue.changes
+                    .iter()
+                    .filter_map(|change| change.preset_reference.as_ref())
+                    .chain(
+                        cue.group_changes
+                            .iter()
+                            .filter_map(|change| change.preset_reference.as_ref()),
+                    )
+            })
+            .filter(|reference| {
+                matches!(
+                    reference.source_owner,
+                    light_core::PresetValueOwner::Universal
+                ) && reference.source_attribute.0.as_ref() == "position"
+            })
+            .filter_map(|reference| {
+                catalog
+                    .get(&reference.preset_instance_id)?
+                    .aim_at_fixture_number
+            })
+            .collect::<std::collections::HashSet<_>>();
+        if !requested.is_empty() {
+            let fixtures = super::patch::compile_patch(candidate)?;
+            let targets = light_engine::saved_aim_targets(&fixtures, requested);
+            for preset in catalog.values_mut() {
+                if let Some(number) = preset.aim_at_fixture_number {
+                    preset
+                        .universal_values
+                        .remove(&light_core::AttributeKey("position".into()));
+                    if let Some(intent) = targets.get(&number) {
+                        preset.universal_values.insert(
+                            light_core::AttributeKey("position".into()),
+                            light_core::AttributeValue::Position(std::sync::Arc::new(
+                                intent.clone(),
+                            )),
+                        );
+                    }
+                }
+            }
+        }
+        let presets = catalog;
+        let native = super::native_sources::compile(candidate, None)?;
+        for cue in lists.iter_mut().flat_map(|list| &mut list.cues) {
+            for change in &mut cue.changes {
+                if change.value.is_some()
+                    && let Some(reference) = &change.preset_reference
+                    && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
+                {
+                    change.replacement_projection = super::cue_presets::replacement_projection(
+                        reference,
+                        &presets,
+                        change.replacement_projection.as_ref(),
+                    );
+                    change.value = Some(value);
+                }
+            }
+            for change in &mut cue.group_changes {
+                if change.value.is_some()
+                    && let Some(reference) = &change.preset_reference
+                    && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
+                {
+                    change.replacement_projections =
+                        super::cue_presets::replacement_projections(reference, &presets);
+                    change.value = Some(value);
+                }
+            }
+        }
+    }
+    for list in &mut lists {
+        if list.required_programming_contract()
+            >= light_core::programming::LIVE_PRESET_REFERENCE_CONTRACT
+        {
+            // Cue-only baselines are derived from current live source values, never stale
+            // materialized restoration rows persisted by an earlier source generation.
+            light_playback::refresh_cue_only_restorations(list);
+        }
         list.validate_programming().map_err(|error| {
             invalid_candidate(format!("invalid cue list {}: {error}", list.id.0))
         })?;
@@ -109,6 +210,15 @@ pub(super) fn decode_dynamics(
             dynamics
                 .iter()
                 .map(light_dynamics::DynamicDefinition::required_programming_contract),
+        )
+        .chain(
+            candidate
+                .objects_of_kind("cue_list")
+                .chain(candidate.objects_of_kind("group"))
+                .map(|object| light_show::required_object_programming_contract(object.body()))
+                // Portable literal writers advertise1 even with no semantic values. Here only
+                // additive addressing/reference features augment the decoded value requirement.
+                .filter(|required| *required > 1),
         )
         .max()
         .unwrap_or(0);
@@ -213,7 +323,12 @@ pub(super) fn supply_playback_defaults(
     // Only a genuinely legacy document with no Playback topology receives seeded controls.
     // A persisted page with no definitions is an intentional empty topology (for example after
     // clearing the final assignment) and must not recreate the detached target.
-    if playbacks.is_empty() && pages.is_empty() {
+    if playbacks.is_empty()
+        && pages.is_empty()
+        && !cue_lists
+            .iter()
+            .any(|list| list.pool_number.is_some() || !list.legacy_pool_aliases.is_empty())
+    {
         playbacks.extend(
             cue_lists
                 .iter()

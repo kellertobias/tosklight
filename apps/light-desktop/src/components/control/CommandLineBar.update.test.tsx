@@ -251,6 +251,35 @@ function RequestedSystemControlsTab() {
 }
 
 describe("scoped command-line integration", () => {
+	it("does not turn an unrelated failed request into programmer feedback", () => {
+		server.error = "CITP discovery request failed";
+		render(<CommandLineBar />);
+		expect(
+			screen.getByRole("textbox", { name: "Command line" }),
+		).not.toHaveClass("error");
+		expect(screen.queryByText("CITP discovery request failed")).toBeNull();
+	});
+
+	it("clears current local command feedback on edit without deleting rejection history", () => {
+		render(<CommandLineBar />);
+		fireEvent(
+			window,
+			new CustomEvent("light:command-error", {
+				detail: "Command revision changed on another surface",
+			}),
+		);
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveClass(
+			"error",
+		);
+		fireEvent(window, new CustomEvent("light:command-error", { detail: null }));
+		expect(
+			screen.getByRole("textbox", { name: "Command line" }),
+		).not.toHaveClass("error");
+		expect(
+			screen.queryByText("Command revision changed on another surface"),
+		).toBeNull();
+		expect(server.commandHistory.length).toBeGreaterThan(0);
+	});
 	it("marks a rejected command locally without turning it into a Desk State warning", () => {
 		render(
 			<>
@@ -661,6 +690,22 @@ describe("Shift+Record Update gestures", () => {
 			value: true,
 		});
 		expect(server.setCommandLine).not.toHaveBeenCalled();
+	});
+
+	it("holds the physical Preload button to inspect without executing GO", () => {
+		preloadLifecycle.armed = true;
+		render(<CommandLineBar />);
+		const button = screen.getByRole("button", { name: "PRELOAD GO" });
+		fireEvent.pointerDown(button);
+		act(() => vi.advanceTimersByTime(1200));
+		fireEvent.pointerUp(button);
+		fireEvent.click(button);
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "preloadStoreOpen",
+			value: true,
+		});
+		expect(preloadLifecycle.actions.go).not.toHaveBeenCalled();
 	});
 
 	it("keeps single, second-press, and long-press software gestures mutually exclusive", async () => {

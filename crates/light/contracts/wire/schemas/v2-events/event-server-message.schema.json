@@ -276,6 +276,18 @@
             }
           ]
         },
+        "owner": {
+          "description": "Exact activation owner; absent from older runtime snapshots.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackRuntimeIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "paused": {
           "type": "boolean"
         },
@@ -316,6 +328,7 @@
         }
       },
       "required": [
+        "owner",
         "cue_index",
         "previous_index",
         "current",
@@ -5870,6 +5883,13 @@
         "scope": {
           "$ref": "#/$defs/PlaybackShowScope"
         },
+        "selected_cue_list": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
         "selected_playback": {
           "type": [
             "integer",
@@ -5968,6 +5988,24 @@
             "kind": {
               "type": "string",
               "const": "cue_list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "cue_list_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "cue_list_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "kind": {
+              "type": "string",
+              "const": "direct_cue_list"
             }
           },
           "additionalProperties": false,
@@ -7618,6 +7656,16 @@
           "format": "uint64",
           "minimum": 0
         },
+        "replacement_projection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReplacementProgramProjection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "value": {
           "$ref": "#/$defs/ProgrammingAttributeValue"
         }
@@ -7701,6 +7749,15 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0
+        },
+        "replacement_projections": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/ReplacementProgramProjection"
+          }
         },
         "value": {
           "$ref": "#/$defs/ProgrammingAttributeValue"
@@ -8516,6 +8573,34 @@
         "fade"
       ]
     },
+    "ProgrammingPreloadGroupReleaseValue": {
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "changed_at_millis": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "programmer_order": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "group_id",
+        "attribute",
+        "programmer_order",
+        "changed_at_millis"
+      ]
+    },
     "ProgrammingPreloadGroupValue": {
       "type": "object",
       "properties": {
@@ -8704,6 +8789,13 @@
             "$ref": "#/$defs/ProgrammingPreloadFixtureValue"
           }
         },
+        "group_release_values": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProgrammingPreloadGroupReleaseValue"
+          }
+        },
         "group_values": {
           "type": "array",
           "items": {
@@ -8721,7 +8813,8 @@
         "revision",
         "fixture_values",
         "group_values",
-        "dynamic_values"
+        "dynamic_values",
+        "group_release_values"
       ]
     },
     "ProgrammingScalarIntent": {
@@ -8939,6 +9032,81 @@
       "required": [
         "opening_degrees",
         "convention"
+      ]
+    },
+    "ReplacementHeadTarget": {
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_head_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "profile_head_id",
+        "fixture_id"
+      ]
+    },
+    "ReplacementProfileContext": {
+      "type": "object",
+      "properties": {
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_revision",
+        "mode_id"
+      ]
+    },
+    "ReplacementProgramProjection": {
+      "type": "object",
+      "properties": {
+        "source_head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_owner": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_profile": {
+          "$ref": "#/$defs/ReplacementProfileContext"
+        },
+        "target_profile": {
+          "$ref": "#/$defs/ReplacementProfileContext"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ReplacementHeadTarget"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source_owner",
+        "source_profile",
+        "source_head_id",
+        "target_profile",
+        "targets"
       ]
     },
     "RuntimeHighlightFixture": {
@@ -10250,6 +10418,11 @@
           "format": "uint64",
           "minimum": 0
         },
+        "external_armed": {
+          "description": "True while the runtime waits to start or relock to an external source.",
+          "type": "boolean",
+          "default": false
+        },
         "frame": {
           "type": "integer",
           "format": "uint64",
@@ -10272,6 +10445,7 @@
         "timecode_id",
         "revision",
         "state",
+        "external_armed",
         "frame",
         "duration_frame",
         "audio_linked",

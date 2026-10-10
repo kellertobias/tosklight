@@ -5,6 +5,7 @@ import {
 } from "./scenerySize";
 import { isSceneryOptionEdit, sceneryOptionChange } from "./sceneryOptions";
 import { modelScaleChange } from "./modelScale";
+import { rootProgrammingCorrespondences, rootProgrammingDecision } from "./replacementProgramming";
 import type { SplitPatch } from "../../../api/types";
 import type { PatchFixtureUpdateAction } from "../../../features/patch/contracts";
 import { parsePatchAddress } from "../../input/ConsoleFields";
@@ -132,6 +133,28 @@ export function saveEdit(
 						degrees: vector[editAxis],
 					},
 		);
+	if (edit === "mode" && definition && controller.ui.replacingFixture) {
+		const revision = controller.ui.replacementRevision;
+		const profile = definition.profile_snapshot;
+		const headMapping = selected.logical_heads.map(head => ({ fixtureId: head.fixture_id,
+			targetProfileHeadId: controller.ui.replacementHeads[head.fixture_id] === "__unmapped"
+				? null : controller.ui.replacementHeads[head.fixture_id] }));
+		if (!revision || !profile || !definition.mode_id || headMapping.some(head => !head.targetProfileHeadId && head.targetProfileHeadId !== null)) {
+			controller.ui.setEditError("Choose a target head or explicitly leave unmatched for every existing logical head.");
+			return;
+		}
+        const rootRows = rootProgrammingCorrespondences(selected.definition, definition);
+        const rootDecisions = rootRows.map(row => rootProgrammingDecision(row, controller.ui.replacementHeads[row.key]));
+        if (rootDecisions.some(decision => decision === null)) {
+            controller.ui.setEditError("Choose replacement owners or explicitly leave unmatched for every existing shared-head programming family.");
+            return;
+        }
+		void applyFixtureIntent(controller, {type: "replace_profile", profileId: profile.id,
+			profileRevision: profile.revision, modeId: definition.mode_id, headMapping,
+            rootProgrammingMapping: rootDecisions.filter(decision => decision !== null),
+			expectedShowRevision: revision.show, expectedPatchRevision: revision.patch });
+		return;
+	}
 	if (edit === "mode" && definition) {
 		const highlight_overrides = compatibleHighlightOverrides(
 			definition,
@@ -214,7 +237,9 @@ async function applyFixtureIntent(
 		)
 	)
 		completeEdit(controller);
-	else controller.ui.setEditError("The fixture update could not be applied.");
+	else controller.ui.setEditError(controller.patch.error || (action.type === "replace_profile"
+		? "The replacement could not be applied. Reopen Product / mode to review the current fixture and its head mapping."
+		: "The fixture update could not be applied."));
 }
 
 export async function saveVectorSpread(

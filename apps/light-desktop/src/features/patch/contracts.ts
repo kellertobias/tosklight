@@ -272,6 +272,12 @@ export type PatchFixturePolicyAction =
  * action optimistically and the server rechecks the supplied show, Patch, and fixture revisions.
  */
 export type PatchFixtureUpdateAction =
+	| { type: "replace_profile"; profileId: string; profileRevision: number; modeId: string;
+		headMapping: Array<{fixtureId: string; targetProfileHeadId: string | null}>;
+		rootProgrammingMapping?: Array<{sourceProfileHeadId: string; attribute: string; targetProfileHeadIds: string[]}>;
+		/** Consent is bound to the snapshot reviewed in the replacement dialog. */
+		expectedShowRevision: number; expectedPatchRevision: number;
+	}
 	| {
 			type: "set_masters";
 			groupMastersEnabled: boolean;

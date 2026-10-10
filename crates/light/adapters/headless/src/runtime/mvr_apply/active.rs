@@ -10,6 +10,10 @@ pub(super) fn active_show_is(state: &AppState, show_id: light_core::ShowId) -> b
 
 pub(super) struct ActiveMvrImport {
     pub entry: ShowEntry,
+    pub destination_revision: Option<(
+        light_show::PortableShowRevision,
+        light_show::PortablePatchRevision,
+    )>,
     pub document: light_mvr::MvrDocument,
     pub definitions: HashMap<Uuid, light_fixture::FixtureDefinition>,
     pub new_profiles: Vec<light_fixture::FixtureProfile>,
@@ -24,6 +28,7 @@ pub(super) async fn apply_active_mvr_import(
 ) -> Result<Json<ApplyMvrResult>, ApiError> {
     let ActiveMvrImport {
         entry,
+        destination_revision,
         document,
         definitions,
         new_profiles,
@@ -44,7 +49,7 @@ pub(super) async fn apply_active_mvr_import(
     let active_show = state.active_show.clone();
     let result = tokio::task::spawn_blocking(move || {
         let ports = ServerShowPatchPorts::new(worker_state);
-        active_show.apply_mvr_import(action, &ports)
+        active_show.apply_mvr_import_at_preview_revision(action, destination_revision, &ports)
     })
     .await
     .map_err(|error| ApiError::internal(format!("MVR import task failed: {error}")))?

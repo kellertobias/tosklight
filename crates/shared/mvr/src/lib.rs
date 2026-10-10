@@ -118,9 +118,10 @@ pub fn read_gdtf(bytes: &[u8]) -> Result<Vec<GdtfMode>, MvrError> {
             Event::Start(e) | Event::Empty(e) => {
                 let tag = String::from_utf8_lossy(local(e.name().as_ref())).to_ascii_lowercase();
                 if tag == "fixturetype" {
-                    manufacturer = attr(&e, b"manufacturer").unwrap_or_else(|| "Unknown".into());
-                    model = attr(&e, b"shortname")
-                        .or_else(|| attr(&e, b"name"))
+                    manufacturer = attr(&e, b"manufacturer", reader.decoder())?
+                        .unwrap_or_else(|| "Unknown".into());
+                    model = attr(&e, b"shortname", reader.decoder())?
+                        .or(attr(&e, b"name", reader.decoder())?)
                         .unwrap_or_else(|| "Unknown".into());
                 } else if tag == "dmxmode" {
                     if let Some(mode) = current.take() {
@@ -129,19 +130,20 @@ pub fn read_gdtf(bytes: &[u8]) -> Result<Vec<GdtfMode>, MvrError> {
                     current = Some(GdtfMode {
                         manufacturer: manufacturer.clone(),
                         model: model.clone(),
-                        name: attr(&e, b"name").unwrap_or_else(|| "Standard".into()),
+                        name: attr(&e, b"name", reader.decoder())?
+                            .unwrap_or_else(|| "Standard".into()),
                         channels: Vec::new(),
                     });
                 } else if tag == "dmxchannel"
                     && let Some(mode) = current.as_mut()
                 {
-                    let offsets = attr(&e, b"offset")
+                    let offsets = attr(&e, b"offset", reader.decoder())?
                         .unwrap_or_else(|| "1".into())
                         .split(',')
                         .filter_map(|v| v.trim().parse::<u16>().ok())
                         .map(|v| v.saturating_sub(1))
                         .collect::<Vec<_>>();
-                    let attribute = attr(&e, b"name").unwrap_or_else(|| {
+                    let attribute = attr(&e, b"name", reader.decoder())?.unwrap_or_else(|| {
                         format!("channel.{}", offsets.first().copied().unwrap_or(0) + 1)
                     });
                     mode.channels.push(GdtfChannel { attribute, offsets });
@@ -168,13 +170,32 @@ pub fn read_gdtf(bytes: &[u8]) -> Result<Vec<GdtfMode>, MvrError> {
 fn local(name: &[u8]) -> &[u8] {
     name.rsplit(|byte| *byte == b':').next().unwrap_or(name)
 }
-fn attr(start: &BytesStart<'_>, key: &[u8]) -> Option<String> {
-    start
-        .attributes()
-        .flatten()
-        .find(|a| local(a.key.as_ref()).eq_ignore_ascii_case(key))
-        .and_then(|a| String::from_utf8(a.value.into_owned()).ok())
+fn attr(
+    start: &BytesStart<'_>,
+    key: &[u8],
+    decoder: quick_xml::encoding::Decoder,
+) -> Result<Option<String>, MvrError> {
+    let mut value = None;
+    // Validate the whole attribute list, including malformed trailing attributes. Decode exactly
+    // once: a literal "&amp;" exported as "&amp;amp;" must stay literal after importing.
+    for attribute in start.attributes() {
+        let attribute = attribute
+            .map_err(|error| MvrError::Invalid(format!("malformed XML attribute: {error}")))?;
+        let decoded = attribute
+            .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, decoder)
+            .map_err(|error| {
+                MvrError::Invalid(format!(
+                    "invalid XML attribute {}: {error}",
+                    String::from_utf8_lossy(attribute.key.as_ref())
+                ))
+            })?;
+        if value.is_none() && local(attribute.key.as_ref()).eq_ignore_ascii_case(key) {
+            value = Some(decoded.into_owned());
+        }
+    }
+    Ok(value)
 }
+
 fn matrix(text: &str) -> [f64; 12] {
     let mut result = [0.0; 12];
     result[0] = 1.0;
@@ -258,41 +279,46 @@ pub fn read(bytes: &[u8]) -> Result<MvrDocument, MvrError> {
                 stack.push(tag.clone());
                 text.clear();
                 if tag == "layer" {
-                    let id = attr(&e, b"uuid").unwrap_or_else(|| Uuid::new_v4().to_string());
+                    let id = attr(&e, b"uuid", reader.decoder())?
+                        .unwrap_or_else(|| Uuid::new_v4().to_string());
                     doc.layers.push(MvrLayer {
                         id: id.clone(),
-                        name: attr(&e, b"name").unwrap_or_default(),
+                        name: attr(&e, b"name", reader.decoder())?.unwrap_or_default(),
                     });
                     current_layer = Some(id);
                 }
                 if tag == "fixture" {
-                    let uuid = attr(&e, b"uuid")
+                    let uuid = attr(&e, b"uuid", reader.decoder())?
                         .and_then(|v| Uuid::parse_str(&v).ok())
                         .unwrap_or_else(Uuid::new_v4);
                     current_fixture = Some(MvrFixture {
                         uuid,
-                        name: attr(&e, b"name").unwrap_or_else(|| "Fixture".into()),
+                        name: attr(&e, b"name", reader.decoder())?
+                            .unwrap_or_else(|| "Fixture".into()),
                         fixture_id: None,
                         gdtf_spec: String::new(),
                         gdtf_mode: String::new(),
                         universe: None,
                         address: None,
                         matrix: matrix(""),
-                        layer: attr(&e, b"layer").or_else(|| current_layer.clone()),
-                        class: attr(&e, b"class"),
+                        layer: attr(&e, b"layer", reader.decoder())?
+                            .or_else(|| current_layer.clone()),
+                        class: attr(&e, b"class", reader.decoder())?,
                     });
                 }
                 if tag == "geometry3d" {
-                    let uuid = attr(&e, b"uuid")
+                    let uuid = attr(&e, b"uuid", reader.decoder())?
                         .and_then(|v| Uuid::parse_str(&v).ok())
                         .unwrap_or_else(Uuid::new_v4);
                     current_geometry = Some(MvrGeometry {
                         uuid,
-                        name: attr(&e, b"name").unwrap_or_else(|| "Geometry".into()),
-                        file_name: attr(&e, b"filename").unwrap_or_default(),
+                        name: attr(&e, b"name", reader.decoder())?
+                            .unwrap_or_else(|| "Geometry".into()),
+                        file_name: attr(&e, b"filename", reader.decoder())?.unwrap_or_default(),
                         matrix: matrix(""),
-                        layer: attr(&e, b"layer").or_else(|| current_layer.clone()),
-                        class: attr(&e, b"class"),
+                        layer: attr(&e, b"layer", reader.decoder())?
+                            .or_else(|| current_layer.clone()),
+                        class: attr(&e, b"class", reader.decoder())?,
                     });
                 }
             }

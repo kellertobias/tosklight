@@ -39,6 +39,7 @@ pub struct MvrImportOutcome {
 /// fact.
 #[derive(Clone)]
 pub struct MvrPreview {
+    pub profile_conflicts: Vec<light_application::mvr_import::MvrProfileConflict>,
     pub warnings: Vec<String>,
     pub fixtures: Vec<MvrPreviewFixture>,
     /// Scenery objects the archive carries.
@@ -67,6 +68,7 @@ pub struct MvrPreviewFixture {
 /// Exact preview inputs. File and library names are never resolved again at Apply.
 #[derive(Clone)]
 pub struct PreparedMvrImport {
+    profile_slots: light_application::mvr_import::MvrProfileSlots,
     pub preview: MvrPreview,
     document: light_mvr::MvrDocument,
     definitions: light_application::mvr_import::MvrDefinitions,
@@ -260,7 +262,14 @@ impl PlanningDocument {
                 conflicted,
             });
         }
+        let profile_slots = self.mvr_profile_slots(&definitions)?;
+        let profile_conflicts = light_application::mvr_import::mvr_profile_conflicts(
+            &definitions,
+            &profile_slots,
+            &HashMap::new(),
+        )?;
         let preview = MvrPreview {
+            profile_conflicts,
             fixtures,
             scenery: document.geometry.len(),
             missing_profiles: missing.into_iter().collect(),
@@ -268,6 +277,7 @@ impl PlanningDocument {
             warnings: definitions.warnings.clone(),
         };
         Ok(PreparedMvrImport {
+            profile_slots,
             preview,
             document,
             definitions,
@@ -283,22 +293,12 @@ impl PlanningDocument {
         Ok(self.prepare_mvr_import(document.clone())?.preview)
     }
 
-    /// Apply the exact preview. A changed destination needs a new preview.
-    pub fn import_prepared_mvr(
+    fn mvr_profile_slots(
         &self,
-        mut prepared: PreparedMvrImport,
-        resolutions: HashMap<Uuid, MvrImportResolution>,
-    ) -> Result<MvrImportOutcome, DocumentError> {
-        use light_application::mvr_import::{
-            MvrProfileSlots, mvr_profile_identity, reserve_mvr_profiles,
-        };
-        if prepared.show_id != self.show_id() || prepared.patch_revision != self.patch_revision()? {
-            return Err(DocumentError::Mvr(
-                "The destination changed after MVR preview. Preview the archive again.".into(),
-            ));
-        }
-        let ids = prepared
-            .definitions
+        definitions: &light_application::mvr_import::MvrDefinitions,
+    ) -> Result<light_application::mvr_import::MvrProfileSlots, DocumentError> {
+        use light_application::mvr_import::{MvrProfileSlots, mvr_profile_identity};
+        let ids = definitions
             .definitions
             .values()
             .filter_map(|d| d.profile_id)
@@ -335,7 +335,48 @@ impl PlanningDocument {
                 .or_default()
                 .insert(mvr_profile_identity(profile.profile().clone())?);
         }
-        reserve_mvr_profiles(&mut prepared.definitions, &mut slots, &resolutions)?;
+        Ok(slots)
+    }
+
+    /// Apply the exact preview. A changed destination needs a new preview.
+    pub fn import_prepared_mvr(
+        &self,
+        prepared: PreparedMvrImport,
+        resolutions: HashMap<Uuid, MvrImportResolution>,
+    ) -> Result<MvrImportOutcome, DocumentError> {
+        self.import_prepared_mvr_with_identity_copies(prepared, resolutions, false)
+    }
+
+    pub fn import_prepared_mvr_with_identity_copies(
+        &self,
+        mut prepared: PreparedMvrImport,
+        resolutions: HashMap<Uuid, MvrImportResolution>,
+        copy_conflicting_profiles: bool,
+    ) -> Result<MvrImportOutcome, DocumentError> {
+        use light_application::mvr_import::reserve_mvr_profiles_with_identity_copies;
+        if prepared.show_id != self.show_id() || prepared.patch_revision != self.patch_revision()? {
+            return Err(DocumentError::Mvr(
+                "The destination changed after MVR preview. Preview the archive again.".into(),
+            ));
+        }
+        let mut slots = self.mvr_profile_slots(&prepared.definitions)?;
+        if light_application::mvr_import::mvr_native_profile_slots(&prepared.definitions, &slots)
+            != light_application::mvr_import::mvr_native_profile_slots(
+                &prepared.definitions,
+                &prepared.profile_slots,
+            )
+        {
+            return Err(DocumentError::Mvr(
+                "Fixture profile revisions changed after MVR preview. Preview the archive again."
+                    .into(),
+            ));
+        }
+        reserve_mvr_profiles_with_identity_copies(
+            &mut prepared.definitions,
+            &mut slots,
+            &resolutions,
+            copy_conflicting_profiles,
+        )?;
         let mut warnings = prepared.definitions.warnings;
         let context = self
             .context()

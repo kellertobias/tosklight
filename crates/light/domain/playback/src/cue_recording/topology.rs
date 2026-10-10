@@ -16,6 +16,8 @@ impl CueList {
         let cue = new_cue(content, cue_number.clone());
         let cue_id = cue.id;
         let cue_list = Self {
+            pool_number: None,
+            legacy_pool_aliases: Vec::new(),
             id,
             name: name.into(),
             priority: 0,

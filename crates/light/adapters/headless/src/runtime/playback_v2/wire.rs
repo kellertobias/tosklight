@@ -52,6 +52,16 @@ pub(in crate::runtime) fn application_identities(
             wire::PlaybackRuntimeIdentity::CueList { .. } => {
                 Err("cue_list_id must not be nil".into())
             }
+            wire::PlaybackRuntimeIdentity::DirectCueList { cue_list_id }
+                if !cue_list_id.is_nil() =>
+            {
+                Ok(application::PlaybackRuntimeIdentity::DirectCueList(
+                    light_core::CueListId(cue_list_id),
+                ))
+            }
+            wire::PlaybackRuntimeIdentity::DirectCueList { .. } => {
+                Err("cue_list_id must not be nil".into())
+            }
             wire::PlaybackRuntimeIdentity::Group { group_id } => {
                 application::PlaybackGroupId::new(&group_id)
                     .map(application::PlaybackRuntimeIdentity::Group)
@@ -113,6 +123,15 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
         Wire::Back { pressed } => App::Back { pressed },
         Wire::Pause { pressed } => App::Pause { pressed },
         Wire::Release => App::Release,
+        Wire::RuntimeStopDynamic {
+            dynamic_id,
+            instance_id,
+            controller_id,
+        } => App::RuntimeStopDynamic {
+            dynamic_id,
+            instance_id,
+            controller_id,
+        },
         Wire::On { pressed } => App::On { pressed },
         Wire::Off { pressed } => App::Off { pressed },
         Wire::Toggle { pressed } => App::Toggle { pressed },
@@ -279,6 +298,7 @@ pub(in crate::runtime) fn desk_projection(
         desk_id: projection.desk_id,
         active_page: projection.active_page,
         selected_playback: projection.selected_playback,
+        selected_cue_list: projection.selected_cue_list.map(|id| id.0),
     }
 }
 
@@ -335,6 +355,11 @@ fn wire_identity(identity: application::PlaybackRuntimeIdentity) -> wire::Playba
         }
         application::PlaybackRuntimeIdentity::CueList(cue_list_id) => {
             wire::PlaybackRuntimeIdentity::CueList {
+                cue_list_id: cue_list_id.0,
+            }
+        }
+        application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id) => {
+            wire::PlaybackRuntimeIdentity::DirectCueList {
                 cue_list_id: cue_list_id.0,
             }
         }

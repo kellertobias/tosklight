@@ -27,10 +27,29 @@ impl MvrImportService {
         envelope: ActionEnvelope<ApplyActiveMvrImportCommand>,
         ports: &P,
     ) -> Result<PreparedActiveMvrImport, ActionError> {
+        self.prepare_at_preview_revision(envelope, None, ports)
+    }
+
+    /// Keeps preview consent bound to the exact destination snapshot through the atomic commit.
+    pub fn prepare_at_preview_revision<P: ShowPatchPorts>(
+        &self,
+        envelope: ActionEnvelope<ApplyActiveMvrImportCommand>,
+        expected: Option<(PortableShowRevision, PortablePatchRevision)>,
+        ports: &P,
+    ) -> Result<PreparedActiveMvrImport, ActionError> {
         ports.authorize_patch(&envelope.context)?;
         let document =
             self.active_show
                 .snapshot(&envelope.context, envelope.command.show_id, ports)?;
+        if let Some(expected) = expected
+            && expected != (document.revision(), document.patch_revision())
+        {
+            return Err(ActionError::new(
+                ActionErrorKind::Conflict,
+                "destination changed after MVR preview; preview the archive again",
+            )
+            .at_revision(document.revision().value()));
+        }
         if let Some(expected) = envelope.context.expected_revision
             && expected != document.patch_revision().value()
         {
@@ -107,7 +126,16 @@ impl MvrImportService {
         envelope: ActionEnvelope<ApplyActiveMvrImportCommand>,
         ports: &P,
     ) -> Result<ActiveMvrImportResult, ActionError> {
-        let prepared = self.prepare(envelope, ports)?;
+        self.apply_at_preview_revision(envelope, None, ports)
+    }
+
+    pub fn apply_at_preview_revision<P: ShowPatchPorts>(
+        &self,
+        envelope: ActionEnvelope<ApplyActiveMvrImportCommand>,
+        expected: Option<(PortableShowRevision, PortablePatchRevision)>,
+        ports: &P,
+    ) -> Result<ActiveMvrImportResult, ActionError> {
+        let prepared = self.prepare_at_preview_revision(envelope, expected, ports)?;
         self.commit(prepared, ports)
     }
 }

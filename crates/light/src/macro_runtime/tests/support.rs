@@ -248,7 +248,9 @@ impl PlaybackPorts for FakeBackend {
             playback_number: match identity {
                 PlaybackRuntimeIdentity::Playback(number) => Some(number),
                 PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
-                PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => None,
+                PlaybackRuntimeIdentity::CueList(_)
+                | PlaybackRuntimeIdentity::DirectCueList(_)
+                | PlaybackRuntimeIdentity::Group(_) => None,
             },
             target: PlaybackTargetProjection::Missing,
         })
@@ -266,6 +268,7 @@ impl PlaybackPorts for FakeBackend {
             desk_id: context.desk_id,
             active_page: 1,
             selected_playback: None,
+            selected_cue_list: None,
         }))
     }
 }

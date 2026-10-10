@@ -24,6 +24,7 @@ fn group_color_engine(programmers: ProgrammerRegistry) -> (Engine, FixtureId) {
             cue_lists: vec![cue_list].into(),
             playbacks: vec![playback, test_group_playback(2, GROUP_ID)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: GROUP_ID.into(),
                 name: "Wash".into(),
                 fixtures: vec![fixture_id],

@@ -28,7 +28,30 @@ impl ServerProgrammingPorts<'_> {
         };
         let address = match parsed {
             PlaybackSelectionTarget::Playback(target) => address(target),
-            PlaybackSelectionTarget::Cuelist { number } => PlaybackAddress::Pool(number),
+            PlaybackSelectionTarget::Cuelist { number } => {
+                let resolved = (|| {
+                    let show = self
+                        .state()
+                        .active_show
+                        .current()
+                        .clone()
+                        .ok_or("no show is open".to_owned())?;
+                    let document = crate::runtime::ActiveShowRepository::open(&show.path)
+                        .and_then(|store| store.portable_document())
+                        .map_err(|error| error.to_string())?;
+                    light_application::cuelist_pool_catalog(&document)
+                        .map_err(|error| error.message)?
+                        .resolve(number)
+                        .map(PlaybackAddress::CueList)
+                        .ok_or_else(|| format!("Cuelist {number} does not exist"))
+                })();
+                match resolved {
+                    Ok(address) => address,
+                    Err(error) => {
+                        return Some(self.recording_execution(context, command, Err(error)));
+                    }
+                }
+            }
         };
         let result = super::super::playback_service::execute(
             self.state(),

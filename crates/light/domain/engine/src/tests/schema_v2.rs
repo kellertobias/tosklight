@@ -749,6 +749,7 @@ fn schema_v2_masters_scale_levels_once_and_reach_other_channels_only_through_fol
             cue_lists: vec![main, unrelated].into(),
             playbacks: playbacks.into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![fixture_id],

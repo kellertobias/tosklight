@@ -18,7 +18,8 @@ mod service;
 mod snapshot;
 
 pub use service::{
-    AudioError, AudioService, SharedTuning, input_devices, output_devices, tuning_of,
+    AudioError, AudioService, SharedTuning, input_devices, output_devices, try_output_devices,
+    tuning_of,
 };
 pub use snapshot::{AnalysisSnapshot, SharedAnalysis, Worker};
 

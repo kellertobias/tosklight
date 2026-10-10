@@ -9,7 +9,9 @@ pub(crate) struct ParsedCueDeletionCommand {
 pub(crate) fn is_cue_deletion(command: &str) -> bool {
     let tokens = tokens(command);
     matches!(tokens.first().map(String::as_str), Some("DELETE" | "DEL"))
-        && tokens.get(1).is_some_and(|token| token == "PBK")
+        && tokens
+            .get(1)
+            .is_some_and(|token| matches!(token.as_str(), "PBK" | "CUELIST"))
 }
 
 pub(crate) fn parse(command: &str) -> Result<Option<ParsedCueDeletionCommand>, String> {
@@ -18,7 +20,12 @@ pub(crate) fn parse(command: &str) -> Result<Option<ParsedCueDeletionCommand>, S
     }
     let tokens = tokens(command);
     let first = number::<u16>(tokens.get(2), "playback number")?;
-    let (address, cue_index) = if tokens.get(3).is_some_and(|token| token == ".") {
+    let (address, cue_index) = if tokens[1] == "CUELIST" {
+        (
+            ProgrammingCueDeletionAddress::CuelistPool { number: first },
+            3,
+        )
+    } else if tokens.get(3).is_some_and(|token| token == ".") {
         let page = u8::try_from(first).map_err(|_| "page number is invalid")?;
         let slot = number::<u8>(tokens.get(4), "page playback number")?;
         (ProgrammingCueDeletionAddress::PageSlot { page, slot }, 5)
@@ -103,6 +110,20 @@ mod tests {
         assert!(!is_cue_deletion("DELETE PRESET 2 . 1"));
         assert!(parse("DELETE PBK 1").is_err());
         assert!(parse("DELETE PBK 1 CUE 01").is_err());
+    }
+
+    #[test]
+    fn cuelist_delete_uses_independent_address_without_reinterpreting_pbk() {
+        assert_eq!(
+            parse("DELETE CUELIST 101 CUE 2").unwrap().unwrap().address,
+            ProgrammingCueDeletionAddress::CuelistPool { number: 101 }
+        );
+        assert_eq!(
+            parse("DELETE PBK 101 CUE 2").unwrap().unwrap().address,
+            ProgrammingCueDeletionAddress::Pool {
+                playback_number: 101
+            }
+        );
     }
 
     #[test]

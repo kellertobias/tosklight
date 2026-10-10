@@ -114,14 +114,17 @@ impl CapabilitySupervisors {
             state.clone(),
             runtime_tasks.cancellation(),
         ));
-        runtime_tasks.spawn(media_identity::run(
-            state.clone(),
-            runtime_tasks.cancellation(),
-        ));
-        runtime_tasks.spawn(media_speed_groups::run(
-            state.clone(),
-            runtime_tasks.cancellation(),
-        ));
+        // A retained private preview must neither impersonate the desk nor control its media targets.
+        if state.output.permits_external_delivery() {
+            runtime_tasks.spawn(media_identity::run(
+                state.clone(),
+                runtime_tasks.cancellation(),
+            ));
+            runtime_tasks.spawn(media_speed_groups::run(
+                state.clone(),
+                runtime_tasks.cancellation(),
+            ));
+        }
         runtime_tasks.spawn(crate::runtime::psn::listener::run(
             state.clone(),
             runtime_tasks.cancellation(),
@@ -143,6 +146,11 @@ impl CapabilitySupervisors {
             matter,
             runtime_tasks,
         }
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn runtime_task_count(&self) -> usize {
+        self.runtime_tasks.tasks.len()
     }
 
     pub(in crate::runtime) fn cancellation(&self) -> CancellationToken {

@@ -187,6 +187,8 @@ export type PixelMapView = {
  */
 mode: string, zones: Array<PixelZoneView>, routes: Array<PixelRouteView>, handoffs: Array<PixelZoneHandoffView>, regions: Array<DisplayRegionView>, };
 export type OutputConfigurationValuesView = { targetKind: string, monitorBy: string | null, monitorValue: string | null, fullscreen: boolean, width: number, height: number, presentation: string, framesPerSecond: number | null, soundOutputKind: string, soundOutputName: string | null, personality: string, protocol: string, universe: number, startAddress: number, };
+export type SoundOutputDiscoveryState = "loading" | "ready" | "failed" | "stalled";
+export type SoundOutputInventoryView = { state: SoundOutputDiscoveryState, hasSuccessfulSnapshot: boolean, error: string | null, };
 export type OutputConfigurationView = { id: string, name: string,
 /**
  * `monitor` or `off-screen`.
@@ -219,7 +221,7 @@ availableMonitors: Array<AvailableMonitorView>,
 /**
  * Audio outputs the operating system currently reports.
  */
-availableSoundOutputs: Array<string>,
+availableSoundOutputs: Array<string>, soundOutputInventory?: SoundOutputInventoryView,
 /**
  * What this output maps onto a rig, and how its canvas is divided across screens.
  */

@@ -32,6 +32,74 @@ pub const PROGRAMMING_OBJECT_KINDS: &[&str] = &[
     "playback_page",
 ];
 
+/// Required feature contract of authored payload, independent of runtime capability.
+pub fn required_object_programming_contract(body: &Value) -> u16 {
+    let nonempty_map = |value: Option<&Value>| {
+        value
+            .and_then(Value::as_object)
+            .is_some_and(|map| !map.is_empty())
+    };
+    let replacement = nonempty_map(body.get("fixture_replacement_projections"))
+        || nonempty_map(body.get("group_replacement_projections"))
+        || nonempty_map(body.get("replacement_projections"))
+        || body
+            .get("cues")
+            .and_then(Value::as_array)
+            .is_some_and(|cues| {
+                cues.iter().any(|cue| {
+                    ["changes", "group_changes"].iter().any(|key| {
+                        cue.get(*key)
+                            .and_then(Value::as_array)
+                            .is_some_and(|changes| {
+                                changes.iter().any(|change| {
+                                    change
+                                        .get("replacement_projection")
+                                        .is_some_and(|value| !value.is_null())
+                                        || nonempty_map(change.get("replacement_projections"))
+                                })
+                            })
+                    })
+                })
+            });
+    if replacement {
+        return light_core::programming::REPLACEMENT_PROGRAM_PROJECTION_CONTRACT;
+    }
+    let referenced = body
+        .get("cues")
+        .and_then(Value::as_array)
+        .is_some_and(|cues| {
+            cues.iter().any(|cue| {
+                ["changes", "group_changes"].iter().any(|key| {
+                    cue.get(*key)
+                        .and_then(Value::as_array)
+                        .is_some_and(|changes| {
+                            changes.iter().any(|change| {
+                                change
+                                    .get("preset_reference")
+                                    .is_some_and(|reference| !reference.is_null())
+                            })
+                        })
+                })
+            })
+        });
+    // Dynamic objects also have pool_number; only Cuelist-shaped bodies own this feature.
+    let independent_pool = body.get("cues").is_some_and(Value::is_array)
+        && (body
+            .get("pool_number")
+            .is_some_and(|number| !number.is_null())
+            || body
+                .get("legacy_pool_aliases")
+                .and_then(Value::as_array)
+                .is_some_and(|aliases| !aliases.is_empty()));
+    if independent_pool {
+        3
+    } else if referenced {
+        2
+    } else {
+        1
+    }
+}
+
 /// Whole family a legacy scalar programming address belongs to.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum LegacyProgrammingFamily {
@@ -190,6 +258,14 @@ pub fn check_programming_object_writes<'a>(
     let mut legacy = Vec::new();
     for (kind, id, body) in writes {
         if PROGRAMMING_OBJECT_KINDS.contains(&kind) {
+            let required = required_object_programming_contract(body);
+            if required > supported {
+                return Err(ProgrammingContractRejection {
+                    message: format!(
+                        "{kind} {id} requires programming contract {required}; this reader supports {supported}. Nothing was changed."
+                    ),
+                });
+            }
             push_findings(&mut legacy, kind, id, body);
         }
     }
@@ -493,9 +569,27 @@ pub(crate) fn stamp_direct_write<'a>(
     changed_kinds: impl Iterator<Item = &'a str>,
 ) -> Result<(), StoreError> {
     if writer_stamps_programming_contract(writer_contract, changed_kinds) {
+        let current: Option<String> = tx
+            .query_row(
+                "SELECT value FROM metadata WHERE key=?1",
+                [PROGRAMMING_CONTRACT_METADATA_KEY],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let mut required = current
+            .and_then(|value| value.parse::<u16>().ok())
+            .unwrap_or(0)
+            .max(1);
+        let mut query = tx.prepare("SELECT body_json FROM objects WHERE kind='cue_list'")?;
+        let bodies = query.query_map([], |row| row.get::<_, String>(0))?;
+        for body in bodies {
+            if let Ok(body) = serde_json::from_str::<Value>(&body?) {
+                required = required.max(required_object_programming_contract(&body));
+            }
+        }
         tx.execute(
             "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            rusqlite::params![PROGRAMMING_CONTRACT_METADATA_KEY, writer_contract.to_string()],
+            rusqlite::params![PROGRAMMING_CONTRACT_METADATA_KEY, required.to_string()],
         )?;
     }
     Ok(())
@@ -521,7 +615,20 @@ impl crate::PortableShowTransaction {
     pub fn stamp_programming_contract(&mut self, supported: u16) -> bool {
         let stamp = writer_stamps_programming_contract(supported, self.changed_object_kinds());
         if stamp {
-            self.set_metadata(PROGRAMMING_CONTRACT_METADATA_KEY, supported.to_string());
+            let required = self
+                .object_writes()
+                .map(|(_, body)| required_object_programming_contract(body))
+                .max()
+                .unwrap_or(1)
+                .max(self.programming_contract_floor)
+                .max(
+                    self.metadata_changes()
+                        .get(PROGRAMMING_CONTRACT_METADATA_KEY)
+                        .and_then(|value| value.as_ref())
+                        .and_then(|value| value.parse::<u16>().ok())
+                        .unwrap_or(0),
+                );
+            self.set_metadata(PROGRAMMING_CONTRACT_METADATA_KEY, required.to_string());
         }
         stamp
     }

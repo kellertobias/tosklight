@@ -87,6 +87,8 @@ fn operational_cue_list(
         light_core::AttributeValue::Normalized(1.0),
     ));
     light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Main".into(),
         priority: 10,

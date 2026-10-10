@@ -39,8 +39,10 @@ pub(super) async fn store_preload_intent(
     }
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let prepared = match input.target.as_str() {
-        "preset" => prepare_preload_preset(&store, &input, fixture_values, group_values)?,
-        "cue" => prepare_preload_cue(&store, &input, fixture_values, group_values)?,
+        "preset" => {
+            prepare_preload_preset(&store, &input, fixture_values, group_values, &programmer)?
+        }
+        "cue" => prepare_preload_cue(&store, &input, fixture_values, group_values, &programmer)?,
         _ => return Err(ApiError::bad_request("target must be preset or cue")),
     };
     let kind = prepared.kind.as_str().to_owned();

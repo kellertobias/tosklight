@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	CadRigOverview,
@@ -126,6 +126,7 @@ function setup(
 	entity: CadEntity | readonly CadEntity[] = fixture,
 	labels = { fixtureIds: false, dmxAddresses: false },
 	options: {
+		onViewportElement?: (element: HTMLCanvasElement | null) => void;
 		snapping?: boolean;
 		expandSelection?: (ids: readonly string[]) => string[];
 		view?: CadViewDirection;
@@ -174,6 +175,15 @@ function setup(
 }
 
 describe("CAD fixture interaction", () => {
+	it("registers the actual canvas and unregisters it on unmount for live CSS measurement", () => {
+		const onViewportElement = vi.fn();
+		const { canvas } = setup([], fixture, undefined, { onViewportElement });
+		expect(onViewportElement).toHaveBeenLastCalledWith(canvas);
+		expect(canvas.clientWidth).toBe(1000); expect(canvas.clientHeight).toBe(800);
+		cleanup();
+		expect(onViewportElement).toHaveBeenLastCalledWith(null);
+	});
+
 	it("shows the floor datum only in elevation views and exposes the origin setting", () => {
 		const { rerender } = render(
 			<CadViewport

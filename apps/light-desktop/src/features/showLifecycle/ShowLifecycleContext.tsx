@@ -39,11 +39,12 @@ export interface ShowLifecycleActions {
 	listShowRevisions: (id: string) => Promise<ShowRevision[]>;
 	saveShowRevision: (name: string) => Promise<ShowRevision | null>;
 	openShowRevision: (id: string, revision: number) => Promise<boolean>;
-	previewMvr: (file: File, showId?: string) => Promise<MvrImportPreview>;
+	previewMvr: (file: File, showId?: string, signal?: AbortSignal) => Promise<MvrImportPreview>;
 	applyMvr: (
 		token: string,
 		input: {
 			new_show?: { name: string; open_after_import: boolean };
+            copy_conflicting_profiles?: boolean;
 			existing_show_id?: string;
 			resolutions?: Record<
 				string,

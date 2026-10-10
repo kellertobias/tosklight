@@ -63,7 +63,7 @@ mod tests {
 
     fn value(changed_at: i64, programmer_order: u64) -> TimedValue {
         TimedValue {
-            fixture_id: FixtureId::new(),
+            fixture_id: FixtureId(uuid::Uuid::from_u128(2)),
             attribute: AttributeKey("pan".into()),
             value: AttributeValue::Normalized(0.5),
             priority: 0,
@@ -100,6 +100,17 @@ mod tests {
             .resolve(Some(previous.clone()))
             .unwrap();
         assert!(Arc::ptr_eq(&kept, &previous));
+        let mut other_fixture = held.clone();
+        other_fixture.fixture_id = FixtureId::new();
+        let moved = built(&source, &other_fixture, Some(4))
+            .resolve(Some(previous.clone()))
+            .unwrap();
+        assert!(
+            !Arc::ptr_eq(&moved, &previous),
+            "an origin cannot describe another authored fixture"
+        );
+        assert_eq!(moved.authored_fixture_id(), other_fixture.fixture_id);
+
         // Any difference builds the offer's own origin, equal to an eager build.
         for (source, changed, order, ordinal) in [
             (&other, 10, 3, Some(4)),

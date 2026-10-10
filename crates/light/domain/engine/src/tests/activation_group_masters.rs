@@ -11,6 +11,7 @@ struct Desk {
 
 fn group(id: &str, fixtures: Vec<FixtureId>) -> GroupDefinition {
     GroupDefinition {
+        replacement_projections: Default::default(),
         id: id.into(),
         name: id.into(),
         fixtures,

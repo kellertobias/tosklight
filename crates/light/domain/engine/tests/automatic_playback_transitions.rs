@@ -93,6 +93,8 @@ fn render_applies_a_link_destination_in_the_same_output_frame() {
 
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Render transition test".into(),
         priority: 0,

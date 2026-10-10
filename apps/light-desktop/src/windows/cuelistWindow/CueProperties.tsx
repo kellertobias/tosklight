@@ -90,8 +90,8 @@ function cueWithNumber(
 		return {
 			...cue,
 			trigger:
-				kind === "link"
-					? cueTrigger("link", millis, String(cue.trigger.cue_id ?? ""))
+				kind === "follow" || kind === "link"
+					? cueTrigger(kind, millis, String(cue.trigger.cue_id ?? ""))
 					: cueTrigger("time", millis),
 		};
 	}

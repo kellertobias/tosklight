@@ -248,26 +248,44 @@ pub(super) fn parse_subset_rule(
         }
         return Ok(light_programmer::SelectionRule::Even);
     }
-    let n = tokens.get(1).map_or(Ok(2), |token| {
-        token
-            .parse::<usize>()
-            .map_err(|_| "DIV requires a positive number")
-    })?;
+    let mut index = 1;
+    let n = match tokens.get(index).map(String::as_str) {
+        None | Some("OFFSET") => 2,
+        Some(token) => {
+            index += 1;
+            token
+                .parse::<usize>()
+                .map_err(|_| "DIV requires a positive number")?
+        }
+    };
     if n == 0 {
         return Err("DIV requires a positive number".into());
     }
-    let has_offset = tokens.get(2).is_some();
-    let offset = match tokens.get(2).map(String::as_str) {
+    let offset = match tokens.get(index).map(String::as_str) {
         None => 0,
-        Some("+") => tokens
-            .get(3)
-            .ok_or("+ requires an offset")?
-            .parse::<usize>()
-            .map_err(|_| "offset is invalid")?,
-        _ => return Err("expected + before the subset offset".into()),
+        Some("OFFSET") => {
+            index += 1;
+            match tokens.get(index) {
+                None => 1,
+                Some(token) => {
+                    index += 1;
+                    token.parse::<usize>().map_err(|_| "offset is invalid")?
+                }
+            }
+        }
+        Some("+") => {
+            index += 1;
+            let token = tokens.get(index).ok_or("+ requires an offset")?;
+            index += 1;
+            token.parse::<usize>().map_err(|_| "offset is invalid")?
+        }
+        _ => return Err("expected OFFSET or + before the subset offset".into()),
     };
-    if tokens.len() > if has_offset { 4 } else { 2 } {
+    if index != tokens.len() {
         return Err("unexpected tokens after subset".into());
+    }
+    if offset >= n {
+        return Err("OFFSET must be smaller than DIV".into());
     }
     Ok(light_programmer::SelectionRule::EveryNth { n, offset })
 }

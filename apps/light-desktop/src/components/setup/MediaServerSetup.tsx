@@ -73,7 +73,11 @@ export function MediaServerSetup({
 					CITP endpoints belong to the physical master fixture. Every logical
 					media layer inherits the same endpoint.
 				</p>
-				{patch.error && <ErrorAlert as="p" role="alert">{patch.error}</ErrorAlert>}
+				{patch.error && (
+					<ErrorAlert as="p" role="alert">
+						{patch.error}
+					</ErrorAlert>
+				)}
 				<MediaServerTable rows={rows} />
 			</section>
 			<DiscoveredMediaServers
@@ -110,7 +114,11 @@ function DiscoveredMediaServers({
 				</div>
 			</header>
 			{busy && <p role="status">Discovering Media Servers…</p>}
-			{error && <ErrorAlert as="p" role="alert">{error}</ErrorAlert>}
+			{error && (
+				<ErrorAlert as="p" role="alert">
+					{error}
+				</ErrorAlert>
+			)}
 			{!busy && discovery?.servers.length === 0 && (
 				<p>
 					No ToskLight Pixel Media servers were found. Check that the Media
@@ -118,6 +126,24 @@ function DiscoveredMediaServers({
 					patching remains available.
 				</p>
 			)}
+			{discovery?.servers
+				.filter(
+					(candidate) =>
+						candidate.outputs.length > 0 &&
+						candidate.error &&
+						!candidate.outputs.some(
+							(output) => output.issue === candidate.error,
+						),
+				)
+				.map((candidate) => (
+					<ErrorAlert
+						as="p"
+						role="alert"
+						key={`${candidate.key}:configuration-error`}
+					>
+						{candidate.name}: {candidate.error}
+					</ErrorAlert>
+				))}
 			{discovery?.servers.flatMap((candidate) =>
 				candidate.outputs.length ? (
 					candidate.outputs.map((output) => (

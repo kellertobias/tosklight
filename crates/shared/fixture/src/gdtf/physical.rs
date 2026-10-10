@@ -10,18 +10,39 @@ use light_core::Xyz;
 /// CIE xyY written for a black source; any chromaticity reproduces XYZ 0 at luminance 0.
 const BLACK_XYY: [f64; 3] = [0.3127, 0.329, 0.0];
 
-/// CIE xyY of an XYZ triple; `None` when a visible colour has zero luminance.
+#[cfg(test)]
+mod optical_scale_tests {
+    use super::*;
+
+    #[test]
+    fn optical_white_hundred_is_runtime_reference_white_one() {
+        let white = xyz([0.3127, 0.329, 100.0]).unwrap();
+        assert_eq!(white.y, 1.0);
+        let exported = xyy(white).unwrap();
+        assert_eq!(exported[2], 100.0);
+        assert!((exported[0] - 0.3127).abs() < 1e-7);
+    }
+}
+
+/// Optical CIE xyY: GDTF white has Y=100; runtime reference white has Y=1.
+/// This is not the GDTF ColorSpace representation, whose white already has Y=1.
 pub(crate) fn xyy(xyz: Xyz) -> Option<[f64; 3]> {
     let [x, y, z] = [xyz.x, xyz.y, xyz.z].map(f64::from);
     let sum = x + y + z;
     if sum <= 0.0 {
         return Some(BLACK_XYY);
     }
-    (y > 0.0).then(|| [x / sum, y / sum, y])
+    (y > 0.0).then(|| [x / sum, y / sum, y * 100.0])
 }
 
 /// XYZ of a CIE xyY triple; `None` when a luminous colour has no chromaticity `y`.
-pub(crate) fn xyz([x, y, luminance]: [f64; 3]) -> Option<Xyz> {
+pub(crate) fn xyz(values: [f64; 3]) -> Option<Xyz> {
+    xyz_with_optical_scale(values, 0.01)
+}
+
+/// Legacy scale is used only to verify exact old imported models against retained source.
+pub(crate) fn xyz_with_optical_scale([x, y, luminance]: [f64; 3], scale: f64) -> Option<Xyz> {
+    let luminance = luminance * scale;
     if luminance == 0.0 {
         return Some(Xyz {
             x: 0.0,

@@ -39,6 +39,48 @@
       "properties": {
         "action": {
           "type": "string",
+          "const": "replace_profile"
+        },
+        "head_mapping": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PatchHeadReplacement"
+          }
+        },
+        "mode_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "profile_revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "root_programming_mapping": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/PatchRootProgramReplacement"
+          }
+        }
+      },
+      "required": [
+        "action",
+        "profile_id",
+        "profile_revision",
+        "mode_id",
+        "head_mapping"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
           "const": "set_masters"
         },
         "grand_master_enabled": {
@@ -534,6 +576,26 @@
         "visualizer_srgb"
       ]
     },
+    "PatchHeadReplacement": {
+      "description": "Explicit decision for one existing logical programming target; null leaves it dormant.",
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_profile_head_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "fixture_id"
+      ]
+    },
     "PatchInstalledFixtureAppearance": {
       "description": "Portable installed lamp/filter/static-shaper appearance for one physical fixture instance.",
       "type": "object",
@@ -840,6 +902,31 @@
         "profile_id",
         "mode_id",
         "geometry_digest"
+      ]
+    },
+    "PatchRootProgramReplacement": {
+      "description": "Explicit routing of existing shared-root programming for one canonical attribute.\nEmpty destinations retain that existing programming as dormant.",
+      "type": "object",
+      "properties": {
+        "attribute": {
+          "type": "string"
+        },
+        "source_profile_head_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_profile_head_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "source_profile_head_id",
+        "attribute",
+        "target_profile_head_ids"
       ]
     },
     "PatchVectorAxis": {

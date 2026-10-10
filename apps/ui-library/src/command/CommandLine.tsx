@@ -128,13 +128,20 @@ function CommandInputSurface(
 					value={props.commandLine}
 					placeholder=""
 					onClick={() => props.onHistoryOpenChange(true)}
-					onChange={(event) =>
-						props.onReplace(
-							props.completed
-								? `${props.commandTarget} ${event.target.value.slice(-1)}`
-								: event.target.value,
-						)
-					}
+					onChange={(event) => {
+						const value = event.target.value;
+						const input = event.nativeEvent as InputEvent;
+						// A next typed character starts a fresh command after completion.
+						// Paste, drop and replacement already carry the operator's full text.
+						const typedCharacter = input.inputType === "insertText" &&
+							input.data?.length === 1 && !input.isComposing;
+						const appendedCharacter = !input.inputType &&
+							value.startsWith(props.commandLine) &&
+							value.length === props.commandLine.length + 1;
+						props.onReplace(props.completed && (typedCharacter || appendedCharacter)
+							? `${props.commandTarget} ${input.data ?? value.slice(-1)}`
+							: value);
+					}}
 					onKeyDown={(event) => {
 						if (event.key !== "Enter") return;
 						event.stopPropagation();

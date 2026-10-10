@@ -192,7 +192,10 @@ fn explicit_profile_preset_generation_writes_portable_show_objects() {
             "preset",
             "2.1",
             &serde_json::to_value(light_programmer::Preset {
-                name: "Red".into(),
+
+fixture_replacement_projections: Default::default(),
+group_replacement_projections: Default::default(),
+name: "Red".into(),
                 family: light_programmer::PresetFamily::Color,
                 number: 1,
                 aim_at_fixture_number: None,

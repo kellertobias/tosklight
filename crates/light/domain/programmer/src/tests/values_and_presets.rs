@@ -135,6 +135,9 @@ fn preset_store_modes_are_explicit() {
     let fixture = FixtureId::new();
     let other = FixtureId::new();
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
+        instance_id: None,
         name: "A".into(),
         family: PresetFamily::Intensity,
         number: 1,
@@ -148,6 +151,9 @@ fn preset_store_modes_are_explicit() {
     };
     preset.store(
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
+            instance_id: None,
             name: String::new(),
             family: PresetFamily::Intensity,
             number: 1,
@@ -168,6 +174,9 @@ fn preset_store_modes_are_explicit() {
     assert!(preset.values.contains_key(&other));
     preset.store(
         Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
+            instance_id: None,
             name: "B".into(),
             family: PresetFamily::Mixed,
             number: 1,
@@ -213,6 +222,8 @@ fn preset_addresses_use_pool_local_numbers() {
 #[test]
 fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
     let mut legacy_color = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         name: "Red".into(),
         aim_at_fixture_number: None,
         family: PresetFamily::Color,
@@ -225,6 +236,8 @@ fn legacy_plain_preset_keys_reconcile_with_the_stored_family() {
     assert_eq!(legacy_color.number, 1);
 
     let mut mismatched = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         aim_at_fixture_number: None,
         number: 1,
@@ -431,6 +444,8 @@ fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
     });
     let [first, second] = [FixtureId::new(), FixtureId::new()];
     let mut preset = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
         family: PresetFamily::Color,
         number: 1,
         values: HashMap::from([
@@ -466,6 +481,8 @@ fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
         let mut values = HashMap::from([(color.clone(), red.clone())]);
         values.extend(extra);
         let mut preset = Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
             family,
             number: 2,
             values: HashMap::from([(first, values)]),
@@ -481,4 +498,247 @@ fn one_shared_whole_colour_consolidates_into_a_universal_color_preset() {
     }))
     .unwrap();
     assert!(!legacy.is_universal());
+}
+
+#[test]
+fn recalled_origin_is_captured_and_same_value_touch_detaches_only_that_address() {
+    use light_core::{PresetValueOwner, PresetValueReference};
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session);
+    let a = FixtureId::new();
+    let b = FixtureId::new();
+    let attribute = AttributeKey("intensity".into());
+    registry.set_many(
+        session,
+        [a, b].map(|fixture| (fixture, attribute.clone(), AttributeValue::Normalized(0.5))),
+    );
+    let identity = uuid::Uuid::new_v4();
+    let origins = [a, b].map(|fixture| {
+        (
+            PresetValueOwner::Fixture {
+                fixture_id: fixture,
+            },
+            attribute.clone(),
+            PresetValueReference {
+                preset_instance_id: identity,
+                source_owner: PresetValueOwner::Universal,
+                source_attribute: attribute.clone(),
+                sample_rank: None,
+                member_fixture: Some(fixture),
+            },
+        )
+    });
+    assert!(registry.attach_preset_provenance(session, &origins, false, true));
+    let capture = registry
+        .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert!(
+        capture
+            .fixture_values
+            .iter()
+            .all(|value| value.preset_reference.is_some())
+    );
+    let recall = [a, b].map(
+        |fixture_id| crate::NormalProgrammerValueMutation::SetFixture {
+            fixture_id,
+            attribute: attribute.clone(),
+            value: AttributeValue::Normalized(0.5),
+            timing: Default::default(),
+        },
+    );
+    let context = "preset:1.1".to_owned();
+    assert!(
+        !registry
+            .apply_normal_preset_recall(session, &recall, context.clone())
+            .unwrap()
+            .values_changed
+    );
+    assert!(
+        !registry
+            .apply_normal_preset_recall(session, &recall, context)
+            .unwrap()
+            .changed()
+    );
+    assert!(!registry.attach_preset_provenance(session, &origins, false, true));
+    assert_eq!(
+        registry
+            .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+            .unwrap()
+            .fixture_values,
+        capture.fixture_values
+    );
+    assert!(registry.apply_normal_values(
+        session,
+        &[crate::NormalProgrammerValueMutation::SetFixture {
+            fixture_id: a,
+            attribute: attribute.clone(),
+            value: AttributeValue::Normalized(0.5),
+            timing: Default::default()
+        }]
+    ));
+    let capture = registry
+        .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert!(
+        capture
+            .fixture_values
+            .iter()
+            .find(|value| value.fixture_id == a)
+            .unwrap()
+            .preset_reference
+            .is_none()
+    );
+    assert!(
+        capture
+            .fixture_values
+            .iter()
+            .find(|value| value.fixture_id == b)
+            .unwrap()
+            .preset_reference
+            .is_some()
+    );
+}
+
+#[test]
+fn persisted_clear_cannot_reuse_an_old_reference_edit_identity() {
+    use light_core::{PresetValueOwner, PresetValueReference};
+    let registry = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    registry.start(session);
+    let fixture = FixtureId::new();
+    let attribute = AttributeKey::intensity();
+    registry.set(
+        session,
+        fixture,
+        attribute.clone(),
+        AttributeValue::Normalized(0.5),
+    );
+    let reference = PresetValueReference {
+        preset_instance_id: uuid::Uuid::new_v4(),
+        source_owner: PresetValueOwner::Universal,
+        source_attribute: attribute.clone(),
+        sample_rank: None,
+        member_fixture: Some(fixture),
+    };
+    registry.attach_preset_provenance(
+        session,
+        &[(
+            PresetValueOwner::Fixture {
+                fixture_id: fixture,
+            },
+            attribute.clone(),
+            reference,
+        )],
+        false,
+        false,
+    );
+    registry.clear_normal_values(session);
+    let restored: ProgrammerState =
+        serde_json::from_value(serde_json::to_value(registry.get(session).unwrap()).unwrap())
+            .unwrap();
+    let reopened = ProgrammerRegistry::default();
+    reopened.restore(restored);
+    reopened.set(session, fixture, attribute, AttributeValue::Normalized(0.5));
+    let capture = reopened
+        .capture_cue_recording(session, crate::CueRecordingSource::CurrentCapture)
+        .unwrap();
+    assert_eq!(capture.fixture_values.len(), 1);
+    assert!(capture.fixture_values[0].preset_reference.is_none());
+}
+
+#[test]
+fn modern_position_store_supersedes_legacy_aim_only_when_authoritative() {
+    let identity = uuid::Uuid::new_v4();
+    let original = Preset {
+        fixture_replacement_projections: Default::default(),
+        group_replacement_projections: Default::default(),
+        instance_id: Some(identity),
+        name: "Follow target".into(),
+        family: PresetFamily::Position,
+        number: 7,
+        aim_at_fixture_number: Some(5),
+        ..Default::default()
+    };
+    let position = AttributeValue::Position(std::sync::Arc::new(
+        light_core::programming::PositionIntent::target(
+            light_core::programming::TargetReference::Origin,
+            [1.0, 2.0, 3.0],
+        ),
+    ));
+    for mode in [PresetStoreMode::Overwrite, PresetStoreMode::Merge] {
+        for owner in [0, 1, 2] {
+            let mut incoming = Preset {
+                fixture_replacement_projections: Default::default(),
+                group_replacement_projections: Default::default(),
+                family: PresetFamily::Position,
+                number: 7,
+                ..Default::default()
+            };
+            let values = [(AttributeKey("position".into()), position.clone())].into();
+            match owner {
+                0 => incoming.universal_values = values,
+                1 => {
+                    incoming.values.insert(FixtureId::new(), values);
+                }
+                _ => {
+                    incoming.group_values.insert("1".into(), values);
+                }
+            }
+            let mut stored = original.clone();
+            stored.store(incoming, mode);
+            assert_eq!(
+                stored.aim_at_fixture_number, None,
+                "{mode:?}, owner {owner}"
+            );
+            assert_eq!(stored.instance_id, Some(identity));
+            assert_eq!(stored.name, original.name);
+        }
+    }
+    for mode in [PresetStoreMode::Merge, PresetStoreMode::AddMissingFixtures] {
+        let mut stored = original.clone();
+        stored.store(
+            Preset {
+                fixture_replacement_projections: Default::default(),
+                group_replacement_projections: Default::default(),
+                family: PresetFamily::Position,
+                ..Default::default()
+            },
+            mode,
+        );
+        assert_eq!(
+            stored.aim_at_fixture_number,
+            Some(5),
+            "empty {mode:?} preserves legacy relation"
+        );
+    }
+    let mut stored = original.clone();
+    stored.store(
+        Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
+            family: PresetFamily::Position,
+            universal_values: [(AttributeKey("position".into()), position)].into(),
+            ..Default::default()
+        },
+        PresetStoreMode::AddMissingFixtures,
+    );
+    assert_eq!(
+        stored.aim_at_fixture_number,
+        Some(5),
+        "Add Missing does not replace the existing relation"
+    );
+    let mut stored = original.clone();
+    stored.store(
+        Preset {
+            fixture_replacement_projections: Default::default(),
+            group_replacement_projections: Default::default(),
+            family: PresetFamily::Position,
+            aim_at_fixture_number: Some(6),
+            ..Default::default()
+        },
+        PresetStoreMode::Overwrite,
+    );
+    assert_eq!(stored.aim_at_fixture_number, Some(6));
+    assert_eq!(stored.instance_id, Some(identity));
 }

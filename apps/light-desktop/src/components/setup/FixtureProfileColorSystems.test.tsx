@@ -19,6 +19,7 @@ import {
 	hexToXyz,
 	nominalWheelSrgb,
 	srgbToXyz,
+	validateProfile,
 	wheelSlotDisplayXyz,
 	xyzToHex,
 } from "./fixtureProfileModel";
@@ -90,9 +91,15 @@ function wheelProfile(): FixtureProfile {
 }
 
 /** A master head plus two RGB pixels, only the first of which has a color system. */
-function pixelMode(): FixtureMode {
-	const mode = blankFixtureProfile().modes[0];
+function pixelMode(profile = blankFixtureProfile()): FixtureMode {
+	const mode = profile.modes[0];
 	mode.heads = [blankHead(0), blankHead(1), blankHead(2)];
+	// Keep the emitting part bound to an actual optical head in this profile.
+	if (!profile.geometry) throw new Error("pixel fixture geometry is missing");
+	mode.emitter_heads = profile.geometry.emitters.map((emitter) => ({
+		emitter_id: emitter.id,
+		head_id: mode.heads[1].id,
+	}));
 	mode.channels = mode.heads
 		.slice(1)
 		.flatMap((head) =>
@@ -277,7 +284,8 @@ describe("per-head color systems", () => {
 		const profile = blankFixtureProfile();
 		profile.manufacturer = "Acme";
 		profile.name = "Pixels";
-		profile.modes[0] = pixelMode();
+		profile.modes[0] = pixelMode(profile);
+		expect(validateProfile(profile)).toEqual([]);
 		const save = vi.fn(async (draft: FixtureProfile) => draft);
 		render(
 			<FixtureProfileEditor

@@ -356,7 +356,7 @@ export class PatchSession {
 					return outcome;
 				} catch (reason) {
 					const error = asError(reason);
-					if (!isConflict(error) || conflicts >= MAX_CONFLICT_RETRIES)
+					if (!isConflict(error) || conflicts >= MAX_CONFLICT_RETRIES || action.type === "replace_profile")
 						throw error;
 					await this.repair();
 				}
@@ -384,8 +384,8 @@ export class PatchSession {
 		const expectedFixtureRevision = this.store.fixtureRevision(fixtureId);
 		if (expectedFixtureRevision == null)
 			throw new Error("The authoritative fixture revision is not loaded");
-		const expectedPatchRevision = this.requiredRevision();
-		const expectedShowRevision = this.requiredShowRevision();
+		const expectedPatchRevision = action.type === "replace_profile" ? action.expectedPatchRevision : this.requiredRevision();
+		const expectedShowRevision = action.type === "replace_profile" ? action.expectedShowRevision : this.requiredShowRevision();
 		const send = () =>
 			updateFixture(
 				this.showId,
@@ -652,6 +652,12 @@ function fixtureUpdateCandidate(
 	multipatchInstanceId: string | null,
 	action: PatchFixtureUpdateAction,
 ): PatchFixtureCandidate {
+	// Replacement topology is computed by the server. Keep the current visible fixture until
+	// the authoritative result arrives rather than guessing logical identities optimistically.
+	if (action.type === "replace_profile") {
+		if (multipatchInstanceId !== null) throw new Error("Replace the root fixture, not an individual copy");
+		return changedPatchFixtureCandidate(fixture, {});
+	}
 	if (multipatchInstanceId == null)
 		return changedPatchFixtureCandidate(
 			fixture,
@@ -675,6 +681,7 @@ function applyRootFixtureAction(
 	fixture: PatchedFixture,
 	action: PatchFixtureUpdateAction,
 ): Partial<PatchedFixture> {
+	if (action.type === "replace_profile") return {};
 	if (action.type === "set_masters")
 		return {
 			group_masters_enabled: action.groupMastersEnabled,
@@ -703,7 +710,7 @@ function applyPhysicalAction(
 	>,
 	action: Exclude<
 		PatchFixtureUpdateAction,
-		{ type: "set_masters" } | { type: "set_move_in_black" }
+		{ type: "set_masters" } | { type: "set_move_in_black" } | { type: "replace_profile" }
 	>,
 ): Partial<PatchedFixture> {
 	switch (action.type) {

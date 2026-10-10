@@ -2,6 +2,10 @@ use crate::*;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CueChange {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_reference: Option<light_core::PresetValueReference>,
     pub fixture_id: FixtureId,
     pub attribute: AttributeKey,
     /// `None` is an explicit release, needed to implement cue-only when the attribute had no
@@ -18,6 +22,8 @@ pub struct CueChange {
 impl CueChange {
     pub fn set(fixture_id: FixtureId, attribute: AttributeKey, value: AttributeValue) -> Self {
         Self {
+            replacement_projection: None,
+            preset_reference: None,
             fixture_id,
             attribute,
             value: Some(value),
@@ -124,6 +130,10 @@ pub struct CueDynamicChange {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GroupCueChange {
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub replacement_projections: light_core::ReplacementProjectionMap,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_reference: Option<light_core::PresetValueReference>,
     pub group_id: String,
     pub attribute: AttributeKey,
     pub value: Option<AttributeValue>,
@@ -211,6 +221,12 @@ pub enum RestartMode {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CueList {
+    /// Independent operator Cuelist address. Absent until legacy topology is migrated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pool_number: Option<u16>,
+    /// Previously valid numeric Cuelist addresses retained by lossless legacy migration.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub legacy_pool_aliases: Vec<u16>,
     pub id: CueListId,
     pub name: String,
     pub priority: i16,
@@ -504,6 +520,7 @@ impl CueList {
         })
     }
     pub fn validate(&self) -> Result<(), String> {
+        crate::cue_pool::validate_pool_metadata(self)?;
         if !self.speed_multiplier.is_finite() || !(0.01..=100.0).contains(&self.speed_multiplier) {
             return Err("speed multiplier must be within 0.01-100".into());
         }
@@ -673,6 +690,8 @@ impl CueList {
                 .collect();
             for address in addresses.difference(&explicit) {
                 next.changes.push(CueChange {
+                    replacement_projection: None,
+                    preset_reference: None,
                     fixture_id: address.0,
                     attribute: address.1.clone(),
                     value: previous.get(address).cloned(),

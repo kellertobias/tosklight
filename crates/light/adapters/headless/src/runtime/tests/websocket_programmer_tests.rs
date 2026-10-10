@@ -1009,3 +1009,33 @@ async fn direct_programmer_writes_preserve_resolved_fade_for_recording() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn replacement_projection_legacy_command_capture_keeps_exact_order_envelopes_and_live_refs() {
+    let registry = light_programmer::ProgrammerRegistry::default();
+    let session = light_core::SessionId::new();
+    let root = light_core::FixtureId::new();
+    let attribute = light_core::AttributeKey::intensity();
+    registry.start(session);
+    registry.set_many(session, [(root, attribute.clone(), light_core::AttributeValue::Normalized(0.4))]);
+    registry.apply_normal_values(session, &[light_programmer::NormalProgrammerValueMutation::SetGroup {
+        group_id: "Front".into(), attribute: attribute.clone(), value: light_core::AttributeValue::Normalized(0.6), timing: Default::default(),
+    }]);
+    let profile = light_core::ReplacementProfileContext { profile_id: light_core::FixtureId::new(), profile_revision: 1, mode_id: uuid::Uuid::new_v4() };
+    let envelope = light_core::ReplacementProgramProjection { source_owner: root, source_profile: profile.clone(), source_head_id: uuid::Uuid::new_v4(), target_profile: profile, targets: vec![light_core::ReplacementHeadTarget { profile_head_id: uuid::Uuid::new_v4(), fixture_id: light_core::FixtureId::new() }] };
+    let before = registry.get(session).unwrap();
+    let direct = before.values[0].programmer_order;
+    let group = before.group_values["Front"][&attribute].programmer_order;
+    let map = HashMap::from([(root, envelope.clone())]);
+    assert!(registry.apply_replacement_migration(before.id, &[(direct,map.clone()),(group,map.clone())]));
+    let reference = light_core::PresetValueReference { preset_instance_id: uuid::Uuid::new_v4(), source_owner: light_core::PresetValueOwner::Fixture { fixture_id: root }, source_attribute: attribute.clone(), sample_rank: None, member_fixture: Some(root) };
+    registry.attach_preset_provenance(session, &[(light_core::PresetValueOwner::Fixture { fixture_id: root }, attribute.clone(), reference.clone())], false, false);
+    let captured = registry.get(session).unwrap();
+    let recorded = programmer_cue(&captured, cue("1"), CommandTiming::default());
+    assert_eq!(recorded.changes[0].replacement_projection, Some(envelope.clone()));
+    assert_eq!(recorded.changes[0].preset_reference, Some(reference));
+    assert_eq!(recorded.group_changes[0].replacement_projections, map);
+    let preset = programmer_preset(&captured, "Captured".into(), light_programmer::PresetAddress::new(light_programmer::PresetFamily::Intensity, 1).unwrap());
+    assert_eq!(preset.fixture_replacement_projections[&root][&attribute], envelope);
+    assert_eq!(preset.group_replacement_projections["Front"][&attribute], recorded.group_changes[0].replacement_projections);
+}

@@ -525,6 +525,148 @@ impl PlaybackEngine {
                 .any(|(candidate, _)| *candidate == identity)
     }
 
+    /// Carry the current static Cue output of Solo peers into the incoming Cue's transition.
+    /// Peers can become logically Off immediately without creating an unowned black interval.
+    /// This is separate from ordinary Off/Release, which continue to remove ownership at once.
+    pub fn adopt_solo_handover(
+        &mut self,
+        incoming: PlaybackIdentity,
+        peers: &[PlaybackIdentity],
+    ) -> Result<(), String> {
+        if self.dynamic_assignment_at(incoming).is_some() {
+            return Ok(());
+        }
+        let key = self.runtime_key_at(incoming)?;
+        let peer_keys: HashSet<_> = peers
+            .iter()
+            .filter_map(|peer| self.runtime_key_at(*peer).ok())
+            .filter(|peer| *peer != key)
+            .collect();
+        if peer_keys.is_empty() {
+            return Ok(());
+        }
+        let now = self.clock.now();
+        let mut retained: HashMap<AttributeAddress, PlaybackContribution> = HashMap::new();
+        for row in self.contributions_with_context(now, None) {
+            if !peer_keys.contains(&PlaybackKey::CueList(row.source.cue_list_id)) {
+                continue;
+            }
+            let address = (row.value.fixture_id, row.value.attribute.clone());
+            let replace = retained.get(&address).is_none_or(|old| {
+                let incoming = &row.value;
+                let previous = &old.value;
+                if incoming.priority != previous.priority {
+                    return incoming.priority > previous.priority;
+                }
+                if incoming.merge_mode == light_core::MergeMode::Htp {
+                    return incoming.value.normalized().unwrap_or(0.)
+                        > previous.value.normalized().unwrap_or(0.);
+                }
+                (incoming.changed_at, row.transition_ordinal)
+                    > (previous.changed_at, old.transition_ordinal)
+            });
+            if replace {
+                retained.insert(address, row);
+            }
+        }
+        if retained.is_empty() {
+            return Ok(());
+        }
+        let ordinal = crate::source_evidence::take_occurrence_ordinal(
+            &mut self.next_source_occurrence_ordinal,
+        );
+        let playback = self
+            .active
+            .get_mut(&key)
+            .ok_or("incoming Solo playback is not active")?;
+        playback.deleted_cue_transition_source = Some(
+            retained
+                .into_values()
+                .map(PlaybackRetainedValue::from)
+                .collect(),
+        );
+        playback.begin_source_history(
+            now,
+            ordinal,
+            &self.compiled_cue_lists[&playback.cue_list_id],
+        );
+        Ok(())
+    }
+
+    /// Adopt only Color pairs authored by the incoming Cue, from the last accepted output.
+    /// This is an activation source, not an additional producer or fabricated author evidence.
+    pub fn adopt_published_color_start(
+        &mut self,
+        incoming: PlaybackIdentity,
+        value_at: &dyn Fn(FixtureId, &AttributeKey) -> Option<AttributeValue>,
+    ) -> Result<(), String> {
+        if self.dynamic_assignment_at(incoming).is_some() {
+            return Ok(());
+        }
+        let key = self.runtime_key_at(incoming)?;
+        let Some(active) = self.active.get(&key).filter(|active| active.enabled) else {
+            return Ok(());
+        };
+        let compiled = &self.compiled_cue_lists[&active.cue_list_id];
+        let priority = self.cue_lists[&active.cue_list_id].priority;
+        let retained: Vec<_> = compiled
+            .attributes_through(active.cue_index)
+            .iter()
+            .filter_map(|attribute| {
+                let target = attribute.value(active.cue_index, active.tracking_wrap)?;
+                let address = (attribute.fixture_id(), attribute.attribute().clone());
+                let start = value_at(address.0, &address.1)?;
+                // Cross-model/semantic-to-Direct crossings need appearance capture at the physical
+                // adapter. Do not pretend an unsupported pair is a continuous native transition.
+                use light_core::programming::ColorProgram;
+                let compatible = match (&start, target) {
+                    (AttributeValue::ColorProgram(a), AttributeValue::ColorProgram(b)) => {
+                        match (a.as_ref(), b.as_ref()) {
+                            (
+                                ColorProgram::Direct { recipe: a, .. },
+                                ColorProgram::Direct { recipe: b, .. },
+                            ) => a.source == b.source,
+                            (ColorProgram::Semantic { .. }, ColorProgram::Semantic { .. }) => true,
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                };
+                compatible.then(|| PlaybackRetainedValue {
+                    replacement_projection: None,
+                    timed: TimedValue {
+                        fixture_id: address.0,
+                        attribute: address.1,
+                        value: start.clone(),
+                        priority,
+                        changed_at: active.activated_at,
+                        programmer_order: 0,
+                        merge_mode: light_core::MergeMode::Ltp,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
+                    },
+                    family_evidence: None,
+                    pending_transition: None,
+                })
+            })
+            .collect();
+        if retained.is_empty() {
+            return Ok(());
+        }
+        let ordinal = crate::source_evidence::take_occurrence_ordinal(
+            &mut self.next_source_occurrence_ordinal,
+        );
+        let active = self.active.get_mut(&key).expect("validated active Cue");
+        active.deleted_cue_transition_source = Some(retained);
+        active.begin_source_history(
+            active.activated_at,
+            ordinal,
+            &self.compiled_cue_lists[&active.cue_list_id],
+        );
+        Ok(())
+    }
+
     pub fn release_at_mutation(
         &mut self,
         identity: PlaybackIdentity,

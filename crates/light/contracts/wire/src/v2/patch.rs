@@ -112,6 +112,15 @@ pub struct PatchFixtureUpdateRequest {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum PatchFixtureUpdateAction {
+    ReplaceProfile {
+        profile_id: Uuid,
+        #[ts(type = "number")]
+        profile_revision: u64,
+        mode_id: Uuid,
+        head_mapping: Vec<PatchHeadReplacement>,
+        #[serde(default)]
+        root_programming_mapping: Vec<PatchRootProgramReplacement>,
+    },
     SetMasters {
         group_masters_enabled: bool,
         grand_master_enabled: bool,
@@ -152,6 +161,22 @@ pub enum PatchFixtureUpdateAction {
     SetInstalledAppearance {
         appearance: PatchInstalledFixtureAppearance,
     },
+}
+
+/// Explicit decision for one existing logical programming target; null leaves it dormant.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchHeadReplacement {
+    pub fixture_id: Uuid,
+    pub target_profile_head_id: Option<Uuid>,
+}
+
+/// Explicit routing of existing shared-root programming for one canonical attribute.
+/// Empty destinations retain that existing programming as dormant.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchRootProgramReplacement {
+    pub source_profile_head_id: Uuid,
+    pub attribute: String,
+    pub target_profile_head_ids: Vec<Uuid>,
 }
 
 /// Saved installation zero correction for one physical fixture; live integration is separate.

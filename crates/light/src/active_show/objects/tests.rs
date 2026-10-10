@@ -659,6 +659,8 @@ fn cue_list(id: &str) -> Value {
     let mut cue = light_playback::Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
     cue.id = uuid::Uuid::from_u128(0x700);
     serde_json::to_value(light_playback::CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId(uuid::Uuid::parse_str(id).unwrap()),
         name: "Before".into(),
         priority: 0,

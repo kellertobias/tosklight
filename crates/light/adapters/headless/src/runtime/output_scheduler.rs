@@ -61,10 +61,12 @@ pub use live_output_bench::{
 };
 mod restored_dynamic_candidate;
 mod start_path_timing;
+mod timecode_audio;
 pub(in crate::runtime) use restored_dynamic_candidate::{
     RestoredDynamicCandidate, prepare_restored_dynamic_candidate,
 };
 pub use start_path_timing::StartPathPhases;
+use timecode_audio::timecode_audio_contributions;
 
 pub(in crate::runtime) use cold_preset_materialization::{
     materialize_cold_preset_dependencies, materialize_pending_preset_dependencies,
@@ -105,6 +107,75 @@ type OutputSequences = HashMap<(Protocol, Universe), u8>;
 type SharedSequences = Arc<tokio::sync::Mutex<OutputSequences>>;
 pub(super) type OutputTask = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
 
+/// Process authority for physical delivery; it never comes from editable show settings.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(in crate::runtime) enum PhysicalDeliveryPolicy {
+    #[default]
+    Live,
+    VisualizerPreview,
+}
+
+impl PhysicalDeliveryPolicy {
+    pub(in crate::runtime) async fn send(
+        self,
+        network: &NetworkOutput,
+        usb: &UsbOutputFanout,
+        routes: &[light_output::OutputRoute],
+        frames: &HashMap<Universe, DmxFrame>,
+        patched_slots: &HashMap<Universe, u16>,
+        sequences: &mut OutputSequences,
+    ) -> io::Result<u64> {
+        if self == Self::VisualizerPreview {
+            return Ok(0);
+        }
+        let network = network
+            .send_routes(routes, frames, patched_slots, sequences)
+            .await;
+        let usb = usb.enqueue_routes(routes, frames);
+        combined_delivery_result(network, usb)
+    }
+
+    pub(in crate::runtime) fn configure_usb(
+        self,
+        usb: &UsbOutputFanout,
+        document: &light_output::UsbEndpointDocument,
+    ) -> Result<(), String> {
+        if self == Self::VisualizerPreview {
+            return document.validate();
+        }
+        usb.configure(document)
+    }
+
+    async fn finish_scheduler_output(
+        self,
+        network: &NetworkOutput,
+        usb: &UsbOutputFanout,
+        routes: &[light_output::OutputRoute],
+        sequences: &mut OutputSequences,
+    ) {
+        // Preserve the scheduler's computed USB safe frame. Explicit route removal is the
+        // separate operation that queues USB zeros; it must not run during scheduler shutdown.
+        if self == Self::Live {
+            let _ = network.terminate_routes(routes, sequences).await;
+        }
+        usb.shutdown();
+    }
+
+    pub(in crate::runtime) async fn terminate(
+        self,
+        network: &NetworkOutput,
+        usb: &UsbOutputFanout,
+        routes: &[light_output::OutputRoute],
+        sequences: &mut OutputSequences,
+    ) {
+        if self == Self::VisualizerPreview {
+            return;
+        }
+        let _ = network.terminate_routes(routes, sequences).await;
+        usb.terminate_routes(routes);
+    }
+}
+
 pub(super) struct Config {
     pub bind_ip: IpAddr,
     pub engine: Arc<Engine>,
@@ -118,6 +189,7 @@ pub(super) struct Config {
     pub active_show: ActiveShowProjection,
     pub activation: ActiveShowCoordinator,
     pub test_bench: bool,
+    pub visualizer_preview: bool,
     pub dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub dynamic_snapshot: Arc<DynamicSnapshotPublication>,
     pub dynamic_source_origins: super::dynamic_source_origins::SharedDynamicSourceOrigins,
@@ -130,6 +202,7 @@ pub(super) struct Config {
 }
 
 pub(super) struct OutputScheduler {
+    delivery_policy: PhysicalDeliveryPolicy,
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
@@ -140,6 +213,7 @@ pub(super) struct OutputScheduler {
 }
 
 struct SharedResources {
+    delivery_policy: PhysicalDeliveryPolicy,
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
     pub(super) control: Arc<Mutex<OutputControl>>,
@@ -151,6 +225,7 @@ struct SharedResources {
 
 #[derive(Clone)]
 struct Runtime {
+    delivery_policy: PhysicalDeliveryPolicy,
     pub(super) engine: Arc<Engine>,
     pub(super) output: Arc<NetworkOutput>,
     pub(super) sequences: SharedSequences,
@@ -325,17 +400,17 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     };
     let publish = publish_started.elapsed();
     let send_started = Instant::now();
-    let network = runtime
-        .output
-        .send_routes(
+    let result = runtime
+        .delivery_policy
+        .send(
+            &runtime.output,
+            &runtime.usb,
             &routes,
             &frames,
             &patched_slots,
             &mut *runtime.sequences.lock().await,
         )
         .await;
-    let usb = runtime.usb.enqueue_routes(&routes, &frames);
-    let result = combined_delivery_result(network, usb);
     let send = send_started.elapsed();
     trace_slow_output_phases(tick_started.elapsed(), dynamic, engine, publish, send);
     let delivered = result.is_ok();
@@ -452,118 +527,6 @@ fn render_ordered_output_frame(
 }
 
 /// A player patched from the TL-367 profile revision carries the canonical Media attributes.
-fn audio_player_uses_media_attributes(fixture: &light_fixture::PatchedFixture) -> bool {
-    fixture
-        .definition
-        .heads
-        .iter()
-        .flat_map(|head| head.parameters.iter())
-        .any(|parameter| *parameter.attribute.0 == *"media.play_mode")
-}
-
-/// Paused holds the voice; playing selects Loop when the track repeats and Once - Hold otherwise.
-fn timecode_play_mode(transport: u32, repeat: bool) -> u32 {
-    match (transport, repeat) {
-        (64, _) => 236,
-        (_, true) => 0,
-        (_, false) => 60,
-    }
-}
-
-fn timecode_audio_contributions(
-    timecodes: &light_application::timeline::TimecodeRuntimeService,
-    fixtures: &[light_fixture::PatchedFixture],
-    changed_at: chrono::DateTime<chrono::Utc>,
-) -> ContributionBatch {
-    let rate = timecodes.frame_rate();
-    let mut order = 0_u64;
-    ContributionBatch::new(timecodes.snapshots().into_iter().flat_map(|snapshot| {
-        let transport = match snapshot.transport {
-            TimecodeTransportState::Stopped => return Vec::new(),
-            TimecodeTransportState::Paused => 64_u32,
-            TimecodeTransportState::Playing => 128_u32,
-        };
-        snapshot
-            .reconstructed
-            .audio_players
-            .into_iter()
-            .flat_map(|player| {
-                let fixture = fixtures
-                    .iter()
-                    .find(|fixture| fixture.fixture_id == player.fixture_id);
-                let fixture_id = fixture
-                    .and_then(|fixture| fixture.logical_heads.first())
-                    .map_or(player.fixture_id, |head| head.fixture_id);
-                let canonical = fixture.is_some_and(audio_player_uses_media_attributes);
-                let cursor_millis = u32::try_from(
-                    u128::from(player.cursor_frame.0)
-                        .saturating_mul(u128::from(rate.denominator()))
-                        .saturating_mul(1_000)
-                        / u128::from(rate.numerator()),
-                )
-                .unwrap_or(u32::MAX);
-                let mut samples = vec![
-                    (
-                        if canonical {
-                            "media.folder"
-                        } else {
-                            "audio.folder"
-                        },
-                        AttributeValue::RawDmxExact(u32::from(player.folder)),
-                    ),
-                    (
-                        if canonical {
-                            "media.file"
-                        } else {
-                            "audio.file"
-                        },
-                        AttributeValue::RawDmxExact(u32::from(player.file)),
-                    ),
-                    (
-                        if canonical { "volume" } else { "audio.volume" },
-                        AttributeValue::Normalized(player.volume),
-                    ),
-                    (
-                        "audio.cursor_millis",
-                        AttributeValue::RawDmxExact(cursor_millis),
-                    ),
-                ];
-                if canonical {
-                    // Play mode carries transport and repeat together on the TL-367 personality.
-                    samples.push((
-                        "media.play_mode",
-                        AttributeValue::RawDmxExact(timecode_play_mode(transport, player.repeat)),
-                    ));
-                } else {
-                    samples.push(("audio.transport", AttributeValue::RawDmxExact(transport)));
-                    samples.push((
-                        "audio.repeat",
-                        AttributeValue::RawDmxExact(if player.repeat { 255 } else { 0 }),
-                    ));
-                }
-                samples
-                    .into_iter()
-                    .map(|(attribute, value)| {
-                        order = order.saturating_add(1);
-                        ContributionSample::independent(TimedValue {
-                            fixture_id,
-                            attribute: AttributeKey(attribute.into()),
-                            value,
-                            priority: 75,
-                            changed_at,
-                            programmer_order: order,
-                            merge_mode: MergeMode::Ltp,
-                            fade: false,
-                            fade_millis: None,
-                            delay_millis: None,
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>()
-    }))
-}
-
 fn dispatch_automatic_cue_actions(
     frame: &light_engine::PreparedOutputFrame,
     engine: &Engine,
@@ -636,17 +599,17 @@ async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
         )
     };
     let send_started = Instant::now();
-    let network = runtime
-        .output
-        .send_routes(
+    let result = runtime
+        .delivery_policy
+        .send(
+            &runtime.output,
+            &runtime.usb,
             &routes,
             &frames,
             &patched_slots,
             &mut *runtime.sequences.lock().await,
         )
         .await;
-    let usb = runtime.usb.enqueue_routes(&routes, &frames);
-    let result = combined_delivery_result(network, usb);
     trace_slow_output_phases(
         tick_started.elapsed(),
         Duration::ZERO,
@@ -1036,26 +999,31 @@ async fn shut_down_safely(runtime: &Runtime) {
     let routes = send_safe_frame(runtime)
         .await
         .unwrap_or_else(|| runtime.engine.output_routes());
-    let _ = runtime
-        .output
-        .terminate_routes(&routes, &mut *runtime.sequences.lock().await)
+    runtime
+        .delivery_policy
+        .finish_scheduler_output(
+            &runtime.output,
+            &runtime.usb,
+            &routes,
+            &mut *runtime.sequences.lock().await,
+        )
         .await;
-    runtime.usb.shutdown();
 }
 
 async fn send_safe_frame(runtime: &Runtime) -> Option<Arc<[light_output::OutputRoute]>> {
     let options = safe_shutdown_options(&runtime.control);
     let safe = runtime.engine.render(options).ok()?;
     let _ = runtime
-        .output
-        .send_routes(
+        .delivery_policy
+        .send(
+            &runtime.output,
+            &runtime.usb,
             &safe.routes,
             &safe.universes,
             &safe.patched_slots,
             &mut *runtime.sequences.lock().await,
         )
         .await;
-    runtime.usb.enqueue_routes(&safe.routes, &safe.universes);
     Some(safe.routes)
 }
 
@@ -1084,6 +1052,7 @@ impl OutputScheduler {
 
     pub(super) fn control_capability(&self) -> OutputControlCapability {
         OutputControlCapability::new(Arc::clone(&self.control))
+            .with_delivery_policy(self.delivery_policy)
     }
 
     pub(super) fn usb_output(&self) -> Arc<UsbOutputFanout> {
@@ -1118,9 +1087,25 @@ impl SharedResources {
         let usb = Arc::new(UsbOutputFanout::new(Arc::new(
             light_usb_dmx_serial::SerialUsbDriverFactory,
         )));
-        usb.configure(&usb_document).map_err(anyhow::Error::msg)?;
+        let delivery_policy = if config.visualizer_preview {
+            PhysicalDeliveryPolicy::VisualizerPreview
+        } else {
+            PhysicalDeliveryPolicy::Live
+        };
+        delivery_policy
+            .configure_usb(&usb, &usb_document)
+            .map_err(anyhow::Error::msg)?;
         Ok(Self {
-            output: bind_output(config.bind_ip, config.test_bench).await?,
+            delivery_policy,
+            output: bind_output(
+                if config.visualizer_preview {
+                    std::net::Ipv4Addr::LOCALHOST.into()
+                } else {
+                    config.bind_ip
+                },
+                config.test_bench,
+            )
+            .await?,
             sequences: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             control: create_control(&config.persisted_runtime),
             usb,
@@ -1136,6 +1121,7 @@ impl SharedResources {
 
     fn runtime(&self, config: &Config) -> Runtime {
         Runtime {
+            delivery_policy: self.delivery_policy,
             engine: Arc::clone(&config.engine),
             output: Arc::clone(&self.output),
             sequences: Arc::clone(&self.sequences),
@@ -1169,6 +1155,7 @@ impl SharedResources {
         task: OutputTask,
     ) -> OutputScheduler {
         OutputScheduler {
+            delivery_policy: self.delivery_policy,
             output: self.output,
             sequences: self.sequences,
             control: self.control,

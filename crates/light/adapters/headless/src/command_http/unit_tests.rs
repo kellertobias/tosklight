@@ -62,7 +62,15 @@ fn group_record_parser_owns_only_exact_untimed_group_commands() {
 
     assert_eq!(
         super::adapter::group_record_command("RECORD GROUP Front").unwrap(),
-        Some(("Front".into(), Operation::Overwrite))
+        Some(("Front".into(), Operation::Merge))
+    );
+    assert_eq!(
+        super::adapter::group_record_command("RECORD SMART GROUP 07").unwrap(),
+        Some(("07".into(), Operation::Overwrite))
+    );
+    assert_eq!(
+        super::adapter::group_record_command("RECORD MERGE GROUP 07").unwrap(),
+        Some(("07".into(), Operation::Merge))
     );
     assert_eq!(
         super::adapter::group_record_command("REC + GROUP 07").unwrap(),
@@ -78,7 +86,7 @@ fn group_record_parser_owns_only_exact_untimed_group_commands() {
     );
     assert_eq!(
         super::adapter::group_record_command("record group Front-Wash").unwrap(),
-        Some(("Front-Wash".into(), Operation::Overwrite))
+        Some(("Front-Wash".into(), Operation::Merge))
     );
     assert_eq!(
         super::adapter::group_record_command("RECORD GROUP 7 TIME 1").unwrap(),
@@ -86,6 +94,22 @@ fn group_record_parser_owns_only_exact_untimed_group_commands() {
     );
     assert_eq!(
         super::adapter::group_record_command("DELETE PRESET 7").unwrap(),
+        None
+    );
+    for (command, operation) in [
+        ("FIXTURE 1 THRU 4 RECORD GROUP 21", Operation::Merge),
+        ("F4 + F2 REC + GROUP 21", Operation::Merge),
+        ("GROUP 1 RECORD - GROUP 21", Operation::Subtract),
+    ] {
+        assert_eq!(
+            super::adapter::group_record_command(command).unwrap(),
+            Some(("21".into(), operation))
+        );
+        assert_eq!(compatibility_only_family(command).unwrap(), None);
+    }
+    assert!(super::adapter::group_record_command("FIXTURE 1 AT 50 RECORD GROUP 21").is_err());
+    assert_eq!(
+        super::adapter::group_record_command("FIXTURE 1 RECORD GROUP 21 TIME 1").unwrap(),
         None
     );
 }

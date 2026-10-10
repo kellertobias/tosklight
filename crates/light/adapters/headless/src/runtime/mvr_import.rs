@@ -23,6 +23,7 @@ fn prepare_mvr_preview(
     let definitions = mvr_definitions(&state, &document)?;
     let mut occupied = Vec::new();
     let mut owners = HashMap::new();
+    let mut destination_revision = None;
     if let Some(id) = query.show_id
         && let Some(show) = state
             .installation
@@ -33,6 +34,7 @@ fn prepare_mvr_preview(
             .map_err(ApiError::store)?
             .portable_document()
             .map_err(ApiError::store)?;
+        destination_revision = Some((destination.revision(), destination.patch_revision()));
         owners = light_application::mvr_import::mvr_destination_fixture_ids(
             &destination,
             &light_application::mvr_export::tosklight_mvr_fixture_metadata(&document),
@@ -75,8 +77,23 @@ fn prepare_mvr_preview(
             }
         }
     }
+    let slots = profiles::mvr_profile_slots(state, &definitions, query.show_id)?;
+    let profile_conflicts =
+        light_application::mvr_import::mvr_profile_conflicts(&definitions, &slots, &HashMap::new())
+            .map_err(mvr_api_error)?
+            .into_iter()
+            .map(
+                |conflict| light_wire::v2::show_library::MvrProfileConflict {
+                    profile_id: conflict.profile_id,
+                    revision: conflict.revision,
+                    name: conflict.name,
+                    fixtures: conflict.fixtures,
+                },
+            )
+            .collect();
     let token = Uuid::new_v4();
     let preview = MvrImportPreview {
+        profile_conflicts,
         token,
         fixtures: document
             .fixtures
@@ -104,6 +121,9 @@ fn prepare_mvr_preview(
     state.active_show.stage_mvr_import(
         token,
         StagedMvrImport {
+            profile_slots: slots,
+            destination_id: query.show_id,
+            destination_revision,
             document,
             definitions,
             created: Instant::now(),

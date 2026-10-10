@@ -1,3 +1,9 @@
+import type { ReplacementProgramProjection } from "./types/replacementProjection";
+export type {
+	ReplacementProgramProjection,
+	ReplacementProfileContext,
+	ReplacementHeadTarget,
+} from "./types/replacementProjection";
 import type { PresetFamily } from "../presetFamilies";
 import type { GroupSpatialSelectionMapping } from "./generated/light-wire";
 import type { ShowEntry } from "./types/desk";
@@ -48,6 +54,9 @@ export type ExistingContentMode = "update_existing" | "add_new";
 /** Operator-facing subset mapped from the runtime diagnostics wire response. */
 export interface RuntimeDiagnostics {
 	outputRoutes: unknown;
+	outputDeliveryStatus?:
+		| readonly import("./generated/light-wire").RuntimeOutputDeliveryStatus[]
+		| null;
 }
 export type UpdateTargetFilter =
 	| "eligible_for_update_existing"
@@ -217,7 +226,7 @@ export interface HelpTopic {
 	live: boolean;
 }
 export interface FileRoot {
-    network?: boolean;
+	network?: boolean;
 	id: string;
 	label: string;
 	icon: string;
@@ -313,6 +322,12 @@ export interface TextDocument {
 }
 
 export interface MvrImportPreview {
+	profile_conflicts?: Array<{
+		profile_id: string;
+		revision: number;
+		name: string;
+		fixtures: string[];
+	}>;
 	token: string;
 	fixtures: Array<{
 		uuid: string;
@@ -342,8 +357,10 @@ export * from "./types/fixtures";
 export * from "./types/playback";
 
 /** The diagnostics view consumes the relevant slice of the generated output contract. */
-export type DmxSnapshot = Pick<import("./generated/light-wire").OutputDmxSnapshot,
-    "revision" | "universes" | "overrides">;
+export type DmxSnapshot = Pick<
+	import("./generated/light-wire").OutputDmxSnapshot,
+	"revision" | "universes" | "overrides"
+>;
 
 export interface VersionedObject<T = Record<string, unknown>> {
 	kind: string;
@@ -367,6 +384,10 @@ export interface StoredGroup {
 	source?: GroupFixtureSource;
 	mapping?: GroupSpatialSelectionMapping;
 	programming?: Record<string, unknown>;
+	replacement_projections?: Record<
+		string,
+		Record<string, ReplacementProgramProjection>
+	>;
 	derived_from?: {
 		source_group_id: string;
 		rule: { type: string; n?: number; offset?: number };
@@ -394,6 +415,17 @@ export type GroupFixtureSource =
 	| { type: "references"; references: GroupReference[] };
 
 export interface StoredPreset {
+	fixture_replacement_projections?: Record<
+		string,
+		Record<string, ReplacementProgramProjection>
+	>;
+	group_replacement_projections?: Record<
+		string,
+		Record<string, Record<string, ReplacementProgramProjection>>
+	>;
+	/** Legacy derived Aim source; semantic recording stores Position directly. */
+	aim_at_fixture_number?: number | null;
+	instance_id?: string | null;
 	name: string;
 	number: number;
 	values: Record<string, Record<string, unknown>>;

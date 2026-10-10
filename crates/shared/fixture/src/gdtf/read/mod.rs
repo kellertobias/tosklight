@@ -33,13 +33,20 @@ pub struct GdtfImport {
 /// Parse an archive without changing any library/show state. Callers retain the original source
 /// and present diagnostics before storing the returned profile.
 pub fn import_profile(bytes: &[u8]) -> Result<GdtfImport, ProfileError> {
-    let xml = archive_xml(bytes)?;
-    let mut imported = from_xml(&xml)?;
+    let mut imported = preview_profile(bytes)?;
     imported.profile.source_gdtf = Some(crate::ProfileGdtfSource::associate(
         &imported.profile,
         bytes,
     )?);
     Ok(imported)
+}
+
+/// Convert and validate every supported mode without constructing a retained-source association.
+/// Preview callers present diagnostics; storage callers associate the exact final mapped profile
+/// and archive atomically. Public import_profile retains its original source-preserving behavior.
+pub fn preview_profile(bytes: &[u8]) -> Result<GdtfImport, ProfileError> {
+    let xml = archive_xml(bytes)?;
+    from_xml(&xml)
 }
 
 /// Structural validation is independent of the subset the canonical importer understands.
@@ -100,7 +107,35 @@ pub(super) fn diagnostic(
     });
 }
 
+/// An explicit vendor alias, not an inferred color name.
+pub(crate) fn declares_amber_alias(bytes: &[u8]) -> bool {
+    let Ok(xml) = archive_xml(bytes) else {
+        return false;
+    };
+    let Ok(root) = xml::parse(&xml) else {
+        return false;
+    };
+    root.child("FixtureType")
+        .and_then(|f| f.child("AttributeDefinitions"))
+        .and_then(|d| d.child("Attributes"))
+        .is_some_and(|attributes| {
+            attributes.children_named("Attribute").any(|a| {
+                a.attr("Name") == Some("ColorAdd_RY")
+                    && a.attr("Pretty") == Some("Amber")
+                    && a.attr("PhysicalUnit") == Some("ColorComponent")
+            })
+        })
+}
+
+pub(crate) fn import_legacy_optical_profile(bytes: &[u8]) -> Result<FixtureProfile, ProfileError> {
+    Ok(from_xml_with_optical_scale(&archive_xml(bytes)?, 1.0)?.profile)
+}
+
 fn from_xml(xml: &str) -> Result<GdtfImport, ProfileError> {
+    from_xml_with_optical_scale(xml, 0.01)
+}
+
+fn from_xml_with_optical_scale(xml: &str, optical_scale: f64) -> Result<GdtfImport, ProfileError> {
     let root = xml::parse(xml)?;
     if root.name != "GDTF" || !matches!(root.attr("DataVersion"), Some("1.0" | "1.1" | "1.2")) {
         return Err(invalid("requires a GDTF 1.0, 1.1 or 1.2 document"));
@@ -139,7 +174,7 @@ fn from_xml(xml: &str) -> Result<GdtfImport, ProfileError> {
         root.attr("DataVersion").unwrap(),
         fixture_id
     );
-    let descriptions = optics::descriptions(fixture);
+    let descriptions = optics::descriptions(fixture, optical_scale);
     optics::beam_optics(&descriptions, &mut profile);
     let mut diagnostics = Vec::new();
     let modes = fixture

@@ -61,7 +61,8 @@ pub use model::{BuiltinModelId, ClearedModelSlotView, ModelSlotView, UpdateModel
 pub use network::{NetworkAddressesView, NetworkEditError, NetworkView, UpdateNetwork};
 pub use output::{
     AvailableMonitorView, EffectBankView, LayerView, MaskView, MasterView,
-    OutputConfigurationValuesView, OutputConfigurationView, OutputView, UpdateLayer, UpdateMaster,
+    OutputConfigurationValuesView, OutputConfigurationView, OutputView, SoundOutputDiscoveryState,
+    SoundOutputInventoryView, UpdateLayer, UpdateMaster,
 };
 pub use output_edit::{OutputConfigurationEditError, UpdateOutputConfiguration};
 pub use pixel_map::{

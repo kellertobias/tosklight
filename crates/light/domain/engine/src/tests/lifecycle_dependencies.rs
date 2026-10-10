@@ -29,6 +29,8 @@ fn setup() -> (Engine, Arc<ManualClock>, FixtureId, FixtureId) {
         automatic_restore: false,
     });
     cue_list.cues[0].group_changes.push(GroupCueChange {
+        replacement_projections: Default::default(),
+        preset_reference: None,
         group_id: "front".into(),
         attribute: AttributeKey::intensity(),
         value: Some(AttributeValue::Normalized(0.6)),
@@ -147,6 +149,7 @@ fn setup() -> (Engine, Arc<ManualClock>, FixtureId, FixtureId) {
             .into(),
             cue_lists: vec![cue_list].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "front".into(),
                 name: "Front".into(),
                 fixtures: vec![first_id],

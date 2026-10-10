@@ -44,7 +44,9 @@ fn addressed_playback(
     match identity {
         PlaybackRuntimeIdentity::Playback(number) => PlaybackIdentity::physical(*number).map(Some),
         PlaybackRuntimeIdentity::Virtual(address) => Ok(Some(PlaybackIdentity::Virtual(*address))),
-        PlaybackRuntimeIdentity::CueList(_) | PlaybackRuntimeIdentity::Group(_) => Ok(None),
+        PlaybackRuntimeIdentity::CueList(_)
+        | PlaybackRuntimeIdentity::DirectCueList(_)
+        | PlaybackRuntimeIdentity::Group(_) => Ok(None),
     }
 }
 
@@ -60,6 +62,9 @@ fn project_after(
         PlaybackTargetProjection::CueList { cue_list_id, .. } => {
             let status = match addressed_playback(&before.requested)? {
                 Some(identity) => playback.runtime_status_at(identity),
+                None if matches!(before.requested, PlaybackRuntimeIdentity::DirectCueList(_)) => {
+                    playback.runtime_status_for_direct_cue_list(*cue_list_id)
+                }
                 None => playback.runtime_status_for_cue_list(*cue_list_id),
             };
             return Ok(cue_list_projection(
@@ -104,7 +109,9 @@ fn project_after(
                     .playback_number
                     .map(PlaybackIdentity::physical)
                     .transpose()?,
-                PlaybackRuntimeIdentity::Virtual(_) | PlaybackRuntimeIdentity::CueList(_) => None,
+                PlaybackRuntimeIdentity::Virtual(_)
+                | PlaybackRuntimeIdentity::CueList(_)
+                | PlaybackRuntimeIdentity::DirectCueList(_) => None,
             };
             let control = identity
                 .map(|identity| playback.control_state_at(identity))

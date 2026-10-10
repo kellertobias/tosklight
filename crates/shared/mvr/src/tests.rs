@@ -249,3 +249,74 @@ fn case_colliding_members_cannot_shadow_gdtf_source() {
             .contains("duplicate archive member")
     );
 }
+
+fn xml_archive(member: &str, xml: &str) -> Vec<u8> {
+    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+    zip.start_file(member, SimpleFileOptions::default())
+        .unwrap();
+    zip.write_all(xml.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+#[test]
+fn attribute_entities_round_trip_literal_layer_and_fixture_names() {
+    let mut fixture = spot(Some("stage"));
+    fixture.name = "Spot \"A\" & 'B' <Main>".into();
+    let doc = MvrDocument {
+        fixtures: vec![fixture],
+        layers: vec![layer("stage", "Stage & Venue \"Main\" 'A'")],
+        ..Default::default()
+    };
+    let once = read(&write(&doc).unwrap()).unwrap();
+    let twice = read(&write(&once).unwrap()).unwrap();
+    for imported in [&once, &twice] {
+        assert_eq!(imported.layers[0].name, doc.layers[0].name);
+        assert_eq!(imported.fixtures[0].name, doc.fixtures[0].name);
+    }
+}
+
+#[test]
+fn attribute_numeric_entities_decode_unicode_and_ampersand_once() {
+    let fixture_id = Uuid::new_v4();
+    let geometry_id = Uuid::new_v4();
+    let xml = format!(
+        r#"<GeneralSceneDescription><Scene><Layers><Layer uuid="stage" name="Stage &#38; &#x56;enue &#x1F4A1;"><ChildList><Fixture uuid="{fixture_id}" name="Spot &#34;A&#34; &amp;amp;" class="Rig &#x26; show"></Fixture><Geometry3D uuid="{geometry_id}" name="Mask &#39;A&#39;" fileName="mask&#38;logo.glb"></Geometry3D></ChildList></Layer></Layers></Scene></GeneralSceneDescription>"#
+    );
+    let doc = read(&xml_archive("GeneralSceneDescription.xml", &xml)).unwrap();
+    assert_eq!(doc.layers[0].name, "Stage & Venue 💡");
+    assert_eq!(doc.fixtures[0].name, "Spot \"A\" &amp;");
+    assert_eq!(doc.fixtures[0].class.as_deref(), Some("Rig & show"));
+    assert_eq!(doc.geometry[0].name, "Mask 'A'");
+    assert_eq!(doc.geometry[0].file_name, "mask&logo.glb");
+}
+
+#[test]
+fn malformed_attribute_entities_and_syntax_are_actionable_errors() {
+    for attributes in [
+        r#"name="Stage &missing;""#,
+        r#"name="Stage &#xZZ;""#,
+        r#"name="Stage &amp""#,
+        r#"name="Stage" name="Other""#,
+        r#"name="Stage" broken"#,
+    ] {
+        let xml = format!(
+            "<GeneralSceneDescription><Scene><Layers><Layer uuid=\"stage\" {attributes}></Layer></Layers></Scene></GeneralSceneDescription>"
+        );
+        let error = read(&xml_archive("GeneralSceneDescription.xml", &xml)).unwrap_err();
+        assert!(
+            error.to_string().contains("XML attribute"),
+            "{attributes}: {error}"
+        );
+    }
+}
+
+#[test]
+fn gdtf_uses_the_same_attribute_entity_decoder() {
+    let xml = r#"<GDTF><FixtureType Manufacturer="Acme &amp; Company" Name="Lamp &#34;A&#34;"><DMXModes><DMXMode Name="Mode &#x31;"><DMXChannels><DMXChannel Name="Pan &amp; Tilt" Offset="&#49;,&#51;"/></DMXChannels></DMXMode></DMXModes></FixtureType></GDTF>"#;
+    let modes = read_gdtf(&xml_archive("description.xml", xml)).unwrap();
+    assert_eq!(modes[0].manufacturer, "Acme & Company");
+    assert_eq!(modes[0].model, "Lamp \"A\"");
+    assert_eq!(modes[0].name, "Mode 1");
+    assert_eq!(modes[0].channels[0].attribute, "Pan & Tilt");
+    assert_eq!(modes[0].channels[0].offsets, vec![0, 2]);
+}

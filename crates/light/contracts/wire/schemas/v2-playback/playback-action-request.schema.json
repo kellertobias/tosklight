@@ -93,6 +93,33 @@
         {
           "type": "object",
           "properties": {
+            "controller_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "dynamic_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "instance_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "const": "runtime_stop_dynamic"
+            }
+          },
+          "required": [
+            "type",
+            "dynamic_id",
+            "instance_id",
+            "controller_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "pressed": {
               "type": "boolean"
             },

@@ -47,6 +47,9 @@ pub(super) fn prepare_deletion(
 
 fn validate_request(request: &ResolvedCueDeletionRequest) -> Result<(), ActionError> {
     match request.address {
+        CueListAddress::CuelistPool { number } if !(1..=1000).contains(&number) => {
+            Err(invalid("Cuelist number must be within 1-1000"))
+        }
         CueListAddress::Pool { playback_number }
             if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
         {

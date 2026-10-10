@@ -1,3 +1,4 @@
+import {geometryErrors} from "./geometryValidation";
 import {positionPhysicalErrors} from "./positionPhysical";
 import type {
 	FixtureChannel,
@@ -227,7 +228,7 @@ function validateHueSaturationSystems(mode: FixtureMode, errors: string[]) {
 }
 
 export function validateProfile(profile: FixtureProfile) {
-	const errors: string[] = positionPhysicalErrors(profile);
+	const errors: string[] = [...positionPhysicalErrors(profile), ...geometryErrors(profile)];
 	if (!profile.manufacturer.trim()) errors.push("Manufacturer is required");
 	if (!profile.name.trim()) errors.push("Fixture name is required");
 	if (!profile.modes.length) errors.push("At least one mode is required");

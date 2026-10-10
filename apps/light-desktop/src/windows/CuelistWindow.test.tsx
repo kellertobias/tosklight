@@ -17,6 +17,11 @@ import type {
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
+import {
+	publishObjectEditorRequest,
+	currentObjectEditorRequest,
+	resetObjectEditorRequestsForTests,
+} from "../features/controlSurfaceInteraction/objectEditorRequest";
 
 const render = (ui: Parameters<typeof rtlRender>[0]) =>
 	rtlRender(ui, { wrapper: ModalProvider });
@@ -36,6 +41,8 @@ const mocks = vi.hoisted(() => ({
 		presetFamily: "Mixed" as const,
 		storeArmed: true,
 		cueListSetArmed: false,
+		cuelistBuiltInView: "pool" as "pool" | "cues",
+		cuelistBuiltInNumber: null as number | null,
 		cueListSetTarget: null as number | null,
 		desks: [
 			{
@@ -92,9 +99,10 @@ vi.mock("../features/playbackTopology/PlaybackTopologyProvider", () => ({
 vi.mock(
 	"../features/playbackRuntime/PlaybackRuntimeView",
 	async (importOriginal) => {
-		const actual = await importOriginal<
-			typeof import("../features/playbackRuntime/PlaybackRuntimeView")
-		>();
+		const actual =
+			await importOriginal<
+				typeof import("../features/playbackRuntime/PlaybackRuntimeView")
+			>();
 		return {
 			...actual,
 			useCueListRuntime: (
@@ -104,7 +112,8 @@ vi.mock(
 				mocks.playbacks.active.find(
 					(entry) =>
 						entry.cue_list_id === cueListId &&
-						(playbackNumber == null || entry.playback_number === playbackNumber),
+						(playbackNumber == null ||
+							entry.playback_number === playbackNumber),
 				),
 		};
 	},
@@ -113,6 +122,7 @@ vi.mock("../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
 }));
 vi.mock("../features/showObjects/ShowObjectsState", () => ({
+	usePresets: () => [],
 	usePortableGroups: () => [],
 	useShowObjectCollectionsReady: () => true,
 	useShowObjectsStore: () => mocks.showObjectsStore,
@@ -161,6 +171,9 @@ vi.mock("./stage3dScene", () => ({
 }));
 
 function resetCuelistWindowMocks() {
+	resetObjectEditorRequestsForTests();
+	mocks.state.cuelistBuiltInView = "pool";
+	mocks.state.cuelistBuiltInNumber = null;
 	cleanup();
 	mocks.dispatch.mockReset();
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
@@ -288,9 +301,7 @@ describe("CuelistWindow Cue settings", () => {
 						fade_millis: 1000,
 						delay_millis: 0,
 						trigger: { type: "manual" },
-						actions: [
-							{ type: "jump", cue_id: "cue-opening", count: 2 },
-						],
+						actions: [{ type: "jump", cue_id: "cue-opening", count: 2 }],
 						changes: [],
 					},
 				],
@@ -476,10 +487,9 @@ describe("CuelistWindow pane selection", () => {
 		const modal = screen.getByRole("dialog", {
 			name: "Cue 1 preview image",
 		});
-		expect(within(modal).getByRole("img", { name: "Cue 1 preview" })).toHaveAttribute(
-			"src",
-			"data:image/png;base64,preview",
-		);
+		expect(
+			within(modal).getByRole("img", { name: "Cue 1 preview" }),
+		).toHaveAttribute("src", "data:image/png;base64,preview");
 		fireEvent.click(
 			within(modal).getByRole("button", { name: "Close Cue preview" }),
 		);
@@ -510,11 +520,7 @@ describe("CuelistWindow pane selection", () => {
 			},
 		];
 		const view = render(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueInformationBlock="current"
-			/>,
+			<CuelistWindow compact cueListTab="cues" cueInformationBlock="current" />,
 		);
 		expect(
 			within(view.container).getByRole("region", {
@@ -523,11 +529,7 @@ describe("CuelistWindow pane selection", () => {
 		).toHaveTextContent("House opens");
 
 		view.rerender(
-			<CuelistWindow
-				compact
-				cueListTab="cues"
-				cueInformationBlock="next"
-			/>,
+			<CuelistWindow compact cueListTab="cues" cueInformationBlock="next" />,
 		);
 		expect(
 			within(view.container).getByRole("region", {
@@ -986,7 +988,9 @@ describe("CuelistWindow Cue property transactions", () => {
 		fireEvent.click(ui.getByRole("button", { name: "Cue Name" }));
 		appendDirectKeyboardValue(" Reprise");
 		fireEvent.keyDown(window, { key: "Enter" });
-		await waitFor(() => expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(mocks.saveTopologyCueList).toHaveBeenCalledOnce(),
+		);
 		expect(mocks.saveTopologyCueList).toHaveBeenLastCalledWith(
 			cueList.id,
 			3,
@@ -1142,6 +1146,24 @@ describe("CuelistWindow pool recording", () => {
 				presentation_icon: "★",
 			},
 		];
+		mocks.playbacks.cue_lists = [
+			{
+				id: "main",
+				name: "No icon",
+				priority: 0,
+				mode: "sequence",
+				looped: false,
+				cues: [],
+			},
+			{
+				id: "encore",
+				name: "Explicit icon",
+				priority: 0,
+				mode: "sequence",
+				looped: false,
+				cues: [],
+			},
+		];
 		const authority = createCommandLineTestAuthority();
 		const { container } = render(
 			authority.wrap(<CuelistWindow compact cueListTab="pool" />),
@@ -1150,6 +1172,41 @@ describe("CuelistWindow pool recording", () => {
 		const cards = container.querySelectorAll(".cuelist-card");
 		expect(cards[0].querySelector(".pool-card-icon")).toBeNull();
 		expect(cards[1].querySelector(".pool-card-icon")).toHaveTextContent("★");
+	});
+
+	it("records independent Cuelist101 while preserving physical SpeedGroup101", async () => {
+		mocks.playbacks.pool = [
+			{
+				number: 101,
+				name: "Speed A",
+				target: { type: "speed_group", group: "A" },
+				buttons: ["go", "go_minus", "flash"],
+				fader: "master",
+				go_activates: true,
+				auto_off: true,
+				xfade_millis: 0,
+			},
+		];
+		const before = JSON.stringify(mocks.playbacks.pool);
+		const authority = createCommandLineTestAuthority({ text: "RECORD" });
+		const { container } = render(
+			authority.wrap(<CuelistWindow compact cueListTab="pool" />),
+		);
+		await act(authority.settle);
+		const reserved = container.querySelector<HTMLButtonElement>(
+			'[data-pool-slot-id="101"]',
+		)!;
+		expect(reserved).toHaveTextContent("Empty");
+		expect(reserved).toHaveClass("empty", "store-target");
+		fireEvent.click(reserved);
+		await waitFor(() =>
+			expect(mocks.recordCue).toHaveBeenCalledWith(
+				expect.objectContaining({
+					target: { kind: "cuelist_pool", number: 101 },
+				}),
+			),
+		);
+		expect(JSON.stringify(mocks.playbacks.pool)).toBe(before);
 	});
 
 	it("renders empty numbered slots and records into the touched slot", async () => {
@@ -1167,7 +1224,7 @@ describe("CuelistWindow pool recording", () => {
 		);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "pool", playbackNumber: 1 },
+				target: { kind: "cuelist_pool", number: 1 },
 				operation: "overwrite",
 				timing: {},
 				cueOnly: false,
@@ -1206,6 +1263,16 @@ describe("CuelistWindow pool recording", () => {
 				go_activates: true,
 				auto_off: true,
 				xfade_millis: 0,
+			},
+		];
+		mocks.playbacks.cue_lists = [
+			{
+				id: "main",
+				name: "Main sequence",
+				priority: 0,
+				mode: "sequence",
+				looped: false,
+				cues: [],
 			},
 		];
 		const { container } = render(<CuelistWindow compact cueListTab="pool" />);
@@ -1350,5 +1417,42 @@ describe("CuelistWindow pool recording", () => {
 			container.querySelector(".ui-window-info small"),
 		);
 		expect(container.querySelector(".pool-message")).toBeNull();
+	});
+});
+
+describe("command requested Cuelist editor", () => {
+	beforeEach(resetCuelistWindowMocks);
+	it("opens the exact unassigned Cuelist detail after objects load and preserves programmer state", async () => {
+		mocks.state.storeArmed = false;
+		mocks.dispatch.mockImplementation((action) => {
+			if (action.type === "OPEN_BUILTIN_CUELIST") {
+				mocks.state.cuelistBuiltInView = "cues";
+				mocks.state.cuelistBuiltInNumber = action.number;
+			}
+		});
+		const request = { kind: "cuelist" as const, objectId: "independent-15" };
+		publishObjectEditorRequest(request);
+		const view = render(<CuelistWindow builtIn />);
+		expect(currentObjectEditorRequest()).toBe(request);
+		expect(mocks.dispatch).not.toHaveBeenCalled();
+		const list = {
+			...editableCueList(),
+			id: request.objectId,
+			pool_number: 15,
+			name: "Independent fifteen",
+		};
+		mocks.playbacks.cue_lists = [list];
+		view.rerender(<CuelistWindow builtIn />);
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN_CUELIST",
+			number: 15,
+		});
+		expect(currentObjectEditorRequest()).toBeNull();
+		view.rerender(<CuelistWindow builtIn />);
+		expect(screen.getByText("Opening")).toBeTruthy();
+		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
+		expect(mocks.recordCue).not.toHaveBeenCalled();
+		expect(mocks.saveTopologyCueList).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog")).toBeNull();
 	});
 });

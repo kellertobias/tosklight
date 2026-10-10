@@ -1,3 +1,4 @@
+import { formatErrorDetails } from "@tosklight/ui";
 import {
 	type Dispatch,
 	type SetStateAction,
@@ -53,6 +54,8 @@ function useQuickSetupKeyboard(options: QuickSetupKeyboardOptions) {
 		const handle = (event: KeyboardEvent) => {
 			if (document.querySelector(".ui-input-modal-layer")) return;
 			const current = optionsRef.current;
+			if (event.key === "Escape" && document.querySelector(".mvr-modal, .load-show-modal"))
+				return; // Registered loading dialogs own their phase-aware close and cancellation.
 			if (event.key === "Escape") {
 				event.preventDefault();
 				event.stopImmediatePropagation();
@@ -136,27 +139,58 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 }
 
 /** State and workflow for the MVR import flows, kept outside QuickSetupModal for size. */
-function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>) {
+export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>) {
 	const [mvrMode, setMvrMode] = useState<"new" | "merge" | null>(
 		null,
 	);
 	const [mvrTarget, setMvrTarget] = useState<ShowEntry | null>(null);
 	const [mvrPreview, setMvrPreview] = useState<MvrImportPreview | null>(null);
 	const [mvrName, setMvrName] = useState("");
+    const [copyConflictingProfiles,setCopyConsentState] = useState(false);
+    const copyConsent = useRef(false);
+    function setCopyConflictingProfiles(value:boolean) {copyConsent.current=value;setCopyConsentState(value);}
 	const [mvrBusy, setMvrBusy] = useState(false);
+    const [mvrOperation,setMvrOperation] = useState<"inspect"|"apply"|null>(null);
+    const [mvrStartedAt,setMvrStartedAt] = useState<number|null>(null);
+    const [mvrInspectionFile,setMvrInspectionFile] = useState<{name:string;size:number}|null>(null);
+    const [mvrError,setMvrError] = useState("");
+    const inspectionGeneration = useRef(0);
+    const inspectionAbort = useRef<AbortController|null>(null);
+    const applying = useRef(false);
+    const acceptedPreview = useRef<MvrImportPreview|null>(null);
+    useEffect(()=>()=>{inspectionGeneration.current+=1;inspectionAbort.current?.abort();acceptedPreview.current=null;},[]);
+    function changeMvrMode(mode:"new"|"merge"|null) {
+        if(applying.current) return;
+        if(mode===null) {
+            inspectionGeneration.current+=1;inspectionAbort.current?.abort();inspectionAbort.current=null;acceptedPreview.current=null;
+            setMvrPreview(null);setMvrBusy(false);setMvrOperation(null);setMvrError("");
+        }
+        setMvrMode(mode);
+    }
+
 	const mvrFilePickerTrigger = useRef<(() => void) | null>(null);
 	const [mvrFilePickerRequested, setMvrFilePickerRequested] = useState(false);
 	const [mvrResolutions, setMvrResolutions] = useState<
 		Record<string, { action: string; universe?: number; address?: number }>
 	>({});
 	async function inspectMvr(file: File) {
-		setMvrBusy(true);
-		try {
-			const preview = await lifecycle?.previewMvr(
+        if(applying.current) return;
+        inspectionAbort.current?.abort();
+        const generation=++inspectionGeneration.current;
+        acceptedPreview.current=null;
+        const abort=new AbortController();inspectionAbort.current=abort;
+        setMvrBusy(true);setMvrOperation("inspect");setMvrStartedAt(Date.now());
+        setCopyConflictingProfiles(false);
+        setMvrInspectionFile({name:file.name,size:file.size});setMvrError("");setMvrPreview(null);
+        try {
+            if(!lifecycle) throw new Error("The desk connection is unavailable. Reconnect and choose the MVR again.");
+            const preview = await lifecycle.previewMvr(
 				file,
 				mvrMode === "merge" ? mvrTarget?.id : undefined,
-			);
-			if (!preview) return;
+                abort.signal,
+            );
+            if (abort.signal.aborted || inspectionGeneration.current!==generation) return;
+			acceptedPreview.current=preview;
 			setMvrPreview(preview);
 			setMvrName(file.name.replace(/\.mvr$/i, ""));
 			const conflicted = new Set(
@@ -177,44 +211,62 @@ function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>) {
 					]),
 				),
 			);
-		} finally {
-			setMvrBusy(false);
-		}
-	}
+        } catch(reason) {
+            if(!abort.signal.aborted && inspectionGeneration.current===generation) setMvrError(`${formatErrorDetails(reason)} Choose the MVR file again to retry.`);
+        } finally {
+            if(inspectionGeneration.current===generation) {
+                inspectionAbort.current=null;setMvrBusy(false);setMvrOperation(null);
+            }
+        }
+    }
+
 	async function applyMvr() {
-		if (!mvrPreview) return;
-		setMvrBusy(true);
+        if (!mvrPreview || acceptedPreview.current!==mvrPreview || applying.current || inspectionAbort.current) return;
+        if ((mvrPreview.profile_conflicts?.length ?? 0)>0 && !copyConsent.current) return;
+        applying.current=true;setMvrOperation("apply");setMvrStartedAt(Date.now());setMvrError("");
+        setMvrBusy(true);
 		try {
-			await lifecycle?.applyMvr(
+			if(!lifecycle) throw new Error("The desk connection is unavailable. Reconnect before applying the MVR.");
+			await lifecycle.applyMvr(
 				mvrPreview.token,
 				mvrMode === "new"
 					? {
 							new_show: { name: mvrName.trim(), open_after_import: true },
 							resolutions: mvrResolutions,
+                            copy_conflicting_profiles: copyConsent.current,
 						}
-					: { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions },
+					: { existing_show_id: mvrTarget!.id, resolutions: mvrResolutions, copy_conflicting_profiles: copyConsent.current },
 			);
+			acceptedPreview.current=null;
 			setMvrMode(null);
 			setMvrPreview(null);
-		} finally {
+        } catch(reason) {
+            setMvrError(`${formatErrorDetails(reason)} Review the preview and retry applying.`);
+        } finally {
+            applying.current=false;setMvrOperation(null);
 			setMvrBusy(false);
 		}
 	}
 	function openMvrImport(closeSource: () => void) {
-		closeSource();
-		setMvrMode("new");
+        if(applying.current) return;
+        inspectionGeneration.current+=1;inspectionAbort.current?.abort();inspectionAbort.current=null;acceptedPreview.current=null;
+        setMvrBusy(false);setMvrOperation(null);setMvrError("");
+        closeSource();
+        setMvrMode("new");
 		setMvrTarget(null);
 		setMvrPreview(null);
 		setMvrFilePickerRequested(true);
 	}
 	return {
 		mvrMode,
-		setMvrMode,
-		mvrTarget,
+        setMvrMode:changeMvrMode,
+        mvrOperation,mvrStartedAt,mvrInspectionFile,mvrError,
+        mvrTarget,
 		setMvrTarget,
 		mvrPreview,
 		setMvrPreview,
 		mvrName,
+        copyConflictingProfiles,setCopyConflictingProfiles,
 		setMvrName,
 		mvrBusy,
 		mvrFilePickerTrigger,

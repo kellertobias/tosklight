@@ -1,6 +1,60 @@
 use super::*;
 
 impl ProgrammingResource {
+    pub(in crate::runtime) fn validate_replacement_migration_with_history(
+        &self,
+        programmer: light_core::ProgrammerId,
+        live: &[(u64, light_core::ReplacementProjectionMap)],
+        undo: &[Vec<(u64, light_core::ReplacementProjectionMap)>],
+        redo: &[Vec<(u64, light_core::ReplacementProjectionMap)>],
+    ) -> Result<(), String> {
+        self.programmers
+            .validate_replacement_migration_with_history(programmer, live, undo, redo)
+    }
+    pub(in crate::runtime) fn apply_replacement_migration_with_history(
+        &self,
+        programmer: light_core::ProgrammerId,
+        live: &[(u64, light_core::ReplacementProjectionMap)],
+        undo: &[Vec<(u64, light_core::ReplacementProjectionMap)>],
+        redo: &[Vec<(u64, light_core::ReplacementProjectionMap)>],
+    ) -> Result<bool, String> {
+        self.programmers
+            .apply_replacement_migration_with_history(programmer, live, undo, redo)
+    }
+
+    pub(in crate::runtime) fn publish_replacement_migration_values(
+        &self,
+        context: &light_application::ActionContext,
+        before: &light_programmer::ProgrammerState,
+    ) -> Option<u64> {
+        self.service
+            .publish_replacement_migration_values(context, before)
+    }
+
+    pub(in crate::runtime) fn apply_replacement_migration(
+        &self,
+        programmer: light_core::ProgrammerId,
+        origins: &[(u64, light_core::ReplacementProjectionMap)],
+    ) -> bool {
+        self.programmers
+            .apply_replacement_migration(programmer, origins)
+    }
+
+    pub(in crate::runtime) fn attach_preset_provenance(
+        &self,
+        session: SessionId,
+        origins: &[(
+            light_core::PresetValueOwner,
+            light_core::AttributeKey,
+            light_core::PresetValueReference,
+        )],
+        preload: bool,
+        checkpoint: bool,
+    ) -> bool {
+        self.programmers
+            .attach_preset_provenance(session, origins, preload, checkpoint)
+    }
+
     /// Enter after activation and before the ActiveShowService operation mutex. Existing
     /// commands reuse the reentrant Programmer gate. Desk ownership remains with interaction
     /// and selection callbacks, which must not be nested under another non-reentrant desk gate.

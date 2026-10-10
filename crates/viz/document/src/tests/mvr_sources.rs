@@ -273,11 +273,14 @@ fn mvr_native_identity_collision_is_rejected_atomically() {
         .profile()
         .clone();
     body["notes"] = serde_json::json!("Same immutable key, different meaning");
-    target.document.retain_fixture_profile(body).unwrap();
+    target
+        .document
+        .retain_fixture_profile(body.clone())
+        .unwrap();
     let revision = target.document.patch_revision().unwrap();
     let error = target
         .document
-        .import_mvr(archive, HashMap::new())
+        .import_mvr(archive.clone(), HashMap::new())
         .err()
         .unwrap();
     assert!(error.to_string().contains("immutable profile"), "{error}");
@@ -289,5 +292,46 @@ fn mvr_native_identity_collision_is_rejected_atomically() {
             .unwrap()
             .fixtures
             .is_empty()
+    );
+    let prepared = target.document.prepare_mvr_import(archive).unwrap();
+    assert_eq!(prepared.preview.profile_conflicts.len(), 1);
+    assert_eq!(prepared.preview.profile_conflicts[0].fixtures.len(), 1);
+    let result = target
+        .document
+        .import_prepared_mvr_with_identity_copies(prepared.clone(), HashMap::new(), true)
+        .unwrap();
+    assert_eq!(result.imported_fixtures, 1);
+    let snapshot = target.document.patch_snapshot().unwrap();
+    assert_eq!(snapshot.fixtures.len(), 1);
+    let copied_id = snapshot.fixtures[0].profile.profile_id;
+    assert_ne!(copied_id, source.profile.profile_id);
+    assert_eq!(snapshot.fixtures[0].profile.mode_id, source.profile.mode_id);
+    let stored = ShowStore::open(&target.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(
+        stored
+            .fixture_profile_revision(source.profile.profile_id, source.profile.profile_revision)
+            .unwrap()
+            .profile(),
+        &body
+    );
+    assert!(
+        stored
+            .fixture_profile_revision(copied_id, snapshot.fixtures[0].profile.profile_revision)
+            .is_some()
+    );
+    let revision_after = target.document.patch_revision().unwrap();
+    assert!(
+        target
+            .document
+            .import_prepared_mvr_with_identity_copies(prepared, HashMap::new(), true)
+            .is_err()
+    );
+    assert_eq!(
+        target.document.patch_revision().unwrap(),
+        revision_after,
+        "stale copy consent cannot apply again"
     );
 }

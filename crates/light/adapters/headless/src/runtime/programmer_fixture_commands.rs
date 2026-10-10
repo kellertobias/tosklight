@@ -215,7 +215,10 @@ pub(super) fn execute_fixture_programmer_command(
         } else {
             set_command_fixture_values(state, session, assignments, timing);
         }
-    } else if value.len() == 3 && value[1] == "." {
+    } else if (value.len() == 3 && value[1] == ".")
+        || (value.len() == 3 && value[1] == "PRESET")
+        || (value.len() == 2 && command_preset_address(value).is_ok())
+    {
         // Validate the explicit preset before selection changes, even for an empty target list.
         let address = command_preset_address(value)?;
         let preset = load_command_preset(state, address)?;
@@ -251,12 +254,7 @@ pub(super) fn execute_fixture_programmer_command(
         state
             .programming
             .select_expression(session.id, fixtures.clone(), expression);
-        apply_command_preset(
-            state,
-            session,
-            &format!("{}.{}", value[0], value[2]),
-            &fixtures,
-        )?;
+        apply_command_preset(state, session, &address.storage_key(), &fixtures)?;
     } else if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
         if fixtures.is_empty() {

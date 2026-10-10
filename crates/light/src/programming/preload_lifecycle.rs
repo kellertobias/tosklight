@@ -24,6 +24,23 @@ pub enum ProgrammingPreloadLifecycleAction {
         expected_playback_event_sequence: ProgrammingPreloadRevisionExpectation,
     },
     ClearPending,
+    RemovePendingPlayback {
+        index: usize,
+    },
+    RemovePendingDynamic {
+        index: usize,
+    },
+    RemovePendingGroupRelease {
+        index: usize,
+    },
+    RemovePendingFixtureValue {
+        fixture_id: light_core::FixtureId,
+        attribute: light_core::AttributeKey,
+    },
+    RemovePendingGroupValue {
+        group_id: String,
+        attribute: light_core::AttributeKey,
+    },
     Release,
 }
 

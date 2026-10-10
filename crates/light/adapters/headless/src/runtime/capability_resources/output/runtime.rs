@@ -360,29 +360,42 @@ impl OutputResource {
         frames: &HashMap<light_core::Universe, light_output::DmxFrame>,
         patched_slots: &HashMap<light_core::Universe, u16>,
     ) -> Result<u64, std::io::Error> {
+        if self.control.delivery_policy
+            == crate::runtime::output_scheduler::PhysicalDeliveryPolicy::VisualizerPreview
+        {
+            return Ok(0);
+        }
         let output = self
             .network
             .as_ref()
             .ok_or_else(|| std::io::Error::other("network output is unavailable"))?;
-        let network = output
-            .send_routes(
+        self.control
+            .delivery_policy
+            .send(
+                output,
+                &self.usb,
                 routes,
                 frames,
                 patched_slots,
                 &mut *self.sequences.lock().await,
             )
-            .await;
-        let usb = self.usb.enqueue_routes(routes, frames);
-        crate::runtime::output_scheduler::combined_delivery_result(network, usb)
+            .await
     }
 
     pub(in crate::runtime) async fn terminate_routes(&self, routes: &[light_output::OutputRoute]) {
-        if let Some(output) = &self.network {
-            let _ = output
-                .terminate_routes(routes, &mut *self.sequences.lock().await)
-                .await;
+        if self.control.delivery_policy
+            == crate::runtime::output_scheduler::PhysicalDeliveryPolicy::VisualizerPreview
+        {
+            return;
         }
-        self.usb.terminate_routes(routes);
+        if let Some(output) = &self.network {
+            self.control
+                .delivery_policy
+                .terminate(output, &self.usb, routes, &mut *self.sequences.lock().await)
+                .await;
+        } else {
+            self.usb.terminate_routes(routes);
+        }
     }
 
     pub(in crate::runtime) fn reset_speed_groups(

@@ -619,6 +619,32 @@ describe("Media server Patch authority", () => {
 		expect(mocks.patchFixtures).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		false,
+		true,
+	])("shows configuration failure without inventing a patch address (other output: %s)", async (hasReadableOutput) => {
+		const unavailable = discoveredServer();
+		unavailable.servers[0].error =
+			"Main (output-id) configuration unavailable: request timed out. Refresh discovery to retry.";
+		if (!hasReadableOutput) unavailable.servers[0].outputs = [];
+		mocks.discoverMediaServers.mockResolvedValue(unavailable);
+		render(<MediaServerSetup />);
+		expect(await screen.findByRole("alert")).toHaveTextContent(
+			"Main (output-id) configuration unavailable",
+		);
+		expect(screen.queryByText("Needs update")).not.toBeInTheDocument();
+		expect(screen.queryByText("0.0")).not.toBeInTheDocument();
+		if (!hasReadableOutput) {
+			expect(
+				screen.queryByRole("button", { name: "Patch suggested" }),
+			).not.toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: "Patch address" }),
+			).not.toBeInTheDocument();
+		}
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+	});
+
 	it("explains an unreachable Media Server", async () => {
 		const unavailable = discoveredServer();
 		unavailable.servers[0].outputs = [];

@@ -13,6 +13,10 @@ import {
 	usePlaybackRuntimeActions,
 	usePlaybackRuntimeStatus,
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
+import {
+	playbackTargetMatches,
+	usePlaybackTopologyRuntimeReconciliation,
+} from "../../../features/playbackRuntime/topologyReconciliation";
 import { usePlaybackTopologyActions } from "../../../features/playbackTopology/PlaybackTopologyProvider";
 import { usePlaybackTopologyView } from "../../../features/playbackTopology/PlaybackTopologyView";
 import {
@@ -274,13 +278,23 @@ function useVisiblePlaybackProjections(
 			!playback ||
 			projectionMatches(playback, projections.get(playback.number)),
 	);
+	const targetKey = JSON.stringify(
+		slots.flatMap(({ playback }) =>
+			playback ? [[playback.number, playback.target]] : [],
+		),
+	);
+	const reconciling = usePlaybackTopologyRuntimeReconciliation(
+		targetKey,
+		loaded,
+		matches,
+	);
 	const error =
-		loaded && !matches
+		loaded && !matches && !reconciling
 			? new Error(
 					"Playback runtime authority does not match the visible topology",
 				)
 			: null;
-	return { projections, loaded, matches, error };
+	return { projections, loaded: loaded && !reconciling, matches, error };
 }
 
 function projectionMatches(
@@ -289,24 +303,5 @@ function projectionMatches(
 ) {
 	if (!projection || projection.playback_number !== playback.number)
 		return false;
-	const target = playback.target;
-	if (target.type === "cue_list")
-		return (
-			projection.target === "cue_list" &&
-			projection.cue_list_id === target.cue_list_id
-		);
-	if (target.type === "group")
-		return (
-			projection.target === "group" && projection.group_id === target.group_id
-		);
-	if (target.type === "speed_group")
-		return (
-			projection.target === "speed_group" && projection.group === target.group
-		);
-	if (target.type === "dynamic")
-		return (
-			projection.target === "dynamic" &&
-			projection.dynamic_id === target.assignment.dynamic_id
-		);
-	return projection.target === target.type;
+	return playbackTargetMatches(playback.target, projection);
 }

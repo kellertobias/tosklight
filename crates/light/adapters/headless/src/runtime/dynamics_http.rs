@@ -313,6 +313,7 @@ fn runtime_controller_projections(
             );
             DynamicRuntimeControllerProjection {
                 controller_id: controller.id,
+                stop_owner: runtime_stop_owner(&controller.source),
                 programmer_id: match controller.source {
                     light_dynamics::DynamicControllerSource::Programmer {
                         programmer_id, ..
@@ -337,6 +338,33 @@ fn runtime_controller_projections(
             }
         })
         .collect()
+}
+
+pub(super) fn runtime_stop_owner(
+    source: &light_dynamics::DynamicControllerSource,
+) -> Option<light_wire::v2::dynamics::DynamicRuntimeStopOwner> {
+    use light_dynamics::DynamicControllerSource;
+    use light_wire::v2::dynamics::DynamicRuntimeStopOwner;
+    match source {
+        DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: Some(page),
+        } if light_playback::VirtualPlaybackAddress::new(*page, *playback_number).is_ok() => {
+            Some(DynamicRuntimeStopOwner::VirtualPlayback {
+                page: *page,
+                playback_number: *playback_number,
+            })
+        }
+        DynamicControllerSource::Playback {
+            playback_number,
+            virtual_page: None,
+        } if light_playback::PhysicalPlaybackNumber::new(*playback_number).is_ok() => {
+            Some(DynamicRuntimeStopOwner::PhysicalPlayback {
+                playback_number: *playback_number,
+            })
+        }
+        _ => None,
+    }
 }
 
 fn dynamic_definition_status(

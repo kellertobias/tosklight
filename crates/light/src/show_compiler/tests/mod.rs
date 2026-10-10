@@ -5,3 +5,7 @@ mod object_migrations;
 mod patch_migrations;
 mod stage_positions;
 mod support;
+
+mod derived_aim;
+
+mod replacement_projection;

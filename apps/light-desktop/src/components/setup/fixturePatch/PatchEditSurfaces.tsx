@@ -1,20 +1,16 @@
-import { ErrorAlert } from "@tosklight/ui";
-import { PositionCalibrationButton } from "./PositionCalibration";
-import { isVisualOnly } from "../patchUtils";
-import { positionPointLabel, positionPoints } from "./positionReference";
-import { SCENERY_AXES } from "./scenerySize";
-import { CHAIN_MODES } from "./sceneryOptions";
 import {
 	Button,
 	ColorPickerField,
+	ErrorAlert,
 	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	Select,
+	TextField,
 	TextInput,
 } from "@tosklight/ui";
 import { ModalNumberEditor } from "@tosklight/ui/input";
-import { fixtureDefinitionKey } from "../fixtureProfileModel";
+import { isVisualOnly } from "../patchUtils";
 import {
 	allowedCombinedPolicyChoices,
 	type CombinedPolicyChoice,
@@ -35,7 +31,15 @@ import {
 	saveMultipatchEdit,
 	saveMultipatchVectorInput,
 } from "./multipatchActions";
+import { PositionCalibrationButton } from "./PositionCalibration";
 import { definitionSplits, fixturePolicyApplicability } from "./patchModel";
+import { positionPointLabel, positionPoints } from "./positionReference";
+import {
+	ReplacementEditDialog,
+	ReplacementModeFields,
+} from "./ReplacementModeFields";
+import { CHAIN_MODES } from "./sceneryOptions";
+import { SCENERY_AXES } from "./scenerySize";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
@@ -88,7 +92,10 @@ export function MultipatchVectorDialog() {
 					/>
 					<EditError />
 					{policy ? (
-						<><CombinedPolicySelect kind="pan_tilt" /><PositionCalibrationButton /></>
+						<>
+							<CombinedPolicySelect kind="pan_tilt" />
+							<PositionCalibrationButton />
+						</>
 					) : (
 						<VectorInputs
 							kind={edit.kind as "location" | "rotation"}
@@ -135,7 +142,12 @@ export function FixtureEditDialog() {
 	const controller = usePatchController();
 	const { edit } = controller.ui;
 	if (!edit || !controller.data.selected || edit === "address") return null;
-	const close = () => requestFixtureEditClose(controller);
+	const replacingPending =
+		controller.ui.replacingFixture &&
+		controller.patch.pendingFixtureIds.has(controller.data.selected.fixture_id);
+	const close = () => {
+		if (!replacingPending) requestFixtureEditClose(controller);
+	};
 	if ((edit === "location" || edit === "rotation") && controller.ui.editAxis) {
 		const axis = controller.ui.editAxis;
 		const label = `${edit === "location" ? "Location" : "Rotation"} ${axis.toUpperCase()} (${edit === "location" ? "meter" : "degree"})`;
@@ -212,6 +224,13 @@ export function FixtureEditDialog() {
 			/>
 		);
 	}
+	if (edit === "mode")
+		return (
+			<ReplacementEditDialog
+				close={close}
+				pending={Boolean(replacingPending)}
+			/>
+		);
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
@@ -227,15 +246,23 @@ export function FixtureEditDialog() {
 								? undefined
 								: {
 										id: "set",
-										label: "Set",
+										label: replacingPending ? "Replacing fixture…" : "Set",
+										disabled: replacingPending,
 										variant: "primary",
 										onPress: () => saveEdit(controller),
 									}
 						}
 						closeLabel={`Cancel fixture ${edit}`}
+						closeDisabled={replacingPending}
 						onClose={close}
 					/>
 					<EditError />
+					{replacingPending && (
+						<p role="status">
+							Validating and applying the replacement. The current fixture
+							remains visible until the authoritative result arrives.
+						</p>
+					)}
 					<FixtureEditFields />
 				</section>
 			</div>
@@ -300,12 +327,17 @@ function FixtureEditFields() {
 	if (edit === "chain") return <ChainModeFields />;
 	if (edit === "position_reference") return <PositionReferenceFields />;
 	if (edit === "masters" || edit === "pan_tilt")
-		return <><CombinedPolicySelect kind={edit} />{edit === "pan_tilt" && <PositionCalibrationButton />}</>;
+		return (
+			<>
+				<CombinedPolicySelect kind={edit} />
+				{edit === "pan_tilt" && <PositionCalibrationButton />}
+			</>
+		);
 	if (edit === "location" || edit === "rotation")
 		return (
 			<VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />
 		);
-	if (edit === "mode") return <ModeField />;
+	if (edit === "mode") return <ReplacementModeFields />;
 	return null;
 }
 
@@ -388,9 +420,9 @@ function PositionReferenceFields() {
 			</Select>
 			<small>
 				Moving or rotating the point carries this{" "}
-				{selected && isVisualOnly(selected.definition) ? "object" : "fixture"} with
-				it, relative to the point's own origin. Its location and rotation stay where
-				it sits when the point rests on its origin.
+				{selected && isVisualOnly(selected.definition) ? "object" : "fixture"}{" "}
+				with it, relative to the point's own origin. Its location and rotation
+				stay where it sits when the point rests on its origin.
 			</small>
 		</label>
 	);
@@ -408,23 +440,19 @@ function InternalBindingsFields() {
 		controller.ui.setEditText(JSON.stringify({ ...draft, [key]: value }));
 	return (
 		<div className="vector-inputs">
-			<label>
-				Audio library binding
-				<TextInput
-					autoFocus
-					aria-label="Logical audio library binding"
-					value={draft.library}
-					onChange={(event) => update("library", event.target.value)}
-				/>
-			</label>
-			<label>
-				Audio output binding
-				<TextInput
-					aria-label="Logical audio output binding"
-					value={draft.output}
-					onChange={(event) => update("output", event.target.value)}
-				/>
-			</label>
+			<TextField
+				label="Audio library binding"
+				autoFocus
+				aria-label="Logical audio library binding"
+				value={draft.library}
+				onChange={(event) => update("library", event.target.value)}
+			/>
+			<TextField
+				label="Audio output binding"
+				aria-label="Logical audio output binding"
+				value={draft.output}
+				onChange={(event) => update("output", event.target.value)}
+			/>
 			<small>
 				Portable logical names only. This desk resolves local folders and
 				devices in Setup.
@@ -546,32 +574,6 @@ function vectorEditTitle(
 	axis?: "x" | "y" | "z",
 ) {
 	return axis ? `${kind} ${axis.toUpperCase()}` : kind;
-}
-
-function ModeField() {
-	const controller = usePatchController();
-	const family = controller.data.selectedModeFamily;
-	if (!family) return null;
-	return (
-		// biome-ignore lint/a11y/noLabelWithoutControl: Select renders its native control inside this label.
-		<label>
-			Product / mode
-			<Select
-				aria-label="Product / mode"
-				value={controller.ui.definitionKey}
-				onChange={(event) => controller.ui.setDefinitionKey(event.target.value)}
-			>
-				{family.modes.map((mode) => (
-					<option
-						value={fixtureDefinitionKey(mode)}
-						key={fixtureDefinitionKey(mode)}
-					>
-						{mode.mode} · {mode.footprint}ch
-					</option>
-				))}
-			</Select>
-		</label>
-	);
 }
 
 export function FixtureAddressDialog() {

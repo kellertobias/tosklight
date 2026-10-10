@@ -26,6 +26,7 @@ pub struct ProgrammingPreloadValuesProjection {
     pub fixture_values: Vec<PreloadProgrammerFixtureValue>,
     pub group_values: Vec<PreloadProgrammerGroupValue>,
     pub dynamic_values: Vec<DynamicAddressValue>,
+    pub group_release_values: Vec<light_programmer::GroupReleaseProgrammerValue>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,6 +45,7 @@ pub(super) struct ProgrammingPreloadValuesContent {
     fixture_values: Vec<PreloadProgrammerFixtureValue>,
     group_values: Vec<PreloadProgrammerGroupValue>,
     dynamic_values: Vec<DynamicAddressValue>,
+    group_release_values: Vec<light_programmer::GroupReleaseProgrammerValue>,
 }
 
 impl ProgrammingPreloadValuesContent {
@@ -63,6 +65,7 @@ impl ProgrammingPreloadValuesContent {
             fixture_values,
             group_values,
             dynamic_values,
+            group_release_values,
         } = programmers
             .preload_pending_values(session)
             .ok_or_else(preload_values_unavailable)?;
@@ -70,6 +73,7 @@ impl ProgrammingPreloadValuesContent {
             fixture_values,
             group_values,
             dynamic_values,
+            group_release_values,
         })
     }
 
@@ -79,6 +83,7 @@ impl ProgrammingPreloadValuesContent {
             fixture_values: self.fixture_values,
             group_values: self.group_values,
             dynamic_values: self.dynamic_values,
+            group_release_values: self.group_release_values,
         }
     }
 }

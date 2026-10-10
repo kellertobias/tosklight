@@ -228,7 +228,7 @@ export function TimecodeRuntimeWindow({
 	useEffect(() => {
 		if (!active) return;
 		const openRequested = (request: {
-			kind: "macro" | "timecode";
+			kind: "macro" | "timecode" | "cuelist";
 			objectId: string;
 		}) => {
 			if (request.kind !== "timecode") return;
@@ -314,14 +314,13 @@ export function TimecodeRuntimeWindow({
 								model={{
 									number,
 									primary: item?.definition.name ?? "Empty",
-									secondary:
-										item && offPending
-											? "Tap to stop Timecode"
-											: snapshot
-												? `${formatFrame(snapshot.frame)} · ${snapshot.state}`
-												: item
-													? "Not running"
-													: "Tap to create",
+									secondary: item
+										? snapshot?.state === "playing"
+											? "Playing"
+											: snapshot?.external_armed
+												? "Armed"
+												: "Unarmed"
+										: undefined,
 									color: "#9365d8",
 									states: [
 										...(!item ? ["empty" as const] : []),

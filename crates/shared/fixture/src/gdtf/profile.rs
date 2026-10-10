@@ -73,6 +73,12 @@ pub fn fixture_type(profile: &FixtureProfile) -> Result<FixtureType, ProfileErro
 fn describe(
     profile: &FixtureProfile,
 ) -> Result<(FixtureType, Vec<GdtfExportDiagnostic>), ProfileError> {
+    // A supported old imported snapshot may carry GDTF optical Y on the old white100
+    // scale. Verify its retained source before generating the normalized optical boundary;
+    // never export the runtime nominal fallback as though it were authored fixture data.
+    let mut optical_projection = profile.clone();
+    crate::profile::gdtf_color_compatibility::for_export(&mut optical_projection);
+    let profile = &optical_projection;
     let (heads, beams) = beams(profile);
     let optics = optics::build(profile, &heads);
     let mut modes = profile

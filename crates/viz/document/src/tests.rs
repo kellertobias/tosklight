@@ -15,6 +15,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+mod canonical_open;
+
 /// Repository rule: temporary work goes to the resolved artifact temp directory when one is set.
 fn temp_path(name: &str) -> PathBuf {
     let base = std::env::var_os("LIGHT_TMP_DIR")

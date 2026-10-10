@@ -152,6 +152,35 @@ pub(super) fn apply_command_preset(
         live_group_targets,
         programmer_fade_millis,
     );
+    let selection = light_programmer::ProgrammerSelection {
+        selected: selected.to_vec(),
+        expression: current_expression,
+        ..Default::default()
+    };
+    let positions = state
+        .output
+        .snapshot()
+        .dynamic_stage_positions
+        .iter()
+        .map(|(id, position)| {
+            (
+                *id,
+                light_dynamics::Position3d {
+                    x: f64::from(position.x),
+                    y: f64::from(position.y),
+                    z: f64::from(position.z),
+                },
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let origins = light_application::preset_value_origins(&selection, &preset, &groups, &positions);
+    let preload = state
+        .programming
+        .get(session.id)
+        .is_some_and(|programmer| programmer.blind && programmer.preload_capture_programmer);
+    state
+        .programming
+        .attach_preset_provenance(session.id, &origins, preload, false);
     state.programming.set_modes(
         session.id,
         None,
@@ -220,7 +249,16 @@ fn apply_position_preset(
         session,
         &mutations,
         Some(format!("preset:{id}")),
-    )
+    )?;
+    let origins = light_application::preset_value_origins(&selection, preset, groups, &positions);
+    let preload = state
+        .programming
+        .get(session.id)
+        .is_some_and(|programmer| programmer.blind && programmer.preload_capture_programmer);
+    state
+        .programming
+        .attach_preset_provenance(session.id, &origins, preload, false);
+    Ok(())
 }
 
 fn apply_selected_fixture_values(
@@ -319,10 +357,50 @@ fn apply_live_group_values(
 pub(super) fn command_preset_address(
     tokens: &[String],
 ) -> Result<light_programmer::PresetAddress, String> {
+    if let [packed] = tokens {
+        for family in ["ALL", "INTENSITY", "COLOR", "POSITION", "BEAM"] {
+            if let Some(number) = packed.strip_prefix(family)
+                && !number.is_empty()
+                && number.chars().all(|character| character.is_ascii_digit())
+            {
+                return named_command_preset_address(family, number);
+            }
+        }
+    }
+    if let [family, number] = tokens {
+        return named_command_preset_address(family, number);
+    }
+    if let [family, keyword, number] = tokens
+        && keyword == "PRESET"
+    {
+        return named_command_preset_address(family, number);
+    }
     if tokens.len() != 3 || tokens[1] != "." {
-        return Err("expected <preset-type> . <preset-number>".into());
+        return Err(
+            "expected <family> [PRESET] <preset-number> or <preset-type>.<preset-number>".into(),
+        );
     }
     light_programmer::PresetAddress::parse(&format!("{}.{}", tokens[0], tokens[2]))
+}
+
+fn named_command_preset_address(
+    family: &str,
+    number: &str,
+) -> Result<light_programmer::PresetAddress, String> {
+    let family = match family {
+        "ALL" => light_programmer::PresetFamily::Mixed,
+        "INTENSITY" => light_programmer::PresetFamily::Intensity,
+        "COLOR" => light_programmer::PresetFamily::Color,
+        "POSITION" => light_programmer::PresetFamily::Position,
+        "BEAM" => light_programmer::PresetFamily::Beam,
+        _ => return Err(format!("unknown Preset family {family}")),
+    };
+    light_programmer::PresetAddress::new(
+        family,
+        number
+            .parse::<u32>()
+            .map_err(|_| "Preset number is invalid")?,
+    )
 }
 
 pub(super) fn command_preset_family(id: &str) -> Result<light_programmer::PresetFamily, String> {
@@ -374,4 +452,37 @@ pub(super) fn command_preset_has_values(
         }
     }
     Ok(applicable)
+}
+
+#[cfg(test)]
+mod named_address_tests {
+    use super::*;
+
+    #[test]
+    fn documented_shifted_family_and_doubled_family_addresses_match_numeric_addresses() {
+        for (name, number) in [
+            ("ALL", 0),
+            ("INTENSITY", 1),
+            ("COLOR", 2),
+            ("POSITION", 3),
+            ("BEAM", 4),
+        ] {
+            let expected =
+                light_programmer::PresetAddress::parse(&format!("{number}.190")).unwrap();
+            assert_eq!(
+                command_preset_address(&[name.into(), "190".into()]).unwrap(),
+                expected
+            );
+            assert_eq!(
+                command_preset_address(&[name.into(), "PRESET".into(), "190".into()]).unwrap(),
+                expected
+            );
+            assert_eq!(
+                command_preset_address(&[number.to_string(), ".".into(), "190".into()]).unwrap(),
+                expected
+            );
+        }
+        assert!(command_preset_address(&["COLOR".into(), "0".into()]).is_err());
+        assert!(command_preset_address(&["UNKNOWN".into(), "190".into()]).is_err());
+    }
 }

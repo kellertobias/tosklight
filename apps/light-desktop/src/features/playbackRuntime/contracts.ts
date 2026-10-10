@@ -65,6 +65,8 @@ export function identityKey(identity: PlaybackIdentity) {
 	if (identity.kind === "virtual")
 		return `virtual:${identity.page}.${identity.playback_number}`;
 	if (identity.kind === "cue_list") return `cuelist:${identity.cue_list_id}`;
+	if (identity.kind === "direct_cue_list")
+		return `direct-cuelist:${identity.cue_list_id}`;
 	return `group:${identity.group_id}`;
 }
 
@@ -72,7 +74,10 @@ export function projectionKeys(projection: PlaybackProjection) {
 	const keys = new Set([identityKey(projection.requested)]);
 	if (projection.playback_number != null)
 		keys.add(`playback:${projection.playback_number}`);
-	if (projection.target === "cue_list")
+	if (
+		projection.target === "cue_list" &&
+		projection.requested.kind !== "direct_cue_list"
+	)
 		keys.add(`cuelist:${projection.cue_list_id}`);
 	if (projection.target === "group") keys.add(`group:${projection.group_id}`);
 	return [...keys];

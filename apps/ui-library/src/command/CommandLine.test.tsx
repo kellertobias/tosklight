@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandLine, type CommandLineProps } from "./CommandLine";
@@ -78,6 +79,43 @@ describe("CommandLine", () => {
 		expect(view.onRecordComplete).toHaveBeenCalledWith(false);
 		fireEvent.click(screen.getByRole("button", { name: "PRELOAD" }));
 		expect(view.onAdvancePreload).toHaveBeenCalledOnce();
+	});
+
+	it.each([false, true])("preserves a full select-all paste after completion (hardware=%s)", async (hardware) => {
+		const execute = vi.fn();
+		function Surface() {
+			const [text, setText] = useState("FIXTURE 9001 AT 20");
+			const [completed, setCompleted] = useState(true);
+			return <CommandLine {...props({ hardware, commandLine: text, completed,
+				onReplace: (next) => { setText(next); setCompleted(false); }, onExecute: execute })} />;
+		}
+		render(<Surface />);
+		const user = userEvent.setup();
+		const input = screen.getByRole("textbox", { name: "Command line" }) as HTMLInputElement;
+		await user.click(input);
+		input.setSelectionRange(0, input.value.length);
+		const command = "FIXTURE 9002 AT COLOR PRESET 100";
+		await user.paste(command);
+		expect(input).toHaveValue(command);
+		await user.keyboard("{Enter}");
+		expect(execute).toHaveBeenCalledExactlyOnceWith(command);
+	});
+
+	it.each(["insertFromDrop", "insertReplacementText", "insertFromPaste"])("keeps complete %s content instead of its final digit", (inputType) => {
+		const view = props({ completed: true });
+		render(<CommandLine {...view} />);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.input(input, { target: { value: "FIXTURE 9002 AT 100" }, inputType, data: "FIXTURE 9002 AT 100" });
+		expect(view.onReplace).toHaveBeenCalledExactlyOnceWith("FIXTURE 9002 AT 100");
+	});
+
+	it.each([false, true])("still starts a fresh command on an ordinary next digit (hardware=%s)", (hardware) => {
+		const view = props({ completed: true, hardware });
+		render(<CommandLine {...view} />);
+		fireEvent.input(screen.getByRole("textbox", { name: "Command line" }), {
+			target: { value: `${view.commandLine}9` }, inputType: "insertText", data: "9",
+		});
+		expect(view.onReplace).toHaveBeenCalledExactlyOnceWith("FIXTURE 9");
 	});
 
 	it("keeps primary captions visible beside the smaller Shift actions", () => {

@@ -2,6 +2,103 @@ import { describe, expect, it } from "vitest";
 import { currentOutputDiagnostics } from "./DeskStateDiagnosticsState";
 
 describe("current desk output diagnostics", () => {
+	it.each(["art_net", "sacn"])("keeps only actual current enabled %s send failure critical and retires on send recovery", (protocol) => {
+		const route = {
+			protocol,
+			universe: 50,
+			destination: "127.0.0.1:16454",
+			enabled: true,
+		};
+		const failed = {
+			...route,
+			delivery_state: "send_failed" as const,
+			current_error: "Permission denied",
+		};
+		expect(
+			currentOutputDiagnostics({
+				outputRoutes: [route],
+				outputDeliveryStatus: [failed],
+			})[0]?.capabilityLoss,
+		).toBe("dmx_output");
+		expect(
+			currentOutputDiagnostics({
+				outputRoutes: [route],
+				outputDeliveryStatus: [
+					{ ...failed, delivery_state: "sending", current_error: null },
+				],
+			}),
+		).toEqual([]);
+		expect(
+			currentOutputDiagnostics({
+				outputRoutes: [{ ...route, enabled: false }],
+				outputDeliveryStatus: [failed],
+			}),
+		).toEqual([]);
+		expect(
+			currentOutputDiagnostics({
+				outputRoutes: [],
+				outputDeliveryStatus: [failed],
+			}),
+		).toEqual([]);
+	});
+	it("does not escalate historical errors without explicit current delivery failure", () => {
+		const route = {
+			protocol: "art_net",
+			universe: 50,
+			destination: "127.0.0.1:16454",
+			enabled: true,
+			send_errors: 99,
+		};
+		expect(currentOutputDiagnostics({ outputRoutes: [route] })).toEqual([]);
+	});
+	it("retires a cached failure when current route configuration disables or removes its target", () => {
+		const route = {
+			protocol: "art_net",
+			universe: 50,
+			destination: "127.0.0.1:16454",
+			enabled: true,
+			delivery_mode: "unicast",
+		};
+		const health = {
+			outputRoutes: [route],
+			outputDeliveryStatus: [
+				{
+					...route,
+					delivery_state: "send_failed" as const,
+					current_error: "Permission denied",
+				},
+			],
+		};
+		const configured = {
+			kind: "output_route",
+			id: "test-route",
+			revision: 1,
+			updated_at: "2026-10-08T16:00:00Z",
+			body: {
+				protocol: "art_net" as const,
+				logical_universe: 1,
+				destination_universe: 50,
+				destination: route.destination,
+				enabled: false,
+				delivery_mode: "unicast" as const,
+				minimum_slots: 512,
+			},
+		};
+		expect(currentOutputDiagnostics(health, [configured])).toEqual([]);
+		expect(currentOutputDiagnostics(health, [])).toEqual([]);
+		expect(
+			currentOutputDiagnostics(health, [
+				{
+					...configured,
+					body: {
+						...configured.body,
+						enabled: true,
+						destination: "127.0.0.1:16455",
+					},
+				},
+			]),
+		).toEqual([]);
+	});
 	it("reports only a currently enabled duplicate output target and address", () => {
 		const route = {
 			protocol: "art_net",
@@ -56,12 +153,13 @@ describe("current desk output diagnostics", () => {
 				minimum_slots: 512,
 			},
 		});
-		const duplicate = currentOutputDiagnostics(
-			{ outputRoutes: [] },
-			[usbRoute("route-a", 1), usbRoute("route-b", 4)],
-		);
+		const duplicate = currentOutputDiagnostics({ outputRoutes: [] }, [
+			usbRoute("route-a", 1),
+			usbRoute("route-b", 4),
+		]);
 		expect(duplicate).toEqual([
 			expect.objectContaining({
+				capabilityLoss: "dmx_output",
 				title: "Duplicate output · USB DMX device · universes 1, 4",
 				summary:
 					"The same USB DMX device is targeted by 2 enabled routes for logical universes 1, 4. One USB DMX device can output one logical universe, so the desk suppresses output instead of choosing one.",
@@ -77,10 +175,10 @@ describe("current desk output diagnostics", () => {
 		expect(operatorCopy).not.toContain("rear-dmx");
 		expect(operatorCopy).not.toMatch(/endpoint|claim/iu);
 		expect(
-			currentOutputDiagnostics(
-				{ outputRoutes: [] },
-				[usbRoute("route-a", 1), usbRoute("route-b", 4, false)],
-			),
+			currentOutputDiagnostics({ outputRoutes: [] }, [
+				usbRoute("route-a", 1),
+				usbRoute("route-b", 4, false),
+			]),
 		).toEqual([]);
 	});
 });

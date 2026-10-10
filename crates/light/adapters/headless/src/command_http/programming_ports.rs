@@ -156,11 +156,28 @@ impl<'a> ServerProgrammingPorts<'a> {
         context: &ActionContext,
         command: &str,
     ) -> Option<ProgrammingExecution> {
-        let (group_id, operation) = super::adapter::group_record_command(command)
-            .ok()
-            .flatten()?;
-        let result =
-            self.execute_group_recording(programmers, context, group_id, operation, command);
+        let (group_id, operation) = match super::adapter::group_record_command(command) {
+            Ok(Some(parsed)) => parsed,
+            Ok(None) => return None,
+            Err(error) => return Some(self.recording_execution(context, command, Err(error))),
+        };
+        let result = self
+            .state
+            .programming
+            .programmers()
+            .with_transaction(self.session.id, || {
+                if let Some((selection, _)) =
+                    super::adapter::selection_prefixed_group_record(command)?
+                {
+                    super::super::programmer_commands::execute_programmer_command_from(
+                        self.state,
+                        self.session,
+                        &selection,
+                        context,
+                    )?;
+                }
+                self.execute_group_recording(programmers, context, group_id, operation, command)
+            });
         Some(self.recording_execution(context, command, result))
     }
 
@@ -187,6 +204,24 @@ impl<'a> ServerProgrammingPorts<'a> {
     ) -> Result<(usize, Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "group-record");
+        // Normal Merge recording creates an unused slot. Keep explicit REC + strict,
+        // as before, and preserve intentionally stored empty Groups as existing targets.
+        let record = super::adapter::selection_prefixed_group_record(raw_command)?
+            .map_or_else(|| raw_command.to_owned(), |(_, record)| record);
+        let operation = if operation == light_application::ProgrammingGroupRecordOperation::Merge
+            && record.split_whitespace().nth(1) != Some("+")
+            && !self
+                .state
+                .output
+                .snapshot()
+                .groups
+                .iter()
+                .any(|group| group.id == group_id)
+        {
+            light_application::ProgrammingGroupRecordOperation::Overwrite
+        } else {
+            operation
+        };
         let command = light_application::ProgrammingGroupRecordRequest {
             show_id,
             group_id,
@@ -223,11 +258,29 @@ impl<'a> ServerProgrammingPorts<'a> {
     ) -> Result<(usize, Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "preset-record");
+        let (tokens, _) = super::super::tokenize_programmer_command(raw_command)?;
+        let (option, _) = super::record_update_option::parse_option(&tokens[1..]);
+        let mode = match option
+            .unwrap_or_else(|| super::record_update_option::preset_record_default(self.state))
+        {
+            light_application::programming_update::RecordUpdateOption::Smart => {
+                light_programmer::PresetStoreMode::Overwrite
+            }
+            light_application::programming_update::RecordUpdateOption::Merge => {
+                light_programmer::PresetStoreMode::Merge
+            }
+            light_application::programming_update::RecordUpdateOption::AddExisting => {
+                light_programmer::PresetStoreMode::AddMissingFixtures
+            }
+            light_application::programming_update::RecordUpdateOption::AddCue => {
+                return Err("Add Cue applies to Cues, not Presets".into());
+            }
+        };
         let command = light_application::ProgrammingPresetRecordRequest {
             show_id,
             address,
             name: format!("Preset {}", address.storage_key()),
-            mode: light_programmer::PresetStoreMode::Overwrite,
+            mode,
             expected_object_revision:
                 light_application::ProgrammingPresetRevisionExpectation::Current,
             expected_show_revision: None,

@@ -18,6 +18,9 @@ pub enum PlaybackRuntimeIdentity {
     CueList {
         cue_list_id: Uuid,
     },
+    DirectCueList {
+        cue_list_id: Uuid,
+    },
     Group {
         #[schemars(length(min = 1, max = 256))]
         group_id: String,
@@ -148,6 +151,10 @@ pub struct PlaybackCueReference {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct CueListRuntimeProjection {
+    /// Exact activation owner; absent from older runtime snapshots.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub owner: Option<PlaybackRuntimeIdentity>,
     pub cue_index: usize,
     pub previous_index: Option<usize>,
     pub current: Option<PlaybackCueReference>,
@@ -299,6 +306,9 @@ pub struct PlaybackDeskProjection {
     pub desk_id: Uuid,
     pub active_page: u8,
     pub selected_playback: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub selected_cue_list: Option<Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

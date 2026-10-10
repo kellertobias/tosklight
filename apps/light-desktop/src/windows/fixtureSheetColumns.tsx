@@ -269,7 +269,14 @@ function colorColumn(
 					<small className="preload-value">
 						<FixtureColorDot color={fixture.preloadColor} />
 						<span className="fixture-sheet-preload-marker">→</span>{" "}
-						<span className="fixture-sheet-value-text">Preload</span>
+						<span className="fixture-sheet-value-text">
+							Preload{" "}
+							{
+								fixture.groupValues?.color.members.find(
+									(member) => member.attribute === "color",
+								)?.preloadText
+							}
+						</span>
 					</small>
 				)}
 				<GroupDynamicIndicators group={fixture.groupValues?.color} />
@@ -481,7 +488,7 @@ function MemberGlyph({
 	preload?: boolean;
 	value?: FixtureSheetMemberValue["value"];
 }) {
-	const normalized = value.kind === "normalized" ? value.value : null;
+	const normalized = value?.kind === "normalized" ? value.value : null;
 	const semantic =
 		group === "media"
 			? member.label.startsWith("Mask")

@@ -42,7 +42,8 @@ pub(super) fn check_programmer(value: &serde_json::Value, supported: u16) -> any
     anyhow::ensure!(
         legacy.is_empty(),
         "stored Programmer holds programming from before semantic programming contract \
-         {supported} ({}); it cannot be converted safely",
+         {} ({}); it cannot be converted safely",
+        light_core::programming::PROGRAMMING_CONTRACT_VERSION,
         legacy.into_iter().collect::<Vec<_>>().join(", ")
     );
     Ok(())
@@ -90,7 +91,8 @@ pub(super) fn check_runtime_payload(
     anyhow::ensure!(
         legacy.is_empty(),
         "stored {label} holds programming from before semantic programming contract \
-         {supported} ({}); it cannot be converted safely",
+         {} ({}); it cannot be converted safely",
+        light_core::programming::PROGRAMMING_CONTRACT_VERSION,
         legacy.into_iter().collect::<Vec<_>>().join(", ")
     );
     Ok(())

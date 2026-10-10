@@ -181,6 +181,133 @@ async fn discovery_reports_an_unreachable_media_server() {
     assert!(server.error.unwrap().contains("refresh discovery"));
 }
 
+fn media_discovery_identity_routes() -> axum::Router {
+    axum::Router::new()
+        .route("/api/v2/health", get(|| async { health() }))
+        .route(
+            "/api/v2/outputs",
+            get(|| async { axum::Json(serde_json::json!([{ "id": OUTPUT_ID, "name": "Main" }])) }),
+        )
+}
+
+#[tokio::test]
+async fn configuration_request_failures_are_unavailable_not_legacy_or_patchable() {
+    use axum::response::IntoResponse;
+    for failure in ["refused", "malformed", "timeout"] {
+        let router = media_discovery_identity_routes().route(
+            "/api/v2/outputs/{output}/configuration",
+            get(move || async move {
+                match failure {
+                    "refused" => {
+                        (StatusCode::SERVICE_UNAVAILABLE, "temporarily busy").into_response()
+                    }
+                    "malformed" => (StatusCode::OK, "not JSON").into_response(),
+                    _ => {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        axum::Json(reference()).into_response()
+                    }
+                }
+            }),
+        );
+        let base = serve(router).await;
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(250))
+            .build()
+            .unwrap();
+        let server = inspect_discovered_native_media_server(client, citp(), base).await;
+        assert_eq!(server.name, "ToskLight Pixel Media - rack-a", "{failure}");
+        assert_eq!(server.status, "ready");
+        assert_eq!(server.instance.as_deref(), Some("rack-a"));
+        assert!(
+            server.outputs.is_empty(),
+            "no invented address or patchable configuration: {failure}"
+        );
+        let error = server.error.unwrap();
+        assert!(
+            error.contains("Main")
+                && error.contains(OUTPUT_ID)
+                && error.contains("configuration unavailable"),
+            "{error}"
+        );
+        assert!(error.contains("Refresh discovery"), "{error}");
+        assert!(!error.contains("needs an update"), "{error}");
+    }
+}
+
+#[tokio::test]
+async fn a_configuration_failure_keeps_other_received_outputs_patchable() {
+    use axum::response::IntoResponse;
+    const FAILED_ID: &str = "00000000-0000-4000-8000-000000000041";
+    let router = axum::Router::new()
+        .route("/api/v2/health", get(|| async { health() }))
+        .route(
+            "/api/v2/outputs",
+            get(|| async {
+                axum::Json(serde_json::json!([
+                    { "id": OUTPUT_ID, "name": "Main" },
+                    { "id": FAILED_ID, "name": "Side" }
+                ]))
+            }),
+        )
+        .route(
+            "/api/v2/outputs/{output}/configuration",
+            get(
+                |axum::extract::Path(id): axum::extract::Path<String>| async move {
+                    if id == FAILED_ID {
+                        (StatusCode::SERVICE_UNAVAILABLE, "temporarily busy").into_response()
+                    } else {
+                        axum::Json(reference()).into_response()
+                    }
+                },
+            ),
+        );
+    let server = inspect_discovered_native_media_server(
+        native_media_client().unwrap(),
+        citp(),
+        serve(router).await,
+    )
+    .await;
+    assert_eq!(server.outputs.len(), 1);
+    assert_eq!(server.outputs[0].id.to_string(), OUTPUT_ID);
+    assert_eq!(server.outputs[0].mode.as_deref(), Some("8 layers"));
+    let error = server.error.unwrap();
+    assert!(
+        error.contains("Side") && error.contains(FAILED_ID),
+        "{error}"
+    );
+    assert!(!error.contains("needs an update"));
+}
+
+#[tokio::test]
+async fn configuration_request_recovery_restores_authoritative_patch_suggestion() {
+    use axum::response::IntoResponse;
+    let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let router = media_discovery_identity_routes().route(
+        "/api/v2/outputs/{output}/configuration",
+        get(move || {
+            let attempts = attempts.clone();
+            async move {
+                if attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                    (StatusCode::SERVICE_UNAVAILABLE, "temporarily busy").into_response()
+                } else {
+                    axum::Json(reference()).into_response()
+                }
+            }
+        }),
+    );
+    let base = serve(router).await;
+    let client = native_media_client().unwrap();
+    let first = inspect_discovered_native_media_server(client.clone(), citp(), base.clone()).await;
+    assert!(first.outputs.is_empty());
+    assert!(first.error.unwrap().contains("configuration unavailable"));
+    let recovered = inspect_discovered_native_media_server(client, citp(), base).await;
+    assert_eq!(recovered.error, None);
+    let output = &recovered.outputs[0];
+    assert_eq!(output.name, "Main");
+    assert_eq!(output.mode.as_deref(), Some("8 layers"));
+    assert_eq!((output.universe, output.start_address), (4, 1));
+}
+
 #[tokio::test]
 async fn an_address_update_refusal_names_the_rejected_value() {
     let router = axum::Router::new().route(

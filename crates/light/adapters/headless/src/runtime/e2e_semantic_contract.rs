@@ -4,24 +4,26 @@
 //! (`PROGRAMMING_CONTRACT_VERSION`, 1) and engaged the TL-548 C3 all-family Live path. Before the
 //! cutover this module carried an E2E-only opt-in (`e2e-semantic-contract` cargo feature plus
 //! `LIGHT_E2E_SEMANTIC_PROGRAMMING_CONTRACT=1`) so the root Playwright semantic specs could run
-//! against a contract-1 server. Every build now reports contract 1, so that feature is a retained
+//! against a contract-1 server. Builds now support the current additive feature contract, so the feature is a retained
 //! no-op: `npm run test:e2e-semantic` still builds a separately named binary with it, and that
 //! binary behaves exactly like production. No code reads the environment variable any more.
 //!
 //! The compile-time assertion below fails the build if the production contract or the Live
 //! family engagement ever drifts from the cutover.
 
+#[cfg(test)]
 use light_core::programming::PROGRAMMING_CONTRACT_VERSION;
+use light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT;
 
-/// Production's programming contract (TL-552 cutover: the semantic contract).
-pub(super) const PRODUCTION_PROGRAMMING_CONTRACT: u16 = PROGRAMMING_CONTRACT_VERSION;
+/// Production reader capability, including live Preset links and independent Cuelist addresses.
+pub(super) const PRODUCTION_PROGRAMMING_CONTRACT: u16 = SUPPORTED_PROGRAMMING_CONTRACT;
 
 // Compile-time proof for every build (production, release, desktop, `e2e-embedded-ui` and the
-// no-op `e2e-semantic-contract` build): the runtime reports the semantic contract and the shared
+// no-op `e2e-semantic-contract` build): the runtime reports current feature support and the shared
 // all-family Live adapters are engaged.
 const _: () = {
-    assert!(PRODUCTION_PROGRAMMING_CONTRACT == PROGRAMMING_CONTRACT_VERSION);
-    assert!(supported_programming_contract() == PROGRAMMING_CONTRACT_VERSION);
+    assert!(PRODUCTION_PROGRAMMING_CONTRACT == SUPPORTED_PROGRAMMING_CONTRACT);
+    assert!(supported_programming_contract() == SUPPORTED_PROGRAMMING_CONTRACT);
     assert!(live_family_adapters_opted_in());
 };
 
@@ -95,10 +97,16 @@ mod tests {
     fn every_build_reports_the_semantic_contract_and_engages_the_family_path() {
         assert_eq!(
             PRODUCTION_PROGRAMMING_CONTRACT,
-            PROGRAMMING_CONTRACT_VERSION
+            SUPPORTED_PROGRAMMING_CONTRACT
         );
-        assert_eq!(supported_programming_contract(), 1);
-        assert_eq!(startup_programming_contract(), 1);
+        assert_eq!(
+            supported_programming_contract(),
+            SUPPORTED_PROGRAMMING_CONTRACT
+        );
+        assert_eq!(
+            startup_programming_contract(),
+            SUPPORTED_PROGRAMMING_CONTRACT
+        );
         assert!(live_family_adapters_opted_in());
     }
 

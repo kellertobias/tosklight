@@ -13,6 +13,8 @@ pub enum PlaybackRuntimeIdentity {
     Playback(u16),
     Virtual(light_playback::VirtualPlaybackAddress),
     CueList(CueListId),
+    /// Only the unassigned/direct Cuelist source, never its assignment aggregate.
+    DirectCueList(CueListId),
     Group(PlaybackGroupId),
 }
 
@@ -149,6 +151,7 @@ pub struct PlaybackCueReference {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct CueListRuntimeProjection {
+    pub owner: Option<PlaybackRuntimeIdentity>,
     pub cue_index: usize,
     pub previous_index: Option<usize>,
     pub current: Option<PlaybackCueReference>,
@@ -286,6 +289,7 @@ pub struct PlaybackDeskProjection {
     pub desk_id: Uuid,
     pub active_page: u8,
     pub selected_playback: Option<u16>,
+    pub selected_cue_list: Option<CueListId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -44,6 +44,80 @@ export class ProgrammerPreloadLifecycleController
 		return this.enqueue(() => this.options.writer.clearPending(requestId));
 	}
 
+	removePendingDynamic(
+		index: number,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(() =>
+			this.options.writer.removePendingDynamic(
+				index,
+				expectedValuesRevision,
+				requestId,
+			),
+		);
+	}
+
+	removePendingGroupRelease(
+		index: number,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(() =>
+			this.options.writer.removePendingGroupRelease(
+				index,
+				expectedValuesRevision,
+				requestId,
+			),
+		);
+	}
+
+	removePendingFixtureValue(
+		fixtureId: string,
+		attribute: string,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(() =>
+			this.options.writer.removePendingFixtureValue(
+				fixtureId,
+				attribute,
+				expectedValuesRevision,
+				requestId,
+			),
+		);
+	}
+
+	removePendingGroupValue(
+		groupId: string,
+		attribute: string,
+		expectedValuesRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(() =>
+			this.options.writer.removePendingGroupValue(
+				groupId,
+				attribute,
+				expectedValuesRevision,
+				requestId,
+			),
+		);
+	}
+
+	removePendingPlayback(
+		index: number,
+		expectedQueueRevision: number,
+		requestId: string = crypto.randomUUID(),
+	) {
+		return this.enqueue(() =>
+			this.options.writer.removePendingPlayback(
+				index,
+				expectedQueueRevision,
+				requestId,
+			),
+		);
+	}
+
 	release(requestId: string = crypto.randomUUID()) {
 		return this.enqueue(() => this.options.writer.release(requestId));
 	}

@@ -278,19 +278,27 @@ pub fn input_devices() -> Vec<String> {
 
 /// This machine's audio outputs, by name.
 pub fn output_devices() -> Vec<String> {
+    try_output_devices().unwrap_or_default()
+}
+
+/// Fallible discovery for the process inventory; an enumeration error is not an empty machine.
+pub fn try_output_devices() -> Result<Vec<String>, String> {
     let host = cpal::default_host();
-    let Ok(devices) = host.output_devices() else {
-        return Vec::new();
-    };
+    let devices = host.output_devices().map_err(|error| error.to_string())?;
     devices
-        .filter_map(|device| {
+        .map(|device| {
             device
                 .description()
-                .ok()
                 .map(|description| description.name().to_owned())
+                .map_err(|error| format!("audio output description could not be read: {error}"))
         })
-        .filter(|name| !name.trim().is_empty())
-        .collect()
+        .collect::<Result<Vec<_>, _>>()
+        .map(|names| {
+            names
+                .into_iter()
+                .filter(|name| !name.trim().is_empty())
+                .collect()
+        })
 }
 
 impl Drop for AudioService {

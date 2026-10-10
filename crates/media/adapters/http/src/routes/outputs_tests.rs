@@ -1238,3 +1238,56 @@ async fn selecting_a_blank_address_is_allowed_because_it_clears_a_layer() {
         MediaAddress::new(1, 0)
     );
 }
+
+#[tokio::test]
+async fn pending_optional_audio_discovery_does_not_block_settings_edits_or_replay() {
+    use crate::diagnostics::{Diagnostics, OutputDeviceDiscoveryState, OutputDeviceInventory};
+    let bench = crate::routes::bench::bench_with(Diagnostics {
+        audio_devices: Arc::new(|| panic!("network settings must not enumerate audio inputs")),
+        output_devices: Arc::new(|| OutputDeviceInventory {
+            devices: vec!["Previously discovered".into()],
+            state: OutputDeviceDiscoveryState::Stalled,
+            has_successful_snapshot: true,
+            error: None,
+        }),
+        ..Default::default()
+    });
+    let configuration_uri = format!("/api/v2/outputs/{}/configuration", bench.output);
+    let (status, snapshot) = send(&bench.router, get(configuration_uri.clone())).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(snapshot["soundOutputInventory"]["state"], "stalled");
+    assert_eq!(
+        snapshot["availableSoundOutputs"][0],
+        "Previously discovered"
+    );
+    let uri = format!("{configuration_uri}/update");
+    let edit = r#"{"requestId":"pending-inventory-edit","protocol":"sacn","universe":51,"soundOutputKind":"device","soundOutputName":"Saved exact device"}"#;
+    let (status, applied) = send(&bench.router, post(uri.clone(), edit)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(applied["protocol"], "sacn");
+    assert_eq!(applied["soundOutputName"], "Saved exact device");
+    assert_eq!(applied["soundOutputInventory"]["state"], "stalled");
+    assert_eq!(bench.stored.lock().unwrap().len(), 1);
+    let (status, replay) = send(&bench.router, post(uri, edit)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replay, applied);
+    assert_eq!(bench.stored.lock().unwrap().len(), 1);
+    // A second unrelated edit proves the serialized guard has been released.
+    let (status, _) = send(
+        &bench.router,
+        post(
+            format!("{configuration_uri}/update"),
+            r#"{"requestId":"second-inventory-edit","startAddress":20}"#,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bench.stored.lock().unwrap().len(), 2);
+    assert_eq!(bench.configuration.load().outputs[0].universe, 51);
+    let (status, _) = send(
+        &bench.router,
+        get(format!("/api/v2/outputs/{}/configuration", OutputId::new())),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

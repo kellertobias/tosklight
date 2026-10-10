@@ -7,6 +7,7 @@ import type {
 } from "../api/types";
 import type { AttributeValue } from "../api/types/playback";
 import { fixtureTypeIconAsset } from "../components/setup/fixtureTypeIconAssets";
+import { colorValueColors } from "../features/presetPreview/colorDisplay";
 import { fixtures } from "../data/mockData";
 import {
 	useActiveShowId,
@@ -34,6 +35,7 @@ import {
 import { followsMasters } from "../components/setup/fixturePatch/patchModel";
 import { fixtureSheetTargets } from "./fixtureSheetTargets";
 import {
+	type FixtureSheetGroupValue,
 	fixtureSheetGroupValues,
 	fixtureSheetNormalizedValue,
 	fixtureSheetValueIndex,
@@ -118,6 +120,44 @@ function fixtureFreezeTargets(target: FixtureSheetTarget) {
 	return { exact, contained, targets: exact ? [exact] : contained };
 }
 
+/** Requested family preview only; never sampled output, fitted Color or a guessed native RGB. */
+export function fixtureSheetColorSwatch(
+	value: AttributeValue | null | undefined,
+): string {
+	if (!value) return "transparent";
+	const previews = colorValueColors(value);
+	const colors = new Set(previews.map((item) => item.hex));
+	return colors.size === 1 && !colors.has(null)
+		? previews[0].hex!
+		: "transparent";
+}
+
+/** The family owns its preview; scalar RGB is only a legacy response compatibility path. */
+export function fixtureSheetColorReadout(group: FixtureSheetGroupValue) {
+	const family = group.members.find((member) => member.attribute === "color");
+	if (family)
+		return {
+			color: fixtureSheetColorSwatch(family.value),
+			preloadColor: family.preloadValue
+				? fixtureSheetColorSwatch(family.preloadValue)
+				: null,
+		};
+	const rgb = (preload: boolean) =>
+		["color.red", "color.green", "color.blue"].map((attribute) => {
+			const member = group.members.find((item) => item.attribute === attribute);
+			const value = preload ? member?.preloadValue : member?.value;
+			return value?.kind === "normalized" ? value.value : null;
+		});
+	const swatch = (values: (number | null)[]) =>
+		values.some((value) => value == null)
+			? null
+			: `rgb(${values.map((value) => Math.round(value! * 255)).join(", ")})`;
+	return {
+		color: swatch(rgb(false)) ?? "transparent",
+		preloadColor: swatch(rgb(true)),
+	};
+}
+
 function fixtureSheetRow({
 	target,
 	programmerValues,
@@ -161,39 +201,24 @@ function fixtureSheetRow({
 	const intensityMember = groupValues.intensity.members.find(
 		(member) => member.attribute === "intensity",
 	);
-	const colorMember = (attribute: string) =>
-		groupValues.color.members.find((member) => member.attribute === attribute);
 	const positionMember = (attribute: string) =>
 		groupValues.position.members.find(
 			(member) => member.attribute === attribute,
 		);
 	const intensity = fixtureSheetNormalizedValue(intensityMember) ?? 0;
-	const red = fixtureSheetNormalizedValue(colorMember("color.red"));
-	const green = fixtureSheetNormalizedValue(colorMember("color.green"));
-	const blue = fixtureSheetNormalizedValue(colorMember("color.blue"));
 	const pan = fixtureSheetNormalizedValue(positionMember("pan")) ?? 0;
 	const tilt = fixtureSheetNormalizedValue(positionMember("tilt")) ?? 0;
 	const preloadIntensity =
 		intensityMember?.preloadValue?.kind === "normalized"
 			? intensityMember.preloadValue.value
 			: null;
-	const preloadColorValue = (attribute: string) => {
-		const value = colorMember(attribute)?.preloadValue;
-		return value?.kind === "normalized" ? value.value : null;
-	};
-	const preloadRed = preloadColorValue("color.red");
-	const preloadGreen = preloadColorValue("color.green");
-	const preloadBlue = preloadColorValue("color.blue");
 	const preloadPositionValue = (attribute: string) => {
 		const value = positionMember(attribute)?.preloadValue;
 		return value?.kind === "normalized" ? value.value : null;
 	};
 	const preloadPan = preloadPositionValue("pan");
 	const preloadTilt = preloadPositionValue("tilt");
-	const color =
-		red == null || green == null || blue == null
-			? "transparent"
-			: `rgb(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)})`;
+	const { color, preloadColor } = fixtureSheetColorReadout(groupValues.color);
 	const icon =
 		patched.definition.icon_asset ||
 		fixtureTypeIconAsset(
@@ -240,10 +265,7 @@ function fixtureSheetRow({
 		positionAvailable: groupValues.position.available,
 		preloadDimmer:
 			preloadIntensity == null ? null : Math.round(preloadIntensity * 100),
-		preloadColor:
-			preloadRed == null || preloadGreen == null || preloadBlue == null
-				? null
-				: `rgb(${Math.round(preloadRed * 255)}, ${Math.round(preloadGreen * 255)}, ${Math.round(preloadBlue * 255)})`,
+		preloadColor,
 		preloadPan: preloadPan == null ? null : Math.round(preloadPan * 100),
 		preloadTilt: preloadTilt == null ? null : Math.round(preloadTilt * 100),
 		sources: {

@@ -15,9 +15,7 @@ import {
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
-import {
-	decodeProgrammerPreloadPlaybackQueueProjection,
-} from "./programmerPreloadPlaybackQueueWire";
+import { decodeProgrammerPreloadPlaybackQueueProjection } from "./programmerPreloadPlaybackQueueWire";
 import {
 	decodePreloadExecutedAction,
 	decodeStrictPlaybackProjection,
@@ -58,12 +56,25 @@ export function encodeProgrammerPreloadLifecycleRequest(
 				? {
 						type: "go",
 						show_id: request.action.showId,
-						expected_show_revision:
-							request.action.expectedShowRevision,
+						expected_show_revision: request.action.expectedShowRevision,
 						expected_playback_event_sequence:
 							request.action.expectedPlaybackEventSequence,
 					}
-				: { type: request.action.type },
+				: request.action.type === "remove_pending_fixture_value"
+					? {
+							type: request.action.type,
+							fixture_id: request.action.fixtureId,
+							attribute: request.action.attribute,
+						}
+					: request.action.type === "remove_pending_group_value"
+						? {
+								type: request.action.type,
+								group_id: request.action.groupId,
+								attribute: request.action.attribute,
+							}
+						: "index" in request.action
+							? { type: request.action.type, index: request.action.index }
+							: { type: request.action.type },
 	};
 }
 
@@ -87,10 +98,7 @@ export function decodeProgrammerPreloadLifecycleOutcome(
 	const requestId = stringAt(response.request_id, "$.request_id");
 	if (requestId !== request.requestId)
 		throw mismatch("$.request_id", request.requestId, requestId);
-	const status = enumAt(response.status, "$.status", [
-		"changed",
-		"no_change",
-	]);
+	const status = enumAt(response.status, "$.status", ["changed", "no_change"]);
 	const captureMode = decodeCaptureModeProjection(
 		response.capture_mode,
 		"$.capture_mode",
@@ -223,9 +231,15 @@ function assertOutcome(
 		request.expectedValuesRevision,
 		outcome.valuesProjection !== null,
 	);
-	if (outcome.valuesProjection?.revision !== undefined &&
-		outcome.valuesProjection.revision !== outcome.valuesRevision)
-		throw mismatch("$.values_revision", outcome.valuesProjection.revision, outcome.valuesRevision);
+	if (
+		outcome.valuesProjection?.revision !== undefined &&
+		outcome.valuesProjection.revision !== outcome.valuesRevision
+	)
+		throw mismatch(
+			"$.values_revision",
+			outcome.valuesProjection.revision,
+			outcome.valuesRevision,
+		);
 	assertProjectionPair(
 		"queue",
 		outcome.queueRevision,
@@ -233,9 +247,15 @@ function assertOutcome(
 		request.expectedQueueRevision,
 		outcome.queueProjection !== null,
 	);
-	if (outcome.queueProjection?.revision !== undefined &&
-		outcome.queueProjection.revision !== outcome.queueRevision)
-		throw mismatch("$.queue_revision", outcome.queueProjection.revision, outcome.queueRevision);
+	if (
+		outcome.queueProjection?.revision !== undefined &&
+		outcome.queueProjection.revision !== outcome.queueRevision
+	)
+		throw mismatch(
+			"$.queue_revision",
+			outcome.queueProjection.revision,
+			outcome.queueRevision,
+		);
 	assertRevisionEventPair(
 		"selection",
 		outcome.selectionRevision,
@@ -272,7 +292,8 @@ function assertRevisionEventPair(
 	eventSequence: number | null,
 	expectedRevision: number,
 ) {
-	const expected = eventSequence === null ? expectedRevision : expectedRevision + 1;
+	const expected =
+		eventSequence === null ? expectedRevision : expectedRevision + 1;
 	if (revision !== expected)
 		throw mismatch(`$.${name}_revision`, expected, revision);
 }
@@ -299,6 +320,16 @@ function assertCommit(
 	commit: ProgrammerPreloadCommitOutcome,
 	request: ProgrammerPreloadLifecycleRequest,
 ) {
+	if (request.action.type === "remove_pending_fixture_value") {
+		programmerValuesUuidAt(request.action.fixtureId, "$.action.fixtureId");
+		printableStringAt(request.action.attribute, "$.action.attribute", 128);
+	}
+	if (request.action.type === "remove_pending_group_value") {
+		printableStringAt(request.action.groupId, "$.action.groupId", 128);
+		printableStringAt(request.action.attribute, "$.action.attribute", 128);
+	}
+	if ("index" in request.action)
+		integerAt(request.action.index, "$.action.index");
 	if (request.action.type !== "go") return;
 	if (commit.showId.toLowerCase() !== request.action.showId.toLowerCase())
 		throw mismatch("$.commit.show_id", request.action.showId, commit.showId);
@@ -330,7 +361,10 @@ function assertCommit(
 			commit.executedPlaybackActions,
 		);
 	for (const [index, change] of commit.runtimeChanges.entries()) {
-		if (change.projection.scope.show_id.toLowerCase() !== commit.showId.toLowerCase())
+		if (
+			change.projection.scope.show_id.toLowerCase() !==
+			commit.showId.toLowerCase()
+		)
 			throw mismatch(
 				`$.commit.runtime_changes[${index}].projection.scope.show_id`,
 				commit.showId,
@@ -363,9 +397,22 @@ function validateRequest(request: ProgrammerPreloadLifecycleRequest) {
 		["expectedSelectionRevision", request.expectedSelectionRevision],
 	] as const)
 		integerAt(value, `$.${key}`);
+	if (request.action.type === "remove_pending_fixture_value") {
+		programmerValuesUuidAt(request.action.fixtureId, "$.action.fixtureId");
+		printableStringAt(request.action.attribute, "$.action.attribute", 128);
+	}
+	if (request.action.type === "remove_pending_group_value") {
+		printableStringAt(request.action.groupId, "$.action.groupId", 128);
+		printableStringAt(request.action.attribute, "$.action.attribute", 128);
+	}
+	if ("index" in request.action)
+		integerAt(request.action.index, "$.action.index");
 	if (request.action.type !== "go") return;
 	programmerValuesUuidAt(request.action.showId, "$.action.showId");
-	integerAt(request.action.expectedShowRevision, "$.action.expectedShowRevision");
+	integerAt(
+		request.action.expectedShowRevision,
+		"$.action.expectedShowRevision",
+	);
 	integerAt(
 		request.action.expectedPlaybackEventSequence,
 		"$.action.expectedPlaybackEventSequence",

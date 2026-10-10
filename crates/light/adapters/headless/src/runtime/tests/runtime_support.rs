@@ -50,7 +50,7 @@ fn test_state_with_programmers(
     programmers: ProgrammerRegistry,
     manual_clock: Option<Arc<ManualClock>>,
 ) -> (AppState, PathBuf) {
-    test_state_with_programming_contract(programmers, manual_clock, light_core::programming::PROGRAMMING_CONTRACT_VERSION)
+    test_state_with_programming_contract(programmers, manual_clock, light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT)
 }
 
 /// TL-548 C3: contract 1 AND the explicit all-family Live opt-in. `test_state` stays legacy.
@@ -218,4 +218,18 @@ fn assert_programming_selection_event(
         expected_selection,
         "the event must carry the authoritative post-interaction selection"
     );
+}
+
+/// Read the independent operator pool, retaining the actual optional physical assignment.
+fn stored_cuelist_pool(
+    store: &ActiveShowRepository,
+    snapshot: &light_engine::EngineSnapshot,
+    number: u16,
+) -> Result<(Option<light_playback::PlaybackDefinition>, light_show::VersionedObject, light_playback::CueList), String> {
+    let id = show_command_update::cuelist_pool_id(snapshot, number)?;
+    let object = store.objects("cue_list").map_err(|error| error.to_string())?.into_iter()
+        .find(|object| object.body["id"] == id.0.to_string()).ok_or("Cuelist does not exist")?;
+    let list = serde_json::from_value(object.body.clone()).map_err(|error| error.to_string())?;
+    let assignment = snapshot.playbacks.iter().find(|playback| playback.target == light_playback::PlaybackTarget::CueList { cue_list_id: id }).cloned();
+    Ok((assignment, object, list))
 }

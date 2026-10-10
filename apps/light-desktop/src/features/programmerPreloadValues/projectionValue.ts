@@ -30,6 +30,41 @@ export function canonicalPreloadProjection(
 		revision: projection.revision,
 		fixtureValues: Object.freeze(fixtureValues),
 		groupValues: Object.freeze(groupValues),
+		...(projection.groupReleaseValues?.length
+			? {
+					groupReleaseValues: Object.freeze(
+						projection.groupReleaseValues.map((entry) => {
+							assertAddress(entry.groupId, entry.attribute, "Group Release");
+							assertNonNegativeInteger(
+								entry.programmerOrder,
+								"programmer order",
+							);
+							return Object.freeze({ ...entry });
+						}),
+					),
+				}
+			: {}),
+		...(projection.dynamicValues?.length
+			? {
+					dynamicValues: Object.freeze(
+						projection.dynamicValues.map((entry) => {
+							assertAddress(
+								entry.fixtureId,
+								entry.attribute,
+								"dynamic fixture",
+							);
+							assertNonNegativeInteger(
+								entry.programmerOrder,
+								"programmer order",
+							);
+							return Object.freeze({
+								...entry,
+								value: freezeTree(structuredClone(entry.value)),
+							});
+						}),
+					),
+				}
+			: {}),
 	});
 }
 
@@ -168,4 +203,12 @@ function sameValue(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function freezeTree<T>(value: T): T {
+	if (value && typeof value === "object") {
+		for (const item of Object.values(value)) freezeTree(item);
+		Object.freeze(value);
+	}
+	return value;
 }

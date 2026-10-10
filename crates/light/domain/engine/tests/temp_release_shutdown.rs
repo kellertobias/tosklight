@@ -158,6 +158,8 @@ fn temp_runs_the_list_with_its_timing_and_turns_off_once_everything_is_released(
 
 fn cue_list(cues: Vec<Cue>) -> CueList {
     CueList {
+        pool_number: None,
+        legacy_pool_aliases: Vec::new(),
         id: CueListId::new(),
         name: "Sunstrip release".into(),
         priority: 10,

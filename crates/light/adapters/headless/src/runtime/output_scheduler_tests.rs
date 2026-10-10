@@ -477,3 +477,218 @@ fn total_delivery_failure_remains_visible_when_usb_accepts_nothing() {
         .unwrap_err();
     assert_eq!(error.to_string(), "udp");
 }
+
+#[tokio::test]
+async fn visualizer_preview_delivery_never_sends_enabled_dual_protocol_routes() {
+    let art = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let sacn = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let network = NetworkOutput::bind(
+        "127.0.0.1".parse().unwrap(),
+        *Uuid::new_v4().as_bytes(),
+        "isolated preview test",
+    )
+    .await
+    .unwrap();
+    let usb = UsbOutputFanout::new(Arc::new(light_output::UnavailableUsbDriverFactory));
+    let routes = [
+        (Protocol::ArtNet, art.local_addr().unwrap()),
+        (Protocol::Sacn, sacn.local_addr().unwrap()),
+    ]
+    .map(|(protocol, destination)| OutputRoute {
+        target: Default::default(),
+        protocol,
+        logical_universe: 1,
+        destination_universe: 1,
+        delivery_mode: Some(DeliveryMode::Unicast),
+        destination: Some(destination),
+        enabled: true,
+        minimum_slots: 512,
+    });
+    let frames = HashMap::from([(1, [77; 512])]);
+    let slots = HashMap::from([(1, 512)]);
+    let mut sequences = HashMap::new();
+    let sent = PhysicalDeliveryPolicy::VisualizerPreview
+        .send(&network, &usb, &routes, &frames, &slots, &mut sequences)
+        .await
+        .unwrap();
+    assert_eq!(sent, 0, "a preview must never become a second desk sender");
+    PhysicalDeliveryPolicy::VisualizerPreview
+        .terminate(&network, &usb, &routes, &mut sequences)
+        .await;
+    PhysicalDeliveryPolicy::VisualizerPreview
+        .finish_scheduler_output(&network, &usb, &routes, &mut sequences)
+        .await;
+    let mut packet = [0; 1200];
+    for receiver in [&art, &sacn] {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(30), receiver.recv_from(&mut packet))
+                .await
+                .is_err()
+        );
+    }
+    assert!(sequences.is_empty());
+    assert_eq!(
+        PhysicalDeliveryPolicy::Live
+            .send(&network, &usb, &routes, &frames, &slots, &mut sequences)
+            .await
+            .unwrap(),
+        2
+    );
+    for receiver in [&art, &sacn] {
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), receiver.recv_from(&mut packet))
+                .await
+                .unwrap()
+                .is_ok()
+        );
+    }
+}
+
+#[test]
+fn visualizer_preview_validates_usb_without_opening_an_enabled_device() {
+    struct CountingFactory(std::sync::atomic::AtomicUsize);
+    impl light_output::UsbPlatformDriverFactory for CountingFactory {
+        fn open(
+            &self,
+            _: &light_output::UsbEndpointConfiguration,
+        ) -> Result<Arc<dyn light_output::UsbEndpointDriver>, String> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Err("isolated fake device".into())
+        }
+    }
+    let factory = Arc::new(CountingFactory(std::sync::atomic::AtomicUsize::new(0)));
+    let usb = UsbOutputFanout::new(factory.clone());
+    let mut document = light_output::UsbEndpointDocument {
+        revision: 1,
+        endpoints: vec![light_output::UsbEndpointConfiguration {
+            endpoint_id: "isolated-preview".into(),
+            driver: light_output::UsbEndpointDriverKind::EnttecUsbProV144,
+            identity: light_output::UsbDeviceIdentity {
+                vendor_id: 1,
+                product_id: 1,
+                manufacturer: None,
+                product: None,
+                usb_serial: Some("isolated-only".into()),
+                widget_serial: None,
+                port_topology_hint: None,
+            },
+            enabled: true,
+        }],
+    };
+    PhysicalDeliveryPolicy::VisualizerPreview
+        .configure_usb(&usb, &document)
+        .unwrap();
+    assert_eq!(factory.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+    PhysicalDeliveryPolicy::Live
+        .configure_usb(&usb, &document)
+        .unwrap();
+    assert_eq!(factory.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+    document.endpoints[0].endpoint_id.clear();
+    assert!(
+        PhysicalDeliveryPolicy::VisualizerPreview
+            .configure_usb(&usb, &document)
+            .is_err()
+    );
+    assert_eq!(factory.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn live_scheduler_shutdown_preserves_usb_safe_control_bytes_and_explicit_off_still_zeros() {
+    #[derive(Default)]
+    struct Driver {
+        frames: std::sync::Mutex<Vec<DmxFrame>>,
+        shutdowns: std::sync::atomic::AtomicUsize,
+    }
+    impl light_output::UsbEndpointDriver for Driver {
+        fn enqueue_latest(&self, frame: light_usb_dmx_core::UniverseFrame) -> Result<(), String> {
+            self.frames.lock().unwrap().push(*frame.slots());
+            Ok(())
+        }
+        fn health(&self) -> light_output::UsbEndpointDriverHealth {
+            light_output::UsbEndpointDriverHealth {
+                online: true,
+                ..Default::default()
+            }
+        }
+        fn shutdown(&self) -> light_output::UsbEndpointShutdown {
+            self.shutdowns
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            light_output::UsbEndpointShutdown::DeviceRetainsLastFrame
+        }
+    }
+    struct Factory(Arc<Driver>);
+    impl light_output::UsbPlatformDriverFactory for Factory {
+        fn open(
+            &self,
+            _: &light_output::UsbEndpointConfiguration,
+        ) -> Result<Arc<dyn light_output::UsbEndpointDriver>, String> {
+            Ok(self.0.clone())
+        }
+    }
+    let driver = Arc::new(Driver::default());
+    let usb = UsbOutputFanout::new(Arc::new(Factory(driver.clone())));
+    let document = light_output::UsbEndpointDocument {
+        revision: 1,
+        endpoints: vec![light_output::UsbEndpointConfiguration {
+            endpoint_id: "isolated-safe-shutdown".into(),
+            driver: light_output::UsbEndpointDriverKind::EnttecUsbProV144,
+            identity: light_output::UsbDeviceIdentity {
+                vendor_id: 1,
+                product_id: 1,
+                manufacturer: None,
+                product: None,
+                usb_serial: Some("isolated-only".into()),
+                widget_serial: None,
+                port_topology_hint: None,
+            },
+            enabled: true,
+        }],
+    };
+    usb.configure(&document).unwrap();
+    let routes = [OutputRoute {
+        target: light_output::OutputRouteTarget::UsbEndpoint {
+            endpoint_id: document.endpoints[0].endpoint_id.clone(),
+        },
+        protocol: Protocol::ArtNet,
+        logical_universe: 1,
+        destination_universe: 1,
+        delivery_mode: None,
+        destination: None,
+        enabled: true,
+        minimum_slots: 512,
+    }];
+    let network = NetworkOutput::bind(
+        "127.0.0.1".parse().unwrap(),
+        *Uuid::new_v4().as_bytes(),
+        "isolated shutdown",
+    )
+    .await
+    .unwrap();
+    let mut safe_frame = [77; 512];
+    safe_frame[0] = 0; // Safe intensity, with other controls parked at their authored safe values.
+    assert_eq!(
+        usb.enqueue_routes(&routes, &HashMap::from([(1, safe_frame)])),
+        1
+    );
+    PhysicalDeliveryPolicy::Live
+        .finish_scheduler_output(&network, &usb, &routes, &mut HashMap::new())
+        .await;
+    assert_eq!(
+        driver.frames.lock().unwrap().len(),
+        1,
+        "scheduler shutdown must not enqueue a replacement all-zero universe"
+    );
+    assert_eq!(driver.frames.lock().unwrap()[0], safe_frame);
+    assert_eq!(
+        driver.shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+        1
+    );
+
+    // Explicit route removal retains its existing zero-frame semantics, independently of scheduler shutdown.
+    let explicit_usb = UsbOutputFanout::new(Arc::new(Factory(driver.clone())));
+    explicit_usb.configure(&document).unwrap();
+    PhysicalDeliveryPolicy::Live
+        .terminate(&network, &explicit_usb, &routes, &mut HashMap::new())
+        .await;
+    assert_eq!(driver.frames.lock().unwrap().last(), Some(&[0; 512]));
+}

@@ -50,6 +50,7 @@ fn group_master_changes_output_generation_without_changing_snapshot_identity() {
         .prepare_snapshot(EngineSnapshot {
             playbacks: vec![test_group_playback_with_master(1, "1", 1.0)].into(),
             groups: vec![GroupDefinition {
+                replacement_projections: Default::default(),
                 id: "1".into(),
                 ..Default::default()
             }]

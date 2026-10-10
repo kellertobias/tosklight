@@ -1,5 +1,9 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import type {
+	FixtureSheetAttributeGroup,
+	FixtureSheetGroupValue,
+} from "./fixtureSheetValues";
 import { fixtureSheetColumns } from "./fixtureSheetColumns";
 import type { FixtureSheetRow } from "./fixtureSheetProjection";
 import type { FixtureStepPresenter } from "./fixtureSheetStep";
@@ -173,4 +177,57 @@ describe("Fixture Sheet attribute value fitting", () => {
 		expect(presentation).toHaveTextContent("Prism 8 facet");
 		expect(presentation).toHaveTextContent("Prism rotation 44%");
 	});
+});
+
+function empty(id: FixtureSheetAttributeGroup): FixtureSheetGroupValue {
+	return {
+		id,
+		available: false,
+		source: "default",
+		members: [],
+		accessibleName: `${id} unavailable`,
+	};
+}
+
+it("renders pending family identity without calling absent Normal black", () => {
+	const fixture = row({
+		color: "transparent",
+		colorAvailable: true,
+		colorLabel: "Unavailable",
+		preloadColor: "transparent",
+	});
+	fixture.groupValues = {
+		intensity: empty("intensity"),
+		position: empty("position"),
+		beam: empty("beam"),
+		shapers: empty("shapers"),
+		focus: empty("focus"),
+		control: empty("control"),
+		media: empty("media"),
+		color: {
+			id: "color",
+			available: true,
+			source: "default",
+			accessibleName: "Color: Unavailable; Preload Direct · unknown appearance",
+			members: [
+				{
+					attribute: "color",
+					label: "Color",
+					value: null,
+					text: "Unavailable",
+					preloadValue: null,
+					preloadText: "Direct · unknown appearance",
+					source: "default",
+					dynamics: [],
+				},
+			],
+		},
+	};
+	const view = renderColumn("color", fixture);
+	expect(view).toHaveTextContent("Unavailable");
+	expect(view).toHaveTextContent("Preload Direct · unknown appearance");
+	expect(view.querySelector('[role="img"]')).toHaveAttribute(
+		"aria-label",
+		fixture.groupValues?.color.accessibleName,
+	);
 });
