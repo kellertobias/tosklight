@@ -123,6 +123,7 @@ function assertIdentity(value: unknown, path: string) {
 		"playback",
 		"virtual",
 		"cue_list",
+		"direct_cue_list",
 		"group",
 	]);
 	exactRecordAt(value, path, [
@@ -131,7 +132,7 @@ function assertIdentity(value: unknown, path: string) {
 			? "playback_number"
 			: kind === "virtual"
 				? "page"
-				: kind === "cue_list"
+				: kind === "cue_list" || kind === "direct_cue_list"
 					? "cue_list_id"
 					: "group_id",
 		...(kind === "virtual" ? ["playback_number"] : []),
@@ -140,6 +141,7 @@ function assertIdentity(value: unknown, path: string) {
 
 function assertCueRuntime(value: unknown, path: string) {
 	const runtime = exactRecordAt(value, path, [
+		"owner",
 		"cue_index",
 		"previous_index",
 		"current",
@@ -168,6 +170,7 @@ function assertCueRuntime(value: unknown, path: string) {
 		"manual_xfade_direction",
 		"manual_xfade_progress",
 	]);
+	if (runtime.owner != null) assertIdentity(runtime.owner, `${path}.owner`);
 	for (const key of ["current", "loaded", "normal_next", "effective_next"])
 		if (runtime[key] != null)
 			exactRecordAt(runtime[key], `${path}.${key}`, ["id", "number"]);
