@@ -349,7 +349,7 @@ stop_running() {
   pkill -x ToskLight 2>/dev/null || true
   pkill -x light-hardware-controls 2>/dev/null || true
   pkill -x Light 2>/dev/null || true
-  pkill -f "$ROOT/node_modules/.bin/vite" 2>/dev/null || true
+  pkill -f "$ROOT/node_modules/.bin/vite([[:space:]]|$)" 2>/dev/null || true
   pkill -f "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless" 2>/dev/null || true
   pkill -f "$TARGET_DIR/debug/light-headless" 2>/dev/null || true
   pkill -f "$TARGET_DIR/debug/light-desktop" 2>/dev/null || true
