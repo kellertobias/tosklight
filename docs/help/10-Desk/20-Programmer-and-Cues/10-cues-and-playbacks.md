@@ -6,7 +6,7 @@
 - **GO** runs the next Cue. **Pause/Resume** holds and continues the current transition; GO also resumes a paused transition.
 - **In** timing belongs to the Cue you enter; **Out** timing belongs to the Cue you leave and applies to decreasing or released Intensity.
 - **Cue Fade** supplies the sequence's fallback fade. **Programmer Fade** controls programming transitions and Preload GO. **Release** supplies Out Fade when that cell is linked to Release.
-- Clear the Programmer when checking Cue output, and check the playback page before using a page-relative address.
+- Press **CLR twice** before checking Cue output: first clears selection, second clears Programmer values. Check the playback page before using a page-relative address.
 
 A Cuelist contains ordered Cues. A playback is an operator control assigned to a Cuelist, Group, or specialized master.
 
