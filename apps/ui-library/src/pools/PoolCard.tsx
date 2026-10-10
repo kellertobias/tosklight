@@ -62,7 +62,7 @@ export function PoolCard({
 	const empty = model.states?.includes("empty") ?? false;
 	const color = empty ? undefined : model.color;
 	const hasStatus = Boolean(
-		workflow || model.status != null || model.derived || model.frozen,
+		model.status != null || model.derived || model.frozen,
 	);
 	const hasInformation =
 		model.secondary != null || Boolean(model.details?.length);
@@ -198,7 +198,12 @@ function poolCardStyle(
 	style: CSSProperties | undefined,
 	empty: boolean,
 ) {
+	const numberDigits =
+		typeof model.number === "number" || typeof model.number === "string"
+			? String(model.number).length
+			: 4;
 	const resolved = {
+		"--pool-card-number-space": `${Math.max(1, numberDigits) * 6 + 7}px`,
 		...(!empty && model.color ? { "--pool-card-color": model.color } : {}),
 		...(!empty && model.iconColor
 			? { "--pool-card-icon-color": model.iconColor }
@@ -239,20 +244,22 @@ function PoolCardContents({
 				<span className="pool-card-information">
 					{model.secondary != null && <small>{model.secondary}</small>}
 					{model.details?.map((detail) => (
-						<em key={detail}>{detail}</em>
+						<em className="pool-card-detail" key={detail}>
+							{detail}
+						</em>
 					))}
+				</span>
+			)}
+			{workflow && (
+				<span
+					className={`pool-card-workflow ${workflow.kind}`}
+					data-pool-workflow={workflow.kind}
+				>
+					{workflow.label}
 				</span>
 			)}
 			{hasStatus && (
 				<span className="pool-card-status-row">
-					{workflow && (
-						<span
-							className={`pool-card-workflow ${workflow.kind}`}
-							data-pool-workflow={workflow.kind}
-						>
-							{workflow.label}
-						</span>
-					)}
 					{model.status != null && (
 						<span className="pool-card-status">{model.status}</span>
 					)}
@@ -317,7 +324,7 @@ function resolveWorkflow(model: PoolCardViewModel) {
 	if (states.has("update-target"))
 		return { kind: "update", label: model.workflow ?? "Update" } as const;
 	if (states.has("record-target") || states.has("store-target"))
-		return { kind: "record", label: model.workflow ?? "Record" } as const;
+		return { kind: "record", label: model.workflow ?? "REC" } as const;
 	if (states.has("set-target"))
 		return { kind: "set", label: model.workflow ?? "Set" } as const;
 	if (states.has("copy-target"))

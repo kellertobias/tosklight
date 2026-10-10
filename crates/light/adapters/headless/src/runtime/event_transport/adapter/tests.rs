@@ -659,6 +659,7 @@ fn timecode_tick_is_a_typed_replaceable_ordered_projection() {
                 timecode_id: id,
                 revision: 12,
                 transport: light_playback::TimecodeTransportState::Playing,
+                external_armed: false,
                 frame: light_playback::TimecodeFrame(88),
                 duration: light_playback::TimecodeFrame(440),
                 reconstructed: light_playback::TimecodeReconstructedState {
@@ -687,6 +688,7 @@ fn timecode_tick_is_a_typed_replaceable_ordered_projection() {
     assert_eq!(snapshot.timecode_id, id.0);
     assert_eq!(snapshot.revision, 12);
     assert_eq!(snapshot.frame, 88);
+    assert!(!snapshot.external_armed);
 }
 
 #[test]

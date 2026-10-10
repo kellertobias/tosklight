@@ -32,6 +32,7 @@ import {
 import { useDynamicObjectEditorRequest } from "../features/dynamics/useDynamicObjectEditorRequest";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
 import { DynamicMutationWriter } from "../features/dynamics/DynamicMutationWriter";
+import { DynamicLaneSymbol } from "../features/dynamics/DynamicLaneSymbol";
 import { dynamicLaneChoices } from "../features/dynamics/laneDomain";
 import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
 import {
@@ -638,7 +639,7 @@ function DynamicPoolTile({
 	poolNumber: number;
 	dynamic: DynamicObject | undefined;
 }) {
-	const count = dynamic ? runningCount(runtime, dynamic.id) : 0;
+	const count = dynamic ? runningFixtureCount(runtime, dynamic.id) : 0;
 	const running = count > 0;
 	const status = dynamic ? definitionStatus(runtime, dynamic.id) : null;
 	const validationError = dynamic?.validationError ?? null;
@@ -657,11 +658,7 @@ function DynamicPoolTile({
 			model={{
 				number: poolNumber,
 				primary: dynamic ? dynamicPoolLabel(dynamic) : "Empty",
-				secondary: dynamic
-					? dynamic.body.target_binding.type === "live_group"
-						? `G${dynamic.body.target_binding.group_id}`
-						: "Live"
-					: "Tap to choose first lane",
+				secondary: dynamic ? String(count) : undefined,
 				status: warningMessage ? (
 					<span
 						role="img"
@@ -671,7 +668,12 @@ function DynamicPoolTile({
 						⚠
 					</span>
 				) : undefined,
-				icon: dynamic?.body.icon,
+				preview: dynamic ? (
+					<DynamicLaneSymbol
+						lanes={dynamic.body.lanes}
+						attributes={actions.attributes}
+					/>
+				) : undefined,
 				iconColor: dynamic?.body.color ?? "#4edcff",
 				color: dynamic?.body.color ?? "#4edcff",
 				kind: "generic",
@@ -732,5 +734,18 @@ import {
 	type DynamicEditorProps,
 	definitionStatus,
 	LaneAttributeModal,
-	runningCount,
 } from "./dynamics/DynamicsEditor";
+
+/** Count fixtures once across active owners; pending Preload instances have not started. */
+export function runningFixtureCount(
+	runtime: DynamicRuntimeSnapshotProjection | null,
+	dynamicId: string,
+) {
+	return new Set(
+		(runtime?.instances ?? [])
+			.filter(
+				(instance) => instance.dynamic_id === dynamicId && !instance.pending,
+			)
+			.flatMap((instance) => instance.targets),
+	).size;
+}

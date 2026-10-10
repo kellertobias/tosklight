@@ -58,6 +58,7 @@ import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsVi
 import { useApp } from "../../state/AppContext";
 import type { CuelistPoolEntry } from "../../features/playbackTopology/cuelistPoolCatalog";
 import { useCuelistPool } from "./useCuelistSelection";
+import { usePoolRecordLabel } from "../../features/recordUpdateOptions/usePoolRecordLabel";
 
 interface CuelistPoolProps {
 	active: boolean;
@@ -74,6 +75,7 @@ interface CuelistPoolProps {
 }
 
 interface PoolSlotProps {
+	recordLabel?: string;
 	number: number;
 	poolPosition: number;
 	playback: CuelistPoolEntry | null;
@@ -108,17 +110,17 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 				model={{
 					number,
 					primary: playback?.cueList.name ?? "Empty",
-					secondary: playback
-						? props.offPending
-							? "Tap to release Cuelist"
-							: props.updateArmed
-								? "Touch to choose Update mode"
-								: `Cuelist · ${runtimeMaster != null ? `${Math.round(runtimeMaster * 100)}%` : "Off"}`
-						: props.updateArmed
-							? "Touch to check Update eligibility"
-							: props.storeArmed
-								? "Tap to record Cuelist"
-								: "Press Rec first",
+					secondary: playback ? (
+						<span>
+							{playback.cueList.cues.length}
+							{runtimeMaster != null && (
+								<span role="img" aria-label="Running">
+									{" "}
+									▶
+								</span>
+							)}
+						</span>
+					) : undefined,
 					details: playback
 						? [
 								...(playback.legacyAlias
@@ -138,12 +140,8 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 							}
 						: undefined,
 					kind: "cuelist",
-					status:
-						runtimeMaster != null
-							? `Active · ${Math.round(runtimeMaster * 100)}%`
-							: undefined,
 					states: props.presentation.states,
-					workflow: props.offPending && playback ? "Off" : undefined,
+					workflow: props.offPending && playback ? "Off" : props.recordLabel,
 				}}
 				onPointerDown={props.onPointerDown}
 				onPointerUp={props.onPointerEnd}
@@ -418,6 +416,7 @@ function usePoolSlots(
 		| undefined
 	>,
 	assignedRuntimes: ReturnType<typeof usePlaybackProjectionMap>,
+	playbackDefinitions: ReturnType<typeof usePlaybackDefinitions>,
 ) {
 	return useMemo(() => {
 		const byNumber = new Map(
@@ -431,6 +430,20 @@ function usePoolSlots(
 				usageByNumber.set(playbackNumber, pages);
 			}
 		}
+		const assignedMasterByCueList = new Map<string, number>();
+		for (const definition of playbackDefinitions) {
+			const target = definition.body.target;
+			const projection = assignedRuntimes.get(definition.body.number);
+			if (
+				target.type !== "cue_list" ||
+				projection?.target !== "cue_list" ||
+				projection.cue_list_id !== target.cue_list_id
+			)
+				continue;
+			const master = runtimeMaster(projection);
+			if (master != null)
+				assignedMasterByCueList.set(target.cue_list_id, master);
+		}
 		const normalizedSearch = search.toLowerCase();
 		return Array.from({ length: 1000 }, (_, index) => ({
 			number: index + 1,
@@ -439,10 +452,8 @@ function usePoolSlots(
 				runtimeMaster(
 					runtimes.get(byNumber.get(index + 1)?.cueList.id ?? ""),
 				) ??
-				runtimeMaster(
-					assignedRuntimes.get(
-						byNumber.get(index + 1)?.assignment?.number ?? -1,
-					),
+				assignedMasterByCueList.get(
+					byNumber.get(index + 1)?.cueList.id ?? "",
 				) ??
 				null,
 			usage:
@@ -454,7 +465,7 @@ function usePoolSlots(
 				playback?.cueList.name.toLowerCase().includes(normalizedSearch) ||
 				String(number).includes(search),
 		);
-	}, [pages, pool, runtimes, assignedRuntimes, search]);
+	}, [pages, pool, runtimes, assignedRuntimes, search, playbackDefinitions]);
 }
 
 type CuelistPoolItem = ReturnType<typeof usePoolSlots>[number];
@@ -573,6 +584,7 @@ function CuelistPoolCards({
 	onPreviewImage: (number: number, playback: CuelistPoolEntry) => void;
 }) {
 	const poolSlots = poolSlotViewModels(slots);
+	const recordLabel = usePoolRecordLabel({ active: storeArmed });
 	const renderSlot = (slot: CuelistPoolItem, poolPosition: number) => {
 		const isSetTarget = setTarget === slot.number;
 		const presentation = resolveCuelistPresentation({
@@ -593,6 +605,15 @@ function CuelistPoolCards({
 				{...slot}
 				poolPosition={poolPosition}
 				selectedCuelist={selectedCuelist}
+				recordLabel={
+					storeArmed && !updateArmed
+						? recordLabel({
+								kind: "cuelist",
+								exists: Boolean(slot.playback),
+								cueCount: slot.playback?.cueList.cues.length ?? 0,
+							})
+						: undefined
+				}
 				storeArmed={storeArmed}
 				updateArmed={updateArmed}
 				setTarget={isSetTarget}
@@ -737,11 +758,12 @@ export function CuelistPool(props: CuelistPoolProps) {
 		pool.map((entry) => entry.cueList.id),
 		props.active,
 	).projections;
+	const playbackDefinitions = usePlaybackDefinitions(props.active);
 	const assignedRuntimes = usePlaybackProjectionMap(
 		props.active
-			? pool.flatMap((entry) =>
-					entry.assignment ? [entry.assignment.number] : [],
-				)
+			? playbackDefinitions
+					.filter((definition) => definition.body.target.type === "cue_list")
+					.map((definition) => definition.body.number)
 			: [],
 	);
 	const filteredPool = usePoolSlots(
@@ -750,6 +772,7 @@ export function CuelistPool(props: CuelistPoolProps) {
 		pages.map((object) => object.body),
 		runtimes,
 		assignedRuntimes,
+		playbackDefinitions,
 	);
 	const workflowMessage =
 		state.cueListSetTarget != null

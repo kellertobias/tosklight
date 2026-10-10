@@ -161,7 +161,7 @@
 	outline: 2px solid color-mix(in srgb, var(--record-theme) 72%, transparent);
 	outline-offset: -3px;
 }
-.store-target::after {
+.store-target:not(.pool-card)::after {
 	content: "RECORD";
 	position: absolute;
 	z-index: 24;
@@ -178,7 +178,7 @@
 .update-target {
 	outline-color: var(--update-theme) !important;
 }
-.update-target::after {
+.update-target:not(.pool-card)::after {
 	background: var(--update-theme) !important;
 }
 .update-armed-banner {

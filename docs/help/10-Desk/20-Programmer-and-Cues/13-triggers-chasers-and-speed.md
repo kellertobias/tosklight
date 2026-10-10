@@ -1,10 +1,24 @@
 # Triggers, Chasers, and Speed Groups
 
+## Quick summary
+
+- **GO** waits for you to advance the Cuelist.
+- **FOLLOW** waits for the current Cue's transition to finish, then waits its follow delay before starting the next Cue.
+- **TIME** counts from the current Cue's start, so the next Cue may start before that transition finishes.
+- Set FOLLOW or TIME and its **Trigger Time** on the **Cue you want to start automatically**. A Link is different: it belongs to the Cue you are leaving.
+- Rehearse automatic sequences with the production pause, looping, speed, and timecode settings.
+
 Cuelists can advance manually, after a follow delay, at a timed delay, through a Link, or from configured timecode.
 
 ## Follow and timed triggers
 
-FOLLOW starts after the preceding Cue's values have finished. TIME starts its stored duration immediately when the preceding Cue receives GO, so its Cue can begin while that preceding Cue is still fading. Confirm pause, release, loop, and end-of-list behavior for every automatic sequence.
+The trigger belongs to the destination Cue. To make Cue 2 start automatically after Cue 1, edit **Cue 2**, choose **FOLLOW** or **TIME**, and enter its **Trigger Time**. Trigger Time is the automatic wait; it is separate from **In Delay**, which holds a value after the Cue starts and before its fade begins.
+
+**FOLLOW** starts its wait after the preceding Cue's latest actual incoming or outgoing transition has finished, including applicable value delays and fades. A zero follow delay starts the next Cue as soon as that work settles. **TIME** starts its wait when the preceding Cue starts; it can interrupt a transition still in progress.
+
+For example, suppose Cue 1 starts at 0 seconds and all its transitions finish at 3 seconds. Set Cue 2 to **FOLLOW**, Trigger Time **2 seconds**: Cue 2 starts at 5 seconds. Change Cue 2 to **TIME**, Trigger Time **2 seconds**: it starts at 2 seconds, while Cue 1 is still fading. If outgoing Intensity instead finishes at 4 seconds, FOLLOW starts Cue 2 at 6 seconds; TIME still starts it at 2 seconds. These examples assume normal timing is enabled and no pause, manual interruption, Link, or authoritative timecode intervenes.
+
+Confirm pause, release, loop, and end-of-list behavior for every automatic sequence.
 
 ## Link triggers
 
