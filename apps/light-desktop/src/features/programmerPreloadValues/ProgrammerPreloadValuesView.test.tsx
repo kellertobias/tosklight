@@ -61,6 +61,18 @@ vi.mock("../showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => [],
 }));
 
+// Playback label authority is a separate tested boundary; this suite exercises
+// retained values subscriptions while programming capture is disabled.
+vi.mock("../playbackTopology/PlaybackTopologyView", () => ({
+	usePlaybackTopologyView: () => ({
+		ready: true,
+		error: null,
+		cueLists: [],
+		playbacks: [],
+		pages: [],
+	}),
+}));
+
 function ProjectionProbe() {
 	const projection = useProgrammerPreloadValuesView();
 	return (

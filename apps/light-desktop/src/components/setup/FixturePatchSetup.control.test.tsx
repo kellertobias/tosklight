@@ -1157,7 +1157,9 @@ describe("installed light-source appearance", () => {
 		expect(
 			within(dialog).getByRole("button", { name: "Touring · 4ch" }),
 		).toBeInTheDocument();
-		fireEvent.click(within(dialog).getByRole("button", { name: "Set" }));
+		fireEvent.click(
+			within(dialog.querySelector("header")!).getByRole("button", { name: "Set" }),
+		);
 
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledOnce(),
@@ -3464,16 +3466,21 @@ it("requires explicit cross-family head correspondence and submits one sparse re
 	const option = screen.getByRole("option", {name:/Other manufacturer.*Wheel mover/}) as HTMLOptionElement;
 	fireEvent.click(option);
 	const dialog = document.querySelector(".patch-edit-modal") as HTMLElement;
-	fireEvent.click(within(dialog).getByRole("button", {name:"Set"}));
+	const set = within(dialog.querySelector("header")!).getByRole("button", { name: "Set" });
+	fireEvent.click(set);
 	expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
-	expect(screen.getByRole("alert")).toHaveTextContent("every existing logical head");
+	expect(set).toBeDisabled();
+	expect(
+		within(dialog.querySelector(".import-workflow__footer")!).getByRole("status"),
+	).toHaveTextContent("Resolve 1 correspondence before Set.");
 	fireEvent.click(screen.getByRole("button", {name:/Choose correspondence/}));
 	fireEvent.click(screen.getByRole("option", {name:/Optical head/}));
-	fireEvent.click(within(dialog).getByRole("button", {name:"Set"}));
+	expect(set).toBeEnabled();
+	fireEvent.click(set);
 	await waitFor(() => expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", null,
 		{type:"replace_profile",profileId:"replacement-profile",profileRevision:replacement.revision,modeId:"replacement-mode",
 		 headMapping:[{fixtureId:"old-logical",targetProfileHeadId:replacement.modes[0].heads[0].id}],
-		 expectedShowRevision:1,expectedPatchRevision:1}));
+		 rootProgrammingMapping:[],expectedShowRevision:1,expectedPatchRevision:1}));
 	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
 });

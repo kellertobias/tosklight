@@ -486,7 +486,7 @@ describe("Patch v2 network boundary", () => {
 		{ action: {type: "replace_profile", profileId: PROFILE_ID, profileRevision: 3, modeId: MODE_ID,
 			headMapping: [{fixtureId: FIXTURE_ID, targetProfileHeadId: null}], expectedShowRevision: 9, expectedPatchRevision: 7},
 			wireAction: {action:"replace_profile",profile_id:PROFILE_ID,profile_revision:3,mode_id:MODE_ID,
-				head_mapping:[{fixture_id:FIXTURE_ID,target_profile_head_id:null}]} },
+				head_mapping:[{fixture_id:FIXTURE_ID,target_profile_head_id:null}],root_programming_mapping:[]} },
 		{
 			action: {
 				type: "set_masters",
