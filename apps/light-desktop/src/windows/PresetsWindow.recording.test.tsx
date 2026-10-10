@@ -1,4 +1,5 @@
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -28,6 +29,8 @@ const mocks = vi.hoisted(() => ({
 	commandReplace: vi.fn(async () => true),
 	commandExecute: vi.fn(async () => true),
 	commandText: "",
+	commandReady: true,
+	loadSettings: vi.fn(),
 	storePreload: vi.fn(async () => true),
 	recall: vi.fn(async () => null),
 	updateTarget: vi.fn(),
@@ -83,10 +86,17 @@ vi.mock(
 vi.mock("../components/control/commandLine/useCommandLineSurface", () => ({
 	useCommandLineSurface: () => ({
 		text: mocks.commandText,
+		read: () => ({ ready: mocks.commandReady, text: mocks.commandText }),
 		reset: mocks.commandReset,
 		replace: mocks.commandReplace,
 		execute: mocks.commandExecute,
 	}),
+}));
+vi.mock("../features/programmingUpdate/ProgrammingUpdateProvider", () => ({
+	useProgrammingUpdate: () => ({ loadSettings: mocks.loadSettings }),
+}));
+vi.mock("../features/recordUpdateOptions/usePoolRecordLabel", () => ({
+	usePoolRecordLabel: () => ({ exists }: { exists: boolean }) => exists ? "Merge" : "REC",
 }));
 vi.mock("../components/control/updateWorkflow", () => ({
 	requestUpdateTarget: mocks.updateTarget,
@@ -123,6 +133,9 @@ beforeEach(() => {
 	mocks.commandReplace.mockClear();
 	mocks.commandExecute.mockClear();
 	mocks.commandText = "";
+	mocks.commandReady = true;
+	mocks.loadSettings.mockReset();
+	mocks.loadSettings.mockResolvedValue({ record_default: "smart" });
 	mocks.storePreload.mockClear();
 	mocks.recall.mockClear();
 	mocks.updateTarget.mockClear();
@@ -344,7 +357,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		expect(mocks.commandReset).not.toHaveBeenCalled();
 	});
 
-	it("preserves the existing-target mode dialog and object revision", () => {
+	it("preserves the existing-target mode dialog and object revision", async () => {
 		mocks.presets = [
 			{
 				kind: "preset",
@@ -362,7 +375,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		render(<PresetsWindow compact />);
 
 		fireEvent.click(firstPresetCell());
-		fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Merge" }));
 
 		expect(mocks.record).toHaveBeenCalledWith({
 			objectId: "01",
@@ -373,7 +386,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		});
 	});
 
-	it("prefers the backend canonical identity over a legacy alias", () => {
+	it("prefers the backend canonical identity over a legacy alias", async () => {
 		mocks.presets = [
 			{
 				kind: "preset",
@@ -393,7 +406,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		render(<PresetsWindow compact />);
 
 		fireEvent.click(firstPresetCell());
-		fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Merge" }));
 
 		expect(mocks.record).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -442,7 +455,7 @@ describe("PresetsWindow active / defined fixture counts", () => {
 		};
 	}
 
-	it("shows a compact active / defined label that follows the effective state", () => {
+	it("shows only active fixture counts and follows the effective state", () => {
 		mocks.state.storeArmed = false;
 		mocks.state.presetFamily = "Beam";
 		mocks.presets = [
@@ -474,13 +487,59 @@ describe("PresetsWindow active / defined fixture counts", () => {
 		const cards = () =>
 			container.querySelectorAll<HTMLButtonElement>(".preset-card");
 
-		expect(cards()[0]).toHaveTextContent("0/2 fx");
+		expect(cards()[0].querySelector(".pool-card-information > small")).toHaveTextContent(/^0$/);
 		expect(cards()[0]).not.toHaveTextContent(/fixtures/);
 		expect(cards()[0]).not.toHaveTextContent(/Beam ·/);
-		expect(cards()[1]).toHaveTextContent("0/0 fx");
+		expect(cards()[1].querySelector(".pool-card-information > small")).toHaveTextContent(/^0$/);
 
 		mocks.visualization = zoomSnapshot(2, 1);
 		rerender(<PresetsWindow compact />);
-		expect(cards()[0]).toHaveTextContent("1/2 fx");
+		expect(cards()[0].querySelector(".pool-card-information > small")).toHaveTextContent(/^1$/);
+	});
+});
+
+
+describe("PresetsWindow effective touch recording option", () => {
+	function existingPreset() {
+		mocks.presets = [{ kind: "preset", id: "2.1", revision: 4, updated_at: "",
+			body: { name: "Blue", number: 1, family: "Color", values: {} } }];
+	}
+	it("merges an occupied preset directly when the desk default is Merge", async () => {
+		existingPreset();
+		mocks.loadSettings.mockResolvedValue({ record_default: "merge" });
+		render(<PresetsWindow compact />);
+		fireEvent.click(firstPresetCell());
+		await waitFor(() => expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({
+			objectId: "2.1", mode: "merge", expectedObjectRevision: 4,
+		})));
+		expect(screen.queryByRole("button", { name: "Merge" })).not.toBeInTheDocument();
+	});
+	it("keeps the mode dialog when one-off Smart overrides the Merge default", async () => {
+		existingPreset();
+		mocks.loadSettings.mockResolvedValue({ record_default: "merge" });
+		mocks.commandText = "RECORD SMART";
+		render(<PresetsWindow compact />);
+		fireEvent.click(firstPresetCell());
+		expect(await screen.findByRole("button", { name: "Merge" })).toBeInTheDocument();
+		expect(mocks.record).not.toHaveBeenCalled();
+	});
+	it("records an empty slot as overwrite even when the default is Merge", () => {
+		mocks.loadSettings.mockResolvedValue({ record_default: "merge" });
+		render(<PresetsWindow compact />);
+		fireEvent.click(firstPresetCell());
+		expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({ mode: "overwrite", expectedObjectRevision: 0 }));
+	});
+	it("cancels a delayed settings decision if the authoritative command changes", async () => {
+		existingPreset();
+		let finish!: (settings: { record_default: string }) => void;
+		mocks.loadSettings.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+		mocks.commandText = "RECORD";
+		render(<PresetsWindow compact />);
+		fireEvent.click(firstPresetCell());
+		await waitFor(() => expect(mocks.loadSettings).toHaveBeenCalledOnce());
+		mocks.commandText = "DELETE";
+		await act(async () => { finish({ record_default: "merge" }); });
+		expect(mocks.record).not.toHaveBeenCalled();
+		expect(screen.queryByRole("button", { name: "Merge" })).not.toBeInTheDocument();
 	});
 });

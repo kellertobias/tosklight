@@ -204,6 +204,24 @@ impl<'a> ServerProgrammingPorts<'a> {
     ) -> Result<(usize, Option<String>, bool), String> {
         let show_id = self.active_show_id()?;
         let context = recording_context(context, "group-record");
+        // Normal Merge recording creates an unused slot. Keep explicit REC + strict,
+        // as before, and preserve intentionally stored empty Groups as existing targets.
+        let record = super::adapter::selection_prefixed_group_record(raw_command)?
+            .map_or_else(|| raw_command.to_owned(), |(_, record)| record);
+        let operation = if operation == light_application::ProgrammingGroupRecordOperation::Merge
+            && record.split_whitespace().nth(1) != Some("+")
+            && !self
+                .state
+                .output
+                .snapshot()
+                .groups
+                .iter()
+                .any(|group| group.id == group_id)
+        {
+            light_application::ProgrammingGroupRecordOperation::Overwrite
+        } else {
+            operation
+        };
         let command = light_application::ProgrammingGroupRecordRequest {
             show_id,
             group_id,
@@ -243,7 +261,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         let (tokens, _) = super::super::tokenize_programmer_command(raw_command)?;
         let (option, _) = super::record_update_option::parse_option(&tokens[1..]);
         let mode = match option
-            .unwrap_or_else(|| super::record_update_option::record_default(self.state))
+            .unwrap_or_else(|| super::record_update_option::preset_record_default(self.state))
         {
             light_application::programming_update::RecordUpdateOption::Smart => {
                 light_programmer::PresetStoreMode::Overwrite

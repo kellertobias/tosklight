@@ -27,6 +27,7 @@ import {
 	type RecordMode,
 	RecordModeDialog,
 } from "../../components/shared/RecordModeDialog";
+import { usePoolRecordLabel } from "../../features/recordUpdateOptions/usePoolRecordLabel";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import { PresetPreviewGlyph } from "../../features/presetPreview/PresetPreviewGlyph";
 import {
@@ -129,6 +130,7 @@ type PresetSlotProps = Omit<
 	index: number;
 	preset: PresetCard | null;
 	preview: PresetPreview | null;
+	recordLabel: ReturnType<typeof usePoolRecordLabel>;
 };
 
 function presetMutationState(
@@ -245,7 +247,8 @@ function PresetPoolSlot(props: PresetSlotProps) {
 				primary: filtered
 					? "Other family"
 					: (customization?.title ?? preset?.body.name ?? "Empty"),
-				secondary: presetSecondary(preset, filtered, storedFamily, props),
+				secondary: preset ? presetSecondary(preset, filtered, storedFamily, props) : undefined,
+				details: preset ? undefined : [presetSecondary(preset, filtered, storedFamily, props)],
 				icon: artwork.icon,
 				preview: artwork.preview && (
 					<PresetPreviewGlyph preview={artwork.preview} />
@@ -254,6 +257,7 @@ function PresetPoolSlot(props: PresetSlotProps) {
 				color: artwork.color,
 				kind: "preset",
 				states: presentation.states,
+				workflow: storeArmed ? props.recordLabel({ kind: "preset", exists: Boolean(preset) }) : undefined,
 			}}
 		/>
 	);
@@ -266,6 +270,7 @@ export function PresetCardGrid({
 	...slotProps
 }: PresetCardGridProps) {
 	const { family } = slotProps;
+	const recordLabel = usePoolRecordLabel({ active: slotProps.storeArmed });
 	const previews = useMemo(
 		() =>
 			new Map(
@@ -309,6 +314,7 @@ export function PresetCardGrid({
 					return (
 						<PresetPoolSlot
 							{...slotProps}
+							recordLabel={recordLabel}
 							index={index}
 							preset={preset}
 							preview={preset ? (previews.get(preset.id) ?? null) : null}

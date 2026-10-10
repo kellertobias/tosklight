@@ -1577,18 +1577,26 @@
 	);
 	/* Tile insets and the picture box size; everything inside the tile follows them. */
 	--pool-card-inset: 6.4px;
-	--pool-card-media-width: clamp(29px, 32%, 56px);
-	--pool-card-media-height: clamp(29px, 30%, 51px);
+	--pool-card-border-width: 1px;
+	--pool-card-radius: 7px;
+	--pool-card-media-width: 100%;
+	--pool-card-media-height: 100%;
 	position: relative;
 	width: 100%;
 	min-width: 0;
 	aspect-ratio: 1;
-	display: block;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 28%;
+	grid-template-rows: minmax(0, 1fr) auto 28%;
+	grid-template-areas: "name name" "status status" "information media";
+	container-type: inline-size;
+	gap: 3px 4px;
 	overflow: hidden;
-	padding: var(--pool-card-inset);
+	/* Keep border + padding constant when selection or workflow thickens the border. */
+	padding: calc(var(--pool-card-inset) + 1px - var(--pool-card-border-width));
 	border: 1px solid
 		color-mix(in srgb, var(--pool-card-resolved-color) 68%, var(--line2));
-	border-radius: 7px;
+	border-radius: var(--pool-card-radius);
 	background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
 	text-align: left;
 }
@@ -1630,6 +1638,7 @@
 .pool-presentation.active,
 .pool-card.selected,
 .pool-card.active {
+	--pool-card-border-width: 2px;
 	border-width: 2px;
 	border-color: var(--pool-card-resolved-color);
 	background: color-mix(
@@ -1648,85 +1657,79 @@
 }
 
 .pool-card > .number {
-	position: absolute;
-	z-index: 4;
-	top: calc(var(--pool-card-inset) - 1.6px);
-	right: var(--pool-card-inset);
+	position: static;
+	inset: auto;
+	grid-area: 1 / 2;
+	z-index: 3;
+	align-self: start;
+	justify-self: end;
 	color: var(--muted);
-	font-size: 10px;
+	font-size: clamp(8px, 12cqw, 10px);
 	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+	background: #10161d;
+	box-shadow: -2px 1px 4px #10161d;
+	border-radius: 2px;
 }
 
 .pool-card-name {
-	position: absolute;
-	z-index: 2;
-	top: var(--pool-card-inset);
-	right: calc(var(--pool-card-inset) + 22px);
-	left: var(--pool-card-inset);
-	max-height: 48%;
+	grid-area: 1 / 1 / 4 / 3;
+	min-width: 0;
+	min-height: 0;
+	align-self: stretch;
+	/* The title can use the whole tile; corner indicators paint above it. */
 	overflow: hidden;
 	color: var(--text);
-	font-size: 13px;
+	font-size: clamp(9px, 15cqw, 14px);
 	font-weight: 800;
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 4;
-	hyphens: auto;
-	line-height: 1.12;
-	overflow-wrap: break-word;
-	text-wrap: pretty;
+	hyphens: none;
+	line-height: 1.15;
+	overflow-wrap: normal;
 	word-break: normal;
+	text-align: left;
+	text-wrap: wrap;
 }
 
-.pool-card:not(.has-information, .has-media, .has-status) .pool-card-name {
-	bottom: var(--pool-card-inset);
-	max-height: none;
-	-webkit-line-clamp: 6;
+/* Protect the first line from the index's opaque centre and its fade. */
+.pool-card-name::before {
+	content: "";
+	float: right;
+	width: var(--pool-card-number-space, 31px);
+	height: 1em;
 }
 
 .pool-card-information {
-	position: absolute;
-	z-index: 2;
-	right: var(--pool-card-inset);
-	bottom: var(--pool-card-inset);
-	left: var(--pool-card-inset);
-	max-height: 42%;
-	overflow: hidden;
+	grid-area: information;
+	position: relative;
+	z-index: 3;
+	min-width: 0;
+	min-height: 0;
+	align-self: end;
+	justify-self: start;
+	background: #10161d;
+	box-shadow: 2px -1px 4px #10161d;
 	pointer-events: none;
 }
 
-.pool-card.has-media .pool-card-information {
-	right: calc(var(--pool-card-media-width) + 2 * var(--pool-card-inset) - 2px);
-}
-
-.pool-card.has-status .pool-card-information {
-	bottom: calc(var(--pool-card-inset) + 20px);
-}
-
-.pool-card-information > small,
-.pool-card-information > em {
-	display: block;
-	overflow: hidden;
-	font-size: 9px;
-	line-height: 1.2;
-	text-overflow: ellipsis;
-}
-
 .pool-card-information > small {
+	display: block;
 	color: var(--muted);
-	display: -webkit-box;
-	-webkit-box-orient: vertical;
-	-webkit-line-clamp: 2;
+	font-size: 10px;
+	line-height: 1.2;
+	overflow-wrap: anywhere;
 }
 
-.pool-card-information > em {
-	margin-top: 2px;
-	color: var(--amber);
-	font-style: normal;
-	white-space: nowrap;
+/* Extra descriptions remain accessible without crowding the four tile corners. */
+.pool-card-detail {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
 }
 
 .pool-card.empty {
+	--pool-card-border-width: 1px;
 	--pool-card-resolved-color: var(--pool-card-uncolored-color, #65717b);
 	border-width: 1px;
 	border-style: dashed;
@@ -1740,14 +1743,14 @@
 }
 
 .pool-card.empty:not(
-	.record-target,
-	.store-target,
-	.update-target,
-	.set-target,
-	.copy-target,
-	.move-target,
-	.delete-target
-)
+		.record-target,
+		.store-target,
+		.update-target,
+		.set-target,
+		.copy-target,
+		.move-target,
+		.delete-target
+	)
 	> :is(.number, .pool-card-name, .pool-card-information) {
 	opacity: 0.45;
 }
@@ -1756,6 +1759,7 @@
 .pool-card.store-target,
 .pool-presentation.record-target,
 .pool-presentation.store-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-record-color, #ff4e55);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1763,6 +1767,7 @@
 
 .pool-card.update-target,
 .pool-presentation.update-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-update-color, #f4b942);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1770,6 +1775,7 @@
 
 .pool-card.set-target,
 .pool-presentation.set-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-set-color, #1bd6ec);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1777,6 +1783,7 @@
 
 .pool-card.copy-target,
 .pool-presentation.copy-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-copy-color, #57a8ff);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1784,6 +1791,7 @@
 
 .pool-card.move-target,
 .pool-presentation.move-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-move-color, #b988ff);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1791,27 +1799,20 @@
 
 .pool-card.delete-target,
 .pool-presentation.delete-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-delete-color, #ff4e55);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
 }
 
 .pool-card-status-row {
-	position: absolute;
-	z-index: 3;
-	right: var(--pool-card-inset);
-	bottom: calc(var(--pool-card-inset) - 1px);
-	left: calc(var(--pool-card-inset) - 1px);
+	grid-area: status;
 	min-width: 0;
 	display: flex;
 	align-items: center;
-	gap: 3px;
-	overflow: hidden;
+	flex-wrap: wrap;
+	gap: 2px;
 	pointer-events: none;
-}
-
-.pool-card.has-media .pool-card-status-row {
-	right: calc(var(--pool-card-media-width) + 2 * var(--pool-card-inset) - 2px);
 }
 
 .pool-card-state-marker,
@@ -1837,8 +1838,22 @@
 	color: var(--amber);
 }
 
+/* Workflow banners cover the footer and artwork without intercepting touch actions. */
+.pool-card-workflow {
+	position: absolute;
+	inset: auto 3px 3px;
+	z-index: 30;
+	padding: 2px 5px;
+	border-radius: calc(var(--pool-card-radius) - 3px);
+	background: #081014;
+	text-align: center;
+	pointer-events: none;
+}
+
 .pool-card-workflow.record {
-	color: var(--pool-record-color, #ff4e55);
+	font-weight: 900;
+	background: var(--pool-record-color, #ff4e55);
+	color: #000;
 }
 
 .pool-card-workflow.update {
@@ -1851,10 +1866,12 @@
 }
 
 .pool-card-media {
-	position: absolute;
-	z-index: 2;
-	right: var(--pool-card-inset);
-	bottom: var(--pool-card-inset);
+	grid-area: media;
+	position: relative;
+	z-index: 3;
+	box-shadow: -2px -2px 4px #10161d;
+	min-width: 0;
+	min-height: 0;
 	width: var(--pool-card-media-width);
 	height: var(--pool-card-media-height);
 	display: grid;
@@ -1867,7 +1884,7 @@
 		color-mix(
 			in srgb,
 			var(--pool-card-icon-color, var(--pool-card-resolved-color)) 16%,
-			#6d7780 22%
+			#202933
 		)
 	);
 	pointer-events: none;
@@ -1915,10 +1932,6 @@
 /* Tiles narrower than the pool's default width show their text at 80%. */
 .pool-grid-narrow .pool-card > .number {
 	font-size: 8px;
-}
-
-.pool-grid-narrow .pool-card-name {
-	font-size: 10.4px;
 }
 
 .pool-grid-narrow
@@ -1979,6 +1992,7 @@
 }
 
 .virtual-playback-box.playback-colored {
+	--pool-card-border-width: 2px;
 	border: 2px solid var(--playback-color);
 	background: var(--panel2);
 }

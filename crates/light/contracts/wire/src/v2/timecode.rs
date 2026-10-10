@@ -325,6 +325,9 @@ pub struct TimecodeTransportSnapshot {
     #[ts(type = "number")]
     pub revision: u64,
     pub state: TimecodeTransportState,
+    /// True while the runtime waits to start or relock to an external source.
+    #[serde(default)]
+    pub external_armed: bool,
     #[ts(type = "number")]
     pub frame: u64,
     #[ts(type = "number")]
@@ -336,6 +339,25 @@ pub struct TimecodeTransportSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transport_snapshot_accepts_legacy_arming_field_absence() {
+        let mut value = serde_json::json!({
+            "timecode_id": "00000000-0000-4000-8000-000000000001",
+            "revision": 1,
+            "state": "stopped",
+            "frame": 0,
+            "duration_frame": 440,
+            "audio_linked": false,
+            "cue_list_clips": [],
+        });
+        let legacy: TimecodeTransportSnapshot = serde_json::from_value(value.clone()).unwrap();
+        assert!(!legacy.external_armed);
+        value["external_armed"] = serde_json::json!(true);
+        let armed: TimecodeTransportSnapshot = serde_json::from_value(value).unwrap();
+        assert!(armed.external_armed);
+        assert_eq!(serde_json::to_value(armed).unwrap()["external_armed"], true);
+    }
 
     #[test]
     fn transport_action_accepts_unknown_fields_at_each_typed_boundary() {

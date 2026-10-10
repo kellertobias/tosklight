@@ -825,25 +825,40 @@ fn source_loss_relocks_but_operator_stop_stays_disarmed() {
         TimecodeTransportAction::Pause,
         TimecodeTransportAction::Stop,
     ] {
-        let (service, _, _) = service();
+        let (service, _, publisher) = service();
         let definition = definition();
         let id = definition.id;
         service.install(definition, None).unwrap();
         service.handle(id, TimecodeTransportAction::Go).unwrap();
         service.synchronize_external(TimecodeFrame(10));
-        service.handle_source_loss(id, action).unwrap();
+        let event_count = publisher.changes().len();
+        let suspended = service.handle_source_loss(id, action).unwrap();
+        assert!(suspended.snapshot.external_armed);
+        assert!(service.snapshot(id).unwrap().external_armed);
+        let events = publisher.changes();
+        assert_eq!(events.len(), event_count + 1);
+        assert_eq!(events.last().unwrap().snapshot, suspended.snapshot);
         assert_ne!(
             service.snapshot(id).unwrap().transport,
             TimecodeTransportState::Playing
         );
         let relocked = service.synchronize_external(TimecodeFrame(30));
         assert_eq!(relocked[0].snapshot.frame, TimecodeFrame(30));
+        assert!(!relocked[0].snapshot.external_armed);
         assert_eq!(
             relocked[0].snapshot.transport,
             TimecodeTransportState::Playing
         );
         service.handle_source_loss(id, action).unwrap();
-        service.handle(id, TimecodeTransportAction::Stop).unwrap();
+        let before_stop = service.snapshot(id).unwrap();
+        let stopped = service.handle(id, TimecodeTransportAction::Stop).unwrap();
+        assert!(stopped.changed);
+        assert!(!stopped.snapshot.external_armed);
+        assert_eq!(stopped.snapshot.revision, before_stop.revision + 1);
+        assert_eq!(
+            publisher.changes().last().unwrap().snapshot,
+            stopped.snapshot
+        );
         assert!(service.synchronize_external(TimecodeFrame(40)).is_empty());
         assert_eq!(
             service.snapshot(id).unwrap().transport,
@@ -947,4 +962,24 @@ fn a_clip_fade_moves_the_driven_cuelists_master() {
     assert_eq!(master_at(5), 0.5);
     assert_eq!(master_at(10), 1.0);
     assert_eq!(master_at(15), 0.5);
+}
+
+#[test]
+fn stopped_auto_start_runtime_can_be_disarmed_without_changing_saved_preference() {
+    let (service, _, publisher) = service();
+    let mut definition = definition();
+    definition.auto_start = true;
+    let id = definition.id;
+    let installed = service.install(definition.clone(), None).unwrap();
+    assert!(installed.external_armed);
+    let event_count = publisher.changes().len();
+    let stopped = service.handle(id, TimecodeTransportAction::Stop).unwrap();
+    assert!(stopped.changed);
+    assert!(!stopped.snapshot.external_armed);
+    assert_eq!(stopped.snapshot.transport, TimecodeTransportState::Stopped);
+    assert_eq!(stopped.snapshot.revision, installed.revision + 1);
+    assert_eq!(publisher.changes().len(), event_count + 1);
+    // Re-reading unchanged saved data must not arm an explicitly stopped transport again.
+    assert!(!service.install(definition, None).unwrap().external_armed);
+    assert!(service.synchronize_external(TimecodeFrame(10)).is_empty());
 }

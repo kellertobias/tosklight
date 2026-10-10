@@ -429,13 +429,14 @@ pub(super) fn group_record_command(
     let parsed = match tokens.as_slice() {
         [record, group, id] if is_record(record) && group.eq_ignore_ascii_case("GROUP") => Some((
             (*id).to_owned(),
-            light_application::ProgrammingGroupRecordOperation::Overwrite,
+            light_application::ProgrammingGroupRecordOperation::Merge,
         )),
         [record, operation, group, id]
             if is_record(record) && group.eq_ignore_ascii_case("GROUP") =>
         {
-            let operation = match *operation {
-                "+" => light_application::ProgrammingGroupRecordOperation::Merge,
+            let operation = match operation.to_ascii_uppercase().as_str() {
+                "SMART" => light_application::ProgrammingGroupRecordOperation::Overwrite,
+                "MERGE" | "+" => light_application::ProgrammingGroupRecordOperation::Merge,
                 "-" => light_application::ProgrammingGroupRecordOperation::Subtract,
                 _ => return Ok(None),
             };

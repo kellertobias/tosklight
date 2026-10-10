@@ -55,6 +55,8 @@ pub struct TimecodeRuntimeSnapshot {
     pub timecode_id: TimecodeId,
     pub revision: u64,
     pub transport: TimecodeTransportState,
+    /// Waiting for an external source, independent of the saved auto-start preference.
+    pub external_armed: bool,
     pub frame: TimecodeFrame,
     pub duration: TimecodeFrame,
     pub reconstructed: TimecodeReconstructedState,
@@ -402,6 +404,15 @@ impl TimecodeRuntimeService {
         id: TimecodeId,
         action: TimecodeTransportAction,
     ) -> Result<TimecodeRuntimeOutcome, TimecodeRuntimeError> {
+        self.handle_transport(id, action, false)
+    }
+
+    fn handle_transport(
+        &self,
+        id: TimecodeId,
+        action: TimecodeTransportAction,
+        rearm_external: bool,
+    ) -> Result<TimecodeRuntimeOutcome, TimecodeRuntimeError> {
         let now = self.clock.now_micros();
         // Reject a missing runtime before touching the output transport. Once installed, the
         // in-memory action cannot fail; applying audio first avoids advertising a transport state
@@ -443,6 +454,9 @@ impl TimecodeRuntimeService {
             let before = runtime.operator_state();
             runtime.synchronize(now, self.rate);
             let action_changed = runtime.apply(action, now);
+            if rearm_external {
+                runtime.external_armed = true;
+            }
             if action_changed {
                 runtime.cue_list_reconcile_mode = match action {
                     TimecodeTransportAction::Go if before.0 == TimecodeTransportState::Stopped => {
@@ -509,16 +523,7 @@ impl TimecodeRuntimeService {
                 "source loss must pause or stop Timecode",
             ));
         }
-        let outcome = self.handle(id, action)?;
-        if let Some(runtime) = self
-            .runtimes
-            .lock()
-            .expect("Timecode runtime lock poisoned")
-            .get_mut(&id)
-        {
-            runtime.external_armed = true;
-        }
-        Ok(outcome)
+        self.handle_transport(id, action, true)
     }
 
     /// Advances every running Timecode in stable object-id order.
@@ -827,6 +832,7 @@ impl Runtime {
             timecode_id: self.definition.id,
             revision: self.revision,
             transport: self.state,
+            external_armed: self.external_armed,
             frame: self.frame,
             duration: self.duration,
             reconstructed: self.definition.state_at(self.frame),
@@ -835,8 +841,8 @@ impl Runtime {
         }
     }
 
-    fn operator_state(&self) -> (TimecodeTransportState, TimecodeFrame) {
-        (self.state, self.frame)
+    fn operator_state(&self) -> (TimecodeTransportState, TimecodeFrame, bool) {
+        (self.state, self.frame, self.external_armed)
     }
 
     fn synchronize(&mut self, now: u64, rate: TimecodeFrameRate) -> Option<TickAdvance> {
