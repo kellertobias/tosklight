@@ -1,20 +1,16 @@
-import { ErrorAlert } from "@tosklight/ui";
-import { PositionCalibrationButton } from "./PositionCalibration";
-import { isVisualOnly } from "../patchUtils";
-import { positionPointLabel, positionPoints } from "./positionReference";
-import { SCENERY_AXES } from "./scenerySize";
-import { CHAIN_MODES } from "./sceneryOptions";
 import {
 	Button,
 	ColorPickerField,
+	ErrorAlert,
 	ModalRegistration,
 	ModalTitleBar,
 	NumberField,
 	Select,
+	TextField,
 	TextInput,
 } from "@tosklight/ui";
 import { ModalNumberEditor } from "@tosklight/ui/input";
-import { fixtureDefinitionKey } from "../fixtureProfileModel";
+import { isVisualOnly } from "../patchUtils";
 import {
 	allowedCombinedPolicyChoices,
 	type CombinedPolicyChoice,
@@ -35,8 +31,15 @@ import {
 	saveMultipatchEdit,
 	saveMultipatchVectorInput,
 } from "./multipatchActions";
+import { PositionCalibrationButton } from "./PositionCalibration";
 import { definitionSplits, fixturePolicyApplicability } from "./patchModel";
-import { rootProgrammingCorrespondences } from "./replacementProgramming";
+import { positionPointLabel, positionPoints } from "./positionReference";
+import {
+	ReplacementEditDialog,
+	ReplacementModeFields,
+} from "./ReplacementModeFields";
+import { CHAIN_MODES } from "./sceneryOptions";
+import { SCENERY_AXES } from "./scenerySize";
 
 export function MultipatchVectorDialog() {
 	const controller = usePatchController();
@@ -89,7 +92,10 @@ export function MultipatchVectorDialog() {
 					/>
 					<EditError />
 					{policy ? (
-						<><CombinedPolicySelect kind="pan_tilt" /><PositionCalibrationButton /></>
+						<>
+							<CombinedPolicySelect kind="pan_tilt" />
+							<PositionCalibrationButton />
+						</>
 					) : (
 						<VectorInputs
 							kind={edit.kind as "location" | "rotation"}
@@ -136,8 +142,12 @@ export function FixtureEditDialog() {
 	const controller = usePatchController();
 	const { edit } = controller.ui;
 	if (!edit || !controller.data.selected || edit === "address") return null;
-	const replacingPending = controller.ui.replacingFixture && controller.patch.pendingFixtureIds.has(controller.data.selected.fixture_id);
-	const close = () => { if (!replacingPending) requestFixtureEditClose(controller); };
+	const replacingPending =
+		controller.ui.replacingFixture &&
+		controller.patch.pendingFixtureIds.has(controller.data.selected.fixture_id);
+	const close = () => {
+		if (!replacingPending) requestFixtureEditClose(controller);
+	};
 	if ((edit === "location" || edit === "rotation") && controller.ui.editAxis) {
 		const axis = controller.ui.editAxis;
 		const label = `${edit === "location" ? "Location" : "Rotation"} ${axis.toUpperCase()} (${edit === "location" ? "meter" : "degree"})`;
@@ -214,6 +224,13 @@ export function FixtureEditDialog() {
 			/>
 		);
 	}
+	if (edit === "mode")
+		return (
+			<ReplacementEditDialog
+				close={close}
+				pending={Boolean(replacingPending)}
+			/>
+		);
 	return (
 		<ModalRegistration onClose={close}>
 			<div className="stacked-modal-layer">
@@ -240,7 +257,12 @@ export function FixtureEditDialog() {
 						onClose={close}
 					/>
 					<EditError />
-					{replacingPending && <p role="status">Validating and applying the replacement. The current fixture remains visible until the authoritative result arrives.</p>}
+					{replacingPending && (
+						<p role="status">
+							Validating and applying the replacement. The current fixture
+							remains visible until the authoritative result arrives.
+						</p>
+					)}
 					<FixtureEditFields />
 				</section>
 			</div>
@@ -305,12 +327,17 @@ function FixtureEditFields() {
 	if (edit === "chain") return <ChainModeFields />;
 	if (edit === "position_reference") return <PositionReferenceFields />;
 	if (edit === "masters" || edit === "pan_tilt")
-		return <><CombinedPolicySelect kind={edit} />{edit === "pan_tilt" && <PositionCalibrationButton />}</>;
+		return (
+			<>
+				<CombinedPolicySelect kind={edit} />
+				{edit === "pan_tilt" && <PositionCalibrationButton />}
+			</>
+		);
 	if (edit === "location" || edit === "rotation")
 		return (
 			<VectorInputs kind={edit} axis={controller.ui.editAxis ?? undefined} />
 		);
-	if (edit === "mode") return <ModeField />;
+	if (edit === "mode") return <ReplacementModeFields />;
 	return null;
 }
 
@@ -393,9 +420,9 @@ function PositionReferenceFields() {
 			</Select>
 			<small>
 				Moving or rotating the point carries this{" "}
-				{selected && isVisualOnly(selected.definition) ? "object" : "fixture"} with
-				it, relative to the point's own origin. Its location and rotation stay where
-				it sits when the point rests on its origin.
+				{selected && isVisualOnly(selected.definition) ? "object" : "fixture"}{" "}
+				with it, relative to the point's own origin. Its location and rotation
+				stay where it sits when the point rests on its origin.
 			</small>
 		</label>
 	);
@@ -413,23 +440,19 @@ function InternalBindingsFields() {
 		controller.ui.setEditText(JSON.stringify({ ...draft, [key]: value }));
 	return (
 		<div className="vector-inputs">
-			<label>
-				Audio library binding
-				<TextInput
-					autoFocus
-					aria-label="Logical audio library binding"
-					value={draft.library}
-					onChange={(event) => update("library", event.target.value)}
-				/>
-			</label>
-			<label>
-				Audio output binding
-				<TextInput
-					aria-label="Logical audio output binding"
-					value={draft.output}
-					onChange={(event) => update("output", event.target.value)}
-				/>
-			</label>
+			<TextField
+				label="Audio library binding"
+				autoFocus
+				aria-label="Logical audio library binding"
+				value={draft.library}
+				onChange={(event) => update("library", event.target.value)}
+			/>
+			<TextField
+				label="Audio output binding"
+				aria-label="Logical audio output binding"
+				value={draft.output}
+				onChange={(event) => update("output", event.target.value)}
+			/>
 			<small>
 				Portable logical names only. This desk resolves local folders and
 				devices in Setup.
@@ -551,58 +574,6 @@ function vectorEditTitle(
 	axis?: "x" | "y" | "z",
 ) {
 	return axis ? `${kind} ${axis.toUpperCase()}` : kind;
-}
-
-function ModeField() {
-	const controller = usePatchController();
-	const family = controller.data.selectedModeFamily;
-	const {ui} = controller;
-	if (!family) return null;
-	const query = ui.replacementQuery.trim().toLowerCase();
-	const modes = ui.replacingFixture ? controller.data.availableDefinitions.filter(mode =>
-		fixtureDefinitionKey(mode) === ui.definitionKey || `${mode.manufacturer} ${mode.name || mode.model} ${mode.mode}`.toLowerCase().includes(query)) : family.modes;
-	const target = controller.data.definition;
-	const selected = controller.data.selected;
-	const targetHeads = target?.profile_snapshot?.modes.find(mode => mode.id === target.mode_id)?.heads ?? [];
-	return <>
-		{ui.replacingFixture && <label>Find replacement<TextInput aria-label="Find replacement" value={ui.replacementQuery} onChange={event => ui.setReplacementQuery(event.target.value)} /></label>}
-		<label>Product / mode
-			<Select aria-label="Product / mode" value={ui.definitionKey}
-				onChange={event => { ui.setDefinitionKey(event.target.value); ui.setReplacementHeads({}); }}>
-				{modes.map(mode => <option value={fixtureDefinitionKey(mode)} key={fixtureDefinitionKey(mode)}>
-					{ui.replacingFixture ? `${mode.manufacturer} · ${mode.name || mode.model} · ` : ""}{mode.mode} · {mode.footprint}ch
-				</option>)}
-			</Select>
-		</label>
-		{!ui.replacingFixture && <Button onClick={() => {ui.setReplacingFixture(true); ui.setReplacementHeads({});}}>Replace fixture with another product</Button>}
-		{ui.replacingFixture && <>
-			<p>The fixture number, placement, groups and stored programming stay attached to this fixture. Choose each logical head correspondence explicitly. Unmatched heads keep dormant programming; new heads receive new identities.</p>
-			<p>Existing root and copy addresses are retained by split number and checked against the new footprint. New splits start unpatched. Incompatible installed calibration remains stored with its original identity and needs revalidation. Direct colors may only approximate on another model; unsupported attributes remain passive.</p>
-			{rootProgrammingCorrespondences(selected?.definition, target).map(row => {
-				const choice = ui.replacementHeads[row.key] ?? "";
-				const destinations = choice === "__unmapped" ? [] : choice.split(",").filter(Boolean);
-				return <fieldset key={row.key}>
-					<legend>Existing shared head {row.sourceName} · {row.attribute}</legend>
-					<p>Route existing programming to the selected owners. New master-only edits keep their normal meaning.</p>
-					<label><input type="checkbox" aria-label={`Leave ${row.sourceName} ${row.attribute} unmatched`} checked={choice === "__unmapped"}
-						onChange={event => ui.setReplacementHeads({...ui.replacementHeads, [row.key]: event.target.checked ? "__unmapped" : ""})} /> Leave unmatched — keep dormant programming</label>
-					{row.targets.map(target => <label key={target.id}><input type="checkbox"
-						aria-label={`Route ${row.sourceName} ${row.attribute} to ${target.name}`} checked={destinations.includes(target.id)}
-						onChange={event => ui.setReplacementHeads({...ui.replacementHeads, [row.key]: (event.target.checked
-							? [...destinations, target.id] : destinations.filter(id => id !== target.id)).join(",")})} /> {target.name}</label>)}
-				</fieldset>;
-			})}
-			{(selected?.logical_heads ?? []).map(head => <label key={head.fixture_id}>
-				Existing head {head.head_index + 1}
-				<Select aria-label={`Replacement for head ${head.head_index + 1}`} value={ui.replacementHeads[head.fixture_id] ?? ""}
-					onChange={event => ui.setReplacementHeads({...ui.replacementHeads, [head.fixture_id]: event.target.value})}>
-					<option value="">Choose correspondence</option>
-					<option value="__unmapped">Leave unmatched — keep dormant programming</option>
-					{targetHeads.map((head,index) => ({head,index})).filter(({head}) => !head.master_shared).map(({head,index}) => <option key={head.id} value={head.id}>{head.name || "Head"} · {index + 1}</option>)}
-				</Select>
-			</label>)}
-		</>}
-	</>;
 }
 
 export function FixtureAddressDialog() {

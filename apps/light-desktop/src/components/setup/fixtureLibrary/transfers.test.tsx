@@ -1,6 +1,14 @@
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	renderHook,
+	screen,
+	within,
+} from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
-import type { PropsWithChildren } from "react";
+import type { ComponentProps, PropsWithChildren } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	AttributeConfigurationApiClient,
@@ -11,8 +19,8 @@ import {
 	FixtureLibraryProvider,
 	type FixtureLibraryState,
 } from "../../../features/fixtureLibrary/FixtureLibraryContext";
-import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
 import { blankFixtureProfile } from "../fixtureProfileModel";
+import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
 
 vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useAttributeRegistry: () => [
@@ -75,7 +83,11 @@ describe("useFixtureLibraryTransfers", () => {
 				busy={false}
 				error={null}
 				modal="gdtf"
-				pendingGdtf={{ ...gdtfPreview(), source: new Uint8Array([80, 75]), expectedRevision: 0 }}
+				pendingGdtf={{
+					...gdtfPreview(),
+					source: new Uint8Array([80, 75]),
+					expectedRevision: 0,
+				}}
 				close={close}
 				confirmGdtfMappings={vi.fn()}
 				confirmPackageMappings={vi.fn()}
@@ -116,7 +128,9 @@ describe("useFixtureLibraryTransfers", () => {
 		fireEvent.keyDown(trigger, { key: "Escape" });
 		expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 		expect(close).not.toHaveBeenCalled();
-		expect(screen.getByLabelText("Display label")).toHaveValue("Vendor Feature");
+		expect(screen.getByLabelText("Display label")).toHaveValue(
+			"Vendor Feature",
+		);
 		fireEvent.keyDown(trigger, { key: "Escape" });
 		expect(close).toHaveBeenCalledOnce();
 		fireEvent.click(screen.getByRole("button", { name: "Close Import GDTF" }));
@@ -480,3 +494,142 @@ function attributeSnapshot(): AttributeConfigurationSnapshot {
 		validation_error: null,
 	};
 }
+
+function gdtfDialogProps(
+	overrides: Partial<ComponentProps<typeof FixtureImportDialogs>> = {},
+): ComponentProps<typeof FixtureImportDialogs> {
+	return {
+		busy: false,
+		error: null,
+		modal: "gdtf",
+		pendingGdtf: {
+			...gdtfPreview(),
+			source: new Uint8Array([80, 75]),
+			expectedRevision: 0,
+		},
+		close: vi.fn(),
+		confirmGdtfMappings: vi.fn(),
+		confirmPackageMappings: vi.fn(),
+		importGdtfFile: vi.fn(),
+		importPackage: vi.fn(),
+		mappingCandidates: [
+			{ id: "gobo.1", label: "Gobo 1", value_type: "indexed" },
+		],
+		mappings: {},
+		requirements: [{ attribute: "gdtf.Gobo", value_type: "indexed" }],
+		setMapping: vi.fn(),
+		activationGroupOptions: [],
+		beginCustomAttribute: vi.fn(),
+		cancelCustomAttribute: vi.fn(),
+		createCustomAttribute: vi.fn(),
+		customAttributeDraft: null,
+		editCustomAttribute: vi.fn(),
+		placementOptions: [],
+		...overrides,
+	};
+}
+
+describe("GDTF import decision hierarchy", () => {
+	it("navigates past a remembered mapping to the actual unresolved destination control", () => {
+		const props = gdtfDialogProps({
+			requirements: [
+				{ attribute: "gdtf.Remembered", value_type: "indexed" },
+				{ attribute: "gdtf.Next", value_type: "indexed" },
+			],
+			mappings: { "gdtf.Remembered": "gobo.1" },
+		});
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		const target = screen.getByLabelText("Map gdtf.Next");
+		const scroll = vi.fn();
+		Object.defineProperty(target, "scrollIntoView", { value: scroll });
+		expect(
+			screen.getByText("1 unresolved of 2 required mappings"),
+		).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: "Import and remember mappings" }),
+		).toBeDisabled();
+		fireEvent.click(screen.getByRole("button", { name: "Next unresolved" }));
+		expect(scroll).toHaveBeenCalledWith({ block: "center" });
+		expect(target).toHaveFocus();
+		expect(
+			screen.getByText(
+				"Choose a destination for 1 remaining attribute to enable import.",
+			),
+		).toBeVisible();
+		expect(props.confirmGdtfMappings).not.toHaveBeenCalled();
+	});
+
+	it("keeps compatible remembered mappings editable and enables import without reconfirmation", () => {
+		const props = gdtfDialogProps({ mappings: { "gdtf.Gobo": "gobo.1" } });
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(
+			screen.getByText("0 unresolved of 1 required mappings"),
+		).toBeVisible();
+		expect(screen.getByText("Mapped")).toBeVisible();
+		expect(screen.getByLabelText("Map gdtf.Gobo")).toBeEnabled();
+		expect(
+			screen.queryByRole("button", { name: "Next unresolved" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Import and remember mappings" }),
+		);
+		expect(props.confirmGdtfMappings).toHaveBeenCalledOnce();
+	});
+
+	it("retains every diagnostic in expandable details and a visible limitation summary", () => {
+		const preview = gdtfPreview();
+		preview.diagnostics.push({
+			node: "Geometry",
+			message: "Model retained only in the source archive.",
+		});
+		const props = gdtfDialogProps({
+			pendingGdtf: {
+				...preview,
+				source: new Uint8Array(),
+				expectedRevision: 2,
+			},
+		});
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(
+			screen.getByText(
+				"2 import limitations. Review the source details before importing.",
+			),
+		).toBeVisible();
+		const summary = screen.getByText("Import limitations — show all 2");
+		const details = summary.closest("details");
+		expect(details).not.toHaveAttribute("open");
+		expect(details).toHaveTextContent(
+			"Optics: Optical calibration remains unknown.",
+		);
+		expect(details).toHaveTextContent(
+			"Geometry: Model retained only in the source archive.",
+		);
+		fireEvent.click(summary);
+		expect(
+			within(details as HTMLElement).getByText(
+				"Model retained only in the source archive.",
+				{
+					exact: false,
+				},
+			),
+		).toBeVisible();
+		expect(
+			screen.getByText(
+				"Creates a new library revision. Patched fixtures keep their current revision.",
+			),
+		).toBeVisible();
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(props.close).toHaveBeenCalledOnce();
+	});
+
+	it("keeps the public import guard and mapping control disabled while importing", () => {
+		const props = gdtfDialogProps({
+			busy: true,
+			mappings: { "gdtf.Gobo": "gobo.1" },
+		});
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(screen.getByRole("button", { name: "Importing…" })).toBeDisabled();
+		expect(screen.getByLabelText("Map gdtf.Gobo")).toBeDisabled();
+		expect(props.confirmGdtfMappings).not.toHaveBeenCalled();
+	});
+});

@@ -1,20 +1,14 @@
-import {ErrorAlert} from "@tosklight/ui";
-import {MvrInspectionProgress} from "./MvrInspectionProgress";
-import {
-	Button,
-	Input,
-	ModalTitleBar,
-	NumberField,
-	SelectField,
-	TextInput,
-	type TitleAction,
-} from "@tosklight/ui";
-
+import { Button, ErrorAlert, ModalTitleBar, TextInput } from "@tosklight/ui";
 import { useEffect } from "react";
-import { NewShowDialog } from "./NewShowDialog";
-import { ShowSaveBrowser } from "./ShowSaveBrowser";
-import { ShowLoadBrowser } from "./ShowLoadBrowser";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
+import { MvrImportPreview } from "./MvrImportPreview";
+import { MvrInspectionProgress } from "./MvrInspectionProgress";
+import { NewShowDialog } from "./NewShowDialog";
+import { ShowLoadBrowser } from "./ShowLoadBrowser";
+import { ShowSaveBrowser } from "./ShowSaveBrowser";
+
+export { MvrImportPreview } from "./MvrImportPreview";
+
 import type { QuickSetupModel } from "./QuickSetupModal";
 import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
 import { StackedModal } from "./StackedModal";
@@ -36,7 +30,10 @@ function NamedRevisionDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="Save named revision"
 			>
-				<ModalTitleBar title="Save Named Revision" onClose={() => setRevisionOpen(false)} />
+				<ModalTitleBar
+					title="Save Named Revision"
+					onClose={() => setRevisionOpen(false)}
+				/>
 				<p>
 					This creates a restore point from the current autosaved show. Autosave
 					continues afterward.
@@ -79,7 +76,10 @@ function CopySaveDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label="Save revision copy"
 			>
-				<ModalTitleBar title="Save Revision Copy" onClose={() => setCopySaveOpen(false)} />
+				<ModalTitleBar
+					title="Save Revision Copy"
+					onClose={() => setCopySaveOpen(false)}
+				/>
 				<p>
 					Autosave already protects this copy. Choose where this copy should
 					remain.
@@ -106,7 +106,7 @@ function CopySaveDialog({ model }: ModelProps) {
 }
 
 function SaveAsDialog({ model }: ModelProps) {
-    return model.dialogs.saveAsOpen ? <ShowSaveBrowser model={model} /> : null;
+	return model.dialogs.saveAsOpen ? <ShowSaveBrowser model={model} /> : null;
 }
 
 function OverwriteDialog({ model }: ModelProps) {
@@ -124,7 +124,11 @@ function OverwriteDialog({ model }: ModelProps) {
 				aria-modal="true"
 				aria-label={`Confirm overwrite ${overwriteTarget.name}`}
 			>
-				<ModalTitleBar title={`Replace ${overwriteTarget.name} Latest Autosave?`} closeDisabled={overwriteBusy} onClose={close} />
+				<ModalTitleBar
+					title={`Replace ${overwriteTarget.name} Latest Autosave?`}
+					closeDisabled={overwriteBusy}
+					onClose={close}
+				/>
 				<p>
 					This replaces only <b>{overwriteTarget.name}</b>&apos;s mutable Latest
 					Autosave with the active show state. Its identity and named revisions
@@ -154,8 +158,8 @@ function OverwriteDialog({ model }: ModelProps) {
 }
 
 function LoadDialog({ model }: ModelProps) {
-    if (!model.dialogs.loadOpen) return null;
-    return <ShowLoadBrowser model={model} />;
+	if (!model.dialogs.loadOpen) return null;
+	return <ShowLoadBrowser model={model} />;
 }
 
 function SelectiveImportDialog({ model }: ModelProps) {
@@ -167,8 +171,17 @@ function SelectiveImportDialog({ model }: ModelProps) {
 		<StackedModal onClose={() => dialogs.selectiveImportClose.current?.()}>
 			<SelectiveShowImportModal
 				activeShow={activeShow}
-				shows={model.dialogs.partialSource ? [model.dialogs.partialSource, ...(lifecycle?.shows ?? []).filter(show => show.id !== model.dialogs.partialSource?.id)] : lifecycle?.shows ?? []}
-                initialSourceShowId={model.dialogs.partialSource?.id}
+				shows={
+					model.dialogs.partialSource
+						? [
+								model.dialogs.partialSource,
+								...(lifecycle?.shows ?? []).filter(
+									(show) => show.id !== model.dialogs.partialSource?.id,
+								),
+							]
+						: (lifecycle?.shows ?? [])
+				}
+				initialSourceShowId={model.dialogs.partialSource?.id}
 				closeTriggerRef={dialogs.selectiveImportClose}
 				onClose={() => dialogs.setSelectiveImportOpen(false)}
 				loadCatalog={selectiveImport.catalog}
@@ -178,7 +191,6 @@ function SelectiveImportDialog({ model }: ModelProps) {
 		</StackedModal>
 	);
 }
-
 
 function MvrShowPicker({ model }: ModelProps) {
 	const { lifecycle } = model.authorities;
@@ -193,9 +205,7 @@ function MvrShowPicker({ model }: ModelProps) {
 							<b>{show.name}</b>
 							<small>Autosaved show file</small>
 						</span>
-						<Button onClick={() => setMvrTarget(show)}>
-							Select
-						</Button>
+						<Button onClick={() => setMvrTarget(show)}>Select</Button>
 					</article>
 				))}
 			</div>
@@ -253,168 +263,6 @@ function MvrFilePicker({ model }: ModelProps) {
 	);
 }
 
-function MvrFixtureRow({
-	fixture,
-	model,
-}: ModelProps & {
-	fixture: NonNullable<
-		QuickSetupModel["mvr"]["mvrPreview"]
-	>["fixtures"][number];
-}) {
-	const { mvrPreview, mvrResolutions, setMvrResolutions } = model.mvr;
-	const resolution = mvrResolutions[fixture.uuid];
-	const conflicted = mvrPreview?.address_conflicts.some((warning) =>
-		warning.startsWith(fixture.name),
-	);
-	const update = (change: Record<string, string | number>) =>
-		setMvrResolutions((current) => ({
-			...current,
-			[fixture.uuid]: {
-				...current[fixture.uuid],
-				action: "address",
-				...change,
-			},
-		}));
-	return (
-		<article>
-			<span>
-				<b>{fixture.name}</b>
-				<small>
-					{fixture.gdtf_spec} · {fixture.gdtf_mode}
-					{fixture.universe && fixture.address
-						? ` · U${fixture.universe}.${fixture.address}`
-						: " · Unpatched"}
-				</small>
-			</span>
-			{conflicted && (
-				<div>
-					<SelectField
-						label={`Resolution for ${fixture.name}`}
-						value={resolution?.action ?? "import_unpatched"}
-						options={[
-							{ value: "import_unpatched", label: "Import unpatched" },
-							{ value: "address", label: "Choose address" },
-							{ value: "skip", label: "Skip" },
-							{ value: "replace", label: "Replace conflict" },
-						]}
-						onChange={(action) =>
-							setMvrResolutions((current) => ({
-								...current,
-								[fixture.uuid]: {
-									action,
-									universe: fixture.universe ?? 1,
-									address: fixture.address ?? 1,
-								},
-							}))
-						}
-					/>
-					{resolution?.action === "address" && (
-						<div className="mvr-address-fields">
-							<NumberField
-								label="Universe"
-								min={1}
-								max={65535}
-								aria-label={`Universe for ${fixture.name}`}
-								value={resolution.universe ?? 1}
-								onChange={(event) =>
-									update({ universe: Number(event.target.value) })
-								}
-							/>
-							<NumberField
-								label="Address"
-								min={1}
-								max={512}
-								aria-label={`Address for ${fixture.name}`}
-								value={resolution.address ?? 1}
-								onChange={(event) =>
-									update({ address: Number(event.target.value) })
-								}
-							/>
-						</div>
-					)}
-				</div>
-			)}
-		</article>
-	);
-}
-
-export function MvrImportPreview({ model }: ModelProps) {
-	const mvr = model.mvr;
-	if (!mvr.mvrPreview) return null;
-	return (
-		<>
-			<div className="mvr-summary">
-				<b>
-					{mvr.mvrPreview.fixtures.length} fixtures · {mvr.mvrPreview.scenery}{" "}
-					scenery objects
-				</b>
-				{mvr.mvrPreview.missing_profiles.length > 0 && (
-					<p className="modal-warning">
-						{mvr.mvrPreview.missing_profiles.length} fixture profiles will be
-						imported as unresolved.
-					</p>
-				)}
-				{mvr.mvrPreview.address_conflicts.map((warning) => (
-					<p className="modal-warning" key={warning}>
-						{warning}
-					</p>
-				))}
-			</div>
-			{(mvr.mvrPreview.profile_conflicts?.length ?? 0) > 0 && (
-				<div className="modal-warning">
-					<p>These immutable fixture profiles differ from this computer's existing revisions:</p>
-					<ul>
-						{mvr.mvrPreview.profile_conflicts?.map((conflict) => (
-							<li key={`${conflict.profile_id}:${conflict.revision}`}>
-								{conflict.name} · revision {conflict.revision} · {conflict.fixtures.length} fixtures
-							</li>
-						))}
-					</ul>
-					<label>
-						<input
-							type="checkbox"
-							checked={mvr.copyConflictingProfiles}
-							onChange={(event) => mvr.setCopyConflictingProfiles(event.target.checked)}
-							disabled={mvr.mvrBusy}
-						/> Import conflicting profiles as new identities
-					</label>
-					<p>
-						The exact archive profiles are copied. Existing profiles and unrelated fixtures stay unchanged.
-						Identity-bound installed calibration is retained and becomes inactive until revalidated for the new
-						profile identity. Retained GDTF source evidence keeps its original association; export generates
-						GDTF if it no longer matches.
-					</p>
-				</div>
-			)}
-			{mvr.mvrMode === "new" && (
-				<TextInput
-					clearable
-					value={mvr.mvrName}
-					onChange={(event) => mvr.setMvrName(event.target.value)}
-					placeholder="Show name"
-					aria-label="Show name"
-				/>
-			)}
-			<div className="mvr-fixture-list">
-				{mvr.mvrPreview.fixtures.map((fixture) => (
-					<MvrFixtureRow key={fixture.uuid} fixture={fixture} model={model} />
-				))}
-			</div>
-			<Button
-				className="primary"
-				disabled={mvr.mvrBusy || (mvr.mvrMode === "new" && !mvr.mvrName.trim()) || ((mvr.mvrPreview.profile_conflicts?.length ?? 0)>0 && !mvr.copyConflictingProfiles)}
-				onClick={() => void mvr.applyMvr()}
-			>
-				{mvr.mvrBusy
-					? "Importing…"
-					: mvr.mvrMode === "new"
-						? "Create and Open Show"
-						: `Add to ${mvr.mvrTarget?.name}`}
-			</Button>
-		</>
-	);
-}
-
 function MvrDialog({ model }: ModelProps) {
 	const mvr = model.mvr;
 	if (!mvr.mvrMode) return null;
@@ -422,21 +270,48 @@ function MvrDialog({ model }: ModelProps) {
 	return (
 		<StackedModal onClose={() => mvr.setMvrMode(null)}>
 			<div
-				className="nested-modal mvr-modal"
+				className="nested-modal mvr-modal import-workflow"
 				role="dialog"
 				aria-modal="true"
 				aria-label="MVR import"
 			>
-				<ModalTitleBar
-					title={mvr.mvrMode === "new" ? "New Show from MVR" : "Add MVR to Show"}
-                    closeDisabled={mvr.mvrOperation === "apply"}
-                    onClose={() => mvr.setMvrMode(null)}
-				/>
-                {mvr.mvrOperation && mvr.mvrStartedAt !== null && <MvrInspectionProgress operation={mvr.mvrOperation} startedAt={mvr.mvrStartedAt} file={mvr.mvrInspectionFile} onCancel={()=>mvr.setMvrMode(null)}/>}
-                {mvr.mvrError && <ErrorAlert role="alert">{mvr.mvrError}</ErrorAlert>}
-				{needsShow && <MvrShowPicker model={model} />}
-				{!needsShow && <MvrFilePicker model={model} />}
+				<header className="import-workflow__header">
+					<ModalTitleBar
+						title={
+							mvr.mvrMode === "new" ? "New Show from MVR" : "Add MVR to Show"
+						}
+						closeDisabled={mvr.mvrOperation === "apply"}
+						onClose={() => mvr.setMvrMode(null)}
+					/>
+				</header>
+				{mvr.mvrOperation && mvr.mvrStartedAt !== null && (
+					<MvrInspectionProgress
+						operation={mvr.mvrOperation}
+						startedAt={mvr.mvrStartedAt}
+						file={mvr.mvrInspectionFile}
+						onCancel={() => mvr.setMvrMode(null)}
+					/>
+				)}
+				{!mvr.mvrPreview && (
+					<div className="import-workflow__body">
+						{mvr.mvrError && (
+							<ErrorAlert role="alert">{mvr.mvrError}</ErrorAlert>
+						)}
+						{needsShow && <MvrShowPicker model={model} />}
+						{!needsShow && <MvrFilePicker model={model} />}
+					</div>
+				)}
 				<MvrImportPreview model={model} />
+				{!mvr.mvrPreview && (
+					<footer className="import-workflow__footer">
+						<Button
+							disabled={mvr.mvrOperation === "apply"}
+							onClick={() => mvr.setMvrMode(null)}
+						>
+							Cancel
+						</Button>
+					</footer>
+				)}
 			</div>
 		</StackedModal>
 	);
@@ -452,7 +327,10 @@ function ShutdownDialog({ model }: ModelProps) {
 				role="alertdialog"
 				aria-modal="true"
 			>
-				<ModalTitleBar title="Shut Down Desk?" onClose={() => setConfirmShutdown(false)} />
+				<ModalTitleBar
+					title="Shut Down Desk?"
+					onClose={() => setConfirmShutdown(false)}
+				/>
 				<p>
 					Hazardous fixtures will be driven to their safe values before the
 					server stops. This desk application will then close.

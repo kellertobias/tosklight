@@ -1,0 +1,197 @@
+/* Import decisions stay visible while their supporting details scroll. */
+.stacked-modal-layer .nested-modal.import-workflow {
+	display: flex;
+	flex-direction: column;
+	width: min(960px, calc(100vw - 36px));
+	max-height: calc(100dvh - 36px);
+	padding: 0;
+	overflow: hidden;
+}
+
+.import-workflow .ui-modal-titlebar {
+	flex: none;
+	margin: 0;
+}
+
+.import-workflow > .ui-modal-titlebar,
+.import-workflow__header,
+.import-workflow__footer {
+	flex: none;
+}
+
+.import-workflow__header,
+.import-workflow__summary {
+	padding: 14px 16px;
+	border-bottom: 1px solid var(--line2);
+	background: var(--panel2);
+}
+
+.import-workflow__header {
+	padding: 0;
+}
+
+.import-workflow__body {
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 16px;
+	scroll-padding-block: 12px;
+}
+
+.import-workflow__footer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	padding: 14px 16px;
+	border-top: 1px solid var(--line2);
+	background: var(--panel);
+}
+
+.import-workflow__footer > p,
+.import-workflow__footer > small {
+	flex: 1 1 240px;
+	margin: 0;
+}
+
+.import-workflow__summary h3,
+.import-workflow__header h3,
+.import-workflow__decisions > h3 {
+	margin: 0 0 8px;
+}
+
+.import-workflow__summary p,
+.import-workflow__header p {
+	margin: 6px 0 0;
+}
+
+.import-workflow__summary > :where(strong, span, small),
+.import-mapping-row__source > code {
+	display: block;
+	margin-block: 6px;
+}
+
+.import-workflow__decisions {
+	margin-block: 16px;
+}
+
+.import-decision-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 1px solid var(--cyan);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--cyan) 8%, var(--panel));
+}
+
+.import-decision-summary p {
+	margin: 4px 0 0;
+}
+
+.import-mapping-row {
+	display: grid;
+	min-width: 0;
+	margin: 0;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+	gap: 10px 20px;
+	align-items: start;
+	padding: 14px;
+	border: 0;
+	border-bottom: 1px solid var(--line2);
+	scroll-margin-block: 12px;
+}
+
+.import-mapping-row:is(
+		[data-state="unresolved"],
+		[data-state="required"],
+		[data-state="invalid"]
+	) {
+	border-inline-start: 4px solid var(--yellow, #f0c54a);
+	background: color-mix(in srgb, var(--yellow, #f0c54a) 6%, var(--panel));
+}
+
+.import-mapping-row__source,
+.import-mapping-row__target {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.import-mapping-row__source small,
+.import-mapping-row__target small {
+	display: block;
+	margin-top: 6px;
+	color: var(--muted);
+}
+
+.import-mapping-row__target > .ui-select,
+.import-mapping-row__target > .ui-select-trigger {
+	width: 100%;
+}
+
+.import-mapping-row__state {
+	display: block;
+	grid-column: 1 / -1;
+	font-size: 0.85em;
+	font-weight: 700;
+	margin-top: 8px;
+}
+
+.import-mapping-row > .ui-form-layout {
+	grid-column: 1 / -1;
+}
+
+.import-mapping-row > button {
+	grid-column: -2 / -1;
+	justify-self: end;
+}
+
+.import-warning-summary {
+	padding: 12px 14px;
+	border-inline-start: 4px solid var(--yellow, #f0c54a);
+	background: color-mix(in srgb, var(--yellow, #f0c54a) 6%, var(--panel));
+}
+
+.import-limitations {
+	margin-block: 16px;
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+}
+
+.import-limitations summary {
+	min-height: 44px;
+	padding: 12px 14px;
+	cursor: pointer;
+	font-weight: 700;
+}
+
+.import-limitations > :not(summary) {
+	margin: 12px 16px;
+}
+
+.import-workflow :where(button, .ui-select-trigger) {
+	min-height: 44px;
+}
+
+@media (max-width: 700px) {
+	.stacked-modal-layer .nested-modal.import-workflow {
+		width: calc(100vw - 16px);
+		max-height: calc(100dvh - 16px);
+	}
+
+	.import-mapping-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.import-workflow__body {
+		padding: 12px;
+	}
+
+	.import-workflow__footer {
+		gap: 8px;
+		padding: 12px;
+	}
+}
