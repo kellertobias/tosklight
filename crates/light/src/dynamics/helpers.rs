@@ -8,22 +8,32 @@ pub(super) fn validate_fix_at_targets(
     let mut unsupported = 0_usize;
     let mut discrete = 0_usize;
     for target in targets {
-        let Some(fixture) = snapshot
-            .fixtures
-            .iter()
-            .find(|fixture| fixture.fixture_id == *target)
-        else {
+        let Some(fixture) = snapshot.fixtures.iter().find(|fixture| {
+            fixture.fixture_id == *target
+                || fixture
+                    .logical_heads
+                    .iter()
+                    .any(|head| head.fixture_id == *target)
+        }) else {
             unsupported += 1;
             continue;
         };
-        let parameters = fixture
+        let head_index = fixture
+            .logical_heads
+            .iter()
+            .find(|head| head.fixture_id == *target)
+            .map(|head| head.head_index);
+        let heads = fixture
             .definition
             .heads
             .iter()
-            .flat_map(|head| &head.parameters)
-            .filter(|parameter| parameter.attribute == *attribute)
+            .filter(|head| fixture.fixture_id == *target || Some(head.index) == head_index)
             .collect::<Vec<_>>();
-        if parameters.is_empty() {
+        if !heads
+            .iter()
+            .flat_map(|head| &head.parameters)
+            .any(|parameter| parameter.attribute == *attribute)
+        {
             unsupported += 1;
             continue;
         }
@@ -34,26 +44,46 @@ pub(super) fn validate_fix_at_targets(
             .zip(fixture.definition.mode_id)
             .and_then(|(profile, mode_id)| profile.mode(mode_id))
             .is_some_and(|mode| {
-                let matching = mode
-                    .channels
+                heads.iter().any(|head| {
+                    let profile_head_id = fixture
+                        .logical_heads
+                        .iter()
+                        .find(|patched| patched.head_index == head.index)
+                        .and_then(|patched| patched.profile_head_id)
+                        .or_else(|| mode.heads.get(usize::from(head.index)).map(|head| head.id));
+                    let matching = mode
+                        .channels
+                        .iter()
+                        .filter(|channel| {
+                            Some(channel.head_id) == profile_head_id
+                                && channel.attribute == *attribute
+                        })
+                        .collect::<Vec<_>>();
+                    !matching.is_empty()
+                        && matching.iter().all(|channel| {
+                            !channel.functions.is_empty()
+                                && channel.functions.iter().all(|function| {
+                                    !matches!(
+                                        function.behavior,
+                                        light_fixture::ChannelFunctionBehavior::Continuous { .. }
+                                    )
+                                })
+                        })
+                })
+            });
+        // A root addresses all its heads; a scalar sibling cannot make a discrete head scalar.
+        if profile_discrete
+            || heads.iter().any(|head| {
+                let matching = head
+                    .parameters
                     .iter()
-                    .filter(|channel| channel.attribute == *attribute)
+                    .filter(|parameter| parameter.attribute == *attribute)
                     .collect::<Vec<_>>();
                 !matching.is_empty()
-                    && matching.iter().all(|channel| {
-                        !channel.functions.is_empty()
-                            && channel.functions.iter().all(|function| {
-                                !matches!(
-                                    function.behavior,
-                                    light_fixture::ChannelFunctionBehavior::Continuous { .. }
-                                )
-                            })
-                    })
-            });
-        if profile_discrete
-            || parameters
-                .iter()
-                .all(|parameter| !parameter.capabilities.is_empty())
+                    && matching
+                        .iter()
+                        .all(|parameter| !parameter.capabilities.is_empty())
+            })
         {
             discrete += 1;
         }

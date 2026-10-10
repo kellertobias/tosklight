@@ -1470,3 +1470,165 @@ family: light_programmer::PresetFamily::Intensity, number: 7,
     }
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+fn fat_scope_fixture(
+    virtual_dimmer: bool,
+) -> (light_fixture::PatchedFixture, [light_core::FixtureId; 3]) {
+    use crate::runtime::output_scheduler::physical_adapters::color::profiles::{patched, rgbw};
+    let mut profile = rgbw();
+    let mode = &mut profile.modes[0];
+    mode.heads[0].master_shared = false;
+    let intensity = mode
+        .channels
+        .iter()
+        .find(|channel| channel.attribute.is_intensity())
+        .unwrap()
+        .clone();
+    if virtual_dimmer {
+        mode.channels
+            .retain(|channel| !channel.attribute.is_intensity());
+        mode.default_virtual_dimmer_reactions();
+    }
+    for (index, attribute) in [(1, "intensity"), (2, "pan")] {
+        let head = uuid::Uuid::new_v4();
+        mode.heads.push(light_fixture::FixtureHead {
+            id: head,
+            name: format!("Head {index}"),
+            master_shared: false,
+        });
+        let mut channel = intensity.clone();
+        channel.id = uuid::Uuid::new_v4();
+        channel.head_id = head;
+        channel.attribute = light_core::AttributeKey(attribute.into());
+        channel.fixture_attribute = channel.attribute.clone();
+        channel.functions[0].attribute = channel.attribute.clone();
+        if index == 1 {
+            channel.functions[0].behavior = light_fixture::ChannelFunctionBehavior::Fixed {
+                semantic_id: "closed".into(),
+                label: "Closed".into(),
+                raw_value: 0,
+            };
+        }
+        mode.channels.push(channel);
+    }
+    mode.splits[0].footprint = mode
+        .channels
+        .iter()
+        .map(|channel| channel.resolution.bytes() as u16)
+        .sum();
+    let root = light_core::FixtureId::new();
+    let targets = std::array::from_fn(|_| light_core::FixtureId::new());
+    let mut fixture = patched(&profile, root, 1);
+    fixture.fixture_number = Some(9004);
+    fixture.logical_heads = targets
+        .iter()
+        .enumerate()
+        .map(|(index, id)| light_fixture::PatchedHead {
+            fixture_id: *id,
+            head_index: index as u16,
+            profile_head_id: Some(profile.modes[0].heads[index].id),
+        })
+        .collect();
+    (fixture, targets)
+}
+
+#[test]
+fn fat_logical_head_accepts_physical_and_projected_virtual_intensity() {
+    for virtual_dimmer in [false, true] {
+        let (state, data_dir) = test_state();
+        let session = Session {
+            capability: light_core::SurfaceCapability::Programming,
+            id: SessionId::new(),
+            token: "fat-head-positive".into(),
+            connected: true,
+            desk: test_control_desk(),
+        };
+        state.programming.start(session.id);
+        let (fixture, targets) = fat_scope_fixture(virtual_dimmer);
+        let parameter = fixture.definition.heads[0]
+            .parameters
+            .iter()
+            .find(|parameter| parameter.attribute.is_intensity())
+            .unwrap();
+        assert_eq!(parameter.virtual_dimmer, virtual_dimmer);
+        assert_eq!(parameter.components.is_empty(), virtual_dimmer);
+        state
+            .output
+            .replace_snapshot(light_engine::EngineSnapshot {
+                fixtures: vec![fixture].into(),
+                ..Default::default()
+            })
+            .unwrap();
+        state.programming.select(session.id, [targets[0]]);
+        let context = operator_action_context(&session, light_application::ActionSource::Http);
+        assert_eq!(
+            execute_programmer_command_from(
+                &state,
+                &session,
+                "ATTRIBUTE intensity FIXAT 50 TIME 2 DELAY 1",
+                &context
+            )
+            .unwrap(),
+            1
+        );
+        let programmer = state.programming.get(session.id).unwrap();
+        assert!(programmer.values.is_empty());
+        assert_eq!(programmer.dynamic_values.len(), 1);
+        assert_eq!(programmer.dynamic_values[0].fixture_id, targets[0]);
+        assert!(
+            matches!(programmer.dynamic_values[0].value, light_dynamics::DynamicSemanticValue::FixAt { value, timing: light_dynamics::DynamicValueTiming { fade_millis: Some(2000), delay_millis: Some(1000) } } if value == 0.5)
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+}
+
+#[test]
+fn fat_logical_head_rejections_are_atomic_and_do_not_borrow_other_heads() {
+    let (state, data_dir) = test_state();
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(),
+        token: "fat-head-negative".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    let (fixture, targets) = fat_scope_fixture(false);
+    let root = fixture.fixture_id;
+    state
+        .output
+        .replace_snapshot(light_engine::EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    for (selection, expected) in [
+        (vec![targets[1]], "discrete"),
+        (vec![targets[0], targets[1]], "discrete"),
+        (vec![targets[2]], "unsupported"),
+        (vec![targets[0], targets[2]], "unsupported"),
+        (
+            vec![targets[0], light_core::FixtureId::new()],
+            "unsupported",
+        ),
+        (vec![root], "discrete"),
+    ] {
+        state.programming.select(session.id, selection);
+        let before = state.programming.get(session.id).unwrap();
+        let context = operator_action_context(&session, light_application::ActionSource::Http);
+        let error = execute_programmer_command_from(
+            &state,
+            &session,
+            "ATTRIBUTE intensity FIXAT 50",
+            &context,
+        )
+        .unwrap_err();
+        assert!(error.contains(expected), "{error}");
+        let after = state.programming.get(session.id).unwrap();
+        assert_eq!(
+            serde_json::to_value(after).unwrap(),
+            serde_json::to_value(before).unwrap()
+        );
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}

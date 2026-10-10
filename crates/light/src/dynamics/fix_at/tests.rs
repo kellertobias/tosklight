@@ -569,3 +569,140 @@ fn capture_with_explicit_angle_activation_is_valid_and_bad_empty_mask_is_not() {
     command.targets.clear();
     assert!(desk.capture(command).is_err());
 }
+
+fn scalar_head_desk(virtual_dimmer: bool) -> (Desk, [FixtureId; 3]) {
+    let mut desk = Desk::new();
+    let mut profile = light_fixture::FixtureProfile::blank();
+    profile.manufacturer = "Test".into();
+    profile.name = "FAT mixed heads".into();
+    let mode = &mut profile.modes[0];
+    mode.heads[0].master_shared = false;
+    let first = mode.heads[0].id;
+    let channels = if virtual_dimmer {
+        vec![(first, "color.red", false)]
+    } else {
+        vec![(first, "intensity", false)]
+    };
+    let mut channels = channels;
+    for (attribute, discrete) in [("intensity", true), ("pan", false)] {
+        let head = Uuid::new_v4();
+        mode.heads.push(light_fixture::FixtureHead {
+            id: head,
+            name: attribute.into(),
+            master_shared: false,
+        });
+        channels.push((head, attribute, discrete));
+    }
+    mode.channels = channels.into_iter().map(|(head, attribute, discrete)| {
+        let behavior = if discrete {
+            serde_json::json!({"type":"fixed", "semantic_id":"off", "label":"Off", "raw_value":0})
+        } else { serde_json::json!({"type":"continuous", "physical_min":0.0, "physical_max":1.0, "unit":null}) };
+        serde_json::from_value(serde_json::json!({
+            "id":Uuid::new_v4(), "head_id":head, "split":1, "attribute":attribute,
+            "fixture_attribute":attribute, "resolution":"u8", "default_raw":0, "highlight_raw":255, "functions":[{
+                "id":Uuid::new_v4(), "name":attribute, "attribute":attribute, "dmx_from":0,
+                "dmx_to":255, "priority":0, "behavior":behavior
+            }]
+        })).unwrap()
+    }).collect();
+    mode.splits[0].footprint = mode.channels.len() as u16;
+    mode.default_virtual_dimmer_reactions();
+    let targets = std::array::from_fn(|_| FixtureId::new());
+    let mut fixture = desk.ports.snapshot.fixtures[0].clone();
+    fixture.definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+    fixture.logical_heads = targets
+        .iter()
+        .enumerate()
+        .map(|(index, target)| light_fixture::PatchedHead {
+            fixture_id: *target,
+            head_index: index as u16,
+            profile_head_id: Some(profile.modes[0].heads[index].id),
+        })
+        .collect();
+    let parameter = fixture.definition.heads[0]
+        .parameters
+        .iter()
+        .find(|p| p.attribute.is_intensity())
+        .unwrap();
+    assert_eq!(parameter.virtual_dimmer, virtual_dimmer);
+    assert_eq!(parameter.components.is_empty(), virtual_dimmer);
+    desk.ports.snapshot = Arc::new(EngineSnapshot {
+        fixtures: Arc::new(vec![fixture]),
+        ..Default::default()
+    });
+    (desk, targets)
+}
+
+#[test]
+fn scalar_fix_at_logical_head_supports_virtual_and_physical_intensity() {
+    for virtual_dimmer in [true, false] {
+        let (desk, targets) = scalar_head_desk(virtual_dimmer);
+        assert_eq!(
+            desk.service
+                .fix_at(
+                    &desk.context,
+                    DynamicFixAtCommand {
+                        targets: vec![targets[0]],
+                        attribute: AttributeKey::intensity(),
+                        value: 0.5,
+                        timing: DynamicValueTiming {
+                            fade_millis: Some(2000),
+                            delay_millis: Some(1000)
+                        },
+                    },
+                    &desk.ports
+                )
+                .unwrap(),
+            1
+        );
+        let state = desk.service.programmers.get(desk.session()).unwrap();
+        assert!(state.values.is_empty());
+        assert_eq!(state.dynamic_values.len(), 1);
+        assert_eq!(state.dynamic_values[0].fixture_id, targets[0]);
+        assert!(matches!(
+            state.dynamic_values[0].value,
+            DynamicSemanticValue::FixAt {
+                value: 0.5,
+                timing: DynamicValueTiming {
+                    fade_millis: Some(2000),
+                    delay_millis: Some(1000)
+                }
+            }
+        ));
+    }
+}
+
+#[test]
+fn scalar_fix_at_logical_head_rejects_discrete_unsupported_and_missing_atomically() {
+    let (desk, targets) = scalar_head_desk(false);
+    let root = desk.ports.snapshot.fixtures[0].fixture_id;
+    for (selection, expected) in [
+        (vec![targets[1]], "discrete"),
+        (vec![targets[0], targets[1]], "discrete"),
+        (vec![targets[2]], "unsupported"),
+        (vec![targets[0], targets[2]], "unsupported"),
+        (vec![targets[0], FixtureId::new()], "unsupported"),
+        (vec![root], "discrete"),
+    ] {
+        let before =
+            serde_json::to_value(desk.service.programmers.get(desk.session()).unwrap()).unwrap();
+        let error = desk
+            .service
+            .fix_at(
+                &desk.context,
+                DynamicFixAtCommand {
+                    targets: selection,
+                    attribute: AttributeKey::intensity(),
+                    value: 0.5,
+                    timing: Default::default(),
+                },
+                &desk.ports,
+            )
+            .unwrap_err();
+        assert!(error.message.contains(expected), "{}", error.message);
+        assert_eq!(
+            serde_json::to_value(desk.service.programmers.get(desk.session()).unwrap()).unwrap(),
+            before
+        );
+    }
+}
