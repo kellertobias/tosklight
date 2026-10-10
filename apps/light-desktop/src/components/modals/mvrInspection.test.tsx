@@ -5,12 +5,22 @@ import {
 	render,
 	renderHook,
 	screen,
+	waitFor,
 } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ShowLifecycleActions } from "../../features/showLifecycle/ShowLifecycleContext";
 import { MvrInspectionProgress } from "./MvrInspectionProgress";
-import { MvrImportPreview } from "./QuickSetupDialogs";
-import { useMvrController } from "./QuickSetupModal";
+import { MvrDialog, MvrImportPreview } from "./QuickSetupDialogs";
+import { type QuickSetupModel, useMvrController } from "./QuickSetupModal";
+
+const picker = vi.hoisted(() => ({ open: vi.fn(), content: vi.fn() }));
+vi.mock("../../windows/FileManagerPickerHost", () => ({
+	openFileManagerPicker: picker.open,
+}));
+vi.mock("../../features/files/FilesContext", () => ({
+	useFiles: () => ({ fileContent: picker.content }),
+}));
 
 afterEach(() => {
 	cleanup();
@@ -41,6 +51,53 @@ function setup(promise: Promise<unknown>) {
 	return { ...hook, lifecycle };
 }
 describe("MVR inspection lifecycle", () => {
+	it("shows noncancellable selected-file reading and guards dialog close before inspection", async () => {
+		const test = setup(Promise.resolve(preview));
+		let fail: (reason: Error) => void = () => {};
+		picker.open.mockResolvedValue([
+			{ rootId: "shows", entry: { name: "rig.mvr", path: "rig.mvr" } },
+		]);
+		picker.content.mockImplementation(
+			() =>
+				new Promise((_resolve, reject) => {
+					fail = reject;
+				}),
+		);
+		render(
+			<MvrDialog
+				model={{ mvr: test.result.current } as unknown as QuickSetupModel}
+			/>,
+			{ wrapper: ModalProvider },
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Choose MVR file" }));
+		await waitFor(() =>
+			expect(
+				screen.getByRole("status", { name: "MVR operation progress" }),
+			).toBeVisible(),
+		);
+		expect(screen.getByText("Loading selected MVR file…")).toBeVisible();
+		expect(
+			screen.queryByRole("button", { name: "Cancel inspection" }),
+		).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "Cancel", hidden: true }),
+		).toBeDisabled();
+		fireEvent.keyDown(
+			screen.getByRole("status", { name: "MVR operation progress" }),
+			{ key: "Escape" },
+		);
+		expect(test.result.current.mvrMode).toBe("new");
+		expect(test.lifecycle.previewMvr).not.toHaveBeenCalled();
+		await act(async () => {
+			fail(new Error("Archive read failed"));
+		});
+		expect(screen.getByRole("alert")).toHaveTextContent("Archive read failed");
+		expect(
+			screen.queryByRole("status", { name: "MVR operation progress" }),
+		).toBeNull();
+		expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+	});
+
 	it("exposes honest active inspection state and passes an abort signal", async () => {
 		const task = deferred<typeof preview>();
 		const test = setup(task.promise);

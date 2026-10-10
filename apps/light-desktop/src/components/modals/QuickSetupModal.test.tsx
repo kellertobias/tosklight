@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   fileContent: vi.fn(),
   openFileManagerPicker: vi.fn(),
   files: {
+    fileContent: vi.fn(),
     fileRoots: vi.fn().mockResolvedValue([{id:"shows",label:"Shows",writable:true,removable:false}]),
     fileEntries: vi.fn().mockResolvedValue({entries:[{name:"tour.show",path:"tour.show",kind:"file",modified_millis:0},{name:"festival.show",path:"festival.show",kind:"file",modified_millis:0}]}),
     fileOperation: vi.fn(),
@@ -468,4 +469,63 @@ describe("QuickSetupModal operator actions", () => {
 			value: false,
 		});
 	});
+	it("defers outer Quick Setup Escape to the MVR read guard and keeps inspection cancellation real", async () => {
+		let finishRead: (content: Blob) => void = () => {};
+		let finishPreview: (value: unknown) => void = () => {};
+		mocks.openFileManagerPicker.mockResolvedValue([
+			{ rootId: "shows", entry: { name: "rig.mvr", path: "rig.mvr" } },
+		]);
+		mocks.files.fileContent.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishRead = resolve;
+				}),
+		);
+		mocks.server.previewMvr.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishPreview = resolve;
+				}),
+		);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: "New Show" }));
+		fireEvent.click(screen.getByRole("button", { name: "Load from MVR" }));
+		const progress = await screen.findByRole("status", {
+			name: "MVR operation progress",
+		});
+		expect(progress).toHaveTextContent("Loading selected MVR file…");
+		fireEvent.keyDown(progress, { key: "Escape" });
+		expect(
+			screen.getByRole("dialog", { name: "MVR import" }),
+		).toBeInTheDocument();
+		expect(mocks.dispatch).not.toHaveBeenCalledWith({
+			type: "SET_MODAL",
+			modal: "setupOpen",
+			value: false,
+		});
+		expect(mocks.server.previewMvr).not.toHaveBeenCalled();
+		finishRead(new Blob(["archive"]));
+		await waitFor(() => expect(mocks.server.previewMvr).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Cancel inspection" }),
+			).toBeVisible(),
+		);
+		const signal = mocks.server.previewMvr.mock.calls[0][2] as AbortSignal;
+		fireEvent.keyDown(
+			screen.getByRole("status", { name: "MVR operation progress" }),
+			{ key: "Escape" },
+		);
+		expect(signal.aborted).toBe(true);
+		expect(screen.queryByRole("dialog", { name: "MVR import" })).toBeNull();
+		finishPreview({
+			token: "late",
+			fixtures: [],
+			address_conflicts: [],
+			missing_profiles: [],
+			scenery: 0,
+			warnings: [],
+		});
+	});
+
 });

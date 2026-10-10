@@ -520,3 +520,78 @@ fn atomic_source_save_associates_the_normalized_profile_and_catalog_omits_archiv
         source
     );
 }
+
+fn diagnostic_archive(xml: &str) -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    zip.start_file("description.xml", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    zip.write_all(xml.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+#[test]
+fn source_free_preview_matches_retained_import_precision_identity_and_diagnostics() {
+    let source = diagnostic_archive(&fixture(&channel("4,2,1", "1193046/3")));
+    let preview = preview_profile(&source).unwrap();
+    let mut retained = import_profile(&source).unwrap();
+    assert!(preview.profile.source_gdtf.is_none());
+    let association = retained.profile.source_gdtf.take().unwrap();
+    assert_eq!(association.decoded_archive().unwrap(), source);
+    assert!(association.matches_profile(&retained.profile).unwrap());
+    assert_eq!(
+        serde_json::to_value(&preview.profile).unwrap(),
+        serde_json::to_value(&retained.profile).unwrap()
+    );
+    assert_eq!(preview.diagnostics, retained.diagnostics);
+    let channel = preview.profile.modes[0]
+        .channels
+        .iter()
+        .find(|channel| channel.attribute.0.as_ref() == "pan")
+        .expect("the imported Pan channel retains its exact source identity");
+    assert_eq!(channel.resolution, ChannelResolution::U24);
+    assert_eq!(channel.secondary_slots, vec![2, 1]);
+    assert_eq!(channel.default_raw, 1193046);
+}
+
+#[test]
+fn source_free_preview_rejects_the_same_malformed_archives_and_unsupported_versions() {
+    let sources = [
+        b"not a zip archive".to_vec(),
+        diagnostic_archive("<WrongRoot/>"),
+        diagnostic_archive("<GDTF><FixtureType></GDTF>"),
+        diagnostic_archive(
+            &fixture(&channel("1", "0/1")).replace("DataVersion=\"1.2\"", "DataVersion=\"9.9\""),
+        ),
+        diagnostic_archive(&fixture(&channel("1", "0/1")).replace("FixtureTypeID=", "MissingID=")),
+    ];
+    for source in sources {
+        let preview_error = preview_profile(&source).unwrap_err().to_string();
+        assert_eq!(
+            import_profile(&source).unwrap_err().to_string(),
+            preview_error
+        );
+    }
+}
+
+#[test]
+fn source_free_conversion_associates_final_mapped_content_at_atomic_save() {
+    let source = diagnostic_archive(&fixture(&channel("1,3", "32769/2")));
+    let mut profile = preview_profile(&source).unwrap().profile;
+    assert!(profile.source_gdtf.is_none());
+    let original_fingerprint = crate::fixture_profile_source_fingerprint(&profile).unwrap();
+    profile.modes[0].channels[0].attribute = light_core::AttributeKey("tilt".into());
+    profile.modes[0].channels[0].functions[0].attribute = light_core::AttributeKey("tilt".into());
+    let library = crate::FixtureLibrary::open(":memory:").unwrap();
+    let saved = library
+        .save_profile_with_source_gdtf(profile, 0, &source)
+        .unwrap();
+    let association = saved.source_gdtf.as_ref().unwrap();
+    assert_eq!(association.decoded_archive().unwrap(), source);
+    assert!(association.matches_profile(&saved).unwrap());
+    assert_ne!(
+        association.profile_fingerprint.as_ref().unwrap(),
+        &original_fingerprint
+    );
+    assert_eq!(saved.modes[0].channels[0].attribute.0.as_ref(), "tilt");
+    assert_eq!(saved.modes[0].channels[0].secondary_slots, vec![3]);
+}

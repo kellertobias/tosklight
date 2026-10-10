@@ -1,5 +1,5 @@
 import { Button, ErrorAlert, ModalTitleBar, TextInput } from "@tosklight/ui";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
 import { MvrImportPreview } from "./MvrImportPreview";
 import { MvrInspectionProgress } from "./MvrInspectionProgress";
@@ -213,7 +213,10 @@ function MvrShowPicker({ model }: ModelProps) {
 	);
 }
 
-function MvrFilePicker({ model }: ModelProps) {
+function MvrFilePicker({
+	model,
+	onReadBusyChange,
+}: ModelProps & { onReadBusyChange: (busy: boolean) => void }) {
 	const {
 		inspectMvr,
 		mvrBusy,
@@ -254,6 +257,7 @@ function MvrFilePicker({ model }: ModelProps) {
 				disabled={mvrBusy}
 				label={mvrBusy ? "Inspecting…" : "Choose MVR file"}
 				allowedExtensions={["mvr"]}
+				onReadBusyChange={onReadBusyChange}
 				onFiles={(files) => {
 					const file = files[0];
 					if (file) return inspectMvr(file);
@@ -263,12 +267,23 @@ function MvrFilePicker({ model }: ModelProps) {
 	);
 }
 
-function MvrDialog({ model }: ModelProps) {
+export function MvrDialog({ model }: ModelProps) {
 	const mvr = model.mvr;
+	const [readingFile, setReadingFile] = useState(false);
+	const readingRef = useRef(false);
+	const [readStartedAt, setReadStartedAt] = useState(Date.now());
+	const readBusyChanged = (value: boolean) => {
+		readingRef.current = value;
+		setReadingFile(value);
+		if (value) setReadStartedAt(Date.now());
+	};
+	const requestClose = () => {
+		if (!readingRef.current) mvr.setMvrMode(null);
+	};
 	if (!mvr.mvrMode) return null;
 	const needsShow = mvr.mvrMode !== "new" && !mvr.mvrTarget;
 	return (
-		<StackedModal onClose={() => mvr.setMvrMode(null)}>
+		<StackedModal onClose={requestClose}>
 			<div
 				className="nested-modal mvr-modal import-workflow"
 				role="dialog"
@@ -280,10 +295,18 @@ function MvrDialog({ model }: ModelProps) {
 						title={
 							mvr.mvrMode === "new" ? "New Show from MVR" : "Add MVR to Show"
 						}
-						closeDisabled={mvr.mvrOperation === "apply"}
-						onClose={() => mvr.setMvrMode(null)}
+						closeDisabled={mvr.mvrOperation === "apply" || readingFile}
+						onClose={requestClose}
 					/>
 				</header>
+				{readingFile && (
+					<MvrInspectionProgress
+						operation="read"
+						startedAt={readStartedAt}
+						file={null}
+						onCancel={requestClose}
+					/>
+				)}
 				{mvr.mvrOperation && mvr.mvrStartedAt !== null && (
 					<MvrInspectionProgress
 						operation={mvr.mvrOperation}
@@ -298,15 +321,17 @@ function MvrDialog({ model }: ModelProps) {
 							<ErrorAlert role="alert">{mvr.mvrError}</ErrorAlert>
 						)}
 						{needsShow && <MvrShowPicker model={model} />}
-						{!needsShow && <MvrFilePicker model={model} />}
+						{!needsShow && (
+							<MvrFilePicker model={model} onReadBusyChange={readBusyChanged} />
+						)}
 					</div>
 				)}
 				<MvrImportPreview model={model} />
 				{!mvr.mvrPreview && (
 					<footer className="import-workflow__footer">
 						<Button
-							disabled={mvr.mvrOperation === "apply"}
-							onClick={() => mvr.setMvrMode(null)}
+							disabled={mvr.mvrOperation === "apply" || readingFile}
+							onClick={requestClose}
 						>
 							Cancel
 						</Button>

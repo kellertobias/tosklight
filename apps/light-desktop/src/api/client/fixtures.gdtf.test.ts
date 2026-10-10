@@ -24,7 +24,9 @@ describe("canonical fixture GDTF transport", () => {
 					replayed: false,
 					result: { type: "profile", profile_id: profile.id, revision: 1 },
 				};
-			return { profiles: [profile] };
+			if (path === `/api/v2/fixture-library/profiles/${profile.id}/revisions`)
+				return { profiles: [{ ...profile, revision: 2 }, profile] };
+			throw new Error(`Unexpected request: ${path}`);
 		});
 		const client = new FixtureApiClient({
 			request,
@@ -44,7 +46,7 @@ describe("canonical fixture GDTF transport", () => {
 		expect(request.mock.calls.map(([path]) => path)).toEqual([
 			"/api/v2/fixture-library/gdtf/preview",
 			`/api/v2/fixture-library/profiles/${profile.id}/update`,
-			"/api/v2/fixture-library/profiles",
+			`/api/v2/fixture-library/profiles/${profile.id}/revisions`,
 		]);
 		const body = JSON.parse(String(request.mock.calls[1]?.[1]?.body));
 		expect(body).toMatchObject({
@@ -56,5 +58,65 @@ describe("canonical fixture GDTF transport", () => {
 		});
 		expect(body.request_id).toEqual(expect.any(String));
 		expect(body.profile).toBeUndefined();
+	});
+
+	it.each([
+		{ name: "a newer revision only", id: "saved-profile", revision: 8 },
+		{
+			name: "another profile at the exact revision",
+			id: "foreign-profile",
+			revision: 7,
+		},
+	])("rejects $name instead of falling back after import", async (candidate) => {
+		const request = vi.fn(async (path: string) => {
+			if (path === "/api/v2/fixture-library/profiles/input-profile/update")
+				return {
+					result: { type: "profile", profile_id: "saved-profile", revision: 7 },
+				};
+			if (path === "/api/v2/fixture-library/profiles/saved-profile/revisions")
+				return { profiles: [{ ...candidate, modes: [] }] };
+			throw new Error(`Unexpected request: ${path}`);
+		});
+		const client = new FixtureApiClient({
+			request,
+		} as unknown as ClientTransport);
+		await expect(
+			client.importFixtureGdtf({
+				profileId: "input-profile",
+				expectedRevision: 0,
+				source: new Uint8Array([80, 75]),
+				attributeMappings: [],
+			}),
+		).rejects.toThrow("Saved fixture profile is missing from the snapshot");
+		expect(request.mock.calls.map(([path]) => path)).toEqual([
+			"/api/v2/fixture-library/profiles/input-profile/update",
+			"/api/v2/fixture-library/profiles/saved-profile/revisions",
+		]);
+	});
+
+	it("propagates scoped authority failure without a whole-library retry", async () => {
+		const failure = new Error("Profile revisions unavailable");
+		const request = vi.fn(async (path: string) => {
+			if (path.endsWith("/update"))
+				return {
+					result: { type: "profile", profile_id: "saved-profile", revision: 7 },
+				};
+			throw failure;
+		});
+		const client = new FixtureApiClient({
+			request,
+		} as unknown as ClientTransport);
+		await expect(
+			client.importFixtureGdtf({
+				profileId: "input-profile",
+				expectedRevision: 0,
+				source: new Uint8Array([80, 75]),
+				attributeMappings: [],
+			}),
+		).rejects.toBe(failure);
+		expect(request.mock.calls.map(([path]) => path)).toEqual([
+			"/api/v2/fixture-library/profiles/input-profile/update",
+			"/api/v2/fixture-library/profiles/saved-profile/revisions",
+		]);
 	});
 });

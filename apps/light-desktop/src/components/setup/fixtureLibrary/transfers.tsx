@@ -5,10 +5,11 @@ import {
 	formatErrorDetails,
 	ModalRegistration,
 	ModalTitleBar,
+	OperationBusyOverlay,
 	SelectField,
 	TextField,
 } from "@tosklight/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { AttributeValueType } from "../../../api/attributeConfigurationModels";
 import type {
 	AttributeConfigurationSnapshot,
@@ -93,7 +94,17 @@ async function downloadFixturePackage(
 }
 
 function useFixtureTransferState() {
-	const [busy, setBusy] = useState(false);
+	const [busy, setBusyState] = useState(false);
+	const busyRef = useRef(false);
+	const setBusy = (value: boolean) => {
+		busyRef.current = value;
+		setBusyState(value);
+	};
+	const beginBusy = () => {
+		if (busyRef.current) return false;
+		setBusy(true);
+		return true;
+	};
 	const [modal, setModal] = useState<FixtureImportModal>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [pendingPackage, setPendingPackage] = useState<Uint8Array | null>(null);
@@ -111,7 +122,8 @@ function useFixtureTransferState() {
 		useState<AttributeConfigurationSnapshot | null>(null);
 	const [customAttributeDraft, setCustomAttributeDraft] =
 		useState<ImportedCustomAttributeDraft | null>(null);
-	const selectModal = (next: FixtureImportModal) => {
+	const selectModal = (next: FixtureImportModal, completed = false) => {
+		if (busyRef.current && !completed) return;
 		setError(null);
 		setPendingPackage(null);
 		setPendingGdtf(null);
@@ -123,6 +135,8 @@ function useFixtureTransferState() {
 	};
 	return {
 		busy,
+		isBusy: () => busyRef.current,
+		beginBusy,
 		setBusy,
 		modal,
 		selectModal,
@@ -161,7 +175,7 @@ function customAttributeOperations(
 			return;
 		}
 		state.setError(null);
-		state.setBusy(true);
+		if (!state.beginBusy()) return;
 		try {
 			const snapshot = await attributeActions.load();
 			const encoderGroup = defaultEncoderGroup(requirement.value_type);
@@ -214,7 +228,7 @@ function customAttributeOperations(
 			return;
 		}
 		state.setError(null);
-		state.setBusy(true);
+		if (!state.beginBusy()) return;
 		try {
 			const id = customAttributeId(draft.label);
 			const custom = {
@@ -298,7 +312,7 @@ function gdtfOperations(
 	const importGdtfFile = async (file?: File) => {
 		if (!file) return;
 		state.setError(null);
-		state.setBusy(true);
+		if (!state.beginBusy()) return;
 		state.setPendingGdtf(null);
 		try {
 			if (!server?.previewFixtureGdtf)
@@ -344,18 +358,18 @@ function gdtfOperations(
 	const confirmGdtfMappings = async () => {
 		const pending = state.pendingGdtf;
 		if (!pending) return;
-		if (
-			state.requirements.some(
-				(requirement) => !state.mappings[requirement.attribute],
-			)
-		) {
+		const attributeMappings = state.requirements.map((requirement) => ({
+			source_attribute: requirement.attribute,
+			target_attribute: state.mappings[requirement.attribute] ?? "",
+		}));
+		if (attributeMappings.some((mapping) => !mapping.target_attribute)) {
 			state.setError(
 				"Choose a compatible descriptor for every GDTF attribute.",
 			);
 			return;
 		}
 		state.setError(null);
-		state.setBusy(true);
+		if (!state.beginBusy()) return;
 		try {
 			if (!server?.importFixtureGdtf)
 				throw new Error("GDTF import requires a connected desk server.");
@@ -372,10 +386,7 @@ function gdtfOperations(
 				profileId: pending.profile.id,
 				expectedRevision: pending.expectedRevision,
 				source: pending.source,
-				attributeMappings: state.requirements.map((requirement) => ({
-					source_attribute: requirement.attribute,
-					target_attribute: state.mappings[requirement.attribute]!,
-				})),
+				attributeMappings,
 			});
 			selectImportedProfile(saved);
 		} catch (reason) {
@@ -434,7 +445,7 @@ export function useFixtureLibraryTransfers({
 		setSelectedModeKey(
 			`${profile.id}:${profile.revision}:${profile.modes[0]?.id ?? profile.id}`,
 		);
-		selectModal(null);
+		selectModal(null, true);
 	};
 
 	const { importGdtfFile, confirmGdtfMappings } = gdtfOperations(
@@ -447,7 +458,7 @@ export function useFixtureLibraryTransfers({
 	const importPackage = async (file?: File) => {
 		if (!file) return;
 		setError(null);
-		setBusy(true);
+		if (!state.beginBusy()) return;
 		try {
 			const source = new Uint8Array(await file.arrayBuffer());
 			const imported = await server?.importFixturePackage(source);
@@ -478,7 +489,7 @@ export function useFixtureLibraryTransfers({
 			return;
 		}
 		setError(null);
-		setBusy(true);
+		if (!state.beginBusy()) return;
 		try {
 			const imported = await server?.importFixturePackage(
 				pendingPackage,
@@ -504,6 +515,7 @@ export function useFixtureLibraryTransfers({
 		beginCustomAttribute,
 		busy,
 		cancelCustomAttribute: () => {
+			if (state.isBusy()) return;
 			setCustomAttributeSnapshot(null);
 			setCustomAttributeDraft(null);
 		},
@@ -747,7 +759,9 @@ function CustomAttributeImportFields({
 				onChange={(event) => onChange({ physicalUnit: event.target.value })}
 			/>
 			<div>
-				<Button onClick={onCancel}>Cancel</Button>
+				<Button disabled={busy} onClick={onCancel}>
+					Cancel
+				</Button>
 				<Button
 					variant="primary"
 					disabled={busy || !draft.label.trim()}
@@ -788,14 +802,25 @@ function PackageImportDialog(props: FixtureImportDialogProps) {
 		mappings,
 		requirements,
 	} = props;
+	const [readingFile, setReadingFile] = useState(false);
+	const readingRef = useRef(false);
+	const readBusyChanged = (value: boolean) => {
+		readingRef.current = value;
+		setReadingFile(value);
+	};
+	const operationBusy = busy || readingFile;
+	const requestClose = () => {
+		if (!busy && !readingRef.current) close();
+	};
 	return (
-		<ModalRegistration onClose={close}>
+		<ModalRegistration onClose={requestClose}>
 			<div className="stacked-modal-layer">
 				<section className="nested-modal fixture-package-import-modal">
 					<ModalTitleBar
 						title="Import fixture"
 						closeLabel="Close Import fixture"
-						onClose={close}
+						closeDisabled={operationBusy}
+						onClose={requestClose}
 					/>
 					<p>
 						Select a transferable .toskfixture package. Its modes, photograph,
@@ -809,9 +834,10 @@ function PackageImportDialog(props: FixtureImportDialogProps) {
 					{requirements.length === 0 ? (
 						<RootConfinedFilePickerButton
 							variant="primary"
-							disabled={busy}
+							disabled={operationBusy}
 							label={busy ? "Importing…" : "Choose fixture package"}
 							allowedExtensions={["toskfixture"]}
+							onReadBusyChange={readBusyChanged}
 							onFiles={(files) => importPackage(files[0])}
 						/>
 					) : (
@@ -834,6 +860,20 @@ function PackageImportDialog(props: FixtureImportDialogProps) {
 								{busy ? "Importing…" : "Import with mappings"}
 							</Button>
 						</>
+					)}
+					{operationBusy && (
+						<OperationBusyOverlay
+							title={
+								readingFile
+									? "Loading selected fixture package…"
+									: "Importing fixture package…"
+							}
+							message={
+								readingFile
+									? "Reading the selected package. Wait for the read to finish; it cannot be cancelled here."
+									: "Loading and importing the package. It may already be writing fixture data; wait for the authoritative result."
+							}
+						/>
 					)}
 				</section>
 			</div>

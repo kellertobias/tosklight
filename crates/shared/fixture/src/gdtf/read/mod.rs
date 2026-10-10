@@ -33,13 +33,20 @@ pub struct GdtfImport {
 /// Parse an archive without changing any library/show state. Callers retain the original source
 /// and present diagnostics before storing the returned profile.
 pub fn import_profile(bytes: &[u8]) -> Result<GdtfImport, ProfileError> {
-    let xml = archive_xml(bytes)?;
-    let mut imported = from_xml(&xml)?;
+    let mut imported = preview_profile(bytes)?;
     imported.profile.source_gdtf = Some(crate::ProfileGdtfSource::associate(
         &imported.profile,
         bytes,
     )?);
     Ok(imported)
+}
+
+/// Convert and validate every supported mode without constructing a retained-source association.
+/// Preview callers present diagnostics; storage callers associate the exact final mapped profile
+/// and archive atomically. Public import_profile retains its original source-preserving behavior.
+pub fn preview_profile(bytes: &[u8]) -> Result<GdtfImport, ProfileError> {
+    let xml = archive_xml(bytes)?;
+    from_xml(&xml)
 }
 
 /// Structural validation is independent of the subset the canonical importer understands.

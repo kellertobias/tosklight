@@ -3,8 +3,9 @@ import {
 	ErrorAlert,
 	ModalRegistration,
 	ModalTitleBar,
+	OperationBusyOverlay,
 } from "@tosklight/ui";
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { RootConfinedFilePickerButton } from "../../files/RootConfinedFilePickerButton";
 import type { FixtureImportDialogsProps, PendingGdtfImport } from "./transfers";
 
@@ -76,6 +77,33 @@ function GdtfLimitations({ pending }: { pending: PendingGdtfImport }) {
 	);
 }
 
+function GdtfBusyProgress({
+	readingFile,
+	pending,
+}: {
+	readingFile: boolean;
+	pending: boolean;
+}) {
+	return (
+		<OperationBusyOverlay
+			title={
+				readingFile
+					? "Loading selected GDTF file…"
+					: pending
+						? "Importing fixture…"
+						: "Reading GDTF…"
+			}
+			message={
+				readingFile
+					? "Reading the selected archive. Wait for the read to finish; it cannot be cancelled here."
+					: pending
+						? "Saving mappings and importing the selected fixture. Wait for the authoritative result."
+						: "Reading fixture data and remembered mappings. Wait for the preview."
+			}
+		/>
+	);
+}
+
 export function GdtfImportDialog({
 	pendingGdtf,
 	busy,
@@ -88,6 +116,16 @@ export function GdtfImportDialog({
 	children,
 }: Props) {
 	const decisions = useRef<HTMLDivElement>(null);
+	const [readingFile, setReadingFile] = useState(false);
+	const readingRef = useRef(false);
+	const readBusyChanged = (value: boolean) => {
+		readingRef.current = value;
+		setReadingFile(value);
+	};
+	const operationBusy = busy || readingFile;
+	const requestClose = () => {
+		if (!busy && !readingRef.current) close();
+	};
 	const unresolved = requirements.filter(
 		(requirement) => !mappings[requirement.attribute],
 	).length;
@@ -99,7 +137,7 @@ export function GdtfImportDialog({
 		trigger?.focus({ preventScroll: true });
 	};
 	return (
-		<ModalRegistration onClose={close}>
+		<ModalRegistration onClose={requestClose}>
 			<div className="stacked-modal-layer">
 				<section
 					className="nested-modal gdtf-import-modal import-workflow"
@@ -111,7 +149,8 @@ export function GdtfImportDialog({
 						<ModalTitleBar
 							title="Import GDTF"
 							closeLabel="Close Import GDTF"
-							onClose={close}
+							closeDisabled={operationBusy}
+							onClose={requestClose}
 						/>
 						{pendingGdtf && <GdtfSourceSummary pending={pendingGdtf} />}
 					</div>
@@ -129,9 +168,10 @@ export function GdtfImportDialog({
 								</p>
 								<RootConfinedFilePickerButton
 									variant="primary"
-									disabled={busy}
+									disabled={operationBusy}
 									label={busy ? "Reading GDTF…" : "Choose GDTF file"}
 									allowedExtensions={["gdtf"]}
+									onReadBusyChange={readBusyChanged}
 									onFiles={(files) => importGdtfFile(files[0])}
 								/>
 							</>
@@ -149,7 +189,7 @@ export function GdtfImportDialog({
 											mappings
 										</p>
 										{unresolved > 0 && (
-											<Button disabled={busy} onClick={nextUnresolved}>
+											<Button disabled={operationBusy} onClick={nextUnresolved}>
 												Next unresolved
 											</Button>
 										)}
@@ -171,20 +211,24 @@ export function GdtfImportDialog({
 					<div className="import-workflow__footer">
 						<p>
 							{busy
-								? pendingGdtf
-									? "Importing fixture…"
-									: "Reading GDTF…"
+								? readingFile
+									? "Reading the selected archive. Wait for the read to finish; it cannot be cancelled here."
+									: pendingGdtf
+										? "Importing fixture…"
+										: "Reading GDTF…"
 								: unresolved > 0
 									? `Choose a destination for ${unresolved} remaining ${unresolved === 1 ? "attribute" : "attributes"} to enable import.`
 									: pendingGdtf
 										? "Ready to import. Review any import limitations."
 										: "Choose a GDTF archive to preview."}
 						</p>
-						<Button onClick={close}>Cancel</Button>
+						<Button disabled={operationBusy} onClick={requestClose}>
+							Cancel
+						</Button>
 						{pendingGdtf && (
 							<Button
 								variant="primary"
-								disabled={busy || unresolved > 0}
+								disabled={operationBusy || unresolved > 0}
 								onClick={() => void confirmGdtfMappings()}
 							>
 								{busy
@@ -195,6 +239,12 @@ export function GdtfImportDialog({
 							</Button>
 						)}
 					</div>
+					{operationBusy && (
+						<GdtfBusyProgress
+							readingFile={readingFile}
+							pending={Boolean(pendingGdtf)}
+						/>
+					)}
 				</section>
 			</div>
 		</ModalRegistration>

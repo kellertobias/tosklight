@@ -1,5 +1,11 @@
-import { ErrorAlert } from "@tosklight/ui";
-import { Button, ModalTitleBar, RadioField, SelectField } from "@tosklight/ui";
+import {
+	Button,
+	ErrorAlert,
+	ModalTitleBar,
+	OperationBusyOverlay,
+	RadioField,
+	SelectField,
+} from "@tosklight/ui";
 import { type RefObject, useLayoutEffect } from "react";
 import type { SelectiveImportOutcome } from "../../api/selectiveImportModels";
 import {
@@ -39,6 +45,7 @@ export function SelectiveShowImportModal(props: SelectiveShowImportModalProps) {
 			<ModalTitleBar
 				title="Partial Show Load"
 				closeLabel="Close Partial Show Load"
+				closeDisabled={workflow.phase === "apply"}
 				onClose={workflow.close}
 			/>
 			<p>
@@ -167,16 +174,22 @@ function SourceShowSelector({
 function WorkflowStatus({ workflow }: { workflow: SelectiveImportWorkflow }) {
 	return (
 		<>
-			{workflow.phase === "catalog" && (
-				<p role="status">Reading the source show…</p>
-			)}
-			{workflow.phase === "preview" && (
-				<p role="status">Building the dependency and conflict preview…</p>
-			)}
-			{workflow.phase === "apply" && (
-				<p role="status">
-					Importing atomically… The write cannot be cancelled after it starts.
-				</p>
+			{workflow.phase !== "idle" && (
+				<OperationBusyOverlay
+					title={
+						workflow.phase === "catalog"
+							? "Reading the source show…"
+							: workflow.phase === "preview"
+								? "Building the dependency and conflict preview…"
+								: "Importing atomically…"
+					}
+					message={
+						workflow.phase === "apply"
+							? "The write cannot be cancelled after it starts."
+							: "Preparing the import preview. The active show is unchanged."
+					}
+					onCancel={workflow.phase === "apply" ? undefined : workflow.close}
+				/>
 			)}
 			{workflow.error && (
 				<ErrorAlert as="p" className="modal-error" role="alert">

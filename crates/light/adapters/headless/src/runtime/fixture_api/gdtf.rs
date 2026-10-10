@@ -9,7 +9,7 @@ pub(super) async fn preview(
 ) -> Result<Json<wire::FixtureGdtfPreview>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let source = decode_archive(&request.source_base64, "GDTF source archive")?;
-    let mut imported = light_fixture::gdtf::read::import_profile(&source)
+    let imported = light_fixture::gdtf::read::preview_profile(&source)
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let unknown_attributes = unknown_canonical_attributes(&state, &imported.profile)
         .into_iter()
@@ -18,9 +18,8 @@ pub(super) async fn preview(
             value_type: fixture_import_value_type(value_type),
         })
         .collect();
-    // The client already holds the archive. Confirmation reparses it on the server and attaches
-    // it atomically; echoing it here doubles the preview response without adding evidence.
-    imported.profile.source_gdtf = None;
+    // Preview omits source-association work. Confirmation validates again and atomically
+    // associates the archive with the final profile after explicit attribute mappings.
     Ok(Json(wire::FixtureGdtfPreview {
         profile: serde_json::to_value(imported.profile)
             .map_err(|error| ApiError::internal(error.to_string()))?,
@@ -63,7 +62,7 @@ pub(super) async fn import(
         .replay
         .execute_fixture_library_edit(key, signature, || {
             let source = decode_archive(&request.source_base64, "GDTF source archive")?;
-            let mut profile = light_fixture::gdtf::read::import_profile(&source)
+            let mut profile = light_fixture::gdtf::read::preview_profile(&source)
                 .map_err(|error| ApiError::bad_request(error.to_string()))?
                 .profile;
             if profile.id.0 != profile_id {

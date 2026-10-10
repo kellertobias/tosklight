@@ -76,16 +76,30 @@ async fn live_fixture_profile_projection_keeps_the_effect_engine_contract() {
         .join("assets/fixture-library/generic--cold-spark.toskfixture");
     let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
     state.installation.save_fixture_profile(profile, 0).unwrap();
-    let response = app.oneshot(
-        Request::get("/api/v2/fixture-library/profiles")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .body(Body::empty()).unwrap(),
-    ).await.unwrap();
+    let response = app
+        .oneshot(
+            Request::get("/api/v2/fixture-library/profiles")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
-    let projected = body["profiles"].as_array().unwrap().iter().find(|profile| profile["name"] == "Cold Spark Fountain").unwrap();
+    let projected = body["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|profile| profile["name"] == "Cold Spark Fountain")
+        .unwrap();
     assert_eq!(projected["effect"]["result_version"], 1);
-    assert!(projected["effect"]["effect_script_asset"].as_str().unwrap().starts_with("data:text/javascript;base64,"));
+    assert!(
+        projected["effect"]["effect_script_asset"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:text/javascript;base64,")
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -132,10 +146,10 @@ async fn gel_catalog_csv_preview_confirm_replay_and_search_are_typed() {
                 Request::post(format!(
                     "/api/v2/fixture-library/gel-catalogs/{catalog_id}/update"
                 ))
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .header(header::CONTENT_TYPE, "application/json")
-                    .body(Body::from(confirm_body.to_string()))
-                    .unwrap(),
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(confirm_body.to_string()))
+                .unwrap(),
             )
             .await
             .unwrap();
@@ -308,7 +322,10 @@ async fn fixture_import_requires_explicit_mapping_for_retired_placeholder_attrib
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
     assert_eq!(response["result"]["type"], "import_required");
-    assert_eq!(response["result"]["unknown_attributes"][0]["attribute"], "beam");
+    assert_eq!(
+        response["result"]["unknown_attributes"][0]["attribute"],
+        "beam"
+    );
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -401,7 +418,10 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
     assert_eq!(mapped["result"]["type"], "profile");
     let mapped_profile = state
         .installation
-        .fixture_profile(profile.id, mapped["result"]["revision"].as_u64().unwrap() as u32)
+        .fixture_profile(
+            profile.id,
+            mapped["result"]["revision"].as_u64().unwrap() as u32,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -415,8 +435,10 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
 
     {
         let mut installed = state.attributes.snapshot();
-        installed.configuration.custom_attributes.push(
-            light_core::CustomAttributeDescriptor {
+        installed
+            .configuration
+            .custom_attributes
+            .push(light_core::CustomAttributeDescriptor {
                 id: unknown.clone(),
                 label: "Vendor feature".into(),
                 value_type: light_core::AttributeValueType::Indexed,
@@ -427,27 +449,23 @@ async fn new_fixture_import_pauses_until_unknown_canonical_id_is_configured() {
                 cyclic: false,
                 recordable: true,
                 lifecycle: light_core::CustomAttributeLifecycle::Active,
-            },
-        );
+            });
         installed
             .configuration
             .placements
             .push(light_core::AttributePlacement {
                 attribute: unknown.clone(),
-                encoder: light_core::EncoderPlacement::new(
-                    light_core::EncoderGroup::Beam,
-                    99,
-                    1,
-                ),
+                encoder: light_core::EncoderPlacement::new(light_core::EncoderGroup::Beam, 99, 1),
                 push_turn_of: None,
             });
-        installed.configuration.activation_groups.push(
-            light_core::AttributeActivationGroup {
+        installed
+            .configuration
+            .activation_groups
+            .push(light_core::AttributeActivationGroup {
                 id: "vendor-test-feature".into(),
                 label: "Vendor feature".into(),
                 members: vec![unknown],
-            },
-        );
+            });
         installed.configuration.validate().unwrap();
         state.attributes.replace_installed(installed);
     }
@@ -542,7 +560,8 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
     }
 
     let (mut multi_split, _, _) = schema_v2_direct_fixture();
-    let mut profile = std::sync::Arc::unwrap_or_clone(multi_split.definition.profile_snapshot.take().unwrap());
+    let mut profile =
+        std::sync::Arc::unwrap_or_clone(multi_split.definition.profile_snapshot.take().unwrap());
     let mode_id = profile.modes[0].id;
     profile.modes[0].splits.push(light_fixture::FixtureSplit {
         number: 2,
@@ -766,21 +785,21 @@ async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes(
         .clone()
         .oneshot(
             Request::post("/api/v2/fixture-library")
-            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-            .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::json!({
-                    "request_id": "attach-orbit-gdtf",
-                    "action": {
-                        "type": "attach_gdtf",
-                        "profile_id": profile_id.0,
-                        "revision": 1,
-                        "source_base64": STANDARD.encode(source)
-                    }
-                })
-                .to_string(),
-            ))
-            .unwrap(),
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "request_id": "attach-orbit-gdtf",
+                        "action": {
+                            "type": "attach_gdtf",
+                            "profile_id": profile_id.0,
+                            "revision": 1,
+                            "source_base64": STANDARD.encode(source)
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -835,7 +854,6 @@ async fn fixture_library_v2_is_replay_safe_and_preserves_package_and_gdtf_bytes(
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
-
 #[tokio::test]
 async fn canonical_gdtf_preview_and_import_preserve_precision_and_retry_identity() {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -854,37 +872,98 @@ async fn canonical_gdtf_preview_and_import_preserve_precision_and_retry_identity
     mode.channels[0].secondary_slots = vec![3];
     mode.channels[0].default_raw = 32769;
     mode.channels[0].highlight_raw = 65534;
-    mode.channels[0].functions = vec![light_fixture::ChannelFunction::continuous("Pan", light_core::AttributeKey("pan".into()), 65535)];
-    mode.channels[0].functions[0].behavior = light_fixture::ChannelFunctionBehavior::Continuous { physical_min: 540.0, physical_max: -540.0, unit: Some("degrees".into()) };
+    mode.channels[0].functions = vec![light_fixture::ChannelFunction::continuous(
+        "Pan",
+        light_core::AttributeKey("pan".into()),
+        65535,
+    )];
+    mode.channels[0].functions[0].behavior = light_fixture::ChannelFunctionBehavior::Continuous {
+        physical_min: 540.0,
+        physical_max: -540.0,
+        unit: Some("degrees".into()),
+    };
     mode.splits[0].footprint = 3;
     let source = light_fixture::gdtf::profile::package_profile(&profile).unwrap();
     let encoded = STANDARD.encode(&source);
-    let request = |path: &str, body: serde_json::Value| Request::post(path)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body.to_string())).unwrap();
-    let response = app.clone().oneshot(request("/api/v2/fixture-library/gdtf/preview", serde_json::json!({"source_base64":encoded,"future_option":true}))).await.unwrap();
+    let request = |path: &str, body: serde_json::Value| {
+        Request::post(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let response = app
+        .clone()
+        .oneshot(request(
+            "/api/v2/fixture-library/gdtf/preview",
+            serde_json::json!({"source_base64":encoded,"future_option":true}),
+        ))
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let preview = json(response).await;
-    assert!(preview["profile"].get("source_gdtf").is_none(), "preview must not echo the client's archive");
-    assert_eq!(preview["profile"]["modes"][0]["channels"][0]["default_raw"], 32769);
-    assert!(preview["diagnostics"].as_array().is_some_and(|items| !items.is_empty()));
-    assert!(state.installation.fixture_profile(profile.id, 1).unwrap().is_none());
+    let direct_preview = light_fixture::gdtf::read::preview_profile(&source).unwrap();
+    assert_eq!(
+        preview["profile"],
+        serde_json::to_value(&direct_preview.profile).unwrap()
+    );
+    assert_eq!(
+        preview["diagnostics"],
+        serde_json::to_value(&direct_preview.diagnostics).unwrap()
+    );
+    assert!(
+        preview["profile"].get("source_gdtf").is_none(),
+        "preview must not echo the client's archive"
+    );
+    assert_eq!(
+        preview["profile"]["modes"][0]["channels"][0]["default_raw"],
+        32769
+    );
+    assert!(
+        preview["diagnostics"]
+            .as_array()
+            .is_some_and(|items| !items.is_empty())
+    );
+    assert!(
+        state
+            .installation
+            .fixture_profile(profile.id, 1)
+            .unwrap()
+            .is_none()
+    );
     let path = format!("/api/v2/fixture-library/profiles/{}/update", profile.id.0);
     let body = serde_json::json!({"request_id":"canonical-gdtf-retry","source_base64":encoded,"expected_revision":0,"attribute_mappings":[],"future_option":true});
-    let (first, retry) = tokio::join!(app.clone().oneshot(request(&path, body.clone())), app.clone().oneshot(request(&path, body.clone())));
-    let first = first.unwrap(); let retry = retry.unwrap();
-    assert_eq!(first.status(), StatusCode::OK); assert_eq!(retry.status(), StatusCode::OK);
-    let first = json(first).await; let retry = json(retry).await;
+    let (first, retry) = tokio::join!(
+        app.clone().oneshot(request(&path, body.clone())),
+        app.clone().oneshot(request(&path, body.clone()))
+    );
+    let first = first.unwrap();
+    let retry = retry.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(retry.status(), StatusCode::OK);
+    let first = json(first).await;
+    let retry = json(retry).await;
     assert_eq!(first["result"], retry["result"]);
-    assert_eq!(first["replayed"], false); assert_eq!(retry["replayed"], true);
-    let saved = state.installation.fixture_profile(profile.id, 1).unwrap().unwrap();
+    assert_eq!(first["replayed"], false);
+    assert_eq!(retry["replayed"], true);
+    let saved = state
+        .installation
+        .fixture_profile(profile.id, 1)
+        .unwrap()
+        .unwrap();
     let retained = saved.source_gdtf.as_ref().unwrap();
     assert_eq!(retained.decoded_archive().unwrap(), source);
     assert!(retained.matches_profile(&saved).unwrap());
     assert_eq!(saved.modes[0].channels[0].secondary_slots, vec![3]);
-    assert!(state.installation.fixture_profile(profile.id, 2).unwrap().is_none());
-    let mut changed = body; changed["expected_revision"] = 1.into();
+    assert!(
+        state
+            .installation
+            .fixture_profile(profile.id, 2)
+            .unwrap()
+            .is_none()
+    );
+    let mut changed = body;
+    changed["expected_revision"] = 1.into();
     let response = app.oneshot(request(&path, changed)).await.unwrap();
     assert_eq!(response.status(), StatusCode::CONFLICT);
     let _ = std::fs::remove_dir_all(data_dir);

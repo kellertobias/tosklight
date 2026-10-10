@@ -5,6 +5,7 @@ import {
 	render,
 	renderHook,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
@@ -21,6 +22,14 @@ import {
 } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { blankFixtureProfile } from "../fixtureProfileModel";
 import { FixtureImportDialogs, useFixtureLibraryTransfers } from "./transfers";
+
+const picker = vi.hoisted(() => ({ open: vi.fn(), content: vi.fn() }));
+vi.mock("../../../windows/FileManagerPickerHost", () => ({
+	openFileManagerPicker: picker.open,
+}));
+vi.mock("../../../features/files/FilesContext", () => ({
+	useFiles: () => ({ fileContent: picker.content }),
+}));
 
 vi.mock("../../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useAttributeRegistry: () => [
@@ -631,5 +640,105 @@ describe("GDTF import decision hierarchy", () => {
 		expect(screen.getByRole("button", { name: "Importing…" })).toBeDisabled();
 		expect(screen.getByLabelText("Map gdtf.Gobo")).toBeDisabled();
 		expect(props.confirmGdtfMappings).not.toHaveBeenCalled();
+	});
+});
+
+describe("fixture import busy ownership", () => {
+	it("blocks close and duplicate package work while a potentially committing request is pending, then closes only on owned success", async () => {
+		let finish: (
+			value: Awaited<ReturnType<FixtureLibraryState["importFixturePackage"]>>,
+		) => void = () => undefined;
+		const request = vi.fn(
+			() =>
+				new Promise<
+					Awaited<ReturnType<FixtureLibraryState["importFixturePackage"]>>
+				>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const library = fixtureLibrary(request);
+		const wrapper = ({ children }: PropsWithChildren) => (
+			<FixtureLibraryProvider library={library}>
+				{children}
+			</FixtureLibraryProvider>
+		);
+		const { result } = renderHook(
+			() =>
+				useFixtureLibraryTransfers({
+					selectedMode: null,
+					setSelectedFamilyKey: vi.fn(),
+					setSelectedModeKey: vi.fn(),
+				}),
+			{ wrapper },
+		);
+		act(() => result.current.setModal("package"));
+		const file = new File([new Uint8Array([1, 2, 3])], "owned.toskfixture");
+		let running: Promise<void> = Promise.resolve();
+		await act(async () => {
+			running = result.current.importPackage(file);
+			await Promise.resolve();
+		});
+		act(() => result.current.setModal(null));
+		expect(result.current.modal).toBe("package");
+		expect(result.current.busy).toBe(true);
+		await act(() => result.current.importPackage(file));
+		expect(request).toHaveBeenCalledOnce();
+		await act(async () => {
+			finish({ type: "profile", profile: blankFixtureProfile() });
+			await running;
+		});
+		expect(result.current.modal).toBeNull();
+		expect(result.current.busy).toBe(false);
+	});
+	it("guards every GDTF dialog close route while reading and importing", () => {
+		const props = gdtfDialogProps({ busy: true });
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		expect(
+			screen.getByRole("status", { name: "Importing fixture…" }),
+		).toBeVisible();
+		expect(
+			screen.getByRole("button", { name: "Close Import GDTF", hidden: true }),
+		).toBeDisabled();
+		expect(
+			screen.getByRole("button", { name: "Cancel", hidden: true }),
+		).toBeDisabled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(props.close).not.toHaveBeenCalled();
+	});
+	it("shows the GDTF selected-file read overlay before import starts and blocks closing until a failed read settles", async () => {
+		let fail: (reason: Error) => void = () => {};
+		picker.open.mockResolvedValue([
+			{ rootId: "fixtures", entry: { name: "tour.gdtf", path: "tour.gdtf" } },
+		]);
+		picker.content.mockImplementation(
+			() =>
+				new Promise((_resolve, reject) => {
+					fail = reject;
+				}),
+		);
+		const props = gdtfDialogProps({ pendingGdtf: null, requirements: [] });
+		render(<FixtureImportDialogs {...props} />, { wrapper: ModalProvider });
+		fireEvent.click(screen.getByRole("button", { name: "Choose GDTF file" }));
+		await waitFor(() =>
+			expect(
+				screen.getByRole("status", { name: "Loading selected GDTF file…" }),
+			).toBeVisible(),
+		);
+		expect(props.importGdtfFile).not.toHaveBeenCalled();
+		expect(
+			screen.getByRole("button", { name: "Close Import GDTF", hidden: true }),
+		).toBeDisabled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(props.close).not.toHaveBeenCalled();
+		await act(async () => {
+			fail(new Error("Read failed"));
+		});
+		expect(screen.getByRole("alert")).toHaveTextContent("Read failed");
+		expect(
+			screen.queryByRole("status", { name: "Loading selected GDTF file…" }),
+		).toBeNull();
+		expect(
+			screen.getByRole("button", { name: "Close Import GDTF" }),
+		).toBeEnabled();
 	});
 });
