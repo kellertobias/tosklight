@@ -139,13 +139,21 @@ function windowView() {
 function TestShiftLatch() {
 	const { state, dispatch } = useApp();
 	return (
-		<button
-			type="button"
-			aria-pressed={state.shiftArmed}
-			onClick={() => dispatch({ type: "SET_SHIFT_ARMED", value: true })}
-		>
-			Arm software Shift
-		</button>
+		<>
+			<button
+				type="button"
+				aria-pressed={state.shiftArmed}
+				onClick={() => dispatch({ type: "SET_SHIFT_ARMED", value: true })}
+			>
+				Arm software Shift
+			</button>
+			<button onClick={() => dispatch({ type: "SET_STORE_ARMED", value: true })}>
+				Arm Record
+			</button>
+			<button onClick={() => dispatch({ type: "SET_UPDATE_ARMED", value: true })}>
+				Arm Update
+			</button>
+		</>
 	);
 }
 
@@ -799,6 +807,44 @@ describe("DynamicsWindow", () => {
 		fireEvent.click(tile);
 		expect(replaceCommand).toHaveBeenCalledWith("ASSIGN DYNAMIC 1");
 	});
+
+	it.each(["software latch", "physical Shift"] as const)(
+		"chooses an ASSIGN source before the %s editor gesture",
+		(shift) => {
+			dynamics = [dynamicObject()];
+			commandText = "ASSIGN";
+			renderWindow();
+			const latch = screen.getByRole("button", { name: "Arm software Shift" });
+			if (shift === "software latch") {
+				fireEvent.click(latch);
+				expect(latch).toHaveAttribute("aria-pressed", "true");
+			}
+			fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
+				shiftKey: shift === "physical Shift",
+			});
+			expect(replaceCommand).toHaveBeenCalledWith("ASSIGN DYNAMIC 1");
+			expect(latch).toHaveAttribute("aria-pressed", "false");
+			expect(screen.queryByRole("button", { name: "← Dynamics" })).toBeNull();
+			expect(toggleDynamic).not.toHaveBeenCalled();
+			expect(executeCommand).not.toHaveBeenCalled();
+			expect(updateDynamic).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each(["Record", "Update"] as const)(
+		"preserves the %s guard while ASSIGN is present",
+		(mode) => {
+			dynamics = [dynamicObject()];
+			commandText = "ASSIGN";
+			renderWindow();
+			fireEvent.click(screen.getByRole("button", { name: `Arm ${mode}` }));
+			fireEvent.click(screen.getByRole("button", { name: /Pulse/i }));
+			expect(screen.getByText(new RegExp(`Finish or cancel ${mode}`))).toBeVisible();
+			expect(replaceCommand).not.toHaveBeenCalled();
+			expect(toggleDynamic).not.toHaveBeenCalled();
+			expect(executeCommand).not.toHaveBeenCalled();
+		},
+	);
 
 	it.each([
 		["right-click", false],

@@ -691,6 +691,9 @@ function DynamicPoolTile({
 				else if (validationError) {
 					actions.onError(warningMessage ?? validationError);
 					actions.onClearShift();
+				} else if (actions.setArmed && !actions.updateArmed && !actions.storeArmed) {
+					actions.onSet(poolNumber);
+					if (actions.shiftArmed) actions.onClearShift();
 				} else if (event.shiftKey || actions.shiftArmed) {
 					open();
 					actions.onClearShift();
@@ -700,7 +703,6 @@ function DynamicPoolTile({
 							? "Finish or cancel Update before operating a Dynamic tile."
 							: "Finish or cancel Record/Store before operating a Dynamic tile.",
 					);
-				else if (actions.setArmed) actions.onSet(poolNumber);
 				else {
 					actions.onToggle(dynamic);
 					if (warningMessage) actions.onError(warningMessage);
