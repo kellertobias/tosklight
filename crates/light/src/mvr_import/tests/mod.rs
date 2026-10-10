@@ -1,3 +1,4 @@
+mod real_archive_profile;
 mod support;
 
 use super::*;
