@@ -25,6 +25,21 @@ pub trait PlaybackPorts: Send + Sync {
         Ok(None)
     }
 
+    /// Called under the service operation lock before any live or capture mutation.
+    fn validate_runtime_dynamic_stop(
+        &self,
+        _context: &ActionContext,
+        _address: &ResolvedPlaybackAddress,
+        _dynamic_id: uuid::Uuid,
+        _instance_id: uuid::Uuid,
+        _controller_id: uuid::Uuid,
+    ) -> Result<(), ActionError> {
+        Err(ActionError::new(
+            crate::ActionErrorKind::Unavailable,
+            "Runtime Dynamic Stop is unavailable",
+        ))
+    }
+
     fn execute(
         &self,
         context: &ActionContext,

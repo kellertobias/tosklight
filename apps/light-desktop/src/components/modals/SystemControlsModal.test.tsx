@@ -70,6 +70,8 @@ const dynamicsRuntime = vi.hoisted(() => ({
 				speedSource: "Speed Group A",
 				controllerId: "dynamic-controller",
 				source: "Playback 12",
+				stopMode: "playback",
+				stopOwner: { kind: "physical_playback", playback_number: 12 },
 				priority: 1,
 				size: 1,
 				speedMultiplier: 1,

@@ -154,7 +154,8 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Crossfade { enabled: false } => "xfade-off",
         PlaybackAction::Temporary { enabled: true, .. } => "temp-on",
         PlaybackAction::Temporary { enabled: false, .. } => "temp-off",
-        PlaybackAction::Master(_)
+        PlaybackAction::RuntimeStopDynamic { .. }
+        | PlaybackAction::Master(_)
         | PlaybackAction::MasterTransition { .. }
         | PlaybackAction::GoTo(_)
         | PlaybackAction::Load(_)

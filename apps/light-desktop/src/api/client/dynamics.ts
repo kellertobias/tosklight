@@ -6,9 +6,17 @@ import type {
 	DynamicInstanceOverridesProjection,
 	DynamicOffActionRequest,
 	DynamicRuntimeSnapshotProjection,
+	DynamicRuntimeStopOwner,
 	DynamicStartActionRequest,
 	DynamicValueTimingProjection,
 } from "../generated/light-wire";
+import {
+	decodeDynamicRuntimeStopMetadata,
+	dynamicRuntimeStopRequest,
+	type DynamicRuntimeStopIdentity,
+} from "../dynamicRuntimeStopWire";
+import { decodePlaybackOutcome } from "../playbackWire";
+import { WireValidationError } from "../wireValidation";
 import { jsonRequest, type LiveClientTransport } from "./transport";
 
 const NO_TIMING: DynamicValueTimingProjection = {};
@@ -22,9 +30,45 @@ export class DynamicsApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
 
 	runtime(showId: string): Promise<DynamicRuntimeSnapshotProjection> {
-		return this.transport.request("/api/v2/dynamics/runtime", {
-			headers: { "x-tosk-show": showId },
-		});
+		return this.transport
+			.request<unknown>("/api/v2/dynamics/runtime", {
+				headers: { "x-tosk-show": showId },
+			})
+			.then(decodeDynamicRuntimeStopMetadata);
+	}
+
+	async stopRuntimeLive(
+		owner: DynamicRuntimeStopOwner,
+		identity: DynamicRuntimeStopIdentity,
+	) {
+		const request = dynamicRuntimeStopRequest(
+			owner,
+			identity,
+			crypto.randomUUID(),
+		);
+		const value = await this.transport.sendAction(
+			{ type: "playback", request },
+			request.request_id,
+		);
+		const outcome = decodePlaybackOutcome(value);
+		if (
+			outcome.request_id !== request.request_id ||
+			!(
+				(outcome.requested.kind === "playback" &&
+					request.address.kind === "playback" &&
+					outcome.requested.playback_number ===
+						request.address.playback_number) ||
+				(outcome.requested.kind === "virtual" &&
+					request.address.kind === "virtual" &&
+					outcome.requested.page === request.address.page &&
+					outcome.requested.playback_number === request.address.playback_number)
+			)
+		)
+			throw new WireValidationError(
+				"$.requested",
+				"the exact requested Dynamic stop owner",
+				outcome.requested,
+			);
 	}
 
 	start(

@@ -1,9 +1,12 @@
-import { formatErrorDetails } from "@tosklight/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DynamicsApiClient } from "../../../api/client/dynamics";
+import type { DynamicRuntimeStopOwner } from "../../../api/dynamicRuntimeStopWire";
 import type { RuntimeCapabilityEvent } from "../../../api/types";
 
-export type RunningDynamicsApi = Pick<DynamicsApiClient, "runtime" | "offLive">;
+export type RunningDynamicsApi = Pick<
+	DynamicsApiClient,
+	"runtime" | "offLive" | "stopRuntimeLive"
+>;
 export type RunningDynamicsSnapshot = Awaited<
 	ReturnType<DynamicsApiClient["runtime"]>
 >;
@@ -29,6 +32,9 @@ export interface RunningDynamicController {
 	speedSource: string;
 	controllerId: string;
 	source: string;
+	stopOwner?: DynamicRuntimeStopOwner;
+	stopMode?: "playback" | "programmer";
+	stopGuidance?: string;
 	priority: number;
 	size: number;
 	speedMultiplier: number;
@@ -80,6 +86,7 @@ export function useRunningDynamicsAuthority(
 	const [stoppingControllerIds, setStoppingControllerIds] = useState<
 		ReadonlySet<string>
 	>(() => new Set());
+	const stoppingRef = useRef(new Set<string>());
 	const refreshRef = useRef<() => Promise<void>>(async () => undefined);
 
 	useEffect(() => {
@@ -155,20 +162,21 @@ export function useRunningDynamicsAuthority(
 	);
 	const off = useCallback(
 		async (row: RunningDynamicController) => {
-			if (!enabled || !showId || !api || row.releasing) return false;
-			let alreadyStopping = false;
-			setStoppingControllerIds((current) => {
-				if (current.has(row.controllerId)) {
-					alreadyStopping = true;
-					return current;
-				}
-				const next = new Set(current);
-				next.add(row.controllerId);
-				return next;
-			});
-			if (alreadyStopping) return false;
+			if (!enabled || !showId || !api || row.releasing || !row.stopMode)
+				return false;
+			if (stoppingRef.current.has(row.controllerId)) return false;
+			stoppingRef.current.add(row.controllerId);
+			setStoppingControllerIds(new Set(stoppingRef.current));
 			try {
-				await api.offLive(row.controllerId);
+				if (row.stopMode === "playback" && row.stopOwner)
+					await api.stopRuntimeLive(row.stopOwner, {
+						dynamicId: row.dynamicId,
+						instanceId: row.instanceId,
+						controllerId: row.controllerId,
+					});
+				else if (row.stopMode === "programmer")
+					await api.offLive(row.controllerId);
+				else return false;
 				await refreshRef.current();
 				return true;
 			} catch (cause) {
@@ -178,11 +186,8 @@ export function useRunningDynamicsAuthority(
 				}));
 				return false;
 			} finally {
-				setStoppingControllerIds((current) => {
-					const next = new Set(current);
-					next.delete(row.controllerId);
-					return next;
-				});
+				stoppingRef.current.delete(row.controllerId);
+				setStoppingControllerIds(new Set(stoppingRef.current));
 			}
 		},
 		[api, enabled, showId],
@@ -216,6 +221,19 @@ export function runningControllerRows(
 			speedSource: instance.speed_source,
 			controllerId: controller.controller_id,
 			source: controller.source,
+			stopOwner: controller.stop_owner,
+			stopMode: controller.stop_owner
+				? "playback"
+				: controller.programmer_id &&
+						controller.programmer_id === snapshot.programmer_id
+					? "programmer"
+					: undefined,
+			stopGuidance: controller.stop_owner
+				? undefined
+				: controller.programmer_id &&
+						controller.programmer_id === snapshot.programmer_id
+					? "Edits the current Programmer; follows its Preload capture mode."
+					: "Stop this source from its owning control; no exact stop owner is available.",
 			priority: controller.priority,
 			size: controller.size,
 			speedMultiplier: controller.speed_multiplier,
@@ -229,5 +247,7 @@ export function runningControllerRows(
 }
 
 function errorMessage(cause: unknown) {
-	return formatErrorDetails(cause);
+	return cause instanceof Error
+		? cause.message
+		: "The Dynamic could not be stopped. Refresh its source and try again.";
 }

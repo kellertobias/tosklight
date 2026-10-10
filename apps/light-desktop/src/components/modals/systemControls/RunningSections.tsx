@@ -216,11 +216,18 @@ function DynamicRow({
 			<Button
 				className="danger"
 				aria-label={`Turn off Dynamic ${dynamic.poolNumber} ${dynamic.name} from ${dynamic.source}`}
-				disabled={!canStop || stopping || dynamic.releasing}
+				disabled={
+					!canStop || stopping || dynamic.releasing || !dynamic.stopMode
+				}
 				onClick={() => onTurnOff(dynamic)}
 			>
-				{stopping ? "Turning off…" : "Off"}
+				{stopping
+					? "Turning off…"
+					: dynamic.stopMode === "programmer"
+						? "Off in Programmer"
+						: "Off"}
 			</Button>
+			{dynamic.stopGuidance && <small>{dynamic.stopGuidance}</small>}
 		</article>
 	);
 }

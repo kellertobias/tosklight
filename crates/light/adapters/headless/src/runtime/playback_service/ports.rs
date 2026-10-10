@@ -103,6 +103,17 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         resolve_group_playback(&self.state.output.snapshot(), group_id.as_str())
     }
 
+    fn validate_runtime_dynamic_stop(
+        &self,
+        _context: &ActionContext,
+        address: &ResolvedPlaybackAddress,
+        dynamic_id: uuid::Uuid,
+        instance_id: uuid::Uuid,
+        controller_id: uuid::Uuid,
+    ) -> Result<(), ActionError> {
+        runtime_dynamic_stop::validate(self.state, address, dynamic_id, instance_id, controller_id)
+    }
+
     fn execute(
         &self,
         context: &ActionContext,

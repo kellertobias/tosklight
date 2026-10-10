@@ -313,6 +313,7 @@ fn dynamics(config: &Config) -> Vec<String> {
         DynamicSpeedGroupTransportProjection::decl(config),
         DynamicDefinitionStatusProjection::decl(config),
         DynamicRuntimeInstanceProjection::decl(config),
+        DynamicRuntimeStopOwner::decl(config),
         DynamicRuntimeControllerProjection::decl(config),
         DynamicStartLiveActionRequest::decl(config),
         DynamicOffLiveActionRequest::decl(config),

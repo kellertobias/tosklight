@@ -29,6 +29,8 @@ mod group;
 mod ports;
 #[path = "playback_service/projection.rs"]
 pub(super) mod projection;
+#[path = "playback_service/runtime_dynamic_stop.rs"]
+mod runtime_dynamic_stop;
 #[path = "playback_service/semantics.rs"]
 mod semantics;
 #[path = "playback_service/support.rs"]

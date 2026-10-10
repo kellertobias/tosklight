@@ -123,6 +123,15 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
         Wire::Back { pressed } => App::Back { pressed },
         Wire::Pause { pressed } => App::Pause { pressed },
         Wire::Release => App::Release,
+        Wire::RuntimeStopDynamic {
+            dynamic_id,
+            instance_id,
+            controller_id,
+        } => App::RuntimeStopDynamic {
+            dynamic_id,
+            instance_id,
+            controller_id,
+        },
         Wire::On { pressed } => App::On { pressed },
         Wire::Off { pressed } => App::Off { pressed },
         Wire::Toggle { pressed } => App::Toggle { pressed },
