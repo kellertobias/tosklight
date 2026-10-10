@@ -184,6 +184,48 @@ describe("CuePropertyModal direct editors", () => {
 		});
 	});
 
+	it("preserves Follow when editing its delayed Trigger Time with the number buttons", async () => {
+		const { onSave } = renderProperty("triggerTime", {
+			cue: { ...cue, trigger: { type: "follow", delay_millis: 250 } },
+		});
+		for (const name of ["0", ".", "5", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name }));
+
+		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+		expect(onSave.mock.calls[0]?.[0].trigger).toEqual({
+			type: "follow",
+			delay_millis: 500,
+		});
+	});
+
+	it("retains Trigger Time when changing TIME to FOLLOW", async () => {
+		const { onSave } = renderProperty("trigger", {
+			cue: { ...cue, trigger: { type: "wait", delay_millis: 500 } },
+		});
+		fireEvent.click(screen.getByRole("button", { name: /FOLLOW/ }));
+
+		await waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+		expect(onSave.mock.calls[0]?.[0].trigger).toEqual({
+			type: "follow",
+			delay_millis: 500,
+		});
+	});
+
+	it("shows FOLLOW selected when reopening a Cue with delayed Follow", () => {
+		renderProperty("trigger", {
+			cue: { ...cue, trigger: { type: "follow", delay_millis: 500 } },
+		});
+
+		expect(screen.getByRole("button", { name: /FOLLOW/ })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		expect(screen.getByRole("button", { name: /^TIMEContinue/ })).toHaveAttribute(
+			"aria-pressed",
+			"false",
+		);
+	});
+
 	it("stores a Jump by stable Cue identity through the grouped chooser", async () => {
 		const destination: Cue = {
 			...cue,

@@ -24,11 +24,7 @@ export function withCueJump(cue: Cue, jump: CueJumpAction | null): Cue {
 
 export function cueTriggerKind(cue: Cue | null | undefined): CueTriggerKind {
 	if (cue?.trigger.type === "manual") return "go";
-	if (
-		cue?.trigger.type === "follow" &&
-		Number(cue.trigger.delay_millis ?? 0) === 0
-	)
-		return "follow";
+	if (cue?.trigger.type === "follow") return "follow";
 	if (cue?.trigger.type === "link") return "link";
 	if (cue?.trigger.type === "timecode") return "timecode";
 	return "time";
@@ -50,7 +46,7 @@ export function cueTrigger(
 	timecodeFrame = 0,
 ) {
 	if (kind === "go") return { type: "manual" };
-	if (kind === "follow") return { type: "follow", delay_millis: 0 };
+	if (kind === "follow") return { type: "follow", delay_millis: delayMillis };
 	if (kind === "link")
 		return {
 			type: "link",
