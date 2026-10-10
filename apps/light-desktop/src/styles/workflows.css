@@ -1568,7 +1568,7 @@
 	outline-offset: -3px;
 	cursor: crosshair;
 }
-.update-target::after {
+.update-target:not(.pool-card)::after {
 	content: "UPDATE";
 	position: absolute;
 	z-index: 24;

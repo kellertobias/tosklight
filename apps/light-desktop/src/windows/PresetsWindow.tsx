@@ -32,6 +32,8 @@ import {
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
 import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
+import { useProgrammingUpdate } from "../features/programmingUpdate/ProgrammingUpdateProvider";
+import { resolveRecordOption } from "../features/recordUpdateOptions/options";
 import { resolveGroupMembership } from "../features/showObjects/groupProjection";
 import {
 	usePortableGroups,
@@ -229,6 +231,7 @@ function usePresetsWindowModel({
 	const presetRecall = usePresetRecall(active);
 	const selection = presetRecall.selection;
 	const presetRecording = usePresetRecording();
+	const programmingUpdate = useProgrammingUpdate();
 	const preload = useProgrammerPreloadLifecycleView(active);
 	const command = useCommandLineSurface({
 		enabled: active,
@@ -306,10 +309,17 @@ function usePresetsWindowModel({
 				setConfigureIndex(target);
 				setConfigureDraft(draft);
 			},
-			onStore: (target, occupied) =>
-				occupied
-					? setRecordPresetIndex(target)
-					: void recordPreset(target, "overwrite"),
+			onStore: (target, occupied) => {
+				if (!occupied) return void recordPreset(target, "overwrite");
+				const before = command.read();
+				if (!before.ready) return;
+				void resolveRecordOption(before.text, programmingUpdate).then(option => {
+					const current = command.read();
+					if (!current.ready || current.text !== before.text) return;
+					if (option === "merge") void recordPreset(target, "merge");
+					else setRecordPresetIndex(target);
+				});
+			},
 			onDisarmSet: () =>
 				dispatch({ type: "SET_PRESET_SET_ARMED", value: false }),
 			mutationTarget: configure ? null : mutationTarget,

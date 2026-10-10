@@ -135,10 +135,9 @@ export function presetFixtureCounts(
 	return { active, defined: targets.size };
 }
 
-/** The tile's compact count: fixtures showing the Preset / fixtures it defines. */
+/** The tile shows only how many fixtures currently match this Preset. */
 export function presetFixtureCountLabel(counts: PresetFixtureCounts) {
-	if (counts.universal) return `Any · ${counts.active} fx`;
-	return `${counts.active}/${counts.defined} fx`;
+	return String(counts.active);
 }
 
 function asAttributeValue(raw: unknown): AttributeValue | null {

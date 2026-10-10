@@ -663,12 +663,70 @@ describe("Cuelist Pool master authority", () => {
 		const main = ui.getByText("Main").closest("button")!;
 		const encore = ui.getByText("Encore").closest("button")!;
 		await waitFor(() =>
-			expect(within(main).getByText("Cuelist · 25%")).toBeInTheDocument(),
+			expect(
+				within(main).getByRole("img", { name: "Running" }),
+			).toBeInTheDocument(),
 		);
 		expect(main).toHaveClass("running");
 		// Playback 2 has no scoped projection, so the legacy 50% never appears.
-		expect(within(encore).getByText("Cuelist · Off")).toBeInTheDocument();
+		expect(within(encore).queryByRole("img", { name: "Running" })).toBeNull();
 		expect(encore).not.toHaveClass("running");
+	});
+
+	it.each([
+		7,
+		null,
+	])("marks running from a secondary assignment or direct owner %s", async (playbackNumber) => {
+		mocks.cueLists[0].pool_number = 1;
+		mocks.cueLists[1].pool_number = 2;
+		mocks.pool.push(
+			cuelistPlayback(7, "Main second assignment", MAIN_CUE_LIST),
+		);
+		authority.cuelists.set(MAIN_CUE_LIST, {
+			playbackNumber,
+			cueIndex: 0,
+			master: 0,
+		});
+		const view = renderCuelistWindow(poolPane());
+		await settle();
+		const main = within(view.container).getByText("Main").closest("button")!;
+		await waitFor(() =>
+			expect(
+				within(main).getByRole("img", { name: "Running" }),
+			).toBeInTheDocument(),
+		);
+		expect(
+			main.querySelector(".pool-card-information > small"),
+		).toHaveTextContent("2");
+		expect(main).toHaveClass("running");
+		expect(authority.requestedKeys()).toContain(
+			identityKey({ kind: "playback", playback_number: 7 }),
+		);
+	});
+
+	it("labels the actual Smart Record action and leaves idle cards unlabeled", async () => {
+		const idle = renderCuelistWindow(poolPane());
+		await settle();
+		expect(idle.container.querySelector(".pool-card-workflow")).toBeNull();
+		idle.unmount();
+		mocks.state.storeArmed = true;
+		const view = renderCuelistWindow(poolPane());
+		await settle();
+		const main = within(view.container).getByText("Main").closest("button")!;
+		const encore = within(view.container)
+			.getByText("Encore")
+			.closest("button")!;
+		expect(main.querySelector(".pool-card-workflow")).toHaveTextContent(
+			"REC CUE",
+		);
+		expect(encore.querySelector(".pool-card-workflow")).toHaveTextContent(
+			"REC",
+		);
+		expect(
+			view.container.querySelector(
+				'[data-pool-slot-id="3"] .pool-card-workflow',
+			),
+		).toHaveTextContent("REC");
 	});
 
 	it("preserves pool numbering, labels, and search over scoped authority", async () => {

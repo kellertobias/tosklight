@@ -13,6 +13,10 @@ import {
 	PresetCustomizationDialog,
 } from "./PresetsWindowView";
 
+vi.mock("../../features/recordUpdateOptions/usePoolRecordLabel", () => ({
+	usePoolRecordLabel: () => ({ exists }: { exists: boolean }) => exists ? "Merge" : "REC",
+}));
+
 afterEach(cleanup);
 
 function semantic(rgb: [number, number, number]) {
@@ -56,10 +60,14 @@ function Grid({
 	family,
 	presets,
 	customizations = {},
+	storeArmed = false,
+	fixtureCounts,
 }: {
 	family: PresetFamily;
 	presets: PresetCard[];
 	customizations?: Record<string, PresetCustomization>;
+	storeArmed?: boolean;
+	fixtureCounts?: ReadonlyMap<string, { active: number; defined: number; universal?: boolean }>;
 }) {
 	return (
 		<PresetCardGrid
@@ -73,7 +81,8 @@ function Grid({
 			fallbackMode="type"
 			selectionCount={0}
 			recallReady
-			storeArmed={false}
+			storeArmed={storeArmed}
+			fixtureCounts={fixtureCounts}
 			updateArmed={false}
 			setArmed={false}
 			onActivate={() => undefined}
@@ -175,5 +184,25 @@ describe("automatic preset pool previews", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Automatic icon" }));
 		expect(onDraft).toHaveBeenCalledWith({ title: "Red", icon: "", color: undefined });
+	});
+});
+
+
+describe("preset tile current fixture counts and record targets", () => {
+	it("shows zero currently active rather than the stored definition size", () => {
+		const preset = card("Position", 1, { values: { a: { position: angles(0, 0) } } });
+		render(<Grid family="Position" presets={[preset]} fixtureCounts={new Map([[preset.id, { active: 0, defined: 7 }]])} />);
+		expect(tile(1).querySelector(".pool-card-information > small")).toHaveTextContent(/^0$/);
+	});
+	it("shows only the current fixture count for a universal preset", () => {
+		const preset = card("Color", 1, { universal_values: { color: semantic([0, 1, 0]) } });
+		render(<Grid family="Color" presets={[preset]} fixtureCounts={new Map([[preset.id, { active: 3, defined: 0, universal: true }]])} />);
+		expect(tile(1).querySelector(".pool-card-information > small")).toHaveTextContent(/^3$/);
+	});
+	it("uses the effective record label for existing presets and REC for empty slots", () => {
+		const preset = card("Color", 1, { values: {} });
+		render(<Grid family="Color" presets={[preset]} storeArmed />);
+		expect(tile(1).querySelector('[data-pool-workflow="record"]')).toHaveTextContent(/^Merge$/);
+		expect(tile(2).querySelector('[data-pool-workflow="record"]')).toHaveTextContent(/^REC$/);
 	});
 });

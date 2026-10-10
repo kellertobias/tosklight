@@ -219,6 +219,7 @@
 }
 
 .cuelist-card-slot {
+	--pool-card-inset: 6.4px;
 	position: relative;
 }
 
@@ -230,13 +231,16 @@
 .cuelist-preview-button {
 	position: absolute;
 	z-index: 5;
-	right: 8px;
-	bottom: 8px;
-	width: clamp(34px, 38%, 66px);
-	height: clamp(34px, 35%, 60px);
+	right: calc(var(--pool-card-inset) + 3px);
+	bottom: calc(var(--pool-card-inset) + 3px);
+	width: calc((100% - 2 * var(--pool-card-inset) - 6px) * 0.32);
+	height: calc((100% - 2 * var(--pool-card-inset) - 6px) * 0.32);
+	min-width: 0;
+	min-height: 0;
 	padding: 0;
 	overflow: hidden;
-	border: 1px solid color-mix(in srgb, #9aa7af 20%, transparent);
+	/* PoolCard paints the preview; this sibling keeps its dedicated open action. */
+	border: 0;
 	border-radius: 6px;
 	background: transparent;
 	cursor: zoom-in;
@@ -248,9 +252,7 @@
 }
 
 .cuelist-preview-button img {
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
+	display: none;
 }
 
 .cuelist-preview-modal {

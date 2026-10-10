@@ -26,6 +26,7 @@ import {
 } from "../../features/poolPresentation/poolPresentation";
 import { useApp } from "../../state/AppContext";
 import { GroupCard } from "./GroupCard";
+import { groupFixtureSelection } from "./groupFixtureCount";
 import type { FixtureMetadata, Group } from "./model";
 
 interface GroupPoolCardSlotProps
@@ -35,6 +36,7 @@ interface GroupPoolCardSlotProps
 	selected: boolean;
 	partiallySelected: boolean;
 	fullySelected: boolean;
+	selectedFixtureCount: number;
 	storeArmed: boolean;
 	updateArmed: boolean;
 	setTarget: boolean;
@@ -57,6 +59,7 @@ function GroupPoolCardSlot({
 	selected,
 	partiallySelected,
 	fullySelected,
+	selectedFixtureCount,
 	storeArmed,
 	updateArmed,
 	setTarget,
@@ -99,6 +102,7 @@ function GroupPoolCardSlot({
 			selected={selected}
 			partiallySelected={partiallySelected}
 			fullySelected={fullySelected}
+			selectedFixtureCount={selectedFixtureCount}
 			storeArmed={storeArmed}
 			updateArmed={updateArmed}
 			setTarget={setTarget}
@@ -339,18 +343,8 @@ export function GroupPoolGrid({
 	);
 }
 
-function groupSelectionState(group: Group | null, selectedFixtures: Set<string>, selectedGroups: Set<string>) {
-	const members = group?.body.fixtures ?? [];
-	const selectedCount = members.filter((id) => selectedFixtures.has(id)).length;
-	return {
-		selected: Boolean(group && selectedGroups.has(group.id)),
-		fullySelected: members.length > 0 && selectedCount === members.length,
-		partiallySelected: selectedCount > 0 && selectedCount < members.length,
-	};
-}
-
 function groupSelectionResolver(command: CommandLineSurface) {
 	const fixtures = new Set(command.selected);
 	const groups = new Set(command.selectedGroupIds);
-	return (group: Group | null) => groupSelectionState(group, fixtures, groups);
+	return (group: Group | null) => groupFixtureSelection(group, fixtures, groups);
 }

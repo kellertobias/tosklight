@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { defaultUpdateSettings } from "../../components/control/updateWorkflow";
+import { programmingUpdateSettingsView } from "./settingsView";
 import type { UpdateMode, UpdateTargetRequest } from "../../api/types";
 import type { ShowObject, ShowObjectsChange } from "../showObjects/contracts";
 import { ShowObjectsStore } from "../showObjects/store";
@@ -283,6 +285,27 @@ function deferred<T>() {
 }
 
 describe("ProgrammingUpdateWriter", () => {
+	it("publishes saved defaults and refuses a late read or stopped scope", async () => {
+		const { writer, transport } = setup({ apply: vi.fn() });
+		const late = deferred<{ settings: typeof defaultUpdateSettings }>();
+		transport.loadSettings = vi.fn(() => late.promise);
+		transport.saveSettings = vi.fn(async settings => ({ settings }));
+		const view = programmingUpdateSettingsView(writer);
+		const read = writer.loadSettings();
+		const merged = { ...defaultUpdateSettings, record_default: "merge" as const };
+		await expect(writer.saveSettings(merged)).resolves.toEqual(merged);
+		expect(view.getSnapshot()?.record_default).toBe("merge");
+		late.resolve({ settings: defaultUpdateSettings });
+		await expect(read).resolves.toBeNull();
+		expect(view.getSnapshot()?.record_default).toBe("merge");
+		const stopped = deferred<{ settings: typeof defaultUpdateSettings }>();
+		transport.loadSettings = vi.fn(() => stopped.promise);
+		const lastRead = writer.loadSettings();
+		writer.stop();
+		stopped.resolve({ settings: defaultUpdateSettings });
+		await expect(lastRead).resolves.toBeNull();
+		expect(view.getSnapshot()?.record_default).toBe("merge");
+	});
 	it("rejects a same-show preview authority from a replaced scope", async () => {
 		const apply = vi.fn();
 		const { store, writer } = setup({ apply });

@@ -28,7 +28,9 @@ describe("PoolCard", () => {
 		expect(media?.querySelector(".pool-card-preview")).toContainElement(
 			screen.getByTestId("artwork"),
 		);
-		expect(media?.querySelector(".pool-card-icon, .pool-card-color")).toBeNull();
+		expect(
+			media?.querySelector(".pool-card-icon, .pool-card-color"),
+		).toBeNull();
 	});
 
 	it("preserves ordered state, warnings, color, icon, and callbacks", () => {
@@ -127,7 +129,7 @@ describe("PoolCard", () => {
 				}}
 			/>,
 		);
-		expect(screen.getByText("Record")).toHaveClass("record");
+		expect(screen.getByText("REC")).toHaveClass("record");
 
 		rerender(
 			<PoolCard
@@ -164,6 +166,42 @@ describe("PoolCard", () => {
 			);
 			expect(screen.getByText(operation)).toHaveClass(operation.toLowerCase());
 		}
+	});
+
+	it.each([
+		"Merge",
+		"REC CUE",
+		"REC",
+	])("keeps all four corners and full name access while showing %s", (workflow) => {
+		const name = "Front wash with a deliberately long operator name";
+		render(
+			<PoolCard
+				model={{
+					number: 1001,
+					primary: name,
+					secondary: "3/12",
+					details: ["References Group 7"],
+					preview: <span data-testid="corner-art">look</span>,
+					workflow,
+					states: ["record-target"],
+				}}
+			/>,
+		);
+		const card = screen.getByRole("button", { name: new RegExp(name) });
+		expect(card.querySelector(".number")).toHaveTextContent("1001");
+		expect(card.querySelector(".pool-card-name")).toHaveTextContent(name);
+		expect(
+			card.querySelector(".pool-card-information > small"),
+		).toHaveTextContent("3/12");
+		expect(card.querySelector(".pool-card-media")).toContainElement(
+			screen.getByTestId("corner-art"),
+		);
+		expect(
+			card.querySelector(".pool-card-status-row > .pool-card-workflow"),
+		).toHaveTextContent(workflow);
+		expect(card.querySelector(".pool-card-detail")).toHaveTextContent(
+			"References Group 7",
+		);
 	});
 
 	it("supports independently colored icon foreground and media background", () => {

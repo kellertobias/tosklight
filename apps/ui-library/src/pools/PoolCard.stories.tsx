@@ -127,6 +127,61 @@ export const NarrowScaling: Story = {
 	render: (args) => <PoolGridExample {...args} />,
 };
 
+/** Narrow and wide versions share exactly the same four-corner contract. */
+export const FourCornersWhileRecording: Story = {
+	args: { width: 720, minimum: 100 },
+	render: ({ width, minimum }) => (
+		<div style={{ width }}>
+			<ButtonGrid className="card-pool" minimum={minimum}>
+				{[
+					{
+						number: 1001,
+						primary: "Front Wash With A Deliberately Long Operator Name",
+						secondary: "3/12",
+						icon: "◇",
+						workflow: "REC",
+					},
+					{
+						number: 1002,
+						primary: "Blue",
+						secondary: "12",
+						preview: (
+							<span
+								style={{ width: "100%", height: "100%", background: "#264fd4" }}
+							/>
+						),
+						workflow: "Merge",
+					},
+					{
+						number: 1003,
+						primary: "Main",
+						secondary: (
+							<span>
+								24 <span aria-label="Running">▶</span>
+							</span>
+						),
+						icon: "★",
+						workflow: "REC CUE",
+					},
+					{
+						number: 1004,
+						primary: "Empty",
+						states: ["empty", "record-target"] as const,
+					},
+				].map((model) => (
+					<PoolCard
+						key={model.number}
+						model={{
+							...model,
+							states: model.states ? [...model.states] : ["record-target"],
+						}}
+					/>
+				))}
+			</ButtonGrid>
+		</div>
+	),
+};
+
 export const OutlineOnlyFilledCards: Story = {
 	args: { width: 720, minimum: 132 },
 	render: ({ width, minimum, holdDelay }) => (
