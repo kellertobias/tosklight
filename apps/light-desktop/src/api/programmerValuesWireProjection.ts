@@ -1,16 +1,3 @@
-import {
-	decodeReplacementProjection,
-	decodeReplacementMap,
-} from "./replacementProjectionWire";
-import {
-	decodeColorProgram,
-	decodePositionIntent,
-	decodeZoomIntent,
-	decodeGroupFamily,
-	decodeDynamicValueAddress,
-	decodeProgrammingComponent,
-} from "./programmingIntentWire";
-import { validateProgrammingMask } from "./programmingMaskWire";
 import type {
 	ProgrammerDynamicValue,
 	ProgrammerFixtureValue,
@@ -33,6 +20,19 @@ import {
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
+import {
+	decodeColorProgram,
+	decodeDynamicValueAddress,
+	decodeGroupFamily,
+	decodePositionIntent,
+	decodeProgrammingComponent,
+	decodeZoomIntent,
+} from "./programmingIntentWire";
+import { validateProgrammingMask } from "./programmingMaskWire";
+import {
+	decodeReplacementMap,
+	decodeReplacementProjection,
+} from "./replacementProjectionWire";
 import type { AttributeValue } from "./types/playback";
 import { WireValidationError } from "./wireValidation";
 
@@ -328,6 +328,17 @@ function decodeDynamicReference(
 			"Dynamic fallback identity or inline definition",
 			value,
 		);
+	if (
+		inlineDefinition &&
+		(inlineDefinition.id !== fallbackId ||
+			inlineDefinition.revision !== fallbackRevision)
+	)
+		throw new WireValidationError(
+			`${path}.embedded_fallback`,
+			`fallback ${fallbackId} revision ${fallbackRevision}`,
+			inlineDefinition,
+		);
+
 	const definition =
 		inlineDefinition ??
 		definitionsByFallback.get(fallbackKey(fallbackId, fallbackRevision));

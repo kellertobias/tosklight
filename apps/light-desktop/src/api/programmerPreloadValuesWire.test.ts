@@ -494,24 +494,27 @@ describe("Preload Programmer semantic component edit intents", () => {
 		["UV and White Blend", "color", whiteBlendUv],
 		["Focus", "focus", focus],
 		["Zoom", "zoom", zoom],
-	])("preserves ordered %s edits with Preload revisions", (_name, attribute, edits) => {
-		expect(
-			request("preload-edit", attribute, edits, { fixtureIds: [FIXTURE_ID] }),
-		).toEqual({
-			request_id: "preload-edit",
-			expected_revision: 21,
-			expected_capture_mode_revision: 8,
-			action: {
-				type: "apply_intent",
-				fixture_ids: [FIXTURE_ID],
-				group_id: null,
-				attribute,
-				operation: { type: "component_edits", edits },
-				undo_group: null,
-				timing: wireTiming,
-			},
-		});
-	});
+	])(
+		"preserves ordered %s edits with Preload revisions",
+		(_name, attribute, edits) => {
+			expect(
+				request("preload-edit", attribute, edits, { fixtureIds: [FIXTURE_ID] }),
+			).toEqual({
+				request_id: "preload-edit",
+				expected_revision: 21,
+				expected_capture_mode_revision: 8,
+				action: {
+					type: "apply_intent",
+					fixture_ids: [FIXTURE_ID],
+					group_id: null,
+					attribute,
+					operation: { type: "component_edits", edits },
+					undo_group: null,
+					timing: wireTiming,
+				},
+			});
+		},
+	);
 
 	it("keeps live Group addressing distinct from fixture addressing", () => {
 		expect(
@@ -678,5 +681,107 @@ describe("Preload inspection release projection", () => {
 				"$",
 			),
 		).toThrow(WireValidationError);
+	});
+});
+
+function inlineDynamicSnapshot() {
+	const definition = {
+		id: OTHER_SESSION_ID,
+		pool_number: 100,
+		revision: 5,
+		name: "Retained Intensity wave",
+		lanes: [
+			{
+				id: CORRELATION_ID,
+				attribute: "intensity",
+				mode: "keyframes",
+				keyframes: {
+					points: [
+						{
+							position: 0,
+							source: { type: "value", value: 0.25 },
+							interpolation: "linear",
+						},
+					],
+					size: 1,
+				},
+			},
+		],
+		random_groups: [],
+	};
+	return {
+		cursor: { sequence: 27 },
+		projection: {
+			revision: 9,
+			fixture_values: [],
+			group_values: [],
+			group_release_values: [],
+			dynamic_values: [
+				{
+					fixture_id: FIXTURE_ID,
+					attribute: "intensity",
+					programmer_order: 1,
+					changed_at_millis: 1000,
+					value: {
+						type: "dynamic_on",
+						instance_link: SESSION_ID,
+						lane_id: CORRELATION_ID,
+						dynamic: {
+							dynamic_id: OTHER_SESSION_ID,
+							last_known_pool_number: 100,
+							embedded_fallback_id: OTHER_SESSION_ID,
+							embedded_fallback_revision: 5,
+							embedded_fallback: definition,
+						},
+						overrides: {
+							size: 1,
+							speed_multiplier: { numerator: 1, denominator: 1 },
+							phase_offset_degrees: 0,
+						},
+						timing: { fade_millis: null, delay_millis: null },
+					},
+				},
+			],
+		},
+	};
+}
+
+describe("cold Preload Dynamic fallback hydration", () => {
+	it("hydrates the exact retained inline fallback without any definition table or cache", () => {
+		const snapshot = inlineDynamicSnapshot();
+		const decoded = decodeProgrammerPreloadValuesSnapshot(snapshot);
+		const value = decoded.projection.dynamicValues?.[0]?.value;
+		expect(value?.type).toBe("dynamic_on");
+		if (value?.type !== "dynamic_on") throw new Error("Expected Dynamic On");
+		expect(value.dynamic.embedded_fallback_id).toBe(OTHER_SESSION_ID);
+		expect(value.dynamic.embedded_fallback_revision).toBe(5);
+		expect(value.dynamic.embedded_fallback).toEqual(
+			snapshot.projection.dynamic_values[0].value.dynamic.embedded_fallback,
+		);
+	});
+
+	it.each(["id", "revision"] as const)(
+		"rejects an inline fallback with a mismatched %s",
+		(field) => {
+			const snapshot = inlineDynamicSnapshot();
+			const fallback =
+				snapshot.projection.dynamic_values[0].value.dynamic.embedded_fallback;
+			if (field === "id") fallback.id = FIXTURE_ID;
+			else fallback.revision = 6;
+			expect(() => decodeProgrammerPreloadValuesSnapshot(snapshot)).toThrow(
+				WireValidationError,
+			);
+		},
+	);
+
+	it("still rejects a missing exact fallback rather than guessing a library revision", () => {
+		const snapshot = inlineDynamicSnapshot();
+		const reference = record(
+			snapshot.projection.dynamic_values[0].value.dynamic,
+		);
+		delete reference.embedded_fallback;
+		expect(() => decodeProgrammerPreloadValuesSnapshot(snapshot)).toThrow(
+			/fallback .* revision 5/,
+		);
 	});
 });
