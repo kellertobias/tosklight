@@ -274,12 +274,15 @@ Long MVR/GDTF inspections show a progress bar with phase, completed/total work w
 
 User clarification, 2026-10-08: disruptive red errors are reserved for loss of DMX output, loss of the show, or critical system danger. A recoverable error must leave the programmer accessible. Selecting a valid group and doing nothing further is a legitimate no-op. Invalid commands show local programmer feedback that clears when typing resumes.
 
+User clarification, 2026-10-11: ordinary command mistakes briefly pulse the command bar red, then restore its regular appearance while retaining the entered command in grey. A short toast above the bar explains the problem, for example **No Selection** or **Preset not Recorded**. Larger command diagnostics are reserved for unexpected failures. An erroneous Playback has a red outline; an intentionally Off, empty, unpatched, hidden, or not-yet-reconciled Playback must not be marked erroneous merely for that state.
+
 | ID | Procedure | Expected and evidence |
 | --- | --- | --- |
 | ERR-01 | Trigger a recoverable pane/request failure in a disposable show; continue selecting and programming while observing captured DMX. | Local actionable feedback; no programmer removal or disruptive critical red surface. Output continues. Record screenshot and packet evidence, classify actual lost capability. |
-| ERR-02 | Type an invalid programmer command, submit, then resume typing a valid command. | Error stays in programmer; clears on the next edit. Valid command works without dismissing a global error. |
+| ERR-02 | Submit an ordinary invalid command through native keyboard, software ENT and supported OSC Enter. Repeat the same rejection, let feedback expire, then edit and submit a valid command. | Brief red pulse and a short toast above the bar; regular bar appearance afterward with the entered command retained in grey. Repetition starts fresh feedback. No automatic large error panel for an operator mistake. The next edit clears the rejection styling and a valid command works without dismissing a global error. |
 | ERR-03 | Select a valid group without applying values; empty programmer and repeat. | Selection/no-op succeeds without error or unintended output change. |
 | ERR-04 | In an isolated test session exercise actual output-service/show-loss failure and recovery. | Critical red indication accurately identifies lost capability, keeps recovery actionable, and clears once recovered. Do not simulate hazardous system conditions. |
+| ERR-05 | Inspect actual erroneous physical and Virtual Playbacks, then their valid Off, pending-start and recovered states. Repeat a shared Dynamic start and auto-off through both surfaces and supported OSC. | Actual errors have a red outline on every affected binding, including selected tiles. Valid states remain clear; queued starts are Pending until reconciliation establishes an outcome. Settled feedback reaches all aliases without reopening a pane, and recovery removes the outline. No layout or touch-target change. |
 
 ## Run completion and initial execution index
 
