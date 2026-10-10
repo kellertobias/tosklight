@@ -500,8 +500,24 @@ fn render_ordered_output_frame(
         runtime.active_show.current().as_ref(),
     );
     let result = completed.map(|completed| {
+        let settled = playback_service::projection::settled_dynamic_playback_events(
+            &runtime.engine,
+            light_application::PlaybackShowScope {
+                show_id: runtime
+                    .active_show
+                    .current()
+                    .map_or_else(Uuid::nil, |show| show.id.0),
+                show_revision: prepared.snapshot().revision,
+            },
+            &prepared.snapshot(),
+            &completed.runtime,
+            &completed.events,
+            &completed.auto_offs,
+            1_000_u64.div_ceil(u64::from(runtime.rate.load(Ordering::Relaxed).max(1))),
+        );
         runtime.dynamic_auto_offs.lock().extend(completed.auto_offs);
         events.extend(completed.events);
+        events.extend(settled);
         let dynamics = Arc::new(FrameDynamicSources {
             sample_boundary: completed.sample_boundary,
             runtime: completed.runtime,

@@ -15,9 +15,12 @@ use super::{ServerPlaybackPorts, invalid, resolve_group_playback};
 
 #[path = "projection/prepared.rs"]
 mod prepared;
+#[path = "projection/settled_dynamic.rs"]
+mod settled_dynamic;
 #[path = "projection/targets.rs"]
 mod targets;
 pub(in crate::runtime) use prepared::prepared_runtime_projections;
+pub(in crate::runtime) use settled_dynamic::settled_dynamic_playback_events;
 use targets::{cue_list_projection, grand_master_projection, group_projection, speed_projection};
 
 pub(in crate::runtime) fn automatic_changes(

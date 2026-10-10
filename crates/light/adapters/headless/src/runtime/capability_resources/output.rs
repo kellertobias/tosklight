@@ -1006,8 +1006,24 @@ impl OutputResource {
             }
             on_capture(&prepared);
             let result = completed.map(|completed| {
+                let settled =
+                    crate::runtime::playback_service::projection::settled_dynamic_playback_events(
+                        &self.engine,
+                        light_application::PlaybackShowScope {
+                            show_id: active_show
+                                .current()
+                                .map_or_else(Uuid::nil, |show| show.id.0),
+                            show_revision: prepared.snapshot().revision,
+                        },
+                        &prepared.snapshot(),
+                        &completed.runtime,
+                        &completed.events,
+                        &completed.auto_offs,
+                        1_000_u64.div_ceil(u64::from(self.frame_rate_hz().max(1))),
+                    );
                 self.dynamic_auto_offs.lock().extend(completed.auto_offs);
                 events.extend(completed.events);
+                events.extend(settled);
                 let dynamics = Arc::new(FrameDynamicSources {
                     sample_boundary: completed.sample_boundary,
                     runtime: completed.runtime,

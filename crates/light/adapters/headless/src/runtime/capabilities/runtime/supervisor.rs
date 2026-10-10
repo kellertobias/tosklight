@@ -2,7 +2,7 @@
 
 use crate::runtime::{
     AppState, OwnedRuntimeTask, control_input_tasks, matter_bridge_sync, media_identity,
-    media_speed_groups, output_scheduler, persist_output_runtime, playback_service, schedules_v2,
+    media_speed_groups, output_scheduler, persist_output_runtime, schedules_v2,
 };
 use anyhow::Context;
 use tokio::task::JoinHandle;
@@ -187,7 +187,9 @@ async fn persist_dynamic_auto_offs(
                 if numbers.is_empty() {
                     continue;
                 }
-                publish_dynamic_auto_offs(&state, &numbers);
+                // Feedback already committed with the output transaction for every alias.
+                // This task owns durable checkpoint retries only; retrying persistence must
+                // not republish an old retained-owner projection over newer control state.
                 if let Err(error) = persist_output_runtime(&state) {
                     state.output.restore_dynamic_auto_offs(numbers);
                     tracing::error!(
@@ -197,43 +199,6 @@ async fn persist_dynamic_auto_offs(
                 }
             }
         }
-    }
-}
-
-fn publish_dynamic_auto_offs(state: &AppState, identities: &[light_playback::PlaybackIdentity]) {
-    let context = light_application::ActionContext::system(
-        uuid::Uuid::nil(),
-        light_application::ActionSource::Scheduler,
-    );
-    let identities = identities
-        .iter()
-        .copied()
-        .map(|identity| match identity {
-            light_playback::PlaybackIdentity::Physical(number) => {
-                light_application::PlaybackRuntimeIdentity::Playback(number.get())
-            }
-            light_playback::PlaybackIdentity::Virtual(address) => {
-                light_application::PlaybackRuntimeIdentity::Virtual(address)
-            }
-        })
-        .collect::<Vec<_>>();
-    let Ok(projections) = playback_service::read_runtime_projections(state, &context, &identities)
-    else {
-        tracing::error!("failed to project Dynamic Playback full-control auto-off");
-        return;
-    };
-    for projection in projections {
-        state
-            .events
-            .publish(light_application::EventDraft::playback_runtime_changed(
-                None,
-                light_application::PlaybackRuntimeChange {
-                    projection,
-                    transition: None,
-                },
-                light_application::EventSource::Runtime,
-                None,
-            ));
     }
 }
 
