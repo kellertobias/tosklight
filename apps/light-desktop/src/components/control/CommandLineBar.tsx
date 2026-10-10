@@ -20,7 +20,12 @@ import {
 	useHardwareConnected,
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useHighlightSnapshot } from "../../features/highlight/HighlightState";
-import { COMMAND_ERROR_EVENT } from "../../features/programmingInteraction/commandError";
+import {
+	COMMAND_ERROR_EVENT,
+	commandErrorFeedback,
+	commandErrorSummary,
+	type CommandErrorFeedback,
+} from "../../features/programmingInteraction/commandError";
 import { useOutputRuntimeBlackout } from "../../features/outputRuntime/OutputRuntimeView";
 import { useShellStatusActions } from "../../features/shellStatus/ShellStatusActionsProvider";
 import {
@@ -31,6 +36,10 @@ import { useApp } from "../../state/AppContext";
 import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
+import {
+	useOSCCommandRejections,
+	useUnexpectedCommandHistory,
+} from "./commandLine/useCommandRejectionHistory";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
@@ -72,7 +81,19 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const shellStatus = useShellStatusActions();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const commandErrorRef = useRef<string | null>(null);
-	const updateCommandError = useCallback((error: string | null) => {
+	const [commandErrorKind, setCommandErrorKind] =
+		useState<"operator" | "unexpected">("operator");
+	const [commandErrorRevision, setCommandErrorRevision] = useState(0);
+	const [commandErrorCommand, setCommandErrorCommand] =
+		useState<string | undefined>();
+	const updateCommandError = useCallback((
+		error: string | null,
+		kind: "operator" | "unexpected" = "operator",
+		command?: string,
+	) => {
+		setCommandErrorKind(kind);
+		setCommandErrorRevision((revision) => revision + 1);
+		setCommandErrorCommand(command);
 		commandErrorRef.current = error;
 		setCommandError(error);
 	}, []);
@@ -80,11 +101,16 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const [errorOpen, setErrorOpen] = useState(false);
 	useEffect(() => {
 		const showCommandError = (event: Event) => {
-			const detail = (event as CustomEvent<string | null>).detail;
+			const detail = (event as CustomEvent<string | CommandErrorFeedback | null>)
+				.detail;
 			if (detail !== null) setCompleted(false);
-			updateCommandError(
-				detail === null ? null : detail || "The command could not be executed.",
-			);
+			if (detail === null) updateCommandError(null);
+			else {
+				const feedback = commandErrorFeedback(
+					detail || "The command could not be executed.",
+				);
+				updateCommandError(feedback.message, feedback.kind, feedback.command);
+			}
 		};
 		window.addEventListener(COMMAND_ERROR_EVENT, showCommandError);
 		return () =>
@@ -101,6 +127,9 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	};
 	return {
 		commandError,
+		commandErrorKind,
+		commandErrorRevision,
+		commandErrorCommand,
 		setCommandError: updateCommandError,
 		hasCommandError: () => commandErrorRef.current !== null,
 		persistentError,
@@ -194,10 +223,9 @@ function useCommandLineBarModel() {
 	const [completed, setCompleted] = useState(false);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
+	useOSCCommandRejections(authoritativeHistory, errors.setCommandError, setCompleted);
 	const [historyOpen, setHistoryOpen] = useState(false);
-	useEffect(() => {
-		if (errors.commandError) setHistoryOpen(true);
-	}, [errors.commandError]);
+	useUnexpectedCommandHistory(errors.commandError, errors.commandErrorKind, setHistoryOpen);
 	const hasRecordableContent =
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
@@ -231,6 +259,7 @@ function useCommandLineBarModel() {
 		if (!ok && !errors.hasCommandError())
 			errors.setCommandError(
 				serverError ?? "The command could not be executed.",
+				"unexpected",
 			);
 	};
 	const toggleRecord = () => armRecordOrChoose(state, dispatch, replaceCommand);
@@ -327,9 +356,16 @@ export function CommandLineBar() {
 			ready={model.command.ready}
 			completed={model.completed}
 			commandError={model.errors.commandError}
+			commandErrorKind={model.errors.commandErrorKind}
+			commandErrorSummary={
+				model.errors.commandError
+					? commandErrorSummary(model.errors.commandError)
+					: undefined
+			}
+			commandErrorRevision={model.errors.commandErrorRevision}
 			persistentError={model.errors.persistentError}
 			persistentErrorOpen={model.errors.errorOpen}
-			commandLine={model.command.text}
+			commandLine={model.errors.commandErrorCommand ?? model.command.text}
 			commandTarget={model.command.target}
 			preloadArmed={model.preload.armed}
 			preloadActive={model.preload.active}

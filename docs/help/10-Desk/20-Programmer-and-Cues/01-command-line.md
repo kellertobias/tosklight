@@ -37,7 +37,7 @@ To empty the command line, press `[ESC]` once. This removes all typed commands f
 
 The desk keeps track of all confirmed commands. To show that history, simply click or typ the command line to unfold **Command Line History** upward. It lists this desk's 50 most recent completed commands newest-first with the time it was executed and the user that executed it, as well as the amount of targets it was applied to.
 
-It also shows errors for the current command (and the current command only, since it will not be accepted if it has an error). There errors can be ackgnowledged. This window opens automatically when a command error occures.
+An operator rejection briefly flashes the command field red and shows a short toast above it, such as **No Selection** or **Preset not Recorded**. The entered command remains visible in grey until you edit it; the rejection remains in history. Ordinary rejections do not open history automatically. An unexpected transport, synchronization or server failure opens the detailed error view so you can inspect and acknowledge the diagnostic.
 
 Opening, closing, or inspecting history does not change the unfinished command in the normal command-line field. Choose **Reuse** to copy an earlier command into that field; it is not executed until you press `[ENT]`. `[ESC]`, the close button, and a pointer press outside the panel close it while preserving the current input.
 

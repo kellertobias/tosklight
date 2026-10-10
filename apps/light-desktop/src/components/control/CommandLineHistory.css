@@ -177,3 +177,29 @@
 		grid-row: 2;
 	}
 }
+
+.command-input.rejected:not(.error) {
+	color: var(--muted);
+}
+.command-feedback-toast {
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 0;
+	z-index: 1160;
+	max-width: 100%;
+	padding: 7px 12px;
+	border: 1px solid var(--line2);
+	border-radius: 6px;
+	background: var(--panel);
+	color: var(--text);
+	font-size: 13px;
+	pointer-events: none;
+}
+.command-field:has(.command-feedback-toast) {
+	overflow: visible;
+}
+.control-section:has(.command-feedback-toast) {
+	position: relative;
+	z-index: 1160;
+	overflow: visible;
+}

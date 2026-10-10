@@ -6,6 +6,7 @@ import {
 	screen,
 } from "@testing-library/react";
 import { Button } from "@tosklight/ui";
+import type { CommandHistoryEntry } from "../../api/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import { DeskStateDiagnosticsProvider } from "../../features/deskState/DeskStateDiagnosticsState";
@@ -133,7 +134,7 @@ const server = {
 			source: "osc",
 			at: "2026-07-17T20:00:01Z",
 		},
-	] as const,
+	] as readonly CommandHistoryEntry[],
 	error: null as string | null,
 	status: "connected",
 	poolPlaybackAction: vi.fn(),
@@ -465,9 +466,8 @@ describe("scoped command-line integration", () => {
 
 		expect(input).toHaveValue(command);
 		expect(screen.getByText(feedback)).toBeInTheDocument();
-		expect(
-			screen.getByRole("dialog", { name: "Command line history" }),
-		).toHaveTextContent(feedback);
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(screen.getByRole("alert")).toHaveClass("command-feedback-toast");
 	});
 });
 
@@ -834,5 +834,45 @@ describe("Shift+Record Update gestures", () => {
 			modal: "storeSettingsOpen",
 			value: true,
 		});
+	});
+});
+
+describe("shared command rejection presentation", () => {
+	it("shows a fresh OSC rejection briefly without changing authoritative command or history", () => {
+		const { rerender } = render(<CommandLineBar />);
+		const previousHistory = server.commandHistory;
+		const entry = {
+			id: "osc-new-rejection",
+			desk_id: "desk-a",
+			session_id: "session-a",
+			command: "COLOR PRESET 999",
+			feedback: "Preset not Recorded",
+			status: "rejected" as const,
+			source: "osc" as const,
+			at: new Date().toISOString(),
+		};
+		server.commandHistory = [entry, ...previousHistory];
+		rerender(<CommandLineBar />);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(input).toHaveValue(entry.command);
+		expect(input).toHaveClass("error", "rejected");
+		expect(screen.getByRole("alert")).toHaveTextContent(entry.feedback);
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		act(() => vi.advanceTimersByTime(600));
+		expect(input).not.toHaveClass("error");
+		expect(input).toHaveClass("rejected");
+		act(() => vi.advanceTimersByTime(2000));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(input).toHaveValue(entry.command);
+		expect(server.commandHistory[0]).toBe(entry);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
+		server.commandHistory = previousHistory;
+	});
+	it("retains unexpected errors in the larger diagnostic history", () => {
+		render(<CommandLineBar />);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "Invalid server response\ndiagnostic detail", kind: "unexpected" },
+		}));
+		expect(screen.getByRole("dialog", { name: "Command line history" })).toHaveTextContent("diagnostic detail");
 	});
 });

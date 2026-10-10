@@ -1,4 +1,4 @@
-import { formatErrorDetails } from "@tosklight/ui";
+import { reportProgrammingCommandError } from "../programmingInteraction/commandError";
 import {
 	commandTargetAfterEnter,
 	defaultCommandLine,
@@ -105,11 +105,7 @@ export function createCommandLineActions(
 				if (!interaction) await persistCommandLine(target);
 				return true;
 			} catch (reason) {
-				const message =
-					formatErrorDetails(reason);
-				window.dispatchEvent(
-					new CustomEvent("light:command-error", { detail: message }),
-				);
+				reportProgrammingCommandError(reason instanceof Error ? reason : new Error(String(reason)));
 				return false;
 			}
 		},

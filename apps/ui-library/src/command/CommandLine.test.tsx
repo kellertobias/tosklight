@@ -1,10 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandLine, type CommandLineProps } from "./CommandLine";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 function props(overrides: Partial<CommandLineProps> = {}): CommandLineProps {
 	return {
@@ -166,8 +166,7 @@ describe("CommandLine", () => {
 		expect(screen.getByText("BLACKOUT")).toBeVisible();
 		expect(screen.getByRole("alert")).toHaveTextContent("Command rejected");
 		expect(
-			screen.getByRole("alert").closest(".command-history-panel")
-				?.parentElement,
+			screen.getByRole("alert").parentElement,
 		).toHaveClass("command-field", "command-history-open");
 		expect(screen.getByRole("alertdialog")).toHaveTextContent(
 			"Output is unavailable",
@@ -340,5 +339,45 @@ describe("CommandLine", () => {
 		expect(
 			screen.queryByRole("button", { name: "Reuse" }),
 		).not.toBeInTheDocument();
+	});
+});
+
+describe("brief operator rejection feedback", () => {
+	it("blinks red briefly, keeps the entered command grey, and expires its small toast", () => {
+		vi.useFakeTimers();
+		render(<CommandLine {...props({ commandError: "No Selection" })} />);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(input).toHaveValue("FIXTURE 1 AT 68");
+		expect(input).toHaveClass("error", "rejected");
+		expect(screen.getByRole("alert")).toHaveTextContent("No Selection");
+		act(() => vi.advanceTimersByTime(600));
+		expect(input).not.toHaveClass("error");
+		expect(input).toHaveClass("rejected");
+		act(() => vi.advanceTimersByTime(2000));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(input).toHaveValue("FIXTURE 1 AT 68");
+		vi.useRealTimers();
+	});
+	it("restarts feedback for repeated rejection and clears it on edit", () => {
+		vi.useFakeTimers();
+		const view = props({ commandError: "Preset not Recorded", commandErrorRevision: 1 });
+		const { rerender } = render(<CommandLine {...view} />);
+		act(() => vi.advanceTimersByTime(2500));
+		rerender(<CommandLine {...view} commandErrorRevision={2} />);
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveClass("error");
+		expect(screen.getByRole("alert")).toHaveTextContent("Preset not Recorded");
+		rerender(<CommandLine {...view} commandError={null} commandLine="FIXTURE 2" />);
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(screen.getByRole("textbox", { name: "Command line" })).not.toHaveClass("rejected");
+		vi.useRealTimers();
+	});
+	it("keeps operator mistakes out of the larger current-error panel", () => {
+		render(<CommandLine {...props({ commandError: "Preset not Recorded", historyOpen: true })} />);
+		expect(document.querySelector(".command-history-current-error")).toBeNull();
+		expect(screen.getByRole("alert")).toHaveTextContent("Preset not Recorded");
+	});
+	it("retains detailed unexpected failures for diagnosis", () => {
+		render(<CommandLine {...props({ commandError: "Unexpected response\nserver diagnostic", commandErrorKind: "unexpected", historyOpen: true })} />);
+		expect(document.querySelector(".command-history-current-error")).toHaveTextContent("server diagnostic");
 	});
 });

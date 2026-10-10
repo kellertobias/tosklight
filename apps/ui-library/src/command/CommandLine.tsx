@@ -1,6 +1,10 @@
 import { ErrorAlert, CopyErrorButton } from "../common/ErrorAlert";
 import { type RefObject, useEffect, useRef } from "react";
 import { Button, Input } from "../controls";
+import {
+	useCommandFeedback,
+	type CommandErrorKind,
+} from "./useCommandFeedback";
 import { ModalTitleBar } from "../common/ModalTitleBar";
 
 export type CommandLineMode = "programmer" | "playbacks";
@@ -40,6 +44,9 @@ export interface CommandLineProps {
 	ready: boolean;
 	completed: boolean;
 	commandError: string | null;
+	commandErrorKind?: CommandErrorKind;
+	commandErrorSummary?: string;
+	commandErrorRevision?: number;
 	persistentError: string | null;
 	persistentErrorOpen: boolean;
 	commandLine: string;
@@ -103,6 +110,10 @@ function CommandInputSurface(
 		historyPanel: RefObject<HTMLElement | null>;
 	},
 ) {
+	const feedback = useCommandFeedback(
+		props.commandError,
+		props.commandErrorRevision,
+	);
 	return (
 		<>
 			{props.onToggleMode && (
@@ -122,8 +133,13 @@ function CommandInputSurface(
 			<div
 				className={`command-field ${props.historyOpen ? "command-history-open" : ""}`}
 			>
+				{feedback.toast && props.commandErrorKind !== "unexpected" && (
+					<div className="command-feedback-toast" role="alert">
+						{props.commandErrorSummary ?? props.commandError?.split("\n")[0]}
+					</div>
+				)}
 				<Input
-					className={`command-input ${props.preloadArmed ? "blind" : ""} ${props.recordState === "update-armed" ? "update-armed" : ""} ${props.completed ? "completed" : ""} ${props.commandError ? "error" : ""}`}
+					className={`command-input ${props.preloadArmed ? "blind" : ""} ${props.recordState === "update-armed" ? "update-armed" : ""} ${props.completed ? "completed" : ""} ${props.commandError ? "rejected" : ""} ${feedback.blink ? "error" : ""}`}
 					aria-label="Command line"
 					value={props.commandLine}
 					placeholder=""
@@ -172,7 +188,7 @@ function CommandInputSurface(
 					history={props.history}
 					open={props.historyOpen}
 					panel={props.historyPanel}
-					commandError={props.commandError}
+					commandError={props.commandErrorKind === "unexpected" ? props.commandError : null}
 					onAcknowledgeCommandError={props.onAcknowledgeCommandError}
 					onClose={() => props.onHistoryOpenChange(false)}
 					onReuse={props.onReuseHistory}
