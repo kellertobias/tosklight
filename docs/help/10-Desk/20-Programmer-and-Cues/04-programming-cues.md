@@ -2,7 +2,7 @@
 
 ## Quick summary
 
-1. Build a look in the Programmer, record it into a Cue, then clear the Programmer and run that Cue.
+1. Build a look in the Programmer, record it into a Cue, then press **CLR twice** (first clears selection, second clears Programmer values) and run that Cue.
 2. Set **In Fade/Delay** on the Cue being entered. Set **Out Fade/Delay** on the Cue being left for decreasing or released Intensity.
 3. Stored per-value timing takes priority unless **Force Cue Timing** is on. An explicit per-value fade of zero means snap, even when the Cue has a longer fade.
 4. For an automatic next step, set FOLLOW or TIME on that next Cue; see [Triggers, Chasers, and Speed Groups](13-triggers-chasers-and-speed.md).

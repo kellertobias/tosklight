@@ -311,7 +311,7 @@ For direct absolute value entry, choose **Direct entry uses Programmer Fade** un
 
 **Preload GO** captures Programmer Fade once for all pending Programmer values. Changing the master afterwards does not alter that running transition. Preloaded playback actions keep explicit Cue timing; where it is absent, the same captured Programmer Fade is their fallback. See [Preload](12-preload.md).
 
-Ordinary Cue playback uses **Cue Fade**, the Cue's stored timing, and any stored per-value timing. There is no general Programmer Fade “apply to Cues” override or category-selection switch in the current application.
+Ordinary Cue playback uses **Cue Fade**, the Cue's stored timing, and any stored per-value timing.
 
 ### Recording Fade and Delay Times
 
