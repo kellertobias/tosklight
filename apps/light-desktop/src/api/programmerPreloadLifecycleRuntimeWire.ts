@@ -73,6 +73,7 @@ function assertProjectionShape(value: unknown, path: string) {
 	const target = enumAt(projection.target, `${path}.target`, [
 		"missing",
 		"cue_list",
+		"dynamic",
 		"group",
 		"speed_group",
 		"grand_master",
@@ -82,15 +83,17 @@ function assertProjectionShape(value: unknown, path: string) {
 	const variant =
 		target === "cue_list"
 			? ["cue_list_id", "runtime"]
-			: target === "group"
-				? ["group_id", "master", "flash_level"]
-				: target === "speed_group"
-					? ["group", "runtime"]
-					: target === "grand_master"
-						? ["runtime"]
-						: target === "programmer_fade" || target === "cue_fade"
-							? ["millis"]
-							: [];
+			: target === "dynamic"
+				? ["dynamic_id", "last_known_pool_number", "embedded", "runtime"]
+				: target === "group"
+					? ["group_id", "master", "flash_level"]
+					: target === "speed_group"
+						? ["group", "runtime"]
+						: target === "grand_master"
+							? ["runtime"]
+							: target === "programmer_fade" || target === "cue_fade"
+								? ["millis"]
+								: [];
 	exactRecordAt(value, path, [
 		"scope",
 		"requested",
@@ -105,6 +108,8 @@ function assertProjectionShape(value: unknown, path: string) {
 	assertIdentity(projection.requested, `${path}.requested`);
 	if (target === "cue_list" && projection.runtime != null)
 		assertCueRuntime(projection.runtime, `${path}.runtime`);
+	if (target === "dynamic" && projection.runtime != null)
+		assertDynamicRuntime(projection.runtime, `${path}.runtime`);
 	if (target === "speed_group")
 		assertSpeedRuntime(projection.runtime, `${path}.runtime`);
 	if (target === "grand_master")
@@ -115,6 +120,40 @@ function assertProjectionShape(value: unknown, path: string) {
 			"flash_active",
 			"dynamics_paused",
 		]);
+}
+
+function assertDynamicRuntime(value: unknown, path: string) {
+	exactRecordAt(value, path, [
+		"playback_number",
+		"enabled",
+		"paused",
+		"flash",
+		"activated_at",
+		"fader_value",
+		"fader_pickup_required",
+		"fader_pickup_target",
+		"size",
+		"master",
+		"local_speed_numerator",
+		"local_speed_denominator",
+		"learned_duration_millis",
+		"state",
+		"instance_id",
+		"controller_id",
+		"winning_controller_id",
+		"controller_status",
+		"target_count",
+		"compatible_target_count",
+		"missing_target_count",
+		"unpatched_target_count",
+		"lane_count",
+		"supported_address_count",
+		"skipped_address_count",
+		"speed_source",
+		"effective_speed_multiplier",
+		"effective_duration_millis",
+		"warning",
+	]);
 }
 
 function assertIdentity(value: unknown, path: string) {

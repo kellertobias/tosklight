@@ -6,6 +6,7 @@ import {
 } from "../features/playbackRuntime/testFixtures";
 import type {
 	PlaybackRuntimeIdentity,
+	DynamicPlaybackRuntimeProjection,
 	ProgrammingPreloadLifecycleOutcome as WireOutcome,
 } from "./generated/light-wire";
 import type { ProgrammerPreloadLifecycleRequest } from "../features/programmerPreloadLifecycle/contracts";
@@ -187,5 +188,107 @@ describe("Preload commit exact runtime owners", () => {
 		expect(() =>
 			decodeProgrammerPreloadLifecycleOutcome(body, request),
 		).toThrow(/runtime\.foreign/);
+	});
+});
+
+function dynamicResponse(active: boolean, embedded: boolean): WireOutcome {
+	const body = response();
+	for (const change of body.commit!.runtime_changes) {
+		const original = change.projection;
+		const runtime: DynamicPlaybackRuntimeProjection = {
+			playback_number: original.playback_number!,
+			enabled: true,
+			paused: false,
+			flash: false,
+			activated_at: "2026-10-10T01:28:00Z",
+			fader_value: 1,
+			fader_pickup_required: true,
+			fader_pickup_target: 0.5,
+			size: 0.75,
+			master: 1,
+			local_speed_numerator: 1,
+			local_speed_denominator: 2,
+			learned_duration_millis: null,
+			state: "active",
+			instance_id: "66666666-6666-4666-8666-666666666666",
+			controller_id: "77777777-7777-4777-8777-777777777777",
+			winning_controller_id: "77777777-7777-4777-8777-777777777777",
+			controller_status: "winning",
+			target_count: 4,
+			compatible_target_count: 3,
+			missing_target_count: 0,
+			unpatched_target_count: 1,
+			lane_count: 2,
+			supported_address_count: 6,
+			skipped_address_count: 2,
+			speed_source: "speed_group",
+			effective_speed_multiplier: 0.5,
+			effective_duration_millis: 4000,
+			warning: "One target is unpatched",
+		};
+		change.projection = {
+			scope: original.scope,
+			requested: original.requested,
+			playback_number: original.playback_number,
+			target: "dynamic",
+			dynamic_id: embedded ? null : "88888888-8888-4888-8888-888888888888",
+			last_known_pool_number: 100,
+			embedded,
+			runtime: active ? runtime : null,
+		};
+	}
+	return body;
+}
+
+describe("Preload committed standalone Dynamic projections", () => {
+	it.each([
+		[true, false],
+		[true, true],
+		[false, false],
+		[false, true],
+	])("preserves physical/virtual identity and exact Dynamic runtime active=%s embedded=%s", (active, embedded) => {
+		const body = dynamicResponse(active, embedded);
+		const decoded = decodeProgrammerPreloadLifecycleOutcome(body, request);
+		expect(decoded.commit!.executedPlaybackActions).toBe(2);
+		expect(
+			decoded.commit!.runtimeChanges.map((change) => change.eventSequence),
+		).toEqual([11, 12]);
+		expect(
+			decoded.commit!.runtimeChanges.map((change) => change.projection),
+		).toEqual(body.commit!.runtime_changes.map((change) => change.projection));
+		expect(decoded.commit!.runtimeChanges[0].projection.requested).toEqual({
+			kind: "playback",
+			playback_number: 11,
+		});
+		expect(decoded.commit!.runtimeChanges[1].projection.requested).toEqual({
+			kind: "virtual",
+			page: 2,
+			playback_number: 1301,
+		});
+	});
+	it.each([
+		["projection", { foreign: true }, "foreign"],
+		["projection", { embedded: "yes" }, "embedded"],
+		["projection", { last_known_pool_number: 0 }, "last_known_pool_number"],
+		["runtime", { foreign: true }, "foreign"],
+		["runtime", { owner: { kind: "playback", playback_number: 11 } }, "owner"],
+		["runtime", { state: "undeclared" }, "state"],
+		["runtime", { playback_number: 0 }, "playback_number"],
+		["runtime", { target_count: -1 }, "target_count"],
+		["runtime", { controller_id: null }, "controller_id"],
+		["runtime", { fader_pickup_required: "yes" }, "fader_pickup_required"],
+	])("rejects malformed/foreign Dynamic %s payload %#", (part, patch, field) => {
+		const body = dynamicResponse(true, false);
+		const projection = body.commit!.runtime_changes[0].projection;
+		if (projection.target !== "dynamic" || !projection.runtime)
+			throw new Error("Dynamic fixture required");
+		Object.assign(part === "runtime" ? projection.runtime : projection, patch);
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, request),
+		).toThrow(
+			new RegExp(
+				`\\$\\.commit\\.runtime_changes\\[0\\]\\.projection.*${field}`,
+			),
+		);
 	});
 });
