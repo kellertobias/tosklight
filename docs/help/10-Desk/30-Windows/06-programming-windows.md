@@ -1,5 +1,15 @@
 # Programming Windows
 
+## Quick guide
+
+- **Record:** press `[REC]`, then touch a target. Groups and Presets normally merge into existing contents. Their tiles show **REC MRG**; empty targets show **REC**. A Cuelist with one Cue asks what to do; an empty Cuelist records its first Cue directly, and one with two or more Cues shows **REC CUE** and adds the next Cue.
+- **Update:** press `[^REC]`, then touch an existing Group, Preset, or Cuelist to inspect the Update preview. Confirm **Update** to apply the selected mode. Update changes stored programming; Record Merge adds to it. Choose **Update All** when new fixtures or attributes should also be included.
+- **Dynamic symbols:** read the four parts around the X: top **I** = Intensity, left **P** = Position, right **C** = Color, bottom **O** = Other. Coloured parts identify configured lanes; grey parts are absent. The bottom-left fixture count tells you whether the Dynamic is running.
+
+The rules above describe the normal defaults. An explicitly chosen Record or Update mode takes priority. See [Record and Update options](../20-Programmer-and-Cues/01-command-line.md) for one-off choices and saved desk defaults.
+
+## Working with the pools
+
 Use the window that gives the clearest view of the current task; all of them operate on the same user programmer.
 
 | Window | Primary use |
@@ -50,6 +60,22 @@ Targets that no longer exist are skipped and reported without substituting anoth
 empty Preset slot remains inactive unless a recording workflow is armed. Record/Store, Update, and
 Set keep priority over this selection shortcut.
 
+## Reading pool tiles
+
+The name starts at the top left; the grid number is at the top right. Long names wrap without an inner scrollbar. The number and bottom-right icon or preview have backgrounds with faded edges so they remain readable above the name.
+
+| Pool | Bottom-left information |
+| --- | --- |
+| Cuelists | Number of Cues, with a small play symbol when running on any playback. |
+| Groups | Fixture count, or selected/total when some members are selected. |
+| Presets | Number of fixtures currently on that Preset. |
+| Timecode | Unarmed, Armed, or Playing. |
+| Dynamics | Number of fixtures currently running that Dynamic. |
+
+While Record is armed, a red rounded badge with bold black text spans the bottom of the tile above its other contents. **REC** means Record, **REC MRG** means Record Merge, and **REC CUE** means record the next Cue. The badge describes the current target and chosen mode. A one-Cue Cuelist showing **REC** still asks Add, Merge, or Overwrite when touched; the label is not permission to overwrite automatically.
+
+Update has its own bottom overlay and target eligibility feedback. Switching between normal, Record, and Update modes leaves the name, number, and information in the same positions. An armed overlay can cover bottom information temporarily. Dynamics are operated or edited through their own controls; their lane symbol does not make them an ordinary Record or Update target.
+
 ## Dynamic lanes
 
 **At a glance:** tile names use the tile's text area without an inner scrollbar, so long
@@ -67,7 +93,7 @@ that Dynamic.
 The symbol follows the configured lanes, including when the Dynamic is stopped. Pan, Tilt
 and Target lanes belong to Position; all colour lanes belong to Color. Other covers lane
 families such as Focus, Zoom, Beam and Gobo. Editing lanes updates the symbol automatically;
-you do not need to choose an icon for the pool tile.
+you do not need to choose an icon for the pool tile. For example, a Pan/Tilt Dynamic fills **P**, a colour chase fills **C**, and a Dynamic combining dimming with movement fills **I** and **P**. A coloured sector means the lane exists, not that it is currently outputting or running. Any saved custom artwork remains stored, but the Dynamics pool uses this automatic lane symbol.
 
 Each lane of a Dynamic animates one attribute. Tap an empty Dynamics tile, or **+ Add Lane** in the
 editor, to open the lane chooser: it lists attribute groups first, and the attributes sit inside
