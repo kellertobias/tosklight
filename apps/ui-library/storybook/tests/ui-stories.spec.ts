@@ -3942,7 +3942,11 @@ test("named application windows use production Fixture, Cuelist, Patch, and Setu
 		"/iframe.html?id=tosklight-windows-cuelists-and-cues--pool&viewMode=story",
 	);
 	await expect(page.getByText("Cuelist Pool", { exact: true })).toBeVisible();
-	await expect(page.getByText("Main Sequence", { exact: true })).toBeVisible();
+	await expect(
+		page
+			.locator('.cuelist-card[data-pool-slot-id="1"]')
+			.getByText("Main Sequence", { exact: true }),
+	).toBeVisible();
 	await page.goto(
 		"/iframe.html?id=tosklight-windows-cuelists-and-cues--cues-with-properties&viewMode=story",
 	);
