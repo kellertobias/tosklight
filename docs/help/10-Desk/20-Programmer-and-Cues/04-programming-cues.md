@@ -1,5 +1,12 @@
 # Programming Cues
 
+## Quick summary
+
+1. Build a look in the Programmer, record it into a Cue, then clear the Programmer and run that Cue.
+2. Set **In Fade/Delay** on the Cue being entered. Set **Out Fade/Delay** on the Cue being left for decreasing or released Intensity.
+3. Stored per-value timing takes priority unless **Force Cue Timing** is on. An explicit per-value fade of zero means snap, even when the Cue has a longer fade.
+4. For an automatic next step, set FOLLOW or TIME on that next Cue; see [Triggers, Chasers, and Speed Groups](13-triggers-chasers-and-speed.md).
+
 A Cue stores what is currently in the programmer. Values that are merely visible from a playback, defaults, Highlight, or resolved output are not recorded. A Cue is one stored step inside a Cuelist; a playback is a control that may be assigned to that Cuelist, not the Cuelist itself.
 
 ## Record the first Cue
@@ -32,7 +39,25 @@ For a temporary change, hold `[REC]` to open **Record Settings** and enable **Cu
 
 ## Timing and triggers
 
-Cue **In Fade** and **In Delay** provide the existing timing fallbacks. For decreasing or released Intensity, **Out Fade** and **Out Delay** can retain explicit independent values. Out Fade can instead link to the desk's **Release** timing master, and Out Delay can link to that Cue's effective **In Fade**. A linked cell names its source and current effective time; changing the source updates the transition immediately. Returning to explicit timing restores the Cue's remembered explicit value. Individual values can retain their own fade and start delay and remain authoritative unless **Force Cue Timing** is enabled. **Disable Cue Timing** snaps both directions. Chasers retain their single X-fade percentage timing. Manual GO, Follow, timed delay, timecode, and Link triggers determine where and when playback moves. Follow timing begins after the latest incoming or outgoing work settles. Link is stored on its source Cue and jumps to a destination Cue by stable identity after that same actual completion point plus the optional Link delay. Renumbering therefore changes the displayed destination number without changing the Link. Missing destinations, self-links, and Link cycles are rejected before the show changes. Pause freezes a running transition; releasing a whole playback still removes its ownership immediately rather than applying Cue out timing to the whole playback.
+### Which Cue owns the timing?
+
+When moving from Cue 1 to Cue 2, **Cue 2's In Fade and In Delay** govern incoming changes. **Cue 1's Out Fade and Out Delay** govern decreasing or released Intensity. Editing Cue 2's Out timing changes what happens when you later leave Cue 2; it does not change the fall from Cue 1 into Cue 2. Other attributes use incoming timing.
+
+For example, Cue 1 has one fixture at 80% and Cue 2 takes it to 20%. With Cue 1 Out Delay **0.3 seconds** and Out Fade **1 second**, it holds for 0.3 seconds after GO, then falls over 1 second, provided no stored per-value timing overrides those times. Another fixture rising into Cue 2 can fade at the same time using Cue 2's In timing. Independent delays can also leave a black gap.
+
+### Per-value timing and timing masters
+
+Cue timing is the fallback for values without their own fade or delay. A stored per-value fade or delay takes priority independently: an explicit fade of **0 seconds** snaps rather than inheriting the Cue fade. Enable **Force Cue Timing** in Cuelist Settings when the Cue's timing should govern all values instead. **Disable Cue Timing** is a rehearsal bypass that makes Cue and per-value timing immediate without changing the stored values; it takes priority over Force Cue Timing.
+
+For a sequence Cue whose In Fade is zero, the desk's **Cue Fade** supplies the fallback. Explicit nonzero Cue In Fade remains its own time. Out Fade can link to the desk's **Release** master, and Out Delay can link to that Cue's effective **In Fade**. Linked cells show the source and current time. Returning to explicit timing restores the remembered explicit value. When Out timing has no independent value, it inherits the effective fade/delay fallback. Chasers use their single X-fade percentage timing.
+
+**Programmer Fade** controls programming transitions and supplies the GO-time transition for queued Programmer values in Preload. It does not globally override ordinary Cue playback. Preloaded playback actions keep explicit Cue timing; without explicit timing they use the Programmer Fade captured at Preload GO. See [Preload](12-preload.md).
+
+### Choose when to advance
+
+Manual GO, FOLLOW, TIME, timecode, and Link determine when playback moves. FOLLOW waits for the latest actual incoming or outgoing work to settle, then adds the follow delay stored on the next Cue. TIME counts from the preceding Cue's start. [Triggers, Chasers, and Speed Groups](13-triggers-chasers-and-speed.md) gives a worked example.
+
+Link is stored on its source Cue and jumps to a destination Cue by stable identity after actual completion plus its optional delay. Renumbering changes the displayed destination number without changing the Link. Missing destinations, self-links, and Link cycles are rejected before the show changes. Pause freezes a running transition. Releasing a whole playback removes its ownership immediately; Cue Out timing does not fade the release of the entire playback.
 
 When a Cue appears inside a Cuelist clip in the Timecode editor it is drawn as two stacked bands: the out timing above the in timing, each a hollow delay block followed by its solid fade block, so one Cue reads as a single stepped shape. The boundary between a delay and its fade sets the delay, and the far edge of the fade sets its duration. These handles edit the same Cuelist-owned timing values. The Timecode clip stores its placement and playback behavior, not a duplicate of the Cue timing. A saved drag is therefore visible immediately in Cuelist View, and a later Cuelist edit changes the ranges shown in Timecode. Linked timing remains linked unless the operator explicitly chooses an independent value.
 

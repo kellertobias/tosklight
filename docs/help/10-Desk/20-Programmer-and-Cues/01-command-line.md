@@ -1,5 +1,13 @@
 # Command Line Reference & Programming your Show
 
+## Quick summary
+
+- Select fixtures or a Group, press **AT**, enter the value, then press **ENT**. Mix command-line input with touch and encoders as needed.
+- **REC** stores Programmer values; clear the Programmer afterwards to check playback output.
+- A single **CUE** addresses a Cue in the selected Cuelist; **CUE CUE** addresses a Cuelist.
+- An undotted playback number uses the current page. Use `page.playback` when you need an explicit page.
+- For timing, explicit per-value TIME takes priority over Cue timing unless **Force Cue Timing** is enabled. [Cue timing and triggers](#cue-timing-and-triggers) explains which Cue owns each time.
+
 ## Intro
 You can program the entire desk from the command line or mixed with touch commands in the UI, encoder changes and inputs from the command line.
 
@@ -297,27 +305,25 @@ There is also a second way to recall a preset, a full preset recall. This works 
 
 ### Programmer Fade Time
 
-When recalling a preset, the programmer fade time applies. This is the time from triggering the preset until the last lamp has fully faded to the selected value. The button below the fade time slider can toggle between off and on. Long pressing it opens a modal where you can select to which additional changes this fade time applies. By default, it only applies to preset selections and Preload GO, but you can also enable/ disable:
-- Preload Go
-- Virtual Playback GO/Toggle
-- Physical Playback Go/Toggle (for playbacks with fader)
-- Physical Playback Go/Toggle (for playbacks with only buttons)
+**Programmer Fade** sets the transition time for preset recall. Set it to **0 seconds** for an immediate recall. The desk timing strip and an assigned Programmer Fade playback both control the same time. A Programmer Fade playback's **Off** button sets that time to zero.
 
-You can also configure the maximum value of that fader and wether the fade is linear or exponential (e.g. lower half 0s-1s upper half 1s-10s)
+For direct absolute value entry, choose **Direct entry uses Programmer Fade** under **Desk Setup > Preferences > Others**. With it off, an entry without explicit TIME is immediate. An explicit TIME in the command remains authoritative. Continuous encoder and fader gestures follow their own gesture behavior rather than acquiring a global Cue fade.
 
-If you have stored individual fade or delay time spreads and this active for the given category, the fade time decides the maximum time of fade + delay for the longest fade in the given transition. All other times are then scaled accoding to the ratio.
+**Preload GO** captures Programmer Fade once for all pending Programmer values. Changing the master afterwards does not alter that running transition. Preloaded playback actions keep explicit Cue timing; where it is absent, the same captured Programmer Fade is their fallback. See [Preload](12-preload.md).
+
+Ordinary Cue playback uses **Cue Fade**, the Cue's stored timing, and any stored per-value timing. There is no general Programmer Fade “apply to Cues” override or category-selection switch in the current application.
 
 ### Recording Fade and Delay Times
 
-You can also store fixed fade and delay time in your presets (and also cues). This works directly from the programmer:
+You can store fixed per-value fade and delay times in Cues. Enter them in the Programmer before recording:
 
 `<slection> [AT] <values> [TIME] 3` which shows `#> <slection> AT <values> FADE 3s` in the command line makes the values fade with 3 seconds. Pressing `[TIME]` a second time, makes it `#> …DELAY`. A delay is the wait time from the start of the preset/ cue until the fade or value change happens.
 
-You can either have multiple individual commands after one another with different values and then store this as a preset (e.g. Fixture 1 goes to 100% with a 10s fade, then fixture 2 has a 5s delay and a 5s fade until it goes to 0%) but you can also use spread operators in fade and delay times: `#> G1 AT 100% FADE 0s THRU 5s DELAY 5s THRU 0s`. This lets the first fixture in the group wait 5s and then snap (0s) to 100%, while the last fixture in the group does not wait and immediately fades over 5s. The fixture in between interpolate their delay and fade time.
+You can either have multiple individual commands after one another with different values and then record them into a Cue (e.g. Fixture 1 goes to 100% with a 10s fade, then fixture 2 has a 5s delay and a 5s fade until it goes to 0%) but you can also use spread operators in fade and delay times: `#> G1 AT 100% FADE 0s THRU 5s DELAY 5s THRU 0s`. This lets the first fixture in the group wait 5s and then snap (0s) to 100%, while the last fixture in the group does not wait and immediately fades over 5s. The fixture in between interpolate their delay and fade time.
 
-You can now store this onto a preset or cue.
+Record the Programmer into a Cue to retain these per-value times. Presets capture values without this timing metadata; recalling a Preset uses the current Programmer Fade.
 
-Hint: As you have read in the earlier section - if programmer fade time is enabled, recalling a preset scales the selected fade times. This also applies if the programmer fade time slider is at 0s; In that case changes are immediate.
+For Cue playback, stored per-value timing remains authoritative unless **Force Cue Timing** is enabled. Preset recall uses the current **Programmer Fade**; use the recorded Cue when you need to play the Cue’s own timing.
 
 ## Recording Cues
 
@@ -411,7 +417,11 @@ Press `[^DIV]` twice to enter **LOAD**: `[^DIV][^DIV][PBK] <playback-number> [CU
 
 The individual fade and delay times in the programmer are stored with the Cue. Append `[TIME] <seconds>` to the complete record command to give that Cue a master fade. For example, `[REC][CUE][CUE] 4 [CUE] 2.1 [TIME] 3 [ENT]` records Cue `2.1` in Cuelist 4 with a three-second master fade.
 
-The Cue master fade behaves like a Programmer Fade that belongs only to that Cue. When Programmer Fade is enabled and configured to apply to Cues, its current value overrides the Cue master fade during playback. Press `[TIME]` twice to enter the Cue's trigger delay. The complete GO, FOLLOW, TIME, per-value timing, and Cuelist timing behavior is explained in [Cues and Playbacks](10-cues-and-playbacks.md).
+The record command's master fade becomes the Cue's **In Fade**. For a sequence Cue with In Fade zero, **Cue Fade** supplies the playback fallback. A stored per-value fade or delay, including explicit zero, overrides its corresponding Cue time unless **Force Cue Timing** is enabled in Cuelist Settings. Programmer Fade does not globally override Cue playback.
+
+When advancing from Cue 1 to Cue 2, increasing Intensity and other incoming values use **Cue 2's In** timing; decreasing or released Intensity uses **Cue 1's Out** timing. Set Out Fade/Delay on the Cue being left.
+
+Press `[TIME]` twice in a record command to enter its trigger delay. In Cuelist View, choose FOLLOW or TIME and set **Trigger Time** on the Cue that should start automatically. FOLLOW counts after the preceding transition finishes; TIME counts from its start. Trigger Time is separate from the Cue's value-level In Delay. See [Programming Cues](04-programming-cues.md#timing-and-triggers) and the numerical example in [Triggers, Chasers, and Speed Groups](13-triggers-chasers-and-speed.md#follow-and-timed-triggers).
 
 ## Updating Existing Programming
 
