@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { DynamicLaneProjection } from "../../api/types";
 import { dynamicLaneOwner } from "./laneModel";
 
@@ -42,19 +43,19 @@ export function dynamicLaneFamilies(
 const sectors = [
 	{
 		family: "intensity", label: "Intensity", letter: "I",
-		points: "1,1 47,1 24,24", x: 24, y: 9,
+		points: "0,0 48,0 24,24", x: 24, y: 9,
 	},
 	{
 		family: "position", label: "Position", letter: "P",
-		points: "1,1 24,24 1,47", x: 9, y: 24,
+		points: "0,0 24,24 0,48", x: 9, y: 24,
 	},
 	{
 		family: "color", label: "Color", letter: "C",
-		points: "47,1 47,47 24,24", x: 39, y: 24,
+		points: "48,0 48,48 24,24", x: 39, y: 24,
 	},
 	{
 		family: "other", label: "Other", letter: "O",
-		points: "1,47 24,24 47,47", x: 24, y: 39,
+		points: "0,48 24,24 48,48", x: 24, y: 39,
 	},
 ] as const;
 
@@ -65,6 +66,7 @@ export function DynamicLaneSymbol({
 	lanes: readonly DynamicLaneProjection[];
 	attributes: readonly LaneAttribute[];
 }) {
+	const clipId = useId();
 	const families = dynamicLaneFamilies(lanes, attributes);
 	const present = sectors
 		.filter((sector) => families.has(sector.family))
@@ -78,6 +80,12 @@ export function DynamicLaneSymbol({
 			aria-label={label}
 		>
 			<title>{label}</title>
+			<defs>
+				<clipPath id={clipId}>
+					<rect x="1" y="1" width="46" height="46" rx="7" />
+				</clipPath>
+			</defs>
+			<g clipPath={`url(#${clipId})`}>
 			{sectors.map((sector) => {
 				const active = families.has(sector.family);
 				return (
@@ -89,9 +97,6 @@ export function DynamicLaneSymbol({
 						<polygon
 							points={sector.points}
 							fill={active ? "var(--pool-card-icon-color, #4edcff)" : "#303943"}
-							stroke="#10161c"
-							strokeWidth="2"
-							strokeLinejoin="round"
 						/>
 						<text
 							x={sector.x}
@@ -108,6 +113,9 @@ export function DynamicLaneSymbol({
 					</g>
 				);
 			})}
+				<path d="M0 0L48 48M48 0L0 48" fill="none" stroke="#10161c" strokeWidth="2" />
+			</g>
+			<rect x="1" y="1" width="46" height="46" rx="7" fill="none" stroke="#66737e" strokeWidth="2" />
 		</svg>
 	);
 }

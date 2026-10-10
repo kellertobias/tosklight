@@ -198,7 +198,12 @@ function poolCardStyle(
 	style: CSSProperties | undefined,
 	empty: boolean,
 ) {
+	const numberDigits =
+		typeof model.number === "number" || typeof model.number === "string"
+			? String(model.number).length
+			: 4;
 	const resolved = {
+		"--pool-card-number-space": `${Math.max(1, numberDigits) * 6 + 4}px`,
 		...(!empty && model.color ? { "--pool-card-color": model.color } : {}),
 		...(!empty && model.iconColor
 			? { "--pool-card-icon-color": model.iconColor }

@@ -1588,7 +1588,8 @@
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 32%;
 	grid-template-rows: minmax(0, 1fr) auto 32%;
-	grid-template-areas: "name number" "status status" "information media";
+	grid-template-areas: "name name" "status status" "information media";
+	container-type: inline-size;
 	gap: 3px 4px;
 	overflow: hidden;
 	/* Keep border + padding constant when selection or workflow thickens the border. */
@@ -1658,7 +1659,8 @@
 .pool-card > .number {
 	position: static;
 	inset: auto;
-	grid-area: number;
+	grid-area: 1 / 2;
+	z-index: 1;
 	align-self: start;
 	justify-self: end;
 	color: var(--muted);
@@ -1676,13 +1678,22 @@
 	overflow: auto;
 	scrollbar-width: none;
 	color: var(--text);
-	font-size: 13px;
+	font-size: clamp(10px, 16cqw, 14px);
 	font-weight: 800;
-	hyphens: auto;
-	line-height: 1.12;
-	overflow-wrap: anywhere;
+	hyphens: none;
+	line-height: 1.15;
+	overflow-wrap: normal;
+	word-break: normal;
 	text-align: left;
-	text-wrap: pretty;
+	text-wrap: wrap;
+}
+
+/* Reserve the index on the first line only; subsequent lines use the full tile width. */
+.pool-card-name::before {
+	content: "";
+	float: right;
+	width: var(--pool-card-number-space, 28px);
+	height: 1em;
 }
 
 .pool-card-name::-webkit-scrollbar {
@@ -1915,10 +1926,6 @@
 /* Tiles narrower than the pool's default width show their text at 80%. */
 .pool-grid-narrow .pool-card > .number {
 	font-size: 8px;
-}
-
-.pool-grid-narrow .pool-card-name {
-	font-size: 10.4px;
 }
 
 .pool-grid-narrow
