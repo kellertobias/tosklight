@@ -55,3 +55,10 @@
 	border-color: var(--line) !important;
 	box-shadow: none !important;
 }
+
+/* Inset outline keeps the card footprint and touch geometry unchanged. */
+.playback-fader-bank article.playback-colored.playback-runtime-error,
+.virtual-playback-box.playback-runtime-error {
+	outline: 2px solid #ff4d4f !important;
+	outline-offset: -2px !important;
+}

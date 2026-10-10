@@ -16,6 +16,7 @@ import {
 	resolveConfiguredPoolPresentation,
 	usePoolPresentationConfiguration,
 } from "../../../features/poolPresentation/poolPresentation";
+import { playbackHasRuntimeError } from "../playbackRuntimeError";
 import { formatSpeedGroupBpm } from "../speedGroupFormatting";
 import { isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
@@ -171,7 +172,7 @@ export function PlaybackSlot({
 				],
 			})
 		: null;
-	const className = `${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
+	const className = `${playbackHasRuntimeError(playback, runtimeProjection, cue !== null) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
 	const cardStyle = playbackCardStyle(
 		Boolean(playback),
 		playbackColor,

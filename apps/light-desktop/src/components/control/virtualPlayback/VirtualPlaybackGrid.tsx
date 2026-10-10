@@ -27,6 +27,7 @@ import {
 	usePoolPresentationConfiguration,
 } from "../../../features/poolPresentation/poolPresentation";
 import type { VirtualPlaybackZone } from "../../../features/virtualPlaybackZones/contracts";
+import { playbackHasRuntimeError } from "../playbackRuntimeError";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
 import {
 	type SingleCuePreview,
@@ -229,6 +230,7 @@ function boxViewModel(
 		number,
 		slot,
 		position,
+		runtimeError: playbackHasRuntimeError(playback, projection, cueList !== undefined),
 		availability: !available ? "unavailable" : playback ? "assigned" : "empty",
 		label: playback?.name,
 		icon: playback?.presentation_icon,

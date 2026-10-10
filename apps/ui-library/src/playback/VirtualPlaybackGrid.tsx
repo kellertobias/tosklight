@@ -60,6 +60,8 @@ export interface VirtualPlaybackBoxViewModel {
 	actionLabel?: string;
 	heldAction?: boolean;
 	running?: boolean;
+	/** An authoritative runtime failure, distinct from normal idle/missing controller state. */
+	runtimeError?: boolean;
 	currentCue?: string;
 	configurationTarget?: boolean;
 	assignmentTarget?: boolean;
@@ -581,6 +583,7 @@ function boxClassName(
 		),
 		box.exclusionSelected && "exclusion-selected",
 		box.backgroundImageTransparent && "cue-preview-transparent",
+		box.runtimeError && assigned && "playback-runtime-error",
 		box.poolPresentation?.className,
 	]
 		.filter(Boolean)

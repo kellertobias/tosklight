@@ -188,7 +188,11 @@ export function playbackFaderDisplay(
 		const identity = runtime.instance_id
 			? ` · I ${runtime.instance_id.slice(0, 8)} · C ${runtime.controller_id.slice(0, 8)}`
 			: ` · C ${runtime.controller_id.slice(0, 8)}`;
-		return `${runtime.state.toUpperCase()} · ${runtime.controller_status.toUpperCase()} · Size ${Math.round(runtime.size * 100)}% · Master ${Math.round(runtime.master * 100)}% · ${runtime.effective_speed_multiplier.toFixed(2)}× ${runtime.speed_source.replaceAll("_", " ")}${duration}${learned} · ${runtime.compatible_target_count}/${runtime.target_count} compatible targets · ${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} target/lane addresses · ${runtime.missing_target_count} missing · ${runtime.unpatched_target_count} unpatched${identity}${warning}`;
+		const controllerStatus =
+			runtime.state === "off" && runtime.controller_status === "missing"
+				? ""
+				: ` · ${runtime.controller_status.toUpperCase()}`;
+		return `${runtime.state.toUpperCase()}${controllerStatus} · Size ${Math.round(runtime.size * 100)}% · Master ${Math.round(runtime.master * 100)}% · ${runtime.effective_speed_multiplier.toFixed(2)}× ${runtime.speed_source.replaceAll("_", " ")}${duration}${learned} · ${runtime.compatible_target_count}/${runtime.target_count} compatible targets · ${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} target/lane addresses · ${runtime.missing_target_count} missing · ${runtime.unpatched_target_count} unpatched${identity}${warning}`;
 	}
 	if (playback.target.type === "programmer_fade")
 		return projection?.target === "programmer_fade"
