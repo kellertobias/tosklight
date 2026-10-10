@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ICON_CATALOG_GROUPS } from "@tosklight/ui/controls";
 import { ModalProvider } from "@tosklight/ui/modals";
@@ -18,6 +24,8 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+// Keep the complete playable/parking pools rendered. Inspector queries are scoped
+// to avoid computing accessible names for every unrelated folder card.
 describe("the CITP media library", () => {
 	it("filters the media folder pool to playable and parking storage", async () => {
 		stubServer();
@@ -77,13 +85,18 @@ describe("the CITP media library", () => {
 		const media = (await screen.findByText("Blue haze")).closest("button");
 		if (!media) throw new Error("media card missing");
 		await userEvent.click(media);
-		const preview = screen.getByRole("img", { name: "Blue haze preview" });
+		const editorQueries = within(
+			document.querySelector<HTMLElement>(".media-library-editor")!,
+		);
+		const preview = editorQueries.getByRole("img", {
+			name: "Blue haze preview",
+		});
 		expect(preview).toHaveAttribute(
 			"src",
 			"/api/v2/library/1/1/preview?frame=0",
 		);
 		expect(preview.parentElement).toHaveClass("media-library-item-preview");
-		const editor = screen
+		const editor = editorQueries
 			.getByRole("button", { name: "Save media" })
 			.closest("form");
 		const inputs = editor?.querySelectorAll("input");
@@ -93,7 +106,9 @@ describe("the CITP media library", () => {
 		await userEvent.type(inputs[0], "Opening haze");
 		await userEvent.clear(inputs[1]);
 		await userEvent.type(inputs[1], "128");
-		await userEvent.click(screen.getByRole("button", { name: "Save media" }));
+		await userEvent.click(
+			editorQueries.getByRole("button", { name: "Save media" }),
+		);
 		await vi.waitFor(() => expect(server.writes).toHaveLength(2));
 		expect(server.writes).toEqual([
 			"/library/items/asset-a/update",
@@ -148,9 +163,12 @@ describe("the CITP media library", () => {
 		const media = (await screen.findByText("Blue haze")).closest("button");
 		if (!media) throw new Error("media card missing");
 		await userEvent.click(media);
+		const editorQueries = within(
+			document.querySelector<HTMLElement>(".media-library-editor")!,
+		);
 
 		await userEvent.click(
-			screen.getByRole("button", { name: "Retry thumbnail" }),
+			editorQueries.getByRole("button", { name: "Retry thumbnail" }),
 		);
 		await vi.waitFor(() =>
 			expect(server.writes).toContain("/library/items/asset-a/thumbnail/retry"),
@@ -160,7 +178,7 @@ describe("the CITP media library", () => {
 		).toHaveAttribute("src", "/api/v2/library/1/1/thumbnail?revision=4");
 
 		await userEvent.click(
-			screen.getByRole("button", { name: "Upload custom thumbnail" }),
+			editorQueries.getByRole("button", { name: "Upload custom thumbnail" }),
 		);
 		const picker = container.querySelector<HTMLInputElement>(
 			'input[type="file"][accept="image/png,image/jpeg,image/gif,image/webp"]',
@@ -196,12 +214,19 @@ describe("the CITP media library", () => {
 		const media = (await screen.findByText("Blue haze")).closest("button");
 		if (!media) throw new Error("media card missing");
 		await userEvent.click(media);
+		const editorQueries = within(
+			document.querySelector<HTMLElement>(".media-library-editor")!,
+		);
 
-		await userEvent.click(screen.getByRole("button", { name: "Delete media" }));
+		await userEvent.click(
+			editorQueries.getByRole("button", { name: "Delete media" }),
+		);
 		expect(server.catalog.itemCount).toBe(2);
 		expect(server.writes).not.toContain("/library/items/asset-a/delete");
 
-		await userEvent.click(screen.getByRole("button", { name: "Delete media" }));
+		await userEvent.click(
+			editorQueries.getByRole("button", { name: "Delete media" }),
+		);
 		await vi.waitFor(() => expect(server.catalog.itemCount).toBe(1));
 		expect(server.catalog.folders[0].items.map((item) => item.id)).toEqual([
 			"asset-b",
@@ -300,9 +325,12 @@ describe("the CITP media library", () => {
 		if (!first || !second) throw new Error("media cards missing");
 		fireEvent.click(first);
 		fireEvent.click(second, { ctrlKey: true });
+		const editor = within(
+			document.querySelector<HTMLElement>(".media-library-editor")!,
+		);
 
 		await userEvent.click(
-			screen.getByRole("button", { name: "Disable selected" }),
+			editor.getByRole("button", { name: "Disable selected" }),
 		);
 		await vi.waitFor(() =>
 			expect(
@@ -316,7 +344,7 @@ describe("the CITP media library", () => {
 		});
 
 		await userEvent.click(
-			screen.getByRole("button", { name: "Enable selected" }),
+			editor.getByRole("button", { name: "Enable selected" }),
 		);
 		await vi.waitFor(() =>
 			expect(
@@ -325,11 +353,11 @@ describe("the CITP media library", () => {
 		);
 
 		await userEvent.click(
-			screen.getByRole("button", { name: "Delete selected" }),
+			editor.getByRole("button", { name: "Delete selected" }),
 		);
 		expect(server.catalog.itemCount).toBe(2);
 		await userEvent.click(
-			screen.getByRole("button", { name: "Delete selected" }),
+			editor.getByRole("button", { name: "Delete selected" }),
 		);
 		await vi.waitFor(() => expect(server.catalog.itemCount).toBe(0));
 		expect(
@@ -345,15 +373,19 @@ describe("the CITP media library", () => {
 		render(<LibraryPage />);
 
 		const first = (await screen.findByText("Looks")).closest("button");
-		const second = screen.getByRole("button", { name: /002Empty folder/u });
+		const second = screen.getByText("002").closest("button")!;
+		expect(second).toHaveAccessibleName(/002Empty folder/u);
 		if (!first) throw new Error("folder card missing");
 		await userEvent.click(first);
 		fireEvent.click(second, { ctrlKey: true });
 
-		const note = screen.getByLabelText("Note for 2 folders");
+		const editor = within(
+			document.querySelector<HTMLElement>(".media-library-note-editor")!,
+		);
+		const note = editor.getByLabelText("Note for 2 folders");
 		await userEvent.type(note, "Purchased stock library licence");
 		await userEvent.click(
-			screen.getByRole("button", { name: "Save note to 2" }),
+			editor.getByRole("button", { name: "Save note to 2" }),
 		);
 		await vi.waitFor(() =>
 			expect(
@@ -366,7 +398,7 @@ describe("the CITP media library", () => {
 			]),
 		);
 
-		await userEvent.click(screen.getByRole("button", { name: "Clear notes" }));
+		await userEvent.click(editor.getByRole("button", { name: "Clear notes" }));
 		await vi.waitFor(() =>
 			expect(
 				server.catalog.folders
@@ -393,7 +425,7 @@ describe("the CITP media library", () => {
 		).toHaveStyle({ aspectRatio: String(4 / 3) });
 	});
 
-	it("clicking a media folder opens name, icon, and upload configuration", async () => {
+	it("opens folder configuration and automatically persists its name", async () => {
 		const server = stubServer();
 		render(
 			<ModalProvider>
@@ -403,15 +435,33 @@ describe("the CITP media library", () => {
 		const folder = (await screen.findByText("Looks")).closest("button");
 		if (!folder) throw new Error("folder button missing");
 		await userEvent.click(folder);
-		expect(screen.getByText("Folder icon")).toBeInTheDocument();
-		expect(screen.getByText("Upload media to this folder")).toBeInTheDocument();
-		await userEvent.clear(screen.getByLabelText("Folder name"));
-		await userEvent.type(screen.getByLabelText("Folder name"), "Act one");
+		const editor = within(
+			document.querySelector<HTMLElement>(".media-folder-presentation-editor")!,
+		);
+		expect(editor.getByText("Folder icon")).toBeInTheDocument();
+		expect(editor.getByText("Upload media to this folder")).toBeInTheDocument();
+		await userEvent.clear(editor.getByLabelText("Folder name"));
+		await userEvent.type(editor.getByLabelText("Folder name"), "Act one");
 		expect(
-			screen.queryByRole("button", { name: "Save folder" }),
+			editor.queryByRole("button", { name: "Save folder" }),
 		).not.toBeInTheDocument();
 		await vi.waitFor(() =>
 			expect(server.catalog.folders[0].name).toBe("Act one"),
+		);
+	});
+
+	it("persists a folder icon selected from the full catalog", async () => {
+		const server = stubServer();
+		render(
+			<ModalProvider>
+				<LibraryPage />
+			</ModalProvider>,
+		);
+		const folder = (await screen.findByText("Looks")).closest("button");
+		if (!folder) throw new Error("folder button missing");
+		await userEvent.click(folder);
+		const editor = within(
+			document.querySelector<HTMLElement>(".media-folder-presentation-editor")!,
 		);
 		const catalogGroup = ICON_CATALOG_GROUPS.find(
 			(group) => group.id !== "built-in" && group.icons.length > 0,
@@ -419,13 +469,14 @@ describe("the CITP media library", () => {
 		const catalogIcon = catalogGroup?.icons[0];
 		if (!catalogGroup || !catalogIcon)
 			throw new Error("full icon catalog missing");
-		await userEvent.click(screen.getByRole("button", { name: "Choose icon" }));
-		await userEvent.click(screen.getByRole("button", { name: "Icon group" }));
+		await userEvent.click(editor.getByRole("button", { name: "Choose icon" }));
+		const picker = within(screen.getByRole("dialog", { name: "Choose icon" }));
+		await userEvent.click(picker.getByRole("button", { name: "Icon group" }));
 		await userEvent.click(
 			screen.getByRole("option", { name: catalogGroup.label }),
 		);
 		await userEvent.click(
-			screen.getByRole("button", { name: catalogIcon.label }),
+			picker.getByRole("button", { name: catalogIcon.label }),
 		);
 		await vi.waitFor(() =>
 			expect(server.catalog.folders[0].icon).toBe(catalogIcon.value),
@@ -436,19 +487,29 @@ describe("the CITP media library", () => {
 		const server = stubServer();
 		render(<LibraryPage />);
 		const first = (await screen.findByText("Looks")).closest("button");
-		const second = screen.getByRole("button", { name: /002Empty folder/u });
+		const second = screen.getByText("002").closest("button")!;
+		expect(second).toHaveAccessibleName(/002Empty folder/u);
 		if (!first) throw new Error("folder button missing");
 
 		await userEvent.click(first);
-		await userEvent.clear(screen.getByLabelText("Folder name"));
-		await userEvent.type(screen.getByLabelText("Folder name"), "Act one");
+		const editor = within(
+			document.querySelector<HTMLElement>(".media-folder-presentation-editor")!,
+		);
+		await userEvent.clear(editor.getByLabelText("Folder name"));
+		await userEvent.type(editor.getByLabelText("Folder name"), "Act one");
 		await userEvent.click(second);
 
 		await vi.waitFor(() =>
 			expect(server.catalog.folders[0].name).toBe("Act one"),
 		);
 		await userEvent.click(first);
-		expect(screen.getByLabelText("Folder name")).toHaveValue("Act one");
+		expect(
+			within(
+				document.querySelector<HTMLElement>(
+					".media-folder-presentation-editor",
+				)!,
+			).getByLabelText("Folder name"),
+		).toHaveValue("Act one");
 		expect(first).toHaveTextContent("Act one");
 	});
 
@@ -499,6 +560,9 @@ describe("the CITP media library", () => {
 			(await screen.findByText("Looks")).closest("button")!,
 		);
 
+		const editor = within(
+			document.querySelector<HTMLElement>(".media-folder-presentation-editor")!,
+		);
 		const pictureInput = document.querySelector(
 			'.media-folder-presentation-editor input[accept="image/*"]',
 		) as HTMLInputElement;
@@ -513,7 +577,7 @@ describe("the CITP media library", () => {
 			),
 		);
 		await userEvent.click(
-			await screen.findByRole("button", { name: "Remove folder picture" }),
+			await editor.findByRole("button", { name: "Remove folder picture" }),
 		);
 		await vi.waitFor(() =>
 			expect(server.folderPresentations.folders[0].pictureUrl).toBeNull(),
