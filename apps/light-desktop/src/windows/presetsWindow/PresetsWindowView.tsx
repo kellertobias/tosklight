@@ -247,7 +247,8 @@ function PresetPoolSlot(props: PresetSlotProps) {
 				primary: filtered
 					? "Other family"
 					: (customization?.title ?? preset?.body.name ?? "Empty"),
-				secondary: presetSecondary(preset, filtered, storedFamily, props),
+				secondary: preset ? presetSecondary(preset, filtered, storedFamily, props) : undefined,
+				details: preset ? undefined : [presetSecondary(preset, filtered, storedFamily, props)],
 				icon: artwork.icon,
 				preview: artwork.preview && (
 					<PresetPreviewGlyph preview={artwork.preview} />

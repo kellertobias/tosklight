@@ -159,8 +159,8 @@ export function GroupCard({
 				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
 				secondary: group
 					? groupFixtureCountLabel(group.body.fixtures.length, selectedFixtureCount)
-					: emptyGroupHint(storeArmed, updateArmed),
-				details,
+					: undefined,
+				details: group ? details : [...details, emptyGroupHint(storeArmed, updateArmed)],
 				icon: group?.body.icon,
 				iconColor: group?.body.color,
 				color: group?.body.color,

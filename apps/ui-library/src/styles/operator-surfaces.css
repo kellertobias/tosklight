@@ -1577,6 +1577,8 @@
 	);
 	/* Tile insets and the picture box size; everything inside the tile follows them. */
 	--pool-card-inset: 6.4px;
+	--pool-card-border-width: 1px;
+	--pool-card-radius: 7px;
 	--pool-card-media-width: 100%;
 	--pool-card-media-height: 100%;
 	position: relative;
@@ -1589,10 +1591,11 @@
 	grid-template-areas: "name number" "status status" "information media";
 	gap: 3px 4px;
 	overflow: hidden;
-	padding: var(--pool-card-inset);
+	/* Keep border + padding constant when selection or workflow thickens the border. */
+	padding: calc(var(--pool-card-inset) + 1px - var(--pool-card-border-width));
 	border: 1px solid
 		color-mix(in srgb, var(--pool-card-resolved-color) 68%, var(--line2));
-	border-radius: 7px;
+	border-radius: var(--pool-card-radius);
 	background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
 	text-align: left;
 }
@@ -1634,6 +1637,7 @@
 .pool-presentation.active,
 .pool-card.selected,
 .pool-card.active {
+	--pool-card-border-width: 2px;
 	border-width: 2px;
 	border-color: var(--pool-card-resolved-color);
 	background: color-mix(
@@ -1711,6 +1715,7 @@
 }
 
 .pool-card.empty {
+	--pool-card-border-width: 1px;
 	--pool-card-resolved-color: var(--pool-card-uncolored-color, #65717b);
 	border-width: 1px;
 	border-style: dashed;
@@ -1740,6 +1745,7 @@
 .pool-card.store-target,
 .pool-presentation.record-target,
 .pool-presentation.store-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-record-color, #ff4e55);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1747,6 +1753,7 @@
 
 .pool-card.update-target,
 .pool-presentation.update-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-update-color, #f4b942);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1754,6 +1761,7 @@
 
 .pool-card.set-target,
 .pool-presentation.set-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-set-color, #1bd6ec);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1761,6 +1769,7 @@
 
 .pool-card.copy-target,
 .pool-presentation.copy-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-copy-color, #57a8ff);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1768,6 +1777,7 @@
 
 .pool-card.move-target,
 .pool-presentation.move-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-move-color, #b988ff);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1775,6 +1785,7 @@
 
 .pool-card.delete-target,
 .pool-presentation.delete-target {
+	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-delete-color, #ff4e55);
 	background: color-mix(in srgb, #68737c 14%, var(--panel2));
 	box-shadow: none;
@@ -1816,16 +1827,17 @@
 /* Workflow banners cover the footer and artwork without intercepting touch actions. */
 .pool-card-workflow {
 	position: absolute;
-	inset: auto 4px 4px;
+	inset: auto 3px 3px;
 	z-index: 30;
-	padding: 4px 5px;
-	border-radius: 999px;
+	padding: 2px 5px;
+	border-radius: calc(var(--pool-card-radius) - 3px);
 	background: #081014;
 	text-align: center;
 	pointer-events: none;
 }
 
 .pool-card-workflow.record {
+	font-weight: 900;
 	background: var(--pool-record-color, #ff4e55);
 	color: #000;
 }
@@ -1967,6 +1979,7 @@
 }
 
 .virtual-playback-box.playback-colored {
+	--pool-card-border-width: 2px;
 	border: 2px solid var(--playback-color);
 	background: var(--panel2);
 }
