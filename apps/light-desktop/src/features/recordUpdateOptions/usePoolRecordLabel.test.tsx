@@ -21,6 +21,9 @@ describe("record labels follow the scoped desk settings", () => {
   await waitFor(() => expect(screen.getAllByText("REC MRG")).toHaveLength(2));
   expect(mocks.update.loadSettings).toHaveBeenCalledOnce();
   act(() => programmingUpdateSettingsView(mocks.update!).install({...defaultUpdateSettings,record_default:"smart"}));
+  expect(screen.getAllByText("REC MRG")).toHaveLength(2);
+  mocks.text = "RECORD SMART";
+  rerender(<><Grid/><Grid/></>);
   expect(screen.getAllByText("REC")).toHaveLength(2);
   mocks.text = "RECORD MERGE";
   rerender(<><Grid/><Grid/></>);

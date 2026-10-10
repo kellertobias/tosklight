@@ -716,3 +716,48 @@ fn selected_link_uses_standalone_uuid_and_preserves_physical_set_target() {
     assert!(rejected.error.as_deref().unwrap().contains("not assigned to a Cuelist"));
     assert_eq!(store.portable_revision().unwrap(), before);
 }
+
+#[test]
+fn default_preset_record_preserves_other_values_and_explicit_smart_overwrites() {
+    let scenario = CommandContractScenario::new();
+    let run = |command: &str| {
+        let context = operator_action_context(&scenario.session, light_application::ActionSource::Http);
+        let execution = command_http::execute_manual_command_without_line_cleanup(
+            &scenario.state, &scenario.session, &context, command,
+        );
+        assert!(matches!(execution, Some(light_application::ProgrammingExecution::Accepted { applied: 1, .. })), "{execution:?}");
+    };
+    // Capture must use fixtures present in the authoritative engine snapshot.
+    let first = schema_v2_direct_fixture().0;
+    let mut second = first.clone();
+    second.fixture_id = light_core::FixtureId::new();
+    second.fixture_number = Some(2);
+    second.address = Some(100);
+    let fixture = first.fixture_id;
+    let additional_fixture = second.fixture_id;
+    scenario.state.output.replace_snapshot(EngineSnapshot {
+        fixtures: vec![first, second].into(),
+        revision: 1,
+        ..EngineSnapshot::default()
+    }).unwrap();
+    let attribute = light_core::AttributeKey::intensity();
+    let programmers = &scenario.state.programming;
+    programmers.set(scenario.session.id, fixture, attribute.clone(), light_core::AttributeValue::Normalized(0.4));
+    run("RECORD 0.1");
+    programmers.clear(scenario.session.id);
+    programmers.start(scenario.session.id);
+    programmers.set(scenario.session.id, additional_fixture, attribute.clone(), light_core::AttributeValue::Normalized(0.8));
+    let read = || -> light_programmer::Preset {
+        // Mixed-family presets use the bare storage address, also for explicit 0.n commands.
+        serde_json::from_value(ActiveShowRepository::open(&scenario.show_path).unwrap().objects("preset").unwrap().into_iter().find(|object| object.id == "1").unwrap().body).unwrap()
+    };
+    run("RECORD 0.1");
+    let merged = read();
+    assert_eq!(merged.values[&fixture][&attribute], light_core::AttributeValue::Normalized(0.4));
+    assert_eq!(merged.values[&additional_fixture][&attribute], light_core::AttributeValue::Normalized(0.8));
+    run("RECORD SMART 0.1");
+    let replaced = read();
+    assert!(!replaced.values.contains_key(&fixture));
+    assert_eq!(replaced.values[&additional_fixture][&attribute], light_core::AttributeValue::Normalized(0.8));
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

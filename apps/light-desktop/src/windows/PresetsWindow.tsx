@@ -313,7 +313,7 @@ function usePresetsWindowModel({
 				if (!occupied) return void recordPreset(target, "overwrite");
 				const before = command.read();
 				if (!before.ready) return;
-				void resolveRecordOption(before.text, programmingUpdate).then(option => {
+				void resolveRecordOption(before.text, programmingUpdate, "preset").then(option => {
 					const current = command.read();
 					if (!current.ready || current.text !== before.text) return;
 					if (option === "merge") void recordPreset(target, "merge");

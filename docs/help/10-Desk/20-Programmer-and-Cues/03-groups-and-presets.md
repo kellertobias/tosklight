@@ -66,6 +66,10 @@ Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity store
 
 Each family is a separate pool with its own local preset numbers. The command-line address combines type and number: `0.1` is Mixed 1, `1.1` is Intensity 1, `2.1` is Color 1, `3.1` is Position 1, and `4.1` is Beam 1. The dotted address is not a global preset ID, so all five presets numbered 1 can coexist.
 
+For quick recording, press `[REC]` and touch a Preset. With the normal **Smart** desk default, an existing Preset merges the Programmer and shows **REC MRG**; an empty slot creates a Preset and shows **REC**.
+
+Merging keeps other stored values and replaces matching values with the Programmer's values. A saved alternative Record default or a one-off option still applies. To replace the entire existing Preset, choose the one-off **Smart** option, touch the tile, then choose **Overwrite**. On the command line, `RECORD SMART 2.1` explicitly overwrites Color Preset 1.
+
 When you recall a Preset and record its values into a Cue, those addresses retain their source
 Preset. Merging or updating that Preset changes the linked Cue values, including a Cue that is
 already running. Clear the Programmer to see playback alone. Editing a recalled value directly

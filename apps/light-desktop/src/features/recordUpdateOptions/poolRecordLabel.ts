@@ -15,7 +15,7 @@ export function poolRecordLabel(
 	if (target.kind === "preset" && option === "merge") return "REC MRG";
 	if (
 		target.kind === "cuelist" &&
-		(option === "add_cue" || (option === "smart" && target.cueCount !== 1))
+		(option === "add_cue" || (option === "smart" && (target.cueCount ?? 0) >= 2))
 	) return "REC CUE";
 	return "REC";
 }

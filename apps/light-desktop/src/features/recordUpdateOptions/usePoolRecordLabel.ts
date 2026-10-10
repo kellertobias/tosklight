@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import { useProgrammingUpdate } from "../programmingUpdate/ProgrammingUpdateProvider";
 import { programmingUpdateSettingsView } from "../programmingUpdate/settingsView";
-import { effectiveOption } from "./options";
+import { commandLineOption, effectiveOption, targetRecordOption } from "./options";
 import { poolRecordLabel, type PoolRecordTarget } from "./poolRecordLabel";
 
 const subscribeEmpty = () => () => undefined;
@@ -29,7 +29,10 @@ export function usePoolRecordLabel({ active = true }: { active?: boolean } = {})
 		settings?.record_default ?? "smart",
 	);
 	return useCallback(
-		(target: PoolRecordTarget) => poolRecordLabel(target, option),
-		[option],
+		(target: PoolRecordTarget) => poolRecordLabel(
+			target,
+			commandLineOption(command.text, "RECORD") ?? targetRecordOption(option, target.kind),
+		),
+		[option, command.text],
 	);
 }

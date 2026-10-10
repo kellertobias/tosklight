@@ -23,7 +23,7 @@ export const RECORD_UPDATE_OPTIONS: readonly RecordUpdateOptionDefinition[] = [
 		label: "Smart",
 		keyword: "SMART",
 		record:
-			"The regular behaviour. A Cuelist with one Cue asks whether to add, merge, or overwrite; otherwise a new Cue is added.",
+			"The regular behaviour. Presets merge by default; one-off Smart offers a choice. A Cuelist with one Cue asks whether to add, merge, or overwrite; otherwise a new Cue is added.",
 		update:
 			"The regular behaviour. A touched target opens the Update preview with its configured mode; a command uses Update.",
 	},
@@ -85,7 +85,8 @@ export function commandLineOption(
 
 /**
  * The armed command line after a choice. A choice equal to the stored default needs no word,
- * because a plain RECORD or UPDATE already uses it; whatever followed the verb is kept.
+ * because a plain RECORD or UPDATE already uses it. Explicit Record Smart keeps its keyword
+ * so Presets can offer the choice dialog. Whatever followed the verb is kept.
  */
 export function armedCommandLine(
 	current: string,
@@ -96,7 +97,7 @@ export function armedCommandLine(
 	const match = optionPattern(verb).exec(current);
 	const rest = match ? current.slice(match[0].length) : "";
 	const keyword =
-		option === storedDefault
+		option === storedDefault && !(verb === "RECORD" && option === "smart")
 			? ""
 			: `${RECORD_UPDATE_OPTIONS.find((candidate) => candidate.value === option)?.keyword} `;
 	return `${verb} ${keyword}${rest}`;
@@ -109,6 +110,14 @@ export function effectiveOption(
 	storedDefault: RecordUpdateOption,
 ) {
 	return commandLineOption(text, verb) ?? storedDefault;
+}
+
+/** Resolves the normal desk default for the target family; named one-off options bypass it. */
+export function targetRecordOption(
+	option: RecordUpdateOption,
+	kind: "preset" | "cuelist" | "other",
+): RecordUpdateOption {
+	return kind === "preset" && option === "smart" ? "merge" : option;
 }
 
 export type TouchCueRecordChoice = "add" | "merge" | "overwrite";
@@ -160,13 +169,17 @@ export async function touchCueRecordPlan(
 export async function resolveRecordOption(
 	text: string,
 	update: { loadSettings(): Promise<UpdateSettings | null> } | null,
+	kind: "preset" | "cuelist" | "other" = "cuelist",
 ): Promise<RecordUpdateOption> {
 	const named = commandLineOption(text, "RECORD");
 	if (named) return named;
 	try {
-		return (await update?.loadSettings())?.record_default ?? "smart";
+		return targetRecordOption(
+			(await update?.loadSettings())?.record_default ?? "smart",
+			kind,
+		);
 	} catch {
-		return "smart";
+		return targetRecordOption("smart", kind);
 	}
 }
 

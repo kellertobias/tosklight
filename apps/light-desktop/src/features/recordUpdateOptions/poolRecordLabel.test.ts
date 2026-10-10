@@ -17,7 +17,8 @@ describe("record tile labels describe the touch plan", () => {
 	});
 	it("distinguishes next-Cue recording from Smart's one-Cue choice and Cue edits", () => {
 		expect(poolRecordLabel({kind:"cuelist",exists:true,cueCount:1}, "smart")).toBe("REC");
-		for (const cueCount of [0, 2, 100]) {
+		expect(poolRecordLabel({kind:"cuelist",exists:true,cueCount:0}, "smart")).toBe("REC");
+		for (const cueCount of [2, 100]) {
 			expect(poolRecordLabel({kind:"cuelist",exists:true,cueCount}, "smart")).toBe("REC CUE");
 		}
 		expect(poolRecordLabel({kind:"cuelist",exists:true,cueCount:1}, "add_cue")).toBe("REC CUE");

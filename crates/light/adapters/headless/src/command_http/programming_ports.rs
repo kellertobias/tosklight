@@ -243,7 +243,7 @@ impl<'a> ServerProgrammingPorts<'a> {
         let (tokens, _) = super::super::tokenize_programmer_command(raw_command)?;
         let (option, _) = super::record_update_option::parse_option(&tokens[1..]);
         let mode = match option
-            .unwrap_or_else(|| super::record_update_option::record_default(self.state))
+            .unwrap_or_else(|| super::record_update_option::preset_record_default(self.state))
         {
             light_application::programming_update::RecordUpdateOption::Smart => {
                 light_programmer::PresetStoreMode::Overwrite
