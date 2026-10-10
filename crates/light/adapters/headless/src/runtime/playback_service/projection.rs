@@ -466,6 +466,52 @@ fn dynamic_runtime_projection(
     )
 }
 
+fn dynamic_playback_state(
+    active: &light_playback::ActiveDynamicPlayback,
+    stored_instance: Option<&light_dynamics::DynamicInstanceSnapshot>,
+    instance: Option<&light_dynamics::DynamicInstanceSnapshot>,
+    controller_status: DynamicPlaybackControllerStatus,
+) -> DynamicPlaybackRuntimeState {
+    if !active.enabled || stored_instance.is_some_and(|instance| instance.completed) {
+        DynamicPlaybackRuntimeState::Off
+    } else if matches!(
+        active.start_state.outcome,
+        light_playback::DynamicPlaybackStartOutcome::Rejected(_)
+    ) {
+        DynamicPlaybackRuntimeState::Failed
+    } else if matches!(
+        active.start_state.outcome,
+        light_playback::DynamicPlaybackStartOutcome::Passive(_)
+    ) {
+        DynamicPlaybackRuntimeState::Pending
+    } else if instance.is_none() {
+        match &active.start_state.outcome {
+            light_playback::DynamicPlaybackStartOutcome::Pending
+            | light_playback::DynamicPlaybackStartOutcome::Passive(_) => {
+                DynamicPlaybackRuntimeState::Pending
+            }
+            light_playback::DynamicPlaybackStartOutcome::Accepted
+            | light_playback::DynamicPlaybackStartOutcome::Rejected(_) => {
+                DynamicPlaybackRuntimeState::Failed
+            }
+        }
+    } else if active.fader_value <= f32::EPSILON || active.master <= f32::EPSILON {
+        DynamicPlaybackRuntimeState::Zero
+    } else if instance.is_some_and(|instance| instance.pending_until_millis.is_some()) {
+        DynamicPlaybackRuntimeState::Pending
+    } else if active.paused
+        || instance.is_some_and(|instance| {
+            instance.paused_at_millis.is_some() || instance.speed_paused_at_millis.is_some()
+        })
+    {
+        DynamicPlaybackRuntimeState::Paused
+    } else if controller_status == DynamicPlaybackControllerStatus::Losing {
+        DynamicPlaybackRuntimeState::Hidden
+    } else {
+        DynamicPlaybackRuntimeState::Active
+    }
+}
+
 fn dynamic_runtime_projection_from_snapshot(
     snapshot: &EngineSnapshot,
     assignment: &light_playback::DynamicPlaybackAssignment,
@@ -504,25 +550,7 @@ fn dynamic_runtime_projection_from_snapshot(
         Some(_) => DynamicPlaybackControllerStatus::Losing,
         None => DynamicPlaybackControllerStatus::Missing,
     };
-    let state = if !active.enabled || stored_instance.is_some_and(|instance| instance.completed) {
-        DynamicPlaybackRuntimeState::Off
-    } else if instance.is_none() {
-        DynamicPlaybackRuntimeState::Failed
-    } else if active.fader_value <= f32::EPSILON || active.master <= f32::EPSILON {
-        DynamicPlaybackRuntimeState::Zero
-    } else if instance.is_some_and(|instance| instance.pending_until_millis.is_some()) {
-        DynamicPlaybackRuntimeState::Pending
-    } else if active.paused
-        || instance.is_some_and(|instance| {
-            instance.paused_at_millis.is_some() || instance.speed_paused_at_millis.is_some()
-        })
-    {
-        DynamicPlaybackRuntimeState::Paused
-    } else if controller_status == DynamicPlaybackControllerStatus::Losing {
-        DynamicPlaybackRuntimeState::Hidden
-    } else {
-        DynamicPlaybackRuntimeState::Active
-    };
+    let state = dynamic_playback_state(&active, stored_instance, instance, controller_status);
     let effective_speed_multiplier = instance
         .and_then(|instance| {
             instance
@@ -557,9 +585,15 @@ fn dynamic_runtime_projection_from_snapshot(
     let coverage = dynamic_target_lane_coverage(snapshot, definition, targets);
     let mut warnings = Vec::new();
     if state == DynamicPlaybackRuntimeState::Failed {
-        warnings.push(
-            "Dynamic Playback is enabled but its runtime instance could not be started".to_owned(),
-        );
+        warnings.push(match &active.start_state.outcome {
+            light_playback::DynamicPlaybackStartOutcome::Rejected(message) => message.clone(),
+            _ => "Dynamic Playback controller disappeared after an accepted start".to_owned(),
+        });
+    } else if active.enabled
+        && let light_playback::DynamicPlaybackStartOutcome::Passive(message) =
+            &active.start_state.outcome
+    {
+        warnings.push(message.clone());
     }
     if coverage.missing_target_count > 0 || coverage.skipped_address_count > 0 {
         warnings.push(format!(

@@ -328,3 +328,59 @@ fn cold_reconciliation_records_the_same_owner_refresh_as_warm_and_failure_keeps_
     );
     assert!(live.controls_since(cursor).unwrap().unwrap().is_empty());
 }
+
+#[test]
+fn warm_reconciliation_receipts_keep_rejections_and_intentionally_empty_recovery_distinct() {
+    use light_playback::DynamicPlaybackStartOutcome as Outcome;
+    let (definition, mut snapshot, mut runtime) = setup();
+    snapshot.playbacks = vec![dynamic_playback(1, &definition, 0, 0)].into();
+    let mut active = row(&definition, PlaybackIdentity::physical(1).unwrap());
+    active.size = f32::NAN;
+    let (_, rejected) = reconcile_dynamic_playbacks_with_sources(
+        &mut runtime,
+        100,
+        &snapshot,
+        &[active.clone()],
+        |_| {},
+    );
+    assert!(
+        matches!(&rejected[0].outcome, Outcome::Rejected(message) if message.contains("controller")),
+        "{:?}",
+        rejected[0].outcome
+    );
+    assert!(
+        runtime
+            .controller(dynamic_playback_controller_id(&active))
+            .is_none()
+    );
+    active.size = 1.0;
+    snapshot.groups = vec![].into();
+    let (_, missing) = reconcile_dynamic_playbacks_with_sources(
+        &mut runtime,
+        105,
+        &snapshot,
+        &[active.clone()],
+        |_| {},
+    );
+    assert!(
+        matches!(&missing[0].outcome, Outcome::Rejected(message) if message.contains("missing"))
+    );
+    snapshot.groups = vec![group(&[])].into();
+    let (_, empty) = reconcile_dynamic_playbacks_with_sources(
+        &mut runtime,
+        110,
+        &snapshot,
+        &[active.clone()],
+        |_| {},
+    );
+    assert!(matches!(&empty[0].outcome, Outcome::Passive(message) if message.contains("empty")));
+    let fixture = FixtureId::new();
+    snapshot.groups = vec![group(&[fixture])].into();
+    let (_, recovered) =
+        reconcile_dynamic_playbacks_with_sources(&mut runtime, 120, &snapshot, &[active], |_| {});
+    assert_eq!(recovered[0].outcome, Outcome::Accepted);
+    assert_eq!(
+        recovered[0].incarnation, empty[0].incarnation,
+        "same activation recovers after target population"
+    );
+}

@@ -19,6 +19,23 @@ impl PlaybackEngine {
         }
     }
 
+    /// Acknowledge only the exact captured activation; clocks are not activation identities.
+    pub fn acknowledge_dynamic_playback_start(
+        &mut self,
+        target: Uuid,
+        incarnation: Uuid,
+        outcome: DynamicPlaybackStartOutcome,
+    ) -> bool {
+        let Some(active) = self.active_dynamics.get_mut(&target) else {
+            return false;
+        };
+        if active.start_state.incarnation != incarnation || active.start_state.outcome == outcome {
+            return false;
+        }
+        active.start_state.outcome = outcome;
+        true
+    }
+
     pub fn active_dynamic_playbacks(&self) -> Vec<ActiveDynamicPlayback> {
         let mut active = self.active_dynamics.values().cloned().collect::<Vec<_>>();
         active.sort_by_key(|playback| playback.playback_number);
@@ -125,6 +142,7 @@ impl PlaybackEngine {
         active.flash_restore_off = false;
         active.paused = false;
         if changed {
+            active.start_state = Default::default();
             active.activated_at = now;
         }
         Ok(PlaybackMutation::new((), durable_effect(changed)))
@@ -348,6 +366,7 @@ impl PlaybackEngine {
             .active_dynamics
             .get_mut(&target_id)
             .expect("Dynamic On creates runtime state");
+        active.start_state = Default::default();
         active.activated_at = now;
         active.paused = false;
         Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Durable))
@@ -539,6 +558,9 @@ impl PlaybackEngine {
             active.flash = true;
             active.flash_restore_off = held_peers.iter().all(|state| state.restore_off);
         }
+        if !before.enabled && active.enabled {
+            active.start_state = Default::default();
+        }
         let effect = if promoted {
             PlaybackRuntimeEffect::Durable
         } else if *active != before || previous_state.is_some() != pressed {
@@ -556,6 +578,7 @@ fn active_dynamic_playback(
     now: DateTime<Utc>,
 ) -> ActiveDynamicPlayback {
     ActiveDynamicPlayback {
+        start_state: Default::default(),
         dynamic_id: Some(assignment.target_id()),
         playback_number: identity.number(),
         playback_identity: identity.virtual_address().map(PlaybackIdentity::Virtual),

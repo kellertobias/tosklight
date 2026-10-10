@@ -9,6 +9,9 @@ mod runtime_dynamic_stop_tests;
 #[path = "dynamic_playback_settled_feedback_tests.rs"]
 mod dynamic_playback_settled_feedback_tests;
 
+#[path = "dynamic_playback_pending_tests.rs"]
+mod dynamic_playback_pending_tests;
+
 #[tokio::test]
 async fn v2_playback_overview_is_authenticated_and_keeps_desk_scope() {
     let (state, data_dir) = test_state();

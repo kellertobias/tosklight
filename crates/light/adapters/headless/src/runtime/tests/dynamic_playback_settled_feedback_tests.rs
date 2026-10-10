@@ -3,8 +3,10 @@ use super::*;
 use light_application::{DynamicPlaybackRuntimeState, PlaybackRuntimeIdentity};
 use light_core::FixtureId;
 
-async fn desk() -> (AppState, PathBuf, Router, String, Session, Uuid, FixtureId) {
-    let (state, dir) = test_state();
+pub(super) async fn desk() -> (AppState, PathBuf, Router, String, Session, Uuid, FixtureId) {
+    let (state, dir) = test_state_with_clock(Arc::new(ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1_000_000).unwrap(),
+    )));
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
     open_playback_test_show(&app, &token).await;
@@ -61,7 +63,7 @@ async fn desk() -> (AppState, PathBuf, Router, String, Session, Uuid, FixtureId)
     (state, dir, app, token, session, id, fixture)
 }
 
-fn render(state: &AppState) {
+pub(super) fn render(state: &AppState) {
     state
         .output
         .render_with_playback_events(

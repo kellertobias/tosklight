@@ -315,7 +315,26 @@ pub(in crate::runtime) struct CapturedDynamicSample {
     after_runtime: light_dynamics::DynamicRuntimeSnapshot,
     samples: Vec<light_dynamics::DynamicRuntimeSample>,
     playback_controls: HashMap<Uuid, DynamicPlaybackControl>,
+    start_receipts: Vec<super::dynamic_reconciliation::DynamicPlaybackStartReceipt>,
     cue_controls: HashMap<Uuid, CueDynamicOutputControl>,
+}
+
+fn acknowledge_dynamic_starts(
+    engine: &Engine,
+    receipts: &[super::dynamic_reconciliation::DynamicPlaybackStartReceipt],
+) -> Vec<Uuid> {
+    receipts
+        .iter()
+        .filter_map(|receipt| {
+            engine
+                .acknowledge_dynamic_playback_start(
+                    receipt.target_id,
+                    receipt.incarnation,
+                    receipt.outcome.clone(),
+                )
+                .then_some(receipt.target_id)
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy)]
@@ -494,6 +513,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
                 before_runtime,
                 samples,
                 playback_controls,
+                start_receipts: Vec::new(),
                 cue_controls,
             },
             context,
@@ -532,13 +552,14 @@ fn sample_captured_dynamic_inputs_with_context<T>(
         |assignment| cue_assignments.push(assignment),
     );
     let mut playback_assignments = Vec::new();
-    let playback_controls = super::dynamic_reconciliation::reconcile_dynamic_playbacks_with_sources(
-        dynamics,
-        now_millis,
-        inputs.snapshot,
-        &active_dynamic_playbacks,
-        |assignment| playback_assignments.push(assignment),
-    );
+    let (playback_controls, start_receipts) =
+        super::dynamic_reconciliation::reconcile_dynamic_playbacks_with_sources(
+            dynamics,
+            now_millis,
+            inputs.snapshot,
+            &active_dynamic_playbacks,
+            |assignment| playback_assignments.push(assignment),
+        );
     let cue_controls = cue_dynamic_output_controls(inputs.cue_values);
     super::start_path_timing::reconciled_since(reconciliation_started);
     let (mut samples, context) = sample(
@@ -570,6 +591,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
             after_runtime: dynamics.output_projection_snapshot(),
             samples,
             playback_controls,
+            start_receipts,
             cue_controls,
         },
         context,

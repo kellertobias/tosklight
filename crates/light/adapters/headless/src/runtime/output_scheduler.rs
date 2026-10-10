@@ -513,6 +513,7 @@ fn render_ordered_output_frame(
             &completed.runtime,
             &completed.events,
             &completed.auto_offs,
+            &completed.start_changes,
             1_000_u64.div_ceil(u64::from(runtime.rate.load(Ordering::Relaxed).max(1))),
         );
         runtime.dynamic_auto_offs.lock().extend(completed.auto_offs);

@@ -14,6 +14,7 @@ pub(in crate::runtime) use family_frame::{LiveFamilyAdapters, OutputRenderSource
 pub(in crate::runtime) struct CommittedDynamicOutput<T> {
     pub output: T,
     pub auto_offs: Vec<PlaybackIdentity>,
+    pub start_changes: Vec<Uuid>,
     pub events: Vec<light_application::EventDraft>,
     pub runtime: light_dynamics::DynamicRuntimeSnapshot,
     pub samples: Vec<light_dynamics::DynamicRuntimeSample>,
@@ -181,24 +182,14 @@ pub(in crate::runtime) fn dynamic_output_frame<T>(
         let starts = claim_carried_starts(&mut dynamics, frame, now_millis);
         (result, boundary, starts)
     };
+    let start_changes = acknowledge_dynamic_starts(engine, &sampled.start_receipts);
     let events =
         dynamic_transition_events(&sampled.before_runtime, &sampled.after_runtime, now_millis);
-    let auto_offs = if sampled.idle {
-        Vec::new()
-    } else {
-        let controlled = fully_controlled_dynamic_playbacks_from(
-            frame.playback_contributions(),
-            &sampled.samples,
-            &sampled.playback_controls,
-            &sampled.after_runtime,
-            inputs.programmer_values,
-            inputs.cue_values,
-        );
-        engine.auto_off_fully_controlled_dynamic_playbacks_at(controlled)
-    };
+    let auto_offs = committed_dynamic_auto_offs(engine, frame, &sampled, &inputs);
     Ok(CommittedDynamicOutput {
         output,
         auto_offs,
+        start_changes,
         events,
         runtime: sampled.after_runtime,
         samples: sampled.samples,
@@ -210,6 +201,27 @@ pub(in crate::runtime) fn dynamic_output_frame<T>(
             Some(TickValues::Legacy(_)) | None => None,
         },
     })
+}
+
+fn committed_dynamic_auto_offs(
+    engine: &Engine,
+    frame: &light_engine::PreparedOutputFrame,
+    sampled: &CapturedDynamicSample,
+    inputs: &CapturedDynamicInputs<'_>,
+) -> Vec<PlaybackIdentity> {
+    if sampled.idle {
+        Vec::new()
+    } else {
+        let controlled = fully_controlled_dynamic_playbacks_from(
+            frame.playback_contributions(),
+            &sampled.samples,
+            &sampled.playback_controls,
+            &sampled.after_runtime,
+            inputs.programmer_values,
+            inputs.cue_values,
+        );
+        engine.auto_off_fully_controlled_dynamic_playbacks_at(controlled)
+    }
 }
 
 /// TL-659: a committed frame carries every Cue and Dynamic start due by its sample instant. The

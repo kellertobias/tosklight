@@ -63,21 +63,56 @@ pub(in crate::runtime::output_scheduler) fn reconcile_dynamic_playbacks(
     )
 }
 
+#[derive(Clone, Debug)]
+pub(in crate::runtime::output_scheduler) struct DynamicPlaybackStartReceipt {
+    pub target_id: Uuid,
+    pub incarnation: Uuid,
+    pub outcome: light_playback::DynamicPlaybackStartOutcome,
+}
+
 pub(in crate::runtime::output_scheduler) fn reconcile_dynamic_playbacks_with_sources(
     dynamics: &mut light_dynamics::DynamicRuntime,
     now_millis: u64,
     snapshot: &light_engine::EngineSnapshot,
     active: &[light_playback::ActiveDynamicPlayback],
     mut emit: impl FnMut(ReconciledSourceAssignment),
-) -> HashMap<Uuid, DynamicPlaybackControl> {
-    reconcile_dynamic_playbacks_observed(
+) -> (
+    HashMap<Uuid, DynamicPlaybackControl>,
+    Vec<DynamicPlaybackStartReceipt>,
+) {
+    let mut outcome = super::cold::ColdOutcome::default();
+    let controls = reconcile_dynamic_playbacks_observed(
         dynamics,
         now_millis,
         snapshot,
         active,
         Some(&mut emit),
-        &mut ReconciliationObserver::warm(),
-    )
+        &mut ReconciliationObserver::warm_observed(&mut outcome),
+    );
+    let receipts = active
+        .iter()
+        .filter(|active| active.enabled)
+        .filter_map(|active| {
+            let target_id = active.dynamic_id.or_else(|| {
+                dynamic_playback_definition(snapshot, active).and_then(|definition| {
+                    match &definition.target {
+                        light_playback::PlaybackTarget::Dynamic { assignment } => {
+                            Some(assignment.target_id())
+                        }
+                        _ => None,
+                    }
+                })
+            })?;
+            let controller = dynamic_playback_controller_id(active);
+            Some(DynamicPlaybackStartReceipt {
+                target_id,
+                incarnation: active.start_state.incarnation,
+                outcome: outcome
+                    .playback_outcome(controller, dynamics.controller(controller).is_some()),
+            })
+        })
+        .collect();
+    (controls, receipts)
 }
 
 pub(super) fn reconcile_dynamic_playbacks_observed(

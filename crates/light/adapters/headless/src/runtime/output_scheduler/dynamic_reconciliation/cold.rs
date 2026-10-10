@@ -194,7 +194,7 @@ pub(in crate::runtime) struct ColdDynamicReconciliationInputs<'a> {
 }
 
 /// Reconcile a detached Dynamic candidate against finalized destination rows and report every
-/// failure the warm path would discard.
+/// rejected reconciliation transition.
 ///
 /// Runs the shared Programmer, Cue and Playback flows in the same order as warm action
 /// reconciliation, reusing their release, cancel-release, rank, lane, target, controller, pause,
@@ -214,6 +214,7 @@ pub(in crate::runtime) fn reconcile_cold_dynamic_candidate(
     let mut outcome = ColdOutcome::default();
     let mut observer = ReconciliationObserver {
         cold: Some(&mut outcome),
+        warm: None,
     };
     let now_millis = inputs.captured_at_millis;
     candidate
@@ -265,19 +266,88 @@ pub(super) struct ColdOutcome {
     scope_requirements: Vec<ColdDynamicScopeRequirement>,
 }
 
-/// Observes reconciliation results. Warm reconciliation discards them exactly as before; cold
-/// reconciliation records failures and passive scope requirements.
+impl ColdOutcome {
+    pub(super) fn playback_outcome(
+        &self,
+        controller: Uuid,
+        present: bool,
+    ) -> light_playback::DynamicPlaybackStartOutcome {
+        use light_playback::DynamicPlaybackStartOutcome as Outcome;
+        if let Some(failure) = self
+            .failures
+            .iter()
+            .find(|failure| failure.context.controller_id == controller)
+        {
+            let message = match &failure.cause {
+                ColdDynamicReconciliationCause::Runtime(error) => error.to_string(),
+                ColdDynamicReconciliationCause::InvalidGroup { group_id, resolver } => {
+                    format!("Cannot resolve target group {group_id}: {resolver}")
+                }
+                ColdDynamicReconciliationCause::MissingPlaybackDefinition => {
+                    "Dynamic Playback owner is missing".to_owned()
+                }
+                ColdDynamicReconciliationCause::NonDynamicPlaybackTarget => {
+                    "Playback owner no longer has a Dynamic assignment".to_owned()
+                }
+                ColdDynamicReconciliationCause::InvalidPlaybackNumber(error) => error.clone(),
+                ColdDynamicReconciliationCause::UnexpectedEmptyTargets => {
+                    "Dynamic start rejected a non-empty target scope".to_owned()
+                }
+            };
+            return Outcome::Rejected(message);
+        }
+        if let Some(scope) = self
+            .scope_requirements
+            .iter()
+            .find(|scope| scope.context.controller_id == controller)
+        {
+            let message = match &scope.reason {
+                ColdDynamicScopeReason::EmptyScope => "No target fixtures".to_owned(),
+                ColdDynamicScopeReason::EmptyGroup { group_id } => {
+                    format!("Target group {group_id} is empty")
+                }
+                ColdDynamicScopeReason::MissingGroup { group_id } => {
+                    format!("Target group {group_id} is missing")
+                }
+            };
+            return if matches!(scope.reason, ColdDynamicScopeReason::MissingGroup { .. }) {
+                Outcome::Rejected(message)
+            } else {
+                Outcome::Passive(message)
+            };
+        }
+        if present {
+            Outcome::Accepted
+        } else {
+            Outcome::Rejected("Dynamic controller did not start".to_owned())
+        }
+    }
+}
+
+/// Cold and observed warm reconciliation preserve failures and passive scope requirements.
+/// Legacy warm callers may still reconcile without recording an outcome.
 pub(super) struct ReconciliationObserver<'r> {
     cold: Option<&'r mut ColdOutcome>,
+    warm: Option<&'r mut ColdOutcome>,
 }
 
 impl ReconciliationObserver<'static> {
     pub(super) fn warm() -> Self {
-        Self { cold: None }
+        Self {
+            cold: None,
+            warm: None,
+        }
     }
 }
 
-impl ReconciliationObserver<'_> {
+impl<'r> ReconciliationObserver<'r> {
+    pub(super) fn warm_observed(outcome: &'r mut ColdOutcome) -> Self {
+        Self {
+            cold: None,
+            warm: Some(outcome),
+        }
+    }
+
     pub(super) fn is_cold(&self) -> bool {
         self.cold.is_some()
     }
@@ -307,7 +377,7 @@ impl ReconciliationObserver<'_> {
         operation: ColdDynamicReconciliationOperation,
         cause: ColdDynamicReconciliationCause,
     ) {
-        if let Some(outcome) = self.cold.as_deref_mut() {
+        if let Some(outcome) = self.cold.as_deref_mut().or(self.warm.as_deref_mut()) {
             outcome.failures.push(ColdDynamicReconciliationFailure {
                 context: context.clone(),
                 operation,
@@ -321,7 +391,7 @@ impl ReconciliationObserver<'_> {
         context: &ColdDynamicReconciliationContext,
         reason: ColdDynamicScopeReason,
     ) {
-        if let Some(outcome) = self.cold.as_deref_mut() {
+        if let Some(outcome) = self.cold.as_deref_mut().or(self.warm.as_deref_mut()) {
             outcome
                 .scope_requirements
                 .push(ColdDynamicScopeRequirement {

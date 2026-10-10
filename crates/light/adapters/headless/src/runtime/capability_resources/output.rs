@@ -1019,6 +1019,7 @@ impl OutputResource {
                         &completed.runtime,
                         &completed.events,
                         &completed.auto_offs,
+                        &completed.start_changes,
                         1_000_u64.div_ceil(u64::from(self.frame_rate_hz().max(1))),
                     );
                 self.dynamic_auto_offs.lock().extend(completed.auto_offs);

@@ -324,6 +324,20 @@ impl Engine {
             .set_external_completion_millis(cue_list_id, duration_millis)
     }
 
+    /// Install a transient start receipt after a successful output transaction.
+    pub fn acknowledge_dynamic_playback_start(
+        &self,
+        target: uuid::Uuid,
+        incarnation: uuid::Uuid,
+        outcome: light_playback::DynamicPlaybackStartOutcome,
+    ) -> bool {
+        self.generation
+            .load()
+            .playback()
+            .write()
+            .acknowledge_dynamic_playback_start(target, incarnation, outcome)
+    }
+
     pub fn active_dynamic_playbacks(&self) -> Vec<ActiveDynamicPlayback> {
         self.generation
             .load()

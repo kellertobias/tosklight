@@ -263,8 +263,11 @@ pub struct ActiveCueDynamicValue {
     pub value: light_dynamics::DynamicSemanticValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveDynamicPlayback {
+    /// Receipt for this activation only; never persisted or exposed as a new wire field.
+    #[serde(skip)]
+    pub start_state: DynamicPlaybackStartState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_id: Option<Uuid>,
     pub playback_number: u16,
@@ -297,6 +300,54 @@ pub struct ActiveDynamicPlayback {
     pub last_learn_tap_millis: Option<u64>,
     #[serde(default)]
     pub learn_intervals_millis: Vec<u64>,
+}
+
+/// A new activation needs a committed reconciliation outcome before missing means failure.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynamicPlaybackStartState {
+    pub incarnation: Uuid,
+    pub outcome: DynamicPlaybackStartOutcome,
+}
+
+impl Default for DynamicPlaybackStartState {
+    fn default() -> Self {
+        Self {
+            incarnation: Uuid::new_v4(),
+            outcome: DynamicPlaybackStartOutcome::Pending,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DynamicPlaybackStartOutcome {
+    Pending,
+    Accepted,
+    Passive(String),
+    Rejected(String),
+}
+
+// Runtime receipts do not change durable Playback equality or control mutation effects.
+impl PartialEq for ActiveDynamicPlayback {
+    fn eq(&self, other: &Self) -> bool {
+        self.dynamic_id == other.dynamic_id
+            && self.playback_number == other.playback_number
+            && self.playback_identity == other.playback_identity
+            && self.enabled == other.enabled
+            && self.paused == other.paused
+            && self.flash == other.flash
+            && self.flash_restore_off == other.flash_restore_off
+            && self.activated_at == other.activated_at
+            && self.fader_value == other.fader_value
+            && self.fader_pickup_required == other.fader_pickup_required
+            && self.fader_pickup_target == other.fader_pickup_target
+            && self.size == other.size
+            && self.master == other.master
+            && self.master_transition == other.master_transition
+            && self.local_speed_multiplier == other.local_speed_multiplier
+            && self.learned_duration_millis == other.learned_duration_millis
+            && self.last_learn_tap_millis == other.last_learn_tap_millis
+            && self.learn_intervals_millis == other.learn_intervals_millis
+    }
 }
 
 const fn default_dynamic_speed_multiplier() -> light_dynamics::Rational {

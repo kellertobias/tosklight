@@ -10,6 +10,7 @@ use std::collections::HashSet;
 /// full-control auto-off, must reach every alias through the Playback event stream as well.
 /// Only targets touched by committed lifecycle changes are projected; unchanged frames emit
 /// nothing. A rejected output transaction must never call this publisher.
+#[allow(clippy::too_many_arguments)]
 pub(in crate::runtime) fn settled_dynamic_playback_events(
     engine: &light_engine::Engine,
     scope: PlaybackShowScope,
@@ -17,9 +18,10 @@ pub(in crate::runtime) fn settled_dynamic_playback_events(
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     changes: &[EventDraft],
     auto_offs: &[PlaybackIdentity],
+    start_changes: &[uuid::Uuid],
     output_interval_millis: u64,
 ) -> Vec<EventDraft> {
-    let mut changed = HashSet::new();
+    let mut changed = start_changes.iter().copied().collect::<HashSet<_>>();
     let mut global_changed = false;
     for event in changes {
         if let ApplicationEvent::Output(OutputEvent::DynamicRuntimeChanged(change)) = &event.payload

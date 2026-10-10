@@ -3,6 +3,7 @@ use light_dynamics::*;
 use light_programmer::ProgrammerRegistry;
 
 mod family_live;
+mod playback_start_receipts;
 mod projected_sources;
 mod snapshot_publication;
 mod source_lifecycle;
