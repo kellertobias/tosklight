@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { PlaybackRuntimeStore } from "../features/playbackRuntime/store";
+import type { PlaybackProjection } from "../features/playbackRuntime/contracts";
 import {
 	CUE_LIST_ID,
 	DESK_ID,
 	GROUP_ID,
+	SHOW_ID,
 	runtimeEvent,
 } from "../features/playbackRuntime/testFixtures";
 import type { PlaybackProtocolError } from "../features/playbackRuntime/transport";
@@ -57,6 +60,80 @@ function createHarness() {
 }
 
 describe("WebSocketPlaybackEventTransport", () => {
+	it("routes virtual settled feedback to its exact address and updates the internal store key", () => {
+		const { observer, transport } = createHarness();
+		const store = new PlaybackRuntimeStore();
+		store.reset(SHOW_ID, DESK_ID);
+		const failed: PlaybackProjection = {
+			scope: { show_id: SHOW_ID, show_revision: 4 },
+			requested: { kind: "virtual", page: 4, playback_number: 1904 },
+			playback_number: 1904,
+			target: "dynamic",
+			dynamic_id: CUE_LIST_ID,
+			last_known_pool_number: 34,
+			embedded: false,
+			runtime: {
+				playback_number: 1904,
+				enabled: true,
+				paused: false,
+				flash: false,
+				activated_at: "2026-07-19T10:00:00Z",
+				fader_value: 1,
+				fader_pickup_required: false,
+				fader_pickup_target: null,
+				size: 1,
+				master: 1,
+				local_speed_numerator: 1,
+				local_speed_denominator: 1,
+				learned_duration_millis: null,
+				state: "failed",
+				instance_id: null,
+				controller_id: CUE_LIST_ID,
+				winning_controller_id: null,
+				controller_status: "missing",
+				target_count: 1,
+				compatible_target_count: 1,
+				missing_target_count: 0,
+				unpatched_target_count: 0,
+				lane_count: 1,
+				supported_address_count: 1,
+				skipped_address_count: 0,
+				speed_source: "fixed",
+				effective_speed_multiplier: 1,
+				effective_duration_millis: 4000,
+				warning: null,
+			},
+		};
+		store.applyProjection(failed, 10);
+		observer.message.mockImplementation((event) => {
+			if (event.type === "event" && event.payload.type === "runtime")
+				store.applyProjection(event.payload.projection, event.sequence);
+		});
+		transport.subscribe(DESK_ID, {
+			identities: [failed.requested], desk: false, telemetry: false,
+		}, 10, observer);
+		const socket = FakeWebSocket.instances[0];
+		socket.emit("open");
+		expect(JSON.parse(socket.sent[0]).filter.objects).toEqual([
+			{ capability: "playback", id: "virtual-playback:4.1904" },
+		]);
+		const off = { ...failed, runtime: { ...failed.runtime!, state: "off", enabled: false } };
+		socket.emit("message", message({
+			type: "event",
+			event: {
+				sequence: 11,
+				object: { capability: "playback", id: "virtual-playback:4.1904" },
+				payload: {
+					type: "playback_runtime_changed",
+					change: { projection: off, transition: null },
+				},
+			},
+		}));
+		expect(observer.error).not.toHaveBeenCalled();
+		expect(store.getSnapshot().projections.get("virtual:4.1904")).toEqual([off]);
+		store.applyProjection(failed, 10);
+		expect(store.getSnapshot().projections.get("virtual:4.1904")).toEqual([off]);
+	});
 	it("subscribes only to mounted Playback identities and the desk view", () => {
 		const { observer, transport } = createHarness();
 		const stream = transport.subscribe(

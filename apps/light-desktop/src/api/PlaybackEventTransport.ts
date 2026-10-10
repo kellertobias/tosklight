@@ -118,7 +118,10 @@ function subscription(
 			objects: [
 				...scope.identities.map((identity) => ({
 					capability: "playback" as const,
-					id: identityKey(identity),
+					// The wire route differs from the frontend's virtual store key.
+					id: identity.kind === "virtual"
+						? `virtual-playback:${identity.page}.${identity.playback_number}`
+						: identityKey(identity),
 				})),
 				...(telemetry
 					? [
