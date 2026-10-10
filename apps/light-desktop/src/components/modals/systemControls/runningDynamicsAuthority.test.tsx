@@ -180,6 +180,37 @@ describe("useRunningDynamicsAuthority", () => {
 		expect(backend.runtime).toHaveBeenCalledTimes(2);
 	});
 
+	it("removes an externally stopped Playback row while preserving the Programmer winner", async () => {
+		const backend = api();
+		const events = new Events();
+		const rendered = renderHook(() =>
+			useRunningDynamicsAuthority(true, SHOW_ID, backend, events),
+		);
+		await waitFor(() => expect(rendered.result.current.rows).toHaveLength(2));
+		backend.runtime.mockResolvedValue(runtime(["controller-a"]));
+		act(() => {
+			events.emit({
+				type: "dynamic_runtime_changed",
+				change: {
+					kind: "instance_off",
+					dynamic_id: "dynamic-a",
+					runtime_instance_id: "instance-a",
+					controller_id: "controller-b",
+					winning_controller_id: "controller-a",
+					occurred_at_millis: 200,
+					message: null,
+				},
+			});
+		});
+		await waitFor(() => expect(rendered.result.current.rows).toHaveLength(1));
+		expect(rendered.result.current.rows[0]).toMatchObject({
+			controllerId: "controller-a", source: "Programmer", winning: true,
+		});
+		expect(backend.offLive).not.toHaveBeenCalled();
+		expect(backend.stopRuntimeLive).not.toHaveBeenCalled();
+		expect(backend.runtime).toHaveBeenCalledTimes(2);
+	});
+
 	it("sends Off for the exact controller and refreshes authority", async () => {
 		const backend = api();
 		const events = new Events();

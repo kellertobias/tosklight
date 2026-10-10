@@ -66,6 +66,29 @@ pub(in crate::runtime) fn dynamic_transition_events(
                 ));
             }
         }
+        // Immediate Off has no release transition. Notify even when a higher-priority
+        // controller keeps winning, so open runtime views can retire the removed owner.
+        for controller in &instance.controllers {
+            if !after_controllers.contains(&controller.id)
+                && !instance.controller_transitions.iter().any(|transition| {
+                    transition.controller_id == controller.id
+                        && transition.release_started_at_millis.is_some()
+                })
+            {
+                events.push(light_application::EventDraft::dynamic_runtime_changed(
+                    None,
+                    light_application::DynamicRuntimeChange {
+                        kind: light_application::DynamicRuntimeEventKind::InstanceOff,
+                        dynamic_id: Some(instance.definition.id),
+                        runtime_instance_id: Some(instance.id),
+                        controller_id: Some(controller.id),
+                        winning_controller_id: winning_controller(after_instance),
+                        occurred_at_millis: now_millis,
+                        message: None,
+                    },
+                ));
+            }
+        }
         let before_winner = winning_controller(Some(instance));
         let after_winner = winning_controller(after_instance);
         if before_winner != after_winner && after_winner.is_some() {

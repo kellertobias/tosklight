@@ -6,6 +6,7 @@ mod family_live;
 mod projected_sources;
 mod snapshot_publication;
 mod source_lifecycle;
+mod transition_notifications;
 
 #[test]
 fn output_transaction_publishes_runtime_and_origins_together_and_reuses_unchanged_catalogue() {
