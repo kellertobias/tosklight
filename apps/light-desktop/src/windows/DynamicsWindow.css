@@ -1438,6 +1438,6 @@
 
 .dynamic-pool-card .pool-card-media {
 	border: 0;
-	border-radius: 0;
-	background: transparent;
+	border-radius: 5px;
+	background: #10161d;
 }

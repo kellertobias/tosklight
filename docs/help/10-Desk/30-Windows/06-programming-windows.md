@@ -52,7 +52,12 @@ Set keep priority over this selection shortcut.
 
 ## Dynamic lanes
 
-**At a glance:** the symbol at the bottom right of a Dynamics tile shows its lane families.
+**At a glance:** tile names use the tile's text area without an inner scrollbar, so long
+names such as **Beam Auxiliary Show Circle** and **Beam Auxiliary Show Waterfall** stay
+distinguishable. The top-right number and bottom-right artwork sit above the name with
+backgrounds that fade into the tile.
+
+The symbol at the bottom right of a Dynamics tile shows its lane families.
 The diagonal X divides it into four parts: **I** at the top for Intensity, **P** on the left
 for Position, **C** on the right for Color, and **O** at the bottom for Other. Filled parts
 use the Dynamic's colour; grey parts mean that family has no lane. Several filled parts
