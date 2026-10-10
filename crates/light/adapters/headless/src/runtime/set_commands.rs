@@ -28,13 +28,35 @@ pub(super) fn execute_set_command(
     tokens: &[String],
     _context: &light_application::ActionContext,
 ) -> Result<usize, String> {
-    if tokens.iter().any(|token| token == "AT")
-        || tokens.first().is_some_and(|token| token == "DYNAMIC")
-    {
+    if tokens.iter().any(|token| token == "AT") {
         return Err(
             "SET does not assign objects; use ASSIGN <source> AT PBK <address> or ASSIGN <source> AT VPBK <number>"
                 .into(),
         );
+    }
+    if tokens.first().is_some_and(|token| token == "DYNAMIC") {
+        let [_, number] = tokens else {
+            return Err("expected SET DYNAMIC <pool number>".into());
+        };
+        let number = number
+            .parse::<u16>()
+            .ok()
+            .filter(|number| (1..=9999).contains(number))
+            .ok_or("Dynamic pool number must be between 1 and 9999")?;
+        let snapshot = state.output.snapshot();
+        let dynamic = snapshot
+            .dynamics
+            .iter()
+            .find(|dynamic| dynamic.pool_number == number)
+            .ok_or_else(|| format!("Dynamic {number} does not exist"))?;
+        emit(
+            state,
+            "desk_action",
+            serde_json::json!({
+                "action": "open-object-editor", "control": "dynamic", "value": dynamic.id.to_string(), "desk_id": session.desk.id,
+            }),
+        );
+        return Ok(0);
     }
     if tokens.first().is_some_and(|token| token == "CUELIST") {
         if tokens.len() != 2 {

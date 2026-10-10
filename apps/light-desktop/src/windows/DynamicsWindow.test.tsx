@@ -20,6 +20,7 @@ import {
 } from "../features/dynamics/editableLane";
 import type { ScalarDynamicLane } from "../features/dynamics/laneModel";
 import { lanePreview } from "./dynamics/DynamicsEditor";
+import { publishObjectEditorRequest, currentObjectEditorRequest, resetObjectEditorRequestsForTests } from "../features/controlSurfaceInteraction/objectEditorRequest";
 
 let dynamics: Array<Record<string, unknown>> = [];
 let deleteArmed = false;
@@ -183,6 +184,7 @@ function dynamicObject({
 describe("DynamicsWindow", () => {
 	afterEach(cleanup);
 	beforeEach(() => {
+		resetObjectEditorRequestsForTests();
 		Object.defineProperty(window, "localStorage", {
 			configurable: true,
 			value: {
@@ -228,6 +230,26 @@ describe("DynamicsWindow", () => {
 			speed_groups: runtimeSpeedGroups,
 		}));
 		toggleDynamic.mockReset().mockResolvedValue({});
+	});
+
+	it("opens the requested Dynamic editor after its object arrives without toggling output", () => {
+		const request = { kind: "dynamic" as const, objectId: "dynamic-7" };
+		publishObjectEditorRequest(request);
+		const view = renderWindow();
+		expect(currentObjectEditorRequest()).toBe(request);
+		const body = createDefaultDynamicDefinition(7, "intensity", {
+			definition: "dynamic-7",
+			lane: "lane-7",
+		});
+		dynamics = [
+			{ kind: "dynamic", id: "dynamic-7", revision: 1, updated_at: "", body },
+		];
+		view.rerender(windowView());
+		expect(screen.getByText("+ Add Lane")).toBeInTheDocument();
+		expect(currentObjectEditorRequest()).toBeNull();
+		expect(executeCommand).not.toHaveBeenCalled();
+		expect(toggleDynamic).not.toHaveBeenCalled();
+		expect(updateDynamic).not.toHaveBeenCalled();
 	});
 
 	it("does not manufacture an icon for a new or iconless Dynamic", () => {

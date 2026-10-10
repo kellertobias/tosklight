@@ -104,10 +104,9 @@ export function MacrosWindow({ active = true, compact = false }: WindowProps) {
 
 	useEffect(() => {
 		if (!active) return;
-		const openRequested = (request: {
-			kind: "macro" | "timecode" | "cuelist";
-			objectId: string;
-		}) => {
+		const openRequested = (
+			request: NonNullable<ReturnType<typeof currentObjectEditorRequest>>,
+		) => {
 			if (request.kind !== "macro") return;
 			const macro = macros.find(
 				(candidate) => candidate.id === request.objectId,

@@ -6,8 +6,11 @@ use crate::tolerant_json::TolerantJson;
 use light_wire::v2::show_objects as wire;
 use std::collections::VecDeque;
 
+mod dynamic_pool_transfer;
 mod replay;
 mod spatial;
+pub(super) use dynamic_pool_transfer::copy_dynamic_command;
+pub(super) use dynamic_pool_transfer::prepare_dynamic_pool_mutation;
 
 pub(super) use replay::*;
 use spatial::{decode_spatial_mapping, dynamic_spatial_context, dynamic_spatial_preview};
@@ -176,49 +179,12 @@ async fn dynamic_pool_action(
     {
         return Ok(Json(outcome));
     }
-    ensure_dynamic_pool_slot_free(&state, show_id, request.pool_number, Some(id))?;
-    let mut raw_body = load_body(&state, show_id, "dynamic", &id.to_string())?;
-    let (object_revision, mut definition) = load_dynamic(&state, show_id, id)?;
-    if object_revision != request.expected_revision {
-        return Err(ApiError::conflict(format!(
-            "Dynamic revision conflict: expected {}, current {object_revision}",
-            request.expected_revision
-        )));
-    }
-    let (target_id, expected_revision) = if copy {
-        let changed_lanes = definition.reidentify(Uuid::new_v4());
-        rewrite_dynamic_lane_ids(&mut raw_body, &changed_lanes);
-        definition.name = format!("{} Copy", definition.name);
-        definition.revision = 1;
-        (definition.id, 0)
-    } else {
-        definition.revision = definition.revision.saturating_add(1);
-        (id, request.expected_revision)
-    };
-    definition.pool_number = request.pool_number;
-    let body = if copy {
-        let mut body = raw_body;
-        let object = body
-            .as_object_mut()
-            .ok_or_else(|| ApiError::internal("stored Dynamic is not an object"))?;
-        object.insert("id".into(), target_id.to_string().into());
-        object.insert("pool_number".into(), request.pool_number.into());
-        object.insert("revision".into(), 1.into());
-        object.insert("name".into(), definition.name.clone().into());
-        body
-    } else {
-        serde_json::to_value(definition).map_err(|error| ApiError::internal(error.to_string()))?
-    };
+    let (target_id, mutation) = prepare_dynamic_pool_mutation(&state, id, show_id, &request, copy)?;
     let action = active_show_object_action(
         operator_action_context(&session, light_application::ActionSource::Http)
             .with_request_id(&request.request_id),
         show_id,
-        vec![put_active_show_object(
-            light_application::ActiveShowObjectKind::Dynamic,
-            target_id.to_string(),
-            expected_revision,
-            body,
-        )?],
+        vec![mutation],
     );
     let (result, _activation) =
         run_active_show_object_action_async(&state, activation, action).await?;

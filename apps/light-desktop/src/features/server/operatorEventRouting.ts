@@ -85,7 +85,8 @@ function routeDeskAction(
 			payload.action === "open-object-editor" &&
 			(payload.control === "macro" ||
 				payload.control === "timecode" ||
-				payload.control === "cuelist") &&
+				payload.control === "cuelist" ||
+				payload.control === "dynamic") &&
 			payload.value
 		) {
 			routeControlSurfaceIntentWithFeedback({
@@ -96,7 +97,9 @@ function routeDeskAction(
 						? "macros"
 						: payload.control === "timecode"
 							? "timecodes"
-							: "cues",
+							: payload.control === "dynamic"
+								? "dynamics"
+								: "cues",
 			});
 			publishObjectEditorRequest({
 				kind: payload.control,

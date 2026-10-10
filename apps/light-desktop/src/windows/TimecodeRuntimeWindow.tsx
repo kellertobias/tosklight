@@ -227,10 +227,9 @@ export function TimecodeRuntimeWindow({
 
 	useEffect(() => {
 		if (!active) return;
-		const openRequested = (request: {
-			kind: "macro" | "timecode" | "cuelist";
-			objectId: string;
-		}) => {
+		const openRequested = (
+			request: NonNullable<ReturnType<typeof currentObjectEditorRequest>>,
+		) => {
 			if (request.kind !== "timecode") return;
 			const timecode = objects.find(
 				(candidate) => candidate.definition.id === request.objectId,

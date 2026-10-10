@@ -29,6 +29,7 @@ import {
 	useActiveShowId,
 	useAttributeRegistry,
 } from "../features/deskSnapshot/DeskSnapshotState";
+import { useDynamicObjectEditorRequest } from "../features/dynamics/useDynamicObjectEditorRequest";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
 import { DynamicMutationWriter } from "../features/dynamics/DynamicMutationWriter";
 import { dynamicLaneChoices } from "../features/dynamics/laneDomain";
@@ -100,6 +101,7 @@ export function DynamicsWindow({
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const selected = dynamics.find((item) => item.id === selectedId) ?? null;
+	useDynamicObjectEditorRequest(active, dynamics, openEditor, setSelectedId);
 	useEffect(
 		() => () => {
 			if (selectedId) closeEditor(selectedId);

@@ -35,6 +35,9 @@ pub(super) fn execute_show_command(
         }
         "SET" => execute_set_command(state, session, parsed.body, context),
         "ASSIGN" => execute_assign_command(state, session, parsed.body, context),
+        "COPY" if parsed.body.first().is_some_and(|token| token == "DYNAMIC") => {
+            super::show_object_intents_v2::copy_dynamic_command(state, parsed.body, context)
+        }
         operation => {
             if matches!(operation, "MOVE" | "COPY")
                 && parsed

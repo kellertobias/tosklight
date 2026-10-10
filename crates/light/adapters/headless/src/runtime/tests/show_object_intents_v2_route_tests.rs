@@ -27,7 +27,7 @@ async fn post_show_object_intent(
     (status, body)
 }
 
-async fn create_seeded_show(
+pub(super) async fn create_seeded_show(
     state: &AppState,
     app: &Router,
     token: &str,
@@ -1074,7 +1074,7 @@ fn deleting_a_dynamic_snapshots_nested_references_without_touching_other_ids() {
     );
 }
 
-fn dynamic_definition_json(pool_number: u16) -> serde_json::Value {
+pub(super) fn dynamic_definition_json(pool_number: u16) -> serde_json::Value {
     serde_json::json!({
         "id": Uuid::new_v4(),
         "pool_number": pool_number,
