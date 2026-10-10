@@ -1,18 +1,22 @@
-import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
+	ErrorAlert,
 	Input,
 	ModalRegistration,
 	ModalTitleBar,
 	MultiValueToggleField,
+	OperationBusyOverlay,
 	SelectField,
 	TextInput,
 } from "@tosklight/ui";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FixtureDefinition } from "../../../api/types";
 import { normalizeFixtureSearch } from "../fixtureLibrary/model";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
-import { compareFixtureManufacturers, groupFixtureFamilies } from "../patchUtils";
+import {
+	compareFixtureManufacturers,
+	groupFixtureFamilies,
+} from "../patchUtils";
 import { type PatchController, usePatchController } from "./controller";
 import {
 	CSV_IMPORT_FIELDS,
@@ -45,14 +49,41 @@ export function CsvImportDialog() {
 	return <CsvImport controller={controller} />;
 }
 
+function useCsvApplyLifecycle() {
+	const locked = useRef(false);
+	const mounted = useRef(true);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+		};
+	}, []);
+	const run = async (operation: () => Promise<string | null>) => {
+		if (locked.current) return;
+		locked.current = true;
+		setBusy(true);
+		setError("");
+		try {
+			const failure = await operation();
+			if (mounted.current && failure) setError(failure);
+		} finally {
+			locked.current = false;
+			if (mounted.current) setBusy(false);
+		}
+	};
+	return { busy, error, setError, isBusy: () => locked.current, run };
+}
+
 function CsvImport({ controller }: { controller: PatchController }) {
 	const [conflictPolicy, setConflictPolicy] =
 		useState<CsvConflictPolicy>("unpatch");
 	const [step, setStep] = useState<Step>("columns");
 	const [mappings, setMappings] = useState<Record<string, CsvTypeMapping>>({});
 	const [activeTypeKey, setActiveTypeKey] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
-	const [importError, setImportError] = useState("");
+	const apply = useCsvApplyLifecycle();
+	const { busy, error: importError, setError: setImportError } = apply;
 	const [closeConfirm, setCloseConfirm] = useState(false);
 	const source = useCsvImportSource(() => {
 		setMappings({});
@@ -62,8 +93,14 @@ function CsvImport({ controller }: { controller: PatchController }) {
 	const { sourceTypes, unresolved, plans, importable, layerId, layerName } =
 		useCsvImportPlan({ controller, source, mappings, conflictPolicy });
 
-	const close = () => controller.ui.setCsvImportOpen(false);
-	const requestClose = () => (source.parsed ? setCloseConfirm(true) : close());
+	const close = () => {
+		if (!apply.isBusy()) controller.ui.setCsvImportOpen(false);
+	};
+	const requestClose = () => {
+		if (apply.isBusy()) return;
+		if (source.parsed) setCloseConfirm(true);
+		else close();
+	};
 
 	const chooseMapping = (key: string, mapping: CsvTypeMapping) => {
 		const next = { ...mappings, [key]: mapping };
@@ -74,13 +111,8 @@ function CsvImport({ controller }: { controller: PatchController }) {
 		if (following) setActiveTypeKey(following.key);
 	};
 
-	const runImport = async () => {
-		setBusy(true);
-		setImportError("");
-		const error = await runCsvImport(controller, plans, layerId, source.fileName);
-		setBusy(false);
-		if (error) setImportError(error);
-	};
+	const runImport = () =>
+		apply.run(() => runCsvImport(controller, plans, layerId, source.fileName));
 
 	const actions = csvImportTitleActions({
 		step,
@@ -88,6 +120,7 @@ function CsvImport({ controller }: { controller: PatchController }) {
 		unresolvedCount: unresolved.length,
 		importableCount: importable.length,
 		busy,
+		failed: Boolean(importError),
 		onCancel: requestClose,
 		onContinue: () => {
 			setActiveTypeKey(unresolved[0]?.key ?? null);
@@ -106,7 +139,12 @@ function CsvImport({ controller }: { controller: PatchController }) {
 
 	return (
 		<ModalRegistration onClose={requestClose}>
-			<div className="stacked-modal-layer">
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) => {
+					if (event.target === event.currentTarget) requestClose();
+				}}
+			>
 				<section
 					className="nested-modal csv-import-modal"
 					role="dialog"
@@ -119,6 +157,7 @@ function CsvImport({ controller }: { controller: PatchController }) {
 						details={source.fileName || undefined}
 						groups={[{ id: "csv-import-actions", actions }]}
 						closeLabel="Close Import CSV"
+						closeDisabled={busy}
 						onClose={requestClose}
 					/>
 					{step === "columns" && (
@@ -156,6 +195,14 @@ function CsvImport({ controller }: { controller: PatchController }) {
 							onConflictPolicy={setConflictPolicy}
 						/>
 					)}
+					{busy && (
+						<OperationBusyOverlay
+							label="Applying CSV patch"
+							title="Importing CSV fixtures…"
+							source={source.fileName}
+							message="Applying the fixture list as one Patch change. This write cannot be cancelled; wait for the result."
+						/>
+					)}
 				</section>
 				{closeConfirm && (
 					<CsvImportCloseConfirm
@@ -175,6 +222,7 @@ function csvImportTitleActions(options: {
 	unresolvedCount: number;
 	importableCount: number;
 	busy: boolean;
+	failed: boolean;
 	onCancel: () => void;
 	onContinue: () => void;
 	onBackToColumns: () => void;
@@ -206,12 +254,19 @@ function csvImportTitleActions(options: {
 		];
 	const count = options.importableCount;
 	return [
-		{ id: "back", label: "Back", onPress: options.onBackToTypes },
+		{
+			id: "back",
+			label: "Back",
+			disabled: options.busy,
+			onPress: options.onBackToTypes,
+		},
 		{
 			id: "import",
 			label: options.busy
 				? "Importing…"
-				: `Import ${count} fixture${count === 1 ? "" : "s"}`,
+				: options.failed
+					? "Retry import"
+					: `Import ${count} fixture${count === 1 ? "" : "s"}`,
 			variant: "primary" as const,
 			disabled: options.busy || count === 0,
 			onPress: options.onImport,
@@ -332,7 +387,10 @@ function ColumnsStep({
 			)}
 			{parsed && (
 				<>
-					<ul className="csv-import-field-summary" aria-label="Column assignments">
+					<ul
+						className="csv-import-field-summary"
+						aria-label="Column assignments"
+					>
 						{CSV_IMPORT_FIELDS.map(({ field, label }) => {
 							const column = assignedColumn(field);
 							return (
@@ -443,7 +501,8 @@ function TypesStep({
 						>
 							<span>{describeSourceType(source)}</span>
 							<small>
-								{source.rowCount} row{source.rowCount === 1 ? "" : "s"} · {state}
+								{source.rowCount} row{source.rowCount === 1 ? "" : "s"} ·{" "}
+								{state}
 							</small>
 						</Button>
 					);
@@ -561,7 +620,9 @@ function LibraryFixturePicker({
 	);
 	const family = families.find((item) => item.key === familyKey) ?? null;
 	const definition =
-		family?.modes.find((mode) => fixtureDefinitionKey(mode) === definitionKey) ??
+		family?.modes.find(
+			(mode) => fixtureDefinitionKey(mode) === definitionKey,
+		) ??
 		family?.modes[0] ??
 		null;
 	return (
@@ -570,8 +631,7 @@ function LibraryFixturePicker({
 				<div>
 					<h3>{describeSourceType(source)}</h3>
 					<p className="patch-secondary">
-						{source.rowCount} row{source.rowCount === 1 ? "" : "s"} in the
-						file.{" "}
+						{source.rowCount} row{source.rowCount === 1 ? "" : "s"} in the file.{" "}
 						{current === "skip"
 							? "These rows are skipped."
 							: "Choose the library fixture and mode these rows use."}
@@ -683,17 +743,18 @@ function ReviewStep({
 }) {
 	const count = (status: CsvImportRowPlan["status"]) =>
 		plans.filter((plan) => plan.status === status).length;
-	const metres = (millimetres: number) => `${(millimetres / 1000).toFixed(3)} m`;
+	const metres = (millimetres: number) =>
+		`${(millimetres / 1000).toFixed(3)} m`;
 	return (
 		<div className="csv-import-body csv-import-review">
 			<div className="csv-import-options">
-				<p className="csv-import-counts" aria-label="Import summary">
+				<output className="csv-import-counts" aria-label="Import summary">
 					<span>{count("ready")} ready</span>
 					<span>{count("unpatched")} unpatched</span>
 					<span>{count("skipped")} skipped</span>
 					<span>{count("error")} not imported</span>
 					<span>Layer {layerName}</span>
-				</p>
+				</output>
 				<MultiValueToggleField
 					label="Address conflicts"
 					value={conflictPolicy}
@@ -739,7 +800,9 @@ function ReviewStep({
 										: (plan.fixtureNumber ?? "—")}
 								</td>
 								<td>{plan.name || "—"}</td>
-								<td>{plan.definition ? definitionLabel(plan.definition) : "—"}</td>
+								<td>
+									{plan.definition ? definitionLabel(plan.definition) : "—"}
+								</td>
 								<td>
 									{plan.patch
 										? `${plan.patch.universe}.${plan.patch.address}`
