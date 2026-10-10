@@ -9,6 +9,28 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 describe("command rejection classification", () => {
+	it("classifies status-less websocket preset rejections without hiding unknown failures", () => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		// resolveCommand rejects with a plain Error carrying only response.error.
+		reportProgrammingCommandError(new Error("preset 2.999 does not exist"));
+		expect((dispatch.mock.lastCall![0] as CustomEvent).detail).toEqual({
+			message: "preset 2.999 does not exist",
+			kind: "operator",
+		});
+		for (const error of [
+			new Error("unrecognised runtime failure"),
+			new Error("Command requires authentication"),
+			new Error("Preset recording service task failed: database unavailable"),
+			new ApiRequestError("preset 2.999 does not exist", 500),
+			new ApiRequestError("preset 2.999 does not exist", 401),
+			new ApiRequestError("preset 2.999 does not exist", 403),
+		]) {
+			reportProgrammingCommandError(error);
+			const event = dispatch.mock.lastCall![0] as CustomEvent;
+			expect(event.detail.kind).toBe("unexpected");
+			expect(event.detail.message).toContain(error.message);
+		}
+	});
 	it("keeps typed operator rejections brief and unexpected failures diagnostic", () => {
 		const dispatch = vi.spyOn(window, "dispatchEvent");
 		reportProgrammingCommandError(new ApiRequestError("Preset not Recorded", 404));

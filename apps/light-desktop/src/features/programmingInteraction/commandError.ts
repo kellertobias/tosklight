@@ -8,7 +8,7 @@ export type CommandErrorFeedback = {
 	command?: string;
 };
 
-const UNEXPECTED = /could not be synchronized|unexpected|invalid server response|internal (?:server|error)|network|failed to fetch|task failed|inconsistent authoritative|runtime snapshot|database|panic/i;
+const UNEXPECTED = /could not be synchronized|unexpected|invalid server response|internal (?:server|error)|network|failed to fetch|task failed|inconsistent authoritative|runtime snapshot|database|panic|unauthorized|forbidden|authentication|authorization|permission denied|access denied|session expired/i;
 const OPERATOR_REJECTION = /\b(?:fixture|group|preset|cue|cuelist|playback|target|level|percentage|selection|syntax|command|record|update|FixAT)\b.*(?:invalid|not recorded|not found|does not exist|not patched|must|requires|unsupported|cannot|not a|changed|empty|already|out of range)|\bno selection\b/i;
 
 const REVERSED_OPERATOR_REJECTION = /^(?:invalid|unsupported)\s+(?:fixture|group|preset|cue|cuelist|playback|target|level|percentage|selection|command syntax)\b/i;
@@ -39,9 +39,17 @@ export function commandErrorSummary(message: string): string {
 export function reportProgrammingCommandError(error: Error | null): void {
 	if (!error) return;
 	const status = "status" in error ? error.status : undefined;
-	const operator = !UNEXPECTED.test(error.message) &&
-		typeof status === "number" && status >= 400 && status < 500 &&
-		status !== 401 && status !== 403;
+	// Websocket command responses carry plain error text, without an HTTP status.
+	// Only known operator messages may use that fallback; typed statuses win.
+	const operator =
+		!UNEXPECTED.test(error.message) &&
+		(status === undefined
+			? commandErrorFeedback(error.message).kind === "operator"
+			: typeof status === "number" &&
+				status >= 400 &&
+				status < 500 &&
+				status !== 401 &&
+				status !== 403);
 	window.dispatchEvent(new CustomEvent<CommandErrorFeedback>(COMMAND_ERROR_EVENT, {
 		detail: {
 			message: operator ? error.message : formatErrorDetails(error),
