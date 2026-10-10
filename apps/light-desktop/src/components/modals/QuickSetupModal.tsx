@@ -54,8 +54,8 @@ function useQuickSetupKeyboard(options: QuickSetupKeyboardOptions) {
 		const handle = (event: KeyboardEvent) => {
 			if (document.querySelector(".ui-input-modal-layer")) return;
 			const current = optionsRef.current;
-			if (event.key === "Escape" && document.querySelector(".mvr-modal"))
-				return; // The registered MVR modal owns close and inspection cancellation.
+			if (event.key === "Escape" && document.querySelector(".mvr-modal, .load-show-modal"))
+				return; // Registered loading dialogs own their phase-aware close and cancellation.
 			if (event.key === "Escape") {
 				event.preventDefault();
 				event.stopImmediatePropagation();

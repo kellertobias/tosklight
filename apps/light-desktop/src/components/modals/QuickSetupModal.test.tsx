@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QuickSetupModal } from "./QuickSetupModal";
 
@@ -7,6 +7,7 @@ vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
 }));
 
 const mocks = vi.hoisted(() => ({
+  lifecycleAvailable: true,
   lockDesk: vi.fn(),
   dispatch: vi.fn(),
   fileContent: vi.fn(),
@@ -87,7 +88,7 @@ vi.mock(
 	"../../features/showLifecycle/ShowLifecycleContext",
 	async (importOriginal) => ({
 		...(await importOriginal<object>()),
-		useShowLifecycle: () => mocks.server,
+		useShowLifecycle: () => mocks.lifecycleAvailable ? mocks.server : null,
 	}),
 );
 vi.mock("../../features/selectiveImport/SelectiveImportContext", () => ({
@@ -117,6 +118,7 @@ vi.mock("../../state/AppContext", () => ({
 }));
 
 beforeEach(() => {
+    mocks.lifecycleAvailable = true;
     mocks.server.bootstrap.active_show.id = "copy";
     mocks.server.bootstrap.active_show.name = "Tour-rev-3-2026-07-17";
     mocks.server.bootstrap.active_show.revision_copy = {
@@ -528,4 +530,204 @@ describe("QuickSetupModal operator actions", () => {
 		});
 	});
 
+});
+
+function loadDeferred<T>() {
+	let resolve!: (value: T) => void;
+	let reject!: (reason: Error) => void;
+	const promise = new Promise<T>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	return { promise, resolve, reject };
+}
+
+describe("Show Load waiting lifecycle", () => {
+	it("cancels a deferred catalogue through actual outer Escape and ignores its late result", async () => {
+		const pending = loadDeferred<{ entries: never[] }>();
+		mocks.files.fileEntries.mockReturnValue(pending.promise);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		expect(
+			screen.getByRole("status", { name: "Reading show catalogue" }),
+		).toBeVisible();
+		expect(
+			screen.getByRole("progressbar", { name: "Reading show catalogue" }),
+		).not.toHaveAttribute("value");
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull();
+		await act(async () => pending.resolve({ entries: [] }));
+		expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull();
+		expect(mocks.server.openShow).not.toHaveBeenCalled();
+	});
+	it("protects one committing Load against actual outer Escape, title close and duplicate clicks", async () => {
+		const pending = loadDeferred<boolean>();
+		mocks.server.openShow.mockReset().mockReturnValue(pending.promise);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		const browser = screen.getByRole("dialog", { name: "Load show" });
+		const load = await within(browser).findAllByRole("button", {
+			name: "Load Latest",
+		});
+		fireEvent.click(load[0]);
+		fireEvent.click(load[0]);
+		expect(
+			screen.getByRole("status", { name: "Loading selected show" }),
+		).toBeVisible();
+		expect(
+			within(browser).getByRole("button", { name: "Close Load Show" }),
+		).toBeDisabled();
+		fireEvent.keyDown(document, { key: "Escape" });
+		fireEvent.click(
+			within(browser).getByRole("button", { name: "Close Load Show" }),
+		);
+		expect(browser).toBeInTheDocument();
+		expect(mocks.server.openShow).toHaveBeenCalledOnce();
+		await act(async () => pending.resolve(true));
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull(),
+		);
+	});
+	it("offers local Retry for a failed load without changing the selected source", async () => {
+		mocks.server.openShow
+			.mockReset()
+			.mockRejectedValueOnce(new Error("Selected show could not be read"))
+			.mockResolvedValueOnce(true);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		const browser = screen.getByRole("dialog", { name: "Load show" });
+		const load = await within(browser).findAllByRole("button", {
+			name: "Load Latest",
+		});
+		fireEvent.click(load[0]);
+		expect(await within(browser).findByRole("alert")).toHaveTextContent(
+			"Selected show could not be read",
+		);
+		fireEvent.click(within(browser).getByRole("button", { name: "Retry" }));
+		await waitFor(() => expect(mocks.server.openShow).toHaveBeenCalledTimes(2));
+		expect(mocks.server.openShow.mock.calls[1]).toEqual(
+			mocks.server.openShow.mock.calls[0],
+		);
+	});
+});
+
+describe("Show Load read and preparation recovery", () => {
+	it("recovers a failed catalogue locally without losing its source", async () => {
+		mocks.files.fileRoots.mockRejectedValueOnce(
+			new Error("Catalogue temporarily unavailable"),
+		);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		const browser = screen.getByRole("dialog", { name: "Load show" });
+		expect(await within(browser).findByRole("alert")).toHaveTextContent(
+			"Catalogue temporarily unavailable",
+		);
+		expect(
+			within(browser).getByRole("button", { name: "Source: Internal" }),
+		).toBeEnabled();
+		fireEvent.click(within(browser).getByRole("button", { name: "Retry" }));
+		expect(
+			await within(browser).findAllByRole("button", { name: "Load Latest" }),
+		).toHaveLength(2);
+	});
+	it("reports an absent desk instead of leaving Network perpetually busy", async () => {
+		mocks.lifecycleAvailable = false;
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		const browser = screen.getByRole("dialog", { name: "Load show" });
+		await waitFor(() =>
+			expect(
+				within(browser).getByRole("button", { name: "Source: Internal" }),
+			).toBeEnabled(),
+		);
+		fireEvent.click(
+			within(browser).getByRole("button", { name: "Source: Internal" }),
+		);
+		fireEvent.click(screen.getByRole("menuitem", { name: "Network" }));
+		expect(await within(browser).findByRole("alert")).toHaveTextContent(
+			"Desk is disconnected",
+		);
+		expect(
+			within(browser).getByRole("button", { name: "Retry" }),
+		).toBeEnabled();
+		expect(within(browser).queryByRole("progressbar")).toBeNull();
+	});
+	it("cancels revision reading and ignores the stale response", async () => {
+		const pending =
+			loadDeferred<
+				Array<{
+					revision: number;
+					name: string;
+					created_at: string;
+					show_id: string;
+				}>
+			>();
+		mocks.server.listShowRevisions.mockReturnValue(pending.promise);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Revisions for Tour" }),
+		);
+		expect(
+			screen.getByRole("status", { name: "Reading named revisions" }),
+		).toBeVisible();
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(
+			screen.queryByRole("dialog", { name: "Revisions for Tour" }),
+		).toBeNull();
+		await act(async () =>
+			pending.resolve([
+				{
+					revision: 9,
+					name: "Stale revision",
+					created_at: "",
+					show_id: "original",
+				},
+			]),
+		);
+		expect(
+			within(screen.getByRole("dialog", { name: "Load show" })).queryByText(
+				/Stale revision/,
+			),
+		).toBeNull();
+		expect(
+			screen.getByRole("dialog", { name: "Load show" }),
+		).toBeInTheDocument();
+	});
+	it("guards Partial Load preparation and opens its preview once only after completion", async () => {
+		const pending = loadDeferred<{ id: string; name: string; path: string }>();
+		mocks.server.prepareShowRevision
+			.mockReset()
+			.mockReturnValue(pending.promise);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Revisions for Tour" }),
+		);
+		const revisions = screen.getByRole("dialog", {
+			name: "Revisions for Tour",
+		});
+		const row = await within(revisions).findByRole("row", {
+			name: /Approved focus/,
+		});
+		const partial = within(row).getByRole("button", { name: "Partial Load" });
+		fireEvent.click(partial);
+		fireEvent.click(partial);
+		expect(
+			screen.getByRole("status", { name: "Preparing selected show" }),
+		).toBeVisible();
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(revisions).toBeInTheDocument();
+		expect(mocks.server.prepareShowRevision).toHaveBeenCalledOnce();
+		await act(async () =>
+			pending.resolve({
+				id: "prepared-copy",
+				name: "Prepared",
+				path: "prepared.show",
+			}),
+		);
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull(),
+		);
+	});
 });
