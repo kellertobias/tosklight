@@ -1,6 +1,14 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PendingPreloadInspection } from "../../components/modals/PendingPreloadInspection";
 import { ProgrammerCaptureModeViewProvider } from "../programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import {
@@ -24,6 +32,34 @@ import {
 	SHOW_ID,
 	SESSION_ID,
 } from "./testFixtures";
+
+const inspectionMocks = vi.hoisted(() => ({
+	actions: {
+		removePendingFixtureValue: vi.fn(),
+		removePendingGroupValue: vi.fn(),
+		removePendingDynamic: vi.fn(),
+		removePendingGroupRelease: vi.fn(),
+		removePendingPlayback: vi.fn(),
+	},
+}));
+vi.mock("../programmerPreloadLifecycle/ProgrammerPreloadLifecycleView", () => ({
+	useProgrammerPreloadLifecycleView: () => ({
+		ready: true,
+		pending: false,
+		error: null,
+		actions: inspectionMocks.actions,
+	}),
+}));
+vi.mock(
+	"../programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView",
+	() => ({
+		useProgrammerPreloadPlaybackQueueView: () => ({ revision: 1, actions: [] }),
+	}),
+);
+vi.mock("../patch/PatchState", () => ({ usePatchedFixturesView: () => [] }));
+vi.mock("../showObjects/ShowObjectsState", () => ({
+	usePortableGroups: () => [],
+}));
 
 function ProjectionProbe() {
 	const projection = useProgrammerPreloadValuesView();
@@ -286,4 +322,110 @@ describe("ProgrammerPreloadValuesViewProvider", () => {
 		).resolves.toMatchObject({ status: "no_change" });
 		expect(applyAction).toHaveBeenCalledOnce();
 	});
+});
+
+it.each([false, true])(
+	"inspects retained pending values with capture OFF (empty=%s) without enabling programming",
+	async (empty) => {
+		const captureModeStore = readyCaptureStore(false);
+		const preloadStore = new ProgrammerPreloadValuesStore();
+		const transport = new FakeProgrammerPreloadValuesTransport();
+		const loadSnapshot = vi.fn(async () =>
+			empty ? preloadSnapshot({ fixtureValues: [] }) : preloadSnapshot(),
+		);
+		const applyAction = vi.fn(
+			async (
+				_scope: ProgrammerPreloadValuesScope,
+				request: ProgrammerPreloadValuesActionRequest,
+			) => noChange(request.requestId),
+		);
+		const onRecord = vi.fn();
+		const capturedBefore = captureModeStore.getSnapshot().projection;
+		const rendered = render(
+			providers({
+				children: (
+					<>
+						<PendingPreloadInspection onClose={vi.fn()} onRecord={onRecord} />
+						<ProjectionProbe />
+						<ActionProbe />
+					</>
+				),
+				captureModeStore,
+				preloadStore,
+				transport,
+				loadSnapshot,
+				applyAction,
+			}),
+		);
+		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(
+				screen.queryByText("Loading authoritative pending Preload…"),
+			).not.toBeInTheDocument(),
+		);
+		if (empty)
+			expect(
+				screen.getByText("No pending programmer changes."),
+			).toBeInTheDocument();
+		else expect(screen.getByText(/intensity · 25%/)).toBeInTheDocument();
+		expect(screen.getByText("Inactive")).toBeInTheDocument();
+		expect(screen.getByText("No actions")).toBeInTheDocument();
+		expect(captureModeStore.getSnapshot().projection).toEqual(capturedBefore);
+		expect(
+			screen.getByRole("button", { name: "Record pending…" }),
+		).toBeEnabled();
+		fireEvent.click(screen.getByRole("button", { name: "Record pending…" }));
+		expect(onRecord).toHaveBeenCalledOnce();
+		expect(applyAction).not.toHaveBeenCalled();
+		expect(transport.subscriptions).toHaveLength(1);
+		act(() =>
+			preloadStore.setRepairRequired(new Error("pending authority gap")),
+		);
+		expect(
+			screen.getByText("Loading authoritative pending Preload…"),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Record pending…" }),
+		).toBeDisabled();
+		act(() =>
+			preloadStore.installRepairSnapshot(
+				empty ? preloadSnapshot({ fixtureValues: [] }) : preloadSnapshot(),
+			),
+		);
+		expect(
+			screen.queryByText("Loading authoritative pending Preload…"),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByRole("button", { name: "Record pending…" }),
+		).toBeEnabled();
+		expect(applyAction).not.toHaveBeenCalled();
+		rendered.unmount();
+		await waitFor(() =>
+			expect(transport.subscriptions[0].close).toHaveBeenCalledOnce(),
+		);
+	},
+);
+
+it("keeps inspection dormant when the provider composition is disabled", async () => {
+	const preloadStore = new ProgrammerPreloadValuesStore();
+	const transport = new FakeProgrammerPreloadValuesTransport();
+	const loadSnapshot = vi.fn(async () => preloadSnapshot());
+	render(
+		providers({
+			children: (
+				<PendingPreloadInspection onClose={vi.fn()} onRecord={vi.fn()} />
+			),
+			captureModeStore: readyCaptureStore(false),
+			preloadStore,
+			transport,
+			loadSnapshot,
+			enabled: false,
+		}),
+	);
+	await act(async () => Promise.resolve());
+	expect(loadSnapshot).not.toHaveBeenCalled();
+	expect(transport.subscriptions).toHaveLength(0);
+	expect(
+		screen.getByRole("button", { name: "Record pending…" }),
+	).toBeDisabled();
 });

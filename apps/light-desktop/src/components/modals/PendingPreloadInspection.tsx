@@ -1,19 +1,37 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useState } from "react";
-import type {
-	ProgrammingColorComponent,
-	ProgrammingColorIntent,
-} from "../../api/generated/light-wire";
 import type { AttributeValue } from "../../api/types/playback";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import type { ProgrammerPreloadLifecycleActions } from "../../features/programmerPreloadLifecycle/contracts";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
 import { useProgrammerPreloadPlaybackQueueView } from "../../features/programmerPreloadPlaybackQueue/ProgrammerPreloadPlaybackQueueView";
 import type { ProgrammerPreloadValuesProjection } from "../../features/programmerPreloadValues/contracts";
-import { useProgrammerPreloadValuesView } from "../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
+import { useProgrammerPreloadInspectionValuesView } from "../../features/programmerPreloadValues/ProgrammerPreloadValuesView";
 import type { HydratedProgrammingDynamicSemanticValue } from "../../features/programmerValues/contracts";
 import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 import { fixtureSheetTargets } from "../../windows/fixtureSheetTargets";
+
+type PendingColorProgram = Extract<
+	AttributeValue,
+	{ kind: "color_program" }
+>["value"];
+type PendingColorIntent = Extract<
+	PendingColorProgram,
+	{ kind: "semantic" }
+>["intent"];
+type PendingColorComponent = NonNullable<
+	PendingColorIntent["spreads"]
+>[number]["component"];
+type PendingNativeColorRecipe = Extract<
+	PendingColorProgram,
+	{ kind: "direct" }
+>["recipe"];
+type PendingProgrammingComponent = NonNullable<
+	Extract<
+		HydratedProgrammingDynamicSemanticValue,
+		{ type: "programming_release" }
+	>["component"]
+>;
 
 export function PendingPreloadInspection({
 	onClose,
@@ -22,7 +40,7 @@ export function PendingPreloadInspection({
 	onClose(): void;
 	onRecord(): void;
 }) {
-	const values = useProgrammerPreloadValuesView();
+	const values = useProgrammerPreloadInspectionValuesView();
 	const queue = useProgrammerPreloadPlaybackQueueView();
 	const lifecycle = useProgrammerPreloadLifecycleView();
 	const fixtures = usePatchedFixturesView();
@@ -297,9 +315,7 @@ function ProgrammerRows({
 	);
 }
 
-function componentLabel(
-	component: import("../../api/generated/light-wire").ProgrammingComponent,
-): string {
+function componentLabel(component: PendingProgrammingComponent): string {
 	if (component.kind === "color")
 		return `Color ${component.component.replaceAll("_", " ")}`;
 	if (component.kind === "color_wheel")
@@ -317,9 +333,7 @@ function pendingDynamicLabel(
 	return `${summary}${value.timing.fade_millis == null ? "" : ` · Fade ${value.timing.fade_millis} ms`}${value.timing.delay_millis == null ? "" : ` · Delay ${value.timing.delay_millis} ms`}`;
 }
 
-function nativeColorLabel(
-	recipe: import("../../api/generated/light-wire").ProgrammingNativeColorRecipe,
-): string {
+function nativeColorLabel(recipe: PendingNativeColorRecipe): string {
 	const channels = recipe.channels.map(
 		(channel) =>
 			`${channel.channel_id}/${channel.function_id}: DMX ${channel.raw}`,
@@ -331,7 +345,7 @@ function nativeColorLabel(
 	return `Direct color · ${[...channels, ...spreads].join(" · ")}`;
 }
 
-function semanticColorLabel(intent: ProgrammingColorIntent): string {
+function semanticColorLabel(intent: PendingColorIntent): string {
 	const number = (n: number) => Number(n.toFixed(3)).toString();
 	const parts = [
 		`Virtual RGB ${intent.recipe.rgb.map((v) => `${number(v * 100)}%`).join(" / ")}`,
@@ -356,7 +370,7 @@ function semanticColorLabel(intent: ProgrammingColorIntent): string {
 }
 
 function colorSpreadPoint(
-	component: ProgrammingColorComponent,
+	component: PendingColorComponent,
 	point: number,
 ): string {
 	const number = (n: number) => Number(n.toFixed(3)).toString();

@@ -103,7 +103,7 @@ vi.mock("../../features/patch/PatchState", () => ({
 vi.mock(
 	"../../features/programmerPreloadValues/ProgrammerPreloadValuesView",
 	() => ({
-		useProgrammerPreloadValuesView: () => mocks.values,
+		useProgrammerPreloadInspectionValuesView: () => mocks.values,
 		useProgrammerPreloadValuesActions: () => ({
 			releaseFixtureValue: mocks.releaseFixture,
 			releaseGroupValue: mocks.releaseGroup,

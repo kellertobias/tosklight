@@ -66,6 +66,11 @@ const AuthorityContext = createContext<ProgrammerPreloadValuesAuthority | null>(
 	null,
 );
 const EnabledContext = createContext(false);
+const InspectionScopeContext = createContext<{
+	showId: string | null;
+	sessionId: string | null;
+	enabled: boolean;
+} | null>(null);
 const fallbackStore = new ProgrammerPreloadValuesStore();
 
 export function ProgrammerPreloadValuesViewProvider({
@@ -164,6 +169,10 @@ export function ProgrammerPreloadValuesViewProvider({
 				: null,
 		[session, store],
 	);
+	const inspectionScope = useMemo(
+		() => ({ showId, sessionId, enabled }),
+		[showId, sessionId, enabled],
+	);
 	useLayoutEffect(() => {
 		store.reset(showId, sessionId, authorityKey);
 	}, [authorityKey, showId, store, sessionId]);
@@ -176,17 +185,42 @@ export function ProgrammerPreloadValuesViewProvider({
 		<StoreContext.Provider value={store}>
 			<SessionContext.Provider value={session}>
 				<AuthorityContext.Provider value={authority}>
-					<EnabledContext.Provider value={captureEnabled}>
-						<ActionsContext.Provider
-							value={captureEnabled ? (actions ?? writer) : null}
-						>
-							{children}
-						</ActionsContext.Provider>
-					</EnabledContext.Provider>
+					<InspectionScopeContext.Provider value={inspectionScope}>
+						<EnabledContext.Provider value={captureEnabled}>
+							<ActionsContext.Provider
+								value={captureEnabled ? (actions ?? writer) : null}
+							>
+								{children}
+							</ActionsContext.Provider>
+						</EnabledContext.Provider>
+					</InspectionScopeContext.Provider>
 				</AuthorityContext.Provider>
 			</SessionContext.Provider>
 		</StoreContext.Provider>
 	);
+}
+
+/** Read pending work without arming capture or exposing value-writing actions. */
+export function useProgrammerPreloadInspectionValuesView(
+	enabled = true,
+): ProgrammerPreloadValuesProjection | null {
+	const scope = useContext(InspectionScopeContext);
+	const active =
+		enabled && !!scope?.enabled && !!scope.showId && !!scope.sessionId;
+	usePreloadViewActivation(active);
+	const store = useProgrammerPreloadValuesStore();
+	const selector = useCallback(
+		(state: ProgrammerPreloadValuesState) =>
+			active &&
+			state.showId === scope?.showId &&
+			state.sessionId === scope?.sessionId &&
+			state.status === "ready" &&
+			!state.repairRequired
+				? state.projection
+				: null,
+		[active, scope],
+	);
+	return useExternalSelection(store, selector, Object.is);
 }
 
 export function useProgrammerPreloadValuesView(enabled = true) {
