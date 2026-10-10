@@ -92,13 +92,10 @@ export function OperationBusyOverlay({
 					{source ? `${source} · ` : ""}Elapsed{" "}
 					{Math.max(0, Math.floor((now - (startedAt ?? started)) / 1000))} s
 				</p>
-				<small>Remaining time cannot be estimated.</small>
-				{onCancel ? (
+				{onCancel && (
 					<Button ref={cancel} onClick={onCancel}>
 						{cancelLabel}
 					</Button>
-				) : (
-					<p>Wait for completion before closing.</p>
 				)}
 			</section>
 		</div>

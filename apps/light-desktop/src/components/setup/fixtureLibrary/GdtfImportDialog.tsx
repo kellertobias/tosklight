@@ -95,10 +95,10 @@ function GdtfBusyProgress({
 			}
 			message={
 				readingFile
-					? "Reading the selected archive. Wait for the read to finish; it cannot be cancelled here."
+					? "Reading the selected GDTF file…"
 					: pending
-						? "Saving mappings and importing the selected fixture. Wait for the authoritative result."
-						: "Reading fixture data and remembered mappings. Wait for the preview."
+						? "Saving fixture and mappings…"
+						: "Preparing fixture modes and attribute mappings…"
 			}
 		/>
 	);

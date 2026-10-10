@@ -235,7 +235,9 @@ describe("MVR visible progress", () => {
 		expect(
 			screen.queryByRole("button", { name: "Cancel inspection" }),
 		).toBeNull();
-		expect(screen.getByText(/Wait for completion/)).toBeTruthy();
+		expect(
+			screen.getByText("Adding fixtures and placements to the show…"),
+		).toBeTruthy();
 	});
 });
 

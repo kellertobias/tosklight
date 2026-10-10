@@ -180,12 +180,12 @@ function WorkflowStatus({ workflow }: { workflow: SelectiveImportWorkflow }) {
 						workflow.phase === "catalog"
 							? "Reading the source show…"
 							: workflow.phase === "preview"
-								? "Building the dependency and conflict preview…"
-								: "Importing atomically…"
+								? "Checking selected show items…"
+								: "Importing selected show items…"
 					}
 					message={
 						workflow.phase === "apply"
-							? "The write cannot be cancelled after it starts."
+							? "Saving the selected items to your show…"
 							: "Preparing the import preview. The active show is unchanged."
 					}
 					onCancel={workflow.phase === "apply" ? undefined : workflow.close}

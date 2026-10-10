@@ -239,7 +239,9 @@ describe("SelectiveShowImportModal", () => {
 			}),
 		);
 
-		expect(await screen.findByText(/cannot be cancelled/)).toBeVisible();
+		expect(
+			await screen.findByText("Saving the selected items to your show…"),
+		).toBeVisible();
 		expect(
 			screen.getByRole("button", { name: "Cancel", hidden: true }),
 		).toBeDisabled();

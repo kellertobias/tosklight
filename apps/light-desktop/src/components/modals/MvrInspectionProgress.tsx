@@ -28,10 +28,10 @@ export function MvrInspectionProgress({
 			}
 			message={
 				operation === "read"
-					? "Reading the selected archive. Wait for the read to finish; it cannot be cancelled here."
+					? "Reading the selected MVR file…"
 					: operation === "inspect"
 						? "The current show is unchanged during inspection."
-						: "Applying has started. The write cannot be cancelled."
+						: "Adding fixtures and placements to the show…"
 			}
 			onCancel={operation === "inspect" ? onCancel : undefined}
 			cancelLabel="Cancel inspection"
