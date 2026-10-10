@@ -10,6 +10,14 @@ Give an agent this instruction, replacing the candidate and optional platform li
 
 Run the phases below in order. Resume only from an identified run's ledger, on the same candidate and saved test-show revision. If candidate, profile, media content or configuration changes, record the change and rerun affected cases and downstream consumers. Preserve earlier failures and link retests; never overwrite their evidence.
 
+### Clean application boundary between runs
+
+Before each run, finish or cancel any pending operation through its UI and restore the previous run's temporary output/settings. Record the test-show revision and inventory the exact executable paths and process IDs started by the campaign. Quit Control, Pixel, Architect and hardware controls normally through their application menus. Capture the state before Quit; use the process inventory as evidence of exit rather than reopening a closed application to inspect it. Leave unrelated applications alone.
+
+Stop the campaign-owned headless desk and renderer helpers as well. For a desk launched by the repository's debug wrapper, remove its `de.tokenet.tosklight.dev-server` launchd job. Verify remaining helper PIDs against the recorded executable paths before terminating them; do not use a blanket process-name kill to close another checkout's desk. Confirm that no campaign process remains and that its server/receiver ports are free. A remaining `--serve` Architect process counts as an incomplete shutdown even when its window has closed.
+
+Launch only the applications required for the next run. Use `npm run build:open` after Control behavior changes, or `npm run open` when rerunning the same existing build. Verify the running bundle, headless executable, readiness and served frontend asset against the candidate; healthy readiness alone does not prove the correct build is running. Record this identity before the first test action. Keep windows on the internal Mac display for this campaign. Launch Pixel and Architect separately when their integration phase needs them, and record their bundle identities too. Repeat this shutdown and restart boundary after a candidate change and between independently identified runs.
+
 ## Release gates and tracking
 
 | Stream | Initial issue | Cases |

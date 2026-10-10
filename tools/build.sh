@@ -377,6 +377,7 @@ wait_for_launchd_server() {
     if [[ -n "$pid" ]]; then
       command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
       if [[ "$command" == "$TARGET_DIR/debug/light-headless --data-dir $DATA_DIR"* ]] && \
+        lsof -nP -a -p "$pid" -iTCP:5000 -sTCP:LISTEN -t >/dev/null 2>&1 && \
         curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
         return 0
       fi
