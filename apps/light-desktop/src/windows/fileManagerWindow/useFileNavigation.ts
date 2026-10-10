@@ -1,9 +1,10 @@
 import { useCallback, useEffect } from "react";
 import { useFiles } from "../../features/files/FilesContext";
-import type { FileManagerLocation, FileManagerPickerOptions } from "./types";
 import { sortFileEntries } from "./fileUtilities";
+import type { FileManagerLocation, FileManagerPickerOptions } from "./types";
 import { useFileListing } from "./useFileListing";
 import { currentLocation, type FileManagerState } from "./useFileManagerState";
+import { useFileRoots } from "./useFileRoots";
 
 interface NavigationOptions {
 	state: FileManagerState;
@@ -44,30 +45,7 @@ export function useFileNavigation({
 		[state.history, state.historyIndex, confirmDiscardEditor],
 	);
 
-	const loadRoots = useCallback(async () => {
-		try {
-			const items = await server.fileRoots();
-			state.setRoots(items);
-			if (!state.initialized.current && items.length) {
-				state.initialized.current = true;
-				const requested = picker?.initialRootId;
-				const initialRoot =
-					items.find((root) => root.id === requested) ?? items[0];
-				state.setHistory([
-					{ rootId: initialRoot.id, path: picker?.initialDirectory ?? "" },
-				]);
-				state.setHistoryIndex(0);
-			}
-		} catch (error) {
-			state.setMessage(`Locations unavailable: ${String(error)}`);
-		}
-	}, [server.fileRoots, picker?.initialDirectory, picker?.initialRootId]);
-
-	useEffect(() => {
-		void loadRoots();
-		const timer = window.setInterval(() => void loadRoots(), 5000);
-		return () => window.clearInterval(timer);
-	}, [loadRoots]);
+	const roots = useFileRoots(state, picker);
 
 	useEffect(() => {
 		if (
@@ -134,6 +112,7 @@ export function useFileNavigation({
 	}, [refresh]);
 
 	return {
+		...roots,
 		current,
 		rootId,
 		currentPath,

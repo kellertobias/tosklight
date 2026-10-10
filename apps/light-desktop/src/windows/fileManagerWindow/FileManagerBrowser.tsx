@@ -1,4 +1,4 @@
-import { Button } from "@tosklight/ui";
+import { Button, OperationBusyOverlay } from "@tosklight/ui";
 import { type ReactNode, useSyncExternalStore } from "react";
 import { useFiles } from "../../features/files/FilesContext";
 import {
@@ -234,7 +234,7 @@ function FileRoots({ controller }: { controller: FileManagerController }) {
 					</div>
 				);
 			})}
-			{!state.roots.length && (
+			{!state.roots.length && navigation.rootsStatus === "ready" && (
 				<p>No configured or removable locations are available.</p>
 			)}
 		</aside>
@@ -400,6 +400,36 @@ function SelectionProperties({
 	);
 }
 
+function FileLocationsStatus({
+	controller,
+}: {
+	controller: FileManagerController;
+}) {
+	const { rootsStatus, retryRoots } = controller.navigation;
+	if (rootsStatus === "loading" && !controller.state.roots.length) {
+		return (
+			<OperationBusyOverlay
+				label="Locations"
+				title="Loading locations…"
+				message="Checking configured and removable locations."
+				onCancel={
+					controller.picker?.onCancel ??
+					(controller.closeable && controller.app
+						? () => controller.app?.dispatch({ type: "CLOSE_FILE_MANAGER" })
+						: undefined)
+				}
+			/>
+		);
+	}
+	if (rootsStatus !== "failed") return null;
+	return (
+		<div className="file-message" role="alert">
+			<p>Could not load locations. Retry to check available locations.</p>
+			<Button onClick={retryRoots}>Retry locations</Button>
+		</div>
+	);
+}
+
 export function FileManagerBrowser({
 	controller,
 }: {
@@ -408,6 +438,7 @@ export function FileManagerBrowser({
 	return (
 		<>
 			<FileManagerToolbar controller={controller} />
+			<FileLocationsStatus controller={controller} />
 			<div className="file-columns">
 				<FileRoots controller={controller} />
 				<DirectoryContents controller={controller} />

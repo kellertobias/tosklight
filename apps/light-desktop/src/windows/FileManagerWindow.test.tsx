@@ -403,9 +403,8 @@ describe("FileManager navigation and previews", () => {
 			}));
 		render(<FileManager instanceId="transient-directory-error" />);
 
-		expect(await screen.findByRole("status")).toHaveTextContent(
-			"Could not open this location",
-		);
+		const error = await screen.findByText(/Could not open this location/);
+		expect(error).toHaveAttribute("role", "status");
 		chooseHeaderAction("View", "Show Hidden Files");
 
 		expect(
