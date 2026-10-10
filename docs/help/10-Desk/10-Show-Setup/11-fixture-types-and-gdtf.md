@@ -1,5 +1,13 @@
 # Fixture Types and GDTF
 
+## Quick summary
+
+- Choose the exact fixture **profile revision and mode** before patching. Each show keeps its own embedded revision.
+- Use **.toskfixture** to transfer a complete ToskLight profile; use **GDTF** to import a fixture description and **MVR** to exchange a rig.
+- MVR can reuse an imported GDTF only while its recorded source association matches the exported profile. Otherwise it generates GDTF from the current profile and reports limitations.
+- Generated GDTF carries supported colour emitters, filters, wheels, physical endpoints, and DMX detail. Native calibration provenance, Position geometry, Zoom conventions, and detailed 3D models remain in ToskLight metadata.
+- A modelled colour match provides a native-control approximation. Check and tune the actual fixtures before relying on physical colour equivalence.
+
 The fixture library is desk-wide and persists independently of show files. Open **Desk Setup > Shows & recovery > Open Fixture Library** to launch its modal and search, import, create, revise, and inspect complete fixture profiles. Library search follows the shared [search-bar layout](../30-Windows/01-desk-interface-and-windows.md#search-bars) and filters automatically with every typed character. Its optional Options dialog selects the fixture type. A profile is one revisioned fixture containing Generic information and an ordered set of modes; a patched show embeds the selected profile revision and mode so later library edits or deletion cannot change that show.
 
 ![Fixture-library manufacturers, modes, footprint, heads, and revision](../../assets/screenshots/workflows/fixture-library.png)
