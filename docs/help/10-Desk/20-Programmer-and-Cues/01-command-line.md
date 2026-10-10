@@ -317,9 +317,9 @@ Ordinary Cue playback uses **Cue Fade**, the Cue's stored timing, and any stored
 
 You can store fixed per-value fade and delay times in Cues. Enter them in the Programmer before recording:
 
-`<slection> [AT] <values> [TIME] 3` which shows `#> <slection> AT <values> FADE 3s` in the command line makes the values fade with 3 seconds. Pressing `[TIME]` a second time, makes it `#> …DELAY`. A delay is the wait time from the start of the preset/ cue until the fade or value change happens.
+`<selection> [AT] <values> [TIME] 3` which shows `#> <selection> AT <values> FADE 3s` in the command line makes the values fade with 3 seconds. Pressing `[TIME]` a second time, makes it `#> …DELAY`. A delay is the wait time from the Cue’s start until the fade or value change happens.
 
-You can either have multiple individual commands after one another with different values and then record them into a Cue (e.g. Fixture 1 goes to 100% with a 10s fade, then fixture 2 has a 5s delay and a 5s fade until it goes to 0%) but you can also use spread operators in fade and delay times: `#> G1 AT 100% FADE 0s THRU 5s DELAY 5s THRU 0s`. This lets the first fixture in the group wait 5s and then snap (0s) to 100%, while the last fixture in the group does not wait and immediately fades over 5s. The fixture in between interpolate their delay and fade time.
+You can either have multiple individual commands after one another with different values and then record them into a Cue (e.g. Fixture 1 goes to 100% with a 10s fade, then fixture 2 has a 5s delay and a 5s fade until it goes to 0%) but you can also use spread operators in fade and delay times: `#> G1 AT 100% FADE 0s THRU 5s DELAY 5s THRU 0s`. This lets the first fixture in the group wait 5s and then snap (0s) to 100%, while the last fixture in the group does not wait and immediately fades over 5s. The fixtures in between interpolate their delay and fade times.
 
 Record the Programmer into a Cue to retain these per-value times. Presets capture values without this timing metadata; recalling a Preset uses the current Programmer Fade.
 
