@@ -61,6 +61,8 @@ Each result row records: case/variant, steps performed, expected, actual, status
 
 For each finding write `briefings/<finding-ID>.md`: impact/severity, candidate/environment, preconditions, numbered UI reproduction with a captioned image per step, expected versus actual, frequency, relevant logs/packet samples, recovery/workaround, source contract and PLAINER link. Confirmed bugs and unusable required flows become **bug** items in Defined. Uncertain behavior or a desired capability becomes a **plan** in Defined with the uncertainty explicit. P0: crash/data loss/uncontrolled output; P1: required workflow impossible or incorrect programming/output; P2: material usability or inaccurate feedback; P3: cosmetic. These severity labels are briefing conventions, not invented PLAINER priority values.
 
+Track integrated testing in the release acceptance campaign and its test streams, separately from implementation issues. The user may archive implementation issues once their changes are implemented; that archive preserves implementation history and does not establish a test pass. Do not reopen those issues merely to test the application. Record candidate verification, remaining variants and regressions in the campaign ledger; create a new test or bug issue when independently trackable work is needed, linking the earlier implementation when relevant. A source regression test, Review/test state or archived issue never substitutes for whole-application acceptance.
+
 ## Phase 0 — Candidate, safety and usability baseline
 
 | ID | UI procedure | Expected and evidence |
