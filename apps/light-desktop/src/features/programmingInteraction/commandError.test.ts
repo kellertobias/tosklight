@@ -9,6 +9,20 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 describe("command rejection classification", () => {
+	it.each([
+		"- requires a fixture selection",
+		"- requires fixture selections on both sides",
+		"Programmer Align requires a non-empty selection",
+	])("presents the actual selection-required websocket rejection: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		reportProgrammingCommandError(new Error(message));
+		expect((dispatch.mock.lastCall![0] as CustomEvent).detail).toEqual({
+			message,
+			kind: "operator",
+		});
+		expect(commandErrorSummary(message)).toBe("No Selection");
+		expect(commandErrorFeedback(`invalid data: ${message}`).kind).toBe("operator");
+	});
 	it("classifies status-less websocket preset rejections without hiding unknown failures", () => {
 		const dispatch = vi.spyOn(window, "dispatchEvent");
 		// resolveCommand rejects with a plain Error carrying only response.error.

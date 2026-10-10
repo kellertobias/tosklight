@@ -12,6 +12,7 @@ const UNEXPECTED = /could not be synchronized|unexpected|invalid server response
 const OPERATOR_REJECTION = /\b(?:fixture|group|preset|cue|cuelist|playback|target|level|percentage|selection|syntax|command|record|update|FixAT)\b.*(?:invalid|not recorded|not found|does not exist|not patched|must|requires|unsupported|cannot|not a|changed|empty|already|out of range)|\bno selection\b/i;
 
 const REVERSED_OPERATOR_REJECTION = /^(?:invalid|unsupported)\s+(?:fixture|group|preset|cue|cuelist|playback|target|level|percentage|selection|command syntax)\b/i;
+const SELECTION_REQUIRED = /^(?:- requires (?:a fixture selection|fixture selections on both sides)|Programmer Align requires a non-empty selection)$/i;
 
 /** History carries plain feedback, so unrecognised failures retain full diagnostics. */
 export function commandErrorFeedback(
@@ -22,7 +23,9 @@ export function commandErrorFeedback(
 	return {
 		message: detail,
 		kind: !UNEXPECTED.test(detail) &&
-			(OPERATOR_REJECTION.test(message) || REVERSED_OPERATOR_REJECTION.test(message))
+			(OPERATOR_REJECTION.test(message) ||
+				REVERSED_OPERATOR_REJECTION.test(message) ||
+				SELECTION_REQUIRED.test(message))
 			? "operator"
 			: "unexpected",
 	};
