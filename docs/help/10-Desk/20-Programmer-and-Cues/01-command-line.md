@@ -327,6 +327,8 @@ For Cue playback, stored per-value timing remains authoritative unless **Force C
 
 ## Recording Cues
 
+**Quick guide:** press `[REC]` and touch the Cuelist. Empty: **REC**, record the first Cue directly. One Cue: **REC**, choose Add, Merge, or Overwrite. Two or more Cues: **REC CUE**, add the next Cue. Groups and Presets normally use Merge and show **REC MRG** when populated; empty targets show **REC**. One-off options and saved alternative defaults can change the operation.
+
 What is in the programmer is what gets stored in a Cue. First select the fixtures and set the values, presets, Dynamics, fade times, and delay times that should be part of the Cue. Values that only come from a running playback, defaults, Highlight, or the resolved output are not added merely because they are visible on stage.
 
 ### Recording the First Cue
@@ -352,7 +354,7 @@ The same choice appears when recording onto a playback whose assigned Cuelist co
 
 Press `[REC]` a second time while Record is armed to open the **Record** modal. It is the same on the keyboard (`[KBD:END]` twice), the on-screen keys, and an attached desk. Record stays armed; press `[ESC]` to leave Record. Choose one of four options:
 
-- **Smart** is the regular behaviour described above: a Cuelist with exactly one Cue asks Add, Merge, or Overwrite; otherwise a new Cue is added. From the command line, a Cuelist or playback target adds a Cue, and an explicit Cue number overwrites or inserts that Cue.
+- **Smart** keeps the regular Cuelist behaviour described above: a Cuelist with exactly one Cue asks Add, Merge, or Overwrite; otherwise a new Cue is added. From the command line, a Cuelist or playback target adds a Cue, and an explicit Cue number overwrites or inserts that Cue.
 - **Merge** merges the programmer into the Cue the playback is on, or into the only Cue of a Cuelist that is not running. Programmer values replace values at the same fixture/attribute; everything else in the Cue stays. With no such Cue, a new Cue is added. With an explicit Cue number it behaves like `[REC][+]`, so that Cue must already exist.
 - **Add Existing** stores into the same Cue as Merge, but adds only what that Cue does not store yet. Values the Cue already has never change.
 - **Add Cue** always stores the programmer as a new Cue at the end. With an explicit Cue number it inserts that Cue, and it refuses a Cue number that already exists instead of replacing it.
@@ -464,6 +466,8 @@ Touch targets open the Update preview with **Update** selected by default and le
 For example, `[^REC][+][+][CUE][CUE] 4 [CUE] 2.1 [ENT]` adds eligible, already-known addresses to Cue `2.1` in Cuelist 4. The command line displays the full selected mode instead of only the `+` or `-` shorthand.
 
 ### Updating Presets
+
+**Quick guide:** Record Merge keeps stored contents and adds or replaces the Programmer's values. Ordinary Update changes existing addresses only; **Update All** also adds new addresses. Touch Update targets to review the proposed changes before confirming. An empty Preset is a Record target, not an existing Preset to Update.
 
 Use `[^REC]` to Update a Preset from the current programmer instead of recording it again. After arming Update, touch the Preset tile or enter its preset-family key and number. For example, `[^REC][^2] 22 [ENT]` displays `#> UPDATE COLOR PRESET 22` and changes only fixture/attribute addresses that are already part of Color Preset 22.
 
