@@ -10418,6 +10418,11 @@
           "format": "uint64",
           "minimum": 0
         },
+        "external_armed": {
+          "description": "True while the runtime waits to start or relock to an external source.",
+          "type": "boolean",
+          "default": false
+        },
         "frame": {
           "type": "integer",
           "format": "uint64",
@@ -10440,6 +10445,7 @@
         "timecode_id",
         "revision",
         "state",
+        "external_armed",
         "frame",
         "duration_frame",
         "audio_linked",

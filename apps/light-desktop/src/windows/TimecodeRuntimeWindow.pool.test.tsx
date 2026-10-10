@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+} from "@testing-library/react";
 import type { MouseEvent, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TimecodeRuntimeWindow } from "./TimecodeRuntimeWindow";
 
 const mocks = vi.hoisted(() => ({
@@ -20,7 +26,9 @@ vi.mock("@tosklight/ui/pools", () => ({
 		"aria-label": ariaLabel,
 		onClick,
 		onContextMenu,
+		model,
 	}: {
+		model: { secondary?: ReactNode; workflow?: ReactNode };
 		"aria-label": string;
 		onClick(): void;
 		onContextMenu(event: MouseEvent): void;
@@ -32,6 +40,8 @@ vi.mock("@tosklight/ui/pools", () => ({
 			onContextMenu={onContextMenu}
 		>
 			{ariaLabel}
+			<span data-testid="footer">{model.secondary}</span>
+			<span data-testid="workflow">{model.workflow}</span>
 		</button>
 	),
 }));
@@ -60,6 +70,8 @@ vi.mock("../components/files/RootConfinedFilePickerButton", () => ({
 		<button type="button">{label}</button>
 	),
 }));
+
+afterEach(cleanup);
 
 describe("Timecode pool gestures", () => {
 	beforeEach(() => {
@@ -99,6 +111,29 @@ describe("Timecode pool gestures", () => {
 		expect(
 			await screen.findByRole("button", { name: "Settings" }),
 		).toBeTruthy();
+	});
+
+	it.each([
+		[false, "stopped", false, "Unarmed"],
+		[true, "stopped", true, "Armed"],
+		[true, "stopped", false, "Unarmed"],
+		[false, "paused", true, "Armed"],
+		[true, "playing", false, "Playing"],
+		[false, "playing", true, "Playing"],
+	] as const)("shows runtime arm state despite auto start %s / transport %s / armed %s", async (autoStart, state, armed, label) => {
+		mocks.api.objects = vi.fn(async () => ({
+			objects: [
+				{ revision: 4, definition: { ...definition(), auto_start: autoStart } },
+			],
+		}));
+		mocks.api.runtime = vi.fn(async () => [
+			{ timecode_id: definition().id, state, external_armed: armed, frame: 44 },
+		]);
+		render(<TimecodeRuntimeWindow />);
+		await screen.findByRole("button", { name: "Timecode 1 Song" });
+		await waitFor(() =>
+			expect(screen.getByTestId("footer")).toHaveTextContent(label),
+		);
 	});
 
 	it("uses OFF then the actual Timecode tile to stop its transport", async () => {

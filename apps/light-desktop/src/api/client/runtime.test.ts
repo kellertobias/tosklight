@@ -261,6 +261,7 @@ describe("LightClientRuntime", () => {
 			type: "timecode_runtime_changed",
 			snapshot: {
 				timecode_id: "timecode-a",
+				external_armed: false,
 				revision: 12,
 				state: "playing",
 				frame: 88,

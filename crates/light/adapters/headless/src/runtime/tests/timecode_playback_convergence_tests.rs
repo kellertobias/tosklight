@@ -453,3 +453,37 @@ fn playback_action_request(
         ))
         .unwrap()
 }
+
+#[test]
+fn timecode_wire_snapshot_preserves_runtime_arming() {
+    let definition = light_playback::TimecodeDefinition {
+        id: light_playback::TimecodeId(Uuid::new_v4()),
+        number: 1,
+        name: "External transport".into(),
+        duration: Some(light_playback::TimecodeFrame(440)),
+        transport_offset: light_playback::TimecodeFrame::ZERO,
+        auto_start: false,
+        audio: None,
+        markers: Vec::new(),
+        lanes: Vec::new(),
+    };
+    for external_armed in [false, true] {
+        let snapshot = light_application::timeline::TimecodeRuntimeSnapshot {
+            timecode_id: definition.id,
+            revision: 7,
+            transport: light_playback::TimecodeTransportState::Paused,
+            external_armed,
+            frame: light_playback::TimecodeFrame(44),
+            duration: light_playback::TimecodeFrame(440),
+            reconstructed: definition.state_at(light_playback::TimecodeFrame(44)),
+            cue_list_clips: Vec::new(),
+            audio_linked: false,
+        };
+        let wire = super::super::timecode_v2::wire_snapshot(snapshot);
+        assert_eq!(wire.external_armed, external_armed);
+        assert_eq!(
+            wire.state,
+            light_wire::v2::timecode::TimecodeTransportState::Paused
+        );
+    }
+}

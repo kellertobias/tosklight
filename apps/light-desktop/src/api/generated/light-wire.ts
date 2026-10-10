@@ -2016,7 +2016,11 @@ export type TimecodeCueListClipExecution = { lane_id: string, cue_list_id: strin
  * The level the clip's own in and out fade put its Cuelist at on the reported frame.
  */
 level: number, message: string | null, };
-export type TimecodeTransportSnapshot = { timecode_id: string, revision: number, state: TimecodeTransportState, frame: number, duration_frame: number, audio_linked: boolean, cue_list_clips: Array<TimecodeCueListClipExecution>, };
+export type TimecodeTransportSnapshot = { timecode_id: string, revision: number, state: TimecodeTransportState,
+/**
+ * True while the runtime waits to start or relock to an external source.
+ */
+external_armed: boolean, frame: number, duration_frame: number, audio_linked: boolean, cue_list_clips: Array<TimecodeCueListClipExecution>, };
 export type DisplayedSourceRef = { lane: VisualizationLane, lease: number, };
 export type OutputReadoutUnavailable = "no_accepted_frame" | "no_accepted_preload" | "show_changed" | "stale_generation";
 export type ProgrammingValuesHoldReason = "displayed_source_unavailable" | "native_color_unavailable" | "explicit_color_start_required" | "zoom_unavailable";

@@ -1096,6 +1096,7 @@ pub(super) fn wire_snapshot(
             }
             light_playback::TimecodeTransportState::Paused => wire::TimecodeTransportState::Paused,
         },
+        external_armed: snapshot.external_armed,
         frame: snapshot.frame.0,
         duration_frame: snapshot.duration.0,
         audio_linked: snapshot.audio_linked,

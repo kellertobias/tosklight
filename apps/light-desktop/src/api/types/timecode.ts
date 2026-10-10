@@ -134,6 +134,8 @@ export interface TimecodeTransportSnapshot {
 	timecode_id: string;
 	revision: number;
 	state: "stopped" | "playing" | "paused";
+	/** Absent only when reading an older server snapshot. */
+	external_armed?: boolean;
 	frame: number;
 	duration_frame: number;
 	audio_linked: boolean;
