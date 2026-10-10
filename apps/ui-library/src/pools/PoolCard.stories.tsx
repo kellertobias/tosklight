@@ -150,7 +150,7 @@ export const FourCornersWhileRecording: Story = {
 								style={{ width: "100%", height: "100%", background: "#264fd4" }}
 							/>
 						),
-						workflow: "Merge",
+						workflow: "REC MRG",
 					},
 					{
 						number: 1003,

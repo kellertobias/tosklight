@@ -62,7 +62,7 @@ export function PoolCard({
 	const empty = model.states?.includes("empty") ?? false;
 	const color = empty ? undefined : model.color;
 	const hasStatus = Boolean(
-		workflow || model.status != null || model.derived || model.frozen,
+		model.status != null || model.derived || model.frozen,
 	);
 	const hasInformation =
 		model.secondary != null || Boolean(model.details?.length);
@@ -245,16 +245,16 @@ function PoolCardContents({
 					))}
 				</span>
 			)}
+			{workflow && (
+				<span
+					className={`pool-card-workflow ${workflow.kind}`}
+					data-pool-workflow={workflow.kind}
+				>
+					{workflow.label}
+				</span>
+			)}
 			{hasStatus && (
 				<span className="pool-card-status-row">
-					{workflow && (
-						<span
-							className={`pool-card-workflow ${workflow.kind}`}
-							data-pool-workflow={workflow.kind}
-						>
-							{workflow.label}
-						</span>
-					)}
 					{model.status != null && (
 						<span className="pool-card-status">{model.status}</span>
 					)}

@@ -18,13 +18,13 @@ describe("record labels follow the scoped desk settings", () => {
   mocks.text = "RECORD";
   mocks.update = {loadSettings: vi.fn(async () => ({...defaultUpdateSettings,record_default:"merge"}))};
   const {rerender} = render(<><Grid/><Grid/></>);
-  await waitFor(() => expect(screen.getAllByText("Merge")).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByText("REC MRG")).toHaveLength(2));
   expect(mocks.update.loadSettings).toHaveBeenCalledOnce();
   act(() => programmingUpdateSettingsView(mocks.update!).install({...defaultUpdateSettings,record_default:"smart"}));
   expect(screen.getAllByText("REC")).toHaveLength(2);
   mocks.text = "RECORD MERGE";
   rerender(<><Grid/><Grid/></>);
-  expect(screen.getAllByText("Merge")).toHaveLength(2);
+  expect(screen.getAllByText("REC MRG")).toHaveLength(2);
  });
  it("does not load settings for an inactive grid", async () => {
   mocks.update = {loadSettings: vi.fn(async () => defaultUpdateSettings)};

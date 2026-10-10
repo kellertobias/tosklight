@@ -14,7 +14,7 @@ import {
 } from "./PresetsWindowView";
 
 vi.mock("../../features/recordUpdateOptions/usePoolRecordLabel", () => ({
-	usePoolRecordLabel: () => ({ exists }: { exists: boolean }) => exists ? "Merge" : "REC",
+	usePoolRecordLabel: () => ({ exists }: { exists: boolean }) => exists ? "REC MRG" : "REC",
 }));
 
 afterEach(cleanup);
@@ -202,7 +202,7 @@ describe("preset tile current fixture counts and record targets", () => {
 	it("uses the effective record label for existing presets and REC for empty slots", () => {
 		const preset = card("Color", 1, { values: {} });
 		render(<Grid family="Color" presets={[preset]} storeArmed />);
-		expect(tile(1).querySelector('[data-pool-workflow="record"]')).toHaveTextContent(/^Merge$/);
+		expect(tile(1).querySelector('[data-pool-workflow="record"]')).toHaveTextContent(/^REC MRG$/);
 		expect(tile(2).querySelector('[data-pool-workflow="record"]')).toHaveTextContent(/^REC$/);
 	});
 });

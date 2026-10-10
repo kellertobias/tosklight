@@ -1813,8 +1813,16 @@
 	color: var(--amber);
 }
 
+/* Workflow banners cover the footer and artwork without intercepting touch actions. */
 .pool-card-workflow {
-	flex-shrink: 0;
+	position: absolute;
+	inset: auto 0 0;
+	z-index: 30;
+	padding: 4px 5px;
+	border-radius: 0;
+	background: #081014;
+	text-align: center;
+	pointer-events: none;
 }
 
 .pool-card-workflow.record {

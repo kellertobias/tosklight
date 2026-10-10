@@ -11,9 +11,9 @@ describe("record tile labels describe the touch plan", () => {
 	});
 	it("shows Merge only on existing presets with effective Merge", () => {
 		const preset = {kind: "preset", exists: true} as const;
-		expect(poolRecordLabel(preset, effectiveOption("RECORD", "RECORD", "merge"))).toBe("Merge");
+		expect(poolRecordLabel(preset, effectiveOption("RECORD", "RECORD", "merge"))).toBe("REC MRG");
 		expect(poolRecordLabel(preset, effectiveOption("RECORD SMART", "RECORD", "merge"))).toBe("REC");
-		expect(poolRecordLabel(preset, effectiveOption("RECORD MERGE", "RECORD", "smart"))).toBe("Merge");
+		expect(poolRecordLabel(preset, effectiveOption("RECORD MERGE", "RECORD", "smart"))).toBe("REC MRG");
 	});
 	it("distinguishes next-Cue recording from Smart's one-Cue choice and Cue edits", () => {
 		expect(poolRecordLabel({kind:"cuelist",exists:true,cueCount:1}, "smart")).toBe("REC");

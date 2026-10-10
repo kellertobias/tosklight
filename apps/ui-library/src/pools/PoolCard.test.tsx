@@ -169,7 +169,7 @@ describe("PoolCard", () => {
 	});
 
 	it.each([
-		"Merge",
+		"REC MRG",
 		"REC CUE",
 		"REC",
 	])("keeps all four corners and full name access while showing %s", (workflow) => {
@@ -197,7 +197,7 @@ describe("PoolCard", () => {
 			screen.getByTestId("corner-art"),
 		);
 		expect(
-			card.querySelector(".pool-card-status-row > .pool-card-workflow"),
+			card.querySelector(":scope > .pool-card-workflow"),
 		).toHaveTextContent(workflow);
 		expect(card.querySelector(".pool-card-detail")).toHaveTextContent(
 			"References Group 7",
