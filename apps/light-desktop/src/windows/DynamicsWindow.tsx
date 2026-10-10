@@ -31,6 +31,7 @@ import {
 } from "../features/deskSnapshot/DeskSnapshotState";
 import { useDynamicEditorSession } from "../features/dynamics/DynamicEditorSessionContext";
 import { DynamicMutationWriter } from "../features/dynamics/DynamicMutationWriter";
+import { DynamicLaneSymbol } from "../features/dynamics/DynamicLaneSymbol";
 import { dynamicLaneChoices } from "../features/dynamics/laneDomain";
 import { useDynamicsActions } from "../features/dynamics/DynamicsActionsContext";
 import {
@@ -665,7 +666,12 @@ function DynamicPoolTile({
 						⚠
 					</span>
 				) : undefined,
-				icon: dynamic?.body.icon,
+				preview: dynamic ? (
+					<DynamicLaneSymbol
+						lanes={dynamic.body.lanes}
+						attributes={actions.attributes}
+					/>
+				) : undefined,
 				iconColor: dynamic?.body.color ?? "#4edcff",
 				color: dynamic?.body.color ?? "#4edcff",
 				kind: "generic",

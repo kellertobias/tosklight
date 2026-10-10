@@ -1429,3 +1429,9 @@
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+.dynamic-lane-symbol {
+	display: block;
+	width: 100%;
+	height: 100%;
+}

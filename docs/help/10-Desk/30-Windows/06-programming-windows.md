@@ -52,6 +52,18 @@ Set keep priority over this selection shortcut.
 
 ## Dynamic lanes
 
+**At a glance:** the symbol at the bottom right of a Dynamics tile shows its lane families.
+The diagonal X divides it into four parts: **I** at the top for Intensity, **P** on the left
+for Position, **C** on the right for Color, and **O** at the bottom for Other. Filled parts
+use the Dynamic's colour; grey parts mean that family has no lane. Several filled parts
+show a combination. The bottom-left number is still the count of fixtures currently running
+that Dynamic.
+
+The symbol follows the configured lanes, including when the Dynamic is stopped. Pan, Tilt
+and Target lanes belong to Position; all colour lanes belong to Color. Other covers lane
+families such as Focus, Zoom, Beam and Gobo. Editing lanes updates the symbol automatically;
+you do not need to choose an icon for the pool tile.
+
 Each lane of a Dynamic animates one attribute. Tap an empty Dynamics tile, or **+ Add Lane** in the
 editor, to open the lane chooser: it lists attribute groups first, and the attributes sit inside
 their group.
