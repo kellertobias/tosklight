@@ -217,6 +217,25 @@ function usePresetCustomizations(
 	}, [items, showId]);
 }
 
+function presetStoreHandler(
+	command: ReturnType<typeof useCommandLineSurface>,
+	programmingUpdate: ReturnType<typeof useProgrammingUpdate>,
+	recordPreset: (index: number, mode: RecordMode) => Promise<void>,
+	chooseRecordMode: (index: number) => void,
+) {
+	return (target: number, occupied: boolean) => {
+		if (!occupied) return void recordPreset(target, "overwrite");
+		const before = command.read();
+		if (!before.ready) return;
+		void resolveRecordOption(before.text, programmingUpdate, "preset").then(option => {
+			const current = command.read();
+			if (!current.ready || current.text !== before.text) return;
+			if (option === "merge") void recordPreset(target, "merge");
+			else chooseRecordMode(target);
+		});
+	};
+}
+
 function usePresetsWindowModel({
 	active = true,
 	compact,
@@ -309,17 +328,9 @@ function usePresetsWindowModel({
 				setConfigureIndex(target);
 				setConfigureDraft(draft);
 			},
-			onStore: (target, occupied) => {
-				if (!occupied) return void recordPreset(target, "overwrite");
-				const before = command.read();
-				if (!before.ready) return;
-				void resolveRecordOption(before.text, programmingUpdate, "preset").then(option => {
-					const current = command.read();
-					if (!current.ready || current.text !== before.text) return;
-					if (option === "merge") void recordPreset(target, "merge");
-					else setRecordPresetIndex(target);
-				});
-			},
+			onStore: presetStoreHandler(
+				command, programmingUpdate, recordPreset, setRecordPresetIndex,
+			),
 			onDisarmSet: () =>
 				dispatch({ type: "SET_PRESET_SET_ARMED", value: false }),
 			mutationTarget: configure ? null : mutationTarget,

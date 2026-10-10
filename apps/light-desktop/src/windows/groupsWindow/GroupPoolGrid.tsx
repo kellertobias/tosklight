@@ -192,6 +192,24 @@ function groupDereferencer(
 	};
 }
 
+function recordTouchedGroup(
+	group: Group | null,
+	id: string,
+	operation: GroupRecordOperation | null,
+	onOpenRecord: (target: GroupRecordingTarget) => void,
+	recordGroup: (target: GroupRecordingTarget, mode?: GroupRecordOperation) => Promise<unknown>,
+	dispatch: ReturnType<typeof useApp>["dispatch"],
+) {
+	if (group?.body.fixtures.length && operation === null) {
+		onOpenRecord(captureGroupRecordingTarget(group));
+		return;
+	}
+	void recordGroup(
+		group ? captureGroupRecordingTarget(group) : emptyGroupRecordingTarget(id),
+		!group && operation === "merge" ? "overwrite" : operation ?? "overwrite",
+	).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
+}
+
 export function GroupPoolGrid({
 	active = true,
 	cards,
@@ -285,17 +303,8 @@ export function GroupPoolGrid({
 			return;
 		}
 		if (!state.storeArmed) return;
-		const operation = groupRecordOperation(command.read().text);
-		if (group?.body.fixtures.length && operation === null) {
-			onOpenRecord(captureGroupRecordingTarget(group));
-			return;
-		}
-		void recordGroup(
-			group
-				? captureGroupRecordingTarget(group)
-				: emptyGroupRecordingTarget(id),
-			!group && operation === "merge" ? "overwrite" : operation ?? "overwrite",
-		).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
+		recordTouchedGroup(group, id, groupRecordOperation(command.read().text),
+			onOpenRecord, recordGroup, dispatch);
 	};
 	const selectionFor = groupSelectionResolver(command);
 	return (
