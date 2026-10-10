@@ -1213,18 +1213,26 @@ describe("CuelistWindow pool recording", () => {
 		const authority = createCommandLineTestAuthority({ text: "STORE" });
 		render(authority.wrap(<CuelistWindow compact cueListTab="pool" />));
 		await act(authority.settle);
-		expect(screen.getAllByText("Tap to record Cuelist")).toHaveLength(1000);
+		expect(screen.getAllByText("REC", { exact: true })).toHaveLength(1000);
 		const cards = document.querySelectorAll(".cuelist-card");
 		expect(cards).toHaveLength(1000);
 		expect(cards[0]).toHaveAttribute("data-pool-slot-id", "1");
 		expect(cards[0]).toHaveClass("store-target");
 		expect(cards[999]).toHaveAttribute("data-pool-slot-id", "1000");
-		fireEvent.click(
-			screen.getAllByText("Tap to record Cuelist")[0].closest("button")!,
-		);
+		expect(cards[999]).toHaveClass("store-target");
+		expect(within(cards[999] as HTMLElement).getByText("Empty")).toBeVisible();
+		expect(
+			within(cards[999] as HTMLElement).getByText("1000", { exact: true }),
+		).toBeVisible();
+		const recordBadge = within(cards[999] as HTMLElement).getByText("REC", {
+			exact: true,
+		});
+		expect(recordBadge).toHaveClass("pool-card-workflow", "record");
+		expect(recordBadge).toHaveAttribute("data-pool-workflow", "record");
+		fireEvent.click(recordBadge);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "cuelist_pool", number: 1 },
+				target: { kind: "cuelist_pool", number: 1000 },
 				operation: "overwrite",
 				timing: {},
 				cueOnly: false,
