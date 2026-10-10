@@ -357,7 +357,8 @@ describe("PresetsWindow normal recording boundary", () => {
 		expect(mocks.commandReset).not.toHaveBeenCalled();
 	});
 
-	it("preserves the existing-target mode dialog and object revision", async () => {
+	it("preserves the explicit Smart mode dialog and object revision", async () => {
+		mocks.commandText = "RECORD SMART";
 		mocks.presets = [
 			{
 				kind: "preset",
@@ -406,7 +407,7 @@ describe("PresetsWindow normal recording boundary", () => {
 		render(<PresetsWindow compact />);
 
 		fireEvent.click(firstPresetCell());
-		fireEvent.click(await screen.findByRole("button", { name: "Merge" }));
+		await waitFor(() => expect(mocks.record).toHaveBeenCalledOnce());
 
 		expect(mocks.record).toHaveBeenCalledWith(
 			expect.objectContaining({
