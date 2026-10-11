@@ -117,12 +117,13 @@ function PlaybackRowConfiguration({
 				onChange={(event) => onUpdate({ count: Number(event.target.value) })}
 			/>
 			<SelectField
-				label="Presentation"
+				label="Input type"
+				ariaLabel="Input type"
 				value={row.presentation}
 				options={[
-					{ value: "fader", label: "Faders" },
+					{ value: "fader", label: "Fader" },
 					{ value: "buttons", label: "Buttons" },
-					{ value: "push_encoder", label: "Push encoders" },
+					{ value: "push_encoder", label: "Potentiometer or encoder" },
 				]}
 				onChange={(value) =>
 					onUpdate({ presentation: value as PlaybackRow["presentation"] })

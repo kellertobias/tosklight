@@ -127,9 +127,18 @@ it.each([
 						.querySelector(".touch-encoder-push")!
 						.getBoundingClientRect();
 					const value = card.querySelector(".touch-encoder-value")!;
+					const rotary = card.querySelector(".playback-rotary-control")!;
+					const ring = getComputedStyle(card.querySelector(".touch-encoder-surface")!, "::before");
 					const numeric = card.querySelector(".touch-encoder-number-entry")!.getBoundingClientRect();
 					return {
 						bottom: box.bottom,
+						position: rotary.getAttribute("data-position"),
+						ring: ring.backgroundImage,
+						actionWidth: action.width,
+						actionLeft: action.left,
+						actionRight: action.right,
+						cardLeft: box.left,
+						cardRight: box.right,
 						actionTop: action.top,
 						actionBottom: action.bottom,
 						actionHeight: action.height,
@@ -150,6 +159,11 @@ it.each([
 		for (const card of rectangles.cards) {
 			expect(card.actionBottom).toBeLessThanOrEqual(card.bottom);
 			expect(card.actionHeight).toBeGreaterThanOrEqual(44);
+			expect(card.actionWidth).toBeGreaterThanOrEqual(44);
+			expect(card.actionLeft).toBeGreaterThanOrEqual(card.cardLeft);
+			expect(card.actionRight).toBeLessThanOrEqual(card.cardRight);
+			expect(card.position).toBe("100");
+			expect(card.ring).toContain("conic-gradient");
 			expect(card.numericHeight).toBeGreaterThanOrEqual(44);
 			expect(card.numericWidth).toBeGreaterThanOrEqual(44);
 			expect(card.numericBottom).toBeLessThanOrEqual(card.bottom);

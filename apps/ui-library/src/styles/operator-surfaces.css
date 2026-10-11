@@ -2261,3 +2261,56 @@
 	clip-path: inset(50%);
 	white-space: nowrap;
 }
+
+/* Playback rotary inputs share the level interaction, without Programmer styling. */
+.playback-rotary-control {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.playback-rotary-control > .touch-encoder {
+	flex: 1;
+	height: auto;
+	min-height: 0;
+}
+.playback-rotary-control .touch-encoder-surface {
+	container-type: size;
+}
+.playback-rotary-control .touch-encoder-ridges,
+.playback-rotary-control .touch-encoder-legend {
+	display: none;
+}
+.playback-rotary-control .touch-encoder-surface::before {
+	content: "";
+	position: absolute;
+	pointer-events: none;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: clamp(52px, min(100cqw, 100cqh), 108px);
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: conic-gradient(from 225deg,
+		var(--encoder-color, #176777) var(--playback-rotary-angle),
+		#46505b var(--playback-rotary-angle) 270deg,
+		transparent 270deg);
+}
+.playback-rotary-control .touch-encoder-push {
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: clamp(44px, min(100cqw - 16px, 100cqh - 16px), 92px);
+	height: clamp(44px, min(100cqw - 16px, 100cqh - 16px), 92px);
+	border: 1px solid #647080;
+	border-radius: 50%;
+	background: #202832;
+	box-shadow: 0 2px 5px #0008;
+}
+.playback-rotary-feedback {
+	flex: none;
+	text-align: center;
+	font-size: 12px;
+	line-height: 16px;
+}

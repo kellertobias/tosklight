@@ -1,5 +1,5 @@
 import { PlaybackArtwork, type PlaybackArtworkModel } from "./PlaybackArtwork";
-import { TouchEncoder } from "../encoders/TouchEncoder";
+import { PlaybackRotaryControl } from "./PlaybackRotaryControl";
 import type {
 	CSSProperties,
 	MouseEventHandler,
@@ -351,18 +351,14 @@ export function TouchPlaybackCardView({
 			{pushEncoder && model.assigned && (
 				<section className="playback-push-encoder">
 					{hasFader ? (
-						<TouchEncoder
-							centerAction={model.actions[0]}
+						<PlaybackRotaryControl
+							action={model.actions[0]}
 							label={model.faderLabel}
-							value={model.faderValue / 100}
+							value={model.faderValue}
 							display={model.faderDisplay}
 							disabled={model.disabled}
-							onSet={(value) => callbacks.onFaderChange?.(value * 100)}
-							onStep={(delta) =>
-								callbacks.onFaderChange?.(
-									Math.min(100, Math.max(0, model.faderValue + delta * 100)),
-								)
-							}
+							accentColor={playbackCardColor(model)}
+							onChange={callbacks.onFaderChange}
 						/>
 					) : (
 						<div aria-hidden="true" style={{ flex: 1, minHeight: 0 }} />

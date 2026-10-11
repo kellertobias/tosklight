@@ -60,7 +60,7 @@ it("accumulates fine encoder wheel steps from fresh authoritative Group projecti
 	for (let index = 0; index < 10; index++) wheel(100);
 	expect(master).toBeCloseTo(0.99, 8);
 	expect(submitted[1]).toBeLessThan(submitted[0]);
-	expect(screen.getByRole("group", { name: "Master" })).toHaveTextContent(
+	expect(screen.getByText("99% master").closest(".playback-rotary-control")).toHaveTextContent(
 		"99% master",
 	);
 	wheel(100, true);

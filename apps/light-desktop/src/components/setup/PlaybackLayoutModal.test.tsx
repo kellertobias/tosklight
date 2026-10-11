@@ -116,3 +116,17 @@ it("labels page source and follow controls and saves the operator's Own page cho
 	fireEvent.click(screen.getByRole("button", { name: "Save" }));
 	expect(save).toHaveBeenCalledWith(layout, { type: "own", page: 1 });
 });
+
+it("names the input type while preserving the existing persisted rotary tag", () => {
+	const save = vi.fn();
+	render(<PlaybackLayoutModal initialLayout={layout} pageSource={{ type: "own", page: 2 }} onSave={save} onClose={() => {}} />);
+	const inputTypes = screen.getAllByRole("button", { name: "Input type" });
+	expect(inputTypes).toHaveLength(2);
+	expect(screen.getByText("Potentiometer or encoder")).toBeInTheDocument();
+	fireEvent.click(inputTypes[0]);
+	fireEvent.click(screen.getByRole("option", { name: "Potentiometer or encoder" }));
+	fireEvent.click(screen.getByRole("button", { name: "Save" }));
+	expect(save).toHaveBeenCalledWith({
+		rows: layout.rows.map((row) => ({ ...row, presentation: "push_encoder" })),
+	}, { type: "own", page: 2 });
+});
