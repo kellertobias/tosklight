@@ -43,15 +43,20 @@ function content(maximized: boolean) {
 	return renderToStaticMarkup(
 		<div className="desk-grid">
 			<PaneView pane={pane} maximized={maximized}>
-				<section className="playback-surface-controls">
-					<div className="playback-solo-toolbar">
-						Select Solo members · Manage Solo Regions
-					</div>
-					<div className="playback-bank-viewport">
-						<div className="playback-fader-bank touch-layout" style={geometry}>
-							{cards}
+				<section className="playback-pane">
+					<section className="playback-surface-controls">
+						<div className="playback-solo-toolbar">
+							Select Solo members · Manage Solo Regions
 						</div>
-					</div>
+						<div className="playback-bank-viewport">
+							<div
+								className="playback-fader-bank touch-layout"
+								style={geometry}
+							>
+								{cards}
+							</div>
+						</div>
+					</section>
 				</section>
 			</PaneView>
 		</div>,
@@ -123,10 +128,37 @@ describe("rendered Playback pane geometry", () => {
 				expect(result.action.height).toBeGreaterThanOrEqual(44);
 				expect(result.address.bottom).toBeLessThanOrEqual(result.name.top);
 				expect(result.viewport.height).toBeGreaterThan(300);
+				expect(result.viewport.bottom).toBeLessThanOrEqual(result.pane.bottom);
 				expect(result.cell.y).toBeGreaterThanOrEqual(result.viewport.y);
 				expect(result.cell.y).toBeLessThan(result.viewport.bottom);
 				expect(result.scrollWidth).toBeGreaterThan(result.viewport.width);
 				expect(result.scrollHeight).toBeGreaterThan(result.viewport.height);
+				await page.locator(".playback-bank-viewport").hover();
+				await page.mouse.wheel(0, 4000);
+				await page.mouse.wheel(1900, 0);
+				await page.waitForFunction(
+					() => {
+						const viewport = document.querySelector(".playback-bank-viewport")!;
+						return viewport.scrollTop > 0 && viewport.scrollLeft > 0;
+					},
+					undefined,
+					{ timeout: 2000 },
+				);
+				const endVisible = await page.evaluate(() => {
+					const viewport = document
+						.querySelector(".playback-bank-viewport")!
+						.getBoundingClientRect();
+					const last = [...document.querySelectorAll(".touch-playback-card")]
+						.at(-1)!
+						.getBoundingClientRect();
+					return (
+						last.top >= viewport.top &&
+						last.bottom <= viewport.bottom &&
+						last.left >= viewport.left &&
+						last.right <= viewport.right
+					);
+				});
+				expect(endVisible).toBe(true);
 				await page.screenshot({
 					path: `.artifacts/tmp/TL714-pane-browser-${measurements.length}.png`,
 				});

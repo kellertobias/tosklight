@@ -1867,6 +1867,13 @@
 	);
 }
 
+.playback-pane {
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+
 .playback-surface-controls {
 	display: flex;
 	flex-direction: column;
@@ -1893,6 +1900,9 @@
 .playback-bank-viewport > .playback-fader-bank,
 .playback-bank-fixed > .playback-fader-bank {
 	height: 100%;
+}
+.playback-bank-viewport > .playback-fader-bank {
+	overflow: visible;
 }
 .playback-bank-viewport .single-button-playback-action {
 	grid-row: 1 / -1;
