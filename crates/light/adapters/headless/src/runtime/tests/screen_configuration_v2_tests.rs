@@ -172,7 +172,7 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
             "request_id":"screen-programmer-invalid-width",
             "action":{
                 "type":"update_programmer_control_surface",
-                "patch":{"visible_encoders":5}
+                "patch":{"visible_encoders":7}
             }
         }),
     )
@@ -216,6 +216,7 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
             page_mode: "follow_main".into(),
             show_page_controls: false,
             show_programmer: false,
+            show_compact_encoders: false,
             desired_open: true,
             display_id: Some("display-1".into()),
             bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
@@ -356,6 +357,7 @@ async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_
             "request_id":"fixed-screen-desktop",
             "patch":{
                 "content":{"type":"desktop"},
+                "show_compact_encoders":true,
                 "clear_bounds":false,
                 "clear_display_id":false,
                 "clear_playback_layout":false
@@ -366,6 +368,7 @@ async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_
     assert_eq!(desktop.status(), StatusCode::OK);
     let desktop = json(desktop).await;
     assert_eq!(desktop["screen"]["content"]["type"], "desktop");
+    assert_eq!(desktop["screen"]["show_compact_encoders"], true);
     assert_eq!(desktop["screen"]["show_dock"], false);
     assert_eq!(desktop["screen"]["layout"]["activeDeskId"], "preserved");
 

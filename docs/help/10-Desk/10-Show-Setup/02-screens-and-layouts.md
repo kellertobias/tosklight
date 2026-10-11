@@ -102,7 +102,9 @@ desk. Keep the main window open and connected while screens are in use.
 
 Choose **Configure encoder placement** in the Screens & playback title bar. Its **Encoder placement** modal decides which screen carries the encoder section, independently of the
 Playback controls. Choose **Encoders on** to select the main screen or any optional screen, and
-**Visible encoders** to show four or six software encoders; attached hardware always keeps its six.
+**Visible encoders** to show four, five or six encoders, including with attached hardware.
+
+Enable **Compact encoder assignments** in the default screen settings or an optional screen’s **Configure → Layout** settings to show assignments beside hardware Playbacks. It is off by default. The display keeps all configured encoders in one row, with their current values or value spreads. Press **Int**, **Col**, **Pos**, **Beam** or another group to select it; press the active group again to cycle its pages. Group and page selection is shared with the full encoder bar. The readouts are display-only; **Programmer Fade**, **Page** and the large **A–E** speed groups remain touchable. Switching to the full Encoders view hides the compact assignments.
 
 The main screen keeps its whole programmer whatever the placement is. While the encoders live on
 another screen, the main screen still carries its command line, its keypad and its Delete and Move

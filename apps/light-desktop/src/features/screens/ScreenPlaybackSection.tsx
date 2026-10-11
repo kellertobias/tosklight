@@ -1,4 +1,6 @@
 import type { ScreenConfiguration } from "../../api/types";
+import type { ReactNode } from "react";
+import { HardwareControlSummary } from "../../components/control/HardwareControlSummary";
 import { PlaybackFaderBank } from "../../components/control/PlaybackFaderBank";
 import { screenShowsPageControls } from "./encoderPlacement";
 import { useLowerSectionSwitch } from "./LowerSectionSwitch";
@@ -13,17 +15,19 @@ import { useScreenPlaybackPage } from "./useScreenPlaybackPage";
  */
 export function ScreenPlaybackSection({
 	screen,
+	encoders,
 }: {
 	screen: ScreenConfiguration;
+	encoders?: ReactNode;
 }) {
 	const { screens, bootstrap } = useScreens();
 	const sectionSwitch = useLowerSectionSwitch();
 	const page = useScreenPlaybackPage(screen, screens);
 	const pageControls = screenShowsPageControls(screen);
-	const sideColumn = pageControls || Boolean(sectionSwitch);
+	const sideColumn = pageControls || Boolean(sectionSwitch) || Boolean(encoders);
 	return (
 		<section
-			className={`screen-playbacks ${sideColumn ? "" : "playbacks-only"}`}
+			className={`screen-playbacks ${sideColumn ? "" : "playbacks-only"} ${encoders ? "with-compact-encoders" : ""}`}
 		>
 			{page == null ? (
 				<div
@@ -43,7 +47,12 @@ export function ScreenPlaybackSection({
 				/>
 			)}
 			{/* The switch stays reachable even while the page is still resolving. */}
-			{page != null && pageControls ? (
+			{encoders ? (
+				<aside className="screen-hardware-summary">
+					{sectionSwitch}
+					<HardwareControlSummary encoders={encoders} pageControl={page != null && pageControls ? <ScreenPageControls screen={screen} page={page} compact /> : null} />
+				</aside>
+			) : page != null && pageControls ? (
 				<ScreenPageControls screen={screen} page={page} />
 			) : (
 				sectionSwitch && (

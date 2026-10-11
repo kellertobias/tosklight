@@ -98,7 +98,7 @@ export class BrowserCrossSurface {
 			const mark = hardware.mark();
 			await this.api.request(
 				"POST",
-				`/api/v2/control-desk/actions`,
+				`/api/v2/control-desk/update`,
 				{
 					request_id: crypto.randomUUID(),
 					action: {
@@ -806,7 +806,7 @@ export class BrowserCrossSurface {
 		await this.withSession(session, () =>
 			this.api.request(
 				"POST",
-				`/api/v2/control-desk/actions`,
+				`/api/v2/control-desk/update`,
 				{
 					request_id: crypto.randomUUID(),
 					action: { type: "set_page", page, existing_only: true },

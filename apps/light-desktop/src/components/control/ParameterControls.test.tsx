@@ -155,6 +155,7 @@ vi.mock("../../state/AppContext", () => ({
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
+ useSessionSnapshot: () => null,
 	useHardwareConnected: () => Boolean(server.bootstrap?.hardware_connected),
 	useAttributeRegistry: () => attributeRegistry.current,
 	useColorModel: () => colorModel.current,

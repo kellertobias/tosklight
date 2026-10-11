@@ -263,7 +263,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		});
 	});
 
-	it("updates the programmer owner and encoder count as one replay-safe screen intent", async () => {
+	it.each([4, 5, 6] as const)("updates the programmer owner with %s encoders as one replay-safe screen intent", async (count) => {
 		const request = vi.fn().mockResolvedValueOnce({
 			request_id: "programmer-control-surface",
 			replayed: false,
@@ -271,7 +271,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			active_page: null,
 			programmer_control_surface: {
 				owner_screen_id: SCREEN_ID,
-				visible_encoders: 4,
+				visible_encoders: count,
 			},
 		});
 		const client = new PlaybackApiClient({
@@ -284,9 +284,9 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await expect(
 			client.updateProgrammerControlSurface({
 				owner_screen_id: SCREEN_ID,
-				visible_encoders: 4,
+				visible_encoders: count,
 			}),
-		).resolves.toEqual({ owner_screen_id: SCREEN_ID, visible_encoders: 4 });
+		).resolves.toEqual({ owner_screen_id: SCREEN_ID, visible_encoders: count });
 		expect(request).toHaveBeenCalledWith(
 			"/api/v2/screens/actions",
 			expect.objectContaining({
@@ -300,7 +300,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		expect(body.action.patch).toEqual({
 			owner_screen_id: SCREEN_ID,
 			assign_to_main: false,
-			visible_encoders: 4,
+			visible_encoders: count,
 		});
 	});
 
@@ -317,7 +317,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.setPlaybackPage(DESK_ID, 2, { existingOnly: true });
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desk/actions`,
+			`/api/v2/control-desk/update`,
 			expect.objectContaining({
 				method: "POST",
 				body: expect.stringContaining('"existing_only":true'),
@@ -338,7 +338,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.setPlaybackPage(DESK_ID, 2);
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desk/actions`,
+			`/api/v2/control-desk/update`,
 			expect.objectContaining({
 				body: expect.stringContaining('"existing_only":false'),
 			}),
@@ -359,7 +359,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.removeClient(DESK_ID, CLIENT_ID);
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desk/actions`,
+			`/api/v2/control-desk/update`,
 			expect.objectContaining({
 				method: "POST",
 				body: expect.stringContaining(`"client_id":"${CLIENT_ID}"`),

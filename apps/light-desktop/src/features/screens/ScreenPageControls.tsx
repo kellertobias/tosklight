@@ -18,9 +18,11 @@ import { useScreens } from "./ScreensContext";
 export function ScreenPageControls({
 	screen,
 	page,
+	compact = false,
 }: {
 	screen: ScreenConfiguration;
 	page: number;
+	compact?: boolean;
 }) {
 	const { setScreenPage } = useScreens();
 	const sectionSwitch = useLowerSectionSwitch();
@@ -57,26 +59,30 @@ export function ScreenPageControls({
 	};
 
 	return (
-		<div className="screen-page-controls">
-			{sectionSwitch}
-			<Button disabled={!writable || page <= 1} onClick={() => setPage(page - 1)}>
+		<div className={`screen-page-controls ${compact ? "compact-screen-page-controls" : ""}`}>
+			{!compact && sectionSwitch}
+			{!compact && <Button disabled={!writable || page <= 1} onClick={() => setPage(page - 1)}>
 				▲ PAGE UP
-			</Button>
+			</Button>}
 			<Button
 				className="screen-page-number"
+				aria-label={compact ? `Page ${page}` : undefined}
+				disabled={compact && !writable}
 				onClick={() => writable && setPicker(true)}
 			>
+				{compact && <span>Page</span>}
 				<strong>{page}</strong>
+				{!compact &&
 				<span>
 					{pages.find((item) => item.number === page)?.name ?? `Page ${page}`}
-				</span>
+				</span>}
 			</Button>
-			<Button
+			{!compact && <Button
 				disabled={!writable || !canAdvancePlaybackPage(pages, page)}
 				onClick={() => void advance()}
 			>
 				PAGE DOWN ▼
-			</Button>
+			</Button>}
 			{picker && (
 				<div className="screen-page-picker">
 					<Button onClick={() => setPicker(false)}>×</Button>

@@ -117,9 +117,9 @@ export function ProgrammerControlSurfaceSettings() {
 				<div>
 					<h3>Encoder placement</h3>
 					<p>
-						Choose which screen carries the encoder section and how many
-						software encoders it shows. Playback controls stay on the main
-						screen either way, and attached hardware remains six encoders.
+						Choose which screen carries the encoder section and whether it
+						shows four, five or six encoders. The same count applies to
+						attached hardware and the compact assignment display.
 					</p>
 				</div>
 			</header>
@@ -147,11 +147,12 @@ export function ProgrammerControlSurfaceSettings() {
 					value={String(configuration.visible_encoders)}
 					onChange={(value) =>
 						void server.updateProgrammerControlSurface({
-							visible_encoders: value === "4" ? 4 : 6,
+							visible_encoders: value === "4" ? 4 : value === "5" ? 5 : 6,
 						})
 					}
 					options={[
 						{ value: "4", label: "Four" },
+						{ value: "5", label: "Five" },
 						{ value: "6", label: "Six" },
 					]}
 				/>
@@ -270,6 +271,8 @@ export function ScreensSetup({
 			<div className="screens-setup-list">
 				<DefaultScreenSettings
 					deskName={defaultScreen.draft?.name ?? ""}
+					showCompactEncoders={defaultScreen.draft?.show_compact_encoders ?? false}
+					onShowCompactEncoders={(enabled) => defaultScreen.updateDesk({ show_compact_encoders: enabled })}
 					onDeskName={(name) => defaultScreen.updateText("name", name)}
 					onTextFocus={defaultScreen.beginTextEdit}
 					onTextBlur={defaultScreen.endTextEdit}

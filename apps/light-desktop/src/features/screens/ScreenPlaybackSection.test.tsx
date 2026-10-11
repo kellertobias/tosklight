@@ -49,6 +49,9 @@ vi.mock("../../components/control/PlaybackFaderBank", () => ({
 		return <div data-testid="fader-bank" data-page={pageNumber} />;
 	},
 }));
+vi.mock("../../components/control/HardwareControlSummary", () => ({
+	HardwareControlSummary: ({ encoders, pageControl }: { encoders?: React.ReactNode; pageControl?: React.ReactNode }) => <div data-testid="compact-hardware-summary">{pageControl}{encoders}</div>,
+}));
 
 const { ScreenPlaybackSection } = await import("./ScreenPlaybackSection");
 
@@ -446,5 +449,34 @@ describe("removed broad Playback facade", () => {
 		);
 		expect(fetchSpy).not.toHaveBeenCalled();
 		fetchSpy.mockRestore();
+	});
+});
+
+describe("compact hardware screen page controls", () => {
+	it("uses the independent screen page picker and writes only that screen", async () => {
+		mocks.desk = { active_page: 9 };
+		mocks.pagesView.pages = [pageObject(2), pageObject(3)];
+		const setScreenPage = vi.fn(async () => undefined);
+		render(<ScreensProvider source={source({ setScreenPage, screens: snapshot({ "screen-1": 2 }) })}><ScreenPlaybackSection screen={screenConfiguration()} encoders={<div data-testid="compact-encoders" />} /></ScreensProvider>);
+		expect(bankPage()).toBe("2");
+		expect(screen.getByRole("button", { name: "Page 2" })).toBeEnabled();
+		expect(screen.queryByRole("button", { name: "PAGE DOWN ▼" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+		fireEvent.click(screen.getByRole("button", { name: "3 · Page 3" }));
+		await settled();
+		expect(setScreenPage).toHaveBeenCalledExactlyOnceWith("screen-1", 3);
+	});
+
+	it("keeps follow-main compact page read-only", () => {
+		mocks.desk = { active_page: 9 };
+		render(<ScreensProvider source={source({ screens: snapshot({ "screen-1": 2 }) })}><ScreenPlaybackSection screen={screenConfiguration({ page_mode: "follow_main" })} encoders={<div />} /></ScreensProvider>);
+		expect(screen.getByRole("button", { name: "Page 9" })).toBeDisabled();
+	});
+
+	it("preserves hidden page controls in the compact summary", () => {
+		render(<ScreensProvider source={source({ screens: snapshot({ "screen-1": 2 }) })}><ScreenPlaybackSection screen={screenConfiguration({ show_page_controls: false })} encoders={<div data-testid="compact-encoders" />} /></ScreensProvider>);
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Page 2" })).toBeNull();
+		expect(mocks.pagesViewMounted).toBe(0);
 	});
 });

@@ -375,7 +375,7 @@ export class BrowserVirtualPlaybacks {
 			throw new Error("Virtual Playback page changes require an API session");
 		await this.api.request(
 			"POST",
-			`/api/v2/control-desk/actions`,
+			`/api/v2/control-desk/update`,
 			{
 				request_id: crypto.randomUUID(),
 				action: {

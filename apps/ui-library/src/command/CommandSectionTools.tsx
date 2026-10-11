@@ -288,6 +288,7 @@ export interface HardwareControlValue {
 
 export interface HardwareControlSummaryViewProps {
 	values: readonly HardwareControlValue[];
+	pageControl?: ReactNode;
 	speedGroups: readonly SpeedGroupViewModel[];
 	onValue: (id: HardwareControlValue["id"]) => void;
 	onValueSettings?: (id: HardwareControlValue["id"]) => void;
@@ -306,6 +307,7 @@ export interface HardwareControlSummaryViewProps {
 
 export function HardwareControlSummaryView({
 	values,
+	pageControl,
 	speedGroups,
 	onValue,
 	onValueSettings,
@@ -337,6 +339,7 @@ export function HardwareControlSummaryView({
 						<b>{value.display}</b>
 					</Button>
 				))}
+				{pageControl}
 			</div>
 			<div className="hardware-speed-groups">
 				{speedGroups.map((group) => (

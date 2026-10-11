@@ -149,7 +149,11 @@ function HardwareControlOverlays({
 	);
 }
 
-export function HardwareControlSummary() {
+export function HardwareControlSummary({
+	encoders,
+	pageControl,
+}: { encoders?: ReactNode; pageControl?: ReactNode } = {}) {
+	const compact = Boolean(encoders);
 	const highlightError = useHighlightErrorMessage();
 	const highlightActions = useHighlightActions();
 	const configurationActions = useConfigurationActions();
@@ -198,7 +202,7 @@ export function HardwareControlSummary() {
 	]);
 	useHardwarePageWindowEvents(
 		hardwarePages,
-		pageReady,
+		pageReady && pageControl === undefined,
 		page,
 		topology.pages,
 		() => setPagesOpen(true),
@@ -221,8 +225,10 @@ export function HardwareControlSummary() {
 		setTimeInput(null);
 	};
 	return (
+		<div className={compact ? "hardware-compact-summary" : "hardware-summary-container"}>
 		<HardwareControlSummaryView
-			values={[
+			pageControl={pageControl}
+			values={([
 				{
 					id: "programmer-fade",
 					label: "Prog Fade",
@@ -246,7 +252,7 @@ export function HardwareControlSummary() {
 					ariaLabel: pageReady ? `Page ${page}` : "Playback page loading",
 					settings: true,
 				},
-			]}
+			 ] as const).filter(value => !compact || value.id === "programmer-fade" || (value.id === "page" && pageControl === undefined))}
 			speedGroups={(["A", "B", "C", "D", "E"] as const).map((group, index) => {
 				const bpm = speedGroups.ready
 					? speedGroups.projection?.groups[index]?.manualBpm
@@ -294,5 +300,7 @@ export function HardwareControlSummary() {
 				/>
 			}
 		/>
+			{encoders}
+		</div>
 	);
 }

@@ -2,37 +2,57 @@
 
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScreenConfiguration } from "../../api/types";
 import { ScreenControlRegion } from "./ScreenControlRegion";
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
+const compactMocks = vi.hoisted(() => ({ hardware: false, programmerContext: true, bindings: [] as { active: boolean; bindHardware: boolean }[], full: [] as unknown[], miniature: [] as unknown[], controller: { id: "shared-controller" } }));
+
+vi.mock("../../components/control/parameterControls/useParameterController", () => ({
+	useParameterController: (active: boolean, options: { bindHardware: boolean }) => {
+		compactMocks.bindings.push({ active, bindHardware: options.bindHardware });
+		return compactMocks.controller;
+	},
+}));
+vi.mock("../../components/control/parameterControls/CompactEncoderAssignments", () => ({
+	CompactEncoderAssignments: ({ controller }: { controller: unknown }) => {
+		compactMocks.miniature.push(controller);
+		return <div data-testid="compact-encoders" />;
+	},
+}));
+
 /** Both sections host the switch where the operator's own controls already are. */
 vi.mock("../../components/control/CommandLineBar", () => ({
 	CommandLineBar: () => <div data-testid="command-line" />,
+}));
+vi.mock("../../components/control/ControlSection", () => ({
+	ControlSection: () => <div data-testid="main-control-section" />,
 }));
 
 vi.mock("../../components/control/ParameterControls", async () => {
 	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
 	return {
-		ParameterControls: () => (
-			<div data-testid="encoders-only">{useLowerSectionSwitch()}</div>
-		),
+		useProgrammerEncoderContext: () => compactMocks.programmerContext,
+		ParameterControls: ({ controller }: { controller: unknown }) => {
+			compactMocks.full.push(controller);
+			return <div data-testid="encoders-only">{useLowerSectionSwitch()}</div>;
+		},
 	};
 });
 
 vi.mock("./ScreenPlaybackSection", async () => {
 	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
 	return {
-		ScreenPlaybackSection: () => (
-			<div data-testid="playbacks">{useLowerSectionSwitch()}</div>
+		ScreenPlaybackSection: ({ encoders }: { encoders?: React.ReactNode }) => (
+			<div data-testid="playbacks">{useLowerSectionSwitch()}{encoders}</div>
 		),
 	};
 });
 
 vi.mock("../deskSnapshot/DeskSnapshotState", () => ({
-	useHardwareConnected: () => false,
+	useHardwareConnected: () => compactMocks.hardware,
 }));
 
 vi.mock("../../state/AppContext", () => ({
@@ -86,6 +106,13 @@ function mount(screenConfiguration: ScreenConfiguration, encoderScreenId: string
 }
 
 describe("ScreenControlRegion", () => {
+	beforeEach(() => {
+		compactMocks.hardware = false;
+		compactMocks.programmerContext = true;
+		compactMocks.bindings = [];
+		compactMocks.full = [];
+		compactMocks.miniature = [];
+	});
 	afterEach(cleanup);
 
 	it("shows only Playbacks while the encoders live elsewhere", () => {
@@ -148,5 +175,37 @@ describe("ScreenControlRegion", () => {
 
 		fireEvent.click(moved);
 		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
+	});
+
+	it("keeps one owner controller while switching into opted-in hardware playback readouts", () => {
+		compactMocks.hardware = true;
+		mount({ ...screenTemplate, show_compact_encoders: true }, "screen-1");
+		expect(screen.queryByTestId("compact-encoders")).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Lower section" }));
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(compactMocks.full[0]).toBe(compactMocks.miniature[0]);
+		expect(compactMocks.bindings.at(-1)).toEqual({ active: true, bindHardware: true });
+	});
+
+	it("makes a nonowner compact screen a readout without extra hardware binding", () => {
+		compactMocks.hardware = true;
+		mount({ ...screenTemplate, show_compact_encoders: true }, null);
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(compactMocks.bindings.at(-1)).toEqual({ active: true, bindHardware: false });
+	});
+
+	it.each(["disabled", "software"])("suppresses compact readouts for %s", (condition) => {
+		compactMocks.hardware = condition !== "software";
+		mount({ ...screenTemplate, show_compact_encoders: condition !== "disabled" }, null);
+		expect(screen.queryByTestId("compact-encoders")).toBeNull();
+		expect(compactMocks.bindings.at(-1)?.active).toBe(false);
+	});
+
+	it("does not suppress a nonowner mirror merely because its own workspace has special controls", () => {
+		compactMocks.hardware = true;
+		compactMocks.programmerContext = false;
+		mount({ ...screenTemplate, show_compact_encoders: true }, null);
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(compactMocks.bindings.at(-1)).toEqual({ active: true, bindHardware: false });
 	});
 });

@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 impl DeskStore {
     pub fn screens(&self) -> Result<Vec<ScreenConfiguration>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,playback_layout_json,content_json,not_editable FROM screens ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,playback_layout_json,content_json,not_editable,show_compact_encoders FROM screens ORDER BY name COLLATE NOCASE")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -31,6 +31,7 @@ impl DeskStore {
                 row.get::<_, Option<String>>(15)?,
                 row.get::<_, String>(16)?,
                 row.get::<_, bool>(17)?,
+                row.get::<_, bool>(18)?,
             ))
         })?;
         rows.map(|row| {
@@ -53,6 +54,7 @@ impl DeskStore {
                 playback_layout,
                 content,
                 not_editable,
+                show_compact_encoders,
             ) = row?;
             let content = serde_json::from_str(&content)?;
             let mut screen = ScreenConfiguration {
@@ -78,6 +80,7 @@ impl DeskStore {
                     .transpose()?,
                 content,
                 not_editable,
+                show_compact_encoders,
             };
             normalize_screen(&mut screen)?;
             Ok(screen)
@@ -114,7 +117,7 @@ impl DeskStore {
             validate_playback_surface(layout)?;
         }
         normalize_screen(&mut screen)?;
-        self.conn.execute("INSERT INTO screens(id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,playback_layout_json,content_json,not_editable) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,show_dock=excluded.show_dock,show_playbacks=excluded.show_playbacks,playback_count=excluded.playback_count,playback_rows=excluded.playback_rows,first_playback_slot=excluded.first_playback_slot,page_mode=excluded.page_mode,show_page_controls=excluded.show_page_controls,show_programmer=excluded.show_programmer,desired_open=excluded.desired_open,display_id=excluded.display_id,bounds_json=excluded.bounds_json,fullscreen=excluded.fullscreen,playback_layout_json=excluded.playback_layout_json,content_json=excluded.content_json,not_editable=excluded.not_editable",params![screen.id.to_string(),screen.name,serde_json::to_string(&screen.layout)?,screen.show_dock,screen.show_playbacks,screen.playback_count,screen.playback_rows,screen.first_playback_slot,screen.page_mode,screen.show_page_controls,screen.show_programmer,screen.desired_open,screen.display_id,screen.bounds.as_ref().map(serde_json::to_string).transpose()?,screen.fullscreen,screen.playback_layout.as_ref().map(serde_json::to_string).transpose()?,serde_json::to_string(&screen.content)?,screen.not_editable])?;
+        self.conn.execute("INSERT INTO screens(id,name,layout_json,show_dock,show_playbacks,playback_count,playback_rows,first_playback_slot,page_mode,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,playback_layout_json,content_json,not_editable,show_compact_encoders) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,show_dock=excluded.show_dock,show_playbacks=excluded.show_playbacks,playback_count=excluded.playback_count,playback_rows=excluded.playback_rows,first_playback_slot=excluded.first_playback_slot,page_mode=excluded.page_mode,show_page_controls=excluded.show_page_controls,show_programmer=excluded.show_programmer,desired_open=excluded.desired_open,display_id=excluded.display_id,bounds_json=excluded.bounds_json,fullscreen=excluded.fullscreen,playback_layout_json=excluded.playback_layout_json,content_json=excluded.content_json,not_editable=excluded.not_editable,show_compact_encoders=excluded.show_compact_encoders",params![screen.id.to_string(),screen.name,serde_json::to_string(&screen.layout)?,screen.show_dock,screen.show_playbacks,screen.playback_count,screen.playback_rows,screen.first_playback_slot,screen.page_mode,screen.show_page_controls,screen.show_programmer,screen.desired_open,screen.display_id,screen.bounds.as_ref().map(serde_json::to_string).transpose()?,screen.fullscreen,screen.playback_layout.as_ref().map(serde_json::to_string).transpose()?,serde_json::to_string(&screen.content)?,screen.not_editable,screen.show_compact_encoders])?;
         self.screen(screen.id)?
             .ok_or_else(|| StoreError::Invalid("screen update failed".into()))
     }
@@ -146,9 +149,9 @@ impl DeskStore {
         &self,
         configuration: ProgrammerControlSurfaceConfiguration,
     ) -> Result<ProgrammerControlSurfaceConfiguration, StoreError> {
-        if !matches!(configuration.visible_encoders, 4 | 6) {
+        if !matches!(configuration.visible_encoders, 4 | 5 | 6) {
             return Err(StoreError::Invalid(
-                "visible encoder count must be 4 or 6".into(),
+                "visible encoder count must be 4, 5 or 6".into(),
             ));
         }
         if let Some(owner_screen_id) = configuration.owner_screen_id

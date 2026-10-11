@@ -443,7 +443,7 @@ async fn put_desk_page(
         .app
         .clone()
         .oneshot(
-            Request::post("/api/v2/control-desk/actions")
+            Request::post("/api/v2/control-desk/update")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
                 .body(Body::from(body.to_string()))

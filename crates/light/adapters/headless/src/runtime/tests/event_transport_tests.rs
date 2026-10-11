@@ -583,6 +583,7 @@ fn event_session(desk_id: Uuid) -> Session {
         token: "event-token".into(),
         connected: true,
         desk: light_show::ControlDesk {
+            show_compact_encoders: false,
             hardware_led_brightness: 100,
             hardware_gooseneck_brightness: 100,
             hardware_gooseneck_color: 100,

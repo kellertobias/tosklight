@@ -173,6 +173,8 @@ pub struct ScreenConfiguration {
     /// Programmer command line above this optional screen's encoders.
     #[serde(default)]
     pub show_programmer: bool,
+    #[serde(default)]
+    pub show_compact_encoders: bool,
     pub desired_open: bool,
     pub display_id: Option<String>,
     #[ts(type = "unknown")]
@@ -275,6 +277,7 @@ pub struct ScreenConfigurationPatch {
     pub page_mode: Option<ScreenPageMode>,
     pub show_page_controls: Option<bool>,
     pub show_programmer: Option<bool>,
+    pub show_compact_encoders: Option<bool>,
     pub desired_open: Option<bool>,
     pub display_id: Option<String>,
     #[serde(default)]

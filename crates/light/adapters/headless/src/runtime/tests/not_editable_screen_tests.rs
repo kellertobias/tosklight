@@ -12,6 +12,7 @@ fn install_screen(scenario: &CommandHttpScenario, name: &str, not_editable: bool
         page_mode: "follow_main".into(),
         show_page_controls: true,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: false,
         display_id: None,
         bounds: None,

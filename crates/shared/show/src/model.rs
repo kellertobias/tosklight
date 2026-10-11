@@ -161,6 +161,8 @@ pub struct PlaybackSurfaceLayout {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ControlDesk {
+    #[serde(default)]
+    pub show_compact_encoders: bool,
     #[serde(default = "default_hardware_illumination")]
     pub hardware_led_brightness: u8,
     #[serde(default = "default_hardware_illumination")]
@@ -198,6 +200,8 @@ pub struct ScreenConfiguration {
     /// Programmer command line above this optional screen's encoders.
     #[serde(default)]
     pub show_programmer: bool,
+    #[serde(default)]
+    pub show_compact_encoders: bool,
     pub desired_open: bool,
     pub display_id: Option<String>,
     pub bounds: Option<serde_json::Value>,
