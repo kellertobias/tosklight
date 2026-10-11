@@ -33,6 +33,70 @@ const model: PlaybackCardViewModel = {
 afterEach(cleanup);
 
 describe("playback card views", () => {
+	it.each([
+		TouchPlaybackCardView,
+		HardwarePlaybackCardView,
+	])("renders chosen artwork, transparent Cue previews and offline notices on each surface", (Card) => {
+		const { container, rerender } = render(
+			<Card
+				model={
+					{
+						...model,
+						artwork: {
+							image: "data:image/png;base64,preview",
+							imageSource: "cue-preview",
+							transparent: true,
+						},
+					} as PlaybackCardViewModel
+				}
+			/>,
+		);
+		const card = () => container.querySelector("article")!;
+		expect(card()).toHaveAttribute("data-image-source", "cue-preview");
+		expect(card()).toHaveClass("cue-preview-transparent");
+		expect(card().querySelector(".pool-card-image")).toHaveAttribute(
+			"src",
+			"data:image/png;base64,preview",
+		);
+		rerender(
+			<Card
+				model={
+					{
+						...model,
+						artwork: { image: "chosen.png", imageSource: "configured" },
+					} as PlaybackCardViewModel
+				}
+			/>,
+		);
+		expect(card()).toHaveAttribute("data-image-source", "configured");
+		expect(card()).not.toHaveClass("cue-preview-transparent");
+		rerender(
+			<Card
+				model={{ ...model, artwork: { icon: "★" } } as PlaybackCardViewModel}
+			/>,
+		);
+		expect(card().querySelector(".pool-card-image")).toBeNull();
+		expect(card().querySelector(".pool-card-icon")).toHaveTextContent("★");
+		rerender(
+			<Card
+				model={
+					{
+						...model,
+						artwork: { notice: "Media Server offline" },
+					} as PlaybackCardViewModel
+				}
+			/>,
+		);
+		expect(card()).toHaveAttribute(
+			"data-preview-notice",
+			"Media Server offline",
+		);
+		expect(card().querySelector("img")).toBeNull();
+		expect(card()).toHaveTextContent("Media Server offline");
+		expect(card()).toHaveAttribute("data-page", "2");
+		expect(card()).toHaveAttribute("data-playback-slot", "3");
+	});
+
 	it("renders a push encoder row with the same exact playback action callbacks", () => {
 		const change = vi.fn();
 		const press = vi.fn();

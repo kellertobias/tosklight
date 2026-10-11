@@ -1,3 +1,4 @@
+import { PlaybackArtwork, type PlaybackArtworkModel } from "./PlaybackArtwork";
 import { TouchEncoder } from "../encoders/TouchEncoder";
 import type {
 	CSSProperties,
@@ -47,6 +48,7 @@ export interface PlaybackCardViewModel {
 	row: number;
 	rowUnits: number;
 	name: string;
+	artwork?: PlaybackArtworkModel;
 	assigned: boolean;
 	kind?: PlaybackCardKind;
 	selected?: boolean;
@@ -193,6 +195,8 @@ function playbackCardClass(
 		`playback-kind-${kind}`,
 		model.assigned ? "playback-colored" : "empty",
 		model.selected && "selected",
+		model.artwork?.transparent && "cue-preview-transparent",
+		(model.artwork?.image || model.artwork?.icon) && "has-playback-artwork",
 		additionalClassName,
 		model.className,
 	]
@@ -282,6 +286,8 @@ function PlaybackTopWidget({
 function cardData(model: PlaybackCardViewModel) {
 	const hasFader = model.assigned && model.hasFader;
 	return {
+		"data-image-source": model.artwork?.imageSource,
+		"data-preview-notice": model.artwork?.notice,
 		"data-page": model.page,
 		"data-playback-slot": model.slot,
 		"data-playback-row": model.row,
@@ -318,6 +324,7 @@ export function TouchPlaybackCardView({
 			onClickCapture={callbacks.onClickCapture}
 			onClick={callbacks.onActivate}
 		>
+			<PlaybackArtwork artwork={model.artwork} />
 			{slots.overlays ?? <CardOverlays model={model} />}
 			{!singleFaderlessAction && <PlaybackIdentity model={model} touch />}
 			{!singleFaderlessAction && <PlaybackStatus model={model} />}
@@ -457,6 +464,7 @@ export function HardwarePlaybackCardView({
 			onClickCapture={callbacks.onClickCapture}
 			onClick={callbacks.onActivate}
 		>
+			<PlaybackArtwork artwork={model.artwork} />
 			{slots.overlays ?? <CardOverlays model={model} />}
 			<header>
 				<PlaybackIdentity model={model} />

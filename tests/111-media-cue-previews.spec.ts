@@ -179,6 +179,7 @@ function change(fixtureId: string, attribute: string, raw: number) {
 function cue(id: string, number: number, name: string, changes: unknown[]) {
 	return {
 		id,
+		number: String(number),
 		name,
 		fade_millis: 0,
 		delay_millis: 0,

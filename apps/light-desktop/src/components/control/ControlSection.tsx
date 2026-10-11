@@ -38,6 +38,7 @@ export function ControlSection() {
 		<PlaybackFaderBank
 			surfaceId={session?.desk.surface_id ?? "main"}
 			hardwareConnected={hardwareConnected}
+			scrollable
 		/>
 	);
 	/*

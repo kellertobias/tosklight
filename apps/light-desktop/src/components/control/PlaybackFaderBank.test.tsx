@@ -19,6 +19,15 @@ import {
 	playbackRowUnits,
 } from "./PlaybackFaderBank";
 
+vi.mock("./playbackFaderBank/PlaybackArtworkProvider", () => ({
+	PlaybackArtworkProvider: ({ children }: { children: React.ReactNode }) =>
+		children,
+}));
+
+vi.mock("./playbackFaderBank/usePlaybackArtwork", () => ({
+	usePlaybackArtwork: () => undefined,
+}));
+
 describe("playback row height units", () => {
 	const oneButton = {
 		first_position: 1,
@@ -2811,6 +2820,80 @@ describe("scrollable software Playback panes", () => {
 				Number(el.getAttribute("data-playback-slot")),
 			),
 		).toEqual(Array.from({ length: 280 }, (_, i) => 401 + i));
+	});
+	it("gives Main15 literal rows readable geometry and scroll-only directional controls", () => {
+		const layout = {
+			rows: [
+				{
+					first_position: 1,
+					count: 15,
+					presentation: "fader" as const,
+					button_count: 2,
+				},
+				{
+					first_position: 101,
+					count: 15,
+					presentation: "buttons" as const,
+					button_count: 1,
+				},
+			],
+		};
+		const { container } = render(
+			<PlaybackFaderBank surfaceId="main" scrollable playbackLayout={layout} />,
+		);
+		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
+			minWidth: "1750px",
+			minHeight: "465px",
+		});
+		expect(
+			[...container.querySelectorAll("[data-playback-slot]")].map((el) =>
+				Number(el.getAttribute("data-playback-slot")),
+			),
+		).toEqual([
+			...Array.from({ length: 15 }, (_, i) => i + 1),
+			...Array.from({ length: 15 }, (_, i) => 101 + i),
+		]);
+		const viewport = container.querySelector<HTMLDivElement>(
+			".playback-bank-viewport",
+		)!;
+		viewport.scrollBy = vi.fn();
+		Object.defineProperties(viewport, {
+			clientWidth: { value: 950 },
+			clientHeight: { value: 160 },
+			scrollWidth: { value: 1750 },
+			scrollHeight: { value: 465 },
+		});
+		fireEvent.scroll(viewport);
+		expect(
+			screen.getByRole("button", { name: "Scroll Playbacks left" }),
+		).toBeDisabled();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Scroll Playbacks right" }),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Scroll Playbacks down" }),
+		);
+		expect(viewport.scrollBy).toHaveBeenNthCalledWith(1, {
+			left: 760,
+			top: 0,
+			behavior: "auto",
+		});
+		expect(viewport.scrollBy).toHaveBeenNthCalledWith(2, {
+			left: 0,
+			top: 128,
+			behavior: "auto",
+		});
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
+	it("keeps attached hardware Main free of software scrolling controls", () => {
+		mocks.hardwareConnected = true;
+		const { container } = render(
+			<PlaybackFaderBank surfaceId="main" scrollable count={15} />,
+		);
+		expect(container.querySelector(".playback-bank-viewport")).toBeNull();
+		expect(
+			screen.queryByRole("navigation", { name: "Scroll Main Playbacks" }),
+		).toBeNull();
 	});
 	it("leaves the normal Main bank unscrolled", () => {
 		const { container } = render(<PlaybackFaderBank count={1} />);

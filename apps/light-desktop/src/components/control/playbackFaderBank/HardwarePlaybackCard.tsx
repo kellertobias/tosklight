@@ -1,3 +1,4 @@
+import { usePlaybackArtwork } from "./usePlaybackArtwork";
 import type { VerticalTouchFaderAction } from "@tosklight/ui/faders";
 import {
 	HardwarePlaybackCardView,
@@ -70,7 +71,9 @@ export function HardwarePlaybackCard({
 		value,
 		runtimeProjection,
 	);
+	const artwork = usePlaybackArtwork(playback, cue);
 	const model: PlaybackCardViewModel = {
+		artwork,
 		page: controller.activePageNumber ?? 1,
 		slot,
 		row: rowIndex,

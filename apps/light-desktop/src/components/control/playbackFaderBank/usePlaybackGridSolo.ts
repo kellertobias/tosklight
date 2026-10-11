@@ -15,7 +15,7 @@ import {
 import { usePlaybackSoloOptional } from "../../../features/playbackSolo/PlaybackSoloContext";
 import type { PlaybackBankController } from "./controller";
 import { playbackCellKey } from "./projection";
-import { soloFenceClasses } from "./soloFence";
+import { soloFenceClassMap } from "./soloFence";
 import type { PlaybackSlotProjection } from "./types";
 const noSubscribe = () => () => {};
 const noRegions = () => null;
@@ -105,31 +105,26 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 			setCreating(false);
 		}
 	};
+	const fenceRegions = useMemo(
+		() =>
+			selecting
+				? [{ id: "draft", name: "Selection", members: selected }]
+				: (regions ?? []),
+		[selecting, selected, regions],
+	);
 	const fences = useMemo(
 		() =>
-			new Map(
-				controller.slots.map((cell) => [
-					playbackCellKey(cell),
-					controller.activePageNumber == null
-						? ""
-						: soloFenceClasses(
-								cell,
-								controller.slots,
-								controller.activePageNumber,
-								controller.columns,
-								selecting
-									? [{ id: "draft", name: "Selection", members: selected }]
-									: (regions ?? []),
-							),
-				]),
+			soloFenceClassMap(
+				controller.slots,
+				controller.activePageNumber,
+				controller.columns,
+				fenceRegions,
 			),
 		[
 			controller.slots,
 			controller.activePageNumber,
 			controller.columns,
-			regions,
-			selecting,
-			selected,
+			fenceRegions,
 		],
 	);
 	const classes = (cell: PlaybackSlotProjection) => {
@@ -141,6 +136,7 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 		return `${fences.get(playbackCellKey(cell)) ?? ""} ${chosen ? "playback-solo-selected" : ""}`.trim();
 	};
 	return {
+		fenceRegions,
 		available: capability?.available ?? false,
 		ready: regions !== null,
 		saving: creating || (capability?.isSaving() ?? false),

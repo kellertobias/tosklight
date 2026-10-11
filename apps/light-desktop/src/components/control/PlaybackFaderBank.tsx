@@ -1,11 +1,14 @@
+import { PlaybackArtworkProvider } from "./playbackFaderBank/PlaybackArtworkProvider";
 import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
-import { memo, useEffect, useId, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import { AssignedPlaybackConfigurationModal } from "./AssignedPlaybackConfigurationModal";
 import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
 } from "./playbackFaderBank/controller";
+import { PlaybackBankScrollControls } from "./playbackFaderBank/PlaybackBankScrollControls";
+import { SoloFenceOverlay } from "./playbackFaderBank/SoloFenceOverlay";
 import { playbackCellKey } from "./playbackFaderBank/projection";
 import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
@@ -17,6 +20,8 @@ import { CueRecordChoiceModal } from "./playbackFaderBank/CueRecordChoiceModal";
 export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 	function PlaybackFaderBank(props: PlaybackFaderBankProps = {}) {
 		const controller = usePlaybackBankController(props);
+		const [bankElement, setBankElement] = useState<HTMLDivElement | null>(null);
+		const viewport = useRef<HTMLDivElement | null>(null);
 		const interactionSurfaceId = useId();
 		usePlaybackBankConfiguration(controller, interactionSurfaceId);
 		const solo = usePlaybackGridSolo(controller);
@@ -52,13 +57,18 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		return (
 			<section className="playback-surface-controls">
 				<PlaybackGridSoloControls solo={solo} />
+				{geometry && controller.surfaceId === "main" ? (
+					<PlaybackBankScrollControls viewport={viewport} />
+				) : null}
 				<div
+					ref={viewport}
 					className={
 						geometry ? "playback-bank-viewport" : "playback-bank-fixed"
 					}
 				>
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 					<div
+						ref={setBankElement}
 						onPointerDownCapture={(event) => {
 							if (solo.selecting) solo.pointerDown(event);
 							else void controller.selectSurface();
@@ -105,14 +115,22 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 							minHeight: geometry?.minHeight,
 						}}
 					>
-						{controller.slots.map((slotData) => (
-							<PlaybackSlot
-								controller={controller}
-								slotData={slotData}
-								soloClasses={solo.classes(slotData)}
-								key={playbackCellKey(slotData)}
-							/>
-						))}
+						<PlaybackArtworkProvider candidates={controller.slots}>
+							{controller.slots.map((slotData) => (
+								<PlaybackSlot
+									controller={controller}
+									slotData={slotData}
+									soloClasses={solo.classes(slotData)}
+									key={playbackCellKey(slotData)}
+								/>
+							))}
+						</PlaybackArtworkProvider>
+						<SoloFenceOverlay
+							bank={bankElement}
+							page={controller.activePageNumber}
+							regions={solo.fenceRegions}
+							layoutKey={controller.slots}
+						/>
 					</div>
 				</div>
 				{controller.configuration && (

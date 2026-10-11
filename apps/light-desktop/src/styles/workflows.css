@@ -1802,63 +1802,18 @@
 	position: relative;
 	overflow: visible;
 }
-.playback-fader-bank article.playback-solo-member::after {
-	content: "";
+.playback-fader-bank { position: relative; }
+.playback-solo-fence-overlay {
 	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
 	z-index: 20;
-	/* Meet adjacent perimeter segments at the existing 5px grid gap midpoint. */
-	inset: -2.5px;
 	pointer-events: none;
-	border: solid var(--amber);
-	border-width: var(--solo-top, 0) var(--solo-right, 0) var(--solo-bottom, 0)
-		var(--solo-left, 0);
-	background:
-		linear-gradient(var(--amber), var(--amber)) left top /
-		var(--solo-corner-tl, 0) var(--solo-corner-tl, 0),
-		linear-gradient(var(--amber), var(--amber)) right top /
-		var(--solo-corner-tr, 0) var(--solo-corner-tr, 0),
-		linear-gradient(var(--amber), var(--amber)) right bottom /
-		var(--solo-corner-br, 0) var(--solo-corner-br, 0),
-		linear-gradient(var(--amber), var(--amber)) left bottom /
-		var(--solo-corner-bl, 0) var(--solo-corner-bl, 0);
-	background-origin: border-box;
-	background-repeat: no-repeat;
-}
-.playback-fader-bank .solo-fence-top {
-	--solo-top: 3px;
-}
-.playback-fader-bank .solo-fence-right {
-	--solo-right: 3px;
-}
-.playback-fader-bank .solo-fence-bottom {
-	--solo-bottom: 3px;
-}
-.playback-fader-bank .solo-fence-left {
-	--solo-left: 3px;
-}
-.playback-fader-bank .solo-corner-top-left {
-	--solo-corner-tl: 3px;
-}
-.playback-fader-bank .solo-corner-top-right {
-	--solo-corner-tr: 3px;
-}
-.playback-fader-bank .solo-corner-bottom-right {
-	--solo-corner-br: 3px;
-}
-.playback-fader-bank .solo-corner-bottom-left {
-	--solo-corner-bl: 3px;
-}
-.playback-fader-bank .solo-fence-top.solo-fence-left::after {
-	border-top-left-radius: 8px;
-}
-.playback-fader-bank .solo-fence-top.solo-fence-right::after {
-	border-top-right-radius: 8px;
-}
-.playback-fader-bank .solo-fence-bottom.solo-fence-right::after {
-	border-bottom-right-radius: 8px;
-}
-.playback-fader-bank .solo-fence-bottom.solo-fence-left::after {
-	border-bottom-left-radius: 8px;
+	fill: none;
+	stroke: var(--amber);
+	stroke-width: 3px;
+	stroke-linecap: square;
 }
 .playback-fader-bank article.playback-solo-selected {
 	background-image: linear-gradient(
@@ -1928,3 +1883,14 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* Main has literal fixed columns; visible touch navigation reveals offscreen cells. */
+.playback-bank-scroll-controls {
+ display: flex;
+ align-items: center;
+ flex: 0 0 auto;
+ gap: 4px;
+ padding-bottom: 4px;
+}
+.playback-bank-scroll-controls span { flex: 1; color: var(--muted); font-size: 12px; }
+.playback-bank-scroll-controls .ui-button { min-width: 44px; min-height: 44px; padding: 4px; }
