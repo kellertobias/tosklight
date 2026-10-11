@@ -182,9 +182,12 @@ fn finish_owned_selection_gesture(state: &AppState, owner: Option<ProgrammingIns
 fn install(state: &AppState, prepared: PreparedOutputSnapshot, policy: PlaybackInstallPolicy) {
     match policy {
         PlaybackInstallPolicy::Preserve => state.output.install_prepared_snapshot(prepared),
-        PlaybackInstallPolicy::Release => state
-            .output
-            .install_prepared_snapshot_releasing_playback(prepared),
+        PlaybackInstallPolicy::Release => {
+            state
+                .output
+                .install_prepared_snapshot_releasing_playback(prepared);
+            state.integrations.replace_osc_playback_runtime();
+        }
     }
 }
 

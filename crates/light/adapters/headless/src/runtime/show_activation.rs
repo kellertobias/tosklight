@@ -346,6 +346,7 @@ async fn run_activation_workflow(
                                 },
                             )
                             .map_err(|error| ApiError::internal(error.to_string()))?;
+                        state.integrations.replace_osc_playback_runtime();
                         state
                             .programming
                             .clear_pending_command_choices_except_context(None);

@@ -104,8 +104,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
         for (const address of [
           `/light/${alias}/feedback/command-line`,
           `/light/${alias}/feedback/programmer/group`,
-          `/light/${alias}/feedback/page-playback/1/fader`,
-          `/light/${alias}/feedback/page-playback/1/button/1`,
+          `/light/${alias}/feedback/playback/1/fader`,
+          `/light/${alias}/feedback/playback/1/button/1`,
           `/light/${alias}/feedback/speed-group/1`,
           `/light/${alias}/feedback/speed-group/5`,
         ]) await hardware.expectAfter(mark, address);
@@ -569,8 +569,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
         `/light/${alias}/feedback/page`,
         `/light/${alias}/feedback/command-line`,
         `/light/${alias}/feedback/programmer/group`,
-        `/light/${alias}/feedback/page-playback/1/fader`,
-        `/light/${alias}/feedback/page-playback/1/button/1`,
+        `/light/${alias}/feedback/playback/1/fader`,
+        `/light/${alias}/feedback/playback/1/button/1`,
         `/light/${alias}/feedback/speed-group/1`,
       ]) await hardware.expectAfter(mark, address);
       const quietMark = hardware.mark();
@@ -652,9 +652,9 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       await expectUnchangedAfter(() => hardware.send(`/light/${alias}/programmer/unknown`, [true]));
 
       await hardware.subscribe("osc-004-reused", alias);
-      await expectUnchangedAfter(() => hardware.sendFloat(`/light/${alias}/page-playback/1/fader`, -0.25));
-      await expectUnchangedAfter(() => hardware.sendFloat(`/light/${alias}/page-playback/1/fader`, 1.25));
-      await expectUnchangedAfter(() => hardware.send(`/light/${alias}/page-playback/1/fader`, ["wrong-type"]));
+      await expectUnchangedAfter(() => hardware.sendFloat(`/light/${alias}/playback/1/fader`, -0.25));
+      await expectUnchangedAfter(() => hardware.sendFloat(`/light/${alias}/playback/1/fader`, 1.25));
+      await expectUnchangedAfter(() => hardware.send(`/light/${alias}/playback/1/fader`, ["wrong-type"]));
 
       await replacement.subscribe("osc-004-reused", alias);
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -829,7 +829,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 			expect(await deskPage(api, firstSession)).toBe(1);
 			expect(await deskPage(api, secondSession)).toBe(1);
 
-			const firstAddress = `/light/${firstAlias}/page-playback/1/button/1`;
+			const firstAddress = `/light/${firstAlias}/playback/1/button/1`;
 			await firstHardware.send(firstAddress, [true]);
 			await expect
 				.poll(
@@ -847,11 +847,11 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 			await setDeskPage(api, secondSession, 2);
 			expect(await deskPage(api, firstSession)).toBe(2);
 			await secondHardware.send(
-				`/light/${secondAlias}/page-playback/1/button/1`,
+				`/light/${secondAlias}/playback/1/button/1`,
 				[true],
 			);
 			await secondHardware.send(
-				`/light/${secondAlias}/page-playback/1/button/1`,
+				`/light/${secondAlias}/playback/1/button/1`,
 				[false],
 			);
 			await expect
@@ -905,7 +905,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 
 			for (const level of [0, 0.5, 1]) {
 				await firstHardware.sendFloat(
-					`/light/${firstAlias}/page-playback/1/fader`,
+					`/light/${firstAlias}/playback/1/fader`,
 					level,
 				);
 				await expect
@@ -917,7 +917,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
 					.toBeCloseTo(level, 4);
 			}
 			for (const level of [0, 0.5, 1]) {
-				await firstHardware.sendFloat("/light/playback/2/1/fader", level);
+				await firstHardware.sendFloat(`/light/${firstAlias}/playback/2/1/fader`, level);
 				await expect
 					.poll(
 						async () =>

@@ -92,16 +92,47 @@ async fn solo_dispatch_audit_reports_actual_released_aliases_and_osc_source() {
     };
     // A direct Timecode Cue start does not activate an assigned Solo member. An
     // already-running target's GO must report only changes the central engine made.
-    state.output.engine().execute_playback(EnginePlaybackCommand::CueList {
-        id: ids[1], action: light_engine::CueListPlaybackAction::ExecuteCueId(incoming_cue_id),
-    }).unwrap();
-    assert!(state.output.engine().permanent_playback_enabled(address(1,2)));
+    state
+        .output
+        .engine()
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id: ids[1],
+            action: light_engine::CueListPlaybackAction::ExecuteCueId(incoming_cue_id),
+        })
+        .unwrap();
+    assert!(
+        state
+            .output
+            .engine()
+            .permanent_playback_enabled(address(1, 2))
+    );
     dispatch("go", true).unwrap();
-    assert!(state.output.engine().permanent_playback_enabled(address(1,1)));
-    assert!(state.output.engine().permanent_playback_enabled(address(1,2)));
+    assert!(
+        state
+            .output
+            .engine()
+            .permanent_playback_enabled(address(1, 1))
+    );
+    assert!(
+        state
+            .output
+            .engine()
+            .permanent_playback_enabled(address(1, 2))
+    );
     dispatch("off", true).unwrap();
-    assert!(state.output.engine().permanent_playback_enabled(address(1,1)));
-    assert!(!state.events.audit_events().iter().any(|event| event.kind == "playback_exclusion_applied"));
+    assert!(
+        state
+            .output
+            .engine()
+            .permanent_playback_enabled(address(1, 1))
+    );
+    assert!(
+        !state
+            .events
+            .audit_events()
+            .iter()
+            .any(|event| event.kind == "playback_exclusion_applied")
+    );
     dispatch("flash", true).unwrap();
     assert!(
         state

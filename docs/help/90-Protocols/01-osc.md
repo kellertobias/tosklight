@@ -57,15 +57,27 @@ Playback addresses deliberately distinguish current-page and explicit-page opera
 
 | Address | Meaning |
 | --- | --- |
-| `/light/{desk}/page-playback/{playback}/{control}` | Resolve the playback number against the page currently selected on that desk or screen. |
-| `/light/playback/{page}/{playback}/{control}` | Address a specific global page and playback, independent of every desk's current page. |
-| `/light/{desk}/virtual-playback/{page}/{number}/{control}` | Address one show-owned Virtual Playback by its stable number. Page 1 owns 1001–1300, page 2 owns 1301–1600, and the server rejects a number outside the named page's 300-number bank. |
-| `/light/cuelist/{number}/{action}` | Operate a Cuelist directly when a page playback is not the intended target. |
+| `/light/{desk}/playback/{position}/{control}` | Resolve a position on the visibly selected surface's command page. |
+| `/light/{desk}/playback/{page}/{position}/{control}` | Address an exact Playback independently of the selected page. |
+| `/light/cuelist/{number}/{action}` | Operate a Cuelist directly without activating a Playback Solo member. |
 
-Changing a page in the application changes where the same `page-playback` packet is routed. It
-does not change an explicit physical or Virtual address. A Virtual number is never an alias for
-physical Playback 1–1000 or an old page slot. Its assignment, runtime, and Solo Regions are
-shared across the desk; the path records the action source but does not select a separate copy.
+Pages are 1–99 and sparse positions are 1–1000. Both Playback routes operate the same show-owned
+assignments and target runtime. The retired `page-playback` and `virtual-playback` routes are rejected.
+Changing a selected page changes the next current-page operation; explicit addresses stay exact.
+
+For Flash and Swap, a press captures the exact address and configured button action. Its release
+uses that capture even after a page, layout, or button-function edit. Repeated presses of the same
+physical control are idempotent until release. Independent subscribed clients retain independent
+holds. Disconnect, expiry, client replacement, and a cold show reload discard the old holds.
+
+Send the pressed Boolean or numeric value as argument 1. Optional argument 2 is a stable integer
+control ID from 0–65535; press and release must use the same ID. Without it, the ID is derived from
+the original position and control token, before expanded-layout remapping: `position × 16 + token`,
+where buttons 1–6 use tokens 1–6, fader/master uses 7, Flash uses 8, and Swap uses 9. A release without a matching
+Flash or Swap press has no effect. Without an explicit control ID, distinct exact-page routes have
+independent captures; a compact route retains its capture across selected-page changes. An explicit
+control ID identifies the same physical control across route changes. Ordinary permanent button
+actions keep their normal semantics.
 
 ### Dynamics
 
@@ -89,7 +101,7 @@ Every subscription snapshot publishes `global-paused`, `runtime-count`, and one
 family per running instance. Each controller publishes
 `controller/{controller-uuid}/{runtime-instance|source|priority|size|speed|phase|paused|winning|releasing}`.
 `source` names the controller's current owner as `programmer:{uuid}`, `cue:{cuelist-uuid}:{link}`,
-`playback:{number}` or `virtual-playback:{page}:{number}`. When a running Playback Dynamic moves to
+`playback:{page}.{position}`. When a running Playback Dynamic moves to
 another Playback or changes priority, `source` and `priority` follow the current assignment without
 restarting the Dynamic.
 Programmer-owned summaries remain under `feedback/dynamic/instance/{uuid}` and

@@ -16,7 +16,11 @@ pub(in crate::runtime) fn cancel_for_desk(
     }
     .scoped_to_desk(desk_id)
     .map_err(ApiError::bad_request)?;
-    cancel(state, &source.surface_id)
+    // Same lock order as OSC ingress: receipt capture precedes the Playback unit of work.
+    let mut holds = state.integrations.osc_playback_holds();
+    cancel(state, &source.surface_id)?;
+    holds.remove_surface(desk_id, surface_id);
+    Ok(())
 }
 
 fn cancel(state: &AppState, surface_id: &str) -> Result<(), ApiError> {

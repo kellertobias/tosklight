@@ -6,6 +6,8 @@ pub(in crate::runtime) struct IntegrationResource {
     matter_transport: Option<Arc<matter::MatterTransport>>,
     osc_subscribers: Arc<Mutex<HashMap<String, OscSubscriber>>>,
     osc_cue_record_suppression: Arc<Mutex<osc_cue_record_suppression::OscCueRecordSuppression>>,
+    osc_playback_holds: Arc<Mutex<osc_playback::holds::OscPlaybackHolds>>,
+    osc_playback_epoch: Arc<std::sync::atomic::AtomicU64>,
     osc_feedback: Option<Arc<std::net::UdpSocket>>,
     osc_feedback_pending: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(test)]
@@ -23,11 +25,29 @@ impl IntegrationResource {
             matter_transport,
             osc_subscribers: Arc::default(),
             osc_cue_record_suppression: Arc::default(),
+            osc_playback_holds: Arc::default(),
+            osc_playback_epoch: Arc::default(),
             osc_feedback,
             osc_feedback_pending: Arc::default(),
             #[cfg(test)]
             osc_feedback_capture: Arc::default(),
         }
+    }
+
+    pub(in crate::runtime) fn osc_playback_holds(
+        &self,
+    ) -> parking_lot::MutexGuard<'_, osc_playback::holds::OscPlaybackHolds> {
+        let mut holds = self.osc_playback_holds.lock();
+        holds.synchronize(self.osc_playback_epoch());
+        holds
+    }
+    pub(in crate::runtime) fn osc_playback_epoch(&self) -> u64 {
+        self.osc_playback_epoch.load(Ordering::Acquire)
+    }
+    /// Only accepted cold runtime replacement invalidates ingress receipts. Configuration edits
+    /// preserve held controls; no receipt mutex is acquired inside the activation transaction.
+    pub(in crate::runtime) fn replace_osc_playback_runtime(&self) {
+        self.osc_playback_epoch.fetch_add(1, Ordering::AcqRel);
     }
 
     pub(in crate::runtime) fn matter_bridge(&self) -> &matter::MatterBridgeAdapter {

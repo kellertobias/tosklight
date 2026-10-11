@@ -1,4 +1,5 @@
 use super::*;
+pub(in crate::runtime) mod holds;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ExpandedOscBinding {
@@ -217,13 +218,29 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
 }
 
 pub(super) fn osc_playback_address(parts: &[&str]) -> Option<(PlaybackAddress, usize)> {
-    if parts.len() < 6 || parts.first() != Some(&"light") || parts.get(2) != Some(&"playback") {
+    if parts.first() != Some(&"light") || parts.get(2) != Some(&"playback") {
         return None;
     }
-    let address =
-        light_playback::PlaybackAddress::new(parts[3].parse().ok()?, parts[4].parse().ok()?)
-            .ok()?;
-    Some((PlaybackAddress::Playback(address), 5))
+    let position = parts.get(3)?.parse::<u16>().ok()?;
+    if parts.get(4)?.parse::<u16>().is_ok() {
+        let address = light_playback::PlaybackAddress::new(
+            u8::try_from(position).ok()?,
+            parts[4].parse().ok()?,
+        )
+        .ok()?;
+        let action = *parts.get(5)?;
+        if parts.len() != if action == "button" { 7 } else { 6 } {
+            return None;
+        }
+        Some((PlaybackAddress::Playback(address), 5))
+    } else {
+        light_playback::PlaybackAddress::new(1, position).ok()?;
+        let action = parts[4];
+        if parts.len() != if action == "button" { 6 } else { 5 } {
+            return None;
+        }
+        Some((PlaybackAddress::CurrentPage { position }, 4))
+    }
 }
 
 pub(super) fn osc_playback_session(
@@ -318,6 +335,23 @@ pub(super) fn handle_playback_osc(
     else {
         return false;
     };
+    let Some(desk) = action_desk.as_ref() else {
+        return false;
+    };
+    let Some(mut capture) = holds::CapturedInput::begin(
+        state,
+        &mut playback_address,
+        &input,
+        arguments,
+        desk,
+        (source_socket, source, parts[action_index]),
+    ) else {
+        return false;
+    };
+    let receipt = capture.receipt;
+    if pressed && receipt.is_some() {
+        return true;
+    }
     let may_program = osc_source_may_program(state, source_socket);
     let record_target = may_program
         && is_physical_record_target(
@@ -332,24 +366,31 @@ pub(super) fn handle_playback_osc(
     } else {
         parts[action_index]
     };
-    if !apply_expanded_osc_binding(
-        state,
-        &mut playback_address,
-        action_desk.as_ref(),
-        &mut input,
-        &mut action,
-    ) {
+    if receipt.is_none()
+        && !apply_expanded_osc_binding(
+            state,
+            &mut playback_address,
+            action_desk.as_ref(),
+            &mut input,
+            &mut action,
+        )
+    {
         return false;
     }
-    let Some(control_id) = osc_playback_control_id(&playback_address, &input, arguments) else {
+    if let Some(receipt) = receipt {
+        playback_address = PlaybackAddress::Playback(receipt.address);
+        action = receipt.action;
+        input.button = receipt.button;
+    }
+    let PlaybackAddress::Playback(exact_address) = playback_address else {
         return false;
     };
-    let control_source = light_playback::PlaybackControlSource {
-        surface_id: source_socket
-            .and_then(|socket| state.integrations.osc_control_source_for_source(socket))
-            .unwrap_or_else(|| format!("osc:{}", source.unwrap_or("local"))),
-        control_id,
-    };
+    let held_action = receipt
+        .map(|receipt| receipt.action)
+        .or_else(|| holds::held_action(state, exact_address, action, &input));
+    if !pressed && held_action.is_some() && receipt.is_none() {
+        return false;
+    }
     let suppression_input =
         osc_suppression_input(session.as_ref(), source_socket, address, action, pressed);
     if suppression_input.is_some_and(|input| {
@@ -363,65 +404,48 @@ pub(super) fn handle_playback_osc(
     // read-side OSC activation before interception so Group/Cuelist assignment can acquire its own
     // authoritative show transaction instead of deadlocking behind this ingress guard.
     drop(activation);
-    let mut off_target = false;
-    if let Some(session) = session.as_ref().filter(|_| may_program) {
-        match command_http::intercept_armed_cue_playback(
-            state,
-            session,
-            playback_address.clone(),
-            record_target,
-            pressed,
-        ) {
-            command_http::PlaybackTargetInterception::NotArmed => {}
-            command_http::PlaybackTargetInterception::Consumed => {
-                if let Some(input) = suppression_input {
-                    state
-                        .integrations
-                        .remember_osc_intercept(input, Instant::now());
-                }
-                return true;
+    let (result, off_target) = match dispatch_osc_input(OscDispatch {
+        state,
+        session: session.as_ref(),
+        desk: action_desk.as_ref(),
+        address: playback_address.clone(),
+        action,
+        input: &mut input,
+        control_source: capture.source.clone(),
+        suppression_input,
+        record_target,
+        may_program,
+        captured_release: receipt.is_some(),
+        hold_epoch: capture.epoch,
+    }) {
+        OscDispatchResult::Consumed => return true,
+        OscDispatchResult::Rejected => return false,
+        OscDispatchResult::Applied(result, off_target) => (result, off_target),
+    };
+    if off_target {
+        action = "off";
+    }
+    let off_target_address = off_target.then(|| playback_address.clone());
+    if !off_target {
+        if pressed {
+            if let Some(action) = held_action {
+                capture.held.receipts.insert(
+                    capture.key,
+                    holds::HeldPlayback {
+                        address: exact_address,
+                        action,
+                        button: input.button,
+                    },
+                );
             }
-            command_http::PlaybackTargetInterception::Off => {
-                if let Some(input) = suppression_input {
-                    state
-                        .integrations
-                        .remember_osc_intercept(input, Instant::now());
-                }
-                action = "off";
-                input.pressed = Some(true);
-                off_target = true;
-            }
+        } else {
+            capture.held.receipts.remove(&capture.key);
         }
     }
-    let Ok(_activation) = state.active_show.try_acquire() else {
-        return false;
-    };
-    let off_target_address = off_target.then(|| playback_address.clone());
-    let Ok(result) = playback_service::osc_action(
-        state,
-        session.as_ref(),
-        action_desk.as_ref(),
-        playback_address,
-        action,
-        &input,
-        control_source,
-    ) else {
-        return false;
-    };
     if let (Some(address), Some(session)) = (off_target_address.as_ref(), session.as_ref()) {
         command_http::complete_off_target(state, session, address);
     }
-    let changed = matches!(
-        result.execution,
-        PlaybackExecution::Playback { changed: true, .. }
-    );
-    if changed && let Some(number) = result.resolved.playback_address() {
-        emit(
-            state,
-            "playback_changed",
-            serde_json::json!({"playback_address":number,"action":action,"source":"osc","session_id":session.map(|session|session.id)}),
-        );
-    }
+    publish_osc_result(state, &result, action, session.as_ref());
     true
 }
 
@@ -466,13 +490,24 @@ fn osc_playback_control_id(
     playback_address: &PlaybackAddress,
     input: &PoolPlaybackInput,
     arguments: &[OscArgument],
+    control: &str,
 ) -> Option<u16> {
-    let fallback = match playback_address {
-        PlaybackAddress::Playback(address) => {
-            address.position().saturating_mul(8) + u16::from(input.button.unwrap_or(6))
-        }
-        _ => 0,
+    let position = match playback_address {
+        PlaybackAddress::Playback(address) => address.position(),
+        PlaybackAddress::CurrentPage { position } => *position,
+        _ => return None,
     };
+    let token = match control {
+        "button" => u16::from(input.button?),
+        "fader" | "master" => 7,
+        "flash" => 8,
+        "swap" => 9,
+        _ => 10,
+    };
+    if control == "button" && !(1..=6).contains(&token) {
+        return None;
+    }
+    let fallback = position * 16 + token;
     match arguments.get(1) {
         Some(OscArgument::Int(value)) => u16::try_from(*value).ok(),
         None => Some(fallback),
@@ -689,5 +724,113 @@ pub(super) fn ingest_timecode(state: &AppState, timecode: SmpteTimecode) {
         state
             .timecodes
             .synchronize_external(light_playback::TimecodeFrame(frame));
+    }
+}
+
+#[cfg(test)]
+#[path = "osc_playback/holds_tests.rs"]
+mod holds_tests;
+
+struct OscDispatch<'a> {
+    state: &'a AppState,
+    session: Option<&'a Session>,
+    desk: Option<&'a ControlDesk>,
+    address: PlaybackAddress,
+    action: &'a str,
+    input: &'a mut PoolPlaybackInput,
+    control_source: light_playback::PlaybackControlSource,
+    suppression_input: Option<osc_cue_record_suppression::OscSuppressionInput<'a>>,
+    record_target: bool,
+    may_program: bool,
+    captured_release: bool,
+    hold_epoch: u64,
+}
+enum OscDispatchResult {
+    Consumed,
+    Rejected,
+    Applied(light_application::PlaybackResult, bool),
+}
+fn dispatch_osc_input(dispatch: OscDispatch<'_>) -> OscDispatchResult {
+    let OscDispatch {
+        state,
+        session,
+        desk: action_desk,
+        address: playback_address,
+        mut action,
+        input,
+        control_source,
+        suppression_input,
+        record_target,
+        may_program,
+        captured_release,
+        hold_epoch,
+    } = dispatch;
+    let pressed = input.pressed.unwrap_or(true);
+    let mut off_target = false;
+    if !captured_release && let Some(session) = session.filter(|_| may_program) {
+        match command_http::intercept_armed_cue_playback(
+            state,
+            session,
+            playback_address.clone(),
+            record_target,
+            pressed,
+        ) {
+            command_http::PlaybackTargetInterception::NotArmed => {}
+            command_http::PlaybackTargetInterception::Consumed => {
+                if let Some(input) = suppression_input {
+                    state
+                        .integrations
+                        .remember_osc_intercept(input, Instant::now());
+                }
+                return OscDispatchResult::Consumed;
+            }
+            command_http::PlaybackTargetInterception::Off => {
+                if let Some(input) = suppression_input {
+                    state
+                        .integrations
+                        .remember_osc_intercept(input, Instant::now());
+                }
+                action = "off";
+                input.pressed = Some(true);
+                off_target = true;
+            }
+        }
+    }
+    let Ok(_activation) = state.active_show.try_acquire() else {
+        return OscDispatchResult::Rejected;
+    };
+    if state.integrations.osc_playback_epoch() != hold_epoch {
+        return OscDispatchResult::Rejected;
+    }
+    let Ok(result) = playback_service::osc_action(
+        state,
+        session,
+        action_desk,
+        playback_address,
+        action,
+        &input,
+        control_source,
+    ) else {
+        return OscDispatchResult::Rejected;
+    };
+    OscDispatchResult::Applied(result, off_target)
+}
+
+fn publish_osc_result(
+    state: &AppState,
+    result: &light_application::PlaybackResult,
+    action: &str,
+    session: Option<&Session>,
+) {
+    let changed = matches!(
+        result.execution,
+        PlaybackExecution::Playback { changed: true, .. }
+    );
+    if changed && let Some(number) = result.resolved.playback_address() {
+        emit(
+            state,
+            "playback_changed",
+            serde_json::json!({"playback_address":number,"action":action,"source":"osc","session_id":session.map(|session|session.id)}),
+        );
     }
 }
