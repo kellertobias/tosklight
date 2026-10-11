@@ -82,15 +82,17 @@ the missing source and how to restore or re-record it. A new Preset at the old n
 take over that link. Shows containing these links require a runtime that supports live Preset
 references; an older runtime refuses the show rather than silently changing its behavior.
 
-The lower-left corner of every stored Group and Preset tile shows how many fixtures it holds. A Group
-tile reads its member count, for example `8`, or the selected/total count, for example `3/8`. A Preset tile reads `active/defined`, for example
-`3/8 fx`. The
-second number counts every fixture the Preset defines, including the members of any Group it
-stores and fixtures that are currently unpatched. The first number counts the fixtures whose
-current effective values, after the Programmer and every Playback have been merged, match every
-value the Preset stores for them; a Preset that is only stored, or whose values another source
-has overridden, is not active. The count follows the live output state while the pane is open. A
-Preset that defines no fixtures shows `0/0 fx`. In a [Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is **universal**: it applies to every selected fixture and its tile reads **Any** with the number of fixtures currently showing it, for example `Any · 2 fx`.
+The lower-left corner of every stored Group and Preset tile shows its fixture information. A Group
+tile reads its member count, for example `8`, or the selected/total count, for example `3/8`. A
+Preset tile reads only the number of fixtures currently showing that Preset, for example `3`.
+The count compares each fixture's current effective values, after the Programmer and every
+Playback have been merged, with every value the Preset stores for it. A Preset that is only
+stored, or whose values another source has overridden, is not active. The count follows the
+live output state while the pane is open; no matching fixtures means `0`. Stored Group members
+and fixtures that are currently unpatched remain part of the Preset's targets. In a
+[Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is
+**universal**: it applies to every selected fixture. Its tile uses the same active fixture count,
+for example `2` when two fixtures currently show it.
 
 ### Automatic Color and Position previews
 

@@ -178,11 +178,11 @@ hardware-connected layout.
 1. Patch two moving heads, for example the Cameo AURO SPOT Z300, and store Position 1 with Tilt
    −67.5° and Position 2 with Tilt 45° for both fixtures. Select both with an empty Programmer and
    show the Position Presets in a Preset pool.
-2. Verify that both tiles read `0 / 2`.
-3. Touch Position 1 and let the fade finish. Verify that Position 1 reads `2 / 2` and Position 2
-   still reads `0 / 2`. The count compares the requested Position intent, so the achieved output
+2. Verify that both tiles read `0`.
+3. Touch Position 1 and let the fade finish. Verify that Position 1 reads `2` and Position 2
+   still reads `0`. The count compares the requested Position intent, so the achieved output
    pose and mechanical limits never deactivate it, and it keeps counting while the pane stays open.
-4. Touch Position 2. Verify that Position 1 returns to `0 / 2` and Position 2 reads `2 / 2`.
+4. Touch Position 2. Verify that Position 1 returns to `0` and Position 2 reads `2`.
 
 ## POSITION-CONTROLS-010 — Point and X/Y/Z on a group: Target readouts and From Point ranges
 
