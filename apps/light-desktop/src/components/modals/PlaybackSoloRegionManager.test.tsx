@@ -27,7 +27,7 @@ function setup() {
 describe("Manage Solo Regions", () => {
 	it("starts a new grid draft and closes without persisting", () => {
 		const s = setup();
-		fireEvent.click(s.getByRole("button", { name: "Create Solo Region" }));
+		fireEvent.click(s.getByRole("button", { name: "Create New Solo Region" }));
 		expect(s.editor.begin).toHaveBeenCalledOnce();
 		expect(s.close).toHaveBeenCalledOnce();
 		expect(s.capability.save).not.toHaveBeenCalled();

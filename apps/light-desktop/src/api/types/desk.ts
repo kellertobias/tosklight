@@ -173,6 +173,7 @@ export interface DeskLockState {
 }
 
 export interface ControlDesk {
+	show_compact_encoders?: boolean;
 	id: string;
 	name: string;
 	columns: number;
@@ -260,6 +261,7 @@ export interface ScreenConfiguration {
 	show_page_controls: boolean;
 	/** Programmer command line above this screen's encoders. */
 	show_programmer: boolean;
+	show_compact_encoders?: boolean;
 	/**
 	 * Whether this screen may change programming. A Not Editable screen presents the desk and
 	 * operates playback, macros and timecodes, but cannot record, update or assign.
@@ -279,11 +281,11 @@ export interface ScreenSnapshot {
 
 export interface ProgrammerControlSurfaceConfiguration {
 	owner_screen_id: string | null;
-	visible_encoders: 4 | 6;
+	visible_encoders: 4 | 5 | 6;
 }
 
 export interface ProgrammerControlSurfacePatch {
 	owner_screen_id?: string;
 	assign_to_main?: boolean;
-	visible_encoders?: 4 | 6;
+	visible_encoders?: 4 | 5 | 6;
 }

@@ -43,6 +43,7 @@ import {
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
+import { usePlaybackSectionSettings } from "./PlaybackSectionSettingsHost";
 import { PlaybackSectionSettingsModal } from "../modals/PlaybackSectionSettingsModal";
 import { usePlaybackSoloEditor } from "../../features/playbackSolo/PlaybackSoloEditorContext";
 import { useCommandLinePlacement } from "./commandLine/programmerAssignment";
@@ -377,6 +378,7 @@ export function CommandLineBar() {
 	const placement = useCommandLinePlacement();
 	const editor = usePlaybackSoloEditor(placement.surfaceId ?? "");
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const settingsHost = usePlaybackSectionSettings();
 	const mode = policy?.mode ?? model.state.controlMode;
 	return (
 		<>
@@ -386,7 +388,7 @@ export function CommandLineBar() {
 					mode === "programmer" ? placement.programmerAssignment : undefined
 				}
 				onModeSettings={
-					placement.surfaceId ? () => setSettingsOpen(true) : undefined
+					settingsHost?.open ?? (placement.surfaceId ? () => setSettingsOpen(true) : undefined)
 				}
 				replacementContent={
 					editor?.selecting ? <SoloCommandEditor editor={editor} /> : undefined
@@ -457,7 +459,7 @@ export function CommandLineBar() {
 	);
 }
 
-function SoloCommandEditor({ editor }: {
+export function SoloCommandEditor({ editor }: {
 	editor: NonNullable<ReturnType<typeof usePlaybackSoloEditor>>;
 }) {
 	return (

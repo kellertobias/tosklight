@@ -2,6 +2,7 @@ import { CommandLineBar } from "../../components/control/CommandLineBar";
 import { ControlSection } from "../../components/control/ControlSection";
 import { ControlSurfaceModeProvider } from "../../components/control/ControlSurfaceMode";
 import { ParameterControls } from "../../components/control/ParameterControls";
+import type { ParameterController } from "../../components/control/parameterControls/useParameterController";
 import {
 	resolveVisibleEncoderCount,
 	useVisibleEncoderCount,
@@ -24,8 +25,10 @@ import { useScreens } from "./ScreensContext";
  */
 export function ProgrammerControlSurfaceRegion({
 	screenId = null,
+	controller,
 }: {
 	screenId?: string | null;
+	controller?: ParameterController;
 }) {
 	const { screens } = useScreens();
 	const configuration = screens?.programmer_control_surface;
@@ -41,6 +44,7 @@ export function ProgrammerControlSurfaceRegion({
 			<VisibleEncoderCountProvider count={configuration.visible_encoders}>
 				<ScreenEncoderSection
 					showCommandLine={Boolean(screen?.show_programmer)}
+					controller={controller}
 				/>
 			</VisibleEncoderCountProvider>
 		);
@@ -68,8 +72,10 @@ export function ProgrammerControlSurfaceRegion({
  */
 function ScreenEncoderSection({
 	showCommandLine,
+	controller,
 }: {
 	showCommandLine: boolean;
+	controller?: ParameterController;
 }) {
 	const { state } = useApp();
 	const hardware = Boolean(useHardwareConnected() || state.midiProfile);
@@ -80,7 +86,7 @@ function ScreenEncoderSection({
 	const sectionSwitch = useLowerSectionSwitch();
 	const encoders = (
 		<VisibleEncoderCountProvider count={visibleEncoderCount}>
-			<ParameterControls />
+			<ParameterControls controller={controller} />
 		</VisibleEncoderCountProvider>
 	);
 	return (

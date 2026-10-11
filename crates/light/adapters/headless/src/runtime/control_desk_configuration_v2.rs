@@ -7,7 +7,8 @@ use light_wire::v2::control_desk_configuration as wire;
 const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
-    Router::new().route("/api/v2/control-desk/actions", post(apply_action))
+    // One desk owns this replay-safe update endpoint; sparse intents retain all other settings.
+    Router::new().route("/api/v2/control-desk/update", post(apply_action))
 }
 
 async fn apply_action(
@@ -80,6 +81,7 @@ fn update_control_desk(
                     .hardware_gooseneck_color
                     .unwrap_or(current.hardware_gooseneck_color),
             ]),
+            patch.show_compact_encoders,
         )
         .map_err(ApiError::store)?;
     state.sessions.update_desk_sessions(&desk);

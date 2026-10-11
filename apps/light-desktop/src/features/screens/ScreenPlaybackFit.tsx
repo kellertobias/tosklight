@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { requiredMainPlaybackHeight } from "./requiredMainPlaybackHeight";
 
 /** A screen fits its authored rows; only personal panes offer scrolling. */
-export function ScreenPlaybackFit({ children }: { children: ReactNode }) {
+export function ScreenPlaybackFit({ children, className = "" }: { children: ReactNode; className?: string }) {
 	const element = useRef<HTMLDivElement>(null);
 	const [insufficient, setInsufficient] = useState(false);
 	useEffect(() => {
@@ -10,19 +10,21 @@ export function ScreenPlaybackFit({ children }: { children: ReactNode }) {
 		if (!host) return;
 		const shell = host.closest<HTMLElement>(".app-shell");
 		let frame = 0;
+		let ownsMainHeight = false;
 		const measure = () => {
 			cancelAnimationFrame(frame);
 			frame = requestAnimationFrame(() => {
 				const bank = host.querySelector<HTMLElement>(".playback-fader-bank");
 				if (!bank || !bank.classList.contains("touch-layout")) {
 					if (bank) bank.inert = false;
-					shell?.style.removeProperty("--screen-playback-required-height");
+					if (ownsMainHeight) shell?.style.removeProperty("--screen-playback-required-height");
 					setInsufficient(false);
 					return;
 				}
 				const bounds = bank.getBoundingClientRect();
 				if (!bounds.width || !bounds.height) return;
 				if (shell && bank.dataset.playbackSurface === "main") {
+					ownsMainHeight = true;
 					const base = getComputedStyle(document.documentElement).getPropertyValue(
 						"--control-height",
 					);
@@ -84,12 +86,12 @@ export function ScreenPlaybackFit({ children }: { children: ReactNode }) {
 			cancelAnimationFrame(frame);
 			const bank = host.querySelector<HTMLElement>(".playback-fader-bank");
 			if (bank) bank.inert = false;
-			shell?.style.removeProperty("--screen-playback-required-height");
-			shell?.style.removeProperty("--screen-playback-base-height");
+			if (ownsMainHeight) shell?.style.removeProperty("--screen-playback-required-height");
+			if (ownsMainHeight) shell?.style.removeProperty("--screen-playback-base-height");
 		};
 	}, []);
 	return (
-		<div ref={element} className="screen-playback-fit">
+		<div ref={element} className={`screen-playback-fit ${className}`.trim()}>
 			<div className="screen-playback-fit-content">
 				{children}
 			</div>

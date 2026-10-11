@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 impl DeskStore {
     pub fn screens(&self) -> Result<Vec<ScreenConfiguration>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,layout_json,show_dock,show_playbacks,surface_id,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,content_json,not_editable FROM screens ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,layout_json,show_dock,show_playbacks,surface_id,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,content_json,not_editable,show_compact_encoders FROM screens ORDER BY name COLLATE NOCASE")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -26,6 +26,7 @@ impl DeskStore {
                 row.get::<_, bool>(11)?,
                 row.get::<_, String>(12)?,
                 row.get::<_, bool>(13)?,
+                row.get::<_, bool>(14)?,
             ))
         })?;
         rows.map(|row| {
@@ -44,6 +45,7 @@ impl DeskStore {
                 fullscreen,
                 content,
                 not_editable,
+                show_compact_encoders,
             ) = row?;
             let mut screen = ScreenConfiguration {
                 id: Uuid::parse_str(&id)?,
@@ -62,6 +64,7 @@ impl DeskStore {
                 fullscreen,
                 content: serde_json::from_str(&content)?,
                 not_editable,
+                show_compact_encoders,
             };
             normalize_screen(&mut screen)?;
             Ok(screen)
@@ -94,7 +97,7 @@ impl DeskStore {
             )));
         }
         normalize_screen(&mut screen)?;
-        self.conn.execute("INSERT INTO screens(id,name,layout_json,show_dock,show_playbacks,surface_id,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,content_json,not_editable) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,show_dock=excluded.show_dock,show_playbacks=excluded.show_playbacks,surface_id=excluded.surface_id,show_page_controls=excluded.show_page_controls,show_programmer=excluded.show_programmer,desired_open=excluded.desired_open,display_id=excluded.display_id,bounds_json=excluded.bounds_json,fullscreen=excluded.fullscreen,content_json=excluded.content_json,not_editable=excluded.not_editable", params![screen.id.to_string(),screen.name,serde_json::to_string(&screen.layout)?,screen.show_dock,screen.show_playbacks,screen.surface_id,screen.show_page_controls,screen.show_programmer,screen.desired_open,screen.display_id,screen.bounds.as_ref().map(serde_json::to_string).transpose()?,screen.fullscreen,serde_json::to_string(&screen.content)?,screen.not_editable])?;
+        self.conn.execute("INSERT INTO screens(id,name,layout_json,show_dock,show_playbacks,surface_id,show_page_controls,show_programmer,desired_open,display_id,bounds_json,fullscreen,content_json,not_editable,show_compact_encoders) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) ON CONFLICT(id) DO UPDATE SET name=excluded.name,layout_json=excluded.layout_json,show_dock=excluded.show_dock,show_playbacks=excluded.show_playbacks,surface_id=excluded.surface_id,show_page_controls=excluded.show_page_controls,show_programmer=excluded.show_programmer,desired_open=excluded.desired_open,display_id=excluded.display_id,bounds_json=excluded.bounds_json,fullscreen=excluded.fullscreen,content_json=excluded.content_json,not_editable=excluded.not_editable,show_compact_encoders=excluded.show_compact_encoders", params![screen.id.to_string(),screen.name,serde_json::to_string(&screen.layout)?,screen.show_dock,screen.show_playbacks,screen.surface_id,screen.show_page_controls,screen.show_programmer,screen.desired_open,screen.display_id,screen.bounds.as_ref().map(serde_json::to_string).transpose()?,screen.fullscreen,serde_json::to_string(&screen.content)?,screen.not_editable,screen.show_compact_encoders])?;
         self.screen(screen.id)?
             .ok_or_else(|| StoreError::Invalid("screen disappeared after update".into()))
     }
@@ -126,9 +129,9 @@ impl DeskStore {
         &self,
         configuration: ProgrammerControlSurfaceConfiguration,
     ) -> Result<ProgrammerControlSurfaceConfiguration, StoreError> {
-        if !matches!(configuration.visible_encoders, 4 | 6) {
+        if !matches!(configuration.visible_encoders, 4 | 5 | 6) {
             return Err(StoreError::Invalid(
-                "visible encoder count must be 4 or 6".into(),
+                "visible encoder count must be 4, 5 or 6".into(),
             ));
         }
         if let Some(owner_screen_id) = configuration.owner_screen_id

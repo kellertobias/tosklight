@@ -2,7 +2,7 @@ import type { Group } from "./model";
 
 /** Group membership comes from the authoritative group, including unpatched members. */
 export function groupFixtureCountLabel(total: number, selected: number) {
-	return selected > 0 ? `${selected}/${total}` : String(total);
+	return selected > 0 && selected < total ? `${selected}/${total}` : String(total);
 }
 
 export function groupFixtureSelection(

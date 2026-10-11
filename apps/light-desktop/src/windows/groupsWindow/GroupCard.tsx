@@ -155,12 +155,11 @@ export function GroupCard({
 			className={`group-card ${presentation.className}`}
 			style={presentation.style}
 			aria-pressed={selected}
-			cornerIndicator={groupMembershipDot(partiallySelected, fullySelected, selected)}
 			model={{
 				number: index + 1,
 				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
 				secondary: group
-					? groupFixtureCountLabel(group.body.fixtures.length, selectedFixtureCount)
+					? <GroupFixtureCount total={group.body.fixtures.length} selected={selectedFixtureCount} />
 					: undefined,
 				details: group ? details : [...details, emptyGroupHint(storeArmed, updateArmed)],
 				icon: group?.body.icon,
@@ -202,11 +201,14 @@ export function GroupCard({
 	);
 }
 
-function groupMembershipDot(partiallySelected: boolean, fullySelected: boolean, selected: boolean) {
-	if (selected || (!partiallySelected && !fullySelected)) return null;
-	return (
-		<span className={`group-membership-selection-dot ${fullySelected ? "full" : "partial"}`} role="img" aria-label={fullySelected ? "All group fixtures selected; group not selected" : "Some group fixtures selected; group not selected"} />
-	);
+function GroupFixtureCount({ total, selected }: { total: number; selected: number }) {
+	const partial = selected > 0 && selected < total;
+	return <span className="group-fixture-count">
+		<span className={selected > 0 ? "group-fixture-count-selected" : undefined}>
+			{partial ? selected : groupFixtureCountLabel(total, selected)}
+		</span>
+		{partial ? `/${total}` : null}
+	</span>;
 }
 
 function groupDetails(attributes: string[], missing: number, unsupported: number) {

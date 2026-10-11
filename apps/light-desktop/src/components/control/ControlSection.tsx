@@ -6,11 +6,15 @@ import {
 	useSessionSnapshot,
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useApp } from "../../state/AppContext";
+import { PlaybackSectionSettingsHost } from "./PlaybackSectionSettingsHost";
 import { CommandLineBar } from "./CommandLineBar";
 import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { HardwareControlSummary } from "./HardwareControlSummary";
 import { NumericPad } from "./NumericPad";
-import { ParameterControls } from "./ParameterControls";
+import { ParameterControls, useProgrammerEncoderContext } from "./ParameterControls";
+import { CompactEncoderAssignments } from "./parameterControls/CompactEncoderAssignments";
+import { useParameterController } from "./parameterControls/useParameterController";
+import { programmerEncoderOwnerContext } from "./parameterControls/useEncoderNavigation";
 import { PatchParameterControls } from "./PatchParameterControls";
 import { PlaybackFaderBank } from "./PlaybackFaderBank";
 import { PlaybackTools } from "./PlaybackTools";
@@ -21,7 +25,7 @@ import {
 } from "./parameterControls/VisibleEncoderCount";
 
 export function ControlSection() {
-	const { state } = useApp();
+	const { state, dispatch } = useApp();
 	const placement = useEncoderPlacement(null);
 	const encoderScreen =
 		placement && !placement.holdsEncoders ? placement.encoderScreen : null;
@@ -35,6 +39,15 @@ export function ControlSection() {
 		configuredEncoderCount,
 		hardware,
 	);
+	const programmerContext = useProgrammerEncoderContext();
+	const compactEnabled = hardware && Boolean(session?.desk.show_compact_encoders);
+	const controller = useParameterController(
+		encoderScreen ? compactEnabled : programmerContext && (mode === "programmer" || compactEnabled),
+		{ bindHardware: !encoderScreen, ownerContext: programmerEncoderOwnerContext(programmerContext, state.builtIn) },
+	);
+	const compact = compactEnabled &&
+		(mode === "playbacks" || Boolean(encoderScreen));
+	const compactEncoders = compact ? <CompactEncoderAssignments controller={controller} /> : undefined;
 	const playbacks = (
 		<ScreenPlaybackFit>
 			<PlaybackFaderBank
@@ -51,6 +64,8 @@ export function ControlSection() {
 	 */
 	return (
 		<VisibleEncoderCountProvider count={visibleEncoderCount}>
+			<PlaybackSectionSettingsHost surfaceId={session?.desk.surface_id ?? "main"}
+				onShowGrid={() => dispatch({ type: "SET_CONTROL_MODE", value: "playbacks" })}>
 			<CommandSection
 				className="screen-bank-fit"
 				mode={mode}
@@ -62,14 +77,15 @@ export function ControlSection() {
 					) : encoderScreen ? (
 						playbacks
 					) : (
-						<ParameterControls />
+						<ParameterControls controller={controller} />
 					)
 				}
 				playbacks={playbacks}
 				programmerTools={<NumericPad />}
 				playbackTools={<PlaybackTools />}
-				hardwareTools={<HardwareControlSummary />}
+				hardwareTools={<HardwareControlSummary encoders={compactEncoders} />}
 			/>
+			</PlaybackSectionSettingsHost>
 		</VisibleEncoderCountProvider>
 	);
 }

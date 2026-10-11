@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **418 root cases across 128 files**.
+Default catalog: **419 root cases across 129 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -232,6 +232,7 @@ Default catalog: **418 root cases across 128 files**.
 | 130-tl714-held-page-change.spec.ts | TL714-HELD-POINTER @ui › held Flash survives a visible Page change until its original release | repository contract | @ui | tl714-held-page-change | standard failure evidence | parallel | pending-semantic-migration |
 | 130-tl714-held-page-change.spec.ts | TL714-HELD-KEYBOARD @ui › held Flash survives a visible Page change until its original release | repository contract | @ui | tl714-held-page-change | standard failure evidence | parallel | pending-semantic-migration |
 | 130-tl714-held-page-change.spec.ts | TL714-HELD-OSC @ui @osc › compact held capture and explicit-page independent sources survive Page changes | repository contract | @ui @osc | tl714-held-page-change | standard failure evidence | parallel | pending-semantic-migration |
+| 133-screen-playback-fit-geometry.spec.ts | TL714 Screen pane fits 15 faders with three actions and 15 buttons, recovers after enlargement | repository contract | none | screen-playback-fit-geometry | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

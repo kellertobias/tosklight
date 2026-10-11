@@ -245,6 +245,7 @@ fn apply_patch(
     patch!(surface_id);
     patch!(show_page_controls);
     patch!(show_programmer);
+    patch!(show_compact_encoders);
     patch!(not_editable);
     patch!(desired_open);
     if patch.clear_display_id {
@@ -274,6 +275,7 @@ fn domain_screen(screen: wire::ScreenConfiguration) -> Result<ScreenConfiguratio
         surface_id: screen.surface_id,
         show_page_controls: screen.show_page_controls,
         show_programmer: screen.show_programmer,
+        show_compact_encoders: screen.show_compact_encoders,
         not_editable: screen.not_editable,
         desired_open: screen.desired_open,
         display_id: screen.display_id,
@@ -293,6 +295,7 @@ fn wire_screen(screen: ScreenConfiguration) -> Result<wire::ScreenConfiguration,
         surface_id: screen.surface_id,
         show_page_controls: screen.show_page_controls,
         show_programmer: screen.show_programmer,
+        show_compact_encoders: screen.show_compact_encoders,
         not_editable: screen.not_editable,
         desired_open: screen.desired_open,
         display_id: screen.display_id,

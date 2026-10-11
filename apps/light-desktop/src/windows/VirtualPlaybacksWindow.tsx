@@ -63,11 +63,11 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 }
 
 function PlaybackPaneBank({ pane, surfaceId }: { pane?: PaneModel; surfaceId: string }) {
-	const { surfaces } = useScreens();
+	const { surfaces, bootstrap } = useScreens();
 	if (pane?.playbackViewMode !== "screen")
 		return <PlaybackFaderBank surfaceId={surfaceId} scrollable />;
 	const screen = pane.playbackScreenSurfaceId ?? "main";
 	if (!surfaces?.playback_surfaces[screen])
 		return <ErrorAlert role="alert">The selected screen layout is unavailable. Choose another screen in Pane Settings.</ErrorAlert>;
-	return <ScreenPlaybackFit><PlaybackFaderBank surfaceId={surfaceId} layoutSourceSurfaceId={screen} /></ScreenPlaybackFit>;
+	return <ScreenPlaybackFit className="screen-bank-fit"><PlaybackFaderBank surfaceId={surfaceId} layoutSourceSurfaceId={screen} hardwareConnected={Boolean(bootstrap?.hardware_connected)} /></ScreenPlaybackFit>;
 }

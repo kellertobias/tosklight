@@ -1,38 +1,78 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect, useMemo, useState } from "react";
+import { PlaybackSoloEditorProvider, usePlaybackSoloEditorRegistry } from "../playbackSolo/PlaybackSoloEditorContext";
 import type { ScreenConfiguration } from "../../api/types";
 import { ScreenControlRegion } from "./ScreenControlRegion";
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
+const soloMocks = vi.hoisted(() => ({ saved: vi.fn(), regions: [] }));
+vi.mock("../playbackSolo/PlaybackSoloContext", () => ({
+	usePlaybackSolo: () => ({ authorityGeneration: 1, activate: () => {}, subscribe: () => () => {},
+		getRegions: () => soloMocks.regions, isSaving: () => false, error: null }),
+}));
+
+const compactMocks = vi.hoisted(() => ({ hardware: false, programmerContext: true, bindings: [] as { active: boolean; bindHardware: boolean }[], full: [] as unknown[], miniature: [] as unknown[], controller: { id: "shared-controller" } }));
+
+vi.mock("../../components/control/parameterControls/useParameterController", () => ({
+	useParameterController: (active: boolean, options: { bindHardware: boolean }) => {
+		compactMocks.bindings.push({ active, bindHardware: options.bindHardware });
+		return compactMocks.controller;
+	},
+}));
+vi.mock("../../components/control/parameterControls/CompactEncoderAssignments", () => ({
+	CompactEncoderAssignments: ({ controller }: { controller: unknown }) => {
+		compactMocks.miniature.push(controller);
+		return <div data-testid="compact-encoders" />;
+	},
+}));
+
 /** Both sections host the switch where the operator's own controls already are. */
-vi.mock("../../components/control/CommandLineBar", () => ({
-	CommandLineBar: () => <div data-testid="command-line" />,
+vi.mock("../../components/control/CommandLineBar", async (original) => {
+	const actual = await original<typeof import("../../components/control/CommandLineBar")>();
+	return { CommandLineBar: () => <div data-testid="command-line" />, SoloCommandEditor: actual.SoloCommandEditor };
+});
+vi.mock("../../components/control/ControlSection", () => ({
+	ControlSection: () => <div data-testid="main-control-section" />,
 }));
 
 vi.mock("../../components/control/ParameterControls", async () => {
 	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
 	return {
-		ParameterControls: () => (
-			<div data-testid="encoders-only">{useLowerSectionSwitch()}</div>
-		),
+		useProgrammerEncoderContext: () => compactMocks.programmerContext,
+		ParameterControls: ({ controller }: { controller: unknown }) => {
+			compactMocks.full.push(controller);
+			return <div data-testid="encoders-only">{useLowerSectionSwitch()}</div>;
+		},
 	};
 });
 
 vi.mock("./ScreenPlaybackSection", async () => {
 	const { useLowerSectionSwitch } = await import("./LowerSectionSwitch");
 	return {
-		ScreenPlaybackSection: () => (
-			<div data-testid="playbacks">{useLowerSectionSwitch()}</div>
-		),
+		ScreenPlaybackSection: ({ screen: configuration, encoders }: { screen: ScreenConfiguration; encoders?: React.ReactNode }) => {
+			const registry = usePlaybackSoloEditorRegistry();
+			const [selecting, setSelecting] = useState(false);
+			const [name, setName] = useState("");
+			const editor = useMemo(() => ({
+				available: true, ready: true, selecting, selected: [{ page: 2, position: 101 }, { page: 2, position: 102 }],
+				name, saving: false, error: null, setName,
+				begin: () => setSelecting(true), beginEdit: () => setSelecting(true),
+				save: async () => { soloMocks.saved({ name, members: [{ page: 2, position: 101 }, { page: 2, position: 102 }] }); setSelecting(false); },
+				cancel: () => setSelecting(false),
+			}), [selecting, name]);
+			useEffect(() => registry?.register(configuration.surface_id, editor), [registry, configuration.surface_id, editor]);
+			return <div data-testid="playbacks">{useLowerSectionSwitch()}{encoders}</div>;
+		},
 	};
 });
 
 vi.mock("../deskSnapshot/DeskSnapshotState", () => ({
-	useHardwareConnected: () => false,
+	useHardwareConnected: () => compactMocks.hardware,
 }));
 
 vi.mock("../../state/AppContext", () => ({
@@ -88,18 +128,64 @@ function mount(
 		removeClient: vi.fn(),
 	};
 	return render(
-		<ScreensProvider source={source}>
-			<ScreenControlRegion screen={screenConfiguration} />
-		</ScreensProvider>,
+		<PlaybackSoloEditorProvider>
+			<ScreensProvider source={source}>
+				<ScreenControlRegion screen={screenConfiguration} />
+			</ScreensProvider>
+		</PlaybackSoloEditorProvider>,
 	);
 }
 
 describe("ScreenControlRegion", () => {
-	afterEach(cleanup);
+	beforeEach(() => {
+		soloMocks.saved.mockClear();
+		compactMocks.hardware = false;
+		compactMocks.programmerContext = true;
+		compactMocks.bindings = [];
+		compactMocks.full = [];
+		compactMocks.miniature = [];
+	});
+	afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+	it("holds optional Programmer settings open through Manage, then exposes local Solo Save and Cancel", async () => {
+		vi.useFakeTimers();
+		mount(screenTemplate, "screen-1");
+		const toggle = screen.getByRole("button", { name: "Lower section" });
+		fireEvent.pointerDown(toggle);
+		act(() => vi.advanceTimersByTime(650));
+		fireEvent.pointerUp(toggle);
+		fireEvent.click(toggle, { detail: 1 });
+		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
+		expect(screen.getByRole("dialog", { name: "Playback section settings" })).toBeInTheDocument();
+		vi.useRealTimers();
+		fireEvent.click(screen.getByRole("tab", { name: "Manage Solo Regions" }));
+		await waitFor(() => expect(screen.getByTestId("playbacks")).toBeInTheDocument());
+		expect(screen.getByRole("dialog")).toBeInTheDocument();
+		fireEvent.click(await screen.findByRole("button", { name: "Create New Solo Region" }));
+		fireEvent.change(screen.getByLabelText("Solo Region name"), { target: { value: "Local pair" } });
+		fireEvent.click(screen.getByRole("button", { name: "Save Solo Region" }));
+		await waitFor(() => expect(soloMocks.saved).toHaveBeenCalledExactlyOnceWith({
+			name: "Local pair", members: [{ page: 2, position: 101 }, { page: 2, position: 102 }],
+		}));
+		expect(screen.queryByRole("button", { name: "Save Solo Region" })).not.toBeInTheDocument();
+		fireEvent.pointerDown(screen.getByRole("button", { name: "Lower section" }));
+		await new Promise((resolve) => setTimeout(resolve, 670));
+		fireEvent.pointerUp(screen.getByRole("button", { name: "Lower section" }));
+		fireEvent.click(screen.getByRole("tab", { name: "Manage Solo Regions" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Create New Solo Region" }));
+		fireEvent.click(screen.getByRole("button", { name: /^Cancel$/ }));
+		expect(screen.queryByRole("button", { name: "Save Solo Region" })).not.toBeInTheDocument();
+		expect(soloMocks.saved).toHaveBeenCalledOnce();
+		expect(screen.getByTestId("playbacks")).toBeInTheDocument();
+	});
 
 	it("shows only Playbacks while the encoders live elsewhere", () => {
 		mount(screenTemplate, null);
 		expect(screen.getByTestId("playbacks")).toBeInTheDocument();
+		const draftLayout = screen.getByTestId("playbacks").parentElement!;
+		expect(draftLayout.style.gridTemplateRows).toBe("auto minmax(0, 1fr)");
+		expect(draftLayout.firstElementChild).toBeEmptyDOMElement();
+		expect(draftLayout.children[1]).toBe(screen.getByTestId("playbacks"));
 		expect(screen.queryByTestId("encoders")).toBeNull();
 		expect(screen.queryByRole("button", { name: "Lower section" })).toBeNull();
 	});
@@ -157,5 +243,37 @@ describe("ScreenControlRegion", () => {
 
 		fireEvent.click(moved);
 		expect(screen.getByTestId("encoders-only")).toBeInTheDocument();
+	});
+
+	it("keeps one owner controller while switching into opted-in hardware playback readouts", () => {
+		compactMocks.hardware = true;
+		mount({ ...screenTemplate, show_compact_encoders: true }, "screen-1");
+		expect(screen.queryByTestId("compact-encoders")).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Lower section" }));
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(compactMocks.full[0]).toBe(compactMocks.miniature[0]);
+		expect(compactMocks.bindings.at(-1)).toEqual({ active: true, bindHardware: true });
+	});
+
+	it("makes a nonowner compact screen a readout without extra hardware binding", () => {
+		compactMocks.hardware = true;
+		mount({ ...screenTemplate, show_compact_encoders: true }, null);
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(compactMocks.bindings.at(-1)).toEqual({ active: true, bindHardware: false });
+	});
+
+	it.each(["disabled", "software"])("suppresses compact readouts for %s", (condition) => {
+		compactMocks.hardware = condition !== "software";
+		mount({ ...screenTemplate, show_compact_encoders: condition !== "disabled" }, null);
+		expect(screen.queryByTestId("compact-encoders")).toBeNull();
+		expect(compactMocks.bindings.at(-1)?.active).toBe(false);
+	});
+
+	it("does not suppress a nonowner mirror merely because its own workspace has special controls", () => {
+		compactMocks.hardware = true;
+		compactMocks.programmerContext = false;
+		mount({ ...screenTemplate, show_compact_encoders: true }, null);
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(compactMocks.bindings.at(-1)).toEqual({ active: true, bindHardware: false });
 	});
 });

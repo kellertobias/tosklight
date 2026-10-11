@@ -62,6 +62,7 @@ fn screens_persist_central_surface_references() {
         show_playbacks: true,
         show_page_controls: false,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: true,
         display_id: Some("display".into()),
         bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
@@ -89,6 +90,7 @@ fn screen_requires_registered_playback_surface() {
         show_playbacks: true,
         show_page_controls: true,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: false,
         display_id: None,
         bounds: None,
@@ -194,6 +196,7 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
         show_playbacks: true,
         show_page_controls: true,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: false,
         display_id: None,
         bounds: None,
@@ -292,6 +295,7 @@ fn programmer_control_surface_persists_one_screen_owner_and_reassigns_deleted_ow
                 show_playbacks: false,
                 show_page_controls: false,
                 show_programmer: false,
+                show_compact_encoders: false,
                 desired_open: true,
                 display_id: None,
                 bounds: None,
@@ -339,7 +343,7 @@ fn programmer_control_surface_rejects_unknown_owners_and_unsupported_widths() {
         store
             .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
                 owner_screen_id: None,
-                visible_encoders: 5,
+                visible_encoders: 7,
             })
             .is_err()
     );
@@ -365,6 +369,7 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
                 show_playbacks: true,
                 show_page_controls: true,
                 show_programmer: false,
+                show_compact_encoders: false,
                 desired_open: true,
                 display_id: None,
                 bounds: None,
@@ -431,6 +436,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
         show_playbacks: true,
         show_page_controls: true,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: true,
         display_id: None,
         bounds: None,
@@ -512,6 +518,7 @@ fn fixed_side_pane_turns_desktop_dock_off() {
                 show_playbacks: true,
                 show_page_controls: true,
                 show_programmer: false,
+                show_compact_encoders: false,
                 desired_open: true,
                 display_id: None,
                 bounds: None,
@@ -546,6 +553,7 @@ fn control_and_empty_screen_content_round_trip_without_desktop_dock() {
         show_playbacks: true,
         show_page_controls: true,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: true,
         display_id: None,
         bounds: None,
@@ -586,6 +594,7 @@ fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_refer
         show_playbacks: true,
         show_page_controls: true,
         show_programmer: false,
+        show_compact_encoders: false,
         desired_open: false,
         display_id: None,
         bounds: None,
@@ -785,4 +794,119 @@ fn an_installation_that_already_holds_one_lock_keeps_it() {
     assert!(store.settings_with_prefix("desk_lock:").unwrap().is_empty());
     drop(store);
     let _ = fs::remove_file(path);
+}
+
+#[test]
+fn five_encoder_count_migrates_preserving_existing_count() {
+    let path = temporary("five-encoder-migration");
+    let store = DeskStore::open(&path).unwrap();
+    store
+        .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
+            owner_screen_id: None,
+            visible_encoders: 4,
+        })
+        .unwrap();
+    store.conn.execute_batch("ALTER TABLE programmer_control_surface RENAME TO programmer_control_surface_new; CREATE TABLE programmer_control_surface(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner_screen_id TEXT,visible_encoders INTEGER NOT NULL DEFAULT 6 CHECK(visible_encoders IN(4,6))); INSERT INTO programmer_control_surface SELECT * FROM programmer_control_surface_new; DROP TABLE programmer_control_surface_new;").unwrap();
+    drop(store);
+    let store = DeskStore::open(&path).unwrap();
+    assert_eq!(
+        store.programmer_control_surface().unwrap().visible_encoders,
+        4
+    );
+    store
+        .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
+            owner_screen_id: None,
+            visible_encoders: 5,
+        })
+        .unwrap();
+    drop(store);
+    let store = DeskStore::open(&path).unwrap();
+    assert_eq!(
+        store.programmer_control_surface().unwrap().visible_encoders,
+        5
+    );
+    assert!(
+        store
+            .put_programmer_control_surface(ProgrammerControlSurfaceConfiguration {
+                owner_screen_id: None,
+                visible_encoders: 7
+            })
+            .is_err()
+    );
+    drop(store);
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn compact_encoder_flags_migrate_canonical_surfaces_and_preserve_sparse_updates() {
+    let path = temporary("canonical-compact-encoders");
+    let store = DeskStore::open(&path).unwrap();
+    let desk = store.desk().unwrap();
+    let screen = store
+        .put_screen(
+            desk.id,
+            ScreenConfiguration {
+                id: Uuid::new_v4(),
+                name: "Canonical screen".into(),
+                layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
+                show_dock: true,
+                show_playbacks: true,
+                surface_id: "main".into(),
+                show_page_controls: true,
+                show_programmer: false,
+                show_compact_encoders: false,
+                desired_open: false,
+                display_id: None,
+                bounds: None,
+                fullscreen: false,
+                content: ScreenContent::Desktop,
+                not_editable: false,
+            },
+        )
+        .unwrap();
+    store.conn.execute_batch("ALTER TABLE control_desks DROP COLUMN show_compact_encoders; ALTER TABLE screens DROP COLUMN show_compact_encoders;").unwrap();
+    drop(store);
+    let store = DeskStore::open(&path).unwrap();
+    let current = store.desk().unwrap();
+    assert_eq!(current.surface_id, "main");
+    assert!(!current.show_compact_encoders);
+    let mut restored = store.screen(screen.id).unwrap().unwrap();
+    assert_eq!(restored.surface_id, screen.surface_id);
+    assert!(!restored.show_compact_encoders);
+    restored.show_compact_encoders = true;
+    store.put_screen(desk.id, restored.clone()).unwrap();
+    let compact = store
+        .update_desk_with_screen_settings(
+            desk.id,
+            &current.name,
+            current.columns,
+            current.rows,
+            current.buttons,
+            current.surface_id.clone(),
+            Some([0, 42, 100]),
+            Some(true),
+        )
+        .unwrap();
+    let renamed = store
+        .update_desk(
+            desk.id,
+            "Renamed",
+            compact.columns,
+            compact.rows,
+            compact.buttons,
+            compact.surface_id.clone(),
+        )
+        .unwrap();
+    assert!(renamed.show_compact_encoders);
+    assert_eq!(renamed.hardware_gooseneck_brightness, 42);
+    assert_eq!(renamed.surface_id, current.surface_id);
+    drop(store);
+    let store = DeskStore::open(&path).unwrap();
+    assert_eq!(store.desk().unwrap(), renamed);
+    assert_eq!(
+        serde_json::to_value(store.screen(screen.id).unwrap().unwrap()).unwrap(),
+        serde_json::to_value(restored).unwrap()
+    );
+    drop(store);
+    fs::remove_file(path).unwrap();
 }

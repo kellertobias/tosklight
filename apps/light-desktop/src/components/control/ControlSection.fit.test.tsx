@@ -22,8 +22,10 @@ vi.mock("./PlaybackFaderBank", () => ({ PlaybackFaderBank: (props: { scrollable?
 vi.mock("./CommandLineBar", () => ({ CommandLineBar: () => <div /> }));
 vi.mock("./HardwareControlSummary", () => ({ HardwareControlSummary: () => <div /> }));
 vi.mock("./NumericPad", () => ({ NumericPad: () => <div /> }));
-vi.mock("./ParameterControls", () => ({ ParameterControls: () => <div /> }));
-vi.mock("./PatchParameterControls", () => ({ PatchParameterControls: () => <div /> }));
+vi.mock("./ParameterControls", () => ({ ParameterControls: () => <div />, useProgrammerEncoderContext: () => true }));
+vi.mock("./parameterControls/useParameterController", () => ({ useParameterController: () => ({}) }));
+vi.mock("./parameterControls/CompactEncoderAssignments", () => ({ CompactEncoderAssignments: () => <div /> }));
+vi.mock("./PatchParameterControls", () => ({ PatchParameterControls: () => <div />, useProgrammerEncoderContext: () => true }));
 vi.mock("./PlaybackTools", () => ({ PlaybackTools: () => <div /> }));
 
 afterEach(cleanup);

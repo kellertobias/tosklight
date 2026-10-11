@@ -35,7 +35,7 @@ describe("hardware lighting intent", () => {
 			),
 		).toEqual(next);
 		const [path, init] = request.mock.calls[0];
-		expect(path).toBe("/api/v2/control-desk/actions");
+		expect(path).toBe("/api/v2/control-desk/update");
 		expect(init?.method).toBe("POST");
 		const body = JSON.parse(String(init?.body));
 		expect(body.request_id).toMatch(/^[0-9a-f-]{36}$/);

@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClientSummary, ScreenConfiguration } from "../../api/types";
+import { DefaultScreenSettings } from "./screens/ScreenSettingsCards";
 import { ScreensProvider } from "../../features/screens/ScreensContext";
 import type { ScreensContextValue } from "../../features/screens/types";
 import {
@@ -74,7 +75,7 @@ const surfaceSnapshot = {
 afterEach(cleanup);
 
 describe("programmer control surface settings", () => {
-	it("offers exactly main or named screen ownership and four or six encoders", () => {
+	it("offers exactly main or named screen ownership and four, five or six encoders", () => {
 		const updateProgrammerControlSurface = vi.fn();
 		const source: ScreensContextValue = {
 			screens: {
@@ -134,11 +135,15 @@ describe("programmer control surface settings", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Six" }));
 		expect(screen.getByRole("option", { name: "Four" })).toBeVisible();
+		expect(screen.getByRole("option", { name: "Five" })).toBeVisible();
 		expect(screen.getByRole("option", { name: "Six" })).toBeVisible();
 		fireEvent.click(screen.getByRole("option", { name: "Four" }));
 		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({
 			visible_encoders: 4,
 		});
+		fireEvent.click(screen.getByRole("button", { name: "Six" }));
+		fireEvent.click(screen.getByRole("option", { name: "Five" }));
+		expect(updateProgrammerControlSurface).toHaveBeenCalledWith({ visible_encoders: 5 });
 	});
 
 	it("reports a closed owner and explicitly recovers controls to main", () => {
@@ -193,6 +198,17 @@ describe("additional screen settings", () => {
 		if (tab !== "Layout")
 			fireEvent.click(screen.getByRole("tab", { name: tab }));
 	}
+
+	it("defaults compact encoder assignments off and persists the optional-screen toggle", async () => {
+		const save = vi.fn(async (_value: ScreenConfiguration) => undefined);
+		render(<ScreenSettingsCard screen={configuredScreen} displays={[]} save={save} remove={vi.fn()} />);
+		openScreenConfiguration();
+		const toggle = screen.getByLabelText("Compact encoder assignments");
+		expect(toggle).not.toBeChecked();
+		fireEvent.click(toggle);
+		await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ show_compact_encoders: true })));
+		expect(toggle).toBeChecked();
+	});
 
 	it("updates fields immediately and serializes the saved configurations", async () => {
 		const saved: ScreenConfiguration[] = [];
@@ -278,8 +294,7 @@ describe("additional screen settings", () => {
 		const names = ["Dock", "Playbacks", "Command line", "Programming"].map(
 			(name) => screen.getByRole("switch", { name }),
 		);
-		// The four switches are direct form children in reading order, so the
-		// two-column grid shows Dock | Playbacks over Command line | Programming.
+		// The switches remain direct children of the same screen configuration form.
 		for (const control of names)
 			expect(control.closest(".ui-form-field")?.parentElement).toBe(form);
 		expect(
@@ -288,7 +303,7 @@ describe("additional screen settings", () => {
 					control.closest(".ui-form-field") as Element,
 				),
 			),
-		).toEqual([2, 3, 4, 5]);
+		).toEqual([2, 3, 4, 6]);
 		const pageControls = screen
 			.getByRole("switch", { name: "Page controls" })
 			.closest(".ui-form-field");
@@ -787,5 +802,17 @@ describe("known windows", () => {
 		expect(
 			screen.queryByRole("alertdialog", { name: "Forget other windows?" }),
 		).toBeNull();
+	});
+});
+
+
+describe("default screen compact encoder settings", () => {
+	it("shows a touchable option and delegates changing the main screen preference", () => {
+		const change = vi.fn();
+		render(<DefaultScreenSettings deskName="Main" onDeskName={vi.fn()} onTextFocus={vi.fn()} onTextBlur={vi.fn()} keyboardShortcuts={false} onKeyboardShortcuts={vi.fn()} onConfigurePlaybacks={vi.fn()} onChooseDefault={vi.fn()} singleClientMode={false} onSingleClientMode={vi.fn()} showCompactEncoders={false} onShowCompactEncoders={change} />);
+		const toggle = screen.getByLabelText("Compact encoder assignments");
+		expect(toggle).not.toBeChecked();
+		fireEvent.click(toggle);
+		expect(change).toHaveBeenCalledWith(true);
 	});
 });

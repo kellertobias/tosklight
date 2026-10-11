@@ -7,7 +7,13 @@ import {
 describe("Storybook actual source", () => {
 	it("maps every included story module to actual source", () => {
 		// The retired split VirtualPlaybackGrid story is no longer included.
-		expect(actualSourceCoverage).toHaveLength(63);
+		const includedStories = Object.keys(import.meta.glob([
+			"../**/*.stories.tsx",
+			"../../../light-desktop/src/**/*.stories.tsx",
+		])).map((path) => path.startsWith("../") && !path.startsWith("../../../")
+			? `apps/ui-library/src/${path.slice(3)}`
+			: `apps/light-desktop/src/${path.slice("../../../light-desktop/src/".length)}`);
+		expect(actualSourceCoverage.map(({ storyPath }) => storyPath)).toEqual(includedStories.sort());
 		expect(actualSourceCoverage.some(({ storyPath }) => storyPath.endsWith("/VirtualPlaybackGrid.stories.tsx"))).toBe(false);
 		expect(
 			actualSourceCoverage.filter(
@@ -19,6 +25,15 @@ describe("Storybook actual source", () => {
 				({ missingImplementationPaths }) => missingImplementationPaths,
 			),
 		).toEqual([]);
+	});
+
+	it("resolves the added compact hardware encoder story without a retired grid alias", () => {
+		const source = actualSourceForStory("<CompactHardwareEncoders />", {
+			parameters: { fileName: "../light-desktop/src/components/CompactHardwareEncoders.stories.tsx" },
+		});
+		expect(source).toContain("// Actual source: apps/light-desktop/src/components/CompactHardwareEncoders.stories.tsx");
+		expect(source).toContain("ParameterControlView");
+		expect(source).toContain("presentation fixtures, not a simulated authoritative desk");
 	});
 
 	it("shows story usage followed by the resolved implementation", () => {

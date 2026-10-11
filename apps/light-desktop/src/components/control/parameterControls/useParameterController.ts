@@ -1,4 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSessionSnapshot } from "../../../features/deskSnapshot/DeskSnapshotState";
+import { useEncoderNavigation } from "./useEncoderNavigation";
+import type { EncoderOwnerContext } from "./useEncoderNavigation";
+import { useDynamicEditorSession } from "../../../features/dynamics/DynamicEditorSessionContext";
 import { useProgrammingAlignmentView } from "../../../features/programmingInteraction/ProgrammingInteractionView";
 import type { AttributeDomain } from "./attributeDomain";
 import { useApp } from "../../../state/AppContext";
@@ -96,45 +100,68 @@ function useHardwareParameterNavigation(
 	}, [active, family, onFamily]);
 }
 
-export function useParameterController(active = true) {
+export function useParameterController(
+	active = true,
+	{ bindHardware = true, ownerContext = "programmer" }: { bindHardware?: boolean; ownerContext?: EncoderOwnerContext } = {},
+) {
 	const { dispatch } = useApp();
-	const [family, setFamily] = useState<ParameterFamily>("Intensity");
-	const [requestedEncoderPage, setRequestedEncoderPage] = useState(1);
+	const session = useSessionSnapshot();
+	const [navigation, selectNavigation, navigationActions] = useEncoderNavigation(session?.desk.id ?? null);
+	const editor = useDynamicEditorSession();
+	const localOwnerContext = ownerContext === "programmer" && editor.session ? "dynamic-editor" : ownerContext;
+	useEffect(() => {
+		if (bindHardware) navigationActions.publishOwnerContext(localOwnerContext);
+	}, [bindHardware, localOwnerContext, navigationActions.publishOwnerContext]);
+	const encoderContext = bindHardware ? localOwnerContext : navigation.ownerContext;
+	const family = navigation.family;
+	const requestedEncoderPage = navigation.page;
+	const setFamily = (next: ParameterFamily) => selectNavigation(next, 1);
 	const [encoderPageAnchor, setEncoderPageAnchor] = useState<string | null>(
 		null,
 	);
+	const anchorNavigation = useRef(navigation);
+	const effectiveAnchor = anchorNavigation.current === navigation ? encoderPageAnchor : null;
+	useEffect(() => {
+		if (anchorNavigation.current !== navigation) {
+			anchorNavigation.current = navigation;
+			setEncoderPageAnchor(null);
+		}
+	}, [navigation]);
 	const alignment = useProgrammingAlignmentView(active);
 	const alignMode = alignment?.mode === "off" ? null : alignment?.mode ?? null;
-	const [dynamicsMode, setDynamicsMode] = useState(false);
+	const dynamicsMode = navigation.dynamicsMode;
+	const setDynamicsMode = navigationActions.setDynamicsMode;
 	const projection = useParameterProjection(
 		family,
 		requestedEncoderPage,
 		active,
-		encoderPageAnchor,
+		effectiveAnchor,
 	);
 	const valueActions = useParameterValueActions(projection);
 	const rawActions = createParameterActions(projection, valueActions);
 	const actions = rawActions;
 	const familyEncoders = useFamilyEncoderBinding(projection, family);
 	useHardwareParameterEncoders(
-		{ ...projection, ...familyEncoders.overrides },
+		{ ...projection, ...familyEncoders.overrides, active: projection.active && bindHardware && encoderContext === "programmer" && !dynamicsMode },
 		{ ...actions, familyEncoderDetent: familyEncoders.detent },
 	);
+	useEffect(() => {
+		familyEncoders.selectPage(family, requestedEncoderPage);
+	}, [family, requestedEncoderPage, familyEncoders.active]);
 	const selectEncoderGroup = (next: ParameterFamily, page: number) => {
 		familyEncoders.selectPage(next, page);
 		const group = projection.encoderGroups.find(
 			(candidate) => candidate.id === next.toLowerCase(),
 		);
 		const anchor = group?.pages[page - 1]?.slots.find(Boolean)?.id ?? null;
-		setFamily(next);
-		setRequestedEncoderPage(page);
+		selectNavigation(next, page);
 		setEncoderPageAnchor(anchor);
 	};
-	useHardwareParameterNavigation(projection.active, family, (next) =>
+	useHardwareParameterNavigation(projection.active && bindHardware && encoderContext === "programmer", family, (next) =>
 		selectEncoderGroup(next, 1),
 	);
 	useEffect(() => {
-		if (!projection.active || !projection.programmerActions) return;
+		if (!projection.active || !bindHardware || encoderContext !== "programmer" || !projection.programmerActions) return;
 		const programmerActions = projection.programmerActions;
 		const handleAlign = () => {
 			void programmerActions
@@ -152,9 +179,9 @@ export function useParameterController(active = true) {
 			window.removeEventListener("light:align-action", handleAlign);
 			window.removeEventListener("light:align-off", handleAlignOff);
 		};
-	}, [projection.active, projection.programmerActions]);
+	}, [projection.active, projection.programmerActions, bindHardware, encoderContext]);
 	useEffect(() => {
-		if (!active) return;
+		if (!active || !bindHardware) return;
 		const selectFromKey = (event: Event) => {
 			const key = (event as CustomEvent<string>).detail;
 			const target = parameterTargetForShiftDigit(key);
@@ -172,7 +199,7 @@ export function useParameterController(active = true) {
 		window.addEventListener("light:parameter-family-key", selectFromKey);
 		return () =>
 			window.removeEventListener("light:parameter-family-key", selectFromKey);
-	}, [active, selectEncoderGroup]);
+	}, [active, bindHardware, selectEncoderGroup]);
 	useEffect(() => {
 		const group = projection.encoderGroups.find(
 			(candidate) => candidate.id === family.toLowerCase(),
@@ -186,7 +213,6 @@ export function useParameterController(active = true) {
 				null;
 			setEncoderPageAnchor(anchor);
 		}
-		setRequestedEncoderPage(projection.encoderPage);
 	}, [
 		family,
 		projection.encoderGroups,
@@ -207,6 +233,7 @@ export function useParameterController(active = true) {
 		alignMode,
 		dynamicsMode,
 		setDynamicsMode,
+		encoderContext,
 	};
 }
 

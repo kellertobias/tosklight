@@ -145,7 +145,7 @@ async function removeClient(
 	clientId: string,
 	requestId = crypto.randomUUID(),
 ) {
-	return api.request<any>("POST", `/api/v2/control-desk/actions`, {
+	return api.request<any>("POST", `/api/v2/control-desk/update`, {
 		request_id: requestId,
 		action: { type: "remove_client", client_id: clientId },
 	});

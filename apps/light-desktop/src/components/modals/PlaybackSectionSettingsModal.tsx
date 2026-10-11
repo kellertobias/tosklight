@@ -7,9 +7,11 @@ import type { PlaybackPageSource } from "../../api/types";
 import { useScreens } from "../../features/screens/ScreensContext";
 import { PlaybackSoloSettings } from "./PlaybackSoloSettings";
 
-export function PlaybackSectionSettingsModal({ surfaceId, onClose }: {
+export function PlaybackSectionSettingsModal({ surfaceId, onClose, onShowGrid, preparationError }: {
 	surfaceId: string;
 	onClose(): void;
+	onShowGrid?(): void;
+	preparationError?: string | null;
 }) {
 	const screens = useScreens();
 	const [tab, setTab] = useState<"page" | "solo">("page");
@@ -25,10 +27,11 @@ export function PlaybackSectionSettingsModal({ surfaceId, onClose }: {
 					<Button role="tab" aria-selected={tab === "page"} onClick={() => setTab("page")}>
 						Page source
 					</Button>
-					<Button role="tab" aria-selected={tab === "solo"} onClick={() => setTab("solo")}>
+					<Button role="tab" aria-selected={tab === "solo"} onClick={() => { setTab("solo"); onShowGrid?.(); }}>
 						Manage Solo Regions
 					</Button>
 				</div>
+				{preparationError && <ErrorAlert role="alert">{preparationError}</ErrorAlert>}
 				{tab === "solo" ? <PlaybackSoloSettings surfaceId={surfaceId} onClose={onClose} />
 					: surface ? <PageSourceSettings key={surfaceId} surfaceId={surfaceId} initial={surface.page_source} />
 						: <p role="status">Playback surface is unavailable.</p>}

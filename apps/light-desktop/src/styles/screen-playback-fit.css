@@ -42,11 +42,12 @@
 .screen-bank-fit .playback-fader-bank.touch-layout .vertical-touch-fader-stack.has-actions {
 	grid-template-rows: minmax(44px, 1fr) auto;
 }
-.screen-bank-fit .vertical-touch-fader-actions {
+.screen-bank-fit .playback-fader-bank.touch-layout article > .vertical-touch-fader-stack.has-actions > .vertical-touch-fader-actions {
 	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: none;
 	grid-auto-rows: 44px;
 }
-.screen-bank-fit .vertical-touch-fader-actions > .ui-button {
+.screen-bank-fit .playback-fader-bank.touch-layout article > .vertical-touch-fader-stack.has-actions > .vertical-touch-fader-actions > .ui-button:nth-child(n) {
 	grid-column: 1;
 	min-height: 44px;
 	height: 44px;

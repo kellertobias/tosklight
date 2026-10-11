@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
 		id: "pane-1",
 		title: "My Playbacks",
 		surface_id: undefined as string | undefined,
+		playbackViewMode: undefined as "screen" | "free-region" | undefined,
+		playbackScreenSurfaceId: undefined as string | undefined,
 	},
 }));
 vi.mock("../features/screens/ScreensContext", () => ({
@@ -32,8 +34,8 @@ vi.mock("../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../components/control/PlaybackFaderBank", () => ({
-	PlaybackFaderBank: ({ surfaceId }: { surfaceId: string }) => (
-		<div data-testid="shared-bank">{surfaceId}</div>
+	PlaybackFaderBank: ({ surfaceId, layoutSourceSurfaceId, scrollable }: { surfaceId: string; layoutSourceSurfaceId?: string; scrollable?: boolean }) => (
+		<div data-testid="shared-bank" data-layout-source={layoutSourceSurfaceId} data-scrollable={Boolean(scrollable)}>{surfaceId}</div>
 	),
 }));
 afterEach(cleanup);
@@ -42,6 +44,8 @@ beforeEach(() => {
 	mocks.update.mockReset().mockResolvedValue(undefined);
 	mocks.registry = {};
 	mocks.pane.surface_id = undefined;
+	mocks.pane.playbackViewMode = undefined;
+	mocks.pane.playbackScreenSurfaceId = undefined;
 });
 describe("unified Playback pane", () => {
 	it("renders the existing central surface through the shared bank", () => {
@@ -52,6 +56,25 @@ describe("unified Playback pane", () => {
 			"screen-linked",
 		);
 		expect(mocks.update).not.toHaveBeenCalled();
+	});
+	it("mirrors live Screen rows while keeping pane page identity and disabling scrolling", () => {
+		mocks.pane.surface_id = "pane:pane-1";
+		mocks.pane.playbackViewMode = "screen";
+		mocks.pane.playbackScreenSurfaceId = "screen:second";
+		mocks.registry = { "pane:pane-1": {}, "screen:second": {} };
+		render(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByTestId("shared-bank")).toHaveTextContent("pane:pane-1");
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-layout-source", "screen:second");
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-scrollable", "false");
+	});
+	it("reports a missing Screen reference instead of silently substituting Free region", () => {
+		mocks.pane.surface_id = "pane:pane-1";
+		mocks.pane.playbackViewMode = "screen";
+		mocks.pane.playbackScreenSurfaceId = "screen:missing";
+		mocks.registry = { "pane:pane-1": {} };
+		render(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByRole("alert")).toHaveTextContent("selected screen layout is unavailable");
+		expect(screen.queryByTestId("shared-bank")).not.toBeInTheDocument();
 	});
 	it("does no surface work while inactive", () => {
 		render(<VirtualPlaybacksWindow paneId="pane-1" active={false} />);

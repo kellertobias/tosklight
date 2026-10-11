@@ -155,6 +155,36 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
+describe("compact encoder timing and speed summary", () => {
+	it("keeps only programmer fade and Page beside all five tappable speed groups", () => {
+		render(<HardwareControlSummary encoders={<div data-testid="mini-encoders" />} />);
+		expect(screen.getByRole("button", { name: /Prog Fade/ })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Page 1" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /Cue Fade/ })).toBeNull();
+		expect(screen.queryByRole("button", { name: /^Release/ })).toBeNull();
+		for (const group of "ABCDE") expect(screen.getByRole("button", { name: new RegExp(`Speed group ${group},`) })).toBeInTheDocument();
+		expect(screen.getByTestId("mini-encoders")).toBeInTheDocument();
+	});
+
+	it("does not consume global hardware Page actions when secondary page controls are hidden", async () => {
+		pageObjects[0].body.assignments = { "1": { name: "Speed A", target: { type: "speed_group", group: "A" } } };
+		render(<HardwareControlSummary encoders={<div />} pageControl={null} />);
+		expect(screen.queryByRole("button", { name: "Page 1" })).toBeNull();
+		window.dispatchEvent(new CustomEvent("light:playback-page-step", { detail: 1 }));
+		window.dispatchEvent(new CustomEvent("light:playback-page-menu"));
+		await act(async () => { await Promise.resolve(); });
+		expect(runtimeActions.setActivePage).not.toHaveBeenCalled();
+		expect(topologyActions.createPage).not.toHaveBeenCalled();
+		expect(screen.queryByRole("dialog", { name: /Playback Pages/i })).toBeNull();
+	});
+
+	it("renders the explicit secondary Page control without the global Page", () => {
+		render(<HardwareControlSummary encoders={<div />} pageControl={<button type="button">Screen Page 7</button>} />);
+		expect(screen.getByRole("button", { name: "Screen Page 7" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Page 1" })).toBeNull();
+	});
+});
+
 function soundState(group: SpeedGroupId): SpeedGroupSoundState {
 	const bpm = server.configuration.speed_groups_bpm[group.charCodeAt(0) - 65];
 	return {

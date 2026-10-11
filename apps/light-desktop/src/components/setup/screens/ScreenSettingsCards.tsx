@@ -181,6 +181,7 @@ function ScreenLayoutFields({
 				onChange={(event) => update({ show_programmer: event.target.checked })}
 				description="The encoder section of this screen always keeps the keypad, the programmer fader and the Delete/Move tools on the main screen. Visible adds the command line above its encoders."
 			/>
+			<ScreenCompactEncoderToggle draft={draft} update={update} />
 			<SwitchField
 				label="Programming"
 				offLabel="Not editable"
@@ -202,6 +203,22 @@ function ScreenLayoutFields({
 				/>
 			)}
 		</>
+	);
+}
+
+function ScreenCompactEncoderToggle({
+	draft,
+	update,
+}: Pick<ScreenSettingsFieldsProps, "draft" | "update">) {
+	return (
+		<SwitchField
+			label="Compact encoder assignments"
+			offLabel="Hidden"
+			onLabel="Visible"
+			checked={draft.show_compact_encoders ?? false}
+			onChange={(event) => update({ show_compact_encoders: event.target.checked })}
+			description="Show encoder assignments and values beside hardware playbacks while keeping fade, page and speed controls visible."
+		/>
 	);
 }
 
@@ -831,6 +848,8 @@ export function ScreenSettingsCard({
 export function DefaultScreenSettings({
 	deskName,
 	onDeskName,
+	showCompactEncoders,
+	onShowCompactEncoders,
 	onTextFocus,
 	onTextBlur,
 	keyboardShortcuts,
@@ -842,6 +861,8 @@ export function DefaultScreenSettings({
 }: {
 	deskName: string;
 	onDeskName: (name: string) => void;
+	showCompactEncoders: boolean;
+	onShowCompactEncoders: (enabled: boolean) => void;
 	onTextFocus: (field: "name") => void;
 	onTextBlur: (field: "name") => void;
 	keyboardShortcuts: boolean;
@@ -874,6 +895,14 @@ export function DefaultScreenSettings({
 					checked={keyboardShortcuts}
 					description="Keyboard shortcuts are always disabled while hardware controls are connected."
 					onChange={(event) => onKeyboardShortcuts(event.target.checked)}
+				/>
+				<SwitchField
+					label="Compact encoder assignments"
+					offLabel="Hidden"
+					onLabel="Visible"
+					checked={showCompactEncoders}
+					onChange={(event) => onShowCompactEncoders(event.target.checked)}
+					description="Show encoder assignments and values beside hardware playbacks while keeping fade, page and speed controls visible."
 				/>
 				<SwitchField
 					label="Single-client mode"

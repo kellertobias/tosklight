@@ -102,7 +102,7 @@ export type CommandErrorResponse = { error: string, };
 export type CommandLineChangedEvent = { desk_id: string, session_id: string, text: string, target: CommandTarget, pristine: boolean, revision: number, source: CommandHttpSource, request_id?: string | null, redacted?: boolean, };
 export type ControlDeskConfigurationActionRequest = { request_id: string, action: ControlDeskConfigurationAction, };
 export type ControlDeskConfigurationAction = { "type": "update", patch: ControlDeskConfigurationPatch, } | { "type": "remove_client", client_id: string, };
-export type ControlDeskConfigurationPatch = { hardware_led_brightness: number | null, hardware_gooseneck_brightness: number | null, hardware_gooseneck_color: number | null, name: string | null, columns: number | null, rows: number | null, buttons: number | null, surface_id: string | null, };
+export type ControlDeskConfigurationPatch = { show_compact_encoders: boolean | null, hardware_led_brightness: number | null, hardware_gooseneck_brightness: number | null, hardware_gooseneck_color: number | null, name: string | null, columns: number | null, rows: number | null, buttons: number | null, surface_id: string | null, };
 export type ControlDeskConfigurationActionOutcome = { request_id: string, replayed: boolean, desk: RuntimeControlDesk, removed: boolean, event_sequence: number | null, };
 export type ConfigurationUpdateRequest = { request_id: string, patch: ConfigurationPatch, };
 export type ConfigurationPatch = { frame_rate_hz?: number | null, output_bind_ip?: string | null, osc_bind?: string | null | null, art_timecode_bind?: string | null | null, timecode_source?: TimecodeSourceSelectionConfiguration | null, timecode_frame_rate?: TimecodeFrameRateConfiguration | null | null, timecode_external_loss_policy?: ExternalTimecodeLossPolicyConfiguration | null, timecode_external_loss_timeout_millis?: number, osc_timecode?: OscTimecodeConfiguration | null | null, timecode_audio_output_device?: string | null | null, timecode_audio_latency_trim_micros_by_output?: { [key in string]: bigint } | null, internal_audio_library_roots?: { [key in string]: string } | null, internal_audio_output_devices?: { [key in string]: string } | null, backup_retention?: number | null, autosave_interval_seconds?: number, programmer_fade_millis?: number, command_line_at_uses_programmer_fade?: boolean | null, sequence_master_fade_millis?: number, release_fade_millis?: number, cuelist_auto_off_at_zero_default?: boolean | null, cuelist_auto_off_flash_release_default?: boolean | null, color_programming_model_default?: ColorProgrammingModel | null, start_after_first_recording?: boolean | null, preload_programmer_changes?: boolean | null, patch_preview_highlight_dmx?: boolean | null, highlight_look?: HighlightLookConfiguration | null, matter_enabled?: boolean | null, pool_presentation?: PoolPresentationConfiguration | null,
@@ -1427,7 +1427,7 @@ export type RuntimeSessionCreateRequest = { client_id: string | null,
  */
 role: RuntimeSessionRole | null, };
 export type RuntimeSessionRole = "operator" | "visualizer";
-export type RuntimeControlDesk = { hardware_led_brightness: number, hardware_gooseneck_brightness: number, hardware_gooseneck_color: number, id: string, name: string, columns: number, rows: number, buttons: number, surface_id: string, };
+export type RuntimeControlDesk = { show_compact_encoders: boolean, hardware_led_brightness: number, hardware_gooseneck_brightness: number, hardware_gooseneck_color: number, id: string, name: string, columns: number, rows: number, buttons: number, surface_id: string, };
 export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
 export type RuntimeShowEntry = { is_base_show: boolean, id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
@@ -1580,7 +1580,7 @@ export type ScreenConfiguration = { id: string, name: string, layout: unknown, s
 /**
  * Programmer command line above this optional screen's encoders.
  */
-show_programmer: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, content: ScreenContent,
+show_programmer: boolean, show_compact_encoders: boolean, desired_open: boolean, display_id: string | null, bounds: unknown, fullscreen: boolean, content: ScreenContent,
 /**
  * Whether this screen may change programming.
  *
@@ -1597,7 +1597,7 @@ export type ScreenConfigurationCreateRequest = { request_id: string, configurati
 export type ScreenConfigurationUpdateRequest = { request_id: string, patch: ScreenConfigurationPatch, };
 export type ScreenConfigurationDeleteRequest = { request_id: string, };
 export type ScreenConfigurationAction = { "type": "create", configuration: ScreenConfiguration, } | { "type": "update", screen_id: string, patch: ScreenConfigurationPatch, } | { "type": "delete", screen_id: string, } | { "type": "update_programmer_control_surface", patch: ProgrammerControlSurfacePatch, };
-export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, surface_id: string | null, show_page_controls: boolean | null, show_programmer: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, content: ScreenContent | null, not_editable: boolean | null, };
+export type ScreenConfigurationPatch = { name: string | null, layout: unknown, show_dock: boolean | null, show_playbacks: boolean | null, surface_id: string | null, show_page_controls: boolean | null, show_programmer: boolean | null, show_compact_encoders: boolean | null, desired_open: boolean | null, display_id: string | null, clear_display_id: boolean, bounds: unknown, clear_bounds: boolean, fullscreen: boolean | null, content: ScreenContent | null, not_editable: boolean | null, };
 export type ScreenConfigurationActionOutcome = { request_id: string, replayed: boolean, screen: ScreenConfiguration | null, programmer_control_surface: ProgrammerControlSurfaceConfiguration | null, };
 export type PlaybackControlPresentation = "fader" | "buttons" | "push_encoder";
 export type PlaybackSurfaceRow = { first_position: number, count: number, presentation: PlaybackControlPresentation, button_count: number, };

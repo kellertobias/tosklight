@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext } from "react";
 
-export type VisibleEncoderCount = 4 | 6;
+export type VisibleEncoderCount = 4 | 5 | 6;
 
 const VisibleEncoderCountContext = createContext<VisibleEncoderCount>(6);
 
@@ -24,7 +24,7 @@ export function useVisibleEncoderCount() {
 
 export function resolveVisibleEncoderCount(
 	softwareCount: VisibleEncoderCount,
-	hardwareConnected: boolean,
+	_hardwareConnected: boolean,
 ): VisibleEncoderCount {
-	return hardwareConnected ? 6 : softwareCount;
+	return softwareCount;
 }

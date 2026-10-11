@@ -181,6 +181,12 @@ describe("PlaybackApiClient v2 action boundary", () => {
 				body: expect.stringContaining('"configuration"'),
 			}),
 		);
+		const body = JSON.parse(request.mock.calls[1][1].body as string);
+		expect(body.configuration).toMatchObject({
+			surface_id: "screen-main",
+			show_compact_encoders: false,
+		});
+		expect(body.configuration).not.toHaveProperty("playback_layout");
 	});
 
 	it("sends only changed screen fields after a v2 snapshot", async () => {
@@ -212,6 +218,28 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			name: "Renamed",
 			show_dock: null,
 		});
+	});
+
+	it("updates compact encoders without replacing the unified playback surface", async () => {
+		const next = { ...screen, show_compact_encoders: true };
+		const request = vi
+			.fn()
+			.mockResolvedValueOnce({ screens: [screen], active_pages: {} })
+			.mockResolvedValueOnce({ screen: next });
+		const client = new PlaybackApiClient({
+			request,
+			sendAction: vi.fn(),
+		} as unknown as LiveClientTransport);
+		await client.screens();
+		await expect(client.putScreen(next)).resolves.toEqual(next);
+		const body = JSON.parse(request.mock.calls[1][1].body as string);
+		expect(request.mock.calls[1][0]).toBe(`/api/v2/screens/${SCREEN_ID}/update`);
+		expect(body.patch).toMatchObject({
+			show_compact_encoders: true,
+			surface_id: null,
+		});
+		expect(body.patch).not.toHaveProperty("playback_layout");
+		expect(body.patch).not.toHaveProperty("playback_page");
 	});
 
 	it("sends fixed pane content and the atomic Dock update", async () => {
@@ -252,7 +280,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		});
 	});
 
-	it("updates the programmer owner and encoder count as one replay-safe screen intent", async () => {
+	it.each([4, 5, 6] as const)("updates the programmer owner with %s encoders as one replay-safe screen intent", async (count) => {
 		const request = vi.fn().mockResolvedValueOnce({
 			request_id: "programmer-control-surface",
 			replayed: false,
@@ -260,7 +288,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 			active_page: null,
 			programmer_control_surface: {
 				owner_screen_id: SCREEN_ID,
-				visible_encoders: 4,
+				visible_encoders: count,
 			},
 		});
 		const client = new PlaybackApiClient({
@@ -273,9 +301,9 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await expect(
 			client.updateProgrammerControlSurface({
 				owner_screen_id: SCREEN_ID,
-				visible_encoders: 4,
+				visible_encoders: count,
 			}),
-		).resolves.toEqual({ owner_screen_id: SCREEN_ID, visible_encoders: 4 });
+		).resolves.toEqual({ owner_screen_id: SCREEN_ID, visible_encoders: count });
 		expect(request).toHaveBeenCalledWith(
 			"/api/v2/screens/actions",
 			expect.objectContaining({
@@ -289,7 +317,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		expect(body.action.patch).toEqual({
 			owner_screen_id: SCREEN_ID,
 			assign_to_main: false,
-			visible_encoders: 4,
+			visible_encoders: count,
 		});
 	});
 
@@ -349,7 +377,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await client.removeClient(DESK_ID, CLIENT_ID);
 
 		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desk/actions`,
+			`/api/v2/control-desk/update`,
 			expect.objectContaining({
 				method: "POST",
 				body: expect.stringContaining(`"client_id":"${CLIENT_ID}"`),

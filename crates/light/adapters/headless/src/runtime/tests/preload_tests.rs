@@ -1,5 +1,6 @@
 fn test_control_desk() -> ControlDesk {
     ControlDesk {
+        show_compact_encoders: false,
         hardware_led_brightness: 100,
         hardware_gooseneck_brightness: 100,
         hardware_gooseneck_color: 100,

@@ -36,7 +36,7 @@ export function PlaybackPaneTitleControls({ surfaceId }: { surfaceId: string }) 
 		{editor?.selecting ? <>
 			<TextField label="Solo Region name" value={editor.name} onChange={event => editor.setName(event.target.value)} disabled={editor.saving} />
 			<Button disabled={editor.saving} onClick={editor.cancel}>Cancel</Button>
-			<Button disabled={editor.saving || editor.selected.length < 2} onClick={() => void editor.save()}>Save Solo Region</Button>
+			<Button aria-label="Save Solo Region" disabled={editor.saving || editor.selected.length < 2} onClick={() => void editor.save()}>Save</Button>
 		</> : <Button disabled={!editor?.available || !editor.ready} onClick={() => {
 			void screens.selectSurface(surfaceId).then(() => editor?.begin()).catch(reason => setError(String(reason)));
 		}}>Create Solo Region</Button>}

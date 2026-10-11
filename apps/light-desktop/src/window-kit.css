@@ -637,7 +637,8 @@
 }
 .group-pool-window .group-card:not(.empty):not(.selected) {
 	border-color: color-mix(in srgb, var(--pool-card-color) 68%, var(--line2));
-	background: color-mix(in srgb, var(--pool-card-color) 18%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, var(--pool-card-color) 18%, var(--panel2));
+	background: var(--pool-card-background);
 }
 .preset-card.set-target {
 	outline: 2px solid var(--amber);
@@ -663,25 +664,16 @@
 .group-pool-window .group-card.selected {
 	border-width: 2px;
 	border-color: var(--pool-card-resolved-color);
-	background: color-mix(in srgb, var(--pool-card-resolved-color) 48%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, var(--pool-card-resolved-color) 48%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: inset 0 0 0 1px var(--pool-card-resolved-color);
 }
-.group-membership-selection-dot {
-	position: absolute;
-	z-index: 3;
-	left: 8px;
-	bottom: 2px;
-	width: 8px;
-	height: 8px;
-	border-radius: 50%;
-	background: #fff;
-	box-shadow: 0 0 0 1px #0008;
-	pointer-events: none;
+.group-fixture-count {
+	color: var(--muted);
 }
 
-.group-membership-selection-dot.partial {
-	background: transparent;
-	border: 2px solid #fff;
+.group-fixture-count-selected {
+	color: #fff;
 }
 
 /* Automatic preset previews: drawn from the stored Color or Position intention. */

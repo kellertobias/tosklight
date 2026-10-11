@@ -64,7 +64,7 @@ export function PlaybackSoloRegionManager({
 				</article>
 			))}
 			<Button disabled={!editor.ready || !editor.available || busy}
-				onClick={() => start(false)}>Create Solo Region</Button>
+				onClick={() => start(false)}>Create New Solo Region</Button>
 			{selected && <>
 				<TextField label="Region name" value={name}
 					onChange={(event) => setName(event.target.value)} />

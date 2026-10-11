@@ -25,7 +25,7 @@ impl DeskStore {
     /// Separate from [`Self::desk`] so a read can stay a read: answering what an installation holds
     /// must not write a row into it.
     fn stored_desk(&self) -> Result<Option<ControlDesk>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,surface_id,hardware_led_brightness,hardware_gooseneck_brightness,hardware_gooseneck_color FROM control_desks ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,surface_id,hardware_led_brightness,hardware_gooseneck_brightness,hardware_gooseneck_color,show_compact_encoders FROM control_desks ORDER BY name COLLATE NOCASE")?;
         let mut rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -37,6 +37,7 @@ impl DeskStore {
                 row.get::<_, u8>(6)?,
                 row.get::<_, u8>(7)?,
                 row.get::<_, u8>(8)?,
+                row.get::<_, bool>(9)?,
             ))
         })?;
         let Some(row) = rows.next() else {
@@ -52,11 +53,13 @@ impl DeskStore {
             hardware_led_brightness,
             hardware_gooseneck_brightness,
             hardware_gooseneck_color,
+            show_compact_encoders,
         ) = row?;
         Ok(Some(ControlDesk {
             hardware_led_brightness,
             hardware_gooseneck_brightness,
             hardware_gooseneck_color,
+            show_compact_encoders,
             id: Uuid::parse_str(&id)?,
             name,
             columns,
@@ -155,6 +158,7 @@ impl DeskStore {
 
     fn insert_desk(&self, name: &str) -> Result<ControlDesk, StoreError> {
         let desk = ControlDesk {
+            show_compact_encoders: false,
             hardware_led_brightness: 100,
             hardware_gooseneck_brightness: 100,
             hardware_gooseneck_color: 100,
@@ -191,7 +195,31 @@ impl DeskStore {
         surface_id: String,
         illumination: Option<[u8; 3]>,
     ) -> Result<ControlDesk, StoreError> {
+        self.update_desk_with_screen_settings(
+            id,
+            name,
+            columns,
+            rows,
+            buttons,
+            surface_id,
+            illumination,
+            None,
+        )
+    }
+
+    pub fn update_desk_with_screen_settings(
+        &self,
+        id: Uuid,
+        name: &str,
+        columns: u8,
+        rows: u8,
+        buttons: u8,
+        surface_id: String,
+        illumination: Option<[u8; 3]>,
+        show_compact_encoders: Option<bool>,
+    ) -> Result<ControlDesk, StoreError> {
         let current = self.desk()?;
+        let show_compact_encoders = show_compact_encoders.unwrap_or(current.show_compact_encoders);
         let illumination = illumination.unwrap_or([
             current.hardware_led_brightness,
             current.hardware_gooseneck_brightness,
@@ -223,7 +251,7 @@ impl DeskStore {
                 "Unknown Playback surface {surface_id}"
             )));
         }
-        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,surface_id=?5,hardware_led_brightness=?7,hardware_gooseneck_brightness=?8,hardware_gooseneck_color=?9 WHERE id=?6",params![name.trim(),columns,rows,buttons,surface_id,id.to_string(),illumination[0],illumination[1],illumination[2]])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
+        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,surface_id=?5,hardware_led_brightness=?7,hardware_gooseneck_brightness=?8,hardware_gooseneck_color=?9,show_compact_encoders=?10 WHERE id=?6",params![name.trim(),columns,rows,buttons,surface_id,id.to_string(),illumination[0],illumination[1],illumination[2],show_compact_encoders])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
         self.desk()
     }
 

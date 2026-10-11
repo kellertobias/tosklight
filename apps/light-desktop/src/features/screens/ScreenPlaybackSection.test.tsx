@@ -6,15 +6,20 @@ import {
 	screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import type { ScreenConfiguration } from "../../api/types";
 import { ScreensProvider } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 const mocks = vi.hoisted(() => ({
 	pages: { ready: true, error: null, pages: [] as unknown[] },
+	pagesViewMounted: 0,
 	actions: { createPage: vi.fn() },
 }));
 vi.mock("../playbackTopology/PlaybackTopologyView", () => ({
-	usePlaybackPagesView: () => mocks.pages,
+	usePlaybackPagesView: () => {
+		mocks.pagesViewMounted += 1;
+		return mocks.pages;
+	},
 }));
 vi.mock("../playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => mocks.actions,
@@ -30,6 +35,10 @@ vi.mock("../../components/control/PlaybackFaderBank", () => ({
 		<div data-testid="bank" data-page={pageNumber} data-surface={surfaceId} />
 	),
 }));
+vi.mock("../../components/control/HardwareControlSummary", () => ({
+	HardwareControlSummary: ({ encoders, pageControl }: { encoders?: ReactNode; pageControl?: ReactNode }) => <div data-testid="compact-hardware-summary">{pageControl}{encoders}</div>,
+}));
+
 const { ScreenPlaybackSection } = await import("./ScreenPlaybackSection");
 const configuration: ScreenConfiguration = {
 	id: "screen-1",
@@ -107,6 +116,7 @@ function mount(value: ScreensContextValue) {
 	);
 }
 beforeEach(() => {
+	mocks.pagesViewMounted = 0;
 	mocks.pages = {
 		ready: true,
 		error: null,
@@ -189,5 +199,47 @@ describe("authoritative secondary Playback surface", () => {
 	it("cannot advance beyond page99", () => {
 		mount(source("own", 99));
 		expect(screen.getByRole("button", { name: "PAGE DOWN ▼" })).toBeDisabled();
+	});
+});
+
+describe("compact hardware screen page controls", () => {
+	it("uses the Own surface page picker and writes only that surface", async () => {
+		mocks.pages.pages.push({ body: { number: 3, name: "Three", assignments: {} } });
+		const value = source("own", 2);
+		value.surfaces!.command_page = 9;
+		render(
+			<ScreensProvider source={value}>
+				<ScreenPlaybackSection screen={configuration} encoders={<div data-testid="compact-encoders" />} />
+			</ScreensProvider>,
+		);
+		expect(screen.getByTestId("bank")).toHaveAttribute("data-page", "2");
+		expect(screen.getByRole("button", { name: "Page 2" })).toBeEnabled();
+		expect(screen.queryByRole("button", { name: "PAGE DOWN ▼" })).toBeNull();
+		fireEvent.click(screen.getByRole("button", { name: "Page 2" }));
+		fireEvent.click(screen.getByRole("button", { name: "3 · Three" }));
+		await act(async () => {});
+		expect(value.selectSurface).toHaveBeenCalledExactlyOnceWith("screen:screen-1");
+		expect(value.setSurfacePage).toHaveBeenCalledExactlyOnceWith("screen:screen-1", 3);
+	});
+
+	it("keeps Follow surface compact page read-only", () => {
+		render(
+			<ScreensProvider source={source("follow", 9)}>
+				<ScreenPlaybackSection screen={configuration} encoders={<div />} />
+			</ScreensProvider>,
+		);
+		expect(screen.getByTestId("bank")).toHaveAttribute("data-page", "9");
+		expect(screen.getByRole("button", { name: "Page 9" })).toBeDisabled();
+	});
+
+	it("preserves hidden page controls in the compact summary", () => {
+		render(
+			<ScreensProvider source={source("own", 2)}>
+				<ScreenPlaybackSection screen={{ ...configuration, show_page_controls: false }} encoders={<div data-testid="compact-encoders" />} />
+			</ScreensProvider>,
+		);
+		expect(screen.getByTestId("compact-encoders")).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Page 2" })).toBeNull();
+		expect(mocks.pagesViewMounted).toBe(0);
 	});
 });

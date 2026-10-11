@@ -1,5 +1,7 @@
 import { Button } from "@tosklight/ui";
-import { createContext, type ReactNode, useContext } from "react";
+import { createContext, type ReactNode, useContext, useEffect, useRef } from "react";
+
+import { usePlaybackSectionSettings } from "../../components/control/PlaybackSectionSettingsHost";
 
 export type LowerSectionView = "encoders" | "playbacks";
 
@@ -37,6 +39,18 @@ export function LowerSectionSwitch({
 	view: LowerSectionView;
 	onView: (view: LowerSectionView) => void;
 }) {
+	const settings = usePlaybackSectionSettings();
+	const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const suppressClick = useRef(false);
+	const clearHold = () => {
+		if (timer.current !== null) clearTimeout(timer.current);
+		timer.current = null;
+	};
+	useEffect(() => () => clearHold(), []);
+	const cancelHold = () => {
+		clearHold();
+		suppressClick.current = true;
+	};
 	/*
 	 * One button carrying both labels. Its geometry never changes with the view — only
 	 * which label is the active colour — so the row it sits in does not reflow when the
@@ -47,9 +61,24 @@ export function LowerSectionSwitch({
 			className="screen-section-switch"
 			aria-label="Lower section"
 			data-section={view}
-			onClick={() =>
-				onView(view === "encoders" ? "playbacks" : "encoders")
-			}
+			onPointerDown={() => {
+				clearHold();
+				suppressClick.current = false;
+				if (settings) timer.current = setTimeout(() => {
+					timer.current = null;
+					suppressClick.current = true;
+					settings.open();
+				}, 650);
+			}}
+			onPointerUp={clearHold}
+			onPointerCancel={cancelHold}
+			onPointerLeave={cancelHold}
+			onContextMenu={(event) => event.preventDefault()}
+			onClick={(event) => {
+				if (!suppressClick.current || event.detail === 0)
+					onView(view === "encoders" ? "playbacks" : "encoders");
+				suppressClick.current = false;
+			}}
 		>
 			<span
 				className={view === "playbacks" ? "active" : ""}

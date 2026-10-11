@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => ({
 	saveScreen: vi.fn(async () => undefined),
 	screens: null as {
 		screens: ScreenConfiguration[];
-		programmer_control_surface?: {
+		programmer_control_surface: {
 			owner_screen_id: string | null;
 			visible_encoders: 4 | 6;
 		};
@@ -47,6 +47,7 @@ vi.mock("./features/patch/PatchFeatureBoundary", () => ({
 	),
 }));
 vi.mock("./features/screens/ScreensContext", () => ({
+	useScreensOptional: () => ({ screens: mocks.screens, saveScreen: mocks.saveScreen }),
 	useScreens: () => ({
 		screens: mocks.screens,
 		saveScreen: mocks.saveScreen,
@@ -96,6 +97,15 @@ vi.mock("./features/screens/FixedScreenPane", () => ({
 	FixedScreenPane: ({ pane }: { pane: { type: string } }) => (
 		<div data-testid="fixed-pane" data-pane-type={pane.type} />
 	),
+}));
+vi.mock("./components/control/ParameterControls", () => ({
+	useProgrammerEncoderContext: () => true,
+}));
+vi.mock("./components/control/parameterControls/useParameterController", () => ({
+	useParameterController: () => ({ id: "screen-programmer-controller" }),
+}));
+vi.mock("./features/deskSnapshot/DeskSnapshotState", () => ({
+	useHardwareConnected: () => false,
 }));
 vi.mock("./features/screens/ProgrammerControlSurfaceRegion", () => ({
 	ProgrammerControlSurfaceRegion: () => (
@@ -183,7 +193,10 @@ describe("ScreenApp", () => {
 	});
 
 	it("shows a terminal state when the requested screen was removed or is unavailable", () => {
-		mocks.screens = { screens: [] };
+		mocks.screens = {
+			screens: [],
+			programmer_control_surface: { owner_screen_id: null, visible_encoders: 6 },
+		};
 
 		render(<ScreenApp id="removed-screen" />);
 
@@ -195,7 +208,10 @@ describe("ScreenApp", () => {
 	});
 
 	it("renders fixed content without hydrating a Desktop or exposing Desktop chrome", () => {
-		mocks.screens = { screens: [configuredScreen()] };
+		mocks.screens = {
+			screens: [configuredScreen()],
+			programmer_control_surface: { owner_screen_id: null, visible_encoders: 6 },
+		};
 
 		render(<ScreenApp id="screen-1" />);
 
@@ -219,6 +235,7 @@ describe("ScreenApp", () => {
 					show_page_controls: true,
 				}),
 			],
+			programmer_control_surface: { owner_screen_id: null, visible_encoders: 6 },
 		};
 
 		render(<ScreenApp id="screen-1" />);
@@ -242,6 +259,7 @@ describe("ScreenApp", () => {
 					},
 				}),
 			],
+			programmer_control_surface: { owner_screen_id: null, visible_encoders: 6 },
 		};
 
 		const { container } = render(<ScreenApp id="screen-1" />);

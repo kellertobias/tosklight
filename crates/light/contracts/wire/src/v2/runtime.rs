@@ -32,6 +32,8 @@ impl RuntimeSessionRole {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeControlDesk {
+    #[serde(default)]
+    pub show_compact_encoders: bool,
     #[serde(default = "default_hardware_illumination")]
     #[schemars(range(min = 0, max = 100))]
     pub hardware_led_brightness: u8,

@@ -144,7 +144,7 @@ describe("DynamicDefinitionEncoderSurface", () => {
 		);
 		expect(
 			container.querySelectorAll(".hardware-encoder-display"),
-		).toHaveLength(6);
+		).toHaveLength(2);
 	});
 
 	it("puts every PWM parameter on the single Lanes encoder page", () => {
