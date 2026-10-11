@@ -44,6 +44,19 @@ export class ShowObjectEventWatermarks {
 		);
 	}
 
+	/** A collection boundary alone does not prove an exact create event was installed. */
+	coversResponseOnlyAtCollectionBoundary(
+		kind: ShowObjectKind,
+		key: string,
+		sequence?: number | null,
+	) {
+		return (
+			sequence != null &&
+			this.kindFloors.get(kind) === sequence &&
+			(this.objectSequences.get(key) ?? -1) < sequence
+		);
+	}
+
 	raiseObjectFloor(
 		kind: ShowObjectKind,
 		objectId: string,

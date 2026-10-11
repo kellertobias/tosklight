@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
 import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
+import { projectPlaybackSlots } from "../../components/control/playbackFaderBank/projection";
 import { ShowObjectsStore } from "../showObjects/store";
 import type {
 	PlaybackTopologyObject,
@@ -553,5 +554,77 @@ describe("PlaybackTopologyWriter", () => {
 		);
 		expect(await writer.updatePlayback(ADDRESS, definition())).not.toBeNull();
 		expect(apply.mock.calls.map((c) => c[1])).toEqual([11, 12]);
+	});
+});
+
+describe("new page response and collection boundary race", () => {
+	it("installs the first Group master assignment and projects the secondary cell at the equal collection floor", async () => {
+		const master: PlaybackDefinition = {
+			...definition("Beam Stage"),
+			target: { type: "group", group_id: "1" },
+			buttons: ["select", "none", "none"],
+			has_fader: true,
+		};
+		const created: ShowObject<"playback_page"> = {
+			kind: "playback_page",
+			id: "2",
+			revision: 1,
+			updated_at: "",
+			body: { number: 2, name: "Page 2", assignments: { 301: master } },
+		};
+		let store!: ShowObjectsStore;
+		const apply = vi.fn(async (_s, _r, request: PlaybackTopologyRequest) => {
+			store.setCollection(SHOW_ID, "playback_page", [], 41, 12);
+			return changed(request, [present(created)], 12, 41);
+		});
+		const h = setup(apply);
+		store = h.store;
+		store.setCollection(SHOW_ID, "playback_page", [], 10, 11);
+		store.setCollection(
+			SHOW_ID,
+			"group",
+			[
+				{
+					...group(),
+					id: "1",
+					body: { name: "Beam Stage", fixtures: ["fixture-1"] },
+				},
+			],
+			10,
+			11,
+		);
+		const result = await h.writer.assignPlayback(
+			{ page: 2, position: 301 },
+			master,
+		);
+		expect(result?.status).toBe("changed");
+		const snapshot = store.getSnapshot();
+		expect(snapshot.playbackPages).toEqual([created]);
+		const slots = projectPlaybackSlots({
+			cueLists: [],
+			groups: snapshot.groups,
+			page: snapshot.playbackPages[0]?.body,
+			playbackLayout: {
+				rows: [
+					{
+						first_position: 301,
+						count: 5,
+						presentation: "push_encoder",
+						button_count: 1,
+					},
+				],
+			},
+			columns: 5,
+			firstSlot: 301,
+			pageSize: 5,
+		});
+		expect(slots[0].playback).toMatchObject({
+			address: { page: 2, position: 301 },
+			name: "Beam Stage",
+			target: { type: "group", group_id: "1" },
+			has_fader: true,
+		});
+		expect(slots[0].group?.body.name).toBe("Beam Stage");
+		expect(slots.slice(1).every((slot) => slot.playback === null)).toBe(true);
 	});
 });

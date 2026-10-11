@@ -21,6 +21,11 @@ export function installAuthoritativeObjects(
 			objectKey(kind, objectId),
 			minimumEventSequence,
 		);
+		const boundaryOnly = watermarks.coversResponseOnlyAtCollectionBoundary(
+			kind,
+			objectKey(kind, objectId),
+			minimumEventSequence,
+		);
 		if (sequenceMode === "seal")
 			watermarks.sealExactResponse(kind, objectId, minimumEventSequence);
 		else watermarks.raiseObjectFloor(kind, objectId, minimumEventSequence);
@@ -41,8 +46,11 @@ export function installAuthoritativeObjects(
 					// a collection re-hydration can stamp the kind floor at the current show
 					// event sequence while its payload predates a just-committed write (the
 					// 409-retried topology save), and dropping that install pins the stale
-					// revision. Only same-or-older bodies and resurrections stay guarded.
-					existing !== undefined && existing.revision < object.revision)
+					// revision. Same-or-older bodies remain guarded.
+					(existing !== undefined && existing.revision < object.revision) ||
+					// Equal collection coverage can race the first created page response.
+					// Never override a later collection or an exact deletion tombstone.
+					(existing === undefined && boundaryOnly))
 		) {
 			if (existing?.revision === object.revision) continue;
 			upsertCollection(collection, object);
