@@ -34,7 +34,7 @@ const DEMO_CHAPTERS = [
 	["PRESET SETUP", "Presets"],
 	["Programming Cues & Cuelists", "Cues & Cuelists"],
 	["DYNAMICS", "Dynamics"],
-	["VIRTUAL PLAYBACKS", "Virtual Playbacks"],
+	["VIRTUAL PLAYBACKS", "Playbacks"],
 	["Busking", "Busking"],
 ] as const;
 

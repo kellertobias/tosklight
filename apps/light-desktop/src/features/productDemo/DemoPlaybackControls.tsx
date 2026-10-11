@@ -128,7 +128,7 @@ export function DemoPlaybackControlsView({
 	return (
 		<section
 			className="product-demo-playbacks"
-			aria-label="Virtual playback controls"
+			aria-label="Playback controls"
 			aria-busy={controls.status.kind === "loading" || undefined}
 			style={{ position: "relative" }}
 		>

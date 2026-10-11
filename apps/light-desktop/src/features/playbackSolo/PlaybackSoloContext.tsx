@@ -209,7 +209,7 @@ export class PlaybackSoloController {
 					closed: () => {
 						if (current())
 							this.reconnect(
-								new Error("Virtual Playback zone event connection closed"),
+								new Error("Solo Region event connection closed"),
 							);
 					},
 				}) ?? null;
@@ -231,7 +231,7 @@ export class PlaybackSoloController {
 		const delay = delays[this.reconnectAttempt++];
 		if (delay === undefined) {
 			this.eventFailure = new Error(
-				"Virtual Playback zone connection could not be restored. Reopen the pane to retry.",
+				"Solo Region connection could not be restored. Reopen the pane to retry.",
 			);
 			this.reportError(this.eventFailure);
 			return;
@@ -304,7 +304,7 @@ export class PlaybackSoloController {
 			if (!this.isCurrent() || (accept && !accept())) return null;
 			if (snapshot.showId !== this.scope.showId)
 				throw new Error(
-					"Virtual Playback zone response changed authority scope",
+					"Solo Region response changed authority scope",
 				);
 			if (loadVersion === this.mutationVersion) this.storeSnapshot(snapshot);
 			this.reportError(this.eventFailure);

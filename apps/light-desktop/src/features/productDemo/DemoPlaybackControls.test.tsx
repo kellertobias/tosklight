@@ -233,6 +233,7 @@ describe("DemoPlaybackControls", () => {
 		const { applyAction, store, view } = harness();
 		mocks.pagesView.pages.push(page(2, DEMO_PAGE.body.assignments));
 		render(view());
+		expect(screen.getByRole("region", { name: "Playback controls" })).toBeVisible();
 		await settled();
 		fireEvent.pointerDown(button(17,3), { pointerId: 91 });
 		await settled();

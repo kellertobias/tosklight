@@ -137,7 +137,7 @@ export class HttpPlaybackSoloTransport
 				);
 				if (decoded === "gap") observer.gap();
 				else if (decoded === "error")
-					observer.error(new Error("Virtual Playback zone event failed"));
+					observer.error(new Error("Solo Region event failed"));
 				else if (decoded === "ready") observer.ready?.();
 				else observer.changed(decoded);
 			} catch (reason) {
@@ -147,7 +147,7 @@ export class HttpPlaybackSoloTransport
 		socket.addEventListener("error", () => {
 			if (explicitlyClosed) return;
 			observer.error(
-				new Error("Virtual Playback zone event connection failed"),
+				new Error("Solo Region event connection failed"),
 			);
 		});
 		socket.addEventListener("close", () => {

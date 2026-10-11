@@ -65,6 +65,7 @@ describe("Open Window categories", () => {
 			"text_editor",
 		]);
 		expect(windowChoices).toContainEqual(["cuelists", "Cuelists"]);
+		expect(windowChoices).toContainEqual(["playbacks", "Playbacks"]);
 		expect(windowChoices.some(([kind]) => kind === "cuelist_pool")).toBe(false);
 	});
 

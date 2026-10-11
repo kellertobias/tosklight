@@ -74,7 +74,7 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 			},
 			{
 				kind: "playbacks",
-				title: "Virtual Playbacks",
+				title: "Playbacks",
 				description: "Place playback actions on a configurable grid.",
 			},
 			{

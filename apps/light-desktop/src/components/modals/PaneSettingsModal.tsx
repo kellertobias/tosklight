@@ -700,7 +700,7 @@ function paneSpecificTabs(
 		tabs.push(
 			{
 				id: "virtual",
-				label: "Virtual Playbacks",
+				label: "Playbacks",
 				content: <PlaybackPaneSettings pane={pane} />,
 			},
 			{
