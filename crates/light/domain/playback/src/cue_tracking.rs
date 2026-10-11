@@ -230,10 +230,23 @@ impl PlaybackEngine {
         id: CueListId,
         cue_id: Uuid,
     ) -> Result<&ActivePlayback, String> {
+        let was_off = self
+            .key_for_cue_list(id)
+            .ok()
+            .and_then(|key| self.active.get(&key))
+            .is_some_and(|playback| !playback.enabled);
         self.jump_to_cue_id(id, cue_id)?;
         self.timeline_controlled.insert(id);
         let key = self.key_for_cue_list(id)?;
         let playback = self.active.get_mut(&key).expect("jump installed playback");
+        // An explicit Timecode Cue start owns activation, unlike an addressed GO
+        // whose definition may deliberately leave an Off Cuelist disabled.
+        playback.enabled = true;
+        playback.fader_zero_auto_off_armed = false;
+        if was_off {
+            playback.previous_index = None;
+            playback.deleted_cue_transition_source = None;
+        }
         playback.discrete_cue_actions_suppressed = false;
         Ok(playback)
     }
@@ -259,6 +272,8 @@ impl PlaybackEngine {
         self.timeline_controlled.insert(id);
         let key = self.key_for_cue_list(id)?;
         let playback = self.active.get_mut(&key).expect("jump installed playback");
+        playback.enabled = true;
+        playback.fader_zero_auto_off_armed = false;
         playback.discrete_cue_actions_suppressed = true;
         playback.previous_index = None;
         playback.deleted_cue_transition_source = None;
