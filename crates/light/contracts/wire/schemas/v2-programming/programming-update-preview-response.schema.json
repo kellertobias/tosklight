@@ -572,7 +572,6 @@
               "const": "cue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "target_type",
             "mode"
@@ -589,7 +588,6 @@
               "const": "existing_content"
             }
           },
-          "additionalProperties": false,
           "required": [
             "target_type",
             "mode"

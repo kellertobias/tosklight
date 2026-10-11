@@ -31,21 +31,70 @@ where
     type Rejection = JsonRejection;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-        let route = req
-            .extensions()
-            .get::<MatchedPath>()
-            .map(MatchedPath::as_str)
-            .unwrap_or_else(|| req.uri().path())
-            .to_owned();
-        let Json(raw) = Json::<serde_json::Value>::from_request(req, state).await?;
+        let (value, route, raw) = read_typed_json::<T, S>(req, state).await?;
         let bytes =
             serde_json::to_vec(&raw).expect("a serde_json::Value always serializes as JSON");
-        let Json(value) = Json::<T>::from_bytes(&bytes)?;
-
         collect_and_log_unknown_fields::<T>(&route, &bytes);
-
         Ok(Self(value))
     }
+}
+
+/// Opt-in inspection for tagged contracts whose Serde buffering hides ignored paths.
+/// Typed validation and bounded, value-free logging remain the shared extractor's.
+pub(crate) trait JsonFieldInspector {
+    fn unknown_fields(raw: &serde_json::Value) -> BTreeSet<String>;
+}
+
+pub(crate) struct TolerantJsonWithFields<T, I>(T, std::marker::PhantomData<I>);
+
+impl<T, I> TolerantJsonWithFields<T, I> {
+    pub(crate) fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T, I, S> FromRequest<S> for TolerantJsonWithFields<T, I>
+where
+    T: DeserializeOwned,
+    I: JsonFieldInspector,
+    S: Send + Sync,
+{
+    type Rejection = JsonRejection;
+
+    async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
+        let (value, route, raw) = read_typed_json::<T, S>(req, state).await?;
+        let fields = I::unknown_fields(&raw);
+        if !fields.is_empty() {
+            let count = fields.len();
+            let paths = fields
+                .into_iter()
+                .take(MAX_LOGGED_UNKNOWN_FIELDS)
+                .map(truncate_field_path)
+                .collect();
+            log_unknown_fields(&route, count, paths, count > MAX_LOGGED_UNKNOWN_FIELDS);
+        }
+        Ok(Self(value, std::marker::PhantomData))
+    }
+}
+
+async fn read_typed_json<T, S>(
+    req: Request,
+    state: &S,
+) -> Result<(T, String, serde_json::Value), JsonRejection>
+where
+    T: DeserializeOwned,
+    S: Send + Sync,
+{
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str)
+        .unwrap_or_else(|| req.uri().path())
+        .to_owned();
+    let Json(raw) = Json::<serde_json::Value>::from_request(req, state).await?;
+    let bytes = serde_json::to_vec(&raw).expect("a serde_json::Value always serializes as JSON");
+    let Json(value) = Json::<T>::from_bytes(&bytes)?;
+    Ok((value, route, raw))
 }
 
 fn collect_and_log_unknown_fields<T>(route: &str, bytes: &[u8])
@@ -85,7 +134,11 @@ where
 
 fn truncate_field_path(mut path: String) -> String {
     if path.len() > MAX_LOGGED_FIELD_PATH_LENGTH {
-        path.truncate(MAX_LOGGED_FIELD_PATH_LENGTH);
+        let mut boundary = MAX_LOGGED_FIELD_PATH_LENGTH;
+        while !path.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
+        path.truncate(boundary);
         path.push('…');
     }
     path
@@ -205,6 +258,14 @@ mod tests {
         assert!(output.contains("nested.future_flag"));
         assert!(!output.contains("do-not-log-this-value"));
         assert!(!output.contains("12345"));
+    }
+
+    #[test]
+    fn long_unicode_field_paths_truncate_at_a_character_boundary() {
+        let path = format!("xx{}", "界".repeat(100));
+        let truncated = super::truncate_field_path(path.clone());
+        assert_eq!(truncated, format!("{}…", &path[..254]));
+        assert!(truncated.len() <= super::MAX_LOGGED_FIELD_PATH_LENGTH + '…'.len_utf8());
     }
 
     #[tokio::test]

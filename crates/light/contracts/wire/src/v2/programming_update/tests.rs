@@ -33,24 +33,40 @@ fn preview_request_has_strict_semantic_target_and_mode_tags() {
 }
 
 #[test]
-fn preview_and_action_requests_reject_unknown_or_client_owned_fields() {
+fn preview_and_action_requests_ignore_unknown_and_client_owned_fields() {
+    let original: ProgrammingUpdatePreviewRequest =
+        serde_json::from_value(preview_request_json()).unwrap();
+    let original_action: ProgrammingUpdateActionRequest =
+        serde_json::from_value(confirm_action_json()).unwrap();
     for path in ["show_id", "desk_id", "user_id", "programmer", "selection"] {
         let mut input = preview_request_json();
         input[path] = json!("forged");
-        assert!(serde_json::from_value::<ProgrammingUpdatePreviewRequest>(input).is_err());
+        assert_eq!(
+            serde_json::from_value::<ProgrammingUpdatePreviewRequest>(input).unwrap(),
+            original
+        );
     }
 
     let mut target = preview_request_json();
     target["target"]["object_id"] = json!("legacy-storage-key");
-    assert!(serde_json::from_value::<ProgrammingUpdatePreviewRequest>(target).is_err());
+    assert_eq!(
+        serde_json::from_value::<ProgrammingUpdatePreviewRequest>(target).unwrap(),
+        original
+    );
 
     let mut mode = preview_request_json();
     mode["mode"]["future"] = json!(true);
-    assert!(serde_json::from_value::<ProgrammingUpdatePreviewRequest>(mode).is_err());
+    assert_eq!(
+        serde_json::from_value::<ProgrammingUpdatePreviewRequest>(mode).unwrap(),
+        original
+    );
 
     let mut action = confirm_action_json();
     action["action"]["expected_show_revision"] = json!(8);
-    assert!(serde_json::from_value::<ProgrammingUpdateActionRequest>(action).is_err());
+    assert_eq!(
+        serde_json::from_value::<ProgrammingUpdateActionRequest>(action).unwrap(),
+        original_action
+    );
 }
 
 #[test]
@@ -106,9 +122,10 @@ fn direct_and_confirm_actions_have_distinct_precondition_shapes() {
 
     let mut direct_with_preview_revision = direct_action_json();
     direct_with_preview_revision["action"]["expected_object_revision"] = json!(6);
-    assert!(
+    assert_eq!(
         serde_json::from_value::<ProgrammingUpdateActionRequest>(direct_with_preview_revision)
-            .is_err()
+            .unwrap(),
+        serde_json::from_value::<ProgrammingUpdateActionRequest>(direct_action_json()).unwrap()
     );
 }
 

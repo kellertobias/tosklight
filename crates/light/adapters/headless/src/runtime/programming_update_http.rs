@@ -1,12 +1,13 @@
 //! Authenticated strict v2 HTTP surface for Programming-owned Update workflows.
 
+use super::programming_update_json::{ActionFields, PreviewFields, TargetsFields};
 use super::{
     AppState, ServerProgrammingUpdatePorts, Session, ShowContext, authenticate, emit,
     parse_if_match, persist_server_configuration,
     programming_update_http_error::ProgrammingUpdateHttpError, programming_update_wire,
     programming_update_wire_output, read_desk_lock, update_settings,
 };
-use crate::tolerant_json::TolerantJson;
+use crate::tolerant_json::{TolerantJson, TolerantJsonWithFields};
 use axum::{
     Json, Router,
     extract::{State, rejection::JsonRejection},
@@ -39,13 +40,17 @@ async fn preview(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<ProgrammingUpdatePreviewRequest>, JsonRejection>,
+    request: Result<
+        TolerantJsonWithFields<ProgrammingUpdatePreviewRequest, PreviewFields>,
+        JsonRejection,
+    >,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let show_id = show
-        .resolve_writable(&state)
-        .map_err(ProgrammingUpdateHttpError::api)?;
-    let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
+    let admission = UpdateAdmission::capture(&state, show)?;
+    let show_id = admission.show_id;
+    let request = request
+        .map_err(ProgrammingUpdateHttpError::json)?
+        .into_inner();
     validate_request_id(&request.request_id)?;
     let (request_id, command) = programming_update_wire::preview_request(show_id, request)
         .map_err(ProgrammingUpdateHttpError::invalid)?;
@@ -53,9 +58,13 @@ async fn preview(
         context: http_context(&session).with_request_id(request_id),
         command,
     };
-    let result = run_update(state, session, false, move |service, active, ports| {
-        service.preview_update(action, active, ports)
-    })
+    let result = run_update(
+        state,
+        session,
+        admission,
+        false,
+        move |service, active, ports| service.preview_update(action, active, ports),
+    )
     .await?;
     let response = programming_update_wire_output::preview_response(show_id, result)
         .map_err(ProgrammingUpdateHttpError::application)?;
@@ -66,22 +75,30 @@ async fn targets(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<ProgrammingUpdateTargetsRequest>, JsonRejection>,
+    request: Result<
+        TolerantJsonWithFields<ProgrammingUpdateTargetsRequest, TargetsFields>,
+        JsonRejection,
+    >,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let show_id = show
-        .resolve_writable(&state)
-        .map_err(ProgrammingUpdateHttpError::api)?;
-    let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
+    let admission = UpdateAdmission::capture(&state, show)?;
+    let show_id = admission.show_id;
+    let request = request
+        .map_err(ProgrammingUpdateHttpError::json)?
+        .into_inner();
     validate_request_id(&request.request_id)?;
     let (request_id, command) = programming_update_wire::targets_request(show_id, request);
     let action = ActionEnvelope {
         context: http_context(&session).with_request_id(request_id),
         command,
     };
-    let result = run_update(state, session, false, move |service, active, ports| {
-        service.update_targets(action, active, ports)
-    })
+    let result = run_update(
+        state,
+        session,
+        admission,
+        false,
+        move |service, active, ports| service.update_targets(action, active, ports),
+    )
     .await?;
     let response = programming_update_wire_output::targets_response(show_id, result)
         .map_err(ProgrammingUpdateHttpError::application)?;
@@ -92,15 +109,19 @@ async fn apply_action(
     State(state): State<AppState>,
     show: ShowContext,
     headers: HeaderMap,
-    request: Result<Json<ProgrammingUpdateActionRequest>, JsonRejection>,
+    request: Result<
+        TolerantJsonWithFields<ProgrammingUpdateActionRequest, ActionFields>,
+        JsonRejection,
+    >,
 ) -> Result<Response, ProgrammingUpdateHttpError> {
     let session = authenticate_update(&state, &headers)?;
-    let show_id = show
-        .resolve_writable(&state)
-        .map_err(ProgrammingUpdateHttpError::api)?;
+    let admission = UpdateAdmission::capture(&state, show)?;
+    let show_id = admission.show_id;
     let expected_show_revision =
         parse_if_match(&headers).map_err(ProgrammingUpdateHttpError::api)?;
-    let Json(request) = request.map_err(ProgrammingUpdateHttpError::json)?;
+    let request = request
+        .map_err(ProgrammingUpdateHttpError::json)?
+        .into_inner();
     validate_request_id(&request.request_id)?;
     let (request_id, command) =
         programming_update_wire::action_request(show_id, expected_show_revision, request)
@@ -111,9 +132,13 @@ async fn apply_action(
             .with_expected_revision(expected_show_revision),
         command,
     };
-    let result = run_update(state, session, true, move |service, active, ports| {
-        service.handle_update(action, active, ports)
-    })
+    let result = run_update(
+        state,
+        session,
+        admission,
+        true,
+        move |service, active, ports| service.handle_update(action, active, ports),
+    )
     .await?;
     let response = programming_update_wire_output::action_outcome(result)
         .map_err(ProgrammingUpdateHttpError::application)?;
@@ -204,9 +229,50 @@ fn restore_settings(
     });
 }
 
+struct UpdateAdmission {
+    epoch: u64,
+    show_id: light_core::ShowId,
+    context: ShowContext,
+}
+
+impl UpdateAdmission {
+    fn capture(state: &AppState, context: ShowContext) -> Result<Self, ProgrammingUpdateHttpError> {
+        // This is the existing accepted cold-install epoch, shared with OSC receipts.
+        // Capture BEFORE resolving Show identity, including same-ID reloads.
+        let epoch = state.integrations.osc_playback_epoch();
+        let show_id = context
+            .resolve_writable(state)
+            .map_err(ProgrammingUpdateHttpError::api)?;
+        Ok(Self {
+            epoch,
+            show_id,
+            context,
+        })
+    }
+
+    fn verify(&self, state: &AppState) -> Result<(), ProgrammingUpdateHttpError> {
+        if state.integrations.osc_playback_epoch() != self.epoch {
+            return Err(ProgrammingUpdateHttpError::api(super::ApiError::conflict(
+                "the active show runtime was replaced while Update waited; preview again",
+            )));
+        }
+        let current = self
+            .context
+            .resolve_writable(state)
+            .map_err(ProgrammingUpdateHttpError::api)?;
+        if current != self.show_id {
+            return Err(ProgrammingUpdateHttpError::api(super::ApiError::conflict(
+                "the active show changed while Update waited; preview again",
+            )));
+        }
+        Ok(())
+    }
+}
+
 async fn run_update<T, F>(
     state: AppState,
     session: Session,
+    admission: UpdateAdmission,
     require_unlocked: bool,
     operation: F,
 ) -> Result<T, ProgrammingUpdateHttpError>
@@ -221,13 +287,19 @@ where
         + 'static,
 {
     tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        state.active_show.pause_http_lifecycle_if_armed();
+        // Admission precedes every Programmer/desk gate. Waiting inside the ports'
+        // lifecycle callback would invert that order against a cold install.
+        let _activation = state.active_show.acquire_shared_blocking();
+        admission.verify(&state)?;
         let ports =
-            ServerProgrammingUpdatePorts::new(state.clone(), session, false, require_unlocked);
+            ServerProgrammingUpdatePorts::admitted_http(state.clone(), session, require_unlocked);
         operation(&state.programming, &state.active_show, &ports)
+            .map_err(ProgrammingUpdateHttpError::application)
     })
     .await
     .map_err(ProgrammingUpdateHttpError::blocking)?
-    .map_err(ProgrammingUpdateHttpError::application)
 }
 
 fn authenticate_update(

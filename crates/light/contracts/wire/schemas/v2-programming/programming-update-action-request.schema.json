@@ -12,7 +12,6 @@
       "minLength": 1
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "action"
@@ -63,7 +62,6 @@
               "const": "confirm_preview"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "target",
@@ -86,7 +84,6 @@
               "const": "apply_direct"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "target",
@@ -124,7 +121,6 @@
               "const": "cue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "target_type",
             "mode"
@@ -141,7 +137,6 @@
               "const": "existing_content"
             }
           },
-          "additionalProperties": false,
           "required": [
             "target_type",
             "mode"
@@ -189,7 +184,6 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "cue_list_id",
@@ -209,7 +203,6 @@
               "const": "preset"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "object_id"
@@ -228,7 +221,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "object_id"

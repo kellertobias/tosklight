@@ -1,4 +1,4 @@
-//! Strict v2 transport contracts for Programmer Update preview and mutation workflows.
+//! Typed v2 transport contracts for Programmer Update preview and mutation workflows.
 
 mod action;
 mod preview;
@@ -30,19 +30,14 @@ pub enum ProgrammingUpdateExistingContentMode {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(
-    tag = "target_type",
-    content = "mode",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
+#[serde(tag = "target_type", content = "mode", rename_all = "snake_case")]
 pub enum ProgrammingUpdateMode {
     Cue(ProgrammingUpdateCueMode),
     ExistingContent(ProgrammingUpdateExistingContentMode),
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingUpdateTarget {
     Cue {
         cue_list_id: Uuid,

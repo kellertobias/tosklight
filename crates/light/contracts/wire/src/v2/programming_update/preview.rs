@@ -122,7 +122,6 @@ impl<'de> Deserialize<'de> for ProgrammingUpdatePreview {
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingUpdatePreviewRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,
@@ -131,7 +130,6 @@ pub struct ProgrammingUpdatePreviewRequest {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct RawProgrammingUpdatePreviewRequest {
     request_id: String,
     target: ProgrammingUpdateTarget,
@@ -169,7 +167,6 @@ pub struct ProgrammingUpdatePreviewResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingUpdateTargetsRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,

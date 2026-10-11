@@ -10,7 +10,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum ProgrammingUpdateAction {
     ConfirmPreview {
         target: ProgrammingUpdateTarget,
@@ -26,7 +26,7 @@ pub enum ProgrammingUpdateAction {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum RawProgrammingUpdateAction {
     ConfirmPreview {
         target: ProgrammingUpdateTarget,
@@ -73,7 +73,6 @@ impl<'de> Deserialize<'de> for ProgrammingUpdateAction {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct ProgrammingUpdateActionRequest {
     #[schemars(length(min = 1, max = 128))]
     pub request_id: String,

@@ -21,6 +21,7 @@ pub(super) struct ServerProgrammingUpdatePorts {
     active: ServerActiveShowPorts,
     require_unlocked: bool,
     within_interaction: bool,
+    active_show_admitted: bool,
 }
 
 impl ServerProgrammingUpdatePorts {
@@ -47,7 +48,16 @@ impl ServerProgrammingUpdatePorts {
             session,
             require_unlocked,
             within_interaction,
+            active_show_admitted: false,
         }
+    }
+
+    /// HTTP owns shared show admission before entering Programming gates. It still
+    /// owns Highlight reconciliation; this is not an inherited Programming interaction.
+    pub(super) fn admitted_http(state: AppState, session: Session, require_unlocked: bool) -> Self {
+        let mut ports = Self::new(state, session, false, require_unlocked);
+        ports.active_show_admitted = true;
+        ports
     }
 
     fn authorize(&self, context: &ActionContext) -> Result<(), ActionError> {
@@ -104,7 +114,7 @@ impl ActiveShowPorts for ServerProgrammingUpdatePorts {
         _show_id: ShowId,
         operation: impl FnOnce() -> Result<T, ActionError>,
     ) -> Result<T, ActionError> {
-        if self.within_interaction {
+        if self.within_interaction || self.active_show_admitted {
             return self.state.programming.run_active_show_boundary(operation);
         }
         let _activation =

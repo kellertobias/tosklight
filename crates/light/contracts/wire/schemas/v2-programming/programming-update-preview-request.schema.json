@@ -15,7 +15,6 @@
       "$ref": "#/$defs/ProgrammingUpdateTarget"
     }
   },
-  "additionalProperties": false,
   "required": [
     "request_id",
     "target",
@@ -72,7 +71,6 @@
               "const": "cue"
             }
           },
-          "additionalProperties": false,
           "required": [
             "target_type",
             "mode"
@@ -89,7 +87,6 @@
               "const": "existing_content"
             }
           },
-          "additionalProperties": false,
           "required": [
             "target_type",
             "mode"
@@ -137,7 +134,6 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "cue_list_id",
@@ -157,7 +153,6 @@
               "const": "preset"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "object_id"
@@ -176,7 +171,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "object_id"
