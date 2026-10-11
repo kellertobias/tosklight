@@ -22,3 +22,6 @@ pub fn validate_glb_model(bytes: &[u8]) -> Result<(), FixturePackageError> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod auro_color_tests;

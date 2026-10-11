@@ -65,14 +65,24 @@ fn root_par_preserves_six_native_emitters_and_keeps_uv_appearance_unknown() {
 }
 
 #[test]
-fn auro_wheel_slots_are_alternative_unknown_states_and_focus_excludes_raw_zero() {
+fn auro_wheel_slots_keep_unknown_transmission_and_nominal_recipes_with_safe_focus() {
     let p = package("cameo--auro-spot-z300");
     assert_eq!(p.modes.len(), 2);
     for m in &p.modes {
         let path = &m.color_physical.as_ref().unwrap().paths[0];
         assert_eq!(path.controls, color_channels(m, path.head_id));
         assert_eq!(path.filters.len(), 9);
-        assert!(matches!(path.source, OpticalSource::Unknown));
+        assert!(matches!(
+            &path.source,
+            OpticalSource::Fixed { provenance, .. }
+                if provenance.quality == PhysicalDataQuality::Estimated
+        ));
+        assert_eq!(path.measurements.len(), 9);
+        assert!(
+            path.measurements
+                .iter()
+                .all(|recipe| recipe.provenance.quality == PhysicalDataQuality::Unknown)
+        );
         let wheel_id = path.controls[0];
         assert!(path.filters.iter().all(|f| f.binding.channel_id == wheel_id
             && matches!(f.transmission, OpticalTransmission::Unknown)));

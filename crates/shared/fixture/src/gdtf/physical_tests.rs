@@ -551,10 +551,30 @@ fn shipped_physical_colour_models_survive_export_and_import() {
             usize::from(name == "martin--elp-cl-profile"),
             "{name}"
         );
-        assert_equivalent(&without_unlinked_controls(original), &imported);
+        assert_equivalent(&without_unlinked_controls(original.clone()), &imported);
         imported.validate().unwrap();
-        // Provenance and Position/geometry losses are reported; no colour data is lost.
+        // Native Color ownership survives. AURO's uncalibrated whole-path estimates
+        // travel in .toskfixture; GDTF cannot carry them and reports the exact loss.
         for diagnostic in diagnostics {
+            if name == "cameo--auro-spot-z300"
+                && diagnostic.message
+                    == "9 whole-path colour measurement(s) have no GDTF representation and are not exported."
+            {
+                let mode = original
+                    .modes
+                    .iter()
+                    .find(|mode| diagnostic.node.starts_with(&mode.name))
+                    .unwrap();
+                let observations = &mode.color_physical.as_ref().unwrap().paths[0].measurements;
+                assert_eq!(observations.len(), 9);
+                assert!(
+                    observations
+                        .iter()
+                        .all(|observation| observation.provenance.quality
+                            == crate::PhysicalDataQuality::Unknown)
+                );
+                continue;
+            }
             assert!(
                 !COLOUR_LOSSES
                     .iter()

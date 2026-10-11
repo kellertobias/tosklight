@@ -134,7 +134,9 @@ A show patched before this keeps the fixture revision embedded in it and is unaf
   positions, gobo shake and wheel rotation bands, prism, frost, auto program, auto movement,
   and device-setting functions from Cameo's DMX chart; **ROOT PAR 6** — D7CH with its physical
   delay channel and virtual intensity; and **Q-SPOT 40 TW** — all five 1-, 2-, 3-, and
-  8-channel personalities.
+  8-channel personalities. The AURO's steady Color Intent wheel recipes use nominal
+  colors inferred from their documented names and are reported uncalibrated.
+  `.toskfixture` preserves those recipes; GDTF export reports that it cannot carry them.
 - **Prolights ECL Fresnel CT+M** — STANDARD; **Clay Paky Stage Zoom 1200** — the
   venue's 20-slot 16-bit, gobo-fine, lamp-control personality in addition to its existing modes.
 - **High End Systems Trackspot** — the classic seven-channel mirror scanner in low- and high-resolution DMX personalities.

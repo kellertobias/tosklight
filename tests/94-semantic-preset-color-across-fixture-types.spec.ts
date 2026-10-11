@@ -103,7 +103,9 @@ scenario(
 		await t.group.expect(1).fixtures(2);
 		await t.selection.clear();
 
-		// Update the same live Color owner for the replacement wash.
+		// Exercise real updates of the same live Color owner and Preset instance.
+		await t.command.via.api.execute("GROUP 1 AT COLOR 0 DIV 100 DIV 0 DIV 0");
+		await t.preset.via.api.update(PresetFamily.Color, 1, { mode: "all" });
 		await t.command.via.api.execute("GROUP 1 AT COLOR 100 DIV 0 DIV 0 DIV 0");
 		// Update All preserves the Preset instance and its live Cue reference.
 		await t.preset.via.api.update(PresetFamily.Color, 1, { mode: "all" });
