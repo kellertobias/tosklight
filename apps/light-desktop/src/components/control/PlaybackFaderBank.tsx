@@ -68,7 +68,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					}
 				>
 					<PlaybackGridSoloControls solo={solo} />
-					{geometry && controller.surfaceId === "main" ? (
+					{geometry ? (
 						<PlaybackBankScrollControls viewport={viewport} />
 					) : null}
 				</div>

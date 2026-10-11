@@ -2854,6 +2854,19 @@ describe("scrollable software Playback panes", () => {
 				Number(el.getAttribute("data-playback-slot")),
 			),
 		).toEqual(Array.from({ length: 280 }, (_, i) => 401 + i));
+		expect(screen.getByRole("navigation", { name: "Scroll Playbacks" })).toBeVisible();
+		const viewport = container.querySelector<HTMLDivElement>(".playback-bank-viewport")!;
+		viewport.scrollBy = vi.fn();
+		Object.defineProperties(viewport, {
+			clientWidth: { value: 580 }, clientHeight: { value: 500 },
+			scrollWidth: { value: 2335 }, scrollHeight: { value: 1353 },
+		});
+		fireEvent.scroll(viewport);
+		fireEvent.click(screen.getByRole("button", { name: "Scroll Playbacks right" }));
+		fireEvent.click(screen.getByRole("button", { name: "Scroll Playbacks down" }));
+		expect(viewport.scrollBy).toHaveBeenNthCalledWith(1, { left: 464, top: 0, behavior: "auto" });
+		expect(viewport.scrollBy).toHaveBeenNthCalledWith(2, { left: 0, top: 400, behavior: "auto" });
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 	it("gives Main15 literal rows readable geometry and scroll-only directional controls", () => {
 		const layout = {
@@ -2926,7 +2939,7 @@ describe("scrollable software Playback panes", () => {
 		);
 		expect(container.querySelector(".playback-bank-viewport")).toBeNull();
 		expect(
-			screen.queryByRole("navigation", { name: "Scroll Main Playbacks" }),
+			screen.queryByRole("navigation", { name: "Scroll Playbacks" }),
 		).toBeNull();
 	});
 	it("leaves a bank without scrollable opt-in fixed", () => {

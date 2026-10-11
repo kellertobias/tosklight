@@ -1,7 +1,7 @@
 import { Button } from "@tosklight/ui";
 import { useEffect, useState, type RefObject } from "react";
 
-/** Visible touch controls supplement swipe and scrollbars on constrained Main layouts. */
+/** Visible touch controls supplement swipe and scrollbars on constrained software layouts. */
 export function PlaybackBankScrollControls({
 	viewport,
 }: {
@@ -50,7 +50,7 @@ export function PlaybackBankScrollControls({
 	return (
 		<nav
 			className="playback-bank-scroll-controls"
-			aria-label="Scroll Main Playbacks"
+			aria-label="Scroll Playbacks"
 		>
 			<span>Swipe or scroll for more Playbacks</span>
 			<Button
