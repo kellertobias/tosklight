@@ -57,7 +57,10 @@ export function projectPlaybackSlots({
 		const footprint = footprintBySlot.get(slot);
 		if (footprint?.state === "claimed") return [];
 		const definition = page?.assignments[String(slot)];
-		const playback = definition && page ? {...definition, address: {page: page.number, position: slot}} : null;
+		const playback =
+			definition && page
+				? { ...definition, address: { page: page.number, position: slot } }
+				: null;
 		const cueListId =
 			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
 		const cue = cueListId
@@ -81,4 +84,19 @@ export function projectPlaybackSlots({
 			},
 		];
 	});
+}
+
+/** Every displayed cell owns a row/column, including holes in sparse show pages. */
+export function playbackCellGridStyle(
+	cell: PlaybackSlotProjection,
+	columns: number,
+	firstSlot: number,
+) {
+	const column = cell.row
+		? cell.slot - cell.row.first_position
+		: (cell.slot - firstSlot) % columns;
+	return {
+		gridRow: `${cell.rowIndex + 1} / span 1`,
+		gridColumn: `${column + 1} / span 1`,
+	};
 }

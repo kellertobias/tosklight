@@ -173,6 +173,7 @@ export function usePlaybackBankController({
 		buttons,
 		rowCount,
 		columns,
+		firstSlot,
 		activePageNumber,
 		pageObject,
 		configuration,

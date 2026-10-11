@@ -24,6 +24,7 @@ import type { PlaybackBankController } from "./controller";
 import { playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
 import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
+import { playbackCellGridStyle } from "./projection";
 import { TouchPlaybackCard } from "./TouchPlaybackCard";
 import type { PlaybackSlotProjection } from "./types";
 
@@ -41,28 +42,24 @@ function playbackCommandTarget(controller: PlaybackBankController) {
 }
 
 function playbackCardStyle(
-	hasPlayback: boolean,
+	cell: PlaybackSlotProjection,
 	color: string,
-	footprint: PlaybackSlotProjection["footprint"],
+	columns: number,
+	firstSlot: number,
 	presentationStyle?: CSSProperties,
-): CSSProperties | undefined {
-	return hasPlayback
-		? ({
-				"--playback-color": color,
-				...(footprint
-					? {
-							gridColumn: `${footprint.columnStart} / span ${footprint.columnSpan}`,
-							gridRow: `${footprint.rowStart} / span ${footprint.rowSpan}`,
-						}
-					: {}),
-				...presentationStyle,
-			} as CSSProperties)
-		: footprint
-			? ({
+): CSSProperties {
+	const footprint = cell.footprint;
+	return {
+		...playbackCellGridStyle(cell, columns, firstSlot),
+		...(cell.playback ? { "--playback-color": color } : {}),
+		...(footprint
+			? {
 					gridColumn: `${footprint.columnStart} / span ${footprint.columnSpan}`,
 					gridRow: `${footprint.rowStart} / span ${footprint.rowSpan}`,
-				} as CSSProperties)
-			: undefined;
+				}
+			: {}),
+		...presentationStyle,
+	} as CSSProperties;
 }
 
 function isSelectedPlayback(
@@ -179,9 +176,10 @@ export function PlaybackSlot({
 		: null;
 	const className = `${soloClasses} ${playbackHasRuntimeError(playback, runtimeProjection, cue !== null) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
 	const cardStyle = playbackCardStyle(
-		Boolean(playback),
+		slotData,
 		playbackColor,
-		slotData.footprint,
+		controller.columns,
+		controller.firstSlot,
 		presentation?.style,
 	);
 	if (controller.hardware && row?.presentation !== "push_encoder")

@@ -67,6 +67,9 @@ const mocks = vi.hoisted(() => ({
 	mapExistingPlayback: vi.fn(),
 	recordCue: vi.fn(),
 	recordDefault: null as string | null,
+	selectSurface: vi.fn(),
+	selectedSurfaceId: "main",
+	surfacePages: {} as Record<string, number>,
 	commandLine: "FIXTURE",
 	error: null as string | null,
 	hardwareConnected: false,
@@ -144,6 +147,13 @@ function PlaybackFaderBank(
 		/>
 	);
 }
+
+vi.mock("../../features/screens/ScreensContext", () => ({
+	useScreensOptional: () => ({
+		selectSurface: mocks.selectSurface,
+		surfaces: { playback_surfaces: {}, resolved_pages: mocks.surfacePages },
+	}),
+}));
 
 vi.mock("../../features/cueRecording/CueRecordingProvider", () => ({
 	useCueRecording: () => ({ record: mocks.recordCue }),
@@ -314,9 +324,14 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 		usePlaybackDeskView: () => ({
 			scope: { show_id: "show-1", show_revision: 9 },
 			desk_id: "desk-1",
-			command_page: mocks.playbacks.active_page,
-			selected_surface_id: "main",
-			resolved_pages: { main: mocks.playbacks.active_page },
+			command_page:
+				mocks.surfacePages[mocks.selectedSurfaceId] ??
+				mocks.playbacks.active_page,
+			selected_surface_id: mocks.selectedSurfaceId,
+			resolved_pages: {
+				main: mocks.playbacks.active_page,
+				...mocks.surfacePages,
+			},
 			selected_playback:
 				mocks.playbacks.selected_playback == null
 					? null
@@ -385,6 +400,14 @@ vi.mock("../../state/AppContext", () => ({
 afterEach(cleanup);
 
 function resetPlaybackFaderMocks() {
+	mocks.playbacks.pages = [{ number: 1, name: "Main", slots: {} }];
+	mocks.selectedSurfaceId = "main";
+	mocks.surfacePages = {};
+	mocks.selectSurface
+		.mockReset()
+		.mockImplementation(async (surfaceId: string) => {
+			mocks.selectedSurfaceId = surfaceId;
+		});
 	mocks.dispatch.mockReset();
 	mocks.executeCommandLine.mockReset().mockResolvedValue(true);
 	mocks.refresh.mockReset().mockResolvedValue(undefined);
@@ -473,6 +496,114 @@ function assignPlayback(overrides: Record<string, unknown> = {}) {
 
 describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it("selects the keyboard-focused surface and projects its authoritative command page", async () => {
+		assignPlayback();
+		mocks.surfacePages = { main: 1, second: 2 };
+		mocks.playbacks.pages.push({
+			number: 2,
+			name: "Second",
+			slots: { "1": 7 },
+		});
+		const banks = (projected = false) => (
+			<>
+				<PlaybackFaderBank
+					surfaceId="main"
+					pageNumber={projected ? 1 : undefined}
+				/>
+				<PlaybackFaderBank
+					surfaceId="second"
+					pageNumber={projected ? 2 : undefined}
+				/>
+			</>
+		);
+		const bank = render(banks());
+		const second = bank.container.querySelector<HTMLElement>(
+			'[data-playback-surface="second"]',
+		)!;
+		const button = within(second).getByRole("button", { name: "GO +" });
+		fireEvent.focus(button);
+		await waitFor(() =>
+			expect(mocks.selectSurface).toHaveBeenCalledWith("second"),
+		);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		bank.rerender(banks(true));
+		expect(second).toHaveAttribute("data-command-surface", "true");
+		expect(
+			bank.container.querySelector('[data-playback-surface="main"]'),
+		).toHaveAttribute("data-command-surface", "false");
+		expect(mocks.surfacePages[mocks.selectedSurfaceId]).toBe(2);
+		fireEvent.keyDown(button, { key: "Enter" });
+		fireEvent.keyUp(button, { key: "Enter" });
+		fireEvent.click(button);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 2, position: 1 },
+			"button",
+			expect.objectContaining({ button: 1 }),
+		);
+		mocks.playbacks.pages.pop();
+	});
+	it.each([
+		{ hardware: false, assigned: [] },
+		{ hardware: true, assigned: [] },
+		{ hardware: false, assigned: [301, 204, 250] },
+		{ hardware: true, assigned: [301, 204, 250] },
+	])("preserves sparse second-screen rows with hardware=$hardware and assigned=$assigned", ({
+		hardware,
+		assigned,
+	}) => {
+		mocks.hardwareConnected = hardware;
+		Object.assign(mocks.state, {
+			cueListSetTarget: null,
+			cueListSetArmed: false,
+		});
+		mocks.playbacks.pages[0].slots = Object.fromEntries(
+			assigned.map((position) => [String(position), position]),
+		);
+		mocks.playbacks.pool = assigned.map((position) =>
+			playbackDefinition(position),
+		);
+		const { container } = render(
+			<PlaybackFaderBank
+				playbackLayout={{
+					rows: [
+						{
+							first_position: 301,
+							count: 5,
+							presentation: "push_encoder",
+							button_count: 1,
+						},
+						...Array.from({ length: 5 }, (_, index) => ({
+							first_position: 201 + index * 10,
+							count: 10,
+							presentation: "buttons" as const,
+							button_count: 1,
+						})),
+					],
+				}}
+			/>,
+		);
+		const cards = [
+			...container.querySelectorAll<HTMLElement>("[data-playback-slot]"),
+		];
+		expect(cards.map((card) => Number(card.dataset.playbackSlot))).toEqual([
+			301,
+			302,
+			303,
+			304,
+			305,
+			...Array.from({ length: 50 }, (_, index) => 201 + index),
+		]);
+		for (const card of cards) {
+			const position = Number(card.dataset.playbackSlot);
+			const row = position >= 301 ? 1 : Math.floor((position - 201) / 10) + 2;
+			const column =
+				position >= 301 ? position - 300 : ((position - 201) % 10) + 1;
+			expect(card.style.gridRow, `row for ${position}`).toBe(`${row} / span 1`);
+			expect(card.style.gridColumn, `column for ${position}`).toBe(
+				`${column} / span 1`,
+			);
+		}
+	});
 	it.each([
 		false,
 		true,
@@ -2410,6 +2541,7 @@ describe("shared Playback grid Solo configuration", () => {
 			'[data-playback-slot="1"]',
 		)!;
 		const encoder = within(card).getByRole("group", { name: "Master" });
+		fireEvent.focus(encoder);
 		fireEvent.pointerDown(encoder, { pointerId: 81, button: 0, clientY: 100 });
 		fireEvent.pointerMove(encoder, { pointerId: 81, clientY: 160 });
 		fireEvent.pointerUp(encoder, { pointerId: 81 });
@@ -2435,6 +2567,7 @@ describe("shared Playback grid Solo configuration", () => {
 			screen.getByRole("button", { name: "Cancel Solo selection" }),
 		);
 		expect(bank.save).not.toHaveBeenCalled();
+		expect(mocks.selectSurface).not.toHaveBeenCalled();
 		expect(card).not.toHaveClass("playback-solo-selected");
 	});
 

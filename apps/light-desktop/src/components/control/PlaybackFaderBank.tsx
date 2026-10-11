@@ -62,6 +62,9 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 							if (solo.selecting) solo.pointerDown(event);
 							else void controller.selectSurface();
 						}}
+						onFocusCapture={() => {
+							if (!solo.selecting) void controller.selectSurface();
+						}}
 						onPointerUpCapture={solo.block}
 						onPointerMoveCapture={solo.block}
 						onPointerCancelCapture={solo.block}
