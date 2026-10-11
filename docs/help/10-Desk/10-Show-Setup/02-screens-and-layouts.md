@@ -108,7 +108,7 @@ Playback controls. Choose **Encoders on** to select the main screen or any optio
 The main screen keeps its whole programmer whatever the placement is. While the encoders live on
 another screen, the main screen still carries its command line, its keypad and its Delete and Move
 tools, and its Programmer/Playback toggle stays available; only the encoder pane itself moves, and
-it names the screen the encoders went to. It does not announce the placement anywhere else; the
+it names the screen the encoders went to. In Programmer mode, the command line shows **Programmer is assigned to** the selected screen. The
 setting you made stays out of the main screen list. If the chosen screen is closed, the same modal shows
 the placement warning and offers **Use encoders on this screen** to take the encoders back in one
 explicit action.
@@ -122,7 +122,7 @@ and the other in white; pressing it changes section. The button keeps the same s
 either view, so the row around it never moves. A screen that carries only one of the two shows that section without a
 switch.
 
-Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit and makes the whole playback section its button, with the function label at bottom-right. A two- or three-button faderless row uses two units and places its buttons side by side. A fader row uses four units. The unit size adapts so the configured rows fill the playback area.
+Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit and makes the whole playback section its button, with the function label at bottom-right. A two- or three-button faderless row uses two units and places its buttons side by side. A fader row uses four units. The unit size adapts so all configured rows and columns fit the playback area without scrolling. Hardware views indicate the actual arrangement. Touch controls retain at least 44px targets; if the available area cannot support a configured layout, the bank shows an actionable space message instead of presenting clipped controls. Configure fewer controls or enlarge the control area. Solo regions are configured in a Playbacks pane displaying this screen, or through a long press on the lower section’s PROG/PLAYBK button.
 
 ![Default screen and playback configuration](../../assets/screenshots/workflows/desk-setup-screens.png)
 

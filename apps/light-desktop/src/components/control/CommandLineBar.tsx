@@ -1,4 +1,4 @@
-import { CommandLine, type CommandStatus } from "@tosklight/ui";
+import { Button, CommandLine, TextField, type CommandStatus } from "@tosklight/ui";
 import {
 	type Dispatch,
 	type SetStateAction,
@@ -43,6 +43,9 @@ import {
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
+import { PlaybackSectionSettingsModal } from "../modals/PlaybackSectionSettingsModal";
+import { usePlaybackSoloEditor } from "../../features/playbackSolo/PlaybackSoloEditorContext";
+import { useCommandLinePlacement } from "./commandLine/programmerAssignment";
 import { usePlaybackCommandContext } from "./commandLine/playbackCommandContext";
 import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
 import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
@@ -371,65 +374,109 @@ export function CommandLineBar() {
 	const model = useCommandLineBarModel();
 	const policy = useControlSurfacePolicy();
 	const commandContext = usePlaybackCommandContext(model.state.desks);
+	const placement = useCommandLinePlacement();
+	const editor = usePlaybackSoloEditor(placement.surfaceId ?? "");
+	const [settingsOpen, setSettingsOpen] = useState(false);
+	const mode = policy?.mode ?? model.state.controlMode;
 	return (
-		<CommandLine
-			commandContext={commandContext}
-			mode={policy?.mode ?? model.state.controlMode}
-			hardware={model.hardware}
-			ready={model.command.ready}
-			completed={model.completed}
-			commandError={model.errors.commandError}
-			commandErrorKind={model.errors.commandErrorKind}
-			commandErrorSummary={
-				model.errors.commandError
-					? commandErrorSummary(model.errors.commandError)
-					: undefined
-			}
-			commandErrorRevision={model.errors.commandErrorRevision}
-			persistentError={model.errors.persistentError}
-			persistentErrorOpen={model.errors.errorOpen}
-			commandLine={model.errors.commandErrorCommand ?? model.command.text}
-			commandTarget={model.command.target}
-			preloadArmed={model.preload.armed}
-			preloadActive={model.preload.active}
-			preloadReady={model.preload.ready}
-			preloadLabel={model.preload.armed ? "PRELOAD GO" : "PRELOAD"}
-			pendingSummary={model.pendingSummary}
-			recordState={
-				model.state.updateArmed
-					? "update-armed"
-					: model.state.storeArmed
-						? "record-armed"
-						: model.hasRecordableContent
-							? "ready"
-							: "empty"
-			}
-			recordShiftArmed={model.state.shiftArmed}
-			history={model.history}
-			historyOpen={model.historyOpen}
-			status={model.status}
-			onReplace={model.replaceCommand}
-			onExecute={model.execute}
-			onToggleMode={
-				policy && !policy.canToggle ? undefined : model.toggleControlMode
-			}
-			onHistoryOpenChange={model.setHistoryOpen}
-			onReuseHistory={(command) => {
-				model.replaceCommand(command);
-				model.setHistoryOpen(false);
-			}}
-			onOpenStatus={model.openSystemControls}
-			onAcknowledgeCommandError={model.errors.acknowledgeCommand}
-			onPersistentErrorOpenChange={model.errors.setErrorOpen}
-			onAcknowledgePersistentError={model.errors.acknowledgePersistent}
-			onRecordStart={model.record.begin}
-			onRecordEnd={model.record.end}
-			onRecordCancel={model.record.cancel}
-			onRecordComplete={model.record.complete}
-			onAdvancePreload={model.advancePreload}
-			onInspectPreload={model.inspectPreload}
-			onEscape={model.undo}
-		/>
+		<>
+			<CommandLine
+				commandContext={mode === "playbacks" ? commandContext : undefined}
+				programmerAssignment={
+					mode === "programmer" ? placement.programmerAssignment : undefined
+				}
+				onModeSettings={
+					placement.surfaceId ? () => setSettingsOpen(true) : undefined
+				}
+				replacementContent={
+					editor?.selecting ? <SoloCommandEditor editor={editor} /> : undefined
+				}
+				mode={mode}
+				hardware={model.hardware}
+				ready={model.command.ready}
+				completed={model.completed}
+				commandError={model.errors.commandError}
+				commandErrorKind={model.errors.commandErrorKind}
+				commandErrorSummary={
+					model.errors.commandError
+						? commandErrorSummary(model.errors.commandError)
+						: undefined
+				}
+				commandErrorRevision={model.errors.commandErrorRevision}
+				persistentError={model.errors.persistentError}
+				persistentErrorOpen={model.errors.errorOpen}
+				commandLine={model.errors.commandErrorCommand ?? model.command.text}
+				commandTarget={model.command.target}
+				preloadArmed={model.preload.armed}
+				preloadActive={model.preload.active}
+				preloadReady={model.preload.ready}
+				preloadLabel={model.preload.armed ? "PRELOAD GO" : "PRELOAD"}
+				pendingSummary={model.pendingSummary}
+				recordState={
+					model.state.updateArmed
+						? "update-armed"
+						: model.state.storeArmed
+							? "record-armed"
+							: model.hasRecordableContent
+								? "ready"
+								: "empty"
+				}
+				recordShiftArmed={model.state.shiftArmed}
+				history={model.history}
+				historyOpen={model.historyOpen}
+				status={model.status}
+				onReplace={model.replaceCommand}
+				onExecute={model.execute}
+				onToggleMode={
+					policy && !policy.canToggle ? undefined : model.toggleControlMode
+				}
+				onHistoryOpenChange={model.setHistoryOpen}
+				onReuseHistory={(command) => {
+					model.replaceCommand(command);
+					model.setHistoryOpen(false);
+				}}
+				onOpenStatus={model.openSystemControls}
+				onAcknowledgeCommandError={model.errors.acknowledgeCommand}
+				onPersistentErrorOpenChange={model.errors.setErrorOpen}
+				onAcknowledgePersistentError={model.errors.acknowledgePersistent}
+				onRecordStart={model.record.begin}
+				onRecordEnd={model.record.end}
+				onRecordCancel={model.record.cancel}
+				onRecordComplete={model.record.complete}
+				onAdvancePreload={model.advancePreload}
+				onInspectPreload={model.inspectPreload}
+				onEscape={model.undo}
+			/>
+			{settingsOpen && placement.surfaceId && (
+				<PlaybackSectionSettingsModal
+					surfaceId={placement.surfaceId}
+					onClose={() => setSettingsOpen(false)}
+				/>
+			)}
+		</>
+	);
+}
+
+function SoloCommandEditor({ editor }: {
+	editor: NonNullable<ReturnType<typeof usePlaybackSoloEditor>>;
+}) {
+	return (
+		<div className="command-solo-editor">
+			<TextField
+				label="Solo Region name"
+				value={editor.name}
+				disabled={editor.saving}
+				onChange={(event) => editor.setName(event.target.value)}
+			/>
+			<Button
+				disabled={!editor.ready || editor.saving || editor.selected.length < 2 || !editor.name.trim()}
+				onClick={() => void editor.save()}
+			>
+				Save Solo Region
+			</Button>
+			<Button disabled={editor.saving} onClick={editor.cancel}>Cancel</Button>
+			{editor.error && <span role="alert">{editor.error}</span>}
+		</div>
 	);
 }
 

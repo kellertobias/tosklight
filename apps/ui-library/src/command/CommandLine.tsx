@@ -1,5 +1,5 @@
 import { ErrorAlert, CopyErrorButton } from "../common/ErrorAlert";
-import { type RefObject, useEffect, useRef } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { Button, Input } from "../controls";
 import {
 	useCommandFeedback,
@@ -7,6 +7,7 @@ import {
 } from "./useCommandFeedback";
 import { ModalTitleBar } from "../common/ModalTitleBar";
 import "./CommandContext.css";
+import { CommandModeToggle } from "./CommandModeToggle";
 
 export type CommandLineMode = "programmer" | "playbacks";
 export type CommandConnectionStatus =
@@ -41,6 +42,9 @@ export interface CommandStatus {
 
 export interface CommandLineProps {
 	commandContext?: { name: string; page: number | null };
+	programmerAssignment?: string;
+	replacementContent?: ReactNode;
+	onModeSettings?: () => void;
 	mode: CommandLineMode;
 	hardware: boolean;
 	ready: boolean;
@@ -95,14 +99,14 @@ export function CommandLine(props: CommandLineProps) {
 			aria-busy={!props.ready}
 			data-command-authority={props.ready ? "ready" : "loading"}
 		>
-			<CommandInputSurface {...props} historyPanel={historyPanel} />
+			{props.replacementContent ?? <CommandInputSurface {...props} historyPanel={historyPanel} />}
 			<PersistentErrorPopover
 				message={props.persistentError}
 				open={props.persistentErrorOpen}
 				onClose={() => props.onPersistentErrorOpenChange(false)}
 				onAcknowledge={props.onAcknowledgePersistentError}
 			/>
-			<CommandRecordPreload {...props} />
+			{!props.replacementContent && <CommandRecordPreload {...props} />}
 		</header>
 	);
 }
@@ -118,29 +122,26 @@ function CommandInputSurface(
 	);
 	return (
 		<>
-			{props.onToggleMode && (
-				<Button
-					className={`mode-toggle ${props.mode === "playbacks" ? "playbacks-active" : ""}`}
-					onClick={props.onToggleMode}
-				>
-					<span className="mode-icon">
-						{props.mode === "playbacks" ? "▶" : "⌨"}
-					</span>
-					<span>
-						<b>PROG.</b>
-						<small>PLAYBK</small>
-					</span>
-				</Button>
+			{(props.onToggleMode || props.onModeSettings) && (
+				<CommandModeToggle
+					mode={props.mode}
+					onToggle={props.onToggleMode}
+					onSettings={props.onModeSettings}
+				/>
 			)}
 			<div
-				className={`command-field ${props.commandContext ? "has-command-context" : ""} ${props.historyOpen ? "command-history-open" : ""}`}
+				className={`command-field ${props.commandContext || props.programmerAssignment ? "has-command-context" : ""} ${props.historyOpen ? "command-history-open" : ""}`}
 			>
 				{feedback.toast && props.commandErrorKind !== "unexpected" && (
 					<div className="command-feedback-toast" role="alert">
 						{props.commandErrorSummary ?? props.commandError?.split("\n")[0]}
 					</div>
 				)}
-				{props.commandContext && (
+				{props.programmerAssignment ? (
+					<div className="command-context" aria-label="Programmer assignment">
+						<span>{props.programmerAssignment}</span>
+					</div>
+				) : props.commandContext && (
 					<div
 						className="command-context"
 						aria-label="Playback command context"

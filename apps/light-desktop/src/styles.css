@@ -9,6 +9,8 @@
 @import "./styles/workflows.css";
 @import "./styles/setup-and-editors.css";
 @import "./styles/import-mapping.css";
+@import "./styles/screen-playback-fit.css";
+@import "./styles/playback-pane-title.css";
 
 .migration-notice {
 	display: flex;

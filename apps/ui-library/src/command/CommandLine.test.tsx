@@ -476,3 +476,51 @@ describe("authoritative Playback command context", () => {
 		expect(screen.queryByText("Page 2")).not.toBeInTheDocument();
 	});
 });
+
+it("holds the mode control for650ms to open settings without a short toggle", () => {
+	vi.useFakeTimers();
+	const settings = vi.fn();
+	const view = props({ onModeSettings: settings });
+	render(<CommandLine {...view} />);
+	const mode = screen.getByRole("button", { name: /PROG.*PLAYBK/ });
+	fireEvent.pointerDown(mode);
+	act(() => vi.advanceTimersByTime(649));
+	expect(settings).not.toHaveBeenCalled();
+	act(() => vi.advanceTimersByTime(1));
+	fireEvent.pointerUp(mode);
+	fireEvent.click(mode);
+	expect(settings).toHaveBeenCalledOnce();
+	expect(view.onToggleMode).not.toHaveBeenCalled();
+	fireEvent.pointerDown(mode);
+	act(() => vi.advanceTimersByTime(100));
+	fireEvent.pointerUp(mode);
+	fireEvent.click(mode);
+	expect(view.onToggleMode).toHaveBeenCalledOnce();
+});
+it("shows Programmer placement instead of Playback context and preserves command text", () => {
+	render(<CommandLine {...props({ programmerAssignment: "Programmer is assigned to Screen1", commandContext: { name: "Main", page: 4 } })} />);
+	expect(screen.getByText("Programmer is assigned to Screen1")).toBeInTheDocument();
+	expect(screen.queryByLabelText("Playback command context")).not.toBeInTheDocument();
+	expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue("FIXTURE 1 AT 68");
+});
+it("replaces the command controls with the supplied Solo editor without invoking desk actions", () => {
+	render(<CommandLine {...props({ replacementContent: <><input aria-label="Solo Region name" /><button>Save Solo Region</button><button>Cancel</button></> })} />);
+	expect(screen.getByRole("button", { name: "Save Solo Region" })).toBeInTheDocument();
+	expect(screen.queryByRole("textbox", { name: "Command line" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "REC" })).not.toBeInTheDocument();
+});
+
+it("cancels a mode-settings hold when its pointer cancels or its component unmounts", () => {
+	vi.useFakeTimers();
+	const settings = vi.fn();
+	const view = render(<CommandLine {...props({ onModeSettings: settings })} />);
+	const mode = screen.getByRole("button", { name: /PROG.*PLAYBK/ });
+	fireEvent.pointerDown(mode);
+	fireEvent.pointerCancel(mode);
+	act(() => vi.advanceTimersByTime(1000));
+	expect(settings).not.toHaveBeenCalled();
+	fireEvent.pointerDown(mode);
+	view.unmount();
+	act(() => vi.advanceTimersByTime(1000));
+	expect(settings).not.toHaveBeenCalled();
+});

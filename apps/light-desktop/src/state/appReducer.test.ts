@@ -982,6 +982,16 @@ describe("appReducer legacy pane layout hydration", () => {
 		expect(notes.textEditorMode ?? "plain").toBe("plain");
 	});
 
+	it("hydrates the selected Playback view without changing another pane or its surface layout", () => {
+		const pane = { id: "pb", kind: "playbacks" as const, title: "Playbacks", surface_id: "pane:pb", x: 1, y: 1, width: 8, height: 8 };
+		const hydrated = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: [{ id: "main", name: "Main", panes: [pane, { ...pane, id: "other" }] }], activeDeskId: "main" });
+		const selected = appReducer(hydrated, { type: "SET_PANE_PLAYBACK_VIEW", id: "pb", mode: "screen", screenSurfaceId: "screen:second" });
+		expect(selected.desks[0].panes[0]).toEqual({ ...pane, playbackViewMode: "screen", playbackScreenSurfaceId: "screen:second" });
+		expect(selected.desks[0].panes[1]).toBe(hydrated.desks[0].panes[1]);
+		const reopened = appReducer(initialState, { type: "HYDRATE_LAYOUT", desks: JSON.parse(JSON.stringify(selected.desks)), activeDeskId: "main" });
+		expect(reopened.desks[0].panes[0]).toEqual(selected.desks[0].panes[0]);
+	});
+
 	it("persists only the selected central Playback surface reference", () => {
 		const hydrated = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",

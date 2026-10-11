@@ -1,9 +1,12 @@
+import { ScreenPlaybackFit } from "../features/screens/ScreenPlaybackFit";
+import { PlaybackPaneTitleControls } from "./PlaybackPaneTitleControls";
 import { Button, ErrorAlert } from "@tosklight/ui";
 import { gridPlaybackLayout } from "@tosklight/ui/playback";
 import { useState } from "react";
 import { PlaybackFaderBank } from "../components/control/PlaybackFaderBank";
 import { useScreens } from "../features/screens/ScreensContext";
 import { useApp } from "../state/AppContext";
+import type { PaneModel } from "../types";
 import type { WindowProps } from "./windowTypes";
 
 /** A pane renders the same sparse Playback addresses as every other surface. */
@@ -39,7 +42,10 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	return (
 		<section className="playback-pane" aria-label="Playbacks">
 			{registry?.[surfaceId] ? (
-				<PlaybackFaderBank surfaceId={surfaceId} scrollable />
+				<>
+				<PlaybackPaneTitleControls surfaceId={surfaceId} />
+				<PlaybackPaneBank pane={pane} surfaceId={surfaceId} />
+				</>
 			) : (
 				<>
 					<p>
@@ -54,4 +60,14 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 			{error && <ErrorAlert role="alert">{error}</ErrorAlert>}
 		</section>
 	);
+}
+
+function PlaybackPaneBank({ pane, surfaceId }: { pane?: PaneModel; surfaceId: string }) {
+	const { surfaces } = useScreens();
+	if (pane?.playbackViewMode !== "screen")
+		return <PlaybackFaderBank surfaceId={surfaceId} scrollable />;
+	const screen = pane.playbackScreenSurfaceId ?? "main";
+	if (!surfaces?.playback_surfaces[screen])
+		return <ErrorAlert role="alert">The selected screen layout is unavailable. Choose another screen in Pane Settings.</ErrorAlert>;
+	return <ScreenPlaybackFit><PlaybackFaderBank surfaceId={surfaceId} layoutSourceSurfaceId={screen} /></ScreenPlaybackFit>;
 }

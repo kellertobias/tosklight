@@ -1,8 +1,6 @@
 import {
 	useEffect,
 	useMemo,
-	useState,
-	useRef,
 	useSyncExternalStore,
 	type SyntheticEvent,
 	type PointerEvent,
@@ -10,8 +8,9 @@ import {
 } from "react";
 import {
 	playbackAddressKey,
-	type PlaybackAddressValue,
 } from "../../../api/playbackAddress";
+import { usePlaybackSoloEditorRegistry } from "../../../features/playbackSolo/PlaybackSoloEditorContext";
+import { usePlaybackSoloDraft } from "./usePlaybackSoloDraft";
 import { usePlaybackSoloOptional } from "../../../features/playbackSolo/PlaybackSoloContext";
 import type { PlaybackBankController } from "./controller";
 import { playbackCellKey } from "./projection";
@@ -20,31 +19,26 @@ import type { PlaybackSlotProjection } from "./types";
 const noSubscribe = () => () => {};
 const noRegions = () => null;
 
-export function usePlaybackGridSolo(controller: PlaybackBankController) {
+export function usePlaybackGridSolo(
+	controller: Pick<
+		PlaybackBankController,
+		"surfaceId" | "activePageNumber" | "slots" | "columns"
+	>,
+	surfaceId = controller.surfaceId,
+) {
 	const capability = usePlaybackSoloOptional();
+	const registry = usePlaybackSoloEditorRegistry();
 	useEffect(() => capability?.activate(), [capability?.authorityGeneration]);
 	const regions = useSyncExternalStore(
 		capability?.subscribe ?? noSubscribe,
 		capability?.getRegions ?? noRegions,
 		capability?.getRegions ?? noRegions,
 	);
-	const [creating, setCreating] = useState(false);
-	const createPending = useRef(false);
-	const [selecting, setSelecting] = useState(false);
-	const [selected, setSelected] = useState<PlaybackAddressValue[]>([]);
-	const [name, setName] = useState("");
-	const [error, setError] = useState<string | null>(null);
-	const [managing, setManaging] = useState(false);
-	useEffect(() => {
-		setSelecting(false);
-		setSelected([]);
-		setManaging(false);
-	}, [capability?.authorityGeneration]);
-	const cancel = () => {
-		setSelecting(false);
-		setSelected([]);
-		setError(null);
-	};
+	const draft = usePlaybackSoloDraft(capability, regions);
+	const {
+		creating, selecting, selected, setSelected, name, setName, error,
+		managing, setManaging, cancel, create, beginEdit,
+	} = draft;
 	const toggle = (target: EventTarget | null) => {
 		if (!(target instanceof Element) || controller.activePageNumber == null)
 			return;
@@ -78,33 +72,6 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 		)
 			toggle(event.target);
 	};
-	const create = async () => {
-		if (!capability || !regions || createPending.current) return;
-		if (!name.trim()) {
-			setError("Enter a Solo Region name");
-			return;
-		}
-		if (selected.length < 2) {
-			setError("Select at least two Playback addresses");
-			return;
-		}
-		setError(null);
-		createPending.current = true;
-		setCreating(true);
-		try {
-			const next = await capability.save([
-				...regions,
-				{ id: crypto.randomUUID(), name: name.trim(), members: selected },
-			]);
-			if (next) {
-				cancel();
-				setName("");
-			}
-		} finally {
-			createPending.current = false;
-			setCreating(false);
-		}
-	};
 	const fenceRegions = useMemo(
 		() =>
 			selecting
@@ -135,7 +102,7 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 		);
 		return `${fences.get(playbackCellKey(cell)) ?? ""} ${chosen ? "playback-solo-selected" : ""}`.trim();
 	};
-	return {
+	const result = {
 		fenceRegions,
 		available: capability?.available ?? false,
 		ready: regions !== null,
@@ -153,11 +120,17 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 		block,
 		pointerDown,
 		keyDown,
-		begin: () => {
-			setSelected([]);
-			setError(null);
-			setSelecting(true);
-		},
+		begin: () => beginEdit(),
+		beginEdit,
+		save: create,
 	};
+	useEffect(() => {
+		if (!registry || !surfaceId) return;
+		return registry.register(surfaceId, result);
+	}, [
+		registry, surfaceId, capability?.authorityGeneration, capability?.available,
+		capability?.error, regions, selecting, selected, name, creating, error,
+	]);
+	return result;
 }
 export type PlaybackGridSolo = ReturnType<typeof usePlaybackGridSolo>;

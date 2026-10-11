@@ -119,6 +119,7 @@ export type Action =
 			filter: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
 	  }
 	| { type: "SET_PANE_PLAYBACK_SURFACE"; id: string; surfaceId: string }
+	| { type: "SET_PANE_PLAYBACK_VIEW"; id: string; mode: "screen" | "free-region"; screenSurfaceId?: string }
 	| { type: "SET_FILE_MANAGER_SHOW_HIDDEN"; id: string; value: boolean }
 	| { type: "SET_TEXT_EDITOR_FILE"; id: string; root: string; path: string }
 	| {

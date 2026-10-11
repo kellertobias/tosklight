@@ -40,6 +40,8 @@ import type { PlaybackConfigurationState } from "./types";
 
 export interface PlaybackFaderBankProps {
 	surfaceId?: string;
+	/** Live screen layout reference; page and control ownership stay on this pane. */
+	layoutSourceSurfaceId?: string;
 	/** Preserve readable touch geometry by scrolling fixed pane rows. */
 	scrollable?: boolean;
 	pageNumber?: number;
@@ -53,6 +55,7 @@ export interface PlaybackFaderBankProps {
 
 export function usePlaybackBankController({
 	surfaceId = "main",
+	layoutSourceSurfaceId,
 	pageNumber,
 	firstSlot = 1,
 	count,
@@ -63,7 +66,7 @@ export function usePlaybackBankController({
 }: PlaybackFaderBankProps) {
 	const surfaces = useScreensOptional();
 	const surface = surfaces?.surfaces?.playback_surfaces[surfaceId];
-	playbackLayout = surface?.layout ?? playbackLayout;
+	playbackLayout = (layoutSourceSurfaceId ? surfaces?.surfaces?.playback_surfaces[layoutSourceSurfaceId]?.layout : surface?.layout) ?? playbackLayout;
 	const topology = usePlaybackTopologyView();
 	const topologyActions = usePlaybackTopologyActions();
 	const runtimeActions = usePlaybackRuntimeActions();
@@ -119,34 +122,7 @@ export function usePlaybackBankController({
 		projectionAuthority.matches;
 	const [configuration, setConfiguration] =
 		useState<PlaybackConfigurationState | null>(null);
-	const [cueRecordChoice, setCueRecordChoice] = useState<{
-		cueNumber: string;
-	} | null>(null);
-	const cueRecordChoiceResolver = useRef<
-		((choice: "add" | "merge" | "overwrite" | null) => void) | null
-	>(null);
-	const chooseCueRecordOperation = useCallback((cueNumbers: string[]) => {
-		if (cueNumbers.length !== 1)
-			return Promise.resolve<"add" | "merge" | "overwrite" | null>("add");
-		setCueRecordChoice({ cueNumber: cueNumbers[0] });
-		return new Promise<"add" | "merge" | "overwrite" | null>((resolve) => {
-			cueRecordChoiceResolver.current = resolve;
-		});
-	}, []);
-	const resolveCueRecordChoice = useCallback(
-		(choice: "add" | "merge" | "overwrite" | null) => {
-			cueRecordChoiceResolver.current?.(choice);
-			cueRecordChoiceResolver.current = null;
-			setCueRecordChoice(null);
-		},
-		[],
-	);
-	useEffect(
-		() => () => {
-			cueRecordChoiceResolver.current?.(null);
-		},
-		[],
-	);
+	const { cueRecordChoice, chooseCueRecordOperation, resolveCueRecordChoice } = useCueRecordChoice();
 	useEffect(() => setConfiguration(null), [activePageNumber, topology.ready]);
 	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
 	const heldActions = useMemo(
@@ -200,6 +176,38 @@ export function usePlaybackBankController({
 			commandStatus.error ??
 			projectionAuthority.error,
 	};
+}
+
+function useCueRecordChoice() {
+	const [cueRecordChoice, setCueRecordChoice] = useState<{
+		cueNumber: string;
+	} | null>(null);
+	const cueRecordChoiceResolver = useRef<
+		((choice: "add" | "merge" | "overwrite" | null) => void) | null
+	>(null);
+	const chooseCueRecordOperation = useCallback((cueNumbers: string[]) => {
+		if (cueNumbers.length !== 1)
+			return Promise.resolve<"add" | "merge" | "overwrite" | null>("add");
+		setCueRecordChoice({ cueNumber: cueNumbers[0] });
+		return new Promise<"add" | "merge" | "overwrite" | null>((resolve) => {
+			cueRecordChoiceResolver.current = resolve;
+		});
+	}, []);
+	const resolveCueRecordChoice = useCallback(
+		(choice: "add" | "merge" | "overwrite" | null) => {
+			cueRecordChoiceResolver.current?.(choice);
+			cueRecordChoiceResolver.current = null;
+			setCueRecordChoice(null);
+		},
+		[],
+	);
+	useEffect(
+		() => () => {
+			cueRecordChoiceResolver.current?.(null);
+		},
+		[],
+	);
+	return { cueRecordChoice, chooseCueRecordOperation, resolveCueRecordChoice };
 }
 
 export type PlaybackBankController = ReturnType<

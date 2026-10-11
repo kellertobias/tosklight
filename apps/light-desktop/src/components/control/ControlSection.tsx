@@ -1,4 +1,5 @@
 import { CommandSection } from "@tosklight/ui/command";
+import { ScreenPlaybackFit } from "../../features/screens/ScreenPlaybackFit";
 import { useEncoderPlacement } from "../../features/screens/encoderPlacement";
 import {
 	useHardwareConnected,
@@ -35,11 +36,12 @@ export function ControlSection() {
 		hardware,
 	);
 	const playbacks = (
-		<PlaybackFaderBank
-			surfaceId={session?.desk.surface_id ?? "main"}
-			hardwareConnected={hardwareConnected}
-			scrollable
-		/>
+		<ScreenPlaybackFit>
+			<PlaybackFaderBank
+				surfaceId={session?.desk.surface_id ?? "main"}
+				hardwareConnected={hardwareConnected}
+			/>
+		</ScreenPlaybackFit>
 	);
 	/*
 	 * With the encoders on another screen this surface has no programmer pane to show, so
@@ -50,6 +52,7 @@ export function ControlSection() {
 	return (
 		<VisibleEncoderCountProvider count={visibleEncoderCount}>
 			<CommandSection
+				className="screen-bank-fit"
 				mode={mode}
 				hardware={hardware}
 				commandLine={<CommandLineBar />}

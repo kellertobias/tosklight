@@ -1,3 +1,4 @@
+import { PlaybackPaneViewSettings } from "./PlaybackPaneViewSettings";
 import { Button, ErrorAlert, SelectField } from "@tosklight/ui";
 import { useState } from "react";
 import { playbackSurfacePatch } from "../../features/screens/playbackSurfacePatch";
@@ -44,10 +45,8 @@ export function PlaybackPaneSettings({ pane }: { pane: PaneModel }) {
 	};
 	return (
 		<section aria-label="Playback surface settings">
-			<p>
-				Rows define playback positions and controls. Page context belongs to
-				this surface.
-			</p>
+			<PlaybackPaneViewSettings pane={pane} />
+			{(pane.playbackViewMode ?? "free-region") === "free-region" && <>
 			<Button
 				disabled={saving || !screens.surfaces}
 				onClick={() => {
@@ -90,6 +89,7 @@ export function PlaybackPaneSettings({ pane }: { pane: PaneModel }) {
 				Take from Screen copies the layout for review; playback assignments stay
 				on their pages.
 			</p>
+			</>}
 			{error && <ErrorAlert role="alert">{error}</ErrorAlert>}
 			{editing && (
 				<PlaybackLayoutModal

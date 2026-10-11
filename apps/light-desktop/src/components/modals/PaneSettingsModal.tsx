@@ -705,8 +705,8 @@ function paneSpecificTabs(
 			},
 			{
 				id: "virtual-exclusion-zones",
-				label: "Solo Regions",
-				content: <PlaybackSoloSettings />,
+				label: "Manage Solo Regions",
+				content: <PlaybackSoloSettings surfaceId={pane.surface_id ?? `pane:${pane.id}`} onClose={close} />,
 			},
 		);
 	if (pane.kind === "file_manager")

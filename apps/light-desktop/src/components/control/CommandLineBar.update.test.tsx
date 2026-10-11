@@ -40,7 +40,7 @@ const activity = vi.hoisted(() => ({
 const highlight = vi.hoisted(() => ({ active: false }));
 const playbackContext = vi.hoisted(() => ({
   desk: { selected_surface_id: "main", command_page: 2 },
-  surfaces: { main: { name: "Main" }, "screen:closed": { name: "Screen 1" } },
+  surfaces: { main: { name: "Main", page_source: { type: "own", page: 2 } }, "screen:closed": { name: "Screen 1", page_source: { type: "own", page: 7 } } },
 }));
 vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", async (original) => ({
   ...(await original<object>()),
@@ -48,6 +48,10 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", async (original) =
 }));
 vi.mock("../../features/screens/ScreensContext", async (original) => ({
   ...(await original<object>()),
+  useScreens: () => ({
+    surfaces: { playback_surfaces: playbackContext.surfaces, resolved_pages: { main: 2 } },
+    updatePlaybackSurface: vi.fn(),
+  }),
   useScreensOptional: () => ({
     surfaces: { playback_surfaces: playbackContext.surfaces },
     screens: { screens: [{ surface_id: "screen:closed", desired_open: false }] },
@@ -82,6 +86,12 @@ const preloadLifecycle = vi.hoisted(() => ({
 	},
 }));
 
+const soloBridge = vi.hoisted(() => ({ editor: null as null | {
+	selecting: boolean; name: string; selected: { page: number; position: number }[];
+	ready: boolean; saving: boolean; error: null;
+	setName: ReturnType<typeof vi.fn>; save: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn>;
+} }));
+vi.mock("../../features/playbackSolo/PlaybackSoloEditorContext", () => ({ usePlaybackSoloEditor: () => soloBridge.editor }));
 const state = {
 	midiProfile: false,
 	controlMode: "programmer",
@@ -913,6 +923,7 @@ describe("shared command rejection presentation", () => {
 
 
 it("visibly names the authoritative closed Screen context and updates its effective page", () => {
+  state.controlMode = "playbacks";
   const { rerender } = render(<CommandLineBar />);
   expect(screen.getByLabelText("Playback command context")).toHaveTextContent("MainPage 2");
   const entered = (screen.getByRole("textbox", { name: "Command line" }) as HTMLInputElement).value;
@@ -924,4 +935,36 @@ it("visibly names the authoritative closed Screen context and updates its effect
   rerender(<CommandLineBar />);
   expect(screen.getByLabelText("Playback command context")).toHaveTextContent("Screen 1Page 8");
   expect(playbackContext.desk.selected_surface_id).toBe("screen:closed");
+  state.controlMode = "programmer";
+});
+
+it("renders the local Solo draft actions in place of command entry and forwards actual edits/save/cancel", () => {
+	const editor = { selecting: true, name: "Evening", selected: [{ page: 2, position: 1 }, { page: 4, position: 102 }], ready: true, saving: false, error: null,
+		setName: vi.fn(), save: vi.fn().mockResolvedValue(undefined), cancel: vi.fn() };
+	soloBridge.editor = editor;
+	try {
+		render(<CommandLineBar />);
+		expect(screen.queryByRole("textbox", { name: "Command line" })).not.toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText("Solo Region name"), { target: { value: "Warm looks" } });
+		expect(editor.setName).toHaveBeenCalledWith("Warm looks");
+		fireEvent.click(screen.getByRole("button", { name: "Save Solo Region" }));
+		expect(editor.save).toHaveBeenCalledOnce();
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(editor.cancel).toHaveBeenCalledOnce();
+	} finally { soloBridge.editor = null; }
+});
+
+it("opens the real local Playback settings modal on a held mode button without toggling mode", () => {
+	render(<CommandLineBar />);
+	const mode = screen.getByRole("button", { name: /PROG.*PLAYBK/ });
+	dispatch.mockClear();
+	fireEvent.pointerDown(mode);
+	act(() => vi.advanceTimersByTime(650));
+	fireEvent.pointerUp(mode);
+	fireEvent.click(mode);
+	expect(screen.getByRole("dialog", { name: "Playback section settings" })).toBeInTheDocument();
+	expect(screen.getByRole("tab", { name: "Page source" })).toBeInTheDocument();
+	expect(screen.getByRole("tab", { name: "Manage Solo Regions" })).toBeInTheDocument();
+	expect(screen.getByLabelText("Page")).toHaveValue("2");
+	expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "SET_CONTROL_MODE" }));
 });

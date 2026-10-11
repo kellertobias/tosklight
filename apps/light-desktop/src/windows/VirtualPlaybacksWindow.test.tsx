@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
+vi.mock("./PlaybackPaneTitleControls", () => ({ PlaybackPaneTitleControls: () => null }));
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
 	update: vi.fn(),

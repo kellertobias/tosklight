@@ -374,6 +374,16 @@ describe("show-object wire decoders", () => {
 		).toThrow(WireValidationError);
 	});
 
+	it("retains new Playback view references and accepts older central panes without them", () => {
+		const pane = { id: "pb", kind: "playbacks", title: "Playbacks", surface_id: "pane:pb", x: 1, y: 1, width: 12, height: 9 };
+		const body = (value: unknown) => ({ desks: [{ id: "main", name: "Main", panes: [value] }], activeDeskId: "main" });
+		const saved = { ...pane, playbackViewMode: "screen", playbackScreenSurfaceId: "screen:second" };
+		expect(decodeShowObject(versioned("user_layout", "user", body(saved)), "user_layout").body.desks[0].panes[0]).toEqual(saved);
+		expect(decodeShowObject(versioned("user_layout", "user", body(pane)), "user_layout").body.desks[0].panes[0]).toEqual(pane);
+		expect(() => decodeShowObject(versioned("user_layout", "user", body({ ...pane, playbackViewMode: "unknown" })), "user_layout")).toThrow(WireValidationError);
+		expect(() => decodeShowObject(versioned("user_layout", "user", body({ ...pane, playbackScreenSurfaceId: 7 })), "user_layout")).toThrow(WireValidationError);
+	});
+
 	it("rejects a legacy Virtual Playbacks pane without a central surface reference", () => {
 		const body = {
 			desks: [

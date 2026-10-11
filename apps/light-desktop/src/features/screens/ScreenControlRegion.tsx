@@ -7,6 +7,7 @@ import {
 	type LowerSectionView,
 } from "./LowerSectionSwitch";
 import { ProgrammerControlSurfaceRegion } from "./ProgrammerControlSurfaceRegion";
+import { ScreenPlaybackFit } from "./ScreenPlaybackFit";
 import { ScreenPlaybackSection } from "./ScreenPlaybackSection";
 
 /**
@@ -24,7 +25,11 @@ export function ScreenControlRegion({
 	const playbacks = screenShowsPlaybacks(screen);
 	const [view, setView] = useState<LowerSectionView>("encoders");
 	if (!holdsEncoders)
-		return playbacks ? <ScreenPlaybackSection screen={screen} /> : null;
+		return playbacks ? (
+			<ScreenPlaybackFit>
+				<ScreenPlaybackSection screen={screen} />
+			</ScreenPlaybackFit>
+		) : null;
 	if (!playbacks)
 		return <ProgrammerControlSurfaceRegion screenId={screen.id} />;
 	return (
@@ -34,7 +39,9 @@ export function ScreenControlRegion({
 			{view === "encoders" ? (
 				<ProgrammerControlSurfaceRegion screenId={screen.id} />
 			) : (
-				<ScreenPlaybackSection screen={screen} />
+				<ScreenPlaybackFit>
+					<ScreenPlaybackSection screen={screen} />
+				</ScreenPlaybackFit>
 			)}
 		</LowerSectionSwitchProvider>
 	);

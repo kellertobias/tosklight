@@ -24,3 +24,19 @@
 	padding-top: 14px;
 	padding-bottom: 1px;
 }
+
+.command-solo-editor {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+}
+.command-solo-editor > :first-child {
+	flex: 1;
+	min-width: 0;
+}
+
+.command-context[aria-label="Programmer assignment"] > span {
+	flex-shrink: 1;
+}

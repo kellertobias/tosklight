@@ -342,6 +342,19 @@ function position3dMap(
 	return decoded;
 }
 
+function playbackPaneFields(pane: Record<string, unknown>, path: string) {
+	const mode = pane.playbackViewMode;
+	if (mode != null && mode !== "screen" && mode !== "free-region")
+		throw new WireValidationError(`${path}.playbackViewMode`, "screen or free-region", mode);
+	return {
+		surface_id: stringAt(pane.surface_id, `${path}.surface_id`),
+		...(mode == null ? {} : { playbackViewMode: mode }),
+		...(pane.playbackScreenSurfaceId == null ? {} : {
+			playbackScreenSurfaceId: stringAt(pane.playbackScreenSurfaceId, `${path}.playbackScreenSurfaceId`),
+		}),
+	};
+}
+
 function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 	const body = recordAt(value, path);
 	const desks: DeskModel[] = arrayAt(body.desks, `${path}.desks`).map(
@@ -355,7 +368,7 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 					const kind = builtInWindowAt(pane.kind, `${panePath}.kind`);
 					const virtualFields =
 						kind === "playbacks"
-							? { surface_id: stringAt(pane.surface_id, `${panePath}.surface_id`) }
+							? playbackPaneFields(pane, panePath)
 							: {};
 					const layoutGroupId =
 						pane.layoutGroupId == null

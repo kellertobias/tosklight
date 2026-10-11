@@ -161,6 +161,9 @@ export interface PaneModel extends GridRect {
 	mediaRightPaneVisible?: boolean;
 	runningFilter?: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
 	surface_id?: string;
+	/** Screen mirrors its live layout; Free region keeps this pane's rows. */
+	playbackViewMode?: "screen" | "free-region";
+	playbackScreenSurfaceId?: string;
 	fileManagerShowHidden?: boolean;
 	textFileRoot?: string;
 	textFilePath?: string;

@@ -47,6 +47,7 @@ import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { TimecodeActionsProvider } from "../features/timecode/TimecodeActionsContext";
 import { PreloadScopeProvider } from "../features/playbackPreloadScope/PreloadScopeContext";
+import { PlaybackSoloEditorProvider } from "../features/playbackSolo/PlaybackSoloEditorContext";
 import { PlaybackSoloProvider } from "../features/playbackSolo/PlaybackSoloContext";
 import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
 import type { VisualizerViewPatch } from "./client/visualizerView";
@@ -552,6 +553,7 @@ function ServerShowProviderStack({
 								authority={boundaries.playbackSoloAuthority}
 								transport={boundaries.playbackSoloTransport}
 							>
+								<PlaybackSoloEditorProvider key={showId ?? "no-show"}>
 								<GroupRecordingProvider
 									showId={showId}
 									store={state.showObjectsStore}
@@ -601,6 +603,7 @@ function ServerShowProviderStack({
 										</CueRecordingProvider>
 									</PresetRecordingProvider>
 								</GroupRecordingProvider>
+								</PlaybackSoloEditorProvider>
 							</PlaybackSoloProvider>
 						</PreloadScopeProvider>
 					</PlaybackTopologyProvider>

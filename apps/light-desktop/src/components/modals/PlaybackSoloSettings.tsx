@@ -4,6 +4,8 @@ import {
 	assertPlaybackAddress,
 	playbackAddressKey,
 } from "../../api/playbackAddress";
+import { usePlaybackSoloEditor } from "../../features/playbackSolo/PlaybackSoloEditorContext";
+import { PlaybackSoloRegionManager } from "./PlaybackSoloRegionManager";
 import { usePlaybackSolo } from "../../features/playbackSolo/PlaybackSoloContext";
 import type { PlaybackSoloRegion } from "../../features/playbackSolo/contracts";
 
@@ -25,7 +27,11 @@ export function parseSoloMembers(value: string) {
 	return members;
 }
 
-export function PlaybackSoloSettings() {
+export function PlaybackSoloSettings({ surfaceId, onClose }: {
+	surfaceId?: string;
+	onClose?: () => void;
+} = {}) {
+	const editor = usePlaybackSoloEditor(surfaceId);
 	const capability = usePlaybackSolo();
 	useEffect(() => capability.activate(), [capability.authorityGeneration]);
 	const regions = useSyncExternalStore(
@@ -65,6 +71,12 @@ export function PlaybackSoloSettings() {
 			setError(reason instanceof Error ? reason.message : String(reason));
 		}
 	};
+	if (editor) return (
+		<PlaybackSoloRegionManager key={capability.authorityGeneration}
+			regions={regions} capability={capability}
+			editor={editor} onClose={onClose} />
+	);
+	if (surfaceId) return <p role="status">Open this surface’s Playback grid to edit Solo Regions.</p>;
 	return (
 		<section aria-label="Playback Solo Regions">
 			<p>

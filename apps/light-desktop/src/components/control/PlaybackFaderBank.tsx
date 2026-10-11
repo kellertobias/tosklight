@@ -7,12 +7,10 @@ import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
 } from "./playbackFaderBank/controller";
-import { PlaybackBankScrollControls } from "./playbackFaderBank/PlaybackBankScrollControls";
 import { SoloFenceOverlay } from "./playbackFaderBank/SoloFenceOverlay";
 import { playbackCellKey } from "./playbackFaderBank/projection";
 import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
-import { PlaybackGridSoloControls } from "./playbackFaderBank/PlaybackGridSoloControls";
 import { usePlaybackGridSolo } from "./playbackFaderBank/usePlaybackGridSolo";
 import { usePlaybackBankConfiguration } from "./playbackFaderBank/usePlaybackBankConfiguration";
 import { CueRecordChoiceModal } from "./playbackFaderBank/CueRecordChoiceModal";
@@ -60,18 +58,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			);
 		return (
 			<section className="playback-surface-controls">
-				<div
-					className={
-						geometry && controller.surfaceId === "main"
-							? "playback-main-toolbar"
-							: undefined
-					}
-				>
-					<PlaybackGridSoloControls solo={solo} />
-					{geometry ? (
-						<PlaybackBankScrollControls viewport={viewport} />
-					) : null}
-				</div>
+
 				<div
 					ref={viewport}
 					className={
@@ -101,7 +88,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 							controller.playbackDesk?.selected_surface_id ===
 							controller.surfaceId
 						}
-						className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"} ${controller.playbackDesk?.selected_surface_id === controller.surfaceId ? "command-surface" : ""}`}
+						className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"}`}
 						onContextMenu={(event) => {
 							if (solo.block(event)) return;
 							event.preventDefault();
@@ -164,6 +151,7 @@ function equalPlaybackFaderBankProps(
 ) {
 	return (
 		(left.surfaceId ?? "main") === (right.surfaceId ?? "main") &&
+		left.layoutSourceSurfaceId === right.layoutSourceSurfaceId &&
 		Boolean(left.scrollable) === Boolean(right.scrollable) &&
 		(left.pageNumber ?? null) === (right.pageNumber ?? null) &&
 		(left.firstSlot ?? 1) === (right.firstSlot ?? 1) &&

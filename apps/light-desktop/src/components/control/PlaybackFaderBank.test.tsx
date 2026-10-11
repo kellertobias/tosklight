@@ -9,7 +9,10 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
+import { PlaybackSoloEditorProvider } from "../../features/playbackSolo/PlaybackSoloEditorContext";
+import { PlaybackPaneTitleControls } from "../../windows/PlaybackPaneTitleControls";
+import { PlaybackSoloSettings } from "../modals/PlaybackSoloSettings";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaybackSoloProvider } from "../../features/playbackSolo/PlaybackSoloContext";
 import type {
@@ -166,6 +169,13 @@ vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (original) => ({
 	useSessionSnapshot: () => ({ desk: { id: "desk-1" } }),
 }));
 vi.mock("../../features/screens/ScreensContext", () => ({
+	useScreens: () => ({
+		selectSurface: mocks.selectSurface,
+		surfaces: {
+			playback_surfaces: { main: { page_source: { type: "own", page: mocks.playbacks.active_page } } },
+			resolved_pages: { main: mocks.playbacks.active_page },
+		},
+	}),
 	useScreensOptional: () => ({
 		selectSurface: mocks.selectSurface,
 		surfaces: { playback_surfaces: {}, resolved_pages: mocks.surfacePages },
@@ -207,6 +217,13 @@ vi.mock(
 	}),
 );
 vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
+	usePlaybackPagesView: () => ({
+		ready: mocks.topologyReady, error: null,
+		pages: mocks.playbacks.pages.map((body) => ({
+			kind: "playback_page", id: `page-object-${body.number}`, revision: 3,
+			updated_at: "", body: canonicalPage(body),
+		})),
+	}),
 	usePlaybackTopologyView: () => {
 		mocks.topologyView();
 		return {
@@ -2617,11 +2634,21 @@ function soloBank(
 			return { close: () => {} };
 		},
 	};
+	function SettingsHost() {
+		const [open, setOpen] = useState(false);
+		return <>
+			<PlaybackPaneTitleControls surfaceId="main" />
+			<button onClick={() => setOpen(true)}>Manage Solo Regions</button>
+			{open && <PlaybackSoloSettings surfaceId="main" onClose={() => setOpen(false)} />}
+		</>;
+	}
 	const view = () => (
 		<PlaybackSoloProvider
 			authority={{ authorityId: "desk-session", scope: { showId: "show-1" } }}
 			transport={transport}
 		>
+			<PlaybackSoloEditorProvider>
+			<SettingsHost />
 			<PlaybackFaderBank
 				pageNumber={mocks.playbacks.active_page}
 				count={4}
@@ -2638,6 +2665,7 @@ function soloBank(
 					}
 				}
 			/>
+			</PlaybackSoloEditorProvider>
 		</PlaybackSoloProvider>
 	);
 	const rendered = render(view());
@@ -2710,12 +2738,13 @@ describe("shared Playback grid Solo configuration", () => {
 		const bank = soloBank();
 		await waitFor(() =>
 			expect(
-				screen.getByRole("button", { name: "Select Solo members" }),
+				screen.getByRole("button", { name: "Create Solo Region" }),
 			).toBeEnabled(),
 		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Select Solo members" }),
+			screen.getByRole("button", { name: "Create Solo Region" }),
 		);
+		await screen.findByLabelText("Solo Region name");
 		for (const position of [1, 2]) {
 			const card = bank.container.querySelector<HTMLElement>(
 				`[data-playback-slot="${position}"]`,
@@ -2745,7 +2774,7 @@ describe("shared Playback grid Solo configuration", () => {
 		fireEvent.change(screen.getByLabelText("Solo Region name"), {
 			target: { value: "Grid pair" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Create Solo Region" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save Solo Region" }));
 		await waitFor(() => expect(bank.save).toHaveBeenCalledOnce());
 		expect(bank.regions()[0]).toMatchObject({
 			name: "Grid pair",
@@ -2797,12 +2826,13 @@ describe("shared Playback grid Solo configuration", () => {
 		const bank = soloBank([], "push_encoder");
 		await waitFor(() =>
 			expect(
-				screen.getByRole("button", { name: "Select Solo members" }),
+				screen.getByRole("button", { name: "Create Solo Region" }),
 			).toBeEnabled(),
 		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Select Solo members" }),
+			screen.getByRole("button", { name: "Create Solo Region" }),
 		);
+		await screen.findByLabelText("Solo Region name");
 		const card = bank.container.querySelector<HTMLElement>(
 			'[data-playback-slot="1"]',
 		)!;
@@ -2830,10 +2860,11 @@ describe("shared Playback grid Solo configuration", () => {
 		expect(second).toHaveClass("playback-solo-selected");
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		fireEvent.click(
-			screen.getByRole("button", { name: "Cancel Solo selection" }),
+			screen.getByRole("button", { name: "Cancel" }),
 		);
 		expect(bank.save).not.toHaveBeenCalled();
-		expect(mocks.selectSurface).not.toHaveBeenCalled();
+		expect(mocks.selectSurface).toHaveBeenCalledTimes(1);
+		expect(mocks.selectSurface).toHaveBeenCalledWith("main");
 		expect(card).not.toHaveClass("playback-solo-selected");
 	});
 
@@ -2841,12 +2872,13 @@ describe("shared Playback grid Solo configuration", () => {
 		const bank = soloBank();
 		await waitFor(() =>
 			expect(
-				screen.getByRole("button", { name: "Select Solo members" }),
+				screen.getByRole("button", { name: "Create Solo Region" }),
 			).toBeEnabled(),
 		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Select Solo members" }),
+			screen.getByRole("button", { name: "Create Solo Region" }),
 		);
+		await screen.findByLabelText("Solo Region name");
 		fireEvent.pointerDown(
 			bank.container.querySelector('[data-playback-slot="1"]')!,
 			{ pointerId: 91, button: 0 },
@@ -2857,11 +2889,11 @@ describe("shared Playback grid Solo configuration", () => {
 			bank.container.querySelector('[data-playback-slot="1"]')!,
 			{ pointerId: 92, button: 0 },
 		);
-		expect(screen.getByText(/2 selected across pages/)).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Save Solo Region" })).toBeEnabled();
 		fireEvent.change(screen.getByLabelText("Solo Region name"), {
 			target: { value: "Two pages" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Create Solo Region" }));
+		fireEvent.click(screen.getByRole("button", { name: "Save Solo Region" }));
 		await waitFor(() => expect(bank.save).toHaveBeenCalledOnce());
 		expect(bank.regions()[0].members).toEqual([
 			{ page: 1, position: 1 },
@@ -2908,17 +2940,30 @@ describe("shared Playback grid Solo configuration", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Manage Solo Regions" }),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Edit Across pages" }));
-		fireEvent.change(screen.getByLabelText("Members (page.position)"), {
-			target: { value: "1.1, 2.1" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Save region" }));
+		fireEvent.click(screen.getByRole("button", { name: "Across pages" }));
+		fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+		expect(screen.queryByRole("region", { name: "Manage Solo Regions" })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(bank.save).not.toHaveBeenCalled();
+		expect(bank.regions()[0].id).toBe("region-a");
+		expect(bank.regions()[0].members).toHaveLength(4);
+		fireEvent.click(screen.getByRole("button", { name: "Manage Solo Regions" }));
+		fireEvent.click(screen.getByRole("button", { name: "Across pages" }));
+		fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+		mocks.playbacks.active_page = 1;
+		bank.rerenderBank();
+		for (const position of [2, 4]) fireEvent.pointerDown(
+			bank.container.querySelector(`[data-playback-slot="${position}"]`)!,
+			{ pointerId: position, button: 0 },
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Save Solo Region" }));
 		await waitFor(() =>
 			expect(bank.regions()[0].members).toEqual([
 				{ page: 1, position: 1 },
 				{ page: 2, position: 1 },
 			]),
 		);
+		expect(bank.regions()[0].id).toBe("region-a");
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 });
@@ -2951,21 +2996,17 @@ describe("scrollable software Playback panes", () => {
 				Number(el.getAttribute("data-playback-slot")),
 			),
 		).toEqual(Array.from({ length: 280 }, (_, i) => 401 + i));
-		expect(screen.getByRole("navigation", { name: "Scroll Playbacks" })).toBeVisible();
+		expect(screen.queryByRole("navigation", { name: "Scroll Playbacks" })).not.toBeInTheDocument();
 		const viewport = container.querySelector<HTMLDivElement>(".playback-bank-viewport")!;
-		viewport.scrollBy = vi.fn();
-		Object.defineProperties(viewport, {
-			clientWidth: { value: 580 }, clientHeight: { value: 500 },
-			scrollWidth: { value: 2335 }, scrollHeight: { value: 1353 },
-		});
+		// Free regions use the browser viewport itself; no permanent directional toolbar.
+		viewport.scrollLeft = 464;
+		viewport.scrollTop = 400;
 		fireEvent.scroll(viewport);
-		fireEvent.click(screen.getByRole("button", { name: "Scroll Playbacks right" }));
-		fireEvent.click(screen.getByRole("button", { name: "Scroll Playbacks down" }));
-		expect(viewport.scrollBy).toHaveBeenNthCalledWith(1, { left: 464, top: 0, behavior: "auto" });
-		expect(viewport.scrollBy).toHaveBeenNthCalledWith(2, { left: 0, top: 400, behavior: "auto" });
+		expect(viewport.scrollLeft).toBe(464);
+		expect(viewport.scrollTop).toBe(400);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
-	it("gives Main15 literal rows readable geometry and scroll-only directional controls", () => {
+	it("fits Main15 configured rows with exact order and no scroll toolbar", () => {
 		const layout = {
 			rows: [
 				{
@@ -2983,11 +3024,11 @@ describe("scrollable software Playback panes", () => {
 			],
 		};
 		const { container } = render(
-			<PlaybackFaderBank surfaceId="main" scrollable playbackLayout={layout} />,
+			<PlaybackFaderBank surfaceId="main" playbackLayout={layout} />,
 		);
 		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
-			minWidth: "1750px",
-			minHeight: "341px",
+			gridTemplateColumns: "repeat(15, minmax(0, 1fr))",
+			gridTemplateRows: "minmax(0, 4fr) minmax(0, 1fr)",
 		});
 		expect(
 			[...container.querySelectorAll("[data-playback-slot]")].map((el) =>
@@ -2997,36 +3038,12 @@ describe("scrollable software Playback panes", () => {
 			...Array.from({ length: 15 }, (_, i) => i + 1),
 			...Array.from({ length: 15 }, (_, i) => 101 + i),
 		]);
-		const viewport = container.querySelector<HTMLDivElement>(
-			".playback-bank-viewport",
-		)!;
-		viewport.scrollBy = vi.fn();
-		Object.defineProperties(viewport, {
-			clientWidth: { value: 950 },
-			clientHeight: { value: 160 },
-			scrollWidth: { value: 1750 },
-			scrollHeight: { value: 465 },
-		});
-		fireEvent.scroll(viewport);
-		expect(
-			screen.getByRole("button", { name: "Scroll Playbacks left" }),
-		).toBeDisabled();
-		fireEvent.click(
-			screen.getByRole("button", { name: "Scroll Playbacks right" }),
-		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Scroll Playbacks down" }),
-		);
-		expect(viewport.scrollBy).toHaveBeenNthCalledWith(1, {
-			left: 760,
-			top: 0,
-			behavior: "auto",
-		});
-		expect(viewport.scrollBy).toHaveBeenNthCalledWith(2, {
-			left: 0,
-			top: 128,
-			behavior: "auto",
-		});
+		expect(container.querySelector(".playback-bank-viewport")).toBeNull();
+		expect(container.querySelector(".playback-bank-fixed")).not.toBeNull();
+		expect(screen.queryByRole("navigation", { name: "Scroll Playbacks" })).not.toBeInTheDocument();
+		const cards = [...container.querySelectorAll<HTMLElement>("[data-playback-slot]")];
+		expect(cards.slice(0, 15).every((card) => card.dataset.playbackRow === "0")).toBe(true);
+		expect(cards.slice(15).every((card) => card.dataset.playbackRow === "1")).toBe(true);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 	it("keeps attached hardware Main free of software scrolling controls", () => {
