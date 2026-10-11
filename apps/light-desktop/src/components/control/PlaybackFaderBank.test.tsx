@@ -1,3 +1,4 @@
+import { PlaybackConfigurationRequestHost } from "./PlaybackConfigurationRequestHost";
 import { TimecodesApiClient } from "../../api/client/timecodes";
 import { TimecodeActionsProvider } from "../../features/timecode/TimecodeActionsContext";
 import {
@@ -162,6 +163,7 @@ function PlaybackFaderBank(
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (original) => ({
 	...await original<typeof import("../../features/deskSnapshot/DeskSnapshotState")>(),
 	useActiveShowId: () => "show-1",
+	useSessionSnapshot: () => ({ desk: { id: "desk-1" } }),
 }));
 vi.mock("../../features/screens/ScreensContext", () => ({
 	useScreensOptional: () => ({
@@ -1134,7 +1136,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 
 	it("opens the same configuration for a command-line ASSIGN PBK request", () => {
 		assignPlayback();
-		render(<PlaybackFaderBank count={1} />);
+		render(<><PlaybackFaderBank count={1} /><PlaybackConfigurationRequestHost /></>);
 		fireEvent(
 			window,
 			new CustomEvent("light:playback-configuration", {
@@ -1146,25 +1148,71 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		).toHaveAttribute("data-slot", "1");
 	});
 
-	it("ignores configuration requests for another page or an invisible position", () => {
+	it.each([
+		{ page: 4, position: 102 },
+		{ page: 1, position: 401 },
+		{ page: 1, position: 1000 },
+	])("opens explicit command configuration outside the visible bank: %j", (address) => {
 		assignPlayback();
-		render(<PlaybackFaderBank count={1} />);
-		for (const address of [
-			{ page: 2, position: 1 },
-			{ page: 1, position: 401 },
-		]) {
-			fireEvent(
-				window,
-				new CustomEvent("light:playback-configuration", {
-					detail: { desk_id: "desk-1", address },
-				}),
-			);
-		}
-		expect(
-			screen.queryByRole("dialog", { name: "Playback Configuration" }),
-		).not.toBeInTheDocument();
+		render(<><PlaybackFaderBank count={1} /><PlaybackConfigurationRequestHost /></>);
+		fireEvent(window, new CustomEvent("light:playback-configuration", {
+			detail: { desk_id: "desk-1", address },
+		}));
+		const dialog = screen.getByRole("dialog", { name: "Playback Configuration" });
+		expect(dialog).toHaveAttribute("data-page", String(address.page));
+		expect(dialog).toHaveAttribute("data-slot", String(address.position));
 		expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
 		expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
+	});
+
+	it("opens one command editor and retains the exact page revision across visible page changes", async () => {
+		assignPlayback();
+		const view = render(<>
+			<PlaybackFaderBank count={1} />
+			<PlaybackFaderBank count={1} surfaceId="pane" />
+			<PlaybackConfigurationRequestHost />
+		</>);
+		fireEvent(window, new CustomEvent("light:playback-configuration", {
+			detail: { desk_id: "desk-1", address: { page: 1, position: 401 } },
+		}));
+		expect(screen.getAllByRole("dialog", { name: "Playback Configuration" })).toHaveLength(1);
+		mocks.surfacePages.main = 2;
+		view.rerender(<>
+			<PlaybackFaderBank count={1} />
+			<PlaybackFaderBank count={1} surfaceId="pane" />
+			<PlaybackConfigurationRequestHost />
+		</>);
+		fireEvent.change(screen.getByLabelText("Playback name"), { target: { value: "Exact 1.401" } });
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
+		expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+			{ page: 1, position: 401 },
+			expect.objectContaining({ name: "Exact 1.401" }),
+			{ expectedPageRevision: 3, expectedPageObjectId: "page-object-1" },
+		);
+	});
+
+	it("opens the assigned off-screen target without borrowing the visible cell definition", () => {
+		assignPlayback();
+		mocks.playbacks.pool.push(playbackDefinition(8, { name: "Off-screen High" }));
+		mocks.playbacks.pages.push({ number: 4, name: "Remote", slots: { "102": 8 } });
+		render(<><PlaybackFaderBank count={1} /><PlaybackConfigurationRequestHost /></>);
+		fireEvent(window, new CustomEvent("light:playback-configuration", {
+			detail: { desk_id: "desk-1", address: { page: 4, position: 102 } },
+		}));
+		expect(screen.getByLabelText("Playback name")).toHaveValue("Off-screen High");
+		expect(screen.getByRole("dialog", { name: "Playback Configuration" })).toHaveAttribute("data-page", "4");
+		expect(mocks.selectSurface).not.toHaveBeenCalled();
+	});
+
+	it("does not open another desk's command configuration", () => {
+		assignPlayback();
+		render(<><PlaybackFaderBank count={1} /><PlaybackConfigurationRequestHost /></>);
+		fireEvent(window, new CustomEvent("light:playback-configuration", {
+			detail: { desk_id: "other-desk", address: { page: 1, position: 1 } },
+		}));
+		expect(screen.queryByRole("dialog", { name: "Playback Configuration" })).not.toBeInTheDocument();
+		expect(mocks.dispatch).not.toHaveBeenCalled();
 	});
 
 	it.each([

@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import type { PlaybackConfigurationNotification } from "../../../api/playbackConfigurationModels";
 import { useControlSurfaceTarget } from "../../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { openPlaybackConfiguration } from "./actions";
 import type { PlaybackBankController } from "./controller";
@@ -49,24 +47,4 @@ export function usePlaybackBankConfiguration(
 				openPlaybackConfiguration(controller, slotData.playback, slot);
 		},
 	});
-	useEffect(() => {
-		const openRequested = (event: Event) => {
-			const { address } = (
-				event as CustomEvent<PlaybackConfigurationNotification>
-			).detail;
-			if (address.page !== controller.activePageNumber) return;
-			const slotData = controller.slots.find(
-				(candidate) => candidate.slot === address.position,
-			);
-			if (slotData)
-				openPlaybackConfiguration(
-					controller,
-					slotData.playback,
-					address.position,
-				);
-		};
-		window.addEventListener("light:playback-configuration", openRequested);
-		return () =>
-			window.removeEventListener("light:playback-configuration", openRequested);
-	}, [controller]);
 }

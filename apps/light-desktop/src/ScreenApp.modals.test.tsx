@@ -22,6 +22,7 @@ vi.mock("./features/patch/PatchState", () => ({
 }));
 vi.mock("./features/deskSnapshot/DeskSnapshotState", () => ({
 	useActiveShow: () => null,
+	useActiveShowId: () => null,
 	useBootstrapSnapshot: () => null,
 	useSessionSnapshot: () => null,
 }));
