@@ -78,11 +78,41 @@ pub(super) async fn drive_control_input<I: ControlInput>(
     mut input: I,
 ) {
     loop {
-        tokio::select! { _=cancel.cancelled()=>break,event=input.next_event()=>match event { Some(event)=>handle_control_event(&state,event),None=>break } }
+        let event = tokio::select! {
+            _ = cancel.cancelled() => break,
+            event = input.next_event() => event,
+        };
+        let Some(event) = event else {
+            break;
+        };
+        if matches!(event, ControlEvent::Osc { .. }) {
+            // Capture before offloading. Await each worker: ordered UDP ingress is never
+            // parallelized, and synchronous show admission cannot block the async executor.
+            let admission = osc_playback::OscInputAdmission::capture(&state, Some(cancel.clone()));
+            let worker = state.clone();
+            if let Err(error) = tokio::task::spawn_blocking(move || {
+                handle_control_event_admitted(&worker, event, &admission);
+            })
+            .await
+            {
+                tracing::error!(%error, "OSC control input worker failed");
+            }
+        } else {
+            handle_control_event(&state, event);
+        }
     }
 }
 
 pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
+    let admission = osc_playback::OscInputAdmission::capture(state, None);
+    handle_control_event_admitted(state, event, &admission);
+}
+
+fn handle_control_event_admitted(
+    state: &AppState,
+    event: ControlEvent,
+    admission: &osc_playback::OscInputAdmission,
+) {
     if let ControlEvent::Timecode(timecode) = &event {
         ingest_timecode(state, timecode.clone());
     }
@@ -131,6 +161,7 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
         source,
     } = &event
     {
+        let playback_route = osc_playback::is_playback_osc_route(address);
         let action_timing =
             begin_authenticated_osc_action_timing(state, address, arguments, source.as_deref());
         let mut measured_action_succeeded = false;
@@ -138,10 +169,17 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
             // A guest operates playback and nothing else. It never reaches the Programmer, so
             // there is no Record to capture, no Update to arm and no encoder to move — which is
             // the whole point of it being able to work beside somebody who is programming.
-            measured_action_succeeded |=
-                handle_playback_osc(state, address, arguments, source.as_deref());
-            handle_timing_osc(state, address, arguments, source.as_deref());
-            if osc_source_capability(state, source.as_deref()).may_program() {
+            measured_action_succeeded |= osc_playback::handle_playback_osc_admitted(
+                state,
+                address,
+                arguments,
+                source.as_deref(),
+                admission,
+            );
+            if !playback_route {
+                handle_timing_osc(state, address, arguments, source.as_deref());
+            }
+            if !playback_route && osc_source_capability(state, source.as_deref()).may_program() {
                 handle_highlight_osc(state, address, arguments, source.as_deref());
                 measured_action_succeeded |=
                     handle_dynamics_osc(state, address, arguments, source.as_deref());
@@ -180,21 +218,38 @@ pub(super) fn handle_control_event(state: &AppState, event: ControlEvent) {
     if input_locked {
         return;
     }
+    apply_admitted_control_mappings(state, event, admission);
+}
+
+fn apply_admitted_control_mappings(
+    state: &AppState,
+    event: ControlEvent,
+    admission: &osc_playback::OscInputAdmission,
+) {
+    let playback_route = matches!(&event, ControlEvent::Osc { address, .. }
+        if osc_playback::is_playback_osc_route(address));
     let mappings = state.output.snapshot().control_mappings.clone();
     let origin = mapped_control_origin(state, &event);
     if mappings.iter().any(|mapping| mapping.matches(&event)) {
-        match state.active_show.try_acquire() {
-            Ok(_activation) => {
-                apply_control_mappings(
-                    state,
-                    &origin,
-                    mappings
-                        .iter()
-                        .filter(|mapping| mapping.matches(&event))
-                        .map(|mapping| &mapping.action),
-                );
+        let activation = if playback_route {
+            Some(state.active_show.acquire_shared_blocking())
+        } else {
+            state.active_show.try_acquire().ok()
+        };
+        if let Some(_activation) = activation {
+            if playback_route && !admission.accepts(state, "mapped OSC Playback input") {
+                return;
             }
-            Err(_) => tracing::warn!("mapped control action skipped during active show transition"),
+            apply_control_mappings(
+                state,
+                &origin,
+                mappings
+                    .iter()
+                    .filter(|mapping| mapping.matches(&event))
+                    .map(|mapping| &mapping.action),
+            );
+        } else {
+            tracing::warn!("mapped control action skipped during active show transition");
         }
     }
     emit(

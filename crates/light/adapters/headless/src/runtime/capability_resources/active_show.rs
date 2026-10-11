@@ -299,6 +299,10 @@ impl ActiveShowResource {
         self.activation.acquire_blocking()
     }
 
+    pub(in crate::runtime) fn acquire_shared_blocking(&self) -> ActiveShowPermit {
+        self.activation.acquire_shared_blocking()
+    }
+
     pub(in crate::runtime) fn try_acquire(
         &self,
     ) -> Result<ActiveShowPermit, tokio::sync::TryLockError> {
@@ -434,6 +438,12 @@ impl ActiveShowCoordinator {
     pub(in crate::runtime) fn acquire_blocking(&self) -> ActiveShowPermit {
         ActiveShowPermit::Exclusive(futures_lite::future::block_on(
             self.lock.clone().write_owned(),
+        ))
+    }
+
+    pub(in crate::runtime) fn acquire_shared_blocking(&self) -> ActiveShowPermit {
+        ActiveShowPermit::Shared(futures_lite::future::block_on(
+            self.lock.clone().read_owned(),
         ))
     }
 

@@ -182,9 +182,7 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
     let Some(page) = page else {
         return true;
     };
-    let Ok(_activation) = state.active_show.try_acquire() else {
-        return true;
-    };
+
     let Some((show, desk)) = state
         .active_show
         .current()
@@ -304,22 +302,108 @@ fn osc_playback_context(
     Ok((source_socket, action_desk, session))
 }
 
+pub(super) fn is_playback_osc_route(address: &str) -> bool {
+    let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
+    osc_playback_address(&parts).is_some()
+        || (parts.len() == 3 && parts[0] == "light" && parts[2] == "page")
+}
+
+#[derive(Clone)]
+pub(super) struct OscInputAdmission {
+    epoch: u64,
+    cancel: Option<CancellationToken>,
+}
+
+impl OscInputAdmission {
+    pub(super) fn capture(state: &AppState, cancel: Option<CancellationToken>) -> Self {
+        Self {
+            epoch: state.integrations.osc_playback_epoch(),
+            cancel,
+        }
+    }
+
+    pub(super) fn accepts(&self, state: &AppState, address: &str) -> bool {
+        let current = state.integrations.osc_playback_epoch();
+        if self.epoch == current
+            && !self
+                .cancel
+                .as_ref()
+                .is_some_and(|cancel| cancel.is_cancelled())
+        {
+            return true;
+        }
+        tracing::warn!(
+            address,
+            captured_epoch = self.epoch,
+            current_epoch = current,
+            "OSC Playback rejected after runtime replacement or input shutdown"
+        );
+        emit(
+            state,
+            "osc_playback_rejected",
+            serde_json::json!({
+                "address":address,"reason":"runtime replaced or input stopped",
+                "captured_epoch":self.epoch,"current_epoch":current
+            }),
+        );
+        false
+    }
+}
+
 pub(super) fn handle_playback_osc(
     state: &AppState,
     address: &str,
     arguments: &[OscArgument],
     source: Option<&str>,
 ) -> bool {
+    handle_playback_osc_admitted(
+        state,
+        address,
+        arguments,
+        source,
+        &OscInputAdmission::capture(state, None),
+    )
+}
+
+fn admit_playback_route(
+    state: &AppState,
+    address: &str,
+    parts: &[&str],
+    arguments: &[OscArgument],
+    admission: &OscInputAdmission,
+) -> Option<(
+    PlaybackAddress,
+    usize,
+    capability_resources::ActiveShowPermit,
+)> {
+    let playback = osc_playback_address(parts);
+    let page_route = parts.len() == 3 && parts[0] == "light" && parts[2] == "page";
+    if playback.is_none() && !page_route {
+        return None;
+    }
+    let activation = state.active_show.acquire_shared_blocking();
+    if !admission.accepts(state, address) {
+        return None;
+    }
+    if handle_osc_page(state, parts, arguments) {
+        return None;
+    }
+    playback.map(|(address, index)| (address, index, activation))
+}
+
+pub(super) fn handle_playback_osc_admitted(
+    state: &AppState,
+    address: &str,
+    arguments: &[OscArgument],
+    source: Option<&str>,
+    admission: &OscInputAdmission,
+) -> bool {
     // Explicit address and stable source are retained across page changes and release.
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let (pressed, value) = osc_playback_values(arguments);
-    if handle_osc_page(state, &parts, arguments) {
-        return false;
-    }
-    let Some((mut playback_address, action_index)) = osc_playback_address(&parts) else {
-        return false;
-    };
-    let Ok(activation) = state.active_show.try_acquire() else {
+    let Some((mut playback_address, action_index, activation)) =
+        admit_playback_route(state, address, &parts, arguments, admission)
+    else {
         return false;
     };
     let button = (parts[action_index] == "button")
@@ -338,6 +422,9 @@ pub(super) fn handle_playback_osc(
     let Some(desk) = action_desk.as_ref() else {
         return false;
     };
+    // Never hold show admission while waiting for the receipt lease. Dispatch takes
+    // receipt → shared admission and retains it across interception and the live action.
+    drop(activation);
     let Some(mut capture) = holds::CapturedInput::begin(
         state,
         &mut playback_address,
@@ -350,7 +437,8 @@ pub(super) fn handle_playback_osc(
     };
     let receipt = capture.receipt;
     if pressed && receipt.is_some() {
-        return true;
+        let _activation = state.active_show.acquire_shared_blocking();
+        return admission.accepts(state, address);
     }
     let may_program = osc_source_may_program(state, source_socket);
     let record_target = may_program
@@ -400,10 +488,6 @@ pub(super) fn handle_playback_osc(
     }) {
         return false;
     }
-    // Target-selection commands enter the same show mutation paths as typed commands. Release the
-    // read-side OSC activation before interception so Group/Cuelist assignment can acquire its own
-    // authoritative show transaction instead of deadlocking behind this ingress guard.
-    drop(activation);
     let (result, off_target) = match dispatch_osc_input(OscDispatch {
         state,
         session: session.as_ref(),
@@ -416,7 +500,7 @@ pub(super) fn handle_playback_osc(
         record_target,
         may_program,
         captured_release: receipt.is_some(),
-        hold_epoch: capture.epoch,
+        admission,
     }) {
         OscDispatchResult::Consumed => return true,
         OscDispatchResult::Rejected => return false,
@@ -743,7 +827,7 @@ struct OscDispatch<'a> {
     record_target: bool,
     may_program: bool,
     captured_release: bool,
-    hold_epoch: u64,
+    admission: &'a OscInputAdmission,
 }
 enum OscDispatchResult {
     Consumed,
@@ -763,8 +847,12 @@ fn dispatch_osc_input(dispatch: OscDispatch<'_>) -> OscDispatchResult {
         record_target,
         may_program,
         captured_release,
-        hold_epoch,
+        admission,
     } = dispatch;
+    let _activation = state.active_show.acquire_shared_blocking();
+    if !admission.accepts(state, "captured Playback input") {
+        return OscDispatchResult::Rejected;
+    }
     let pressed = input.pressed.unwrap_or(true);
     let mut off_target = false;
     if !captured_release && let Some(session) = session.filter(|_| may_program) {
@@ -795,12 +883,6 @@ fn dispatch_osc_input(dispatch: OscDispatch<'_>) -> OscDispatchResult {
                 off_target = true;
             }
         }
-    }
-    let Ok(_activation) = state.active_show.try_acquire() else {
-        return OscDispatchResult::Rejected;
-    };
-    if state.integrations.osc_playback_epoch() != hold_epoch {
-        return OscDispatchResult::Rejected;
     }
     let Ok(result) = playback_service::osc_action(
         state,

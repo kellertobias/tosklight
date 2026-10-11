@@ -249,7 +249,7 @@ async fn playback_snapshot(
     let Json(request) = request.map_err(|error| PlaybackHttpError::invalid(error.body_text()))?;
     let identities =
         wire::application_identities(request.identities).map_err(PlaybackHttpError::invalid)?;
-    let _activation = state.active_show.acquire().await;
+    let _activation = state.active_show.acquire_shared().await;
     show.verify(&state).map_err(PlaybackHttpError::api)?;
     let context = http_context(&session);
     let snapshot = playback_service::snapshot(&state, &session, context, &identities)

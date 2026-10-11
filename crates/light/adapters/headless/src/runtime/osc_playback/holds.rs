@@ -59,7 +59,6 @@ pub(super) fn held_action(
 pub(super) struct CapturedInput<'a> {
     pub held: super::super::capability_resources::OscPlaybackHoldLease<'a>,
     pub key: HoldKey,
-    pub epoch: u64,
     pub receipt: Option<HeldPlayback>,
     pub source: light_playback::PlaybackControlSource,
 }
@@ -103,7 +102,6 @@ impl<'a> CapturedInput<'a> {
             control_id,
         };
         let held = state.integrations.osc_playback_holds();
-        let epoch = state.integrations.osc_playback_epoch();
         let receipt = held.receipt(&key);
         if receipt.is_none()
             && let super::PlaybackAddress::CurrentPage { position } = address
@@ -116,7 +114,6 @@ impl<'a> CapturedInput<'a> {
         Some(Self {
             held,
             key,
-            epoch,
             receipt,
             source,
         })

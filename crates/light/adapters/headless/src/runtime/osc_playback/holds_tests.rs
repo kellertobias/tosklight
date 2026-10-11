@@ -242,7 +242,10 @@ async fn accepted_same_id_cold_install_invalidates_previous_osc_release() {
                 record_target: false,
                 may_program: false,
                 captured_release: true,
-                hold_epoch: old_epoch,
+                admission: &OscInputAdmission {
+                    epoch: old_epoch,
+                    cancel: None
+                },
             }),
             OscDispatchResult::Rejected
         ),
@@ -392,5 +395,266 @@ async fn same_osc_source_explicit_pages_without_ids_hold_independently() {
         source
     ));
     assert!(!flash(&state, 2));
+    std::fs::remove_dir_all(path).unwrap();
+}
+
+#[tokio::test]
+async fn osc_playback_waits_for_writer_and_preserves_flash_release() {
+    let (state, path, _desk) = setup();
+    let writer = state.active_show.acquire().await;
+    let worker_state = state.clone();
+    let (started, entered) = tokio::sync::oneshot::channel();
+    let mut press = tokio::task::spawn_blocking(move || {
+        started.send(()).unwrap();
+        handle_playback_osc(
+            &worker_state,
+            "/light/main/playback/1/1/flash",
+            &[OscArgument::Int(1), OscArgument::Int(71)],
+            Some("127.0.0.1:19100"),
+        )
+    });
+    entered.await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut press)
+            .await
+            .is_err(),
+        "ordinary writer contention must wait rather than silently drop OSC input"
+    );
+    drop(writer);
+    assert!(press.await.unwrap());
+    assert!(flash(&state, 1));
+    assert!(handle_playback_osc(
+        &state,
+        "/light/main/playback/1/1/flash",
+        &[OscArgument::Int(0), OscArgument::Int(71)],
+        Some("127.0.0.1:19100")
+    ));
+    assert!(!flash(&state, 1));
+    std::fs::remove_dir_all(path).unwrap();
+}
+
+struct ObservedOscUdp {
+    input: UdpControlInput,
+    next: tokio::sync::mpsc::UnboundedSender<()>,
+}
+impl ControlInput for ObservedOscUdp {
+    fn next_event<'life0, 'async_trait>(
+        &'life0 mut self,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Option<ControlEvent>> + Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        Box::pin(async move {
+            let _ = self.next.send(());
+            self.input.next_event().await
+        })
+    }
+}
+
+#[tokio::test]
+async fn real_udp_osc_writer_contention_keeps_press_release_order() {
+    let (state, path, _desk) = setup();
+    let reserve = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    let target = reserve.local_addr().unwrap();
+    drop(reserve);
+    let input = UdpControlInput::bind(target, UdpInputProtocol::Osc)
+        .await
+        .unwrap();
+    let sender = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let (next, mut calls) = tokio::sync::mpsc::unbounded_channel();
+    let cancel = CancellationToken::new();
+    let driver = tokio::spawn(super::super::control_inputs::drive_control_input(
+        state.clone(),
+        cancel.clone(),
+        ObservedOscUdp { input, next },
+    ));
+    calls.recv().await.unwrap();
+    let writer = state.active_show.acquire().await;
+    let packet = |pressed| {
+        light_control::encode_osc_message(
+            "/light/main/playback/1/1/flash",
+            &[OscArgument::Int(pressed), OscArgument::Int(71)],
+        )
+        .unwrap()
+    };
+    sender.send_to(&packet(1), target).await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), calls.recv())
+            .await
+            .is_err(),
+        "the listener must await the accepted press before reading its release"
+    );
+    sender.send_to(&packet(0), target).await.unwrap();
+    drop(writer);
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(2), calls.recv())
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    assert!(!flash(&state, 1));
+    assert_eq!(
+        state
+            .events
+            .audit_events()
+            .iter()
+            .filter(|event| event.kind == "playback_changed" && event.payload["action"] == "flash")
+            .count(),
+        2
+    );
+    cancel.cancel();
+    driver.await.unwrap();
+    std::fs::remove_dir_all(path).unwrap();
+}
+
+#[tokio::test]
+async fn queued_osc_press_rejects_replaced_runtime_without_source_side_effects() {
+    let (state, path, _desk) = setup();
+    let admission = OscInputAdmission::capture(&state, None);
+    let sessions = state.sessions.sessions().len();
+    let writer = state.active_show.acquire().await;
+    let worker_state = state.clone();
+    let (started, entered) = tokio::sync::oneshot::channel();
+    let mut press = tokio::task::spawn_blocking(move || {
+        started.send(()).unwrap();
+        handle_playback_osc_admitted(
+            &worker_state,
+            "/light/main/playback/1/1/flash",
+            &[OscArgument::Int(1), OscArgument::Int(71)],
+            Some("127.0.0.1:19100"),
+            &admission,
+        )
+    });
+    entered.await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut press)
+            .await
+            .is_err()
+    );
+    state.integrations.replace_osc_playback_runtime();
+    drop(writer);
+    assert!(!press.await.unwrap());
+    assert!(!flash(&state, 1));
+    assert_eq!(state.sessions.sessions().len(), sessions);
+    assert!(
+        state
+            .events
+            .audit_events()
+            .iter()
+            .any(|event| event.kind == "osc_playback_rejected")
+    );
+    std::fs::remove_dir_all(path).unwrap();
+}
+
+#[tokio::test]
+async fn cancelled_final_osc_admission_cannot_activate() {
+    let (state, path, desk) = setup();
+    let cancel = CancellationToken::new();
+    let admission = OscInputAdmission::capture(&state, Some(cancel.clone()));
+    let writer = state.active_show.acquire().await;
+    let worker_state = state.clone();
+    let (started, entered) = tokio::sync::oneshot::channel();
+    let mut dispatch = tokio::task::spawn_blocking(move || {
+        started.send(()).unwrap();
+        dispatch_osc_input(OscDispatch {
+            state: &worker_state,
+            session: None,
+            desk: Some(&desk),
+            address: PlaybackAddress::Playback(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+            action: "flash",
+            input: &mut PoolPlaybackInput {
+                pressed: Some(true),
+                ..Default::default()
+            },
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "osc:test".into(),
+                control_id: 71,
+            },
+            suppression_input: None,
+            record_target: false,
+            may_program: false,
+            captured_release: false,
+            admission: &admission,
+        })
+    });
+    entered.await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut dispatch)
+            .await
+            .is_err()
+    );
+    cancel.cancel();
+    drop(writer);
+    assert!(matches!(
+        dispatch.await.unwrap(),
+        OscDispatchResult::Rejected
+    ));
+    assert!(!flash(&state, 1));
+    assert!(
+        state
+            .events
+            .audit_events()
+            .iter()
+            .any(|event| event.kind == "osc_playback_rejected")
+    );
+    std::fs::remove_dir_all(path).unwrap();
+}
+
+#[tokio::test]
+async fn stale_osc_dispatch_cannot_consume_armed_record_or_assign() {
+    let (state, path, desk) = setup();
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(),
+        token: "osc-interception-test".into(),
+        connected: true,
+        desk: desk.clone(),
+    };
+    state.programming.start(session.id);
+    state.sessions.insert_session(session.clone());
+    let admission = OscInputAdmission::capture(&state, None);
+    state.integrations.replace_osc_playback_runtime();
+    for command in ["RECORD", "ASSIGN GROUP 1 AT"] {
+        state
+            .programming
+            .set_command_line(session.id, command.into());
+        let result = dispatch_osc_input(OscDispatch {
+            state: &state,
+            session: Some(&session),
+            desk: Some(&desk),
+            address: PlaybackAddress::Playback(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+            action: "button",
+            input: &mut PoolPlaybackInput {
+                pressed: Some(true),
+                button: Some(1),
+                ..Default::default()
+            },
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "osc:test".into(),
+                control_id: 1,
+            },
+            suppression_input: None,
+            record_target: true,
+            may_program: true,
+            captured_release: false,
+            admission: &admission,
+        });
+        assert!(matches!(result, OscDispatchResult::Rejected));
+        assert_eq!(
+            state.programming.get(session.id).unwrap().command_line,
+            command
+        );
+    }
+    assert!(!state.events.audit_events().iter().any(|event| matches!(
+        event.kind.as_str(),
+        "cue_recorded"
+            | "cue_record_rejected"
+            | "playback_target_selected"
+            | "playback_target_rejected"
+    )));
+    assert!(!flash(&state, 1));
     std::fs::remove_dir_all(path).unwrap();
 }
