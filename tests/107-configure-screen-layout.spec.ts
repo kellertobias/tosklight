@@ -92,9 +92,13 @@ function switchField(dialog: Locator, name: string) {
 }
 
 function layoutSwitchFields(dialog: Locator) {
-	return ["Dock", "Playbacks", "Command line", "Programming"].map((name) =>
-		switchField(dialog, name),
-	);
+	return [
+		"Dock",
+		"Playbacks",
+		"Command line",
+		"Compact encoder assignments",
+		"Programming",
+	].map((name) => switchField(dialog, name));
 }
 
 /** No framed section or heading sits between the modal and its form fields. */
@@ -104,7 +108,7 @@ async function expectNoInnerFrames(dialog: Locator, form: Locator) {
 	await expect(dialog.locator(".fixed-screen-pane-settings")).toHaveCount(0);
 }
 
-test("TL-472 @ui › Configure Screen shows its switches as a 2x2 grid and edits playbacks without a nested modal", async ({
+test("TL-472 @ui › Configure Screen shows its switches in two columns and edits playbacks without a nested modal", async ({
 	api,
 	bench,
 	desk,
@@ -119,16 +123,20 @@ test("TL-472 @ui › Configure Screen shows its switches as a 2x2 grid and edits
 		const { screenId, dialog, form } = await configureNewScreen(page);
 		await expectNoInnerFrames(dialog, form);
 
-		const [dock, playbacks, commandLine, programming] = await Promise.all(
-			layoutSwitchFields(dialog).map(box),
-		);
-		// Row 1: Dock | Playbacks. Row 2: Command line | Programming.
+		const [dock, playbacks, commandLine, compactEncoders, programming] =
+			await Promise.all(layoutSwitchFields(dialog).map(box));
+		// Row 1: Dock | Playbacks. Row 2: Command line | Compact encoders.
+		// Programming occupies the next row; all five settings remain reachable.
 		expect(Math.abs(dock.y - playbacks.y)).toBeLessThanOrEqual(1);
-		expect(Math.abs(commandLine.y - programming.y)).toBeLessThanOrEqual(1);
+		expect(Math.abs(commandLine.y - compactEncoders.y)).toBeLessThanOrEqual(1);
 		expect(commandLine.y).toBeGreaterThanOrEqual(dock.y + dock.height);
 		expect(Math.abs(dock.x - commandLine.x)).toBeLessThanOrEqual(1);
-		expect(Math.abs(playbacks.x - programming.x)).toBeLessThanOrEqual(1);
+		expect(Math.abs(playbacks.x - compactEncoders.x)).toBeLessThanOrEqual(1);
 		expect(playbacks.x).toBeGreaterThanOrEqual(dock.x + dock.width);
+		expect(programming.y).toBeGreaterThanOrEqual(
+			commandLine.y + commandLine.height,
+		);
+		expect(Math.abs(dock.x - programming.x)).toBeLessThanOrEqual(1);
 		// Page controls follows the grid across the full form width.
 		const pageControls = await box(switchField(dialog, "Page controls"));
 		expect(pageControls.y).toBeGreaterThanOrEqual(

@@ -99,7 +99,8 @@ test.describe("docs/testing/24-record-and-update-options.md", () => {
 		await expect.poll(async () => (await defaults(api)).record_default).toBe(
 			"smart",
 		);
-		await expectLine(api, "RECORD");
+		// Explicit Smart remains visible even after saving it as the default.
+		await expectLine(api, "RECORD SMART");
 		await finishOnKeypad(page, api, true);
 		stored = await cues(api);
 		expect(stored).toHaveLength(2);
@@ -226,13 +227,8 @@ async function defaults(api: ApiDriver) {
 }
 
 async function cues(api: ApiDriver): Promise<StoredCue[]> {
-	const playback = (await objects<any>(api, "playback")).find(
-		(candidate) => candidate.body.number === CUELIST,
-	);
-	expect(playback).toBeDefined();
-	const cueListId = playback?.body.target.cue_list_id;
 	const cueList = (await objects<any>(api, "cue_list")).find(
-		(candidate) => candidate.body.id === cueListId,
+		(candidate) => candidate.body.pool_number === CUELIST,
 	);
 	expect(cueList).toBeDefined();
 	return cueList?.body.cues ?? [];

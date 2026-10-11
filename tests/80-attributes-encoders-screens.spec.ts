@@ -1,3 +1,4 @@
+import type { ScreenConfiguration } from "../apps/light-desktop/src/api/generated/light-wire";
 import type { ApiDriver, Session } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
 import { fixtureIdsByNumber, loadCanonicalCopy } from "./support/catalog";
@@ -144,23 +145,22 @@ async function configureBrowserControlScreen(
 			type: "create",
 			configuration: {
 				id: screenId,
+				// This command-only screen shares the registered desk surface; it authors no Playback topology.
+				surface_id: "main",
 				name: "Browser Programmer",
 				layout: { desks: [], activeDeskId: "main" },
 				show_dock: false,
 				show_playbacks: false,
-				playback_count: 8,
-				playback_rows: 1,
-				first_playback_slot: 1,
-				page_mode: "follow_main",
 				show_page_controls: false,
 				show_programmer: true,
+				show_compact_encoders: false,
+				not_editable: false,
 				desired_open: false,
 				display_id: null,
 				bounds: null,
 				fullscreen: false,
-				playback_layout: null,
 				content: { type: "control_surface" },
-			},
+			} satisfies ScreenConfiguration,
 		},
 	});
 	await api.request("POST", "/api/v2/screens/actions", {

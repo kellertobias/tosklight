@@ -16,9 +16,13 @@ test("FIXTURE-SELECTION-005 @ui › missing fixture IDs are skipped and Fixture 
 	show,
 }) => {
 	const initial = await readPatchSnapshot(api, show.id);
-	const retained = initial.fixtures.filter((fixture) =>
-		[10, 11, 12].includes(fixture.fixture_number),
-	).sort((left, right) => left.fixture_number - right.fixture_number);
+	const retained = initial.fixtures
+		.filter(
+			(fixture) =>
+				fixture.fixture_number != null &&
+				[10, 11, 12].includes(fixture.fixture_number),
+		)
+		.sort((left, right) => (left.fixture_number ?? 0) - (right.fixture_number ?? 0));
 	expect(retained.map((fixture) => fixture.fixture_number)).toEqual([10, 11, 12]);
 	await api.request(
 		"POST",
@@ -27,7 +31,9 @@ test("FIXTURE-SELECTION-005 @ui › missing fixture IDs are skipped and Fixture 
 			request_id: crypto.randomUUID(),
 			fixtures: [],
 			remove_fixture_ids: initial.fixtures
-				.filter((fixture) => fixture.fixture_number < 10)
+				.filter(
+					(fixture) => fixture.fixture_number != null && fixture.fixture_number < 10,
+				)
 				.map((fixture) => fixture.fixture_id),
 		},
 		true,
@@ -56,9 +62,10 @@ test("FIXTURE-SELECTION-005 @ui › missing fixture IDs are skipped and Fixture 
 	await expect.poll(() => selectedNumbers(api)).toEqual([10, 11, 12]);
 
 	await executeVisibleCommand(page, "FIXTURE BANANA", false);
-	const history = page.getByRole("dialog", { name: "Command line history" });
-	await expect(history).toBeVisible();
-	await expect(history.getByRole("alert")).toContainText(
+	await expect(
+		page.getByRole("dialog", { name: "Command line history" }),
+	).toHaveCount(0);
+	await expect(page.locator(".command-feedback-toast")).toContainText(
 		"fixture number is invalid",
 	);
 });
@@ -82,14 +89,16 @@ test("TL-164 @ui › a rejected THRU/PLUS entry cannot poison later Preload work
 	const input = page.getByRole("textbox", { name: "Command line" });
 	await expect(input).toHaveValue(invalid);
 	await expect(
-		page
-			.getByRole("dialog", { name: "Command line history" })
-			.getByRole("alert"),
+		page.locator(".command-feedback-toast"),
 	).toContainText("level must be a percentage or FULL");
 
 	await input.fill("AT 75");
 	await input.press("Enter");
 	await expect(input).toHaveClass(/completed/u);
+	await expect(page.locator(".command-feedback-toast")).toHaveCount(0);
+	await expect(
+		page.getByRole("dialog", { name: "Command line history" }),
+	).toHaveCount(0);
 	await expectProgrammer(api, (programmer) => {
 		expect(programmer.preload_pending).toHaveLength(1);
 		expect(programmer.preload_pending[0]).toMatchObject({
@@ -157,7 +166,15 @@ async function executeVisibleCommand(
 	await input.fill(value);
 	await input.press("Enter");
 	if (expectSuccess) await expect(input).toHaveClass(/completed/u);
-	else await expect(input).toHaveClass(/error/u);
+	else {
+		await expect(input).toHaveClass(/error/u);
+		await expect(input).toHaveValue(value);
+		await expect(input).toHaveClass(/rejected/u);
+		await expect(input).not.toHaveClass(/error/u);
+		await expect(
+			page.getByRole("dialog", { name: "Command line history" }),
+		).toHaveCount(0);
+	}
 }
 
 async function clockGeometry(page: Page) {

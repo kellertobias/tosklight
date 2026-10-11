@@ -2,11 +2,11 @@
 
 import {
 	fixture,
-	fixtureRange,
 	group,
 } from "./bench/command-selection/selectionContract";
 import { scenario } from "./bench/core/scenario";
 import { Show } from "./bench/show/showScenario";
+import { fixtureRange } from "./bench/output/fixtureDmxContract";
 
 scenario(
 	"DIM-001",
@@ -20,11 +20,17 @@ scenario(
 			"GROUP 3 AT 50",
 			"GROUP 3 + 5 + 6",
 			"RECORD GROUP 3",
-			"GROUP 3 - 2 + 2",
-			"RECORD GROUP 3",
 		])
 			await t.command.execute(command);
 
+		// Normal recording retains existing member order. Persist the removal before
+		// re-adding the fixture so the merge appends it to the stored Group.
+		await t.group.expect(3).fixtures(1, 2, 3, 4, 5, 6);
+		await t.command.execute("FIXTURE 2");
+		await t.command.execute("RECORD - GROUP 3");
+		await t.group.expect(3).fixtures(1, 3, 4, 5, 6);
+		await t.command.execute("GROUP 3 + 2");
+		await t.command.execute("RECORD GROUP 3");
 		await t.group.expect(3).fixtures(1, 3, 4, 5, 6, 2);
 		await t.clock.advanceBy("3s");
 		await t.expectFixtureDMX(fixtureRange(1, 6), { Intensity: 128 });

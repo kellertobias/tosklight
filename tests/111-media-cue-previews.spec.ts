@@ -544,7 +544,15 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			change(a2, "media.file", 4),
 			change(a2, "intensity", 255),
 		];
-		await putCueList(api, listId, "Media looks", cues, stored.revision);
+		await putObject(
+			api,
+			"cue_list",
+			listId,
+			{ ...stored.body, cues },
+			stored.revision,
+		);
+		// Content edits retain the independently authored pool address and pane target.
+		expect((await revisionOf(api, "cue_list", listId)).body.pool_number).toBe(201);
 		await expect
 			.poll(async () =>
 				pictures.requests

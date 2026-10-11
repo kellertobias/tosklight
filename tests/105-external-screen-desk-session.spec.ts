@@ -1,3 +1,4 @@
+import type { ScreenConfiguration } from "../apps/light-desktop/src/api/generated/light-wire";
 import type { Page } from "@playwright/test";
 import type { ScreenAttachment } from "../apps/light-desktop/src/api/client/screenAttachment";
 import type { ApiDriver } from "./bench/core/api";
@@ -30,23 +31,22 @@ async function createOpenScreen(api: ApiDriver, screenId: string) {
 			type: "create",
 			configuration: {
 				id: screenId,
+				// This command-only screen shares the registered desk surface; it authors no Playback topology.
+				surface_id: "main",
 				name: "Joined Screen",
 				layout: { desks: [], activeDeskId: "main" },
 				show_dock: false,
 				show_playbacks: false,
-				playback_count: 8,
-				playback_rows: 1,
-				first_playback_slot: 1,
-				page_mode: "follow_main",
 				show_page_controls: false,
 				show_programmer: true,
+				show_compact_encoders: false,
+				not_editable: false,
 				desired_open: true,
 				display_id: null,
 				bounds: null,
 				fullscreen: false,
-				playback_layout: null,
 				content: { type: "control_surface" },
-			},
+			} satisfies ScreenConfiguration,
 		},
 	});
 	/* The screen carries the desk's encoders, so it shows the one desk command line too. */
