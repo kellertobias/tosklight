@@ -96,7 +96,7 @@ test("canonical-demo benchmark look has one physical and eleven virtual assignme
 	assert.equal(
 		new Set(
 			CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map(
-				(assignment) => `${assignment.kind}:${assignment.playbackNumber}`,
+				(assignment) => `${assignment.page}.${assignment.position}`,
 			),
 		).size,
 		CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.length,

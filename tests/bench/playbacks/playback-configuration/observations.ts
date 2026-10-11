@@ -15,7 +15,7 @@ export async function playbackConfigurationObservation(
 	return {
 		page,
 		slot,
-		number: playback.body.number,
+		address: {page, position:slot},
 		targetType: playback.body.target.type,
 		targetMatchesExpected:
 			playback.body.target.type === "cue_list" &&
@@ -81,13 +81,13 @@ export async function intensityLevels(
 
 export function hasTemporaryRuntime(snapshot: any, number: number): boolean {
 	return snapshot.active.some(
-		(item: any) => item.playback_number === number && item.temporary_active,
+		(item: any) => item.playback_address?.page === 1 && item.playback_address.position === number && item.temporary_active,
 	);
 }
 
 export function hasSwapRuntime(snapshot: any, number: number): boolean {
 	return snapshot.active.some(
-		(item: any) => item.playback_number === number && item.swap_active,
+		(item: any) => item.playback_address?.page === 1 && item.playback_address.position === number && item.swap_active,
 	);
 }
 

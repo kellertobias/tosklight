@@ -14,7 +14,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.playbackConfiguration.expectInspectionWithoutMutation(1, {
-			number: 40,
+			address: {page:1,position:1},
 			targetType: "cue_list",
 			buttons: ["go_minus", "go", "flash"],
 			buttonCount: 3,
@@ -67,7 +67,7 @@ scenario(
 		await t.playback.expect(43).runtime({ current_cue_number: "1" });
 		await t.playbackConfiguration.setButton(1, "Top button", "Select contents");
 		await t.playbackConfiguration.expectAssignment(1, {
-			number: 43,
+			address: {page:1,position:1},
 			buttons: ["select_contents", "go", "flash"],
 		});
 		await t.playbackConfiguration.selectContentsWithoutPlaybackMutation(1, 43, {
@@ -122,24 +122,24 @@ scenario(
 		await t.app.expect.ready();
 		await t.playback.open();
 		await t.playback.via.ui.temp(55);
-		await t.playbackConfiguration.expectTemporary(55, true);
+		await t.playbackConfiguration.expectTemporary(2, true);
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.8 });
 		await t.expectFixtureValue(fixture(2), { intensity: 0.6 });
 		await t.expectFixtureValue(fixture(3), { intensity: 0.4 });
 		await t.playback.via.ui.temp(55);
-		await t.playbackConfiguration.expectTemporary(55, false);
+		await t.playbackConfiguration.expectTemporary(2, false);
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.3 });
 
 		await t.playback.via.ui.swap(55).hold(async () => {
-			await t.playbackConfiguration.expectSwap(55, true);
+			await t.playbackConfiguration.expectSwap(2, true);
 			await t.clock.advanceBy("0ms");
 			await t.expectFixtureValue(fixture(1), { intensity: 0.8 });
 			await t.expectFixtureValue(fixture(2), { intensity: 0 });
 			await t.expectFixtureValue(fixture(3), { intensity: 0.4 });
 		});
-		await t.playbackConfiguration.expectSwap(55, false);
+		await t.playbackConfiguration.expectSwap(2, false);
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.3 });
 		await t.expectFixtureValue(fixture(2), { intensity: 0.6 });
@@ -180,18 +180,18 @@ scenario(
 			cueFadeMillis: 15_000,
 		});
 		await t.playbackConfiguration.expectAssignment(1, {
-			number: 61,
+			address: {page:1,position:1},
 			targetType: "speed_group",
 			buttons: ["double", "half", "learn"],
 			fader: "learned_percentage",
 			color: "#8b5cf6",
 		});
 		await t.playbackConfiguration.expectAssignment(2, {
-			number: 62,
+			address: {page:1,position:2},
 			targetType: "group",
 		});
 		await t.playbackConfiguration.expectAssignment(3, {
-			number: 63,
+			address: {page:1,position:3},
 			targetType: "grand_master",
 		});
 	},

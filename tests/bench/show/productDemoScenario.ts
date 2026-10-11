@@ -36,7 +36,7 @@ import {
 	PLANNED_DEMO_TOTAL_FIXTURE_RECORDS,
 	PLANNED_DEMO_TOTAL_PHYSICAL_INSTANCES,
 } from "../../support/plannedDemoScenery";
-import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "../../support/plannedDemoVirtualPlaybackZones";
+import { PLANNED_DEMO_SOLO_REGIONS } from "../../support/plannedDemoSoloRegions";
 import { replaceActiveProgrammingSelection } from "../command-selection/programmingSelection";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
@@ -1955,8 +1955,7 @@ async function buildGroups(
 				{
 					number: 1,
 					name: page?.body.name ?? "Busking",
-					slots: page?.body.slots ?? {},
-					virtual_playbacks: page?.body.virtual_playbacks ?? {},
+					assignments: page?.body.assignments ?? {},
 				},
 				page?.revision ?? 0,
 			);
@@ -2068,7 +2067,7 @@ async function buildDynamicsSetup(
 		"Creating the remaining 28 Dynamics and reconciling speed, phase, and curve details.",
 		() =>
 			installPlannedDemoDynamics(api, showId, {
-				assignVirtualPlaybacks: false,
+				assignPlaybacks: false,
 			}),
 	);
 	expect(await dynamicIdentities(api, showId, [1, 19])).toEqual(
@@ -2089,21 +2088,21 @@ async function buildDynamicsSetup(
 			await installPlannedDemoLayout(api, showId);
 		},
 	);
-	for (const zone of PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES) {
+	for (const zone of PLANNED_DEMO_SOLO_REGIONS) {
 		await createVirtualPlaybackExclusionZone(
 			desk,
 			page,
 			pane,
 			zone.name,
-			zone.playback_numbers.map((number) => number - 1000),
+			zone.members.map(({position}) => position),
 		);
 	}
 	await expect
 		.poll(async () => virtualPlaybackExclusionZones(api, showId))
 		.toEqual(
-			PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES.map((zone) => ({
+			PLANNED_DEMO_SOLO_REGIONS.map((zone) => ({
 				name: zone.name,
-				playback_numbers: [...zone.playback_numbers],
+				members: [...zone.members],
 			})),
 		);
 	await expect
@@ -2437,7 +2436,7 @@ async function buildCueProgramming(
 	await expect(cuelistPool.root()).toContainText("Start");
 	await expect(cuelistPool.root()).toContainText("ACL Chase");
 	expect(await api.showObjects(showId, "cue_list")).toHaveLength(8);
-	expect(await api.showObjects(showId, "playback")).toHaveLength(14);
+	expect(Object.keys((await api.showObject<any>(showId, "playback_page", "1"))!.body.assignments).filter((position) => Number(position) < 401)).toHaveLength(14);
 	for (const [number, cueListId] of visibleCueListIds) {
 		expect(await playbackTarget(api, showId, number)).toMatchObject({
 			type: "cue_list",
@@ -2554,18 +2553,12 @@ async function recordVisibleCuelist({
 		},
 		cueList.revision,
 	);
-	const playback = (await api.showObjects<any>(showId, "playback")).find(
-		(candidate) => candidate.body.number === number,
-	);
-	if (!playback) throw new Error(`Cuelist ${number} has no Playback object`);
-	await api.seedShowObject(
-		showId,
-		"playback",
-		playback.id,
-		{ ...playback.body, name },
-		playback.revision,
-	);
-	await api.playbackNumberAction(number, "select");
+	const playbackPage = await api.showObject<any>(showId, "playback_page", "1");
+ const position = demoCuePositions[number];
+ const definition = playbackPage?.body.assignments?.[position];
+ if (!definition) throw new Error(`Cuelist ${number} has no Playback 1.${position}`);
+ await api.seedShowObject(showId, "playback_page", "1", {...playbackPage!.body, assignments:{...playbackPage!.body.assignments,[position]:{...definition,name}}}, playbackPage!.revision);
+ await api.request("POST", "/api/v2/playback-actions", {address:{kind:"playback",page:1,position}, action:{type:"select",pressed:true},control_source:{surface_id:"main",control_id:position}}, true, undefined, {showId});
 	await expect(detail).toContainText(name);
 	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.cuelistStoredHoldFrames);
 	return target.cue_list_id as string;
@@ -3157,7 +3150,7 @@ async function expectProfileColorSeparation(
 				"GET",
 				"/api/v2/output/visualization",
 			);
-			const colors = new Map(
+			const colors = new Map<string, {x:number;y:number;z:number}>(
 				snapshot.profile_output_values.flatMap((entry: any) =>
 					entry.attribute === "color" && entry.value.kind === "color_xyz"
 						? [[entry.fixture_id, entry.value.value] as const]
@@ -3631,13 +3624,21 @@ async function createVirtualPlaybackDesktop(desk: DeskDriver, page: Page) {
 	await desk.click(
 		paneSettings.getByRole("tab", { name: "Virtual Playbacks", exact: true }),
 	);
-	await paneSettings.getByLabel("Rows").fill("5");
-	await paneSettings.getByLabel("Columns").fill("10");
-	await paneSettings.getByLabel("Columns").blur();
-	await demoPause(
-		page,
-		PRODUCT_DEMO_SCRIPT.pacing.virtualPlaybackResultHoldFrames,
-	);
+ await desk.click(paneSettings.getByRole("button", {name:"Configure layout and page source",exact:true}));
+ const layout = page.getByRole("dialog", {name:"Configure Playbacks"});
+ while (await layout.locator(".playback-row-configuration").count() > 5) {
+  const count = await layout.locator(".playback-row-configuration").count();
+  await desk.click(layout.getByRole("button", {name:`Remove row ${count}`,exact:true}));
+ }
+ while (await layout.locator(".playback-row-configuration").count() < 5)
+  await desk.click(layout.getByRole("button", {name:"Add Row",exact:true}));
+ for (let index=0;index<5;index++) {
+  const row = layout.locator(".playback-row-configuration").nth(index);
+  await row.getByLabel("First Playback Number").fill(String(401+index*10));
+  await row.getByLabel("Playbacks in row").fill("10");
+ }
+ await desk.click(layout.getByRole("button", {name:"Save",exact:true}));
+ await expect(layout).toBeHidden();
 	await desk.click(
 		paneSettings.getByRole("button", { name: "Close settings", exact: true }),
 	);
@@ -3657,11 +3658,11 @@ async function assignVirtualDynamic(
 	poolNumber: number,
 ) {
 	await desk.setDemoAction(
-		`Assign ${name} to stable Virtual Playback ${1000 + cell} through Playback Configuration.`,
+		`Assign ${name} to stable Virtual Playback ${400 + cell} through Playback Configuration.`,
 	);
 	const target = pane.getByRole("button", {
 		name: new RegExp(
-			`Virtual playback ${1000 + cell} page 1 cell ${cell} empty`,
+			`Virtual playback ${400 + cell} page 1 cell ${400 + cell} empty`,
 		),
 	});
 	await desk.click(target, { button: "right" });
@@ -3750,20 +3751,8 @@ async function createVirtualPlaybackExclusionZone(
 }
 
 async function virtualPlaybackExclusionZones(api: ApiDriver, showId: string) {
-	const snapshot = await api.request<{
-		zones: Array<{ name: string; playback_numbers: number[] }>;
-	}>(
-		"GET",
-		"/api/v2/virtual-playback-exclusion-zones",
-		undefined,
-		true,
-		undefined,
-		{ showId },
-	);
-	return snapshot.zones.map(({ name, playback_numbers }) => ({
-		name,
-		playback_numbers,
-	}));
+ const snapshot = await api.request<{regions: Array<{id: string; name: string; members: Array<{page: number; position: number}>}>}>("GET", "/api/v2/playback-solo-regions", undefined, true, undefined, {showId});
+ return snapshot.regions.map(({name, members}) => ({name, members}));
 }
 
 function digits(value: number) {
@@ -4034,144 +4023,30 @@ async function selectGroupIconThroughTouch(
 	);
 }
 
+const demoCuePositions: Record<number, number> = {1:102, 2:101, 3:106, 4:108, 5:103, 6:104, 7:105, 8:107};
 async function playbackTarget(api: ApiDriver, showId: string, number: number) {
-	const playback = (await api.showObjects<any>(showId, "playback")).find(
-		(candidate) => candidate.body.number === number,
-	);
-	return playback?.body.target ?? null;
+ return playbackTargetAtPhysicalSlot(api, showId, 1, demoCuePositions[number]);
 }
-
-async function playbackTargetAtPhysicalSlot(
-	api: ApiDriver,
-	showId: string,
-	pageNumber: number,
-	slot: number,
-) {
-	const page = (await api.showObjects<any>(showId, "playback_page")).find(
-		(candidate) => candidate.body.number === pageNumber,
-	);
-	const playbackNumber = page?.body.slots?.[String(slot)];
-	return playbackNumber == null
-		? null
-		: playbackTarget(api, showId, Number(playbackNumber));
+async function playbackTargetAtPhysicalSlot(api: ApiDriver, showId: string, pageNumber: number, position: number) {
+ const page = await api.showObject<any>(showId, "playback_page", String(pageNumber));
+ return page?.body.assignments?.[String(position)]?.target ?? null;
 }
-
 async function installRemainingGroupMasters(api: ApiDriver, showId: string) {
-	const assignments = [
-		[3, "LED Show", "18"],
-		[4, "Wash Show", "11"],
-		[5, "All ACLs", "32"],
-		[6, "Blinders", "26"],
-	] as const;
-	const existingPlaybacks = await api.showObjects<any>(showId, "playback");
-	for (const [number, name, groupId] of assignments) {
-		const existing = existingPlaybacks.find(
-			(candidate) => candidate.body.number === number,
-		);
-		await api.seedShowObject(
-			showId,
-			"playback",
-			existing?.id ?? String(number),
-			groupMasterPlayback(number, name, groupId),
-			existing?.revision ?? 0,
-		);
-	}
-	const pages = await api.showObjects<any>(showId, "playback_page");
-	const page = pages.find((candidate) => candidate.body.number === 1);
-	await api.seedShowObject(
-		showId,
-		"playback_page",
-		page?.id ?? "1",
-		{
-			number: 1,
-			name: page?.body.name ?? "Busking",
-			slots: {
-				...(page?.body.slots ?? {}),
-				1: 1,
-				2: 2,
-				3: 3,
-				4: 4,
-				5: 5,
-				6: 6,
-			},
-			virtual_playbacks: page?.body.virtual_playbacks ?? {},
-		},
-		page?.revision ?? 0,
-	);
+ const page = await api.showObject<any>(showId, "playback_page", "1");
+ const assignments = {...(page?.body.assignments ?? {})};
+ for (const [position, name, groupId] of [[3,"LED Show","18"],[4,"Wash Show","11"],[5,"All ACLs","32"],[6,"Blinders","26"]] as const)
+   assignments[position] = groupMasterPlayback(name, groupId);
+ await api.seedShowObject(showId, "playback_page", "1", {number:1, name:page?.body.name ?? "Busking", assignments}, page?.revision ?? 0);
 }
-
-async function migrateDemoGroupMastersToCanonicalPlaybacks(
-	api: ApiDriver,
-	showId: string,
-) {
-	const numberMap = new Map([
-		[1, 101],
-		[2, 102],
-		[3, 103],
-		[4, 104],
-		[5, 105],
-		[6, 106],
-	]);
-	const cueListIds = new Map([
-		[1, "00000000-0000-4004-8200-000000000001"],
-		[2, "00000000-0000-4004-8200-000000000008"],
-		[3, "00000000-0000-4004-8200-000000000006"],
-		[4, "00000000-0000-4004-8200-000000000002"],
-		[5, "00000000-0000-4004-8200-000000000003"],
-		[6, "00000000-0000-4004-8200-000000000004"],
-	]);
-	const playbacks = await api.showObjects<any>(showId, "playback");
-	for (const playback of playbacks) {
-		const number = numberMap.get(playback.body.number);
-		if (number == null || playback.body.target?.type !== "group") continue;
-		const existing = playbacks.find(
-			(candidate) => candidate.body.number === number,
-		);
-		await api.seedShowObject(
-			showId,
-			"playback",
-			existing?.id ?? String(number),
-			{ ...playback.body, number },
-			existing?.revision ?? 0,
-		);
-	}
-	for (const page of await api.showObjects<any>(showId, "playback_page")) {
-		const slots = Object.fromEntries(
-			Object.entries(page.body.slots ?? {}).map(([slot, playback]) => [
-				slot,
-				numberMap.get(Number(playback)) ?? playback,
-			]),
-		);
-		await api.seedShowObject(
-			showId,
-			"playback_page",
-			page.id,
-			{ ...page.body, slots },
-			page.revision,
-		);
-	}
-	for (const playback of playbacks) {
-		const cueListId = cueListIds.get(playback.body.number);
-		if (cueListId == null || playback.body.target?.type !== "group") continue;
-		await api.seedShowObject(
-			showId,
-			"cue_list",
-			cueListId,
-			emptyDemoCueList(cueListId),
-		);
-		await api.seedShowObject(
-			showId,
-			"playback",
-			playback.id,
-			{
-				...playback.body,
-				name: "Empty",
-				target: { type: "cue_list", cue_list_id: cueListId },
-				buttons: ["go", "go_minus", "flash"],
-			},
-			playback.revision,
-		);
-	}
+async function migrateDemoGroupMastersToCanonicalPlaybacks(api: ApiDriver, showId: string) {
+ const cueListIds = new Map([[1,"00000000-0000-4004-8200-000000000001"],[2,"00000000-0000-4004-8200-000000000008"],[3,"00000000-0000-4004-8200-000000000006"],[4,"00000000-0000-4004-8200-000000000002"],[5,"00000000-0000-4004-8200-000000000003"],[6,"00000000-0000-4004-8200-000000000004"],[8,"00000000-0000-4004-8200-000000000007"]]);
+ const page = await api.showObject<any>(showId, "playback_page", "1");
+ const assignments = {...(page?.body.assignments ?? {})};
+ for (const [poolNumber, cueListId] of cueListIds) {
+   await api.seedShowObject(showId, "cue_list", cueListId, emptyDemoCueList(cueListId));
+   assignments[demoCuePositions[poolNumber]] = {...groupMasterPlayback("Empty", "1"), target:{type:"cue_list",cue_list_id:cueListId},buttons:["go","go_minus","flash"]};
+ }
+ await api.seedShowObject(showId, "playback_page", "1", {number:1,name:page?.body.name ?? "Busking",assignments}, page?.revision ?? 0);
 }
 
 function emptyDemoCueList(id: string) {
@@ -4206,9 +4081,8 @@ function emptyDemoCueList(id: string) {
 	};
 }
 
-function groupMasterPlayback(number: number, name: string, groupId: string) {
+function groupMasterPlayback(name: string, groupId: string) {
 	return {
-		number,
 		name,
 		target: { type: "group", group_id: groupId },
 		buttons: ["select", "flash", "select_dereferenced"],
@@ -4378,7 +4252,7 @@ async function programmerValueCount(api: ApiDriver) {
 async function activeNumbers(api: ApiDriver): Promise<number[]> {
 	return (await api.request<any>("GET", "/api/v2/playback-overview")).active
 		.filter((item: any) => item.enabled)
-		.map((item: any) => item.playback_number);
+		.filter((item: any) => item.playback_address?.page === 1).map((item: any) => item.playback_address.position);
 }
 
 async function expectLiveOutput(api: ApiDriver) {

@@ -24,10 +24,9 @@ export async function playbackSlotAuthority(
 	page: number,
 	slot: number,
 ): Promise<PlaybackSlotAuthority> {
-	const [showId, pages, playbacks, runtime] = await Promise.all([
+	const [showId, pages, runtime] = await Promise.all([
 		activeShowId(api),
 		objects<PlaybackPage>(api, "playback_page"),
-		objects<PlaybackDefinition>(api, "playback"),
 		api.request<PlaybackRuntimeSnapshot>(
 			"POST",
 			"/api/v2/playback-runtime/snapshot",
@@ -38,10 +37,8 @@ export async function playbackSlotAuthority(
 	]);
 	const pageObject =
 		pages.find((candidate) => candidate.body.number === page) ?? null;
-	const playbackNumber = pageObject?.body.slots[String(slot)];
-	const playback =
-		playbacks.find((candidate) => candidate.body.number === playbackNumber) ??
-		null;
+ const definition = pageObject?.body.assignments[String(slot)];
+ const playback = definition && pageObject ? {...pageObject, body:definition} : null;
 	if (runtime.desk.scope.show_id !== showId)
 		throw new Error(
 			"Playback topology authority crossed an active Show change",
@@ -62,18 +59,15 @@ export async function configurePlaybackSlot<TPlayback extends object>(
 ) {
 	const authority = await playbackSlotAuthority(api, page, slot);
 	const outcome = await applyTopology(api, authority, {
-		type: "configure_slot",
-		page,
-		slot,
+		type: authority.playback ? "update_playback" : "assign_playback",
+		address: {page, position:slot},
 		expectedPageRevision: authority.page?.revision ?? 0,
 		expectedPageObjectId: authority.page?.id ?? null,
-		expectedPlaybackRevision: authority.playback?.revision ?? 0,
-		expectedPlaybackObjectId: authority.playback?.id ?? null,
-		playback: playback as unknown as PlaybackDefinition,
+		definition: playback as unknown as PlaybackDefinition,
 	});
 	return {
 		outcome,
-		playback: presentBody<PlaybackDefinition>(outcome, "playback"),
+		playback: presentBody<PlaybackPage>(outcome, "playback_page").assignments[String(slot)],
 		page: presentBody<PlaybackPage>(outcome, "playback_page"),
 	};
 }
@@ -85,13 +79,10 @@ export async function clearMappedPlaybackSlot(
 ) {
 	const authority = await playbackSlotAuthority(api, page, slot);
 	const outcome = await applyTopology(api, authority, {
-		type: "clear_mapped_playback",
-		page,
-		slot,
+		type: "clear_playback",
+		address: {page, position:slot},
 		expectedPageRevision: authority.page?.revision ?? 0,
 		expectedPageObjectId: authority.page?.id ?? null,
-		expectedPlaybackRevision: authority.playback?.revision ?? 0,
-		expectedPlaybackObjectId: authority.playback?.id ?? null,
 	});
 	return { outcome };
 }
@@ -137,7 +128,7 @@ async function applyTopology(
 
 function presentBody<T>(
 	outcome: PlaybackTopologyOutcome,
-	kind: "playback" | "playback_page",
+	kind: "playback_page",
 ): T {
 	const projection = outcome.objects.find(
 		(candidate) => candidate.kind === kind && candidate.state === "present",

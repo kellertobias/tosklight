@@ -6,8 +6,8 @@ import { semanticAngles, semanticColor } from "../../support/plannedDemoSemantic
 describe("Plan 76 initial Playback topology", () => {
 	it("creates Group Masters, individual ACLs, Hazer, Start, and the Speed D chase", async () => {
 		const writes: Array<{ kind: string; id: string; body: any }> = [];
-		const retainedVirtualPlayback = {
-			"1001": { number: 1001, target: { type: "dynamic", dynamic_id: "pwm" } },
+		const retainedPlayback = {
+			"401": { target: { type: "dynamic", dynamic_id: "pwm" } },
 		};
 		const api = {
 			showObjects: async () => [],
@@ -16,7 +16,7 @@ describe("Plan 76 initial Playback topology", () => {
 					? {
 							id,
 							revision: 1,
-							body: { virtual_playbacks: retainedVirtualPlayback },
+							body: { assignments: retainedPlayback },
 						}
 					: null,
 			seedShowObject: async (
@@ -83,12 +83,12 @@ describe("Plan 76 initial Playback topology", () => {
 		const front = result.cuelists.find((item) => item.name === "Front Light")!;
 		expect(front.cues[0].changes).toHaveLength(12);
 		expect(
-			result.playbacks.find((item) => item.name === "Front Light")?.number,
+			result.playbacks.find((item) => item.name === "Front Light")?.authoredPosition,
 		).toBe(2);
 		expect(
 			result.playbacks
 				.filter((item) => item.target.type === "cue_list")
-				.map((item) => item.number),
+				.map((item) => item.authoredPosition),
 		).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
 		const chase = result.cuelists.find((item) => item.name === "ACL Chase")!;
 		expect(chase).toMatchObject({
@@ -106,14 +106,13 @@ describe("Plan 76 initial Playback topology", () => {
 		}
 		const page = writes.find((write) => write.kind === "playback_page")?.body;
 		expect(page?.name).toBe("Busking");
-		expect(page?.slots).toMatchObject({
-			1: 101,
-			6: 106,
-			11: 2,
-			12: 1,
-			17: 8,
-			18: 4,
-		});
-		expect(page?.virtual_playbacks).toEqual(retainedVirtualPlayback);
+  expect(Object.keys(page.assignments).map(Number).sort((a,b)=>a-b)).toEqual([1,2,3,4,5,6,101,102,103,104,105,106,107,108,401]);
+  expect(page.assignments["1"].target).toMatchObject({type:"group",group_id:"6"});
+  expect(page.assignments["6"].target).toMatchObject({type:"group",group_id:"26"});
+  expect(page.assignments["101"].target).toMatchObject({type:"cue_list",cue_list_id:front.id});
+  expect(page.assignments["107"].target).toMatchObject({type:"cue_list",cue_list_id:chase.id});
+  expect(page.assignments["401"]).toEqual(retainedPlayback["401"]);
+  expect(writes.some(write=>write.kind==="playback")).toBe(false);
+  expect(Object.values(page.assignments).every((definition:any)=>!("number" in definition))).toBe(true);
 	});
 });

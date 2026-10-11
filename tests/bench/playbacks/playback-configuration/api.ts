@@ -1,4 +1,5 @@
 import {
+	activeShowId,
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
@@ -18,7 +19,6 @@ import type {
 } from "./models";
 
 export function definition(
-	number: number,
 	name: string,
 	target: PlaybackTarget,
 	overrides: Partial<PlaybackDefinition> = {},
@@ -61,7 +61,6 @@ export function definition(
 								fader: "master",
 							};
 	return {
-		number,
 		name,
 		target,
 		buttons: defaults.buttons,
@@ -165,52 +164,12 @@ export async function createCueList(
 	return id;
 }
 
-export async function installPlaybacks(
-	api: ApiDriver,
-	definitions: PlaybackDefinition[],
-	slots: Record<number, number>,
-): Promise<void> {
-	for (const playback of definitions) {
-		const current = (await objects(api, "playback")).find(
-			(item) => item.id === String(playback.number),
-		);
-		await putObject(
-			api,
-			"playback",
-			String(playback.number),
-			playback,
-			current?.revision ?? 0,
-		);
-	}
-	await writePage(
-		api,
-		1,
-		Object.fromEntries(
-			Object.entries(slots).map(([slot, number]) => [String(slot), number]),
-		),
-	);
+export async function installPlaybacks(api: ApiDriver, definitions: PlaybackDefinition[]): Promise<void> {
+ await writePage(api, 1, Object.fromEntries(definitions.map((definition,index) => [String(index+1),definition])));
 }
-
-export async function writePage(
-	api: ApiDriver,
-	number: number,
-	slots: Record<string, number>,
-): Promise<void> {
-	const current = (await objects<any>(api, "playback_page")).find(
-		(item) => item.id === String(number),
-	);
-	await putObject(
-		api,
-		"playback_page",
-		String(number),
-		{
-			number,
-			name: number === 1 ? "Main" : `Page ${number}`,
-			slots,
-			virtual_playbacks: current?.body.virtual_playbacks ?? {},
-		},
-		current?.revision ?? 0,
-	);
+export async function writePage(api: ApiDriver, number: number, assignments: Record<string, PlaybackDefinition>): Promise<void> {
+ const current = (await objects<any>(api, "playback_page")).find(item => item.id === String(number));
+ await putObject(api, "playback_page", String(number), {number, name:current?.body.name ?? (number===1 ? "Main" : `Page ${number}`),assignments}, current?.revision ?? 0);
 }
 
 export async function pageObject(api: ApiDriver, page: number) {
@@ -219,9 +178,9 @@ export async function pageObject(api: ApiDriver, page: number) {
 
 export async function playbackAt(api: ApiDriver, page: number, slot: number) {
 	const pageState = await pageObject(api, page);
-	const number = pageState.body.slots[String(slot)];
-	expect(number).toBeDefined();
-	return object<PlaybackDefinition>(api, "playback", String(number));
+ const definition = pageState.body.assignments[String(slot)];
+ expect(definition).toBeDefined();
+ return {...pageState, body:definition as PlaybackDefinition};
 }
 
 export async function saveSlot(
@@ -263,7 +222,14 @@ export async function poolAction<T = any>(
 	action: string,
 	body: Record<string, unknown> = {},
 ): Promise<T> {
-	return api.playbackNumberAction<T>(number, action, body);
+	if (!api.session) throw new Error("Playback action requires an authenticated desk");
+ const pressed = typeof body.pressed === "boolean" ? body.pressed : true;
+ const operand = action === "button" ? {type:"configured_button",number:body.button,pressed}
+ : action === "master" ? {type:"master",value:body.value}
+ : action === "release" ? {type:"release"}
+ : action === "go-to" || action === "load" ? {type:action==="go-to"?"go_to":"load",cue_number:String(body.cue_number)}
+ : {type:({"go-minus":"back","fast-forward":"fast_forward","fast-rewind":"fast_rewind"} as Record<string,string>)[action] ?? action,pressed};
+ return api.request<T>("POST", "/api/v2/playback-actions", {address:{kind:"playback",page:1,position:number},action:operand,control_source:{surface_id:"main",control_id:number*8+Number(body.button ?? 6)}}, true, undefined, {showId:await activeShowId(api),deskId:api.session.desk.id});
 }
 
 export async function pressButton(
@@ -285,7 +251,7 @@ export async function playbackSnapshot(api: ApiDriver) {
 
 export async function activePlayback(api: ApiDriver, number: number) {
 	const active = (await playbackSnapshot(api)).active.find(
-		(item: any) => item.playback_number === number,
+		(item: any) => item.playback_address?.page === 1 && item.playback_address.position === number,
 	);
 	expect(active).toBeDefined();
 	return active;
@@ -318,15 +284,11 @@ export async function audit(api: ApiDriver): Promise<any[]> {
 }
 
 export async function inertSnapshot(api: ApiDriver, number: number) {
-	const playback = await object<PlaybackDefinition>(
-		api,
-		"playback",
-		String(number),
-	);
+	const playback = await playbackAt(api, 1, number);
 	const state = await playbackSnapshot(api);
 	return {
 		object: playback,
-		pool: state.pool,
+
 		pages: state.pages,
 		active: state.active,
 		selected_playback: state.selected_playback,

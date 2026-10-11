@@ -51,18 +51,18 @@ export const PACKAGED_STAGE_PROFILES = Object.freeze({
 });
 
 export const CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS = Object.freeze([
-	{ name: "ACL Chase", kind: "physical", playbackNumber: 8 },
-	{ name: "Wash Show Waterfall", kind: "virtual", playbackNumber: 1024 },
-	{ name: "Beam Show Circle", kind: "virtual", playbackNumber: 1019 },
-	{ name: "Beam Show PWM", kind: "virtual", playbackNumber: 1001 },
-	{ name: "LED Show Random", kind: "virtual", playbackNumber: 1014 },
-	{ name: "LED Show Random Strobe", kind: "virtual", playbackNumber: 1030 },
-	{ name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
-	{ name: "Beam Auxiliary Show Circle", kind: "virtual", playbackNumber: 1021 },
-	{ name: "Beam Auxiliary Show PWM", kind: "virtual", playbackNumber: 1004 },
-	{ name: "Wash Auxiliary Show Waterfall", kind: "virtual", playbackNumber: 1026 },
-	{ name: "Wash Auxiliary Show Random", kind: "virtual", playbackNumber: 1011 },
-	{ name: "LED Auxiliary Show Sinus", kind: "virtual", playbackNumber: 1018 },
+	{ name: "ACL Chase", kind: "physical", surface_id: "main", page: 1, position: 107 },
+	{ name: "Wash Show Waterfall", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 424 },
+	{ name: "Beam Show Circle", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 419 },
+	{ name: "Beam Show PWM", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 401 },
+	{ name: "LED Show Random", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 414 },
+	{ name: "LED Show Random Strobe", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 430 },
+	{ name: "Sunstrip Rain", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 429 },
+	{ name: "Beam Auxiliary Show Circle", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 421 },
+	{ name: "Beam Auxiliary Show PWM", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 404 },
+	{ name: "Wash Auxiliary Show Waterfall", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 426 },
+	{ name: "Wash Auxiliary Show Random", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 411 },
+	{ name: "LED Auxiliary Show Sinus", kind: "virtual", surface_id: "pane:busking-playbacks", page: 1, position: 418 },
 ]);
 
 export function packagedStageProfile(profile) {

@@ -27,7 +27,7 @@ import {
 } from "./ui";
 
 export interface PlaybackConfigurationExpectation {
-	number: number;
+	address: {page: number; position: number};
 	targetType: string;
 	buttons: string[];
 	buttonCount: number;
@@ -95,7 +95,7 @@ export class BrowserPlaybackConfiguration {
 		slot: number,
 		expected: PlaybackConfigurationExpectation,
 	): Promise<void> {
-		const before = await inertSnapshot(this.api, expected.number);
+		const before = await inertSnapshot(this.api, expected.address.position);
 		await this.open(slot);
 		const modal = await expectConfigurationModal(this.page, 1, slot);
 		for (const section of ["Function", "Behavior", "Layout"])
@@ -112,7 +112,7 @@ export class BrowserPlaybackConfiguration {
 			...expected,
 		});
 		await this.close(modal);
-		expect(await inertSnapshot(this.api, expected.number)).toEqual(before);
+		expect(await inertSnapshot(this.api, expected.address.position)).toEqual(before);
 	}
 
 	async assignCueList(
@@ -223,8 +223,9 @@ export class BrowserPlaybackConfiguration {
 		},
 	): Promise<void> {
 		const playback = await playbackAt(this.api, 1, slot);
+        if (expected.address) expect(expected.address).toEqual({page:1,position:slot});
 		expect(playback.body).toMatchObject({
-			...(expected.number == null ? {} : { number: expected.number }),
+
 			...(expected.targetType == null
 				? {}
 				: expected.targetType === "cue_list" && expected.cueList
@@ -248,7 +249,7 @@ export class BrowserPlaybackConfiguration {
 	async expectUnassigned(slot: number): Promise<void> {
 		await expect
 			.poll(
-				async () => (await pageObject(this.api, 1)).body.slots[String(slot)],
+				async () => (await pageObject(this.api, 1)).body.assignments[String(slot)],
 			)
 			.toBeUndefined();
 	}

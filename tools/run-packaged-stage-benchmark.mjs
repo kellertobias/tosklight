@@ -603,10 +603,9 @@ async function exerciseSupportedScaleOscPlayback(
 			"POST",
 			"/api/v2/playback-actions",
 			{
-				request_id: crypto.randomUUID(),
-				address: { kind: "playback", playback_number: 1 },
+				address: { kind: "playback", page: 1, position: 1 },
 				action,
-				surface: "physical",
+				control_source: { surface_id: "main", control_id: 1 },
 			},
 			{ session, showId, deskId: session.desk.id },
 		);
@@ -622,13 +621,12 @@ async function exerciseSupportedScaleOscPlayback(
 		const baseline = hardware.messages.length;
 		const networkBaseline = networkCapture.snapshot();
 		const sentAt = Date.now();
-		await hardware.send(`/light/playback/1/${action}`, [value, requestId]);
+		await hardware.send(`/light/${hardware.deskAlias}/playback/1/1/${action}`, [value, 1]);
 		const [feedback, network] = await Promise.all([
 			waitForOscMessage(
 				hardware.messages,
 				(message) =>
-					message.address === `/light/${hardware.deskAlias}/feedback/action` &&
-					message.arguments[0] === requestId,
+					message.address === `/light/${hardware.deskAlias}/feedback/action` && typeof message.arguments[0] === "string" && message.arguments[1] === true,
 				2_000,
 				baseline,
 			).catch((error) => {
@@ -638,7 +636,10 @@ async function exerciseSupportedScaleOscPlayback(
 			}),
 			waitForNetworkDmxChange(networkCapture, networkBaseline, sentAt, 2_000),
 		]);
-		measurements.push({ action, value, requestId, sentAt, feedback, network });
+		// This dedicated subscribed socket executes one action at a time. The server generates
+        // correlation identity; numeric argument 2 remains the stable held control source.
+        const serverRequestId = feedback.arguments[0];
+        measurements.push({ action, value, requestId: serverRequestId, sentAt, feedback, network });
 		await new Promise((resolve) =>
 			setTimeout(resolve, action === "go" ? 1_600 : 75),
 		);
@@ -651,10 +652,9 @@ async function exerciseSupportedScaleOscPlayback(
 			"POST",
 			"/api/v2/playback-actions",
 			{
-				request_id: crypto.randomUUID(),
-				address: { kind: "playback", playback_number: 1 },
+				address: { kind: "playback", page: 1, position: 1 },
 				action,
-				surface: "physical",
+				control_source: { surface_id: "main", control_id: 1 },
 			},
 			{ session, showId, deskId: session.desk.id },
 		);
@@ -1269,59 +1269,22 @@ async function openCanonicalDemoShow(session) {
 
 async function startCanonicalDemoBenchmarkLook(session, showId) {
 	const activate = async (assignment) => {
-		const address =
-			assignment.kind === "physical"
-				? {
-						kind: "playback",
-						playback_number: assignment.playbackNumber,
-					}
-				: {
-						kind: "virtual",
-						page: 1,
-						playback_number: assignment.playbackNumber,
-					};
-		const pressedAction =
-			assignment.kind === "physical"
-				? { type: "go_to", cue_number: "1" }
-				: { type: "on", pressed: true };
+		const address = { kind: "playback", page: assignment.page, position: assignment.position };
+		const pressedAction = { type: "on", pressed: true };
 		await requestJson(
 			"POST",
 			"/api/v2/playback-actions",
 			{
-				request_id: crypto.randomUUID(),
 				address,
 				action: pressedAction,
-				surface: assignment.kind === "physical" ? "physical" : "virtual",
-			},
-			{ session, showId, deskId: session.desk.id },
-		);
-		if (assignment.kind === "physical") return;
-		await requestJson(
-			"POST",
-			"/api/v2/playback-actions",
-			{
-				request_id: crypto.randomUUID(),
-				address,
-				action: { type: "on", pressed: false },
-				surface: assignment.kind === "physical" ? "physical" : "virtual",
+				control_source: { surface_id: assignment.surface_id, control_id: assignment.position },
 			},
 			{ session, showId, deskId: session.desk.id },
 		);
 	};
 	for (const assignment of CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS)
 		await activate(assignment);
-	const identities = CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) =>
-		assignment.kind === "physical"
-			? {
-					kind: "playback",
-					playback_number: assignment.playbackNumber,
-				}
-			: {
-					kind: "virtual",
-					page: 1,
-					playback_number: assignment.playbackNumber,
-				},
-	);
+	const identities = CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS.map(({page, position}) => ({kind: "playback", page, position}));
 	const activationDeadline = Date.now() + 5_000;
 	let snapshot;
 	let active;
@@ -1353,10 +1316,10 @@ async function startCanonicalDemoBenchmarkLook(session, showId) {
 							: projection.target === "dynamic" &&
 								projection.runtime?.state === "active"),
 				)
-				.map((projection) => projection.requested.playback_number),
+				.map((projection) => `${projection.identity.page}.${projection.identity.position}`),
 		);
 		for (const assignment of CANONICAL_DEMO_BENCHMARK_ASSIGNMENTS)
-			if (inactiveNumbers.has(assignment.playbackNumber))
+			if (inactiveNumbers.has(`${assignment.page}.${assignment.position}`))
 				await activate(assignment);
 		await new Promise((resolve) => setTimeout(resolve, 25));
 	} while (Date.now() < activationDeadline);
@@ -1486,61 +1449,22 @@ async function installSupportedScalePlaybackWorkload(
 		1_500,
 		first.show_revision,
 	);
-	const page = await requestJson(
-		"GET",
-		"/api/v2/objects/playback_page/1",
-		undefined,
-		{ session, showId },
-	);
-	const playback = second.projections?.playback;
-	if (!playback || playback.body?.number !== 1)
-		throw new Error("Supported-scale Cue recording returned no Playback 1");
-	await requestJson(
-		"POST",
-		"/api/v2/playback-topology/actions",
-		{
-			request_id: crypto.randomUUID(),
-			action: {
-				type: "map_existing_playback",
-				page: 1,
-				slot: 1,
-				playback_number: 1,
-				expected_page_revision: page.object?.revision ?? 0,
-				expected_page_object_id: page.object?.id ?? null,
-				expected_playback_revision: playback.revision,
-				expected_playback_object_id: playback.id,
-			},
-		},
-		{
-			session,
-			showId,
-			deskId: session.desk.id,
-			revision: second.show_revision,
-		},
-	);
-	await requestJson(
-		"POST",
-		`/api/v2/control-desks/${encodeURIComponent(session.desk.id)}/actions`,
-		{
-			request_id: crypto.randomUUID(),
-			action: { type: "set_page", page: 1, existing_only: true },
-		},
-		{ session, showId, deskId: session.desk.id },
-	);
+	const page = second.projections?.page;
+	if (!page?.body?.assignments?.["1"])
+		throw new Error("Supported-scale Cue recording returned no Playback 1.1 assignment");
 	await clearProgrammerValues(session, showId);
 	await requestJson(
 		"POST",
 		"/api/v2/playback-actions",
 		{
-			request_id: crypto.randomUUID(),
-			address: { kind: "playback", playback_number: 1 },
+			address: { kind: "playback", page: 1, position: 1 },
 			action: { type: "go_to", cue_number: "1" },
-			surface: "physical",
+			control_source: { surface_id: "main", control_id: 1 },
 		},
 		{ session, showId, deskId: session.desk.id },
 	);
 	return {
-		playbackNumber: 1,
+		address: { page: 1, position: 1 },
 		page: 1,
 		slot: 1,
 		fixtureId,
@@ -1573,7 +1497,7 @@ async function recordSupportedScaleCue(
 		"/api/v2/cues/record",
 		{
 			request_id: crypto.randomUUID(),
-			target: { kind: "pool", playback_number: 1 },
+			target: { kind: "playback", page: 1, position: 1 },
 			operation: "overwrite",
 			cue_number: cueNumber,
 			timing: { fade_millis: fadeMillis, delay_millis: 0 },

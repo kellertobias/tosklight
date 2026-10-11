@@ -26,15 +26,14 @@ export class PlaybackConfigurationSetup {
 		await installPlaybacks(
 			this.api,
 			[
-				definition(40, "Configured Sequence", {
+				definition("Configured Sequence", {
 					type: "cue_list",
 					cue_list_id: cueListId,
 				}),
 			],
-			{ 1: 40 },
 		);
-		await poolAction(this.api, 40, "go");
-		await poolAction(this.api, 40, "master", { value: 0.6 });
+		await poolAction(this.api, 1, "go");
+		await poolAction(this.api, 1, "master", { value: 0.6 });
 	}
 
 	async prepareAssignment(): Promise<void> {
@@ -51,12 +50,11 @@ export class PlaybackConfigurationSetup {
 		await installPlaybacks(
 			this.api,
 			[
-				definition(43, "Action Matrix", {
+				definition("Action Matrix", {
 					type: "cue_list",
 					cue_list_id: cueListId,
 				}),
 			],
-			{ 1: 43 },
 		);
 	}
 
@@ -71,16 +69,13 @@ export class PlaybackConfigurationSetup {
 		await installPlaybacks(
 			this.api,
 			[
-				definition(
-					47,
-					"Manual Crossfade",
+				definition("Manual Crossfade",
 					{ type: "cue_list", cue_list_id: cueListId },
 					{ fader: "x_fade" },
 				),
 			],
-			{ 1: 47 },
 		);
-		await poolAction(this.api, 47, "on");
+		await poolAction(this.api, 1, "on");
 	}
 
 	async prepareTempAndSwap(): Promise<void> {
@@ -115,32 +110,25 @@ export class PlaybackConfigurationSetup {
 		await installPlaybacks(
 			this.api,
 			[
-				definition(54, "Underlying", {
+				definition("Underlying", {
 					type: "cue_list",
 					cue_list_id: underlying,
 				}),
-				definition(
-					55,
-					"Temporary",
+				definition("Temporary",
 					{ type: "cue_list", cue_list_id: temporary },
 					{ buttons: ["swap", "temp", "flash"] },
 				),
-				definition(
-					56,
-					"Unprotected",
+				definition("Unprotected",
 					{ type: "cue_list", cue_list_id: unprotected },
 					{ auto_off: false },
 				),
-				definition(
-					57,
-					"Protected",
+				definition("Protected",
 					{ type: "cue_list", cue_list_id: protectedId },
 					{ auto_off: false, protect_from_swap: true },
 				),
 			],
-			{ 1: 54, 2: 55, 3: 56, 4: 57 },
 		);
-		for (const number of [54, 56, 57]) await poolAction(this.api, number, "on");
+		for (const number of [1, 3, 4]) await poolAction(this.api, number, "on");
 	}
 
 	async prepareMasters(): Promise<void> {
@@ -149,18 +137,15 @@ export class PlaybackConfigurationSetup {
 		await installPlaybacks(
 			this.api,
 			[
-				definition(
-					61,
-					"Speed A",
+				definition("Speed A",
 					{ type: "speed_group", group: "A" },
 					{ color: "#8b5cf6" },
 				),
-				definition(62, "Group 1", { type: "group", group_id: "1" }),
-				definition(63, "Grand", { type: "grand_master" }),
-				definition(64, "Programmer Fade", { type: "programmer_fade" }),
-				definition(65, "Cue Fade", { type: "cue_fade" }),
+				definition("Group 1", { type: "group", group_id: "1" }),
+				definition("Grand", { type: "grand_master" }),
+				definition("Programmer Fade", { type: "programmer_fade" }),
+				definition("Cue Fade", { type: "cue_fade" }),
 			],
-			{ 1: 61, 2: 62, 3: 63, 4: 64, 5: 65 },
 		);
 	}
 

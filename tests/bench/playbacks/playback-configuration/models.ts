@@ -7,7 +7,6 @@ export type PlaybackTarget =
 	| { type: "grand_master" };
 
 export interface PlaybackDefinition {
-	number: number;
 	name: string;
 	target: PlaybackTarget;
 	buttons: [string, string, string];
@@ -33,7 +32,7 @@ export interface PreparedShow {
 export interface PlaybackConfigurationObservation {
 	page: number;
 	slot: number;
-	number: number;
+	address: {page: number; position: number};
 	targetType: PlaybackTarget["type"];
 	targetMatchesExpected: boolean;
 	buttons: string[];
