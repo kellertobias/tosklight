@@ -161,8 +161,9 @@ export class BrowserPages {
 	async create(number: number) {
 		number = validPage(number);
 		await this.topology({
-			type: "create_page",
-			page: number,
+			type: "create_playback_page",
+			number,
+			name: `Page ${number}`,
 			expectedPageRevision: 0,
 			expectedPageObjectId: null,
 		});
@@ -172,8 +173,8 @@ export class BrowserPages {
 	async rename(number: number, name: string) {
 		const page = await this.requiredObject(number);
 		await this.topology({
-			type: "rename_page",
-			page: number,
+			type: "rename_playback_page",
+			number,
 			name,
 			expectedPageRevision: page.revision,
 			expectedPageObjectId: page.id,

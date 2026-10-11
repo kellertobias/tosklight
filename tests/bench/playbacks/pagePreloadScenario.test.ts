@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HttpPlaybackTopologyTransport } from "../../../apps/light-desktop/src/api/PlaybackTopologyTransport";
 import type { ApiDriver } from "../core/api";
 import {
 	BrowserPages,
@@ -6,7 +7,7 @@ import {
 	pendingPlaybackTuples,
 } from "./pagePreloadScenario";
 const SHOW = "11111111-1111-4111-8111-111111111111";
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("canonical page and Preload scenarios", () => {
 	it("selects the authoritative surface page live without an intent ID", async () => {
 		let page = 2;
@@ -150,4 +151,21 @@ describe("canonical page and Preload scenarios", () => {
 		await expect(pages.via.api.select(page)).rejects.toThrow("1–99");
 		expect(request).not.toHaveBeenCalled();
 	});
+});
+
+it("creates and renames sparse Pages using canonical typed topology operands", async () => {
+	const apply = vi.spyOn(HttpPlaybackTopologyTransport.prototype, "apply").mockResolvedValue({} as never);
+	const api = {
+		baseUrl: "http://test",
+		session: { token: "test", desk: { id: "desk" } },
+		request: vi.fn(async () => ({ desk: { scope: { show_revision: 5 } } })),
+		showObject: vi.fn(async () => ({ id: "2", revision: 3, body: { number: 2, name: "Second", assignments: {} } })),
+	} as unknown as ApiDriver;
+	const pages = new BrowserPages(api, {} as never, {} as never, () => SHOW);
+	await pages.create(2);
+	await pages.rename(2, "Second");
+	expect(apply.mock.calls.map((call) => call[2].action)).toEqual([
+		{ type: "create_playback_page", number: 2, name: "Page 2", expectedPageRevision: 0, expectedPageObjectId: null },
+		{ type: "rename_playback_page", number: 2, name: "Second", expectedPageRevision: 3, expectedPageObjectId: "2" },
+	]);
 });
