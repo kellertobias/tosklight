@@ -118,6 +118,7 @@ export interface DesktopBridge {
 	exitApplication(): Promise<void>;
 	cancelQuit(): Promise<void>;
 	onQuitRequested(handler: () => void): Promise<DesktopUnsubscribe>;
+	onQuitCancelled(handler: () => void): Promise<DesktopUnsubscribe>;
 	onApplicationShuttingDown(handler: () => void): Promise<DesktopUnsubscribe>;
 	listDisplays(): Promise<DesktopDisplay[]>;
 	openConsoleScreen(screen: ConsoleScreenWindow): Promise<void>;

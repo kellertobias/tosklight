@@ -33,8 +33,9 @@ pub(crate) fn exit_desktop_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-pub(crate) fn cancel_quit(state: tauri::State<'_, QuitState>) {
+pub(crate) fn cancel_quit(app: tauri::AppHandle, state: tauri::State<'_, QuitState>) {
     state.cancel();
+    let _ = app.emit("quit-cancelled", ());
 }
 
 #[tauri::command]

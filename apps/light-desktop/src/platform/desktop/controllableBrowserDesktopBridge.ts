@@ -22,6 +22,7 @@ export type ControllableDesktopAction =
 
 export type ControllableDesktopEvent =
 	| "quit_requested"
+	| "quit_cancelled"
 	| "application_shutting_down"
 	| "current_window_moved"
 	| "current_window_resized"
@@ -68,6 +69,7 @@ export function controllableBrowserDesktopBridge(
 		exitApplication: () => perform({ type: "exit_application" }),
 		cancelQuit: () => perform({ type: "cancel_quit" }),
 		onQuitRequested: (handler) => subscribe("quit_requested", handler),
+	onQuitCancelled: (handler) => subscribe("quit_cancelled", handler),
 		onApplicationShuttingDown: (handler) =>
 			subscribe("application_shutting_down", handler),
 		listDisplays: async () => decodeDisplays(await port.listDisplays()),

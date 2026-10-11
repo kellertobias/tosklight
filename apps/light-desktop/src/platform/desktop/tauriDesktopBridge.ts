@@ -126,6 +126,7 @@ export const tauriDesktopBridge: DesktopBridge = {
 	exitApplication: () => invoke("exit_desktop_app"),
 	cancelQuit: () => invoke("cancel_quit"),
 	onQuitRequested: (handler) => listen("quit-requested", handler),
+	onQuitCancelled: (handler) => listen("quit-cancelled", handler),
 	onApplicationShuttingDown: (handler) => listen("app-shutting-down", handler),
 	listDisplays: async () => {
 		const api = await coreApi();

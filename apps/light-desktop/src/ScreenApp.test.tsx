@@ -59,6 +59,7 @@ vi.mock("./platform/desktop", () => ({
 const desktop = {
 	available: true,
 	cancelQuit: mocks.cancelQuit,
+	onQuitCancelled: async () => () => undefined,
 	onQuitRequested: async (handler: () => void) => {
 		mocks.quitRequested = handler;
 		return mocks.quitUnsubscribe;

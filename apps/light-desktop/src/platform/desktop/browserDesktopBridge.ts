@@ -10,6 +10,7 @@ export const browserDesktopBridge: DesktopBridge = {
 	exitApplication: noAction,
 	cancelQuit: noAction,
 	onQuitRequested: noSubscription,
+	onQuitCancelled: noSubscription,
 	onApplicationShuttingDown: noSubscription,
 	listDisplays: async () => [],
 	openConsoleScreen: noAction,
