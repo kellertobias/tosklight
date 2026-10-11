@@ -3,7 +3,7 @@
 import { CueRecordMode } from "./bench/playbacks/cuePlaybackScenario";
 import { StoreMode as GroupStoreMode } from "./bench/groups-presets/groupScenario";
 import { scenario } from "./bench/core/scenario";
-import { fixtureRange } from "./bench/command-selection/selectionContract";
+import { fixtureRange } from "./bench/output/fixtureDmxContract";
 import { Show } from "./bench/show/showScenario";
 
 scenario(

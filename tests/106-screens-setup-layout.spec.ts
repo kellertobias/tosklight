@@ -44,9 +44,14 @@ async function lengthenInformation(page: Page) {
 
 /** Every cell of a row starts on one line and no two cells share any area. */
 async function expectTopAlignedWithoutOverlap(cells: Locator) {
-	const boxes: Box[] = [];
-	for (const cell of await cells.all()) boxes.push(await box(cell));
-	expect(boxes.length).toBeGreaterThan(1);
+	const boxes: Box[] = await cells.evaluateAll((elements) =>
+		elements.map((element) => {
+			const { x, y, width, height } = element.getBoundingClientRect();
+			return { x, y, width, height };
+		}),
+	);
+	const diagnostic = `Measured row cell bounds: ${JSON.stringify(boxes)}`;
+	expect(boxes.length, diagnostic).toBeGreaterThan(1);
 	const rows = new Map<number, Box[]>();
 	for (const cell of boxes) {
 		const key = [...rows.keys()].find((top) => Math.abs(top - cell.y) <= 1);
@@ -55,10 +60,10 @@ async function expectTopAlignedWithoutOverlap(cells: Locator) {
 	// Wrapped grid rows are fine; within each row every cell starts at the same top edge.
 	for (const [top, row] of rows)
 		for (const cell of row)
-			expect(Math.abs(cell.y - top)).toBeLessThanOrEqual(1);
+			expect(Math.abs(cell.y - top), diagnostic).toBeLessThanOrEqual(1);
 	for (const [index, cell] of boxes.entries())
 		for (const other of boxes.slice(index + 1))
-			expect(overlaps(cell, other)).toBe(false);
+			expect(overlaps(cell, other), diagnostic).toBe(false);
 }
 
 async function deleteScreens(api: ApiDriver, before: string[]) {
@@ -90,36 +95,46 @@ test("TL-471 @ui › the default screen row stays top-aligned with long informat
 
 	for (const width of [1600, 1180, 900, 760]) {
 		await page.setViewportSize({ width, height: 900 });
-		const cells = row.locator(":scope > *");
-		await expectTopAlignedWithoutOverlap(cells);
-		// The information stays inside its own field and the row never scrolls sideways.
-		const information = row.locator(".ui-form-field small").first();
-		const field = row.locator(":scope > .ui-form-field").nth(1);
-		const informationBox = await box(information);
-		const fieldBox = await box(field);
-		expect(informationBox.x + informationBox.width).toBeLessThanOrEqual(
-			fieldBox.x + fieldBox.width + 1,
-		);
-		expect(
-			await row.evaluate(
-				(element) => element.scrollWidth - element.clientWidth,
-			),
-		).toBeLessThanOrEqual(0);
-		// The actions start level with the field controls beside them, not with their labels.
-		const deskName = await box(row.getByRole("textbox", { name: "Desk name" }));
-		const configure = await box(
-			row.getByRole("button", { name: "Configure Playbacks", exact: true }),
-		);
-		if (
-			Math.abs(configure.x - deskName.x) > 1 &&
-			configure.y < deskName.y + deskName.height
-		)
-			expect(Math.abs(configure.y - deskName.y)).toBeLessThanOrEqual(8);
-		for (const name of ["Configure Playbacks", "Known windows"]) {
-			const action = row.getByRole("button", { name, exact: true });
-			await expect(action).toBeVisible();
-			await expect(action).toBeInViewport();
-		}
+		await expect(async () => {
+			const cells = row.locator(":scope > *");
+			await expectTopAlignedWithoutOverlap(cells);
+			// The information stays inside its own field and the row never scrolls sideways.
+			const information = row.locator(".ui-form-field small").first();
+			const field = row.locator(":scope > .ui-form-field").nth(1);
+			const informationBox = await box(information);
+			const fieldBox = await box(field);
+			const diagnostic = await row.evaluate((element) => JSON.stringify({
+				row: { width: element.clientWidth, scrollWidth: element.scrollWidth },
+				cells: [...element.children].map((cell) => {
+					const { x, y, width, height } = cell.getBoundingClientRect();
+					return { x, y, width, height };
+				}),
+			}));
+			expect(informationBox.x + informationBox.width, diagnostic).toBeLessThanOrEqual(
+				fieldBox.x + fieldBox.width + 1,
+			);
+			expect(
+				await row.evaluate(
+					(element) => element.scrollWidth - element.clientWidth,
+				),
+				diagnostic,
+			).toBeLessThanOrEqual(0);
+			// The actions start level with the field controls beside them, not with their labels.
+			const deskName = await box(row.getByRole("textbox", { name: "Desk name" }));
+			const configure = await box(
+				row.getByRole("button", { name: "Configure Playbacks", exact: true }),
+			);
+			if (
+				Math.abs(configure.x - deskName.x) > 1 &&
+				configure.y < deskName.y + deskName.height
+			)
+				expect(Math.abs(configure.y - deskName.y), diagnostic).toBeLessThanOrEqual(8);
+			for (const name of ["Configure Playbacks", "Known windows"]) {
+				const action = row.getByRole("button", { name, exact: true });
+				await expect(action, diagnostic).toBeVisible();
+				await expect(action, diagnostic).toBeInViewport();
+			}
+		}).toPass({ timeout: 5_000 });
 	}
 });
 

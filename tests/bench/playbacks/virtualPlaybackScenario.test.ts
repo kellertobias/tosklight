@@ -26,7 +26,7 @@ describe("Playback pane canonical addresses", () => {
 describe("Solo management renderer contract",()=>{
  it("deletes the named region without obsolete per-region name inputs",async()=>{
   class Locator { readonly _apiName="Locator"; constructor(readonly name:string){} async _expect(){return {matches:true};} }
-  const permitted=new Set(["Settings","Solo Regions","Delete Touring pair","Close settings"]);
+  const permitted=new Set(["Settings","Manage Solo Regions","Touring pair","Delete","Close settings"]);
   const getByRole=vi.fn((_role:string,options:{name:string})=>{
    if(!permitted.has(options.name)) throw new Error(`No rendered control ${options.name}`);
    return new Locator(options.name);
@@ -36,7 +36,10 @@ describe("Solo management renderer contract",()=>{
   const api={request:vi.fn().mockResolvedValue({regions:[]}),session:{desk:{id:"desk"}}} as unknown as ApiDriver;
   const helper=new BrowserVirtualPlaybacks(api,{getByRole:()=>settings} as never,{click} as never,{locatorFor:()=>({getByRole})} as never,{} as never,()=>"show");
   await helper.deleteSoloRegion({} as never,"Touring pair");
-  expect(getByRole).toHaveBeenCalledWith("button",{name:"Delete Touring pair",exact:true});
-  expect(click).toHaveBeenCalledTimes(4);
+  expect(getByRole).toHaveBeenCalledWith("tab",{name:"Manage Solo Regions",exact:true});
+  expect(getByRole).toHaveBeenCalledWith("button",{name:"Touring pair",exact:true});
+  expect(getByRole).toHaveBeenCalledWith("button",{name:"Delete",exact:true});
+  expect(getByRole).not.toHaveBeenCalledWith("button",{name:"Delete Touring pair",exact:true});
+  expect(click).toHaveBeenCalledTimes(5);
  });
 });

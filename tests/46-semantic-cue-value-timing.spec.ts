@@ -1,6 +1,6 @@
 // @bench-semantic-world
 
-import { fixtureRange } from "./bench/command-selection/selectionContract";
+import { fixtureRange } from "./bench/output/fixtureDmxContract";
 import { scenario } from "./bench/core/scenario";
 import { Show } from "./bench/show/showScenario";
 

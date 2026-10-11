@@ -1,5 +1,11 @@
 import fs from "node:fs/promises";
 import { expect, type Page } from "@playwright/test";
+import type {
+	AttributeConfigurationSnapshot,
+	AttributeConfigurationUpdateRequest,
+	AttributeConfigurationUpdateOutcome,
+	ColorProgrammingModel,
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { LightBench, TestShow } from "../core/lightBench";
@@ -132,6 +138,34 @@ export class BrowserShows {
 		recoveryRequired: () => this.recoveryDriver.expectRecoveryRequired(),
 		recovered: () => this.recoveryDriver.expectRecovered(),
 	};
+
+	/** Choose the fixture-independent color model before authoring an isolated show. */
+	async colorModel(model: ColorProgrammingModel): Promise<void> {
+		const showId = this.requireCurrent().workingId;
+		const snapshot = await this.api.request<AttributeConfigurationSnapshot>(
+			"GET",
+			"/api/v2/attribute-configuration",
+			undefined,
+			true,
+			undefined,
+			{ showId },
+		);
+		const request: AttributeConfigurationUpdateRequest = {
+			request_id: crypto.randomUUID(),
+			expected_show_revision: snapshot.show_revision,
+			expected_object_revision: snapshot.object_revision,
+			patch: { color_model: model },
+		};
+		const outcome = await this.api.request<AttributeConfigurationUpdateOutcome>(
+			"POST",
+			"/api/v2/attribute-configuration/update",
+			request,
+			true,
+			undefined,
+			{ showId },
+		);
+		expect(outcome.snapshot.configuration.color_model).toBe(model);
+	}
 
 	create(name: string): Promise<ShowHandle> {
 		return this.via.ui.create(name);

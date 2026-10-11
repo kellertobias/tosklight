@@ -4,10 +4,10 @@ import {
 	StoreMode,
 } from "./bench/groups-presets/groupScenario";
 import { PaneType } from "./bench/window-system/paneTypes";
+import { fixtureRange } from "./bench/output/fixtureDmxContract";
 import { scenario } from "./bench/core/scenario";
 import {
 	fixture,
-	fixtureRange,
 	group,
 	groupRange,
 } from "./bench/command-selection/selectionContract";

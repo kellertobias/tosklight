@@ -1,5 +1,8 @@
 // @bench-semantic-world
 
+import { expect } from "@playwright/test";
+
+import { fixture } from "./bench/output/fixtureDmxContract";
 import { scenario } from "./bench/core/scenario";
 import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { PresetFamily } from "./bench/groups-presets/presetScenario";
@@ -23,6 +26,7 @@ scenario(
 	"a Cue on a Group Color Preset follows a replaced fixture from a color wheel to RGBWA mixing",
 	async (t) => {
 		await t.show.use(Show.Empty);
+		await t.show.colorModel("intent");
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.timing.programmerFade.via.api.set("0s");
@@ -38,19 +42,31 @@ scenario(
 		await t.group.via.api.store(1, { mode: StoreMode.Overwrite });
 		await t.group.expect(1).fixtures(1);
 
-		// Color Preset 1 is red on the wheel.
-		await t.group.via.api.select(1);
-		await t.encoder.discrete.set("color.wheel.1", "deep_red");
+		// A whole-color Preset keeps its live Color owner across fixture types.
+		await t.command.via.api.execute("GROUP 1 AT COLOR 100 DIV 0 DIV 0 DIV 0");
 		await t.preset.via.api.store(PresetFamily.Color, 1, { mode: "overwrite" });
 		await t.encoder.clear();
 		await t.selection.clear();
 
 		// Cue 1 holds Group 1 at full on Color Preset 1, recorded onto a Playback.
-		await t.group.via.api.select(1);
-		await t.encoder.intensity.dimmer.via.api.set(100);
-		await t.preset.via.api.recall(PresetFamily.Color, 1);
+		await t.command.via.ui.execute("GROUP 1 AT 100");
+		await t.command.via.ui.execute("GROUP 1 AT 2.1");
 		const playback = await t.record.via.ui.playback(1);
 		await t.cue.expect(playback, 1).present();
+		await t.cue.expect(playback, 1).groupValue(1, "intensity", 1);
+		const recordedCue = await t.cue.cue(playback, 1);
+		const colorPreset = await t.preset.requiredObject(PresetFamily.Color, 1);
+		expect(recordedCue?.group_changes).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					group_id: "1",
+					preset_reference: expect.objectContaining({
+						preset_instance_id: colorPreset.body.instance_id,
+						source_attribute: "color",
+					}),
+				}),
+			]),
+		);
 		await t.encoder.clear();
 		await t.selection.clear();
 
@@ -61,8 +77,12 @@ scenario(
 		});
 		await t.clock.advanceBy("5s");
 		await t.expectFixtureDMX(
-			{ fixture: 1 },
-			{ Intensity: 255, "Color wheel 1": AURO_DEEP_RED_SLOT },
+			fixture(1),
+			{
+				"Intensity coarse": 255,
+				"Intensity fine": 255,
+				"Color wheel 1": AURO_DEEP_RED_SLOT,
+			},
 		);
 
 		await t.playback.via.api.off(playback);
@@ -83,14 +103,9 @@ scenario(
 		await t.group.expect(1).fixtures(2);
 		await t.selection.clear();
 
-		// Update Color Preset 1 so the wash is red as well.
-		await t.group.via.api.select(1);
-		await t.encoder.color.red.via.api.set(100);
-		await t.encoder.color.green.via.api.set(0);
-		await t.encoder.color.blue.via.api.set(0);
-		await t.encoder.color.white.via.api.set(0);
-		await t.encoder.color.amber.via.api.set(0);
-		// Update All, because the wash's color addresses are not yet part of the Preset.
+		// Update the same live Color owner for the replacement wash.
+		await t.command.via.api.execute("GROUP 1 AT COLOR 100 DIV 0 DIV 0 DIV 0");
+		// Update All preserves the Preset instance and its live Cue reference.
 		await t.preset.via.api.update(PresetFamily.Color, 1, { mode: "all" });
 		await t.encoder.clear();
 		await t.selection.clear();
@@ -103,7 +118,7 @@ scenario(
 		});
 		await t.clock.advanceBy("5s");
 		await t.expectFixtureDMX(
-			{ fixture: 2 },
+			fixture(2),
 			{
 				Intensity: 255,
 				"Color red": 255,
@@ -118,7 +133,7 @@ scenario(
 		await t.playback.via.api.off(playback);
 		await t.clock.advanceBy("5s");
 		await t.expectFixtureDMX(
-			{ fixture: 2 },
+			fixture(2),
 			{ Intensity: 0, "Color green": 255, "Color blue": 255, "Color white": 255 },
 		);
 	},
