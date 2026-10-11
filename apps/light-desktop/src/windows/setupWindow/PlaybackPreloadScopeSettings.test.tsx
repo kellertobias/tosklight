@@ -16,15 +16,18 @@ import { PlaybackPreloadScopeSettings } from "./PlaybackPreloadScopeSettings";
 const SHOW = "11111111-1111-4111-8111-111111111111",
 	OTHER = "22222222-2222-4222-8222-222222222222";
 const scope = { position_ranges: [{ start: 1, end: 1000 }], pages: null };
-function setup() {
+function setup(loadSnapshot?: PreloadScopeTransport["loadSnapshot"]) {
 	let observer!: PreloadScopeObserver;
 	const close = vi.fn();
 	const transport: PreloadScopeTransport = {
-		loadSnapshot: vi.fn(async (authority) => ({
-			show_id: authority.showId,
-			revision: 4,
-			scope,
-		})),
+		loadSnapshot: vi.fn(
+			loadSnapshot ??
+				(async (authority) => ({
+					show_id: authority.showId,
+					revision: 4,
+					scope,
+				})),
+		),
 		save: vi.fn(async (authority, revision, value, id) => ({
 			show_id: authority.showId,
 			revision: revision + 1,
@@ -134,5 +137,91 @@ describe("Preload eligibility operator settings", () => {
 		expect(
 			screen.getByRole("button", { name: "Save playback eligibility" }),
 		).toBeDisabled();
+		model.view.rerender(model.tree(SHOW));
+		await waitFor(() =>
+			expect(screen.getByLabelText("Playback position ranges")).toBeEnabled(),
+		);
+		expect(screen.getByLabelText("Playback position ranges")).toHaveValue(
+			"1-1000",
+		);
+		expect(
+			screen.getByRole("button", { name: "Save playback eligibility" }),
+		).toBeDisabled();
 	});
+});
+
+it("loads a deferred restricted snapshot before the first edit and saves the displayed page scope", async () => {
+	type Snapshot = Awaited<ReturnType<PreloadScopeTransport["loadSnapshot"]>>;
+	let resolve!: (value: Snapshot) => void;
+	const pending = new Promise<Snapshot>((done) => {
+		resolve = done;
+	});
+	const model = setup(() => pending);
+	expect(screen.getByLabelText("Playback position ranges")).toBeDisabled();
+	await act(async () => {
+		resolve({
+			show_id: SHOW,
+			revision: 8,
+			scope: { position_ranges: [{ start: 301, end: 305 }], pages: [2, 5] },
+		});
+	});
+	await waitFor(() =>
+		expect(screen.getByLabelText("Playback position ranges")).toBeEnabled(),
+	);
+	expect(screen.getByLabelText("Playback position ranges")).toHaveValue(
+		"301-305",
+	);
+	expect(screen.getByLabelText("Eligible pages")).toHaveValue("2, 5");
+	fireEvent.change(screen.getByLabelText("Playback position ranges"), {
+		target: { value: "401-680" },
+	});
+	fireEvent.click(
+		screen.getByRole("button", { name: "Save playback eligibility" }),
+	);
+	await waitFor(() =>
+		expect(model.transport.save).toHaveBeenCalledWith(
+			{ showId: SHOW },
+			8,
+			{ position_ranges: [{ start: 401, end: 680 }], pages: [2, 5] },
+			expect.any(String),
+			expect.any(AbortSignal),
+		),
+	);
+});
+
+it("retains rejected edits and retries against a newer authoritative revision", async () => {
+	const model = setup();
+	await waitFor(() =>
+		expect(screen.getByLabelText("Playback position ranges")).toBeEnabled(),
+	);
+	vi.mocked(model.transport.save).mockRejectedValueOnce(
+		new Error("Scope changed; review and retry"),
+	);
+	fireEvent.change(screen.getByLabelText("Playback position ranges"), {
+		target: { value: "401-680" },
+	});
+	fireEvent.click(
+		screen.getByRole("button", { name: "Save playback eligibility" }),
+	);
+	expect(await screen.findByRole("alert")).toHaveTextContent("review and retry");
+	vi.mocked(model.transport.loadSnapshot).mockResolvedValueOnce({
+		show_id: SHOW,
+		revision: 5,
+		scope: { position_ranges: [{ start: 301, end: 305 }], pages: [2] },
+	});
+	await act(async () => model.getObserver().changed({ showId: SHOW, revision: 5 }));
+	expect(screen.getByLabelText("Playback position ranges")).toHaveValue("401-680");
+	expect(screen.getByLabelText("All pages")).toBeChecked();
+	fireEvent.click(
+		screen.getByRole("button", { name: "Save playback eligibility" }),
+	);
+	await waitFor(() =>
+		expect(model.transport.save).toHaveBeenLastCalledWith(
+			{ showId: SHOW },
+			5,
+			{ position_ranges: [{ start: 401, end: 680 }], pages: null },
+			expect.any(String),
+			expect.any(AbortSignal),
+		),
+	);
 });

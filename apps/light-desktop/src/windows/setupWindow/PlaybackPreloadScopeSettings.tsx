@@ -13,28 +13,32 @@ import {
 } from "../../features/playbackPreloadScope/scopeText";
 export function PlaybackPreloadScopeSettings() {
 	const model = usePreloadScope();
-	const [positions, setPositions] = useState("1-1000"),
-		[allPages, setAllPages] = useState(true),
-		[pages, setPages] = useState("");
-	const [dirty, setDirty] = useState(false),
-		[inputError, setInputError] = useState<string | null>(null);
-	useEffect(() => {
-		setDirty(false);
-		setInputError(null);
-	}, [model.key]);
-	useEffect(() => {
-		if (model.snapshot && !dirty) {
-			const text = preloadScopeText(model.snapshot.scope);
-			setPositions(text.positions);
-			setAllPages(text.allPages);
-			setPages(text.pages);
-		}
-	}, [model.snapshot, dirty]);
+	const [draft, setDraft] = useState<{
+		key: string;
+		edited: ReturnType<typeof preloadScopeText> | null;
+	}>({ key: model.key, edited: null });
+	if (draft.key !== model.key) setDraft({ key: model.key, edited: null });
+	const edited = draft.key === model.key ? draft.edited : null;
+	const [inputError, setInputError] = useState<string | null>(null);
+	const dirty = edited !== null;
+	const text = dirty
+		? edited
+		: model.snapshot
+			? preloadScopeText(model.snapshot.scope)
+			: { positions: "1-1000", allPages: true, pages: "" };
+	const { positions, allPages, pages } = text;
+	const edit = (change: Partial<ReturnType<typeof preloadScopeText>>) =>
+		setDraft({ key: model.key, edited: { ...text, ...change } });
+	useEffect(() => setInputError(null), [model.key]);
 	const save = async () => {
 		try {
 			setInputError(null);
 			const scope = parsePlaybackPreloadScope(positions, allPages, pages);
-			if (await model.save(scope)) setDirty(false);
+			const key = model.key;
+			if (await model.save(scope))
+				setDraft((current) =>
+					current.key === key ? { key, edited: null } : current,
+				);
 		} catch (e) {
 			setInputError(e instanceof Error ? e.message : String(e));
 		}
@@ -52,10 +56,7 @@ export function PlaybackPreloadScopeSettings() {
 					label="Playback position ranges"
 					value={positions}
 					disabled={!model.snapshot || model.saving}
-					onChange={(e) => {
-						setPositions(e.target.value);
-						setDirty(true);
-					}}
+					onChange={(e) => edit({ positions: e.target.value })}
 				/>
 				<SwitchField
 					label="All pages"
@@ -63,20 +64,14 @@ export function PlaybackPreloadScopeSettings() {
 					onLabel="All pages"
 					checked={allPages}
 					disabled={!model.snapshot || model.saving}
-					onChange={(e) => {
-						setAllPages(e.target.checked);
-						setDirty(true);
-					}}
+					onChange={(e) => edit({ allPages: e.target.checked })}
 				/>
 				{!allPages && (
 					<TextField
 						label="Eligible pages"
 						value={pages}
 						disabled={model.saving}
-						onChange={(e) => {
-							setPages(e.target.value);
-							setDirty(true);
-						}}
+						onChange={(e) => edit({ pages: e.target.value })}
 					/>
 				)}
 			</FormLayout>
