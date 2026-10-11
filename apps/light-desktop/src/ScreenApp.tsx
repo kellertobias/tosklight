@@ -10,6 +10,7 @@ import { ServerRuntime } from "./api/ServerRuntime";
 import type { ScreenConfiguration } from "./api/types";
 import { LoadingSurface } from "./components/common/LoadingSurface";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
+import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
 import { ConnectionState } from "./components/shell/ConnectionState";
 import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 import { LeftDock } from "./components/shell/LeftDock";
@@ -147,11 +148,15 @@ function ScreenSurface({ id }: { id: string }) {
 	const closing = useScreenWindowPersistence(screen, server.saveScreen);
 	if (server.screens && !screen)
 		return (
-			<ErrorAlert as="div" className="connection-cover parameter-empty" role="alert">
+			<ErrorAlert
+				as="div"
+				className="connection-cover parameter-empty"
+				role="alert"
+			>
 				<b>Screen unavailable</b>
 				<small>
-					This screen was removed or this browser link is not authorized for
-					the current desk.
+					This screen was removed or this browser link is not authorized for the
+					current desk.
 				</small>
 			</ErrorAlert>
 		);
@@ -181,15 +186,18 @@ function ScreenSurface({ id }: { id: string }) {
 
 export function ScreenApp({ id }: { id: string }) {
 	return (
-		<ServerRuntime sessionRole="secondary">
-			<AppProvider>
-				<PatchFeatureBoundary>
-					<ScreenSurface id={id} />
-					<ConnectionState />
-					<DeskLoadingOverlay />
-				</PatchFeatureBoundary>
-			</AppProvider>
-			<DeskLockOverlay />
-		</ServerRuntime>
+		<>
+			<QuitConfirmOverlay />
+			<ServerRuntime sessionRole="secondary">
+				<AppProvider>
+					<PatchFeatureBoundary>
+						<ScreenSurface id={id} />
+						<ConnectionState />
+						<DeskLoadingOverlay />
+					</PatchFeatureBoundary>
+				</AppProvider>
+				<DeskLockOverlay />
+			</ServerRuntime>
+		</>
 	);
 }

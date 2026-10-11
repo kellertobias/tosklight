@@ -1,4 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { ModalProvider } from "@tosklight/ui/modals";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+} from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScreenConfiguration } from "./api/types";
@@ -6,6 +13,10 @@ import { ScreenApp } from "./ScreenApp";
 
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
+	withholdRuntime: false,
+	quitRequested: undefined as (() => void) | undefined,
+	cancelQuit: vi.fn(async () => undefined),
+	quitUnsubscribe: vi.fn(),
 	saveScreen: vi.fn(async () => undefined),
 	screens: null as {
 		screens: ScreenConfiguration[];
@@ -18,7 +29,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./api/ServerRuntime", () => ({
 	ServerRuntime: ({ children }: PropsWithChildren) => (
-		<div data-testid="server-runtime">{children}</div>
+		<div data-testid="server-runtime">
+			{mocks.withholdRuntime ? null : children}
+		</div>
 	),
 }));
 vi.mock("./state/AppContext", () => ({
@@ -41,7 +54,16 @@ vi.mock("./features/screens/ScreensContext", () => ({
 }));
 vi.mock("./platform/desktop", () => ({
 	useScreenWindowPersistence: () => ({ current: false }),
+	useDesktopBridge: () => desktop,
 }));
+const desktop = {
+	available: true,
+	cancelQuit: mocks.cancelQuit,
+	onQuitRequested: async (handler: () => void) => {
+		mocks.quitRequested = handler;
+		return mocks.quitUnsubscribe;
+	},
+};
 vi.mock("./components/common/LoadingSurface", () => ({
 	LoadingSurface: () => <div data-testid="screen-surface" />,
 }));
@@ -111,10 +133,40 @@ function configuredScreen(
 describe("ScreenApp", () => {
 	beforeEach(() => {
 		mocks.dispatch.mockReset();
+		mocks.withholdRuntime = false;
+		mocks.quitRequested = undefined;
+		mocks.cancelQuit.mockClear();
+		mocks.quitUnsubscribe.mockClear();
 		mocks.saveScreen.mockClear();
 		mocks.screens = null;
 	});
 	afterEach(cleanup);
+
+	it("shows and dismisses native quit confirmation before Screen bootstrap succeeds", async () => {
+		mocks.withholdRuntime = true;
+		const view = render(
+			<ModalProvider>
+				<ScreenApp id="screen-1" />
+			</ModalProvider>,
+		);
+		await act(async () => {});
+		expect(screen.queryByTestId("screen-surface")).not.toBeInTheDocument();
+		expect(mocks.quitRequested).toBeTypeOf("function");
+		act(() => mocks.quitRequested?.());
+		expect(screen.getByRole("heading", { name: "Really quit?" })).toBeVisible();
+		expect(screen.getByText(/again to quit ToskLight/)).toHaveTextContent(
+			"Press ⌘Q again to quit ToskLight.",
+		);
+		fireEvent.pointerDown(
+			screen.getByRole("heading", { name: "Really quit?" }),
+		);
+		expect(mocks.cancelQuit).toHaveBeenCalledOnce();
+		expect(
+			screen.queryByRole("heading", { name: "Really quit?" }),
+		).not.toBeInTheDocument();
+		view.unmount();
+		expect(mocks.quitUnsubscribe).toHaveBeenCalledOnce();
+	});
 
 	it("provides Patch authority to console-screen panes", () => {
 		render(<ScreenApp id="screen-1" />);
