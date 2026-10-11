@@ -158,12 +158,22 @@ function handleSelectKey<T extends string>(
 		);
 	} else if (event.key === "ArrowUp") {
 		controller.setActive((index) => Math.max(0, index - 1));
+	} else if (event.key === "Home") {
+		const first = controller.options.findIndex((option) => !option.disabled);
+		controller.setActive(() => Math.max(0, first));
+	} else if (event.key === "End") {
+		const last = controller.options.reduce(
+			(index, option, current) => option.disabled ? index : current,
+			0,
+		);
+		controller.setActive(() => last);
 	} else if (event.key === "Enter") {
 		const option = controller.options[controller.active];
 		if (option && !option.disabled) controller.choose(option.value);
 		else return;
 	} else return;
 	event.preventDefault();
+	event.stopPropagation();
 }
 
 function SelectOptions<T extends string>({
