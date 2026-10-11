@@ -456,7 +456,7 @@ impl CommandHttpScenario {
 
     async fn playback_go_to(
         &self,
-        request_id: &str,
+        _request_id: &str,
         playback_number: u16,
         cue_number: f64,
     ) -> Response {
@@ -472,10 +472,9 @@ impl CommandHttpScenario {
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     serde_json::json!({
-                        "request_id": request_id,
-                        "address": {"kind":"playback","playback_number":playback_number},
+                        "address": {"kind":"playback","page":1,"position":playback_number},
                         "action": {"type":"go_to","cue_number":cue_number.to_string()},
-                        "surface":"virtual"
+                        "control_source": {"surface_id":"main","control_id":1}
                     })
                     .to_string(),
                 ))

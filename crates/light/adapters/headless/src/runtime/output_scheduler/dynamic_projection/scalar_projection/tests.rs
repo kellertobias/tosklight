@@ -203,8 +203,8 @@ fn partial_focus_fixed_enters_family_assembly_once_and_keeps_exact_evidence() {
 
 fn cue(attribute: &str, value: f32, enabled: bool) -> light_playback::ActiveCueDynamicValue {
     let source = light_playback::SequenceMasterSource {
-        playback_number: Some(1),
-        playback_identity: Some(light_playback::PlaybackIdentity::physical(1).unwrap()),
+        playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+        control_source_id: None,
         cue_list_id: light_core::CueListId(Uuid::from_u128(42)),
         temporary: false,
     };
@@ -214,7 +214,7 @@ fn cue(attribute: &str, value: f32, enabled: bool) -> light_playback::ActiveCueD
         output_enabled: enabled,
         sequence_master: 1.,
         snap_sequence_master: 1.,
-        playback_number: source.playback_number,
+        playback_address: source.playback_address,
         cue_list_id: source.cue_list_id,
         authored_cue_id: Uuid::from_u128(43),
         current_cue_id: Uuid::from_u128(44),

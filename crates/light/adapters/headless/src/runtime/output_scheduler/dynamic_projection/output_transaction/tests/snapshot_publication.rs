@@ -75,23 +75,32 @@ impl Harness {
         engine
             .replace_snapshot(light_engine::EngineSnapshot {
                 dynamics: vec![definition.clone()].into(),
-                playbacks: vec![light_playback::PlaybackDefinition {
+                playback_pages: vec![light_playback::PlaybackPage {
                     number: 1,
-                    name: "Front master".into(),
-                    buttons: light_playback::PlaybackDefinition::default_buttons(&group_target),
-                    button_count: 3,
-                    fader: light_playback::PlaybackDefinition::default_fader(&group_target),
-                    has_fader: true,
-                    footprint: light_playback::PlaybackFootprint::Normal,
-                    go_activates: true,
-                    auto_off: false,
-                    xfade_millis: 0,
-                    color: "#20c997".into(),
-                    flash_release: light_playback::FlashReleaseMode::ReleaseAll,
-                    protect_from_swap: false,
-                    presentation_icon: None,
-                    presentation_image: None,
-                    target: group_target,
+                    name: "Main".into(),
+                    assignments: [(
+                        1,
+                        light_playback::PlaybackDefinition {
+                            name: "Front master".into(),
+                            buttons: light_playback::PlaybackDefinition::default_buttons(
+                                &group_target,
+                            ),
+                            button_count: 3,
+                            fader: light_playback::PlaybackDefinition::default_fader(&group_target),
+                            has_fader: true,
+                            footprint: light_playback::PlaybackFootprint::Normal,
+                            go_activates: true,
+                            auto_off: false,
+                            xfade_millis: 0,
+                            color: "#20c997".into(),
+                            flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+                            protect_from_swap: false,
+                            presentation_icon: None,
+                            presentation_image: None,
+                            target: group_target,
+                        },
+                    )]
+                    .into(),
                 }]
                 .into(),
                 groups: vec![light_programmer::GroupDefinition {

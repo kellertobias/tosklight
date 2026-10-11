@@ -91,18 +91,21 @@ mod tests {
         ));
         assert!(matches!(
             parse("PBK 6 AT SPD GRP 3").unwrap().unwrap().source,
-            SpeedGroupBindingSource::Playback(CommandPlaybackTarget::CurrentPage { slot: 6 })
+            SpeedGroupBindingSource::Playback(CommandPlaybackTarget::CurrentPage { position: 6 })
         ));
         assert!(matches!(
             parse("PBK 2 . 6 AT SPD GRP 4").unwrap().unwrap().source,
             SpeedGroupBindingSource::Playback(CommandPlaybackTarget::ExplicitPage {
                 page: 2,
-                slot: 6
+                position: 6
             })
         ));
         assert!(matches!(
-            parse("VPBK 1001 AT SPD GRP 5").unwrap().unwrap().source,
-            SpeedGroupBindingSource::Playback(CommandPlaybackTarget::Virtual(_))
+            parse("PBK 99 . 1000 AT SPD GRP 5").unwrap().unwrap().source,
+            SpeedGroupBindingSource::Playback(CommandPlaybackTarget::ExplicitPage {
+                page: 99,
+                position: 1000
+            })
         ));
         assert!(matches!(
             parse("DYNAMIC 29 AT SPD GRP 1").unwrap().unwrap().source,

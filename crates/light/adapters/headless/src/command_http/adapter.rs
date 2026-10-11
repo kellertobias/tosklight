@@ -113,7 +113,7 @@ pub(crate) fn prevalidate_external_command(
             .is_some()
             .then_some(())
             .ok_or_else(|| "GO TO or LOAD command is invalid".into()),
-        Some("PBK" | "VPBK" | "CUELIST") => super::playback_selection_command::parse(command)?
+        Some("PBK" | "CUELIST") => super::playback_selection_command::parse(command)?
             .is_some()
             .then_some(())
             .ok_or_else(|| "playback selection command is invalid".into()),
@@ -158,7 +158,7 @@ pub(crate) fn command_only_operates_the_desk(command: &str) -> bool {
     }
     matches!(
         tokens.first().map(String::as_str),
-        Some("GO" | "LOAD" | "PBK" | "VPBK" | "CUELIST" | "SPD")
+        Some("GO" | "LOAD" | "PBK" | "CUELIST" | "SPD")
     )
 }
 
@@ -168,6 +168,15 @@ pub(crate) enum ExistingCommandPolicy {
     Compatibility,
     /// Public v2 guarantee: only commands whose complete mutation is isolated in Programmer.
     AtomicProgrammer,
+}
+
+impl ExistingCommandPolicy {
+    pub(crate) fn execution_policy(self) -> ExecutionPolicy {
+        match self {
+            Self::AtomicProgrammer => ExecutionPolicy::AtomicProgrammer,
+            Self::Compatibility => ExecutionPolicy::Compatibility,
+        }
+    }
 }
 
 pub(crate) fn ordered_ui_command_policy(command: &str) -> ExistingCommandPolicy {

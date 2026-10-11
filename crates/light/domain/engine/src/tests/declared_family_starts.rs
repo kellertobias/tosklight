@@ -179,7 +179,7 @@ fn cue_engine(fixture: PatchedFixture) -> (Engine, FixtureId, Arc<ManualClock>) 
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![list.clone()].into(),
-            playbacks: vec![test_playback(1, list.id)].into(),
+            playback_pages: vec![playback_page(1, [(1, test_playback(1, list.id))])].into(),
             revision: 1,
             ..Default::default()
         })
@@ -237,7 +237,7 @@ fn cue_color_zoom_and_focus_fade_in_from_the_declared_defaults() {
     };
     assert!((focus - DEFAULT_FOCUS).abs() < 1e-3, "{focus}");
 
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(250);
     let lerp = |from: f32, to: f32| from + (to - from) * 0.25;
     let zoom = opening(value(&engine, root, ProgrammingOwner::Zoom))
@@ -290,7 +290,7 @@ fn an_undecodable_default_keeps_the_previous_fade_in() {
             .is_none(),
         "no declared convention: a degree default is never guessed into one"
     );
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(250);
     assert_eq!(value(&engine, root, ProgrammingOwner::Color), None);
     assert_eq!(value(&engine, root, ProgrammingOwner::Zoom), None);

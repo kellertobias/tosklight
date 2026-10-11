@@ -765,7 +765,6 @@ fn install_optics_cues(live: &Live) {
         cue_list_id: list.id,
     };
     let playback = PlaybackDefinition {
-        number: 1,
         name: "Optics".into(),
         buttons: PlaybackDefinition::default_buttons(&target),
         button_count: 3,
@@ -784,7 +783,12 @@ fn install_optics_cues(live: &Live) {
     };
     let mut snapshot = (*live.engine.snapshot()).clone();
     snapshot.cue_lists = vec![list].into();
-    snapshot.playbacks = vec![playback].into();
+    snapshot.playback_pages = vec![light_playback::PlaybackPage {
+        number: 1,
+        name: "Main".into(),
+        assignments: [(1, playback)].into(),
+    }]
+    .into();
     snapshot.revision += 1;
     live.engine.replace_snapshot(snapshot).unwrap();
 }
@@ -804,9 +808,14 @@ fn cue_faded_focus_and_zoom_keep_their_own_times_through_independent_dynamics() 
     install_optics_cues(&live);
     let go = || {
         live.engine
-            .execute_playback(light_engine::EnginePlaybackCommand::Pool {
-                number: 1,
-                action: light_engine::PoolPlaybackAction::Go,
+            .execute_playback(light_engine::EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                action: light_engine::PlaybackAction::Go,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
             })
             .unwrap()
     };

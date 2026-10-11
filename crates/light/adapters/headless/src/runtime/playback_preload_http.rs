@@ -52,46 +52,43 @@ async fn update(
     let show_id = show.resolve_writable(&state)?;
     let key = (session.id.0, request.request_id.clone());
     let action = (show_id.0, request.clone());
-    if let Some(outcome) = state.replay.playback_preload.lock().get(&key, &action)? {
-        return Ok(Json(outcome));
-    }
-    let context = light_application::ActionContext::operator(
-        session.desk.id,
-        session.id.0,
-        light_application::ActionSource::Http,
-    );
-    let (changed, stored) = super::playback_policy::update_playback_preload(
-        &state,
-        &context,
-        show_id,
-        request.expected_revision,
-        scope,
-        &request.request_id,
-    )?;
-    let outcome = wire::PlaybackPreloadScopeUpdateOutcome {
-        request_id: request.request_id,
-        show_id: show_id.0,
-        revision: stored.revision,
-        scope: scope_wire(&stored.scope)?,
-        replayed: false,
-        changed,
-    };
     state
         .replay
-        .playback_preload
-        .lock()
-        .insert(key, action, outcome.clone());
-    if changed {
-        state.events.publish(
-            light_application::EventDraft::playback_preload_scope_changed(
-                light_application::PlaybackPreloadScopeChange {
-                    show_id,
-                    revision: stored.revision,
-                },
-            ),
-        );
-    }
-    Ok(Json(outcome))
+        .playback_preload_update(key, action, || {
+            let context = light_application::ActionContext::operator(
+                session.desk.id,
+                session.id.0,
+                light_application::ActionSource::Http,
+            );
+            let (changed, stored) = super::playback_policy::update_playback_preload(
+                &state,
+                &context,
+                show_id,
+                request.expected_revision,
+                scope,
+                &request.request_id,
+            )?;
+            let outcome = wire::PlaybackPreloadScopeUpdateOutcome {
+                request_id: request.request_id,
+                show_id: show_id.0,
+                revision: stored.revision,
+                scope: scope_wire(&stored.scope)?,
+                replayed: false,
+                changed,
+            };
+            if changed {
+                state.events.publish(
+                    light_application::EventDraft::playback_preload_scope_changed(
+                        light_application::PlaybackPreloadScopeChange {
+                            show_id,
+                            revision: stored.revision,
+                        },
+                    ),
+                );
+            }
+            Ok(outcome)
+        })
+        .map(Json)
 }
 #[derive(Default)]
 pub(super) struct PreloadReplayCache {
@@ -102,7 +99,7 @@ pub(super) struct PreloadReplayCache {
     )>,
 }
 impl PreloadReplayCache {
-    fn get(
+    pub(super) fn get(
         &self,
         key: &(Uuid, String),
         action: &(Uuid, wire::PlaybackPreloadScopeUpdateRequest),
@@ -123,7 +120,7 @@ impl PreloadReplayCache {
         outcome.replayed = true;
         Ok(Some(outcome))
     }
-    fn insert(
+    pub(super) fn insert(
         &mut self,
         key: (Uuid, String),
         action: (Uuid, wire::PlaybackPreloadScopeUpdateRequest),

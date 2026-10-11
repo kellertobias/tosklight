@@ -7,7 +7,7 @@ use light_dynamics::{
     DynamicValue, DynamicValueTiming, FamilyCompositionContext, FamilyCompositionScratch,
     compose_dynamic_family,
 };
-use light_playback::{CueDynamicSourceKey, PlaybackIdentity, SequenceMasterSource};
+use light_playback::{CueDynamicSourceKey, PlaybackAddress, SequenceMasterSource};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Row = (Uuid, i16, DynamicAddressValue);
@@ -46,8 +46,8 @@ fn sidecar(row: &Row) -> light_engine::CapturedDynamicProgrammerRow {
 }
 fn cue(value: DynamicSemanticValue) -> light_playback::ActiveCueDynamicValue {
     let source = SequenceMasterSource {
-        playback_number: Some(1_301),
-        playback_identity: Some(PlaybackIdentity::virtual_playback(2, 1_301).unwrap()),
+        playback_address: Some(PlaybackAddress::new(2, 301).unwrap()),
+        control_source_id: None,
         cue_list_id: light_core::CueListId(Uuid::from_u128(42)),
         temporary: false,
     };
@@ -57,7 +57,7 @@ fn cue(value: DynamicSemanticValue) -> light_playback::ActiveCueDynamicValue {
         output_enabled: true,
         sequence_master: 0.0,
         snap_sequence_master: 0.0,
-        playback_number: source.playback_number,
+        playback_address: source.playback_address,
         cue_list_id: source.cue_list_id,
         authored_cue_id: Uuid::from_u128(43),
         current_cue_id: Uuid::from_u128(44),
@@ -139,9 +139,8 @@ fn fixed_rank_keeps_cue_submillisecond_recency_before_transition_order() {
     let mut b = cue(focus(0.8));
     b.changed_at += chrono::Duration::nanoseconds(1);
     b.transition_ordinal = 1;
-    b.source.playback_number = Some(1_302);
-    b.source.playback_identity = Some(PlaybackIdentity::virtual_playback(2, 1_302).unwrap());
-    b.playback_number = b.source.playback_number;
+    b.source.playback_address = Some(PlaybackAddress::new(2, 302).unwrap());
+    b.playback_address = b.source.playback_address;
     b.source_key = CueDynamicSourceKey::Normal { source: b.source };
     let cues = [a, b];
     let mut scratch = FixedMaskCompilationScratch::default();

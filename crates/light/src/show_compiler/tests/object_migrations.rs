@@ -467,267 +467,115 @@ fn group_sources_backfill_losslessly_once_and_canonical_source_wins() {
 }
 
 #[test]
-fn group_master_migration_reconciles_assignments_strips_groups_and_is_idempotent() {
-    let group = |name: &str, master: f64| {
-        json!({
-            "name": name,
-            "fixtures": [],
-            "master": master,
-            "playback_fader": 77,
-            "future_group": {"kept": true}
-        })
-    };
-    let playback = |number: u16, group_id: &str, initial_master: Option<f32>| {
-        let mut target = json!({"type": "group", "group_id": group_id});
-        if let Some(initial_master) = initial_master {
-            target["initial_master"] = json!(initial_master);
-        }
-        json!({
-            "name": format!("Playback {number}"),
-            "target": target,
-            "future_playback": {"kept": number}
-        })
-    };
-    let objects = [
-        ("group", "front", group("Front", 0.5)),
-        ("group", "back", group("Back", 0.625)),
-        (
-            "group",
-            "orphan",
-            json!({
-                "name": "Orphan",
-                "fixtures": [],
-                "master": "invalid but unassigned",
-                "playback_fader": 99,
-                "future_group": {"kept": true}
-            }),
-        ),
-        (
-            "group",
-            "broken-assigned",
-            json!({
-                "name": "Broken assigned legacy master",
-                "fixtures": [],
-                "master": "malformed but retired",
-                "playback_fader": 88,
-                "future_group": {"kept": true}
-            }),
-        ),
-        (
-            "playback_page",
-            "1",
-            assignment_page(
-                1,
-                json!({
-                    "9":playback(9,"front",Some(0.75)), "2":playback(2,"front",Some(0.25)),
-                    "3":playback(3,"back",None), "4":playback(4,"broken-assigned",None),
-                    "501":playback(501,"front",Some(0.875)), "502":playback(502,"back",None)
-                }),
-            ),
-        ),
-    ];
-    let object_refs = objects
-        .iter()
-        .map(|(kind, id, body)| (*kind, *id, body.clone()))
-        .collect::<Vec<_>>();
-    let (store, document) = document_with_objects(&object_refs);
-    let mut transaction = document.transaction();
-    stage_candidate_migrations(&document, &mut transaction).unwrap();
-    let candidate = document.candidate(&transaction).unwrap();
-
-    for group_id in ["front", "back", "orphan", "broken-assigned"] {
-        let body = candidate.object("group", group_id).unwrap().body();
-        assert!(body.get("master").is_none());
-        assert!(body.get("playback_fader").is_none());
-        assert_eq!(body["future_group"], json!({"kept": true}));
-    }
-    for number in ["2", "9"] {
-        let body = &candidate.object("playback_page", "1").unwrap().body()["assignments"][number];
-        assert_eq!(body["target"]["initial_master"], 0.25);
-        assert_eq!(
-            body["future_playback"]["kept"],
-            number.parse::<u16>().unwrap()
+fn retired_group_controls_are_refused_without_rewriting_the_candidate() {
+    for field in ["master", "playback_fader"] {
+        let (store, document) = document_with_objects(&[]);
+        let mut body = json!({"name":"Front", "fixtures":[], "future_group":{"kept":true}});
+        body[field] = json!(1);
+        let mut transaction = document.transaction();
+        transaction.put("group", "front", body.clone());
+        let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("retired Group-owned Playback controls")
         );
+        assert_eq!(
+            document
+                .candidate(&transaction)
+                .unwrap()
+                .object("group", "front")
+                .unwrap()
+                .body(),
+            &body
+        );
+        assert_eq!(
+            store.portable_document().unwrap().revision(),
+            document.revision()
+        );
+        assert!(store.objects("group").unwrap().is_empty());
     }
-    assert_eq!(
-        candidate.object("playback_page", "1").unwrap().body()["assignments"]["3"]["target"]["initial_master"],
-        0.625
-    );
-    assert!(
-        candidate.object("playback_page", "1").unwrap().body()["assignments"]["4"]["target"]
-            .get("initial_master")
-            .is_none(),
-        "a malformed retired Group master must not invent a Playback seed"
-    );
-    let page = candidate.object("playback_page", "1").unwrap().body();
-    assert_eq!(page["assignments"]["501"]["target"]["initial_master"], 0.25);
-    assert_eq!(
-        page["assignments"]["502"]["target"]["initial_master"],
-        0.625
-    );
-    assert_eq!(page["future_page"], json!({"kept": true}));
-
-    store.apply_portable_transaction(transaction).unwrap();
-    let migrated = store.portable_document().unwrap();
-    let revision = migrated.revision();
-    let mut second_pass = migrated.transaction();
-    stage_candidate_migrations(&migrated, &mut second_pass).unwrap();
-    assert!(
-        second_pass.is_empty(),
-        "Group Master migration must be idempotent"
-    );
-    assert_eq!(
-        store
-            .apply_portable_transaction(second_pass)
-            .unwrap()
-            .revision(),
-        revision
-    );
 }
 
 #[test]
-fn targetless_dynamic_assignments_migrate_to_distinct_target_bound_fallbacks() {
+fn targetless_dynamic_assignments_are_refused_with_or_without_legacy_scope() {
     let original = targetless_dynamic(7);
-    let original_id = original.id;
-    let first_target = light_core::FixtureId::new();
-    let second_target = light_core::FixtureId::new();
-    let mut first = dynamic_playback(
+    for scope in [
+        json!({"type":"live_group","group_id":"front"}),
+        serde_json::Value::Null,
+    ] {
+        let (store, document) = document_with_objects(&[]);
+        let body = assignment_page(
+            1,
+            json!({"1":{"target":{"type":"dynamic","assignment":{
+                "target_scope":scope, "dynamic":{"embedded_fallback":{"definition":original}}
+            }}}}),
+        );
+        let mut transaction = document.transaction();
+        transaction.put("playback_page", "1", body.clone());
+        let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
+        assert!(
+            error
+                .message
+                .contains("targetless or scoped Dynamic Playback assignment")
+        );
+        assert_eq!(
+            document
+                .candidate(&transaction)
+                .unwrap()
+                .object("playback_page", "1")
+                .unwrap()
+                .body(),
+            &body
+        );
+        assert!(store.objects("playback_page").unwrap().is_empty());
+        assert_eq!(
+            store.portable_document().unwrap().revision(),
+            document.revision()
+        );
+    }
+}
+
+#[test]
+fn canonical_live_group_assignment_preserves_identity_and_distinct_master_seeds() {
+    let mut definition = targetless_dynamic(7);
+    definition.target_binding = light_dynamics::DynamicTargetBinding::LiveGroup {
+        group_id: "front".into(),
+    };
+    let playback = dynamic_playback(
         1,
-        &original,
-        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
-            targets: vec![first_target],
-        },
-    );
-    let second = dynamic_playback(
-        2,
-        &original,
+        &definition,
         light_playback::DynamicPlaybackTargetScope::LiveGroup {
             group_id: "front".into(),
         },
     );
-    first.name = "First legacy scope".into();
-    let mut first_body = serde_json::to_value(first).unwrap();
-    first_body["future_playback"] = json!({"kept": true});
-    let mut button_playback = dynamic_playback(
-        501,
-        &original,
-        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
-            targets: vec![second_target],
-        },
-    );
-    button_playback.has_fader = false;
-    button_playback.button_count = 1;
-    button_playback.buttons[1] = light_playback::PlaybackButtonAction::None;
-    button_playback.buttons[2] = light_playback::PlaybackButtonAction::None;
-    let objects = vec![
-        ("dynamic", "7", serde_json::to_value(&original).unwrap()),
-        (
-            "playback_page",
-            "1",
-            assignment_page(1, json!({"1":first_body,"2":second,"501":button_playback})),
+    let (_, document) = document_with_objects(&[(
+        "playback_page",
+        "1",
+        assignment_page(
+            1,
+            json!({
+                "1":playback,
+                "2":{"target":{"type":"group","group_id":"front","initial_master":0.25}},
+                "3":{"target":{"type":"group","group_id":"front","initial_master":0.75}}
+            }),
         ),
-    ];
-    let (store, document) = document_with_objects(&objects);
+    )]);
     let mut transaction = document.transaction();
     stage_candidate_migrations(&document, &mut transaction).unwrap();
     let candidate = document.candidate(&transaction).unwrap();
-
-    let first = &candidate.object("playback_page", "1").unwrap().body()["assignments"]["1"];
-    let second = &candidate.object("playback_page", "1").unwrap().body()["assignments"]["2"];
-    let button_playback =
-        &candidate.object("playback_page", "1").unwrap().body()["assignments"]["501"];
-    for playback in [first, second, button_playback] {
-        assert!(playback["target"]["assignment"]["dynamic"]["dynamic_id"].is_null());
-        assert!(playback["target"]["assignment"]["target_scope"].is_null());
-    }
+    let assignments = &candidate.object("playback_page", "1").unwrap().body()["assignments"];
     assert_eq!(
-        migrated_dynamic_definition(first)["target_binding"],
-        json!({"type":"frozen_targets","targets":[first_target]})
+        assignments["1"]["target"]["assignment"]["dynamic"]["dynamic_id"],
+        json!(definition.id)
     );
+    assert!(assignments["1"]["target"]["assignment"]["target_scope"].is_null());
     assert_eq!(
-        migrated_dynamic_definition(second)["target_binding"],
+        migrated_dynamic_definition(&assignments["1"])["target_binding"],
         json!({"type":"live_group","group_id":"front"})
     );
-    assert_eq!(
-        migrated_dynamic_definition(button_playback)["target_binding"],
-        json!({"type":"frozen_targets","targets":[second_target]})
-    );
-    let migrated_ids = [first, second, button_playback]
-        .map(|playback| {
-            migrated_dynamic_definition(playback)["id"]
-                .as_str()
-                .unwrap()
-        })
-        .into_iter()
-        .collect::<std::collections::HashSet<_>>();
-    assert_eq!(migrated_ids.len(), 3);
-    let original_id = original_id.to_string();
-    assert!(!migrated_ids.contains(original_id.as_str()));
-    assert_eq!(first["future_playback"], json!({"kept": true}));
-    assert_eq!(
-        candidate.object("playback_page", "1").unwrap().body()["future_page"],
-        json!({"kept": true})
-    );
-    assert_eq!(
-        candidate.object("dynamic", "7").unwrap().body()["target_binding"],
-        json!({"type":"targetless"})
-    );
-    assert_eq!(
-        stored_body(&store, "playback_page", "1")["assignments"]["1"]["target"]["assignment"]["dynamic"]
-            ["dynamic_id"],
-        original_id.to_string()
-    );
-
-    let migrated = candidate
-        .objects()
-        .map(|object| {
-            (
-                object.key().kind().to_owned(),
-                object.key().id().to_owned(),
-                object.body().clone(),
-            )
-        })
-        .collect::<Vec<_>>();
-    let migrated_refs = migrated
-        .iter()
-        .map(|(kind, id, body)| (kind.as_str(), id.as_str(), body.clone()))
-        .collect::<Vec<_>>();
-    let (_, migrated_document) = document_with_objects(&migrated_refs);
-    let mut second_pass = migrated_document.transaction();
-    stage_candidate_migrations(&migrated_document, &mut second_pass).unwrap();
-    assert!(second_pass.is_empty());
-}
-
-#[test]
-fn targetless_dynamic_assignment_without_legacy_scope_fails_visibly() {
-    let original = targetless_dynamic(7);
-    let mut playback = serde_json::to_value(dynamic_playback(
-        1,
-        &original,
-        light_playback::DynamicPlaybackTargetScope::FrozenTargets {
-            targets: vec![light_core::FixtureId::new()],
-        },
-    ))
-    .unwrap();
-    playback["target"]["assignment"]["target_scope"] = serde_json::Value::Null;
-    let objects = vec![
-        ("dynamic", "7", serde_json::to_value(original).unwrap()),
-        (
-            "playback_page",
-            "1",
-            assignment_page(1, json!({"1": playback})),
-        ),
-    ];
-    let (_, document) = document_with_objects(&objects);
-    let mut transaction = document.transaction();
-
-    let error = stage_candidate_migrations(&document, &mut transaction).unwrap_err();
-
-    assert_eq!(
-        error.message,
-        "invalid playback_page 1: legacy targetless Dynamic Playback assignment has no stored target scope"
-    );
-    assert!(transaction.is_empty());
+    assert_eq!(assignments["2"]["target"]["initial_master"], 0.25);
+    assert_eq!(assignments["3"]["target"]["initial_master"], 0.75);
 }
 
 #[test]
@@ -898,7 +746,7 @@ fn targetless_dynamic(pool_number: u16) -> light_dynamics::DynamicDefinition {
 fn dynamic_playback(
     number: u16,
     definition: &light_dynamics::DynamicDefinition,
-    target_scope: light_playback::DynamicPlaybackTargetScope,
+    _target_scope: light_playback::DynamicPlaybackTargetScope,
 ) -> light_playback::PlaybackDefinition {
     let target = light_playback::PlaybackTarget::Dynamic {
         assignment: light_playback::DynamicPlaybackAssignment {
@@ -910,7 +758,7 @@ fn dynamic_playback(
                 },
             },
             revision: 1,
-            target_scope: Some(target_scope),
+            target_scope: None,
             fader_mode: light_playback::DynamicPlaybackFaderMode::SizeAndMaster,
             priority: 0,
             activation_override: None,

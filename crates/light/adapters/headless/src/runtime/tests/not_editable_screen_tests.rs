@@ -6,24 +6,20 @@ fn install_screen(scenario: &CommandHttpScenario, name: &str, not_editable: bool
         layout: serde_json::json!({"desks": [], "activeDeskId": ""}),
         show_dock: true,
         show_playbacks: true,
-        playback_count: 8,
-        playback_rows: 1,
-        first_playback_slot: 1,
-        page_mode: "follow_main".into(),
+        surface_id: "main".into(),
         show_page_controls: true,
         show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,
         fullscreen: false,
-        playback_layout: None,
         content: light_show::ScreenContent::default(),
         not_editable,
     };
     scenario
         .state
         .installation
-        .put_screen(screen)
+        .put_screen(scenario.session.desk.id, screen)
         .expect("the screen should store")
         .id
 }
@@ -166,7 +162,7 @@ async fn the_not_editable_flag_survives_being_stored_and_read_back() {
         .unwrap()
         .expect("the screen should still be there");
     assert!(stored.not_editable);
-    assert_eq!(stored.page_mode, "follow_main", "screen-local presentation configuration is untouched");
+    assert_eq!(stored.surface_id, "main", "screen-local presentation configuration is untouched");
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

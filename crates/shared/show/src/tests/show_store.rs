@@ -52,6 +52,8 @@ fn exact_object_snapshot_does_not_decode_unrequested_siblings() {
         )
         .unwrap();
 
+    drop(show);
+    let show = ShowStore::open(&path).unwrap();
     let (revision, object) = show
         .object_with_portable_revision("future", "wanted")
         .unwrap();

@@ -22,9 +22,7 @@ use light_application::{
 };
 use light_core::{ManualClock, SessionId, ShowId};
 use light_dynamics::DynamicRuntime;
-use light_engine::{
-    Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction, RenderOptions,
-};
+use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PlaybackAction, RenderOptions};
 use light_fixture::{FixtureProfile, PortablePatchedFixtureRecord};
 use light_programmer::{GroupDefinition, HighlightRegistry, ProgrammerRegistry};
 use light_show::{
@@ -131,8 +129,7 @@ impl ProgrammingCueRecordingPorts for Ports {
     ) -> Result<ProgrammingCueRecordingEnvironment, ActionError> {
         Ok(ProgrammingCueRecordingEnvironment {
             target: ProgrammingCueResolvedTarget::Playback {
-                playback_number: PLAYBACK,
-                page_slot: None,
+                address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
             },
             active_cue: None,
             cuelist_auto_off_at_zero_default: false,
@@ -152,7 +149,7 @@ impl ProgrammingCueRecordingPorts for Ports {
     fn activate_recorded_cue(
         &self,
         _context: &ActionContext,
-        _playback_number: u16,
+        _playback_address: light_playback::PlaybackAddress,
         _cue_number: CueNumber,
     ) -> Option<ProgrammingCueActivationCompletion> {
         None
@@ -271,8 +268,8 @@ impl Show {
                     context,
                     command: ProgrammingCueRecordRequest {
                         show_id: self.ports.show_id,
-                        target: ProgrammingCueRecordTarget::Pool {
-                            playback_number: PLAYBACK,
+                        target: ProgrammingCueRecordTarget::Playback {
+                            address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
                         },
                         operation: ProgrammingCueRecordOperation::Overwrite,
                         cue_number: Some(CueNumber::try_from_legacy_f64(number).unwrap()),
@@ -342,9 +339,14 @@ impl Output {
     fn go(&self, snapshot: EngineSnapshot, cue: f64) {
         self.engine.replace_snapshot(snapshot).unwrap();
         self.engine
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number: PLAYBACK,
-                action: PoolPlaybackAction::GoTo(CueNumber::try_from_legacy_f64(cue).unwrap()),
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
+                action: PlaybackAction::GoTo(CueNumber::try_from_legacy_f64(cue).unwrap()),
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: PLAYBACK,
+                },
             })
             .unwrap();
     }

@@ -63,12 +63,11 @@ fn lifecycle_go(
     )
 }
 
-fn playback_request(request_id: &str, number: u16, action: &str) -> serde_json::Value {
+fn playback_request(_request_id: &str, number: u16, action: &str) -> serde_json::Value {
     serde_json::json!({
-        "request_id":request_id,
-        "address":{"kind":"playback","playback_number":number},
+        "address":{"kind":"playback","page":1,"position":number},
         "action":{"type":action,"pressed":true},
-        "surface":"physical",
+        "control_source":{"surface_id":"main","control_id":1},
     })
 }
 
@@ -85,9 +84,6 @@ fn application_event_count(state: &AppState, object: light_application::EventObj
 #[tokio::test]
 async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces() {
     let scenario = CommandHttpScenario::new().await;
-    scenario.state.installation.update_configuration(|configuration| {
-        configuration.preload_physical_playback_actions = true;
-    });
     let (show_id, show_revision, fixture) =
         install_lifecycle_show(&scenario, "Typed Preload lifecycle").await;
     let enter = lifecycle_request(
@@ -215,7 +211,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
     assert_eq!(committed["capture_mode"]["blind"], false);
     assert_eq!(committed["commit"]["show_revision"], show_revision);
     assert_eq!(committed["commit"]["executed_playback_actions"], 1);
-    assert_eq!(committed["commit"]["executed"][0]["playback_number"], 1);
+    assert_eq!(committed["commit"]["executed"][0]["address"], serde_json::json!({"page":1,"position":1}));
     assert_eq!(
         committed["commit"]["runtime_changes"]
             .as_array()
@@ -249,7 +245,7 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
         2
     );
     assert_eq!(
-        application_event_count(&scenario.state, light_application::EventObject::playback(1),),
+        application_event_count(&scenario.state, light_application::EventObject::playback(light_playback::PlaybackAddress::new(1, 1).unwrap()),),
         1
     );
     let event_cursor = scenario.state.events.latest_sequence();
@@ -376,9 +372,6 @@ async fn preload_lifecycle_http_is_sparse_replay_safe_and_shared_across_surfaces
 #[tokio::test]
 async fn preload_go_rejects_show_target_and_gap_conflicts_with_explicit_authorities() {
     let scenario = CommandHttpScenario::new().await;
-    scenario.state.installation.update_configuration(|configuration| {
-        configuration.preload_physical_playback_actions = true;
-    });
     let (show_id, show_revision, _) =
         install_lifecycle_show(&scenario, "Preload cursor authority").await;
     assert_eq!(

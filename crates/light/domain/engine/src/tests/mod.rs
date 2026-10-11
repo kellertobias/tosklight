@@ -23,10 +23,41 @@ use std::{
     sync::Arc,
 };
 
-fn execute_pool(engine: &Engine, number: u16, action: PoolPlaybackAction) {
+fn playback_address(page: u8, position: u16) -> light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(page, position).unwrap()
+}
+
+pub(crate) fn test_control_source() -> light_playback::PlaybackControlSource {
+    light_playback::PlaybackControlSource {
+        surface_id: "main".into(),
+        control_id: 1,
+    }
+}
+
+fn execute_address(
+    engine: &Engine,
+    address: light_playback::PlaybackAddress,
+    action: PlaybackAction,
+) {
     engine
-        .execute_playback(EnginePlaybackCommand::Pool { number, action })
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address,
+            action,
+            activation_origin: None,
+            control_source: test_control_source(),
+        })
         .unwrap();
+}
+
+fn playback_page(
+    page: u8,
+    assignments: impl IntoIterator<Item = (u16, PlaybackDefinition)>,
+) -> light_playback::PlaybackPage {
+    light_playback::PlaybackPage {
+        number: page,
+        name: format!("Page {page}"),
+        assignments: assignments.into_iter().collect(),
+    }
 }
 
 fn execute_cue_list(engine: &Engine, id: light_core::CueListId, action: CueListPlaybackAction) {
@@ -343,7 +374,6 @@ fn test_group_playback_with_master(
 
 fn test_playback_for_target(number: u16, target: PlaybackTarget) -> PlaybackDefinition {
     PlaybackDefinition {
-        number,
         name: format!("Playback {number}"),
         buttons: PlaybackDefinition::default_buttons(&target),
         target,
@@ -439,7 +469,6 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
         cues: vec![first, dark, lit],
     };
     let playback = PlaybackDefinition {
-        number: 1,
         name: "MIB".into(),
         target: PlaybackTarget::CueList {
             cue_list_id: cue_list.id,
@@ -469,8 +498,9 @@ fn mib_snapshot(fixtures: Vec<PatchedFixture>, fixture_ids: &[FixtureId]) -> Eng
         cue_lists: vec![cue_list].into(),
         dynamics: vec![].into(),
         dynamic_stage_positions: Default::default(),
-        playbacks: vec![playback].into(),
-        playback_pages: vec![].into(),
+        playback_pages: vec![playback_page(1, [(1, playback)])].into(),
+        playback_solo_regions: vec![].into(),
+        playback_preload_scope: Default::default(),
         routes: vec![].into(),
         control_mappings: vec![].into(),
         groups: vec![].into(),

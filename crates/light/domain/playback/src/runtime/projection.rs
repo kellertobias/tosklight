@@ -294,10 +294,14 @@ impl PlaybackEngine {
             PlaybackTarget::CueList { cue_list_id } => cue_list_id,
             _ => return None,
         };
+        // A held Temp can contribute an inactive synthetic status before the permanent
+        // owner in address order. Project the target-owned runtime first, then overlay
+        // only the requested assignment's held controls.
         let mut status = self
             .runtime_status()
             .into_iter()
-            .find(|status| status.playback.cue_list_id == cue_list_id)?;
+            .filter(|status| status.playback.cue_list_id == cue_list_id)
+            .min_by_key(|status| status.playback.control_source_id.is_some())?;
         status.playback.playback_address = Some(identity);
         let (temporary_active, temporary_master, swap_active) =
             self.apply_assignment_feedback(&mut status.playback, Some(identity));

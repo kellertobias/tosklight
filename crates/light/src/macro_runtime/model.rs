@@ -91,14 +91,24 @@ pub enum OperatorInputValue {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MacroEventFilter {
-    ShowRevision { show_id: Uuid, after_revision: u64 },
-    Playback { playback_number: u16 },
+    ShowRevision {
+        show_id: Uuid,
+        after_revision: u64,
+    },
+    Playback {
+        address: light_playback::PlaybackAddress,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MacroObservedEvent {
-    ShowRevision { show_id: Uuid, revision: u64 },
-    Playback { playback_number: u16 },
+    ShowRevision {
+        show_id: Uuid,
+        revision: u64,
+    },
+    Playback {
+        address: light_playback::PlaybackAddress,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

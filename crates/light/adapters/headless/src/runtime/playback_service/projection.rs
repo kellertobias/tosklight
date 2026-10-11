@@ -49,20 +49,14 @@ pub(super) fn automatic_source_projection(
     transition: &light_playback::AutomaticPlaybackTransition,
     status: Option<&light_playback::PlaybackRuntimeStatus>,
 ) -> Option<AutomaticPlaybackProjection> {
-    let identity = match status.and_then(|status| status.source.playback_address) {
-        Some(address) if transition.playback_address != Some(address) => {
-            PlaybackRuntimeIdentity::Playback(address)
-        }
-        None if transition.playback_address.is_none() => {
-            PlaybackRuntimeIdentity::DirectCueList(transition.cue_list_id)
-        }
-        _ => return None,
+    let identity = match transition.playback_address {
+        Some(address) => PlaybackRuntimeIdentity::Playback(address),
+        None => PlaybackRuntimeIdentity::DirectCueList(transition.cue_list_id),
     };
-    let status = if matches!(identity, PlaybackRuntimeIdentity::DirectCueList(_)) {
-        status.filter(|status| status.source.playback_address.is_none())
-    } else {
-        status
-    };
+    // An already accepted transition belongs to its captured owner, even if a newer
+    // operation has taken over the shared Cuelist before feedback is projected.
+    let status =
+        status.filter(|status| status.source.playback_address == transition.playback_address);
     Some(AutomaticPlaybackProjection {
         projection: cue_list_projection(scope, identity, None, transition.cue_list_id, status),
         transition: transition.clone(),
@@ -280,7 +274,7 @@ fn project_playback(
             timecode_id: *timecode_id,
         },
         PlaybackTarget::Group { group_id, .. } => {
-            group_projection(ports, snapshot, group_id, None)?
+            group_projection(ports, snapshot, group_id, Some(address))?
         }
         PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
         PlaybackTarget::GrandMaster => grand_master_projection(ports),

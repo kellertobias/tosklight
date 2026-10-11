@@ -182,7 +182,7 @@ impl Engine {
         crate::timed(crate::RenderPhase::PreparedCapture, || {
             let continuity = self.capture_output_continuity();
             let programmer = self.programmers.capture_output_sources();
-            self.prepare_captured_frame(options, programmer, continuity, true)
+            self.prepare_captured_frame(options, programmer, continuity, true, self.clock.now())
         })
     }
 
@@ -191,7 +191,33 @@ impl Engine {
         crate::timed(crate::RenderPhase::PreparedCapture, || {
             let continuity = self.capture_output_continuity();
             let programmer = self.programmers.try_capture_output_sources()?;
-            Some(self.prepare_captured_frame(options, programmer, continuity, true))
+            Some(self.prepare_captured_frame(
+                options,
+                programmer,
+                continuity,
+                true,
+                self.clock.now(),
+            ))
+        })
+    }
+
+    /// Refresh sources after an accepted external transport action, retaining this tick's
+    /// sample time. The original frame still owns its transition/action claims; refresh must
+    /// not advance another Follow edge or repeat discrete Cue actions.
+    pub fn try_refresh_output_frame(
+        &self,
+        previous: &PreparedOutputFrame,
+    ) -> Option<PreparedOutputFrame> {
+        crate::timed(crate::RenderPhase::PreparedCapture, || {
+            let continuity = self.capture_output_continuity();
+            let programmer = self.programmers.try_capture_output_sources()?;
+            Some(self.prepare_captured_frame(
+                previous.options(),
+                programmer,
+                continuity,
+                false,
+                previous.sampled_at(),
+            ))
         })
     }
 
@@ -199,7 +225,7 @@ impl Engine {
         crate::timed(crate::RenderPhase::PreparedCapture, || {
             let continuity = self.capture_output_continuity();
             let programmer = self.programmers.capture_output_sources();
-            self.prepare_captured_frame(options, programmer, continuity, false)
+            self.prepare_captured_frame(options, programmer, continuity, false, self.clock.now())
         })
     }
 
@@ -212,8 +238,8 @@ impl Engine {
             crate::OutputContinuityState,
         ),
         advance: bool,
+        sampled_at: DateTime<Utc>,
     ) -> PreparedOutputFrame {
-        let sampled_at = self.clock.now();
         if advance {
             self.advance_group_master_transitions_at(sampled_at);
         }

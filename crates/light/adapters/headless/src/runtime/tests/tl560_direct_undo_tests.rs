@@ -101,7 +101,7 @@ async fn record(scenario: &CommandHttpScenario, show_id: &str, request_id: &str)
             Some(active_show_revision(scenario)),
             cue_record_request(
                 request_id,
-                serde_json::json!({"kind":"pool","playback_number":PLAYBACK}),
+                serde_json::json!({"kind":"cuelist_pool","number":PLAYBACK}),
                 Some(1.0),
                 "current_capture",
                 "hold",

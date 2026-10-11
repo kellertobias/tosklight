@@ -512,3 +512,29 @@ fn playback_presentation_accepts_bounded_embedded_images() {
         "playback presentation image must contain 1-600000 characters"
     );
 }
+
+#[test]
+fn speed_group_legacy_fader_deserialization_is_refused_without_remapping() {
+    let error = serde_json::from_value::<PlaybackDefinition>(serde_json::json!({
+        "name":"Speed A", "target":{"type":"speed_group","group":"A"}, "fader":"speed"
+    }))
+    .unwrap_err();
+    assert!(error.to_string().contains("learned_percentage"));
+    for (raw, expected) in [
+        ("learned_percentage", PlaybackFaderMode::LearnedPercentage),
+        ("direct_bpm", PlaybackFaderMode::DirectBpm),
+        ("centered_relative", PlaybackFaderMode::CenteredRelative),
+    ] {
+        let definition: PlaybackDefinition = serde_json::from_value(serde_json::json!({
+            "name":"Speed A", "target":{"type":"speed_group","group":"A"}, "fader":raw
+        }))
+        .unwrap();
+        assert_eq!(definition.fader, expected);
+        definition.validate().unwrap();
+    }
+    let definition: PlaybackDefinition = serde_json::from_value(serde_json::json!({
+        "name":"Speed A", "target":{"type":"speed_group","group":"A"}
+    }))
+    .unwrap();
+    assert_eq!(definition.fader, PlaybackFaderMode::LearnedPercentage);
+}

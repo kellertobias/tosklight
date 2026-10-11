@@ -293,7 +293,53 @@ fn installs_the_generated_product_demo_as_the_default_show() {
     assert_eq!(store.objects("patch_layer").unwrap().len(), 19);
     assert_eq!(store.objects("group").unwrap().len(), 35);
     assert_eq!(store.objects("cue_list").unwrap().len(), 8);
-    assert_eq!(store.objects("playback").unwrap().len(), 14);
+    let pages = store.objects("playback_page").unwrap();
+    assert_eq!(pages.len(), 1);
+    let page: light_playback::PlaybackPage = serde_json::from_value(pages[0].body.clone()).unwrap();
+    assert_eq!(page.number, 1);
+    assert_eq!(page.assignments.len(), 44);
+    assert_eq!(
+        page.assignments
+            .values()
+            .filter(|definition| matches!(
+                definition.target,
+                light_playback::PlaybackTarget::Group { .. }
+            ))
+            .count(),
+        6
+    );
+    assert_eq!(
+        page.assignments
+            .values()
+            .filter(|definition| matches!(
+                definition.target,
+                light_playback::PlaybackTarget::CueList { .. }
+            ))
+            .count(),
+        8
+    );
+    assert_eq!(
+        page.assignments
+            .values()
+            .filter(|definition| matches!(
+                definition.target,
+                light_playback::PlaybackTarget::Dynamic { .. }
+            ))
+            .count(),
+        30
+    );
+    assert!(store.objects("playback").unwrap().is_empty());
+    let solo = store.objects("playback_solo_regions").unwrap();
+    assert_eq!(solo.len(), 1);
+    assert_eq!(solo[0].body["regions"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        solo[0].body["regions"][0]["members"],
+        serde_json::json!([{ "page":1,"position":401 },{ "page":1,"position":402 },{ "page":1,"position":403 }])
+    );
+    assert_eq!(
+        solo[0].body["regions"][1]["members"],
+        serde_json::json!([{ "page":1,"position":419 },{ "page":1,"position":420 }])
+    );
     assert_eq!(store.objects("preset").unwrap().len(), 30);
     assert_eq!(store.objects("dynamic").unwrap().len(), 30);
     assert_eq!(store.objects("user_layout").unwrap().len(), 1);

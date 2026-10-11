@@ -397,6 +397,9 @@ impl StartupState {
         let (manual_clock, programmers, programmer_recovery) = restore_programmers(&persistent)?;
         let (engine, dynamics, active_show_error) =
             load_engine(&persistent, &programmers, programmer_recovery)?;
+        let (playbacks, playback_recovery) =
+            load_active_playbacks(&persistent, &engine, active_show_error.as_deref())?;
+        let active_show_error = active_show_error.or(playback_recovery);
         let (output_runtime, output_recovery) =
             load_output_runtime(&persistent, &programmers, active_show_error.as_deref())?;
         let active_show_error = persistent
@@ -404,7 +407,7 @@ impl StartupState {
             .clone()
             .or(active_show_error)
             .or(output_recovery);
-        apply_output_runtime(&engine, &output_runtime);
+        apply_output_runtime(&engine, &output_runtime, playbacks);
         let speed_groups = create_speed_groups(&persistent.configuration);
         Ok(Self {
             persistent,
@@ -528,9 +531,6 @@ fn load_engine(
     })));
     tracing::info!("engine snapshot ready");
     configure_engine(&engine, &persistent.configuration)?;
-    let playback_recovery =
-        restore_active_playbacks(persistent, &engine, active_show_error.as_deref())?;
-    let active_show_error = active_show_error.or(playback_recovery);
     Ok((engine, dynamics, active_show_error))
 }
 
@@ -567,19 +567,19 @@ fn configure_engine(engine: &Engine, configuration: &DeskConfiguration) -> anyho
         .map_err(|error| anyhow::anyhow!(error.to_string()))
 }
 
-fn restore_active_playbacks(
+fn load_active_playbacks(
     persistent: &PersistentState,
     engine: &Engine,
     recovery_error: Option<&str>,
-) -> anyhow::Result<Option<String>> {
+) -> anyhow::Result<(Vec<light_playback::ActivePlayback>, Option<String>)> {
     let Some(show) = available_show(persistent, recovery_error) else {
-        return Ok(None);
+        return Ok((Vec::new(), None));
     };
     let Some(serialized) = persistent
         .desk
         .setting(&active_playbacks_setting(show.id))?
     else {
-        return Ok(None);
+        return Ok((Vec::new(), None));
     };
     let parsed = (|| -> anyhow::Result<Vec<light_playback::ActivePlayback>> {
         check_runtime_payload("Playback", &serialized, supported_programming_contract())?;
@@ -597,12 +597,7 @@ fn restore_active_playbacks(
         Ok(playbacks)
     })();
     match parsed {
-        Ok(playbacks) => {
-            engine
-                .execute_playback(EnginePlaybackCommand::RestoreActive(playbacks))
-                .expect("restoring validated Playback state is infallible");
-            Ok(None)
-        }
+        Ok(playbacks) => Ok((playbacks, None)),
         Err(error) => runtime_recovery::preserve(
             &persistent.data_dir,
             "Playback",
@@ -610,7 +605,7 @@ fn restore_active_playbacks(
             &serialized,
             &error,
         )
-        .map(Some),
+        .map(|message| (Vec::new(), Some(message))),
     }
 }
 
@@ -665,7 +660,11 @@ fn parse_output_runtime(serialized: &str) -> anyhow::Result<PersistedOutputRunti
     PersistedOutputRuntime::decode_for_support(serialized, supported_programming_contract())
 }
 
-fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
+fn apply_output_runtime(
+    engine: &Engine,
+    runtime: &PersistedOutputRuntime,
+    playbacks: Vec<light_playback::ActivePlayback>,
+) {
     if !runtime.group_masters.is_empty() {
         apply_group_masters(engine, runtime);
     }
@@ -675,10 +674,13 @@ fn apply_output_runtime(engine: &Engine, runtime: &PersistedOutputRuntime) {
         ))
         .expect("restoring dynamics pause state is infallible");
     engine
-        .execute_playback(EnginePlaybackCommand::RestoreActiveDynamics(
-            runtime.dynamic_playbacks.clone(),
-        ))
-        .expect("restoring validated Dynamic Playback state is infallible");
+        // Solo decisions require the whole saved checkpoint. Installing Cue state first
+        // would discard a region winner before comparing its saved Dynamic peer.
+        .execute_playback(EnginePlaybackCommand::RestorePlaybackRuntime {
+            playbacks,
+            dynamic_playbacks: runtime.dynamic_playbacks.clone(),
+        })
+        .expect("restoring validated permanent Playback checkpoint is infallible");
 }
 
 fn apply_group_masters(engine: &Engine, runtime: &PersistedOutputRuntime) {

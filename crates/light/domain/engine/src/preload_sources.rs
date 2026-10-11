@@ -995,10 +995,9 @@ mod tests {
         assert!(!empty.has_pending);
         registry.queue_preload_playback_action(
             session,
-            7,
-            Some(3),
+            light_playback::PlaybackAddress::new(3, 7).unwrap(),
             light_programmer::PreloadPlaybackQueueAction::Go,
-            light_programmer::PreloadPlaybackQueueSurface::Virtual,
+            crate::tests::test_control_source(),
         );
         let queued = memo.prepare(&registry.capture_output_sources());
         assert!(queued.has_pending);

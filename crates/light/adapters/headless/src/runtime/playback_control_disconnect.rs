@@ -32,54 +32,62 @@ struct Disconnect<'a> {
 impl PlaybackUnitOfWork for Disconnect<'_> {
     type Output = Result<(), ApiError>;
     fn execute(self) -> PlaybackOperation<Self::Output> {
-        let snapshot = self.state.output.snapshot();
-        let identities = snapshot
-            .playback_pages
-            .iter()
-            .flat_map(|page| {
-                page.assignments
-                    .keys()
-                    .filter_map(move |position| {
-                        light_playback::PlaybackAddress::new(page.number, *position).ok()
-                    })
-                    .map(PlaybackRuntimeIdentity::Playback)
-            })
-            .collect::<Vec<_>>();
-        let context = ActionContext::system(uuid::Uuid::nil(), ActionSource::System);
-        let before =
-            super::playback_service::read_runtime_projections(self.state, &context, &identities);
-        let result = self
-            .state
-            .output
-            .cancel_playback_control_surface(self.surface_id)
-            .map_err(ApiError::bad_request);
-        if let Err(error) = result {
-            return PlaybackOperation::new(Err(error));
+        match cancel_scoped_in_order(self.state, self.surface_id) {
+            Ok(events) => PlaybackOperation::with_events(Ok(()), events),
+            Err(error) => PlaybackOperation::new(Err(error)),
         }
-        let (before, after) = match (
-            before,
-            super::playback_service::read_runtime_projections(self.state, &context, &identities),
-        ) {
-            (Ok(before), Ok(after)) => (before, after),
-            (Err(error), _) | (_, Err(error)) => return PlaybackOperation::new(Err(error)),
-        };
-        let events = before
-            .into_iter()
-            .zip(after)
-            .filter_map(|(before, projection)| {
-                (before != projection).then(|| {
-                    EventDraft::playback_runtime_changed(
-                        None,
-                        PlaybackRuntimeChange {
-                            projection,
-                            transition: None,
-                        },
-                        EventSource::Runtime,
-                        None,
-                    )
-                })
-            })
-            .collect();
-        PlaybackOperation::with_events(Ok(()), events)
     }
+}
+
+pub(in crate::runtime) fn cancel_scoped_in_order(
+    state: &AppState,
+    surface_id: &str,
+) -> Result<Vec<EventDraft>, ApiError> {
+    let snapshot = state.output.snapshot();
+    let identities = snapshot
+        .playback_pages
+        .iter()
+        .flat_map(|page| {
+            page.assignments
+                .keys()
+                .filter_map(move |position| {
+                    light_playback::PlaybackAddress::new(page.number, *position).ok()
+                })
+                .map(PlaybackRuntimeIdentity::Playback)
+        })
+        .collect::<Vec<_>>();
+    let context = ActionContext::system(uuid::Uuid::nil(), ActionSource::System);
+    let before = super::playback_service::read_runtime_projections(state, &context, &identities);
+    let result = state
+        .output
+        .cancel_playback_control_surface(surface_id)
+        .map_err(ApiError::bad_request);
+    if let Err(error) = result {
+        return Err(error);
+    }
+    let (before, after) = match (
+        before,
+        super::playback_service::read_runtime_projections(state, &context, &identities),
+    ) {
+        (Ok(before), Ok(after)) => (before, after),
+        (Err(error), _) | (_, Err(error)) => return Err(error),
+    };
+    let events = before
+        .into_iter()
+        .zip(after)
+        .filter_map(|(before, projection)| {
+            (before != projection).then(|| {
+                EventDraft::playback_runtime_changed(
+                    None,
+                    PlaybackRuntimeChange {
+                        projection,
+                        transition: None,
+                    },
+                    EventSource::Runtime,
+                    None,
+                )
+            })
+        })
+        .collect();
+    Ok(events)
 }

@@ -44,7 +44,11 @@ fn active_group_cue_survives_snapshot_swap_and_gains_new_members() {
     let snapshot = |members| EngineSnapshot {
         fixtures: vec![first.clone(), second.clone()].into(),
         cue_lists: vec![list.clone()].into(),
-        playbacks: vec![test_group_playback_with_master(1, "live", 0.5)].into(),
+        playback_pages: vec![playback_page(
+            1,
+            [(1, test_group_playback_with_master(1, "live", 0.5))],
+        )]
+        .into(),
         groups: vec![GroupDefinition {
             replacement_projections: Default::default(),
             id: "live".into(),
@@ -120,12 +124,14 @@ fn unpatched_group_member_keeps_programming_but_outputs_no_dmx() {
         cue_lists: vec![].into(),
         dynamics: vec![].into(),
         dynamic_stage_positions: Default::default(),
-        playbacks: vec![].into(),
+
         playback_pages: vec![].into(),
         routes: vec![].into(),
         control_mappings: vec![].into(),
         groups: vec![group.clone()].into(),
         revision: 1,
+        playback_solo_regions: Default::default(),
+        playback_preload_scope: Default::default(),
     };
     let engine = Engine::new(programmers);
     engine

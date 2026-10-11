@@ -584,6 +584,8 @@ fn restored_exclusion_active_with_origin(
 ) -> light_playback::ActivePlayback {
     let mut playback =
         restored_exclusion_active(number, cue_list_id, "2026-01-01T00:00:00Z");
+    // Canonical runtime checkpoints carry a nonzero transition order from their live action.
+    playback.transition_ordinal = ordinal;
     playback.activation = Some(light_playback::PlaybackActivationProvenance {
         ordinal,
         at: playback.activated_at,
@@ -794,4 +796,96 @@ async fn test_bench_router_seeds_show_objects_through_the_gated_v2_route() {
     assert_eq!(group.revision, 1);
     assert_eq!(group.body["name"], "Seeded Group");
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn startup_mixed_solo_checkpoint_arbitrates_once_from_all_original_regions() {
+    use semantic_contract_startup_support::ContractDesk;
+    use sha2::{Digest, Sha256};
+    use crate::runtime::output_scheduler::physical_adapters::color::profiles::{patched, rgbw};
+    let desk = ContractDesk::new("mixed-solo-checkpoint");
+    let show = desk.create_show("Mixed Solo");
+    desk.activate(&show);
+    let base = light_core::CueListId::new();
+    let snapshot = restored_exclusion_snapshot(base);
+    for list in snapshot.cue_lists.iter().take(2) {
+        show.put("cue_list", &list.id.0.to_string(), serde_json::to_value(list).unwrap());
+    }
+    let fixture = light_core::FixtureId::new();
+    show.patch(&patched(&rgbw(), fixture, 1));
+    let mut dynamic_body = show_object_intents_v2_route_tests::dynamic_definition_json(17);
+    // Already-bound canonical definitions must retain the checkpoint UUID through compilation.
+    dynamic_body["target_binding"] = serde_json::json!({"type":"frozen_targets","targets":[fixture]});
+    let dynamic: light_dynamics::DynamicDefinition = serde_json::from_value(dynamic_body.clone()).unwrap();
+    show.put("dynamic", &dynamic.id.to_string(), dynamic_body);
+    let assignment = light_playback::DynamicPlaybackAssignment {
+        dynamic: light_dynamics::DynamicReference {dynamic_id:Some(dynamic.id),last_known_pool_number:17,embedded_fallback:light_dynamics::DynamicDefinitionSnapshot {definition:Arc::new(dynamic.clone())}},
+        revision:1,target_scope:None,
+        fader_mode:light_playback::DynamicPlaybackFaderMode::Master,priority:0,activation_override:None,
+        resume_policy:light_playback::DynamicPlaybackResumePolicy::FollowDynamic,
+        local_speed_multiplier:light_dynamics::Rational::ONE,learned_duration_millis:None,
+        crossfade_non_intensity:false,auto_off_at_zero:false,auto_off_flash_release:false,auto_off_full_control:false,
+    };
+    let mut dynamic_definition = snapshot.playback_pages[0].assignments[&3].clone();
+    dynamic_definition.target = light_playback::PlaybackTarget::Dynamic {assignment};
+    dynamic_definition.buttons = light_playback::PlaybackDefinition::default_buttons(&dynamic_definition.target);
+    let mut page = snapshot.playback_pages[0].clone();
+    page.assignments.retain(|position,_| *position<=2);
+    page.assignments.insert(3,dynamic_definition);
+    show.put("playback_page", "1", serde_json::to_value(page).unwrap());
+    show.put("playback_solo_regions", "global", serde_json::json!({
+        "revision":1,"regions":[startup_solo_region(&[1,2]),startup_solo_region(&[2,3])]
+    }));
+    // Initialize a freshly authored portable show before installing private runtime checkpoints.
+    // Byte preservation below concerns runtime restoration, after normal first-load setup.
+    let initialized = startup_state::StartupState::load(desk.options()).unwrap();
+    assert!(initialized.active_show_error.is_none(), "{:?}", initialized.active_show_error);
+    let initialized_snapshot = initialized.engine.snapshot();
+    let initialized_assignment = &initialized_snapshot.playback_pages.iter()
+        .find(|page| page.number == 1).unwrap().assignments[&3];
+    let light_playback::PlaybackTarget::Dynamic { assignment } = &initialized_assignment.target else {
+        panic!("initial compiled assignment must remain Dynamic");
+    };
+    assert_eq!(assignment.dynamic.dynamic_id, Some(dynamic.id), "first load must preserve the authored UUID");
+    drop(initialized_snapshot);
+    drop(initialized);
+    let desk_id = desk.desk().desk().unwrap().id;
+    let cues = [restored_exclusion_active_with_origin(1,base,3,desk_id),restored_exclusion_active_with_origin(2,base,2,desk_id)];
+    let cue_json = serde_json::to_string(&cues.iter().map(|cue| {
+        let mut row=serde_json::to_value(cue).unwrap();
+        row["activation"]=serde_json::to_value(&cue.activation).unwrap();
+        row["transition_ordinal"]=serde_json::to_value(cue.transition_ordinal).unwrap();row
+    }).collect::<Vec<_>>()).unwrap();
+    let dynamic_runtime: light_playback::ActiveDynamicPlayback = serde_json::from_value(serde_json::json!({
+        "dynamic_id":dynamic.id,"playback_address":{"page":1,"position":3},"enabled":true,"paused":false,
+        "activated_at":"2026-01-01T00:00:00Z",
+        "activation":{"ordinal":1,"at":"2026-01-01T00:00:00Z","desk_id":desk_id,"surface":"virtual","exclusion_scope":"show"}
+    })).unwrap();
+    assert!(dynamic_runtime.enabled, "the original checkpoint must contain an enabled Dynamic");
+    assert_eq!(dynamic_runtime.dynamic_id, Some(dynamic.id));
+    let output_json = serde_json::to_string(&PersistedOutputRuntime {
+        dynamic_playbacks:vec![dynamic_runtime],..Default::default()
+    }).unwrap();
+    let cue_key=active_playbacks_setting(show.entry.id);
+    let output_key=output_runtime_setting(show.entry.id);
+    desk.desk().set_setting(&cue_key,&cue_json).unwrap();
+    desk.desk().set_setting(&output_key,&output_json).unwrap();
+    let original_show_digest = Sha256::digest(show.bytes());
+    let loaded=startup_state::StartupState::load(desk.options()).unwrap();
+    assert!(loaded.active_show_error.is_none(), "{:?}", loaded.active_show_error);
+    let compiled = loaded.engine.snapshot();
+    let assigned = &compiled.playback_pages.iter().find(|page| page.number == 1).unwrap().assignments[&3];
+    let light_playback::PlaybackTarget::Dynamic { assignment } = &assigned.target else { panic!("saved Dynamic assignment must remain Dynamic"); };
+    assert_eq!(assignment.dynamic.dynamic_id, Some(dynamic.id), "compilation must retain the saved Dynamic UUID");
+    let restored = loaded.engine.active_dynamic_playbacks();
+    assert!(restored.iter().any(|row| row.dynamic_id == Some(dynamic.id) && row.playback_address == startup_playback_address(3)),
+        "the original Dynamic checkpoint must restore, rather than be discarded as an unmatched definition");
+    assert!(loaded.engine.permanent_playback_enabled(startup_playback_address(1)));
+    assert!(!loaded.engine.permanent_playback_enabled(startup_playback_address(2)));
+    assert!(!loaded.engine.permanent_playback_enabled(startup_playback_address(3)),
+        "oldest Dynamic loses region2 to saved Cue2 even when Cue2 already lost region1; premature Cue arbitration must not revive it");
+    assert_eq!(loaded.persistent.desk.setting(&cue_key).unwrap().unwrap(),cue_json,"startup must retain the original Cue checkpoint");
+    assert_eq!(loaded.persistent.desk.setting(&output_key).unwrap().unwrap(),output_json,"startup must retain the original Output checkpoint");
+    drop(loaded);
+    assert_eq!(Sha256::digest(show.bytes()), original_show_digest, "runtime restoration must not rewrite the portable show");
 }

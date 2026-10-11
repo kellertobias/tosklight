@@ -14,6 +14,25 @@ use light_playback::{
 use super::{TimecodeAudioService, WavMetadata};
 use crate::AssetReference;
 
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TimecodeCueListReconcileReport {
+    pub activations: Vec<TimecodeCueListActivation>,
+    pub failures: Vec<TimecodeCueListReconcileFailure>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TimecodeCueListActivation {
+    pub cue_list_id: light_core::CueListId,
+    pub originating_timecode: TimecodeId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TimecodeCueListReconcileFailure {
+    pub cue_list_id: light_core::CueListId,
+    pub originating_timecode: Option<TimecodeId>,
+    pub message: String,
+}
+
 pub trait TimecodeClock: Send + Sync {
     fn now_micros(&self) -> u64;
 }
@@ -273,6 +292,23 @@ impl TimecodeRuntimeService {
     /// Stable source ownership prevents one Timecode from releasing a Cuelist still owned by
     /// another active or held clip.
     pub fn reconcile_cue_lists(&self, engine: &Engine) {
+        self.reconcile_cue_lists_with_executor(engine, |command, _origin| {
+            engine.execute_playback(command)
+        });
+    }
+
+    /// The caller owns ordering. The executor may coordinate external transport handles,
+    /// but must not recursively reconcile clips while the clip-ownership lock is held.
+    /// The report retains actual activations even if a later command partially fails.
+    pub fn reconcile_cue_lists_with_executor(
+        &self,
+        engine: &Engine,
+        mut execute: impl FnMut(
+            EnginePlaybackCommand,
+            Option<TimecodeId>,
+        ) -> Result<light_engine::EnginePlaybackOutcome, String>,
+    ) -> TimecodeCueListReconcileReport {
+        let mut report = TimecodeCueListReconcileReport::default();
         let installed = self
             .runtimes
             .lock()
@@ -341,14 +377,39 @@ impl TimecodeRuntimeService {
         for cue_list_id in cue_list_ids {
             let before = previous.get(&cue_list_id);
             let next = desired.get(&cue_list_id);
+            let origin = next.or(before).map(|clip| clip.source.timecode_id);
+            let was_enabled = engine
+                .playback_runtime_status_for_cue_list(cue_list_id)
+                .is_some_and(|status| status.playback.enabled);
             let result = match next {
-                None => engine.execute_playback(EnginePlaybackCommand::CueList {
-                    id: cue_list_id,
-                    action: CueListPlaybackAction::Release,
-                }),
-                Some(next) => reconcile_desired_cue_list(engine, cue_list_id, before, next),
+                None => execute(
+                    EnginePlaybackCommand::CueList {
+                        id: cue_list_id,
+                        action: CueListPlaybackAction::Release,
+                    },
+                    origin,
+                ),
+                Some(next) => {
+                    reconcile_desired_cue_list(engine, cue_list_id, before, next, &mut execute)
+                }
             };
+            if !was_enabled
+                && engine
+                    .playback_runtime_status_for_cue_list(cue_list_id)
+                    .is_some_and(|status| status.playback.enabled)
+                && let Some(originating_timecode) = origin
+            {
+                report.activations.push(TimecodeCueListActivation {
+                    cue_list_id,
+                    originating_timecode,
+                });
+            }
             if let Err(message) = result {
+                report.failures.push(TimecodeCueListReconcileFailure {
+                    cue_list_id,
+                    originating_timecode: origin,
+                    message: message.clone(),
+                });
                 if let Some(next) = next
                     && let Some(clips) = statuses.get_mut(&next.source.timecode_id)
                     && let Some(status) = clips.iter_mut().find(|clip| {
@@ -384,6 +445,7 @@ impl TimecodeRuntimeService {
         for change in changes {
             self.publisher.publish(&change);
         }
+        report
     }
 
     /// Removes stale runtime state after a portable Timecode is deleted or becomes unrunnable.
@@ -669,6 +731,10 @@ fn reconcile_desired_cue_list(
     cue_list_id: light_core::CueListId,
     before: Option<&AppliedCueListClip>,
     next: &AppliedCueListClip,
+    execute: &mut impl FnMut(
+        EnginePlaybackCommand,
+        Option<TimecodeId>,
+    ) -> Result<light_engine::EnginePlaybackOutcome, String>,
 ) -> Result<light_engine::EnginePlaybackOutcome, String> {
     let actual = engine.playback_runtime_status_for_cue_list(cue_list_id);
     let desired_changed =
@@ -681,7 +747,7 @@ fn reconcile_desired_cue_list(
     let changed_cue = desired_changed || actual_drifted || reconstruct_timing_changed;
     let mut outcome = if changed_cue {
         let entering = before.is_none_or(|before| before.source != next.source);
-        let execute = desired_changed
+        let should_execute = desired_changed
             && match next.reconcile_mode {
                 CueListReconcileMode::Forward => {
                     !entering || next.start_behavior == light_playback::TimecodeClipStart::Cue
@@ -691,7 +757,7 @@ fn reconcile_desired_cue_list(
                 }
                 CueListReconcileMode::Reconstruct => false,
             };
-        let action = if execute {
+        let action = if should_execute {
             CueListPlaybackAction::ExecuteCueId(next.cue_id)
         } else {
             CueListPlaybackAction::ReconstructCueId {
@@ -702,34 +768,46 @@ fn reconcile_desired_cue_list(
                 ),
             }
         };
-        engine.execute_playback(EnginePlaybackCommand::CueList {
-            id: cue_list_id,
-            action,
-        })?
+        execute(
+            EnginePlaybackCommand::CueList {
+                id: cue_list_id,
+                action,
+            },
+            Some(next.source.timecode_id),
+        )?
     } else {
         light_engine::EnginePlaybackOutcome::Applied
     };
     if before.is_none_or(|before| before.level != next.level) {
-        outcome = engine.execute_playback(EnginePlaybackCommand::CueList {
-            id: cue_list_id,
-            action: CueListPlaybackAction::SetMaster(next.level),
-        })?;
+        outcome = execute(
+            EnginePlaybackCommand::CueList {
+                id: cue_list_id,
+                action: CueListPlaybackAction::SetMaster(next.level),
+            },
+            Some(next.source.timecode_id),
+        )?;
     }
     if next.transport == TimecodeTransportState::Paused
         && (changed_cue || actual.as_ref().is_none_or(|status| !status.playback.paused))
     {
-        outcome = engine.execute_playback(EnginePlaybackCommand::CueList {
-            id: cue_list_id,
-            action: CueListPlaybackAction::Pause,
-        })?;
+        outcome = execute(
+            EnginePlaybackCommand::CueList {
+                id: cue_list_id,
+                action: CueListPlaybackAction::Pause,
+            },
+            Some(next.source.timecode_id),
+        )?;
     } else if !changed_cue
         && next.transport == TimecodeTransportState::Playing
         && actual.as_ref().is_some_and(|status| status.playback.paused)
     {
-        outcome = engine.execute_playback(EnginePlaybackCommand::CueList {
-            id: cue_list_id,
-            action: CueListPlaybackAction::Resume,
-        })?;
+        outcome = execute(
+            EnginePlaybackCommand::CueList {
+                id: cue_list_id,
+                action: CueListPlaybackAction::Resume,
+            },
+            Some(next.source.timecode_id),
+        )?;
     }
     Ok(outcome)
 }

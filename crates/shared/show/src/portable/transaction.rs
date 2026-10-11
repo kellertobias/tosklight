@@ -257,6 +257,11 @@ impl PortableShowTransaction {
         self.writes.iter()
     }
 
+    /// Object keys explicitly removed from this transaction's complete candidate.
+    pub fn object_deletes(&self) -> impl Iterator<Item = &PortableShowObjectKey> {
+        self.deletes.iter()
+    }
+
     pub fn changed_object_keys(&self) -> impl Iterator<Item = &PortableShowObjectKey> {
         self.writes.keys().chain(self.deletes.iter())
     }

@@ -142,10 +142,16 @@ fn setup() -> (Engine, Arc<ManualClock>, FixtureId, FixtureId) {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![first, second].into(),
-            playbacks: vec![
-                test_playback(1, cue_list.id),
-                test_playback_for_target(2, PlaybackTarget::Dynamic { assignment }),
-            ]
+            playback_pages: vec![playback_page(
+                1,
+                [
+                    (1, test_playback(1, cue_list.id)),
+                    (
+                        2,
+                        test_playback_for_target(2, PlaybackTarget::Dynamic { assignment }),
+                    ),
+                ],
+            )]
             .into(),
             cue_lists: vec![cue_list].into(),
             groups: vec![GroupDefinition {
@@ -161,8 +167,8 @@ fn setup() -> (Engine, Arc<ManualClock>, FixtureId, FixtureId) {
             ..Default::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
     (engine, clock, first_id, second_id)
 }
 
@@ -230,25 +236,36 @@ fn candidate_assignment_moves_and_removals_reconcile_before_publication() {
         let mut candidate = (*engine.snapshot()).clone();
         candidate.revision += 1;
         if remove {
-            candidate.playbacks = Arc::default();
+            candidate.playback_pages = Arc::default();
         } else {
-            let definitions = Arc::make_mut(&mut candidate.playbacks);
-            definitions[0].number = 3;
-            definitions[1].number = 7;
+            let page = &mut Arc::make_mut(&mut candidate.playback_pages)[0];
+            let cue_assignment = page.assignments.remove(&1).unwrap();
+            let dynamic_assignment = page.assignments.remove(&2).unwrap();
+            page.assignments.insert(3, cue_assignment);
+            page.assignments.insert(7, dynamic_assignment);
         }
         let finalized = finalize(&engine, candidate, true);
         if remove {
             assert!(finalized.cue_dynamic_values().is_empty());
             assert!(finalized.dynamic_playbacks().is_empty());
         } else {
-            assert_eq!(finalized.cue_dynamic_values()[0].playback_number, Some(3));
-            assert_eq!(finalized.dynamic_playbacks()[0].playback_number, 7);
+            assert_eq!(
+                finalized.cue_dynamic_values()[0].playback_address,
+                Some(playback_address(1, 3))
+            );
+            assert_eq!(
+                finalized.dynamic_playbacks()[0].playback_address,
+                playback_address(1, 7)
+            );
         }
         assert_eq!(
-            engine.active_cue_dynamic_values()[0].playback_number,
-            Some(1)
+            engine.active_cue_dynamic_values()[0].playback_address,
+            Some(playback_address(1, 1))
         );
-        assert_eq!(engine.active_dynamic_playbacks()[0].playback_number, 2);
+        assert_eq!(
+            engine.active_dynamic_playbacks()[0].playback_address,
+            playback_address(1, 2)
+        );
         let cues = finalized.cue_dynamic_values().to_vec();
         let dynamics = finalized.dynamic_playbacks().to_vec();
         engine.install_finalized_snapshot(finalized);
@@ -261,7 +278,11 @@ fn candidate_assignment_moves_and_removals_reconcile_before_publication() {
 fn shared_playback_is_detached_and_release_clears_normal_temporary_and_dynamic_state() {
     for preserve in [false, true] {
         let (engine, clock, _, _) = setup();
-        execute_pool(&engine, 1, PoolPlaybackAction::SetTempButton(true));
+        execute_address(
+            &engine,
+            playback_address(1, 1),
+            PlaybackAction::SetTempButton(true),
+        );
         engine
             .execute_playback(EnginePlaybackCommand::SetDynamicsPaused(true))
             .unwrap();
@@ -308,14 +329,18 @@ fn shared_playback_is_detached_and_release_clears_normal_temporary_and_dynamic_s
 fn abandoning_finalized_playback_leaves_live_generation_controls_and_history_unchanged() {
     for preserve in [false, true] {
         let (engine, _, _, _) = setup();
-        execute_pool(&engine, 1, PoolPlaybackAction::SetTempButton(true));
+        execute_address(
+            &engine,
+            playback_address(1, 1),
+            PlaybackAction::SetTempButton(true),
+        );
         let original = engine.generation.load_full();
         let runtime = engine.playback_runtime();
         let cues = engine.active_cue_dynamic_values();
         let dynamics = engine.active_dynamic_playbacks();
         let watermark = engine.playback_source_occurrence_watermark();
         let mut candidate = (*engine.snapshot()).clone();
-        candidate.playbacks = Arc::default();
+        candidate.playback_pages = Arc::default();
         drop(finalize(&engine, candidate, preserve));
         assert!(Arc::ptr_eq(&original, &engine.generation.load_full()));
         assert_eq!(engine.playback_runtime(), runtime);
@@ -345,7 +370,7 @@ fn deleted_cue_hold_uses_finalization_time_and_is_not_recaptured_at_installation
     ));
     list.cues.push(second);
     engine.replace_snapshot(initial).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(250);
     let mut candidate = (*engine.snapshot()).clone();
     Arc::make_mut(&mut candidate.cue_lists)[0].cues.pop();
@@ -371,7 +396,11 @@ fn deleted_cue_hold_uses_finalization_time_and_is_not_recaptured_at_installation
 #[test]
 fn reused_preparation_cannot_resurrect_temporary_sources_from_an_older_generation() {
     let (engine, _, _, _) = setup();
-    execute_pool(&engine, 1, PoolPlaybackAction::SetTempButton(true));
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetTempButton(true),
+    );
     let mut old_candidate = (*engine.snapshot()).clone();
     old_candidate.revision = 3;
     let prepared = engine.prepare_snapshot(old_candidate).unwrap();
@@ -379,7 +408,7 @@ fn reused_preparation_cannot_resurrect_temporary_sources_from_an_older_generatio
     newer.revision = 2;
     Arc::make_mut(&mut newer.cue_lists)[0].name = "New compiled generation".into();
     engine.replace_snapshot(newer).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Off);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Off);
     assert!(engine.active_cue_dynamic_values().is_empty());
     let finalized = engine.finalize_snapshot_playback(prepared, true).unwrap();
     assert!(finalized.cue_dynamic_values().is_empty());

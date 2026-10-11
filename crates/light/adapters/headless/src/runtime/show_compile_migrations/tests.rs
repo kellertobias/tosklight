@@ -193,7 +193,7 @@ fn start(runtime: &mut light_dynamics::DynamicRuntime, definition_id: Uuid) -> U
             definition_id,
             controller: DynamicController {
                 id: Uuid::new_v4(),
-                source: DynamicControllerSource::physical_playback(1),
+                source: DynamicControllerSource::playback(1, 1).unwrap(),
                 priority: 10,
                 activated_at_millis: 0,
                 size: 1.,

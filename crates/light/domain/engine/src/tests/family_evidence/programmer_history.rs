@@ -89,10 +89,10 @@ impl History {
             vec![CueChange::set(self.fixture, self.attribute.clone(), value)],
         );
         let mut snapshot = (*self.engine.snapshot()).clone();
-        snapshot.playbacks = vec![test_playback(1, list.id)].into();
+        snapshot.playback_pages = vec![playback_page(1, [(1, test_playback(1, list.id))])].into();
         snapshot.cue_lists = vec![list].into();
         self.engine.replace_snapshot(snapshot).unwrap();
-        execute_pool(&self.engine, 1, PoolPlaybackAction::Go);
+        execute_address(&self.engine, playback_address(1, 1), PlaybackAction::Go);
     }
 }
 
@@ -224,7 +224,7 @@ fn completed_playback_underlay_keeps_its_stamp_and_ordinal_after_playback_is_off
     h.clock.advance_millis(1);
     let incoming = h.edit(AttributeValue::Normalized(0.75), Some((1_000, 0)));
     h.commit(&[]);
-    execute_pool(&h.engine, 1, PoolPlaybackAction::Off);
+    execute_address(&h.engine, playback_address(1, 1), PlaybackAction::Off);
     let interior = h.observe(500);
     h.assert_scalar(&interior, 0.5);
     assert_entries(&h.evidence(&interior), &[playback, incoming.clone()]);

@@ -26,16 +26,12 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
                 "layout":{"desks":[],"activeDeskId":"main","future_layout":true},
                 "show_dock":true,
                 "show_playbacks":true,
-                "playback_count":8,
-                "playback_rows":1,
-                "first_playback_slot":1,
-                "page_mode":"follow_main",
+                "surface_id":"main",
                 "show_page_controls":true,
                 "desired_open":false,
                 "display_id":null,
                 "bounds":null,
                 "fullscreen":false,
-                "playback_layout":null,
                 "future_configuration_field":42
             }
         }
@@ -74,8 +70,7 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
             "action":{
                 "type":"update",
                 "screen_id":screen_id,
-                "patch":{"name":"Renamed","clear_bounds":false,"clear_display_id":false,
-                    "clear_playback_layout":false}
+                "patch":{"name":"Renamed","clear_bounds":false,"clear_display_id":false}
             }
         }),
     )
@@ -86,48 +81,56 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
     assert_eq!(sparse["screen"]["layout"]["future_layout"], true);
     assert_eq!(sparse["screen"]["show_playbacks"], true);
 
-    let followed = post_screen_action(
+    let surface_id = format!("screen:{screen_id}");
+    let surface = post_screen_intent(&app, &token, &format!("/api/v2/playback-surfaces/{surface_id}/update"), serde_json::json!({
+        "request_id":"screen-follow-surface", "name":"Side Playback surface",
+        "layout":{"rows":[{"first_position":1,"count":8,"presentation":"fader","button_count":3}]},
+        "page_source":{"type":"follow","surface_id":"main"}
+    })).await;
+    assert_eq!(surface.status(), StatusCode::OK);
+    let referenced = post_screen_intent(
         &app,
         &token,
+        &format!("/api/v2/screens/{screen_id}/update"),
         serde_json::json!({
-            "request_id":"screen-page-followed",
-            "action":{"type":"set_page","screen_id":screen_id,"page":1}
+            "request_id":"screen-reference-surface", "patch":{"surface_id":surface_id}
         }),
     )
     .await;
-    assert_eq!(followed.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        json(followed).await["error"],
-        "screen follows the main page"
-    );
-
-    let independent = post_screen_action(
+    assert_eq!(referenced.status(), StatusCode::OK);
+    let followed = post_screen_intent(
         &app,
         &token,
+        &format!("/api/v2/playback-surfaces/{surface_id}/page"),
+        serde_json::json!({"page":2}),
+    )
+    .await;
+    assert_eq!(followed.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        json(followed).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("Own")
+    );
+    let independent = post_screen_intent(
+        &app,
+        &token,
+        &format!("/api/v2/playback-surfaces/{surface_id}/update"),
         serde_json::json!({
-            "request_id":"screen-independent",
-            "action":{
-                "type":"update",
-                "screen_id":screen_id,
-                "patch":{"page_mode":"independent","clear_bounds":false,"clear_display_id":false,
-                    "clear_playback_layout":false}
-            }
+            "request_id":"screen-own-surface", "page_source":{"type":"own","page":1}
         }),
     )
     .await;
     assert_eq!(independent.status(), StatusCode::OK);
-    let page = post_screen_action(
+    let page = post_screen_intent(
         &app,
         &token,
-        serde_json::json!({
-            "request_id":"screen-page",
-            "action":{"type":"set_page","screen_id":screen_id,"page":1}
-        }),
+        &format!("/api/v2/playback-surfaces/{surface_id}/page"),
+        serde_json::json!({"page":2}),
     )
     .await;
     assert_eq!(page.status(), StatusCode::OK);
-    assert_eq!(json(page).await["active_page"], 1);
-
+    assert_eq!(json(page).await["resolved_pages"][&surface_id], 2);
     let snapshot = app
         .clone()
         .oneshot(
@@ -141,7 +144,7 @@ async fn screen_configuration_v2_is_sparse_replay_safe_tolerant_and_retires_v1()
     assert_eq!(snapshot.status(), StatusCode::OK);
     let snapshot = json(snapshot).await;
     assert_eq!(snapshot["screens"][0]["name"], "Renamed");
-    assert_eq!(snapshot["active_pages"][screen_id.to_string()], 1);
+    assert_eq!(snapshot["surfaces"]["resolved_pages"][&surface_id], 2);
     assert_eq!(
         snapshot["programmer_control_surface"],
         serde_json::json!({"owner_screen_id":null,"visible_encoders":6})
@@ -203,26 +206,25 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
     let screen_id = Uuid::new_v4();
     state
         .installation
-        .put_screen(ScreenConfiguration {
-            not_editable: false,
-            id: screen_id,
-            name: "Existing row".into(),
-            layout: serde_json::json!({"desks":[],"activeDeskId":"legacy"}),
-            show_dock: false,
-            show_playbacks: true,
-            playback_count: 6,
-            playback_rows: 2,
-            first_playback_slot: 5,
-            page_mode: "follow_main".into(),
-            show_page_controls: false,
-            show_programmer: false,
-            desired_open: true,
-            display_id: Some("display-1".into()),
-            bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
-            fullscreen: true,
-            playback_layout: None,
-            content: light_show::ScreenContent::Desktop,
-        })
+        .put_screen(
+            state.installation.desk().unwrap().id,
+            ScreenConfiguration {
+                not_editable: false,
+                id: screen_id,
+                name: "Existing row".into(),
+                layout: serde_json::json!({"desks":[],"activeDeskId":"legacy"}),
+                show_dock: false,
+                show_playbacks: true,
+                surface_id: "main".into(),
+                show_page_controls: false,
+                show_programmer: false,
+                desired_open: true,
+                display_id: Some("display-1".into()),
+                bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
+                fullscreen: true,
+                content: light_show::ScreenContent::Desktop,
+            },
+        )
         .unwrap();
     let app = router(state);
     let (token, _) = login(&app, "Operator").await;
@@ -238,7 +240,7 @@ async fn screen_configuration_v2_reads_existing_desk_store_rows_without_migratio
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
     assert_eq!(body["screens"][0]["id"], screen_id.to_string());
-    assert_eq!(body["screens"][0]["first_playback_slot"], 5);
+    assert_eq!(body["screens"][0]["surface_id"], "main");
     assert_eq!(body["screens"][0]["display_id"], "display-1");
     assert_eq!(body["screens"][0]["fullscreen"], true);
     let _ = std::fs::remove_dir_all(data_dir);
@@ -263,16 +265,12 @@ async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_
                 "layout":{"desks":[],"activeDeskId":"preserved"},
                 "show_dock":true,
                 "show_playbacks":true,
-                "playback_count":8,
-                "playback_rows":1,
-                "first_playback_slot":1,
-                "page_mode":"follow_main",
+                "surface_id":"main",
                 "show_page_controls":true,
                 "desired_open":false,
                 "display_id":null,
                 "bounds":null,
                 "fullscreen":false,
-                "playback_layout":null,
                 "content":{
                     "type":"fixed_pane",
                     "pane":{
@@ -319,8 +317,7 @@ async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_
                 }
             },
             "clear_bounds":false,
-            "clear_display_id":false,
-            "clear_playback_layout":false
+            "clear_display_id":false
         }
     });
     let updated = post_screen_intent(
@@ -357,8 +354,7 @@ async fn screen_configuration_intent_routes_persist_fixed_content_and_keep_dock_
             "patch":{
                 "content":{"type":"desktop"},
                 "clear_bounds":false,
-                "clear_display_id":false,
-                "clear_playback_layout":false
+                "clear_display_id":false
             }
         }),
     )
@@ -398,16 +394,12 @@ async fn screen_configuration_intent_routes_reject_invalid_fixed_display_setting
                 "layout":{},
                 "show_dock":false,
                 "show_playbacks":true,
-                "playback_count":8,
-                "playback_rows":1,
-                "first_playback_slot":1,
-                "page_mode":"follow_main",
+                "surface_id":"main",
                 "show_page_controls":true,
                 "desired_open":false,
                 "display_id":null,
                 "bounds":null,
                 "fullscreen":false,
-                "playback_layout":null,
                 "content":{
                     "type":"fixed_pane",
                     "pane":{

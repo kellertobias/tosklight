@@ -9,17 +9,15 @@ use std::{collections::HashMap, sync::Arc};
 
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock};
-use light_engine::{
-    Engine, EnginePlaybackCommand, EngineSnapshot, RenderOptions, VirtualPlaybackAction,
-};
+use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PlaybackAction, RenderOptions};
 use light_playback::{
-    Cue, CueChange, CueList, CueListMode, CueTrigger, IntensityPriorityMode, PlaybackButtonAction,
-    PlaybackDefinition, PlaybackFaderMode, PlaybackFootprint, PlaybackIdentity, PlaybackPage,
-    PlaybackTarget, RestartMode, VirtualPlaybackAddress, WrapMode,
+    Cue, CueChange, CueList, CueListMode, CueTrigger, IntensityPriorityMode, PlaybackAddress,
+    PlaybackButtonAction, PlaybackControlSource, PlaybackDefinition, PlaybackFaderMode,
+    PlaybackFootprint, PlaybackPage, PlaybackTarget, RestartMode, WrapMode,
 };
 use light_programmer::ProgrammerRegistry;
 
-const VIRTUAL: u16 = 1_001;
+const POSITION: u16 = 401;
 
 #[test]
 fn temp_runs_the_list_with_its_timing_and_turns_off_once_everything_is_released() {
@@ -53,14 +51,13 @@ fn temp_runs_the_list_with_its_timing_and_turns_off_once_everything_is_released(
         });
     }
     let cue_list = cue_list(vec![white, release]);
-    let address = VirtualPlaybackAddress::new(1, VIRTUAL).unwrap();
+    let address = PlaybackAddress::new(3, POSITION).unwrap();
     engine
         .replace_snapshot(EngineSnapshot {
             playback_pages: vec![PlaybackPage {
-                number: 1,
-                name: "Virtual".into(),
-                slots: HashMap::new(),
-                virtual_playbacks: HashMap::from([(VIRTUAL, temp_playback(cue_list.id))]),
+                number: 3,
+                name: "Screen".into(),
+                assignments: HashMap::from([(POSITION, temp_playback(cue_list.id))]),
             }]
             .into(),
             cue_lists: vec![cue_list].into(),
@@ -84,21 +81,24 @@ fn temp_runs_the_list_with_its_timing_and_turns_off_once_everything_is_released(
     };
     let temp_active = || {
         engine
-            .playback_runtime_status_at(PlaybackIdentity::Virtual(address))
+            .playback_runtime_status_at(address)
             .is_some_and(|status| status.temporary_active)
     };
     let cue_number = || {
         engine
-            .playback_runtime_status_at(PlaybackIdentity::Virtual(address))
+            .playback_runtime_status_at(address)
             .and_then(|status| status.playback.current_cue_number)
             .map(|number| number.to_string())
     };
 
     engine
-        .execute_playback(EnginePlaybackCommand::Virtual {
+        .execute_playback(EnginePlaybackCommand::Playback {
             address,
-            action: VirtualPlaybackAction::ToggleTemp,
-            exclusion_zones: Vec::new(),
+            action: PlaybackAction::ToggleTemp,
+            control_source: PlaybackControlSource {
+                surface_id: "screen:test".into(),
+                control_id: 1,
+            },
             activation_origin: None,
         })
         .unwrap();
@@ -149,7 +149,7 @@ fn temp_runs_the_list_with_its_timing_and_turns_off_once_everything_is_released(
         assert_eq!(level(&released, attribute), None, "{attribute:?} released");
     }
     assert!(!temp_active(), "Temp returns to off by itself");
-    let status = engine.playback_runtime_status_at(PlaybackIdentity::Virtual(address));
+    let status = engine.playback_runtime_status_at(address);
     assert!(
         status.is_none_or(|status| !status.playback.enabled && !status.temporary_active),
         "the Playback is inactive"
@@ -183,7 +183,6 @@ fn cue_list(cues: Vec<Cue>) -> CueList {
 
 fn temp_playback(cue_list_id: CueListId) -> PlaybackDefinition {
     PlaybackDefinition {
-        number: VIRTUAL,
         name: "Sunstrip release".into(),
         target: PlaybackTarget::CueList { cue_list_id },
         buttons: [

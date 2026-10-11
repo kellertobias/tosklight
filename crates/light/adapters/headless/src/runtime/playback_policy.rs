@@ -40,7 +40,9 @@ fn read<T: serde::de::DeserializeOwned + Default>(
     )
 }
 pub(super) fn read_playback_solo(state: &AppState, show_id: ShowId) -> Result<SoloStore, ApiError> {
-    read(state, show_id, "playback_solo_regions")
+    let mut stored: SoloStore = read(state, show_id, "playback_solo_regions")?;
+    stored.regions = validate_playback_solo_regions(stored.regions)?;
+    Ok(stored)
 }
 pub(super) fn read_playback_preload(
     state: &AppState,

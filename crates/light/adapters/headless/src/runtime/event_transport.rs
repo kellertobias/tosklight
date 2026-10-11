@@ -4,7 +4,7 @@ mod adapter;
 
 use super::{
     ApiError, AppState, EventResource, Session, WsResponse, authenticate_token,
-    dispatch_live_action_live,
+    software_playback_sources,
 };
 use axum::{
     Router,
@@ -91,7 +91,21 @@ async fn handle_socket(mut socket: WebSocket, state: AppState, session: Session)
     if architect {
         publish_architect_sync(&state);
     }
-    event_loop(&mut socket, &mut stream, &state, &session).await;
+    // Socket lifetime owns only sources actually used on this connection. The guard
+    // also runs on task cancellation and send/receive failure.
+    let socket_owner = SocketPlaybackOwner {
+        socket: state.software_playback_sources.open(session.desk.id),
+        state: state.clone(),
+    };
+    event_loop(
+        &mut socket,
+        &mut stream,
+        &state,
+        &session,
+        &socket_owner.socket,
+    )
+    .await;
+    drop(socket_owner);
     drop(stream);
     if visualizer {
         state.sessions.set_visualizer_connected(session.id, false);
@@ -129,13 +143,14 @@ async fn event_loop(
     stream: &mut EventStream,
     state: &AppState,
     session: &Session,
+    playback_socket: &software_playback_sources::SoftwarePlaybackSocket,
 ) {
     loop {
         let item = tokio::select! {
             delivery = stream.next() => LoopItem::Delivery(delivery),
             request = next_client_message(socket) => LoopItem::Client(request),
         };
-        if !handle_loop_item(socket, stream, state, session, item).await {
+        if !handle_loop_item(socket, stream, state, session, playback_socket, item).await {
             return;
         }
     }
@@ -151,6 +166,7 @@ async fn handle_loop_item(
     stream: &EventStream,
     state: &AppState,
     session: &Session,
+    playback_socket: &software_playback_sources::SoftwarePlaybackSocket,
     item: LoopItem,
 ) -> bool {
     match item {
@@ -159,7 +175,8 @@ async fn handle_loop_item(
         LoopItem::Client(Some(message)) => {
             send_server_message(
                 socket,
-                client_response(stream, state, session, message).await,
+                client_response_on_socket(stream, state, session, message, Some(playback_socket))
+                    .await,
             )
             .await
         }
@@ -172,6 +189,16 @@ pub(super) async fn client_response(
     session: &Session,
     message: ClientMessage,
 ) -> ServerMessage {
+    client_response_on_socket(stream, state, session, message, None).await
+}
+
+async fn client_response_on_socket(
+    stream: &EventStream,
+    state: &AppState,
+    session: &Session,
+    message: ClientMessage,
+    socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
+) -> ServerMessage {
     match message {
         ClientMessage::Event(wire::EventClientMessage::Repair { cursor }) => {
             ServerMessage::Event(stream.repair(cursor))
@@ -181,9 +208,10 @@ pub(super) async fn client_response(
                 error: "event subscription is already active".into(),
             })
         }
-        ClientMessage::Action(action) => {
-            ServerMessage::Command(dispatch_live_action_live(state, session, action).await)
-        }
+        ClientMessage::Action(action) => ServerMessage::Command(
+            super::ws_dispatch::dispatch_live_action_on_socket(state, session, action, socket)
+                .await,
+        ),
         ClientMessage::Invalid {
             request_id: Some(request_id),
             error,
@@ -478,3 +506,15 @@ fn same_rate_topic(left: &wire::EventRateLimit, right: &wire::EventRateLimit) ->
 #[cfg(test)]
 #[path = "tests/event_transport_tests.rs"]
 mod tests;
+
+struct SocketPlaybackOwner {
+    state: AppState,
+    socket: software_playback_sources::SoftwarePlaybackSocket,
+}
+impl Drop for SocketPlaybackOwner {
+    fn drop(&mut self) {
+        if let Err(error) = software_playback_sources::close_socket(&self.state, &self.socket) {
+            tracing::error!(error = %error.message, "Failed to release disconnected software Playback controls");
+        }
+    }
+}

@@ -255,7 +255,7 @@ fn running(show: &light_engine::EngineSnapshot, definition: &DynamicDefinition) 
             definition_id: definition.id,
             controller: DynamicController {
                 id: Uuid::new_v4(),
-                source: DynamicControllerSource::physical_playback(1),
+                source: DynamicControllerSource::playback(1, 1).unwrap(),
                 priority: 100,
                 activated_at_millis: 5,
                 size: 1.0,

@@ -106,7 +106,7 @@ fn automatic_transitions(
         assert_eq!(
             changes
                 .iter()
-                .filter(|change| change.projection.requested == identity)
+                .filter(|change| change.projection.identity == identity)
                 .count(),
             1
         );
@@ -506,4 +506,121 @@ fn prepared_output_cannot_advance_a_cue_while_another_playback_operation_holds_t
     );
     assert_eq!(state.output.engine().playback_runtime()[0].cue_index, 1);
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[test]
+fn transport_capture_refresh_retains_same_tick_and_single_transition_claim() {
+    let started = "2026-01-01T00:00:00Z".parse().unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
+    let fixture = FixtureId::new();
+    let mut list = chaser(fixture);
+    let id = list.id;
+    list.cues[1]
+        .actions
+        .push(light_playback::CueAction::TimecodeStop {
+            timecode_id: light_playback::TimecodeId(Uuid::new_v4()),
+        });
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(fixture)].into(),
+            cue_lists: vec![list].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id,
+            action: light_engine::CueListPlaybackAction::GoAt(started),
+        })
+        .unwrap();
+    clock.advance_millis(100);
+    let frame = engine.prepare_output_frame(RenderOptions::default());
+    let sampled = frame.sampled_at();
+    let ordinal = engine.playback_runtime()[0].transition_ordinal;
+    let mut actions = 0;
+    let settled = output_scheduler::timecode_capture::settle(
+        &engine,
+        frame,
+        |_| {
+            actions += 1;
+            // A slow external action must not advance this frame's sample to another Chaser edge.
+            clock.advance_millis(100);
+            Ok(None)
+        },
+        || Ok(()),
+    );
+    assert_eq!(actions, 1);
+    let final_frame = settled.frame.unwrap();
+    assert_eq!(final_frame.sampled_at(), sampled);
+    assert_eq!(engine.playback_runtime()[0].transition_ordinal, ordinal);
+    assert!(final_frame.automatic_playback_transitions().is_empty());
+    let accepted = settled.accepted.unwrap();
+    assert_eq!(accepted.claim_automatic_playback_transitions().len(), 1);
+    assert!(accepted.claim_automatic_playback_transitions().is_empty());
+    assert!(output_scheduler::claim_automatic_cue_action_batches(&accepted).is_empty());
+}
+
+#[test]
+fn failed_transport_capture_reconciles_accepted_changes_and_never_replays_actions() {
+    let started = "2026-01-01T00:00:00Z".parse().unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let engine = Engine::new(ProgrammerRegistry::with_clock(clock.clone()));
+    let fixture = FixtureId::new();
+    let mut list = chaser(fixture);
+    let id = list.id;
+    let action = light_playback::CueAction::TimecodeStop {
+        timecode_id: light_playback::TimecodeId(Uuid::new_v4()),
+    };
+    list.cues[1].actions.extend([action.clone(), action]);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(fixture)].into(),
+            cue_lists: vec![list].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    engine
+        .execute_playback(EnginePlaybackCommand::CueList {
+            id,
+            action: light_engine::CueListPlaybackAction::GoAt(started),
+        })
+        .unwrap();
+    clock.advance_millis(100);
+    let frame = engine.prepare_output_frame(RenderOptions::default());
+    let mut applied = 0;
+    let mut reconciled = false;
+    let settled = output_scheduler::timecode_capture::settle(
+        &engine,
+        frame,
+        |_| {
+            applied += 1;
+            if applied == 1 {
+                Ok(None)
+            } else {
+                Err("transport disappeared".into())
+            }
+        },
+        || {
+            reconciled = true;
+            Ok(())
+        },
+    );
+    assert_eq!(applied, 2);
+    assert!(
+        reconciled,
+        "accepted transport changes must reconcile despite a later failure"
+    );
+    assert!(
+        matches!(settled.frame, Err(EngineError::Invalid(message)) if message == "transport disappeared")
+    );
+    let accepted = settled.accepted.unwrap();
+    assert_eq!(accepted.claim_automatic_playback_transitions().len(), 1);
+    assert!(output_scheduler::claim_automatic_cue_action_batches(&accepted).is_empty());
+    assert!(
+        output_scheduler::claim_automatic_cue_action_batches(
+            &engine.prepare_output_frame(RenderOptions::default())
+        )
+        .is_empty()
+    );
 }

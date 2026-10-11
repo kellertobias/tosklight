@@ -429,11 +429,16 @@ fn group_changes(body: &Value, cue: usize) -> Vec<(String, AttributeValue)> {
         .collect()
 }
 
-fn pool_go(output: &Output, action: PoolPlaybackAction) {
+fn playback_go(output: &Output, action: PlaybackAction) {
     output
         .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: PLAYBACK,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: PLAYBACK,
+            },
             action,
         })
         .unwrap();
@@ -444,12 +449,12 @@ fn pool_go(output: &Output, action: PoolPlaybackAction) {
 /// Reopen and compile, install, GoTo Cue 1 then GO to the Focus-only Cue 2.
 fn play(show: &Show, output: &Output, cue: f64) {
     output.engine.replace_snapshot(show.compile()).unwrap();
-    pool_go(
+    playback_go(
         output,
-        PoolPlaybackAction::GoTo(CueNumber::try_from_legacy_f64(CUE_FULL).unwrap()),
+        PlaybackAction::GoTo(CueNumber::try_from_legacy_f64(CUE_FULL).unwrap()),
     );
     if cue == CUE_FOCUS_ONLY {
-        pool_go(output, PoolPlaybackAction::Go);
+        playback_go(output, PlaybackAction::Go);
     }
 }
 

@@ -453,20 +453,31 @@ fn restored_playback_rebinding_and_removal_reconcile_before_any_live_install() {
             auto_off_full_control: true,
         };
         let mut source = (*output.snapshot()).clone();
-        source.playbacks = vec![
-            serde_json::from_value(serde_json::json!({
-                "number": 1, "name": "Destination Dynamic",
-                "target": light_playback::PlaybackTarget::Dynamic { assignment }
-            }))
-            .unwrap(),
-        ]
+        source.playback_pages = vec![light_playback::PlaybackPage {
+            number: 1,
+            name: "Main".into(),
+            assignments: [(
+                1,
+                serde_json::from_value(serde_json::json!({
+                    "name": "Destination Dynamic",
+                    "target": light_playback::PlaybackTarget::Dynamic { assignment }
+                }))
+                .unwrap(),
+            )]
+            .into(),
+        }]
         .into();
         output.replace_snapshot(source).unwrap();
         output
             .engine
-            .execute_playback(light_engine::EnginePlaybackCommand::Pool {
-                number: 1,
-                action: light_engine::PoolPlaybackAction::On,
+            .execute_playback(light_engine::EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                action: light_engine::PlaybackAction::On,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
             })
             .unwrap();
         output.finalize_restored_owners(&playback()).unwrap();
@@ -496,15 +507,16 @@ fn restored_playback_rebinding_and_removal_reconcile_before_any_live_install() {
         let mut destination = (*output.snapshot()).clone();
         destination.revision += 1;
         if removed {
-            destination.playbacks = Arc::default();
+            destination.playback_pages = Arc::default();
         } else {
-            let playback = &mut Arc::make_mut(&mut destination.playbacks)[0];
-            playback.number = 7;
+            let page = &mut Arc::make_mut(&mut destination.playback_pages)[0];
+            let mut playback = page.assignments.remove(&1).unwrap();
             let light_playback::PlaybackTarget::Dynamic { assignment } = &mut playback.target
             else {
                 unreachable!()
             };
             assignment.priority = 37;
+            page.assignments.insert(7, playback);
         }
         let prepared = output.prepare_snapshot(destination).unwrap();
         let before = Before::capture(&output);
@@ -528,7 +540,10 @@ fn restored_playback_rebinding_and_removal_reconcile_before_any_live_install() {
             assert!(expected_runtime.instances.is_empty());
         } else {
             assert_eq!(expected_rows.len(), 1);
-            assert_eq!(expected_rows[0].playback_number, 7);
+            assert_eq!(
+                expected_rows[0].playback_address,
+                light_playback::PlaybackAddress::new(1, 7).unwrap()
+            );
             assert_eq!(expected_runtime.instances.len(), 1);
             let retained = &expected_runtime.instances[0];
             assert_eq!(retained.id, original_instance.id);
@@ -560,8 +575,8 @@ fn restored_playback_rebinding_and_removal_reconcile_before_any_live_install() {
                         matches!(
                             controller.source,
                             light_dynamics::DynamicControllerSource::Playback {
-                                playback_number: 7,
-                                ..
+                                page: 1,
+                                position: 7,
                             }
                         )
                     })
@@ -758,10 +773,8 @@ fn activation_retires_only_obsolete_authored_lookup_and_preserves_incoming_evide
             sources: vec![DynamicStaticSourceEntry {
                 source: DynamicStaticSource::Playback {
                     source: DynamicSequenceSource {
-                        playback_number: Some(4),
-                        playback_identity: Some(
-                            light_playback::PlaybackIdentity::physical(4).unwrap(),
-                        ),
+                        playback_address: Some(light_playback::PlaybackAddress::new(1, 4).unwrap()),
+                        control_source_id: None,
                         cue_list_id: light_core::CueListId::new(),
                         temporary: false,
                     },

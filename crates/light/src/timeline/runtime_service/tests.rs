@@ -983,3 +983,105 @@ fn stopped_auto_start_runtime_can_be_disarmed_without_changing_saved_preference(
     assert!(!service.install(definition, None).unwrap().external_armed);
     assert!(service.synchronize_external(TimecodeFrame(10)).is_empty());
 }
+
+#[test]
+fn clip_executor_receives_origin_and_reports_actual_activation() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let definition = execution_definition(&cue_list);
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    let mut origins = Vec::new();
+    let report = service.reconcile_cue_lists_with_executor(&engine, |command, origin| {
+        origins.push(origin);
+        // Access the actual transport while reconciliation owns clip bookkeeping. This
+        // must not require re-entering that bookkeeping or retaining its transport lock.
+        assert_eq!(
+            service.snapshot(definition.id).unwrap().transport,
+            TimecodeTransportState::Playing
+        );
+        engine.execute_playback(command)
+    });
+    assert!(!origins.is_empty());
+    assert!(origins.iter().all(|origin| *origin == Some(definition.id)));
+    assert_eq!(
+        report.activations,
+        vec![super::TimecodeCueListActivation {
+            cue_list_id: cue_list.id,
+            originating_timecode: definition.id,
+        }]
+    );
+    assert!(report.failures.is_empty());
+    let second = service
+        .reconcile_cue_lists_with_executor(&engine, |command, _| engine.execute_playback(command));
+    assert!(second.activations.is_empty());
+}
+
+#[test]
+fn rejected_clip_executor_reports_failure_without_activating_cue() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let definition = execution_definition(&cue_list);
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    let report = service.reconcile_cue_lists_with_executor(&engine, |_command, _origin| {
+        Err("Solo peer unavailable".into())
+    });
+    assert!(report.activations.is_empty());
+    assert_eq!(report.failures.len(), 1);
+    assert_eq!(report.failures[0].originating_timecode, Some(definition.id));
+    assert_eq!(report.failures[0].message, "Solo peer unavailable");
+    assert!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .is_none()
+    );
+    let clips = service.snapshot(definition.id).unwrap().cue_list_clips;
+    assert_eq!(clips[0].kind, TimecodeCueListClipExecutionKind::Unable);
+    assert_eq!(clips[0].message.as_deref(), Some("Solo peer unavailable"));
+}
+
+#[test]
+fn partial_clip_execution_failure_reports_the_accepted_activation_truthfully() {
+    let (service, _, _) = service();
+    let cue_list = execution_cue_list();
+    let engine = execution_engine(&cue_list);
+    let definition = execution_definition(&cue_list);
+    service.install(definition.clone(), None).unwrap();
+    service
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    let report = service.reconcile_cue_lists_with_executor(&engine, |command, _origin| {
+        if matches!(
+            &command,
+            EnginePlaybackCommand::CueList {
+                action: CueListPlaybackAction::SetMaster(_),
+                ..
+            }
+        ) {
+            Err("Master device rejected".into())
+        } else {
+            engine.execute_playback(command)
+        }
+    });
+    assert_eq!(report.activations.len(), 1);
+    assert_eq!(report.failures.len(), 1);
+    assert_eq!(report.failures[0].message, "Master device rejected");
+    assert!(
+        engine
+            .playback_runtime_status_for_cue_list(cue_list.id)
+            .unwrap()
+            .playback
+            .enabled
+    );
+    assert_eq!(
+        service.snapshot(definition.id).unwrap().cue_list_clips[0].kind,
+        TimecodeCueListClipExecutionKind::Unable
+    );
+}

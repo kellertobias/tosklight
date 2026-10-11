@@ -364,12 +364,16 @@ fn source_frame_projection_keeps_the_captured_cue_master_after_live_values_chang
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![patched].into(),
             cue_lists: vec![cue.clone()].into(),
-            playbacks: vec![test_playback(1, cue.id)].into(),
+            playback_pages: vec![playback_page(1, [(1, test_playback(1, cue.id))])].into(),
             ..Default::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.25));
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(0.25),
+    );
     let live = engine.render(Default::default()).unwrap();
     let frame = engine.observe_source_frame(&[]);
     assert!(

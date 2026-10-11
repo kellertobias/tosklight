@@ -66,8 +66,9 @@ fn wire_source(source: &str) -> CommandHttpSource {
         "http" => CommandHttpSource::Http,
         // Extensions enter through the same typed key path as the attached desk surface. The
         // command-line wire contract intentionally distinguishes transport HTTP from key input,
-        // while the accompanying operation event retains the precise `extension` provenance.
-        "http_key" | "extension" => CommandHttpSource::HttpKey,
+        // while the accompanying operation event retains precise `extension` or `software`
+        // provenance. Software command entry shares that key-input event category.
+        "http_key" | "extension" | "software" => CommandHttpSource::HttpKey,
         "macro" => CommandHttpSource::Macro,
         _ => unreachable!("the command HTTP adapter has a bounded source enum"),
     }

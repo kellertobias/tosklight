@@ -26,8 +26,9 @@ fn hazardous_fixture_defaults_to_immediate_safe_on_control_loss() {
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
             dynamic_stage_positions: Default::default(),
-            playbacks: vec![].into(),
             playback_pages: vec![].into(),
+            playback_solo_regions: vec![].into(),
+            playback_preload_scope: Default::default(),
             routes: vec![].into(),
             control_mappings: vec![].into(),
             groups: vec![].into(),
@@ -60,8 +61,8 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
             &[enabled, disabled],
         ))
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
 
     clock.set(started + ChronoDuration::milliseconds(1_999));
     let values = engine
@@ -153,7 +154,7 @@ fn move_in_black_waits_for_resolved_darkness_then_prepositions_only_enabled_fixt
         MoveInBlackState::Completed
     );
 
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     let values = engine
         .render(RenderOptions::default())
         .unwrap()
@@ -178,8 +179,8 @@ fn move_in_black_is_blocked_and_restarts_its_delay_after_intensity_returns() {
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[logical]))
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     programmers.set(
         session,
         logical,
@@ -253,7 +254,11 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
     let programmers = ProgrammerRegistry::with_clock(shared);
     let (fixture, logical) = moving_fixture(1, true, 0);
     let mut snapshot = mib_snapshot(vec![fixture], &[logical]);
-    Arc::make_mut(&mut snapshot.playbacks)[0].auto_off = false;
+    Arc::make_mut(&mut snapshot.playback_pages)[0]
+        .assignments
+        .get_mut(&1)
+        .unwrap()
+        .auto_off = false;
 
     let mut newer_list = snapshot.cue_lists[0].clone();
     newer_list.id = light_core::CueListId::new();
@@ -264,20 +269,21 @@ fn move_in_black_obeys_same_priority_ltp_and_numeric_priority() {
         .find(|change| change.attribute == AttributeKey("pan".into()))
         .unwrap()
         .value = Some(AttributeValue::Normalized(0.4));
-    let mut newer_playback = snapshot.playbacks[0].clone();
-    newer_playback.number = 2;
+    let mut newer_playback = snapshot.playback_pages[0].assignments[&1].clone();
     newer_playback.name = "Newer MIB".into();
     newer_playback.target = PlaybackTarget::CueList {
         cue_list_id: newer_list.id,
     };
     Arc::make_mut(&mut snapshot.cue_lists).push(newer_list);
-    Arc::make_mut(&mut snapshot.playbacks).push(newer_playback);
+    Arc::make_mut(&mut snapshot.playback_pages)[0]
+        .assignments
+        .insert(2, newer_playback);
 
     let engine = Engine::new(programmers);
     engine.replace_snapshot(snapshot.clone()).unwrap();
     for playback in [1, 2] {
-        execute_pool(&engine, playback, PoolPlaybackAction::Go);
-        execute_pool(&engine, playback, PoolPlaybackAction::Go);
+        execute_address(&engine, playback_address(1, playback), PlaybackAction::Go);
+        execute_address(&engine, playback_address(1, playback), PlaybackAction::Go);
     }
 
     clock.set(started + ChronoDuration::milliseconds(2_000));

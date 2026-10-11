@@ -77,7 +77,9 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
     assert_eq!(first[0].session_id, session.id.0);
     assert_eq!(
         first[0].trigger,
-        light_application::CommandMacroTrigger::Playback { playback_number: 7 }
+        light_application::CommandMacroTrigger::Playback {
+            address: light_playback::PlaybackAddress::new(1, 7).unwrap()
+        }
     );
 
     let ws_id = "ui-ws-macro-playback";
@@ -90,10 +92,9 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
             serde_json::from_value(serde_json::json!({
                 "type": "playback",
                 "request": {
-                    "request_id": ws_id,
-                    "address": {"kind": "playback", "playback_number": 7},
+                    "address": {"kind": "playback", "page": 1, "position": 7},
                     "action": {"type": "go", "pressed": true},
-                    "surface": "virtual"
+                    "control_source": {"surface_id":"main","control_id":7}
                 }
             }))
             .unwrap(),
@@ -106,7 +107,9 @@ async fn macro_playback_http_and_ui_ws_actions_converge_on_one_execution_service
     assert!(both.iter().all(|execution| {
         execution.macro_id == macro_id
             && execution.trigger
-                == light_application::CommandMacroTrigger::Playback { playback_number: 7 }
+                == light_application::CommandMacroTrigger::Playback {
+                    address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
+                }
     }));
 
     let editor_ws_id = "ui-ws-macro-editor";
@@ -229,23 +232,30 @@ fn install_macro_playback(state: &AppState, macro_id: Uuid) {
     state
         .output
         .replace_snapshot(EngineSnapshot {
-            playbacks: vec![light_playback::PlaybackDefinition {
-                number: 7,
-                name: "Macro 71".into(),
-                target: target.clone(),
-                buttons: light_playback::PlaybackDefinition::default_buttons(&target),
-                button_count: 1,
-                fader: light_playback::PlaybackDefinition::default_fader(&target),
-                has_fader: false,
-                footprint: light_playback::PlaybackFootprint::Normal,
-                go_activates: true,
-                auto_off: false,
-                xfade_millis: 0,
-                color: "#8f3541".into(),
-                flash_release: light_playback::FlashReleaseMode::default(),
-                protect_from_swap: false,
-                presentation_icon: None,
-                presentation_image: None,
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: [(
+                    7,
+                    light_playback::PlaybackDefinition {
+                        name: "Macro 71".into(),
+                        target: target.clone(),
+                        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+                        button_count: 1,
+                        fader: light_playback::PlaybackDefinition::default_fader(&target),
+                        has_fader: false,
+                        footprint: light_playback::PlaybackFootprint::Normal,
+                        go_activates: true,
+                        auto_off: false,
+                        xfade_millis: 0,
+                        color: "#8f3541".into(),
+                        flash_release: light_playback::FlashReleaseMode::default(),
+                        protect_from_swap: false,
+                        presentation_icon: None,
+                        presentation_image: None,
+                    },
+                )]
+                .into(),
             }]
             .into(),
             ..EngineSnapshot::default()
@@ -257,7 +267,7 @@ fn playback_action_request(
     token: &str,
     show_id: light_core::ShowId,
     desk_id: Uuid,
-    request_id: &str,
+    _request_label: &str,
 ) -> Request<Body> {
     Request::post("/api/v2/playback-actions")
         .header(header::AUTHORIZATION, format!("Bearer {token}"))
@@ -266,10 +276,9 @@ fn playback_action_request(
         .header("x-tosk-desk", desk_id.to_string())
         .body(Body::from(
             serde_json::json!({
-                "request_id": request_id,
-                "address": {"kind": "playback", "playback_number": 7},
+                "address": {"kind": "playback", "page": 1, "position": 7},
                 "action": {"type": "go", "pressed": true},
-                "surface": "virtual"
+                "control_source": {"surface_id":"main","control_id":7}
             })
             .to_string(),
         ))

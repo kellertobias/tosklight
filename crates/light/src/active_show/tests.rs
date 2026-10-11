@@ -1,5 +1,7 @@
 use super::*;
 
+#[path = "tests_deleted_playback_targets.rs"]
+mod deleted_playback_targets;
 mod finalization;
 #[path = "tests_migration_riders.rs"]
 mod migration_riders;

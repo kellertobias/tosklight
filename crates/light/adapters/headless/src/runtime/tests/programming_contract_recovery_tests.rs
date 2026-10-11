@@ -235,8 +235,8 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
                 PlaybackFamilyEvidence::try_new(vec![PlaybackFamilyEntry {
                     occurrence: PlaybackSourceOccurrence {
                         source: SequenceMasterSource {
-                            playback_number: None,
-                            playback_identity: None,
+                            playback_address: None,
+                            control_source_id: None,
                             cue_list_id: list_id,
                             temporary: false,
                         },

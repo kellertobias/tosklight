@@ -121,15 +121,32 @@ impl Rig {
         let mut snapshot = (*self.engine.snapshot()).clone();
         snapshot.dynamics = dynamics.into();
         snapshot.cue_lists = cue_lists.into();
-        snapshot.playbacks = playbacks.into();
+        snapshot.playback_pages = vec![light_playback::PlaybackPage {
+            number: 1,
+            name: "Main".into(),
+            assignments: playbacks
+                .into_iter()
+                .enumerate()
+                .map(|(index, definition)| (index as u16 + 1, definition))
+                .collect(),
+        }]
+        .into();
         snapshot.revision += 1;
         self.engine.replace_snapshot(snapshot).unwrap();
     }
 
     /// One real Playback pool action at the current clock.
-    pub(super) fn playback(&self, number: u16, action: light_engine::PoolPlaybackAction) {
+    pub(super) fn playback(&self, number: u16, action: light_engine::PlaybackAction) {
         self.engine
-            .execute_playback(light_engine::EnginePlaybackCommand::Pool { number, action })
+            .execute_playback(light_engine::EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, number).unwrap(),
+                action,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: number,
+                },
+            })
             .unwrap();
     }
 

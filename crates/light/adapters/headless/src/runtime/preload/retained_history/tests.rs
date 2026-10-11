@@ -163,7 +163,7 @@ impl Rig {
             definition_id: definition.id,
             controller: DynamicController {
                 id: controller,
-                source: DynamicControllerSource::physical_playback(1),
+                source: DynamicControllerSource::playback(1, 1).unwrap(),
                 priority: 10,
                 activated_at_millis: 0,
                 size: 1.,

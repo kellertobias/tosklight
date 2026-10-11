@@ -204,7 +204,7 @@ fn locked_desk_can_preview_update_but_cannot_apply_it() {
         target: UpdateApiTarget {
             family: UpdateApiTargetFamily::Group,
             object_id: Some("982".into()),
-            playback_number: None,
+            playback_address: None,
             cue_id: None,
             cue_number: None,
             validate_active_context: false,
@@ -249,7 +249,7 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
         .programming
         .set_command_line(session.id, "UPDATE ".into());
     let mut snapshot = matter_test_snapshot();
-    std::sync::Arc::make_mut(&mut snapshot.playbacks)[0].buttons[0] =
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[1].assignments.get_mut(&7).unwrap().buttons[0] =
         light_playback::PlaybackButtonAction::Go;
     state.output.replace_snapshot(snapshot).unwrap();
     let source: SocketAddr = "127.0.0.1:19021".parse().unwrap();
@@ -272,7 +272,7 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
 
     handle_playback_osc(
         &state,
-        "/light/playback/4/7/button/1",
+        "/light/desk/playback/4/7/button/1",
         &[OscArgument::Bool(true)],
         Some("127.0.0.1:19021"),
     );
@@ -292,7 +292,7 @@ fn armed_hardware_playback_touch_requests_update_without_operating_playback() {
         .unwrap();
     assert_eq!(requested.payload["desk_id"], session.desk.id.to_string());
     assert_eq!(requested.payload["target"]["family"]["type"], "cue");
-    assert_eq!(requested.payload["target"]["playback_number"], 25);
+    assert_eq!(requested.payload["target"]["playback_address"], serde_json::json!({"page":4,"position":7}));
     assert!(
         events
             .iter()

@@ -84,7 +84,7 @@ fn start(runtime: &mut DynamicRuntime, definition: &DynamicDefinition, targets: 
             definition_id: definition.id,
             controller: DynamicController {
                 id: Uuid::new_v4(),
-                source: DynamicControllerSource::physical_playback(1),
+                source: DynamicControllerSource::playback(1, 1).unwrap(),
                 priority: 100,
                 activated_at_millis: 5,
                 size: 1.,
@@ -392,10 +392,10 @@ fn native_checkpoint(profile: &FixtureProfile) -> DynamicRuntimeSourceCheckpoint
                 sources: vec![DynamicStaticSourceEntry {
                     source: DynamicStaticSource::Playback {
                         source: DynamicSequenceSource {
-                            playback_number: Some(1),
-                            playback_identity: Some(
-                                light_playback::PlaybackIdentity::physical(1).unwrap(),
+                            playback_address: Some(
+                                light_playback::PlaybackAddress::new(1, 1).unwrap(),
                             ),
+                            control_source_id: None,
                             cue_list_id: light_core::CueListId::new(),
                             temporary: false,
                         },

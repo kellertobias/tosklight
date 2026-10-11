@@ -4,13 +4,12 @@ pub(super) fn execute(
     ports: &ServerPlaybackPorts<'_>,
     context: &ActionContext,
     group_id: PlaybackGroupId,
-    playback_address: Option<light_playback::PlaybackAddress>,
+    _playback_address: Option<light_playback::PlaybackAddress>,
     action: PlaybackAction,
     control_source: &light_playback::PlaybackControlSource,
 ) -> Result<PlaybackExecution, ActionError> {
-    if let Some(address) = playback_address {
-        return ports.execute_playback(context, address, action, control_source);
-    }
+    // A direct Group operand controls the shared target, irrespective of which
+    // assignment currently displays it. Pickup belongs only to addressed faders.
     let changed = match action {
         PlaybackAction::Master(level) => set_master(ports, context, group_id, level)?,
         PlaybackAction::MasterTransition {

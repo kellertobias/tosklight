@@ -38,8 +38,8 @@ fn contribution(
                 transition_ordinal: 1,
                 sequence_master: scale,
                 source: SequenceMasterSource {
-                    playback_number: Some(1),
-                    playback_identity: None,
+                    playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+                    control_source_id: None,
                     cue_list_id: CueListId::new(),
                     temporary: false,
                 },

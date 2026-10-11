@@ -12,7 +12,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
     assert_eq!(empty.status(), StatusCode::OK);
     assert_eq!(
         json(empty).await,
-        serde_json::json!({"show_id":show_id,"revision":0,"zones":[]})
+        serde_json::json!({"show_id":show_id,"revision":0,"regions":[]})
     );
 
     let cursor = state.events.latest_sequence();
@@ -23,7 +23,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
         serde_json::json!({
             "show_id": show_id,
             "revision": 1,
-            "zones": zones(),
+            "regions": zones(),
             "request_id": "save-zones",
             "replayed": false,
             "changed": true,
@@ -36,13 +36,10 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
         .unwrap();
     assert_eq!(
         portable
-            .object(
-                VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND,
-                VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID,
-            )
+            .object("playback_solo_regions", "global",)
             .unwrap()
             .body(),
-        &serde_json::json!({"revision":1,"zones":zones()})
+        &serde_json::json!({"revision":1,"regions":zones()})
     );
     assert!(
         state
@@ -67,7 +64,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
     };
     assert_eq!(events.len(), 1);
     let light_application::ApplicationEvent::Show(
-        light_application::ShowEvent::VirtualPlaybackExclusionZonesChanged(change),
+        light_application::ShowEvent::PlaybackSoloRegionsChanged(change),
     ) = &events[0].payload
     else {
         panic!("expected typed exclusion-zone invalidation event")
@@ -84,7 +81,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
     assert_eq!(stale_revision.status(), StatusCode::CONFLICT);
     assert_eq!(
         json(stale_revision).await["error"],
-        "Virtual Playback exclusion-zone revision conflict: expected 0, actual 1"
+        "Playback policy revision changed; reload before applying"
     );
 
     let second_desk = state.installation.desk().unwrap();
@@ -96,7 +93,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
     assert_eq!(second["revision"], 1);
     let snapshot = json(get_zones(&app, &token).await).await;
     assert_eq!(snapshot["revision"], 1);
-    assert_eq!(snapshot["zones"], zones());
+    assert_eq!(snapshot["regions"], zones());
 
     let foreign_show =
         put_zones(&app, &token, &Uuid::new_v4().to_string(), "foreign-show", 1).await;
@@ -109,7 +106,7 @@ async fn show_level_route_is_cross_desk_and_publishes_one_replay_safe_event() {
 }
 
 #[tokio::test]
-async fn incompatible_legacy_zone_shape_is_rejected_instead_of_silently_dropped() {
+async fn invalid_canonical_solo_address_is_rejected_instead_of_silently_dropped() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -121,11 +118,11 @@ async fn incompatible_legacy_zone_shape_is_rejected_instead_of_silently_dropped(
     ShowStore::open(&active.path)
         .unwrap()
         .put_object(
-            VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_KIND,
-            VIRTUAL_PLAYBACK_EXCLUSION_OBJECT_ID,
+            "playback_solo_regions",
+            "global",
             &serde_json::json!({
                 "revision": 1,
-                "zones": [{"id":"legacy","name":"Legacy","slots":[1,2]}]
+                "regions": [{"id":Uuid::from_u128(78),"name":"Invalid","members":[{"page":0,"position":1}]}]
             }),
             0,
         )
@@ -137,7 +134,7 @@ async fn incompatible_legacy_zone_shape_is_rejected_instead_of_silently_dropped(
         json(response).await["error"]
             .as_str()
             .unwrap()
-            .starts_with("incompatible Virtual Playback exclusion-zone schema:")
+            .contains("page")
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -167,13 +164,13 @@ async fn captured_show_scope_is_rejected_after_active_show_replacement() {
 }
 
 fn zones() -> serde_json::Value {
-    serde_json::json!([{"id":"paired","name":"Paired","playback_numbers":[1001,1002]}])
+    serde_json::json!([{"id":Uuid::from_u128(77),"name":"Paired","members":[{"page":1,"position":1000},{"page":2,"position":1}]}])
 }
 
 async fn get_zones(app: &Router, token: &str) -> Response {
     app.clone()
         .oneshot(
-            Request::get("/api/v2/virtual-playback-exclusion-zones")
+            Request::get("/api/v2/playback-solo-regions")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap(),
@@ -191,7 +188,7 @@ async fn put_zones(
 ) -> Response {
     app.clone()
         .oneshot(
-            Request::post("/api/v2/virtual-playback-exclusion-zones/update")
+            Request::post("/api/v2/playback-solo-regions/update")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header("x-tosk-show", show_id)
                 .header(header::CONTENT_TYPE, "application/json")
@@ -199,7 +196,7 @@ async fn put_zones(
                     serde_json::json!({
                         "request_id": request_id,
                         "expected_revision": expected_revision,
-                        "zones": zones(),
+                        "regions": zones(),
                     })
                     .to_string(),
                 ))

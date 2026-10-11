@@ -1,39 +1,31 @@
 use super::*;
-use light_playback::{
-    PlaybackIdentity, PlaybackPage, PlaybackRuntimeEffect, VirtualPlaybackAddress,
-};
+use light_playback::{PlaybackAddress, PlaybackRuntimeEffect};
 use uuid::Uuid;
 
-fn command(virtual_playback: bool, action: PlaybackBatchAction) -> PlaybackBatchCommand {
+fn command(screen: bool, action: PlaybackBatchAction) -> PlaybackBatchCommand {
     PlaybackBatchCommand {
-        number: if virtual_playback { 1_001 } else { 1 },
-        page: virtual_playback.then_some(1),
+        address: identity(screen),
         action,
-        exclusion_zones: Arc::default(),
+        control_source: test_control_source(),
         activation_origin: None,
     }
 }
 
-fn identity(virtual_playback: bool) -> PlaybackIdentity {
-    if virtual_playback {
-        PlaybackIdentity::Virtual(VirtualPlaybackAddress::new(1, 1_001).unwrap())
+fn identity(screen: bool) -> PlaybackAddress {
+    if screen {
+        playback_address(3, 401)
     } else {
-        PlaybackIdentity::physical(1).unwrap()
+        playback_address(1, 1)
     }
 }
 
-fn assign(snapshot: &mut EngineSnapshot, definition: PlaybackDefinition, virtual_playback: bool) {
-    if virtual_playback {
-        snapshot.playback_pages = vec![PlaybackPage {
-            number: 1,
-            name: "Preview".into(),
-            slots: HashMap::new(),
-            virtual_playbacks: HashMap::from([(definition.number, definition)]),
-        }]
-        .into();
-    } else {
-        snapshot.playbacks = vec![definition].into();
-    }
+fn assign(snapshot: &mut EngineSnapshot, definition: PlaybackDefinition, screen: bool) {
+    let address = identity(screen);
+    snapshot.playback_pages = vec![playback_page(
+        address.page(),
+        [(address.position(), definition)],
+    )]
+    .into();
 }
 
 fn dynamic_engine(virtual_playback: bool) -> (Engine, Arc<ManualClock>) {
@@ -98,10 +90,7 @@ fn dynamic_engine(virtual_playback: bool) -> (Engine, Arc<ManualClock>) {
     let mut snapshot = EngineSnapshot::default();
     assign(
         &mut snapshot,
-        test_playback_for_target(
-            command(virtual_playback, PlaybackBatchAction::On).number,
-            target,
-        ),
+        test_playback_for_target(identity(virtual_playback).position(), target),
         virtual_playback,
     );
     engine.replace_snapshot(snapshot).unwrap();
@@ -119,9 +108,6 @@ fn queued_dynamic_controls_skip_cue_timing_and_install_their_changed_runtime() {
             PlaybackBatchAction::DynamicDoubleSpeed,
             PlaybackBatchAction::DynamicHalfSpeed,
             PlaybackBatchAction::DynamicLearnSpeed,
-            PlaybackBatchAction::SetFader {
-                value_permyriad: 4_000,
-            },
             PlaybackBatchAction::Off,
             PlaybackBatchAction::Toggle,
         ] {
@@ -130,46 +116,30 @@ fn queued_dynamic_controls_skip_cue_timing_and_install_their_changed_runtime() {
             let prepared = engine
                 .prepare_playback_batch(&[command(virtual_playback, action)], clock.now(), 800)
                 .unwrap();
-            let pickup_only =
-                !virtual_playback && matches!(action, PlaybackBatchAction::SetFader { .. });
-            let expected_effect = if pickup_only {
-                PlaybackRuntimeEffect::Transient
-            } else {
-                PlaybackRuntimeEffect::Durable
-            };
+            let expected_effect = PlaybackRuntimeEffect::Durable;
             assert_eq!(prepared.effect(), expected_effect, "{action:?}");
             assert_eq!(
                 engine.active_dynamic_playbacks(),
                 before,
                 "preparation remains isolated"
             );
-            if !virtual_playback {
-                assert_eq!(prepared.effect_for(1), expected_effect);
-                assert_eq!(
-                    prepared.changed_playback_numbers().collect::<Vec<_>>(),
-                    vec![1]
-                );
-            }
+            assert_eq!(
+                prepared.effect_for(identity(virtual_playback)),
+                expected_effect
+            );
+            assert_eq!(
+                prepared.changed_playback_addresses().collect::<Vec<_>>(),
+                vec![identity(virtual_playback)]
+            );
             engine.install_prepared_playback_batch(prepared).unwrap();
             let current = engine
-                .active_dynamic_playback_at(identity(virtual_playback))
+                .active_dynamic_playback(identity(virtual_playback))
                 .unwrap();
-            if pickup_only {
-                assert_eq!(
-                    engine.active_dynamic_playbacks(),
-                    before,
-                    "pickup cannot change the live Dynamic level"
-                );
-                let control = engine.playback_control_state_at(identity(false));
-                assert_eq!(control.fader_position, 0.4);
-                assert!(control.fader_pickup_required);
-            } else {
-                assert_ne!(
-                    engine.active_dynamic_playbacks(),
-                    before,
-                    "{action:?} was installed"
-                );
-            }
+            assert_ne!(
+                engine.active_dynamic_playbacks(),
+                before,
+                "{action:?} was installed"
+            );
             match action {
                 PlaybackBatchAction::On | PlaybackBatchAction::Toggle => assert!(current.enabled),
                 PlaybackBatchAction::TogglePause => assert!(current.paused),
@@ -187,11 +157,6 @@ fn queued_dynamic_controls_skip_cue_timing_and_install_their_changed_runtime() {
                     current.last_learn_tap_millis,
                     Some(clock.now().timestamp_millis() as u64)
                 ),
-                PlaybackBatchAction::SetFader { .. } => {
-                    let level = if pickup_only { 1.0 } else { 0.4 };
-                    assert_eq!(current.size, level);
-                    assert_eq!(current.master, level);
-                }
                 PlaybackBatchAction::Off => assert!(!current.enabled),
                 _ => unreachable!(),
             }
@@ -225,7 +190,7 @@ fn dynamic_batch_exact_cancellation_and_repeated_on_have_no_retained_effect() {
             )
             .unwrap();
         assert_eq!(prepared.effect(), PlaybackRuntimeEffect::None);
-        assert_eq!(prepared.changed_playback_numbers().count(), 0);
+        assert_eq!(prepared.changed_playback_addresses().count(), 0);
         assert_eq!(
             prepared.outcomes()[0].effect,
             PlaybackRuntimeEffect::Durable
@@ -265,10 +230,7 @@ fn queued_cues_keep_explicit_timing_and_use_programmer_fallback_when_unspecified
                 AttributeValue::Normalized(1.0),
             ));
             list.cues.push(next);
-            let definition = test_playback(
-                command(virtual_playback, PlaybackBatchAction::On).number,
-                list.id,
-            );
+            let definition = test_playback(identity(virtual_playback).position(), list.id);
             let mut snapshot = EngineSnapshot {
                 fixtures: vec![fixture].into(),
                 cue_lists: vec![list].into(),
@@ -325,21 +287,13 @@ fn capture_queue(engine: &Engine, commands: &[PlaybackBatchCommand]) -> Prepared
             PlaybackBatchAction::DynamicDoubleSpeed => {
                 light_programmer::PreloadPlaybackQueueAction::DynamicDoubleSpeed
             }
-            PlaybackBatchAction::SetFader { value_permyriad } => {
-                light_programmer::PreloadPlaybackQueueAction::Fader { value_permyriad }
-            }
             _ => panic!("this test helper needs a matching captured action"),
         };
         assert!(engine.programmers.queue_preload_playback_action(
             session,
-            command.number,
-            command.page,
+            command.address,
             action,
-            if command.page.is_some() {
-                light_programmer::PreloadPlaybackQueueSurface::Virtual
-            } else {
-                light_programmer::PreloadPlaybackQueueSurface::Physical
-            },
+            command.control_source.clone(),
         ));
     }
     engine.prepare_output_frame(RenderOptions::default())
@@ -365,10 +319,7 @@ fn queued_cue_engine(virtual_playback: bool) -> (Engine, Arc<ManualClock>) {
             cue
         })
         .collect();
-    let definition = test_playback(
-        command(virtual_playback, PlaybackBatchAction::On).number,
-        list.id,
-    );
+    let definition = test_playback(identity(virtual_playback).position(), list.id);
     let mut snapshot = EngineSnapshot {
         fixtures: vec![fixture].into(),
         cue_lists: vec![list].into(),
@@ -452,12 +403,10 @@ fn captured_queue_failure_discards_earlier_commands_without_mutating_live_or_the
     let (engine, _) = queued_cue_engine(false);
     let commands = [
         command(false, PlaybackBatchAction::Go),
-        command(
-            false,
-            PlaybackBatchAction::SetFader {
-                value_permyriad: 10_001,
-            },
-        ),
+        PlaybackBatchCommand {
+            address: playback_address(1, 999),
+            ..command(false, PlaybackBatchAction::On)
+        },
     ];
     let frame = capture_queue(&engine, &commands);
     let live = engine.playback_runtime();
@@ -507,7 +456,7 @@ fn captured_dynamic_queue_is_isolated_and_requires_an_explicit_captured_base() {
             .unwrap();
         let active = result
             .runtime()
-            .active_dynamic_playback_at(identity(virtual_playback))
+            .active_dynamic_playback(identity(virtual_playback))
             .unwrap();
         assert!(active.enabled);
         assert!(active.paused);
@@ -531,5 +480,29 @@ fn captured_dynamic_queue_is_isolated_and_requires_an_explicit_captured_base() {
                 .len(),
             3
         );
+    }
+}
+
+#[test]
+fn dynamic_fader_pickup_is_source_specific_on_every_address() {
+    for screen in [false, true] {
+        let (engine, _) = dynamic_engine(screen);
+        let address = identity(screen);
+        execute_address(&engine, address, PlaybackAction::On);
+        let before = engine.active_dynamic_playbacks();
+        execute_address(&engine, address, PlaybackAction::SetMaster(0.4));
+        assert_eq!(
+            engine.active_dynamic_playbacks(),
+            before,
+            "an unmatched fader position cannot change live Dynamic output"
+        );
+        let control = engine.playback_control_state(address, &test_control_source());
+        assert_eq!(control.fader_position, 0.4);
+        assert!(control.fader_pickup_required);
+        execute_address(&engine, address, PlaybackAction::SetMaster(1.0));
+        execute_address(&engine, address, PlaybackAction::SetMaster(0.4));
+        let current = engine.active_dynamic_playback(address).unwrap();
+        assert_eq!(current.master, 0.4);
+        assert_eq!(current.size, 0.4);
     }
 }

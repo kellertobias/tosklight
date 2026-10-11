@@ -101,8 +101,8 @@ fn setup(kind: usize) -> (light_engine::EngineSnapshot, Rows, DynamicRuntime) {
         )]),
         1 => {
             let source = light_playback::SequenceMasterSource {
-                playback_number: Some(1),
-                playback_identity: Some(PlaybackIdentity::physical(1).unwrap()),
+                playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+                control_source_id: None,
                 cue_list_id: light_core::CueListId::new(),
                 temporary: false,
             };
@@ -112,7 +112,7 @@ fn setup(kind: usize) -> (light_engine::EngineSnapshot, Rows, DynamicRuntime) {
                 output_enabled: true,
                 sequence_master: 1.,
                 snap_sequence_master: 1.,
-                playback_number: Some(1),
+                playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
                 cue_list_id: source.cue_list_id,
                 authored_cue_id: Uuid::new_v4(),
                 current_cue_id: Uuid::new_v4(),
@@ -126,14 +126,20 @@ fn setup(kind: usize) -> (light_engine::EngineSnapshot, Rows, DynamicRuntime) {
             }])
         }
         2 => {
-            snapshot.playbacks = vec![serde_json::from_value(serde_json::json!({
-                "number": 1, "name": "Recorded playback", "target": {"type": "dynamic", "assignment": {
+            let playback = serde_json::from_value(serde_json::json!({
+                "name": "Recorded playback", "target": {"type": "dynamic", "assignment": {
                     "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": definition.pool_number,
                         "embedded_fallback": {"definition": definition}}
                 }}
-            })).unwrap()].into();
+            })).unwrap();
+            snapshot.playback_pages = vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: [(1, playback)].into(),
+            }]
+            .into();
             Rows::Playback(vec![serde_json::from_value(serde_json::json!({
-                "dynamic_id": definition.id, "playback_number": 1, "enabled": true, "paused": false,
+                "dynamic_id": definition.id, "playback_address": {"page":1,"position":1}, "enabled": true, "paused": false,
                 "activated_at": chrono::DateTime::from_timestamp_millis(10).unwrap()
             })).unwrap()])
         }

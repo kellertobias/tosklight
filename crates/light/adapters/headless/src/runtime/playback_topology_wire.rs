@@ -53,7 +53,14 @@ fn application_playback(
     value: wire::PlaybackTopologyPlaybackDefinition,
 ) -> Result<playback::PlaybackDefinition, String> {
     let target = application_target(value.target)?;
-    let fader = normalize_legacy_fader(&target, application_fader(value.fader));
+    let fader = application_fader(value.fader);
+    if matches!(target, playback::PlaybackTarget::SpeedGroup { .. })
+        && fader == playback::PlaybackFaderMode::Speed
+    {
+        return Err(
+            "playback.fader speed is unsupported for Speed Group; use learned_percentage".into(),
+        );
+    }
     Ok(playback::PlaybackDefinition {
         name: value.name,
         target,
@@ -78,18 +85,6 @@ fn application_playback(
         presentation_icon: value.presentation_icon,
         presentation_image: value.presentation_image,
     })
-}
-
-fn normalize_legacy_fader(
-    target: &playback::PlaybackTarget,
-    fader: playback::PlaybackFaderMode,
-) -> playback::PlaybackFaderMode {
-    if matches!(target, playback::PlaybackTarget::SpeedGroup { .. })
-        && fader == playback::PlaybackFaderMode::Speed
-    {
-        return playback::PlaybackFaderMode::LearnedPercentage;
-    }
-    fader
 }
 
 fn application_target(
@@ -437,22 +432,108 @@ mod tests {
             assert!(
                 application_command(ShowId(uuid::Uuid::from_u128(1)), request)
                     .unwrap_err()
-                    .contains("Playback address")
+                    .contains("Playback")
             );
         }
     }
 
-    #[test]
-    fn legacy_speed_group_fader_uses_the_domain_migration() {
-        let target = playback::PlaybackTarget::SpeedGroup { group: "A".into() };
+    fn speed_group_request(
+        fader: wire::PlaybackTopologyFaderMode,
+        update: bool,
+    ) -> wire::PlaybackTopologyActionRequest {
+        let definition = wire::PlaybackTopologyPlaybackDefinition {
+            name: "Speed A".into(),
+            target: wire::PlaybackTopologyTarget::SpeedGroup { group: "A".into() },
+            buttons: [wire::PlaybackTopologyButtonAction::None; 3],
+            button_count: 3,
+            fader,
+            has_fader: true,
+            footprint: None,
+            go_activates: true,
+            auto_off: false,
+            xfade_millis: 0,
+            color: "#20c997".into(),
+            flash_release: wire::PlaybackTopologyFlashReleaseMode::ReleaseAll,
+            protect_from_swap: false,
+            presentation_icon: None,
+            presentation_image: None,
+        };
+        let address = light_wire::v2::playback::PlaybackAddressValue {
+            page: 4,
+            position: 305,
+        };
+        let action = if update {
+            wire::PlaybackTopologyAction::UpdatePlayback {
+                address,
+                expected_page_revision: 7,
+                expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present("4".into()),
+                definition,
+            }
+        } else {
+            wire::PlaybackTopologyAction::AssignPlayback {
+                address,
+                expected_page_revision: 7,
+                expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present("4".into()),
+                definition,
+            }
+        };
+        wire::PlaybackTopologyActionRequest {
+            request_id: "speed-fader".into(),
+            action,
+        }
+    }
 
-        assert_eq!(
-            normalize_legacy_fader(&target, playback::PlaybackFaderMode::Speed),
-            playback::PlaybackFaderMode::LearnedPercentage
-        );
-        assert_eq!(
-            normalize_legacy_fader(&target, playback::PlaybackFaderMode::DirectBpm),
-            playback::PlaybackFaderMode::DirectBpm
-        );
+    #[test]
+    fn speed_group_legacy_fader_is_rejected_for_assign_and_update() {
+        for update in [false, true] {
+            let error = application_command(
+                ShowId(uuid::Uuid::from_u128(1)),
+                speed_group_request(wire::PlaybackTopologyFaderMode::Speed, update),
+            )
+            .unwrap_err();
+            assert!(error.contains("playback.fader"));
+            assert!(error.contains("learned_percentage"));
+        }
+    }
+
+    #[test]
+    fn canonical_speed_group_fader_modes_are_preserved() {
+        for update in [false, true] {
+            for (wire_fader, expected) in [
+                (
+                    wire::PlaybackTopologyFaderMode::LearnedPercentage,
+                    playback::PlaybackFaderMode::LearnedPercentage,
+                ),
+                (
+                    wire::PlaybackTopologyFaderMode::DirectBpm,
+                    playback::PlaybackFaderMode::DirectBpm,
+                ),
+                (
+                    wire::PlaybackTopologyFaderMode::CenteredRelative,
+                    playback::PlaybackFaderMode::CenteredRelative,
+                ),
+            ] {
+                let (_, command) = application_command(
+                    ShowId(uuid::Uuid::from_u128(1)),
+                    speed_group_request(wire_fader, update),
+                )
+                .unwrap();
+                let (address, definition) = match command.action {
+                    application::PlaybackTopologyAction::AssignPlayback {
+                        address,
+                        playback,
+                        ..
+                    }
+                    | application::PlaybackTopologyAction::UpdatePlayback {
+                        address,
+                        playback,
+                        ..
+                    } => (address, playback),
+                    _ => panic!("expected Playback assignment or update"),
+                };
+                assert_eq!(address, playback::PlaybackAddress::new(4, 305).unwrap());
+                assert_eq!(definition.fader, expected);
+            }
+        }
     }
 }

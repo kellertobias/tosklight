@@ -12,7 +12,7 @@ use light_dynamics::{
     DynamicValueSource, FamilyCompositionSample, ProgrammingLaneConfiguration, Rational,
     SpeedGroup,
 };
-use light_engine::{EnginePlaybackCommand, PoolPlaybackAction};
+use light_engine::{EnginePlaybackCommand, PlaybackAction};
 use light_playback::{
     DynamicPlaybackAssignment, DynamicPlaybackFaderMode, DynamicPlaybackResumePolicy,
     PlaybackDefinition, PlaybackTarget,
@@ -325,17 +325,25 @@ fn playback(definition: &DynamicDefinition, crossfade: bool) -> PlaybackDefiniti
         },
     };
     serde_json::from_value(serde_json::json!({
-        "number": definition.pool_number, "name": "Hidden Position peer", "target": target,
+        "name": "Hidden Position peer", "target": target,
         "xfade_millis": 1000,
     }))
     .unwrap()
 }
 impl SuppressedDesk {
-    fn command(&self, number: u16, action: PoolPlaybackAction) {
+    fn command(&self, number: u16, action: PlaybackAction) {
         self.shared
             .rig
             .engine
-            .execute_playback(EnginePlaybackCommand::Pool { number, action })
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, number).unwrap(),
+                action,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: number,
+                },
+            })
             .unwrap();
     }
     fn install_hidden(&mut self, crossfade: bool, unavailable: bool) {
@@ -390,21 +398,25 @@ impl SuppressedDesk {
             .engine
             .replace_snapshot(EngineSnapshot {
                 dynamics: definitions.clone().into(),
-                playbacks: self
-                    .hidden
-                    .iter()
-                    .map(|definition| playback(definition, crossfade))
-                    .collect::<Vec<_>>()
-                    .into(),
+                playback_pages: vec![light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Hidden peers".into(),
+                    assignments: self
+                        .hidden
+                        .iter()
+                        .map(|definition| (definition.pool_number, playback(definition, crossfade)))
+                        .collect(),
+                }]
+                .into(),
                 revision: snapshot.revision + 1,
                 ..snapshot.as_ref().clone()
             })
             .unwrap();
         self.runtime.install_definitions(definitions).unwrap();
         for number in 2..=3 {
-            self.command(number, PoolPlaybackAction::On);
-            self.command(number, PoolPlaybackAction::SetMaster(1.));
-            self.command(number, PoolPlaybackAction::SetMaster(0.));
+            self.command(number, PlaybackAction::On);
+            self.command(number, PlaybackAction::SetMaster(1.));
+            self.command(number, PlaybackAction::SetMaster(0.));
         }
         // First sample reconciles both actual producers; the second has interior activation.
         self.tick();
@@ -415,7 +427,10 @@ impl SuppressedDesk {
             let active = capture
                 .dynamic_playbacks()
                 .iter()
-                .find(|entry| entry.playback_number == number)
+                .find(|entry| {
+                    entry.playback_address
+                        == light_playback::PlaybackAddress::new(1, number).unwrap()
+                })
                 .unwrap();
             assert!(active.enabled);
             assert_eq!(
@@ -424,9 +439,10 @@ impl SuppressedDesk {
             );
             let snapshot = capture.snapshot();
             let definition = snapshot
-                .playbacks
+                .playback_pages
                 .iter()
-                .find(|entry| entry.number == number)
+                .find(|page| page.number == 1)
+                .and_then(|page| page.assignments.get(&number))
                 .unwrap();
             let PlaybackTarget::Dynamic { assignment } = &definition.target else {
                 unreachable!()
@@ -580,12 +596,12 @@ fn actual_suppressed_multisource_peer_keeps_baseline_and_all_native_copies_durin
     );
 
     // Re-enabling a source restores the existing conservative multi-source eligibility.
-    desk.command(3, PoolPlaybackAction::SetMaster(1.));
+    desk.command(3, PlaybackAction::SetMaster(1.));
     desk.lane = PhysicalAdapterLane::live(PositionAdapter::default());
     let (capture, enabled) = desk.tick();
     desk.prove_hidden_gate(&capture, false, [0., 1.]);
     desk.verify_passive(&capture, &enabled);
-    desk.command(3, PoolPlaybackAction::SetMaster(0.));
+    desk.command(3, PlaybackAction::SetMaster(0.));
     desk.shared.rig.clock.advance_millis(50);
     let (capture, restored) = desk.tick();
     desk.prove_hidden_gate(&capture, false, [0., 0.]);

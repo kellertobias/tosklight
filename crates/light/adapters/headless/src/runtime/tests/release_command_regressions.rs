@@ -207,32 +207,19 @@ async fn release_dynamic_assignment_routes_empty_current_explicit_and_virtual_ta
     )
     .await;
     assert_eq!(scenario.state.output.snapshot().fixtures.len(), 2);
-    let show = light_core::ShowId(Uuid::parse_str(&show_id).unwrap());
     scenario
         .state
         .installation
-        .set_desk_page(scenario.session.desk.id, show, 3)
+        .set_playback_surface_page(scenario.session.desk.id, "main", 3)
         .unwrap();
     scenario
         .state
         .programming
         .select(scenario.session.id, [unselected]);
-    for (request, command, page, slot, virtual_number) in [
-        ("current", "ASSIGN DYNAMIC 100 AT PBK 8", 3, Some(8), None),
-        (
-            "explicit",
-            "ASSIGN DYNAMIC 100 AT PBK 2.6",
-            2,
-            Some(6),
-            None,
-        ),
-        (
-            "virtual",
-            "ASSIGN DYNAMIC 100 AT VPBK 1001",
-            1,
-            None,
-            Some(1001),
-        ),
+    for (request, command, page, position) in [
+        ("current", "ASSIGN DYNAMIC 100 AT PBK 8", 3, 8),
+        ("explicit", "ASSIGN DYNAMIC 100 AT PBK 2.6", 2, 6),
+        ("pane", "ASSIGN DYNAMIC 100 AT PBK 1.101", 1, 101),
     ] {
         let response = scenario.execute(request, Some(command)).await;
         let status = response.status();
@@ -245,15 +232,7 @@ async fn release_dynamic_assignment_routes_empty_current_explicit_and_virtual_ta
             .iter()
             .find(|p| p.number == page)
             .unwrap();
-        let playback = if let Some(slot) = slot {
-            snapshot
-                .playbacks
-                .iter()
-                .find(|p| p.number == page_def.slots[&slot])
-                .unwrap()
-        } else {
-            &page_def.virtual_playbacks[&virtual_number.unwrap()]
-        };
+        let playback = &page_def.assignments[&position];
         let light_playback::PlaybackTarget::Dynamic { assignment } = &playback.target else {
             panic!("assignment target must be Dynamic")
         };
@@ -277,18 +256,18 @@ async fn release_dynamic_assignment_routes_empty_current_explicit_and_virtual_ta
     for (id, address, surface) in [
         (
             "current-on",
-            serde_json::json!({"kind":"current_page","slot":8}),
-            "physical",
+            serde_json::json!({"kind":"current_page","position":8}),
+            "main",
         ),
         (
             "explicit-on",
-            serde_json::json!({"kind":"explicit_page","page":2,"slot":6}),
-            "physical",
+            serde_json::json!({"kind":"playback","page":2,"position":6}),
+            "main",
         ),
         (
             "virtual-on",
-            serde_json::json!({"kind":"virtual","page":1,"playback_number":1001}),
-            "virtual",
+            serde_json::json!({"kind":"playback","page":1,"position":101}),
+            "pane:dynamic",
         ),
     ] {
         let on = id;
@@ -371,7 +350,7 @@ async fn release_dynamic_assignment_routes_empty_current_explicit_and_virtual_ta
 
 async fn playback_action(
     scenario: &CommandHttpScenario,
-    id: &str,
+    _request_label: &str,
     address: serde_json::Value,
     surface: &str,
     action: &str,
@@ -380,5 +359,5 @@ async fn playback_action(
         .header(header::AUTHORIZATION,format!("Bearer {}",scenario.token))
         .header("x-tosk-desk",scenario.session.desk.id.to_string())
         .header(header::CONTENT_TYPE,"application/json")
-        .body(Body::from(serde_json::json!({"request_id":id,"address":address,"surface":surface,"action":{"type":action,"pressed":true}}).to_string())).unwrap()).await.unwrap()
+        .body(Body::from(serde_json::json!({"address":address,"control_source":{"surface_id":surface,"control_id":0},"action":{"type":action,"pressed":true}}).to_string())).unwrap()).await.unwrap()
 }

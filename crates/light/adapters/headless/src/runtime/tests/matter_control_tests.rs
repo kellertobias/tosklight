@@ -221,7 +221,7 @@ fn matter_activation_checkpoint_restores_canonical_origin_and_general_solo_state
     state.output.execute_playback(EnginePlaybackCommand::Playback {address:matter_test_address(1,1),action:light_engine::PlaybackAction::On,activation_origin:None,control_source:matter_test_source()}).unwrap();
     apply_matter_playback_write(&state,matter_test_endpoint(&state,1,2),matter::MatterPlaybackWrite{on:Some(true),..Default::default()}).unwrap();
     let activation=state.output.playback_runtime().into_iter().find(|playback|playback.playback_address==Some(matter_test_address(1,2))).unwrap().activation.unwrap();
-    assert_eq!(activation.desk_id,None);assert_eq!(activation.surface,light_playback::PlaybackActivationSurface::Matter);
+    assert_eq!(activation.desk_id,Some(Uuid::nil()));assert_eq!(activation.surface,light_playback::PlaybackActivationSurface::Matter);
     persist_active_playbacks(&state).unwrap();
     let checkpoint=state.installation.setting(&active_playbacks_setting(show.id)).unwrap().unwrap();
     state.output.execute_playback(EnginePlaybackCommand::RestoreActive(serde_json::from_str(&checkpoint).unwrap())).unwrap();

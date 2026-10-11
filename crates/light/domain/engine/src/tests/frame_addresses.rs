@@ -30,12 +30,12 @@ fn playback_contributions_carry_the_current_generation_address() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture.clone()].into(),
             cue_lists: vec![cue_list.clone()].into(),
-            playbacks: vec![playback.clone()].into(),
+            playback_pages: vec![playback_page(1, [(1, playback.clone())])].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
 
     let generation = engine.frame_addresser().generation();
     let contributions = engine.playback_contributions_at(Utc::now());
@@ -67,7 +67,7 @@ fn playback_contributions_carry_the_current_generation_address() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![other, fixture].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![playback_page(1, [(1, playback)])].into(),
             revision: 2,
             ..EngineSnapshot::default()
         })

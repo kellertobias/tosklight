@@ -118,10 +118,13 @@ fn highlight_scenario() -> HighlightScenario {
             }]
             .into(),
             cue_lists: vec![cue_list.clone()].into(),
-            playbacks: vec![
-                test_playback(1, cue_list.id),
-                test_group_playback_with_master(2, "1", 0.5),
-            ]
+            playback_pages: vec![playback_page(
+                1,
+                [
+                    (1, test_playback(1, cue_list.id)),
+                    (2, test_group_playback_with_master(2, "1", 0.5)),
+                ],
+            )]
             .into(),
             revision: 1,
             ..Default::default()

@@ -485,7 +485,6 @@ async fn timed_fade_keeps_rendering_and_real_operator_writes_while_restoring_pri
         initial_master: Some(0.25),
     };
     let playback = light_playback::PlaybackDefinition {
-        number: 1,
         name: "Front master".into(),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
         button_count: 3,
@@ -503,7 +502,17 @@ async fn timed_fade_keeps_rendering_and_real_operator_writes_while_restoring_pri
         target,
     };
     store
-        .put_object("playback", "1", &serde_json::to_value(playback).unwrap(), 0)
+        .put_object(
+            "playback_page",
+            "1",
+            &serde_json::to_value(light_playback::PlaybackPage {
+                number: 1,
+                name: "Group masters".into(),
+                assignments: std::collections::HashMap::from([(1, playback)]),
+            })
+            .unwrap(),
+            0,
+        )
         .unwrap();
     drop(store);
     state

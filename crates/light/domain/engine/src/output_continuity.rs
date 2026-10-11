@@ -179,7 +179,7 @@ mod tests {
         let cue_list = CueListId::new();
         let attribute = AttributeKey("pan".into());
         let candidate = light_playback::MoveInBlackCandidate {
-            playback_number: Some(1),
+            playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
             cue_list_id: cue_list,
             current_cue_id: uuid::Uuid::new_v4(),
             current_cue_number: 1_u16.into(),
@@ -196,7 +196,7 @@ mod tests {
             }],
         };
         let key = MoveInBlackKey {
-            playback_number: Some(1),
+            playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
             cue_list_id: cue_list,
             fixture_id: fixture,
         };

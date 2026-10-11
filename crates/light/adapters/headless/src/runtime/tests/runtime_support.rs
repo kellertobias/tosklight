@@ -2,32 +2,6 @@ pub(in crate::runtime) fn test_state() -> (AppState, PathBuf) {
     test_state_with_programmers(ProgrammerRegistry::default(), None)
 }
 
-fn persist_test_virtual_playback_exclusions(
-    state: &AppState,
-    show_id: light_core::ShowId,
-    store: &VirtualPlaybackExclusionStore,
-) {
-    let entry = state.active_show.current().unwrap();
-    let show_store = match light_show::ShowStore::open(&entry.path) {
-        Ok(show_store) => show_store,
-        Err(_) => {
-            light_show::ShowStore::create(&entry.path, &entry.name)
-                .unwrap()
-                .0
-        }
-    };
-    show_store.set_identity(show_id, &entry.name, None).unwrap();
-    state.active_show.clear_document_cache();
-    update_virtual_playback_exclusions(
-        state,
-        show_id,
-        0,
-        &store.zones,
-        "test-virtual-playback-exclusions",
-    )
-    .unwrap();
-}
-
 fn live_action_frame(
     session: &Session,
     request_id: impl Into<String>,
@@ -96,6 +70,7 @@ fn test_state_with_programming_contract(
             installation: InstallationResource::open_test_installation(data_dir.clone()).unwrap(),
             psn: crate::runtime::psn::service::PsnResource::new(),
             sessions: SessionResource::new(),
+            software_playback_sources: Arc::default(),
             dynamics: light_application::DynamicsService::new(programmers.clone()),
             macros: light_application::CommandMacroExecutionService::default(),
             timecodes: crate::runtime::timecode_v2::new_service_with_clock(
@@ -230,6 +205,6 @@ fn stored_cuelist_pool(
     let object = store.objects("cue_list").map_err(|error| error.to_string())?.into_iter()
         .find(|object| object.body["id"] == id.0.to_string()).ok_or("Cuelist does not exist")?;
     let list = serde_json::from_value(object.body.clone()).map_err(|error| error.to_string())?;
-    let assignment = snapshot.playbacks.iter().find(|playback| playback.target == light_playback::PlaybackTarget::CueList { cue_list_id: id }).cloned();
+    let assignment = snapshot.playback_pages.iter().flat_map(|page| page.assignments.values()).find(|playback| playback.target == light_playback::PlaybackTarget::CueList { cue_list_id: id }).cloned();
     Ok((assignment, object, list))
 }

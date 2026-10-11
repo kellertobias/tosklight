@@ -365,8 +365,7 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
                 id: "front".into(),
                 ..Default::default()
             }].into(),
-            playbacks: vec![light_playback::PlaybackDefinition {
-                number: 1,
+            playback_pages: vec![light_playback::PlaybackPage {number:1,name:"Main".into(),assignments:HashMap::from([(1,light_playback::PlaybackDefinition {
                 name: "Front master".into(),
                 buttons: light_playback::PlaybackDefinition::default_buttons(&target),
                 button_count: 3,
@@ -382,7 +381,7 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
                 presentation_icon: None,
                 presentation_image: None,
                 target,
-            }]
+            })])}]
             .into(),
             ..Default::default()
         })
@@ -397,7 +396,7 @@ async fn group_master_rejects_exclusive_show_change_but_not_output_read_permit()
                 "request_id":"group-master",
                 "address":{"kind":"group","group_id":"front"},
                 "action":{"type":"master","value":0.5},
-                "surface":"virtual"
+                "control_source":{"surface_id":"main","control_id":1}
             }
         }))
         .unwrap();

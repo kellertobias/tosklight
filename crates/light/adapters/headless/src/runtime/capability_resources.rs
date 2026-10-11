@@ -563,7 +563,7 @@ pub(in crate::runtime) struct ReplayResource {
     cue_thumbnails: Arc<Mutex<cue_thumbnails_http::CueThumbnailReplayCache>>,
     psn: Arc<Mutex<psn_http::PsnReplayCache>>,
     stage_layout: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
-    pub(in crate::runtime) playback_preload: Arc<Mutex<playback_preload_http::PreloadReplayCache>>,
+    playback_preload: Arc<Mutex<playback_preload_http::PreloadReplayCache>>,
     playback_solo: Arc<Mutex<playback_solo_http::PlaybackSoloReplayCache>>,
     visualizer_view: Arc<Mutex<visualizer_view_http::VisualizerViewReplayCache>>,
     change_lead: Arc<Mutex<change_lead_http::ChangeLeadReplayCache>>,
@@ -595,6 +595,27 @@ impl Default for ReplayResource {
 }
 
 impl ReplayResource {
+    pub(in crate::runtime) fn playback_preload_update(
+        &self,
+        key: (Uuid, String),
+        request: (
+            Uuid,
+            light_wire::v2::playback::PlaybackPreloadScopeUpdateRequest,
+        ),
+        apply: impl FnOnce() -> Result<
+            light_wire::v2::playback::PlaybackPreloadScopeUpdateOutcome,
+            ApiError,
+        >,
+    ) -> Result<light_wire::v2::playback::PlaybackPreloadScopeUpdateOutcome, ApiError> {
+        let mut replay = self.playback_preload.lock();
+        if let Some(outcome) = replay.get(&key, &request)? {
+            return Ok(outcome);
+        }
+        let outcome = apply()?;
+        replay.insert(key, request, outcome.clone());
+        Ok(outcome)
+    }
+
     pub(in crate::runtime) fn playback_surfaces_update(
         &self,
         key: (Uuid, String),

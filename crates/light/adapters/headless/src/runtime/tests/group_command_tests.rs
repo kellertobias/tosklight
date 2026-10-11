@@ -228,17 +228,15 @@ fn set_group_requests_properties_only_for_the_originating_desk() {
     );
     let event = state.events.audit_events().last().cloned().unwrap();
     assert_eq!(event.kind, "playback_configuration_requested");
-    assert_eq!(event.payload["addressing"], "current_page");
-    assert_eq!(event.payload["slot"], 6);
+    assert_eq!(event.payload["address"], serde_json::json!({"page":1,"position":6}));
     assert_eq!(event.payload["desk_id"], session.desk.id.to_string());
 
     assert_eq!(
-        execute_programmer_command(&state, &session, "ASSIGN VPBK 1001").unwrap(),
+        execute_programmer_command(&state, &session, "ASSIGN PBK 4 . 1000").unwrap(),
         0
     );
     let event = state.events.audit_events().last().cloned().unwrap();
-    assert_eq!(event.payload["addressing"], "virtual");
-    assert_eq!(event.payload["playback"], 1001);
+    assert_eq!(event.payload["address"], serde_json::json!({"page":4,"position":1000}));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -310,15 +308,7 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
         .find(|object| object.id == "1")
         .unwrap();
     let page = serde_json::from_value::<light_playback::PlaybackPage>(page.body).unwrap();
-    let playback_number = *page.slots.get(&2).unwrap();
-    let playback = store
-        .objects("playback")
-        .unwrap()
-        .into_iter()
-        .find(|object| object.id == playback_number.to_string())
-        .unwrap();
-    let playback =
-        serde_json::from_value::<light_playback::PlaybackDefinition>(playback.body).unwrap();
+    let playback = page.assignments.get(&2).unwrap();
     assert!(matches!(
         playback.target,
         light_playback::PlaybackTarget::Group { ref group_id, .. } if group_id == "4"
@@ -334,10 +324,10 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
         group_revision,
         "Group Master assignment must not mutate Group data",
     );
-    assert_eq!(page.slots.get(&2), Some(&playback_number));
+    assert_eq!(page.assignments[&2].target, playback.target);
 
     assert_eq!(
-        execute_programmer_command(&state, &session, "ASSIGN GROUP 4 AT VPBK 1001").unwrap(),
+        execute_programmer_command(&state, &session, "ASSIGN GROUP 4 AT PBK 1 . 1000").unwrap(),
         1
     );
     let virtual_page = ShowStore::open(&show_path)
@@ -350,8 +340,8 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
         .unwrap();
     assert!(matches!(
         virtual_page
-            .virtual_playbacks
-            .get(&1001)
+            .assignments
+            .get(&1000)
             .map(|playback| &playback.target),
         Some(light_playback::PlaybackTarget::Group { group_id, .. }) if group_id == "4"
     ));
@@ -359,7 +349,7 @@ fn assign_group_at_page_slot_assigns_a_group_master_and_set_rejects_assignment()
 }
 
 #[test]
-fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
+fn assign_cuelist_uses_pool_identity_for_explicit_page_targets() {
     let (state, data_dir) = test_state();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -385,7 +375,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
     };
     let store = ShowStore::open(&show_path).unwrap();
     let cue_list = light_playback::CueList {
-        pool_number: None,
+        pool_number: Some(4),
         legacy_pool_aliases: Vec::new(),
         id: light_core::CueListId::new(),
         name: "Main".into(),
@@ -418,7 +408,6 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
         cue_list_id: cue_list.id,
     };
     let source = light_playback::PlaybackDefinition {
-        number: 4,
         name: "Main".into(),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
         button_count: 3,
@@ -436,7 +425,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
         target,
     };
     store
-        .put_object("playback", "4", &serde_json::to_value(&source).unwrap(), 0)
+        .put_object("playback_page", "1", &serde_json::json!({"number":1,"name":"Main","assignments":{"4":source}}), 0)
         .unwrap();
     state.active_show.replace_current(Some(entry.clone()));
     state
@@ -449,7 +438,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
         1
     );
     assert_eq!(
-        execute_programmer_command(&state, &session, "ASSIGN CUELIST 4 AT VPBK 1001").unwrap(),
+        execute_programmer_command(&state, &session, "ASSIGN CUELIST 4 AT PBK 1 . 1000").unwrap(),
         1
     );
     let pages = ShowStore::open(&show_path)
@@ -465,19 +454,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
             .clone(),
     )
     .unwrap();
-    let physical_number = physical_page.slots[&6];
-    let playback: light_playback::PlaybackDefinition = serde_json::from_value(
-        ShowStore::open(&show_path)
-            .unwrap()
-            .objects("playback")
-            .unwrap()
-            .into_iter()
-            .find(|object| object.id == physical_number.to_string())
-            .unwrap()
-            .body,
-    )
-    .unwrap();
-    assert_eq!(playback.target, source.target);
+    assert_eq!(physical_page.assignments[&6].target, source.target);
     let virtual_page: light_playback::PlaybackPage = serde_json::from_value(
         pages
             .iter()
@@ -487,7 +464,7 @@ fn assign_cuelist_uses_pool_identity_for_physical_and_virtual_targets() {
             .clone(),
     )
     .unwrap();
-    assert_eq!(virtual_page.virtual_playbacks[&1001].target, source.target);
+    assert_eq!(virtual_page.assignments[&1000].target, source.target);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -523,17 +500,12 @@ fn record_group_supports_overwrite_merge_subtract_and_empty_source_delete() {
         .put_object(
             "group",
             "3",
-            &{
-                let mut group = serde_json::to_value(light_programmer::GroupDefinition {
-                    id: "3".into(),
-                    name: "Kept name".into(),
-                    fixtures: fixtures[..2].to_vec(),
-                    ..Default::default()
-                })
-                .unwrap();
-                group["master"] = serde_json::json!(0.4);
-                group
-            },
+            &serde_json::to_value(light_programmer::GroupDefinition {
+                id: "3".into(),
+                name: "Kept name".into(),
+                fixtures: fixtures[..2].to_vec(),
+                ..Default::default()
+            }).unwrap(),
             0,
         )
         .unwrap();

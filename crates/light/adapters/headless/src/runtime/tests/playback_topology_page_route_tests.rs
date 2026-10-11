@@ -22,7 +22,7 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
     assert_eq!(changed["objects"][0]["object_id"], "4");
     assert_eq!(
         changed["objects"][0]["body"],
-        serde_json::json!({"number":4,"name":"Page 4","slots":{},"virtual_playbacks":{}})
+        serde_json::json!({"number":4,"name":"Page 4","assignments":{}})
     );
     assert_one_topology_event(&scenario.state, cursor, 1);
 
@@ -68,12 +68,11 @@ async fn create_page_returns_one_authority_and_is_replayable_and_idempotent() {
 #[tokio::test]
 async fn rename_page_is_lossless_no_change_replayable_and_revision_checked() {
     let scenario = TopologyScenario::new("Rename Playback Page").await;
-    scenario.seed("playback", "8", &numbered_grand_master_playback_body(8));
     scenario.seed(
         "playback_page",
         "legacy-page-three",
         &serde_json::json!({
-            "number":3,"name":"Before","slots":{"2":8},"virtual_playbacks":{},
+            "number":3,"name":"Before","assignments":{"2":{"name":"Grand Master","target":{"type":"grand_master"}}},
             "future_layout":{"columns":8}
         }),
     );
@@ -101,7 +100,10 @@ async fn rename_page_is_lossless_no_change_replayable_and_revision_checked() {
     let page = &changed["objects"][0];
     assert_eq!(page["object_id"], "legacy-page-three");
     assert_eq!(page["body"]["name"], "Act One");
-    assert_eq!(page["body"]["slots"], serde_json::json!({"2":8}));
+    assert_eq!(
+        page["body"]["assignments"]["2"]["target"]["type"],
+        "grand_master"
+    );
     assert_eq!(page["body"]["future_layout"]["columns"], 8);
     assert_one_topology_event(&scenario.state, cursor, 1);
 
@@ -214,8 +216,8 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = json(response).await;
-    assert_eq!(body["desk"]["id"], desk_id.to_string());
-    assert_eq!(body["page"], 2);
+    assert_eq!(body["command_page"], 2);
+    assert_eq!(body["resolved_pages"]["main"], 2);
     let view_filter = light_application::EventFilter::for_desk(desk_id)
         .with_object(light_application::EventObject::playback_view(desk_id));
     let light_application::EventReplay::Events(retained) =
@@ -224,8 +226,7 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
         panic!("the focused Playback view event must remain replayable")
     };
     assert_eq!(retained.len(), 1);
-    assert_eq!(body["event_sequence"], retained[0].sequence);
-    assert!(body["page_creation_event_sequence"].is_null());
+    assert!(retained[0].sequence > cursor);
     assert_eq!(desk_page(&scenario, desk_id, show_id), 2);
     let light_application::ApplicationEvent::Desk(
         light_application::DeskEvent::PlaybackViewChanged(projection),
@@ -234,66 +235,31 @@ async fn strict_desk_page_selects_one_existing_page_without_creating_another() {
         panic!("expected one authoritative Playback desk event")
     };
     assert_eq!(projection.desk_id, desk_id);
-    assert_eq!(projection.active_page, 2);
+    assert_eq!(projection.command_page, 2);
     scenario.cleanup();
 }
 
 #[tokio::test]
-async fn strict_missing_page_is_side_effect_free_while_legacy_advance_still_creates() {
-    let scenario = TopologyScenario::new("Strict missing desk Page").await;
-    let configured = scenario
-        .action(
-            scenario.show_revision(),
-            configure_request("occupy-page-one", 0, 0),
-        )
-        .await;
-    assert_eq!(configured.status(), StatusCode::OK);
+async fn live_surface_page_selects_sparse_unassigned_page_without_show_mutation() {
+    let scenario = TopologyScenario::new("Sparse surface page").await;
     let desk_id = scenario_desk_id(&scenario);
     let show_id = scenario_show_id(&scenario);
     let revision = scenario.show_revision();
     let cursor = scenario.state.events.latest_sequence();
-
-    let strict = put_desk_page(&scenario, 2, Some(true)).await;
-
-    assert_eq!(strict.status(), StatusCode::BAD_REQUEST);
+    let response = put_desk_page(&scenario, 99, None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json(response).await["command_page"], 99);
     assert_eq!(scenario.show_revision(), revision);
-    assert!(scenario.document().object("playback_page", "2").is_none());
-    assert!(
-        !scenario
-            .state
-            .output
-            .snapshot()
-            .playback_pages
-            .iter()
-            .any(|page| page.number == 2)
-    );
-    assert_eq!(desk_page(&scenario, desk_id, show_id), 1);
-    let view_filter = light_application::EventFilter::for_desk(desk_id)
+    assert!(scenario.document().object("playback_page", "99").is_none());
+    assert_eq!(desk_page(&scenario, desk_id, show_id), 99);
+    let filter = light_application::EventFilter::for_desk(desk_id)
         .with_object(light_application::EventObject::playback_view(desk_id));
-    let light_application::EventReplay::Events(strict_view_events) =
-        scenario.state.events.replay(cursor, &view_filter)
+    let light_application::EventReplay::Events(events) =
+        scenario.state.events.replay(cursor, &filter)
     else {
-        panic!("the focused Playback view history must remain replayable")
+        panic!("view event must remain replayable")
     };
-    assert!(strict_view_events.is_empty());
-
-    let legacy = put_desk_page(&scenario, 2, None).await;
-
-    assert_eq!(legacy.status(), StatusCode::OK);
-    let legacy = json(legacy).await;
-    let legacy_filter = view_filter.with_object(
-        light_application::EventObject::show_storage_object(show_id, "playback_page", "2"),
-    );
-    let light_application::EventReplay::Events(retained) =
-        scenario.state.events.replay(cursor, &legacy_filter)
-    else {
-        panic!("the focused Page creation and Playback view events must remain replayable")
-    };
-    assert_eq!(retained.len(), 2);
-    assert_eq!(legacy["page_creation_event_sequence"], retained[0].sequence);
-    assert_eq!(legacy["event_sequence"], retained[1].sequence);
-    assert_eq!(desk_page(&scenario, desk_id, show_id), 2);
-    assert!(scenario.document().object("playback_page", "2").is_some());
+    assert_eq!(events.len(), 1);
     scenario.cleanup();
 }
 
@@ -359,7 +325,7 @@ async fn osc_page_creation_finalizes_before_switch_and_keeps_repeat_and_missing_
     else {
         panic!("page creation must precede the authoritative desk view event")
     };
-    assert_eq!(view.active_page, 2);
+    assert_eq!(view.command_page, 2);
     assert_eq!(view.scope.show_revision, revision + 1);
     assert!(events[0].sequence < events[1].sequence);
     assert_eq!(
@@ -391,7 +357,7 @@ async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_reque
     scenario.seed(
         "playback_page",
         "6",
-        &serde_json::json!({"number":9,"name":"Occupied","slots":{},"virtual_playbacks":{}}),
+        &serde_json::json!({"number":9,"name":"Occupied","assignments":{}}),
     );
     let revision = scenario.show_revision();
     let cursor = scenario.state.events.latest_sequence();
@@ -433,17 +399,14 @@ async fn page_route_rejects_unauthenticated_unsafe_and_canonical_collision_reque
 async fn put_desk_page(
     scenario: &TopologyScenario,
     page: u8,
-    existing_only: Option<bool>,
+    _existing_only: Option<bool>,
 ) -> Response {
-    let body = serde_json::json!({
-        "request_id":Uuid::new_v4().to_string(),
-        "action":{"type":"set_page","page":page,"existing_only":existing_only.unwrap_or(false)}
-    });
+    let body = serde_json::json!({"page":page});
     scenario
         .app
         .clone()
         .oneshot(
-            Request::post("/api/v2/control-desk/actions")
+            Request::post("/api/v2/playback-surfaces/main/page")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
                 .body(Body::from(body.to_string()))
@@ -472,11 +435,7 @@ pub(super) fn scenario_show_id(scenario: &TopologyScenario) -> light_core::ShowI
 pub(super) fn desk_page(
     scenario: &TopologyScenario,
     desk_id: Uuid,
-    show_id: light_core::ShowId,
+    _show_id: light_core::ShowId,
 ) -> u8 {
-    scenario
-        .state
-        .installation
-        .desk_page(desk_id, show_id)
-        .unwrap()
+    scenario.state.installation.command_page(desk_id).unwrap()
 }

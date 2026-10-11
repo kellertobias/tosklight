@@ -191,11 +191,11 @@ pub enum PlaybackTarget {
     },
     Group {
         group_id: String,
-        /// Portable compatibility seed for the shared runtime Group Master.
+        /// Portable initial seed for the shared runtime Group Master.
         ///
-        /// Every assignment for one Group is normalized to the same value when a legacy show is
-        /// opened. The value is not live authority: the runtime owns subsequent changes and the
-        /// desk/show output-runtime sidecar overrides this seed when present.
+        /// The lowest canonical assignment address supplies the seed when no retained runtime
+        /// exists. Subsequent changes belong to the shared runtime, and a saved desk/show output
+        /// checkpoint overrides the seed without rewriting assignment definitions.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         initial_master: Option<f32>,
     },
@@ -710,13 +710,15 @@ impl<'de> Deserialize<'de> for PlaybackDefinition {
         let buttons = stored
             .buttons
             .unwrap_or_else(|| PlaybackDefinition::default_buttons(&stored.target));
-        let mut fader = stored
+        let fader = stored
             .fader
             .unwrap_or_else(|| PlaybackDefinition::default_fader(&stored.target));
         if matches!(stored.target, PlaybackTarget::SpeedGroup { .. })
             && fader == PlaybackFaderMode::Speed
         {
-            fader = PlaybackFaderMode::LearnedPercentage;
+            return Err(serde::de::Error::custom(
+                "Speed Group fader speed is retired; use learned_percentage",
+            ));
         }
         Ok(Self {
             name: stored.name,

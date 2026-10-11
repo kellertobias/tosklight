@@ -277,7 +277,7 @@ fn a_bound_point_ignores_a_running_cue() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![playback_page(1, [(1, playback)])].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -285,7 +285,7 @@ fn a_bound_point_ignores_a_running_cue() {
     engine.set_tracked_overrides([held(fixture_id, 0.6)]);
 
     // The cue goes live against a point that is already bound: the marker keeps it.
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     assert_eq!(point_at(&engine, fixture_id), 0.6);
 }
 

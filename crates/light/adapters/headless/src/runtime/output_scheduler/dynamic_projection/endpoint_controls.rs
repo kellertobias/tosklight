@@ -139,7 +139,7 @@ mod tests {
     }
     fn playback(master: f32, crossfade_non_intensity: bool) -> DynamicPlaybackControl {
         DynamicPlaybackControl {
-            identity: light_playback::PlaybackIdentity::physical(1).unwrap(),
+            identity: light_playback::PlaybackAddress::new(1, 1).unwrap(),
             master,
             crossfade_non_intensity,
             auto_off_full_control: false,

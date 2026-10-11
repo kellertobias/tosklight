@@ -36,15 +36,23 @@ fn explicit_off_after_automatic_empty_release_resets_jump_history_for_every_alia
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![test_playback(1, cue_list_id), test_playback(2, cue_list_id)].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: HashMap::from([
+                    (1, test_playback(1, cue_list_id)),
+                    (2, test_playback(2, cue_list_id)),
+                ]),
+            }]
+            .into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
 
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
     for expected in [2_u16, 1, 2, 3] {
-        execute_pool(&engine, 1, PoolPlaybackAction::Go);
+        execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
         assert_eq!(
             engine.playback_runtime()[0].current_cue_number,
             Some(expected.into())
@@ -62,10 +70,12 @@ fn explicit_off_after_automatic_empty_release_resets_jump_history_for_every_alia
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
                 action: PlaybackBatchAction::Off,
-                exclusion_zones: Arc::default(),
                 activation_origin: None,
             }],
             clock.now(),
@@ -73,11 +83,17 @@ fn explicit_off_after_automatic_empty_release_resets_jump_history_for_every_alia
         )
         .unwrap();
     assert_eq!(prepared.effect(), PlaybackRuntimeEffect::Durable);
-    assert_eq!(prepared.effect_for(1), PlaybackRuntimeEffect::Durable);
-    assert_eq!(prepared.effect_for(2), PlaybackRuntimeEffect::Durable);
     assert_eq!(
-        prepared.changed_playback_numbers().collect::<Vec<_>>(),
-        vec![1, 2]
+        prepared.effect_for(playback_address(1, 1)),
+        PlaybackRuntimeEffect::Durable
+    );
+    assert_eq!(
+        prepared.effect_for(playback_address(1, 2)),
+        PlaybackRuntimeEffect::Durable
+    );
+    assert_eq!(
+        prepared.changed_playback_addresses().collect::<Vec<_>>(),
+        vec![playback_address(1, 1), playback_address(1, 2)]
     );
     assert_eq!(
         engine.playback_runtime(),
@@ -88,9 +104,13 @@ fn explicit_off_after_automatic_empty_release_resets_jump_history_for_every_alia
 
     // Loading the first Cue avoids the FirstCue restart policy, which would independently clear
     // Jump counters and hide a lost Off effect. The next pass must take the one allowed jump.
-    execute_pool(&engine, 1, PoolPlaybackAction::Load(1_u16.into()));
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::Load(1_u16.into()),
+    );
     for expected in [1_u16, 2, 1] {
-        execute_pool(&engine, 1, PoolPlaybackAction::Go);
+        execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
         assert_eq!(
             engine.playback_runtime()[0].current_cue_number,
             Some(expected.into())

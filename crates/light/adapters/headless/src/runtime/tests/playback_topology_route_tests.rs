@@ -15,14 +15,17 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     assert_eq!(configured["request_id"], "configure-house");
     assert_eq!(configured["status"], "changed");
     assert_eq!(configured["show_revision"], initial_revision + 1);
-    assert_eq!(configured["resolution"]["kind"], "page_slot");
-    assert_eq!(configured["resolution"]["playback_number"], 1);
+    assert_eq!(configured["resolution"]["kind"], "playback");
+    assert_eq!(
+        serde_json::json!({"page":configured["resolution"]["page"],"position":configured["resolution"]["position"]}),
+        serde_json::json!({"page":1,"position":4})
+    );
     assert_eq!(configured["event_sequence"], cursor + 1);
     assert_eq!(configured["replayed"], false);
-    let playback_revision = projection_revision(&configured, "playback");
+    let playback_revision = projection_revision(&configured, "playback_page");
     let page_revision = projection_revision(&configured, "playback_page");
     assert_eq!(show_events(&scenario.state, cursor).len(), 1);
-    assert_one_topology_event(&scenario.state, cursor, 2);
+    assert_one_topology_event(&scenario.state, cursor, 1);
 
     let replay = scenario.action(initial_revision, configure).await;
     assert_eq!(replay.status(), StatusCode::OK);
@@ -33,18 +36,16 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     assert_eq!(replay["event_sequence"], cursor + 1);
     assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
-    let no_change = scenario
-        .action(
-            initial_revision + 1,
-            configure_request("configure-identical", page_revision, playback_revision),
-        )
-        .await;
-    assert_eq!(no_change.status(), StatusCode::OK);
+    let mut identical = configure_request("configure-identical", page_revision, playback_revision);
+    identical["action"]["type"] = serde_json::json!("update_playback");
+    let no_change = scenario.action(initial_revision + 1, identical).await;
+    let status = no_change.status();
     assert_etag(&no_change, initial_revision + 1);
     let no_change = json(no_change).await;
+    assert_eq!(status, StatusCode::OK, "{no_change}");
     assert_eq!(no_change["status"], "no_change");
     assert!(no_change.get("event_sequence").is_none());
-    assert_eq!(no_change["objects"].as_array().unwrap().len(), 2);
+    assert_eq!(no_change["objects"].as_array().unwrap().len(), 1);
     assert_eq!(scenario.state.events.latest_sequence(), cursor + 1);
 
     let stale_show = scenario
@@ -83,11 +84,22 @@ async fn configure_no_change_replay_conflict_and_clear_are_one_event_actions() {
     let clear = json(clear).await;
     assert_eq!(clear["status"], "changed");
     assert_eq!(clear["event_sequence"], cursor + 2);
-    assert!(clear["objects"].as_array().unwrap().iter().any(|object| {
-        object["kind"] == "playback" && object["object_id"] == "1" && object["state"] == "deleted"
-    }));
-    assert_one_topology_event(&scenario.state, cursor + 1, 2);
-    assert!(scenario.document().object("playback", "1").is_none());
+    assert_eq!(clear["objects"][0]["kind"], "playback_page");
+    assert!(
+        clear["objects"][0]["body"]["assignments"]
+            .get("4")
+            .is_none()
+    );
+    assert_one_topology_event(&scenario.state, cursor + 1, 1);
+    assert!(
+        scenario
+            .document()
+            .object("playback_page", "1")
+            .unwrap()
+            .body()["assignments"]
+            .get("4")
+            .is_none()
+    );
     assert_eq!(scenario.show_revision(), initial_revision + 2);
     scenario.cleanup();
 }
@@ -210,7 +222,7 @@ async fn cue_jump_round_trips_by_stable_identity_when_its_destination_is_renumbe
 async fn topology_route_rejects_missing_authority_and_forged_scope() {
     let scenario = TopologyScenario::new("Playback topology authorization").await;
     let revision = scenario.show_revision();
-    let request = map_existing_request("authorization", 0, None, 0, None);
+    let request = configure_request("authorization", 0, 0);
     let cursor = scenario.state.events.latest_sequence();
 
     let unauthorized = post_topology(
@@ -257,7 +269,7 @@ async fn topology_route_rejects_missing_authority_and_forged_scope() {
     assert_eq!(json(foreign_show).await["kind"], "conflict");
 
     let unsafe_revision = 9_007_199_254_740_992_u64;
-    let mut unsafe_action = map_existing_request("unsafe-object-revision", 0, None, 0, None);
+    let mut unsafe_action = configure_request("unsafe-object-revision", 0, 0);
     unsafe_action["action"]["expected_page_revision"] = serde_json::json!(unsafe_revision);
     let response = scenario.action(revision, unsafe_action).await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);

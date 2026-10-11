@@ -798,23 +798,29 @@ async fn group_master_runtime_restores_and_persists_only_assigned_targets() {
                 },
             ]
             .into(),
-            playbacks: vec![light_playback::PlaybackDefinition {
+            playback_pages: vec![light_playback::PlaybackPage {
                 number: 1,
-                name: "Front master".into(),
-                buttons: light_playback::PlaybackDefinition::default_buttons(&target),
-                button_count: 3,
-                fader: light_playback::PlaybackDefinition::default_fader(&target),
-                has_fader: true,
-                footprint: light_playback::PlaybackFootprint::Normal,
-                go_activates: true,
-                auto_off: false,
-                xfade_millis: 0,
-                color: "#20c997".into(),
-                flash_release: light_playback::FlashReleaseMode::ReleaseAll,
-                protect_from_swap: false,
-                presentation_icon: None,
-                presentation_image: None,
-                target,
+                name: "Main".into(),
+                assignments: HashMap::from([(
+                    1,
+                    light_playback::PlaybackDefinition {
+                        name: "Front master".into(),
+                        buttons: light_playback::PlaybackDefinition::default_buttons(&target),
+                        button_count: 3,
+                        fader: light_playback::PlaybackDefinition::default_fader(&target),
+                        has_fader: true,
+                        footprint: light_playback::PlaybackFootprint::Normal,
+                        go_activates: true,
+                        auto_off: false,
+                        xfade_millis: 0,
+                        color: "#20c997".into(),
+                        flash_release: light_playback::FlashReleaseMode::ReleaseAll,
+                        protect_from_swap: false,
+                        presentation_icon: None,
+                        presentation_image: None,
+                        target,
+                    },
+                )]),
             }]
             .into(),
             ..Default::default()
@@ -975,4 +981,34 @@ async fn open_show_for_output_test(app: &Router, token: &str, show: &serde_json:
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[test]
+fn private_dynamic_checkpoint_preserves_solo_order_without_exposing_it_publicly() {
+    let source: light_playback::ActiveDynamicPlayback = serde_json::from_value(serde_json::json!({
+        "playback_address":{"page":2,"position":417},
+        "enabled":true,"paused":false,"activated_at":"2026-10-11T00:00:00Z",
+        "activation":{"ordinal":73,"at":"2026-10-11T00:00:00Z",
+            "surface":"virtual","exclusion_scope":"show"}
+    }))
+    .unwrap();
+    assert!(source.activation.is_some());
+    assert!(
+        serde_json::to_value(&source)
+            .unwrap()
+            .get("activation")
+            .is_none()
+    );
+    let runtime = PersistedOutputRuntime {
+        dynamic_playbacks: vec![source.clone()],
+        ..Default::default()
+    };
+    let serialized = serde_json::to_string(&runtime).unwrap();
+    let restored: PersistedOutputRuntime = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(restored.dynamic_playbacks[0].activation, source.activation);
+    assert_eq!(
+        restored.dynamic_playbacks[0].playback_address,
+        source.playback_address
+    );
+    assert!(restored.dynamic_playbacks[0].enabled);
 }

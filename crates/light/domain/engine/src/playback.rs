@@ -28,6 +28,11 @@ pub enum EnginePlaybackCommand {
     },
     ReleaseAddressBatch(Vec<PlaybackAddress>),
     CancelControlSurface(String),
+    /// Install the complete saved permanent state before resolving overlapping Solo regions.
+    RestorePlaybackRuntime {
+        playbacks: Vec<ActivePlayback>,
+        dynamic_playbacks: Vec<ActiveDynamicPlayback>,
+    },
     RestoreActive(Vec<ActivePlayback>),
     RestoreActiveDynamics(Vec<ActiveDynamicPlayback>),
     RestoreDynamicsPausedSince(Option<DateTime<Utc>>),
@@ -433,22 +438,8 @@ pub(crate) fn execute(
     regions: &[PlaybackSoloRegion],
 ) -> Result<EnginePlaybackOutcome, String> {
     match command {
-        EnginePlaybackCommand::CueList { id, action } => {
-            let was_enabled = playback
-                .runtime()
-                .iter()
-                .any(|runtime| runtime.cue_list_id == id && runtime.enabled);
-            let outcome = execute_cue_list(playback, id, action)?;
-            if !was_enabled
-                && playback
-                    .runtime()
-                    .iter()
-                    .any(|runtime| runtime.cue_list_id == id && runtime.enabled)
-            {
-                crate::playback_exclusion::enforce_direct_cue_solo(playback, id, regions)?;
-            }
-            Ok(outcome)
-        }
+        // Direct Cue control (including Timecode clips) does not activate a Playback member.
+        EnginePlaybackCommand::CueList { id, action } => execute_cue_list(playback, id, action),
         EnginePlaybackCommand::Playback {
             address,
             action,
@@ -485,6 +476,14 @@ pub(crate) fn execute(
             released.sort_unstable();
             released.dedup();
             Ok(EnginePlaybackOutcome::ChangedPlaybacks(released))
+        }
+        EnginePlaybackCommand::RestorePlaybackRuntime {
+            playbacks,
+            dynamic_playbacks,
+        } => {
+            playback.restore_permanent_runtime(playbacks, dynamic_playbacks);
+            crate::playback_exclusion::enforce_restored_solo(playback, regions)?;
+            Ok(EnginePlaybackOutcome::Applied)
         }
         EnginePlaybackCommand::RestoreActive(active) => {
             playback.restore_active(active);

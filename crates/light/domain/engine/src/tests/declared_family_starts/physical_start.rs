@@ -6,20 +6,24 @@ use light_core::{MergeMode, TimedValue};
 fn physical_rig() -> (Engine, FixtureId, Arc<ManualClock>) {
     let (engine, target, clock, _, _) = rig();
     let mut snapshot = (*engine.snapshot()).clone();
-    snapshot.playbacks = snapshot
-        .cue_lists
-        .iter()
-        .enumerate()
-        .map(|(index, list)| {
-            let mut definition = test_playback(index as u16 + 1, list.id);
-            definition.auto_off = false;
-            definition
-        })
-        .collect::<Vec<_>>()
-        .into();
+    snapshot.playback_pages = vec![playback_page(
+        1,
+        snapshot
+            .cue_lists
+            .iter()
+            .enumerate()
+            .map(|(index, list)| {
+                let mut definition = test_playback(index as u16 + 1, list.id);
+                definition.auto_off = false;
+                (index as u16 + 1, definition)
+            })
+            .collect::<Vec<_>>(),
+    )]
+    .into();
+    snapshot.playback_solo_regions = Arc::default();
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
     clock.advance_millis(3000);
     engine.set_control_timing([120.; 5], 0, 2000, 2000);
     (engine, target, clock)
@@ -38,9 +42,11 @@ fn publish(engine: &Engine, sampled: &[ContributionBatch]) -> PlaybackStartFrame
 fn on(engine: &Engine, number: u16, start: &PlaybackStartFrame) {
     engine
         .execute_playback_from_published(
-            EnginePlaybackCommand::Pool {
-                number,
-                action: PoolPlaybackAction::On,
+            EnginePlaybackCommand::Playback {
+                address: playback_address(1, number),
+                activation_origin: None,
+                control_source: test_control_source(),
+                action: PlaybackAction::On,
             },
             Some(start),
         )
@@ -102,7 +108,7 @@ fn physical_on_starts_from_published_white_and_off_reveals_retained_base() {
             .count()
             == 2
     );
-    execute_pool(&engine, 2, PoolPlaybackAction::Off);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::Off);
     assert_eq!(channels(&engine, target), vec![255, 255, 255]);
 }
 
@@ -185,7 +191,7 @@ fn stale_published_seed_cannot_cross_generation() {
         engine
             .playback_runtime()
             .iter()
-            .find(|row| row.playback_number == Some(2))
+            .find(|row| row.playback_address == Some(playback_address(1, 2)))
             .unwrap()
             .deleted_cue_transition_source
             .is_none()
@@ -199,7 +205,7 @@ fn zero_fade_and_ordinary_off_keep_immediate_semantics_with_seed() {
     let start = publish(&engine, &[]);
     on(&engine, 2, &start);
     assert_eq!(channels(&engine, target), vec![255, 0, 0]);
-    execute_pool(&engine, 2, PoolPlaybackAction::Off);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::Off);
     assert_eq!(channels(&engine, target), vec![255, 255, 255]);
 }
 
@@ -208,10 +214,9 @@ fn prepared_activation_uses_published_seed_and_rejection_leaves_live_untouched()
     let (engine, target, clock) = physical_rig();
     let start = publish(&engine, &[]);
     let command = crate::PlaybackBatchCommand {
-        number: 2,
-        page: None,
+        address: playback_address(1, 2),
+        control_source: test_control_source(),
         action: crate::PlaybackBatchAction::On,
-        exclusion_zones: Arc::default(),
         activation_origin: None,
     };
     let rejected = engine
@@ -230,7 +235,7 @@ fn prepared_activation_uses_published_seed_and_rejection_leaves_live_untouched()
         engine
             .playback_runtime()
             .iter()
-            .all(|row| row.playback_number != Some(2))
+            .all(|row| row.playback_address != Some(playback_address(1, 2)))
     );
     let prepared = engine
         .prepare_playback_batch_from_published(&[command], clock.now(), 2000, Some(&start))

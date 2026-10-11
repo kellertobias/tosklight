@@ -502,7 +502,7 @@ fn cue_and_playback_import_keep_generated_lane_references_with_the_duplicated_dy
 }
 
 #[test]
-fn targetless_playback_scope_migration_reidentifies_the_required_current_partner() {
+fn targetless_scoped_playback_writer_is_refused_without_changing_either_show() {
     let rig = TestRig::new();
     let fixture = portable_fixture_record(340_000, 1);
     rig.source_profile(&fixture.profile);
@@ -523,32 +523,31 @@ fn targetless_playback_scope_migration_reidentifies_the_required_current_partner
         },
     ))
     .unwrap();
-    rig.source_object("playback_page", "1", json!({
+    validate_definition(&definition).unwrap();
+    assert!(definition.is_automatic_angle_partner(&definition.lanes[1]));
+    let retired = json!({
         "number":1,"name":"Main","assignments":{"7":{"name":"Targetless scope","target":{"type":"dynamic","assignment":{
             "dynamic":DynamicReference { dynamic_id:None,last_known_pool_number:7,
                 embedded_fallback:DynamicDefinitionSnapshot { definition:Arc::new(definition) } },
             "target_scope":{"type":"frozen_targets","targets":[fixture.fixture_id]}
         }}}}
-    }));
-    let preview = rig.preview(rig.request("playback_page", "1"));
-    assert!(preview.can_apply(), "{:?}", preview.blockers);
-    rig.apply(&preview).unwrap();
-    let document = rig.target_document();
-    let raw = document.object("playback_page", "1").unwrap().body();
-    assert!(
-        raw.pointer("/assignments/7/target/assignment/target_scope")
-            .unwrap()
-            .is_null()
-    );
-    let mut migrated: DynamicDefinition = serde_json::from_value(
-        raw.pointer("/assignments/7/target/assignment/dynamic/embedded_fallback/definition")
-            .unwrap()
-            .clone(),
-    )
-    .unwrap();
-    assert_ne!(migrated.id, original_id);
-    assert!(migrated.is_automatic_angle_partner(&migrated.lanes[1]));
-    migrated.lanes.remove(0);
-    migrated.normalize_angle_pair();
-    assert!(migrated.lanes.is_empty());
+    });
+    let source_bytes = rig.source_file_bytes();
+    let target_revision = rig.target_document().revision();
+    let error = rig
+        .try_source_object("playback_page", "1", &retired)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("retired regular/virtual Playback format"));
+    assert!(error.contains("Nothing was changed"));
+    assert_eq!(rig.source_file_bytes(), source_bytes);
+    assert!(rig.source_document().object("playback_page", "1").is_none());
+    let target = rig.target_document();
+    assert_eq!(target.revision(), target_revision);
+    assert!(target.objects_of_kind("patched_fixture").next().is_none());
+    assert!(target.objects_of_kind("dynamic").next().is_none());
+    assert!(target.object("playback_page", "1").is_none());
+    assert!(rig.steps().is_empty());
+    assert!(rig.ports.installed.lock().is_none());
+    assert!(rig.ports.reconciled.lock().is_empty());
 }

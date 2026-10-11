@@ -32,7 +32,7 @@ fn cue_engine(fixture: PatchedFixture) -> (Engine, FixtureId, Arc<ManualClock>, 
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![list.clone()].into(),
-            playbacks: vec![test_playback(1, list.id)].into(),
+            playback_pages: vec![playback_page(1, [(1, test_playback(1, list.id))])].into(),
             revision: 1,
             ..Default::default()
         })
@@ -65,7 +65,7 @@ fn cue_angles_fade_in_from_the_declared_default_pose() {
         .expect("the U16 mover's default_raw maps into Angles");
     // 32768 of 65535 on a ±720° channel: just off centre, never an invented 0°.
     assert_ne!(default.pan_degrees, 0.0);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(250);
     let (pan, tilt) = angles(&engine, root).expect("the fade renders from its first frame");
     let lerp = |from: f32, to: f32| from + (to - from) * 0.25;
@@ -97,12 +97,12 @@ fn a_go_during_the_fade_in_continues_from_where_the_fade_was() {
     snapshot.cue_lists = vec![list].into();
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(500);
     let (midway, _) = angles(&engine, root).unwrap();
     // The interrupted source a GO captures uses the same declared start as the frame, so the
     // next fade starts at the interior pose instead of jumping back to the default.
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     let (resumed, _) = angles(&engine, root).expect("the second fade renders at once");
     assert!((resumed - midway).abs() < 1e-3, "{resumed} vs {midway}");
     clock.advance_millis(500);
@@ -127,7 +127,7 @@ fn undecodable_default_keeps_the_passive_hold_until_the_fade_completes() {
             .declared_default_position(&engine.snapshot(), root)
             .is_none()
     );
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(250);
     assert_eq!(angles(&engine, root), None);
     clock.advance_millis(750);

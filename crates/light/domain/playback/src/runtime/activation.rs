@@ -51,6 +51,25 @@ impl PlaybackEngine {
     ) {
         let ordinal = self.next_activation_ordinal;
         self.next_activation_ordinal = ordinal.saturating_add(1);
+        if let Some(target) = self
+            .dynamic_assignment(identity)
+            .map(|assignment| assignment.target_id())
+        {
+            if let Some(playback) = self
+                .active_dynamics
+                .get_mut(&target)
+                .filter(|playback| playback.enabled)
+            {
+                playback.activation = Some(PlaybackActivationProvenance {
+                    ordinal,
+                    at: origin.at,
+                    desk_id: origin.desk_id,
+                    surface: origin.surface,
+                    exclusion_scope: origin.exclusion_scope,
+                });
+            }
+            return;
+        }
         let Ok(key) = self.runtime_key(identity) else {
             return;
         };

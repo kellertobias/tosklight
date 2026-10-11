@@ -203,13 +203,12 @@ pub(super) fn execute_programmer_command_effect_from(
         root.eq_ignore_ascii_case("GO")
             || root.eq_ignore_ascii_case("LOAD")
             || root.eq_ignore_ascii_case("PBK")
-            || root.eq_ignore_ascii_case("VPBK")
             || root.eq_ignore_ascii_case("CUELIST")
             || (matches!(root.to_ascii_uppercase().as_str(), "RECORD" | "REC")
                 && raw_tokens.iter().skip(1).any(|token| {
                     matches!(
                         token.to_ascii_uppercase().as_str(),
-                        "CUE" | "CUELIST" | "PBK" | "VPBK"
+                        "CUE" | "CUELIST" | "PBK"
                     )
                 }))
     });
@@ -249,9 +248,7 @@ pub(super) fn execute_programmer_command_effect_from(
     if matches!(first.as_str(), "RECORD" | "REC")
         && tokens.iter().skip(1).any(|token| token == "SET")
     {
-        return Err(
-            "SET is not a recording address; use RECORD CUELIST, RECORD PBK, or RECORD VPBK".into(),
-        );
+        return Err("SET is not a recording address; use RECORD CUELIST or RECORD PBK".into());
     }
     if tokens.iter().any(|token| token == "RELEASE") {
         return execute_release_command(state, session, &tokens, context)

@@ -897,27 +897,27 @@ fn hardware_status_feedback_tracks_authoritative_values_modes_and_assignment() {
     });
     let messages = state.integrations.captured_osc_feedback();
     for suffix in ["assigned", "selected"] {
-        let address = format!("/light/hardware-status/feedback/page-playback/1/{suffix}");
+        let address = format!("/light/hardware-status/feedback/playback/1/1/{suffix}");
         assert_eq!(messages.iter().rev().find(|(_, path, _)| path == &address).unwrap().2, vec![OscArgument::Bool(false)]);
     }
     let mut assigned = snapshot;
-    assigned.playbacks = vec![serde_json::from_value(serde_json::json!({
-        "number": 7, "name": "Assigned", "target": {"type": "grand_master"}
-    })).unwrap()].into();
+    let definition: light_playback::PlaybackDefinition = serde_json::from_value(serde_json::json!({
+        "name":"Assigned", "target":{"type":"grand_master"}
+    })).unwrap();
     assigned.playback_pages = vec![light_playback::PlaybackPage {
-        number: 1, name: "Page one".into(), slots: HashMap::from([(1, 7), (9, 7), (21, 7), (39, 7)]),
-        virtual_playbacks: HashMap::new(),
+        number:1, name:"Page one".into(),
+        assignments: [1,9,21,39].into_iter().map(|position| (position,definition.clone())).collect(),
     }].into();
     for (page, expected) in [(1, true), (2, false)] {
         send_playback_osc_feedback(OscPlaybackFeedback {
             state: &state, subscriber: &subscriber, desk: &session.desk, page,
-            selected_playback: Some(7), snapshot: &assigned, runtime: &[], speed_groups: &speed_groups,
+            selected_playback: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()), snapshot: &assigned, runtime: &[], speed_groups: &speed_groups,
         });
         let messages = state.integrations.captured_osc_feedback();
         for slot in [1, 9, 21, 39] {
             for suffix in ["assigned", "selected"] {
-                let address = format!("/light/hardware-status/feedback/page-playback/{slot}/{suffix}");
-                assert_eq!(messages.iter().rev().find(|(_, path, _)| path == &address).unwrap().2, vec![OscArgument::Bool(expected)]);
+                let address = format!("/light/hardware-status/feedback/playback/{page}/{slot}/{suffix}");
+                assert_eq!(messages.iter().rev().find(|(_, path, _)| path == &address).unwrap().2, vec![OscArgument::Bool(expected && (suffix == "assigned" || slot == 1))]);
             }
         }
     }

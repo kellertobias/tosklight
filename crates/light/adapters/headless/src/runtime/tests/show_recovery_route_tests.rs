@@ -17,11 +17,12 @@ async fn read(app: &Router, token: &str, show_id: &str, path: &str) -> serde_jso
     json(response).await
 }
 
-async fn post(app: &Router, token: &str, path: &str, body: serde_json::Value) {
+async fn post(app: &Router, token: &str, show_id: &str, path: &str, body: serde_json::Value) {
     let response = app
         .clone()
         .oneshot(
             Request::post(path)
+                .header("x-tosk-show", show_id)
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .body(Body::from(body.to_string()))
@@ -49,19 +50,21 @@ async fn show_recovery_serves_no_objects_of_the_show_that_failed_to_load() {
     post(
         &app,
         &token,
+        &show_id,
         &format!("/api/v2/test/shows/{show_id}/objects/group/1"),
         serde_json::json!({"expected_revision": 0, "action": {"type": "put", "body": {
             "id": "1", "name": "Stored Group", "fixtures": []
         }}}),
     )
     .await;
-    let zones = serde_json::json!({"request_id": "zones", "expected_revision": 0, "zones": [
-        {"id": "left", "name": "Left", "playback_numbers": [1001, 1002]}
+    let zones = serde_json::json!({"request_id": "zones", "expected_revision": 0, "regions": [
+        {"id": "00000000-0000-4714-8200-000000000001", "name": "Left", "members": [{"page":1,"position":401},{"page":1,"position":402}]}
     ]});
     post(
         &app,
         &token,
-        "/api/v2/virtual-playback-exclusion-zones/update",
+        &show_id,
+        "/api/v2/playback-solo-regions/update",
         zones,
     )
     .await;
@@ -71,14 +74,8 @@ async fn show_recovery_serves_no_objects_of_the_show_that_failed_to_load() {
     assert_eq!(groups["objects"].as_array().unwrap().len(), 1);
     let group = read(&app, &token, &show_id, "/api/v2/objects/group/1").await;
     assert_eq!(group["object"]["body"]["name"], "Stored Group");
-    let zones = read(
-        &app,
-        &token,
-        &show_id,
-        "/api/v2/virtual-playback-exclusion-zones",
-    )
-    .await;
-    assert_eq!(zones["zones"].as_array().unwrap().len(), 1);
+    let zones = read(&app, &token, &show_id, "/api/v2/playback-solo-regions").await;
+    assert_eq!(zones["regions"].as_array().unwrap().len(), 1);
     let stored_revision = groups["show_revision"].as_u64().unwrap();
     assert!(stored_revision > 0);
 
@@ -94,14 +91,7 @@ async fn show_recovery_serves_no_objects_of_the_show_that_failed_to_load() {
         "The active show could not be loaded"
     );
     // ...but none of its objects run, so none are served.
-    for kind in [
-        "group",
-        "playback",
-        "playback_page",
-        "preset",
-        "cue_list",
-        "dynamic",
-    ] {
+    for kind in ["group", "playback_page", "preset", "cue_list", "dynamic"] {
         let collection = read(&app, &token, &show_id, &format!("/api/v2/objects/{kind}")).await;
         assert_eq!(collection["show_id"], show_id, "{kind}");
         assert_eq!(collection["kind"], kind);
@@ -114,14 +104,8 @@ async fn show_recovery_serves_no_objects_of_the_show_that_failed_to_load() {
     let patch = read(&app, &token, &show_id, "/api/v2/patch").await;
     assert_eq!(patch["fixtures"], serde_json::json!([]));
     assert_eq!(patch["patch_revision"], 0);
-    let zones = read(
-        &app,
-        &token,
-        &show_id,
-        "/api/v2/virtual-playback-exclusion-zones",
-    )
-    .await;
-    assert_eq!(zones["zones"], serde_json::json!([]));
+    let zones = read(&app, &token, &show_id, "/api/v2/playback-solo-regions").await;
+    assert_eq!(zones["regions"], serde_json::json!([]));
     let timecodes = read(&app, &token, &show_id, "/api/v2/timecodes").await;
     assert_eq!(timecodes["objects"], serde_json::json!([]));
 

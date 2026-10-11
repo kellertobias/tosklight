@@ -26,6 +26,7 @@ async fn install_speed_group_binding_show(
 	let cue_list_id = Uuid::new_v4();
 	let cue_list = serde_json::json!({
 		"id": cue_list_id,
+        "pool_number":4,
 		"name": "Rate source",
 		"priority": 0,
 		"mode": "chaser",
@@ -59,7 +60,6 @@ async fn install_speed_group_binding_show(
 		StatusCode::OK
 	);
 	let playback = serde_json::json!({
-		"number": 4,
 		"name": "Rate source",
 		"target": {"type":"cue_list","cue_list_id":cue_list_id},
 		"buttons": ["go_minus","go","flash"],
@@ -73,21 +73,9 @@ async fn install_speed_group_binding_show(
 		"flash_release": "release_all",
 		"protect_from_swap": false
 	});
-	assert_eq!(
-		scenario
-			.put_active_object(&show_id, "playback", "4", 0, playback.clone())
-			.await
-			.status(),
-		StatusCode::OK
-	);
-	let mut virtual_playback = playback;
-	virtual_playback["number"] = 1001.into();
 	for page in [1, 2] {
-		let virtual_playbacks = if page == 1 {
-			serde_json::json!({"1001": virtual_playback.clone()})
-		} else {
-			serde_json::json!({})
-		};
+        let mut assignments = serde_json::json!({"1":playback.clone()});
+        if page == 1 { assignments["1000"] = playback.clone(); }
 		assert_eq!(
 			scenario
 				.put_active_object(
@@ -98,8 +86,7 @@ async fn install_speed_group_binding_show(
 					serde_json::json!({
 						"number": page,
 						"name": format!("Page {page}"),
-						"slots": {"1":4},
-						"virtual_playbacks": virtual_playbacks
+						"assignments": assignments
 					}),
 				)
 				.await
@@ -238,7 +225,7 @@ async fn documented_cuelist_and_playback_addresses_replace_the_rate_source_witho
 		("bind-cuelist", "CUELIST 4 AT SPD GRP 2", "B"),
 		("bind-current", "PBK 1 AT SPD GRP 3", "C"),
 		("bind-explicit", "PBK 2 . 1 AT SPD GRP 4", "D"),
-		("bind-virtual", "VPBK 1001 AT SPD GRP 5", "E"),
+		("bind-virtual", "PBK 1 . 1000 AT SPD GRP 5", "E"),
 	] {
 		let response = scenario.execute(request, Some(command)).await;
 		assert_eq!(response.status(), StatusCode::OK, "{command}");
@@ -265,7 +252,7 @@ async fn documented_cuelist_and_playback_addresses_replace_the_rate_source_witho
 				.installation
 				.selected_playback(scenario.session.desk.id, active_show_id)
 				.unwrap(),
-			Some(77)
+			Some(light_show::PlaybackSelection{page:1,position:77})
 		);
 	}
 	let _ = std::fs::remove_dir_all(scenario.data_dir);

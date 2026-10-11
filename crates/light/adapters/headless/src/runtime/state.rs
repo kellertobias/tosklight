@@ -6,6 +6,7 @@ pub(super) struct AppState {
     pub(super) attributes: AttributeConfigurationResource,
     pub(super) installation: InstallationResource,
     pub(super) sessions: SessionResource,
+    pub(super) software_playback_sources: Arc<software_playback_sources::SoftwarePlaybackSources>,
     pub(super) programming: ProgrammingResource,
     pub(super) fixture_freeze_history: super::fixture_freeze::FixtureFreezeHistory,
     pub(super) dynamics: light_application::DynamicsService,
@@ -176,12 +177,36 @@ pub(super) struct PersistedOutputRuntime {
     pub(super) grand_master: f32,
     pub(super) blackout: bool,
     pub(super) dynamics_paused_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(serialize_with = "serialize_private_dynamic_playbacks")]
     pub(super) dynamic_playbacks: Vec<light_playback::ActiveDynamicPlayback>,
     pub(super) dynamic_runtime: Option<light_dynamics::DynamicRuntimeSnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) dynamic_source_origins:
         Option<super::dynamic_source_origins::DynamicSourceOriginsSnapshot>,
     pub(super) group_masters: HashMap<String, f32>,
+}
+
+// Private desk checkpoint keeps accepted Solo order while public Dynamic runtime JSON
+// continues to omit this internal provenance, just like permanent Cue checkpoints.
+fn serialize_private_dynamic_playbacks<S: serde::Serializer>(
+    sources: &[light_playback::ActiveDynamicPlayback],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(serde::Serialize)]
+    struct Checkpoint<'a> {
+        #[serde(flatten)]
+        runtime: &'a light_playback::ActiveDynamicPlayback,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        activation: Option<&'a light_playback::PlaybackActivationProvenance>,
+    }
+    sources
+        .iter()
+        .map(|source| Checkpoint {
+            runtime: source,
+            activation: source.activation.as_ref(),
+        })
+        .collect::<Vec<_>>()
+        .serialize(serializer)
 }
 
 impl Default for PersistedOutputRuntime {

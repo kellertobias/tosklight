@@ -168,9 +168,14 @@ impl Desk {
     /// GoTo `cue` on the harness Playback and settle well past any default fade.
     pub fn go(&self, cue: f64) {
         self.engine()
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number: PLAYBACK,
-                action: PoolPlaybackAction::GoTo(CueNumber::try_from_legacy_f64(cue).unwrap()),
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: PLAYBACK,
+                },
+                action: PlaybackAction::GoTo(CueNumber::try_from_legacy_f64(cue).unwrap()),
             })
             .unwrap();
         self.clock.advance_millis(600_000);
@@ -266,8 +271,8 @@ pub(super) fn record_from(
                 context,
                 command: ProgrammingCueRecordRequest {
                     show_id: show.ports.show_id,
-                    target: ProgrammingCueRecordTarget::Pool {
-                        playback_number: PLAYBACK,
+                    target: ProgrammingCueRecordTarget::Playback {
+                        address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
                     },
                     operation: ProgrammingCueRecordOperation::Overwrite,
                     cue_number: Some(CueNumber::try_from_legacy_f64(number).unwrap()),

@@ -138,7 +138,9 @@ fn actual_partial_mask_peer_and_current_envelope_fit_the_complete_native_cohort_
     let playback = capture
         .dynamic_playbacks()
         .iter()
-        .find(|playback| playback.playback_number == 1)
+        .find(|playback| {
+            playback.playback_address == light_playback::PlaybackAddress::new(1, 1).unwrap()
+        })
         .unwrap();
     assert_eq!(
         playback.master, 0.25,

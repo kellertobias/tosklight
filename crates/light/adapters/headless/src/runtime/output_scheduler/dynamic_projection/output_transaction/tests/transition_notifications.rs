@@ -21,7 +21,7 @@ fn owners() -> DynamicRuntimeSnapshot {
                 programmer_id: Uuid::from_u128(20), instance_link: None,
             }, 100),
             controller(2, DynamicControllerSource::Playback {
-                playback_number: 28, virtual_page: None,
+                page: 1, position: 28,
             }, 0)
         ],
         "started_at_millis": 100, "paused_at_millis": null, "paused_elapsed_millis": 0,

@@ -31,7 +31,7 @@ fn red_group(target: FixtureId, origins: &mut DynamicSourceOrigins) -> DynamicFa
                 lane_id: rank.dynamic_identity().unwrap().lane_id,
             },
             DynamicSourceOrigin::Playback {
-                identity: PlaybackIdentity::physical(5).unwrap(),
+                identity: light_playback::PlaybackAddress::new(1, 5).unwrap(),
                 activated_at: chrono::DateTime::from_timestamp_millis(1000).unwrap(),
             },
         )

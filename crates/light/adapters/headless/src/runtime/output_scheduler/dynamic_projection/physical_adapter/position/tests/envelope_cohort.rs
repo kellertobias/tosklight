@@ -11,7 +11,7 @@ use light_dynamics::{
     DynamicValueTiming, FamilyCompositionSample, ProgrammingLaneConfiguration, Rational,
     SpeedGroup,
 };
-use light_engine::{EnginePlaybackCommand, PoolPlaybackAction};
+use light_engine::{EnginePlaybackCommand, PlaybackAction};
 use light_playback::{
     DynamicPlaybackAssignment, DynamicPlaybackFaderMode, DynamicPlaybackResumePolicy,
     PlaybackDefinition, PlaybackTarget,
@@ -54,7 +54,7 @@ fn playback(definition: &DynamicDefinition) -> PlaybackDefinition {
         },
     };
     serde_json::from_value(serde_json::json!({
-        "number":1,"name":"Envelope Current crossfade","target":target,"xfade_millis":1000,
+        "name":"Envelope Current crossfade","target":target,"xfade_millis":1000,
     }))
     .unwrap()
 }
@@ -103,11 +103,19 @@ impl EnvelopeDesk {
         .unwrap();
         (capture, output)
     }
-    fn command(&self, action: PoolPlaybackAction) {
+    fn command(&self, action: PlaybackAction) {
         self.shared
             .rig
             .engine
-            .execute_playback(EnginePlaybackCommand::Pool { number: 1, action })
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                action,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
+            })
             .unwrap();
     }
     fn mask(&self, value: AttributeValue, fade: Option<u64>) {
@@ -203,7 +211,12 @@ impl EnvelopeDesk {
                 .engine
                 .replace_snapshot(EngineSnapshot {
                     dynamics: vec![definition.clone()].into(),
-                    playbacks: vec![playback(&definition)].into(),
+                    playback_pages: vec![light_playback::PlaybackPage {
+                        number: 1,
+                        name: "Main".into(),
+                        assignments: [(1, playback(&definition))].into(),
+                    }]
+                    .into(),
                     revision: snapshot.revision + 1,
                     ..snapshot.as_ref().clone()
                 })
@@ -241,8 +254,8 @@ impl EnvelopeDesk {
         };
         desk.mask(desk.fixed.clone(), None);
         if use_playback {
-            desk.command(PoolPlaybackAction::On);
-            desk.command(PoolPlaybackAction::SetMaster(1.));
+            desk.command(PlaybackAction::On);
+            desk.command(PlaybackAction::SetMaster(1.));
         }
         desk.tick();
         desk.shared
@@ -302,7 +315,7 @@ impl EnvelopeDesk {
         desk.tick();
         desk.shared.rig.clock.advance_millis(250);
         if use_playback {
-            desk.command(PoolPlaybackAction::SetMaster(0.25));
+            desk.command(PlaybackAction::SetMaster(0.25));
         }
         desk
     }
@@ -339,7 +352,9 @@ impl EnvelopeDesk {
             let playback = capture
                 .dynamic_playbacks()
                 .iter()
-                .find(|playback| playback.playback_number == 1)
+                .find(|playback| {
+                    playback.playback_address == light_playback::PlaybackAddress::new(1, 1).unwrap()
+                })
                 .unwrap();
             assert_eq!(
                 playback.master, 0.25,

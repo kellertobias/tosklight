@@ -43,8 +43,7 @@ fn legacy_spread_show(
             &serde_json::json!({
                 "id": "1",
                 "name": "Legacy spread group",
-                "fixtures": members,
-                "master": 1.0
+                "fixtures": members
             }),
             0,
         )

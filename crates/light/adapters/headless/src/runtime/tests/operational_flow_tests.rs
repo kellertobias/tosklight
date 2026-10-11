@@ -178,7 +178,7 @@ instance_id: None,
                             "request_id":"operational-flow-go",
                             "address":{"kind":"cue_list","cue_list_id":self.cue_list_id.0},
                             "action":{"type":"go","pressed":true},
-                            "surface":"physical"
+                            "control_source":{"surface_id":"main","control_id":1}
                         })
                         .to_string(),
                     ))

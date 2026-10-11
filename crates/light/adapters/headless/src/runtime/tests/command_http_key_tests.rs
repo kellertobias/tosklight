@@ -99,7 +99,15 @@ async fn command_line_v2_accepts_transport_neutral_shift_and_double_gestures() {
         .gesture_key("PBK", "double", false, "double-pbk")
         .await;
     assert_eq!(double.status(), StatusCode::OK);
-    assert_eq!(json(double).await["command_line"]["text"], "VPBK");
+    assert_eq!(json(double).await["command_line"]["text"], "PBK");
+    let repeated = scenario.gesture_key("PBK", "double", false, "repeat-double-pbk").await;
+    assert_eq!(repeated.status(), StatusCode::OK);
+    assert_eq!(json(repeated).await["command_line"]["text"], "PBK");
+    for (key, expected) in [("4", "PBK 4"), (".", "PBK 4."), ("6", "PBK 4.6")] {
+        let response = scenario.press_key(&scenario.token, key, &format!("page-address-{key}")).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(json(response).await["command_line"]["text"], expected);
+    }
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

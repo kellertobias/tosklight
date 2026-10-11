@@ -352,21 +352,19 @@ mod tests {
             layout: serde_json::json!({"desks": [], "activeDeskId": ""}),
             show_dock: false,
             show_playbacks: true,
-            playback_count: 6,
-            playback_rows: 2,
-            first_playback_slot: 3,
-            page_mode: "independent".into(),
+            surface_id: "main".into(),
             show_page_controls: false,
             show_programmer: true,
             desired_open: true,
             display_id: Some("display-2".into()),
             bounds: Some(serde_json::json!({"x": 10, "y": 20, "width": 800, "height": 600})),
             fullscreen: true,
-            playback_layout: None,
             content: light_show::ScreenContent::default(),
             not_editable: true,
         };
-        let stored = store.put_screen(screen.clone()).unwrap();
+        let stored = store
+            .put_screen(store.desk().unwrap().id, screen.clone())
+            .unwrap();
 
         let collapse = DeskCollapse::decide(vec![
             session(1, "2026-08-01T00:00:00Z"),
@@ -380,11 +378,9 @@ mod tests {
             .expect("the screen survives");
         assert_eq!(after.name, stored.name);
         assert_eq!(after.layout, stored.layout);
-        assert_eq!(after.playback_count, stored.playback_count);
-        assert_eq!(after.playback_rows, stored.playback_rows);
+        assert_eq!(after.surface_id, stored.surface_id);
         assert!(after.not_editable);
-        assert_eq!(after.page_mode, "independent");
-        assert_eq!(after.first_playback_slot, 3);
+        assert_eq!(after.surface_id, "main");
         assert_eq!(after.display_id.as_deref(), Some("display-2"));
         assert!(after.fullscreen);
         let _ = std::fs::remove_dir_all(&directory);

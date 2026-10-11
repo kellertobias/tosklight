@@ -1,18 +1,20 @@
-use std::{collections::BTreeMap, str::FromStr, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    str::FromStr,
+    sync::Arc,
+};
 
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use light_core::{AttributeKey, AttributeValue, FixtureId, ManualClock};
-use light_engine::{
-    Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction, RenderOptions,
-};
+use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PlaybackAction, RenderOptions};
 use light_fixture::{
     CanonicalTransform, ChannelBehavior, ChannelFunction, ChannelResolution, FixtureChannel,
     FixtureFreezeState, FixtureProfile, PatchedFixture, PatchedHead,
 };
 use light_playback::{
-    Cue, CueChange, CueList, CueListMode, CueNumber, IntensityPriorityMode, PlaybackButtonAction,
-    PlaybackDefinition, PlaybackFaderMode, PlaybackFootprint, PlaybackTarget, RestartMode,
-    WrapMode,
+    Cue, CueChange, CueList, CueListMode, CueNumber, IntensityPriorityMode, PlaybackAddress,
+    PlaybackButtonAction, PlaybackControlSource, PlaybackDefinition, PlaybackFaderMode,
+    PlaybackFootprint, PlaybackPage, PlaybackTarget, RestartMode, WrapMode,
 };
 use light_programmer::ProgrammerRegistry;
 
@@ -49,7 +51,12 @@ fn cue_fades_follow_registry_value_types_through_media_output() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![patched].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: HashMap::from([(1, playback)]),
+            }]
+            .into(),
             revision: 1,
             ..Default::default()
         })
@@ -57,9 +64,14 @@ fn cue_fades_follow_registry_value_types_through_media_output() {
 
     for _ in 0..2 {
         engine
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number: 1,
-                action: PoolPlaybackAction::Go,
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: PlaybackAddress::new(1, 1).unwrap(),
+                control_source: PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
+                activation_origin: None,
+                action: PlaybackAction::Go,
             })
             .unwrap();
     }
@@ -199,7 +211,6 @@ fn cue_list(cues: Vec<Cue>) -> CueList {
 
 fn playback(cue_list_id: light_core::CueListId) -> PlaybackDefinition {
     PlaybackDefinition {
-        number: 1,
         name: "Registry fades".into(),
         target: PlaybackTarget::CueList { cue_list_id },
         buttons: [

@@ -42,8 +42,8 @@ fn playback_value(
             transition_ordinal,
             sequence_master: 1.0,
             source: SequenceMasterSource {
-                playback_number: None,
-                playback_identity: None,
+                playback_address: None,
+                control_source_id: None,
                 cue_list_id: CueListId::new(),
                 temporary: false,
             },

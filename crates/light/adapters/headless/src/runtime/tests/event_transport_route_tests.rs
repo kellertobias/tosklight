@@ -124,8 +124,8 @@ async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
     assert_eq!(response.request_id, "v2-multiplex-command");
 
     state.events.publish(
-        light_application::EventDraft::virtual_playback_exclusion_zones_changed(
-            light_application::VirtualPlaybackExclusionZonesChange {
+        light_application::EventDraft::playback_solo_regions_changed(
+            light_application::PlaybackSoloRegionsChange {
                 show_id: light_core::ShowId(Uuid::from_u128(41)),
                 revision: 1,
             },
@@ -137,7 +137,7 @@ async fn v2_subscription_dispatches_an_action_and_keeps_delivering_events() {
     };
     assert!(matches!(
         event.payload,
-        light_wire::v2::events::EventPayload::VirtualPlaybackExclusionZonesChanged { .. }
+        light_wire::v2::events::EventPayload::PlaybackSoloRegionsChanged { .. }
     ));
     let _ = std::fs::remove_dir_all(data_dir);
 }

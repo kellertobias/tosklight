@@ -492,3 +492,168 @@ fn timecode_wire_snapshot_preserves_runtime_arming() {
         );
     }
 }
+
+#[tokio::test]
+async fn automatic_timecode_stop_releases_owned_cue_in_the_same_captured_dmx_frame() {
+    assert_automatic_timecode_same_frame(false).await;
+}
+
+#[tokio::test]
+async fn isolated_transport_settler_releases_real_timecode_owned_cue_before_render() {
+    assert_automatic_timecode_same_frame(true).await;
+}
+
+async fn assert_automatic_timecode_same_frame(isolated_proof: bool) {
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock.clone());
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show = create_show(&app, &token, "Automatic Timecode same-frame release").await;
+    let opened = app
+        .clone()
+        .oneshot(open_show_request(&token, show["id"].as_str().unwrap()))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let fixture = light_core::FixtureId::new();
+    let owned = operational_cue_list(light_core::CueListId::new(), fixture);
+    let owned_id = owned.id;
+    let owned_cue = owned.cues[0].id;
+    let timecode_id = light_playback::TimecodeId(Uuid::new_v4());
+    let mut first = light_playback::Cue::new(cue("1"));
+    first.fade_millis = 0;
+    let mut second = light_playback::Cue::new(cue("2"));
+    second.fade_millis = 0;
+    second.trigger = light_playback::CueTrigger::Follow { delay_millis: 10 };
+    second
+        .actions
+        .push(light_playback::CueAction::TimecodeStop { timecode_id });
+    let trigger: light_playback::CueList = serde_json::from_value(serde_json::json!({
+        "id":light_core::CueListId::new(), "name":"Stop timeline", "priority":0,
+        "mode":"sequence", "looped":false, "cues":[first,second]
+    }))
+    .unwrap();
+    let trigger_id = trigger.id;
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(fixture)].into(),
+            cue_lists: vec![owned, trigger].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: std::collections::HashMap::from([(
+                    1,
+                    light_playback::PlaybackDefinition::new_cue_list("Stop timeline", trigger_id),
+                )]),
+            }]
+            .into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    state
+        .timecodes
+        .install(
+            light_playback::TimecodeDefinition {
+                id: timecode_id,
+                number: 1,
+                name: "Own dimmer Cue".into(),
+                duration: Some(light_playback::TimecodeFrame(440)),
+                transport_offset: light_playback::TimecodeFrame::ZERO,
+                auto_start: false,
+                audio: None,
+                markers: Vec::new(),
+                lanes: vec![light_playback::TimecodeLane {
+                    id: light_playback::TimecodeLaneId(Uuid::new_v4()),
+                    name: "Dimmer".into(),
+                    content: light_playback::TimecodeLaneContent::CueList {
+                        cue_list_id: owned_id,
+                        clips: vec![light_playback::TimecodeCueListClip {
+                            id: light_playback::TimecodeClipId(Uuid::new_v4()),
+                            start_frame: light_playback::TimecodeFrame::ZERO,
+                            end_frame: light_playback::TimecodeFrame(440),
+                            start_cue_id: owned_cue,
+                            end_cue_id: owned_cue,
+                            start_behavior: light_playback::TimecodeClipStart::State,
+                            end_behavior: light_playback::TimecodeClipEnd::Release,
+                            cue_starts: Vec::new(),
+                            in_fade_frames: 0,
+                            out_fade_frames: 0,
+                        }],
+                    },
+                }],
+            },
+            None,
+        )
+        .unwrap();
+    state
+        .timecodes
+        .handle(timecode_id, light_playback::TimecodeTransportAction::Go)
+        .unwrap();
+    state.timecodes.reconcile_cue_lists(state.output.engine());
+    let _ = output_scheduler::render_test_tick(state.clone()).await;
+    assert_eq!(
+        state.output.dmx_snapshot().0.universes[0].slots[0],
+        255,
+        "the real Timecode clip must own the patched dimmer before the automatic action"
+    );
+    state
+        .output
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            action: light_engine::PlaybackAction::Go,
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
+        })
+        .unwrap();
+    let _ = output_scheduler::render_test_tick(state.clone()).await;
+    clock.advance_millis(20);
+    let captured = if isolated_proof {
+        // Test-only proof: use the real transport, owned Cue and physical Engine frame,
+        // without changing either production capture callback or test-bench dispatch.
+        let engine = state.output.engine();
+        let prepared = engine.prepare_output_frame(state.output.render_options());
+        let sampled_at = prepared.sampled_at();
+        assert_eq!(prepared.automatic_playback_transitions().len(), 1);
+        let settled = output_scheduler::timecode_capture::settle(
+            engine,
+            prepared,
+            |action| {
+                super::super::timecode_v2::apply_installed_cue_action(
+                    &state.timecodes,
+                    &state.active_show.current().unwrap().path,
+                    action,
+                )
+                .map_err(|error| error.message)
+            },
+            || {
+                state.timecodes.reconcile_cue_lists(engine);
+                Ok(())
+            },
+        );
+        let accepted = settled.accepted.unwrap();
+        assert_eq!(accepted.automatic_playback_transitions().len(), 1);
+        assert!(output_scheduler::claim_automatic_cue_action_batches(&accepted).is_empty());
+        let refreshed = settled.frame.unwrap();
+        assert_eq!(refreshed.sampled_at(), sampled_at);
+        assert!(refreshed.automatic_playback_transitions().is_empty());
+        engine.render_prepared(&refreshed, &[]).unwrap().universes[&1][0]
+    } else {
+        let _ = output_scheduler::render_test_tick(state.clone()).await;
+        state.output.dmx_snapshot().0.universes[0].slots[0]
+    };
+    let transport = state.timecodes.snapshot(timecode_id).unwrap().transport;
+    let retained_owner = state
+        .output
+        .playback_runtime_status_for_cue_list(owned_id)
+        .is_some_and(|runtime| runtime.playback.enabled);
+    assert_eq!(
+        (captured, transport, retained_owner),
+        (0, light_playback::TimecodeTransportState::Stopped, false),
+        "automatic Stop, owned Cue release and captured DMX must settle in one frame"
+    );
+    std::fs::remove_dir_all(data_dir).unwrap();
+}

@@ -123,18 +123,16 @@ fn canonical_extension_controls_use_authoritative_output_and_playback_services()
     };
     let cue_list_id = cue_list.id;
     let playback =
-        light_playback::PlaybackDefinition::new_cue_list(17, "Extension playback", cue_list_id);
+        light_playback::PlaybackDefinition::new_cue_list("Extension playback", cue_list_id);
     let page = light_playback::PlaybackPage {
         number: 2,
         name: "Extension page".into(),
-        slots: HashMap::from([(3, 17)]),
-        virtual_playbacks: HashMap::new(),
+        assignments: HashMap::from([(3, playback)]),
     };
     state
         .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
             playback_pages: vec![page].into(),
             ..EngineSnapshot::default()
         })

@@ -241,7 +241,7 @@ fn start(runtime: &mut DynamicRuntime, definition: &DynamicDefinition) -> Uuid {
             definition_id: definition.id,
             controller: light_dynamics::DynamicController {
                 id: Uuid::new_v4(),
-                source: light_dynamics::DynamicControllerSource::physical_playback(1),
+                source: light_dynamics::DynamicControllerSource::playback(1, 1).unwrap(),
                 priority: 100,
                 activated_at_millis: 5,
                 size: 1.0,

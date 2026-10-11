@@ -99,6 +99,14 @@ impl<'a> ServerProgrammingPorts<'a> {
         command: &str,
         policy: ExecutionPolicy,
     ) -> Option<ProgrammingExecution> {
+        // Software typed commands preserve their existing facade notifications. This only
+        // selects publication policy for typed handlers; command-intent replay still belongs
+        // to the outer Programming service and generic value edits retain atomic staging.
+        let policy = if self.source == "software" {
+            ExecutionPolicy::Compatibility
+        } else {
+            policy
+        };
         self.fixture_freeze_command(programmers, context, command)
             .or_else(|| self.link_cue_command(programmers, context, command))
             .or_else(|| self.record_group_command(programmers, context, command))

@@ -154,8 +154,6 @@ fn merge_materializes_derived_membership_and_preserves_metadata_and_extensions()
         ..Default::default()
     })
     .unwrap();
-    derived["master"] = json!(0.35);
-    derived["playback_fader"] = json!(4);
     derived["future_extension"] = json!({"keep":true});
     let document = TestDocument::new([("source", source), ("derived", derived)]);
     let commit = recording(

@@ -267,9 +267,11 @@ fn cue_recall_of_live_group_spread_re_resolves_after_membership_edit() {
         .unwrap();
     assert_eq!(rig.resolved(&rig.fixtures), vec![None; 6]);
     rig.state
-        .output.execute_playback(EnginePlaybackCommand::Pool {
-            number: rig.state.output.snapshot().playback_pages.iter().find(|page| page.number == 1).unwrap().slots[&25],
-            action: PoolPlaybackAction::Go,
+        .output.execute_playback(EnginePlaybackCommand::Playback {
+            address:light_playback::PlaybackAddress::new(1,25).unwrap(),
+            action:light_engine::PlaybackAction::Go,
+            activation_origin:None,
+            control_source:light_playback::PlaybackControlSource {surface_id:"spread-recall".into(),control_id:25},
         })
         .unwrap();
     // Cue recall before the edit.

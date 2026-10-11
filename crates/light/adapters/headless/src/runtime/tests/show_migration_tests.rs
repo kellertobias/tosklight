@@ -609,7 +609,7 @@ fn startup_migrates_legacy_patch_to_lean_once_and_reopens_at_the_relocated_addre
 }
 
 #[test]
-fn startup_moves_assigned_group_master_to_playback_and_reopens_without_a_sidecar() {
+fn startup_rejects_retired_group_master_playback_unchanged_and_loads_a_separate_empty_show() {
     let data_dir =
         std::env::temp_dir().join(format!("light-group-master-startup-{}", Uuid::new_v4()));
     let path = data_dir.join("shows/group-master.show");
@@ -624,76 +624,82 @@ fn startup_moves_assigned_group_master_to_playback_and_reopens_without_a_sidecar
                 "id": "900",
                 "name": "Portable master",
                 "fixtures": [],
-                "master": 0.375,
-                "playback_fader": 99,
                 "future_group": {"kept": true}
             }),
             0,
         )
         .unwrap();
-    store
-        .put_object(
-            "playback",
-            "900",
-            &serde_json::json!({
+    drop(store);
+    // Simulate already persisted pre-TL-714 content. Normal writers intentionally refuse
+    // Group-owned controls and standalone Playback objects, so inject the forbidden raw
+    // bodies only after creating the canonical baseline in this rejection fixture.
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection.execute(
+        "UPDATE objects SET body_json=?1 WHERE kind='group' AND id='900'",
+        [serde_json::json!({
+            "id":"900", "name":"Portable master", "fixtures":[],
+            "master":0.375, "playback_fader":99, "future_group":{"kept":true}
+        }).to_string()],
+    ).unwrap();
+    connection
+        .execute(
+            "INSERT INTO objects(kind,id,body_json,revision,updated_at) VALUES('playback','900',?1,1,'legacy')",
+            [serde_json::json!({
                 "number": 900,
                 "name": "Portable master",
                 "target": {"type": "group", "group_id": "900"},
                 "future_playback": {"kept": true}
-            }),
-            0,
+            })
+            .to_string()],
         )
         .unwrap();
-    let source_revision = store.portable_revision().unwrap().value();
-    drop(store);
-    let entry = migration_test_entry(&path, show_id, "Group Master transfer");
+    connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)").unwrap();
+    drop(connection);
+    let original = show_file_digest(&path);
+    let entry = migration_test_entry(&path, show_id, "Retired Group Master show");
+    let engine = Engine::new(ProgrammerRegistry::default());
+    let error = compile_active_show_for_startup(&engine, &entry, &data_dir, 5)
+        .expect("retired Playback content must enter recovery without migration");
+    assert!(error.contains("Retired Group Master show"));
+    assert!(error.contains("before TL-714"));
+    assert!(error.contains("Nothing was changed"));
+    assert!(error.contains("separate empty show"));
+    assert!(engine.snapshot().fixtures.is_empty());
+    assert!(engine
+        .snapshot()
+        .playback_pages
+        .iter()
+        .all(|page| page.assignments.is_empty()));
+    assert_eq!(engine.group_master("900"), None);
+    assert_eq!(show_file_digest(&path), original);
+    assert!(migration_backup_files(&data_dir).is_empty());
+    let reopen_error = ShowStore::open(&path).err().unwrap().to_string();
+    assert!(reopen_error.contains("before TL-714"));
+    assert_eq!(show_file_digest(&path), original);
 
-    let first = Engine::new(ProgrammerRegistry::default());
+    // Recovery opens a different fresh show; it never converts or replaces the rejected file.
+    let fresh_path = data_dir.join("shows/fresh-empty.show");
+    let (fresh_store, fresh_id) = ShowStore::create(&fresh_path, "Fresh recovery show").unwrap();
+    let fresh_revision = fresh_store.portable_revision().unwrap();
+    drop(fresh_store);
+    let fresh_entry = migration_test_entry(&fresh_path, fresh_id, "Fresh recovery show");
     assert_eq!(
-        compile_active_show_for_startup(&first, &entry, &data_dir, 5),
+        compile_active_show_for_startup(&engine, &fresh_entry, &data_dir, 5),
         None
     );
-    assert_eq!(first.group_master("900"), Some(0.375));
-
-    let store = ShowStore::open(&path).unwrap();
-    let document = store.portable_document().unwrap();
-    let migrated_revision = document.revision();
-    let group = document.object("group", "900").unwrap().body();
-    assert!(group.get("master").is_none());
-    assert!(group.get("playback_fader").is_none());
-    assert_eq!(group["future_group"], serde_json::json!({"kept": true}));
-    let playback = document.object("playback", "900").unwrap().body();
-    assert_eq!(playback["target"]["initial_master"], 0.375);
+    assert!(engine.snapshot().fixtures.is_empty());
+    assert!(engine
+        .snapshot()
+        .playback_pages
+        .iter()
+        .all(|page| page.assignments.is_empty()));
+    assert_eq!(engine.group_master("900"), None);
     assert_eq!(
-        playback["future_playback"],
-        serde_json::json!({"kept": true})
+        ShowStore::open(&fresh_path).unwrap().portable_revision().unwrap(),
+        fresh_revision
     );
-    drop(store);
-    let backups = migration_backup_files(&data_dir);
-    assert_eq!(backups.len(), 1);
-    assert!(backups[0]
-        .file_name()
-        .unwrap()
-        .to_string_lossy()
-        .contains(&format!("source-revision-{source_revision}")));
-    let backup = ShowStore::open(&backups[0]).unwrap().portable_document().unwrap();
-    assert_eq!(backup.object("group", "900").unwrap().body()["master"], 0.375);
-    assert_eq!(
-        backup.object("group", "900").unwrap().body()["playback_fader"],
-        99
-    );
-
-    let reopened = Engine::new(ProgrammerRegistry::default());
-    assert_eq!(
-        compile_active_show_for_startup(&reopened, &entry, &data_dir, 5),
-        None
-    );
-    assert_eq!(reopened.group_master("900"), Some(0.375));
-    assert_eq!(
-        ShowStore::open(&path).unwrap().portable_revision().unwrap(),
-        migrated_revision
-    );
-    assert_eq!(migration_backup_files(&data_dir), backups);
+    assert_eq!(show_file_digest(&path), original);
+    assert!(migration_backup_files(&data_dir).is_empty());
     std::fs::remove_dir_all(data_dir).unwrap();
 }
 

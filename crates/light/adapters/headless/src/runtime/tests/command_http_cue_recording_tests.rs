@@ -53,7 +53,7 @@ async fn programmer_undo_reverses_a_new_cue_list_and_playback_atomically() {
             Some(active_show_revision(&scenario)),
             cue_record_request(
                 "cue-recording-undo",
-                serde_json::json!({"kind":"pool","playback_number":27}),
+                serde_json::json!({"kind":"playback","page":1,"position":27}),
                 Some(1.0),
                 "current_capture",
                 "hold",
@@ -82,14 +82,14 @@ async fn programmer_undo_reverses_a_new_cue_list_and_playback_atomically() {
             .object("cue_list", &projections.cue_list.id)
             .is_none()
     );
-    assert!(document.object("playback", "27").is_none());
+    assert!(document.objects_of_kind("playback_page").all(|page| page.body()["assignments"].get("27").is_none()));
     assert!(
         scenario
             .state
             .output.snapshot()
-            .playbacks
+            .playback_pages
             .iter()
-            .all(|playback| playback.number != 27)
+            .all(|page| page.number != 1 || !page.assignments.contains_key(&27))
     );
 }
 
@@ -103,7 +103,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
     let compatibility_baseline = scenario.cue_list_compatibility_payloads().len();
     let request = cue_record_request(
         "cue-route-record",
-        serde_json::json!({"kind":"pool","playback_number":27}),
+        serde_json::json!({"kind":"playback","page":1,"position":27}),
         Some(2.5),
         "current_capture",
         "hold",
@@ -141,8 +141,8 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
         projections.cue_list.body["cues"][0]["changes"][0]["fixture_id"],
         serde_json::json!(fixture.0)
     );
-    assert_eq!(projections.playback.as_ref().unwrap().id, "27");
-    assert!(projections.page.is_none());
+    assert_eq!(projections.page.as_ref().unwrap().id, "1");
+    assert!(projections.page.as_ref().unwrap().body["assignments"].get("27").is_some());
     assert!(runtime.is_none(), "pool recording with Hold must stay inactive");
     assert_eq!(*show_event_sequence, baseline + 1);
     assert_one_show_batch(&scenario.state, baseline, 2);
@@ -186,7 +186,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
             Some(initial_revision + 1),
             cue_record_request(
                 "cue-route-no-change",
-                serde_json::json!({"kind":"pool","playback_number":27}),
+                serde_json::json!({"kind":"playback","page":1,"position":27}),
                 Some(2.5),
                 "current_capture",
                 "hold",
@@ -212,7 +212,7 @@ async fn cue_record_route_is_atomic_replay_safe_sparse_and_revisioned() {
             Some(initial_revision),
             cue_record_request(
                 "cue-route-stale",
-                serde_json::json!({"kind":"pool","playback_number":27}),
+                serde_json::json!({"kind":"playback","page":1,"position":27}),
                 Some(3.0),
                 "current_capture",
                 "hold",
@@ -253,7 +253,7 @@ async fn cue_record_route_rejects_missing_authority_and_forged_context() {
     set_cue_record_value(&scenario);
     let request = cue_record_request(
         "cue-route-secure",
-        serde_json::json!({"kind":"pool","playback_number":9}),
+        serde_json::json!({"kind":"playback","page":1,"position":9}),
         Some(1.0),
         "current_capture",
         "hold",
@@ -358,7 +358,7 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
             Some(initial_revision),
             cue_record_request(
                 "cue-page-normal",
-                serde_json::json!({"kind":"page_slot","page":4,"slot":7}),
+                serde_json::json!({"kind":"playback","page":4,"position":7}),
                 None,
                 "current_capture",
                 "go_to_if_normal",
@@ -380,10 +380,10 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
     };
     assert_eq!(captured_source, light_wire::v2::cue_recording::CueRecordCapturedSource::Normal);
     assert_eq!(projections.page.as_ref().unwrap().id, "4");
-    assert!(projections.page.as_ref().unwrap().body["slots"].get("7").is_some());
+    assert!(projections.page.as_ref().unwrap().body["assignments"].get("7").is_some());
     assert_eq!(show_event_sequence, baseline + 1);
     assert_eq!(runtime.event_sequence, baseline + 2);
-    assert_one_show_batch(&scenario.state, baseline, 3);
+    assert_one_show_batch(&scenario.state, baseline, 2);
 
     assert!(scenario.state.programming.set_preload_group(
         scenario.session.id,
@@ -399,7 +399,7 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
             Some(initial_revision + 1),
             cue_record_request(
                 "cue-page-preload",
-                serde_json::json!({"kind":"page_slot","page":4,"slot":8}),
+                serde_json::json!({"kind":"playback","page":4,"position":8}),
                 None,
                 "pending_or_active_preload",
                 "go_to_if_normal",
@@ -436,7 +436,7 @@ async fn already_current_cue_activation_can_complete_without_a_second_runtime_ev
             Some(active_show_revision(&scenario)),
             cue_record_request(
                 "current-cue-first",
-                serde_json::json!({"kind":"pool","playback_number":63}),
+                serde_json::json!({"kind":"playback","page":1,"position":63}),
                 Some(1.0),
                 "current_capture",
                 "go_to_if_normal",
@@ -457,7 +457,7 @@ async fn already_current_cue_activation_can_complete_without_a_second_runtime_ev
     let baseline = scenario.state.events.latest_sequence();
     let request = cue_record_request(
         "current-cue-overwrite",
-        serde_json::json!({"kind":"pool","playback_number":63}),
+        serde_json::json!({"kind":"playback","page":1,"position":63}),
         Some(1.0),
         "current_capture",
         "go_to_if_normal",
@@ -513,7 +513,7 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
             Some(initial_revision),
             cue_record_request(
                 "cue-shared-user",
-                serde_json::json!({"kind":"pool","playback_number":40}),
+                serde_json::json!({"kind":"playback","page":1,"position":40}),
                 Some(1.0),
                 "current_capture",
                 "hold",
@@ -547,7 +547,7 @@ async fn cue_recording_shares_one_users_values_across_desks_and_isolates_another
             Some(initial_revision + 1),
             cue_record_request(
                 "cue-other-user",
-                serde_json::json!({"kind":"pool","playback_number":41}),
+                serde_json::json!({"kind":"playback","page":1,"position":41}),
                 Some(1.0),
                 "current_capture",
                 "hold",
@@ -573,7 +573,7 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
             Some(revision),
             cue_record_request(
                 "cue-target-pool",
-                serde_json::json!({"kind":"pool","playback_number":50}),
+                serde_json::json!({"kind":"playback","page":1,"position":50}),
                 Some(1.0),
                 "current_capture",
                 "hold",
@@ -586,7 +586,7 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
         .installation.set_selected_playback(
             scenario.session.desk.id,
             light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
-            Some(50),
+            Some(light_show::PlaybackSelection { page: 1, position: 50 }),
         )
         .unwrap();
 
@@ -605,8 +605,8 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
         )
         .await;
     assert_eq!(selected.status(), StatusCode::OK);
-    let cue_list_id = stored_cue_list(&scenario, 50).2.id;
-    assert_eq!(stored_cue_list(&scenario, 50).2.cues.len(), 2);
+    let cue_list_id = recording_stored_cue_list(&scenario, 50).2.id;
+    assert_eq!(recording_stored_cue_list(&scenario, 50).2.cues.len(), 2);
 
     let exact = scenario
         .cue_recording_action(
@@ -628,10 +628,9 @@ async fn selected_playback_and_exact_cue_list_targets_do_not_readdress_the_recor
     let light_wire::v2::cue_recording::CueRecordOutcome::Changed { projections, .. } = exact else {
         panic!("the exact Cuelist recording must append its Cue")
     };
-    assert!(projections.playback.is_none());
     assert!(projections.page.is_none());
-    assert_eq!(stored_cue_list(&scenario, 50).2.cues.len(), 3);
-    assert_eq!(scenario.state.output.snapshot().playbacks.len(), 1);
+    assert_eq!(recording_stored_cue_list(&scenario, 50).2.cues.len(), 3);
+    assert_eq!(scenario.state.output.snapshot().playback_pages.iter().find(|page| page.number == 1).unwrap().assignments.len(), 1);
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 
@@ -648,7 +647,7 @@ async fn explicit_and_implicit_cue_merges_use_the_one_shared_active_cue() {
                 Some(active_show_revision(&scenario)),
                 cue_record_request(
                     request_id,
-                    serde_json::json!({"kind":"pool","playback_number":50}),
+                    serde_json::json!({"kind":"playback","page":1,"position":50}),
                     Some(cue_number),
                     "current_capture",
                     "hold",
@@ -657,19 +656,16 @@ async fn explicit_and_implicit_cue_merges_use_the_one_shared_active_cue() {
             .await;
         assert_eq!(response.status(), StatusCode::OK);
     }
-    let (second, _, cue_list) = stored_cue_list(&scenario, 50);
-    let mut second = second.expect("legacy physical Pool target must create its Playback assignment");
-    second.number = 51;
+    let (second, _, cue_list) = recording_stored_cue_list(&scenario, 50);
+    let mut second = second.expect("exact page target must create its Playback assignment");
     second.name = "Second active instance".into();
-    let response = scenario
-        .put_active_object(
-            &show_id,
-            "playback",
-            "51",
-            0,
-            serde_json::to_value(second).unwrap(),
-        )
-        .await;
+    let page = scenario.state.output.snapshot().playback_pages.iter().find(|page| page.number == 1).unwrap().clone();
+    let store = ActiveShowRepository::open(&scenario.state.active_show.current().as_ref().unwrap().path).unwrap();
+    let page_revision = store.objects("playback_page").unwrap().into_iter().find(|object| object.id == "1").unwrap().revision;
+    let mut page = page;
+    page.assignments.insert(51, second);
+    let response = scenario.put_active_object(&show_id, "playback_page", "1", page_revision,
+        serde_json::to_value(page).unwrap()).await;
     assert_eq!(response.status(), StatusCode::OK);
     for (request_id, playback, cue_number) in
         [("divergent-go-50", 50, 1.0), ("divergent-go-51", 51, 2.0)]
@@ -713,7 +709,7 @@ async fn explicit_and_implicit_cue_merges_use_the_one_shared_active_cue() {
     assert_eq!(outcome["status"], "changed");
     assert_eq!(outcome["show_revision"], revision + 1);
     assert_eq!(outcome["show_event_sequence"], baseline + 1);
-    assert!(outcome["projections"]["playback"].is_null());
+    assert!(outcome["projections"]["page"].is_null());
     assert!(outcome["projections"]["page"].is_null());
     assert_eq!(scenario.state.events.latest_sequence(), baseline + 1);
     assert_one_show_batch(&scenario.state, baseline, 1);
@@ -765,7 +761,7 @@ async fn active_preload_capture_persists_its_release_on_the_direct_v2_route() {
             Some(active_show_revision(&scenario) + 1),
             cue_record_request(
                 "active-preload-stale",
-                serde_json::json!({"kind":"pool","playback_number":60}),
+                serde_json::json!({"kind":"playback","page":1,"position":60}),
                 Some(1.0),
                 "pending_or_active_preload",
                 "hold",
@@ -784,7 +780,7 @@ async fn active_preload_capture_persists_its_release_on_the_direct_v2_route() {
             Some(revision),
             cue_record_request(
                 "active-preload-record",
-                serde_json::json!({"kind":"pool","playback_number":60}),
+                serde_json::json!({"kind":"playback","page":1,"position":60}),
                 Some(1.0),
                 "pending_or_active_preload",
                 "hold",
@@ -825,7 +821,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
                 Some(active_show_revision(&scenario)),
                 cue_record_request(
                     request_id,
-                    serde_json::json!({"kind":"pool","playback_number":61}),
+                    serde_json::json!({"kind":"playback","page":1,"position":61}),
                     Some(cue_number),
                     "current_capture",
                     "hold",
@@ -845,7 +841,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
     let baseline = scenario.state.events.latest_sequence();
     let mut merge = cue_record_request(
         "operation-merge",
-        serde_json::json!({"kind":"pool","playback_number":61}),
+        serde_json::json!({"kind":"playback","page":1,"position":61}),
         Some(1.0),
         "current_capture",
         "hold",
@@ -869,7 +865,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
     let after_merge = scenario.state.events.latest_sequence();
     let mut no_change = cue_record_request(
         "operation-merge-no-change",
-        serde_json::json!({"kind":"pool","playback_number":61}),
+        serde_json::json!({"kind":"playback","page":1,"position":61}),
         Some(1.0),
         "current_capture",
         "hold",
@@ -895,7 +891,7 @@ async fn v2_merge_no_change_and_empty_subtract_use_one_authoritative_action_each
     let baseline = scenario.state.events.latest_sequence();
     let mut subtract = cue_record_request(
         "operation-empty-subtract",
-        serde_json::json!({"kind":"pool","playback_number":61}),
+        serde_json::json!({"kind":"playback","page":1,"position":61}),
         Some(2.0),
         "current_capture",
         "go_to_if_normal",
@@ -949,7 +945,7 @@ fn recorded_fixture_value(
     playback: u16,
     fixture: light_core::FixtureId,
 ) -> f32 {
-    let cue_list = stored_cue_list(scenario, playback).2;
+    let cue_list = recording_stored_cue_list(scenario, playback).2;
     let change = cue_list.cues[0]
         .changes
         .iter()
@@ -979,4 +975,14 @@ fn assert_one_show_batch(state: &AppState, baseline: u64, expected_changes: usiz
         .collect::<Vec<_>>();
     assert_eq!(show.len(), 1);
     assert_eq!(show[0].changes.len(), expected_changes);
+}
+
+fn recording_stored_cue_list(scenario: &CommandHttpScenario, position: u16) -> (Option<light_playback::PlaybackDefinition>, light_show::VersionedObject, light_playback::CueList) {
+    let snapshot = scenario.state.output.snapshot();
+    let definition = snapshot.playback_pages.iter().find(|page| page.number == 1).unwrap().assignments[&position].clone();
+    let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else { panic!("expected a Cuelist assignment") };
+    let entry = scenario.state.active_show.current().clone().unwrap();
+    let object = ActiveShowRepository::open(&entry.path).unwrap().objects("cue_list").unwrap().into_iter().find(|object| object.id == cue_list_id.0.to_string()).unwrap();
+    let list = serde_json::from_value(object.body.clone()).unwrap();
+    (Some(definition), object, list)
 }

@@ -621,7 +621,7 @@ async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set()
 }
 
 #[tokio::test]
-async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
+async fn v2_flash_bypasses_solo_without_publishing_an_unchanged_peer() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -650,8 +650,8 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
         .await,
     )
     .await;
-    assert_eq!(press["related"].as_array().unwrap().len(), 1);
-    assert!(!virtual_is_enabled(&state, 1, 101));
+    assert_eq!(press["related"], serde_json::json!([]));
+    assert!(virtual_is_enabled(&state, 1, 101));
 
     let release = json(
         post_action(
@@ -674,9 +674,6 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
         playback_event_identities(&state, cursor),
         vec![
             light_application::PlaybackRuntimeIdentity::Playback(
-                light_playback::PlaybackAddress::new(1, 101).unwrap()
-            ),
-            light_application::PlaybackRuntimeIdentity::Playback(
                 light_playback::PlaybackAddress::new(1, 102).unwrap()
             ),
             light_application::PlaybackRuntimeIdentity::Playback(
@@ -684,7 +681,7 @@ async fn v2_flash_release_promotion_publishes_its_exclusion_peer() {
             ),
         ]
     );
-    assert_eq!(enabled_playback_numbers(&state), vec![102]);
+    assert_eq!(enabled_playback_numbers(&state), vec![101, 102]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -953,7 +950,10 @@ async fn v2_group_selection_publishes_one_live_or_static_programming_event() {
     let replay = post_action(&app, Some(&token), desk_id, request).await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert!(json(replay).await.get("replayed").is_none());
-    assert!(playback_selection_events(&state, desk_id, after_live).is_empty());
+    assert_eq!(
+        playback_selection_events(&state, desk_id, after_live).len(),
+        1
+    );
 
     let cursor = state.events.latest_sequence();
     let response = post_action(
@@ -1053,8 +1053,8 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
 
     handle_playback_osc(
         &state,
-        "/light/playback/2/select",
-        &[OscArgument::Bool(true)],
+        "/light/desk/playback/1/2/select",
+        &[OscArgument::Bool(true), OscArgument::Int(1)],
         Some("127.0.0.1:9020"),
     );
 
@@ -1075,8 +1075,8 @@ async fn osc_group_playback_selection_uses_the_same_typed_event_boundary() {
     let after_press = state.events.latest_sequence();
     handle_playback_osc(
         &state,
-        "/light/playback/2/select",
-        &[OscArgument::Bool(false)],
+        "/light/desk/playback/1/2/select",
+        &[OscArgument::Bool(false), OscArgument::Int(1)],
         Some("127.0.0.1:9020"),
     );
     assert!(playback_selection_events(&state, desk_id, after_press).is_empty());
@@ -1223,10 +1223,10 @@ async fn v2_group_runtime_actions_use_assigned_runtime_authority() {
     );
     assert_eq!(
         assigned["resolved"],
-        serde_json::json!({"kind":"group","group_id":"front","position":2})
+        serde_json::json!({"kind":"group","group_id":"front"})
     );
     assert_eq!(assigned["projection"]["identity"], assigned["requested"]);
-    assert_eq!(assigned["projection"]["position"], 2);
+    assert!(assigned["projection"].get("position").is_none());
     assert_eq!(assigned["projection"]["target"], "group");
     assert_eq!(assigned["projection"]["master"], 0.5);
     assert_eq!(assigned["outcome"]["status"], "applied");
@@ -1246,14 +1246,18 @@ async fn v2_group_runtime_actions_use_assigned_runtime_authority() {
             light_playback::PlaybackAddress::new(1, 2).unwrap(),
         ),
     );
-    assert_eq!(by_group.len(), 1);
+    assert_eq!(by_group.len(), 2);
+    assert_group_feedback_identities(&by_group, "front");
+    assert_eq!(by_playback.len(), 1);
     assert_eq!(by_group[0].sequence, by_playback[0].sequence);
-    assert_eq!(assigned["event_sequence"], by_group[0].sequence);
+    assert_eq!(assigned["event_sequence"], by_group[1].sequence);
+    assert_eq!(by_group[0].correlation_id, by_group[1].correlation_id);
 
     let replay_cursor = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, assigned_request).await).await;
     assert!(replay.get("replayed").is_none());
-    assert_eq!(replay["event_sequence"], assigned["event_sequence"]);
+    assert_eq!(replay["outcome"]["status"], "no_change");
+    assert!(replay["event_sequence"].is_null());
     assert_eq!(state.events.latest_sequence(), replay_cursor);
 
     let no_change = json(
@@ -1322,7 +1326,7 @@ async fn v2_group_snapshot_is_exact_and_rejects_foreign_or_invalid_identity() {
         snapshot["projections"][0]["identity"],
         serde_json::json!({"kind":"group","group_id":"front"})
     );
-    assert_eq!(snapshot["projections"][0]["position"], 2);
+    assert!(snapshot["projections"][0].get("position").is_none());
     assert_eq!(snapshot["projections"][0]["master"], 0.75);
     assert_eq!(snapshot["projections"][0]["flash_level"], 0.0);
     assert!(!snapshot.to_string().contains("side"));
@@ -1399,7 +1403,7 @@ async fn v2_snapshot_reports_an_absent_group_per_item_and_keeps_stored_groups() 
     let by_request = |requested: serde_json::Value| {
         projections
             .iter()
-            .find(|projection| projection["requested"] == requested)
+            .find(|projection| projection["identity"] == requested)
             .unwrap_or_else(|| panic!("no projection for {requested}"))
     };
     // A Group the show does not hold (deleted, or named by the previous show) is reported as
@@ -1414,7 +1418,10 @@ async fn v2_snapshot_reports_an_absent_group_per_item_and_keeps_stored_groups() 
     let empty = by_request(serde_json::json!({"kind":"group","group_id":"empty"}));
     assert_eq!(empty["target"], "group");
     assert_eq!(empty["group_id"], "empty");
-    assert_eq!(empty["position"], 3);
+    assert_eq!(
+        empty["identity"],
+        serde_json::json!({"kind":"group","group_id":"empty"})
+    );
     assert_eq!(empty["master"], 0.25);
 
     // A malformed identity is still a request error, not a per-item absence.
@@ -1525,8 +1532,15 @@ async fn playback_originated_group_change_uses_the_same_group_event_route() {
             light_playback::PlaybackAddress::new(1, 2).unwrap(),
         ),
     );
-    assert_eq!(by_group.len(), 1);
-    assert_eq!(by_group[0].sequence, by_playback[0].sequence);
+    assert_eq!(by_group.len(), 2);
+    assert_group_feedback_identities(&by_group, "front");
+    assert_eq!(by_playback.len(), 1);
+    assert!(
+        by_group
+            .iter()
+            .any(|event| event.sequence == by_playback[0].sequence)
+    );
+    assert_eq!(by_group[0].correlation_id, by_group[1].correlation_id);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -1556,9 +1570,9 @@ async fn physical_group_master_fader_holds_until_pickup_and_tracks_virtual_chang
             &app,
             Some(&token),
             desk_id,
-            action_request(
-                "virtual-group-master-change",
-                2,
+            group_action_request(
+                "direct-group-master-change",
+                "front",
                 serde_json::json!({"type":"master","value":0.4}),
             ),
         )
@@ -1654,9 +1668,15 @@ async fn v2_group_runtime_is_the_desks_and_rejects_a_stale_show() {
     else {
         panic!("Playback events should remain replayable")
     };
-    assert_eq!(first_events.len(), 1);
-    assert_eq!(second_events.len(), 1);
+    assert_eq!(first_events.len(), 2);
+    assert_group_feedback_identities(&first_events, "front");
+    assert_eq!(second_events.len(), 2);
     assert_eq!(first_events[0].sequence, second_events[0].sequence);
+    assert_eq!(first_events[1].sequence, second_events[1].sequence);
+    assert_eq!(
+        first_events[0].correlation_id,
+        first_events[1].correlation_id
+    );
 
     for (token, desk_id) in [(&first_token, first_desk), (&second_token, second_desk.id)] {
         let snapshot = post_playback_snapshot(
@@ -1711,15 +1731,15 @@ async fn v2_playback_rejects_forged_sources_control_ids_and_no_change_emits_noth
 
     for invalid in [
         serde_json::json!({
-            "address":{"kind":"playback","page":1,"position":1},
+            "address":{"kind":"playback","page":1,"position":1001},
             "action":{"type":"go","pressed":true},
             "control_source":{"surface_id":"main","control_id":1}
         }),
-        action_request(
-            "line\nbreak",
-            1,
-            serde_json::json!({"type":"go","pressed":true}),
-        ),
+        serde_json::json!({
+            "address":{"kind":"playback","page":1,"position":1},
+            "action":{"type":"go","pressed":true},
+            "control_source":{"surface_id":"nul\0source","control_id":1}
+        }),
     ] {
         let response = post_action(&app, Some(&token), desk_id, invalid).await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -1755,20 +1775,21 @@ async fn v2_explicit_playback_states_report_exact_repeat_no_changes() {
     install_playback_test_state(&state);
 
     for (name, action) in [
+        ("load", serde_json::json!({"type":"load","cue_number":"1"})),
         ("on", serde_json::json!({"type":"on","pressed":true})),
         ("master", serde_json::json!({"type":"master","value":0.5})),
-        ("load", serde_json::json!({"type":"load","cue_number":"1"})),
         (
             "temporary",
             serde_json::json!({"type":"temporary","enabled":true,"pressed":true}),
         ),
         (
             "crossfade",
-            serde_json::json!({"type":"crossfade","enabled":true}),
+            serde_json::json!({"type":"crossfade","enabled":false}),
         ),
     ] {
         assert_repeat_is_no_change(&app, &state, &token, desk_id, name, action).await;
     }
+    observe_group_master_fader(&app, &token, desk_id).await;
     assert_action_is_no_change(
         &app,
         &state,
@@ -1794,6 +1815,7 @@ async fn v2_playback_actions_persist_only_their_owned_runtime_domain() {
     let active_key = active_playbacks_setting(show_id);
     let output_key = output_runtime_setting(show_id);
 
+    observe_group_master_fader(&app, &token, desk_id).await;
     set_runtime_sentinels(&state, &active_key, &output_key);
     assert_action_is_no_change(
         &app,
@@ -1904,6 +1926,26 @@ fn setting_value(state: &AppState, key: &str) -> String {
     state.installation.setting(key).unwrap().unwrap()
 }
 
+async fn observe_group_master_fader(app: &Router, token: &str, desk_id: Uuid) {
+    let observed = post_action(
+        app,
+        Some(token),
+        desk_id,
+        action_request(
+            "observe-group-master",
+            2,
+            serde_json::json!({"type":"master","value":0.75}),
+        ),
+    )
+    .await;
+    assert_eq!(observed.status(), StatusCode::OK);
+    let observed = json(observed).await;
+    assert_eq!(observed["outcome"]["status"], "applied");
+    assert_eq!(observed["projection"]["master"], 0.75);
+    assert_eq!(observed["projection"]["fader_position"], 0.75);
+    assert_eq!(observed["projection"]["fader_pickup_required"], false);
+}
+
 async fn assert_repeat_is_no_change(
     app: &Router,
     state: &AppState,
@@ -1920,7 +1962,11 @@ async fn assert_repeat_is_no_change(
     )
     .await;
     assert_eq!(first.status(), StatusCode::OK);
-    assert_eq!(json(first).await["outcome"]["status"], "applied");
+    assert_eq!(
+        json(first).await["outcome"]["status"],
+        "applied",
+        "first {name}"
+    );
     let cursor = state.events.latest_sequence();
 
     let repeated = post_action(
@@ -2240,7 +2286,7 @@ async fn same_user_preload_commit_keeps_captured_originating_desk_with_show_scop
     );
     assert_eq!(
         activation.surface,
-        light_playback::PlaybackActivationSurface::Virtual
+        light_playback::PlaybackActivationSurface::Physical
     );
     assert_eq!(
         activation.exclusion_scope,
@@ -2940,6 +2986,35 @@ fn playback_runtime_events(
     events
 }
 
+fn assert_group_feedback_identities(
+    events: &[Arc<light_application::EventEnvelope>],
+    group_id: &str,
+) {
+    let identities = events
+        .iter()
+        .map(|event| {
+            let light_application::ApplicationEvent::Playback(
+                light_application::PlaybackEvent::RuntimeChanged(change),
+            ) = &event.payload
+            else {
+                panic!("expected canonical Playback runtime feedback");
+            };
+            change.projection.identity.clone()
+        })
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        identities,
+        std::collections::HashSet::from([
+            light_application::PlaybackRuntimeIdentity::Group(
+                light_application::PlaybackGroupId::new(group_id).unwrap()
+            ),
+            light_application::PlaybackRuntimeIdentity::Playback(
+                light_playback::PlaybackAddress::new(1, 2).unwrap()
+            ),
+        ])
+    );
+}
+
 fn playback_events_for_object(
     state: &AppState,
     after: u64,
@@ -2982,8 +3057,10 @@ async fn assert_group_flash_phase(
         cursor,
         light_application::EventObject::group(group_id),
     );
-    assert_eq!(events.len(), 1);
-    assert_eq!(response["event_sequence"], events[0].sequence);
+    assert_eq!(events.len(), 2);
+    assert_group_feedback_identities(&events, group_id);
+    assert_eq!(response["event_sequence"], events[1].sequence);
+    assert_eq!(events[0].correlation_id, events[1].correlation_id);
 }
 
 fn playback_event_state(event: &light_application::EventEnvelope) -> (u16, bool) {

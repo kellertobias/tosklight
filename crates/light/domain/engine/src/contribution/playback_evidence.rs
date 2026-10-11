@@ -101,6 +101,7 @@ mod tests {
                 occurrence: PlaybackSourceOccurrence {
                     source: SequenceMasterSource {
                         playback_address: None,
+                        control_source_id: None,
                         cue_list_id: CueListId::new(),
                         temporary: true,
                     },

@@ -1,6 +1,6 @@
 //! A rejected final render must not acknowledge a speculative Playback start.
 use super::*;
-use light_engine::{EnginePlaybackCommand as Command, PoolPlaybackAction as Action};
+use light_engine::{EnginePlaybackCommand as Command, PlaybackAction as Action};
 use light_playback::DynamicPlaybackStartOutcome as Outcome;
 
 #[test]
@@ -11,7 +11,7 @@ fn failed_final_render_preserves_pending_start_until_successful_retry() {
         targets: vec![fixture],
     };
     let playback = serde_json::from_value(serde_json::json!({
-        "number": 1, "name": "Receipt", "xfade_millis": 0,
+        "name": "Receipt", "xfade_millis": 0,
         "target": {"type": "dynamic", "assignment": {
             "auto_off_full_control": false,
             "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": 1,
@@ -26,13 +26,23 @@ fn failed_final_render_preserves_pending_start_until_successful_retry() {
     engine
         .replace_snapshot(light_engine::EngineSnapshot {
             dynamics: vec![definition.clone()].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: [(1, playback)].into(),
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();
     engine
-        .execute_playback(Command::Pool {
-            number: 1,
+        .execute_playback(Command::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
             action: Action::On,
         })
         .unwrap();
@@ -91,14 +101,24 @@ fn failed_final_render_preserves_pending_start_until_successful_retry() {
     assert!(!committed.runtime.instances.is_empty());
     let previous = active.clone();
     engine
-        .execute_playback(Command::Pool {
-            number: 1,
+        .execute_playback(Command::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
             action: Action::Off,
         })
         .unwrap();
     engine
-        .execute_playback(Command::Pool {
-            number: 1,
+        .execute_playback(Command::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
             action: Action::On,
         })
         .unwrap();
@@ -147,9 +167,9 @@ fn true_warm_start_rejection_publishes_failed_for_all_aliases_once() {
     definition.target_binding = DynamicTargetBinding::FrozenTargets {
         targets: vec![fixture],
     };
-    let playback = |number| {
+    let playback = || {
         serde_json::from_value(serde_json::json!({
-            "number": number, "name": "Rejected receipt", "xfade_millis": 0,
+            "name": "Rejected receipt", "xfade_millis": 0,
             "target": {"type": "dynamic", "assignment": {
                 "auto_off_full_control": false,
                 "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": 1,
@@ -162,20 +182,30 @@ fn true_warm_start_rejection_publishes_failed_for_all_aliases_once() {
     engine
         .replace_snapshot(light_engine::EngineSnapshot {
             dynamics: vec![definition.clone()].into(),
-            playbacks: vec![playback(1), playback(2)].into(),
-            playback_pages: vec![light_playback::PlaybackPage {
-                number: 1,
-                name: "Aliases".into(),
-                slots: HashMap::new(),
-                virtual_playbacks: HashMap::from([(1001, playback(1001))]),
-            }]
+            playback_pages: vec![
+                light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Main aliases".into(),
+                    assignments: HashMap::from([(1, playback()), (2, playback())]),
+                },
+                light_playback::PlaybackPage {
+                    number: 3,
+                    name: "Pane alias".into(),
+                    assignments: HashMap::from([(401, playback())]),
+                },
+            ]
             .into(),
             ..Default::default()
         })
         .unwrap();
     engine
-        .execute_playback(Command::Pool {
-            number: 2,
+        .execute_playback(Command::Playback {
+            address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 2,
+            },
             action: Action::On,
         })
         .unwrap();

@@ -1,7 +1,7 @@
 use super::{ObjectUpdate, invalid_object};
 use crate::{ActionError, lossless_json};
 use light_output::OutputRoute;
-use light_playback::{CueList, PlaybackDefinition, PlaybackTarget};
+use light_playback::CueList;
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{PortableShowCandidate, PortableShowCandidateObject};
 use serde_json::{Map, Value, json};
@@ -11,6 +11,9 @@ const LEGACY_SPEED_GROUPS_BPM: [f64; 5] = [120.0, 90.0, 60.0, 30.0, 15.0];
 pub(super) fn collect(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<Vec<ObjectUpdate>, ActionError> {
+    for object in candidate.objects() {
+        validate_contract(object)?;
+    }
     let presets = candidate
         .objects_of_kind("preset")
         .map(|object| {
@@ -34,7 +37,6 @@ pub(super) fn collect(
                 .map_err(|error| invalid_object(object, error))
         })
         .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
-    let group_master_levels = reconcile_group_master_levels(candidate)?;
     let native = super::super::dynamic_presets::NativeTemplateValidator::new(candidate);
     candidate
         .objects()
@@ -43,10 +45,15 @@ pub(super) fn collect(
                 migrate_dynamic_fallbacks(object, &presets, &groups, &|value| native.allows(value))
                     .transpose()
             } else {
-                migrate_with_group_masters(object, &group_master_levels).transpose()
+                migrate(object).transpose()
             }
         })
         .collect()
+}
+
+fn validate_contract(object: PortableShowCandidateObject<'_>) -> Result<(), ActionError> {
+    light_show::validate_playback_object(object.key().kind(), object.key().id(), object.body())
+        .map_err(|error| invalid_object(object, error))
 }
 
 fn migrate_dynamic_fallbacks(
@@ -130,19 +137,13 @@ fn copy_scalar_fallback(canonical: &Value, migrated: &mut Value, path: &str) {
 pub(super) fn migrate(
     object: PortableShowCandidateObject<'_>,
 ) -> Result<Option<ObjectUpdate>, ActionError> {
-    migrate_with_group_masters(object, &std::collections::HashMap::new())
-}
-
-fn migrate_with_group_masters(
-    object: PortableShowCandidateObject<'_>,
-    group_master_levels: &std::collections::HashMap<String, f32>,
-) -> Result<Option<ObjectUpdate>, ActionError> {
+    validate_contract(object)?;
     let mut migrated = match object.key().kind() {
         "attribute_configuration" => object.body().clone(),
         "cue_list" => migrate_cue_list(object)?,
         "dynamic" => object.body().clone(),
         "group" => migrate_group(object)?,
-        "playback_page" => migrate_playback_page(object, group_master_levels)?,
+        "playback_page" => object.body().clone(),
         "preset" => migrate_preset(object)?,
         "route" => migrate_route(object)?,
         "stage_layout" => migrate_stage_layout(object)?,
@@ -439,8 +440,6 @@ fn migrate_group(object: PortableShowCandidateObject<'_>) -> Result<Value, Actio
             body.insert(field.into(), value.clone());
         }
     }
-    body.remove("master");
-    body.remove("playback_fader");
     Ok(migrated)
 }
 
@@ -474,167 +473,6 @@ fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, Acti
     let mut migrated = object.body().clone();
     lossless_json::apply_delta(&mut migrated, &before, &after);
     Ok(migrated)
-}
-
-fn migrate_playback_page(
-    object: PortableShowCandidateObject<'_>,
-    group_master_levels: &std::collections::HashMap<String, f32>,
-) -> Result<Value, ActionError> {
-    let mut page = serde_json::from_value::<light_playback::PlaybackPage>(object.body().clone())
-        .map_err(|error| invalid_object(object, error))?;
-    let before = serde_json::to_value(&page).map_err(|error| invalid_object(object, error))?;
-    let page_number = page.number;
-    for (number, playback) in &mut page.assignments {
-        migrate_targetless_dynamic_assignment(
-            playback,
-            light_playback::PlaybackAddress::new(page_number, *number)
-                .map_err(|error| invalid_object(object, error))?,
-        )
-        .map_err(|error| invalid_object(object, error))?;
-        reconcile_playback_group_master(playback, group_master_levels);
-    }
-    let after = serde_json::to_value(page).map_err(|error| invalid_object(object, error))?;
-    let mut migrated = object.body().clone();
-    lossless_json::apply_delta(&mut migrated, &before, &after);
-    Ok(migrated)
-}
-
-fn reconcile_playback_group_master(
-    playback: &mut PlaybackDefinition,
-    levels: &std::collections::HashMap<String, f32>,
-) {
-    let PlaybackTarget::Group {
-        group_id,
-        initial_master,
-    } = &mut playback.target
-    else {
-        return;
-    };
-    if let Some(level) = levels.get(group_id) {
-        *initial_master = Some(*level);
-    }
-}
-
-/// Choose one portable compatibility seed per assigned Group.
-///
-/// Explicit Playback-owned seeds win over legacy Group-owned values. When several assignments
-/// disagree, the lowest physical Playback number wins; virtual assignments follow, ordered by
-/// page and then number. The chosen value is subsequently written into every assignment for that
-/// Group so transfer to a desk without an output-runtime sidecar remains deterministic.
-fn reconcile_group_master_levels(
-    candidate: PortableShowCandidate<'_>,
-) -> Result<std::collections::HashMap<String, f32>, ActionError> {
-    let mut assignments = Vec::new();
-    for object in candidate.objects_of_kind("playback_page") {
-        let page = serde_json::from_value::<light_playback::PlaybackPage>(object.body().clone())
-            .map_err(|error| invalid_object(object, error))?;
-        for (position, playback) in page.assignments {
-            if let PlaybackTarget::Group {
-                group_id,
-                initial_master,
-            } = playback.target
-            {
-                assignments.push(((page.number, position), group_id, initial_master));
-            }
-        }
-    }
-    assignments.sort_by_key(|(address, _, _)| *address);
-
-    let mut levels = std::collections::HashMap::new();
-    let mut assigned_groups = std::collections::HashSet::new();
-    for (_, group_id, initial_master) in &assignments {
-        assigned_groups.insert(group_id.clone());
-        if let Some(initial_master) = initial_master {
-            if let Some(chosen) = levels.get(group_id) {
-                if chosen != initial_master {
-                    tracing::warn!(
-                        %group_id,
-                        chosen_level = *chosen,
-                        ignored_level = *initial_master,
-                        "reconciled divergent portable Group Master assignment levels by stable Playback address"
-                    );
-                }
-            } else {
-                levels.insert(group_id.clone(), *initial_master);
-            }
-        }
-    }
-    for object in candidate.objects_of_kind("group") {
-        let group_id = object.key().id();
-        if !assigned_groups.contains(group_id) {
-            continue;
-        }
-        if let Some(value) = object.body().get("master") {
-            let Some(level) = value.as_f64() else {
-                tracing::warn!(
-                    %group_id,
-                    "ignored malformed retired Group-owned master during Playback-owned migration"
-                );
-                continue;
-            };
-            if !level.is_finite() || !(0.0..=1.0).contains(&level) {
-                tracing::warn!(
-                    %group_id,
-                    "ignored out-of-range retired Group-owned master during Playback-owned migration"
-                );
-                continue;
-            }
-            let level = level as f32;
-            if let Some(chosen) = levels.get(group_id) {
-                if *chosen != level {
-                    tracing::warn!(
-                        %group_id,
-                        chosen_level = *chosen,
-                        ignored_legacy_level = level,
-                        "reconciled a legacy Group-owned master against Playback-owned state"
-                    );
-                }
-            } else {
-                levels.insert(group_id.to_owned(), level);
-            }
-        }
-    }
-    Ok(levels)
-}
-
-fn migrate_targetless_dynamic_assignment(
-    playback: &mut PlaybackDefinition,
-    identity: light_playback::PlaybackAddress,
-) -> Result<bool, String> {
-    let light_playback::PlaybackTarget::Dynamic { assignment } = &mut playback.target else {
-        return Ok(false);
-    };
-    if !matches!(
-        assignment
-            .dynamic
-            .embedded_fallback
-            .definition
-            .target_binding,
-        light_dynamics::DynamicTargetBinding::Targetless
-    ) {
-        return Ok(false);
-    }
-    let Some(scope) = assignment.target_scope.take() else {
-        return Err(
-            "legacy targetless Dynamic Playback assignment has no stored target scope".into(),
-        );
-    };
-    let target_binding = match scope {
-        light_playback::DynamicPlaybackTargetScope::LiveGroup { group_id } => {
-            light_dynamics::DynamicTargetBinding::LiveGroup { group_id }
-        }
-        light_playback::DynamicPlaybackTargetScope::FrozenTargets { targets } => {
-            light_dynamics::DynamicTargetBinding::FrozenTargets { targets }
-        }
-    };
-    let original = &assignment.dynamic.embedded_fallback.definition;
-    let mut migrated = original.as_ref().clone();
-    let name = format!("playback:{}:{}", identity.page(), identity.position());
-    migrated.reidentify(uuid::Uuid::new_v5(&original.id, name.as_bytes()));
-    migrated.target_binding = target_binding;
-    assignment.dynamic.dynamic_id = None;
-    assignment.dynamic.embedded_fallback.definition = std::sync::Arc::new(migrated);
-    Ok(true)
 }
 
 fn migrate_route(object: PortableShowCandidateObject<'_>) -> Result<Value, ActionError> {

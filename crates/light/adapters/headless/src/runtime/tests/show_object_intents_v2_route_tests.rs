@@ -857,7 +857,12 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
-    let definition_json = dynamic_definition_json(31);
+    let fixture = light_core::FixtureId::new();
+    let mut definition_json = dynamic_definition_json(31);
+    // Current direct Playback assignments reference an already target-bound definition.
+    // Targetless fallback plus assignment.target_scope would exercise obsolete scope migration.
+    definition_json["target_binding"] =
+        serde_json::json!({"type": "frozen_targets", "targets": [fixture]});
     let definition: light_dynamics::DynamicDefinition =
         serde_json::from_value(definition_json.clone()).unwrap();
     let dynamic_id = definition.id;
@@ -869,7 +874,6 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         last_known_pool_number: definition.pool_number,
         embedded_fallback: fallback.clone(),
     };
-    let fixture = light_core::FixtureId::new();
     let instance_link = Uuid::new_v4();
     let mut cue_list = test_cue_list();
     cue_list.cues[0].dynamic_changes = vec![light_playback::CueDynamicChange {
@@ -892,9 +896,7 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         assignment: light_playback::DynamicPlaybackAssignment {
             dynamic: reference,
             revision: 1,
-            target_scope: Some(light_playback::DynamicPlaybackTargetScope::FrozenTargets {
-                targets: vec![fixture],
-            }),
+            target_scope: None,
             fader_mode: light_playback::DynamicPlaybackFaderMode::SizeAndMaster,
             priority: 0,
             activation_override: None,
@@ -908,7 +910,6 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         },
     };
     let playback = light_playback::PlaybackDefinition {
-        number: 1,
         name: "Deleted Dynamic reference".into(),
         buttons: light_playback::PlaybackDefinition::default_buttons(&playback_target),
         button_count: 3,
@@ -939,7 +940,16 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
                 &cue_list_id,
                 serde_json::to_value(cue_list).unwrap(),
             ),
-            ("playback", "1", serde_json::to_value(playback).unwrap()),
+            (
+                "playback_page",
+                "1",
+                serde_json::to_value(light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Dynamic references".into(),
+                    assignments: std::collections::HashMap::from([(1, playback)]),
+                })
+                .unwrap(),
+            ),
         ],
     )
     .await;
@@ -969,12 +979,13 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         .1
         .unwrap()
         .body;
-    let playback_body = store
-        .object_with_portable_revision("playback", "1")
+    let page_object = store
+        .object_with_portable_revision("playback_page", "1")
         .unwrap()
         .1
-        .unwrap()
-        .body;
+        .unwrap();
+    assert_eq!(page_object.revision, 2);
+    let playback_body = &page_object.body["assignments"]["1"];
     let cue_reference = &cue_body["cues"][0]["dynamic_changes"][0]["value"]["dynamic"];
     assert!(cue_reference["dynamic_id"].is_null());
     assert_eq!(
@@ -987,20 +998,20 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
     );
 
     let playback_reference = &playback_body["target"]["assignment"]["dynamic"];
-    let migrated_playback_dynamic_id = Uuid::new_v5(&dynamic_id, b"physical:1").to_string();
     assert!(playback_reference["dynamic_id"].is_null());
     assert_eq!(
         playback_reference["embedded_fallback"]["definition"]["id"],
-        migrated_playback_dynamic_id
+        dynamic_id_text
     );
     assert_eq!(
         playback_reference["embedded_fallback"]["definition"]["pool_number"],
         31
     );
     assert_eq!(
-        playback_reference["embedded_fallback"]["definition"]["target_binding"]["type"],
-        "frozen_targets"
+        playback_reference["embedded_fallback"]["definition"]["target_binding"],
+        serde_json::json!({"type": "frozen_targets", "targets": [fixture]})
     );
+    assert!(playback_body["target"]["assignment"]["target_scope"].is_null());
     assert!(
         store
             .object_with_portable_revision("dynamic", &dynamic_id_text)
@@ -1033,12 +1044,13 @@ async fn deleting_a_dynamic_snapshots_cue_and_playback_references_without_old_sl
         .1
         .unwrap()
         .body;
-    let playback_body = store
-        .object_with_portable_revision("playback", "1")
+    let page_object = store
+        .object_with_portable_revision("playback_page", "1")
         .unwrap()
         .1
-        .unwrap()
-        .body;
+        .unwrap();
+    assert_eq!(page_object.revision, 2);
+    let playback_body = &page_object.body["assignments"]["1"];
     assert!(cue_body["cues"][0]["dynamic_changes"][0]["value"]["dynamic"]["dynamic_id"].is_null());
     assert!(playback_body["target"]["assignment"]["dynamic"]["dynamic_id"].is_null());
 

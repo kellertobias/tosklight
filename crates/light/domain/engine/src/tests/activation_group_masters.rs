@@ -1,7 +1,7 @@
 //! TL-588: persisted Group Master levels are applied to a detached, finalized destination before
 //! installation, so activation needs no fallible per-Group replay against Live.
 use super::*;
-use light_playback::{PlaybackControlState, PlaybackIdentity};
+use light_playback::{PlaybackAddress, PlaybackControlState};
 
 struct Desk {
     engine: Engine,
@@ -40,10 +40,13 @@ fn desk() -> Desk {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![first, second].into(),
-            playbacks: vec![
-                test_group_playback_with_master(1, "front", 0.5),
-                test_group_playback_with_master(2, "back", 1.0),
-            ]
+            playback_pages: vec![playback_page(
+                1,
+                [
+                    (1, test_group_playback_with_master(1, "front", 0.5)),
+                    (2, test_group_playback_with_master(2, "back", 1.0)),
+                ],
+            )]
             .into(),
             groups: vec![
                 group("front", vec![front]),
@@ -62,8 +65,8 @@ fn desk() -> Desk {
     }
 }
 
-fn physical(number: u16) -> PlaybackIdentity {
-    PlaybackIdentity::physical(number).unwrap()
+fn address(position: u16) -> PlaybackAddress {
+    playback_address(1, position)
 }
 
 fn output(engine: &Engine) -> [u8; 2] {
@@ -106,7 +109,7 @@ impl LiveEvidence {
             playback: generation.playback_arc(),
             generation,
             masters: ["front", "back", "spare"].map(|id| engine.group_master(id)),
-            controls: [1, 2].map(|number| engine.playback_control_state_at(physical(number))),
+            controls: [1, 2].map(|number| engine.playback_control_state_at(address(number))),
             runtime: engine.playback_runtime(),
             watermark: engine.playback_source_occurrence_watermark(),
             output: output(engine),
@@ -127,7 +130,7 @@ impl LiveEvidence {
         );
         assert_eq!(
             self.controls,
-            [1, 2].map(|number| engine.playback_control_state_at(physical(number)))
+            [1, 2].map(|number| engine.playback_control_state_at(address(number)))
         );
         assert_eq!(self.runtime, engine.playback_runtime());
         assert_eq!(
@@ -153,9 +156,11 @@ fn prepared_group_masters_restore_levels_and_physical_controls_before_install() 
         let engine = &desk.engine;
         // A Live operator gesture that the destination must neither inherit nor disturb.
         engine
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number: 1,
-                action: PoolPlaybackAction::SetGroupMasterFader {
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: playback_address(1, 1),
+                activation_origin: None,
+                control_source: test_control_source(),
+                action: PlaybackAction::SetGroupMasterFader {
                     value: 0.5,
                     authoritative: 0.5,
                 },
@@ -164,8 +169,9 @@ fn prepared_group_masters_restore_levels_and_physical_controls_before_install() 
         engine.reserve_playback_source_occurrence_watermark(300);
         let mut candidate = next_revision(engine);
         if changed_topology {
-            Arc::make_mut(&mut candidate.playbacks)
-                .push(test_group_playback_with_master(3, "front", 0.5));
+            Arc::make_mut(&mut candidate.playback_pages)[0]
+                .assignments
+                .insert(3, test_group_playback_with_master(3, "front", 0.5));
         }
         let live = LiveEvidence::capture(engine);
         assert_eq!(live.output, [128, 255]);
@@ -195,20 +201,18 @@ fn prepared_group_masters_restore_levels_and_physical_controls_before_install() 
         assert!(report.missing().is_empty());
         live.assert_unchanged(engine);
 
-        // The detached destination already carries the restored levels and pickup targets.
+        // Restored levels are ready before installation; source pickup initializes on first input.
         assert_eq!(finalized.group_master("front"), Some(0.0));
         assert_eq!(finalized.group_master("back"), Some(1.0));
         let mut fadered = vec![(1, 0.0), (2, 1.0)];
         if changed_topology {
             fadered.push((3, 0.0));
         }
-        for &(number, level) in &fadered {
-            let control = finalized.playback_control_state_at(physical(number));
-            assert!(control.fader_pickup_required, "Playback {number}");
+        for &(number, _) in &fadered {
             assert_eq!(
-                control.fader_pickup_target,
-                Some(level),
-                "Playback {number}"
+                finalized.playback_control_state_at(address(number)),
+                PlaybackControlState::default(),
+                "released sources have no synthetic control state for Playback {number}"
             );
         }
         // The exact finalized token: identity, captured owners and watermark are unchanged.
@@ -225,9 +229,37 @@ fn prepared_group_masters_restore_levels_and_physical_controls_before_install() 
         assert_eq!(engine.group_master("front"), Some(0.0));
         assert_eq!(engine.group_master("back"), Some(1.0));
         for &(number, level) in &fadered {
-            let control = engine.playback_control_state_at(physical(number));
-            assert!(control.fader_pickup_required);
+            let group_id = if number == 2 { "back" } else { "front" };
+            execute_address(
+                engine,
+                address(number),
+                PlaybackAction::SetGroupMasterFader {
+                    value: 0.5,
+                    authoritative: level,
+                },
+            );
+            let control = engine.playback_control_state(address(number), &test_control_source());
+            assert!(control.fader_pickup_required, "Playback {number}");
             assert_eq!(control.fader_pickup_target, Some(level));
+            assert_eq!(
+                engine.group_master(group_id),
+                Some(level),
+                "first input cannot jump the restored master"
+            );
+            execute_address(
+                engine,
+                address(number),
+                PlaybackAction::SetGroupMasterFader {
+                    value: level,
+                    authoritative: level,
+                },
+            );
+            assert!(
+                !engine
+                    .playback_control_state(address(number), &test_control_source())
+                    .fader_pickup_required
+            );
+            assert_eq!(engine.group_master(group_id), Some(level));
         }
         assert_eq!(engine.playback_source_occurrence_watermark(), 300);
         assert_eq!(output(engine), [0, 255]);
@@ -285,8 +317,8 @@ fn prepared_install_matches_the_legacy_post_install_replay_exactly() {
     }
     for number in [1, 2] {
         assert_eq!(
-            prepared.engine.playback_control_state_at(physical(number)),
-            legacy.engine.playback_control_state_at(physical(number))
+            prepared.engine.playback_control_state_at(address(number)),
+            legacy.engine.playback_control_state_at(address(number))
         );
     }
     assert_eq!(output(&prepared.engine), output(&legacy.engine));
@@ -304,7 +336,9 @@ fn missing_and_deleted_groups_are_skipped_passively_with_structured_information(
     let engine = &desk.engine;
     let mut candidate = next_revision(engine);
     // Delete Group `back` and its Playback; `spare` stays defined but unassigned.
-    Arc::make_mut(&mut candidate.playbacks).retain(|playback| playback.number != 2);
+    Arc::make_mut(&mut candidate.playback_pages)[0]
+        .assignments
+        .remove(&2);
     Arc::make_mut(&mut candidate.groups).retain(|group| group.id != "back");
     let live = LiveEvidence::capture(engine);
     let mut finalized = release_candidate(engine, candidate);
@@ -323,7 +357,7 @@ fn missing_and_deleted_groups_are_skipped_passively_with_structured_information(
     assert_eq!(finalized.group_master("back"), None);
     assert_eq!(finalized.group_master("spare"), None);
     assert_eq!(
-        finalized.playback_control_state_at(physical(2)),
+        finalized.playback_control_state_at(address(2)),
         PlaybackControlState::default()
     );
     live.assert_unchanged(engine);
@@ -342,8 +376,8 @@ fn invalid_saved_levels_reject_before_any_candidate_or_live_mutation() {
         let mut finalized = release_candidate(engine, next_revision(engine));
         let seeds = (
             finalized.group_master("front"),
-            finalized.playback_control_state_at(physical(1)),
-            finalized.playback_control_state_at(physical(2)),
+            finalized.playback_control_state_at(address(1)),
+            finalized.playback_control_state_at(address(2)),
         );
         // Valid entries sort on both sides of the invalid one; none may be applied.
         let error = finalized
@@ -358,8 +392,8 @@ fn invalid_saved_levels_reject_before_any_candidate_or_live_mutation() {
             seeds,
             (
                 finalized.group_master("front"),
-                finalized.playback_control_state_at(physical(1)),
-                finalized.playback_control_state_at(physical(2)),
+                finalized.playback_control_state_at(address(1)),
+                finalized.playback_control_state_at(address(2)),
             )
         );
         assert_eq!(finalized.group_master("front"), None, "not prepared");
@@ -369,7 +403,7 @@ fn invalid_saved_levels_reject_before_any_candidate_or_live_mutation() {
         assert_eq!(engine.group_master("front"), Some(0.5));
         assert_eq!(engine.group_master("back"), Some(1.0));
         assert_eq!(
-            engine.playback_control_state_at(physical(1)),
+            engine.playback_control_state_at(address(1)),
             PlaybackControlState::default()
         );
     }
@@ -383,7 +417,7 @@ fn preparation_is_single_use_and_requires_release_policy() {
     finalized
         .prepare_group_masters(&levels(&[("front", 0.1)]))
         .unwrap();
-    let control = finalized.playback_control_state_at(physical(1));
+    let control = finalized.playback_control_state_at(address(1));
     assert!(
         finalized
             .prepare_group_masters(&levels(&[("front", 0.9), ("back", 0.9)]))
@@ -391,9 +425,9 @@ fn preparation_is_single_use_and_requires_release_policy() {
     );
     assert_eq!(finalized.group_master("front"), Some(0.1));
     assert_eq!(finalized.group_master("back"), Some(1.0));
-    assert_eq!(finalized.playback_control_state_at(physical(1)), control);
+    assert_eq!(finalized.playback_control_state_at(address(1)), control);
     assert_eq!(
-        finalized.playback_control_state_at(physical(2)),
+        finalized.playback_control_state_at(address(2)),
         PlaybackControlState::default()
     );
 
@@ -426,9 +460,11 @@ fn ordinary_group_master_gestures_after_prepared_install_are_unchanged() {
     engine.install_finalized_snapshot(finalized);
     // Picking up the physical fader at the restored level moves the master as before.
     engine
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 1,
-            action: PoolPlaybackAction::SetGroupMasterFader {
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: playback_address(1, 1),
+            activation_origin: None,
+            control_source: test_control_source(),
+            action: PlaybackAction::SetGroupMasterFader {
                 value: 0.0,
                 authoritative: 0.0,
             },
@@ -436,7 +472,7 @@ fn ordinary_group_master_gestures_after_prepared_install_are_unchanged() {
         .unwrap();
     assert!(
         !engine
-            .playback_control_state_at(physical(1))
+            .playback_control_state_at(address(1))
             .fader_pickup_required
     );
     assert!(!engine.set_group_master("front", 0.0).unwrap());

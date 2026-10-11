@@ -136,96 +136,38 @@ pub(super) fn ws_programmer_execute(
         )
         .with_request_id(&command.request_id)
     });
-    let policy = command_http::ordered_ui_command_policy(&input.value);
-    let outcome = ws_typed_recording(state, session, &input.value, &context).unwrap_or_else(|| {
-        command_http::execute_existing_command(
-            state,
-            session,
-            &input.value,
-            "software",
-            &context,
+    let policy = command_http::ordered_ui_command_policy(&input.value).execution_policy();
+    // The command envelope, rather than the resolved target, owns retry identity. A retry
+    // must be recognised before a newly created Group or changed current page is resolved.
+    let result = command_http::run_service_with_source(
+        state,
+        session,
+        context.clone(),
+        light_application::ProgrammingCommand::Execute {
+            command: Some(input.value.clone()),
             policy,
-        )
-    });
-    finish_ws_execution(state, session, &input.value, outcome)
-}
-
-fn finish_ws_execution(
-    state: &AppState,
-    session: &Session,
-    command: &str,
-    outcome: command_http::ExistingCommandOutcome,
-) -> Result<serde_json::Value, String> {
-    let pending_choice = match &outcome {
-        command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
-            Some(pending_choice.clone())
-        }
-        command_http::ExistingCommandOutcome::Accepted { .. }
-        | command_http::ExistingCommandOutcome::Rejected { .. } => None,
-    };
-    let replayed = matches!(
-        &outcome,
-        command_http::ExistingCommandOutcome::Accepted { replayed: true, .. }
-    );
-    let final_text = match &outcome {
-        command_http::ExistingCommandOutcome::Accepted { .. } => Some(""),
-        command_http::ExistingCommandOutcome::ChoiceRequired { .. }
-        | command_http::ExistingCommandOutcome::Rejected { .. } => Some(command),
-    };
-    if !replayed {
-        state
-            .programming
-            .complete_command_execution(session.id, final_text, pending_choice);
-    }
-    match outcome {
-        command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice } => {
-            Ok(serde_json::json!({
-                "applied":0,
-                "pending_choice":command_http::wire_choice(pending_choice)
-            }))
-        }
-        command_http::ExistingCommandOutcome::Accepted {
-            applied,
-            persistence_warning,
-            ..
-        } => Ok(serde_json::json!({
-            "applied":applied,
-            "persistence_warning":persistence_warning
-        })),
-        command_http::ExistingCommandOutcome::Rejected { error } => Err(error),
-    }
-}
-
-fn ws_typed_recording(
-    state: &AppState,
-    session: &Session,
-    command: &str,
-    context: &light_application::ActionContext,
-) -> Option<command_http::ExistingCommandOutcome> {
-    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
-    let outcome = ports.record_typed_command(
-        &state.programming,
-        context,
-        command,
-        light_application::ExecutionPolicy::Compatibility,
-    )?;
-    Some(match outcome {
-        light_application::ProgrammingExecution::Accepted {
-            applied,
-            warning,
-            replayed,
-        } => command_http::ExistingCommandOutcome::Accepted {
-            applied,
-            persistence_warning: warning,
-            replayed,
+            origin: light_application::CommandOrigin::CommandLine,
         },
-        light_application::ProgrammingExecution::ChoiceRequired { pending_choice } => {
-            command_http::ExistingCommandOutcome::ChoiceRequired { pending_choice }
-        }
-        light_application::ProgrammingExecution::Rejected { error } => {
-            command_http::ExistingCommandOutcome::Rejected { error }
-        }
-    })
+        "software",
+    )
+    .map_err(|error| error.message)?;
+    command_http::publish_service_result(
+        state,
+        session,
+        &result,
+        "software",
+        context.request_id.as_deref(),
+        Some(&input.value),
+    );
+    match result.outcome {
+        light_application::ProgrammingOutcome::Accepted {
+            applied, warning, ..
+        } => Ok(serde_json::json!({"applied":applied.unwrap_or(0), "persistence_warning":warning})),
+        light_application::ProgrammingOutcome::ChoiceRequired { pending_choice } => Ok(
+            serde_json::json!({"applied":0, "pending_choice":command_http::wire_choice(pending_choice)}),
+        ),
+        light_application::ProgrammingOutcome::Rejected { error } => Err(error),
+    }
 }
 
 /// Match typed event/snapshot JSON spelling: to_value widens f32 to f64 and would

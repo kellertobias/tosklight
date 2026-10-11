@@ -196,6 +196,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
         auto_off_full_control: true,
     };
     let active = ActiveDynamicPlayback {
+        activation: None,
         start_state: Default::default(),
         dynamic_id: Some(definition.id),
         playback_address: address(7),

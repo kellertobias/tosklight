@@ -17,6 +17,16 @@ fn rejected(detail: impl std::fmt::Display) -> StoreError {
 
 /// Refuses obsolete identities even when a tolerant decoder would otherwise ignore them.
 pub fn validate_playback_object(kind: &str, id: &str, body: &Value) -> Result<(), StoreError> {
+    if kind == "group" && (body.get("master").is_some() || body.get("playback_fader").is_some()) {
+        return Err(rejected(format!(
+            "Group {id} has retired Group-owned Playback controls"
+        )));
+    }
+    if contains_retired_dynamic_assignment(body) {
+        return Err(rejected(format!(
+            "Unsupported targetless or scoped Dynamic Playback assignment in {kind} {id}"
+        )));
+    }
     match kind {
         "playback" | "virtual_playback_exclusion_zones" => {
             Err(rejected(format!("Unsupported {kind} object {id}")))
@@ -54,6 +64,13 @@ fn validate_page(id: &str, body: &Value) -> Result<(), StoreError> {
         )));
     }
     for (position, definition) in assignments {
+        if definition.pointer("/target/type").and_then(Value::as_str) == Some("speed_group")
+            && definition.get("fader").and_then(Value::as_str) == Some("speed")
+        {
+            return Err(rejected(format!(
+                "Playback page {id} assignment {position} has retired Speed Group fader speed; use learned_percentage"
+            )));
+        }
         if !position
             .parse::<u16>()
             .is_ok_and(|number| (1..=1000).contains(&number))
@@ -106,7 +123,23 @@ pub fn validate_show_playback_contract(path: impl AsRef<Path>) -> Result<(), Sto
         })?;
         for object in objects {
             let (kind, id, serialized) = object?;
-            validate_playback_object(&kind, &id, &serde_json::from_str(&serialized)?)?;
+            match serde_json::from_str(&serialized) {
+                Ok(body) => validate_playback_object(&kind, &id, &body)?,
+                Err(error)
+                    if matches!(
+                        kind.as_str(),
+                        "playback"
+                            | "playback_page"
+                            | "playback_solo_regions"
+                            | "virtual_playback_exclusion_zones"
+                    ) =>
+                {
+                    return Err(error.into());
+                }
+                // Compatibility inspection owns Playback identities. A malformed unrelated
+                // object is reported when requested, without blocking an exact sibling read.
+                Err(_) => {}
+            }
         }
     }
     Ok(())
@@ -116,12 +149,32 @@ use rusqlite::OptionalExtension;
 
 /// Applies to persisted live state and programmer history, not unrelated media transport state.
 pub fn validate_playback_runtime(body: &Value) -> Result<(), StoreError> {
-    if contains_retired_identity(body) {
+    if contains_retired_identity(body) || contains_retired_dynamic_assignment(body) {
         Err(rejected(
             "The stored runtime has an obsolete Playback identity",
         ))
     } else {
         Ok(())
+    }
+}
+
+fn contains_retired_dynamic_assignment(body: &Value) -> bool {
+    match body {
+        Value::Object(fields) => {
+            let obsolete = fields.get("type").and_then(Value::as_str) == Some("dynamic")
+                && fields.get("assignment").is_some_and(|assignment| {
+                    assignment
+                        .get("target_scope")
+                        .is_some_and(|scope| !scope.is_null())
+                        || assignment
+                            .pointer("/dynamic/embedded_fallback/definition/target_binding/type")
+                            .and_then(Value::as_str)
+                            == Some("targetless")
+                });
+            obsolete || fields.values().any(contains_retired_dynamic_assignment)
+        }
+        Value::Array(values) => values.iter().any(contains_retired_dynamic_assignment),
+        _ => false,
     }
 }
 

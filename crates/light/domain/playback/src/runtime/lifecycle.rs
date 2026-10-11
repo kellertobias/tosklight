@@ -69,6 +69,21 @@ impl PlaybackEngine {
             .retain(|(cue_list_id, _), _| !released_cue_lists.contains(cue_list_id));
         changed
     }
+    /// Replace a complete saved checkpoint; transient controls never survive restoration.
+    pub fn restore_permanent_runtime(
+        &mut self,
+        playbacks: impl IntoIterator<Item = ActivePlayback>,
+        dynamics: impl IntoIterator<Item = ActiveDynamicPlayback>,
+    ) {
+        self.active.clear();
+        self.temporary.clear();
+        self.cuelist_flash_states.clear();
+        self.cuelist_swap_states.clear();
+        self.swap_held.clear();
+        self.restore_active(playbacks);
+        self.restore_active_dynamics(dynamics);
+    }
+
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         self.control_states.clear();
         for mut playback in playbacks {
@@ -235,9 +250,10 @@ impl PlaybackEngine {
             playback.dynamic_id = Some(target_id);
             playback.playback_address = identity;
 
+            self.observe_restored_activation(playback.activation.as_ref());
             let replace = self.active_dynamics.get(&target_id).is_none_or(|current| {
-                playback.activated_at > current.activated_at
-                    || (playback.activated_at == current.activated_at
+                dynamic_activation_order(&playback) > dynamic_activation_order(current)
+                    || (dynamic_activation_order(&playback) == dynamic_activation_order(current)
                         && persisted_identity
                             < *restored_origins
                                 .get(&target_id)
@@ -257,7 +273,11 @@ impl PlaybackEngine {
         self.active_dynamics
             .iter()
             .filter_map(|(target_id, active)| {
-                let identity = next.first_dynamic_identity(*target_id)?;
+                let identity = next
+                    .dynamic_target_id(active.playback_address)
+                    .filter(|candidate| candidate == target_id)
+                    .map(|_| active.playback_address)
+                    .or_else(|| next.first_dynamic_identity(*target_id))?;
                 let mut active = active.clone();
                 if active.flash_restore_off {
                     active.enabled = false;
@@ -410,4 +430,13 @@ fn restored_runtime_wins(candidate: &ActivePlayback, current: &ActivePlayback) -
         return candidate.transition_ordinal > current.transition_ordinal;
     }
     candidate.playback_address < current.playback_address
+}
+
+fn dynamic_activation_order(active: &ActiveDynamicPlayback) -> (DateTime<Utc>, u64) {
+    active
+        .activation
+        .as_ref()
+        .map_or((active.activated_at, 0), |activation| {
+            (activation.at, activation.ordinal)
+        })
 }

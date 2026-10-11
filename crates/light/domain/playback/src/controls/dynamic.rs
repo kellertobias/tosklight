@@ -529,6 +529,7 @@ fn active_dynamic_playback(
     now: DateTime<Utc>,
 ) -> ActiveDynamicPlayback {
     ActiveDynamicPlayback {
+        activation: None,
         start_state: Default::default(),
         dynamic_id: Some(assignment.target_id()),
         playback_address: identity,

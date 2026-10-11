@@ -173,7 +173,7 @@ async fn recorded_cues_store_focus_and_zoom_as_independent_typed_changes_in_the_
     let record = |request: &str, cue: f64, operation: &str| {
         let mut body = cue_record_request(
             request,
-            serde_json::json!({"kind": "pool", "playback_number": 27}),
+            serde_json::json!({"kind": "cuelist_pool", "number": 27}),
             Some(cue),
             "current_capture",
             "hold",

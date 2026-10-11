@@ -1,6 +1,7 @@
 //! One canonical Playback adapter, ordered by the application service.
 use super::*;
 pub(super) struct ServerPlaybackPorts<'a> {
+    pub(super) socket: Option<&'a super::super::software_playback_sources::SoftwarePlaybackSocket>,
     pub(super) state: &'a AppState,
     pub(super) session: Option<&'a Session>,
     pub(super) desk: Option<&'a ControlDesk>,
@@ -14,6 +15,7 @@ impl<'a> ServerPlaybackPorts<'a> {
         desk: Option<&'a ControlDesk>,
     ) -> Self {
         Self {
+            socket: None,
             state,
             session,
             desk,
@@ -76,6 +78,15 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
         control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
         control_source.validate().map_err(invalid)?;
+        if let Some(socket) = self.socket {
+            super::super::software_playback_sources::claim_in_order(
+                self.state,
+                socket,
+                context.desk_id,
+                control_source,
+            )
+            .map_err(api_action_error)?;
+        }
         match address {
             ResolvedPlaybackAddress::CueList(id) => self.execute_cue_list(context, id, action),
             ResolvedPlaybackAddress::Group {
@@ -143,14 +154,20 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             _ => None,
         };
         let solo_targets = if semantics::may_activate_playback(action.clone()) {
-            target
-                .as_ref()
-                .map(|target| solo_related_targets(&snapshot, target))
+            address
+                .playback_address()
+                .map(|address| solo_related_targets(&snapshot, address))
                 .unwrap_or_default()
         } else {
             Vec::new()
         };
         let mut related = Vec::new();
+        if let Some(light_playback::PlaybackTarget::Group { group_id, .. }) = &target {
+            related.push(PlaybackRuntimeIdentity::Group(
+                light_application::PlaybackGroupId::new(group_id)
+                    .map_err(|error| invalid(error.to_string()))?,
+            ));
+        }
         if let Some(light_playback::PlaybackTarget::CueList { cue_list_id }) = &target {
             related.push(PlaybackRuntimeIdentity::DirectCueList(*cue_list_id));
         }
@@ -225,7 +242,7 @@ fn same_target(
 
 fn solo_related_targets(
     snapshot: &light_engine::EngineSnapshot,
-    incoming: &light_playback::PlaybackTarget,
+    incoming: light_playback::PlaybackAddress,
 ) -> Vec<light_playback::PlaybackTarget> {
     let definition = |address: light_playback::PlaybackAddress| {
         snapshot
@@ -235,11 +252,11 @@ fn solo_related_targets(
             .and_then(|page| page.assignments.get(&address.position()))
     };
     let mut targets = Vec::new();
-    for region in snapshot.playback_solo_regions.iter().filter(|region| {
-        region.members.iter().any(|address| {
-            definition(*address).is_some_and(|candidate| same_target(incoming, &candidate.target))
-        })
-    }) {
+    for region in snapshot
+        .playback_solo_regions
+        .iter()
+        .filter(|region| region.members.contains(&incoming))
+    {
         for target in region
             .members
             .iter()
@@ -257,7 +274,7 @@ fn solo_related_targets(
 mod solo_projection_tests {
     use super::*;
     #[test]
-    fn related_solo_targets_follow_every_incoming_alias_and_deduplicate_peers() {
+    fn related_solo_targets_use_exact_member_and_deduplicate_peer_targets() {
         let incoming = light_core::CueListId::new();
         let peer = light_core::CueListId::new();
         let unrelated = light_core::CueListId::new();
@@ -309,7 +326,8 @@ mod solo_projection_tests {
             cue_list_id: incoming,
         };
         let peer_target = light_playback::PlaybackTarget::CueList { cue_list_id: peer };
-        let targets = solo_related_targets(&snapshot, &incoming_target);
+        assert!(solo_related_targets(&snapshot, address(1, 1)).is_empty());
+        let targets = solo_related_targets(&snapshot, address(2, 1));
         assert_eq!(targets.len(), 2);
         assert!(
             targets

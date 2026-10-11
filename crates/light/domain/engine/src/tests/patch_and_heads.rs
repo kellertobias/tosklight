@@ -114,12 +114,14 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
             dynamic_stage_positions: Default::default(),
-            playbacks: vec![].into(),
+
             playback_pages: vec![].into(),
             routes: vec![].into(),
             control_mappings: vec![].into(),
             groups: vec![].into(),
             revision: 1,
+            playback_solo_regions: Default::default(),
+            playback_preload_scope: Default::default(),
         })
         .unwrap();
     let result = engine.render(RenderOptions::default()).unwrap();
@@ -155,12 +157,14 @@ fn logical_head_programmer_value_renders_to_physical_patch() {
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
             dynamic_stage_positions: Default::default(),
-            playbacks: vec![].into(),
+
             playback_pages: vec![].into(),
             routes: vec![].into(),
             control_mappings: vec![].into(),
             groups: vec![].into(),
             revision: 7,
+            playback_solo_regions: Default::default(),
+            playback_preload_scope: Default::default(),
         })
         .unwrap();
     let result = engine.render(RenderOptions::default()).unwrap();
@@ -249,7 +253,11 @@ fn master_only_group_fader_does_not_scale_child_heads() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![test_group_playback_with_master(1, "master", 0.5)].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(1, test_group_playback_with_master(1, "master", 0.5))],
+            )]
+            .into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "master".into(),

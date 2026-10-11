@@ -364,7 +364,7 @@ fn overlapping_preserve_and_release_publishers_serialize_the_complete_registry_p
                 definition_id: second_definition.id,
                 controller: DynamicController {
                     id: Uuid::new_v4(),
-                    source: DynamicControllerSource::physical_playback(1),
+                    source: DynamicControllerSource::playback(1, 1).unwrap(),
                     priority: 100,
                     activated_at_millis: 0,
                     size: 1.0,

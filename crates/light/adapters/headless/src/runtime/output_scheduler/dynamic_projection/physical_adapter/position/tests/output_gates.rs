@@ -10,7 +10,7 @@ use light_dynamics::{
     DynamicLaneBody, DynamicReference, DynamicSpeed, DynamicTargetBinding, DynamicValue,
     DynamicValueSource, ProgrammingLaneConfiguration, Rational, SpeedGroup,
 };
-use light_engine::{EnginePlaybackCommand, PoolPlaybackAction};
+use light_engine::{EnginePlaybackCommand, PlaybackAction};
 use light_playback::{
     DynamicPlaybackAssignment, DynamicPlaybackFaderMode, DynamicPlaybackResumePolicy,
     PlaybackDefinition, PlaybackTarget,
@@ -42,7 +42,7 @@ fn playback(definition: &DynamicDefinition, number: u16, crossfade: bool) -> Pla
         },
     };
     serde_json::from_value(serde_json::json!({
-        "number": number, "name": format!("Position gates {number}"),
+        "name": format!("Position gates {number}"),
         "target": target, "xfade_millis": 1000,
     }))
     .unwrap()
@@ -74,14 +74,17 @@ impl ResumeDesk {
         let active = capture
             .dynamic_playbacks()
             .iter()
-            .find(|active| active.playback_number == 1)
+            .find(|active| {
+                active.playback_address == light_playback::PlaybackAddress::new(1, 1).unwrap()
+            })
             .expect("engine captured the actual running Playback");
         assert!(active.enabled);
         let snapshot = capture.snapshot();
         let playback = snapshot
-            .playbacks
+            .playback_pages
             .iter()
-            .find(|playback| playback.number == 1)
+            .find(|page| page.number == 1)
+            .and_then(|page| page.assignments.get(&1))
             .unwrap();
         let PlaybackTarget::Dynamic { assignment } = &playback.target else {
             unreachable!()
@@ -114,18 +117,27 @@ impl ResumeDesk {
             .values()
             .collect::<Vec<_>>();
         assert!(
-            controls.iter().any(|control| control.identity.number() == 1
+            controls.iter().any(|control| control.identity
+                == light_playback::PlaybackAddress::new(1, 1).unwrap()
                 && control.master == active.master
                 && control.crossfade_non_intensity == self.crossfade),
             "the same actual captured gate reaches controller reconciliation"
         );
         (capture, output)
     }
-    fn command(&self, action: PoolPlaybackAction) {
+    fn command(&self, action: PlaybackAction) {
         self.shared
             .rig
             .engine
-            .execute_playback(EnginePlaybackCommand::Pool { number: 1, action })
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                action,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
+            })
             .unwrap();
     }
     fn new(crossfade: bool) -> Self {
@@ -173,7 +185,12 @@ impl ResumeDesk {
             .replace_snapshot(EngineSnapshot {
                 fixtures: fixtures.into(),
                 dynamics: vec![definition.clone()].into(),
-                playbacks: vec![playback(&definition, 1, crossfade)].into(),
+                playback_pages: vec![light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Main".into(),
+                    assignments: [(1, playback(&definition, 1, crossfade))].into(),
+                }]
+                .into(),
                 revision: snapshot.revision + 1,
                 ..snapshot.as_ref().clone()
             })
@@ -199,10 +216,10 @@ impl ResumeDesk {
             origins: Default::default(),
             scratch: Default::default(),
         };
-        desk.command(PoolPlaybackAction::On);
+        desk.command(PlaybackAction::On);
         // SetMaster is the actual physical fader path. First meet its authoritative pickup
         // target; subsequent movement to zero/half must change the master, not only touch state.
-        desk.command(PoolPlaybackAction::SetMaster(1.));
+        desk.command(PlaybackAction::SetMaster(1.));
         desk.tick();
         desk.shared.rig.clock.advance_millis(1100);
         let (capture, initial) = desk.tick();
@@ -402,7 +419,7 @@ fn actual_full_playback_master_completes_shared_resume_and_retains_original_cont
 #[test]
 fn actual_zero_non_crossfading_master_suppresses_resume_sources_and_preserves_static_targets() {
     let mut desk = ResumeDesk::new(false);
-    desk.command(PoolPlaybackAction::SetMaster(0.));
+    desk.command(PlaybackAction::SetMaster(0.));
     let (_, output) = desk.tick_with_gate(light_dynamics::FamilyEndpointOutputControl::Suppressed);
     desk.prove_resume(&output);
     assert!(output.requirements.is_empty());
@@ -498,7 +515,7 @@ fn assert_passive(
 #[test]
 fn actual_partial_playback_master_remains_passive_without_envelope_cut_authority() {
     let mut desk = ResumeDesk::new(true);
-    desk.command(PoolPlaybackAction::SetMaster(0.5));
+    desk.command(PlaybackAction::SetMaster(0.5));
     desk.lane = PhysicalAdapterLane::live(PositionAdapter::default());
     let (capture, output) = desk
         .tick_with_gate(light_dynamics::FamilyEndpointOutputControl::CrossfadeCurrent { mix: 0.5 });
@@ -540,14 +557,19 @@ fn actual_full_master_does_not_omit_requirements_only_peer_source() {
     let snapshot = desk.shared.rig.engine.snapshot();
     let mut definitions = snapshot.dynamics.as_ref().clone();
     definitions.push(missing.clone());
-    let mut playbacks = snapshot.playbacks.as_ref().clone();
-    playbacks.push(playback(&missing, 2, true));
+    let mut pages = snapshot.playback_pages.as_ref().clone();
+    pages
+        .iter_mut()
+        .find(|page| page.number == 1)
+        .unwrap()
+        .assignments
+        .insert(2, playback(&missing, 2, true));
     desk.shared
         .rig
         .engine
         .replace_snapshot(EngineSnapshot {
             dynamics: definitions.clone().into(),
-            playbacks: playbacks.into(),
+            playback_pages: pages.into(),
             revision: snapshot.revision + 1,
             ..snapshot.as_ref().clone()
         })
@@ -556,9 +578,14 @@ fn actual_full_master_does_not_omit_requirements_only_peer_source() {
     desk.shared
         .rig
         .engine
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 2,
-            action: PoolPlaybackAction::On,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
+            action: PlaybackAction::On,
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 2,
+            },
         })
         .unwrap();
     desk.lane = PhysicalAdapterLane::live(PositionAdapter::default());

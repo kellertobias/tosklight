@@ -19,7 +19,7 @@ mod tests {
                 columns: 8,
                 rows: 1,
                 buttons: 3,
-                playback_layout: None,
+                surface_id: "main".into(),
             },
         }
     }

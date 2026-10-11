@@ -237,9 +237,14 @@ impl Live {
 
     fn go(&self, cue: f64) {
         self.engine
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number: PLAYBACK,
-                action: PoolPlaybackAction::GoTo(CueNumber::try_from_legacy_f64(cue).unwrap()),
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: PLAYBACK,
+                },
+                action: PlaybackAction::GoTo(CueNumber::try_from_legacy_f64(cue).unwrap()),
             })
             .unwrap();
     }

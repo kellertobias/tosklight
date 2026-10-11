@@ -264,6 +264,9 @@ pub struct ActiveCueDynamicValue {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveDynamicPlayback {
+    /// Accepted permanent activation order, persisted explicitly by the runtime adapter.
+    #[serde(default, skip_serializing)]
+    pub activation: Option<PlaybackActivationProvenance>,
     /// Receipt for this activation only; never persisted or exposed as a new wire field.
     #[serde(skip)]
     pub start_state: DynamicPlaybackStartState,
@@ -327,7 +330,8 @@ pub enum DynamicPlaybackStartOutcome {
 // Runtime receipts do not change durable Playback equality or control mutation effects.
 impl PartialEq for ActiveDynamicPlayback {
     fn eq(&self, other: &Self) -> bool {
-        self.dynamic_id == other.dynamic_id
+        self.activation == other.activation
+            && self.dynamic_id == other.dynamic_id
             && self.playback_address == other.playback_address
             && self.enabled == other.enabled
             && self.paused == other.paused

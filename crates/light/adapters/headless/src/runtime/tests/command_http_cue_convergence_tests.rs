@@ -190,11 +190,11 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         .state
         .programming
         .set_command_line(scenario.session.id, "RECORD".into());
-    let fader_address = "/light/playback/4/9/fader";
+    let fader_address = "/light/desk/playback/4/9/fader";
     handle_playback_osc(
         &scenario.state,
         fader_address,
-        &[OscArgument::Float(0.42)],
+        &[OscArgument::Float(0.42), OscArgument::Int(101)],
         Some("127.0.0.1:9027"),
     );
     assert_eq!(
@@ -218,11 +218,11 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
         .state
         .programming
         .set_command_line(scenario.session.id, "RECORD".into());
-    let flash_address = "/light/playback/4/10/button/3";
+    let flash_address = "/light/desk/playback/4/10/button/3";
     handle_playback_osc(
         &scenario.state,
         flash_address,
-        &[OscArgument::Bool(true)],
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9027"),
     );
     assert!(runtime_for_page_slot(&scenario, 10).flash);
@@ -238,7 +238,7 @@ async fn real_osc_record_touch_creates_exact_page_target_and_suppresses_control(
     handle_playback_osc(
         &scenario.state,
         flash_address,
-        &[OscArgument::Bool(false)],
+        &[OscArgument::Bool(false), OscArgument::Int(101)],
         Some("127.0.0.1:9027"),
     );
     assert!(!runtime_for_page_slot(&scenario, 10).flash);
@@ -305,7 +305,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
     assert!(handle_playback_osc(
         &scenario.state,
         &current_address,
-        &[OscArgument::Bool(true)],
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9028"),
     ));
     let current = scenario
@@ -345,7 +345,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
     handle_playback_osc(
         &scenario.state,
         &current_address,
-        &[OscArgument::Bool(false)],
+        &[OscArgument::Bool(false), OscArgument::Int(101)],
         Some("127.0.0.1:9028"),
     );
     assert_eq!(scenario.state.events.latest_sequence(), after_current_press);
@@ -354,11 +354,11 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         .state
         .programming
         .set_command_line(scenario.session.id, "ASSIGN CUELIST 41 AT".into());
-    let explicit_address = "/light/playback/4/7/fader";
+    let explicit_address = "/light/desk/playback/4/7/fader";
     handle_playback_osc(
         &scenario.state,
         explicit_address,
-        &[OscArgument::Float(0.25)],
+        &[OscArgument::Float(0.25), OscArgument::Int(101)],
         Some("127.0.0.1:9028"),
     );
     let explicit = scenario
@@ -378,7 +378,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
     handle_playback_osc(
         &scenario.state,
         explicit_address,
-        &[OscArgument::Float(0.75)],
+        &[OscArgument::Float(0.75), OscArgument::Int(101)],
         Some("127.0.0.1:9028"),
     );
     assert_eq!(scenario.state.events.latest_sequence(), after_explicit_sample);
@@ -397,8 +397,8 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         .set_command_line(scenario.session.id, "ASSIGN GROUP 4 AT".into());
     handle_playback_osc(
         &scenario.state,
-        "/light/playback/4/7/label",
-        &[OscArgument::Bool(true)],
+        "/light/desk/playback/4/7/label",
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9028"),
     );
     let snapshot = scenario.state.output.snapshot();
@@ -418,8 +418,8 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         .set_command_line(scenario.session.id, "ASSIGN CUELIST 42 AT".into());
     handle_playback_osc(
         &scenario.state,
-        "/light/playback/4/8/label",
-        &[OscArgument::Bool(true)],
+        "/light/desk/playback/4/8/label",
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9028"),
     );
     let snapshot = scenario.state.output.snapshot();
@@ -520,7 +520,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
     assert!(handle_playback_osc(
         &scenario.state,
         &current_address,
-        &[OscArgument::Bool(true)],
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9030"),
     ));
     assert!(!playback_is_enabled(&scenario, first_playback));
@@ -575,8 +575,8 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         .set_command_line(scenario.session.id, "OFF".into());
     assert!(handle_playback_osc(
         &scenario.state,
-        "/light/playback/4/7/fader",
-        &[OscArgument::Float(0.25)],
+        "/light/desk/playback/4/7/fader",
+        &[OscArgument::Float(0.25), OscArgument::Int(101)],
         Some("127.0.0.1:9030"),
     ));
     assert!(!playback_is_enabled(&scenario, first_playback));
@@ -596,8 +596,8 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
     let after_off = scenario.state.events.latest_sequence();
     handle_playback_osc(
         &scenario.state,
-        "/light/playback/4/7/fader",
-        &[OscArgument::Float(0.75)],
+        "/light/desk/playback/4/7/fader",
+        &[OscArgument::Float(0.75), OscArgument::Int(101)],
         Some("127.0.0.1:9030"),
     );
     assert_eq!(scenario.state.events.latest_sequence(), after_off);
@@ -612,7 +612,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
             "/light/{}/playback/5/7/label",
             "desk"
         ),
-        &[OscArgument::Bool(true)],
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9030"),
     ));
     assert!(!playback_is_enabled(&scenario, second_playback));
@@ -627,7 +627,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
             "/light/{}/playback/5/7/label",
             "desk"
         ),
-        &[OscArgument::Bool(true)],
+        &[OscArgument::Bool(true), OscArgument::Int(101)],
         Some("127.0.0.1:9030"),
     ));
     assert!(!playback_is_enabled(&scenario, second_playback));
@@ -696,8 +696,8 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
         let value = 0.2 + index as f32 * 0.2;
         handle_playback_osc(
             &scenario.state,
-            "/light/playback/4/8/fader",
-            &[OscArgument::Float(value)],
+            "/light/desk/playback/4/8/fader",
+            &[OscArgument::Float(value), OscArgument::Int(101)],
             Some("127.0.0.1:9029"),
         );
         assert_eq!(runtime_for_page_slot(&scenario, 8).master, value);
@@ -732,9 +732,9 @@ fn assert_osc_surface_records(
         .state
         .programming
         .set_command_line(scenario.session.id, "RECORD".into());
-    let address = format!("/light/playback/4/{slot}/{control}");
+    let address = format!("/light/desk/playback/4/{slot}/{control}");
     let baseline = scenario.state.events.latest_sequence();
-    handle_playback_osc(&scenario.state, &address, &[press], Some("127.0.0.1:9027"));
+    handle_playback_osc(&scenario.state, &address, &[press, OscArgument::Int(i32::from(slot) * 8 + 1)], Some("127.0.0.1:9027"));
     let action_filter = light_application::EventFilter::default()
         .with_capability(light_application::EventCapability::Desk)
         .with_capability(light_application::EventCapability::Playback)
@@ -765,7 +765,7 @@ fn assert_osc_surface_records(
         handle_playback_osc(
             &scenario.state,
             &address,
-            &[release],
+            &[release, OscArgument::Int(i32::from(slot) * 8 + 1)],
             Some("127.0.0.1:9027"),
         );
         assert_eq!(
@@ -908,8 +908,8 @@ async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
     handle_control_event(
         &scenario.state,
         ControlEvent::Osc {
-            address: "/light/playback/4/11/fader".into(),
-            arguments: vec![OscArgument::Float(0.6)],
+            address: "/light/remote/playback/4/11/fader".into(),
+            arguments: vec![OscArgument::Float(0.6), OscArgument::Int(101)],
             source: Some(guest_source.to_string()),
         },
     );

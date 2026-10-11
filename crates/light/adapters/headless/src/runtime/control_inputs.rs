@@ -341,20 +341,20 @@ mod action_timing_tests {
         let press = [OscArgument::Bool(true)];
         let release = [OscArgument::Bool(false)];
         assert_eq!(
-            osc_action_timing(&["light", "playback", "1", "go"], &press),
+            osc_action_timing(&["light", "main", "playback", "1", "1", "go"], &press),
             Some(("playback_go".into(), true))
         );
         assert_eq!(
-            osc_action_timing(&["light", "playback", "1", "flash"], &press),
+            osc_action_timing(&["light", "main", "playback", "1", "1", "flash"], &press),
             Some(("playback_flash_press".into(), true))
         );
         assert_eq!(
-            osc_action_timing(&["light", "playback", "1", "flash"], &release),
+            osc_action_timing(&["light", "main", "playback", "1", "1", "flash"], &release),
             Some(("playback_flash_release".into(), true))
         );
         assert_eq!(
             osc_action_timing(
-                &["light", "main", "page-playback", "1", "fader"],
+                &["light", "main", "playback", "1", "1", "fader"],
                 &[OscArgument::Float(0.5)]
             ),
             Some(("playback_master".into(), true))

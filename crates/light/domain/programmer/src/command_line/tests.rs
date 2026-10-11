@@ -235,7 +235,7 @@ fn resolves_double_gestures_to_one_final_visible_intent() {
     let cases = [
         ("GROUP", CommandKey::Group, false, "DEGROUP"),
         ("CUE", CommandKey::Cue, false, "CUELIST"),
-        ("PBK", CommandKey::Playback, false, "VPBK"),
+        ("PBK", CommandKey::Playback, false, "PBK"),
         ("FIXTURE", CommandKey::Group, true, "DMX"),
         ("GO TO", CommandKey::Divide, true, "LOAD"),
         ("FREEZE", CommandKey::Clear, true, "UNFREEZE"),
@@ -321,5 +321,26 @@ fn represents_immediate_and_hold_actions_without_adapter_strings() {
             CommandGestureIntent::Immediate(expected),
             "{key:?}"
         );
+    }
+}
+
+#[test]
+fn repeated_playback_key_keeps_the_unified_root_and_explicit_page_address() {
+    for prefix in ["PBK", "RECORD PBK", "GO TO PBK"] {
+        let repeated = press(prefix, CommandTarget::Fixture, false, "PBK");
+        assert_eq!(repeated.text, prefix);
+        let CommandGestureIntent::Edit(double) = gesture(
+            prefix,
+            CommandKey::Playback,
+            CommandGestureKind::Double,
+            false,
+        ) else {
+            panic!("Playback double gesture should remain a command edit");
+        };
+        assert_eq!(double.text, prefix);
+        let page = press(&double.text, CommandTarget::Fixture, false, "4");
+        let separator = press(&page.text, CommandTarget::Fixture, false, ".");
+        let position = press(&separator.text, CommandTarget::Fixture, false, "6");
+        assert_eq!(position.text, format!("{prefix} 4.6"));
     }
 }

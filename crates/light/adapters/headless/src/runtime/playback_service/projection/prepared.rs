@@ -96,8 +96,8 @@ fn project_after(
             fader_pickup_target,
             ..
         } => {
-            // Match the ordinary projector: Group identities can resolve a physical fader;
-            // virtual Group tiles have no assignment-local fader projection.
+            // Exact Playback identities carry assignment-local pickup feedback.
+            // Direct Group identities have no control address.
             let identity = addressed_playback(&before.identity)?;
             let control = identity
                 .map(|identity| playback.control_state_at(identity))

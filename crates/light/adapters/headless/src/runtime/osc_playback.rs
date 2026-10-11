@@ -1,19 +1,5 @@
 use super::*;
 
-pub(super) fn cuelist_for_page_playback(
-    snapshot: &EngineSnapshot,
-    page: u8,
-    position: u16,
-) -> Option<light_playback::PlaybackAddress> {
-    snapshot
-        .playback_pages
-        .iter()
-        .find(|candidate| candidate.number == page)?
-        .assignments
-        .get(&position)?;
-    light_playback::PlaybackAddress::new(page, position).ok()
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ExpandedOscBinding {
     pub(super) anchor_slot: u16,
@@ -346,48 +332,17 @@ pub(super) fn handle_playback_osc(
     } else {
         parts[action_index]
     };
-    if let (PlaybackAddress::Playback(address), Some(desk)) =
-        (playback_address.clone(), action_desk.as_ref())
-    {
-        if let Some(binding) = expanded_osc_binding(
-            state,
-            &state.output.snapshot(),
-            address.page(),
-            desk,
-            address.position(),
-        ) {
-            playback_address = PlaybackAddress::Playback(
-                light_playback::PlaybackAddress::new(address.page(), binding.anchor_slot)
-                    .expect("validated layout address"),
-            );
-            match (binding.position, action) {
-                (ExpandedOscPosition::TallerUpper, "button") if input.button == Some(1) => {
-                    input.button = Some(4)
-                }
-                (ExpandedOscPosition::WiderRight, "button") => {
-                    input.button = input.button.and_then(|button| button.checked_add(3))
-                }
-                (ExpandedOscPosition::WiderRight, "master") => {
-                    action = "configured-fader";
-                    input.button = Some(2);
-                }
-                _ => return false,
-            }
-        }
+    if !apply_expanded_osc_binding(
+        state,
+        &mut playback_address,
+        action_desk.as_ref(),
+        &mut input,
+        &mut action,
+    ) {
+        return false;
     }
-    let fallback_control_id = match &playback_address {
-        PlaybackAddress::Playback(address) => {
-            address.position().saturating_mul(8) + u16::from(input.button.unwrap_or(6))
-        }
-        _ => 0,
-    };
-    let control_id = match arguments.get(1) {
-        Some(OscArgument::Int(value)) => match u16::try_from(*value) {
-            Ok(value) => value,
-            Err(_) => return false,
-        },
-        None => fallback_control_id,
-        _ => return false,
+    let Some(control_id) = osc_playback_control_id(&playback_address, &input, arguments) else {
+        return false;
     };
     let control_source = light_playback::PlaybackControlSource {
         surface_id: source_socket
@@ -468,6 +423,61 @@ pub(super) fn handle_playback_osc(
         );
     }
     true
+}
+
+fn apply_expanded_osc_binding(
+    state: &AppState,
+    playback_address: &mut PlaybackAddress,
+    desk: Option<&ControlDesk>,
+    input: &mut PoolPlaybackInput,
+    action: &mut &str,
+) -> bool {
+    if let (PlaybackAddress::Playback(address), Some(desk)) = (playback_address.clone(), desk) {
+        if let Some(binding) = expanded_osc_binding(
+            state,
+            &state.output.snapshot(),
+            address.page(),
+            desk,
+            address.position(),
+        ) {
+            *playback_address = PlaybackAddress::Playback(
+                light_playback::PlaybackAddress::new(address.page(), binding.anchor_slot)
+                    .expect("validated layout address"),
+            );
+            match (binding.position, *action) {
+                (ExpandedOscPosition::TallerUpper, "button") if input.button == Some(1) => {
+                    input.button = Some(4)
+                }
+                (ExpandedOscPosition::WiderRight, "button") => {
+                    input.button = input.button.and_then(|button| button.checked_add(3))
+                }
+                (ExpandedOscPosition::WiderRight, "master") => {
+                    *action = "configured-fader";
+                    input.button = Some(2);
+                }
+                _ => return false,
+            }
+        }
+    }
+    true
+}
+
+fn osc_playback_control_id(
+    playback_address: &PlaybackAddress,
+    input: &PoolPlaybackInput,
+    arguments: &[OscArgument],
+) -> Option<u16> {
+    let fallback = match playback_address {
+        PlaybackAddress::Playback(address) => {
+            address.position().saturating_mul(8) + u16::from(input.button.unwrap_or(6))
+        }
+        _ => 0,
+    };
+    match arguments.get(1) {
+        Some(OscArgument::Int(value)) => u16::try_from(*value).ok(),
+        None => Some(fallback),
+        _ => None,
+    }
 }
 
 /// The key an already-applied OSC action is remembered under, so its echo is ignored.

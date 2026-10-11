@@ -33,7 +33,7 @@ fn cue_deletion_request(
         "address":address,
         "cue_number":cue_number,
         "authority":{
-            "playback_number":playback_number,
+            "playback_address":{"page":1,"position":playback_number},
             "cue_list_id":CUE_LIST_ID,
             "object_id":CUE_LIST_ID,
             "object_revision":object_revision,
@@ -48,7 +48,7 @@ async fn standalone_cue_deletion_waits_for_activation_before_programmer_and_keep
     let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2.5");
     let body = cue_deletion_request(
         "activation-ordered-delete",
-        serde_json::json!({"type":"current_page","expected_page":1,"slot":2}),
+        serde_json::json!({"type":"current_page","expected_page":1,"position":2}),
         "2.5", object_revision, cue_id, 2,
     );
     let baseline = scenario.state.events.latest_sequence();
@@ -87,14 +87,14 @@ async fn cue_deletion_route_tolerates_nested_extra_fields_but_rejects_invalid_kn
     let baseline = scenario.state.events.latest_sequence();
     let mut request = cue_deletion_request(
         "tolerant-delete",
-        serde_json::json!({"type":"current_page","expected_page":1,"slot":2}),
+        serde_json::json!({"type":"current_page","expected_page":1,"position":2}),
         "2.5", object_revision, cue_id, 2,
     );
     request["show_id"] = serde_json::json!(Uuid::new_v4());
     request["future_option"] = serde_json::json!(true);
     request["address"]["future_address"] = serde_json::json!(true);
     request["authority"]["future_authority"] = serde_json::json!(true);
-    for pointer in ["/address/slot", "/authority/object_revision"] {
+    for pointer in ["/address/position", "/authority/object_revision"] {
         let mut invalid = request.clone();
         *invalid.pointer_mut(pointer).unwrap() = serde_json::json!("invalid");
         let response = delete_cue_action(
@@ -240,7 +240,7 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
     let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2.5");
     let request = cue_deletion_request(
         "direct-cue-delete",
-        serde_json::json!({"type":"current_page","expected_page":1,"slot":2}),
+        serde_json::json!({"type":"current_page","expected_page":1,"position":2}),
         "2.5",
         object_revision,
         cue_id,
@@ -275,9 +275,9 @@ async fn direct_current_page_action_returns_authority_and_replays_before_page_an
 
     scenario
         .state
-        .installation.set_desk_page(
+        .installation.set_playback_surface_page(
             scenario.session.desk.id,
-            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
+            "main",
             2,
         )
         .unwrap();
@@ -320,7 +320,7 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
     let (show_revision, object_revision, cue_id) = cue_deletion_authority(&scenario, "2");
     let request = cue_deletion_request(
         "secure-delete",
-        serde_json::json!({"type":"pool","playback_number":1}),
+        serde_json::json!({"type":"playback","page":1,"position":1}),
         "2",
         object_revision - 1,
         cue_id,
@@ -345,7 +345,7 @@ async fn direct_action_rejects_stale_authority_and_foreign_desk_atomically() {
     let (_, current_object_revision, cue_id) = cue_deletion_authority(&scenario, "2");
     let request = cue_deletion_request(
         "foreign-desk-delete",
-        serde_json::json!({"type":"pool","playback_number":1}),
+        serde_json::json!({"type":"playback","page":1,"position":1}),
         "2",
         current_object_revision,
         cue_id,

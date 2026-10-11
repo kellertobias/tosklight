@@ -43,9 +43,9 @@ async fn send(
 fn writes(round: &str) -> Vec<(&'static str, serde_json::Value)> {
     vec![
         (
-            "/api/v2/virtual-playback-exclusion-zones/update",
+            "/api/v2/playback-solo-regions/update",
             serde_json::json!({"request_id": format!("zones-{round}"), "expected_revision": 1,
-                "zones": [{"id": "right", "name": "Right", "playback_numbers": [1003, 1004]}]}),
+                "regions": [{"id": "00000000-0000-4714-8200-000000000002", "name": "Right", "members": [{"page":1,"position":403},{"page":1,"position":404}]}]}),
         ),
         (
             "/api/v2/schedules/create",
@@ -53,7 +53,7 @@ fn writes(round: &str) -> Vec<(&'static str, serde_json::Value)> {
                 "name": "Nightly", "enabled": false,
                 "trigger": {"type": "interval", "every_seconds": 300,
                     "enabled_at": "2000-01-01T00:00:00Z"},
-                "target": {"type": "playback", "page": 1, "slot": 1, "playback_number": 1,
+                "target": {"type": "playback", "address": {"page": 1, "position": 1},
                     "action": "on", "master_transition": null}}}),
         ),
         (
@@ -99,13 +99,13 @@ async fn show_recovery_refuses_show_content_writes_and_keeps_the_desk_working() 
                 "id": schedule_id, "name": "Stored", "enabled": false,
                 "trigger": {"type": "interval", "every_seconds": 300,
                     "enabled_at": "2000-01-01T00:00:00Z"},
-                "target": {"type": "playback", "page": 1, "slot": 1, "playback_number": 1,
+                "target": {"type": "playback", "address": {"page": 1, "position": 1},
                     "action": "on", "master_transition": null}}}}),
         ),
         (
-            "/api/v2/virtual-playback-exclusion-zones/update".to_owned(),
-            serde_json::json!({"request_id": "seed-zones", "expected_revision": 0, "zones": [
-                {"id": "left", "name": "Left", "playback_numbers": [1001, 1002]}]}),
+            "/api/v2/playback-solo-regions/update".to_owned(),
+            serde_json::json!({"request_id": "seed-zones", "expected_revision": 0, "regions": [
+                {"id": "00000000-0000-4714-8200-000000000001", "name": "Left", "members": [{"page":1,"position":401},{"page":1,"position":402}]}]}),
         ),
     ] {
         let (status, body) = send(&app, &token, &show_id, "POST", &path, Some(body)).await;
@@ -237,12 +237,15 @@ async fn show_recovery_refuses_show_content_writes_and_keeps_the_desk_working() 
         &token,
         &show_id,
         "GET",
-        "/api/v2/virtual-playback-exclusion-zones",
+        "/api/v2/playback-solo-regions",
         None,
     )
     .await;
     assert_eq!(zones["revision"], 1);
-    assert_eq!(zones["zones"][0]["id"], "left");
+    assert_eq!(
+        zones["regions"][0]["id"],
+        "00000000-0000-4714-8200-000000000001"
+    );
     let (_, timecodes) = send(&app, &token, &show_id, "GET", "/api/v2/timecodes", None).await;
     assert_eq!(timecodes["objects"], serde_json::json!([]));
 
@@ -279,14 +282,14 @@ async fn a_running_show_accepts_the_writes_show_recovery_refuses() {
         .await
         .unwrap();
     assert_eq!(opened.status(), StatusCode::OK);
-    let seed = serde_json::json!({"request_id": "seed-zones", "expected_revision": 0, "zones": [
-        {"id": "left", "name": "Left", "playback_numbers": [1001, 1002]}]});
+    let seed = serde_json::json!({"request_id": "seed-zones", "expected_revision": 0, "regions": [
+        {"id": "00000000-0000-4714-8200-000000000001", "name": "Left", "members": [{"page":1,"position":401},{"page":1,"position":402}]}]});
     let (status, _) = send(
         &app,
         &token,
         &show_id,
         "POST",
-        "/api/v2/virtual-playback-exclusion-zones/update",
+        "/api/v2/playback-solo-regions/update",
         Some(seed),
     )
     .await;

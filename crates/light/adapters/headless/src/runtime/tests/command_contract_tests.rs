@@ -313,7 +313,7 @@ fn standalone_cuelist_record_is_one_active_show_batch() {
         .unwrap();
     assert_eq!(after.revision().value(), before.revision().value() + 1);
     assert_eq!(after.objects_of_kind("cue_list").count(), 1);
-    assert!(after.object("playback", "25").is_none());
+    assert!(after.objects_of_kind("playback_page").all(|page| page.body()["assignments"].get("25").is_none()));
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
         // One interval-gated recovery checkpoint per show (api-rules §8).
@@ -366,8 +366,7 @@ fn assign_cuelist_page_assignment_is_one_lossless_active_show_batch() {
             &serde_json::json!({
                 "number": 1,
                 "name": "Main",
-                "slots": {},
-                "virtual_playbacks": {},
+                "assignments": {},
                 "future_layout": {"columns": 10}
             }),
             0,
@@ -394,7 +393,7 @@ fn assign_cuelist_page_assignment_is_one_lossless_active_show_batch() {
         .unwrap();
     let page = after.object("playback_page", "1").unwrap();
     assert_eq!(after.revision().value(), before.revision().value() + 1);
-    assert_eq!(page.body()["slots"]["1"], 1);
+    assert_eq!(page.body()["assignments"]["1"]["target"]["type"], "cue_list");
     assert_eq!(page.body()["future_layout"]["columns"], 10);
     assert_eq!(
         command_show_object_backup_count(&scenario.data_dir),
@@ -417,7 +416,6 @@ fn standalone_cuelist_record_preserves_same_number_special_playback() {
     let scenario = CommandContractScenario::new();
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
     let conflicting = light_playback::PlaybackDefinition {
-        number: 25,
         name: "Concurrent playback".into(),
         target: light_playback::PlaybackTarget::GrandMaster,
         buttons: light_playback::PlaybackDefinition::default_buttons(
@@ -439,9 +437,9 @@ fn standalone_cuelist_record_preserves_same_number_special_playback() {
     let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     store
         .put_object(
-            "playback",
-            "25",
-            &serde_json::to_value(conflicting).unwrap(),
+            "playback_page",
+            "1",
+            &serde_json::json!({"number":1,"name":"Main","assignments":{"25":conflicting}}),
             0,
         )
         .unwrap();
@@ -463,9 +461,9 @@ fn standalone_cuelist_record_preserves_same_number_special_playback() {
         .unwrap();
     assert_eq!(after.revision().value(), before.revision().value() + 1);
     assert_eq!(after.objects_of_kind("cue_list").count(), 1);
-    assert_eq!(after.object("playback", "25").unwrap().revision(), 1);
+    assert_eq!(after.object("playback_page", "1").unwrap().revision(), 1);
     assert!(!Arc::ptr_eq(&scenario.state.output.snapshot(), &runtime));
-    assert_eq!(after.object("playback", "25").unwrap().body(), before.object("playback", "25").unwrap().body());
+    assert_eq!(after.object("playback_page", "1").unwrap().body(), before.object("playback_page", "1").unwrap().body());
     assert_eq!(scenario.state.events.latest_sequence(), event_sequence + 3);
     let light_application::EventReplay::Events(events) = scenario.state.events.replay(
         event_sequence,
@@ -615,8 +613,7 @@ fn typed_link_command_stores_the_destination_cue_identity() {
     .unwrap();
     scenario.verify_cue_creation_and_timing();
     execute_programmer_command(&scenario.state, &scenario.session, "ASSIGN CUELIST 25 AT PBK 25").unwrap();
-    let assigned = scenario.state.output.snapshot().playback_pages.iter().find(|page| page.number == 1).unwrap().slots[&25];
-    let command = format!("LINK SET {assigned} CUE 1 AT CUE 7 DELAY 0.25");
+    let command = "LINK SET 1 . 25 CUE 1 AT CUE 7 DELAY 0.25".to_string();
     assert!(
         scenario
             .state
@@ -683,11 +680,11 @@ fn selected_link_uses_standalone_uuid_and_preserves_physical_set_target() {
     execute_programmer_command(&scenario.state, &scenario.session, "GROUP 1 AT 50").unwrap();
     execute_programmer_command(&scenario.state, &scenario.session, "RECORD CUELIST 101 CUE 1").unwrap();
     execute_programmer_command(&scenario.state, &scenario.session, "RECORD CUELIST 101 CUE 7").unwrap();
-    let mut special = light_playback::PlaybackDefinition::new_cue_list(101, "Special", light_core::CueListId::new());
+    let mut special = light_playback::PlaybackDefinition::new_cue_list("Special", light_core::CueListId::new());
     special.target = light_playback::PlaybackTarget::GrandMaster;
     special.reset_incompatible_layout();
     let raw = serde_json::to_value(special).unwrap();
-    ActiveShowRepository::open(&scenario.show_path).unwrap().put_object("playback", "101", &raw, 0).unwrap();
+    ActiveShowRepository::open(&scenario.show_path).unwrap().put_object("playback_page", "1", &serde_json::json!({"number":1,"name":"Main","assignments":{"101":raw}}), 0).unwrap();
     let entry = scenario.state.active_show.current().clone().unwrap();
     scenario.state.output.replace_snapshot(load_engine_snapshot(&entry).unwrap()).unwrap();
     let linked = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
@@ -703,13 +700,13 @@ fn selected_link_uses_standalone_uuid_and_preserves_physical_set_target() {
     let destination = list.cues.iter().find(|item| item.number == cue("7")).unwrap().id;
     assert!(matches!(list.cues.iter().find(|item| item.number == cue("1")).unwrap().trigger,
         light_playback::CueTrigger::Link { cue_id, delay_millis: 250 } if cue_id == destination));
-    assert_eq!(store.objects("playback").unwrap().iter().find(|object| object.id == "101").unwrap().body, raw);
+    assert_eq!(store.objects("playback_page").unwrap().iter().find(|object| object.id == "1").unwrap().body["assignments"]["101"], raw);
     let before = store.portable_revision().unwrap();
     let rejected = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
         &scenario.session, "physical-link-special",
         light_wire::v2::live_action::LiveAction::CommandLineExecute(
             light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
-                value: "LINK SET 101 CUE 1 AT CUE 7".into(),
+                value: "LINK SET 1 . 101 CUE 1 AT CUE 7".into(),
             }),
     ));
     assert!(!rejected.ok);

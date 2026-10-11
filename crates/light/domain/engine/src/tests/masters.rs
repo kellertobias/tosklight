@@ -14,8 +14,8 @@ fn group_playback(number: u16, group_id: &str, initial_master: f32) -> PlaybackD
 }
 
 #[test]
-fn portable_group_master_seed_uses_lowest_physical_assignment_before_virtual() {
-    let mut virtual_playback = group_playback(1_001, "front", 0.9);
+fn portable_group_master_seed_uses_lowest_address_assignment() {
+    let mut virtual_playback = group_playback(401, "front", 0.9);
     virtual_playback.has_fader = false;
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
@@ -27,17 +27,14 @@ fn portable_group_master_seed_uses_lowest_physical_assignment_before_virtual() {
                 ..Default::default()
             }]
             .into(),
-            playbacks: vec![
-                group_playback(9, "front", 0.7),
-                group_playback(2, "front", 0.3),
-            ]
-            .into(),
-            playback_pages: vec![light_playback::PlaybackPage {
-                number: 1,
-                name: "Virtual".into(),
-                slots: HashMap::new(),
-                virtual_playbacks: HashMap::from([(1_001, virtual_playback)]),
-            }]
+            playback_pages: vec![playback_page(
+                1,
+                [
+                    (9, group_playback(9, "front", 0.7)),
+                    (2, group_playback(2, "front", 0.3)),
+                    (401, virtual_playback),
+                ],
+            )]
             .into(),
             ..Default::default()
         })
@@ -67,12 +64,14 @@ fn grand_master_and_blackout_affect_intensity() {
             cue_lists: vec![].into(),
             dynamics: vec![].into(),
             dynamic_stage_positions: Default::default(),
-            playbacks: vec![].into(),
+
             playback_pages: vec![].into(),
             routes: vec![].into(),
             control_mappings: vec![].into(),
             groups: vec![].into(),
             revision: 1,
+            playback_solo_regions: Default::default(),
+            playback_preload_scope: Default::default(),
         })
         .unwrap();
     assert_eq!(
@@ -131,7 +130,7 @@ fn partial_intensity_freeze_is_not_changed_by_group_grand_master_or_blackout() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![group_playback(1, "front", 0.5)].into(),
+            playback_pages: vec![playback_page(1, [(1, group_playback(1, "front", 0.5))])].into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "front".into(),
@@ -206,7 +205,8 @@ fn held_parameters_show_a_freeze_as_held_and_never_apply_a_master() {
         engine
             .replace_snapshot(EngineSnapshot {
                 fixtures: vec![fixture].into(),
-                playbacks: vec![group_playback(1, "front", 0.5)].into(),
+                playback_pages: vec![playback_page(1, [(1, group_playback(1, "front", 0.5))])]
+                    .into(),
                 groups: vec![GroupDefinition {
                     replacement_projections: Default::default(),
                     id: "front".into(),
@@ -270,7 +270,7 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
     let engine = Engine::new(programmers.clone());
     let mut snapshot = EngineSnapshot {
         fixtures: vec![fixture].into(),
-        playbacks: vec![group_playback(1, "front", 0.0)].into(),
+        playback_pages: vec![playback_page(1, [(1, group_playback(1, "front", 0.0))])].into(),
         groups: vec![GroupDefinition {
             replacement_projections: Default::default(),
             id: "front".into(),
@@ -296,7 +296,9 @@ fn full_freeze_bypasses_every_master_and_resumes_underlying_state_when_removed()
     );
 
     Arc::make_mut(&mut snapshot.fixtures)[0].freeze = FixtureFreezeState::default();
-    Arc::make_mut(&mut snapshot.playbacks).clear();
+    Arc::make_mut(&mut snapshot.playback_pages)[0]
+        .assignments
+        .clear();
     Arc::make_mut(&mut snapshot.groups).clear();
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
@@ -331,7 +333,7 @@ fn patch_master_opt_outs_are_independent_and_blackout_remains_authoritative() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![participating, ignores_grand, ignores_groups].into(),
-            playbacks: vec![group_playback(1, "all", 0.25)].into(),
+            playback_pages: vec![playback_page(1, [(1, group_playback(1, "all", 0.25))])].into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "all".into(),
@@ -423,10 +425,13 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
     ];
     let mut snapshot = EngineSnapshot {
         fixtures: fixtures.into(),
-        playbacks: vec![
-            group_playback(1, "odd", 0.25),
-            group_playback(2, "even", 0.75),
-        ]
+        playback_pages: vec![playback_page(
+            1,
+            [
+                (1, group_playback(1, "odd", 0.25)),
+                (2, group_playback(2, "even", 0.75)),
+            ],
+        )]
         .into(),
         groups: groups.into(),
         revision: 1,
@@ -450,7 +455,9 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
         );
     }
 
-    Arc::make_mut(&mut snapshot.playbacks).push(group_playback(3, "all", 0.0));
+    Arc::make_mut(&mut snapshot.playback_pages)[0]
+        .assignments
+        .insert(3, group_playback(3, "all", 0.0));
     engine.replace_snapshot(snapshot).unwrap();
     assert!(engine.set_group_master("all", 0.9).unwrap());
     assert_eq!(
@@ -493,7 +500,7 @@ fn group_master_runtime_update_is_targeted_idempotent_and_revision_neutral() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![group_playback(1, "front", 0.25)].into(),
+            playback_pages: vec![playback_page(1, [(1, group_playback(1, "front", 0.25))])].into(),
             groups: vec![
                 GroupDefinition {
                     replacement_projections: Default::default(),
@@ -552,7 +559,7 @@ fn group_master_transition_advances_on_render_without_scheduler_updates() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![group_playback(1, "front", 0.25)].into(),
+            playback_pages: vec![playback_page(1, [(1, group_playback(1, "front", 0.25))])].into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "front".into(),
@@ -600,7 +607,7 @@ fn group_master_flash_is_temporary_and_does_not_move_the_fader() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![group_playback(1, "front", 0.25)].into(),
+            playback_pages: vec![playback_page(1, [(1, group_playback(1, "front", 0.25))])].into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "front".into(),
@@ -743,7 +750,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
-            playbacks: vec![group_playback(1, "first", 0.5)].into(),
+            playback_pages: vec![playback_page(1, [(1, group_playback(1, "first", 0.5))])].into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "first".into(),
@@ -804,7 +811,11 @@ fn masters_scale_the_default_level_of_an_unprogrammed_dimmer_and_virtual_dimmer_
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![dimmer, rgb].into(),
-            playbacks: vec![test_group_playback_with_master(3, "front", 0.5)].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(3, test_group_playback_with_master(3, "front", 0.5))],
+            )]
+            .into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "front".into(),

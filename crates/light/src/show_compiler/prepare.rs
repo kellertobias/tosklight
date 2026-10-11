@@ -68,6 +68,7 @@ pub fn prepare_normalized_show_candidate_incremental(
     let candidate = document
         .candidate(&transaction)
         .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
+    super::deleted_playback_targets::validate(candidate, &transaction)?;
     let snapshot = compile_show_candidate_incremental(candidate, previous, dirty)?;
     Ok(PreparedShowCandidate {
         transaction,
@@ -89,6 +90,7 @@ pub fn prepare_show_candidate(
     let candidate = document
         .candidate(&transaction)
         .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
+    super::deleted_playback_targets::validate(candidate, &transaction)?;
     let snapshot = compile_show_candidate(candidate)?;
     Ok(PreparedShowCandidate {
         transaction,
@@ -111,6 +113,7 @@ pub(crate) fn prepare_show_candidate_exact_transaction(
     let candidate = document
         .candidate(&compilation)
         .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
+    super::deleted_playback_targets::validate(candidate, &transaction)?;
     let snapshot = compile_show_candidate(candidate)?;
     Ok(PreparedShowCandidate {
         transaction,
@@ -130,6 +133,7 @@ pub(crate) fn prepare_show_candidate_preserving_object(
     let candidate = document
         .candidate(&transaction)
         .map_err(|error| invalid_candidate(format!("invalid portable show candidate: {error}")))?;
+    super::deleted_playback_targets::validate(candidate, &transaction)?;
     let snapshot = compile_show_candidate(candidate)?;
     Ok(PreparedShowCandidate {
         transaction,

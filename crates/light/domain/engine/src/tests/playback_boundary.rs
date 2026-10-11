@@ -1,8 +1,7 @@
 use super::*;
-use crate::playback::combine_release_effect;
 use light_playback::{
-    PlaybackActivationOrigin, PlaybackActivationSurface, PlaybackExclusionScope, PlaybackIdentity,
-    PlaybackPage, PlaybackRuntimeEffect, VirtualPlaybackAddress,
+    PlaybackActivationOrigin, PlaybackActivationSurface, PlaybackAddress, PlaybackExclusionScope,
+    PlaybackRuntimeEffect, PlaybackSoloRegion,
 };
 use uuid::Uuid;
 
@@ -16,7 +15,7 @@ fn prepared_batch_dependency_rejection_leaves_playback_unchanged_and_does_not_in
         |candidate| {
             assert!(
                 candidate
-                    .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+                    .runtime_status_for_playback(playback_address(1, 1))
                     .is_some_and(|status| status.playback.enabled)
             );
             Err::<(), _>("dependent projection rejected".to_owned())
@@ -33,7 +32,7 @@ fn prepared_batch_dependency_rejection_leaves_playback_unchanged_and_does_not_in
             prepared,
             |candidate| {
                 Ok(candidate
-                    .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+                    .runtime_status_for_playback(playback_address(1, 1))
                     .unwrap())
             },
             |projection| {
@@ -46,7 +45,7 @@ fn prepared_batch_dependency_rejection_leaves_playback_unchanged_and_does_not_in
     assert_eq!(
         serde_json::to_value(
             engine
-                .playback_runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+                .playback_runtime_status_at(playback_address(1, 1))
                 .unwrap()
         )
         .unwrap(),
@@ -77,10 +76,9 @@ fn prepared_batch_is_isolated_until_one_typed_install() {
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: playback_address(1, 1),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::On,
-                exclusion_zones: Arc::default(),
                 activation_origin: None,
             }],
             started_at,
@@ -89,13 +87,16 @@ fn prepared_batch_is_isolated_until_one_typed_install() {
         .unwrap();
 
     assert!(engine.playback_runtime().is_empty());
-    assert_eq!(prepared.outcomes()[0].number, 1);
+    assert_eq!(prepared.outcomes()[0].address, playback_address(1, 1));
     engine.install_prepared_playback_batch(prepared).unwrap();
     assert!(
         engine
             .playback_runtime()
             .iter()
-            .any(|playback| playback.playback_number == Some(1) && playback.enabled)
+            .any(
+                |playback| playback.playback_address == Some(playback_address(1, 1))
+                    && playback.enabled
+            )
     );
 }
 
@@ -105,10 +106,9 @@ fn prepared_batch_cannot_overwrite_a_new_compiled_generation() {
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: playback_address(1, 1),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::Go,
-                exclusion_zones: Arc::default(),
                 activation_origin: None,
             }],
             chrono::Utc::now(),
@@ -124,53 +124,101 @@ fn prepared_batch_cannot_overwrite_a_new_compiled_generation() {
 }
 
 #[test]
-fn atomic_pool_activation_releases_only_active_peers_in_number_order() {
+fn atomic_playback_activation_releases_only_active_peers_in_number_order() {
     let engine = playback_engine_with_numbers(&[1, 2, 3, 4]);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
-    execute_pool(&engine, 3, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
+    execute_address(&engine, playback_address(1, 3), PlaybackAction::On);
 
-    let transition = engine
-        .execute_pool_playback_with_exclusions(
-            1,
-            PoolPlaybackAction::On,
-            &[vec![3, 1, 2], vec![4, 3, 1]],
-        )
-        .unwrap();
+    let transition = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[
+            vec![
+                playback_address(1, 3),
+                playback_address(1, 1),
+                playback_address(1, 2),
+            ],
+            vec![
+                playback_address(1, 4),
+                playback_address(1, 3),
+                playback_address(1, 1),
+            ],
+        ],
+        None,
+    )
+    .unwrap();
 
-    assert_changed_effect(transition.outcome, PlaybackRuntimeEffect::Durable);
-    assert_eq!(transition.released_playbacks, vec![2, 3]);
+    assert_changed_effect(transition, PlaybackRuntimeEffect::Durable);
+    assert!(!playback_runtime(&engine, 2).enabled && !playback_runtime(&engine, 3).enabled);
     assert_eq!(enabled_playback_numbers(&engine), vec![1]);
 }
 
 #[test]
 fn atomic_fader_activation_obeys_the_same_exclusion_boundary() {
     let engine = playback_engine_with_numbers(&[1, 2]);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    let mut snapshot = (*engine.snapshot()).clone();
+    snapshot.revision += 1;
+    Arc::make_mut(&mut snapshot.cue_lists)[0].auto_off_at_zero = true;
+    engine.replace_snapshot(snapshot).unwrap();
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
+    // Observe and pick up the original full master before the zero-to-live gesture.
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(1.0),
+    );
 
-    let transition = engine
-        .execute_pool_playback_with_exclusions(1, PoolPlaybackAction::SetMaster(0.5), &[vec![1, 2]])
-        .unwrap();
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(0.0),
+    );
+    assert!(
+        !playback_runtime(&engine, 1).enabled,
+        "zero must deactivate before the tested permanent start"
+    );
+    assert!(playback_runtime(&engine, 2).enabled);
+    let transition = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(0.5),
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        None,
+    )
+    .unwrap();
 
-    assert_eq!(transition.released_playbacks, vec![2]);
+    assert_changed_effect(transition, PlaybackRuntimeEffect::Durable);
+    assert!(!playback_runtime(&engine, 2).enabled);
     assert_eq!(enabled_playback_numbers(&engine), vec![1]);
 }
 
 #[test]
-fn atomic_pool_noop_and_deactivation_do_not_release_peers() {
+fn atomic_playback_noop_and_deactivation_do_not_release_peers() {
     let engine = playback_engine_with_numbers(&[1, 2]);
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
 
-    let noop = engine
-        .execute_pool_playback_with_exclusions(1, PoolPlaybackAction::On, &[vec![1, 2]])
-        .unwrap();
-    assert!(noop.released_playbacks.is_empty());
+    let noop = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        None,
+    )
+    .unwrap();
+    assert_changed_effect(noop, PlaybackRuntimeEffect::None);
     assert_eq!(enabled_playback_numbers(&engine), vec![1, 2]);
 
-    let deactivation = engine
-        .execute_pool_playback_with_exclusions(1, PoolPlaybackAction::Off, &[vec![1, 2]])
-        .unwrap();
-    assert!(deactivation.released_playbacks.is_empty());
+    let deactivation = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::Off,
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        None,
+    )
+    .unwrap();
+    assert_changed_effect(deactivation, PlaybackRuntimeEffect::Durable);
     assert_eq!(enabled_playback_numbers(&engine), vec![2]);
 }
 
@@ -182,9 +230,14 @@ fn activation_provenance_is_atomic_stable_on_noop_and_cleared_on_release() {
     let first = activation_origin(first_desk, PlaybackActivationSurface::Virtual);
     let second = activation_origin(second_desk, PlaybackActivationSurface::Physical);
 
-    engine
-        .execute_pool_playback_with_activation(1, PoolPlaybackAction::On, &[], Some(first))
-        .unwrap();
+    execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[],
+        Some(first),
+    )
+    .unwrap();
     let recorded = playback_runtime(&engine, 1).activation.unwrap();
     assert_eq!(recorded.desk_id, Some(first_desk));
     assert_eq!(recorded.surface, PlaybackActivationSurface::Virtual);
@@ -196,44 +249,60 @@ fn activation_provenance_is_atomic_stable_on_noop_and_cleared_on_release() {
         .cues
         .push(Cue::new(2_u16.into()));
     engine.replace_snapshot(replacement).unwrap();
-    engine
-        .execute_pool_playback_with_activation(1, PoolPlaybackAction::Go, &[], Some(second))
-        .unwrap();
+    execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::Go,
+        &[],
+        Some(second),
+    )
+    .unwrap();
     let advanced = playback_runtime(&engine, 1);
     assert_eq!(advanced.current_cue_number, Some(2_u16.into()));
     assert_eq!(advanced.activation.as_ref(), Some(&recorded));
 
-    let repeated = engine
-        .execute_pool_playback_with_activation(1, PoolPlaybackAction::On, &[], Some(second))
-        .unwrap();
-    assert_changed_effect(repeated.outcome, PlaybackRuntimeEffect::None);
+    let repeated = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[],
+        Some(second),
+    )
+    .unwrap();
+    assert_changed_effect(repeated, PlaybackRuntimeEffect::None);
     assert_eq!(
         playback_runtime(&engine, 1).activation,
         Some(recorded.clone())
     );
 
-    engine
-        .execute_pool_playback_with_activation(2, PoolPlaybackAction::On, &[], Some(second))
-        .unwrap();
-    let transition = engine
-        .execute_pool_playback_with_activation(
-            1,
-            PoolPlaybackAction::Off,
-            &[vec![1, 2]],
-            Some(first),
-        )
-        .unwrap();
-    assert!(transition.released_playbacks.is_empty());
+    execute_with_regions(
+        &engine,
+        playback_address(1, 2),
+        PlaybackAction::On,
+        &[],
+        Some(second),
+    )
+    .unwrap();
+    let transition = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::Off,
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        Some(first),
+    )
+    .unwrap();
+    assert_changed_effect(transition, PlaybackRuntimeEffect::Durable);
+    assert!(playback_runtime(&engine, 2).enabled);
     assert!(playback_runtime(&engine, 1).activation.is_none());
 
-    engine
-        .execute_pool_playback_with_activation(
-            1,
-            PoolPlaybackAction::On,
-            &[vec![1, 2]],
-            Some(first),
-        )
-        .unwrap();
+    execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        Some(first),
+    )
+    .unwrap();
     assert!(playback_runtime(&engine, 2).activation.is_none());
     assert_eq!(playback_runtime(&engine, 1).activation.unwrap().ordinal, 3);
 }
@@ -253,17 +322,15 @@ fn prepared_batch_assigns_distinct_activation_ordinals_in_queue_order() {
         .prepare_playback_batch(
             &[
                 PlaybackBatchCommand {
-                    number: 2,
-                    page: None,
+                    address: playback_address(1, 2),
+                    control_source: test_control_source(),
                     action: PlaybackBatchAction::On,
-                    exclusion_zones: Arc::default(),
                     activation_origin: Some(origin),
                 },
                 PlaybackBatchCommand {
-                    number: 1,
-                    page: None,
+                    address: playback_address(1, 1),
+                    control_source: test_control_source(),
                     action: PlaybackBatchAction::On,
-                    exclusion_zones: Arc::default(),
                     activation_origin: Some(origin),
                 },
             ],
@@ -281,17 +348,21 @@ fn prepared_batch_assigns_distinct_activation_ordinals_in_queue_order() {
 fn timed_preload_release_retains_activation_provenance_while_fade_is_active() {
     let engine = playback_engine();
     let origin = activation_origin(Uuid::new_v4(), PlaybackActivationSurface::Virtual);
-    engine
-        .execute_pool_playback_with_activation(1, PoolPlaybackAction::On, &[], Some(origin))
-        .unwrap();
+    execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[],
+        Some(origin),
+    )
+    .unwrap();
     let activation = playback_runtime(&engine, 1).activation.unwrap();
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: playback_address(1, 1),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::Off,
-                exclusion_zones: Arc::default(),
                 activation_origin: Some(origin),
             }],
             origin.at + chrono::Duration::seconds(1),
@@ -314,42 +385,56 @@ fn timed_preload_release_retains_activation_provenance_while_fade_is_active() {
 #[test]
 fn toggle_off_reports_a_real_transition_without_releasing_peers() {
     let engine = playback_engine_with_numbers(&[1, 2]);
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
 
-    let transition = engine
-        .execute_pool_playback_with_exclusions(1, PoolPlaybackAction::Toggle, &[vec![1, 2]])
-        .unwrap();
+    let transition = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::Toggle,
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        None,
+    )
+    .unwrap();
 
-    assert_changed_effect(transition.outcome, PlaybackRuntimeEffect::Durable);
-    assert!(transition.released_playbacks.is_empty());
+    assert_changed_effect(transition, PlaybackRuntimeEffect::Durable);
     assert_eq!(enabled_playback_numbers(&engine), vec![2]);
 }
 
 #[test]
-fn failed_pool_activation_does_not_release_peers() {
+fn failed_playback_activation_does_not_release_peers() {
     let engine = playback_engine_with_numbers(&[1, 2]);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
 
-    let result =
-        engine.execute_pool_playback_with_exclusions(99, PoolPlaybackAction::On, &[vec![99, 2]]);
+    let result = execute_with_regions(
+        &engine,
+        playback_address(1, 99),
+        PlaybackAction::On,
+        &[vec![playback_address(1, 99), playback_address(1, 2)]],
+        None,
+    );
 
     assert!(result.is_err());
     assert_eq!(enabled_playback_numbers(&engine), vec![2]);
 }
 
 #[test]
-fn release_pool_batch_reports_only_actual_changes_in_number_order() {
+fn release_address_batch_reports_only_actual_changes_in_number_order() {
     let engine = playback_engine_with_numbers(&[1, 2, 3]);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
 
     let outcome = engine
-        .execute_playback(EnginePlaybackCommand::ReleasePoolBatch(vec![3, 2, 2, 99]))
+        .execute_playback(EnginePlaybackCommand::ReleaseAddressBatch(vec![
+            playback_address(1, 3),
+            playback_address(1, 2),
+            playback_address(1, 2),
+            playback_address(1, 99),
+        ]))
         .unwrap();
 
     assert!(matches!(
         outcome,
-        EnginePlaybackOutcome::ChangedPlaybacks(ref changed) if changed == &vec![2]
+        EnginePlaybackOutcome::ChangedPlaybacks(ref changed) if changed == &vec![playback_address(1,2)]
     ));
     assert!(enabled_playback_numbers(&engine).is_empty());
 }
@@ -357,23 +442,32 @@ fn release_pool_batch_reports_only_actual_changes_in_number_order() {
 #[test]
 fn prepared_batch_reports_only_peers_it_actually_releases() {
     let engine = playback_engine_with_numbers(&[1, 2, 3]);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
 
+    install_regions(
+        &engine,
+        &[vec![
+            playback_address(1, 3),
+            playback_address(1, 2),
+            playback_address(1, 1),
+        ]],
+    );
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: playback_address(1, 1),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::On,
-                exclusion_zones: vec![vec![3, 2, 1, 2]].into(),
                 activation_origin: None,
             }],
             chrono::Utc::now(),
             0,
         )
         .unwrap();
-
-    assert_eq!(prepared.outcomes()[0].released_playbacks, vec![2]);
+    assert_eq!(
+        prepared.outcomes()[0].released_playbacks,
+        vec![playback_address(1, 2)]
+    );
     assert_eq!(enabled_playback_numbers(&engine), vec![2]);
     engine.install_prepared_playback_batch(prepared).unwrap();
     assert_eq!(enabled_playback_numbers(&engine), vec![1]);
@@ -382,60 +476,52 @@ fn prepared_batch_reports_only_peers_it_actually_releases() {
 #[test]
 fn pool_mutations_report_durable_transient_and_exact_noop_effects() {
     let engine = playback_engine();
-    assert_pool_effect(
+    assert_playback_effect(&engine, PlaybackAction::On, PlaybackRuntimeEffect::Durable);
+    assert_playback_effect(&engine, PlaybackAction::On, PlaybackRuntimeEffect::None);
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::On,
-        PlaybackRuntimeEffect::Durable,
-    );
-    assert_pool_effect(&engine, PoolPlaybackAction::On, PlaybackRuntimeEffect::None);
-    assert_pool_effect(
-        &engine,
-        PoolPlaybackAction::SetMaster(0.5),
+        PlaybackAction::SetMaster(0.5),
         PlaybackRuntimeEffect::Transient,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::SetMaster(0.5),
+        PlaybackAction::SetMaster(0.5),
         PlaybackRuntimeEffect::None,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::SetVirtualMaster(0.5),
+        PlaybackAction::SetMasterWithExplicitActivation(0.5),
         PlaybackRuntimeEffect::Durable,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::SetVirtualMaster(0.5),
+        PlaybackAction::SetMasterWithExplicitActivation(0.5),
         PlaybackRuntimeEffect::None,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::Load(1_u16.into()),
+        PlaybackAction::Load(1_u16.into()),
         PlaybackRuntimeEffect::Durable,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::Load(1_u16.into()),
+        PlaybackAction::Load(1_u16.into()),
         PlaybackRuntimeEffect::None,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::Pause,
+        PlaybackAction::Pause,
         PlaybackRuntimeEffect::Durable,
     );
-    assert_pool_effect(
+    assert_playback_effect(&engine, PlaybackAction::Pause, PlaybackRuntimeEffect::None);
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::Pause,
-        PlaybackRuntimeEffect::None,
-    );
-    assert_pool_effect(
-        &engine,
-        PoolPlaybackAction::SetTempButton(true),
+        PlaybackAction::SetTempButton(true),
         PlaybackRuntimeEffect::Transient,
     );
-    assert_pool_effect(
+    assert_playback_effect(
         &engine,
-        PoolPlaybackAction::SetTempButton(true),
+        PlaybackAction::SetTempButton(true),
         PlaybackRuntimeEffect::None,
     );
 }
@@ -465,13 +551,10 @@ fn cue_list_pause_retains_active_projection_with_exact_effect() {
 
 #[test]
 fn exclusion_release_upgrades_only_the_aggregate_effect() {
-    let outcome = combine_release_effect(
-        EnginePlaybackOutcome::Changed(EnginePlaybackEffect::from_addressed(
-            PlaybackRuntimeEffect::Transient,
-        )),
-        &[2],
-    )
-    .unwrap();
+    let outcome = EnginePlaybackOutcome::Changed(
+        EnginePlaybackEffect::from_addressed(PlaybackRuntimeEffect::Transient)
+            .with_related(PlaybackRuntimeEffect::Durable),
+    );
 
     assert_changed_effects(
         outcome,
@@ -485,9 +568,11 @@ fn peer_only_auto_off_keeps_the_addressed_effect_unchanged() {
     let (engine, _) = peer_only_auto_off_engine();
 
     let outcome = engine
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 2,
-            action: PoolPlaybackAction::On,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: playback_address(1, 2),
+            control_source: test_control_source(),
+            activation_origin: None,
+            action: PlaybackAction::On,
         })
         .unwrap();
 
@@ -507,10 +592,9 @@ fn peer_only_auto_off_batch_does_not_retime_the_addressed_playback() {
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 2,
-                page: None,
+                address: playback_address(1, 2),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::On,
-                exclusion_zones: Arc::default(),
                 activation_origin: None,
             }],
             started_at,
@@ -537,16 +621,25 @@ fn peer_only_auto_off_batch_does_not_retime_the_addressed_playback() {
 #[test]
 fn exclusion_does_not_clean_up_an_inactive_loaded_peer() {
     let engine = playback_engine_with_numbers(&[1, 2]);
-    execute_pool(&engine, 2, PoolPlaybackAction::Load(1_u16.into()));
+    execute_address(
+        &engine,
+        playback_address(1, 2),
+        PlaybackAction::Load(1_u16.into()),
+    );
     let loaded_id = playback_runtime(&engine, 2).loaded_cue_id;
     assert!(loaded_id.is_some());
 
-    let transition = engine
-        .execute_pool_playback_with_exclusions(1, PoolPlaybackAction::On, &[vec![1, 2]])
-        .unwrap();
+    let transition = execute_with_regions(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::On,
+        &[vec![playback_address(1, 1), playback_address(1, 2)]],
+        None,
+    )
+    .unwrap();
 
-    assert!(transition.released_playbacks.is_empty());
     let peer = playback_runtime(&engine, 2);
+    assert_changed_effect(transition, PlaybackRuntimeEffect::Durable);
     assert!(!peer.enabled);
     assert_eq!(peer.loaded_cue_id, loaded_id);
 }
@@ -589,17 +682,15 @@ fn prepared_batch_classifies_the_exact_final_state_after_transient_cancellation(
         .prepare_playback_batch(
             &[
                 PlaybackBatchCommand {
-                    number: 1,
-                    page: None,
+                    address: playback_address(1, 1),
+                    control_source: test_control_source(),
                     action: PlaybackBatchAction::SetTempButton(true),
-                    exclusion_zones: Arc::default(),
                     activation_origin: None,
                 },
                 PlaybackBatchCommand {
-                    number: 1,
-                    page: None,
+                    address: playback_address(1, 1),
+                    control_source: test_control_source(),
                     action: PlaybackBatchAction::SetTempButton(false),
-                    exclusion_zones: Arc::default(),
                     activation_origin: None,
                 },
             ],
@@ -616,8 +707,11 @@ fn prepared_batch_classifies_the_exact_final_state_after_transient_cancellation(
             .all(|outcome| outcome.effect == PlaybackRuntimeEffect::Transient)
     );
     assert_eq!(prepared.effect(), PlaybackRuntimeEffect::None);
-    assert_eq!(prepared.effect_for(1), PlaybackRuntimeEffect::None);
-    assert_eq!(prepared.changed_playback_numbers().count(), 0);
+    assert_eq!(
+        prepared.effect_for(playback_address(1, 1)),
+        PlaybackRuntimeEffect::None
+    );
+    assert_eq!(prepared.changed_playback_addresses().count(), 0);
     engine.install_prepared_playback_batch(prepared).unwrap();
     assert!(engine.playback_runtime().is_empty());
 }
@@ -625,16 +719,15 @@ fn prepared_batch_classifies_the_exact_final_state_after_transient_cancellation(
 #[test]
 fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
     let engine = playback_engine();
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
     let before = playback_runtime(&engine, 1);
     let started_at = before.activated_at + chrono::Duration::seconds(1);
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: playback_address(1, 1),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::On,
-                exclusion_zones: Arc::default(),
                 activation_origin: None,
             }],
             started_at,
@@ -652,31 +745,32 @@ fn repeated_on_batch_does_not_retrigger_timing_or_signal_persistence() {
 }
 
 #[test]
-fn virtual_exclusions_release_only_their_global_playback_number_peers() {
+fn solo_releases_only_exact_address_members_across_pages() {
     let engine = virtual_playback_engine();
-    let activated = VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let same_page_peer = VirtualPlaybackAddress::new(1, 1_002).unwrap();
-    let other_page_first = VirtualPlaybackAddress::new(2, 1_301).unwrap();
-    let other_page_peer = VirtualPlaybackAddress::new(2, 1_302).unwrap();
+    let activated = PlaybackAddress::new(3, 401).unwrap();
+    let same_page_peer = PlaybackAddress::new(3, 402).unwrap();
+    let other_page_first = PlaybackAddress::new(4, 401).unwrap();
+    let other_page_peer = PlaybackAddress::new(4, 402).unwrap();
     let origin = activation_origin(Uuid::new_v4(), PlaybackActivationSurface::Osc);
 
     for address in [same_page_peer, other_page_first, other_page_peer] {
         engine
-            .execute_playback(EnginePlaybackCommand::Virtual {
+            .execute_playback(EnginePlaybackCommand::Playback {
                 address,
-                action: VirtualPlaybackAction::On,
-                exclusion_zones: Vec::new(),
+                action: PlaybackAction::On,
+                control_source: test_control_source(),
                 activation_origin: None,
             })
             .unwrap();
     }
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
 
+    install_regions(&engine, &[vec![activated, same_page_peer]]);
     engine
-        .execute_playback(EnginePlaybackCommand::Virtual {
+        .execute_playback(EnginePlaybackCommand::Playback {
             address: activated,
-            action: VirtualPlaybackAction::On,
-            exclusion_zones: vec![vec![activated, same_page_peer]],
+            action: PlaybackAction::On,
+            control_source: test_control_source(),
             activation_origin: Some(origin.clone()),
         })
         .unwrap();
@@ -685,24 +779,18 @@ fn virtual_exclusions_release_only_their_global_playback_number_peers() {
     let by_identity = |identity| {
         runtime
             .iter()
-            .find(|playback| playback.playback_identity == Some(identity))
+            .find(|playback| playback.playback_address == Some(identity))
             .unwrap()
     };
-    assert!(by_identity(PlaybackIdentity::Virtual(activated)).enabled);
-    assert!(!by_identity(PlaybackIdentity::Virtual(same_page_peer)).enabled);
-    assert!(by_identity(PlaybackIdentity::Virtual(other_page_first)).enabled);
-    assert!(by_identity(PlaybackIdentity::Virtual(other_page_peer)).enabled);
-    assert!(
-        runtime
-            .iter()
-            .any(|playback| playback.playback_number == Some(1)
-                && playback.playback_identity.is_none()
-                && playback.enabled)
-    );
-    let recorded = by_identity(PlaybackIdentity::Virtual(activated))
-        .activation
-        .as_ref()
-        .unwrap();
+    assert!(by_identity(activated).enabled);
+    assert!(!by_identity(same_page_peer).enabled);
+    assert!(by_identity(other_page_first).enabled);
+    assert!(by_identity(other_page_peer).enabled);
+    assert!(runtime.iter().any(|playback| playback.playback_address
+        == Some(playback_address(1, 1))
+        && playback.playback_address == Some(playback_address(1, 1))
+        && playback.enabled));
+    let recorded = by_identity(activated).activation.as_ref().unwrap();
     assert_eq!(recorded.at, origin.at);
     assert_eq!(recorded.desk_id, origin.desk_id);
     assert_eq!(recorded.surface, origin.surface);
@@ -710,27 +798,33 @@ fn virtual_exclusions_release_only_their_global_playback_number_peers() {
 }
 
 #[test]
-fn prepared_virtual_batch_keeps_page_identity_and_exclusions_atomic() {
+fn prepared_address_batch_keeps_page_identity_and_solo_atomic() {
     let engine = virtual_playback_engine();
-    let page_one_peer = VirtualPlaybackAddress::new(1, 1_002).unwrap();
-    let page_two_peer = VirtualPlaybackAddress::new(2, 1_302).unwrap();
+    let page_one_peer = PlaybackAddress::new(3, 402).unwrap();
+    let page_two_peer = PlaybackAddress::new(4, 402).unwrap();
     for address in [page_one_peer, page_two_peer] {
         engine
-            .execute_playback(EnginePlaybackCommand::Virtual {
+            .execute_playback(EnginePlaybackCommand::Playback {
                 address,
-                action: VirtualPlaybackAction::On,
-                exclusion_zones: Vec::new(),
+                action: PlaybackAction::On,
+                control_source: test_control_source(),
                 activation_origin: None,
             })
             .unwrap();
     }
+    install_regions(
+        &engine,
+        &[
+            vec![playback_address(3, 401), playback_address(3, 402)],
+            vec![playback_address(4, 401), playback_address(4, 402)],
+        ],
+    );
     let prepared = engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1_001,
-                page: Some(1),
+                address: playback_address(3, 401),
+                control_source: test_control_source(),
                 action: PlaybackBatchAction::On,
-                exclusion_zones: vec![vec![1_001, 1_002], vec![1_301, 1_302]].into(),
                 activation_origin: None,
             }],
             chrono::Utc::now(),
@@ -738,33 +832,43 @@ fn prepared_virtual_batch_keeps_page_identity_and_exclusions_atomic() {
         )
         .unwrap();
 
-    assert_eq!(prepared.outcomes()[0].page, Some(1));
-    assert_eq!(prepared.outcomes()[0].released_playbacks, vec![1_002]);
+    assert_eq!(prepared.outcomes()[0].address, playback_address(3, 401));
+    assert_eq!(
+        prepared.outcomes()[0].released_playbacks,
+        vec![playback_address(3, 402)]
+    );
     assert!(
         engine
             .playback_runtime()
             .iter()
-            .any(|playback| playback.playback_identity
-                == Some(PlaybackIdentity::Virtual(page_one_peer))
-                && playback.enabled)
+            .any(|playback| playback.playback_address == Some(page_one_peer) && playback.enabled)
     );
     engine.install_prepared_playback_batch(prepared).unwrap();
     let runtime = engine.playback_runtime();
-    assert!(runtime.iter().any(|playback| playback.playback_identity
-        == Some(PlaybackIdentity::Virtual(page_one_peer))
-        && !playback.enabled));
-    assert!(runtime.iter().any(|playback| playback.playback_identity
-        == Some(PlaybackIdentity::Virtual(page_two_peer))
-        && playback.enabled));
+    assert!(
+        runtime
+            .iter()
+            .any(|playback| playback.playback_address == Some(page_one_peer) && !playback.enabled)
+    );
+    assert!(
+        runtime
+            .iter()
+            .any(|playback| playback.playback_address == Some(page_two_peer) && playback.enabled)
+    );
 }
 
-fn assert_pool_effect(
+fn assert_playback_effect(
     engine: &Engine,
-    action: PoolPlaybackAction,
+    action: PlaybackAction,
     expected: PlaybackRuntimeEffect,
 ) {
     let outcome = engine
-        .execute_playback(EnginePlaybackCommand::Pool { number: 1, action })
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: playback_address(1, 1),
+            action,
+            control_source: test_control_source(),
+            activation_origin: None,
+        })
         .unwrap();
     assert_changed_effect(outcome, expected);
 }
@@ -797,7 +901,7 @@ fn playback_runtime(engine: &Engine, number: u16) -> light_playback::ActivePlayb
     engine
         .playback_runtime()
         .into_iter()
-        .find(|playback| playback.playback_number == Some(number))
+        .find(|playback| playback.playback_address == Some(playback_address(1, number)))
         .unwrap()
 }
 
@@ -817,10 +921,9 @@ fn prepare_batch(engine: &Engine, action: PlaybackBatchAction) -> PreparedPlayba
     engine
         .prepare_playback_batch(
             &[PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: playback_address(1, 1),
+                control_source: test_control_source(),
                 action,
-                exclusion_zones: Arc::default(),
                 activation_origin: None,
             }],
             chrono::Utc::now(),
@@ -857,17 +960,25 @@ fn peer_only_auto_off_engine() -> (Engine, Arc<ManualClock>) {
     engine
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![low, high].into(),
-            playbacks: vec![low_definition, high_definition].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(1, low_definition), (2, high_definition)],
+            )]
+            .into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
     clock.advance_millis(1);
-    execute_pool(&engine, 2, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::On);
     let mut replacement = (*engine.snapshot()).clone();
     replacement.revision += 1;
-    Arc::make_mut(&mut replacement.playbacks)[0].auto_off = true;
+    Arc::make_mut(&mut replacement.playback_pages)[0]
+        .assignments
+        .get_mut(&1)
+        .unwrap()
+        .auto_off = true;
     engine.replace_snapshot(replacement).unwrap();
     (engine, clock)
 }
@@ -890,7 +1001,7 @@ fn playback_engine_with_numbers(numbers: &[u16]) -> Engine {
     engine
         .replace_snapshot(EngineSnapshot {
             cue_lists: cue_lists.into(),
-            playbacks: playbacks.into(),
+            playback_pages: vec![playback_page(1, numbers.iter().copied().zip(playbacks))].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -900,41 +1011,26 @@ fn playback_engine_with_numbers(numbers: &[u16]) -> Engine {
 
 fn virtual_playback_engine() -> Engine {
     let mut cue_lists = Vec::new();
-    let mut page = |number| {
-        let virtual_playbacks = {
-            let start = light_playback::virtual_playback_page_start(number).unwrap();
-            [start, start + 1]
-        }
-        .into_iter()
-        .map(|playback_number| {
-            let cue_list = test_cue_list(
-                &format!("Virtual typed boundary {playback_number}"),
-                Vec::new(),
-            );
-            let definition = test_playback(playback_number, cue_list.id);
+    let mut pages = Vec::new();
+    for page_number in [3, 4] {
+        let assignments = [401, 402].map(|position| {
+            let cue_list = test_cue_list(&format!("Playback {page_number}.{position}"), Vec::new());
+            let definition = test_playback(position, cue_list.id);
             cue_lists.push(cue_list);
-            (playback_number, definition)
-        })
-        .collect();
-        PlaybackPage {
-            number,
-            name: format!("Page {number}"),
-            slots: HashMap::new(),
-            virtual_playbacks,
-        }
-    };
-    let pages = vec![page(1), page(2)];
-    let physical = test_cue_list("Physical typed boundary", Vec::new());
-    let physical_playback = test_playback(1, physical.id);
-    cue_lists.push(physical);
+            (position, definition)
+        });
+        pages.push(playback_page(page_number, assignments));
+    }
+    let list = test_cue_list("Main Playback", Vec::new());
+    pages.push(playback_page(1, [(1, test_playback(1, list.id))]));
+    cue_lists.push(list);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
             cue_lists: cue_lists.into(),
-            playbacks: vec![physical_playback].into(),
             playback_pages: pages.into(),
             revision: 1,
-            ..EngineSnapshot::default()
+            ..Default::default()
         })
         .unwrap();
     engine
@@ -945,6 +1041,38 @@ fn enabled_playback_numbers(engine: &Engine) -> Vec<u16> {
         .playback_runtime()
         .into_iter()
         .filter(|playback| playback.enabled)
-        .filter_map(|playback| playback.playback_number)
+        .filter_map(|playback| playback.playback_address.map(|address| address.position()))
         .collect()
+}
+
+fn install_regions(engine: &Engine, members: &[Vec<PlaybackAddress>]) {
+    let mut snapshot = (*engine.snapshot()).clone();
+    snapshot.revision += 1;
+    snapshot.playback_solo_regions = members
+        .iter()
+        .enumerate()
+        .map(|(index, members)| PlaybackSoloRegion {
+            id: Uuid::new_v4(),
+            name: format!("Solo {index}"),
+            members: members.clone(),
+        })
+        .collect::<Vec<_>>()
+        .into();
+    engine.replace_snapshot(snapshot).unwrap();
+}
+
+fn execute_with_regions(
+    engine: &Engine,
+    address: PlaybackAddress,
+    action: PlaybackAction,
+    members: &[Vec<PlaybackAddress>],
+    origin: Option<PlaybackActivationOrigin>,
+) -> Result<EnginePlaybackOutcome, String> {
+    install_regions(engine, members);
+    engine.execute_playback(EnginePlaybackCommand::Playback {
+        address,
+        action,
+        activation_origin: origin,
+        control_source: test_control_source(),
+    })
 }

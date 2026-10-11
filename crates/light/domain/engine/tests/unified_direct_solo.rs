@@ -7,7 +7,7 @@ use light_programmer::ProgrammerRegistry;
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 #[test]
-fn direct_cuelist_start_enforces_union_of_regions_across_all_aliases() {
+fn direct_cuelist_start_does_not_activate_assigned_solo_members() {
     let engine = Engine::new(ProgrammerRegistry::default());
     let incoming = cue_list(vec![Cue::new(1_u16.into())]);
     let peer1 = cue_list(vec![Cue::new(1_u16.into())]);
@@ -68,14 +68,13 @@ fn direct_cuelist_start_enforces_union_of_regions_across_all_aliases() {
     let active = engine.active_playbacks();
     assert!(active.iter().any(|r| r.cue_list_id == id));
     assert!(
-        !active
-            .iter()
-            .any(|r| r.cue_list_id == peer1.id || r.cue_list_id == peer2.id),
-        "direct target activation must evict peers in every alias region"
+        active.iter().any(|r| r.cue_list_id == peer1.id)
+            && active.iter().any(|r| r.cue_list_id == peer2.id),
+        "direct Cue control must leave both Playback Solo peers running"
     );
 }
 #[test]
-fn external_timecode_solo_bridge_releases_permanent_cue_peers_in_alias_regions() {
+fn external_timecode_solo_bridge_uses_exact_member_address() {
     let engine = Engine::new(ProgrammerRegistry::default());
     let peer = cue_list(vec![Cue::new(1_u16.into())]);
     let peer_id = peer.id;
@@ -124,10 +123,17 @@ fn external_timecode_solo_bridge_releases_permanent_cue_peers_in_alias_regions()
     engine
         .execute_playback(EnginePlaybackCommand::EnforceSoloForTarget { address: a })
         .unwrap();
+    assert!(
+        engine.permanent_playback_enabled(b),
+        "an outside-region alias has no Solo membership"
+    );
+    engine
+        .execute_playback(EnginePlaybackCommand::EnforceSoloForTarget { address: alias })
+        .unwrap();
     assert!(!engine.permanent_playback_enabled(b));
 }
 #[test]
-fn prepared_solo_batch_reports_union_releases_and_every_shared_peer_alias_effect() {
+fn prepared_solo_batch_reports_exact_region_releases_and_shared_peer_feedback() {
     let engine = Engine::new(ProgrammerRegistry::default());
     let incoming = cue_list(vec![Cue::new(1_u16.into())]);
     let peer = cue_list(vec![Cue::new(1_u16.into())]);
@@ -197,7 +203,7 @@ fn prepared_solo_batch_reports_union_releases_and_every_shared_peer_alias_effect
     let prepared = engine
         .prepare_playback_batch(
             &[light_engine::PlaybackBatchCommand {
-                address,
+                address: alias,
                 action: light_engine::PlaybackBatchAction::On,
                 activation_origin: None,
                 control_source: source,
@@ -209,7 +215,7 @@ fn prepared_solo_batch_reports_union_releases_and_every_shared_peer_alias_effect
     assert_eq!(
         prepared.outcomes()[0].released_playbacks,
         vec![peer_address],
-        "released peers must be the deduplicated union across target aliases"
+        "released peers must be deduplicated across regions containing the addressed member"
     );
     let changed = prepared.changed_playback_addresses().collect::<Vec<_>>();
     for alias in [address, alias, peer_address, peer_alias] {

@@ -19,7 +19,7 @@ pub(super) fn dispatch_live_action(
     frame: LiveActionFrame,
 ) -> WsResponse {
     let timing = begin_live_action_timing(state, session, &frame);
-    let response = dispatch_live_action_inner(state, session, frame, false);
+    let response = dispatch_live_action_inner(state, session, frame, false, None);
     acknowledge_live_action(state, timing, response)
 }
 
@@ -30,9 +30,18 @@ pub(super) async fn dispatch_live_action_live(
     session: &Session,
     frame: LiveActionFrame,
 ) -> WsResponse {
+    dispatch_live_action_on_socket(state, session, frame, None).await
+}
+
+pub(super) async fn dispatch_live_action_on_socket(
+    state: &AppState,
+    session: &Session,
+    frame: LiveActionFrame,
+    socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
+) -> WsResponse {
     let timing = begin_live_action_timing(state, session, &frame);
     if !is_dynamic_action(&frame.action) {
-        let response = dispatch_live_action_inner(state, session, frame, false);
+        let response = dispatch_live_action_inner(state, session, frame, false, socket);
         return acknowledge_live_action(state, timing, response);
     }
     let revision = state.output.snapshot().revision;
@@ -59,7 +68,7 @@ pub(super) async fn dispatch_live_action_live(
             ),
         );
     }
-    let response = dispatch_live_action_inner(state, session, frame, true);
+    let response = dispatch_live_action_inner(state, session, frame, true, socket);
     drop(activation);
     acknowledge_live_action(state, timing, response)
 }
@@ -171,6 +180,7 @@ fn dispatch_live_action_inner(
     session: &Session,
     frame: LiveActionFrame,
     dynamic_activation_held: bool,
+    socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
 ) -> WsResponse {
     let revision = state.output.snapshot().revision;
     if let Err(error) = validate_frame(state, session, &frame) {
@@ -186,6 +196,7 @@ fn dispatch_live_action_inner(
         &context,
         &ports,
         dynamic_activation_held,
+        socket,
     );
     match result.response {
         Ok(payload) => WsResponse {
@@ -234,6 +245,7 @@ fn dispatch_action(
     context: &light_application::ActionContext,
     ports: &command_http::ServerProgrammingPorts<'_>,
     dynamic_activation_held: bool,
+    socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
 ) -> ActionOutput {
     match action {
         LiveAction::SpeedGroup(request) => runtime_output(ws_speed_group_action(
@@ -269,28 +281,13 @@ fn dispatch_action(
             ports,
         )),
         LiveAction::ProgrammerCaptureMode(request) => {
-            run_interaction(state, session, context, || {
-                let response =
-                    ws_programmer_capture_mode(state, session, request).and_then(|outcome| {
-                        serde_json::to_value(outcome).map_err(|error| error.to_string())
-                    });
-                ActionOutput::plain(response)
-            })
+            dispatch_capture_mode(state, session, context, request)
         }
         LiveAction::ProgrammerPriority(request) => typed_programming(
             ws_programmer_priority_action(state, &action_request(request, context), context, ports),
         ),
         LiveAction::ProgrammerPreloadLifecycle(request) => {
-            let needs_activation =
-                matches!(request.action, ProgrammingPreloadLifecycleAction::Go { .. });
-            run_typed_with_optional_activation(state, needs_activation, || {
-                ws_programmer_preload_lifecycle_action(
-                    state,
-                    &action_request(request, context),
-                    context,
-                    ports,
-                )
-            })
+            dispatch_preload_lifecycle(state, context, ports, request)
         }
         LiveAction::ProgrammerPreloadValues(request) => run_typed_with_activation(state, || {
             ws_programmer_preload_values_action(
@@ -314,30 +311,22 @@ fn dispatch_action(
             ))
         }),
         LiveAction::PlaybackSurfaceSelect(request) => {
-            run_interaction(state, session, context, || {
-                ActionOutput::plain(super::playback_surfaces_http::select_live(
-                    state,
-                    session,
-                    &request.surface_id,
-                ))
-            })
+            dispatch_surface_action(state, session, context, &request.surface_id, None)
         }
-        LiveAction::PlaybackSurfacePage(request) => {
-            run_interaction(state, session, context, || {
-                ActionOutput::plain(super::playback_surfaces_http::page_live(
-                    state,
-                    session,
-                    &request.surface_id,
-                    request.page,
-                ))
-            })
-        }
+        LiveAction::PlaybackSurfacePage(request) => dispatch_surface_action(
+            state,
+            session,
+            context,
+            &request.surface_id,
+            Some(request.page),
+        ),
         LiveAction::Playback(request) => run_interaction(state, session, context, || {
             ActionOutput::plain(ws_playback_action(
                 state,
                 session,
                 &action_request(request, context),
                 Some(context),
+                socket,
             ))
         }),
         LiveAction::Macro(request) => run_interaction(state, session, context, || {
@@ -360,26 +349,10 @@ fn dispatch_action(
                 &action_request(request, context),
             ))
         }),
-        LiveAction::CommandLineExecute(request) => run_interaction(state, session, context, || {
-            ActionOutput::plain(ws_programmer_execute(
-                state,
-                session,
-                &action_request(request, context),
-                Some(context),
-            ))
-        }),
-        LiveAction::ProgrammerUndo => run_interaction(state, session, context, || {
-            let response = super::fixture_freeze::undo_latest(state, session, context)
-                .map_err(|error| error.message)
-                .and_then(|freeze_changed| {
-                    let changed =
-                        freeze_changed.unwrap_or_else(|| state.programming.undo(session.id));
-                    persist_programmer(state, session)
-                        .map(|()| serde_json::json!({"changed":changed}))
-                        .map_err(|error| error.message)
-                });
-            ActionOutput::plain(response)
-        }),
+        LiveAction::CommandLineExecute(request) => {
+            dispatch_command_execute(state, session, context, &action_request(request, context))
+        }
+        LiveAction::ProgrammerUndo => dispatch_programmer_undo(state, session, context),
         LiveAction::FixtureFreeze(request) => ActionOutput::plain(
             super::fixture_freeze::toggle_selected(state, session, &request, context)
                 .and_then(|outcome| {
@@ -406,6 +379,91 @@ fn dispatch_action(
             dynamic_action,
         ),
     }
+}
+
+fn dispatch_preload_lifecycle(
+    state: &AppState,
+    context: &light_application::ActionContext,
+    ports: &command_http::ServerProgrammingPorts<'_>,
+    request: light_wire::v2::preload_lifecycle::ProgrammingPreloadLifecycleRequest,
+) -> ActionOutput {
+    let needs_activation = matches!(request.action, ProgrammingPreloadLifecycleAction::Go { .. });
+    run_typed_with_optional_activation(state, needs_activation, || {
+        ws_programmer_preload_lifecycle_action(
+            state,
+            &action_request(request, context),
+            context,
+            ports,
+        )
+    })
+}
+
+fn dispatch_capture_mode(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: light_wire::v2::live_action::ProgrammerCaptureModeLiveActionRequest,
+) -> ActionOutput {
+    run_interaction(state, session, context, || {
+        let response = ws_programmer_capture_mode(state, session, request)
+            .and_then(|outcome| serde_json::to_value(outcome).map_err(|error| error.to_string()));
+        ActionOutput::plain(response)
+    })
+}
+
+fn dispatch_surface_action(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    surface_id: &str,
+    page: Option<u8>,
+) -> ActionOutput {
+    run_interaction(state, session, context, || {
+        ActionOutput::plain(match page {
+            Some(page) => {
+                super::playback_surfaces_http::page_live(state, session, surface_id, page)
+            }
+            None => super::playback_surfaces_http::select_live(state, session, surface_id),
+        })
+    })
+}
+
+fn dispatch_command_execute(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    request: &WsActionRequest,
+) -> ActionOutput {
+    let _activation = match try_programming_activation(state) {
+        Ok(activation) => activation,
+        Err(error) => return ActionOutput::plain(Err(error)),
+    };
+    // Execute owns replay, publication and Highlight reconciliation inside its
+    // ordered Programming service. An external wrapper would repeat that work.
+    ActionOutput::plain(ws_programmer_execute(
+        state,
+        session,
+        request,
+        Some(context),
+    ))
+}
+
+fn dispatch_programmer_undo(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+) -> ActionOutput {
+    run_interaction(state, session, context, || {
+        let response = super::fixture_freeze::undo_latest(state, session, context)
+            .map_err(|error| error.message)
+            .and_then(|freeze_changed| {
+                let changed = freeze_changed.unwrap_or_else(|| state.programming.undo(session.id));
+                persist_programmer(state, session)
+                    .map(|()| serde_json::json!({"changed":changed}))
+                    .map_err(|error| error.message)
+            });
+        ActionOutput::plain(response)
+    })
 }
 
 fn dispatch_dynamic_action(

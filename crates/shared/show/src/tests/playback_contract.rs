@@ -119,3 +119,122 @@ fn retired_undo_and_redo_bodies_refuse_reopen_before_any_write() {
         let _ = fs::remove_file(path);
     }
 }
+
+#[test]
+fn retired_group_controls_and_dynamic_scopes_refuse_files_and_history_without_writes() {
+    let targetless = json!({"type":"dynamic","assignment":{"target_scope":null,"dynamic":{
+        "embedded_fallback":{"definition":{"target_binding":{"type":"targetless"}}}
+    }}});
+    let scoped = json!({"type":"dynamic","assignment":{"target_scope":{"type":"live_group","group_id":"1"},
+        "dynamic":{"embedded_fallback":{"definition":{"target_binding":{"type":"live_group","group_id":"1"}}}}
+    }});
+    let cases = [
+        ("group", json!({"name":"Front","fixtures":[],"master":1})),
+        (
+            "group",
+            json!({"name":"Front","fixtures":[],"playback_fader":1}),
+        ),
+        (
+            "playback_page",
+            json!({"number":1,"assignments":{"1":{"target":targetless}}}),
+        ),
+        (
+            "playback_page",
+            json!({"number":1,"assignments":{"1":{"target":scoped}}}),
+        ),
+    ];
+    for table in ["objects", "object_history", "object_redo"] {
+        for (kind, body) in &cases {
+            let path = temporary("retired-assignment-control");
+            let (store, _) = ShowStore::create(&path, "Original").unwrap();
+            let time_column = if table == "objects" {
+                "updated_at"
+            } else {
+                "created_at"
+            };
+            store.conn.execute(&format!("INSERT INTO {table}(kind,id,revision,body_json,{time_column}) VALUES(?1,'1',1,?2,'test')"),
+                [*kind, &body.to_string()]).unwrap();
+            store
+                .conn
+                .execute("UPDATE schema_info SET version=9", [])
+                .unwrap();
+            store
+                .conn
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .unwrap();
+            drop(store);
+            let original = fs::read(&path).unwrap();
+            let error = ShowStore::open(&path).err().unwrap().to_string();
+            assert!(error.contains("before TL-714"), "{error}");
+            assert_eq!(fs::read(&path).unwrap(), original);
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+#[test]
+fn bound_dynamic_assignments_and_targetless_pool_templates_remain_valid() {
+    let binding = json!({"type":"live_group","group_id":"1"});
+    let definition = json!({"target_binding":binding});
+    assert!(
+        validate_playback_object(
+            "dynamic",
+            "1",
+            &json!({"target_binding":{"type":"targetless"}})
+        )
+        .is_ok()
+    );
+    assert!(validate_playback_object("playback_page", "1", &json!({"number":1,"assignments":{"1":{"target":{
+        "type":"dynamic","assignment":{"target_scope":null,"dynamic":{"embedded_fallback":{"definition":definition}}}
+    }}}})).is_ok());
+    let path = temporary("retired-control-writer");
+    let (store, _) = ShowStore::create(&path, "Writer").unwrap();
+    let document = store.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    transaction.put("group", "1", json!({"master":0.5}));
+    assert!(store.apply_portable_transaction(transaction).is_err());
+    assert_eq!(
+        store.portable_document().unwrap().revision(),
+        document.revision()
+    );
+    assert!(store.objects("group").unwrap().is_empty());
+    drop(store);
+    let _ = fs::remove_file(path);
+}
+
+mod compact_rig_generation;
+
+#[test]
+fn speed_group_legacy_fader_is_refused_before_writable_open_including_history() {
+    let body = json!({"number":4,"assignments":{"305":{
+        "name":"Speed A","target":{"type":"speed_group","group":"A"},"fader":"speed"
+    }}});
+    assert!(validate_playback_object("playback_page", "4", &body).is_err());
+    for table in ["objects", "object_history", "object_redo"] {
+        let path = temporary("retired-speed-group-fader");
+        let (store, _) = ShowStore::create(&path, "Original").unwrap();
+        let time_column = if table == "objects" {
+            "updated_at"
+        } else {
+            "created_at"
+        };
+        store.conn.execute(&format!("INSERT INTO {table}(kind,id,revision,body_json,{time_column}) VALUES('playback_page','4',1,?1,'test')"),
+            [body.to_string()]).unwrap();
+        store
+            .conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .unwrap();
+        drop(store);
+        let original = fs::read(&path).unwrap();
+        let error = ShowStore::open(&path).err().unwrap().to_string();
+        assert!(error.contains("learned_percentage"));
+        assert!(error.contains("Nothing was changed"));
+        assert_eq!(fs::read(&path).unwrap(), original);
+        let _ = fs::remove_file(path);
+    }
+    for fader in ["learned_percentage", "direct_bpm", "centered_relative"] {
+        let mut canonical = body.clone();
+        canonical["assignments"]["305"]["fader"] = json!(fader);
+        validate_playback_object("playback_page", "4", &canonical).unwrap();
+    }
+}

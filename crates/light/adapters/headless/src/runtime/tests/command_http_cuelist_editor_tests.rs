@@ -73,13 +73,13 @@ async fn set_cuelist_editor_keeps_shifted_assign_and_existing_physical_set_addre
     set_cue_record_value(&scenario);
     assert_eq!(scenario.execute("physical-editor-seed", Some("RECORD CUELIST 15 CUE 1")).await.status(), StatusCode::OK);
     assert_eq!(scenario.execute("explicit-assign", Some("ASSIGN CUELIST 15 AT PBK 2.3")).await.status(), StatusCode::OK);
-    let expected = scenario.state.output.snapshot().playback_pages.iter().find(|page| page.number == 2).unwrap().slots[&3];
+    let expected = serde_json::json!({"page":2,"position":3});
     let context = light_application::ActionContext::operator(scenario.session.desk.id, scenario.session.id.0, light_application::ActionSource::Http);
-    // The existing compatibility SET path still addresses physical Playbacks; its HTTP
-    // atomic policy remains unchanged and is separately exercised by command policy tests.
+    // Explicit page configuration stays independent of the selected Cuelist editor.
     assert_eq!(set_commands::execute_set_command(&scenario.state, &scenario.session, &["2".into(), ".".into(), "3".into()], &context).unwrap(), 0);
-    assert!(scenario.state.events.audit_events().iter().any(|event| event.kind == "playback_configuration_requested" && event.payload["playback"] == expected));
-    assert_eq!(set_commands::execute_set_command(&scenario.state, &scenario.session, &[expected.to_string()], &context).unwrap(), 0);
+    assert!(scenario.state.events.audit_events().iter().any(|event| event.kind == "playback_configuration_requested" && event.payload["address"] == expected));
+    scenario.state.installation.set_playback_surface_page(scenario.session.desk.id, "main", 2).unwrap();
+    assert_eq!(set_commands::execute_set_command(&scenario.state, &scenario.session, &["3".into()], &context).unwrap(), 0);
     assert!(cuelist_editor_events(&scenario).is_empty(), "physical SET still opens physical configuration");
     let response = scenario.execute("independent-editor-after-assign", Some("SET CUELIST 15")).await;
     assert_eq!(response.status(), StatusCode::OK, "{}", json(response).await);

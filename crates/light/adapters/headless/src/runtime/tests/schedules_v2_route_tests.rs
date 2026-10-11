@@ -67,25 +67,12 @@ async fn seeded_schedule_show(state: &AppState, app: &Router, token: &str) -> St
         .unwrap();
     store
         .put_object(
-            "playback",
-            "7",
-            &serde_json::json!({
-                "number":7,
-                "name":"Worklights",
-                "target":{"type":"group","group_id":"worklights"}
-            }),
-            0,
-        )
-        .unwrap();
-    store
-        .put_object(
             "playback_page",
             "1",
             &serde_json::json!({
-                "number":1,
-                "name":"Main",
-                "slots":{"3":7},
-                "virtual_playbacks":{}
+                "number":1,"name":"Main","assignments":{"3":{
+                    "name":"Worklights","target":{"type":"group","group_id":"worklights"}
+                }}
             }),
             0,
         )
@@ -112,9 +99,7 @@ fn interval_create(request_id: &str) -> serde_json::Value {
             },
             "target":{
                 "type":"playback",
-                "page":1,
-                "slot":3,
-                "playback_number":7,
+                "address":{"page":1,"position":3},
                 "action":"on",
                 "master_transition":null
             }
@@ -289,7 +274,7 @@ async fn enabled_schedule_rejects_past_macro_missing_and_moved_targets() {
                 "enabled":true,
                 "trigger":{"type":"one_time","at":"2000-01-01T00:00:00"},
                 "target":{
-                    "type":"playback","page":1,"slot":3,"playback_number":7,"action":"on"
+                    "type":"playback","address":{"page":1,"position":3},"action":"on"
                 }
             }
         }),
@@ -318,7 +303,7 @@ async fn enabled_schedule_rejects_past_macro_missing_and_moved_targets() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{macro_target}");
 
     let mut moved = interval_create("moved");
-    moved["definition"]["target"]["slot"] = 4.into();
+    moved["definition"]["target"]["address"]["position"] = 4.into();
     let (status, moved) =
         post_schedule(&app, &token, &show_id, "/api/v2/schedules/create", moved).await;
     assert_eq!(status, StatusCode::CONFLICT, "{moved}");
@@ -352,7 +337,7 @@ async fn due_one_time_schedule_executes_through_playback_and_disables_itself() {
                 "enabled":true,
                 "trigger":{"type":"one_time","at":local_due},
                 "target":{
-                    "type":"playback","page":1,"slot":3,"playback_number":7,"action":"on"
+                    "type":"playback","address":{"page":1,"position":3},"action":"on"
                 }
             }
         }),

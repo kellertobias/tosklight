@@ -32,13 +32,9 @@ impl PositionDesk {
             chrono::DateTime::from_timestamp_millis(1_000_000).unwrap(),
         ));
         let scenario = CommandHttpScenario::with_clock(clock.clone()).await;
-        let response = scenario
-            .app
-            .clone()
-            .oneshot(open_default_show_request(&scenario.token))
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        scenario
+            .create_and_open_show("Calibrated Position authoring")
+            .await;
         let profile = physical::moving_head();
         let owner = FixtureId::new();
         let point = FixtureId::new();
@@ -59,8 +55,8 @@ impl PositionDesk {
             },
         );
         let snapshot = scenario.state.output.snapshot();
-        // Preserve the opened show's fixture/group/playback references. Add the physical
-        // authoring rig in an unused universe rather than replacing the seeded show graph.
+        // Author this independent rig in a fresh canonical show. Preserve any existing
+        // fixture/group/playback references and choose an unused universe.
         fixture.fixture_number = Some(
             snapshot
                 .fixtures

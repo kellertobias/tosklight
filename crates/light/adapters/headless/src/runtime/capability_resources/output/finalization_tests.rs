@@ -182,18 +182,29 @@ fn start(output: &OutputResource, definition: &DynamicDefinition) -> (Uuid, Uuid
     // Give the running clock an actual active Playback owner. A hand-built orphan would
     // correctly be released by destination reconciliation and cannot test retained history.
     let mut snapshot = output.snapshot().as_ref().clone();
-    snapshot.playbacks = vec![serde_json::from_value(serde_json::json!({
-        "number": 1, "name": "Finalizer owner", "target": {"type": "dynamic", "assignment": {
+    let playback = serde_json::from_value(serde_json::json!({
+        "name": "Finalizer owner", "target": {"type": "dynamic", "assignment": {
             "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": definition.pool_number,
                 "embedded_fallback": {"definition": definition}}
         }}
-    })).unwrap()].into();
+    })).unwrap();
+    snapshot.playback_pages = vec![light_playback::PlaybackPage {
+        number: 1,
+        name: "Main".into(),
+        assignments: [(1, playback)].into(),
+    }]
+    .into();
     output.replace_snapshot(snapshot).unwrap();
     output
         .engine
-        .execute_playback(light_engine::EnginePlaybackCommand::Pool {
-            number: 1,
-            action: light_engine::PoolPlaybackAction::On,
+        .execute_playback(light_engine::EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            action: light_engine::PlaybackAction::On,
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
         })
         .unwrap();
     output.reconcile_dynamic_runtime();

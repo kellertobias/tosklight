@@ -946,7 +946,16 @@ impl OutputResource {
         playback: &PlaybackRenderCapability,
         options: RenderOptions,
     ) -> Result<(RenderedSemanticFrame, OutputSemanticRenderTiming), EngineError> {
-        self.render_with_playback_events_timed_with_capture(active_show, playback, options, |_| {})
+        self.render_with_playback_events_timed_with_capture(
+            active_show,
+            playback,
+            options,
+            || {},
+            |frame| output_scheduler::timecode_capture::SettledTimecodeCapture {
+                frame: Ok(frame),
+                accepted: None,
+            },
+        )
     }
 
     /// The callback runs inside the same ordered Playback operation as the authoritative
@@ -956,14 +965,40 @@ impl OutputResource {
         active_show: &ActiveShowProjection,
         playback: &PlaybackRenderCapability,
         options: RenderOptions,
-        on_capture: impl FnOnce(&light_engine::PreparedOutputFrame),
+        before_capture: impl FnOnce(),
+        on_capture: impl FnOnce(
+            light_engine::PreparedOutputFrame,
+        ) -> output_scheduler::timecode_capture::SettledTimecodeCapture,
     ) -> Result<(RenderedSemanticFrame, OutputSemanticRenderTiming), EngineError> {
         output_scheduler::ordered_output_operation(playback, || {
             let dynamic_started = Instant::now();
+            before_capture();
             let Some(prepared) = self.engine.try_prepare_output_frame(options) else {
                 return light_application::PlaybackOperation::new(Err(
                     EngineError::StalePreparedFrame,
                 ));
+            };
+            let settled = on_capture(prepared);
+            let mut events = Vec::new();
+            if let Some(accepted) = settled.accepted.as_ref() {
+                output_scheduler::change_lead::carry_uncommitted_capture(
+                    &self.change_lead_recorder(),
+                    accepted,
+                );
+                events.extend(output_scheduler::captured_playback_events(
+                    &self.engine,
+                    active_show,
+                    playback,
+                    accepted,
+                    None,
+                    None,
+                ));
+            }
+            let prepared = match settled.frame {
+                Ok(frame) => frame,
+                Err(error) => {
+                    return light_application::PlaybackOperation::with_events(Err(error), events);
+                }
             };
             let prepared =
                 crate::runtime::dynamic_snapshot_publication::RetainedFrameCapture::select(
@@ -971,7 +1006,6 @@ impl OutputResource {
                     &self.dynamic_snapshot,
                     dynamic_started,
                 );
-            let mut events = Vec::new();
             let completed = output_scheduler::dynamic_output_frame(
                 &self.engine,
                 &prepared,
@@ -1020,7 +1054,6 @@ impl OutputResource {
                     None,
                 ));
             }
-            on_capture(&prepared);
             let result = completed.map(|completed| {
                 let settled =
                     crate::runtime::playback_service::projection::settled_dynamic_playback_events(

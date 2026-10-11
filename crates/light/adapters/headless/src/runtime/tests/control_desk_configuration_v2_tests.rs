@@ -83,7 +83,7 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
         &scenario,
         serde_json::json!({
             "request_id":"desk-update",
-            "action":{"type":"set_page","page":1,"existing_only":true}
+            "action":{"type":"update","patch":{"name":"collision"}}
         }),
     )
     .await;
@@ -118,22 +118,39 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
         )
         .await;
     assert_eq!(configured.status(), StatusCode::OK);
-    let missing = post_desk_action(&scenario, page_action("missing-page", 2, true)).await;
-    assert_eq!(missing.status(), StatusCode::BAD_REQUEST);
-    let created = post_desk_action(&scenario, page_action("create-page", 2, false)).await;
+    // Page choice is a live surface action: it can select an unassigned sparse page
+    // without creating portable show data or entering object-intent replay machinery.
+    let show_revision = scenario.show_revision();
+    let created = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::post("/api/v2/playback-surfaces/main/page")
+                .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({"page":2}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(created.status(), StatusCode::OK);
     let created = json(created).await;
-    assert_eq!(created["page"], 2);
-    assert!(created["event_sequence"].is_number());
-    assert!(created["page_creation_event_sequence"].is_number());
+    assert_eq!(created["command_page"], 2);
+    assert!(created.get("replayed").is_none());
     assert_eq!(
         desk_page(&scenario, desk_id, scenario_show_id(&scenario)),
         2
     );
-    let page_event = scenario.state.events.audit_revision();
-    let replayed_page = post_desk_action(&scenario, page_action("create-page", 2, false)).await;
-    assert_eq!(json(replayed_page).await["replayed"], true);
-    assert_eq!(scenario.state.events.audit_revision(), page_event);
+    assert_eq!(scenario.show_revision(), show_revision);
+    assert!(
+        !scenario
+            .state
+            .output
+            .snapshot()
+            .playback_pages
+            .iter()
+            .any(|page| page.number == 2)
+    );
 
     scenario.cleanup();
 }
@@ -151,11 +168,4 @@ async fn post_desk_action(scenario: &TopologyScenario, body: serde_json::Value) 
         )
         .await
         .unwrap()
-}
-
-fn page_action(request_id: &str, page: u8, existing_only: bool) -> serde_json::Value {
-    serde_json::json!({
-        "request_id":request_id,
-        "action":{"type":"set_page","page":page,"existing_only":existing_only}
-    })
 }

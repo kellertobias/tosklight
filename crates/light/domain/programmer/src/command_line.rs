@@ -197,7 +197,7 @@ pub fn command_gesture_intent(
             let replacement = match key {
                 CommandKey::Group => Some(("DEGROUP", &["GROUP", "FIXTURE"][..])),
                 CommandKey::Cue => Some(("CUELIST", &["CUE"][..])),
-                CommandKey::Playback => Some(("VPBK", &["PBK"][..])),
+                CommandKey::Playback => Some(("PBK", &["PBK"][..])),
                 _ => None,
             };
             if let Some((text, roots)) = replacement {
@@ -428,7 +428,7 @@ fn edit_text(state: &CommandLineState, key: CommandKey) -> CommandLineEdit {
         return edited(replace_last_word(command, "CUELIST"), state.target);
     }
     if key == CommandKey::Playback && last_word_is_any(command, &["PBK"]) {
-        return edited(replace_last_word(command, "VPBK"), state.target);
+        return edited(command.to_owned(), state.target);
     }
     if key == CommandKey::At && last_word_is_any(command, &["AT"]) {
         let mut edit = edited(replace_last_word(command, "AT 100"), state.target);

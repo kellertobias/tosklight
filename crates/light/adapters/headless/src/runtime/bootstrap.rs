@@ -683,6 +683,7 @@ fn build_app_state(
             desk_token(),
         ),
         sessions: SessionResource::new(),
+        software_playback_sources: Arc::default(),
         dynamics: light_application::DynamicsService::new(startup.programmers.clone()),
         macros: light_application::CommandMacroExecutionService::default(),
         timecodes: resources.timecodes.clone(),

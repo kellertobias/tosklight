@@ -145,8 +145,8 @@ struct EvidenceSource {
 fn singleton_fast_path_changes_identity_for_action_ordinal_footprint_and_role() {
     let target = FixtureId::new();
     let source = ContributionSourceId::playback(light_playback::SequenceMasterSource {
-        playback_number: None,
-        playback_identity: None,
+        playback_address: None,
+        control_source_id: None,
         cue_list_id: light_core::CueListId::new(),
         temporary: false,
     });

@@ -1,6 +1,6 @@
 //! Physical ON must retain the accepted Dynamic color, rather than a hidden static peer.
 use super::*;
-use light_engine::{EnginePlaybackCommand, PoolPlaybackAction};
+use light_engine::{EnginePlaybackCommand, PlaybackAction};
 use light_playback::{Cue, CueChange, CueList, PlaybackDefinition};
 
 #[test]
@@ -16,20 +16,34 @@ fn physical_on_captures_real_dynamic_color_from_published_family_output() {
         cue.changes.push(CueChange::set(target, ProgrammingOwner::Color.key(), value));
         serde_json::from_value(serde_json::json!({"id":light_core::CueListId::new(),"name":"Published start","priority":10,"mode":"sequence","looped":false,"cues":[cue]})).unwrap()
     }).collect();
-    let definitions: Vec<PlaybackDefinition> = lists.iter().enumerate().map(|(index,list)| {
-        serde_json::from_value(serde_json::json!({"number":index+1,"name":"Physical","target":{"type":"cue_list","cue_list_id":list.id},"auto_off":false})).unwrap()
+    let definitions: Vec<PlaybackDefinition> = lists.iter().map(|list| {
+        serde_json::from_value(serde_json::json!({"name":"Physical","target":{"type":"cue_list","cue_list_id":list.id},"auto_off":false})).unwrap()
     }).collect();
     let mut snapshot = (*desk.state.output.snapshot()).clone();
     snapshot.cue_lists = lists.into();
-    snapshot.playbacks = definitions.into();
+    snapshot.playback_pages = vec![light_playback::PlaybackPage {
+        number: 1,
+        name: "Main".into(),
+        assignments: definitions
+            .into_iter()
+            .enumerate()
+            .map(|(index, definition)| (index as u16 + 1, definition))
+            .collect(),
+    }]
+    .into();
     snapshot.revision += 1;
     desk.state.output.replace_snapshot(snapshot).unwrap();
     let on = |number| {
         desk.state
             .output
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number,
-                action: PoolPlaybackAction::On,
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, number).unwrap(),
+                action: PlaybackAction::On,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: number,
+                },
             })
             .unwrap()
     };

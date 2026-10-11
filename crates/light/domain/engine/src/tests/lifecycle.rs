@@ -25,7 +25,7 @@ fn source_occurrence_watermark_survives_generation_changes_without_active_playba
         assert!(engine.playback_runtime().is_empty());
         assert_eq!(engine.playback_source_occurrence_watermark(), 81);
         engine.reserve_playback_source_occurrence_watermark(2);
-        execute_pool(&engine, 1, PoolPlaybackAction::On);
+        execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
         assert!(engine.playback_source_occurrence_watermark() > 81);
     }
 }
@@ -40,7 +40,7 @@ fn exhausted_source_occurrence_watermark_survives_generation_replacement() {
         .replace_snapshot(playback_snapshot(&cue_list, &playback, 1))
         .unwrap();
     assert_eq!(engine.playback_source_occurrence_watermark(), u64::MAX);
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
     assert_eq!(engine.playback_source_occurrence_watermark(), u64::MAX);
     assert_eq!(
         engine.active_playbacks().len(),
@@ -61,7 +61,11 @@ fn invalid_snapshot_preparation_does_not_change_live_state() {
             ..GroupDefinition::default()
         }]
         .into(),
-        playbacks: vec![test_group_playback_with_master(1, "invalid", 2.0)].into(),
+        playback_pages: vec![playback_page(
+            1,
+            [(1, test_group_playback_with_master(1, "invalid", 2.0))],
+        )]
+        .into(),
         revision: 2,
         ..EngineSnapshot::default()
     };
@@ -116,26 +120,24 @@ fn prepared_installation_preserves_compatible_playback_runtime() {
 #[test]
 fn playback_runtime_survives_one_detach_and_releases_after_the_final_assignment() {
     let cue_list = test_cue_list("Shared", vec![]);
-    let physical = test_playback(1, cue_list.id);
-    let mut virtual_playback = test_playback(1_001, cue_list.id);
-    virtual_playback.has_fader = false;
-    let page = light_playback::PlaybackPage {
-        number: 1,
-        name: "Virtual".into(),
-        slots: HashMap::new(),
-        virtual_playbacks: HashMap::from([(1_001, virtual_playback)]),
-    };
+    let fader_playback = test_playback(1, cue_list.id);
+    let mut button_playback = test_playback(501, cue_list.id);
+    button_playback.has_fader = false;
+    let page = playback_page(1, [(501, button_playback)]);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list.clone()].into(),
-            playbacks: vec![physical].into(),
-            playback_pages: vec![page.clone()].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(1, fader_playback), (501, page.assignments[&501].clone())],
+            )]
+            .into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
 
     engine
         .replace_snapshot(EngineSnapshot {
@@ -165,7 +167,7 @@ fn reassignment_releases_the_final_reference_to_the_old_target() {
     engine
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![first.clone(), second.clone()].into(),
-            playbacks: vec![test_playback(1, first.id)].into(),
+            playback_pages: vec![playback_page(1, [(1, test_playback(1, first.id))])].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -175,7 +177,7 @@ fn reassignment_releases_the_final_reference_to_the_old_target() {
     engine
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![first, second.clone()].into(),
-            playbacks: vec![test_playback(1, second.id)].into(),
+            playback_pages: vec![playback_page(1, [(1, test_playback(1, second.id))])].into(),
             revision: 2,
             ..EngineSnapshot::default()
         })
@@ -209,20 +211,21 @@ fn final_group_assignment_removes_transient_master_state() {
         playback.fader = PlaybackDefinition::default_fader(&playback.target);
         playback
     };
-    let mut virtual_group = group_playback(1_001);
-    virtual_group.has_fader = false;
-    let page = light_playback::PlaybackPage {
-        number: 1,
-        name: "Virtual".into(),
-        slots: HashMap::new(),
-        virtual_playbacks: HashMap::from([(1_001, virtual_group)]),
-    };
+    let mut button_group = group_playback(501);
+    button_group.has_fader = false;
+    let page = playback_page(1, [(501, button_group)]);
     let engine = Engine::new(ProgrammerRegistry::default());
     engine
         .replace_snapshot(EngineSnapshot {
             groups: vec![group.clone()].into(),
-            playbacks: vec![group_playback(1)].into(),
-            playback_pages: vec![page.clone()].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [
+                    (1, group_playback(1)),
+                    (501, page.assignments[&501].clone()),
+                ],
+            )]
+            .into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
@@ -269,7 +272,7 @@ fn playback_snapshot(
 ) -> EngineSnapshot {
     EngineSnapshot {
         cue_lists: vec![cue_list.clone()].into(),
-        playbacks: vec![playback.clone()].into(),
+        playback_pages: vec![playback_page(1, [(1, playback.clone())])].into(),
         revision,
         ..EngineSnapshot::default()
     }

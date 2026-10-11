@@ -732,7 +732,6 @@ pub(super) fn test_playback(
     cue_list_id: light_core::CueListId,
 ) -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
-        number: 1,
         name: "Hybrid sources".into(),
         target: light_playback::PlaybackTarget::CueList { cue_list_id },
         buttons: [
@@ -892,14 +891,24 @@ fn hybrid_gates_legacy_pan_rgb_and_focus_against_typed_family_owners() {
             .replace_snapshot(light_engine::EngineSnapshot {
                 dynamics: vec![definition.clone()].into(),
                 cue_lists: vec![cue_list].into(),
-                playbacks: vec![playback].into(),
+                playback_pages: vec![light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Main".into(),
+                    assignments: [(1, playback)].into(),
+                }]
+                .into(),
                 ..Default::default()
             })
             .unwrap();
         engine
-            .execute_playback(light_engine::EnginePlaybackCommand::Pool {
-                number: 1,
-                action: light_engine::PoolPlaybackAction::Go,
+            .execute_playback(light_engine::EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                action: light_engine::PlaybackAction::Go,
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
             })
             .unwrap();
         let mut runtime =
@@ -990,7 +999,6 @@ fn hybrid_retains_final_move_in_black_underlay_when_scalar_intensity_changes_pos
         cues,
     };
     let playback = light_playback::PlaybackDefinition {
-        number: 1,
         name: "Hybrid MIB".into(),
         target: light_playback::PlaybackTarget::CueList {
             cue_list_id: cue_list.id,
@@ -1021,14 +1029,24 @@ fn hybrid_retains_final_move_in_black_underlay_when_scalar_intensity_changes_pos
         .replace_snapshot(light_engine::EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: [(1, playback)].into(),
+            }]
+            .into(),
             ..Default::default()
         })
         .unwrap();
     engine
-        .execute_playback(light_engine::EnginePlaybackCommand::Pool {
-            number: 1,
-            action: light_engine::PoolPlaybackAction::Go,
+        .execute_playback(light_engine::EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            action: light_engine::PlaybackAction::Go,
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
         })
         .unwrap();
     set_fixed(

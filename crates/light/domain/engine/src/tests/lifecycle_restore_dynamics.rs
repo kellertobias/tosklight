@@ -20,7 +20,11 @@ fn saved_dynamic(engine: &Engine) -> light_playback::ActiveDynamicPlayback {
 fn destination_restore_captures_exact_owners_before_install_for_same_and_changed_topology() {
     for changed in [false, true] {
         let (engine, clock, _, _) = setup();
-        execute_pool(&engine, 1, PoolPlaybackAction::SetTempButton(true));
+        execute_address(
+            &engine,
+            playback_address(1, 1),
+            PlaybackAction::SetTempButton(true),
+        );
         let saved = saved_dynamic(&engine);
         let paused_since = Some(clock.now());
         engine.reserve_playback_source_occurrence_watermark(200);
@@ -33,8 +37,10 @@ fn destination_restore_captures_exact_owners_before_install_for_same_and_changed
         candidate.revision += 1;
         let mut expected = saved.clone();
         if changed {
-            Arc::make_mut(&mut candidate.playbacks)[1].number = 7;
-            expected.playback_number = 7;
+            let page = &mut Arc::make_mut(&mut candidate.playback_pages)[0];
+            let assignment = page.assignments.remove(&2).unwrap();
+            page.assignments.insert(7, assignment);
+            expected.playback_address = playback_address(1, 7);
         }
         // The saved release transition is overdue. Finalization must not tick it.
         clock.advance_millis(500);
@@ -77,7 +83,11 @@ fn destination_restore_captures_exact_owners_before_install_for_same_and_changed
 #[test]
 fn destination_restore_from_old_shared_preparation_uses_only_saved_rows_and_current_watermark() {
     let (engine, _, _, _) = setup();
-    execute_pool(&engine, 1, PoolPlaybackAction::SetTempButton(true));
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetTempButton(true),
+    );
     let saved = saved_dynamic(&engine);
     let mut candidate = (*engine.snapshot()).clone();
     candidate.revision = 3;
@@ -86,7 +96,7 @@ fn destination_restore_from_old_shared_preparation_uses_only_saved_rows_and_curr
     intervening.revision = 2;
     Arc::make_mut(&mut intervening.cue_lists)[0].name = "Intervening compilation".into();
     engine.replace_snapshot(intervening).unwrap();
-    execute_pool(&engine, 2, PoolPlaybackAction::Off);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::Off);
     engine.reserve_playback_source_occurrence_watermark(500);
     engine
         .execute_playback(EnginePlaybackCommand::SetDynamicsPaused(true))
@@ -146,7 +156,7 @@ fn destination_restore_keeps_existing_passive_target_and_flash_normalization_rul
         saved.size = 1.5;
         let mut candidate = (*engine.snapshot()).clone();
         if missing {
-            candidate.playbacks = Arc::default();
+            candidate.playback_pages = Arc::default();
         }
         let finalized = engine
             .finalize_snapshot_playback_restoring_dynamics(
@@ -174,10 +184,16 @@ fn malformed_destination_rows_fail_before_publication_or_live_changes() {
     let (engine, _, _, _) = setup();
     let good = saved_dynamic(&engine);
     let mut invalid = Vec::new();
-    let mut row = good.clone();
-    row.playback_number = 0;
-    row.playback_identity = None;
-    invalid.push(row);
+    for address in [
+        serde_json::json!({"page":0,"position":2}),
+        serde_json::json!({"page":1,"position":0}),
+    ] {
+        let mut malformed = serde_json::to_value(&good).unwrap();
+        malformed["playback_address"] = address;
+        assert!(
+            serde_json::from_value::<light_playback::ActiveDynamicPlayback>(malformed).is_err()
+        );
+    }
     let mut row = good.clone();
     row.fader_value = f32::NAN;
     invalid.push(row);
@@ -224,7 +240,11 @@ fn destination_commit_reserves_later_live_and_checkpoint_watermarks_without_reca
             )
             .unwrap();
         // The old show emits a real temporary Cue occurrence while activation awaits commit.
-        execute_pool(&engine, 1, PoolPlaybackAction::SetTempButton(true));
+        execute_address(
+            &engine,
+            playback_address(1, 1),
+            PlaybackAction::SetTempButton(true),
+        );
         let live_watermark = engine.playback_source_occurrence_watermark();
         assert!(live_watermark > 200);
         assert_eq!(engine.active_cue_dynamic_values().len(), 2);

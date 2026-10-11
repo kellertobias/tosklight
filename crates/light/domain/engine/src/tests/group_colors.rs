@@ -22,7 +22,11 @@ fn group_color_engine(programmers: ProgrammerRegistry) -> (Engine, FixtureId) {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback, test_group_playback(2, GROUP_ID)].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(1, playback), (2, test_group_playback(2, GROUP_ID))],
+            )]
+            .into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: GROUP_ID.into(),
@@ -34,7 +38,7 @@ fn group_color_engine(programmers: ProgrammerRegistry) -> (Engine, FixtureId) {
             ..Default::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::On);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::On);
     (engine, fixture_id)
 }
 

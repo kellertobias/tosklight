@@ -94,9 +94,18 @@ fn desk(
             "cues":[light_playback::Cue::new("1".parse().unwrap())]
         })).unwrap()]
             .into(),
-            playbacks: vec![serde_json::from_value(serde_json::json!({
-            "number":1,"name":"GO candidate","target":{"type":"cue_list","cue_list_id":cue_list}
-        })).unwrap()]
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: [(
+                    1,
+                    serde_json::from_value(serde_json::json!({
+                        "name":"GO candidate","target":{"type":"cue_list","cue_list_id":cue_list}
+                    }))
+                    .unwrap(),
+                )]
+                .into(),
+            }]
             .into(),
             ..Default::default()
         })
@@ -107,10 +116,12 @@ fn batch(output: &OutputResource) -> light_engine::PreparedPlaybackBatch {
     output
         .prepare_playback_batch(
             &[light_engine::PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
                 action: light_engine::PlaybackBatchAction::Go,
-                exclusion_zones: Arc::from([]),
                 activation_origin: None,
             }],
             output.engine.application_time(),
@@ -124,7 +135,9 @@ fn projection_before(
     light_application::PlaybackRuntimeIdentity,
     light_application::PlaybackRuntimeProjection,
 )> {
-    let identity = light_application::PlaybackRuntimeIdentity::Playback(1);
+    let identity = light_application::PlaybackRuntimeIdentity::Playback(
+        light_playback::PlaybackAddress::new(1, 1).unwrap(),
+    );
     vec![(
         identity.clone(),
         light_application::PlaybackRuntimeProjection {
@@ -132,8 +145,7 @@ fn projection_before(
                 show_id: Uuid::new_v4(),
                 show_revision: output.snapshot().revision,
             },
-            requested: identity,
-            playback_number: Some(1),
+            identity,
             target: light_application::PlaybackTargetProjection::CueList {
                 cue_list_id: output.snapshot().cue_lists[0].id,
                 runtime: None,
@@ -459,7 +471,9 @@ fn callback_holds_dynamics_until_infallible_commit_and_blocked_reader_observes_t
             writer.install_preload_playback_batch(prepared, at, |_, playback, candidate| {
                 assert!(
                     playback
-                        .runtime_status_at(light_playback::PlaybackIdentity::physical(1).unwrap())
+                        .runtime_status_for_playback(
+                            light_playback::PlaybackAddress::new(1, 1).unwrap()
+                        )
                         .unwrap()
                         .playback
                         .enabled
@@ -500,9 +514,7 @@ fn callback_holds_dynamics_until_infallible_commit_and_blocked_reader_observes_t
         "the actual shared Dynamics mutex must remain held inside final preparation"
     );
     assert_eq!(runtime, candidate);
-    assert!(
-        playback
-            .iter()
-            .any(|status| status.playback_number == Some(1) && status.enabled)
-    );
+    assert!(playback.iter().any(|status| status.playback_address
+        == Some(light_playback::PlaybackAddress::new(1, 1).unwrap())
+        && status.enabled));
 }

@@ -195,6 +195,16 @@ impl TestRig {
         )
     }
 
+    pub fn try_source_object(&self, kind: &str, id: &str, body: &Value) -> Result<(), StoreError> {
+        ShowStore::open(&self.source_path)?
+            .put_object(kind, id, body, 0)
+            .map(|_| ())
+    }
+
+    pub fn source_file_bytes(&self) -> Vec<u8> {
+        std::fs::read(&self.source_path).unwrap()
+    }
+
     pub fn source_document(&self) -> PortableShowDocument {
         document(&self.source_path)
     }

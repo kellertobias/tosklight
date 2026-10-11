@@ -254,14 +254,20 @@ fn cue_dynamic_values_include_referenced_dynamic_and_embedded_fallback_dependenc
 }
 
 #[test]
-fn dynamic_playback_includes_dynamic_scope_and_fallback_dependencies() {
+fn bound_dynamic_playback_includes_target_and_fallback_dependencies() {
     let rig = TestRig::new();
-    let fixture_id = Uuid::new_v4();
+    let fixture = portable_fixture_record(350_000, 1);
+    rig.source_profile(&fixture.profile);
+    rig.source_object(
+        "patched_fixture",
+        &fixture.fixture_id.0.to_string(),
+        fixture.body.clone(),
+    );
     let dynamic_id = Uuid::new_v4();
     rig.source_object(
         "group",
         "front",
-        json!({"id":"front","name":"Front","fixtures":[]}),
+        json!({"id":"front","name":"Front","fixtures":[fixture.fixture_id]}),
     );
     rig.source_object(
         "preset",
@@ -287,10 +293,7 @@ fn dynamic_playback_includes_dynamic_scope_and_fallback_dependencies() {
                         "last_known_pool_number": 7,
                         "embedded_fallback": {"definition": fallback}
                     },
-                    "target_scope": {
-                        "type": "frozen_targets",
-                        "targets": [fixture_id]
-                    }
+                    "target_scope": null
                 }
             }
         }} }),
@@ -299,6 +302,7 @@ fn dynamic_playback_includes_dynamic_scope_and_fallback_dependencies() {
     let preview = rig.preview(rig.request("playback_page", "1"));
 
     for dependency in [
+        key("patched_fixture", &fixture.fixture_id.0.to_string()),
         key("dynamic", &dynamic_id.to_string()),
         key("group", "front"),
         key("preset", "1.1"),

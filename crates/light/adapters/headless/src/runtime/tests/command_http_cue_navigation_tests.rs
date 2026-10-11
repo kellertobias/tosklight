@@ -63,44 +63,16 @@ async fn install_cue_navigation_show(
         "{:?}",
         json(response).await
     );
-    for (number, name) in [(1, "Twin A"), (2, "Twin B")] {
-        let response = scenario
-            .put_active_object(
-                &show_id,
-                "playback",
-                &number.to_string(),
-                0,
-                serde_json::json!({
-                    "number": number,
-                    "name": name,
-                    "target": {"type":"cue_list","cue_list_id":CUE_LIST_ID},
-                    "buttons": ["go_minus","go","flash"],
-                    "fader": "master",
-                    "go_activates": true,
-                    "auto_off": false,
-                    "xfade_millis": 0,
-                    "color": "#20c997",
-                    "flash_release": "release_all",
-                    "protect_from_swap": false
-                }),
-            )
-            .await;
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-    let response = scenario
-        .put_active_object(
-            &show_id,
-            "playback_page",
-            "1",
-            0,
-            serde_json::json!({
-                "number":1,
-                "name":"Main",
-                "slots":{"1":1,"2":2},
-                "virtual_playbacks":{}
-            }),
-        )
-        .await;
+    let assignments = serde_json::Map::from_iter([(1, "Twin A"), (2, "Twin B")].into_iter().map(|(position, name)| {
+        (position.to_string(), serde_json::json!({
+            "name":name, "target":{"type":"cue_list","cue_list_id":CUE_LIST_ID},
+            "buttons":["go_minus","go","flash"], "fader":"master", "go_activates":true,
+            "auto_off":false, "xfade_millis":0, "color":"#20c997",
+            "flash_release":"release_all", "protect_from_swap":false
+        }))
+    }));
+    let response = scenario.put_active_object(&show_id, "playback_page", "1", 0,
+        serde_json::json!({"number":1,"name":"Main","assignments":assignments})).await;
     assert_eq!(response.status(), StatusCode::OK);
     (scenario, show_id)
 }
@@ -109,7 +81,7 @@ fn select_playback(scenario: &CommandHttpScenario, desk_id: Uuid, playback: Opti
     let show_id = scenario.state.active_show.current().as_ref().unwrap().id;
     scenario
         .state
-        .installation.set_selected_playback(desk_id, show_id, playback)
+        .installation.set_selected_playback(desk_id, show_id, playback.map(|position| light_show::PlaybackSelection { page: 1, position }))
         .unwrap();
 }
 
@@ -120,7 +92,7 @@ fn active_playback(
     scenario
         .state
         .output
-        .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(playback).ok()?)
+        .playback_runtime_status_at(light_playback::PlaybackAddress::new(1, playback).ok()?)
         .map(|status| status.playback)
 }
 
@@ -181,7 +153,7 @@ async fn pbk_and_cuelist_selection_are_distinct_authoritative_commands() {
             .installation
             .selected_playback(scenario.session.desk.id, show_id)
             .unwrap(),
-        Some(2)
+        Some(light_show::PlaybackSelection { page: 1, position: 2 })
     );
 
     let response = scenario.execute("select-cuelist", Some("CUELIST 1")).await;
@@ -192,7 +164,7 @@ async fn pbk_and_cuelist_selection_are_distinct_authoritative_commands() {
             .installation
             .selected_playback(scenario.session.desk.id, show_id)
             .unwrap(),
-        Some(2)
+        Some(light_show::PlaybackSelection { page: 1, position: 2 })
     );
 
     assert!(scenario.state.installation.selected_cue_list(scenario.session.desk.id, show_id).unwrap().is_some());
@@ -278,7 +250,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
             .state
             .installation.selected_playback(scenario.session.desk.id, show_id)
             .unwrap(),
-        Some(2)
+        Some(light_show::PlaybackSelection { page: 1, position: 2 })
     );
 
     // Explicit Load through an explicit-page address, with a decimal Cue number.
@@ -320,13 +292,13 @@ async fn rejected_navigation_retains_the_command_line_and_mutates_no_runtime() {
         (
             "missing-playback",
             "GO TO PBK 99 CUE 1",
-            "paged playback not found",
+            "playback is not assigned",
         ),
         ("missing-cue", "GO TO PBK 2 CUE 99", "cue does not exist"),
         (
             "unassigned-slot",
             "GO TO PBK 9 . 9 CUE 1",
-            "paged playback not found",
+            "playback is not assigned",
         ),
     ] {
         let baseline = scenario.state.events.latest_sequence();
@@ -539,6 +511,19 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     assert_eq!(playback_events(&scenario, after), 0);
     assert_eq!(playback_changed_notifications(&scenario), 1);
     assert_eq!(history_len(&scenario), history);
+    assert_eq!(command_line_text(&scenario).await, "GROUP 7 +");
+    let collision = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
+        &scenario.session, "cue-ws-go-to",
+        light_wire::v2::live_action::LiveAction::CommandLineExecute(
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                value: "GO TO PBK 2 CUE 1".into(),
+            },
+        ),
+    ));
+    assert!(!collision.ok, "a reused intent must not navigate to another Cue");
+    assert_eq!(playback_events(&scenario, after), 0);
+    assert_eq!(history_len(&scenario), history);
+    assert_eq!(current_cue(&scenario, 2), Some("3".into()));
     assert_eq!(command_line_text(&scenario).await, "GROUP 7 +");
     scenario
         .state

@@ -685,6 +685,18 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
         sequence
     );
     assert_eq!(scenario.history_len(), history);
+    let collision = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
+        &scenario.session, "group-ws-replay",
+        light_wire::v2::live_action::LiveAction::CommandLineExecute(
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                value: "RECORD GROUP 16".into(),
+            },
+        ),
+    ));
+    assert!(!collision.ok, "a reused command intent must not create another Group");
+    assert_eq!(scenario.state.events.latest_sequence(), sequence);
+    assert_eq!(scenario.history_len(), history);
+    assert!(scenario.state.output.snapshot().groups.iter().all(|group| group.id != "16"));
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
 

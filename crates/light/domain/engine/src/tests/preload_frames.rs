@@ -59,32 +59,31 @@ fn hypothetical_playback_drives_both_current_and_final_from_one_captured_lane() 
     engine
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![patched].into(),
-            playbacks: vec![test_playback(1, cues.id)].into(),
+            playback_pages: vec![playback_page(1, [(1, test_playback(1, cues.id))])].into(),
             cue_lists: vec![cues].into(),
             ..Default::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     registry.queue_preload_playback_action(
         session,
-        1,
-        None,
+        playback_address(1, 1),
         light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
+        test_control_source(),
     );
     let frame = engine.prepare_output_frame(Default::default());
     let mut hypothetical = frame
         .preload_playback_source()
         .unwrap()
         .fork_for_preview(frame.sampled_at());
-    hypothetical.go_playback(1).unwrap();
+    hypothetical.go_playback(playback_address(1, 1)).unwrap();
     let input = engine.prepare_preload_frame(&frame, Some(&hypothetical));
     assert!(frame.cue_dynamic_values().is_empty());
     assert_eq!(input.cue_dynamic_values().len(), 1);
     assert!(input.sources().has_pending);
     // The lane is a retained projection, not a handle to either mutable runtime.
-    hypothetical.off_mutation(1).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Off);
+    hypothetical.off_mutation(playback_address(1, 1)).unwrap();
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Off);
     clock.advance_millis(500);
     let mut state = PreloadFrameState::default();
     for before_release in [true, false] {

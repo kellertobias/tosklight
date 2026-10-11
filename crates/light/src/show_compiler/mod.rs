@@ -1,4 +1,5 @@
 mod cue_presets;
+mod deleted_playback_targets;
 mod dynamic_presets;
 mod migrations;
 mod native_sources;

@@ -88,9 +88,7 @@ pub(super) fn apply_specialized_target_action(
         PlaybackTarget::Macro { macro_id } => {
             apply_macro_action(state, session, address, *macro_id, action)
         }
-        PlaybackTarget::Timecode { timecode_id } => {
-            apply_timecode_action(state, *timecode_id, action)
-        }
+        PlaybackTarget::Timecode { .. } => apply_timecode_action(state, address, action),
         PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. } => {
             unreachable!("Cuelist and Dynamic actions use the pool boundary")
         }
@@ -99,7 +97,7 @@ pub(super) fn apply_specialized_target_action(
 
 fn apply_timecode_action(
     state: &AppState,
-    timecode_id: light_playback::TimecodeId,
+    address: light_playback::PlaybackAddress,
     action: Action,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let action = match action {
@@ -113,7 +111,7 @@ fn apply_timecode_action(
             ));
         }
     };
-    let outcome = super::super::playback_solo::timecode_action(state, timecode_id, action)?;
+    let outcome = super::super::playback_solo::timecode_playback_action(state, address, action)?;
     Ok(PlaybackTargetOutcome::changed(outcome.changed))
 }
 

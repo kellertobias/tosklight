@@ -7,6 +7,9 @@ use light_playback::{
 };
 use std::collections::BTreeSet;
 
+mod components;
+pub(in crate::runtime) use components::SoloCoordinator;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::runtime) enum SoloTarget {
     CueList(CueListId),
@@ -22,24 +25,15 @@ pub(in crate::runtime) fn target(definition: &PlaybackTarget) -> Option<SoloTarg
     }
 }
 
-/// All aliases of a shared target participate, including aliases on different pages.
+/// Membership belongs to the exact Playback which was activated.
 pub(in crate::runtime) fn solo_members(
     snapshot: &EngineSnapshot,
-    incoming: SoloTarget,
+    incoming: PlaybackAddress,
 ) -> Vec<PlaybackAddress> {
     snapshot
         .playback_solo_regions
         .iter()
-        .filter(|region| {
-            region.members.iter().any(|address| {
-                snapshot
-                    .playback_pages
-                    .iter()
-                    .find(|page| page.number == address.page())
-                    .and_then(|page| page.assignments.get(&address.position()))
-                    .is_some_and(|definition| target(&definition.target) == Some(incoming))
-            })
-        })
+        .filter(|region| region.members.contains(&incoming))
         .flat_map(|region| region.members.iter().copied())
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -62,8 +56,14 @@ fn aliases(snapshot: &EngineSnapshot, incoming: SoloTarget) -> Vec<PlaybackAddre
 }
 pub(in crate::runtime) fn timecode_peer_ids(
     snapshot: &EngineSnapshot,
-    incoming: SoloTarget,
+    incoming: PlaybackAddress,
 ) -> Vec<TimecodeId> {
+    let incoming_target = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == incoming.page())
+        .and_then(|page| page.assignments.get(&incoming.position()))
+        .and_then(|definition| target(&definition.target));
     let mut ids = Vec::new();
     for address in solo_members(snapshot, incoming) {
         let definition = snapshot
@@ -76,50 +76,17 @@ pub(in crate::runtime) fn timecode_peer_ids(
         else {
             continue;
         };
-        if incoming != SoloTarget::Timecode(id) && !ids.contains(&id) {
+        if incoming_target != Some(SoloTarget::Timecode(id)) && !ids.contains(&id) {
             ids.push(id);
         }
     }
     ids
 }
-fn timecode_peers(state: &AppState, incoming: SoloTarget) -> Result<Vec<TimecodeId>, ApiError> {
-    timecode_peer_ids(&state.output.snapshot(), incoming)
-        .into_iter()
-        .filter_map(|id| match state.timecodes.snapshot(id) {
-            Ok(runtime) if runtime.transport != TimecodeTransportState::Stopped => Some(Ok(id)),
-            Ok(_) => None,
-            Err(error) => Some(Err(ApiError::internal(format!(
-                "Solo Timecode peer unavailable: {}",
-                error.message
-            )))),
-        })
-        .collect()
-}
-
-fn stop_peers(state: &AppState, peers: Vec<TimecodeId>) -> Result<(), ApiError> {
-    for id in peers {
-        state
-            .timecodes
-            .handle(id, TimecodeTransportAction::Stop)
-            .map_err(|error| {
-                ApiError::internal(format!(
-                    "Solo could not stop Timecode {}: {}",
-                    id.0, error.message
-                ))
-            })?;
-    }
-    Ok(())
-}
-fn publish_settled(state: &AppState, incoming: SoloTarget) -> Result<(), ApiError> {
+fn publish_addresses(state: &AppState, addresses: Vec<PlaybackAddress>) -> Result<(), ApiError> {
     use light_application::{
         ActionContext, ActionSource, EventDraft, EventSource, PlaybackRuntimeChange,
         PlaybackRuntimeIdentity,
     };
-    let snapshot = state.output.snapshot();
-    let mut addresses = solo_members(&snapshot, incoming);
-    addresses.extend(aliases(&snapshot, incoming));
-    addresses.sort_unstable();
-    addresses.dedup();
     let identities = addresses
         .into_iter()
         .map(PlaybackRuntimeIdentity::Playback)
@@ -147,130 +114,135 @@ fn publish_settled(state: &AppState, incoming: SoloTarget) -> Result<(), ApiErro
 }
 fn finish<T>(
     state: &AppState,
-    incoming: SoloTarget,
+    addresses: Vec<PlaybackAddress>,
+    before: &[light_application::PlaybackRuntimeProjection],
     result: Result<T, ApiError>,
 ) -> Result<T, ApiError> {
-    // An external device can reject Stop after another target accepted its start. Publish actual
-    // authorities even on failure; returning an error must never advertise coherent Solo success.
-    let feedback = publish_settled(state, incoming);
     match result {
-        Err(error) => Err(error),
+        Err(error) => {
+            publish_failure_feedback(state, &addresses, before);
+            Err(error)
+        }
         Ok(value) => {
-            feedback?;
+            publish_addresses(state, addresses)?;
             Ok(value)
         }
     }
 }
-fn enabled(state: &AppState, incoming: SoloTarget) -> bool {
-    match incoming {
-        SoloTarget::CueList(id) => state
-            .output
-            .playback_runtime()
-            .iter()
-            .any(|runtime| runtime.cue_list_id == id && runtime.enabled),
-        _ => aliases(&state.output.snapshot(), incoming)
-            .iter()
-            .any(|address| state.output.engine().permanent_playback_enabled(*address)),
+fn publish_failure_feedback(
+    state: &AppState,
+    addresses: &[PlaybackAddress],
+    before: &[light_application::PlaybackRuntimeProjection],
+) {
+    if let Err(feedback) = publish_failed_changes(state, addresses, before) {
+        tracing::warn!(error = %feedback.message, "Solo partial failure feedback failed");
     }
 }
+fn capture_address_projections(
+    state: &AppState,
+    addresses: &[PlaybackAddress],
+) -> Result<Vec<light_application::PlaybackRuntimeProjection>, ApiError> {
+    let context = light_application::ActionContext::system(
+        uuid::Uuid::nil(),
+        light_application::ActionSource::System,
+    );
+    let identities = addresses
+        .iter()
+        .copied()
+        .map(light_application::PlaybackRuntimeIdentity::Playback)
+        .collect::<Vec<_>>();
+    super::playback_service::read_runtime_projections(state, &context, &identities)
+        .map_err(|error| ApiError::internal(format!("Solo feedback failed: {}", error.message)))
+}
+fn publish_failed_changes(
+    state: &AppState,
+    addresses: &[PlaybackAddress],
+    before: &[light_application::PlaybackRuntimeProjection],
+) -> Result<(), ApiError> {
+    for projection in capture_address_projections(state, addresses)? {
+        if before.iter().any(|previous| previous == &projection) {
+            continue;
+        }
+        state
+            .events
+            .publish(light_application::EventDraft::playback_runtime_changed(
+                None,
+                light_application::PlaybackRuntimeChange {
+                    projection,
+                    transition: None,
+                },
+                light_application::EventSource::Runtime,
+                None,
+            ));
+    }
+    Ok(())
+}
+
 /// Caller already holds the shared ordered Playback operation.
 pub(in crate::runtime) fn execute_engine(
     state: &AppState,
     command: EnginePlaybackCommand,
 ) -> Result<EnginePlaybackOutcome, ApiError> {
-    let incoming = match &command {
-        EnginePlaybackCommand::CueList { id, .. } => Some(SoloTarget::CueList(*id)),
-        EnginePlaybackCommand::Playback { address, .. } => state
-            .output
-            .snapshot()
-            .playback_pages
-            .iter()
-            .find(|page| page.number == address.page())
-            .and_then(|page| page.assignments.get(&address.position()))
-            .and_then(|definition| target(&definition.target)),
+    let coordinator = SoloCoordinator {
+        engine: state.output.engine(),
+        timecodes: &state.timecodes,
+    };
+    let address = match &command {
+        EnginePlaybackCommand::Playback { address, .. } => Some(*address),
         _ => None,
     };
-    let before = incoming.is_some_and(|incoming| enabled(state, incoming));
-    let may_activate = match &command {
-        EnginePlaybackCommand::CueList { action, .. } => matches!(
-            action,
-            light_engine::CueListPlaybackAction::Go
-                | light_engine::CueListPlaybackAction::GoAt(_)
-                | light_engine::CueListPlaybackAction::Back
-                | light_engine::CueListPlaybackAction::Jump(_)
-                | light_engine::CueListPlaybackAction::ExecuteCueId(_)
-                | light_engine::CueListPlaybackAction::ReconstructCueId { .. }
-        ),
-        EnginePlaybackCommand::Playback { action, .. } => !matches!(
-            action,
-            light_engine::PlaybackAction::Off
-                | light_engine::PlaybackAction::Release
-                | light_engine::PlaybackAction::SetFlash(_)
-                | light_engine::PlaybackAction::Pause
-                | light_engine::PlaybackAction::TogglePause
-        ),
-        _ => false,
-    };
-    let peers = if !before && may_activate {
-        incoming
-            .map(|incoming| timecode_peers(state, incoming))
-            .transpose()?
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let outcome = state
-        .output
-        .execute_playback(command)
-        .map_err(ApiError::bad_request)?;
-    if !before && incoming.is_some_and(|incoming| enabled(state, incoming)) {
-        let incoming = incoming.expect("checked incoming target");
-        if let Err(error) = stop_peers(state, peers) {
-            return finish(state, incoming, Err(error));
+    let addresses = address
+        .map(|address| coordinator.related_addresses(address))
+        .unwrap_or_default();
+    let before = capture_address_projections(state, &addresses)?;
+    match coordinator.execute(command) {
+        Ok(outcome) => Ok(outcome.output),
+        Err(error) => {
+            // Rejection before mutation emits nothing. An external Stop can fail after
+            // accepted engine changes; publish only those actual changed authorities.
+            publish_failure_feedback(state, &addresses, &before);
+            Err(error)
         }
-        // PlaybackService publishes successful related projections as one action transaction.
-        return Ok(outcome);
     }
-    Ok(outcome)
 }
+
 /// Caller already holds the shared ordered Playback operation.
 pub(in crate::runtime) fn timecode_action(
     state: &AppState,
     id: TimecodeId,
     action: TimecodeTransportAction,
 ) -> Result<light_application::timeline::TimecodeRuntimeOutcome, ApiError> {
-    let before = state
-        .timecodes
-        .snapshot(id)
-        .map_err(|error| ApiError::bad_request(error.message))?;
-    let incoming = SoloTarget::Timecode(id);
-    let peers = if before.transport == TimecodeTransportState::Stopped
-        && matches!(action, TimecodeTransportAction::Go)
-    {
-        timecode_peers(state, incoming)?
-    } else {
-        Vec::new()
+    let coordinator = SoloCoordinator {
+        engine: state.output.engine(),
+        timecodes: &state.timecodes,
     };
-    let outcome = state
-        .timecodes
-        .handle(id, action)
-        .map_err(|error| ApiError::bad_request(error.message))?;
-    if before.transport == TimecodeTransportState::Stopped
-        && outcome.snapshot.transport != TimecodeTransportState::Stopped
-    {
-        let result = (|| {
-            stop_peers(state, peers)?;
-            if let Some(address) = aliases(&state.output.snapshot(), incoming).first().copied() {
-                state
-                    .output
-                    .execute_playback(EnginePlaybackCommand::EnforceSoloForTarget { address })
-                    .map_err(ApiError::internal)?;
-            }
-            Ok(outcome)
-        })();
-        return finish(state, incoming, result);
+    let addresses = aliases(&state.output.snapshot(), SoloTarget::Timecode(id));
+    let before = capture_address_projections(state, &addresses)?;
+    let result = coordinator
+        .transport(id, action)
+        .map(|outcome| outcome.output);
+    finish(state, addresses, &before, result)
+}
+
+/// Assigned transport dispatch retains its exact Playback membership.
+pub(in crate::runtime) fn timecode_playback_action(
+    state: &AppState,
+    address: PlaybackAddress,
+    action: TimecodeTransportAction,
+) -> Result<light_application::timeline::TimecodeRuntimeOutcome, ApiError> {
+    let coordinator = SoloCoordinator {
+        engine: state.output.engine(),
+        timecodes: &state.timecodes,
+    };
+    let addresses = coordinator.related_addresses(address);
+    let before = capture_address_projections(state, &addresses)?;
+    match coordinator.transport_playback(address, action) {
+        Ok(outcome) => Ok(outcome.output),
+        Err(error) => {
+            publish_failure_feedback(state, &addresses, &before);
+            Err(error)
+        }
     }
-    finish(state, incoming, Ok(outcome))
 }
 
 #[cfg(test)]
@@ -336,7 +308,7 @@ mod tests {
         }
     }
     #[tokio::test]
-    async fn accepted_timecode_start_stops_actual_peers_across_all_alias_regions() {
+    async fn assigned_timecode_start_stops_actual_peers_only_in_its_exact_region() {
         let (state, path) = super::super::tests::test_state();
         let ids = [1, 2, 3].map(|id| TimecodeId(uuid::Uuid::from_u128(id)));
         for (index, id) in ids.iter().enumerate() {
@@ -352,22 +324,19 @@ mod tests {
                 .handle(*id, TimecodeTransportAction::Go)
                 .unwrap();
         }
-        super::super::timecode_v2::apply_transport_action(
-            &state,
-            ids[0],
-            TimecodeTransportAction::Go,
-        )
-        .unwrap();
+        timecode_playback_action(&state, address(1, 1), TimecodeTransportAction::Go).unwrap();
         assert_eq!(
             state.timecodes.snapshot(ids[0]).unwrap().transport,
             TimecodeTransportState::Playing
         );
-        for id in &ids[1..] {
-            assert_eq!(
-                state.timecodes.snapshot(*id).unwrap().transport,
-                TimecodeTransportState::Stopped
-            );
-        }
+        assert_eq!(
+            state.timecodes.snapshot(ids[1]).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+        assert_eq!(
+            state.timecodes.snapshot(ids[2]).unwrap().transport,
+            TimecodeTransportState::Playing
+        );
         std::fs::remove_dir_all(path).unwrap();
     }
     #[tokio::test]
@@ -375,28 +344,24 @@ mod tests {
         let (state, path) = super::super::tests::test_state();
         let ids = [11, 12, 13].map(|id| TimecodeId(uuid::Uuid::from_u128(id)));
         install(&state, ids[0], 1);
-        install(&state, ids[1], 2);
+        install(&state, ids[2], 3);
         state
             .output
             .replace_snapshot(snapshot(ids[0], ids[1], ids[2]))
             .unwrap();
         state
             .timecodes
-            .handle(ids[1], TimecodeTransportAction::Go)
+            .handle(ids[2], TimecodeTransportAction::Go)
             .unwrap();
-        let error = super::super::timecode_v2::apply_transport_action(
-            &state,
-            ids[0],
-            TimecodeTransportAction::Go,
-        )
-        .unwrap_err();
+        let error = timecode_playback_action(&state, address(1, 1), TimecodeTransportAction::Go)
+            .unwrap_err();
         assert!(error.message.contains("Solo Timecode peer unavailable"));
         assert_eq!(
             state.timecodes.snapshot(ids[0]).unwrap().transport,
             TimecodeTransportState::Stopped
         );
         assert_eq!(
-            state.timecodes.snapshot(ids[1]).unwrap().transport,
+            state.timecodes.snapshot(ids[2]).unwrap().transport,
             TimecodeTransportState::Playing
         );
         // Off remains available even when a different Solo member has disappeared.
@@ -406,6 +371,328 @@ mod tests {
             TimecodeTransportAction::Stop,
         )
         .unwrap();
+        std::fs::remove_dir_all(path).unwrap();
+    }
+    #[tokio::test]
+    async fn direct_transport_and_outside_alias_do_not_arbitrate_member_playbacks() {
+        let (state, path) = super::super::tests::test_state();
+        let ids = [21, 22, 23].map(|id| TimecodeId(uuid::Uuid::from_u128(id)));
+        for (index, id) in ids.iter().enumerate() {
+            install(&state, *id, index as u32 + 1);
+        }
+        let mut show = snapshot(ids[0], ids[1], ids[2]);
+        Arc::make_mut(&mut show.playback_pages).push(PlaybackPage {
+            number: 3,
+            name: "Outside".into(),
+            assignments: [(1, assigned(ids[0]))].into(),
+        });
+        state.output.replace_snapshot(show).unwrap();
+        for id in &ids[1..] {
+            state
+                .timecodes
+                .handle(*id, TimecodeTransportAction::Go)
+                .unwrap();
+        }
+        let coordinator = SoloCoordinator {
+            engine: state.output.engine(),
+            timecodes: &state.timecodes,
+        };
+        assert!(
+            coordinator
+                .transport(ids[0], TimecodeTransportAction::Go)
+                .unwrap()
+                .stopped_timecodes
+                .is_empty()
+        );
+        for id in &ids[1..] {
+            assert_eq!(
+                state.timecodes.snapshot(*id).unwrap().transport,
+                TimecodeTransportState::Playing
+            );
+        }
+        coordinator
+            .transport(ids[0], TimecodeTransportAction::Stop)
+            .unwrap();
+        assert!(
+            coordinator
+                .transport_playback(address(3, 1), TimecodeTransportAction::Go)
+                .unwrap()
+                .stopped_timecodes
+                .is_empty()
+        );
+        for id in &ids[1..] {
+            assert_eq!(
+                state.timecodes.snapshot(*id).unwrap().transport,
+                TimecodeTransportState::Playing
+            );
+        }
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn peer_disappearing_after_validation_returns_failure_and_keeps_actual_changes() {
+        let (state, path) = super::super::tests::test_state();
+        let ids = [31, 32, 33].map(|id| TimecodeId(uuid::Uuid::from_u128(id)));
+        for (index, id) in ids.iter().enumerate() {
+            install(&state, *id, index as u32 + 1);
+        }
+        state
+            .output
+            .replace_snapshot(snapshot(ids[0], ids[1], ids[2]))
+            .unwrap();
+        for id in &ids[1..] {
+            state
+                .timecodes
+                .handle(*id, TimecodeTransportAction::Go)
+                .unwrap();
+        }
+        let coordinator = SoloCoordinator {
+            engine: state.output.engine(),
+            timecodes: &state.timecodes,
+        };
+        let mut peers = coordinator.prepare_peer_releases(address(1, 1)).unwrap();
+        peers.extend(coordinator.prepare_peer_releases(address(2, 1)).unwrap());
+        state.timecodes.uninstall(ids[2]).unwrap();
+        let error = coordinator.stop_peer_releases(&peers).unwrap_err();
+        assert!(error.message.contains("Solo could not stop Timecode"));
+        assert_eq!(
+            state.timecodes.snapshot(ids[1]).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+        assert!(state.timecodes.snapshot(ids[2]).is_err());
+        assert_eq!(
+            state.timecodes.snapshot(ids[0]).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+        std::fs::remove_dir_all(path).unwrap();
+    }
+    #[tokio::test]
+    async fn direct_cue_start_keeps_assigned_timecode_peer_but_playback_activation_stops_it() {
+        let (state, path) = super::super::tests::test_state();
+        let timecode = TimecodeId(uuid::Uuid::from_u128(41));
+        install(&state, timecode, 1);
+        let cue_list = CueListId::new();
+        let list = serde_json::from_value(serde_json::json!({
+            "id":cue_list,"name":"Direct Cue","priority":0,"mode":"sequence","looped":false,
+            "cues":[Cue::new(CueNumber::from(1_u8))]
+        }))
+        .unwrap();
+        let cue_definition = serde_json::from_value(serde_json::json!({
+            "name":"Member Cue","auto_off":false,"target":{"type":"cue_list","cue_list_id":cue_list}
+        }))
+        .unwrap();
+        state
+            .output
+            .replace_snapshot(EngineSnapshot {
+                cue_lists: vec![list].into(),
+                playback_pages: vec![PlaybackPage {
+                    number: 1,
+                    name: "Main".into(),
+                    assignments: [(1, cue_definition), (2, assigned(timecode))].into(),
+                }]
+                .into(),
+                playback_solo_regions: vec![PlaybackSoloRegion {
+                    id: uuid::Uuid::new_v4(),
+                    name: "Solo".into(),
+                    members: vec![address(1, 1), address(1, 2)],
+                }]
+                .into(),
+                ..Default::default()
+            })
+            .unwrap();
+        state
+            .timecodes
+            .handle(timecode, TimecodeTransportAction::Go)
+            .unwrap();
+        let coordinator = SoloCoordinator {
+            engine: state.output.engine(),
+            timecodes: &state.timecodes,
+        };
+        let direct = EnginePlaybackCommand::CueList {
+            id: cue_list,
+            action: light_engine::CueListPlaybackAction::Go,
+        };
+        assert_eq!(coordinator.command_target(&direct), None);
+        assert!(
+            coordinator
+                .execute(direct)
+                .unwrap()
+                .stopped_timecodes
+                .is_empty()
+        );
+        assert_eq!(
+            state.timecodes.snapshot(timecode).unwrap().transport,
+            TimecodeTransportState::Playing
+        );
+        coordinator
+            .execute(EnginePlaybackCommand::CueList {
+                id: cue_list,
+                action: light_engine::CueListPlaybackAction::Release,
+            })
+            .unwrap();
+        let result = coordinator
+            .execute(EnginePlaybackCommand::Playback {
+                address: address(1, 1),
+                action: light_engine::PlaybackAction::On,
+                activation_origin: None,
+                control_source: PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
+            })
+            .unwrap();
+        assert_eq!(result.stopped_timecodes, vec![timecode]);
+        assert_eq!(
+            state.timecodes.snapshot(timecode).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+        std::fs::remove_dir_all(path).unwrap();
+    }
+    fn install_cue_aliases(state: &AppState) {
+        let id = CueListId::new();
+        let list = serde_json::from_value(serde_json::json!({
+            "id":id,"name":"Feedback Cue","priority":0,"mode":"sequence","looped":false,
+            "cues":[Cue::new(CueNumber::from(1_u8))]
+        }))
+        .unwrap();
+        let definition = PlaybackDefinition::new_cue_list("Alias", id);
+        state
+            .output
+            .replace_snapshot(EngineSnapshot {
+                cue_lists: vec![list].into(),
+                playback_pages: vec![PlaybackPage {
+                    number: 1,
+                    name: "One".into(),
+                    assignments: HashMap::from([(1, definition.clone()), (2, definition)]),
+                }]
+                .into(),
+                ..Default::default()
+            })
+            .unwrap();
+    }
+    fn cue_command(action: light_engine::PlaybackAction) -> EnginePlaybackCommand {
+        EnginePlaybackCommand::Playback {
+            address: address(1, 1),
+            action,
+            activation_origin: None,
+            control_source: PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
+        }
+    }
+    #[tokio::test]
+    async fn rejected_cue_does_not_publish_unchanged_alias_feedback() {
+        let (state, path) = super::super::tests::test_state();
+        install_cue_aliases(&state);
+        let cursor = state.events.latest_sequence();
+        let error = execute_engine(
+            &state,
+            cue_command(light_engine::PlaybackAction::GoTo(CueNumber::from(99_u8))),
+        )
+        .unwrap_err();
+        assert!(error.message.contains("cue does not exist"));
+        assert_eq!(state.events.latest_sequence(), cursor);
+        assert!(
+            !state
+                .output
+                .engine()
+                .permanent_playback_enabled(address(1, 1))
+        );
+        std::fs::remove_dir_all(path).unwrap();
+    }
+    #[tokio::test]
+    async fn accepted_cue_then_partial_external_stop_failure_publishes_changed_aliases() {
+        let (state, path) = super::super::tests::test_state();
+        install_cue_aliases(&state);
+        let ids = [51, 52].map(|id| TimecodeId(uuid::Uuid::from_u128(id)));
+        for (index, id) in ids.iter().enumerate() {
+            install(&state, *id, index as u32 + 1);
+            state
+                .timecodes
+                .handle(*id, TimecodeTransportAction::Go)
+                .unwrap();
+        }
+        let mut snapshot = (*state.output.snapshot()).clone();
+        Arc::make_mut(&mut snapshot.playback_pages)[0]
+            .assignments
+            .extend([(3, assigned(ids[0])), (4, assigned(ids[1]))]);
+        snapshot.playback_solo_regions = vec![PlaybackSoloRegion {
+            id: uuid::Uuid::new_v4(),
+            name: "Partial".into(),
+            members: vec![address(1, 1), address(1, 3), address(1, 4)],
+        }]
+        .into();
+        state.output.replace_snapshot(snapshot).unwrap();
+        let coordinator = SoloCoordinator {
+            engine: state.output.engine(),
+            timecodes: &state.timecodes,
+        };
+        let addresses = coordinator.related_addresses(address(1, 1));
+        let before = capture_address_projections(&state, &addresses).unwrap();
+        let peers = coordinator.prepare_peer_releases(address(1, 1)).unwrap();
+        state
+            .output
+            .engine()
+            .execute_playback(cue_command(light_engine::PlaybackAction::On))
+            .unwrap();
+        state.timecodes.uninstall(ids[1]).unwrap();
+        let error = coordinator.stop_peer_releases(&peers).unwrap_err();
+        assert!(error.message.contains("Solo could not stop Timecode"));
+        assert_eq!(
+            state.timecodes.snapshot(ids[0]).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+        assert!(
+            state
+                .output
+                .engine()
+                .permanent_playback_enabled(address(1, 1))
+        );
+        let cursor = state.events.latest_sequence();
+        publish_failed_changes(&state, &addresses, &before).unwrap();
+        let light_application::EventReplay::Events(events) = state
+            .events
+            .replay(cursor, &light_application::EventFilter::default())
+        else {
+            panic!("feedback replay unavailable")
+        };
+        assert_eq!(events.len(), 2);
+        let identities = events
+            .iter()
+            .map(|event| match &event.payload {
+                light_application::ApplicationEvent::Playback(
+                    light_application::PlaybackEvent::RuntimeChanged(change),
+                ) => change.projection.identity.clone(),
+                _ => panic!("expected actual Playback feedback"),
+            })
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            identities,
+            std::collections::HashSet::from([
+                light_application::PlaybackRuntimeIdentity::Playback(address(1, 1)),
+                light_application::PlaybackRuntimeIdentity::Playback(address(1, 2))
+            ])
+        );
+        std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[tokio::test]
+    async fn unavailable_direct_and_assigned_transports_do_not_publish_unchanged_feedback() {
+        let (state, path) = super::super::tests::test_state();
+        let ids = [61, 62, 63].map(|id| TimecodeId(uuid::Uuid::from_u128(id)));
+        state
+            .output
+            .replace_snapshot(snapshot(ids[0], ids[1], ids[2]))
+            .unwrap();
+        let cursor = state.events.latest_sequence();
+        let direct = timecode_action(&state, ids[0], TimecodeTransportAction::Go).unwrap_err();
+        assert!(direct.message.contains("not installed"));
+        assert_eq!(state.events.latest_sequence(), cursor);
+        let assigned = timecode_playback_action(&state, address(1, 1), TimecodeTransportAction::Go)
+            .unwrap_err();
+        assert!(assigned.message.contains("not installed"));
+        assert_eq!(state.events.latest_sequence(), cursor);
         std::fs::remove_dir_all(path).unwrap();
     }
 }

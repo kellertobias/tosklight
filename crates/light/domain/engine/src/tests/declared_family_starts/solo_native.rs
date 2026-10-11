@@ -1,11 +1,10 @@
 //! Static native Color cues: no Dynamic mask or injected DMX substitutes for the playback.
 use super::*;
 use crate::{
-    EnginePlaybackCommand, NativeColorSourceCatalog, NativeColorSourceRevisionKey,
-    VirtualPlaybackAction,
+    EnginePlaybackCommand, NativeColorSourceCatalog, NativeColorSourceRevisionKey, PlaybackAction,
 };
 use light_core::{NativeColorValue, programming::NativeColorObservation};
-use light_playback::{PlaybackPage, VirtualPlaybackAddress};
+use light_playback::{PlaybackPage, PlaybackSoloRegion};
 
 #[path = "physical_start.rs"]
 mod physical_start;
@@ -63,7 +62,7 @@ fn rig() -> (
     let white = recipe([255, 255, 255]);
     let red = recipe([255, 0, 0]);
     let mut lists = Vec::new();
-    let virtual_playbacks = [(1001, white.clone()), (1002, red.clone())]
+    let assignments = [(401, white.clone()), (402, red.clone())]
         .into_iter()
         .map(|(number, color)| {
             let mut cue = Cue::new(1_u16.into());
@@ -96,8 +95,13 @@ fn rig() -> (
             playback_pages: vec![PlaybackPage {
                 number: 1,
                 name: "Solo".into(),
-                slots: HashMap::new(),
-                virtual_playbacks,
+                assignments,
+            }]
+            .into(),
+            playback_solo_regions: vec![PlaybackSoloRegion {
+                id: uuid::Uuid::new_v4(),
+                name: "Native Solo".into(),
+                members: vec![playback_address(1, 401), playback_address(1, 402)],
             }]
             .into(),
             native_color_sources: catalogue,
@@ -108,22 +112,8 @@ fn rig() -> (
     (engine, target, clock, white, red)
 }
 
-fn operate(engine: &Engine, number: u16, action: VirtualPlaybackAction, solo: bool) {
-    engine
-        .execute_playback(EnginePlaybackCommand::Virtual {
-            address: VirtualPlaybackAddress::new(1, number).unwrap(),
-            action,
-            exclusion_zones: if solo {
-                vec![vec![
-                    VirtualPlaybackAddress::new(1, 1001).unwrap(),
-                    VirtualPlaybackAddress::new(1, 1002).unwrap(),
-                ]]
-            } else {
-                vec![]
-            },
-            activation_origin: None,
-        })
-        .unwrap();
+fn operate(engine: &Engine, position: u16, action: PlaybackAction) {
+    execute_address(engine, playback_address(1, position), action);
 }
 
 fn channels(engine: &Engine, target: FixtureId) -> Vec<u32> {
@@ -157,11 +147,11 @@ fn channels(engine: &Engine, target: FixtureId) -> Vec<u32> {
 #[test]
 fn solo_native_color_crosses_from_live_white_without_blackout() {
     let (engine, target, clock, _, _) = rig();
-    operate(&engine, 1001, VirtualPlaybackAction::On, false);
+    operate(&engine, 401, PlaybackAction::On);
     assert_eq!(channels(&engine, target), vec![255, 255, 255]);
     clock.advance_millis(3000);
     engine.set_control_timing([120.; 5], 0, 2000, 2000);
-    operate(&engine, 1002, VirtualPlaybackAction::On, true);
+    operate(&engine, 402, PlaybackAction::On);
     assert_eq!(channels(&engine, target), vec![255, 255, 255]);
     clock.advance_millis(1000);
     let halfway = channels(&engine, target);
@@ -172,7 +162,7 @@ fn solo_native_color_crosses_from_live_white_without_blackout() {
     );
     clock.advance_millis(1000);
     assert_eq!(channels(&engine, target), vec![255, 0, 0]);
-    operate(&engine, 1002, VirtualPlaybackAction::Off, false);
+    operate(&engine, 402, PlaybackAction::Off);
     assert!(
         value(&engine, target, ProgrammingOwner::Color).is_none(),
         "ordinary Off stays immediate"
@@ -182,13 +172,13 @@ fn solo_native_color_crosses_from_live_white_without_blackout() {
 #[test]
 fn solo_interruption_starts_at_current_native_recipe() {
     let (engine, target, clock, _, _) = rig();
-    operate(&engine, 1001, VirtualPlaybackAction::On, false);
+    operate(&engine, 401, PlaybackAction::On);
     clock.advance_millis(3000);
     engine.set_control_timing([120.; 5], 0, 2000, 2000);
-    operate(&engine, 1002, VirtualPlaybackAction::On, true);
+    operate(&engine, 402, PlaybackAction::On);
     clock.advance_millis(1000);
     let before = channels(&engine, target);
-    operate(&engine, 1001, VirtualPlaybackAction::On, true);
+    operate(&engine, 401, PlaybackAction::On);
     assert_eq!(channels(&engine, target), before);
     clock.advance_millis(1000);
     let halfway = channels(&engine, target);
@@ -206,11 +196,12 @@ fn static_same_source_direct_cue_fades_continuous_channels() {
     second.fade_millis = 2000;
     second.changes = vec![CueChange::set(target, ProgrammingOwner::Color.key(), red)];
     lists[0].cues.push(second);
+    let cue_list_id = lists[0].id;
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
-    operate(&engine, 1001, VirtualPlaybackAction::Go, false);
+    execute_cue_list(&engine, cue_list_id, CueListPlaybackAction::Go);
     assert_eq!(channels(&engine, target), vec![255, 255, 255]);
-    operate(&engine, 1001, VirtualPlaybackAction::Go, false);
+    execute_cue_list(&engine, cue_list_id, CueListPlaybackAction::Go);
     clock.advance_millis(1000);
     let halfway = channels(&engine, target);
     assert_eq!(halfway[0], 255);

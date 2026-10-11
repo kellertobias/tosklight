@@ -45,8 +45,8 @@ fn unknown() -> FamilyProjectionMetadata {
 
 fn source() -> light_playback::SequenceMasterSource {
     light_playback::SequenceMasterSource {
-        playback_number: Some(1),
-        playback_identity: Some(light_playback::PlaybackIdentity::physical(1).unwrap()),
+        playback_address: Some(playback_address(1, 1)),
+        control_source_id: None,
         cue_list_id: light_core::CueListId::new(),
         temporary: false,
     }

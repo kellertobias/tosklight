@@ -643,8 +643,8 @@ fn schema_v2_snap_bypasses_move_in_black_and_signal_loss_fades() {
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[fixture_id]))
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.set(started + ChronoDuration::milliseconds(1_999));
     let values = engine
         .render(RenderOptions::default())
@@ -747,7 +747,14 @@ fn schema_v2_masters_scale_levels_once_and_reach_other_channels_only_through_fol
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![main, unrelated].into(),
-            playbacks: playbacks.into(),
+            playback_pages: vec![playback_page(
+                1,
+                playbacks
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, definition)| (index as u16 + 1, definition)),
+            )]
+            .into(),
             groups: vec![GroupDefinition {
                 replacement_projections: Default::default(),
                 id: "front".into(),
@@ -760,10 +767,29 @@ fn schema_v2_masters_scale_levels_once_and_reach_other_channels_only_through_fol
             ..Default::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 2, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
-    execute_pool(&engine, 2, PoolPlaybackAction::SetVirtualMaster(0.1));
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::Go);
+    // Each source first picks up its Cuelist's authoritative master at full.
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(1.0),
+    );
+    execute_address(
+        &engine,
+        playback_address(1, 2),
+        PlaybackAction::SetMaster(1.0),
+    );
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(0.5),
+    );
+    execute_address(
+        &engine,
+        playback_address(1, 2),
+        PlaybackAction::SetMaster(0.1),
+    );
 
     let frame = engine
         .render(RenderOptions {
@@ -1075,13 +1101,17 @@ fn cue_master_leaves_non_level_parameters_alone_and_projection_rejects_old_gener
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![main].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![playback_page(1, [(1, playback)])].into(),
             revision: 1,
             ..Default::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(0.5),
+    );
     let source = engine.snapshot();
     let values = engine.resolved_values();
     // The Cue master scales level parameters only: a rate is not a level.

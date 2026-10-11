@@ -102,6 +102,22 @@ pub(super) fn execute(
         .map_err(action_error)
 }
 
+pub(in crate::runtime) fn execute_for_socket(
+    state: &AppState,
+    session: Option<&Session>,
+    desk: Option<&ControlDesk>,
+    socket: &super::software_playback_sources::SoftwarePlaybackSocket,
+    context: ActionContext,
+    command: PlaybackCommand,
+) -> Result<PlaybackResult, ApiError> {
+    let mut ports = ServerPlaybackPorts::new(state, session, desk);
+    ports.socket = Some(socket);
+    state
+        .playback
+        .handle(ActionEnvelope { context, command }, &ports)
+        .map_err(action_error)
+}
+
 pub(super) fn snapshot(
     state: &AppState,
     session: &Session,

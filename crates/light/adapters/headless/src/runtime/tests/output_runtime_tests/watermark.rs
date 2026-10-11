@@ -15,10 +15,10 @@ pub(super) fn checkpoint(ordinal: u64) -> DynamicRuntimeSourceCheckpoint {
                 sources: vec![DynamicStaticSourceEntry {
                     source: DynamicStaticSource::Playback {
                         source: DynamicSequenceSource {
-                            playback_number: Some(1),
-                            playback_identity: Some(
-                                light_playback::PlaybackIdentity::physical(1).unwrap(),
+                            playback_address: Some(
+                                light_playback::PlaybackAddress::new(1, 1).unwrap(),
                             ),
+                            control_source_id: None,
                             cue_list_id: light_core::CueListId::new(),
                             temporary: false,
                         },

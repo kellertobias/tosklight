@@ -40,10 +40,8 @@ fn source_descriptors_preserve_every_identity_and_borrow_lane_names() {
     };
     assert_eq!(borrowed.as_ptr(), name.as_ptr());
     let source = light_playback::SequenceMasterSource {
-        playback_number: Some(1601),
-        playback_identity: Some(light_playback::PlaybackIdentity::Virtual(
-            light_playback::VirtualPlaybackAddress::new(3, 1601).unwrap(),
-        )),
+        control_source_id: None,
+        playback_address: Some(playback_address(3, 601)),
         cue_list_id: light_core::CueListId::new(),
         temporary: true,
     };
@@ -289,9 +287,9 @@ fn playback_retains_distinct_authors_through_equal_values_and_interrupted_blends
     list.cues.extend([second, third]);
     let mut snapshot = (*engine.snapshot()).clone();
     snapshot.cue_lists = vec![list.clone()].into();
-    snapshot.playbacks = vec![test_playback(1, list.id)].into();
+    snapshot.playback_pages = vec![playback_page(1, [(1, test_playback(1, list.id))])].into();
     engine.replace_snapshot(snapshot).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     let first = engine.observe_source_frame(&[]);
     let entry = whole_entry(&first, fixture, &attribute);
     assert!(
@@ -306,7 +304,7 @@ fn playback_retains_distinct_authors_through_equal_values_and_interrupted_blends
     assert_eq!(entry.stamp().programmer_order, stamp.programmer_order);
     assert_eq!(entry.authored_cue_id(), Some(list.cues[0].id));
     clock.advance_millis(1);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(500);
     let equal_blend = engine.observe_source_frame(&[]);
     assert_eq!(
@@ -339,7 +337,7 @@ fn playback_retains_distinct_authors_through_equal_values_and_interrupted_blends
             .contribution_family_evidence(fixture, &attribute)
             .unwrap()
     ));
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.advance_millis(500);
     let interrupted = engine.observe_source_frame(&[]);
     let retained = interrupted
@@ -373,12 +371,12 @@ fn same_time_playback_actions_keep_distinct_authored_occurrences() {
     list.cues.push(second);
     let mut snapshot = (*engine.snapshot()).clone();
     snapshot.cue_lists = vec![list.clone()].into();
-    snapshot.playbacks = vec![test_playback(1, list.id)].into();
+    snapshot.playback_pages = vec![playback_page(1, [(1, test_playback(1, list.id))])].into();
     engine.replace_snapshot(snapshot).unwrap();
 
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     let first = engine.observe_source_frame(&[]);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     let second = engine.observe_source_frame(&[]);
     let first_entry = whole_entry(&first, fixture, &attribute);
     let second_entry = whole_entry(&second, fixture, &attribute);
@@ -417,8 +415,8 @@ fn playback_samples_keep_origin_ordinals_and_explicit_evidence_ordinals_independ
     let attribute = AttributeKey("focus".into());
     let at = Utc::now();
     let source = light_playback::SequenceMasterSource {
-        playback_number: Some(1),
-        playback_identity: Some(light_playback::PlaybackIdentity::physical(1).unwrap()),
+        control_source_id: None,
+        playback_address: Some(playback_address(1, 1)),
         cue_list_id: light_core::CueListId::new(),
         temporary: false,
     };

@@ -127,7 +127,7 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
     let runtime = runtime_with_controllers(vec![
         dynamic_controller(
             source_controller,
-            DynamicControllerSource::physical_playback(1),
+            DynamicControllerSource::playback(1, 1).unwrap(),
             10,
             100,
         ),
@@ -155,7 +155,7 @@ fn dynamic_playback_full_control_requires_complete_persistent_coverage_and_honor
             &[],
             engine.application_time(),
         ),
-        vec![light_playback::PlaybackIdentity::physical(1).unwrap()],
+        vec![light_playback::PlaybackAddress::new(1, 1).unwrap()],
         "the default-on setting turns the source off only after every address is covered",
     );
 
@@ -202,13 +202,13 @@ fn temporary_dynamic_playback_coverage_never_triggers_full_control_auto_off() {
     let runtime = runtime_with_controllers(vec![
         dynamic_controller(
             source_controller,
-            DynamicControllerSource::physical_playback(1),
+            DynamicControllerSource::playback(1, 1).unwrap(),
             10,
             100,
         ),
         dynamic_controller(
             temporary_controller,
-            DynamicControllerSource::physical_playback(2),
+            DynamicControllerSource::playback(1, 2).unwrap(),
             11,
             101,
         ),
@@ -347,12 +347,12 @@ fn dynamic_event_kinds(
 }
 
 fn dynamic_playback_control(
-    playback_number: u16,
+    position: u16,
     auto_off_full_control: bool,
     temporary_only: bool,
 ) -> DynamicPlaybackControl {
     DynamicPlaybackControl {
-        identity: light_playback::PlaybackIdentity::physical(playback_number).unwrap(),
+        identity: light_playback::PlaybackAddress::new(1, position).unwrap(),
         master: 1.0,
         crossfade_non_intensity: false,
         auto_off_full_control,

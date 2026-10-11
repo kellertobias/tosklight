@@ -173,19 +173,16 @@ pub(super) async fn create_show_with_boundary(
 pub(super) fn configure_request(
     request_id: &str,
     page_revision: u64,
-    playback_revision: u64,
+    _playback_revision: u64,
 ) -> serde_json::Value {
     serde_json::json!({
         "request_id": request_id,
         "action": {
-            "type": "configure_slot",
-            "page": 1,
-            "slot": 4,
+            "type": "assign_playback",
+            "address":{"page":1,"position":4},
             "expected_page_revision": page_revision,
             "expected_page_object_id": if page_revision == 0 { None } else { Some("1") },
-            "expected_playback_revision": playback_revision,
-            "expected_playback_object_id": if playback_revision == 0 { None } else { Some("1") },
-            "playback": playback_body()
+            "definition": playback_body()
         }
     })
 }
@@ -193,40 +190,15 @@ pub(super) fn configure_request(
 pub(super) fn clear_request(
     request_id: &str,
     page_revision: u64,
-    playback_revision: u64,
+    _playback_revision: u64,
 ) -> serde_json::Value {
     serde_json::json!({
         "request_id": request_id,
         "action": {
-            "type": "clear_mapped_playback",
-            "page": 1,
-            "slot": 4,
+            "type": "clear_playback",
+            "address":{"page":1,"position":4},
             "expected_page_revision": page_revision,
             "expected_page_object_id": if page_revision == 0 { None } else { Some("1") },
-            "expected_playback_revision": playback_revision,
-            "expected_playback_object_id": if playback_revision == 0 { None } else { Some("1") }
-        }
-    })
-}
-
-pub(super) fn map_existing_request(
-    request_id: &str,
-    page_revision: u64,
-    page_object_id: Option<&str>,
-    playback_revision: u64,
-    playback_object_id: Option<&str>,
-) -> serde_json::Value {
-    serde_json::json!({
-        "request_id": request_id,
-        "action": {
-            "type": "map_existing_playback",
-            "page": 2,
-            "slot": 4,
-            "playback_number": 12,
-            "expected_page_revision": page_revision,
-            "expected_page_object_id": page_object_id,
-            "expected_playback_revision": playback_revision,
-            "expected_playback_object_id": playback_object_id
         }
     })
 }
@@ -240,8 +212,9 @@ pub(super) fn create_page_request(
     serde_json::json!({
         "request_id": request_id,
         "action": {
-            "type": "create_page",
-            "page": page,
+            "type": "create_playback_page",
+            "number": page,
+            "name":format!("Page {page}"),
             "expected_page_revision": page_revision,
             "expected_page_object_id": page_object_id
         }
@@ -258,8 +231,8 @@ pub(super) fn rename_page_request(
     serde_json::json!({
         "request_id": request_id,
         "action": {
-            "type": "rename_page",
-            "page": page,
+            "type": "rename_playback_page",
+            "number": page,
             "name": name,
             "expected_page_revision": page_revision,
             "expected_page_object_id": page_object_id
@@ -353,7 +326,6 @@ fn show_document(state: &AppState, show_id: &str) -> light_show::PortableShowDoc
 
 fn playback_body() -> serde_json::Value {
     serde_json::json!({
-        "number": 999,
         "name": "House",
         "target": {"type": "grand_master"},
         "buttons": ["blackout", "pause_dynamics", "flash"],
@@ -373,7 +345,7 @@ fn playback_body() -> serde_json::Value {
 
 pub(super) fn numbered_grand_master_playback_body(number: u16) -> serde_json::Value {
     let mut body = playback_body();
-    body["number"] = serde_json::json!(number);
+    body["name"] = serde_json::json!(format!("Grand Master {number}"));
     body
 }
 
@@ -383,7 +355,6 @@ pub(super) fn cue_list_playback_body(
 ) -> serde_json::Value {
     let target = light_playback::PlaybackTarget::CueList { cue_list_id };
     serde_json::to_value(light_playback::PlaybackDefinition {
-        number,
         name: format!("Cuelist {number}"),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
         fader: light_playback::PlaybackDefinition::default_fader(&target),

@@ -67,6 +67,8 @@ pub(in crate::runtime) use restored_dynamic_candidate::{
 };
 pub use start_path_timing::StartPathPhases;
 use timecode_audio::timecode_audio_contributions;
+pub(in crate::runtime) mod timecode_capture;
+pub(in crate::runtime) use timecode_capture::claim_automatic_cue_action_batches;
 
 pub(in crate::runtime) use cold_preset_materialization::{
     materialize_cold_preset_dependencies, materialize_pending_preset_dependencies,
@@ -348,15 +350,11 @@ async fn run(
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let tick_started = Instant::now();
     let action_timing = runtime.action_timing.begin_output_render();
-    if update_timecode(&runtime) {
-        runtime.timecodes.tick();
-    }
     let options = runtime.control.lock().render_options();
     let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
             return send_retained_output(&runtime).await;
         };
-        runtime.timecodes.reconcile_cue_lists(&runtime.engine);
         let visualization_scope = VisualizationScope {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
@@ -433,8 +431,46 @@ fn render_ordered_output_frame(
     options: RenderOptions,
 ) -> PlaybackOperation<Result<(RenderedSemanticFrame, Duration, Duration), EngineError>> {
     let dynamic_started = Instant::now();
+    if update_timecode(runtime) {
+        runtime.timecodes.tick();
+    }
+    runtime.timecodes.reconcile_cue_lists(&runtime.engine);
     let Some(prepared) = runtime.engine.try_prepare_output_frame(options) else {
         return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
+    };
+    let show = runtime.active_show.current();
+    let settled = timecode_capture::settle(
+        &runtime.engine,
+        prepared,
+        |action| match show.as_ref() {
+            Some(show) => super::timecode_v2::apply_installed_cue_action(
+                &runtime.timecodes,
+                &show.path,
+                action,
+            )
+            .map_err(|error| error.message),
+            None => Err("Automatic Cue action has no active show".into()),
+        },
+        || {
+            runtime.timecodes.reconcile_cue_lists(&runtime.engine);
+            Ok(())
+        },
+    );
+    let mut events = Vec::new();
+    if let Some(accepted) = settled.accepted.as_ref() {
+        change_lead::carry_uncommitted_capture(&runtime.change_lead, accepted);
+        events.extend(captured_playback_events(
+            &runtime.engine,
+            &runtime.active_show,
+            &runtime.playback,
+            accepted,
+            None,
+            Some(&runtime.persistence),
+        ));
+    }
+    let prepared = match settled.frame {
+        Ok(prepared) => prepared,
+        Err(error) => return PlaybackOperation::with_events(Err(error), events),
     };
     let prepared = crate::runtime::dynamic_snapshot_publication::RetainedFrameCapture::select(
         prepared,
@@ -451,7 +487,6 @@ fn render_ordered_output_frame(
     } else {
         vec![timecode_audio]
     };
-    let mut events = Vec::new();
     let completed = dynamic_output_frame(
         &runtime.engine,
         &prepared,
@@ -493,12 +528,6 @@ fn render_ordered_output_frame(
             Some(&runtime.persistence),
         ));
     }
-    dispatch_automatic_cue_actions(
-        &prepared,
-        &runtime.engine,
-        &runtime.timecodes,
-        runtime.active_show.current().as_ref(),
-    );
     let result = completed.map(|completed| {
         let settled = playback_service::projection::settled_dynamic_playback_events(
             &runtime.engine,
@@ -541,68 +570,6 @@ fn render_ordered_output_frame(
         )
     });
     PlaybackOperation::with_events(result, events)
-}
-
-/// A player patched from the TL-367 profile revision carries the canonical Media attributes.
-fn dispatch_automatic_cue_actions(
-    frame: &light_engine::PreparedOutputFrame,
-    engine: &Engine,
-    timecodes: &light_application::timeline::TimecodeRuntimeService,
-    show: Option<&light_show::ShowEntry>,
-) {
-    let Some(show) = show else {
-        return;
-    };
-    for (cue_list_id, actions) in claim_automatic_cue_action_batches(frame) {
-        let mut completion = 0;
-        for action in &actions {
-            match super::timecode_v2::apply_installed_cue_action(timecodes, &show.path, action) {
-                Ok(value) => completion = completion.max(value.unwrap_or(0)),
-                Err(error) => {
-                    tracing::warn!(error = %error.message, "automatic Cue Timecode action failed")
-                }
-            }
-        }
-        engine.set_cue_external_completion_millis(cue_list_id, completion);
-    }
-}
-
-/// Resolves only final-state transitions captured by this authoritative tick. The token is
-/// independent of event publication, so a failed DMX frame still gets one action dispatch.
-pub(in crate::runtime) fn claim_automatic_cue_action_batches(
-    frame: &light_engine::PreparedOutputFrame,
-) -> Vec<(light_core::CueListId, Vec<light_playback::CueAction>)> {
-    let snapshot = frame.snapshot();
-    let mut batches = Vec::new();
-    for transition in frame.claim_automatic_cue_action_transitions() {
-        let Some(playback) = frame.captured_active_playbacks().iter().find(|playback| {
-            playback.cue_list_id == transition.cue_list_id
-                && playback.playback_address == transition.playback_address
-                && playback.current_cue_id == Some(transition.current.id)
-                && playback.transition_ordinal == transition.transition_ordinal
-        }) else {
-            continue;
-        };
-        if playback.transition_timing_bypassed || playback.discrete_cue_actions_suppressed {
-            continue;
-        }
-        let cue_list_id = transition.cue_list_id;
-        let Some(cue) = snapshot
-            .cue_lists
-            .iter()
-            .find(|cue_list| cue_list.id == cue_list_id)
-            .and_then(|cue_list| {
-                cue_list
-                    .cues
-                    .iter()
-                    .find(|cue| cue.id == transition.current.id)
-            })
-        else {
-            continue;
-        };
-        batches.push((cue_list_id, cue.actions.clone()));
-    }
-    batches
 }
 
 async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
@@ -652,13 +619,9 @@ pub(in crate::runtime) fn combined_delivery_result(
 /// boundary as the production scheduler.
 pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
     let tick_started = Instant::now();
-    if state.output.uses_internal_timecode_clock() {
-        state.timecodes.tick();
-    }
     let action_timing = state.action_timing.begin_output_render();
     let (rendered, semantic_timing, visualization_scope) = {
         let _activation = state.active_show.acquire_shared().await;
-        state.timecodes.reconcile_cue_lists(state.output.engine());
         let visualization_scope = VisualizationScope {
             show_id: state.active_show.current().map(|show| show.id.0),
         };
@@ -668,13 +631,30 @@ pub(super) async fn render_test_tick(state: AppState) -> io::Result<u64> {
             &active_show,
             &playback,
             state.output.render_options(),
+            || {
+                if state.output.uses_internal_timecode_clock() {
+                    state.timecodes.tick();
+                }
+                state.timecodes.reconcile_cue_lists(state.output.engine());
+            },
             |prepared| {
-                dispatch_automatic_cue_actions(
-                    prepared,
+                timecode_capture::settle(
                     state.output.engine(),
-                    &state.timecodes,
-                    active_show.current().as_ref(),
-                );
+                    prepared,
+                    |action| match active_show.current().as_ref() {
+                        Some(show) => super::timecode_v2::apply_installed_cue_action(
+                            &state.timecodes,
+                            &show.path,
+                            action,
+                        )
+                        .map_err(|error| error.message),
+                        None => Err("Automatic Cue action has no active show".into()),
+                    },
+                    || {
+                        state.timecodes.reconcile_cue_lists(state.output.engine());
+                        Ok(())
+                    },
+                )
             },
         );
         let (rendered, semantic_timing) = match result {

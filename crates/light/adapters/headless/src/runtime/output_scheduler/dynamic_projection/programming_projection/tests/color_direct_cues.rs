@@ -24,7 +24,7 @@ use super::color_direct_transition::{Rig, semantic_value, uv_amount};
 use super::color_direct_whole_fade::sample_appearance_fade;
 use super::staged_geometry::{test_cue_list, test_playback};
 use super::*;
-use light_engine::PoolPlaybackAction;
+use light_engine::PlaybackAction;
 use light_playback::{Cue, CueChange, CueDynamicChange, CueList};
 
 /// A whole Fixed Color mask authored in a Cue, fading in over `fade_millis`.
@@ -74,10 +74,10 @@ fn go_through_cue_fade(
     underlay: &AttributeValue,
     destination: &AttributeValue,
 ) -> Vec<PhysicalHeadResult<ColorAdapter>> {
-    rig.playback(1, PoolPlaybackAction::Go);
+    rig.playback(1, PlaybackAction::Go);
     assert!(rig.frame(10, lane).is_none(), "Cue 1 is a static owner");
     assert_eq!(rig.last_static.as_ref(), Some(underlay));
-    rig.playback(1, PoolPlaybackAction::Go);
+    rig.playback(1, PlaybackAction::Go);
     let results = sample_appearance_fade(rig, lane, underlay, destination);
     assert!(
         rig.cue_rows.iter().any(|row| {
@@ -95,7 +95,7 @@ fn back_releases_the_mask(
     lane: &PhysicalAdapterLane<ColorAdapter>,
     underlay: &AttributeValue,
 ) {
-    rig.playback(1, PoolPlaybackAction::Back);
+    rig.playback(1, PlaybackAction::Back);
     for _ in 0..4 {
         if let Some(result) = rig.frame(250, lane) {
             assert_eq!(&result.value, underlay);
@@ -200,8 +200,7 @@ fn suppressed_cue_dynamic_keeps_running_and_reenables_on_its_current_recipe(kind
         .collect();
     let list = test_cue_list(vec![cue]);
     let swap_list = test_cue_list(vec![Cue::new(1_u16.into())]);
-    let mut swap = test_playback(swap_list.id);
-    swap.number = 2;
+    let swap = test_playback(swap_list.id);
     rig.install_show(
         vec![definition.clone()],
         vec![list.clone(), swap_list.clone()],
@@ -210,7 +209,7 @@ fn suppressed_cue_dynamic_keeps_running_and_reenables_on_its_current_recipe(kind
     rig.runtime
         .install_definitions([definition.clone()])
         .unwrap();
-    rig.playback(1, PoolPlaybackAction::Go);
+    rig.playback(1, PlaybackAction::Go);
     let lane = PhysicalAdapterLane::live(ColorAdapter::default());
     for _ in 0..3 {
         let running = rig.typed(130, &lane);
@@ -232,7 +231,7 @@ fn suppressed_cue_dynamic_keeps_running_and_reenables_on_its_current_recipe(kind
         clocks: rig.clocks(),
     });
     // Explicit output suppression: the captured Cue row is disabled, the rows still reconcile.
-    rig.playback(2, PoolPlaybackAction::SetSwap(true));
+    rig.playback(2, PlaybackAction::SetSwap(true));
     for index in 0..4 {
         // The single Color owner shows the Programmer underlay, never a stale Dynamic recipe.
         let shown = rig.typed(150, &lane);
@@ -257,7 +256,7 @@ fn suppressed_cue_dynamic_keeps_running_and_reenables_on_its_current_recipe(kind
             clocks: rig.clocks(),
         });
     }
-    rig.playback(2, PoolPlaybackAction::SetSwap(false));
+    rig.playback(2, PlaybackAction::SetSwap(false));
     for index in 0..4 {
         let enabled = rig.typed(170, &lane);
         assert!(

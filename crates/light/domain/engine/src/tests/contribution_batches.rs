@@ -177,17 +177,27 @@ fn playback_sample_master_scales_intensity_but_never_a_non_level_output() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![playback_page(1, [(1, playback)])].into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    // Match the live master before moving this newly observed source fader.
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(1.0),
+    );
 
     // The Cue master scales level parameters only (2026-10-05); Tilt reaches DMX unmastered.
     for (master, expected_intensity) in [(0.5, 0.1), (0.0, 0.0)] {
-        execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(master));
-        let assignments = playback_assignments(&engine, started, Some(1));
+        execute_address(
+            &engine,
+            playback_address(1, 1),
+            PlaybackAction::SetMaster(master),
+        );
+        let assignments = playback_assignments(&engine, started, Some(playback_address(1, 1)));
         let sampled = FakeAnimatedSource::default().sample(&assignments);
         let resolved =
             engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
@@ -239,15 +249,29 @@ fn sampled_playback_intensity_is_mastered_before_htp_arbitration() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![sampled_list, competing_list].into(),
-            playbacks: vec![sampled_playback, competing_playback].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(1, sampled_playback), (2, competing_playback)],
+            )]
+            .into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 2, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::SetVirtualMaster(0.5));
-    let assignments = playback_assignments(&engine, started, Some(1));
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    // Match the live master before moving this newly observed source fader.
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(1.0),
+    );
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::Go);
+    execute_address(
+        &engine,
+        playback_address(1, 1),
+        PlaybackAction::SetMaster(0.5),
+    );
+    let assignments = playback_assignments(&engine, started, Some(playback_address(1, 1)));
     let sampled = FakeAnimatedSource { phase: 0.6 }.sample(&assignments);
 
     let resolved = engine.resolved_values_with_contribution_batches(std::slice::from_ref(&sampled));
@@ -294,14 +318,18 @@ fn a_sample_replaces_only_its_independent_playback() {
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![fixture].into(),
             cue_lists: vec![sampled_list, independent_list].into(),
-            playbacks: vec![sampled_playback, independent_playback].into(),
+            playback_pages: vec![playback_page(
+                1,
+                [(1, sampled_playback), (2, independent_playback)],
+            )]
+            .into(),
             revision: 1,
             ..EngineSnapshot::default()
         })
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 2, PoolPlaybackAction::Go);
-    let assignments = playback_assignments(&engine, started, Some(1));
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 2), PlaybackAction::Go);
+    let assignments = playback_assignments(&engine, started, Some(playback_address(1, 1)));
     let sampled = ContributionBatch::new(assignments.into_iter().map(|assignment| {
         let mut value = assignment.value;
         value.value = AttributeValue::Normalized(0.1);
@@ -511,10 +539,10 @@ fn exclusion_only_release_preserves_other_group_and_fixture_sources_and_reveals_
     let playback = test_playback(1, cue.id);
     let mut snapshot = engine.snapshot().as_ref().clone();
     snapshot.cue_lists = vec![cue].into();
-    snapshot.playbacks = vec![playback].into();
+    snapshot.playback_pages = vec![playback_page(1, [(1, playback)])].into();
     snapshot.revision += 1;
     engine.replace_snapshot(snapshot).unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     programmers.set_group(session, "b".into(), attribute.clone(), normalized(0.4));
     clock.advance_millis(1);
     programmers.set_group(session, "a".into(), attribute.clone(), normalized(0.9));
@@ -624,8 +652,8 @@ fn sampled_intensity_participates_in_move_in_black_darkness() {
     engine
         .replace_snapshot(mib_snapshot(vec![fixture], &[fixture_id]))
         .unwrap();
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
-    execute_pool(&engine, 1, PoolPlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
+    execute_address(&engine, playback_address(1, 1), PlaybackAction::Go);
     clock.set(started + ChronoDuration::milliseconds(5_000));
     let sampled = independent_batch(timed_value(fixture_id, "intensity", 0.2, 100, clock.now()));
 
@@ -710,12 +738,12 @@ fn playback_cue_projection(
 fn playback_assignments(
     engine: &Engine,
     at: DateTime<Utc>,
-    playback_number: Option<u16>,
+    address: Option<light_playback::PlaybackAddress>,
 ) -> Vec<ProjectedAssignment> {
     engine
         .playback_contributions_at(at)
         .into_iter()
-        .filter(|contribution| contribution.source.playback_number == playback_number)
+        .filter(|contribution| contribution.source.playback_address == address)
         .map(|contribution| ProjectedAssignment {
             source: ContributionSourceId::playback(contribution.source),
             sequence_master: Some((contribution.source, contribution.sequence_master)),

@@ -276,6 +276,7 @@ mod playback_control_disconnect;
 mod playback_policy;
 mod playback_preload_http;
 mod playback_solo_http;
+mod software_playback_sources;
 mod update_plans;
 mod visualizer_view_http;
 mod ws_dispatch;
