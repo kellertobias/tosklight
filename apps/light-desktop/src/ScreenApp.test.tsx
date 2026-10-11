@@ -76,6 +76,9 @@ vi.mock("./components/shell/DeskLoadingOverlay", () => ({
 vi.mock("./components/modals/DeskLockOverlay", () => ({
 	DeskLockOverlay: () => <div data-testid="desk-lock" />,
 }));
+vi.mock("./components/shell/DeskModalHost", () => ({
+	DeskModalHost: () => null,
+}));
 vi.mock("./components/shell/LeftDock", () => ({
 	LeftDock: () => <div data-testid="left-dock" />,
 }));

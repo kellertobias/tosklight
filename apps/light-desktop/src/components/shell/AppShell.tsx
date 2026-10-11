@@ -1,15 +1,6 @@
 import type { ReactNode } from "react";
 import { ProgrammerControlSurfaceRegion } from "../../features/screens/ProgrammerControlSurfaceRegion";
-import { CommandChoiceModal } from "../modals/CommandChoiceModal";
-import { DebugModal } from "../modals/DebugModal";
-import { PreloadStoreModal } from "../modals/PreloadStoreModal";
-import { QuickSetupModal } from "../modals/QuickSetupModal";
-import { ShowRecoveryModal } from "../modals/ShowRecoveryModal";
-import { SpecialDialogsModal } from "../modals/SpecialDialogsModal";
-import { StoreSettingsModal } from "../modals/StoreSettingsModal";
-import { RecordChoiceHost } from "../modals/RecordChoiceHost";
-import { SystemControlsModal } from "../modals/SystemControlsModal";
-import { UpdateWorkflow } from "../modals/UpdateWorkflow";
+import { DeskModalHost } from "./DeskModalHost";
 import { ConnectionState } from "./ConnectionState";
 import { DeskLoadingOverlay } from "./DeskLoadingOverlay";
 import { DeskNoticeToast } from "./DeskNoticeToast";
@@ -31,20 +22,7 @@ export function AppShell() {
 			dock={<LeftDock />}
 			workspace={<WorkspaceView />}
 			control={<ProgrammerControlSurfaceRegion />}
-			modals={
-				<>
-					<QuickSetupModal />
-					<DebugModal />
-					<SpecialDialogsModal />
-					<SystemControlsModal />
-					<PreloadStoreModal />
-					<StoreSettingsModal />
-					<RecordChoiceHost />
-					<UpdateWorkflow />
-					<CommandChoiceModal />
-					<ShowRecoveryModal />
-				</>
-			}
+			modals={<DeskModalHost />}
 			connectionState={
 				<>
 					<ConnectionState />

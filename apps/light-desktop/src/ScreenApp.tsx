@@ -12,6 +12,7 @@ import { LoadingSurface } from "./components/common/LoadingSurface";
 import { DeskLockOverlay } from "./components/modals/DeskLockOverlay";
 import { QuitConfirmOverlay } from "./components/modals/QuitConfirmOverlay";
 import { ConnectionState } from "./components/shell/ConnectionState";
+import { DeskModalHost } from "./components/shell/DeskModalHost";
 import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
 import { LeftDock } from "./components/shell/LeftDock";
 import { NativeDragStrip } from "./components/shell/NativeDragStrip";
@@ -192,6 +193,7 @@ export function ScreenApp({ id }: { id: string }) {
 				<AppProvider>
 					<PatchFeatureBoundary>
 						<ScreenSurface id={id} />
+						<DeskModalHost />
 						<ConnectionState />
 						<DeskLoadingOverlay />
 					</PatchFeatureBoundary>
