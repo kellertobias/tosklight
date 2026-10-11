@@ -159,7 +159,9 @@ export class ProgrammingCommandLineWriter {
 			executionError = asError(reason);
 			this.onError?.(executionError);
 		}
-		const reconciled = await this.reconcileAfterExecution(!executionError);
+		const reconciled = await this.reconcileAfterExecution(
+			executed && !executionError,
+		);
 		if (!reconciled) {
 			this.discardDeferredWrite();
 			return this.finishExecution("execution_unknown");

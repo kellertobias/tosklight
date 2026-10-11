@@ -465,6 +465,60 @@ describe("scoped command-line integration", () => {
 		expect(server.setCommandLine).not.toHaveBeenCalled();
 	});
 
+	it("keeps parser rejection out of history and retires feedback after the next successful execution", async () => {
+		const command = "FIXTUREPBK4.301";
+		const feedback = "fixture number is invalid";
+		let accepted = false;
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={new ProgrammingInteractionStore()}
+				transport={new FakeProgrammingTransport()}
+				loadSnapshot={async () =>
+					programmingSnapshot({
+						command: commandLine(
+							accepted ? 2 : 1,
+							accepted ? "FIXTURE" : command,
+						),
+					})
+				}
+				replaceCommandLine={async (_deskId, value, revision) =>
+					commandLine(revision + 1, value)
+				}
+				executeCommand={async () => {
+					if (!accepted)
+						window.dispatchEvent(
+							new CustomEvent("light:command-error", { detail: feedback }),
+						);
+					return accepted;
+				}}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		expect(input).toHaveValue(command);
+		expect(input).toHaveClass("rejected");
+		expect(screen.getByRole("alert")).toHaveTextContent(feedback);
+		expect(
+			screen.queryByRole("dialog", { name: "Command line history" }),
+		).toBeNull();
+
+		accepted = true;
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		expect(input).toHaveValue("FIXTURE");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(
+			screen.queryByRole("dialog", { name: "Command line history" }),
+		).toBeNull();
+	});
+
 	it("retains a rejected THRU/PLUS command with actionable inline feedback", async () => {
 		const command = "FIXTURE 2 THRU 3 + 1 AT NOPE";
 		const feedback = "level must be a percentage or FULL";

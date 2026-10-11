@@ -439,6 +439,39 @@ describe("ProgrammingCommandLineWriter", () => {
 		expect(onError).not.toHaveBeenCalledWith(null);
 	});
 
+	it("retains reported operator rejection when execution returns false, then clears it on success", async () => {
+		const command = "FIXTUREPBK4.301";
+		const store = readyStore(commandLine(2, command));
+		const rejection = new Error("fixture number is invalid");
+		const onError = vi.fn();
+		const writer = new ProgrammingCommandLineWriter({
+			deskId: DESK_ID,
+			store,
+			replace: vi.fn(),
+			loadSnapshot: vi
+				.fn()
+				.mockResolvedValue(
+					programmingSnapshot({ command: commandLine(3, command) }),
+				),
+			onError,
+		});
+
+		await expect(
+			writer.executeAfterPendingWrites(async () => {
+				onError(rejection);
+				return false;
+			}, OPTIMISTIC_RESET),
+		).resolves.toBe("execution_failed");
+		expect(onError).toHaveBeenLastCalledWith(rejection);
+		expect(onError).not.toHaveBeenCalledWith(null);
+		expect(store.getSnapshot().commandLine?.text).toBe(command);
+
+		await expect(
+			writer.executeAfterPendingWrites(async () => true, OPTIMISTIC_RESET),
+		).resolves.toBe("executed");
+		expect(onError).toHaveBeenLastCalledWith(null);
+	});
+
 	it("does not repair or report a conflict after the writer is stopped", async () => {
 		const store = readyStore();
 		const request = deferred<CommandLineProjection>();

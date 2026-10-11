@@ -143,7 +143,10 @@ export function ProgrammingInteractionViewProvider({
 						store,
 						replace: replaceCommandLine,
 						loadSnapshot: measuredLoadSnapshot,
-						onError: reportProgrammingCommandError,
+						onError: (error) => {
+							if (error) reportProgrammingCommandError(error);
+							else clearProgrammingCommandError();
+						},
 						onEdit: clearProgrammingCommandError,
 					})
 				: null,
