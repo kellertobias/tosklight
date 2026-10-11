@@ -251,7 +251,8 @@ describe("PreloadStoreModal", () => {
 			.map((row) => row.textContent);
 		expect(labels[0]).toContain("Group 3 · Front · pan · 25%");
 		expect(labels[1]).toContain("Fixture 7 · Wash · intensity · 50%");
-		expect(labels[2]).toContain("Page 2 Playback 4 · GO · physical:test");
+		expect(labels[2]).toContain("Page 2 Playback 4 · GO");
+		expect(labels.join(" ")).not.toContain("physical:test");
 		fireEvent.click(
 			screen.getByRole("button", { name: "Remove playback action 2" }),
 		);
@@ -285,7 +286,7 @@ describe("PreloadStoreModal", () => {
 		render(<PreloadStoreModal />);
 		expect(
 			screen.getByText(
-				"Page 1 Playback 11 · current name: White base · ON · physical:test",
+				"Page 1 Playback 11 · current name: White base · ON",
 			),
 		).toBeInTheDocument();
 		expect(
@@ -325,14 +326,14 @@ describe("PreloadStoreModal", () => {
 		render(<PreloadStoreModal />);
 		expect(
 			screen.getByText(
-				"Page 1 Playback 401 · current name: Blue look · GO · virtual:test",
+				"Page 1 Playback 401 · current name: Blue look · GO",
 			),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText("Page 1 Playback 12 · ON · physical:test"),
+			screen.getByText("Page 1 Playback 12 · ON"),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText("Page 1 Playback 402 · ON · virtual:test"),
+			screen.getByText("Page 1 Playback 402 · ON"),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/Wrong pool name/)).not.toBeInTheDocument();
 	});
@@ -349,7 +350,7 @@ describe("PreloadStoreModal", () => {
 		];
 		render(<PreloadStoreModal />);
 		expect(
-			screen.getByText("Page 1 Playback 11 · ON · physical:test"),
+			screen.getByText("Page 1 Playback 11 · ON"),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/Stale name/)).not.toBeInTheDocument();
 	});

@@ -41,7 +41,7 @@ function pendingPlaybackLabel(
 	topology: PlaybackTopologyView,
 ) {
 	const definition = topology.ready ? topology.pages.find(page => page.body.number === entry.address.page)?.body.assignments[String(entry.address.position)] : undefined;
-	return `Page ${entry.address.page} Playback ${entry.address.position}${definition?.name?.trim() ? ` · current name: ${definition.name}` : ""} · ${entry.action.replaceAll("_", " ").toUpperCase()} · ${entry.controlSource.surface_id}`;
+	return `Page ${entry.address.page} Playback ${entry.address.position}${definition?.name?.trim() ? ` · current name: ${definition.name}` : ""} · ${entry.action.replaceAll("_", " ").toUpperCase()}`;
 }
 
 export function PendingPreloadInspection({
