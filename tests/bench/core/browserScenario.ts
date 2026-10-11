@@ -1,3 +1,7 @@
+import type {
+	PlaybackSurfacesSnapshot,
+	ScreenConfigurationSnapshot,
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 import {
 	expect,
 	type Locator,
@@ -604,23 +608,33 @@ class ScreenPageHandle {
 		private readonly screenId: string,
 	) {}
 
+	private async snapshot(): Promise<ScreenConfigurationSnapshot> {
+		return this.api.request("GET", "/api/v2/screens");
+	}
+
 	async select(number: number): Promise<void> {
-		if (!Number.isSafeInteger(number) || number < 1)
-			throw new Error("Playback Page numbers start at 1");
-		await this.api.request("POST", "/api/v2/screens/actions", {
-			request_id: crypto.randomUUID(),
-			action: { type: "set_page", screen_id: this.screenId, page: number },
-		});
+		if (!Number.isSafeInteger(number) || number < 1 || number > 99)
+			throw new Error("Playback Page must be within 1–99");
+		const screen = (await this.snapshot()).screens.find(
+			(entry) => entry.id === this.screenId,
+		);
+		if (!screen) throw new Error(`Screen ${this.screenId} is absent`);
+		const path = `/api/v2/playback-surfaces/${encodeURIComponent(screen.surface_id)}`;
+		await this.api.request("POST", `${path}/select`, {});
+		await this.api.request("POST", `${path}/page`, { page: number });
 		await this.expectSelected(number);
 	}
 
 	async expectSelected(number: number): Promise<void> {
 		await expect
 			.poll(async () => {
-				const snapshot = await this.api.request<{
-					active_pages: Record<string, number>;
-				}>("GET", "/api/v2/screens");
-				return snapshot.active_pages[this.screenId];
+				const snapshot = await this.snapshot();
+				const screen = snapshot.screens.find(
+					(entry) => entry.id === this.screenId,
+				);
+				return screen
+					? snapshot.surfaces.resolved_pages[screen.surface_id]
+					: undefined;
 			})
 			.toBe(number);
 	}
@@ -751,17 +765,22 @@ export class BrowserScreens {
 		screenId: string,
 		playback: NonNullable<ScreenConfigurationIntent["playbacks"]>,
 	): Promise<void> {
-		// Playback rows are edited inside Configure Screen's Playbacks tab and apply as they
-		// change; Add Row sits in that modal's title bar.
-		await settings
-			.getByLabel("Playbacks per row")
-			.fill(String(playback.perRow));
+		const snapshot = await this.api.request<ScreenConfigurationSnapshot>(
+			"GET",
+			"/api/v2/screens",
+		);
+		const screen = snapshot.screens.find((entry) => entry.id === screenId);
+		if (!screen) throw new Error(`Screen ${screenId} is absent`);
+		const main = snapshot.surfaces.playback_surfaces.main;
+		if (!main) throw new Error("Main Playback surface is absent");
 		await chooseOption(
 			this.page,
 			settings,
-			"Page Mode",
-			playback.pageMode === "dedicated" ? "Dedicated Page" : "Follow Main",
+			"Page source",
+			playback.pageMode === "dedicated" ? "Own page" : "Follow surface",
 		);
+		if (playback.pageMode !== "dedicated")
+			await chooseOption(this.page, settings, "Follow surface", main.name);
 		const rows = settings.locator("[data-playback-row-index]");
 		while ((await rows.count()) < playback.rows.length)
 			await settings.getByRole("button", { name: "Add Row" }).click();
@@ -773,42 +792,41 @@ export class BrowserScreens {
 		for (let index = 0; index < playback.rows.length; index += 1) {
 			const row = rows.nth(index);
 			const desired = playback.rows[index];
+			await row.getByLabel("Playbacks in row").fill(String(playback.perRow));
 			await row.getByLabel("First Playback Number").fill(String(desired.first));
-			await setSwitch(row, "Fader", desired.fader);
+			await chooseOption(
+				this.page,
+				row,
+				"Presentation",
+				desired.fader ? "Faders" : "Buttons",
+			);
 			await row.getByLabel("Buttons").fill(String(desired.buttons));
 		}
 		await expect
 			.poll(async () => {
-				const snapshot = await this.api.request<{
-					screens: Array<{
-						id: string;
-						page_mode: string;
-						playback_layout?: {
-							playbacks_per_row: number;
-							rows: Array<{
-								first_playback_slot: number;
-								has_fader: boolean;
-								button_count: number;
-							}>;
-						};
-					}>;
-				}>("GET", "/api/v2/screens");
-				const stored = snapshot.screens.find(
-					(screen) => screen.id === screenId,
+				const current = await this.api.request<PlaybackSurfacesSnapshot>(
+					"GET",
+					"/api/v2/playback-surfaces",
 				);
+				const surface = current.playback_surfaces[screen.surface_id];
 				return {
-					pageMode: stored?.page_mode,
-					layout: stored?.playback_layout,
+					pageSource:
+						surface?.page_source.type === "own"
+							? { type: "own" }
+							: surface?.page_source,
+					layout: surface?.layout,
 				};
 			})
 			.toEqual({
-				pageMode:
-					playback.pageMode === "dedicated" ? "independent" : "follow_main",
+				pageSource:
+					playback.pageMode === "dedicated"
+						? { type: "own" }
+						: { type: "follow", surface_id: "main" },
 				layout: {
-					playbacks_per_row: playback.perRow,
 					rows: playback.rows.map((row) => ({
-						first_playback_slot: row.first,
-						has_fader: row.fader,
+						first_position: row.first,
+						count: playback.perRow,
+						presentation: row.fader ? "fader" : "buttons",
 						button_count: row.buttons,
 					})),
 				},

@@ -1,3 +1,5 @@
+import { decodePlaybackSnapshot } from "../apps/light-desktop/src/api/playbackWire";
+import type { PlaybackSurfacesSnapshot } from "../apps/light-desktop/src/api/generated/light-wire";
 import type { ApiDriver, Session } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
 import { pairedScenario } from "./bench/core/pairedScenario";
@@ -282,8 +284,8 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     },
     assert: async ({ api, bench }, state) => {
       expect(await deskPage(api, state.session!)).toBe(2);
-      expect(await activePlayback(api, 2)).toMatchObject({ current_cue_number: "1" });
-      expect(await activePlayback(api, 1)).toBeUndefined();
+      expect(await activePlayback(api, { page: 2, position: 1 })).toMatchObject({ current_cue_number: "1" });
+      expect(await activePlayback(api, { page: 1, position: 1 })).toBeUndefined();
 
       const art = bench.artnet.mark();
       const sacn = bench.sacn.mark();
@@ -374,19 +376,19 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
       revision: 0,
     });
 
-    const groupPrefix = await api.sendCommandKey("GRP", "press", "api-003-group-prefix");
+    const groupPrefix = await api.sendCommandKey("GRP", "press", crypto.randomUUID());
     expect(groupPrefix).toMatchObject({
       outcome: "accepted",
       action: "edited",
       command_line: { text: "GROUP", target: "FIXTURE", pristine: false, revision: 1 },
     });
-    const degroupPrefix = await api.sendCommandKey("GRP", "press", "api-003-degroup-prefix");
+    const degroupPrefix = await api.sendCommandKey("GRP", "press", crypto.randomUUID());
     expect(degroupPrefix).toMatchObject({
       outcome: "accepted",
       action: "edited",
       command_line: { text: "DEGROUP", target: "FIXTURE", pristine: false, revision: 2 },
     });
-    const toggled = await api.sendCommandKey("ENT", "press", "api-003-group-mode");
+    const toggled = await api.sendCommandKey("ENT", "press", crypto.randomUUID());
     expect(toggled).toMatchObject({
       outcome: "accepted",
       action: "edited",
@@ -777,103 +779,160 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     }
   });
 
-  test("OSC-006 @osc › current-page follows each desk while explicit-page ignores it", async ({ api, bench, desk, page }) => {
-    test.setTimeout(60_000);
-    await loadCanonicalCopy(api, bench, "osc-006-wire");
-    await installPlayback(api);
-    await desk.open(bench.baseUrl);
-    const firstSession = await desk.session();
-    const secondSession = await createSession(api, crypto.randomUUID());
-    await setDeskPage(api, secondSession, 2);
-    const firstHardware = await bench.osc();
-    const secondHardware = await bench.osc();
-    const firstAlias = "desk";
-    const secondAlias = "desk";
-    try {
-      const firstSubscriptionMark = firstHardware.mark();
-      await firstHardware.send("/light/subscribe", [
-        "osc-006-first",
-        firstAlias,
-        firstHardware.feedbackPort,
-      ]);
-      expect(
-        (
-          await firstHardware.expectAfter(
-            firstSubscriptionMark,
-            `/light/${firstAlias}/feedback/page`,
-          )
-        ).arguments,
-      ).toEqual([1]);
-      const secondSubscriptionMark = secondHardware.mark();
-      await secondHardware.send("/light/subscribe", [
-        "osc-006-second",
-        secondAlias,
-        secondHardware.feedbackPort,
-      ]);
-      expect(
-        (
-          await secondHardware.expectAfter(
-            secondSubscriptionMark,
-            `/light/${secondAlias}/feedback/page`,
-          )
-        ).arguments,
-      ).toEqual([2]);
-      expect(await deskPage(api, firstSession)).toBe(1);
-      expect(await deskPage(api, secondSession)).toBe(2);
+	test("OSC-006 @ui › current-page is shared by attached desk sessions while explicit-page ignores it", async ({
+		api,
+		bench,
+		desk,
+		page,
+	}) => {
+		test.setTimeout(60_000);
+		await loadCanonicalCopy(api, bench, "osc-006-wire");
+		await installPlayback(api);
+		await desk.open(bench.baseUrl);
+		const firstSession = await desk.session();
+		const secondSession = await createSession(api, crypto.randomUUID());
+		expect(secondSession.desk.id).toBe(firstSession.desk.id);
+		await setDeskPage(api, firstSession, 1);
+		const firstHardware = await bench.osc();
+		const secondHardware = await bench.osc();
+		const firstAlias = "desk";
+		const secondAlias = "desk";
+		try {
+			const firstSubscriptionMark = firstHardware.mark();
+			await firstHardware.send("/light/subscribe", [
+				"osc-006-first",
+				firstAlias,
+				firstHardware.feedbackPort,
+			]);
+			expect(
+				(
+					await firstHardware.expectAfter(
+						firstSubscriptionMark,
+						`/light/${firstAlias}/feedback/page`,
+					)
+				).arguments,
+			).toEqual([1]);
+			const secondSubscriptionMark = secondHardware.mark();
+			await secondHardware.send("/light/subscribe", [
+				"osc-006-second",
+				secondAlias,
+				secondHardware.feedbackPort,
+			]);
+			expect(
+				(
+					await secondHardware.expectAfter(
+						secondSubscriptionMark,
+						`/light/${secondAlias}/feedback/page`,
+					)
+				).arguments,
+			).toEqual([1]);
+			expect(await deskPage(api, firstSession)).toBe(1);
+			expect(await deskPage(api, secondSession)).toBe(1);
 
-      const firstAddress = `/light/${firstAlias}/page-playback/1/button/1`;
-      await firstHardware.send(firstAddress, [true]);
-      await expect.poll(async () => (await activePlayback(api, 1))?.current_cue_number).toBe("1");
-      await firstHardware.send(firstAddress, [false]);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(await activePlayback(api, 1)).toMatchObject({ current_cue_number: "1" });
+			const firstAddress = `/light/${firstAlias}/page-playback/1/button/1`;
+			await firstHardware.send(firstAddress, [true]);
+			await expect
+				.poll(
+					async () =>
+						(await activePlayback(api, { page: 1, position: 1 }))
+							?.current_cue_number,
+				)
+				.toBe("1");
+			await firstHardware.send(firstAddress, [false]);
+			await new Promise((resolve) => setTimeout(resolve, 50));
+			expect(await activePlayback(api, { page: 1, position: 1 })).toMatchObject(
+				{ current_cue_number: "1" },
+			);
 
-      await secondHardware.send(`/light/${secondAlias}/page-playback/1/button/1`, [true]);
-      await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe("1");
+			await setDeskPage(api, secondSession, 2);
+			expect(await deskPage(api, firstSession)).toBe(2);
+			await secondHardware.send(
+				`/light/${secondAlias}/page-playback/1/button/1`,
+				[true],
+			);
+			await secondHardware.send(
+				`/light/${secondAlias}/page-playback/1/button/1`,
+				[false],
+			);
+			await expect
+				.poll(
+					async () =>
+						(await activePlayback(api, { page: 2, position: 1 }))
+							?.current_cue_number,
+				)
+				.toBe("1");
 
-      const pageFeedbackMark = firstHardware.mark();
-      await selectPlaybackPage(page, "Page 2");
-      await expect.poll(async () => deskPage(api, firstSession)).toBe(2);
-      await expect
-        .poll(() =>
-          firstHardware.messages.slice(pageFeedbackMark).some(
-            (message) =>
-              message.address === `/light/${firstAlias}/feedback/page` &&
-              message.arguments[0] === 2,
-          ),
-        )
-        .toBe(true);
-      await firstHardware.send(firstAddress, [true]);
-      await expect.poll(async () => (await activePlayback(api, 2))?.current_cue_number).toBe("2");
-      expect(await deskPage(api, secondSession)).toBe(2);
+			await setDeskPage(api, firstSession, 1);
+			const pageFeedbackMark = firstHardware.mark();
+			await selectPlaybackPage(page, "Page 2");
+			await expect.poll(async () => deskPage(api, firstSession)).toBe(2);
+			await expect
+				.poll(() =>
+					firstHardware.messages
+						.slice(pageFeedbackMark)
+						.some(
+							(message) =>
+								message.address === `/light/${firstAlias}/feedback/page` &&
+								message.arguments[0] === 2,
+						),
+				)
+				.toBe(true);
+			await firstHardware.send(firstAddress, [true]);
+			await firstHardware.send(firstAddress, [false]);
+			await expect
+				.poll(
+					async () =>
+						(await activePlayback(api, { page: 2, position: 1 }))
+							?.current_cue_number,
+				)
+				.toBe("2");
+			expect(await deskPage(api, secondSession)).toBe(2);
 
-      const returnFeedbackMark = firstHardware.mark();
-      await selectPlaybackPage(page, "Main");
-      await expect.poll(async () => deskPage(api, firstSession)).toBe(1);
-      await expect
-        .poll(() =>
-          firstHardware.messages.slice(returnFeedbackMark).some(
-            (message) =>
-              message.address === `/light/${firstAlias}/feedback/page` &&
-              message.arguments[0] === 1,
-          ),
-        )
-        .toBe(true);
+			const returnFeedbackMark = firstHardware.mark();
+			await selectPlaybackPage(page, "Main");
+			await expect.poll(async () => deskPage(api, firstSession)).toBe(1);
+			await expect
+				.poll(() =>
+					firstHardware.messages
+						.slice(returnFeedbackMark)
+						.some(
+							(message) =>
+								message.address === `/light/${firstAlias}/feedback/page` &&
+								message.arguments[0] === 1,
+						),
+				)
+				.toBe(true);
 
-      for (const level of [0, 0.5, 1]) {
-        await firstHardware.sendFloat(`/light/${firstAlias}/page-playback/1/fader`, level);
-        await expect.poll(async () => (await activePlayback(api, 1))?.fader_position).toBeCloseTo(level, 4);
-      }
-      for (const level of [0, 0.5, 1]) {
-        await firstHardware.sendFloat("/light/playback/2/1/fader", level);
-        await expect.poll(async () => (await activePlayback(api, 2))?.fader_position).toBeCloseTo(level, 4);
-        expect(await deskPage(api, firstSession)).toBe(1);
-      }
-    } finally {
-      await unsubscribeAndClose(firstHardware, "osc-006-first");
-      await unsubscribeAndClose(secondHardware, "osc-006-second");
-    }
-  });
+			for (const level of [0, 0.5, 1]) {
+				await firstHardware.sendFloat(
+					`/light/${firstAlias}/page-playback/1/fader`,
+					level,
+				);
+				await expect
+					.poll(
+						async () =>
+							(await activePlayback(api, { page: 1, position: 1 }))
+								?.fader_position,
+					)
+					.toBeCloseTo(level, 4);
+			}
+			for (const level of [0, 0.5, 1]) {
+				await firstHardware.sendFloat("/light/playback/2/1/fader", level);
+				await expect
+					.poll(
+						async () =>
+							(await activePlayback(api, { page: 2, position: 1 }))
+								?.fader_position,
+					)
+					.toBeCloseTo(level, 4);
+				expect(await deskPage(api, firstSession)).toBe(1);
+				expect(await deskPage(api, secondSession)).toBe(1);
+			}
+		} finally {
+			await unsubscribeAndClose(firstHardware, "osc-006-first");
+			await unsubscribeAndClose(secondHardware, "osc-006-second");
+		}
+	});
 
   test("CROSS-001 @osc › OSC matches UI and API normalized Group output", async ({ api, bench }) => {
     await loadCanonicalCopy(api, bench, "cross-001-osc");
@@ -931,14 +990,14 @@ async function unsubscribeAndClose(hardware: OscHardware, clientId: string): Pro
 async function subscribeIsolatedHardware(bench: any, state: OscIsolationState): Promise<void> {
   state.firstHardware = await bench.osc();
   state.secondHardware = await bench.osc();
-  state.firstMark = state.firstHardware.mark();
-  await state.firstHardware.subscribe("osc-003-a", "desk");
-  await state.firstHardware.expectAfter(state.firstMark, `/light/desk/feedback/speed-group/5`);
-  const firstSecondSubscriptionMark = state.firstHardware.mark();
-  state.secondMark = state.secondHardware.mark();
-  await state.secondHardware.subscribe("osc-003-b", "desk");
-  await state.firstHardware.expectAfter(firstSecondSubscriptionMark, `/light/desk/feedback/speed-group/5`);
-  await state.secondHardware.expectAfter(state.secondMark, `/light/desk/feedback/speed-group/5`);
+  state.firstMark = state.firstHardware!.mark();
+  await state.firstHardware!.subscribe("osc-003-a", "desk");
+  await state.firstHardware!.expectAfter(state.firstMark, `/light/desk/feedback/speed-group/5`);
+  const firstSecondSubscriptionMark = state.firstHardware!.mark();
+  state.secondMark = state.secondHardware!.mark();
+  await state.secondHardware!.subscribe("osc-003-b", "desk");
+  await state.firstHardware!.expectAfter(firstSecondSubscriptionMark, `/light/desk/feedback/speed-group/5`);
+  await state.secondHardware!.expectAfter(state.secondMark, `/light/desk/feedback/speed-group/5`);
 }
 
 async function assertRevisionConflict(api: ApiDriver, state: RevisionConflictState): Promise<void> {
@@ -1039,77 +1098,127 @@ function fixtureSheetRow(page: Page, number: number): Locator {
   }).first();
 }
 
-async function installPlayback(api: ApiDriver): Promise<{ firstCueListId: string; secondCueListId: string }> {
-  const fixtures = await fixtureIdsByNumber(api);
-  const firstCueListId = crypto.randomUUID();
-  const secondCueListId = crypto.randomUUID();
-  for (const [id, name, fixture, levels] of [
-    [firstCueListId, "OSC Page One", fixtures[1], [0.25, 0.5]],
-    [secondCueListId, "OSC Page Two", fixtures[2], [0.75, 1]],
-  ] as const) {
-    await putObject(api, "cue_list", id, {
-      id, name, priority: 0, mode: "sequence", looped: false,
-      chaser_step_millis: 1000, speed_group: null,
-      cues: levels.map((level, index) => ({
-        number: index + 1,
-        name: `Cue ${index + 1}`,
-        changes: [{ fixture_id: fixture, attribute: "intensity", value: { kind: "normalized", value: level }, fade_millis: 0 }],
-        group_changes: [],
-        fade_millis: 0,
-        delay_millis: 0,
-        trigger: { type: "manual" },
-      })),
-    });
-  }
-  for (const [number, name, cueListId] of [
-    [1, "OSC Page One", firstCueListId],
-    [2, "OSC Page Two", secondCueListId],
-  ] as const) {
-    const existing = (await objects(api, "playback")).find((playback) => playback.id === String(number));
-    await putObject(api, "playback", String(number), {
-      number,
-      name,
-      target: { type: "cue_list", cue_list_id: cueListId },
-      buttons: ["go", "go_minus", "flash"],
-      button_count: 3,
-      fader: "master",
-      has_fader: true,
-      go_activates: true,
-      auto_off: false,
-      xfade_millis: 0,
-      color: number === 1 ? "#20c997" : "#4d8cff",
-      flash_release: "release_all",
-      protect_from_swap: false,
-      presentation_icon: null,
-      presentation_image: null,
-    }, existing?.revision ?? 0);
-  }
-  for (const [number, name, playback] of [[1, "Main", 1], [2, "Page 2", 2]] as const) {
-    const existing = (await objects(api, "playback_page")).find((page) => page.id === String(number));
-    await putObject(api, "playback_page", String(number), {
-      number,
-      name,
-      slots: { "1": playback },
-      virtual_playbacks: existing?.body.virtual_playbacks ?? {},
-    }, existing?.revision ?? 0);
-  }
-  return { firstCueListId, secondCueListId };
+async function installPlayback(
+	api: ApiDriver,
+): Promise<{ firstCueListId: string; secondCueListId: string }> {
+	const fixtures = await fixtureIdsByNumber(api);
+	const firstCueListId = crypto.randomUUID();
+	const secondCueListId = crypto.randomUUID();
+	for (const [id, name, fixture, levels] of [
+		[firstCueListId, "OSC Page One", fixtures[1], [0.25, 0.5]],
+		[secondCueListId, "OSC Page Two", fixtures[2], [0.75, 1]],
+	] as const) {
+		await putObject(api, "cue_list", id, {
+			id,
+			name,
+			priority: 0,
+			mode: "sequence",
+			looped: false,
+			chaser_step_millis: 1000,
+			speed_group: null,
+			cues: levels.map((level, index) => ({
+				number: index + 1,
+				name: `Cue ${index + 1}`,
+				changes: [
+					{
+						fixture_id: fixture,
+						attribute: "intensity",
+						value: { kind: "normalized", value: level },
+						fade_millis: 0,
+					},
+				],
+				group_changes: [],
+				fade_millis: 0,
+				delay_millis: 0,
+				trigger: { type: "manual" },
+			})),
+		});
+	}
+	for (const [number, name, cueListId] of [
+		[1, "Main", firstCueListId],
+		[2, "Page 2", secondCueListId],
+	] as const) {
+		const existing = (await objects(api, "playback_page")).find(
+			(page) => page.id === String(number),
+		);
+		await putObject(
+			api,
+			"playback_page",
+			String(number),
+			{
+				number,
+				name,
+				assignments: {
+					...(existing?.body.assignments ?? {}),
+					"1": {
+						name: number === 1 ? "OSC Page One" : "OSC Page Two",
+						target: { type: "cue_list", cue_list_id: cueListId },
+						buttons: ["go", "go_minus", "flash"],
+						button_count: 3,
+						fader: "master",
+						has_fader: true,
+						go_activates: true,
+						auto_off: false,
+						xfade_millis: 0,
+						color: number === 1 ? "#20c997" : "#4d8cff",
+						flash_release: "release_all",
+						protect_from_swap: false,
+						presentation_icon: null,
+						presentation_image: null,
+					},
+				},
+			},
+			existing?.revision ?? 0,
+		);
+	}
+	return { firstCueListId, secondCueListId };
 }
 
-async function activePlayback(api: ApiDriver, number: number): Promise<any | undefined> {
-  const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
-  return playbacks.active.find((playback: any) => playback.playback_number === number);
+async function activePlayback(
+	api: ApiDriver,
+	address: { page: number; position: number },
+): Promise<any | undefined> {
+	const snapshot = decodePlaybackSnapshot(
+		await api.request("POST", "/api/v2/playback-runtime/snapshot", {
+			identities: [{ kind: "playback", ...address }],
+		}),
+	);
+	const projection = snapshot.projections.find(
+		(entry) =>
+			entry.identity.kind === "playback" &&
+			entry.identity.page === address.page &&
+			entry.identity.position === address.position,
+	);
+	const runtime = projection?.target === "cue_list" ? projection.runtime : null;
+	return runtime?.enabled
+		? { ...runtime, current_cue_number: runtime.current?.number ?? null }
+		: undefined;
 }
 
 async function deskPage(api: ApiDriver, session: Session): Promise<number> {
-  return (await withSession(api, session, () => api.request<any>("GET", "/api/v2/playback-overview"))).active_page;
+	return (
+		await withSession(api, session, () =>
+			api.request<PlaybackSurfacesSnapshot>("GET", "/api/v2/playback-surfaces"),
+		)
+	).command_page;
 }
 
-async function setDeskPage(api: ApiDriver, session: Session, page: number): Promise<void> {
-  await withSession(api, session, () => api.request("POST", `/api/v2/control-desk/actions`, {
-    request_id: crypto.randomUUID(),
-    action: { type: "set_page", page, existing_only: false },
-  }));
+async function setDeskPage(
+	api: ApiDriver,
+	session: Session,
+	page: number,
+): Promise<void> {
+	await withSession(api, session, async () => {
+		const surfaces = await api.request<PlaybackSurfacesSnapshot>(
+			"GET",
+			"/api/v2/playback-surfaces",
+		);
+		await api.request(
+			"POST",
+			`/api/v2/playback-surfaces/${encodeURIComponent(surfaces.selected_surface_id)}/page`,
+			{ page },
+		);
+	});
 }
 
 async function withSession<T>(api: ApiDriver, session: Session, action: () => Promise<T>): Promise<T> {
