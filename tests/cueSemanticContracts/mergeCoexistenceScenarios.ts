@@ -136,9 +136,9 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			],
 			{ name: "Sequence B", priority: 100 },
 		);
-		await api.playbackNumberAction(1, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		await bench.tick(1);
-		await api.playbackNumberAction(2, "go", {});
+		await api.playbackAction({ page: 1, position: 2 }, "go", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0.6);
 		expect(await visualizationLevel(api, bFixture, "intensity")).toBe(0.4);
@@ -156,25 +156,25 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		expect(await rgbValues(api, bFixture)).toEqual([1, 0.7, 0.4]);
 
 		await bench.tick(1);
-		await api.playbackNumberAction(1, "go-to", { cue_number: 1 });
+		await api.playbackAction({ page: 1, position: 1 }, "go-to", { cue_number: "1" });
 		await bench.tick(0);
 		expect(await rgbValues(api, aFixture)).toEqual([0, 0, 1]);
 		expect(await rgbValues(api, bFixture)).toEqual([1, 0.7, 0.4]);
 
 		await setFixtureValue(api, state.showId, bFixture, "blue", 0.8);
 		await bench.tick(1);
-		await api.playbackNumberAction(1, "go-to", { cue_number: 1 });
+		await api.playbackAction({ page: 1, position: 1 }, "go-to", { cue_number: "1" });
 		await bench.tick(0);
 		expect(await visualizationLevel(api, bFixture, "blue")).toBe(0.8);
 
 		await setProgrammerPriority(api, { surface: "api", priority: 110 });
 		await setFixtureValue(api, state.showId, aFixture, "red", 1);
 		await bench.tick(1);
-		await api.playbackNumberAction(1, "go-to", { cue_number: 1 });
+		await api.playbackAction({ page: 1, position: 1 }, "go-to", { cue_number: "1" });
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "red")).toBe(1);
 		await setProgrammerPriority(api, { surface: "api", priority: 90 });
-		await api.playbackNumberAction(1, "go-to", { cue_number: 1 });
+		await api.playbackAction({ page: 1, position: 1 }, "go-to", { cue_number: "1" });
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "red")).toBe(0);
 
@@ -182,11 +182,11 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			surface: "api",
 			showId: state.showId,
 		});
-		await api.playbackNumberAction(2, "off", {});
+		await api.playbackAction({ page: 1, position: 2 }, "off", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0.6);
 		expect(await visualizationLevel(api, bFixture, "intensity")).toBe(0);
-		await api.playbackNumberAction(1, "off", {});
+		await api.playbackAction({ page: 1, position: 1 }, "off", {});
 		await bench.tick(0);
 		expect(await visualizationLevel(api, aFixture, "intensity")).toBe(0);
 		state.completed = true;

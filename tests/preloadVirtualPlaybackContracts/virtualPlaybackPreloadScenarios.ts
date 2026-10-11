@@ -23,7 +23,7 @@ import {
 	openPlaybackMode,
 	type PreloadVirtualPairState,
 	playbackCard,
-	poolAction,
+	assignedPlaybackAction,
 	prepare,
 	setCaptureMask,
 	timestampMillis,
@@ -85,7 +85,7 @@ const preload004Scenario: PairedScenario<PreloadVirtualPairState> = {
 		// Keep the disabled-domain programmer proof on a distinct fixture: programmer priority is
 		// intentionally higher than these Cuelists and must not mask the playback fade under test.
 		await api.executeCommandLine("FIXTURE 1 AT 35");
-		await poolAction(api, 46, "button", {
+		await assignedPlaybackAction(api, { page: 1, position: 46 }, "button", {
 			button: 1,
 			pressed: true,
 			surface: "physical",
@@ -234,7 +234,7 @@ const preload004ApiSupplement = async ({
 		showId: prepared.showId,
 	});
 	await api.executeCommandLine("GROUP 1 AT 35");
-	await poolAction(api, 43, "button", {
+	await assignedPlaybackAction(api, { page: 1, position: 43 }, "button", {
 		button: 1,
 		pressed: true,
 		surface: "physical",
@@ -347,7 +347,7 @@ const preload004UiSupplement = async ({
 	const pane = await addVirtualPlaybackPane(page);
 	await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
 	await api.executeCommandLine("GROUP 1 AT 35");
-	await poolAction(api, 46, "button", {
+	await assignedPlaybackAction(api, { page: 1, position: 46 }, "button", {
 		button: 1,
 		pressed: true,
 		surface: "physical",

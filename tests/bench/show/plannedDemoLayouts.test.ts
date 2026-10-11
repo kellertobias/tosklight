@@ -24,11 +24,10 @@ describe("Plan 76 desktop layout", () => {
 			"presets",
 			"presets",
 			"presets",
-			"virtual_playbacks",
+			"playbacks",
 		]);
 		expect(layout.desks[1].panes.at(-1)).toMatchObject({
-			virtualPlaybackRows: 5,
-			virtualPlaybackColumns: 10,
+			surface_id: "pane:busking-playbacks",
 		});
 		expect(layout.desks[2].panes.map((pane) => pane.kind)).toEqual([
 			"fixtures",

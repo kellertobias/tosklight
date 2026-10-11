@@ -30,7 +30,12 @@ export function enterProgrammerPreload(
 	intent: ProgrammerPreloadLifecycleIntent,
 	dependencies: IntentHttpDependencies = {},
 ) {
-	return applyProgrammerPreloadAction(api, intent, { type: "enter" }, dependencies);
+	return applyProgrammerPreloadAction(
+		api,
+		intent,
+		{ type: "enter" },
+		dependencies,
+	);
 }
 
 export function goProgrammerPreload(
@@ -38,7 +43,12 @@ export function goProgrammerPreload(
 	intent: ProgrammerPreloadLifecycleIntent,
 	dependencies: IntentHttpDependencies = {},
 ) {
-	return applyProgrammerPreloadAction(api, intent, { type: "go" }, dependencies);
+	return applyProgrammerPreloadAction(
+		api,
+		intent,
+		{ type: "go" },
+		dependencies,
+	);
 }
 
 export function clearPendingProgrammerPreload(
@@ -87,7 +97,13 @@ async function applyProgrammerPreloadAction(
 		sessionId: session.session_id,
 		deskId: session.desk.id,
 	};
-	const authority = await loadAuthority(api, session, intent.showId, action, fetch);
+	const authority = await loadAuthority(
+		api,
+		session,
+		intent.showId,
+		action,
+		fetch,
+	);
 	return lifecycleTransport(api, session, fetch).applyAction(scope, {
 		requestId: intentRequestId(dependencies),
 		expectedCaptureModeRevision: authority.captureModeRevision,
@@ -177,7 +193,6 @@ function preloadValues(
 		baseUrl: api.baseUrl,
 		sessionToken: session.token,
 		authenticatedSessionId: session.session_id,
-		authenticatedDeskId: session.desk.id,
 		fetch,
 	});
 }
@@ -235,14 +250,24 @@ async function loadPlaybackAuthority(
 	const path = "/api/v2/playback-runtime/snapshot";
 	const response = await fetch(intentUrl(api, path), {
 		method: "POST",
-		headers: { ...intentContextHeaders(session, showId), "content-type": "application/json" },
+		headers: {
+			...intentContextHeaders(session, showId),
+			"content-type": "application/json",
+		},
 		body: JSON.stringify({ identities: [] }),
 	});
 	const value = await responseJson(response, "Playback runtime");
 	if (!response.ok)
-		throw new Error(`Playback runtime snapshot returned HTTP ${response.status}`);
+		throw new Error(
+			`Playback runtime snapshot returned HTTP ${response.status}`,
+		);
 	const snapshot = decodePlaybackSnapshot(value);
-	assertPlaybackScope(snapshot.desk.desk_id, snapshot.desk.scope.show_id, session, showId);
+	assertPlaybackScope(
+		snapshot.desk.desk_id,
+		snapshot.desk.scope.show_id,
+		session,
+		showId,
+	);
 	return {
 		showRevision: snapshot.desk.scope.show_revision,
 		eventSequence: snapshot.cursor.sequence,

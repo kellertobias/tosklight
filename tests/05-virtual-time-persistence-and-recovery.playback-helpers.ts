@@ -251,13 +251,13 @@ export async function restartPlaybackRun(
 	numbers: number[],
 ): Promise<void> {
 	for (const number of [1, 2])
-		await api.playbackNumberAction(number, "off", {}).catch(() => undefined);
+		await api.playbackAction({ page: 1, position: number }, "off", {}).catch(() => undefined);
 	await api.openShow(showId, {
 		transition: "hold_current",
 	});
 	await api.request("POST", "/api/v2/test/clock/reset", undefined, false);
 	for (const number of numbers)
-		await api.playbackNumberAction(number, number === 2 ? "on" : "go", {});
+		await api.playbackAction({ page: 1, position: number }, number === 2 ? "on" : "go", {});
 }
 
 export async function playbackRuntime(

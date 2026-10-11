@@ -99,9 +99,14 @@ scenario(
 		});
 		await t.page.create(2);
 		await t.page.rename(2, "Page 2");
-		await t.page.map({ page: 2, slot: 1, playback: second });
+		await t.page.map({
+			sourceAddress: second,
+			targetAddress: { page: 2, position: 1 },
+		});
 
 		await t.crossSurface.verifyCurrentAndExplicitPageOscAddressing();
+		await t.playback.expect({ page: 2, position: 1 }).runtime({ enabled: true });
+		// Both assignments refer to the same Cuelist and project its shared runtime.
 		await t.playback.expect(second).runtime({ enabled: true });
 	},
 );
@@ -235,7 +240,7 @@ scenario(
 
 		await t.selection.fixtures.via.api.item(1);
 		await t.encoder.intensity.dimmer.via.api.set(25);
-		const cueCreated = await t.record.recordViaApi({ playback: 1, cue: 90 });
+		const cueCreated = await t.record.recordViaApi({ playback: { page: 1, position: 1 }, cue: 90 });
 		expect(cueCreated).toMatchObject({
 			status: "changed",
 			recordedCue: { number: "90", deleted: false },
@@ -243,7 +248,7 @@ scenario(
 		await t.selection.fixtures.via.api.item(2);
 		await t.encoder.intensity.dimmer.via.api.set(75);
 		const cueOverwritten = await t.record.recordViaApi({
-			playback: 1,
+			playback: { page: 1, position: 1 },
 			cue: 90,
 		});
 		expect(cueOverwritten).toMatchObject({
@@ -255,15 +260,15 @@ scenario(
 		expect(cueCreated.showEventSequence).toBeLessThan(
 			cueOverwritten.showEventSequence,
 		);
-		await t.cue.expect(1, 90).present();
-		const siblingCue = await t.record.recordViaApi({ playback: 1, cue: 91 });
+		await t.cue.expect({ page: 1, position: 1 }, 90).present();
+		const siblingCue = await t.record.recordViaApi({ playback: { page: 1, position: 1 }, cue: 91 });
 		if (siblingCue.status !== "changed")
 			throw new Error("Second Cue must produce an event before deletion");
 		expect(cueOverwritten.showEventSequence).toBeLessThan(
 			siblingCue.showEventSequence,
 		);
-		await t.cue.expect(1, 91).present();
-		const cueDeleted = await t.cue.deleteViaApi(1, 90);
+		await t.cue.expect({ page: 1, position: 1 }, 91).present();
+		const cueDeleted = await t.cue.deleteViaApi({ page: 1, position: 1 }, 90);
 		expect(cueDeleted).toMatchObject({
 			status: "changed",
 			deletedCue: { number: "90" },
@@ -273,8 +278,8 @@ scenario(
 		expect(siblingCue.showEventSequence).toBeLessThan(
 			cueDeleted.showEventSequence,
 		);
-		await t.cue.expect(1, 90).absent();
-		await t.cue.expect(1, 91).present();
+		await t.cue.expect({ page: 1, position: 1 }, 90).absent();
+		await t.cue.expect({ page: 1, position: 1 }, 91).present();
 	},
 );
 

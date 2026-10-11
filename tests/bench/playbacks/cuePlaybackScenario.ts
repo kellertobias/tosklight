@@ -6,7 +6,7 @@ import { HttpPlaybackTopologyTransport } from "../../../apps/light-desktop/src/a
 import type {
 	Cue,
 	CueList,
-	PlaybackDefinition,
+	PlaybackPage,
 } from "../../../apps/light-desktop/src/api/types/playback";
 import type { BrowserCommands } from "../command-selection/commandScenario";
 import type { ApiDriver } from "../core/api";
@@ -455,8 +455,13 @@ class RecordingSurface {
 	}
 }
 
+export interface CuePlaybackAddress {
+	page: number;
+	position: number;
+}
+
 export interface RecordCueIntent {
-	playback: number;
+	playback: CuePlaybackAddress;
 	cue: number;
 	mode?: CueRecordMode;
 	timing?: CueTiming;
@@ -502,7 +507,7 @@ export class BrowserRecording {
 			sessionToken: session.token,
 		}).record(this.showId(), snapshot.desk.scope.show_revision, {
 			requestId: crypto.randomUUID(),
-			target: { kind: "pool", playbackNumber: intent.playback },
+			target: { kind: "playback", ...validatePlaybackAddress(intent.playback) },
 			operation: intent.mode ?? CueRecordMode.Overwrite,
 			cueNumber: formatCueNumber(intent.cue),
 			timing: {},
@@ -512,15 +517,15 @@ export class BrowserRecording {
 		});
 	}
 
-	async append(playback: number) {
+	async append(playback: CuePlaybackAddress) {
 		const location = await playbackLocation(
 			this.api,
 			this.showId(),
-			validInteger(playback, "Playback"),
+			validatePlaybackAddress(playback),
 		);
 		const before = await this.cueListForPlayback(playback);
 		const target = this.page.getByRole("button", {
-			name: `Playback representation page ${location.page} playback ${location.slot}`,
+			name: `Playback representation page ${location.page} playback ${location.position}`,
 			exact: true,
 		});
 		if (!(await target.isVisible())) {
@@ -582,7 +587,7 @@ export class BrowserRecording {
 	}
 
 	async playbackVia(route: CommandRoute, slot: number) {
-		validInteger(slot, "Playback slot");
+		validatePlaybackAddress({ page: 1, position: slot });
 		if (route === "api")
 			throw new Error(
 				"Creating an assigned Playback has no truthful API command; use the visible UI route",
@@ -600,24 +605,24 @@ export class BrowserRecording {
 			this.page.locator(".global-store-button:visible").first(),
 		);
 		await this.desk.click(target);
-		let playbackNumber: number | undefined;
+		const playbackAddress = { page: 1, position: slot };
 		await expect
 			.poll(async () => {
 				const page = await this.pageObject(1);
-				playbackNumber = page?.body.slots[String(slot)];
+				const assignment = page?.body.assignments[String(slot)];
 				return {
 					revision: page?.revision ?? 0,
-					playbackNumber,
+					assigned: assignment?.target.type === "cue_list",
 				};
 			})
 			.toMatchObject({
 				revision: expect.any(Number),
-				playbackNumber: expect.any(Number),
+				assigned: true,
 			});
 		expect((await this.pageObject(1))?.revision ?? 0).toBeGreaterThan(
 			before?.revision ?? 0,
 		);
-		return playbackNumber!;
+		return playbackAddress;
 	}
 
 	async cueVia(route: CommandRoute, intent: RecordCueIntent) {
@@ -646,17 +651,17 @@ export class BrowserRecording {
 			.toBeGreaterThan(before.revision);
 	}
 
-	private async address(playback: number) {
+	private async address(playback: CuePlaybackAddress) {
 		const location = await playbackLocation(this.api, this.showId(), playback);
-		return `PBK ${location.page} . ${location.slot}`;
+		return `PBK ${location.page} . ${location.position}`;
 	}
 
-	private cueListForPlayback(playback: number) {
+	private cueListForPlayback(playback: CuePlaybackAddress) {
 		return cueListForPlayback(this.api, this.showId(), playback);
 	}
 
 	private pageObject(number: number) {
-		return this.api.showObject<any>(
+		return this.api.showObject<PlaybackPage>(
 			this.showId(),
 			"playback_page",
 			String(number),
@@ -679,15 +684,15 @@ class CueSurface {
 		private readonly route: CommandRoute,
 	) {}
 
-	update(playback: number, cue: number) {
+	update(playback: CuePlaybackAddress, cue: number) {
 		return this.owner.updateVia(this.route, playback, cue);
 	}
 
-	delete(playback: number, cue: number) {
+	delete(playback: CuePlaybackAddress, cue: number) {
 		return this.owner.deleteVia(this.route, playback, cue);
 	}
 
-	move(playback: number, cue: number, destination: number) {
+	move(playback: CuePlaybackAddress, cue: number, destination: number) {
 		return this.owner.transferVia(
 			this.route,
 			"MOVE",
@@ -697,7 +702,7 @@ class CueSurface {
 		);
 	}
 
-	copy(playback: number, cue: number, destination: number) {
+	copy(playback: CuePlaybackAddress, cue: number, destination: number) {
 		return this.owner.transferVia(
 			this.route,
 			"COPY",
@@ -707,15 +712,15 @@ class CueSurface {
 		);
 	}
 
-	goto(playback: number, cue: number) {
+	goto(playback: CuePlaybackAddress, cue: number) {
 		return this.owner.gotoVia(this.route, playback, cue);
 	}
 
-	load(playback: number, cue: number) {
+	load(playback: CuePlaybackAddress, cue: number) {
 		return this.owner.loadVia(this.route, playback, cue);
 	}
 
-	select(playback: number, cue: number) {
+	select(playback: CuePlaybackAddress, cue: number) {
 		return this.owner.selectVia(this.route, playback, cue);
 	}
 }
@@ -723,7 +728,7 @@ class CueSurface {
 class CueExpectation {
 	constructor(
 		private readonly owner: BrowserCues,
-		private readonly playback: number,
+		private readonly playback: CuePlaybackAddress,
 		private readonly cue: number,
 	) {}
 
@@ -784,7 +789,7 @@ class CueExpectation {
 class CueListExpectation {
 	constructor(
 		private readonly owner: BrowserCues,
-		private readonly playback: number,
+		private readonly playback: CuePlaybackAddress,
 	) {}
 
 	async configuration(expected: Partial<CueList>) {
@@ -808,47 +813,47 @@ export class BrowserCues {
 		private readonly showId: () => string,
 	) {}
 
-	update(playback: number, cue: number) {
+	update(playback: CuePlaybackAddress, cue: number) {
 		return this.updateVia("ui", playback, cue);
 	}
 
-	delete(playback: number, cue: number) {
+	delete(playback: CuePlaybackAddress, cue: number) {
 		return this.deleteVia("ui", playback, cue);
 	}
 
-	deleteViaApi(playback: number, cue: number) {
+	deleteViaApi(playback: CuePlaybackAddress, cue: number) {
 		return deleteCue(this.api, {
 			surface: "api",
-			address: { type: "pool", playbackNumber: playback },
+			address: { type: "playback", ...validatePlaybackAddress(playback) },
 			cueNumber: formatCueNumber(cue),
 		});
 	}
 
-	move(playback: number, cue: number, destination: number) {
+	move(playback: CuePlaybackAddress, cue: number, destination: number) {
 		return this.transferVia("ui", "MOVE", playback, cue, destination);
 	}
 
-	copy(playback: number, cue: number, destination: number) {
+	copy(playback: CuePlaybackAddress, cue: number, destination: number) {
 		return this.transferVia("ui", "COPY", playback, cue, destination);
 	}
 
-	goto(playback: number, cue: number) {
+	goto(playback: CuePlaybackAddress, cue: number) {
 		return this.gotoVia("ui", playback, cue);
 	}
 
-	load(playback: number, cue: number) {
+	load(playback: CuePlaybackAddress, cue: number) {
 		return this.loadVia("ui", playback, cue);
 	}
 
-	select(playback: number, cue: number) {
+	select(playback: CuePlaybackAddress, cue: number) {
 		return this.selectVia("ui", playback, cue);
 	}
 
-	expect(playback: number, cue: number) {
+	expect(playback: CuePlaybackAddress, cue: number) {
 		return new CueExpectation(this, playback, cue);
 	}
 
-	expectList(playback: number) {
+	expectList(playback: CuePlaybackAddress) {
 		return new CueListExpectation(this, playback);
 	}
 
@@ -856,14 +861,8 @@ export class BrowserCues {
 		return new CueTransferChoice(this.page, this.desk, operation);
 	}
 
-	async openEditor(playback: number) {
+	async openEditor(playback: CuePlaybackAddress) {
 		const cueList = await cueListForPlayback(this.api, this.showId(), playback);
-		const playbackObject = await this.api.showObject<PlaybackDefinition>(
-			this.showId(),
-			"playback",
-			String(playback),
-		);
-		if (!playbackObject) throw new Error(`Playback ${playback} is absent`);
 		await this.page.setViewportSize({ width: 1280, height: 1100 });
 		// The Cuelist Pool is a dock Built-in. SHIFT lives on the playback face of the programmer
 		// surface and the digits on the other, so no single face offers the old SHIFT + 4 shortcut.
@@ -885,7 +884,7 @@ export class BrowserCues {
 		await expect(this.page.locator(".cuelist-pool-window")).toBeVisible();
 		await this.desk.click(
 			this.page.locator(".cuelist-card").filter({
-				hasText: playbackObject.body.name,
+				hasText: cueList.body.name,
 			}),
 		);
 		await expect(this.page.locator(".cue-table")).toBeVisible();
@@ -899,7 +898,7 @@ export class BrowserCues {
 		);
 	}
 
-	async reopenEditor(playback: number) {
+	async reopenEditor(playback: CuePlaybackAddress) {
 		await this.api.openShow(this.showId(), { transition: "hold_current" });
 		await this.page.reload();
 		await expect(this.page.locator(".connection-cover")).toBeHidden({
@@ -908,7 +907,10 @@ export class BrowserCues {
 		return this.openEditor(playback);
 	}
 
-	async configure(playback: number, configuration: CueListConfiguration) {
+	async configure(
+		playback: CuePlaybackAddress,
+		configuration: CueListConfiguration,
+	) {
 		const current = await cueListForPlayback(this.api, this.showId(), playback);
 		const priority = configuration.priority ?? current.body.priority;
 		if (
@@ -945,7 +947,11 @@ export class BrowserCues {
 		});
 	}
 
-	async updateVia(route: CommandRoute, playback: number, cue: number) {
+	async updateVia(
+		route: CommandRoute,
+		playback: CuePlaybackAddress,
+		cue: number,
+	) {
 		await this.mutate(
 			route,
 			playback,
@@ -953,7 +959,11 @@ export class BrowserCues {
 		);
 	}
 
-	async deleteVia(route: CommandRoute, playback: number, cue: number) {
+	async deleteVia(
+		route: CommandRoute,
+		playback: CuePlaybackAddress,
+		cue: number,
+	) {
 		await this.mutate(
 			route,
 			playback,
@@ -964,7 +974,7 @@ export class BrowserCues {
 	async transferVia(
 		route: CommandRoute,
 		operation: "MOVE" | "COPY",
-		playback: number,
+		playback: CuePlaybackAddress,
 		cue: number,
 		destination: number,
 	) {
@@ -1007,36 +1017,52 @@ export class BrowserCues {
 			.toBeGreaterThan(before.revision);
 	}
 
-	async gotoVia(route: CommandRoute, playback: number, cue: number) {
+	async gotoVia(
+		route: CommandRoute,
+		playback: CuePlaybackAddress,
+		cue: number,
+	) {
 		return this.commands.via[route].execute(
 			`GO TO ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
-	async loadVia(route: CommandRoute, playback: number, cue: number) {
+	async loadVia(
+		route: CommandRoute,
+		playback: CuePlaybackAddress,
+		cue: number,
+	) {
 		return this.commands.via[route].execute(
 			`LOAD ${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
-	async selectVia(route: CommandRoute, playback: number, cue: number) {
+	async selectVia(
+		route: CommandRoute,
+		playback: CuePlaybackAddress,
+		cue: number,
+	) {
 		return this.commands.via[route].execute(
 			`${await this.address(playback)} CUE ${formatCueNumber(cue)}`,
 		);
 	}
 
-	async cue(playback: number, cue: number) {
+	async cue(playback: CuePlaybackAddress, cue: number) {
 		const list = await cueListForPlayback(this.api, this.showId(), playback);
 		// A stored Cue carries its dotted path, so the desk's "3" never equals the operator's 3.
 		const number = formatCueNumber(cue);
 		return list.body.cues.find((candidate) => candidate.number === number);
 	}
 
-	async cueList(playback: number) {
+	async cueList(playback: CuePlaybackAddress) {
 		return (await cueListForPlayback(this.api, this.showId(), playback)).body;
 	}
 
-	private async mutate(route: CommandRoute, playback: number, command: string) {
+	private async mutate(
+		route: CommandRoute,
+		playback: CuePlaybackAddress,
+		command: string,
+	) {
 		const before = await cueListForPlayback(this.api, this.showId(), playback);
 		if (route === "ui") await this.ensureCommandSurface();
 		await this.commands.via[route].execute(command);
@@ -1049,9 +1075,9 @@ export class BrowserCues {
 			.toBeGreaterThan(before.revision);
 	}
 
-	private async address(playback: number) {
+	private async address(playback: CuePlaybackAddress) {
 		const location = await playbackLocation(this.api, this.showId(), playback);
-		return `PBK ${location.page} . ${location.slot}`;
+		return `PBK ${location.page} . ${location.position}`;
 	}
 
 	private async ensureCommandSurface() {
@@ -1073,37 +1099,59 @@ export class BrowserCues {
 export async function playbackLocation(
 	api: ApiDriver,
 	showId: string,
-	number: number,
+	address: CuePlaybackAddress,
 ) {
-	validInteger(number, "Playback");
-	const pages = await api.showObjects<any>(showId, "playback_page");
-	for (const page of pages)
-		for (const [slot, playback] of Object.entries(page.body.slots))
-			if (playback === number)
-				return { page: page.body.number as number, slot: Number(slot) };
-	throw new Error(`Playback ${number} is not mapped to a page`);
+	const captured = validatePlaybackAddress(address);
+	const page = await api.showObject<PlaybackPage>(
+		showId,
+		"playback_page",
+		String(captured.page),
+	);
+	if (!page?.body.assignments[String(captured.position)])
+		throw new Error(`Playback ${captured.page}.${captured.position} is absent`);
+	return captured;
 }
 
 export async function cueListForPlayback(
 	api: ApiDriver,
 	showId: string,
-	number: number,
+	address: CuePlaybackAddress,
 ) {
-	const playback = await api.showObject<PlaybackDefinition>(
+	const captured = validatePlaybackAddress(address);
+	const page = await api.showObject<PlaybackPage>(
 		showId,
-		"playback",
-		String(number),
+		"playback_page",
+		String(captured.page),
 	);
-	if (!playback) throw new Error(`Playback ${number} is absent`);
-	if (playback.body.target.type !== "cue_list")
-		throw new Error(`Playback ${number} does not target a Cuelist`);
+	const playback = page?.body.assignments[String(captured.position)];
+	if (!playback)
+		throw new Error(`Playback ${captured.page}.${captured.position} is absent`);
+	if (playback.target.type !== "cue_list")
+		throw new Error(
+			`Playback ${captured.page}.${captured.position} does not target a Cuelist`,
+		);
 	const cueList = await api.showObject<CueList>(
 		showId,
 		"cue_list",
-		playback.body.target.cue_list_id,
+		playback.target.cue_list_id,
 	);
-	if (!cueList) throw new Error(`Playback ${number}'s Cuelist is absent`);
+	if (!cueList)
+		throw new Error(
+			`Playback ${captured.page}.${captured.position}'s Cuelist is absent`,
+		);
 	return cueList;
+}
+
+export function validatePlaybackAddress(
+	address: CuePlaybackAddress,
+): CuePlaybackAddress {
+	for (const [value, max, label] of [
+		[address.page, 99, "Page"],
+		[address.position, 1000, "position"],
+	] as const)
+		if (!Number.isSafeInteger(value) || value < 1 || value > max)
+			throw new Error(`Playback ${label} must be between 1 and ${max}`);
+	return { page: address.page, position: address.position };
 }
 
 export function formatCueNumber(number: number) {

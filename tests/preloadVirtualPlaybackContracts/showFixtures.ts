@@ -183,13 +183,13 @@ export async function setCaptureMask(
 	});
 }
 
-export async function poolAction<T = any>(
+export async function assignedPlaybackAction(
 	api: ApiDriver,
-	number: number,
+	address: { page: number; position: number },
 	action: string,
 	body: Record<string, unknown> = {},
-): Promise<T> {
-	return api.playbackNumberAction<T>(number, action, body);
+) {
+	return api.playbackAction(address, action, body);
 }
 
 export async function playbacks(api: ApiDriver): Promise<any> {

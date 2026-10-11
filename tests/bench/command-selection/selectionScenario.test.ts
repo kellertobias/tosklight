@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PatchedFixture, StoredGroup } from "../../../apps/light-desktop/src/api/types";
+import type {
+	PatchedFixture,
+	StoredGroup,
+} from "../../../apps/light-desktop/src/api/types";
 import { ApiDriver } from "../core/api";
 import {
 	dereferencedGroup,
@@ -119,7 +122,7 @@ function selectionHarness(options: HarnessOptions = {}) {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Desk" },
 	};
 	vi.spyOn(api, "patch").mockResolvedValue({
 		revision: 1,
@@ -214,7 +217,9 @@ function playbackSnapshot() {
 		desk: {
 			scope: { show_id: SHOW_ID, show_revision: 1 },
 			desk_id: DESK_ID,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: [],

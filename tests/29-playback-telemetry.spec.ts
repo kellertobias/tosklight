@@ -47,8 +47,8 @@ test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without p
     .toBe("ready");
   const hydrationSnapshots = snapshotRequests.length;
 
-  await api.playbackNumberAction(1, "go", {});
-  await api.playbackNumberAction(2, "go", {});
+  await api.playbackAction({ page: 1, position: 1 }, "go", {});
+  await api.playbackAction({ page: 1, position: 2 }, "go", {});
 
   // One wall-paced second at the configured 44 Hz output rate. The frame divider (4)
   // must produce ~11 sampled ticks while the fades progress. Using the production

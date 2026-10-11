@@ -79,7 +79,10 @@ scenario(
 
 		await t.page.create(2);
 		await t.page.rename(2, "Second");
-		await t.page.map({ page: 2, slot: 1, playback: second });
+		await t.page.map({
+			sourceAddress: second,
+			targetAddress: { page: 2, position: 1 },
+		});
 		await t.page.expect(2).named("Second");
 
 		await t.playback.via.api.off(first);
@@ -91,6 +94,8 @@ scenario(
 
 		await t.page.via.ui.select(2);
 		await t.playback.via.api.go(currentPagePlayback(1));
+		await t.playback.expect({ page: 2, position: 1 }).runtime({ enabled: true });
+		// Both assignments refer to the same Cuelist and project its shared runtime.
 		await t.playback.expect(second).runtime({ enabled: true });
 
 		await t.playback.via.api.off(first);

@@ -23,7 +23,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				"compact-rig",
 			);
 			const cueListId = await installTwinPlaybacks(api);
-			await api.playbackNumberAction(2, "select", {});
+			await api.playbackAction({ page: 1, position: 2 }, "select", {});
 			await api.executeCommandLine("GO TO PBK 1 CUE 3");
 			await api.executeCommandLine("LOAD PBK 1 . 2 CUE 2");
 			expect(await runtime(api, 1)).toMatchObject({

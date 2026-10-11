@@ -476,7 +476,7 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		};
 
 		// 1. Cue red, the Programmer empty: the colour the lamps show, never the open-white start.
-		await playbackAction(api, 1, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "go");
 		await selectFixtures(api, show.id, ids);
 		await pageColorTo(page, 1);
 		await expect.poll(readings, { message: "red Cue" }).toEqual(["100%", "0%", "0%", "0%"]);
@@ -506,15 +506,15 @@ test.describe("docs/testing/36-semantic-color-controls.md", () => {
 		expect([rgb[1], rgb[2]]).toEqual([0, 0]);
 		await expect(encoder(page, 2).locator(".touch-encoder-value")).toHaveText("0%");
 		await clearProgrammerValues(api, { surface: "api", showId: show.id });
-		await playbackAction(api, 1, "off");
+		await playbackAction(api, { page: 1, position: 1 }, "off");
 
 		// 4. Differing Cue colours across the selection read Mixed; black stays 0%.
-		await playbackAction(api, 2, "go");
+		await playbackAction(api, { page: 1, position: 2 }, "go");
 		await expect.poll(readings, { message: "red and blue Cue" }).toEqual(["Mixed", "0%", "Mixed", "0%"]);
-		await playbackAction(api, 2, "off");
-		await playbackAction(api, 3, "go");
+		await playbackAction(api, { page: 1, position: 2 }, "off");
+		await playbackAction(api, { page: 1, position: 3 }, "go");
 		await expect.poll(readings, { message: "black Cue" }).toEqual(["0%", "0%", "0%", "0%"]);
-		await playbackAction(api, 3, "off");
+		await playbackAction(api, { page: 1, position: 3 }, "off");
 
 		// 5. Nothing gives the fixtures a colour any more: the open-white start again.
 		await expect.poll(readings, { message: "no colour" }).toEqual(["100%", "100%", "100%", "0%"]);

@@ -61,10 +61,10 @@ scenario(
 		await t.playbackConfiguration.prepareActionMatrix();
 		await t.app.open();
 		await t.app.expect.ready();
-		await t.playback.go(43);
-		await t.playback.go(43);
-		await t.playback.goBack(43);
-		await t.playback.expect(43).runtime({ current_cue_number: "1" });
+		await t.playback.go({ page: 1, position: 43 });
+		await t.playback.go({ page: 1, position: 43 });
+		await t.playback.goBack({ page: 1, position: 43 });
+		await t.playback.expect({ page: 1, position: 43 }).runtime({ current_cue_number: "1" });
 		await t.playbackConfiguration.setButton(1, "Top button", "Select contents");
 		await t.playbackConfiguration.expectAssignment(1, {
 			address: {page:1,position:1},
@@ -85,8 +85,8 @@ scenario(
 		await t.playbackConfiguration.prepareCrossfade();
 		await t.app.open();
 		await t.app.expect.ready();
-		await t.playback.fader(47, 25);
-		await t.playback.expect(47).runtime({
+		await t.playback.fader({ page: 1, position: 47 }, 25);
+		await t.playback.expect({ page: 1, position: 47 }).runtime({
 			current_cue_number: "1",
 			manual_xfade_position: 0.25,
 			manual_xfade_progress: 0.25,
@@ -95,8 +95,8 @@ scenario(
 		// The visualization reads the last published frame; publish after the fader write landed.
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.25 });
-		await t.playback.fader(47, 100);
-		await t.playback.expect(47).runtime({
+		await t.playback.fader({ page: 1, position: 47 }, 100);
+		await t.playback.expect({ page: 1, position: 47 }).runtime({
 			current_cue_number: "2",
 			manual_xfade_position: 1,
 			manual_xfade_direction: "towards_low",
@@ -104,10 +104,10 @@ scenario(
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 1 });
 		await t.cue
-			.expect(47, 1)
+			.expect({ page: 1, position: 47 }, 1)
 			.metadata({ fade_millis: 30_000, delay_millis: 10_000 });
 		await t.cue
-			.expect(47, 2)
+			.expect({ page: 1, position: 47 }, 2)
 			.metadata({ fade_millis: 30_000, delay_millis: 10_000 });
 	},
 );
@@ -121,18 +121,18 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.playback.open();
-		await t.playback.via.ui.temp(55);
+		await t.playback.via.ui.temp({ page: 1, position: 55 });
 		await t.playbackConfiguration.expectTemporary(2, true);
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.8 });
 		await t.expectFixtureValue(fixture(2), { intensity: 0.6 });
 		await t.expectFixtureValue(fixture(3), { intensity: 0.4 });
-		await t.playback.via.ui.temp(55);
+		await t.playback.via.ui.temp({ page: 1, position: 55 });
 		await t.playbackConfiguration.expectTemporary(2, false);
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(1), { intensity: 0.3 });
 
-		await t.playback.via.ui.swap(55).hold(async () => {
+		await t.playback.via.ui.swap({ page: 1, position: 55 }).hold(async () => {
 			await t.playbackConfiguration.expectSwap(2, true);
 			await t.clock.advanceBy("0ms");
 			await t.expectFixtureValue(fixture(1), { intensity: 0.8 });
@@ -144,9 +144,9 @@ scenario(
 		await t.expectFixtureValue(fixture(1), { intensity: 0.3 });
 		await t.expectFixtureValue(fixture(2), { intensity: 0.6 });
 		await t.expectFixtureValue(fixture(3), { intensity: 0.4 });
-		await t.playback.expect(54).runtime({ enabled: true });
-		await t.playback.expect(56).runtime({ enabled: true });
-		await t.playback.expect(57).runtime({ enabled: true });
+		await t.playback.expect({ page: 1, position: 54 }).runtime({ enabled: true });
+		await t.playback.expect({ page: 1, position: 56 }).runtime({ enabled: true });
+		await t.playback.expect({ page: 1, position: 57 }).runtime({ enabled: true });
 	},
 );
 

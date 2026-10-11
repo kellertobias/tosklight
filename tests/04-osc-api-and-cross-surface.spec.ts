@@ -266,7 +266,7 @@ test.describe("docs/testing/04-osc-api-and-cross-surface.md", () => {
     api: async ({ api }, state) => {
       state.session = api.session!;
       await setDeskPage(api, state.session, 2);
-      await api.currentPagePlaybackAction(1, "button", {
+      await api.playbackAction({ page: await api.playbackCommandPage(), position: 1 }, "button", {
         button: 1,
         pressed: true,
         surface: "hardware",

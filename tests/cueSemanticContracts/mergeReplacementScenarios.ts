@@ -58,9 +58,9 @@ registerPairedCueScenario<{ completed: boolean }>({
 		};
 
 		let prepared = await prepare("merge-003-full", false);
-		await api.playbackNumberAction(1, "on", {});
+		await api.playbackAction({ page: 1, position: 1 }, "on", {});
 		await bench.tick(1);
-		await api.playbackNumberAction(2, "on", {});
+		await api.playbackAction({ page: 1, position: 2 }, "on", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: false });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
@@ -73,13 +73,13 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ ...definition.body, auto_off: false },
 			definition.revision,
 		);
-		await api.playbackNumberAction(2, "off", {});
-		await api.playbackNumberAction(1, "on", {});
+		await api.playbackAction({ page: 1, position: 2 }, "off", {});
+		await api.playbackAction({ page: 1, position: 1 }, "on", {});
 		await bench.tick(1);
-		await api.playbackNumberAction(2, "on", {});
+		await api.playbackAction({ page: 1, position: 2 }, "on", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
-		await api.playbackNumberAction(2, "off", {});
+		await api.playbackAction({ page: 1, position: 2 }, "off", {});
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
 
@@ -91,26 +91,26 @@ registerPairedCueScenario<{ completed: boolean }>({
 			{ ...definition.body, auto_off: true },
 			definition.revision,
 		);
-		await api.playbackNumberAction(1, "on", {});
-		await api.playbackNumberAction(2, "flash", { pressed: true });
+		await api.playbackAction({ page: 1, position: 1 }, "on", {});
+		await api.playbackAction({ page: 1, position: 2 }, "flash", { pressed: true });
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
-		await api.playbackNumberAction(2, "flash", { pressed: false });
+		await api.playbackAction({ page: 1, position: 2 }, "flash", { pressed: false });
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
-		await api.playbackNumberAction(2, "temp", {});
+		await api.playbackAction({ page: 1, position: 2 }, "temp", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
-		await api.playbackNumberAction(2, "temp", {});
+		await api.playbackAction({ page: 1, position: 2 }, "temp", {});
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
 
 		prepared = await prepare("merge-003-partial", true);
-		await api.playbackNumberAction(1, "on", {});
+		await api.playbackAction({ page: 1, position: 1 }, "on", {});
 		await bench.tick(1);
-		await api.playbackNumberAction(2, "on", {});
+		await api.playbackAction({ page: 1, position: 2 }, "on", {});
 		await bench.tick(0);
 		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
 		expect(await visualizationLevel(api, prepared.fixture, "intensity")).toBe(

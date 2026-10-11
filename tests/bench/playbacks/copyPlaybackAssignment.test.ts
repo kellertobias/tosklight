@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiDriver } from "../core/api";
-import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
+import { copyPlaybackAssignment } from "./copyPlaybackAssignment";
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const SESSION_ID = "22222222-2222-4222-8222-222222222222";
@@ -9,10 +9,10 @@ const REQUEST_ID = "44444444-4444-4444-8444-444444444444";
 const CORRELATION_ID = "55555555-5555-4555-8555-555555555555";
 const CUE_LIST_ID = "66666666-6666-4666-8666-666666666666";
 
-describe("map existing Playback acceptance intent", () => {
+describe("copy Playback assignment acceptance intent", () => {
 	it("captures exact active Show, Page, and Playback authority for one action", async () => {
 		const fetchMock = topologyFetch(changedOutcome());
-		const outcome = await mapExistingPlaybackToSlot(api(), intent(), {
+		const outcome = await copyPlaybackAssignment(api(), intent(), {
 			fetch: fetchMock as typeof fetch,
 			requestId: () => REQUEST_ID,
 		});
@@ -22,10 +22,9 @@ describe("map existing Playback acceptance intent", () => {
 			status: "changed",
 			showRevision: 8,
 			resolution: {
-				kind: "page_slot",
+				kind: "playback",
 				page: 1,
-				slot: 1,
-				playbackNumber: 1,
+				position: 1,
 			},
 		});
 		assertNarrowCalls(fetchMock);
@@ -34,24 +33,26 @@ describe("map existing Playback acceptance intent", () => {
 		expect(JSON.parse(String(action[1]?.body))).toEqual({
 			request_id: REQUEST_ID,
 			action: {
-				type: "map_existing_playback",
-				page: 1,
-				slot: 1,
-				playback_number: 1,
+				type: "assign_playback",
+				address: { page: 1, position: 1 },
+				definition: {
+					...definition(),
+					footprint: { type: "normal" },
+					presentation_icon: null,
+					presentation_image: null,
+				},
 				expected_page_revision: 3,
 				expected_page_object_id: "1",
-				expected_playback_revision: 4,
-				expected_playback_object_id: "1",
 			},
 		});
 	});
 
 	it("accepts a strict replayed no-change outcome without another action", async () => {
 		const fetchMock = topologyFetch(noChangeOutcome(), {
-			page: pageSnapshot({ 1: 1 }),
+			page: pageSnapshot({ 1: definition() }),
 		});
 		await expect(
-			mapExistingPlaybackToSlot(api(), intent(), {
+			copyPlaybackAssignment(api(), intent(), {
 				fetch: fetchMock as typeof fetch,
 				requestId: () => REQUEST_ID,
 			}),
@@ -75,7 +76,7 @@ describe("map existing Playback acceptance intent", () => {
 			{ actionStatus: 409, actionEtag: '"8"' },
 		);
 		await expect(
-			mapExistingPlaybackToSlot(api(), intent(), {
+			copyPlaybackAssignment(api(), intent(), {
 				fetch: fetchMock as typeof fetch,
 			}),
 		).rejects.toMatchObject({
@@ -92,7 +93,7 @@ describe("map existing Playback acceptance intent", () => {
 	it("uses the production strict outcome decoder", async () => {
 		const malformed = { ...changedOutcome(), legacy_payload: {} };
 		await expect(
-			mapExistingPlaybackToSlot(api(), intent(), {
+			copyPlaybackAssignment(api(), intent(), {
 				fetch: topologyFetch(malformed) as typeof fetch,
 			}),
 		).rejects.toThrow(/legacy_payload.*declared wire field/);
@@ -112,17 +113,58 @@ describe("map existing Playback acceptance intent", () => {
 	] as const)("rejects a foreign active %s before mutation", async (_, active, error) => {
 		const fetchMock = topologyFetch(changedOutcome(), { active });
 		await expect(
-			mapExistingPlaybackToSlot(api(), intent(), {
+			copyPlaybackAssignment(api(), intent(), {
 				fetch: fetchMock as typeof fetch,
 			}),
 		).rejects.toThrow(error);
 		expect(actionCalls(fetchMock)).toEqual([]);
 	});
 
+	it("rejects a mixed source Page revision before mutation", async () => {
+		const fetchMock = topologyFetch(changedOutcome(), {
+			playbackShowRevision: 8,
+		});
+		await expect(
+			copyPlaybackAssignment(api(), intent(), {
+				fetch: fetchMock as typeof fetch,
+			}),
+		).rejects.toThrow(/Show authority changed/);
+		expect(actionCalls(fetchMock)).toEqual([]);
+	});
+
+	it.each([
+		false,
+		true,
+	])("rejects replaced session after response (action=%s)", async (late) => {
+		const driver = api();
+		const base = topologyFetch(changedOutcome());
+		const fetchMock = vi.fn(
+			async (input: RequestInfo | URL, init?: RequestInit) => {
+				const response = await base(input);
+				if (
+					String(input).includes(
+						late ? "playback-topology/actions" : "playback-runtime/snapshot",
+					)
+				)
+					driver.session = { ...driver.session!, token: "replacement" };
+				return response;
+			},
+		);
+		await expect(
+			copyPlaybackAssignment(driver, intent(), {
+				fetch: fetchMock as typeof fetch,
+				requestId: () => REQUEST_ID,
+			}),
+		).rejects.toThrow(/session changed/);
+		expect(
+			actionCalls(fetchMock as ReturnType<typeof topologyFetch>),
+		).toHaveLength(late ? 1 : 0);
+	});
+
 	it("rejects a mixed Show revision snapshot before mutation", async () => {
 		const fetchMock = topologyFetch(changedOutcome(), { pageShowRevision: 8 });
 		await expect(
-			mapExistingPlaybackToSlot(api(), intent(), {
+			copyPlaybackAssignment(api(), intent(), {
 				fetch: fetchMock as typeof fetch,
 			}),
 		).rejects.toThrow(/Show authority changed/);
@@ -136,7 +178,7 @@ function api() {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Desk" },
 	};
 	return driver;
 }
@@ -145,9 +187,8 @@ function intent() {
 	return {
 		surface: "api" as const,
 		showId: SHOW_ID,
-		page: 1,
-		slot: 1,
-		playbackNumber: 1,
+		sourceAddress: { page: 2, position: 7 },
+		targetAddress: { page: 1, position: 1 },
 	};
 }
 
@@ -161,7 +202,7 @@ interface FetchOptions {
 }
 
 function topologyFetch(outcome: unknown, options: FetchOptions = {}) {
-	return vi.fn(async (input: RequestInfo | URL) => {
+	return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
 		const url = String(input);
 		if (url.includes("playback-runtime/snapshot"))
 			return json(options.active ?? playbackRuntime());
@@ -173,13 +214,13 @@ function topologyFetch(outcome: unknown, options: FetchOptions = {}) {
 				object_id: "1",
 				object: options.page ?? pageSnapshot(),
 			});
-		if (url.includes("/objects/playback/1"))
+		if (url.includes("/objects/playback_page/2"))
 			return json({
 				show_id: SHOW_ID,
 				show_revision: options.playbackShowRevision ?? 7,
-				kind: "playback",
-				object_id: "1",
-				object: playbackSnapshot(),
+				kind: "playback_page",
+				object_id: "2",
+				object: pageSnapshot({ 7: definition() }, 2),
 			});
 		if (url.includes("/playback-topology/actions"))
 			return json(outcome, options.actionStatus ?? 200, {
@@ -193,8 +234,8 @@ function assertNarrowCalls(fetchMock: ReturnType<typeof topologyFetch>) {
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
 		"http://desk.local/api/v2/playback-runtime/snapshot",
+		"http://desk.local/api/v2/objects/playback_page/2",
 		"http://desk.local/api/v2/objects/playback_page/1",
-		"http://desk.local/api/v2/objects/playback/1",
 		"http://desk.local/api/v2/playback-topology/actions",
 	]);
 	expect(
@@ -215,34 +256,42 @@ function playbackRuntime(showId = SHOW_ID, deskId = DESK_ID) {
 		desk: {
 			scope: { show_id: showId, show_revision: 7 },
 			desk_id: deskId,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: [],
 	};
 }
 
-function pageSnapshot(slots: Record<number, number> = {}) {
+function pageSnapshot(
+	assignments: Record<number, ReturnType<typeof definition>> = {},
+	page = 1,
+) {
 	return {
 		kind: "playback_page",
-		id: "1",
+		id: String(page),
 		revision: 3,
 		updated_at: "2026-07-21T10:00:00Z",
-		body: { number: 1, name: "Main", slots, virtual_playbacks: {} },
+		body: { number: page, name: "Main", assignments },
 	};
 }
 
-function playbackSnapshot() {
+function definition() {
 	return {
-		kind: "playback",
-		id: "1",
-		revision: 4,
-		updated_at: "2026-07-21T10:00:00Z",
-		body: {
-			number: 1,
-			name: "Recorded Playback 1",
-			target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
-		},
+		name: "Recorded Playback 1",
+		target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
+		buttons: ["flash", "go", "off"],
+		button_count: 3,
+		fader: "master",
+		has_fader: true,
+		go_activates: true,
+		auto_off: true,
+		xfade_millis: 0,
+		color: "#20c997",
+		flash_release: "release_all",
+		protect_from_swap: false,
 	};
 }
 
@@ -252,10 +301,9 @@ function changedOutcome() {
 		correlation_id: CORRELATION_ID,
 		show_revision: 8,
 		resolution: {
-			kind: "page_slot",
+			kind: "playback",
 			page: 1,
-			slot: 1,
-			playback_number: 1,
+			position: 1,
 		},
 		status: "changed",
 		objects: [pageOutcome(4)],
@@ -284,8 +332,7 @@ function pageOutcome(revision: number) {
 		body: {
 			number: 1,
 			name: "Main",
-			slots: { 1: 1 },
-			virtual_playbacks: {},
+			assignments: { 1: definition() },
 		},
 	};
 }

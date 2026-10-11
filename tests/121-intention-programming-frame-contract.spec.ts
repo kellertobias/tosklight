@@ -346,12 +346,12 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		await both(20, -30, "preset");
 		await clearProgrammer(api, rig);
 		await select(api, rig, []);
-		await playbackAction(api, 1, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "go");
 		await both(20, -30, "Cue");
-		await playbackAction(api, 1, "off");
-		await playbackAction(api, 2, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "off");
+		await playbackAction(api, { page: 1, position: 2 }, "go");
 		await both(-15, 25, "Group Cue");
-		await playbackAction(api, 2, "off");
+		await playbackAction(api, { page: 1, position: 2 }, "off");
 		expect(await presetBody(api, rig, "Position", 1)).toEqual(preset);
 
 		// Preload GO commits the prepared Angles to Live in one step.
@@ -585,10 +585,10 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		await replaceFixture(api, lamp, { number: 1, address: "1.1", ...CMY });
 		await clearProgrammer(api, rig);
 		await select(api, rig, []);
-		await playbackAction(api, 1, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "go");
 		await bench.tick(1_000);
 		expect(await channels(bench, 1, 4)).toEqual([255, 0, 255, 0]);
-		await playbackAction(api, 1, "off");
+		await playbackAction(api, { page: 1, position: 1 }, "off");
 		expect(await records(), "fitted output never replaces the semantic records").toEqual(before);
 	});
 
@@ -790,13 +790,13 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		await recordPlayback(api, 1);
 		await clearProgrammer(api, rig);
 		await select(api, rig, []);
-		await playbackAction(api, 1, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "go");
 		expectAngles(await poseAfter(api, bench, mover, 1_000), -40, -20, "static Current");
-		await seedDynamicPlayback(api, rig, 3, { ...(await createDynamic(api, rig, holdAt(3, mover))), pool_number: 3 }, true);
-		await seedDynamicPlayback(api, rig, 4, { ...(await createDynamic(api, rig, holdAt(4, mover))), pool_number: 4 }, false);
+		await seedDynamicPlayback(api, rig, { page: 1, position: 3 }, { ...(await createDynamic(api, rig, holdAt(3, mover))), pool_number: 3 }, true);
+		await seedDynamicPlayback(api, rig, { page: 1, position: 4 }, { ...(await createDynamic(api, rig, holdAt(4, mover))), pool_number: 4 }, false);
 		// The virtual fader of each standalone Dynamic Playback (see the physical-fader bug below).
 		const master = async (playback: number, value: number) => {
-			await playbackAction(api, playback, "master", { value, surface: "virtual" });
+			await playbackAction(api, { page: 1, position: playback }, "master", { value, surface: "virtual" });
 			return poseAfter(api, bench, mover, 1_000);
 		};
 		// Crossfade: the endpoint blends from static Current; zero is a Current-valued vote.
@@ -804,12 +804,12 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		expectAngles(await master(3, 0.5), 0, 0, "crossfade half");
 		expectAngles(await master(3, 0.25), -20, -10, "crossfade quarter");
 		expectAngles(await master(3, 0), -40, -20, "crossfade zero");
-		await playbackAction(api, 3, "off");
+		await playbackAction(api, { page: 1, position: 3 }, "off");
 		// No crossfade: a positive master leaves the endpoint intact; zero casts no vote.
 		expectAngles(await master(4, 1), 40, 20, "no crossfade full");
 		expectAngles(await master(4, 0.25), 40, 20, "no crossfade quarter");
 		expectAngles(await master(4, 0), -40, -20, "no crossfade zero");
-		await playbackAction(api, 4, "off");
+		await playbackAction(api, { page: 1, position: 4 }, "off");
 	});
 
 	test("INTENT-FRAME-006 @api › the physical fader of a Dynamic Playback moves its master", async ({
@@ -820,11 +820,11 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		const [mover] = rig.movers;
 		await select(api, rig, []);
 		const dynamic = await createDynamic(api, rig, holdAt(3, mover));
-		await seedDynamicPlayback(api, rig, 3, { ...dynamic, pool_number: 3 }, true);
-		await playbackAction(api, 3, "master", { value: 1 });
+		await seedDynamicPlayback(api, rig, { page: 1, position: 3 }, { ...dynamic, pool_number: 3 }, true);
+		await playbackAction(api, { page: 1, position: 3 }, "master", { value: 1 });
 		// The runtime instance starts on the next output frame; the bench clock is manual.
 		await bench.tick(25);
-		await playbackAction(api, 3, "master", { value: 0.5 });
+		await playbackAction(api, { page: 1, position: 3 }, "master", { value: 0.5 });
 		expectAngles(await poseAfter(api, bench, mover, 1_000), 20, 10, "half master from home");
 	});
 
@@ -841,16 +841,16 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		await recordPlayback(api, 1);
 		await clearProgrammer(api, rig);
 		await select(api, rig, []);
-		await playbackAction(api, 1, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "go");
 		await bench.tick(1_000);
 		expect(await channels(bench, 1, 4)).toEqual([255, 255, 0, 255]);
 		// A fresh fader picks the master up at Full before it moves it.
-		await playbackAction(api, 1, "master", { value: 1 });
+		await playbackAction(api, { page: 1, position: 1 }, "master", { value: 1 });
 		for (const [level, dimmer] of [
 			[0.5, 128],
 			[0, 0],
 		] as const) {
-			await playbackAction(api, 1, "master", { value: level });
+			await playbackAction(api, { page: 1, position: 1 }, "master", { value: level });
 			await bench.tick(25);
 			expect(await channels(bench, 1, 4), `master ${level}`).toEqual([dimmer, 255, 0, 255]);
 		}
@@ -868,17 +868,17 @@ test.describe("docs/testing/32-intention-programming-frame-contract.md", () => {
 		await recordPlayback(api, 1);
 		await clearProgrammer(api, rig);
 		await select(api, rig, []);
-		await playbackAction(api, 1, "go");
+		await playbackAction(api, { page: 1, position: 1 }, "go");
 		const dynamic = await createDynamic(api, rig, holdAt(3, mover));
-		await seedDynamicPlayback(api, rig, 3, { ...dynamic, pool_number: 3 }, true);
-		await playbackAction(api, 3, "master", { value: 1, surface: "virtual" });
-		await playbackAction(api, 3, "master", { value: 0.5, surface: "virtual" });
+		await seedDynamicPlayback(api, rig, { page: 1, position: 3 }, { ...dynamic, pool_number: 3 }, true);
+		await playbackAction(api, { page: 1, position: 3 }, "master", { value: 1, surface: "virtual" });
+		await playbackAction(api, { page: 1, position: 3 }, "master", { value: 0.5, surface: "virtual" });
 		expectAngles(await poseAfter(api, bench, mover, 1_000), 0, 0, "half master");
 		expect(
 			await api.executeCommandLineRaw("FIXTURE 1 ATTRIBUTE PAN FIXAT POSITION PRESET 1"),
 		).toMatchObject({ outcome: "accepted" });
 		expectAngles(await poseAfter(api, bench, mover, 1_000), 5, 0, "masked Pan, mastered Tilt");
-		await playbackAction(api, 3, "master", { value: 0.25, surface: "virtual" });
+		await playbackAction(api, { page: 1, position: 3 }, "master", { value: 0.25, surface: "virtual" });
 		expectAngles(await poseAfter(api, bench, mover, 1_000), 5, -10, "the mask ignores the master");
 	});
 });

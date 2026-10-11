@@ -88,7 +88,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			surface: "api",
 			showId: state.showId,
 		});
-		await api.playbackNumberAction(1, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		expect(logicalSlots(await bench.tick(3_000), 4)).toEqual(
 			Array(4).fill(255),
 		);
@@ -134,7 +134,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			surface: "api",
 			showId: state.showId,
 		});
-		await api.playbackNumberAction(playbackNumber, "go", {});
+		await api.playbackAction({ page: 1, position: playbackNumber }, "go", {});
 		await expect
 			.poll(async () => runtime(api, playbackNumber))
 			.toMatchObject({ current_cue_number: "1", enabled: true });
@@ -215,12 +215,12 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			[1, 1, 1],
 		];
 		for (const groups of trackedSequence) {
-			await api.playbackNumberAction(1, "go", {});
+			await api.playbackAction({ page: 1, position: 1 }, "go", {});
 			expect(logicalSlots(await bench.tick(0), 12)).toEqual(
 				groups.flatMap((value) => Array(4).fill(value * 255)),
 			);
 		}
-		await api.playbackNumberAction(1, "off", {});
+		await api.playbackAction({ page: 1, position: 1 }, "off", {});
 
 		await setProgrammerGroupValue(api, {
 			surface: "api",
@@ -306,12 +306,12 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			await closeWebSocket(stream.socket, "CUE-001 event stream");
 		}
 
-		await api.playbackNumberAction(1, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual([
 			...Array(4).fill(255),
 			...Array(8).fill(0),
 		]);
-		await api.playbackNumberAction(1, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual([
 			...Array(4).fill(255),
 			...Array(4).fill(0),

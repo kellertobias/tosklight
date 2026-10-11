@@ -23,7 +23,7 @@ import {
 	type PreloadPlaybackPairState,
 	playbackCard,
 	playbacks,
-	poolAction,
+	assignedPlaybackAction,
 	prepare,
 	setCaptureMask,
 	summarizePlaybackState,
@@ -62,9 +62,9 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 			Object.fromEntries(specs.map((spec, index) => [index + 1, spec.number])),
 		);
 		await setCaptureMask(api, false, true, false, 2_000, 7_000);
-		await poolAction(api, 3, "go");
-		await poolAction(api, 3, "go");
-		await poolAction(api, 4, "go");
+		await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
+		await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
+		await assignedPlaybackAction(api, { page: 1, position: 4 }, "go");
 		return prepared;
 	},
 	api: async ({ api, bench }, state) => {
@@ -81,7 +81,7 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 			[6, "temp-on"],
 			[6, "temp-off"],
 		] as const)
-			await poolAction(api, number, action, { surface: "physical" });
+			await assignedPlaybackAction(api, { page: 1, position: number }, action, { surface: "physical" });
 		state.pendingActions = (await programmer(api)).preload_playback_pending.map(
 			(entry: any) => entry.action,
 		);
@@ -204,15 +204,15 @@ const preload002ApiSupplement = async ({
 		),
 	);
 	await setCaptureMask(api, false, true, false, 2_000, 7_000);
-	await poolAction(api, 2, "go");
-	await poolAction(api, 2, "go");
-	await poolAction(api, 3, "go");
-	await poolAction(api, 3, "off");
-	await poolAction(api, 4, "go");
-	await poolAction(api, 5, "go");
-	await poolAction(api, 5, "off");
-	await poolAction(api, 7, "temp-on");
-	await poolAction(api, 9, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 2 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 2 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 3 }, "off");
+	await assignedPlaybackAction(api, { page: 1, position: 4 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 5 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 5 }, "off");
+	await assignedPlaybackAction(api, { page: 1, position: 7 }, "temp-on");
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go");
 
 	await enterProgrammerPreload(api, {
 		surface: "api",
@@ -237,25 +237,25 @@ const preload002ApiSupplement = async ({
 		[7, "temp-off"],
 	] as const;
 	for (const [number, action] of verbs)
-		await poolAction(api, number, action, { surface: "physical" });
+		await assignedPlaybackAction(api, { page: 1, position: number }, action, { surface: "physical" });
 	expect(
 		(await programmer(api)).preload_playback_pending.map(
 			(entry: any) => entry.action,
 		),
 	).toEqual(verbs.map(([, action]) => action));
 
-	await poolAction(api, 8, "button", {
+	await assignedPlaybackAction(api, { page: 1, position: 8 }, "button", {
 		button: 3,
 		pressed: true,
 		surface: "physical",
 	});
 	expect((await activePlayback(api, 8))?.flash).toBe(true);
-	await poolAction(api, 8, "button", {
+	await assignedPlaybackAction(api, { page: 1, position: 8 }, "button", {
 		button: 3,
 		pressed: false,
 		surface: "physical",
 	});
-	await poolAction(api, 8, "master", { value: 0.4, surface: "physical" });
+	await assignedPlaybackAction(api, { page: 1, position: 8 }, "master", { value: 0.4, surface: "physical" });
 	expect(await activePlayback(api, 8)).toMatchObject({ enabled: true });
 	expect((await activePlayback(api, 8))?.fader_position).toBeCloseTo(0.4, 5);
 	expect(
@@ -264,9 +264,9 @@ const preload002ApiSupplement = async ({
 		),
 	).toEqual(verbs.map(([, action]) => action));
 
-	await poolAction(api, 9, "go", { surface: "physical" });
-	await poolAction(api, 9, "go", { surface: "physical" });
-	await poolAction(api, 9, "go", { surface: "virtual" });
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", { surface: "physical" });
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", { surface: "physical" });
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", { surface: "virtual" });
 	expect((await activePlayback(api, 9))?.current_cue_number).toBe("2");
 	expect(
 		(await programmer(api)).preload_playback_pending
@@ -360,11 +360,11 @@ const preload002UiSupplement = async ({
 		Object.fromEntries(specs.map((spec, index) => [index + 1, spec.number])),
 	);
 	await setCaptureMask(api, false, true, false, 2_000, 7_000);
-	await poolAction(api, 3, "go");
-	await poolAction(api, 3, "go");
-	await poolAction(api, 4, "go");
-	await poolAction(api, 5, "go");
-	await poolAction(api, 5, "off");
+	await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 4 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 5 }, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 5 }, "off");
 	await desk.open(bench.baseUrl);
 	await openPlaybackMode(page);
 	await page.getByRole("button", { name: "PRELOAD", exact: true }).click();

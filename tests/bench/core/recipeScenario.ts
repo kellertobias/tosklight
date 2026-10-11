@@ -1,5 +1,8 @@
 import type { BrowserScenarioWorld } from "./browserScenario";
-import type { PaneHandle, PanePlacement } from "../window-system/desktopScenario";
+import type {
+	PaneHandle,
+	PanePlacement,
+} from "../window-system/desktopScenario";
 import { Show, type DefinedShow } from "../show/showCatalog";
 import type { OperatorPaneType } from "../window-system/paneTypes";
 import type { SelectionTarget } from "../command-selection/selectionContract";
@@ -21,9 +24,9 @@ interface TestRecipeTypes {
 	};
 	"record-two-cue-dimmer-show": {
 		options: {
-			playback: number;
+			playback: { page: number; position: number };
 			selection: readonly SelectionTarget[];
-		low?: number;
+			low?: number;
 			high?: number;
 		};
 		result: void;
@@ -77,9 +80,14 @@ export function defineTestRecipe<N extends TestRecipeName>(
 	routes: readonly TestRecipeRoute[],
 	execute: TestRecipeDefinition<N>["execute"],
 ): void {
-	if (registry.has(name)) throw new Error(`Test recipe "${name}" is already registered`);
-	if (routes.length === 0) throw new Error(`Test recipe "${name}" must support at least one route`);
-	registry.set(name, { routes, execute } as TestRecipeDefinition<TestRecipeName>);
+	if (registry.has(name))
+		throw new Error(`Test recipe "${name}" is already registered`);
+	if (routes.length === 0)
+		throw new Error(`Test recipe "${name}" must support at least one route`);
+	registry.set(name, {
+		routes,
+		execute,
+	} as TestRecipeDefinition<TestRecipeName>);
 }
 
 export class BrowserRecipes {

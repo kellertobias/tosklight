@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { HttpPlaybackTopologyTransport } from "../../../apps/light-desktop/src/api/PlaybackTopologyTransport";
 import { HttpProgrammerCaptureModeTransport } from "../../../apps/light-desktop/src/api/ProgrammerCaptureModeTransport";
 import { HttpProgrammerPreloadValuesTransport } from "../../../apps/light-desktop/src/api/ProgrammerPreloadValuesTransport";
+import type { PlaybackAddress } from "../../../apps/light-desktop/src/features/playbackTopology/contracts";
 import type { AttributeValue } from "../../../apps/light-desktop/src/api/types/playback";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
@@ -11,29 +12,33 @@ import {
 	goProgrammerPreload,
 	releaseProgrammerPreload,
 } from "../programmer/programmerPreloadLifecycle";
-import { mapExistingPlaybackToSlot } from "./mapExistingPlaybackToSlot";
+import { copyPlaybackAssignment } from "./copyPlaybackAssignment";
 import type { BrowserPlaybacks } from "./playbackScenario";
-import type { VirtualPlaybackIdentity } from "./virtualPlaybackScenario";
+import { HttpPreloadScopeTransport } from "../../../apps/light-desktop/src/features/playbackPreloadScope/transport";
+import { preloadScopeText } from "../../../apps/light-desktop/src/features/playbackPreloadScope/scopeText";
+import type {
+	PlaybackPreloadScope,
+	PlaybackControlSource,
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 
 type PageRoute = "ui" | "api";
 type PreloadRoute = "ui" | "api";
 
 export interface PreloadCaptureConfiguration {
 	programmer: boolean;
-	physicalPlaybacks: boolean;
-	virtualPlaybacks: boolean;
+	playbackScope: PlaybackPreloadScope;
 	programmerFade: number;
 	cueFade: number;
 }
 
 export type PreloadCaptureMask = Pick<
 	PreloadCaptureConfiguration,
-	"programmer" | "physicalPlaybacks" | "virtualPlaybacks"
+	"programmer" | "playbackScope"
 >;
 
 export interface PendingPreloadExpectation {
 	groupIds: string[];
-	playbackActions: Array<[number | VirtualPlaybackIdentity, string, string]>;
+	playbackActions: Array<[PlaybackAddress, string, PlaybackControlSource]>;
 }
 
 interface ProgrammerPreloadProjection {
@@ -41,10 +46,9 @@ interface ProgrammerPreloadProjection {
 	preload_group_pending: Record<string, unknown>;
 	preload_group_active: Record<string, Record<string, { changed_at?: string }>>;
 	preload_playback_pending: Array<{
-		playback_number: number;
-		page?: number;
+		address: PlaybackAddress;
 		action: string;
-		surface: string;
+		control_source: PlaybackControlSource;
 	}>;
 }
 
@@ -112,20 +116,17 @@ export class BrowserPages {
 	}
 
 	expect(number: number) {
-		return new PageExpectation(this, valid(number, "Playback Page"));
+		return new PageExpectation(this, validPage(number));
 	}
 
 	async selectVia(route: PageRoute, number: number) {
-		number = valid(number, "Playback Page");
+		number = validPage(number);
 		if (route === "api") {
 			const session = this.session();
 			await this.api.request(
 				"POST",
-				`/api/v2/control-desk/actions`,
-				{
-					request_id: crypto.randomUUID(),
-					action: { type: "set_page", page: number, existing_only: true },
-				},
+				`/api/v2/playback-surfaces/${encodeURIComponent(await this.currentSurface())}/page`,
+				{ page: number },
 				true,
 				undefined,
 				{ showId: this.showId(), deskId: session.desk.id },
@@ -158,7 +159,7 @@ export class BrowserPages {
 	}
 
 	async create(number: number) {
-		number = valid(number, "Playback Page");
+		number = validPage(number);
 		await this.topology({
 			type: "create_page",
 			page: number,
@@ -180,23 +181,30 @@ export class BrowserPages {
 		await this.expect(number).named(name);
 	}
 
-	async map(intent: { page: number; slot: number; playback: number }) {
-		await mapExistingPlaybackToSlot(this.api, {
+	async map(intent: {
+		sourceAddress: PlaybackAddress;
+		targetAddress: PlaybackAddress;
+	}) {
+		await copyPlaybackAssignment(this.api, {
 			surface: "api",
 			showId: this.showId(),
-			page: valid(intent.page, "Playback Page"),
-			slot: valid(intent.slot, "Playback slot"),
-			playbackNumber: valid(intent.playback, "Playback"),
+			sourceAddress: intent.sourceAddress,
+			targetAddress: intent.targetAddress,
 		});
 	}
 
 	async current() {
+		return (await this.runtimeDesk()).command_page;
+	}
+	private async currentSurface() {
+		return (await this.runtimeDesk()).selected_surface_id;
+	}
+	private async runtimeDesk() {
 		return (
-			await this.api.request<{ active_page: number }>(
-				"GET",
-				"/api/v2/playback-overview",
-			)
-		).active_page;
+			await this.api.request<{
+				desk: { command_page: number; selected_surface_id: string };
+			}>("GET", "/api/v2/playback-overview")
+		).desk;
 	}
 
 	object(number: number) {
@@ -265,59 +273,52 @@ class PreloadSurface {
 export class PreloadSettings {
 	readonly expect = {
 		mask: async (mask: PreloadCaptureMask) => {
-			const expected = [
-				mask.programmer,
-				mask.physicalPlaybacks,
-				mask.virtualPlaybacks,
-			];
 			await expect
-				.poll(async () => {
-					const configuration = await this.configuration();
-					return [
-						configuration.preload_programmer_changes,
-						configuration.preload_physical_playback_actions,
-						configuration.preload_virtual_playback_actions,
-					];
-				})
-				.toEqual(expected);
-			for (const [index, label] of PRELOAD_MASK_LABELS.entries())
-				await expect(
-					this.page.getByRole("switch", { name: label }),
-				).toBeChecked({
-					checked: expected[index],
-				});
+				.poll(async () => ({
+					programmer: (await this.configuration()).preload_programmer_changes,
+					playbackScope: (
+						await this.scopeTransport().loadSnapshot({ showId: this.showId() })
+					).scope,
+				}))
+				.toEqual(mask);
+			await expect(
+				this.page.getByRole("switch", { name: "Preload programmer changes" }),
+			).toBeChecked({ checked: mask.programmer });
+			const text = preloadScopeText(mask.playbackScope);
+			await expect(
+				this.page.getByLabel("Playback position ranges"),
+			).toHaveValue(text.positions);
+			await expect(
+				this.page.getByRole("switch", { name: "All pages" }),
+			).toBeChecked({ checked: text.allPages });
 		},
 	};
-
 	constructor(
 		private readonly api: ApiDriver,
 		private readonly page: Page,
 		private readonly desk: DeskDriver,
+		private readonly showId: () => string,
 	) {}
-
 	async configure(mask: PreloadCaptureMask): Promise<void> {
-		const desired = [
-			mask.programmer,
-			mask.physicalPlaybacks,
-			mask.virtualPlaybacks,
-		];
-		for (const [index, label] of PRELOAD_MASK_LABELS.entries()) {
-			const control = this.page.getByRole("switch", { name: label });
-			if ((await control.isChecked()) !== desired[index])
-				await this.desk.click(
-					control.locator("..").locator(".ui-switch-track"),
-				);
-		}
-		await expect
-			.poll(async () => {
-				const configuration = await this.configuration();
-				return [
-					configuration.preload_programmer_changes,
-					configuration.preload_physical_playback_actions,
-					configuration.preload_virtual_playback_actions,
-				];
-			})
-			.toEqual(desired);
+		const control = this.page.getByRole("switch", {
+			name: "Preload programmer changes",
+		});
+		if ((await control.isChecked()) !== mask.programmer)
+			await this.desk.click(control.locator("..").locator(".ui-switch-track"));
+		const text = preloadScopeText(mask.playbackScope);
+		await this.page.getByLabel("Playback position ranges").fill(text.positions);
+		const pages = this.page.getByRole("switch", { name: "All pages" });
+		if ((await pages.isChecked()) !== text.allPages)
+			await this.desk.click(pages.locator("..").locator(".ui-switch-track"));
+		if (!text.allPages)
+			await this.page.getByLabel("Eligible pages").fill(text.pages);
+		await this.desk.click(
+			this.page.getByRole("button", {
+				name: "Save playback eligibility",
+				exact: true,
+			}),
+		);
+		await this.expect.mask(mask);
 		await this.desk.click(
 			this.page.getByRole("button", { name: "Outputs", exact: true }),
 		);
@@ -325,17 +326,21 @@ export class PreloadSettings {
 			this.page.getByRole("button", { name: "Others", exact: true }),
 		);
 	}
-
 	private configuration() {
 		return this.api
-			.request<{
-				configuration: {
-					preload_programmer_changes: boolean;
-					preload_physical_playback_actions: boolean;
-					preload_virtual_playback_actions: boolean;
-				};
-			}>("GET", "/api/v2/configuration")
-			.then((response) => response.configuration);
+			.request<{ configuration: { preload_programmer_changes: boolean } }>(
+				"GET",
+				"/api/v2/configuration",
+			)
+			.then((r) => r.configuration);
+	}
+	private scopeTransport() {
+		if (!this.api.session)
+			throw new Error("Preload settings require an API session");
+		return new HttpPreloadScopeTransport({
+			baseUrl: this.api.baseUrl,
+			sessionToken: this.api.session.token,
+		});
 	}
 }
 
@@ -351,10 +356,9 @@ export class BrowserPreload {
 			expect(await this.pendingPlaybackActions()).toEqual(actions),
 		pending: async (expected: PendingPreloadExpectation) =>
 			expect.poll(() => this.pending()).toEqual(expected),
-		atomicCommit: async (
-			groupId: string,
-			playbacks: Array<number | VirtualPlaybackIdentity>,
-		) => {
+		pendingMatching: async (expected: unknown) =>
+			expect.poll(() => this.pending()).toMatchObject(expected),
+		atomicCommit: async (groupId: string, playbacks: PlaybackAddress[]) => {
 			if (playbacks.length < 1)
 				throw new Error("Atomic Preload commit requires a Playback");
 			await expect
@@ -364,11 +368,8 @@ export class BrowserPreload {
 						programmer.preload_group_active[groupId]?.intensity?.changed_at;
 					const playbackTimestamps = await Promise.all(
 						playbacks.map(async (identity) => {
-							const runtime =
-								typeof identity === "number"
-									? await this.playbacks.runtime(identity)
-									: await this.virtualRuntime(identity);
-							return runtime?.activated_at ?? runtime?.runtime?.activated_at;
+							const runtime = await this.playbacks.runtime(identity);
+							return runtimeActivationTimestamp(runtime);
 						}),
 					);
 					const timestamps = [groupTimestamp, ...playbackTimestamps].map(
@@ -401,17 +402,26 @@ export class BrowserPreload {
 	}
 
 	async configure(configuration: PreloadCaptureConfiguration) {
-		const current = await this.api.request<{
-			configuration: Record<string, unknown>;
-		}>("GET", "/api/v2/configuration");
-		await this.api.request("PUT", "/api/v2/configuration", {
-			...current.configuration,
-			programmer_fade_millis: configuration.programmerFade,
-			sequence_master_fade_millis: configuration.cueFade,
-			preload_programmer_changes: configuration.programmer,
-			preload_physical_playback_actions: configuration.physicalPlaybacks,
-			preload_virtual_playback_actions: configuration.virtualPlaybacks,
+		await this.api.request("POST", "/api/v2/configuration/update", {
+			request_id: crypto.randomUUID(),
+			patch: {
+				programmer_fade_millis: configuration.programmerFade,
+				sequence_master_fade_millis: configuration.cueFade,
+				preload_programmer_changes: configuration.programmer,
+			},
 		});
+		const transport = new HttpPreloadScopeTransport({
+			baseUrl: this.api.baseUrl,
+			sessionToken: this.session().token,
+		});
+		const scope = { showId: this.showId() };
+		const snapshot = await transport.loadSnapshot(scope);
+		await transport.save(
+			scope,
+			snapshot.revision,
+			configuration.playbackScope,
+			crypto.randomUUID(),
+		);
 	}
 
 	async openSettings(): Promise<PreloadSettings> {
@@ -426,10 +436,10 @@ export class BrowserPreload {
 		);
 		await expect(
 			this.page.getByRole("switch", {
-				name: PRELOAD_MASK_LABELS[0],
+				name: "Preload programmer changes",
 			}),
 		).toBeVisible();
-		return new PreloadSettings(this.api, this.page, this.desk);
+		return new PreloadSettings(this.api, this.page, this.desk, this.showId);
 	}
 
 	async startVia(route: PreloadRoute) {
@@ -531,7 +541,7 @@ export class BrowserPreload {
 		const snapshot = await new HttpProgrammerCaptureModeTransport({
 			baseUrl: this.api.baseUrl,
 			sessionToken: session.token,
-		}).loadSnapshot({ showId: this.showId(), sessionId: session.session_id });
+		}).loadSnapshot({ showId: this.showId() });
 		return snapshot.projection.blind;
 	}
 
@@ -545,40 +555,10 @@ export class BrowserPreload {
 		const programmer = await this.programmer();
 		return {
 			groupIds: Object.keys(programmer.preload_group_pending).sort(),
-			playbackActions: programmer.preload_playback_pending.map((entry) => [
-				entry.surface === "virtual" && entry.page != null
-					? {
-							page: entry.page,
-							playbackNumber: entry.playback_number,
-						}
-					: entry.playback_number,
-				entry.action,
-				entry.surface,
-			]),
+			playbackActions: pendingPlaybackTuples(
+				programmer.preload_playback_pending,
+			),
 		};
-	}
-
-	private async virtualRuntime(
-		identity: VirtualPlaybackIdentity,
-	): Promise<any> {
-		const session = this.session();
-		const snapshot = await this.api.request<any>(
-			"POST",
-			"/api/v2/playback-runtime/snapshot",
-			{
-				identities: [
-					{
-						kind: "virtual",
-						page: identity.page,
-						playback_number: identity.playbackNumber,
-					},
-				],
-			},
-			true,
-			undefined,
-			{ showId: this.showId(), deskId: session.desk.id },
-		);
-		return snapshot.projections?.[0];
 	}
 
 	private async programmer(): Promise<ProgrammerPreloadProjection> {
@@ -587,9 +567,9 @@ export class BrowserPreload {
 			"GET",
 			"/api/v2/programmers",
 		);
-		const programmer =
-			programmers.find((candidate) => candidate.session_id === sessionId) ??
-			programmers[0];
+		const programmer = programmers.find(
+			(candidate) => candidate.session_id === sessionId,
+		);
 		if (!programmer) throw new Error("No Programmer projection is available");
 		return programmer;
 	}
@@ -605,11 +585,15 @@ export class BrowserPreload {
 	}
 }
 
-const PRELOAD_MASK_LABELS = [
-	"Preload programmer changes",
-	"Preload physical playback actions",
-	"Preload virtual playback actions",
-] as const;
+export function pendingPlaybackTuples(
+	entries: ProgrammerPreloadProjection["preload_playback_pending"],
+): PendingPreloadExpectation["playbackActions"] {
+	return entries.map((entry) => [
+		{ page: entry.address.page, position: entry.address.position },
+		entry.action,
+		{ ...entry.control_source },
+	]);
+}
 
 function valid(value: number, label: string) {
 	if (!Number.isSafeInteger(value) || value < 1)
@@ -621,4 +605,16 @@ function normalizeCommitTimestamp(value: unknown): number | null {
 	if (typeof value !== "string" && typeof value !== "number") return null;
 	const millis = typeof value === "number" ? value : Date.parse(value);
 	return Number.isFinite(millis) ? millis : null;
+}
+
+function validPage(number: number) {
+	if (!Number.isSafeInteger(number) || number < 1 || number > 99)
+		throw new Error("Playback Pages are 1–99");
+	return number;
+}
+
+function runtimeActivationTimestamp(value: unknown): unknown {
+	if (!value || typeof value !== "object") return null;
+	if ("activated_at" in value) return value.activated_at;
+	return "runtime" in value ? runtimeActivationTimestamp(value.runtime) : null;
 }

@@ -6,6 +6,7 @@ import type {
 import type {
 	CueList,
 	PlaybackDefinition,
+	PlaybackPage,
 } from "../../../apps/light-desktop/src/api/types/playback";
 import { openPatch, patchFixtureRow } from "../../support/foundational/ui";
 
@@ -184,7 +185,11 @@ export class BrowserMoveInBlack {
 			false,
 		);
 		await this.api.cueListPlaybackAction(installation.cueListId, "release", {});
-		await this.api.playbackNumberAction(installation.playback, "off", {});
+		await this.api.playbackAction(
+			{ page: 1, position: installation.playback },
+			"off",
+			{},
+		);
 	}
 
 	async reopenPatch(): Promise<void> {
@@ -334,7 +339,7 @@ export class BrowserMoveInBlack {
 			fadeMillis = 0,
 		) => ({
 			id: crypto.randomUUID(),
-			number,
+			number: String(number),
 			name: `Cue ${number}`,
 			changes,
 			group_changes: [],
@@ -387,7 +392,6 @@ export class BrowserMoveInBlack {
 		cueListId: string,
 	): Promise<void> {
 		const playback: PlaybackDefinition = {
-			number,
 			name: "MIB",
 			target: { type: "cue_list", cue_list_id: cueListId },
 			buttons: ["go_minus", "go", "flash"],
@@ -399,36 +403,19 @@ export class BrowserMoveInBlack {
 			flash_release: "release_all",
 			protect_from_swap: false,
 		};
-		await this.api.seedShowObject(
+		const page = await this.api.showObject<PlaybackPage>(
 			this.showId(),
-			"playback",
-			String(number),
-			playback,
-			(await this.api.showObject(this.showId(), "playback", String(number)))
-				?.revision ?? 0,
+			"playback_page",
+			"1",
 		);
-		const page =
-			(await this.api.showObject<Record<string, unknown>>(
-				this.showId(),
-				"playback_page",
-				"1",
-			)) ?? null;
-		const body = page?.body ?? {};
 		await this.api.seedShowObject(
 			this.showId(),
 			"playback_page",
 			"1",
 			{
-				...body,
 				number: 1,
-				name: typeof body.name === "string" ? body.name : "Main",
-				slots: {
-					...(isRecord(body.slots) ? body.slots : {}),
-					[String(number)]: number,
-				},
-				virtual_playbacks: isRecord(body.virtual_playbacks)
-					? body.virtual_playbacks
-					: {},
+				name: page?.body.name ?? "Main",
+				assignments: { ...page?.body.assignments, [String(number)]: playback },
 			},
 			page?.revision ?? 0,
 		);

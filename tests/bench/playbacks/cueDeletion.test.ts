@@ -48,10 +48,10 @@ describe("Cue deletion acceptance intent", () => {
 		);
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
-			address: { type: "pool", playback_number: 1 },
+			address: { type: "cuelist_pool", number: 1 },
 			cue_number: "2",
 			authority: {
-				playback_number: 1,
+				playback_address: null,
 				cue_list_id: CUE_LIST_ID,
 				object_id: "stored-cuelist",
 				object_revision: 4,
@@ -65,19 +65,19 @@ describe("Cue deletion acceptance intent", () => {
 			"current Page",
 			{
 				surface: "api",
-				address: { type: "current_page", slot: 3 },
+				address: { type: "current_page", position: 3 },
 				cueNumber: "2",
 			},
-			{ type: "current_page", expected_page: 1, slot: 3 },
+			{ type: "current_page", expected_page: 1, position: 3 },
 		],
 		[
 			"explicit Page",
 			{
 				surface: "api",
-				address: { type: "page_slot", page: 1, slot: 3 },
+				address: { type: "playback", page: 1, position: 3 },
 				cueNumber: "2",
 			},
-			{ type: "page_slot", page: 1, slot: 3 },
+			{ type: "playback", page: 1, position: 3 },
 		],
 	] as const)("resolves %s slot mapping without bootstrap", async (_, intent, address) => {
 		const fetchMock = cueDeletionFetch();
@@ -88,7 +88,7 @@ describe("Cue deletion acceptance intent", () => {
 		assertNarrowCalls(fetchMock, true);
 		const body = JSON.parse(String(actionCalls(fetchMock)[0][1]?.body));
 		expect(body.address).toEqual(address);
-		expect(body.authority.playback_number).toBe(1);
+		expect(body.authority.playback_address).toEqual({ page: 1, position: 3 });
 	});
 
 	it("strictly accepts a replayed no-change outcome with no event", async () => {
@@ -149,18 +149,33 @@ describe("Cue deletion acceptance intent", () => {
 					"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 				),
 			},
-			{ playbackShowRevision: 8 },
-			{
-				playbackObjects: [
-					playbackObject(),
-					playbackObject("duplicate-playback"),
-				],
-			},
+			{ cueListShowRevision: 8 },
 			{ cueListObjects: [cueListObject(), cueListObject("duplicate-cuelist")] },
 		] satisfies FetchOptions[]) {
 			const fetchMock = cueDeletionFetch(options);
 			await expect(
 				deleteCue(api(), poolIntent(), { fetch: fetchMock as typeof fetch }),
+			).rejects.toThrow();
+			expect(actionCalls(fetchMock)).toEqual([]);
+		}
+	});
+
+	it("rejects ambiguous pages and unassigned positions before mutation", async () => {
+		for (const pageObjects of [
+			[pageObject(), { ...pageObject(), id: "duplicate-page" }],
+			[{ ...pageObject(), body: { ...pageObject().body, assignments: {} } }],
+		]) {
+			const fetchMock = cueDeletionFetch({ pageObjects });
+			await expect(
+				deleteCue(
+					api(),
+					{
+						surface: "api",
+						address: { type: "playback", page: 1, position: 3 },
+						cueNumber: "2",
+					},
+					{ fetch: fetchMock as typeof fetch },
+				),
 			).rejects.toThrow();
 			expect(actionCalls(fetchMock)).toEqual([]);
 		}
@@ -230,7 +245,7 @@ function session() {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Test desk" },
 	};
 }
 
@@ -245,17 +260,15 @@ function replacementSession() {
 function poolIntent(): DeleteCueIntent {
 	return {
 		surface: "api",
-		address: { type: "pool", playbackNumber: 1 },
+		address: { type: "cuelist_pool", number: 1 },
 		cueNumber: "2",
 	};
 }
 
 interface FetchOptions {
 	active?: ReturnType<typeof playbackRuntime>;
-	playbackShowRevision?: number;
 	cueListShowRevision?: number;
 	pageShowRevision?: number;
-	playbackObjects?: unknown[];
 	cueListObjects?: unknown[];
 	pageObjects?: unknown[];
 	outcome?: unknown;
@@ -270,13 +283,6 @@ function cueDeletionFetch(options: FetchOptions = {}) {
 		const url = String(input);
 		if (url.includes("playback-runtime/snapshot"))
 			return json(options.active ?? playbackRuntime());
-		if (url.endsWith("/objects/playback"))
-			return json({
-				show_id: SHOW_ID,
-				show_revision: options.playbackShowRevision ?? 7,
-				kind: "playback",
-				objects: options.playbackObjects ?? [playbackObject()],
-			});
 		if (url.endsWith("/objects/cue_list")) {
 			options.onCueLists?.();
 			return json({
@@ -320,7 +326,6 @@ function assertNarrowCalls(
 	const urls = fetchMock.mock.calls.map(([input]) => String(input));
 	expect(urls).toEqual([
 		"http://desk.local/api/v2/playback-runtime/snapshot",
-		"http://desk.local/api/v2/objects/playback",
 		"http://desk.local/api/v2/objects/cue_list",
 		...(withPage ? ["http://desk.local/api/v2/objects/playback_page"] : []),
 		"http://desk.local/api/v2/cues/delete",
@@ -337,24 +342,12 @@ function playbackRuntime(showId = SHOW_ID, deskId = DESK_ID) {
 		desk: {
 			scope: { show_id: showId, show_revision: 7 },
 			desk_id: deskId,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: [],
-	};
-}
-
-function playbackObject(id = "stored-playback") {
-	return {
-		kind: "playback",
-		id,
-		revision: 3,
-		updated_at: "2026-07-21T10:00:00Z",
-		body: {
-			number: 1,
-			name: "Main Cuelist",
-			target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
-		},
 	};
 }
 
@@ -377,8 +370,22 @@ function pageObject() {
 		body: {
 			number: 1,
 			name: "Main",
-			slots: { 3: 1 },
-			virtual_playbacks: {},
+			assignments: {
+				3: {
+					name: "Main",
+					target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
+					buttons: ["go", "off", "flash"],
+					button_count: 3,
+					fader: "master",
+					has_fader: true,
+					go_activates: true,
+					auto_off: false,
+					xfade_millis: 0,
+					color: "",
+					flash_release: "release_all",
+					protect_from_swap: false,
+				},
+			},
 		},
 	};
 }
@@ -386,6 +393,7 @@ function pageObject() {
 function cueListBody(withDeletedCue: boolean) {
 	return {
 		id: CUE_LIST_ID,
+		pool_number: 1,
 		name: "Main Cuelist",
 		priority: 0,
 		mode: "sequence",

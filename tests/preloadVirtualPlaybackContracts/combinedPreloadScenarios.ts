@@ -30,7 +30,7 @@ import {
 	type PreloadCombinedPairState,
 	playbackCard,
 	playbacks,
-	poolAction,
+	assignedPlaybackAction,
 	preloadCombinedObservation,
 	prepare,
 	setCaptureMask,
@@ -87,7 +87,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			{ 1: 61, 2: 62 },
 		);
 		await setCaptureMask(api, true, true, true, 1_500, 8_000);
-		await poolAction(api, 60, "go");
+		await assignedPlaybackAction(api, { page: 1, position: 60 }, "go");
 		await bench.tick(8_000);
 		return { ...prepared, groupFixture };
 	},
@@ -97,12 +97,12 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			showId: state.showId,
 		});
 		await api.executeCommandLine("GROUP 1 AT 80");
-		await poolAction(api, 61, "button", {
+		await assignedPlaybackAction(api, { page: 1, position: 61 }, "button", {
 			button: 1,
 			pressed: true,
 			surface: "physical",
 		});
-		await poolAction(api, 62, "button", {
+		await assignedPlaybackAction(api, { page: 1, position: 62 }, "button", {
 			button: 1,
 			pressed: true,
 			surface: "virtual",
@@ -219,7 +219,7 @@ const preload006ApiSupplement = async ({
 	];
 	await installOnCurrentShow(api, show.id, fixtures, specs, { 1: 61, 2: 62 });
 	await setCaptureMask(api, true, true, true, 1_500, 8_000);
-	await poolAction(api, 60, "go");
+	await assignedPlaybackAction(api, { page: 1, position: 60 }, "go");
 	// This is an ordinary live GO, so its zero-time cue correctly uses the 8 s Cue Fade.
 	await bench.tick(8_000);
 	expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.25, 2);
@@ -228,12 +228,12 @@ const preload006ApiSupplement = async ({
 		showId: show.id,
 	});
 	await api.executeCommandLine("GROUP 1 AT 80");
-	await poolAction(api, 61, "button", {
+	await assignedPlaybackAction(api, { page: 1, position: 61 }, "button", {
 		button: 1,
 		pressed: true,
 		surface: "physical",
 	});
-	await poolAction(api, 62, "button", {
+	await assignedPlaybackAction(api, { page: 1, position: 62 }, "button", {
 		button: 1,
 		pressed: true,
 		surface: "virtual",

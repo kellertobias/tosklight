@@ -219,7 +219,7 @@ function session(): Session {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Desk" },
 	};
 }
 
@@ -229,7 +229,9 @@ function playbackSnapshot(showId = SHOW_ID, deskId = DESK_ID) {
 		desk: {
 			scope: { show_id: showId, show_revision: 9 },
 			desk_id: deskId,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: [],

@@ -21,7 +21,7 @@ import {
 	openPlaybackMode,
 	type PreloadProgrammerPairState,
 	playbackCard,
-	poolAction,
+	assignedPlaybackAction,
 	preloadProgrammerObservation,
 	prepare,
 	setCaptureMask,
@@ -69,7 +69,7 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 		});
 		await api.executeCommandLine("GROUP 1 AT 50");
 		await api.executeCommandLine("GROUP 2 AT 70 TIME 1");
-		await poolAction(api, 31, "button", {
+		await assignedPlaybackAction(api, { page: 1, position: 31 }, "button", {
 			button: 1,
 			pressed: true,
 			surface: "physical",
@@ -186,7 +186,7 @@ const preload001ApiSupplement = async ({
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 
-	await poolAction(api, 30, "go", { surface: "physical" });
+	await assignedPlaybackAction(api, { page: 1, position: 30 }, "go", { surface: "physical" });
 	expect((await activePlayback(api, 30))?.current_cue_number).toBe("1");
 	expect((await programmer(api)).preload_playback_pending).toEqual([]);
 	await bench.tick(2_000);

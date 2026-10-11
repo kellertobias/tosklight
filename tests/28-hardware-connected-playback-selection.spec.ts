@@ -224,7 +224,7 @@ function playback(
 }
 
 async function selectPlayback(api: ApiDriver, number: number) {
-	await api.playbackNumberAction(number, "select", {});
+	await api.playbackAction({ page: 1, position: number }, "select", {});
 }
 
 async function playbackState(api: ApiDriver) {

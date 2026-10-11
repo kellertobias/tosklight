@@ -6,11 +6,10 @@ const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const SESSION_ID = "22222222-2222-4222-8222-222222222222";
 const DESK_ID = "33333333-3333-4333-8333-333333333333";
 const CUE_LIST_ID = "44444444-4444-4444-8444-444444444444";
-const REQUEST_ID = "55555555-5555-4555-8555-555555555555";
 const CORRELATION_ID = "66666666-6666-4666-8666-666666666666";
 const FOREIGN_SHOW_ID = "77777777-7777-4777-8777-777777777777";
 const FOREIGN_DESK_ID = "88888888-8888-4888-8888-888888888888";
-const PLAYBACK_NUMBER = 7;
+const PLAYBACK_ADDRESS = { page: 2, position: 7 };
 
 describe("Playback runtime acceptance intent", () => {
 	it("sends one direct Cuelist GO through the exact v2 authority", async () => {
@@ -19,16 +18,30 @@ describe("Playback runtime acceptance intent", () => {
 		await expect(
 			goCueListPlayback(api(), intent(), dependencies(fetchMock)),
 		).resolves.toMatchObject({
-			request_id: REQUEST_ID,
 			correlation_id: CORRELATION_ID,
 			requested: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			resolved: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			outcome: { status: "applied" },
 			event_sequence: 19,
-			replayed: false,
 		});
 
 		assertExactCalls(fetchMock);
+	});
+
+	it("sends each repeated live GO without an intent identity", async () => {
+		const fetchMock = playbackFetch();
+		const driver = api();
+		await goCueListPlayback(driver, intent(), dependencies(fetchMock));
+		await goCueListPlayback(driver, intent(), dependencies(fetchMock));
+		expect(actionCalls(fetchMock)).toHaveLength(2);
+		for (const [, init] of actionCalls(fetchMock)) {
+			const body = JSON.parse(String(init?.body));
+			expect(body).not.toHaveProperty("request_id");
+			expect(body).toHaveProperty("control_source", {
+				surface_id: "main",
+				control_id: 1,
+			});
+		}
 	});
 
 	it.each([
@@ -43,21 +56,7 @@ describe("Playback runtime acceptance intent", () => {
 		expect(actionCalls(fetchMock)).toHaveLength(0);
 	});
 
-	it("decodes replayed outcomes and rejects malformed outcomes", async () => {
-		const replayFetch = playbackFetch({
-			outcome: { ...actionOutcome(), replayed: true },
-		});
-		await expect(
-			goCueListPlayback(api(), intent(), dependencies(replayFetch)),
-		).resolves.toMatchObject({
-			request_id: REQUEST_ID,
-			replayed: true,
-			projection: {
-				scope: { show_id: SHOW_ID, show_revision: 12 },
-			},
-		});
-		expect(actionCalls(replayFetch)).toHaveLength(1);
-
+	it("rejects malformed outcomes without retrying the live action", async () => {
 		const malformedFetch = playbackFetch({
 			outcome: { ...actionOutcome(), event_sequence: "19" },
 		});
@@ -126,18 +125,19 @@ function assertExactCalls(fetchMock: ReturnType<typeof playbackFetch>) {
 	expect(JSON.parse(String(snapshot?.[1]?.body))).toEqual({
 		identities: [
 			{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
-			{ kind: "playback", playback_number: PLAYBACK_NUMBER },
+			{ kind: "playback", ...PLAYBACK_ADDRESS },
 		],
 	});
 	expect(action?.[1]?.method).toBe("POST");
 	expect(JSON.parse(String(action?.[1]?.body))).toEqual({
-		request_id: REQUEST_ID,
 		address: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
 		action: { type: "go", pressed: true },
-		surface: "virtual",
+		control_source: { surface_id: "main", control_id: 1 },
 	});
 	for (const [, init] of fetchMock.mock.calls)
-		expect(new Headers(init?.headers).get("authorization")).toBe("Bearer token");
+		expect(new Headers(init?.headers).get("authorization")).toBe(
+			"Bearer token",
+		);
 	expect(actionCalls(fetchMock)).toHaveLength(1);
 }
 
@@ -150,7 +150,7 @@ interface PlaybackFetchOptions {
 }
 
 function playbackFetch(options: PlaybackFetchOptions = {}) {
-	return vi.fn(async (input: RequestInfo | URL) => {
+	return vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
 		const url = String(input);
 		if (url.endsWith("/playback-runtime/snapshot")) {
 			options.onSnapshot?.();
@@ -173,7 +173,6 @@ function actionCalls(fetchMock: ReturnType<typeof playbackFetch>) {
 function dependencies(fetchMock: ReturnType<typeof playbackFetch>) {
 	return {
 		fetch: fetchMock as typeof globalThis.fetch,
-		requestId: () => REQUEST_ID,
 	};
 }
 
@@ -181,7 +180,7 @@ function intent() {
 	return {
 		surface: "api" as const,
 		showId: SHOW_ID,
-		playbackNumber: PLAYBACK_NUMBER,
+		playbackAddress: PLAYBACK_ADDRESS,
 		cueListId: CUE_LIST_ID,
 	};
 }
@@ -197,7 +196,7 @@ function session(): Session {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Test desk" },
 	};
 }
 
@@ -220,13 +219,11 @@ function playbackSnapshot(options: PlaybackSnapshotOptions = {}) {
 		projections: [
 			cueListProjection(
 				{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
-				PLAYBACK_NUMBER,
 				showId,
 				12,
 			),
 			cueListProjection(
-				{ kind: "playback", playback_number: PLAYBACK_NUMBER },
-				PLAYBACK_NUMBER,
+				{ kind: "playback", ...PLAYBACK_ADDRESS },
 				showId,
 				options.playbackRevision ?? 12,
 			),
@@ -236,7 +233,6 @@ function playbackSnapshot(options: PlaybackSnapshotOptions = {}) {
 
 function actionOutcome() {
 	return {
-		request_id: REQUEST_ID,
 		correlation_id: CORRELATION_ID,
 		requested: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
 		resolved: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
@@ -244,7 +240,6 @@ function actionOutcome() {
 		durability: "durable",
 		projection: cueListProjection(
 			{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
-			null,
 			SHOW_ID,
 			12,
 		),
@@ -252,22 +247,19 @@ function actionOutcome() {
 		desk: deskProjection(SHOW_ID, DESK_ID, 12),
 		event_sequence: 19,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 
 function cueListProjection(
 	requested:
 		| { kind: "cue_list"; cue_list_id: string }
-		| { kind: "playback"; playback_number: number },
-	playbackNumber: number | null,
+		| { kind: "playback"; page: number; position: number },
 	showId: string,
 	showRevision: number,
 ) {
 	return {
 		scope: { show_id: showId, show_revision: showRevision },
-		requested,
-		playback_number: playbackNumber,
+		identity: requested,
 		target: "cue_list",
 		cue_list_id: CUE_LIST_ID,
 		runtime: null,
@@ -278,7 +270,9 @@ function deskProjection(showId: string, deskId: string, showRevision: number) {
 	return {
 		scope: { show_id: showId, show_revision: showRevision },
 		desk_id: deskId,
-		active_page: 1,
+		command_page: 1,
+		selected_surface_id: "main",
+		resolved_pages: { main: 1 },
 		selected_playback: null,
 	};
 }

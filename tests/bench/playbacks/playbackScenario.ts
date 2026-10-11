@@ -2,13 +2,18 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { HttpPlaybackTopologyTransport } from "../../../apps/light-desktop/src/api/PlaybackTopologyTransport";
 import type {
 	PlaybackDefinition,
-	PlaybackSnapshot,
+	PlaybackPage,
 } from "../../../apps/light-desktop/src/api/types/playback";
+import { decodePlaybackSnapshot } from "../../../apps/light-desktop/src/api/playbackWire";
+import type {
+	PlaybackAddressValue,
+	PlaybackOverview,
+} from "../../../apps/light-desktop/src/api/generated/light-wire";
 import { commandKeys } from "../command-selection/commandScenario";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
-import { playbackLocation, validInteger } from "./cuePlaybackScenario";
+import { validInteger } from "./cuePlaybackScenario";
 
 export enum PlaybackButton {
 	Go = "go",
@@ -47,26 +52,30 @@ export interface PlaybackConfiguration {
 type RuntimeRoute = "ui" | "api";
 
 export type PlaybackTarget =
-	| number
-	| { kind: "current_page"; slot: number }
-	| { kind: "explicit_page"; page: number; slot: number };
+	| PlaybackAddressValue
+	| { kind: "current_page"; position: number };
 
-export function currentPagePlayback(slot: number): PlaybackTarget {
-	return { kind: "current_page", slot: validInteger(slot, "Playback slot") };
+export function currentPagePlayback(position: number): PlaybackTarget {
+	return {
+		kind: "current_page",
+		position: validInteger(position, "Playback position"),
+	};
 }
 
 export function explicitPagePlayback(
 	page: number,
-	slot: number,
-): PlaybackTarget {
+	position: number,
+): PlaybackAddressValue {
+	if (page > 99 || position > 1000)
+		throw new Error("Playback address is out of range");
 	return {
-		kind: "explicit_page",
 		page: validInteger(page, "Playback Page"),
-		slot: validInteger(slot, "Playback slot"),
+		position: validInteger(position, "Playback position"),
 	};
 }
 
 class MomentaryPlayback {
+	private heldTarget: PlaybackTarget | undefined;
 	constructor(
 		private readonly owner: BrowserPlaybacks,
 		private readonly route: RuntimeRoute | "osc",
@@ -74,12 +83,21 @@ class MomentaryPlayback {
 		private readonly action: "flash" | "temp" | "swap",
 	) {}
 
-	press() {
-		return this.owner.actionVia(this.route, this.target, this.action, true);
+	async press() {
+		this.heldTarget = this.target;
+		if ("kind" in this.target && this.target.kind === "current_page")
+			this.heldTarget = explicitPagePlayback(
+				await this.owner.commandPage(),
+				this.target.position,
+			);
+		return this.owner.actionVia(this.route, this.heldTarget, this.action, true);
 	}
 
 	release() {
-		return this.owner.actionVia(this.route, this.target, this.action, false);
+		if (!this.heldTarget) throw new Error("Playback hold has not been pressed");
+		const target = this.heldTarget;
+		this.heldTarget = undefined;
+		return this.owner.actionVia(this.route, target, this.action, false);
 	}
 
 	async hold(callback: () => Promise<void>) {
@@ -106,32 +124,32 @@ class PlaybackSurface {
 		return this.owner.actionVia(this.route, target, PlaybackButton.GoBack);
 	}
 
-	on(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.On);
+	on(address: PlaybackAddressValue) {
+		return this.owner.actionVia(this.route, address, PlaybackButton.On);
 	}
 
-	off(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.Off);
+	off(address: PlaybackAddressValue) {
+		return this.owner.actionVia(this.route, address, PlaybackButton.Off);
 	}
 
-	toggle(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.Toggle);
+	toggle(address: PlaybackAddressValue) {
+		return this.owner.actionVia(this.route, address, PlaybackButton.Toggle);
 	}
 
-	release(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.Release);
+	release(address: PlaybackAddressValue) {
+		return this.owner.actionVia(this.route, address, PlaybackButton.Release);
 	}
 
-	pause(number: number) {
-		return this.owner.actionVia(this.route, number, PlaybackButton.Pause);
+	pause(address: PlaybackAddressValue) {
+		return this.owner.actionVia(this.route, address, PlaybackButton.Pause);
 	}
 
-	select(number: number) {
-		return this.owner.selectVia(this.route, number);
+	select(address: PlaybackAddressValue) {
+		return this.owner.selectVia(this.route, address);
 	}
 
-	fader(number: number, value: number) {
-		return this.owner.faderVia(this.route, number, value);
+	fader(address: PlaybackAddressValue, value: number) {
+		return this.owner.faderVia(this.route, address, value);
 	}
 
 	flash(target: PlaybackTarget) {
@@ -150,33 +168,32 @@ class PlaybackSurface {
 class PlaybackExpectation {
 	constructor(
 		private readonly owner: BrowserPlaybacks,
-		private readonly number: number,
+		private readonly address: PlaybackAddressValue,
 	) {}
-
 	async present() {
-		expect(await this.owner.definition(this.number)).not.toBeNull();
+		expect(await this.owner.definition(this.address)).not.toBeNull();
 	}
-
 	async runtime(expected: Record<string, unknown>) {
 		const { master, ...rest } = expected;
 		await expect
-			.poll(() => this.owner.runtime(this.number))
+			.poll(() => this.owner.runtime(this.address))
 			.toMatchObject(rest);
 		if (typeof master === "number")
 			await expect
-				.poll(async () => (await this.owner.runtime(this.number))?.master)
+				.poll(async () => {
+					const value = await this.owner.runtime(this.address);
+					return value && "master" in value ? value.master : undefined;
+				})
 				.toBeCloseTo(master, 5);
 	}
-
 	async selected() {
 		await expect
 			.poll(async () => (await this.owner.snapshot()).selected_playback)
-			.toBe(this.number);
+			.toEqual(this.address);
 	}
-
 	async configuration(expected: Partial<PlaybackDefinition>) {
 		expect(
-			(await this.owner.requiredDefinition(this.number)).body,
+			(await this.owner.requiredDefinition(this.address)).body,
 		).toMatchObject(expected);
 	}
 }
@@ -205,45 +222,44 @@ export class BrowserPlaybacks {
 		private readonly showId: () => string,
 	) {}
 
-	go(number: number) {
-		return this.actionVia("ui", number, PlaybackButton.Go);
+	go(address: PlaybackAddressValue) {
+		return this.actionVia("ui", address, PlaybackButton.Go);
 	}
 
-	goBack(number: number) {
-		return this.actionVia("ui", number, PlaybackButton.GoBack);
+	goBack(address: PlaybackAddressValue) {
+		return this.actionVia("ui", address, PlaybackButton.GoBack);
 	}
 
-	on(number: number) {
-		return this.actionVia("ui", number, PlaybackButton.On);
+	on(address: PlaybackAddressValue) {
+		return this.actionVia("ui", address, PlaybackButton.On);
 	}
 
-	off(number: number) {
-		return this.actionVia("ui", number, PlaybackButton.Off);
+	off(address: PlaybackAddressValue) {
+		return this.actionVia("ui", address, PlaybackButton.Off);
 	}
 
-	toggle(number: number) {
-		return this.actionVia("ui", number, PlaybackButton.Toggle);
+	toggle(address: PlaybackAddressValue) {
+		return this.actionVia("ui", address, PlaybackButton.Toggle);
 	}
 
-	release(number: number) {
-		return this.actionVia("api", number, PlaybackButton.Release);
+	release(address: PlaybackAddressValue) {
+		return this.actionVia("api", address, PlaybackButton.Release);
 	}
 
-	pause(number: number) {
-		return this.actionVia("ui", number, PlaybackButton.Pause);
+	pause(address: PlaybackAddressValue) {
+		return this.actionVia("ui", address, PlaybackButton.Pause);
 	}
 
-	select(number: number) {
-		return this.selectVia("ui", number);
+	select(address: PlaybackAddressValue) {
+		return this.selectVia("ui", address);
 	}
 
-	async nameTargetCuelist(number: number, name: string) {
-		number = validInteger(number, "Playback");
+	async nameTargetCuelist(address: PlaybackAddressValue, name: string) {
 		const nextName = name.trim();
 		if (!nextName) throw new Error("Cuelist name must not be empty");
-		const definition = await this.requiredDefinition(number);
+		const definition = await this.requiredDefinition(address);
 		if (definition.body.target.type !== "cue_list")
-			throw new Error(`Playback ${number} does not target a Cuelist`);
+			throw new Error("Playback does not target a Cuelist");
 		const cueListId = definition.body.target.cue_list_id;
 		const cueList = await this.api.showObject<any>(
 			this.showId(),
@@ -260,41 +276,33 @@ export class BrowserPlaybacks {
 		);
 	}
 
-	async selectFromHardwareCard(number: number) {
-		number = validInteger(number, "Playback");
+	async selectFromHardwareCard(address: PlaybackAddressValue) {
 		if (!this.hardware.connected)
 			throw new Error(
 				"Hardware-card selection requires hardware.connect() first",
 			);
-		await this.desk.recordStep(
-			"HARDWARE PLAYBACK SELECT",
-			`Select concrete Playback ${number} from its attached-hardware card header.`,
-		);
-		const definition = await this.requiredDefinition(number);
+		const definition = await this.requiredDefinition(address);
 		if (definition.body.target.type !== "cue_list")
-			throw new Error(`Playback ${number} does not target a Cuelist`);
+			throw new Error("Playback does not target a Cuelist");
 		const cueList = await this.api.showObject<any>(
 			this.showId(),
 			"cue_list",
 			definition.body.target.cue_list_id,
 		);
-		if (!cueList)
-			throw new Error(
-				`Cuelist ${definition.body.target.cue_list_id} is absent`,
-			);
-		const card = await this.visibleCard(number);
+		if (!cueList) throw new Error("Assigned Cuelist is absent");
+		const card = await this.visibleCard(address);
 		await expect(
 			card.getByRole("button", { name: /Playback representation/ }),
 		).toHaveCount(0);
 		await this.desk.click(card.locator("header b"));
 		await expect(
 			this.page.getByRole("main", { name: "cuelists built-in" }),
-		).toContainText(`Cuelist ${number} · ${cueList.body.name}`);
-		await this.expect(number).selected();
+		).toContainText(cueList.body.name);
+		await this.expect(address).selected();
 	}
 
-	fader(number: number, value: number) {
-		return this.faderVia("ui", number, value);
+	fader(address: PlaybackAddressValue, value: number) {
+		return this.faderVia("ui", address, value);
 	}
 
 	async open() {
@@ -303,19 +311,22 @@ export class BrowserPlaybacks {
 		await expect(this.page.locator(".playback-fader-bank")).toBeVisible();
 	}
 
-	expect(number: number) {
-		return new PlaybackExpectation(this, validInteger(number, "Playback"));
+	expect(address: PlaybackAddressValue) {
+		return new PlaybackExpectation(this, address);
 	}
 
-	async expectActivatedTogether(...numbers: number[]) {
-		if (numbers.length < 2)
+	async expectActivatedTogether(...addresses: PlaybackAddressValue[]) {
+		if (addresses.length < 2)
 			throw new Error("Shared activation requires at least two Playbacks");
 		await expect
 			.poll(async () => {
 				const timestamps = await Promise.all(
-					numbers.map(
-						async (number) => (await this.runtime(number))?.activated_at,
-					),
+					addresses.map(async (address) => {
+						const value = await this.runtime(address);
+						return value && "activated_at" in value
+							? value.activated_at
+							: undefined;
+					}),
 				);
 				return timestamps.every(Boolean) ? new Set(timestamps).size : 0;
 			})
@@ -328,103 +339,93 @@ export class BrowserPlaybacks {
 		action: PlaybackButton | "flash" | "temp" | "swap",
 		pressed = true,
 	) {
-		const number =
-			typeof target === "number"
-				? validInteger(target, "Playback")
-				: await this.playbackNumber(target);
+		const address = await this.resolveTarget(target);
 		if (route === "api") {
-			if (action === PlaybackButton.Release) {
-				const definition = await this.requiredDefinition(number);
-				if (definition.body.target.type !== "cue_list")
-					throw new Error("Playback release requires a Cuelist target");
-				await this.api.cueListPlaybackAction(
-					definition.body.target.cue_list_id,
-					"release",
-					{},
-				);
-			} else {
-				const wireAction =
-					action === PlaybackButton.GoBack ? "go-minus" : action;
-				await this.apiAction(target, wireAction, pressed);
-			}
-		} else if (route === "ui") {
-			if (action === PlaybackButton.Release)
-				throw new Error("Playback release has no default visible button");
-			const button = (await this.visibleCardFor(target, number)).getByRole(
-				"button",
-				{
-					name: playbackButtonLabel(action),
-					exact: true,
-				},
+			await this.api.playbackAction(
+				address,
+				action === PlaybackButton.GoBack ? "go-minus" : action,
+				{ pressed },
 			);
-			if (["flash", "swap"].includes(action)) {
-				if (pressed) {
-					await button.hover();
-					await this.page.mouse.down();
-				} else await this.page.mouse.up();
-			} else await this.desk.click(button);
-		} else await this.oscAction(target, number, action, pressed);
+			return;
+		}
+		if (route === "osc") {
+			await this.oscAction(address, action, pressed);
+			return;
+		}
+		if (action === PlaybackButton.Release)
+			throw new Error("Playback release has no default visible button");
+		if (["flash", "swap"].includes(action) && !pressed) {
+			await this.page.mouse.up();
+			return;
+		}
+		const button = (await this.visibleCard(address)).getByRole("button", {
+			name: playbackButtonLabel(action),
+			exact: true,
+		});
+		if (["flash", "swap"].includes(action)) {
+			await button.hover();
+			await this.page.mouse.down();
+		} else await this.desk.click(button);
 	}
 
-	async selectVia(route: RuntimeRoute, number: number) {
-		if (route === "api") await this.api.playbackNumberAction(number, "select");
+	async selectVia(route: RuntimeRoute, address: PlaybackAddressValue) {
+		if (route === "api") await this.api.playbackAction(address, "select");
 		else {
-			const location = await playbackLocation(this.api, this.showId(), number);
-			await this.desk.recordStep(
-				"PLAYBACK SELECT",
-				`Select Playback ${number} through its canonical PBK address on the visible keypad.`,
-			);
 			const keypad = (key: string) =>
 				this.page.locator(`[data-keypad-key="${key}"]:visible`).first();
-			const groupKey = keypad("GRP");
-			if (!(await groupKey.isVisible())) {
+			if (!(await keypad("GRP").isVisible())) {
 				await this.desk.click(this.page.locator(".mode-toggle"));
-				await expect(groupKey).toBeVisible();
+				await expect(keypad("GRP")).toBeVisible();
 			}
 			await this.desk.click(
 				this.page.locator(".command-escape:visible").first(),
 			);
 			for (const key of commandKeys(
-				`PBK ${location.page} . ${location.slot}`,
+				`PBK ${address.page} . ${address.position}`,
 				"FIXTURE",
 			))
 				await this.desk.click(keypad(key));
 			await this.desk.click(keypad("ENT"));
 		}
-		await this.expect(number).selected();
+		await this.expect(address).selected();
 	}
 
-	async faderVia(route: RuntimeRoute, number: number, value: number) {
+	async faderVia(
+		route: RuntimeRoute,
+		address: PlaybackAddressValue,
+		value: number,
+	) {
 		if (!Number.isFinite(value) || value < 0 || value > 100)
 			throw new Error("Playback fader value must be between 0 and 100");
 		if (route === "api")
-			await this.api.playbackNumberAction(number, "master", {
-				value: value / 100,
-			});
+			await this.api.playbackAction(address, "master", { value: value / 100 });
 		else
-			await (await this.visibleCard(number))
+			await (await this.visibleCard(address))
 				.getByRole("slider")
 				.fill(String(value));
 	}
 
-	async configure(number: number, definition: PlaybackConfiguration) {
-		number = validInteger(number, "Playback");
-		const current = await this.requiredDefinition(number);
-		const location = await playbackLocation(this.api, this.showId(), number);
-		const page = await this.api.showObject<any>(
+	async configure(
+		address: PlaybackAddressValue,
+		definition: PlaybackConfiguration,
+	) {
+		const current = await this.requiredDefinition(address);
+		const page = await this.api.showObject<PlaybackPage>(
 			this.showId(),
 			"playback_page",
-			String(location.page),
+			String(address.page),
 		);
-		if (!page) throw new Error(`Playback Page ${location.page} is absent`);
+		if (!page) throw new Error(`Playback Page ${address.page} is absent`);
 		const session = this.session();
-		const runtime = await this.api.request<any>(
-			"POST",
-			"/api/v2/playback-runtime/snapshot",
-			{ identities: [] },
-			true,
-			undefined,
-			{ showId: this.showId(), deskId: session.desk.id },
+		const runtime = decodePlaybackSnapshot(
+			await this.api.request<unknown>(
+				"POST",
+				"/api/v2/playback-runtime/snapshot",
+				{ identities: [] },
+				true,
+				undefined,
+				{ showId: this.showId(), deskId: session.desk.id },
+			),
 		);
 		await new HttpPlaybackTopologyTransport({
 			baseUrl: this.api.baseUrl,
@@ -432,14 +433,11 @@ export class BrowserPlaybacks {
 		}).apply(this.showId(), runtime.desk.scope.show_revision, {
 			requestId: crypto.randomUUID(),
 			action: {
-				type: "configure_slot",
-				page: location.page,
-				slot: location.slot,
+				type: "update_playback",
+				address,
 				expectedPageRevision: page.revision,
 				expectedPageObjectId: page.id,
-				expectedPlaybackRevision: current.revision,
-				expectedPlaybackObjectId: current.id,
-				playback: {
+				definition: {
 					...current.body,
 					...(definition.name == null ? {} : { name: definition.name }),
 					...(definition.color == null ? {} : { color: definition.color }),
@@ -461,51 +459,58 @@ export class BrowserPlaybacks {
 		});
 	}
 
-	definition(number: number) {
-		return this.api.showObject<PlaybackDefinition>(
+	async definition(address: PlaybackAddressValue) {
+		const page = await this.api.showObject<PlaybackPage>(
 			this.showId(),
-			"playback",
-			String(number),
+			"playback_page",
+			String(address.page),
 		);
+		const body = page?.body.assignments[String(address.position)];
+		return body && page ? { id: page.id, revision: page.revision, body } : null;
 	}
-
-	async requiredDefinition(number: number) {
-		const definition = await this.definition(number);
-		if (!definition) throw new Error(`Playback ${number} is absent`);
+	async requiredDefinition(address: PlaybackAddressValue) {
+		const definition = await this.definition(address);
+		if (!definition)
+			throw new Error(`Playback ${address.page}.${address.position} is absent`);
 		return definition;
 	}
-
 	snapshot() {
-		return this.api.request<PlaybackSnapshot>(
+		return this.api.request<PlaybackOverview>(
 			"GET",
 			"/api/v2/playback-overview",
 		);
 	}
 
-	async runtime(number: number) {
+	async runtime(address: PlaybackAddressValue) {
 		const session = this.session();
-		const snapshot = await this.api.request<any>(
-			"POST",
-			"/api/v2/playback-runtime/snapshot",
-			{
-				identities: [{ kind: "playback", playback_number: number }],
-			},
-			true,
-			undefined,
-			{ showId: this.showId(), deskId: session.desk.id },
+		const snapshot = decodePlaybackSnapshot(
+			await this.api.request<unknown>(
+				"POST",
+				"/api/v2/playback-runtime/snapshot",
+				{
+					identities: [{ kind: "playback", ...address }],
+				},
+				true,
+				undefined,
+				{ showId: this.showId(), deskId: session.desk.id },
+			),
 		);
-		const projection = snapshot.projections?.[0];
+		const projection = snapshot.projections.find(
+			(item) =>
+				item.identity.kind === "playback" &&
+				item.identity.page === address.page &&
+				item.identity.position === address.position,
+		);
 		if (projection?.target === "cue_list") {
 			const runtime = projection.runtime;
 			return runtime
 				? {
 						...runtime,
-						playback_number: projection.playback_number,
+						address,
 						current_cue_number: runtime.current?.number ?? null,
 						loaded_cue_number: runtime.loaded?.number ?? null,
 						normal_next_cue_number: runtime.normal_next?.number ?? null,
-						effective_next_cue_number:
-							runtime.effective_next?.number ?? null,
+						effective_next_cue_number: runtime.effective_next?.number ?? null,
 					}
 				: {
 						enabled: false,
@@ -516,94 +521,48 @@ export class BrowserPlaybacks {
 						loaded_cue_number: null,
 					};
 		}
-		return projection;
+		return projection?.target === "dynamic" ? projection.runtime : projection;
 	}
 
-	private async visibleCard(number: number): Promise<Locator> {
+	private async visibleCard(address: PlaybackAddressValue): Promise<Locator> {
 		await this.open();
-		const location = await playbackLocation(this.api, this.showId(), number);
 		const card = this.page.locator(
-			`.playback-fader-bank [data-playback-slot="${location.slot}"]:visible`,
+			`.playback-fader-bank [data-page="${address.page}"][data-playback-slot="${address.position}"]:visible`,
 		);
 		await expect(card).toBeVisible();
 		return card;
 	}
-
-	private async visibleCardFor(
+	commandPage() {
+		return this.api.playbackCommandPage();
+	}
+	private async resolveTarget(
 		target: PlaybackTarget,
-		number: number,
-	): Promise<Locator> {
-		if (typeof target === "number") return this.visibleCard(number);
-		await this.open();
-		const card = this.page.locator(
-			`.playback-fader-bank [data-playback-slot="${target.slot}"]:visible`,
-		);
-		await expect(card).toBeVisible();
-		return card;
+	): Promise<PlaybackAddressValue> {
+		return "kind" in target
+			? explicitPagePlayback(await this.commandPage(), target.position)
+			: explicitPagePlayback(target.page, target.position);
 	}
-
-	private apiAction(target: PlaybackTarget, action: string, pressed: boolean) {
-		const input = { pressed };
-		if (typeof target === "number")
-			return this.api.playbackNumberAction(target, action, input);
-		if (target.kind === "current_page")
-			return this.api.currentPagePlaybackAction(target.slot, action, input);
-		return this.api.explicitPagePlaybackAction(
-			target.page,
-			target.slot,
-			action,
-			input,
-		);
-	}
-
-	private async playbackNumber(target: Exclude<PlaybackTarget, number>) {
-		const page =
-			target.kind === "explicit_page"
-				? target.page
-				: (await this.snapshot()).active_page;
-		const object = await this.api.showObject<any>(
-			this.showId(),
-			"playback_page",
-			String(page),
-		);
-		const number = object?.body.slots[String(target.slot)];
-		if (typeof number !== "number")
-			throw new Error(`Playback Page ${page} slot ${target.slot} is empty`);
-		return number;
-	}
-
 	private async oscAction(
-		target: PlaybackTarget,
-		number: number,
+		address: PlaybackAddressValue,
 		action: PlaybackButton | "flash" | "temp" | "swap",
 		pressed: boolean,
 	) {
 		if (!this.hardware.connected)
 			throw new Error("Playback OSC route requires hardware.connect()");
-		const definition = await this.requiredDefinition(number);
+		const definition = await this.requiredDefinition(address);
 		const button = definition.body.buttons.indexOf(
-			action === PlaybackButton.GoBack ? "go_minus" : (action as any),
+			action === PlaybackButton.GoBack
+				? "go_minus"
+				: (action as (typeof definition.body.buttons)[number]),
 		);
 		if (button < 0)
-			throw new Error(`Playback ${number} has no configured ${action} button`);
-		const alias = "desk";
-		const address =
-			typeof target !== "number" && target.kind === "current_page"
-				? `/light/${alias}/page-playback/${target.slot}/button/${button + 1}`
-				: await this.explicitOscAddress(target, number, button + 1);
-		await this.hardware.send(address, [pressed]);
-	}
-
-	private async explicitOscAddress(
-		target: PlaybackTarget,
-		number: number,
-		button: number,
-	) {
-		const location =
-			typeof target === "number"
-				? await playbackLocation(this.api, this.showId(), number)
-				: target;
-		return `/light/playback/${location.page}/${location.slot}/button/${button}`;
+			throw new Error(
+				`Playback ${address.page}.${address.position} has no configured ${action} button`,
+			);
+		await this.hardware.send(
+			`/light/playback/${address.page}/${address.position}/button/${button + 1}`,
+			[pressed],
+		);
 	}
 
 	private session() {
@@ -613,8 +572,10 @@ export class BrowserPlaybacks {
 	}
 }
 
-function playbackButtonLabel(action: PlaybackButton) {
-	const labels: Partial<Record<PlaybackButton, string>> = {
+function playbackButtonLabel(
+	action: PlaybackButton | "flash" | "swap" | "temp",
+) {
+	const labels: Partial<Record<string, string | RegExp>> = {
 		[PlaybackButton.Go]: "GO +",
 		[PlaybackButton.GoBack]: "GO −",
 		[PlaybackButton.On]: "ON",

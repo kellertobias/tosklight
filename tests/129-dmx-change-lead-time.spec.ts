@@ -133,7 +133,7 @@ test("CHANGE-LEAD-001 @api the longest GO-to-sent-frame lead is reported and res
 	});
 
 	// GO, then the first frame leaves 40 ms later: a 40 ms lead.
-	await api.playbackNumberAction(1, "go", {});
+	await api.playbackAction({ page: 1, position: 1 }, "go", {});
 	const first = await bench.tick(40);
 	expect(
 		first.universes.find((universe: any) => universe.universe === 1)?.slots
@@ -147,7 +147,7 @@ test("CHANGE-LEAD-001 @api the longest GO-to-sent-frame lead is reported and res
 	});
 
 	// A quicker GO keeps the longest as the maximum and reports itself as the latest.
-	await api.playbackNumberAction(1, "go", {});
+	await api.playbackAction({ page: 1, position: 1 }, "go", {});
 	await bench.tick(15);
 	// Frames that carry no start measure nothing.
 	await bench.tick(25);
@@ -175,7 +175,7 @@ test("CHANGE-LEAD-001 @api the longest GO-to-sent-frame lead is reported and res
 	});
 
 	// A resent reset answers with the first outcome and never wipes a lead measured since.
-	await api.playbackNumberAction(1, "go", {});
+	await api.playbackAction({ page: 1, position: 1 }, "go", {});
 	await bench.tick(20);
 	const replayed = await reset(api, requestId);
 	expect(replayed.replayed).toBe(true);
@@ -221,7 +221,7 @@ test("CHANGE-LEAD-002 @ui the DMX output summary shows the change lead time and 
 	await expect(lead).toBeVisible();
 	await expect(lead.getByRole("definition")).toHaveText(["—", "—", "—"]);
 
-	await api.playbackNumberAction(1, "go", {});
+	await api.playbackAction({ page: 1, position: 1 }, "go", {});
 	await bench.tick(30);
 	// The summary reads the desk's live readings once a second.
 	await expect(lead.getByRole("definition")).toHaveText([

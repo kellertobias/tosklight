@@ -363,8 +363,8 @@ async function assertCueTransferOutcome(
 		expect(sourceAfter.body).toEqual(sourceBefore.body);
 		expect(transferred.id).not.toBe(setup.sourceCueId);
 	}
-	await api.playbackNumberAction(2, "go", {});
-	await api.playbackNumberAction(2, "go", {});
+	await api.playbackAction({ page: 1, position: 2 }, "go", {});
+	await api.playbackAction({ page: 1, position: 2 }, "go", {});
 	let frame = await bench.tick(3_000);
 	const slots =
 		frame.universes.find((universe: any) => universe.universe === 1)?.slots ??
@@ -376,8 +376,8 @@ async function assertCueTransferOutcome(
 	]);
 	if (transfer.moves) {
 		await api.cueListPlaybackAction(setup.destinationId, "release", {});
-		await api.playbackNumberAction(1, "go", {});
-		await api.playbackNumberAction(1, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		frame = await bench.tick(3_000);
 		const recalculated =
 			frame.universes.find((universe: any) => universe.universe === 1)?.slots ??

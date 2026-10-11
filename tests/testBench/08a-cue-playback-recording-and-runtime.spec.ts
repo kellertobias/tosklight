@@ -59,8 +59,8 @@ scenario(
 		await t.playback.expect(playback).runtime({ current_cue_number: "1" });
 
 		expect(await t.playback.runtime(playback)).toMatchObject({
-			playback_number: playback,
+			address: playback,
 		});
-		expect((await t.playback.runtime(playback))?.master).toBeCloseTo(1, 5);
+		await t.playback.expect(playback).runtime({ master: 1 });
 	},
 );

@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import { expect, test } from "./bench/core/fixtures";
-import { mapExistingPlaybackToSlot } from "./bench/playbacks/mapExistingPlaybackToSlot";
 import { setOutputRuntime } from "./bench/output/outputRuntime";
 import { pairedScenario } from "./bench/core/pairedScenario";
 import { clearProgrammerValues } from "./bench/programmer/programmerValues";
@@ -55,13 +54,7 @@ export function registerShow001PairedScenario(): void {
 			await api.executeCommandLine("RECORD + GROUP 3");
 			await api.executeCommandLine("GROUP 3 AT 40");
 			await api.executeCommandLine("RECORD PBK 1");
-			await mapExistingPlaybackToSlot(api, {
-				surface: "api",
-				showId: state.copyId,
-				page: 1,
-				slot: 1,
-				playbackNumber: 1,
-			});
+
 			await clearProgrammerValues(api, {
 				surface: "api",
 				showId: state.copyId,
@@ -70,7 +63,7 @@ export function registerShow001PairedScenario(): void {
 				surface: "api",
 				showId: state.copyId,
 			});
-			await api.playbackNumberAction(1, "go", {});
+			await api.playbackAction({ page: 1, position: 1 }, "go", {});
 			await api.executeCommandLine("FIXTURE 12 AT 65");
 			await api.saveShowRevision(state.copyId, state.revisionName);
 		},
@@ -126,10 +119,7 @@ export function registerEmptyShowRestartTest(): void {
 			marker: "programmed before naming",
 		});
 
-		const renamed = await api.renameShow<any>(
-			provisional.id,
-			"Opening Night",
-		);
+		const renamed = await api.renameShow<any>(provisional.id, "Opening Night");
 		expect(renamed).toMatchObject({
 			id: provisional.id,
 			name: "Opening Night",
@@ -137,9 +127,7 @@ export function registerEmptyShowRestartTest(): void {
 		expect(renamed.path).toContain("Opening Night.show");
 		await expect(fs.access(provisionalPath)).rejects.toThrow();
 		expect(
-			(await api.shows<any>()).filter(
-				(show) => show.id === provisional.id,
-			),
+			(await api.shows<any>()).filter((show) => show.id === provisional.id),
 		).toEqual([
 			expect.objectContaining({ id: provisional.id, name: "Opening Night" }),
 		]);
@@ -188,7 +176,7 @@ export function registerShow001ProcessRestartTest(): void {
 		expect((await object<any>(api, "group", "3")).body.fixtures).toEqual(
 			expectedGroup,
 		);
-		await api.playbackNumberAction(1, "go", {});
+		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		await api.executeCommandLine("FIXTURE 12 AT 65");
 		await bench.tick(0);
 		await setOutputRuntime(api, {

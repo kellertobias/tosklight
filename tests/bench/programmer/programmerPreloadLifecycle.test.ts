@@ -18,33 +18,30 @@ describe("Programmer Preload lifecycle acceptance intents", () => {
 		["enter", enterProgrammerPreload, changedEnterOutcome],
 		["clear_pending", clearPendingProgrammerPreload, noChangeOutcome],
 		["release", releaseProgrammerPreload, noChangeOutcome],
-	] as const)(
-		"captures exact authority and sends one %s lifecycle action",
-		async (action, apply, outcome) => {
-			const fetchMock = lifecycleFetch(outcome());
-			const result = await apply(
-				api(),
-				{ surface: "api", showId: SHOW_ID },
-				{ fetch: fetchMock as typeof fetch, requestId: () => REQUEST_ID },
-			);
+	] as const)("captures exact authority and sends one %s lifecycle action", async (action, apply, outcome) => {
+		const fetchMock = lifecycleFetch(outcome());
+		const result = await apply(
+			api(),
+			{ surface: "api", showId: SHOW_ID },
+			{ fetch: fetchMock as typeof fetch, requestId: () => REQUEST_ID },
+		);
 
-			expect(result).toMatchObject({
-				requestId: REQUEST_ID,
-				status: action === "enter" ? "changed" : "no_change",
-			});
-			assertExactAuthorityCalls(fetchMock, false);
-			expect(actionBodies(fetchMock)).toEqual([
-				{
-					request_id: REQUEST_ID,
-					expected_capture_mode_revision: 3,
-					expected_values_revision: 5,
-					expected_queue_revision: 6,
-					expected_selection_revision: 7,
-					action: { type: action },
-				},
-			]);
-		},
-	);
+		expect(result).toMatchObject({
+			requestId: REQUEST_ID,
+			status: action === "enter" ? "changed" : "no_change",
+		});
+		assertExactAuthorityCalls(fetchMock, false);
+		expect(actionBodies(fetchMock)).toEqual([
+			{
+				request_id: REQUEST_ID,
+				expected_capture_mode_revision: 3,
+				expected_values_revision: 5,
+				expected_queue_revision: 6,
+				expected_selection_revision: 7,
+				action: { type: action },
+			},
+		]);
+	});
 
 	it("captures the exact Show revision and Playback cursor for one replayed GO", async () => {
 		const fetchMock = lifecycleFetch(changedGoOutcome());
@@ -63,7 +60,13 @@ describe("Programmer Preload lifecycle acceptance intents", () => {
 				playbackEventSequenceBefore: 41,
 				committedAt: "2026-07-21T10:00:00Z",
 				executedPlaybackActions: 1,
-				executed: [{ playbackNumber: 9, action: "go" }],
+				executed: [
+					{
+						address: { page: 1, position: 9 },
+						action: "go",
+						controlSource: { surface_id: "main", control_id: 9 },
+					},
+				],
 			},
 		});
 		assertExactAuthorityCalls(fetchMock, true);
@@ -97,13 +100,16 @@ describe("Programmer Preload lifecycle acceptance intents", () => {
 	});
 
 	it("surfaces typed conflict metadata without retrying the action", async () => {
-		const fetchMock = lifecycleFetch({
-			kind: "conflict",
-			error: "Preload values revision conflict",
-			current_revision: 8,
-			current_related_revision: 9,
-			retryable: false,
-		}, 409);
+		const fetchMock = lifecycleFetch(
+			{
+				kind: "conflict",
+				error: "Preload values revision conflict",
+				current_revision: 8,
+				current_related_revision: 9,
+				retryable: false,
+			},
+			409,
+		);
 		await expect(
 			releaseProgrammerPreload(
 				api(),
@@ -162,7 +168,7 @@ function api() {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Desk" },
 	};
 	return driver;
 }
@@ -204,9 +210,9 @@ function assertExactAuthorityCalls(
 			`http://desk.local/api/v2/programmer/preload/actions`,
 		]),
 	);
-	expect(urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url))).toBe(
-		false,
-	);
+	expect(
+		urls.some((url) => /bootstrap|\/playbacks|programmers/.test(url)),
+	).toBe(false);
 	expect(
 		urls.filter((url) => url.endsWith("/programmer/preload/actions")),
 	).toHaveLength(1);
@@ -297,7 +303,9 @@ function playbackSnapshot(showId = SHOW_ID, deskId = DESK_ID) {
 		desk: {
 			scope: { show_id: showId, show_revision: 12 },
 			desk_id: deskId,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: [],
@@ -355,10 +363,9 @@ function changedGoOutcome() {
 			executed_playback_actions: 1,
 			executed: [
 				{
-					playback_number: 9,
-					page: null,
+					address: { page: 1, position: 9 },
+					control_source: { surface_id: "main", control_id: 9 },
 					action: "go",
-					surface: "physical",
 				},
 			],
 			runtime_changes: [],

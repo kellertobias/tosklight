@@ -171,7 +171,7 @@ async function verifyLiveSpreadStorage(api: ApiDriver, bench: BenchDriver) {
 	await goCueListPlayback(api, {
 		surface: "api",
 		showId,
-		playbackNumber: 1,
+		playbackAddress: { page: 1, position: 1 },
 		cueListId,
 	});
 	await expectSlotsAfterTick(bench, 3_000, expected);
@@ -214,7 +214,7 @@ async function verifyDereferencedSpreadStorage(
 	await goCueListPlayback(api, {
 		surface: "api",
 		showId,
-		playbackNumber: 2,
+		playbackAddress: { page: 1, position: 2 },
 		cueListId,
 	});
 	await expectSlotsAfterTick(bench, 3_000, expected);

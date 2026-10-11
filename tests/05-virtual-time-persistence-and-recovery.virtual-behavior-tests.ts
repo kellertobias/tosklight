@@ -78,7 +78,7 @@ export function registerVirtualBehaviorTest(): void {
 		);
 		expect(dynamicDirect).toBeCloseTo(0.5, 6);
 
-		await api.playbackNumberAction(3, "button", {
+		await api.playbackAction({ page: 1, position: 3 }, "button", {
 			button: 3,
 			pressed: true,
 		});
@@ -87,7 +87,7 @@ export function registerVirtualBehaviorTest(): void {
 			dynamicDirect,
 			6,
 		);
-		await api.playbackNumberAction(3, "button", {
+		await api.playbackAction({ page: 1, position: 3 }, "button", {
 			button: 3,
 			pressed: true,
 		});

@@ -13,13 +13,13 @@ test("PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while sele
   await expect(card).toBeVisible();
   const slot = Number(await card.getAttribute("data-playback-slot"));
   const before = await background(card);
-  await api.currentPagePlaybackAction(slot, "button", { button: 2, pressed: true, surface: "virtual" });
+  await api.playbackAction({ page: await api.playbackCommandPage(), position: slot }, "button", { button: 2, pressed: true, surface: "virtual" });
   await expect(card).toHaveClass(/running/);
   await expect.poll(() => background(card)).not.toBe(before);
 
   const state = await api.request<any>("GET", "/api/v2/playback-overview");
   const number = state.pages.find((candidate: any) => candidate.number === state.active_page).slots[String(slot)];
-  await api.playbackNumberAction(number, "select", {});
+  await api.playbackAction({ page: 1, position: number }, "select", {});
   await expect(card).toHaveClass(/selected/);
   await expect(card).toHaveClass(/running/);
   expect(await card.getAttribute("data-selected-playback")).toBe("true");

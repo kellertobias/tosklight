@@ -26,13 +26,19 @@ export interface AngleDynamicIntent {
 	cycle: { millis: number } | { speedGroupBeats: number };
 	lanes: AngleLane[];
 	/** Additional legacy scalar lanes (Intensity, 3D Point axes). */
-	scalarLanes?: Array<{ attribute: string; keyframes: Array<[number, number]> }>;
+	scalarLanes?: Array<{
+		attribute: string;
+		keyframes: Array<[number, number]>;
+	}>;
 	/** Frozen targets; a Dynamic assigned directly to a Playback cannot be targetless. */
 	targets?: string[];
 }
 
 function angleLane(lane: AngleLane) {
-	const address = { representation: { kind: "angles" }, component: { kind: lane.component } };
+	const address = {
+		representation: { kind: "angles" },
+		component: { kind: lane.component },
+	};
 	return {
 		id: crypto.randomUUID(),
 		speed_multiplier: { numerator: 1, denominator: 1 },
@@ -84,8 +90,16 @@ function scalarLane(attribute: string, keyframes: Array<[number, number]>) {
 			})),
 			size: 1,
 		},
-		max_min: { minimum: { type: "value", value: 0 }, maximum: { type: "value", value: 1 }, ...shape },
-		middle_amplitude: { middle: { type: "current" }, amplitude: 0.35, ...shape },
+		max_min: {
+			minimum: { type: "value", value: 0 },
+			maximum: { type: "value", value: 1 },
+			...shape,
+		},
+		middle_amplitude: {
+			middle: { type: "current" },
+			amplitude: 0.35,
+			...shape,
+		},
 		speed_multiplier: { numerator: 1, denominator: 1 },
 		width: 1,
 		random_group_id: null,
@@ -106,7 +120,9 @@ export function dynamicDefinition(intent: AngleDynamicIntent) {
 			: { type: "targetless" },
 		lanes: [
 			...intent.lanes.map(angleLane),
-			...(intent.scalarLanes ?? []).map((lane) => scalarLane(lane.attribute, lane.keyframes)),
+			...(intent.scalarLanes ?? []).map((lane) =>
+				scalarLane(lane.attribute, lane.keyframes),
+			),
 		],
 		random_groups: [],
 		phase_mode: "uniform",
@@ -125,7 +141,10 @@ export function dynamicDefinition(intent: AngleDynamicIntent) {
 				: {
 						type: "speed_group",
 						group: "A",
-						beats_per_cycle: { numerator: intent.cycle.speedGroupBeats, denominator: 1 },
+						beats_per_cycle: {
+							numerator: intent.cycle.speedGroupBeats,
+							denominator: 1,
+						},
 					},
 		overall_speed_multiplier: { numerator: 1, denominator: 1 },
 		run_mode: "loop",
@@ -139,12 +158,18 @@ export interface StoredDynamic {
 	lanes: Array<{
 		programming?: {
 			address: { component: { kind: string } | null };
-			configuration: { configuration: { points: Array<{ source: { kind: string } }> } };
+			configuration: {
+				configuration: { points: Array<{ source: { kind: string } }> };
+			};
 		};
 	}>;
 }
 
-export async function createDynamic(api: ApiDriver, rig: IntentRig, intent: AngleDynamicIntent) {
+export async function createDynamic(
+	api: ApiDriver,
+	rig: IntentRig,
+	intent: AngleDynamicIntent,
+) {
 	const created = await api.request<{ object: { body: StoredDynamic } }>(
 		"POST",
 		"/api/v2/dynamics/create",
@@ -156,15 +181,27 @@ export async function createDynamic(api: ApiDriver, rig: IntentRig, intent: Angl
 	return created.object.body;
 }
 
-export async function storedDynamic(api: ApiDriver, rig: IntentRig, id: string) {
-	return (await api.showObject<StoredDynamic>(rig.showId, "dynamic", id))?.body ?? null;
+export async function storedDynamic(
+	api: ApiDriver,
+	rig: IntentRig,
+	id: string,
+) {
+	return (
+		(await api.showObject<StoredDynamic>(rig.showId, "dynamic", id))?.body ??
+		null
+	);
 }
 
 /** The source kinds of the stored lane of one Angle component, keyframe by keyframe. */
-export function laneSources(dynamic: StoredDynamic | null, component: "pan" | "tilt") {
+export function laneSources(
+	dynamic: StoredDynamic | null,
+	component: "pan" | "tilt",
+) {
 	return dynamic?.lanes
 		.find((lane) => lane.programming?.address.component?.kind === component)
-		?.programming?.configuration.configuration.points.map((point) => point.source.kind);
+		?.programming?.configuration.configuration.points.map(
+			(point) => point.source.kind,
+		);
 }
 
 /** Starts the Dynamic on the current selection, into the Programmer, as the pool does. */
@@ -197,7 +234,11 @@ export interface DynamicStatus {
 	warning?: string | null;
 }
 
-export async function dynamicStatus(api: ApiDriver, rig: IntentRig, id: string) {
+export async function dynamicStatus(
+	api: ApiDriver,
+	rig: IntentRig,
+	id: string,
+) {
 	const runtime = await api.request<{ definitions: DynamicStatus[] }>(
 		"GET",
 		"/api/v2/dynamics/runtime",
@@ -211,9 +252,13 @@ export async function dynamicStatus(api: ApiDriver, rig: IntentRig, id: string) 
 
 /** Pauses or resumes Speed Group A, which freezes the phase of every Dynamic it drives. */
 export async function toggleSpeedGroupPause(api: ApiDriver) {
-	return api.request<{ snapshot: { paused: boolean } }>("POST", "/api/v2/speed-groups/A/actions", {
-		action: "pause",
-	});
+	return api.request<{ snapshot: { paused: boolean } }>(
+		"POST",
+		"/api/v2/speed-groups/A/actions",
+		{
+			action: "pause",
+		},
+	);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -250,9 +295,15 @@ export async function readouts(
 		owners: Array<{
 			fixture_id: string;
 			requested?: Pose["requested"];
-			position: { available: boolean; common?: { pan_degrees: number; tilt_degrees: number } | null };
+			position: {
+				available: boolean;
+				common?: { pan_degrees: number; tilt_degrees: number } | null;
+			};
 		}>;
-	}>("GET", `/api/v2/output/readouts?lane=${lane}&fixture_ids=${fixtureIds.join(",")}`);
+	}>(
+		"GET",
+		`/api/v2/output/readouts?lane=${lane}&fixture_ids=${fixtureIds.join(",")}`,
+	);
 	return {
 		frame: snapshot.frame ?? null,
 		unavailable: snapshot.unavailable ?? null,
@@ -271,7 +322,12 @@ export async function readouts(
 }
 
 /** Advances the manual clock by `millis`, then reads the commanded Angles of one fixture. */
-export async function poseAfter(api: ApiDriver, bench: LightBench, fixtureId: string, millis = 0) {
+export async function poseAfter(
+	api: ApiDriver,
+	bench: LightBench,
+	fixtureId: string,
+	millis = 0,
+) {
 	await bench.tick(millis);
 	const pose = (await readouts(api, [fixtureId])).poses[fixtureId];
 	if (!pose) throw new Error(`no Position readout for ${fixtureId}`);
@@ -281,16 +337,30 @@ export async function poseAfter(api: ApiDriver, bench: LightBench, fixtureId: st
 /** Commanded Angles agree within this many degrees (16-bit fitting round trip). */
 export const DEGREES = 0.01;
 
-export function expectAngles(pose: Pose, pan: number, tilt: number, label = "") {
-	expect(Math.abs(pose.pan - pan), `${label} Pan ${pose.pan} vs ${pan}`).toBeLessThan(DEGREES);
-	expect(Math.abs(pose.tilt - tilt), `${label} Tilt ${pose.tilt} vs ${tilt}`).toBeLessThan(DEGREES);
+export function expectAngles(
+	pose: Pose,
+	pan: number,
+	tilt: number,
+	label = "",
+) {
+	expect(
+		Math.abs(pose.pan - pan),
+		`${label} Pan ${pose.pan} vs ${pan}`,
+	).toBeLessThan(DEGREES);
+	expect(
+		Math.abs(pose.tilt - tilt),
+		`${label} Tilt ${pose.tilt} vs ${tilt}`,
+	).toBeLessThan(DEGREES);
 }
 
 export interface DmxSnapshot {
 	frame: FrameIdentity | null;
 	revision: number;
 	universes: Array<{ universe: number; slots: number[] }>;
-	points: Array<{ fixture_id: string; offset_metres: [number, number, number] }>;
+	points: Array<{
+		fixture_id: string;
+		offset_metres: [number, number, number];
+	}>;
 	preload: { frame: FrameIdentity | null } | null;
 	preload_status?: { state: string; episode?: string | null } | null;
 }
@@ -303,9 +373,14 @@ export function outputDmx(api: ApiDriver, includePreload = false) {
 }
 
 /** One fixture's channels, from its 1-based start address on universe 1. */
-export async function channels(bench: LightBench, address: number, count: number) {
+export async function channels(
+	bench: LightBench,
+	address: number,
+	count: number,
+) {
 	const frame = await bench.tick(0);
-	const slots = frame.universes.find((entry) => entry.universe === 1)?.slots ?? [];
+	const slots =
+		frame.universes.find((entry) => entry.universe === 1)?.slots ?? [];
 	return slots.slice(address - 1, address - 1 + count);
 }
 
@@ -321,7 +396,11 @@ export interface ColorReport {
 	accepted_frame?: { state: string; frame?: FrameIdentity | null } | null;
 }
 
-export function colorReport(api: ApiDriver, rig: IntentRig, fixtureIds: readonly string[]) {
+export function colorReport(
+	api: ApiDriver,
+	rig: IntentRig,
+	fixtureIds: readonly string[],
+) {
 	return api.request<ColorReport>(
 		"GET",
 		`/api/v2/color-intent/report?fixtures=${fixtureIds.join(",")}`,
@@ -337,15 +416,11 @@ export function colorReport(api: ApiDriver, rig: IntentRig, fixtureIds: readonly
 
 export async function playbackAction(
 	api: ApiDriver,
-	playback: number,
+	address: { page: number; position: number },
 	action: string,
 	input: Record<string, unknown> = {},
 ) {
-	const result = await api.playbackNumberAction<{ outcome: { status: string } }>(
-		playback,
-		action,
-		input,
-	);
+	const result = await api.playbackAction(address, action, input);
 	return result.outcome.status;
 }
 
@@ -356,13 +431,12 @@ export async function playbackAction(
 export async function seedDynamicPlayback(
 	api: ApiDriver,
 	rig: IntentRig,
-	number: number,
+	address: { page: number; position: number },
 	dynamic: StoredDynamic & { pool_number?: number },
 	crossfadeNonIntensity: boolean,
 ) {
-	await api.seedShowObject(rig.showId, "playback", String(number), {
-		number,
-		name: `Dynamic ${number}`,
+	const definition = {
+		name: `Dynamic ${address.page}.${address.position}`,
 		target: {
 			type: "dynamic",
 			assignment: {
@@ -395,5 +469,23 @@ export async function seedDynamicPlayback(
 		color: "#20c997",
 		flash_release: "release_all",
 		protect_from_swap: false,
-	});
+	};
+	const page = await api.showObject<{
+		name: string;
+		assignments: Record<string, unknown>;
+	}>(rig.showId, "playback_page", String(address.page));
+	await api.seedShowObject(
+		rig.showId,
+		"playback_page",
+		String(address.page),
+		{
+			number: address.page,
+			name: page?.body.name ?? `Page ${address.page}`,
+			assignments: {
+				...page?.body.assignments,
+				[String(address.position)]: definition,
+			},
+		},
+		page?.revision ?? 0,
+	);
 }

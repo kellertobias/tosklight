@@ -59,7 +59,7 @@ export class BrowserOutput {
 			"OUTPUT · PAUSE DYNAMICS",
 			`Operate Pause Dynamics on playback ${control.playbackNumber}, button ${control.button}.`,
 		);
-		await this.api.playbackNumberAction(control.playbackNumber, "button", {
+		await this.api.playbackAction({ page: 1, position: control.playbackNumber }, "button", {
 			button: control.button,
 			pressed: true,
 		});

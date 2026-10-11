@@ -11,7 +11,6 @@ import type { ApiDriver, Session } from "../core/api";
 import {
 	type IntentHttpDependencies,
 	intentFetch,
-	intentRequestId,
 	intentSession,
 	intentUrl,
 } from "../core/v2IntentHttp";
@@ -19,7 +18,7 @@ import {
 export interface GoCueListPlaybackIntent {
 	surface: "api";
 	showId: string;
-	playbackNumber: number;
+	playbackAddress: { page: number; position: number };
 	cueListId: string;
 }
 
@@ -44,11 +43,9 @@ export async function goCueListPlayback(
 		intent.showId,
 		session.desk.id,
 		{
-			request_id: intentRequestId(dependencies),
 			address: { kind: "cue_list", cue_list_id: intent.cueListId },
 			action: { type: "go", pressed: true },
-			// The retired WebSocket action was a virtual Playback interaction.
-			surface: "virtual",
+			control_source: { surface_id: "main", control_id: 1 },
 		},
 	);
 	assertCurrentSession(api, session, sessionKey);
@@ -61,7 +58,7 @@ function runtimeIdentities(
 ): PlaybackRuntimeIdentity[] {
 	return [
 		{ kind: "cue_list", cue_list_id: intent.cueListId },
-		{ kind: "playback", playback_number: intent.playbackNumber },
+		{ kind: "playback", ...intent.playbackAddress },
 	];
 }
 
@@ -78,20 +75,20 @@ function assertAuthority(
 	}
 	const cueList = snapshot.projections.some(
 		(projection) =>
-			projection.requested.kind === "cue_list" &&
-			sameId(projection.requested.cue_list_id, intent.cueListId) &&
-			projection.playback_number === intent.playbackNumber &&
+			projection.identity.kind === "cue_list" &&
+			sameId(projection.identity.cue_list_id, intent.cueListId) &&
 			isCueListProjection(projection, intent.cueListId),
 	);
 	const playback = snapshot.projections.some(
 		(projection) =>
-			projection.requested.kind === "playback" &&
-			projection.requested.playback_number === intent.playbackNumber &&
-			projection.playback_number === intent.playbackNumber &&
+			projection.identity.kind === "playback" &&
+			sameAddress(projection.identity, intent.playbackAddress) &&
 			isCueListProjection(projection, intent.cueListId),
 	);
 	if (!cueList || !playback)
-		throw new Error("Playback snapshot does not contain the exact Playback/Cuelist authority");
+		throw new Error(
+			"Playback snapshot does not contain the exact Playback/Cuelist authority",
+		);
 	return revision;
 }
 
@@ -99,15 +96,14 @@ function assertRequestedProjection(
 	projection: PlaybackRuntimeSnapshot["projections"][number],
 	intent: GoCueListPlaybackIntent,
 ) {
-	const requested = projection.requested;
+	const requested = projection.identity;
 	const matchesCueList =
 		requested.kind === "cue_list" &&
 		sameId(requested.cue_list_id, intent.cueListId) &&
 		isCueListProjection(projection, intent.cueListId);
 	const matchesPlayback =
 		requested.kind === "playback" &&
-		requested.playback_number === intent.playbackNumber &&
-		projection.playback_number === intent.playbackNumber &&
+		sameAddress(requested, intent.playbackAddress) &&
 		isCueListProjection(projection, intent.cueListId);
 	if (!matchesCueList && !matchesPlayback)
 		throw new Error("Playback snapshot contains unrelated runtime authority");
@@ -129,7 +125,7 @@ function assertDeskScope(
 }
 
 function assertProjectionScope(
-	projection: PlaybackRuntimeSnapshot["projections"][number],
+	projection: { scope: { show_id: string; show_revision: number } },
 	showId: string,
 	revision: number,
 ) {
@@ -138,7 +134,9 @@ function assertProjectionScope(
 			`Playback projection belongs to foreign Show ${projection.scope.show_id}`,
 		);
 	if (projection.scope.show_revision !== revision)
-		throw new Error("Playback authority revision changed during snapshot capture");
+		throw new Error(
+			"Playback authority revision changed during snapshot capture",
+		);
 }
 
 function isCueListProjection(
@@ -165,16 +163,19 @@ function assertOutcome(
 	)
 		throw new Error("Playback outcome does not match the requested Cuelist");
 	if (
-		outcome.projection.requested.kind !== "cue_list" ||
-		!sameId(outcome.projection.requested.cue_list_id, intent.cueListId) ||
-		outcome.projection.playback_number !== null ||
+		outcome.projection.identity.kind !== "cue_list" ||
+		!sameId(outcome.projection.identity.cue_list_id, intent.cueListId) ||
 		!isCueListProjection(outcome.projection, intent.cueListId)
 	)
-		throw new Error("Playback outcome does not contain the direct Cuelist projection");
+		throw new Error(
+			"Playback outcome does not contain the direct Cuelist projection",
+		);
 	assertProjectionScope(outcome.projection, intent.showId, revision);
 	if (outcome.desk !== null) {
 		if (!sameId(outcome.desk.desk_id, session.desk.id))
-			throw new Error(`Playback outcome belongs to foreign desk ${outcome.desk.desk_id}`);
+			throw new Error(
+				`Playback outcome belongs to foreign desk ${outcome.desk.desk_id}`,
+			);
 		assertProjectionScope(outcome.desk, intent.showId, revision);
 	}
 }
@@ -200,7 +201,8 @@ function playbackClient(
 		request,
 		blob: unsupported,
 		absoluteUrl: (path) => intentUrl(api, path),
-		command: unsupported,
+		currentDeskId: () => session.desk.id,
+		sendAction: unsupported,
 	});
 }
 
@@ -241,14 +243,22 @@ function validateIntent(intent: GoCueListPlaybackIntent) {
 		throw new Error("Playback runtime helper supports only the API surface");
 	programmingUuidAt(intent.showId, "$.showId");
 	programmingUuidAt(intent.cueListId, "$.cueListId");
-	if (
-		!Number.isSafeInteger(intent.playbackNumber) ||
-		intent.playbackNumber < 1 ||
-		intent.playbackNumber > 1_000
-	)
-		throw new Error("Playback number must be between 1 and 1000");
+	for (const [value, maximum, label] of [
+		[intent.playbackAddress.page, 99, "Page"],
+		[intent.playbackAddress.position, 1000, "position"],
+	] as const) {
+		if (!Number.isSafeInteger(value) || value < 1 || value > maximum)
+			throw new Error(`Playback ${label} must be between 1 and ${maximum}`);
+	}
 }
 
 function sameId(left: string, right: string) {
 	return left.toLowerCase() === right.toLowerCase();
+}
+
+function sameAddress(
+	left: { page: number; position: number },
+	right: { page: number; position: number },
+) {
+	return left.page === right.page && left.position === right.position;
 }

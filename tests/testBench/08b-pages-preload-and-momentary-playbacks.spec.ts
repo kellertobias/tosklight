@@ -53,12 +53,13 @@ scenario(
 		await t.hardware.connect();
 		try {
 			const target = explicitPagePlayback(1, 1);
-			await t.playback.via.osc.flash(target).press();
+			const heldFlash = t.playback.via.osc.flash(target);
+            await heldFlash.press();
 			await t.playback.expect(playback).runtime({
 				flash: true,
 				temporary_active: true,
 			});
-			await t.playback.via.osc.flash(target).release();
+			await heldFlash.release();
 			await t.playback.expect(playback).runtime({
 				flash: false,
 				temporary_active: false,

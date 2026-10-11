@@ -405,7 +405,7 @@ async function freeTcpPort(): Promise<number> {
 async function freeUdpPort(): Promise<number> {
   const socket = dgram.createSocket("udp4");
   await new Promise<void>((resolve, reject) => { socket.once("error", reject); socket.bind(0, "127.0.0.1", resolve); });
-  const port = (socket.address() as dgram.AddressInfo).port;
+  const port = (socket.address() as net.AddressInfo).port;
   await new Promise<void>((resolve) => socket.close(() => resolve()));
   return port;
 }

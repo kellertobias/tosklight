@@ -39,8 +39,8 @@ scenario(
 
 		await t.moveInBlack.reset();
 		await t.playback.open();
-		await t.playback.go(1);
-		await t.playback.go(1);
+		await t.playback.go({ page: 1, position: 1 });
+		await t.playback.go({ page: 1, position: 1 });
 
 		// Cue 1 never rendered, so Cue 2 fades Pan in from the fixture's declared default pose
 		// (TL-552): Profile Moving Light's DMX default 128/255 on its nominal 540° travel, +1.06°.
@@ -89,7 +89,7 @@ scenario(
 			targetCue: "3",
 		});
 
-		await t.playback.go(1);
+		await t.playback.go({ page: 1, position: 1 });
 		await t.clock.advanceBy("0ms");
 		await t.expectFixtureValue(fixture(101), { "position:pan": 162 });
 		await t.expectFixtureValue(fixture(102), { "position:pan": -162 });

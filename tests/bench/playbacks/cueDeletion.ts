@@ -25,9 +25,9 @@ import {
 } from "../core/v2IntentHttp";
 
 export type CueDeletionAddress =
-	| { type: "pool"; playbackNumber: number }
-	| { type: "current_page"; slot: number }
-	| { type: "page_slot"; page: number; slot: number };
+	| { type: "cuelist_pool"; number: number }
+	| { type: "current_page"; position: number }
+	| { type: "playback"; page: number; position: number };
 
 export interface DeleteCueIntent {
 	surface: "api";
@@ -99,7 +99,7 @@ interface ActiveShowAuthority {
 
 interface ResolvedCueAuthority {
 	address: Record<string, string | number>;
-	playbackNumber: number;
+	playbackAddress: { page: number; position: number } | null;
 	cueList: ShowObject<"cue_list">;
 	cue: { id: string; number: string };
 }
@@ -160,7 +160,7 @@ async function loadActiveShow(
 			"$.desk.scope.show_id",
 		),
 		showRevision: snapshot.desk.scope.show_revision,
-		activePage: snapshot.desk.active_page,
+		activePage: snapshot.desk.command_page,
 	};
 }
 
@@ -176,43 +176,50 @@ async function resolveAuthority(
 		sessionToken: session.token,
 		fetch,
 	});
-	const [playbacks, cueLists, pageSnapshot] = await Promise.all([
-		snapshots.collection(active.showId, "playback"),
+	const [cueLists, pageSnapshot] = await Promise.all([
 		snapshots.collection(active.showId, "cue_list"),
-		intent.address.type === "pool"
+		intent.address.type === "cuelist_pool"
 			? Promise.resolve(null)
 			: snapshots.collection(active.showId, "playback_page"),
 	]);
-	for (const revision of [
-		playbacks.showRevision,
-		cueLists.showRevision,
-		pageSnapshot?.showRevision,
-	])
+	for (const revision of [cueLists.showRevision, pageSnapshot?.showRevision])
 		if (revision != null && revision !== active.showRevision)
 			throw new Error("Show authority changed while resolving Cue deletion");
-	const resolved = resolveAddress(
-		intent.address,
-		active,
-		pageSnapshot?.objects ?? [],
-	);
-	const playback = unique(
-		playbacks.objects,
-		(item) => item.body.number === resolved.playbackNumber,
-		`Playback ${resolved.playbackNumber}`,
-	);
-	if (playback.body.target.type !== "cue_list")
-		throw new Error(
-			`Playback ${resolved.playbackNumber} does not contain Cues`,
+	const resolved = resolveAddress(intent.address, active);
+	let cueList: ShowObject<"cue_list">;
+	if (intent.address.type === "cuelist_pool") {
+		const poolNumber = intent.address.number;
+		cueList = unique(
+			cueLists.objects,
+			(item) => item.body.pool_number === poolNumber,
+			`Cuelist Pool ${intent.address.number}`,
 		);
-	const cueListId = programmingUuidAt(
-		playback.body.target.cue_list_id,
-		"$.playback.target.cue_list_id",
-	);
-	const cueList = unique(
-		cueLists.objects,
-		(item) => sameId(item.body.id, cueListId),
-		`Cuelist ${cueListId}`,
-	);
+	} else {
+		const address = resolved.playbackAddress!;
+		const page = unique(
+			pageSnapshot!.objects,
+			(item) => item.body.number === address.page,
+			`Playback Page ${address.page}`,
+		);
+		const playback = page.body.assignments[String(address.position)];
+		if (!playback)
+			throw new Error(
+				`Playback ${address.page}.${address.position} is not assigned`,
+			);
+		if (playback.target.type !== "cue_list")
+			throw new Error(
+				`Playback ${address.page}.${address.position} does not contain Cues`,
+			);
+		const cueListId = programmingUuidAt(
+			playback.target.cue_list_id,
+			"$.playback.target.cue_list_id",
+		);
+		cueList = unique(
+			cueLists.objects,
+			(item) => sameId(item.body.id, cueListId),
+			`Cuelist ${cueListId}`,
+		);
+	}
 	programmingUuidAt(cueList.body.id, "$.cue_list.body.id");
 	const cue = unique(
 		cueList.body.cues,
@@ -226,35 +233,24 @@ async function resolveAuthority(
 function resolveAddress(
 	address: CueDeletionAddress,
 	active: ActiveShowAuthority,
-	pages: ShowObject<"playback_page">[],
-): Pick<ResolvedCueAuthority, "address" | "playbackNumber"> {
-	if (address.type === "pool")
+): Pick<ResolvedCueAuthority, "address" | "playbackAddress"> {
+	if (address.type === "cuelist_pool")
 		return {
-			address: { type: "pool", playback_number: address.playbackNumber },
-			playbackNumber: address.playbackNumber,
+			address: { type: "cuelist_pool", number: address.number },
+			playbackAddress: null,
 		};
-	const pageNumber =
+	const page =
 		address.type === "current_page" ? active.activePage : address.page;
-	const page = unique(
-		pages,
-		(item) => item.body.number === pageNumber,
-		`Playback Page ${pageNumber}`,
-	);
-	const playbackNumber = page.body.slots[String(address.slot)];
-	if (playbackNumber == null)
-		throw new Error(
-			`Playback Page ${pageNumber} slot ${address.slot} is not assigned`,
-		);
 	return {
 		address:
 			address.type === "current_page"
 				? {
 						type: "current_page",
-						expected_page: pageNumber,
-						slot: address.slot,
+						expected_page: page,
+						position: address.position,
 					}
-				: { type: "page_slot", page: pageNumber, slot: address.slot },
-		playbackNumber,
+				: { type: "playback", page, position: address.position },
+		playbackAddress: { page, position: address.position },
 	};
 }
 
@@ -268,7 +264,7 @@ function actionRequest(
 		address: authority.address,
 		cue_number: intent.cueNumber,
 		authority: {
-			playback_number: authority.playbackNumber,
+			playback_address: authority.playbackAddress,
 			cue_list_id: authority.cueList.body.id,
 			object_id: authority.cueList.id,
 			object_revision: authority.cueList.revision,
@@ -480,12 +476,12 @@ function validateIntent(intent: DeleteCueIntent) {
 	if (intent.surface !== "api")
 		throw new Error("Cue deletion helper supports only the API surface");
 	cueNumberAt(intent.cueNumber, "$.cueNumber");
-	if (intent.address.type === "pool")
-		bounded(intent.address.playbackNumber, 1_000, "Playback");
+	if (intent.address.type === "cuelist_pool")
+		bounded(intent.address.number, 1_000, "Playback");
 	else {
-		bounded(intent.address.slot, 127, "slot");
-		if (intent.address.type === "page_slot")
-			bounded(intent.address.page, 127, "Page");
+		bounded(intent.address.position, 1000, "position");
+		if (intent.address.type === "playback")
+			bounded(intent.address.page, 99, "Page");
 	}
 }
 

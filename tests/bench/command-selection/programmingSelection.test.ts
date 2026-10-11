@@ -90,7 +90,10 @@ describe("Programming selection acceptance intents", () => {
 				expected_revision: 8,
 			},
 		},
-	])("sends one strict $name action against exact authority", async ({ apply, action }) => {
+	])("sends one strict $name action against exact authority", async ({
+		apply,
+		action,
+	}) => {
 		const fetchMock = selectionFetch();
 		const outcome = await apply(api(), fetchMock as typeof fetch);
 
@@ -256,7 +259,7 @@ function api() {
 		session_id: "11111111-1111-4111-8111-111111111111",
 		client_id: "client",
 		token: "token",
-		desk: { id: DESK_ID },
+		desk: { id: DESK_ID, name: "Desk" },
 	};
 	return driver;
 }
@@ -305,7 +308,9 @@ function assertExactCalls(fetchMock: ReturnType<typeof selectionFetch>) {
 		]),
 	);
 	expect(urls).toHaveLength(3);
-	expect(urls.some((url) => /bootstrap|\/api\/v1|playbacks|programmers/.test(url))).toBe(false);
+	expect(
+		urls.some((url) => /bootstrap|\/api\/v1|playbacks|programmers/.test(url)),
+	).toBe(false);
 	const playback = fetchMock.mock.calls.find(([input]) =>
 		String(input).endsWith("/playback-runtime/snapshot"),
 	);
@@ -321,7 +326,9 @@ function actionCalls(fetchMock: ReturnType<typeof selectionFetch>) {
 }
 
 function actionBodies(fetchMock: ReturnType<typeof selectionFetch>) {
-	return actionCalls(fetchMock).map(([, init]) => JSON.parse(String(init?.body)));
+	return actionCalls(fetchMock).map(([, init]) =>
+		JSON.parse(String(init?.body)),
+	);
 }
 
 function playbackSnapshot(showId = SHOW_ID, deskId = DESK_ID) {
@@ -330,7 +337,9 @@ function playbackSnapshot(showId = SHOW_ID, deskId = DESK_ID) {
 		desk: {
 			scope: { show_id: showId, show_revision: 12 },
 			desk_id: deskId,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: [],

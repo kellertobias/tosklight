@@ -59,7 +59,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 
 		const sequential: Array<[number, number]> = [];
 		for (let index = 0; index < 3; index += 1) {
-			await api.playbackNumberAction(1, "go", {});
+			await api.playbackAction({ page: 1, position: 1 }, "go", {});
 			await bench.tick(0);
 			sequential.push([
 				await visualizationLevel(api, fixtures[1], "intensity"),
@@ -74,9 +74,9 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 
 		const direct: Array<[number, number]> = [];
 		for (const cueNumber of [1, 2, 3]) {
-			await api.playbackNumberAction(1, "off", {});
-			await api.playbackNumberAction(1, "go-to", {
-				cue_number: cueNumber,
+			await api.playbackAction({ page: 1, position: 1 }, "off", {});
+			await api.playbackAction({ page: 1, position: 1 }, "go-to", {
+				cue_number: String(cueNumber),
 			});
 			await bench.tick(0);
 			direct.push([
@@ -176,10 +176,10 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			surface: "api",
 			showId: state.showId,
 		});
-		await api.playbackNumberAction(1, "off", {});
+		await api.playbackAction({ page: 1, position: 1 }, "off", {});
 		const states: number[][] = [];
 		for (let index = 0; index < 3; index += 1) {
-			await api.playbackNumberAction(1, "go", {});
+			await api.playbackAction({ page: 1, position: 1 }, "go", {});
 			states.push(logicalSlots(await bench.tick(0), 8));
 		}
 		expect(states).toEqual([

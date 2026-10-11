@@ -1,4 +1,5 @@
 import dgram, { type Socket } from "node:dgram";
+import type { AddressInfo } from "node:net";
 
 export type DmxProtocol = "artnet" | "sacn";
 export interface DmxPacket {
@@ -51,7 +52,7 @@ export class DmxReceiver {
 
   static async bind(): Promise<DmxReceiver> {
     const socket = await bindUdp();
-    return new DmxReceiver(socket, (socket.address() as dgram.AddressInfo).port);
+    return new DmxReceiver(socket, (socket.address() as AddressInfo).port);
   }
 
   static async canBind(): Promise<boolean> {
@@ -172,7 +173,7 @@ export class OscHardware {
   static async connect(serverPort: number): Promise<OscHardware> {
     const command = await bindUdp();
     const feedback = await bindUdp();
-    return new OscHardware(command, feedback, serverPort, (feedback.address() as dgram.AddressInfo).port);
+    return new OscHardware(command, feedback, serverPort, (feedback.address() as AddressInfo).port);
   }
 
   mark(): number { return this.messages.length; }

@@ -20,7 +20,7 @@ import {
 	expectPreloadMaskControls,
 	openPreloadInputSettings,
 	type PreloadMaskPairState,
-	poolAction,
+	assignedPlaybackAction,
 	prepare,
 	setCaptureMask,
 	setPreloadMaskThroughUi,
@@ -125,12 +125,12 @@ const preload005ApiSupplement = async ({
 			showId: prepared.showId,
 		});
 		await api.executeCommandLine("GROUP 1 AT 45");
-		await poolAction(api, 51, "button", {
+		await assignedPlaybackAction(api, { page: 1, position: 51 }, "button", {
 			button: 1,
 			pressed: true,
 			surface: "physical",
 		});
-		await poolAction(api, 52, "button", {
+		await assignedPlaybackAction(api, { page: 1, position: 52 }, "button", {
 			button: 1,
 			pressed: true,
 			surface: "virtual",
