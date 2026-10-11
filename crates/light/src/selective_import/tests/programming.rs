@@ -425,19 +425,22 @@ fn cue_and_playback_import_keep_generated_lane_references_with_the_duplicated_dy
         }),
     );
     rig.source_object(
-        "playback",
+        "playback_page",
         "1",
         json!({
-                "number":1,"name":"Angles","target":{"type":"dynamic","assignment":{
+                "number":1,"name":"Main","assignments":{"7":{"name":"Angles","target":{"type":"dynamic","assignment":{
                 "dynamic":fallback
-            }}
+            }}}}
         }),
     );
     let preview = rig.preview(
         SelectiveShowImportRequest::new(
             rig.source_id,
             rig.target_id,
-            [key("cue_list", &cue_id.to_string()), key("playback", "1")],
+            [
+                key("cue_list", &cue_id.to_string()),
+                key("playback_page", "1"),
+            ],
         )
         .with_mode(ImportLoadMode::AddToEnd),
     );
@@ -462,7 +465,7 @@ fn cue_and_playback_import_keep_generated_lane_references_with_the_duplicated_dy
         .unwrap()
         .body();
     let playback = document
-        .object("playback", destination("playback"))
+        .object("playback_page", destination("playback_page"))
         .unwrap()
         .body();
     let generated = &live["lanes"][1]["id"];
@@ -474,7 +477,9 @@ fn cue_and_playback_import_keep_generated_lane_references_with_the_duplicated_dy
     for reference in [
         cue.pointer("/cues/0/dynamic_changes/0/value/dynamic")
             .unwrap(),
-        playback.pointer("/target/assignment/dynamic").unwrap(),
+        playback
+            .pointer("/assignments/7/target/assignment/dynamic")
+            .unwrap(),
     ] {
         assert_eq!(reference["dynamic_id"], live["id"]);
         let fallback = &reference["embedded_fallback"]["definition"];
@@ -518,25 +523,25 @@ fn targetless_playback_scope_migration_reidentifies_the_required_current_partner
         },
     ))
     .unwrap();
-    rig.source_object("playback", "1", json!({
-        "number":1,"name":"Targetless scope","target":{"type":"dynamic","assignment":{
+    rig.source_object("playback_page", "1", json!({
+        "number":1,"name":"Main","assignments":{"7":{"name":"Targetless scope","target":{"type":"dynamic","assignment":{
             "dynamic":DynamicReference { dynamic_id:None,last_known_pool_number:7,
                 embedded_fallback:DynamicDefinitionSnapshot { definition:Arc::new(definition) } },
             "target_scope":{"type":"frozen_targets","targets":[fixture.fixture_id]}
-        }}
+        }}}}
     }));
-    let preview = rig.preview(rig.request("playback", "1"));
+    let preview = rig.preview(rig.request("playback_page", "1"));
     assert!(preview.can_apply(), "{:?}", preview.blockers);
     rig.apply(&preview).unwrap();
     let document = rig.target_document();
-    let raw = document.object("playback", "1").unwrap().body();
+    let raw = document.object("playback_page", "1").unwrap().body();
     assert!(
-        raw.pointer("/target/assignment/target_scope")
+        raw.pointer("/assignments/7/target/assignment/target_scope")
             .unwrap()
             .is_null()
     );
     let mut migrated: DynamicDefinition = serde_json::from_value(
-        raw.pointer("/target/assignment/dynamic/embedded_fallback/definition")
+        raw.pointer("/assignments/7/target/assignment/dynamic/embedded_fallback/definition")
             .unwrap()
             .clone(),
     )

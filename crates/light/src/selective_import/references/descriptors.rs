@@ -398,7 +398,78 @@ pub(super) fn cue_list_descriptor(
     Ok(descriptor)
 }
 
-pub(super) fn playback_descriptor(
+fn add_playback_assignment_references(
+    body: &Value,
+    prefix: &str,
+    source: &FixtureIdentityCatalog,
+    target: &FixtureIdentityCatalog,
+    descriptor: &mut ImportObjectDescriptor,
+) -> Result<(), String> {
+    match body
+        .pointer(&format!("{prefix}/target/type"))
+        .and_then(Value::as_str)
+    {
+        Some("cue_list") => add_optional_direct_reference(
+            body,
+            &format!("{prefix}/target/cue_list_id"),
+            "cue_list",
+            descriptor,
+        )?,
+        Some("group") => add_optional_direct_reference(
+            body,
+            &format!("{prefix}/target/group_id"),
+            "group",
+            descriptor,
+        )?,
+        Some("macro") => add_optional_direct_reference(
+            body,
+            &format!("{prefix}/target/macro_id"),
+            "macro",
+            descriptor,
+        )?,
+        Some("timecode") => add_optional_direct_reference(
+            body,
+            &format!("{prefix}/target/timecode_id"),
+            "timecode",
+            descriptor,
+        )?,
+        // Speed Groups are fixed desk/runtime controls, not portable fixture Group objects.
+        Some("speed_group") => {}
+        Some("dynamic") => {
+            add_optional_direct_reference(
+                body,
+                &format!("{prefix}/target/assignment/dynamic/dynamic_id"),
+                "dynamic",
+                descriptor,
+            )?;
+            add_dynamic_definition_references(
+                body,
+                &format!("{prefix}/target/assignment/dynamic/embedded_fallback/definition"),
+                source,
+                target,
+                descriptor,
+            )?;
+            add_optional_direct_reference(
+                body,
+                &format!("{prefix}/target/assignment/target_scope/group_id"),
+                "group",
+                descriptor,
+            )?;
+            add_fixture_array_at(
+                body,
+                &format!("{prefix}/target/assignment/target_scope/targets"),
+                &format!("{prefix}/target/assignment/target_scope/targets"),
+                source,
+                target,
+                descriptor,
+            )?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+pub(super) fn playback_page_descriptor(
     object: &PortableShowObject,
     source: &FixtureIdentityCatalog,
     target: &FixtureIdentityCatalog,
@@ -411,88 +482,29 @@ pub(super) fn playback_descriptor(
         )?],
         ..ImportObjectDescriptor::default()
     };
-    match object
+    let assignments = object
         .body()
-        .pointer("/target/type")
-        .and_then(Value::as_str)
-    {
-        Some("cue_list") => add_optional_direct_reference(
+        .get("assignments")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "Playback page must contain sparse assignments".to_owned())?;
+    for position in assignments.keys() {
+        let parsed = position
+            .parse::<u16>()
+            .map_err(|_| format!("Invalid Playback position {position}"))?;
+        let page = object
+            .body()
+            .get("number")
+            .and_then(Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .ok_or_else(|| "Invalid Playback page".to_owned())?;
+        light_playback::PlaybackAddress::new(page, parsed).map_err(|error| error.to_string())?;
+        add_playback_assignment_references(
             object.body(),
-            "/target/cue_list_id",
-            "cue_list",
+            &format!("/assignments/{position}"),
+            source,
+            target,
             &mut descriptor,
-        )?,
-        Some("group") => add_optional_direct_reference(
-            object.body(),
-            "/target/group_id",
-            "group",
-            &mut descriptor,
-        )?,
-        Some("macro") => add_optional_direct_reference(
-            object.body(),
-            "/target/macro_id",
-            "macro",
-            &mut descriptor,
-        )?,
-        Some("dynamic") => {
-            add_optional_direct_reference(
-                object.body(),
-                "/target/assignment/dynamic/dynamic_id",
-                "dynamic",
-                &mut descriptor,
-            )?;
-            add_dynamic_definition_references(
-                object.body(),
-                "/target/assignment/dynamic/embedded_fallback/definition",
-                source,
-                target,
-                &mut descriptor,
-            )?;
-            add_optional_direct_reference(
-                object.body(),
-                "/target/assignment/target_scope/group_id",
-                "group",
-                &mut descriptor,
-            )?;
-            add_fixture_array_at(
-                object.body(),
-                "/target/assignment/target_scope/targets",
-                "/target/assignment/target_scope/targets",
-                source,
-                target,
-                &mut descriptor,
-            )?;
-        }
-        _ => {}
-    }
-    Ok(descriptor)
-}
-
-pub(super) fn playback_page_descriptor(
-    object: &PortableShowObject,
-) -> Result<ImportObjectDescriptor, String> {
-    let mut descriptor = ImportObjectDescriptor {
-        identities: vec![primary_identity(
-            object,
-            "/number",
-            ImportIdentityFormat::Full,
-        )?],
-        ..ImportObjectDescriptor::default()
-    };
-    let Some(slots) = object.body().pointer("/slots").and_then(Value::as_object) else {
-        return Ok(descriptor);
-    };
-    for (slot, playback) in slots {
-        let id = scalar_id(playback)
-            .ok_or_else(|| format!("playback page slot {slot} is not an identity"))?;
-        descriptor.references.push(direct_reference(
-            "playback",
-            id,
-            value_location(
-                format!("/slots/{}", slot.replace('~', "~0").replace('/', "~1")),
-                ImportIdentityFormat::Full,
-            ),
-        ));
+        )?;
     }
     Ok(descriptor)
 }
@@ -506,12 +518,21 @@ pub(super) fn schedule_descriptor(
         .pointer("/target/type")
         .and_then(Value::as_str)
     {
-        Some("playback") => add_optional_direct_reference(
-            object.body(),
-            "/target/playback_number",
-            "playback",
-            &mut descriptor,
-        )?,
+        Some("playback") => {
+            let address: light_playback::PlaybackAddress = serde_json::from_value(
+                object
+                    .body()
+                    .pointer("/target/address")
+                    .cloned()
+                    .ok_or_else(|| "Schedule Playback target requires an address".to_owned())?,
+            )
+            .map_err(|error| format!("Invalid Schedule Playback address: {error}"))?;
+            descriptor.references.push(direct_reference(
+                "playback_page",
+                address.page().to_string(),
+                value_location("/target/address/page", ImportIdentityFormat::Full),
+            ));
+        }
         Some("macro") => add_optional_direct_reference(
             object.body(),
             "/target/macro_id",

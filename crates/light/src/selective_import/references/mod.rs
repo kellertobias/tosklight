@@ -22,7 +22,6 @@ enum RegisteredObjectKind {
     Dynamic,
     Preset,
     CueList,
-    Playback,
     PlaybackPage,
     Schedule,
     StageLayout,
@@ -48,7 +47,6 @@ impl RegisteredObjectKind {
             "dynamic" => Some(Self::Dynamic),
             "preset" => Some(Self::Preset),
             "cue_list" => Some(Self::CueList),
-            "playback" => Some(Self::Playback),
             "playback_page" => Some(Self::PlaybackPage),
             "schedule" => Some(Self::Schedule),
             "stage_layout" => Some(Self::StageLayout),
@@ -99,10 +97,9 @@ pub(super) fn registered_descriptor(
         RegisteredObjectKind::CueList => {
             descriptors::cue_list_descriptor(object, source_fixtures, target_fixtures)?
         }
-        RegisteredObjectKind::Playback => {
-            descriptors::playback_descriptor(object, source_fixtures, target_fixtures)?
+        RegisteredObjectKind::PlaybackPage => {
+            descriptors::playback_page_descriptor(object, source_fixtures, target_fixtures)?
         }
-        RegisteredObjectKind::PlaybackPage => descriptors::playback_page_descriptor(object)?,
         RegisteredObjectKind::Schedule => descriptors::schedule_descriptor(object)?,
         RegisteredObjectKind::StageLayout => {
             descriptors::stage_layout_descriptor(object, source_fixtures, target_fixtures)?

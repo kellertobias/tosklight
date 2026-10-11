@@ -195,6 +195,10 @@ impl TestRig {
         )
     }
 
+    pub fn source_document(&self) -> PortableShowDocument {
+        document(&self.source_path)
+    }
+
     pub fn target_document(&self) -> PortableShowDocument {
         document(&self.target_path)
     }

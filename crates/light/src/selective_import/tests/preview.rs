@@ -275,10 +275,10 @@ fn dynamic_playback_includes_dynamic_scope_and_fallback_dependencies() {
     );
     let fallback = dynamic_with_dependencies(Uuid::new_v4(), "front", "1.1");
     rig.source_object(
-        "playback",
+        "playback_page",
         "1",
         json!({
-            "number": 1,
+            "number": 1,"name":"Main","assignments":{"7":{
             "target": {
                 "type": "dynamic",
                 "assignment": {
@@ -293,10 +293,10 @@ fn dynamic_playback_includes_dynamic_scope_and_fallback_dependencies() {
                     }
                 }
             }
-        }),
+        }} }),
     );
 
-    let preview = rig.preview(rig.request("playback", "1"));
+    let preview = rig.preview(rig.request("playback_page", "1"));
 
     for dependency in [
         key("dynamic", &dynamic_id.to_string()),
@@ -967,4 +967,198 @@ fn conflicting_revisions_of_one_profile_family_share_one_duplicate_identity() {
     assert_ne!(preview.profiles[0].destination.profile_id, profile_id);
     assert_eq!(preview.profiles[0].destination.revision, 1);
     assert_eq!(preview.profiles[1].destination.revision, 2);
+}
+
+#[test]
+fn playback_timecode_dependency_is_imported_and_speed_group_letter_is_preserved() {
+    let rig = TestRig::new();
+    let timecode = Uuid::new_v4();
+    rig.source_object(
+        "timecode",
+        &timecode.to_string(),
+        json!({"id":timecode,"name":"Show clock"}),
+    );
+    rig.source_object(
+        "playback_page",
+        "99",
+        json!({"number":99,"name":"Last page","assignments":{
+            "999":{"name":"Show clock","target":{"type":"timecode","timecode_id":timecode}},
+            "1000":{"name":"Speed A","target":{"type":"speed_group","group":"A"},"future_assignment":{"keep":true}}
+        }}),
+    );
+    let preview = rig.preview(rig.request("playback_page", "99"));
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    assert!(
+        preview
+            .dependencies
+            .iter()
+            .any(|item| item.dependency == key("timecode", &timecode.to_string()))
+    );
+    assert!(
+        !preview.dependencies.iter().any(
+            |item| item.dependency.kind() == "group" || item.dependency.kind() == "speed_group"
+        )
+    );
+    rig.apply(&preview).unwrap();
+    let document = rig.target_document();
+    let page = document.object("playback_page", "99").unwrap().body();
+    assert_eq!(page["assignments"]["1000"]["target"]["group"], "A");
+    assert_eq!(
+        page["assignments"]["1000"]["future_assignment"]["keep"],
+        true
+    );
+}
+
+#[test]
+fn schedule_playback_address_follows_duplicated_page_and_preserves_position() {
+    let rig = TestRig::new();
+    let schedule = Uuid::new_v4();
+    rig.source_object(
+        "group",
+        "front",
+        json!({"id":"front","name":"Front","fixtures":[]}),
+    );
+    rig.source_object(
+        "playback_page",
+        "4",
+        json!({"number":4,"name":"Source","assignments":{
+            "1000":{"name":"Front master","target":{"type":"group","group_id":"front"},"future_assignment":{"keep":true}}
+        }}),
+    );
+    rig.target_object(
+        "playback_page",
+        "4",
+        json!({"number":4,"name":"Destination","assignments":{}}),
+    );
+    rig.source_object(
+        "schedule",
+        &schedule.to_string(),
+        json!({"id":schedule,"name":"Start", "enabled":true,
+            "trigger":{"type":"interval","every_seconds":60,"enabled_at":"2026-01-01T00:00:00Z"},
+            "target":{"type":"playback","address":{"page":4,"position":1000},"action":"on"},
+            "future_schedule":{"keep":true}
+        }),
+    );
+    let preview = rig.preview(rig.request("schedule", &schedule.to_string()).resolve(
+        key("playback_page", "4"),
+        ImportConflictResolution::Duplicate,
+    ));
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    let page = preview
+        .objects
+        .iter()
+        .find(|item| item.source == key("playback_page", "4"))
+        .unwrap()
+        .destination
+        .id()
+        .parse::<u8>()
+        .unwrap();
+    assert_eq!(page, 1, "the first free valid page is used");
+    let imported_schedule_id = preview
+        .objects
+        .iter()
+        .find(|item| item.source == key("schedule", &schedule.to_string()))
+        .unwrap()
+        .destination
+        .id()
+        .to_owned();
+    assert_ne!(
+        imported_schedule_id,
+        schedule.to_string(),
+        "Schedules receive fresh occurrence identities on import"
+    );
+    let source_before = rig.source_document();
+    rig.apply(&preview).unwrap();
+    assert_eq!(rig.source_document(), source_before);
+    let document = rig.target_document();
+    let imported = document
+        .object("schedule", &imported_schedule_id)
+        .unwrap()
+        .body();
+    assert_eq!(
+        imported["target"]["address"],
+        json!({"page":page,"position":1000})
+    );
+    assert_eq!(imported["future_schedule"]["keep"], true);
+    assert_eq!(
+        document.object("playback_page", "4").unwrap().body()["name"],
+        "Destination"
+    );
+    assert_eq!(
+        document
+            .object("playback_page", &page.to_string())
+            .unwrap()
+            .body()["assignments"]["1000"]["future_assignment"]["keep"],
+        true
+    );
+}
+
+#[test]
+fn playback_page_99_collision_uses_a_free_page_and_preserves_both_inputs() {
+    let rig = TestRig::new();
+    let source = json!({"number":99,"name":"Source","assignments":{}});
+    let target = json!({"number":99,"name":"Target","assignments":{}});
+    rig.source_object("playback_page", "99", source.clone());
+    rig.target_object("playback_page", "99", target.clone());
+    // A fixture Group numbered 1 is a different identity family and does not occupy page 1.
+    rig.target_object("group", "1", json!({"id":"1","name":"Front","fixtures":[]}));
+    let before = rig.target_document();
+    let source_before = rig.source_document();
+    let preview = rig.preview(rig.request("playback_page", "99").resolve(
+        key("playback_page", "99"),
+        ImportConflictResolution::Duplicate,
+    ));
+    assert!(preview.can_apply(), "{:?}", preview.blockers);
+    let destination = &preview
+        .objects
+        .iter()
+        .find(|item| item.source == key("playback_page", "99"))
+        .unwrap()
+        .destination;
+    assert_eq!(destination, &key("playback_page", "1"));
+    assert_eq!(
+        rig.target_document(),
+        before,
+        "preview must not modify the target"
+    );
+    rig.apply(&preview).unwrap();
+    assert_eq!(rig.source_document(), source_before);
+    let document = rig.target_document();
+    assert_eq!(
+        document.object("playback_page", "99").unwrap().body(),
+        &target
+    );
+    assert_eq!(
+        document.object("playback_page", "1").unwrap().body()["name"],
+        "Source"
+    );
+}
+
+#[test]
+fn full_playback_page_capacity_is_a_preview_blocker_without_writes() {
+    let rig = TestRig::new();
+    rig.source_object(
+        "playback_page",
+        "99",
+        json!({"number":99,"name":"Source","assignments":{}}),
+    );
+    for page in 1..=99 {
+        rig.target_object(
+            "playback_page",
+            &page.to_string(),
+            json!({"number":page,"name":"Occupied","assignments":{}}),
+        );
+    }
+    let before = rig.target_document();
+    let source_before = rig.source_document();
+    let preview = rig.preview(rig.request("playback_page", "99").resolve(
+        key("playback_page", "99"),
+        ImportConflictResolution::Duplicate,
+    ));
+    assert!(!preview.can_apply());
+    assert!(preview.blockers.iter().any(|blocker| matches!(blocker, ImportBlocker::InvalidResolution {message,..} if message.contains("all 99 pages are occupied"))));
+    assert_eq!(rig.target_document(), before);
+    assert!(rig.apply(&preview).is_err());
+    assert_eq!(rig.source_document(), source_before);
+    assert_eq!(rig.target_document(), before);
 }

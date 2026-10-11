@@ -55,7 +55,14 @@ impl IdentityAllocator {
         &mut self,
         source: &PortableShowObjectKey,
     ) -> Result<PortableShowObjectKey, String> {
-        let key = if Uuid::parse_str(source.id()).is_ok() {
+        let key = if source.kind() == "playback_page" {
+            (1..=99)
+                .map(|page| PortableShowObjectKey::new("playback_page", page.to_string()))
+                .find(|key| !self.occupied_keys.contains(key))
+                .ok_or_else(|| {
+                    "Cannot duplicate Playback page: all 99 pages are occupied".to_owned()
+                })?
+        } else if Uuid::parse_str(source.id()).is_ok() {
             self.first_available_key(source, "object", |attempt| {
                 derived_uuid(
                     self.source_show,

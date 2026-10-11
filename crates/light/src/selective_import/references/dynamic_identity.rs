@@ -93,21 +93,36 @@ pub(super) fn reidentify_embedded_references(
                 }
             }
         }
-        "playback" => {
-            if original.pointer("/target/type").and_then(Value::as_str) == Some("dynamic") {
-                let dynamic = "/target/assignment/dynamic";
-                if let Some((_, destination)) = changed_live_id(original, rewritten, dynamic)? {
-                    let fallback = format!("{dynamic}/embedded_fallback/definition");
-                    let old_fallback = original
-                        .pointer(&format!("{fallback}/id"))
-                        .and_then(Value::as_str)
-                        .ok_or_else(|| format!("missing embedded Dynamic identity at {fallback}"))?
-                        .parse::<Uuid>()
-                        .map_err(|_| format!("invalid embedded Dynamic identity at {fallback}"))?;
-                    let body = rewritten
-                        .pointer_mut(&fallback)
-                        .ok_or_else(|| format!("missing embedded Dynamic at {fallback}"))?;
-                    rewrite_definition(body, old_fallback, destination)?;
+        "playback_page" => {
+            let assignments = original
+                .get("assignments")
+                .and_then(Value::as_object)
+                .ok_or_else(|| "Playback page must contain sparse assignments".to_owned())?;
+            for position in assignments.keys() {
+                if original
+                    .pointer(&format!("/assignments/{position}/target/type"))
+                    .and_then(Value::as_str)
+                    == Some("dynamic")
+                {
+                    let dynamic = format!("/assignments/{position}/target/assignment/dynamic");
+                    if let Some((_, destination)) = changed_live_id(original, rewritten, &dynamic)?
+                    {
+                        let fallback = format!("{dynamic}/embedded_fallback/definition");
+                        let old_fallback = original
+                            .pointer(&format!("{fallback}/id"))
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| {
+                                format!("missing embedded Dynamic identity at {fallback}")
+                            })?
+                            .parse::<Uuid>()
+                            .map_err(|_| {
+                                format!("invalid embedded Dynamic identity at {fallback}")
+                            })?;
+                        let body = rewritten
+                            .pointer_mut(&fallback)
+                            .ok_or_else(|| format!("missing embedded Dynamic at {fallback}"))?;
+                        rewrite_definition(body, old_fallback, destination)?;
+                    }
                 }
             }
         }
@@ -253,14 +268,16 @@ mod tests {
         );
         assert_eq!(rewritten_cue["future_cue"], json!({"keep":true}));
 
-        let playback = json!({"target":{"type":"dynamic","assignment":{"dynamic":{
+        let playback = json!({"number":1,"assignments":{"7":{"target":{"type":"dynamic","assignment":{"dynamic":{
             "dynamic_id": source, "embedded_fallback":{"definition":fallback}
-        }}}});
+        }}}}}});
         let mut rewritten_playback = playback.clone();
-        rewritten_playback["target"]["assignment"]["dynamic"]["dynamic_id"] = json!(destination);
-        reidentify_embedded_references(&playback, &mut rewritten_playback, "playback").unwrap();
+        rewritten_playback["assignments"]["7"]["target"]["assignment"]["dynamic"]["dynamic_id"] =
+            json!(destination);
+        reidentify_embedded_references(&playback, &mut rewritten_playback, "playback_page")
+            .unwrap();
         let definition = rewritten_playback
-            .pointer("/target/assignment/dynamic/embedded_fallback/definition")
+            .pointer("/assignments/7/target/assignment/dynamic/embedded_fallback/definition")
             .unwrap();
         assert_eq!(definition["id"], json!(destination));
         assert_eq!(definition["lanes"][0]["id"], authored);
