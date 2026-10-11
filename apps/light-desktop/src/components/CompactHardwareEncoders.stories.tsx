@@ -250,6 +250,7 @@ function Prototype({ encoderCount = 6, initialFamily = "Color", width = 1496 }: 
 
 const meta = {
 	title: "ToskLight/Compact hardware encoders",
+	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	globals: { mode: "hardware" },
 	args: { encoderCount: 6 as EncoderCount },

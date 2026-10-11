@@ -147,6 +147,11 @@
 	touch-action: none;
 }
 
+/* Ordinary Programmer encoders need three complete touch zones even in an auto-height grid. */
+.touch-encoder:not(:has(.touch-encoder-number-entry)) {
+	min-height: 134px;
+}
+
 .touch-encoder-surface {
 	position: relative;
 	width: 100%;
