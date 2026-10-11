@@ -196,7 +196,7 @@ export class LightClientRuntime {
 		socket.addEventListener("message", (message) =>
 			this.handleSocketMessage(message),
 		);
-		return this.awaitSocketOpen(socket);
+		return this.awaitSubscriptionReady(socket);
 	}
 
 	disconnectEvents(): void {
@@ -275,13 +275,32 @@ export class LightClientRuntime {
 		return protocols;
 	}
 
-	private awaitSocketOpen(socket: WebSocket): Promise<void> {
+	private awaitSubscriptionReady(socket: WebSocket): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
-			socket.addEventListener("open", () => resolve(), { once: true });
+			const listeners = new AbortController();
+			const finish = (error?: Error) => {
+				listeners.abort();
+				if (error) reject(error);
+				else resolve();
+			};
+			socket.addEventListener(
+				"message",
+				(message) => {
+					const data = JSON.parse(String(message.data)) as EventServerMessage;
+					if (data.type === "ready") finish();
+					else if (data.type === "error") finish(new Error(data.error));
+				},
+				{ signal: listeners.signal },
+			);
 			socket.addEventListener(
 				"error",
-				() => reject(new Error("WebSocket connection failed")),
-				{ once: true },
+				() => finish(new Error("WebSocket connection failed")),
+				{ signal: listeners.signal },
+			);
+			socket.addEventListener(
+				"close",
+				() => finish(new Error("WebSocket closed before its subscription was ready")),
+				{ signal: listeners.signal },
 			);
 		});
 	}

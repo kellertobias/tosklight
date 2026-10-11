@@ -58,15 +58,27 @@ export function useServerConnection(
 				)
 					return;
 				handoffRef.current.capture(generation, session);
-				unsubscribe = api.runtime.onEvent(
-					createServerEventRouter(
-						() => stateRef.current,
-						session,
-						loadShowObjectsRef.current,
-					),
+				const routeEvent = createServerEventRouter(
+					() => stateRef.current,
+					session,
+					loadShowObjectsRef.current,
 				);
+				let screensEpoch = 0;
+				unsubscribe = api.runtime.onEvent((event) => {
+					if (event.type === "screens_changed") screensEpoch += 1;
+					routeEvent(event);
+				});
 				await api.runtime.connectEvents(retry);
-				if (!cancelled) setStatus("connected");
+				if (cancelled || generation !== attemptGeneration.current) return;
+				if (role === "secondary") {
+					// A Screen can render its hydrated controls before subscribing. Reconcile
+					// configuration missed in that gap after the server acknowledges the feed.
+					const requestedEpoch = screensEpoch;
+					const screens = await api.playback.screens();
+					if (cancelled || generation !== attemptGeneration.current) return;
+					if (requestedEpoch === screensEpoch) stateRef.current.setScreens(screens);
+				}
+				setStatus("connected");
 			} catch (reason) {
 				if (cancelled || generation !== attemptGeneration.current) return;
 				handoffRef.current.release(

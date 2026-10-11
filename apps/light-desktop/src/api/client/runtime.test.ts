@@ -203,6 +203,7 @@ describe("LightClientRuntime", () => {
 			"light.desk.b64.w6QgZGVzaw",
 		]);
 		socket.emit("open");
+		socket.emitMessage({ type: "ready", cursor: { sequence: 1 } });
 		await connecting;
 		expect(JSON.parse(socket.sent[0])).toEqual({
 			type: "subscribe",
@@ -213,6 +214,33 @@ describe("LightClientRuntime", () => {
 
 		client.disconnectEvents();
 		expect(onClose).not.toHaveBeenCalled();
+	});
+
+	it("waits for the server subscription boundary before reporting connected", async () => {
+		const client = connectedClient();
+		let connected = false;
+		const connecting = client.connectEvents().then(() => {
+			connected = true;
+		});
+		const socket = FakeWebSocket.instances.at(-1)!;
+		socket.emit("open");
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(connected).toBe(false);
+		socket.emitMessage({ type: "ready", cursor: { sequence: 1 } });
+		await connecting;
+		expect(connected).toBe(true);
+	});
+
+	it("rejects a connection closed before its subscription is ready", async () => {
+		const client = connectedClient();
+		const connecting = expect(client.connectEvents()).rejects.toThrow(
+			"WebSocket closed before its subscription was ready",
+		);
+		const socket = FakeWebSocket.instances.at(-1)!;
+		socket.emit("open");
+		socket.close();
+		await connecting;
 	});
 
 	it("dispatches events until the listener unsubscribes", async () => {
@@ -401,6 +429,7 @@ describe("LightClientRuntime", () => {
 		const replacement = FakeWebSocket.instances.at(-1);
 		if (!replacement) throw new Error("Expected a replacement event socket");
 		replacement.emit("open");
+		replacement.emitMessage({ type: "ready", cursor: { sequence: 1 } });
 		await reconnecting;
 
 		expect(replacement).not.toBe(first);
@@ -426,6 +455,7 @@ describe("LightClientRuntime", () => {
 		const socket = FakeWebSocket.instances.at(-1);
 		if (!socket) throw new Error("Expected an event socket");
 		socket.emit("open");
+		socket.emitMessage({ type: "ready", cursor: { sequence: 1 } });
 		await connecting;
 
 		socket.emitMessage({
@@ -454,6 +484,7 @@ async function openEvents(client: LightClientRuntime): Promise<FakeWebSocket> {
 	const socket = FakeWebSocket.instances.at(-1);
 	if (!socket) throw new Error("Expected an event socket");
 	socket.emit("open");
+	socket.emitMessage({ type: "ready", cursor: { sequence: 1 } });
 	await connecting;
 	return socket;
 }
