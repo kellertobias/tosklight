@@ -565,7 +565,7 @@ export class BrowserPlaybacks {
 				`Playback ${address.page}.${address.position} has no configured ${action} button`,
 			);
 		await this.hardware.send(
-			`/light/playback/${address.page}/${address.position}/button/${button + 1}`,
+			`/light/desk/playback/${address.page}/${address.position}/button/${button + 1}`,
 			[pressed],
 		);
 	}

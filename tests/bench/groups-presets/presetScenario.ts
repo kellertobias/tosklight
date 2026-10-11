@@ -258,8 +258,8 @@ export class BrowserPresets {
 			await this.activateFamily(family);
 			await this.desk.click(this.presetCard(number));
 		} else if (route === "keypad")
-			await this.commands.via.ui.execute(presetCommandAddress(family, number));
-		else await this.sendOsc([...presetAddressKeys(family, number), "enter"]);
+			await this.commands.via.ui.execute(`AT ${presetCommandAddress(family, number)}`);
+		else await this.sendOsc(["at", ...presetAddressKeys(family, number), "enter"]);
 	}
 
 	async tapEmptyPoolSlot(family: PresetFamily, number: number) {
@@ -466,6 +466,10 @@ export class BrowserPresets {
 		if (!this.hardware.connected)
 			throw new Error("Preset OSC route requires hardware.connect()");
 		const alias = "desk";
+		const history = () => this.api.request<Array<{
+			status: string; command: string; feedback: string;
+		}>>("GET", "/api/v2/command-history");
+		const before = (await history()).length;
 		for (const key of keys) {
 			const mark = this.hardware.mark();
 			await this.hardware.send(`/light/${alias}/programmer/${key}`, [true]);
@@ -475,6 +479,11 @@ export class BrowserPresets {
 			);
 			await this.hardware.send(`/light/${alias}/programmer/${key}`, [false]);
 		}
+		// Command-line feedback can precede execution; wait for the recorded outcome.
+		await expect.poll(async () => (await history()).length).toBeGreaterThan(before);
+		const entries = await history();
+		expect(entries.at(-1), "OSC Preset command must be accepted")
+			.toMatchObject({ status: "accepted" });
 	}
 
 	private showId() {

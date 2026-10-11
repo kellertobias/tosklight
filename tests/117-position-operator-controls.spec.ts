@@ -328,10 +328,10 @@ async function preloadPans(api: ApiDriver) {
 	});
 }
 
-/** A tile's `active / defined` label after the manual bench clock renders another frame. */
+/** A tile's active fixture count after the manual bench clock renders another frame. */
 async function tileCount(bench: LightBench, tile: Locator) {
 	await bench.tick(25);
-	return (await tile.innerText()).replace(/\s+/gu, " ");
+	return (await tile.locator(".pool-card-information > small").innerText()).trim();
 }
 
 
@@ -673,19 +673,19 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		const up = pane.locator(".preset-card").nth(1);
 		await expect(down).toContainText("Down");
 		await expect(up).toContainText("Up");
-		await expect.poll(() => tileCount(bench, down)).toContain("0/2 fx");
-		await expect.poll(() => tileCount(bench, up)).toContain("0/2 fx");
+		await expect.poll(() => tileCount(bench, down)).toBe("0");
+		await expect.poll(() => tileCount(bench, up)).toBe("0");
 
 		await down.click();
 		await expect.poll(async () => (await programmedAngles(api, selected.length))?.every((angles) => angles.tilt === -67.5) ?? false).toBe(true);
-		await expect.poll(() => tileCount(bench, down)).toContain("2/2 fx");
+		await expect.poll(() => tileCount(bench, down)).toBe("2");
 		// Negative control: a preset the fixtures do not show stays inactive.
-		expect(await tileCount(bench, up)).toContain("0/2 fx");
+		expect(await tileCount(bench, up)).toBe("0");
 
 		await up.click();
 		await expect.poll(async () => (await programmedAngles(api, selected.length))?.every((angles) => angles.tilt === 45) ?? false).toBe(true);
-		await expect.poll(() => tileCount(bench, up)).toContain("2/2 fx");
-		await expect.poll(() => tileCount(bench, down)).toContain("0/2 fx");
+		await expect.poll(() => tileCount(bench, up)).toBe("2");
+		await expect.poll(() => tileCount(bench, down)).toBe("0");
 		await expect(page.getByRole("alert")).toHaveCount(0);
 	});
 

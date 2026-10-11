@@ -11,7 +11,7 @@ import { scenario } from "./bench/core/scenario";
 import { ProgrammerToken } from "./bench/encoders/encoderCatalog";
 import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { PresetFamily } from "./bench/groups-presets/presetScenario";
-import { fixture as dmxFixture } from "./bench/output/fixtureDmx";
+import { fixture as dmxFixture } from "./bench/output/fixtureDmxContract";
 import { Show } from "./bench/show/showScenario";
 import { PaneType } from "./bench/window-system/paneTypes";
 
@@ -98,6 +98,8 @@ scenario(
 		await t.show.use(Show.DefaultStage);
 		await t.app.open();
 		await t.app.expect.ready();
+		// This preset-routing scenario asserts immediate values, not fade envelopes.
+		await t.timing.programmerFade.via.api.set("0s");
 		await openPools(t);
 		await t.selection.fixtures.via.api.items(101, 102);
 
@@ -152,21 +154,23 @@ scenario(
 		await t.selection.clear();
 		await t.preset.expectVisibleSelectionCount(0);
 		await t.clock.advanceStep();
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 0 });
-		await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 0 });
+		await t.expectFixtureDMX(dmxFixture(101), { Intensity: 0 });
+		await t.expectFixtureDMX(dmxFixture(102), { Intensity: 0 });
 		await t.preset.tapEmptyPoolSlot(PresetFamily.Mixed, 9);
 		await t.expect.selection();
 
 		await t.preset.via.pool.recall(PresetFamily.Mixed, 1);
+		await t.clock.advanceStep();
 		await waitForSelectionCount(t, 2);
 		await expectPresetTargetSelection(t);
 		await t.preset.expectVisibleSelection(101, 102);
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 0 });
-		await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 0 });
+		await t.expectFixtureDMX(dmxFixture(101), { Intensity: 0 });
+		await t.expectFixtureDMX(dmxFixture(102), { Intensity: 0 });
 
 		await t.preset.via.pool.recall(PresetFamily.Mixed, 1);
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 179 });
-		await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 });
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX(dmxFixture(101), { Intensity: 179 });
+		await t.expectFixtureDMX(dmxFixture(102), { Intensity: 179 });
 
 		await t.preset.via.keypad.recall(PresetFamily.Position, 1);
 		await expectPresetTargetSelection(t);
@@ -182,9 +186,10 @@ scenario(
 		await t.hardware.connect();
 		try {
 			await t.preset.via.osc.recall(PresetFamily.Mixed, 2);
+			await t.clock.advanceStep();
 			await expectPresetTargetSelection(t);
-			await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 179 });
-			await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 179 });
+			await t.expectFixtureDMX(dmxFixture(101), { Intensity: 179 });
+			await t.expectFixtureDMX(dmxFixture(102), { Intensity: 179 });
 			await t.highlight.via.osc.toggle();
 			await expectPresetTargetSelection(t);
 			await t.highlight.via.osc.toggle();

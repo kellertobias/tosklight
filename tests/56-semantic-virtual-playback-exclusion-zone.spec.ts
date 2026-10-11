@@ -8,7 +8,7 @@ import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"VPB-007",
-	"show-owned Virtual Playback exclusion zones are inert, authoritative, and explicitly removable",
+	"show-owned Solo Region selection is inert, saved winners are authoritative, and regions are explicitly removable",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
@@ -76,6 +76,8 @@ scenario(
 		);
 		await t.virtualPlayback.activate(pane, 1);
 		await t.virtualPlayback.activate(pane, 2);
+		await t.virtualPlayback.expect.runtime(firstPlayback, { runtime: { enabled: true } });
+		await t.virtualPlayback.expect.runtime(secondPlayback, { runtime: { enabled: true } });
 
 		await t.virtualPlayback.createSoloRegionWithAttachedShift(
 			pane,
@@ -87,6 +89,8 @@ scenario(
 		]);
 		await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
 		await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
+		// Saving the new region reconciles permanent owners by their activation order.
+		// Selection above is inert; the newer second Playback is the exact saved winner.
 		await t.virtualPlayback.expect.runtime(firstPlayback, {
 			identity: {
 				kind: "playback",
@@ -94,7 +98,7 @@ scenario(
 				position: 401,
 			},
 			target: "cue_list",
-			runtime: { enabled: true },
+			runtime: { enabled: false },
 		});
 		await t.virtualPlayback.expect.runtime(secondPlayback, {
 			identity: {

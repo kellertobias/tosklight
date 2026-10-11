@@ -6,7 +6,7 @@ import type {
 	GroupRecordingOutcome,
 	GroupRecordOperation,
 } from "../../../apps/light-desktop/src/features/groupRecording/contracts";
-import type { BrowserCommands } from "../command-selection/commandScenario";
+import { BrowserKeypad, type BrowserCommands, type KeypadKey } from "../command-selection/commandScenario";
 import type { BrowserSelection } from "../command-selection/selectionScenario";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
@@ -256,7 +256,17 @@ export class BrowserGroups {
 				await this.desk.click(choice);
 			}
 		} else if (route === "keypad") {
-			await this.commands.via.ui.execute(groupRecordCommand(number, mode));
+			if (mode === StoreMode.Overwrite) {
+				await this.commands.via.ui.clear();
+				const keypad = new BrowserKeypad(this.desk, this.page);
+				await keypad.press(["REC", "REC"]);
+				await this.chooseOneOffSmart();
+				// SMART is a one-off Record choice, never a physical keypad token.
+				const numberKeys = [...String(number)] as KeypadKey[];
+				await keypad.press(["GRP", ...numberKeys, "ENT"]);
+			} else {
+				await this.commands.via.ui.execute(groupRecordCommand(number, mode));
+			}
 		} else if (mode === StoreMode.Overwrite) {
 			await this.sendOsc(["record"]);
 			// The second REC opens a modal without changing the command line, so wait

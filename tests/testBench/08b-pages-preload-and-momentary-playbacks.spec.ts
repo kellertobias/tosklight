@@ -1,4 +1,5 @@
 import { expect } from "../bench/core/fixtures";
+import { fixture } from "../bench/output/fixtureDmxContract";
 import {
 	explicitPagePlayback,
 	PlaybackButton,
@@ -33,10 +34,11 @@ scenario(
 			attribute: "intensity",
 			value: { kind: "normalized", value: 0.8 },
 		});
-		await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 0 });
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX(fixture(102), { Intensity: 0 });
 		await t.preload.via.api.commit();
 		await t.clock.advanceBy("0ms");
-		await t.expectFixtureDMX({ fixture: 102 }, { Intensity: 204 });
+		await t.expectFixtureDMX(fixture(102), { Intensity: 204 });
 		await t.preload.release();
 
 		await t.playback.via.ui.flash(playback).hold(async () => {
@@ -54,7 +56,7 @@ scenario(
 		try {
 			const target = explicitPagePlayback(1, 1);
 			const heldFlash = t.playback.via.osc.flash(target);
-            await heldFlash.press();
+			await heldFlash.press();
 			await t.playback.expect(playback).runtime({
 				flash: true,
 				temporary_active: true,

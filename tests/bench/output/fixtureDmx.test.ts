@@ -4,9 +4,23 @@ import type {
 	PatchedFixture,
 	PatchSnapshot,
 } from "../../../apps/light-desktop/src/api/types";
-import { FixtureDmxAssertions, fixture, fixtureRange } from "./fixtureDmx";
+import {
+	FixtureDmxAssertions,
+	fixture,
+	fixtureRange,
+	type FixtureDMXTarget,
+} from "./fixtureDmx";
 
 describe("fixture-aware logical DMX", () => {
+	it("rejects obsolete targets instead of passing an empty output assertion", async () => {
+		const assertions = new FixtureDmxAssertions(
+			source([profileFixture()], logicalFrame([[101, 0]])), 0,
+		);
+		await expect(assertions.expect(
+			{ fixture: 101 } as unknown as FixtureDMXTarget,
+			{ "Pan coarse": 127 },
+		)).rejects.toThrow("Fixture DMX target");
+	});
 	it("resolves coarse, fine, and ultra bytes from the current sparse profile layout", async () => {
 		const fixture101 = profileFixture();
 		const frame = logicalFrame([

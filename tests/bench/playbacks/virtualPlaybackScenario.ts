@@ -39,43 +39,66 @@ export class BrowserVirtualPlaybacks {
                 if (sides.split(" ").includes(side)) await expect(target).toHaveClass(pattern);
                 else await expect(target).not.toHaveClass(pattern);
             }
+			const overlay = this.pane(pane).locator(".playback-solo-fence-overlay");
+			await expect(overlay).toBeVisible();
+			await expect(overlay.locator("path").first()).toBeVisible();
 			const expected = new Set(sides.split(" "));
-			await expect
-				.poll(() =>
-					target.evaluate((element) => {
-						const style = getComputedStyle(element, "::after");
-						return {
-							top: style.borderTopWidth,
-							right: style.borderRightWidth,
-							bottom: style.borderBottomWidth,
-							left: style.borderLeftWidth,
-						};
-					}),
-				)
-				.toEqual(
-					{
-						top: expected.has("top") ? "3px" : "0px",
-						right: expected.has("right") ? "3px" : "0px",
-						bottom: expected.has("bottom") ? "3px" : "0px",
-						left: expected.has("left") ? "3px" : "0px",
-					},
-				);
-			// The fence lies half the grid's real gap outside the tile's border, so the fences of
-			// neighbouring members meet in the gap as one continuous outline.
-			const fence = await target.evaluate((element) => {
-				const style = getComputedStyle(element, "::after");
-				const gap = Number.parseFloat(
-					getComputedStyle(element.parentElement ?? element).columnGap,
-				);
-
-				return {
-					inset: [style.top, style.right, style.bottom, style.left],
-					outside: `${-(gap / 2)}px`,
-					gap,
+			await expect.poll(() => target.evaluate((element) => {
+				const bank = element.closest(".playback-fader-bank");
+				const svg = bank?.querySelector<SVGSVGElement>(".playback-solo-fence-overlay");
+				if (!bank || !svg) return null;
+				const bounds = bank.getBoundingClientRect();
+				const tile = element.getBoundingClientRect();
+				const style = getComputedStyle(bank);
+				const gapX = Number.parseFloat(style.columnGap);
+				const gapY = Number.parseFloat(style.rowGap);
+				const viewBox = svg.viewBox.baseVal;
+				if (!bounds.width || !bounds.height || !viewBox.width || !viewBox.height) return null;
+				// Independently measure the shared half-gap perimeter in bank pixels, then
+				// convert to the SVG's coordinates. Rounded corners leave side midpoints intact.
+				const left = Math.max(1.5, tile.left - bounds.left - gapX / 2);
+				const right = Math.min(bounds.width - 1.5, tile.right - bounds.left + gapX / 2);
+				const top = Math.max(1.5, tile.top - bounds.top - gapY / 2);
+				const bottom = Math.min(bounds.height - 1.5, tile.bottom - bounds.top + gapY / 2);
+				const midpoints = {
+					top: [(left + right) / 2, top],
+					right: [right, (top + bottom) / 2],
+					bottom: [(left + right) / 2, bottom],
+					left: [left, (top + bottom) / 2],
 				};
+				const paths = [...svg.querySelectorAll<SVGGeometryElement>("path")];
+				const stroked = Object.fromEntries(Object.entries(midpoints).map(([side, [x, y]]) => {
+					const point = new DOMPoint(
+						viewBox.x + x * viewBox.width / bounds.width,
+						viewBox.y + y * viewBox.height / bounds.height,
+					);
+					return [side, paths.some((path) => path.isPointInStroke(point))];
+				}));
+				return {
+					positiveGaps: gapX > 0 && gapY > 0,
+					stroked,
+					closedRounded: paths.length > 0 && paths.every((path) => {
+						const drawing = path.getAttribute("d") ?? "";
+						return drawing.includes("Q") && drawing.trim().endsWith("Z");
+					}),
+					visibleTwoPixelStroke: paths.length > 0 && paths.every((path) => {
+						const paint = getComputedStyle(path);
+						return paint.strokeWidth === "2px" && paint.stroke !== "none"
+							&& paint.visibility === "visible" && paint.display !== "none"
+							&& Number(paint.opacity) > 0;
+					}),
+				};
+			})).toEqual({
+				positiveGaps: true,
+				stroked: {
+					top: expected.has("top"),
+					right: expected.has("right"),
+					bottom: expected.has("bottom"),
+					left: expected.has("left"),
+				},
+				closedRounded: true,
+				visibleTwoPixelStroke: true,
 			});
-			expect(fence.gap, "the desk grid has a real gap").toBeGreaterThan(0);
-			expect(fence.inset).toEqual(Array(4).fill(fence.outside));
 		},
 		runtime: async (
 			identity: PlaybackAddress,
@@ -199,21 +222,30 @@ export class BrowserVirtualPlaybacks {
 			dialog.getByRole("button", { name: "Apply", exact: true }),
 		);
 		await expect(dialog).toBeHidden();
-		// SET is a latched desk modifier. Applying a configuration does not release it, so disarm it
-		// before the next ordinary Virtual Playback activation.
-		await this.desk.click(
-			this.page.getByRole("button", { name: "SET", exact: true }),
+		// Apply may already clear SET. Only disarm a visibly active modifier; clicking
+		// an inactive SET would arm configuration again before the ordinary action.
+		const set = this.page.getByRole("button", { name: "SET", exact: true });
+		const armed = () => set.evaluate((element) =>
+			element.getAttribute("aria-pressed") === "true"
+				|| element.classList.contains("patch-set-armed"),
 		);
+		if (await armed()) await this.desk.click(set);
+		await expect.poll(armed).toBe(false);
 	}
 
-    async createSoloRegion(pane: VirtualPlaybackPane, name: string, cells: number[]): Promise<void> {
-        if (cells.length < 2) throw new Error("A Solo Region needs two Playback members");
-        await this.desk.click(this.pane(pane).getByRole("button", { name: "Select Solo members", exact: true }));
-        for (const cell of cells) await this.desk.click(this.cell(pane, cell));
-        await this.pane(pane).getByLabel("Solo Region name").fill(name);
-        await this.desk.click(this.pane(pane).getByRole("button", { name: "Create Solo Region", exact: true }));
-        await expect.poll(async () => (await this.zones()).some(region => region.name === name)).toBe(true);
-    }
+	async createSoloRegion(pane: VirtualPlaybackPane, name: string, cells: number[]): Promise<void> {
+		if (cells.length < 2) throw new Error("A Solo Region needs two Playback members");
+		const members = cells.map((cell) => panePlaybackAddress(cell));
+		const before = await Promise.all(members.map((address) => this.runtime(address)));
+		await this.desk.click(this.pane(pane).getByRole("button", { name: "Create Solo Region", exact: true }));
+		for (const cell of cells) await this.desk.click(this.cell(pane, cell));
+		await this.pane(pane).getByLabel("Solo Region name").fill(name);
+		// Choosing members must not operate either existing or stopped Playback owners.
+		expect(await Promise.all(members.map((address) => this.runtime(address)))).toEqual(before);
+		await this.desk.click(this.pane(pane).getByRole("button", { name: "Save Solo Region", exact: true }));
+		await expect.poll(async () => (await this.zones()).find((region) => region.name === name))
+			.toEqual({ name, members });
+	}
 
     async createSoloRegionWithAttachedShift(pane: VirtualPlaybackPane, name: string, cells: number[]): Promise<void> {
         const alias = "desk";
@@ -236,12 +268,12 @@ export class BrowserVirtualPlaybacks {
 		);
 		const settings = this.page.getByRole("dialog", { name: "Pane Settings" });
 		await this.desk.click(
-			settings.getByRole("tab", { name: "Solo Regions", exact: true }),
+			settings.getByRole("tab", { name: "Manage Solo Regions", exact: true }),
 		);
-		await expect(settings.getByRole("button", { name: `Delete ${name}`, exact: true })).toBeVisible();
-		await this.desk.click(
-			settings.getByRole("button", { name: `Delete ${name}`, exact: true }),
-		);
+		await this.desk.click(settings.getByRole("button", { name, exact: true }));
+		const remove = settings.getByRole("button", { name: "Delete", exact: true });
+		await expect(remove).toBeVisible();
+		await this.desk.click(remove);
 		await expect
 			.poll(async () => (await this.zones()).some((zone) => zone.name === name))
 			.toBe(false);
@@ -255,7 +287,7 @@ export class BrowserVirtualPlaybacks {
 		cell: number,
 		page = 1,
 	): Promise<void> {
-		await this.desk.click(this.cell(pane, cell, undefined, page).getByRole("button", { name: /^(GO|TOGGLE|ON|Toggle|On)/ }).first());
+		await this.desk.click(this.cell(pane, cell, undefined, page).getByRole("button", { name: /^(GO|TOGGLE|TEMP|ON|Toggle|On)/ }).first());
 	}
 
     async setMainPage(page: number): Promise<void> {

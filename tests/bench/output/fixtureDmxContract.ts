@@ -56,6 +56,8 @@ export function fixtureRange(
 export function fixtureReferences(
 	target: FixtureDMXTarget,
 ): FixtureReference[] {
+	if (!target || (target.kind !== "fixture" && target.kind !== "fixture-range"))
+		throw new Error("Fixture DMX target must use fixture() or fixtureRange()");
 	if (target.kind === "fixture") return [target];
 	const direction = target.first <= target.last ? 1 : -1;
 	return Array.from(

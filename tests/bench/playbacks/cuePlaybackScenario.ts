@@ -13,6 +13,7 @@ import type { ApiDriver } from "../core/api";
 import { type ClockDuration, parseClockDuration } from "../core/clockScenario";
 import type { DeskDriver } from "../core/desk";
 import { deleteCue } from "./cueDeletion";
+import { ensurePlaybackViewport } from "./playback-configuration/ui";
 
 export enum CueRecordMode {
 	Overwrite = "overwrite",
@@ -592,6 +593,7 @@ export class BrowserRecording {
 			throw new Error(
 				"Creating an assigned Playback has no truthful API command; use the visible UI route",
 			);
+		await ensurePlaybackViewport(this.page);
 		const before = await this.pageObject(1);
 		const target = this.page.getByRole("button", {
 			name: `Playback representation page 1 playback ${slot}`,

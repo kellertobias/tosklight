@@ -32,14 +32,14 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
     await expect(settings).toBeHidden();
 
     const previewButton = page.getByRole("button", {
-      name: `Open ${installed.name} Playback preview`,
+      name: `Open ${installed.name} preview`,
     });
     await previewButton.click();
     const preview = page.getByRole("dialog", {
-      name: `${installed.name} Playback preview image`,
+      name: `${installed.name} preview image`,
     });
     const enlarged = preview.getByRole("img", {
-      name: `${installed.name} Playback preview`,
+      name: `${installed.name} preview`,
     });
     await expect(enlarged).toHaveAttribute("src", previewImage);
     const buttonBox = await previewButton.boundingBox();

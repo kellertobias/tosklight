@@ -29,7 +29,7 @@ test("DYNAMICS-POOL-001 @ui › stored Dynamic 29 stays painted through navigati
 		});
 	}
 	const definitions = await installPlannedDemoDynamics(api, show.id, {
-		assignVirtualPlaybacks: false,
+		assignPlaybacks: false,
 	});
 	const stored29 = definitions.find((dynamic) => dynamic.pool_number === 29);
 	expect(stored29).toBeDefined();

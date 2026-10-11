@@ -198,13 +198,25 @@ export class BrowserPages {
 	async current() {
 		return (await this.runtimeDesk()).command_page;
 	}
+	async resolvedPage(surfaceId: string) {
+		const page = (await this.runtimeDesk()).resolved_pages[surfaceId];
+		if (page === undefined)
+			throw new Error(`Playback surface ${surfaceId} has no resolved page`);
+		return page;
+	}
 	private async currentSurface() {
 		return (await this.runtimeDesk()).selected_surface_id;
 	}
-    private async runtimeDesk() {
-        return this.api.request<{command_page:number;selected_surface_id:string}>(
-            "GET", "/api/v2/playback-surfaces", undefined, true, undefined, { deskId: this.session().desk.id });
-    }
+	private async runtimeDesk() {
+		return this.api.request<{
+			command_page: number;
+			selected_surface_id: string;
+			resolved_pages: Record<string, number>;
+		}>(
+			"GET", "/api/v2/playback-surfaces", undefined, true, undefined,
+			{ deskId: this.session().desk.id },
+		);
+	}
 
 	object(number: number) {
 		return this.api.showObject<any>(

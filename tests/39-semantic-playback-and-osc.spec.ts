@@ -1,11 +1,13 @@
 // @bench-semantic-world
 
+import { expect } from "@playwright/test";
 import {
 	fixture,
 	fixtureRange,
 	groupRange,
 } from "./bench/command-selection/selectionContract";
 import { scenario } from "./bench/core/scenario";
+import { fixture as dmxFixture } from "./bench/output/fixtureDmxContract";
 import { CueRecordMode } from "./bench/playbacks/cuePlaybackScenario";
 import {
 	currentPagePlayback,
@@ -22,6 +24,7 @@ scenario(
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.timing.programmerFade.via.api.set("0s");
+		await t.timing.cueFade.set("0s");
 		await t.selection.fixtures.via.api.item(101);
 
 		await t.encoder.intensity.dimmer.via.api.set(20);
@@ -46,13 +49,14 @@ scenario(
 			current_cue_number: "1",
 			enabled: true,
 		});
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 51 });
+		await t.clock.advanceStep();
+		await t.expectFixtureDMX(dmxFixture(101), { Intensity: 51 });
 
 		await t.playback.via.api.go(playback);
 		await t.clock.advanceBy("500ms");
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 128 });
+		await t.expectFixtureDMX(dmxFixture(101), { Intensity: 128 });
 		await t.clock.advanceBy("500ms");
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 204 });
+		await t.expectFixtureDMX(dmxFixture(101), { Intensity: 204 });
 
 		await t.playback.via.api.select(playback);
 		await t.playback.expect(playback).selected();
@@ -115,7 +119,9 @@ scenario(
 		});
 		await screen.page.select(1);
 		await screen.page.expectSelected(1);
-		await t.page.expect(2).selected();
+		// Selecting the independent Screen makes it the command surface; Main keeps its own page.
+		expect(await t.page.resolvedPage("main")).toBe(2);
+		await t.page.expect(1).selected();
 	},
 );
 

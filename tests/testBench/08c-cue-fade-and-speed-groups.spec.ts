@@ -1,6 +1,7 @@
 import { expect } from "../bench/core/fixtures";
 import { scenario } from "../bench/core/scenario";
 import { Show } from "../bench/show/showScenario";
+import { fixture } from "../bench/output/fixtureDmxContract";
 import { SpeedGroup } from "../bench/playbacks/speedGroupScenario";
 
 scenario(
@@ -35,11 +36,11 @@ scenario(
 		await t.clock.advanceBy("4s");
 		await t.playback.via.api.go(playback);
 		await t.clock.advanceBy("2s");
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 128 });
+		await t.expectFixtureDMX(fixture(101), { Intensity: 128 });
 		await t.clock.advanceBy("2s");
 		await t.playback.via.api.go(playback);
 		await t.clock.advanceBy("500ms");
-		await t.expectFixtureDMX({ fixture: 101 }, { Intensity: 230 });
+		await t.expectFixtureDMX(fixture(101), { Intensity: 230 });
 	},
 );
 
