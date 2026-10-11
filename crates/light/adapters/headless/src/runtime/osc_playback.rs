@@ -429,7 +429,7 @@ pub(super) fn handle_playback_osc(
     if !off_target {
         if pressed {
             if let Some(action) = held_action {
-                capture.held.receipts.insert(
+                capture.held.remember(
                     capture.key,
                     holds::HeldPlayback {
                         address: exact_address,
@@ -439,7 +439,7 @@ pub(super) fn handle_playback_osc(
                 );
             }
         } else {
-            capture.held.receipts.remove(&capture.key);
+            capture.held.forget(&capture.key);
         }
     }
     if let (Some(address), Some(session)) = (off_target_address.as_ref(), session.as_ref()) {

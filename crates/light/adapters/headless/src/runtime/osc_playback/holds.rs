@@ -57,7 +57,7 @@ pub(super) fn held_action(
 }
 
 pub(super) struct CapturedInput<'a> {
-    pub held: parking_lot::MutexGuard<'a, OscPlaybackHolds>,
+    pub held: super::super::capability_resources::OscPlaybackHoldLease<'a>,
     pub key: HoldKey,
     pub epoch: u64,
     pub receipt: Option<HeldPlayback>,
@@ -104,7 +104,7 @@ impl<'a> CapturedInput<'a> {
         };
         let held = state.integrations.osc_playback_holds();
         let epoch = state.integrations.osc_playback_epoch();
-        let receipt = held.receipts.get(&key).copied();
+        let receipt = held.receipt(&key);
         if receipt.is_none()
             && let super::PlaybackAddress::CurrentPage { position } = address
         {

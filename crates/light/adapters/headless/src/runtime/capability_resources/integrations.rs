@@ -34,12 +34,10 @@ impl IntegrationResource {
         }
     }
 
-    pub(in crate::runtime) fn osc_playback_holds(
-        &self,
-    ) -> parking_lot::MutexGuard<'_, osc_playback::holds::OscPlaybackHolds> {
+    pub(in crate::runtime) fn osc_playback_holds(&self) -> OscPlaybackHoldLease<'_> {
         let mut holds = self.osc_playback_holds.lock();
         holds.synchronize(self.osc_playback_epoch());
-        holds
+        OscPlaybackHoldLease { held: holds }
     }
     pub(in crate::runtime) fn osc_playback_epoch(&self) -> u64 {
         self.osc_playback_epoch.load(Ordering::Acquire)
@@ -335,5 +333,32 @@ impl IntegrationResource {
     #[cfg(test)]
     pub(in crate::runtime) fn captured_osc_feedback(&self) -> Vec<CapturedOscMessage> {
         self.osc_feedback_capture.lock().clone()
+    }
+}
+
+/// Opaque ingress lease: callers can manage receipts while retaining the capture-before-Playback
+/// lock order, without exposing the integration mutex or its storage through the capability API.
+pub(in crate::runtime) struct OscPlaybackHoldLease<'a> {
+    held: parking_lot::MutexGuard<'a, osc_playback::holds::OscPlaybackHolds>,
+}
+impl OscPlaybackHoldLease<'_> {
+    pub(in crate::runtime) fn receipt(
+        &self,
+        key: &osc_playback::holds::HoldKey,
+    ) -> Option<osc_playback::holds::HeldPlayback> {
+        self.held.receipts.get(key).copied()
+    }
+    pub(in crate::runtime) fn remember(
+        &mut self,
+        key: osc_playback::holds::HoldKey,
+        receipt: osc_playback::holds::HeldPlayback,
+    ) {
+        self.held.receipts.insert(key, receipt);
+    }
+    pub(in crate::runtime) fn forget(&mut self, key: &osc_playback::holds::HoldKey) {
+        self.held.receipts.remove(key);
+    }
+    pub(in crate::runtime) fn remove_surface(&mut self, desk_id: Uuid, surface_id: &str) {
+        self.held.remove_surface(desk_id, surface_id);
     }
 }

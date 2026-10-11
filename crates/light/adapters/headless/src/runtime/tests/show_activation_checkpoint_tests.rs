@@ -414,3 +414,197 @@ async fn activation_copy_cleanup_preserves_live_or_durably_active_destinations()
         let _ = std::fs::remove_dir_all(data_dir);
     }
 }
+
+/// Exercise the production accepted activation hook, rather than manually invalidating receipts.
+#[tokio::test]
+async fn same_id_http_reload_invalidates_stale_osc_hold_release() {
+    use light_playback::{PlaybackAddress, PlaybackControlSource};
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Same-ID OSC reload").await;
+    let (entry, cue_list_id) = osc_reload_entry(&state, &data_dir);
+    let response = app
+        .clone()
+        .oneshot(open_show_request(&token, entry.id.0))
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "{}",
+        json(response).await
+    );
+    let address = PlaybackAddress::new(1, 1).unwrap();
+    assert!(
+        matches!(state.output.snapshot().playback_pages[0].assignments[&1].target,
+        light_playback::PlaybackTarget::CueList{cue_list_id:id} if id == cue_list_id)
+    );
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    assert!(handle_subscription_osc(
+        &state,
+        "/light/subscribe",
+        &[
+            OscArgument::String("same-id-held".into()),
+            OscArgument::String("desk".into()),
+            OscArgument::Int(19150),
+        ],
+        Some("127.0.0.1:19100")
+    ));
+    let route = "/light/desk/playback/1/1/flash";
+    assert!(handle_playback_osc(
+        &state,
+        route,
+        &[OscArgument::Int(1)],
+        Some("127.0.0.1:19100")
+    ));
+    assert!(
+        state
+            .output
+            .engine()
+            .playback_runtime_status_at(address)
+            .unwrap()
+            .playback
+            .flash
+    );
+    let receipt_key = crate::runtime::osc_playback::holds::HoldKey {
+        desk_id: session.desk.id,
+        surface_id: "hardware:same-id-held".into(),
+        control_id: 24,
+        route: Some("explicit:1.1/flash/0".into()),
+    };
+    let old_receipt = state
+        .integrations
+        .osc_playback_holds()
+        .receipt(&receipt_key)
+        .unwrap();
+    let epoch_before = state.integrations.osc_playback_epoch();
+    let response = app
+        .clone()
+        .oneshot(open_show_request(&token, entry.id.0))
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "{}",
+        json(response).await
+    );
+    assert_eq!(state.active_show.current().unwrap().id, entry.id);
+    assert!(
+        state.integrations.osc_playback_epoch() > epoch_before,
+        "accepted same-ID HTTP reload advances receipt epoch"
+    );
+    assert!(
+        !state
+            .output
+            .engine()
+            .playback_runtime_status_at(address)
+            .is_some_and(|status| status.playback.flash),
+        "cold install discards old transient engine holds"
+    );
+    // Deliberately reuse exact authenticated engine source identity. Without the accepted hook,
+    // the retained old ingress receipt would release this newly acquired runtime hold.
+    let control_source = PlaybackControlSource {
+        surface_id: "hardware:same-id-held".into(),
+        control_id: 24,
+    }
+    .scoped_to_desk(session.desk.id)
+    .unwrap();
+    state
+        .output
+        .engine()
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address,
+            action: light_engine::PlaybackAction::SetFlash(true),
+            activation_origin: None,
+            control_source,
+        })
+        .unwrap();
+    assert!(
+        state
+            .output
+            .engine()
+            .playback_runtime_status_at(address)
+            .unwrap()
+            .playback
+            .flash
+    );
+    assert!(!handle_playback_osc(
+        &state,
+        route,
+        &[OscArgument::Int(0)],
+        Some("127.0.0.1:19100")
+    ));
+    assert!(
+        state
+            .output
+            .engine()
+            .playback_runtime_status_at(address)
+            .unwrap()
+            .playback
+            .flash,
+        "old OSC release cannot cancel the new same-source cold-runtime hold"
+    );
+    // Negative control: retaining the old receipt under the new epoch would cancel this exact
+    // new hold. This proves the source/address tuple above is not accidentally unrelated.
+    state
+        .integrations
+        .osc_playback_holds()
+        .remember(receipt_key, old_receipt);
+    assert!(handle_playback_osc(
+        &state,
+        route,
+        &[OscArgument::Int(0)],
+        Some("127.0.0.1:19100")
+    ));
+    assert!(
+        !state
+            .output
+            .engine()
+            .playback_runtime_status_at(address)
+            .is_some_and(|status| status.playback.flash)
+    );
+    drop(app);
+    drop(state);
+    std::fs::remove_dir_all(data_dir).unwrap();
+}
+
+fn osc_reload_entry(state: &AppState, data_dir: &FsPath) -> (ShowEntry, light_core::CueListId) {
+    use light_playback::{Cue, CueNumber, PlaybackDefinition, PlaybackPage};
+    let entry = activation_entry(state, data_dir, "OSC same-ID reload");
+    let cue_list_id = light_core::CueListId::new();
+    let cue_list: light_playback::CueList = serde_json::from_value(serde_json::json!({
+        "id":cue_list_id,"name":"Cold OSC target","priority":0,"mode":"sequence","looped":true,
+        "cues":[Cue::new(CueNumber::from(1_u8))]
+    }))
+    .unwrap();
+    let mut definition = PlaybackDefinition::new_cue_list("Reload hold", cue_list_id);
+    definition.auto_off = false;
+    let page = PlaybackPage {
+        number: 1,
+        name: "One".into(),
+        assignments: [(1, definition)].into(),
+    };
+    let store = light_show::ShowStore::open(&entry.path).unwrap();
+    for (kind, id, body) in [
+        (
+            "cue_list",
+            cue_list_id.0.to_string(),
+            serde_json::to_value(cue_list).unwrap(),
+        ),
+        (
+            "playback_page",
+            "1".into(),
+            serde_json::to_value(page).unwrap(),
+        ),
+    ] {
+        store.put_object(kind, &id, &body, 0).unwrap();
+    }
+    drop(store);
+    (entry, cue_list_id)
+}
