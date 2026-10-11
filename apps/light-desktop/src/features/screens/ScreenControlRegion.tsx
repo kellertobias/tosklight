@@ -16,6 +16,7 @@ import {
 } from "./LowerSectionSwitch";
 import { ProgrammerControlSurfaceRegion } from "./ProgrammerControlSurfaceRegion";
 import { ScreenPlaybackFit } from "./ScreenPlaybackFit";
+import { ScreenPlaybackDraftLayout } from "./ScreenPlaybackDraftLayout";
 import { ScreenPlaybackSection } from "./ScreenPlaybackSection";
 import { PlaybackSectionSettingsHost } from "../../components/control/PlaybackSectionSettingsHost";
 import { SoloCommandEditor } from "../../components/control/CommandLineBar";
@@ -86,10 +87,11 @@ function ScreenPlaybackDraftSection({ screen, encoders }: {
 	const editor = usePlaybackSoloEditor(screen.surface_id);
 	const grid = <ScreenPlaybackSection key="grid" screen={screen} encoders={encoders} />;
 	return (
-		<div style={{ display: "grid", gridTemplateRows: "auto minmax(0, 1fr)", height: "100%", minHeight: 0 }}>
-			<div>{editor?.selecting && <SoloCommandEditor editor={editor} />}</div>
+		<ScreenPlaybackDraftLayout
+			editor={editor?.selecting ? <SoloCommandEditor editor={editor} /> : null}
+		>
 			{grid}
-		</div>
+		</ScreenPlaybackDraftLayout>
 	);
 }
 

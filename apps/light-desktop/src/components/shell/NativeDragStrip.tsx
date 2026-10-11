@@ -8,8 +8,10 @@ import { useDesktopBridge } from "../../platform/desktop";
  */
 export function NativeDragStrip({
 	closes = "window",
+	compactFullscreen = false,
 }: {
 	closes?: "window" | "application";
+	compactFullscreen?: boolean;
 } = {}) {
 	const desktop = useDesktopBridge();
 	const [fullscreen, setFullscreen] = useState(false);
@@ -53,14 +55,22 @@ export function NativeDragStrip({
 	if (!desktop.available) return null;
 	if (fullscreen)
 		return (
-			<div className="native-drag-strip native-drag-strip-fullscreen">
+			<div
+				className={`native-drag-strip native-drag-strip-fullscreen ${compactFullscreen ? "native-drag-strip-compact-fullscreen" : ""}`}
+			>
 				<Button
 					className="native-window-exit-fullscreen"
 					aria-label="Exit fullscreen"
 					title="Exit fullscreen"
 					onClick={exitFullscreen}
 				>
-					Exit fullscreen
+					{compactFullscreen ? (
+						<svg viewBox="0 0 16 16" aria-hidden="true">
+							<path d="M2 6h4V2M14 6h-4V2M2 10h4v4M14 10h-4v4" />
+						</svg>
+					) : (
+						"Exit fullscreen"
+					)}
 				</Button>
 			</div>
 		);

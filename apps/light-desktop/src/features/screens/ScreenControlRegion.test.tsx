@@ -183,7 +183,7 @@ describe("ScreenControlRegion", () => {
 		mount(screenTemplate, null);
 		expect(screen.getByTestId("playbacks")).toBeInTheDocument();
 		const draftLayout = screen.getByTestId("playbacks").parentElement!;
-		expect(draftLayout.style.gridTemplateRows).toBe("auto minmax(0, 1fr)");
+		expect(draftLayout).toHaveClass("screen-playback-draft-layout");
 		expect(draftLayout.firstElementChild).toBeEmptyDOMElement();
 		expect(draftLayout.children[1]).toBe(screen.getByTestId("playbacks"));
 		expect(screen.queryByTestId("encoders")).toBeNull();

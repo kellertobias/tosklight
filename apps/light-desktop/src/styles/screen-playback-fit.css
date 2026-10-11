@@ -90,3 +90,23 @@
 .app-shell:has(> .screen-bank-fit.touch-connected .playback-fader-bank[data-playback-surface="main"].touch-layout) {
 	--control-height: max(var(--screen-playback-base-height, 348px), var(--screen-playback-required-height, 0px));
 }
+
+/* The editor and bank share one explicit column, never implicit shell tracks. */
+.screen-playback-draft-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: auto minmax(0, 1fr);
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+.screen-playback-draft-editor {
+	grid-column: 1;
+	grid-row: 1;
+	min-width: 0;
+}
+.screen-playback-draft-layout > .screen-playbacks {
+	grid-column: 1;
+	grid-row: 2;
+	min-width: 0;
+}

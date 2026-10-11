@@ -2892,3 +2892,33 @@ textarea,
 	box-sizing: border-box;
 	padding-top: 32px;
 }
+
+/* Fullscreen Screen chrome occupies a local corner, never a full control row. */
+.native-drag-strip.native-drag-strip-compact-fullscreen {
+	left: auto;
+	right: 5px;
+	top: 5px;
+	width: 32px;
+	border: 1px solid var(--line);
+	border-radius: 4px;
+	overflow: hidden;
+}
+.native-drag-strip-compact-fullscreen .native-window-exit-fullscreen {
+	padding: 0;
+}
+.screen-shell.utility-content:has(> .native-drag-strip-compact-fullscreen) {
+	padding-top: 0;
+}
+.screen-shell:has(> .native-drag-strip-compact-fullscreen) .screen-page-controls:not(.compact-screen-page-controls),
+.screen-shell:has(> .native-drag-strip-compact-fullscreen) .screen-hardware-summary {
+	padding-top: 37px;
+}
+/* A hidden page rail still leaves only a narrow local exit-control strip. */
+.screen-shell.utility-content:has(> .native-drag-strip-compact-fullscreen) .screen-playbacks.playbacks-only {
+	padding-right: 42px;
+}
+.screen-shell.utility-content:has(> .native-drag-strip-compact-fullscreen) .screen-encoders-only,
+.screen-shell.utility-content:has(> .native-drag-strip-compact-fullscreen) .control-section,
+.screen-shell:not(.utility-content):has(> .native-drag-strip-compact-fullscreen) {
+	padding-right: 42px;
+}

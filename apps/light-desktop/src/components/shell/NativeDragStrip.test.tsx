@@ -101,6 +101,26 @@ describe("native window controls", () => {
 		).toBeInTheDocument();
 	});
 
+	it("keeps compact Screen fullscreen exit accessible without replacing normal drag controls", async () => {
+		const setCurrentWindowFullscreen = vi.fn().mockResolvedValue(undefined);
+		render(
+			<DesktopProvider bridge={nativeShell({
+				currentWindowFullscreen: vi.fn().mockResolvedValue(true),
+				setCurrentWindowFullscreen,
+			})}>
+				<NativeDragStrip compactFullscreen />
+			</DesktopProvider>,
+		);
+		const exit = await screen.findByRole("button", { name: "Exit fullscreen" });
+		expect(exit).toHaveAttribute("title", "Exit fullscreen");
+		expect(exit).not.toHaveTextContent("Exit fullscreen");
+		expect(exit.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+		expect(exit.parentElement).toHaveClass("native-drag-strip-compact-fullscreen");
+		fireEvent.click(exit);
+		await waitFor(() => expect(setCurrentWindowFullscreen).toHaveBeenCalledWith(false));
+		expect(await screen.findByRole("button", { name: "Move window" })).toHaveAttribute("data-tauri-drag-region");
+	});
+
 	it("closes only its own window on a screen", () => {
 		const closeCurrentWindow = vi.fn().mockResolvedValue(undefined);
 		const exitApplication = vi.fn().mockResolvedValue(undefined);

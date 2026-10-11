@@ -80,7 +80,7 @@ function DesktopScreenSurface({
 		<div
 			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
-			<NativeDragStrip />
+			<NativeDragStrip compactFullscreen />
 			{screen.show_dock && <LeftDock />}
 			<WorkspaceView />
 			{(showScreenControls || programmerOwner) && (
@@ -100,7 +100,7 @@ function FixedScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 		<div
 			className={`screen-shell fixed-content ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
-			<NativeDragStrip />
+			<NativeDragStrip compactFullscreen />
 			<FixedScreenPane pane={screen.content.pane} />
 			{(showScreenControls || programmerOwner) && (
 				<ScreenControlRegion screen={screen} />
@@ -124,7 +124,7 @@ function SideScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 				{ "--fixed-side-pane-width": `${width_percent}%` } as CSSProperties
 			}
 		>
-			<NativeDragStrip />
+			<NativeDragStrip compactFullscreen />
 			<FixedScreenPane pane={pane} />
 			<div className="screen-side-base">
 				<ScreenControlRegion screen={screen} />
@@ -137,7 +137,7 @@ function SideScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 function ControlScreenSurface({ screen }: { screen: ScreenConfiguration }) {
 	return (
 		<div className="screen-shell utility-content">
-			<NativeDragStrip />
+			<NativeDragStrip compactFullscreen />
 			<ScreenControlRegion screen={screen} />
 		</div>
 	);
