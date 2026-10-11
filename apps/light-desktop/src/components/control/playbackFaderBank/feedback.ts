@@ -90,9 +90,7 @@ export function playbackFaderValue(
 ) {
 	if (!playback) return 0;
 	if (playback.target.type === "group")
-		return projection?.target === "group"
-			? Math.round(projection.master * 100)
-			: 0;
+		return projection?.target === "group" ? projection.master * 100 : 0;
 	if (playback.target.type === "speed_group") {
 		if (projection?.target !== "speed_group") return 0;
 		const runtime = projection.runtime;
@@ -101,11 +99,11 @@ export function playbackFaderValue(
 			? bpm / 3
 			: playback.fader === "centered_relative"
 				? centeredRelativePosition(runtime.speed_master_scale)
-				: Math.round(runtime.speed_master_scale * 100);
+				: runtime.speed_master_scale * 100;
 	}
 	if (playback.target.type === "dynamic")
 		return projection?.target === "dynamic" && projection.runtime
-			? Math.round(projection.runtime.fader_value * 100)
+			? projection.runtime.fader_value * 100
 			: 0;
 	if (playback.target.type === "programmer_fade")
 		return projection?.target === "programmer_fade"
@@ -115,19 +113,18 @@ export function playbackFaderValue(
 		return projection?.target === "cue_fade" ? projection.millis / 600 : 0;
 	if (playback.target.type === "grand_master")
 		return projection?.target === "grand_master"
-			? Math.round(projection.runtime.level * 100)
+			? projection.runtime.level * 100
 			: 0;
 	if (playback.fader === "x_fade")
-		return Math.round((active?.manual_xfade_position ?? 0) * 100);
-	if (playback.fader === "temp")
-		return Math.round((active?.temporary_master ?? 0) * 100);
+		return (active?.manual_xfade_position ?? 0) * 100;
+	if (playback.fader === "temp") return (active?.temporary_master ?? 0) * 100;
 	// Software touch controls set the shared master absolutely. The physical input position
 	// remains independent and may be zero while an assigned/virtual owner runs at full master.
 	// Only the hardware representation should show that physical position and pickup feedback.
-	return Math.round(
+	return (
 		(hardware
 			? (active?.fader_position ?? active?.master ?? 0)
-			: (active?.master ?? 0)) * 100,
+			: (active?.master ?? 0)) * 100
 	);
 }
 
@@ -168,6 +165,7 @@ export function playbackFaderDisplay(
 	projection?: PlaybackRuntimeProjection,
 ) {
 	if (!playback) return "Empty";
+	const percent = Math.round(value);
 	if (playback.target.type === "speed_group") {
 		if (projection?.target !== "speed_group") return "Unavailable";
 		const runtime = projection.runtime;
@@ -205,10 +203,10 @@ export function playbackFaderDisplay(
 	if (playback.target.type === "grand_master") {
 		if (projection?.target !== "grand_master") return "Unavailable";
 		const master = projection.runtime;
-		return `${value}%${master.blackout ? " · BLACKOUT" : ""}${master.dynamics_paused ? " · DYNAMICS PAUSED" : ""}`;
+		return `${percent}%${master.blackout ? " · BLACKOUT" : ""}${master.dynamics_paused ? " · DYNAMICS PAUSED" : ""}`;
 	}
 	if (playback.target.type === "group")
-		return value === 0 ? "0% master · ▲" : `${value}% master`;
+		return value === 0 ? "0% master · ▲" : `${percent}% master`;
 	if (playback.fader === "x_fade") {
 		const current =
 			active?.current_cue_number ??
@@ -216,12 +214,12 @@ export function playbackFaderDisplay(
 		return `Cue ${current} → ${active?.effective_next_cue_number ?? "—"} · ${Math.round((active?.manual_xfade_progress ?? 0) * 100)}%`;
 	}
 	if (playback.fader === "temp")
-		return `${active?.temporary_active ? "TEMP" : "Temp"} · ${value}%`;
+		return `${active?.temporary_active ? "TEMP" : "Temp"} · ${percent}%`;
 	if (active?.loaded_cue_number != null)
-		return `Load ${active.loaded_cue_number} · ${value}%`;
+		return `Load ${active.loaded_cue_number} · ${percent}%`;
 	if (active?.enabled !== false && active)
-		return `Cue ${active.current_cue_number ?? active.cue_index + 1} · ${value}%`;
-	return `${value}%`;
+		return `Cue ${active.current_cue_number ?? active.cue_index + 1} · ${percent}%`;
+	return `${percent}%`;
 }
 
 function centeredRelativePosition(scale: number) {
