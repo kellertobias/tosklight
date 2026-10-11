@@ -340,27 +340,12 @@ fn apply_active_preload_timing(
     previous: Option<PlaybackPreloadTimingState>,
 ) -> bool {
     let mut changed = false;
+    // Activation uses one Cue value transition, retaining the captured live look. A separate
+    // master envelope would multiply that transition and override explicit Cue timing.
     if playback.enabled && matches!(action, "go" | "go-minus" | "on" | "toggle") {
         changed |= set_transition_timing(playback, started_at, fallback_millis);
     }
     match (previous, playback.enabled) {
-        (Some(PlaybackPreloadTimingState { enabled: false, .. }), true)
-            if matches!(action, "go" | "on" | "toggle") && fallback_millis > 0 =>
-        {
-            let target = playback.master;
-            changed |= set_master_transition(
-                playback,
-                PlaybackMasterTransition {
-                    from: 0.0,
-                    to: target,
-                    started_at,
-                    duration_millis: fallback_millis,
-                    release_after: false,
-                },
-                0.0,
-                true,
-            );
-        }
         (Some(previous), false)
             if previous.enabled && matches!(action, "off" | "toggle") && fallback_millis > 0 =>
         {
@@ -388,23 +373,7 @@ fn apply_temporary_preload_timing(
     started_at: DateTime<Utc>,
     fallback_millis: u64,
 ) -> bool {
-    let target = playback.master;
-    let mut changed = set_transition_timing(playback, started_at, fallback_millis);
-    if fallback_millis > 0 {
-        changed |= set_master_transition(
-            playback,
-            PlaybackMasterTransition {
-                from: 0.0,
-                to: target,
-                started_at,
-                duration_millis: fallback_millis,
-                release_after: false,
-            },
-            0.0,
-            playback.enabled,
-        );
-    }
-    changed
+    set_transition_timing(playback, started_at, fallback_millis)
 }
 
 fn set_transition_timing(
