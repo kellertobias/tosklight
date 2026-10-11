@@ -40,9 +40,6 @@ function DemoPlaybackButton({
 	useEffect(() => {
 		releaseRef.current = release;
 	}, [release]);
-	useEffect(() => {
-		if (!enabled) releaseRef.current();
-	}, [enabled]);
 	useEffect(() => () => releaseRef.current(), []);
 	return (
 		<Button

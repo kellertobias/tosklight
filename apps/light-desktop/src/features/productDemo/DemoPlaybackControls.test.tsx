@@ -25,6 +25,7 @@ import { PlaybackRuntimeViewProvider } from "../playbackRuntime/PlaybackRuntimeV
 import { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import {
 	cueProjection,
+	deskProjection,
 	DESK_ID,
 	playbackSnapshot,
 	SHOW_ID,
@@ -228,6 +229,51 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("DemoPlaybackControls", () => {
+	it("holds the original page until the gesture releases after a page change", async () => {
+		const { applyAction, store, view } = harness();
+		mocks.pagesView.pages.push(page(2, DEMO_PAGE.body.assignments));
+		render(view());
+		await settled();
+		fireEvent.pointerDown(button(17,3), { pointerId: 91 });
+		await settled();
+		await act(async () => { store.applyDesk(deskProjection(2), 100); });
+		await settled();
+		expect(buttonSends(applyAction)).toHaveLength(1);
+		fireEvent.pointerUp(button(17,3), { pointerId: 91 });
+		await settled();
+		const requests=applyAction.mock.calls.map(([, , request]) => request);
+		expect(requests.map(request => request.address)).toEqual([
+			{kind:"playback",page:1,position:17},{kind:"playback",page:1,position:17}
+		]);
+		expect(requests[1].control_source).toEqual(requests[0].control_source);
+	});
+
+	it("uses independent instance sources for sibling buttons and faders", async () => {
+		const left=harness();const right=harness();
+		render(<>{left.view()}{right.view()}</>);
+		await settled();
+		const buttons=screen.getAllByRole("button",{name:"Playback 17 button 3"});
+		fireEvent.pointerDown(buttons[0],{pointerId:1});
+		fireEvent.pointerDown(buttons[1],{pointerId:2});
+		await settled();
+		const leftSource=left.applyAction.mock.calls[0][2].control_source;
+		const rightSource=right.applyAction.mock.calls[0][2].control_source;
+		expect(leftSource.surface_id).not.toEqual(rightSource.surface_id);
+		const faders=screen.getAllByLabelText("Playback 17 fader");
+		fireEvent.input(faders[0],{target:{value:"0.75"}});
+		fireEvent.input(faders[1],{target:{value:"0.75"}});
+		await settled();
+		expect(left.applyAction.mock.calls[1][2].control_source.surface_id).toEqual(leftSource.surface_id);
+		expect(right.applyAction.mock.calls[1][2].control_source.surface_id).toEqual(rightSource.surface_id);
+		fireEvent.pointerUp(buttons[0],{pointerId:1});
+		await settled();
+		expect(buttonSends(left.applyAction).map(send=>send.pressed)).toEqual([true,false]);
+		expect(buttonSends(right.applyAction).map(send=>send.pressed)).toEqual([true]);
+		fireEvent.pointerUp(buttons[1],{pointerId:2});
+		await settled();
+		expect(buttonSends(right.applyAction).map(send=>send.pressed)).toEqual([true,false]);
+	});
+
 	it("subscribes to exactly the Playback numbers the active desk Page maps", async () => {
 		const { transport, view } = harness();
 		render(view());
@@ -302,7 +348,7 @@ describe("DemoPlaybackControls", () => {
 		});
 		expect(request.action).toEqual({ type: "master", value: 0.75 });
 		expect(request.control_source).toEqual({
-			surface_id: "demo",
+			surface_id: expect.stringMatching(/^software:/),
 			control_id: 170,
 		});
 	});
@@ -320,13 +366,13 @@ describe("DemoPlaybackControls", () => {
 				playbackNumber: 11,
 				button: 2,
 				pressed: true,
-				controlSource: { surface_id: "demo", control_id: 112 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 112 },
 			},
 			{
 				playbackNumber: 11,
 				button: 2,
 				pressed: false,
-				controlSource: { surface_id: "demo", control_id: 112 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 112 },
 			},
 		]);
 	});
@@ -353,13 +399,13 @@ describe("DemoPlaybackControls", () => {
 				playbackNumber: 11,
 				button: 1,
 				pressed: true,
-				controlSource: { surface_id: "demo", control_id: 111 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 111 },
 			},
 			{
 				playbackNumber: 11,
 				button: 1,
 				pressed: false,
-				controlSource: { surface_id: "demo", control_id: 111 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 111 },
 			},
 		]);
 	});
@@ -425,13 +471,13 @@ describe("DemoPlaybackControls", () => {
 				playbackNumber: 13,
 				button: 1,
 				pressed: true,
-				controlSource: { surface_id: "demo", control_id: 131 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 131 },
 			},
 			{
 				playbackNumber: 13,
 				button: 1,
 				pressed: false,
-				controlSource: { surface_id: "demo", control_id: 131 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 131 },
 			},
 		]);
 	});
@@ -449,13 +495,13 @@ describe("DemoPlaybackControls", () => {
 				playbackNumber: 14,
 				button: 1,
 				pressed: true,
-				controlSource: { surface_id: "demo", control_id: 141 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 141 },
 			},
 			{
 				playbackNumber: 14,
 				button: 1,
 				pressed: false,
-				controlSource: { surface_id: "demo", control_id: 141 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 141 },
 			},
 		]);
 	});
@@ -474,12 +520,12 @@ describe("DemoPlaybackControls", () => {
 				playbackNumber: 15,
 				button: 1,
 				pressed: false,
-				controlSource: { surface_id: "demo", control_id: 151 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 151 },
 			},
 		]);
 	});
 
-	it("releases once through the captured writer when authority stops being ready", async () => {
+	it("retains the captured hold while projections stop being ready", async () => {
 		const { applyAction, view } = harness();
 		const rendered = render(view());
 		await settled();
@@ -489,6 +535,7 @@ describe("DemoPlaybackControls", () => {
 		mocks.pagesView = { ready: false, error: null, pages: [DEMO_PAGE] };
 		rendered.rerender(view());
 		await settled();
+		expect(buttonSends(applyAction)).toHaveLength(1);
 		fireEvent.lostPointerCapture(button(11), { pointerId: 1 });
 		await settled();
 
@@ -497,13 +544,13 @@ describe("DemoPlaybackControls", () => {
 				playbackNumber: 11,
 				button: 1,
 				pressed: true,
-				controlSource: { surface_id: "demo", control_id: 111 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 111 },
 			},
 			{
 				playbackNumber: 11,
 				button: 1,
 				pressed: false,
-				controlSource: { surface_id: "demo", control_id: 111 },
+				controlSource: { surface_id: expect.stringMatching(/^software:/), control_id: 111 },
 			},
 		]);
 		expect(button(11)).toBeDisabled();

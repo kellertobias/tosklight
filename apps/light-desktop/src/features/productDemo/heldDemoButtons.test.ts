@@ -27,7 +27,7 @@ function deferredActions() {
 describe("HeldDemoButtons", () => {
 	it("sends a exact press for the assigned address and button", async () => {
 		const { actions, calls, settle } = deferredActions();
-		const held = new HeldDemoButtons(actions);
+		const held = new HeldDemoButtons(actions, "demo-test");
 		held.press(2, { page: 1, position: 17 }, 3);
 		await flush();
 		expect(calls).toEqual([
@@ -37,7 +37,7 @@ describe("HeldDemoButtons", () => {
 				input: {
 					button: 3,
 					pressed: true,
-					control_source: { surface_id: "demo", control_id: 23 },
+					control_source: { surface_id: "demo-test", control_id: 23 },
 				},
 			},
 		]);
@@ -46,7 +46,7 @@ describe("HeldDemoButtons", () => {
 
 	it("releases the originally pressed address after a topology change", async () => {
 		const { actions, calls, settle } = deferredActions();
-		const held = new HeldDemoButtons(actions);
+		const held = new HeldDemoButtons(actions, "demo-test");
 		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
 		// The desk Page remaps slot 1 while the operator still holds the button.
@@ -59,7 +59,7 @@ describe("HeldDemoButtons", () => {
 				{
 					button: 1,
 					pressed: true,
-					control_source: { surface_id: "demo", control_id: 11 },
+					control_source: { surface_id: "demo-test", control_id: 11 },
 				},
 			],
 			[
@@ -67,7 +67,7 @@ describe("HeldDemoButtons", () => {
 				{
 					button: 1,
 					pressed: false,
-					control_source: { surface_id: "demo", control_id: 11 },
+					control_source: { surface_id: "demo-test", control_id: 11 },
 				},
 			],
 		]);
@@ -76,7 +76,7 @@ describe("HeldDemoButtons", () => {
 
 	it("holds the release until the press it belongs to has settled", async () => {
 		const { actions, calls, settle } = deferredActions();
-		const held = new HeldDemoButtons(actions);
+		const held = new HeldDemoButtons(actions, "demo-test");
 		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
 		expect(calls).toHaveLength(1);
@@ -94,7 +94,7 @@ describe("HeldDemoButtons", () => {
 
 	it("ignores a repeated press of the same held address", async () => {
 		const { actions, calls, settle } = deferredActions();
-		const held = new HeldDemoButtons(actions);
+		const held = new HeldDemoButtons(actions, "demo-test");
 		held.press(1, { page: 1, position: 11 }, 1);
 		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
@@ -104,7 +104,7 @@ describe("HeldDemoButtons", () => {
 
 	it("releases a superseded address before pressing the new one", async () => {
 		const { actions, calls, settle } = deferredActions();
-		const held = new HeldDemoButtons(actions);
+		const held = new HeldDemoButtons(actions, "demo-test");
 		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
 		held.press(1, { page: 1, position: 12 }, 1);
@@ -116,7 +116,7 @@ describe("HeldDemoButtons", () => {
 				{
 					button: 1,
 					pressed: true,
-					control_source: { surface_id: "demo", control_id: 11 },
+					control_source: { surface_id: "demo-test", control_id: 11 },
 				},
 			],
 			[
@@ -124,7 +124,7 @@ describe("HeldDemoButtons", () => {
 				{
 					button: 1,
 					pressed: false,
-					control_source: { surface_id: "demo", control_id: 11 },
+					control_source: { surface_id: "demo-test", control_id: 11 },
 				},
 			],
 			[
@@ -132,7 +132,7 @@ describe("HeldDemoButtons", () => {
 				{
 					button: 1,
 					pressed: true,
-					control_source: { surface_id: "demo", control_id: 11 },
+					control_source: { surface_id: "demo-test", control_id: 11 },
 				},
 			],
 		]);
@@ -140,7 +140,7 @@ describe("HeldDemoButtons", () => {
 
 	it("releases every held button exactly once", async () => {
 		const { actions, calls, settle } = deferredActions();
-		const held = new HeldDemoButtons(actions);
+		const held = new HeldDemoButtons(actions, "demo-test");
 		held.press(1, { page: 1, position: 11 }, 1);
 		held.press(1, { page: 1, position: 11 }, 2);
 		held.press(21, { page: 1, position: 31 }, 1);
@@ -159,7 +159,7 @@ describe("HeldDemoButtons", () => {
 	});
 
 	it("stays inert without an authoritative action layer", async () => {
-		const held = new HeldDemoButtons(null);
+		const held = new HeldDemoButtons(null, "demo-test");
 		expect(() => {
 			held.press(1, { page: 1, position: 11 }, 1);
 			held.releaseAll();

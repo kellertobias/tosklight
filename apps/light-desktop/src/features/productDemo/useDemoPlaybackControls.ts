@@ -1,5 +1,5 @@
 import { playbackAddressKey, type PlaybackAddressValue } from "../../api/playbackAddress";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	usePlaybackDeskView,
 	usePlaybackProjectionMap,
@@ -59,15 +59,12 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 		actionsReady: runtimeActions !== null,
 	});
 	const ready = status.kind === "ready";
+	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
 	const held = useMemo(
-		() => new HeldDemoButtons(runtimeActions),
-		[runtimeActions],
+		() => new HeldDemoButtons(runtimeActions, controlSourceId),
+		[runtimeActions, controlSourceId],
 	);
-	useEffect(() => {
-		if (!ready) held.releaseAll();
-	}, [held, ready]);
 	useEffect(() => () => held.releaseAll(), [held]);
-	useEffect(() => { held.releaseAll(); }, [held, activePage]);
 	return useMemo(() => {
 		const resolve = (slot: number) =>
 			ready ? (mapped.get(slot) ?? null) : null;
@@ -94,11 +91,11 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 				if (playbackNumber == null) return;
 				void runtimeActions?.playbackAction(playbackNumber, "master", {
 					value,
-					control_source: {surface_id:"demo",control_id:slot*10},
+					control_source: {surface_id:controlSourceId,control_id:slot*10},
 				});
 			},
 		};
-	}, [held, mapped, projections, ready, runtimeActions, status]);
+	}, [held, mapped, projections, ready, runtimeActions, status, controlSourceId]);
 }
 
 interface DemoPlaybackAuthority {
