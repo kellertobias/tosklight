@@ -2060,6 +2060,45 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		);
 	});
 
+	it.each(["pointerup", "pointercancel"])("releases an actual encoder center's original address/source after page change on %s", async (finish) => {
+		assignPlayback({ buttons: ["flash", "none", "none"], button_count: 1 });
+		const playbackLayout = { rows: [{ first_position: 1, count: 1, presentation: "push_encoder" as const, button_count: 1 }] };
+		const bank = render(<PlaybackFaderBank surfaceId="main" count={1} playbackLayout={playbackLayout} />);
+		const center = bank.container.querySelector(".touch-encoder-push")!;
+		fireEvent(center, Object.assign(new Event("pointerdown", { bubbles: true }), { pointerId: 44 }));
+		await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 }, "flash", expect.objectContaining({ pressed: true }),
+		));
+		const source = mocks.poolPlaybackAction.mock.calls[0][2].control_source;
+		bank.rerender(<PlaybackFaderBank surfaceId="main" pageNumber={2} count={1} playbackLayout={playbackLayout} />);
+		fireEvent(window, Object.assign(new Event(finish), { pointerId: 44 }));
+		await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 }, "flash", { pressed: false, control_source: source },
+		));
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2);
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
+	it("releases the original encoder center keyboard hold after its page disappears", async () => {
+		assignPlayback({ buttons: ["flash", "none", "none"], button_count: 1 });
+		const playbackLayout = { rows: [{ first_position: 1, count: 1, presentation: "push_encoder" as const, button_count: 1 }] };
+		const bank = render(<PlaybackFaderBank surfaceId="main" count={1} playbackLayout={playbackLayout} />);
+		const center = bank.container.querySelector(".touch-encoder-push")!;
+		fireEvent.keyDown(center, { key: " ", repeat: false });
+		fireEvent.keyDown(center, { key: " ", repeat: true });
+		await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 }, "flash", expect.objectContaining({ pressed: true }),
+		));
+		const source = mocks.poolPlaybackAction.mock.calls[0][2].control_source;
+		bank.rerender(<PlaybackFaderBank surfaceId="main" pageNumber={2} count={1} playbackLayout={playbackLayout} />);
+		fireEvent.keyUp(window, { key: " " });
+		await waitFor(() => expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 }, "flash", { pressed: false, control_source: source },
+		));
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2);
+		expect(screen.queryByRole("dialog")).toBeNull();
+	});
+
 	it("keeps two mounted controls of the same configured surface independently held", async () => {
 		assignPlayback();
 		const held = new Set<string>();

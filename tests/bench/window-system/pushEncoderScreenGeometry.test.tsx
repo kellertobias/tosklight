@@ -124,14 +124,18 @@ it.each([
 				].map((card) => {
 					const box = card.getBoundingClientRect();
 					const action = card
-						.querySelector(".playback-push-encoder button:last-child")!
+						.querySelector(".touch-encoder-push")!
 						.getBoundingClientRect();
 					const value = card.querySelector(".touch-encoder-value")!;
+					const numeric = card.querySelector(".touch-encoder-number-entry")!.getBoundingClientRect();
 					return {
 						bottom: box.bottom,
 						actionTop: action.top,
 						actionBottom: action.bottom,
 						actionHeight: action.height,
+						numericHeight: numeric.height,
+						numericWidth: numeric.width,
+						numericBottom: numeric.bottom,
 						valueFits: value.scrollWidth <= value.clientWidth,
 					};
 				}),
@@ -146,6 +150,9 @@ it.each([
 		for (const card of rectangles.cards) {
 			expect(card.actionBottom).toBeLessThanOrEqual(card.bottom);
 			expect(card.actionHeight).toBeGreaterThanOrEqual(44);
+			expect(card.numericHeight).toBeGreaterThanOrEqual(44);
+			expect(card.numericWidth).toBeGreaterThanOrEqual(44);
+			expect(card.numericBottom).toBeLessThanOrEqual(card.bottom);
 			expect(card.valueFits).toBe(true);
 		}
 		expect(rectangles.toolbarTop).toBeGreaterThanOrEqual(

@@ -12,6 +12,7 @@ import {
 	type ModalNumberFaderConfig,
 	type ModalNumberPresetConfig,
 } from "../input/ModalNumberEditor";
+import type { VerticalTouchFaderAction } from "../faders/VerticalTouchFader";
 import { submitNumericExpression } from "../input/numericExpression";
 
 export const TOUCH_ENCODER_CONTINUOUS_INTERVAL_MILLIS = 80;
@@ -23,6 +24,8 @@ export type TouchEncoderInteraction = "continuous" | "choices";
 
 export interface TouchEncoderProps {
 	label: string;
+	/** Playback-only push; generic encoders retain absolute entry at their center. */
+	centerAction?: VerticalTouchFaderAction;
 	slot?: number;
 	attributeLabel?: string;
 	display?: string;
@@ -124,6 +127,7 @@ function useContinuousRidgeMotion(motion: EncoderMotion | null) {
 }
 
 function TouchEncoderSurface({
+	centerAction,
 	attributeLabel,
 	disabled,
 	display,
@@ -136,6 +140,7 @@ function TouchEncoderSurface({
 	slot,
 	slowStep,
 }: {
+	centerAction?: VerticalTouchFaderAction;
 	attributeLabel?: string;
 	disabled: boolean;
 	display: string;
@@ -179,6 +184,9 @@ function TouchEncoderSurface({
 					/>
 				</>
 			)}
+			{centerAction ? (
+				<TouchEncoderPush action={centerAction} disabled={disabled} display={display} />
+			) : (
 			<button
 				type="button"
 				className={`touch-encoder-value ${range ? "range-value" : ""}`.trim()}
@@ -196,6 +204,7 @@ function TouchEncoderSurface({
 					display
 				)}
 			</button>
+			)}
 			{choiceMode ? (
 				<button
 					type="button"
@@ -411,6 +420,7 @@ function useTouchEncoderInteraction({
 }
 
 function createEncoderKeyDownHandler({
+	centerAction = false,
 	disabled,
 	indexed,
 	canRelease,
@@ -418,6 +428,7 @@ function createEncoderKeyDownHandler({
 	onStep,
 	slowStep,
 }: {
+	centerAction?: boolean;
 	disabled: boolean;
 	indexed: boolean;
 	canRelease: boolean;
@@ -440,7 +451,7 @@ function createEncoderKeyDownHandler({
 		} else if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
 			event.preventDefault();
 			onStep(-slowStep);
-		} else if (event.key === "Enter" || event.key === " ") {
+		} else if (!centerAction && (event.key === "Enter" || event.key === " ")) {
 			event.preventDefault();
 			openEditor();
 		}
@@ -460,6 +471,7 @@ function typedScale(inputScale: number, inputOffset: number) {
 }
 
 export function TouchEncoder({
+	centerAction,
 	label,
 	slot,
 	attributeLabel,
@@ -518,20 +530,15 @@ export function TouchEncoder({
 		const set = (next: number) => onSet(clamp(valueOf(next)));
 		if (submitNumericExpression(candidate, set, onSetRange)) setEditing(false);
 	};
-	const onWheel = createEncoderWheelHandler({
-		disabled,
-		fastStep,
-		indexed,
-		onStep,
-		slowStep,
-	});
-	const onKeyDown = createEncoderKeyDownHandler({
+	const { onWheel, onKeyDown } = createTouchEncoderHandlers({
+		centerAction: Boolean(centerAction),
 		disabled,
 		indexed,
 		canRelease,
 		openEditor,
 		onStep,
 		slowStep,
+		fastStep,
 	});
 	const instructionsId = `touch-encoder-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-instructions`;
 	return (
@@ -540,7 +547,7 @@ export function TouchEncoder({
 			<section
 				ref={encoderRef}
 				role="group"
-				tabIndex={unavailable ? -1 : 0}
+				tabIndex={unavailable || centerAction ? -1 : 0}
 				className={`touch-encoder ${choiceMode ? "choice-encoder" : ""} ${disabled ? "disabled" : ""} ${indexed ? "indexed" : ""}`}
 				data-motion={interaction.motion?.direction}
 				style={
@@ -563,6 +570,7 @@ export function TouchEncoder({
 				onKeyDown={onKeyDown}
 			>
 				<TouchEncoderSurface
+					centerAction={centerAction}
 					attributeLabel={attributeLabel}
 					disabled={unavailable}
 					display={renderedValue}
@@ -577,7 +585,8 @@ export function TouchEncoder({
 					slot={slot}
 					slowStep={slowStep}
 				/>
-				<TouchEncoderInstructions choiceMode={choiceMode} id={instructionsId} />
+				{centerAction && <TouchEncoderNumberEntry label={label} disabled={unavailable} onClick={openEditor} />}
+				<TouchEncoderInstructions choiceMode={choiceMode} id={instructionsId} centerAction={Boolean(centerAction)} />
 			</section>
 			{editing && (
 				<TouchEncoderEditing
@@ -609,15 +618,19 @@ export function TouchEncoder({
 }
 
 function TouchEncoderInstructions({
+	centerAction,
 	choiceMode,
 	id,
 }: {
+	centerAction: boolean;
 	choiceMode: boolean;
 	id: string;
 }) {
 	return (
 		<span id={id} className="visually-hidden">
-			{choiceMode
+			{centerAction
+				? "Rotate or drag to adjust the fader. Press the center for the configured Playback action; use Set value for absolute entry."
+				: choiceMode
 				? "Tap the upper chevron for the next value or the lower chevron for the previous value. Tap the center or press Enter to choose from the available options."
 				: "The upper third increases the value and the lower third decreases it. Drag vertically to accelerate linearly. Tap the full-width center third or press Enter for absolute entry."}
 		</span>
@@ -725,4 +738,65 @@ function TouchEncoderEditing({
 			}
 		/>
 	);
+}
+
+function TouchEncoderPush({ action, disabled, display }: {
+	action: VerticalTouchFaderAction;
+	disabled: boolean;
+	display: string;
+}) {
+	const { id: _id, label, onPointerDown, onKeyDown, onKeyUp, className, ...props } = action;
+	return (
+		<button
+			{...props}
+			type="button"
+			className={`touch-encoder-value touch-encoder-push ${className ?? ""}`}
+			aria-label={typeof label === "string" ? label : undefined}
+			disabled={disabled || action.disabled}
+			onPointerDown={(event) => {
+				event.stopPropagation();
+				onPointerDown?.(event);
+			}}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+				onKeyDown?.(event);
+			}}
+			onKeyUp={(event) => {
+				event.stopPropagation();
+				onKeyUp?.(event);
+			}}
+		>
+			<span>{label}</span>
+			<small>{display}</small>
+		</button>
+	);
+}
+
+function TouchEncoderNumberEntry({ label, disabled, onClick }: {
+	label: string;
+	disabled: boolean;
+	onClick(): void;
+}) {
+	return (
+		<button
+			type="button"
+			className="ui-button touch-encoder-number-entry"
+			aria-label={`Set ${label} value`}
+			disabled={disabled}
+			onPointerDown={(event) => event.stopPropagation()}
+			onKeyDown={(event) => event.stopPropagation()}
+			onClick={onClick}
+		>
+			Set value
+		</button>
+	);
+}
+
+function createTouchEncoderHandlers(
+	options: Parameters<typeof createEncoderKeyDownHandler>[0] & { fastStep: number },
+) {
+	return {
+		onWheel: createEncoderWheelHandler(options),
+		onKeyDown: createEncoderKeyDownHandler(options),
+	};
 }

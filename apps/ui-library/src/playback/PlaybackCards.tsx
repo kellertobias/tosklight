@@ -352,6 +352,7 @@ export function TouchPlaybackCardView({
 				<section className="playback-push-encoder">
 					{hasFader ? (
 						<TouchEncoder
+							centerAction={model.actions[0]}
 							label={model.faderLabel}
 							value={model.faderValue / 100}
 							display={model.faderDisplay}
@@ -366,7 +367,7 @@ export function TouchPlaybackCardView({
 					) : (
 						<div aria-hidden="true" style={{ flex: 1, minHeight: 0 }} />
 					)}
-					<PlaybackActionButtons actions={model.actions} />
+					<PlaybackActionButtons actions={hasFader ? model.actions.slice(1) : model.actions} />
 				</section>
 			)}
 			{singleFaderlessAction && <SingleFaderlessPlaybackAction model={model} />}

@@ -2204,3 +2204,27 @@
 	> .single-button-playback-action {
 	grid-row: 1 / -1;
 }
+
+/* Playback push keeps its configured action separate from absolute fader entry. */
+.touch-encoder-number-entry {
+	min-width: 44px;
+	min-height: 44px;
+	flex: none;
+}
+.touch-encoder-push {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+}
+
+.touch-encoder:has(.touch-encoder-number-entry) {
+	display: flex;
+	flex-direction: column;
+}
+.touch-encoder:has(.touch-encoder-number-entry) > .touch-encoder-surface {
+	flex: 1;
+	height: auto;
+}
+.touch-encoder-push {
+	min-height: 44px;
+}
