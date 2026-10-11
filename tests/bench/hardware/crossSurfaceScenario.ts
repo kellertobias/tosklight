@@ -512,14 +512,14 @@ export class BrowserCrossSurface {
 			const pageFeedbackMark = firstHardware.mark();
 			await this.selectPlaybackPage("Page 2");
 			await expect.poll(() => this.deskPage(first)).toBe(2);
-			expect(
-				(
-					await firstHardware.expectAfter(
-						pageFeedbackMark,
-						`/light/desk/feedback/page`,
-					)
-				).arguments,
-			).toEqual([2]);
+			// Feedback from an earlier accepted action may still be in transit at the
+			// cursor. Require the new page's packet, rather than the first page packet.
+			await expect.poll(
+				() => firstHardware.messages.slice(pageFeedbackMark)
+					.filter(message => message.address === "/light/desk/feedback/page")
+					.map(message => message.arguments),
+				{ timeout: 2_000 },
+			).toContainEqual([2]);
             // OSC carries an exact address. Changing the selected command page cannot retarget it.
             await firstHardware.send(firstAddress, [true]);
             await expect.poll(async () => (await this.activePlayback({ page: 1, position: 1 }))?.enabled).toBe(true);
