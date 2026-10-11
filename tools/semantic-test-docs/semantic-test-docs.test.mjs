@@ -19,6 +19,50 @@ const root = path.resolve(
 );
 fs.mkdirSync(artifactPaths.tmp, { recursive: true });
 
+test("color-preset acceptance narrates configuration, visible commands and stored-object reads", () => {
+	const calls = [
+		[
+			"show.colorModel",
+			['"intent"'],
+			`Set the active show's color programming model to "intent".`,
+			["Show files"],
+		],
+		[
+			"command.via.ui.execute",
+			['"GROUP 1 AT 100"'],
+			'Execute the desk command "GROUP 1 AT 100" through the visible command line.',
+			["Browser UI", "Command line"],
+		],
+		[
+			"command.via.ui.execute",
+			['"GROUP 1 AT 2.1"'],
+			'Execute the desk command "GROUP 1 AT 2.1" through the visible command line.',
+			["Browser UI", "Command line"],
+		],
+		[
+			"cue.cue",
+			["$playback", "1"],
+			"Read stored Cue 1 from the Cuelist assigned to Playback $playback.",
+			["Cue runtime"],
+		],
+		[
+			"preset.requiredObject",
+			["PresetFamily.Color", "1"],
+			"Read the stored PresetFamily.Color Preset 1, requiring that it exists.",
+			["Presets"],
+		],
+	];
+	for (const [callPath, args, description, surfaces] of calls) {
+		const narration = narrateCall({ path: callPath, root: "t", arguments: args });
+		assert.ok(narration, callPath);
+		assert.equal(narration.description, description);
+		assert.deepEqual(narration.surfaces, surfaces);
+		assert.equal(narration.kind, "step");
+		assert.equal(narration.expectedOutcome, undefined);
+		assert.equal(narration.resultType, undefined);
+	}
+});
+
 test("central narration separates actions, outcomes, surfaces, and returned handles", () => {
 	assert.deepEqual(
 		narrateCall({

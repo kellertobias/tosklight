@@ -91,6 +91,7 @@ const supportedCallPaths = new Set([
 	"command.type",
 	"command.via.api.execute",
 	"command.via.api.type",
+	"command.via.ui.execute",
 	"crossSurface.completeOneSharedValueFromSeveralSurfaces",
 	"crossSurface.executeOscGroupCommandAndVerifyOutput",
 	"crossSurface.expectCompleteFeedbackForPage",
@@ -108,6 +109,7 @@ const supportedCallPaths = new Set([
 	"cue.expect.groupValueTiming",
 	"cue.expectList.configuration",
 	"cue.configure",
+	"cue.cue",
 	"cue.delete",
 	"cue.deleteViaApi",
 	"cue.goto",
@@ -335,6 +337,7 @@ const supportedCallPaths = new Set([
 	"preset.expectVisibleSelection",
 	"preset.expectVisibleSelectionCount",
 	"preset.recall",
+	"preset.requiredObject",
 	"preset.tapEmptyPoolSlot",
 	"preset.via.api.recall",
 	"preset.via.api.store",
@@ -399,6 +402,7 @@ const supportedCallPaths = new Set([
 	"show.saveAs",
 	"show.saveRevision",
 	"show.use",
+	"show.colorModel",
 	"show.via.ui.loadRevision",
 	"show.via.ui.saveAs",
 	"show.via.ui.saveRevision",
@@ -525,6 +529,20 @@ const exactNarrations = new Map([
 	],
 	["app.expect.ready", () => "The ToskLight browser application is ready."],
 	["show.use", ([show]) => `Use the isolated ${show} show.`],
+	[
+		"show.colorModel",
+		([model]) => `Set the active show's color programming model to ${model}.`,
+	],
+	[
+		"cue.cue",
+		([playback, cue]) =>
+			`Read stored Cue ${cue} from the Cuelist assigned to Playback ${playback}.`,
+	],
+	[
+		"preset.requiredObject",
+		([family, number]) =>
+			`Read the stored ${family} Preset ${number}, requiring that it exists.`,
+	],
 	["show.create", ([name]) => `Create the show ${name}.`],
 	["show.load", ([show]) => `Load the show ${show}.`],
 	["show.save", () => "Save the active show."],
@@ -545,6 +563,10 @@ const exactNarrations = new Map([
 		([revision]) => `Show → revision matches ${revision}.`,
 	],
 	["command.execute", ([command]) => `Execute the desk command ${command}.`],
+	[
+		"command.via.ui.execute",
+		([command]) => `Execute the desk command ${command} through the visible command line.`,
+	],
 	[
 		"command.via.api.execute",
 		([command]) => `Execute the desk command ${command} through the API.`,
