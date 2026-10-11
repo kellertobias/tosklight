@@ -149,7 +149,7 @@ describe("compact hardware encoder assignments", () => {
 
 it("keeps large live fixture spreads readable without losing their range or direction", () => {
 	expect(compactEncoderValueText(Array(28).fill("1%").join(" thru "))).toBe("1%");
-	expect(compactEncoderValueText("75% thru 50% thru 25% thru 0%" )).toBe("75%…0%");
+	expect(compactEncoderValueText("75% thru 50% thru 25% thru 0%" )).toBe("75…0%");
 	expect(compactEncoderValueText("0° thru 30° thru -20° thru 0°")).toBe("-20…30° · Mixed");
-	expect(compactEncoderValueText("25% thru 50% thru 75%")).toBe("25% thru 50% thru 75%");
+	expect(compactEncoderValueText("25% thru 50% thru 75%")).toBe("25…75%");
 });
