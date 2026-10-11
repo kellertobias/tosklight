@@ -840,3 +840,91 @@ fn independent_empty_cuelist_101_preserves_reserved_playback_and_creates_no_assi
     );
     assert_eq!(document.objects_of_kind("playback").count(), 0);
 }
+
+#[test]
+fn recording_explicit_playbacks_allocates_independent_cuelists_without_position_collision() {
+    assert_independent_recording_numbering(true);
+}
+
+#[test]
+fn recording_explicit_playbacks_preserves_seeded_assignment_derived_cuelist_number() {
+    assert_independent_recording_numbering(false);
+}
+
+fn assert_independent_recording_numbering(explicit_number: bool) {
+    let rig = TestRig::new();
+    let mut seeded: CueList =
+        serde_json::from_value(cue_list(CueListId::new(), Uuid::new_v4(), 0.5)).unwrap();
+    seeded.pool_number = explicit_number.then_some(101);
+    let seeded_id = seeded.id;
+    rig.seed(
+        "cue_list",
+        &seeded_id.0.to_string(),
+        serde_json::to_value(&seeded).unwrap(),
+    );
+    let seed_assignment =
+        light_playback::PlaybackDefinition::new_cue_list("Seeded Cuelist", seeded_id);
+    rig.seed(
+        "playback_page",
+        "1",
+        json!({"number":1,"name":"Main","assignments":{"101":seed_assignment}}),
+    );
+    rig.seed(
+        "playback_page",
+        "2",
+        json!({"number":2,"name":"Page 2","assignments":{}}),
+    );
+    let mut created = Vec::new();
+    for (position, level) in [(101, 0.25), (102, 0.75)] {
+        let address = light_playback::PlaybackAddress::new(2, position).unwrap();
+        let commit = rig.commit(
+            ProgrammingCueRecordTarget::Playback { address },
+            ProgrammingCueResolvedTarget::Playback { address },
+            ProgrammingCueRecordOperation::Overwrite,
+            None,
+            capture(level),
+        );
+        let result = rig
+            .service
+            .commit_programming_cue(&rig.context(), &commit, &rig.ports)
+            .unwrap();
+        let recorded: CueList =
+            serde_json::from_value((*result.projections.cue_list.raw_body).clone()).unwrap();
+        assert!(
+            recorded.pool_number.is_some(),
+            "Playback recording must author an independent Cuelist address"
+        );
+        assert_ne!(recorded.pool_number, Some(position));
+        created.push(recorded.id);
+        let document = rig.document();
+        let catalog = crate::cuelist_pool_catalog(&document).unwrap();
+        assert_eq!(catalog.resolve(101), Some(seeded_id));
+        assert_eq!(
+            catalog.resolve(recorded.pool_number.unwrap()),
+            Some(recorded.id)
+        );
+        let page: light_playback::PlaybackPage = serde_json::from_value(
+            document
+                .object("playback_page", "2")
+                .unwrap()
+                .body()
+                .clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            page.assignments[&position].target,
+            light_playback::PlaybackTarget::CueList {
+                cue_list_id: recorded.id
+            }
+        );
+    }
+    assert_ne!(created[0], created[1]);
+    seeded.pool_number = Some(101);
+    assert_eq!(
+        rig.document()
+            .object("cue_list", &seeded_id.0.to_string())
+            .unwrap()
+            .body(),
+        &serde_json::to_value(seeded).unwrap()
+    );
+}

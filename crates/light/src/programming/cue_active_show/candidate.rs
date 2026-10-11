@@ -21,7 +21,9 @@ pub(super) fn prepare_candidate(
 ) -> Result<PreparedActiveShowTransaction<PreparedRecording>, ActionError> {
     let (mut plan, cue_list_id) = plan_recording(commit, &target)?;
     let catalog = crate::cuelist_pool_catalog(document)?;
-    let independent = target.pool_number.is_some()
+    // Playback positions are never Cuelist addresses in the unified model.
+    let independent = target.concrete_playback_address.is_some()
+        || target.pool_number.is_some()
         || matches!(document.programming_contract_marker(), light_show::ProgrammingContractMarker::Declared(version) if version >= light_core::programming::INDEPENDENT_CUELIST_POOL_CONTRACT);
     if let Some(number) = target.pool_number {
         if target.cue_list.is_some() {
@@ -88,6 +90,7 @@ pub(super) fn prepare_candidate(
     let candidate = document
         .candidate(prepared.transaction())
         .map_err(invalid)?;
+    validate_recorded_cuelist_catalog(&candidate)?;
     let companion_projections = companions
         .iter()
         .map(|id| candidate_projection(&candidate, ActiveShowObjectKind::CueList, id))
@@ -322,4 +325,35 @@ fn invalid_topology() -> ActionError {
         ActionErrorKind::Internal,
         "Cue recording produced an inconsistent portable topology",
     )
+}
+
+// Check the complete numbered namespace, including unnumbered assignment-derived entries,
+// before any backup, commit or runtime installation can accept this recording.
+fn validate_recorded_cuelist_catalog(
+    candidate: &light_show::PortableShowCandidate<'_>,
+) -> Result<(), ActionError> {
+    let lists = candidate
+        .objects_of_kind("cue_list")
+        .map(|object| {
+            serde_json::from_value::<light_playback::CueList>(object.body().clone())
+                .map_err(invalid)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut definitions = Vec::new();
+    for object in candidate.objects_of_kind("playback_page") {
+        let page: PlaybackPage = serde_json::from_value(object.body().clone()).map_err(invalid)?;
+        for (position, definition) in page.assignments {
+            definitions.push((
+                light_playback::PlaybackAddress::new(page.number, position).map_err(invalid)?,
+                definition,
+            ));
+        }
+    }
+    light_playback::CueListPoolCatalog::build(
+        &lists,
+        &definitions,
+        candidate.objects_of_kind("playback_page").next().is_none(),
+    )
+    .map(|_| ())
+    .map_err(invalid)
 }
