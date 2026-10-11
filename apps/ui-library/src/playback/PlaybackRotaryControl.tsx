@@ -5,6 +5,7 @@ import type { VerticalTouchFaderAction } from "../faders";
 /** Playback rotation changes the level; its center retains the captured action. */
 export function PlaybackRotaryControl({
 	value,
+	hardware = false,
 	label,
 	display,
 	disabled,
@@ -13,6 +14,7 @@ export function PlaybackRotaryControl({
 	onChange,
 }: {
 	value: number;
+	hardware?: boolean;
 	label: string;
 	display: string;
 	disabled?: boolean;
@@ -26,7 +28,7 @@ export function PlaybackRotaryControl({
 	const percentage = `${Number(position.toFixed(1))}%`;
 	return (
 		<div
-			className="playback-rotary-control"
+			className={`playback-rotary-control ${hardware ? "hardware-rotary" : ""}`}
 			data-position={position}
 			style={
 				{ "--playback-rotary-angle": `${position * 2.7}deg` } as CSSProperties

@@ -2314,3 +2314,34 @@
 	font-size: 12px;
 	line-height: 16px;
 }
+
+/* Attached hardware supplies the physical wheel and absolute level controls. */
+.hardware-rotary-row {
+	justify-content: flex-start;
+}
+.hardware-rotary-row > .hardware-rotary {
+	flex: 0 0 auto;
+	height: 88px;
+}
+.hardware-rotary .touch-encoder {
+	border: 0;
+	background: transparent;
+}
+.hardware-rotary .touch-encoder-number-entry {
+	display: none;
+}
+.hardware-rotary .touch-encoder-surface::before {
+	width: 64px;
+}
+.hardware-rotary .touch-encoder-push {
+	width: 48px;
+	height: 48px;
+	font-size: 11px;
+	padding: 2px;
+}
+.hardware-rotary .touch-encoder-push small {
+	font-size: 11px;
+}
+.hardware-rotary .playback-rotary-feedback {
+	font-size: 11px;
+}

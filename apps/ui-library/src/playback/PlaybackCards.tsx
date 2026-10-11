@@ -306,10 +306,12 @@ function cardData(model: PlaybackCardViewModel) {
 
 export function TouchPlaybackCardView({
 	model,
+	hardware = false,
 	callbacks = {},
 	slots = {},
 }: {
 	model: PlaybackCardViewModel;
+	hardware?: boolean;
 	callbacks?: PlaybackCardCallbacks;
 	slots?: PlaybackCardSlots;
 }) {
@@ -349,9 +351,10 @@ export function TouchPlaybackCardView({
 				/>
 			)}
 			{pushEncoder && model.assigned && (
-				<section className="playback-push-encoder">
+				<section className={`playback-push-encoder ${hardware ? "hardware-rotary-row" : ""}`}>
 					{hasFader ? (
 						<PlaybackRotaryControl
+							hardware={hardware}
 							action={model.actions[0]}
 							label={model.faderLabel}
 							value={model.faderValue}

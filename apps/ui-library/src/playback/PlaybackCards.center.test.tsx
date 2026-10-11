@@ -12,6 +12,14 @@ const model: PlaybackCardViewModel = {
 	faderLabel: "Master", faderDisplay: "50%", actions: [],
 };
 describe("Playback encoder center", () => {
+	it("marks hardware rotary controls compact while retaining their configured center action", () => {
+		const press = vi.fn();
+		const { container } = render(<TouchPlaybackCardView hardware model={{ ...model, actions: [{ id: "go", label: "GO", onClick: press }] }} />);
+		expect(container.querySelector(".playback-rotary-control")).toHaveClass("hardware-rotary");
+		fireEvent.click(screen.getByRole("button", { name: "GO" }));
+		expect(press).toHaveBeenCalledOnce();
+		expect(screen.getByText("50%")).toBeInTheDocument();
+	});
 	it("drags the dial level and stops on cancellation without pressing its center action", () => {
 		vi.useFakeTimers();
 		const change = vi.fn();

@@ -102,6 +102,7 @@ export function TouchPlaybackCard({
 	};
 	return (
 		<TouchPlaybackCardView
+			hardware={controller.hardware}
 			model={model}
 			slots={{
 				overlays: (

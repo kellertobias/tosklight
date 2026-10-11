@@ -27,6 +27,7 @@ it.each([
 		});
 		const cards = Array.from({ length: 5 }, (_, index) => (
 			<TouchPlaybackCardView
+				hardware={rowUnits === 2}
 				key={index}
 				model={{
 					page: 4,
@@ -129,10 +130,15 @@ it.each([
 					const value = card.querySelector(".touch-encoder-value")!;
 					const rotary = card.querySelector(".playback-rotary-control")!;
 					const ring = getComputedStyle(card.querySelector(".touch-encoder-surface")!, "::before");
-					const numeric = card.querySelector(".touch-encoder-number-entry")!.getBoundingClientRect();
+					const numericElement = card.querySelector(".touch-encoder-number-entry")!;
+					const numeric = numericElement.getBoundingClientRect();
+					const hardware = card.querySelector(".hardware-rotary") !== null;
 					return {
 						bottom: box.bottom,
 						position: rotary.getAttribute("data-position"),
+						hardware,
+						ringWidth: parseFloat(ring.width),
+						numericHidden: getComputedStyle(numericElement).display === "none",
 						ring: ring.backgroundImage,
 						actionWidth: action.width,
 						actionLeft: action.left,
@@ -164,9 +170,18 @@ it.each([
 			expect(card.actionRight).toBeLessThanOrEqual(card.cardRight);
 			expect(card.position).toBe("100");
 			expect(card.ring).toContain("conic-gradient");
-			expect(card.numericHeight).toBeGreaterThanOrEqual(44);
-			expect(card.numericWidth).toBeGreaterThanOrEqual(44);
-			expect(card.numericBottom).toBeLessThanOrEqual(card.bottom);
+			expect(card.hardware).toBe(rowUnits === 2);
+			if (rowUnits === 2) {
+				expect(card.ringWidth).toBe(64);
+				expect(card.actionWidth).toBe(48);
+				expect(card.actionHeight).toBe(48);
+				expect(card.numericHidden).toBe(true);
+			} else {
+				expect(card.numericHidden).toBe(false);
+				expect(card.numericHeight).toBeGreaterThanOrEqual(44);
+				expect(card.numericWidth).toBeGreaterThanOrEqual(44);
+				expect(card.numericBottom).toBeLessThanOrEqual(card.bottom);
+			}
 			expect(card.valueFits).toBe(true);
 		}
 		expect(rectangles.toolbarTop).toBeGreaterThanOrEqual(
