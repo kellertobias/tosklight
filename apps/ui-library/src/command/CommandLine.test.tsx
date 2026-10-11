@@ -62,6 +62,20 @@ function props(overrides: Partial<CommandLineProps> = {}): CommandLineProps {
 }
 
 describe("CommandLine", () => {
+	it("routes ordinary Escape separately from shifted Undo", () => {
+		const clear = vi.fn();
+		const undo = vi.fn();
+		const view = props({ onClearCommand: clear, onEscape: undo });
+		const mounted = render(<CommandLine {...view} />);
+		fireEvent.click(screen.getByRole("button", { name: "ESC" }));
+		expect(clear).toHaveBeenCalledOnce();
+		expect(undo).not.toHaveBeenCalled();
+		expect(view.onReplace).not.toHaveBeenCalled();
+		mounted.rerender(<CommandLine {...view} recordShiftArmed />);
+		fireEvent.click(screen.getByRole("button", { name: "ESC, Shift: UNDO" }));
+		expect(undo).toHaveBeenCalledOnce();
+		expect(clear).toHaveBeenCalledOnce();
+	});
 	it("exposes command, mode, status, Record, and Preload interactions without services", () => {
 		const view = props();
 		render(<CommandLine {...view} />);

@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import "../../styles.css";
+import { useNumericPadController } from "./numericPad/useNumericPadController";
 import { softwareDeskKeypadLayout } from "@tosklight/ui/programmer-keypad";
 import {
 	NumericPad,
@@ -204,6 +205,18 @@ afterEach(() => {
 });
 
 describe("NumericPad Clear and SET routing", () => {
+	it.each(["touch", "keyboard", "hardware"] as const)("ESC from %s leaves Record and preserves programmer values and selection", (source) => {
+		state.storeArmed = true;
+		server.selectedFixtures = ["fixture-1"];
+		valuesActivity.current = { authority: "normal", ready: true, valueCount: 1, pendingValueCount: 0 };
+		const hook = renderHook(() => useNumericPadController());
+		act(() => hook.result.current.press("ESC", source));
+		expect(dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
+		expect(commandActions.reset).toHaveBeenCalledOnce();
+		expect(selectionActions.replace).not.toHaveBeenCalled();
+		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
+		state.storeArmed = false;
+	});
 	it("ignores stale bootstrap values and clears selection before scoped normal values", () => {
 		server.bootstrap.active_programmers = [
 			{

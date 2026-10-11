@@ -278,6 +278,14 @@ function RequestedSystemControlsTab() {
 }
 
 describe("scoped command-line integration", () => {
+	it.each(["touch", "keyboard"])("leaves armed Record using ordinary Escape from %s", (source) => {
+		state.storeArmed = true;
+		render(<CommandLineBar />);
+		if (source === "touch") fireEvent.click(screen.getByRole("button", { name: "ESC" }));
+		else fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
+		expect(dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
+		expect(state.storeArmed).toBe(false);
+	});
 	it("does not turn an unrelated failed request into programmer feedback", () => {
 		server.error = "CITP discovery request failed";
 		render(<CommandLineBar />);

@@ -368,6 +368,7 @@ function useCommandLineBarModel() {
 		openSystemControls,
 		toggleControlMode,
 		undo: () => numericPad.press("UND", "touch"),
+		escape: () => numericPad.escape(),
 	};
 }
 
@@ -448,6 +449,7 @@ export function CommandLineBar() {
 				onAdvancePreload={model.advancePreload}
 				onInspectPreload={model.inspectPreload}
 				onEscape={model.undo}
+				onClearCommand={model.escape}
 			/>
 			{settingsOpen && placement.surfaceId && (
 				<PlaybackSectionSettingsModal

@@ -84,6 +84,7 @@ export interface CommandLineProps {
 	onAdvancePreload: () => void | Promise<void>;
 	onInspectPreload: () => void | Promise<void>;
 	onEscape?: () => void;
+	onClearCommand?: () => void;
 }
 
 export function CommandLine(props: CommandLineProps) {
@@ -190,7 +191,9 @@ function CommandInputSurface(
 						onClick={() =>
 							props.recordShiftArmed
 								? props.onEscape?.()
-								: props.onReplace("", true)
+								: props.onClearCommand
+									? props.onClearCommand()
+									: props.onReplace("", true)
 						}
 					>
 						<ShiftedKeyCaption

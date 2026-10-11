@@ -81,13 +81,7 @@ export function useNumericPadController() {
 		toggleFixtureFreeze: () => advanceFixtureFreezeCommand(command),
 		selectFixtureFreezeFamily: (key: "1" | "2" | "3" | "4") =>
 			selectFixtureFreezeFamily(command, key),
-		escape: () => {
-			if (setInteraction)
-				void setInteraction.cancel().then((consumed) => {
-					if (!consumed) void command.reset();
-				});
-			else void command.reset();
-		},
+		escape: () => escapeCommand(context),
 		press: (key: SoftwareKey, source: ControlSurfaceSource = "touch") =>
 			pressKey(context, key, source),
 		hold: (key: SoftwareKey) =>
@@ -160,6 +154,7 @@ function pressKey(
 	)
 		return;
 	if (repeated && handleRepeatedKey(context, key)) return;
+	if (key === "ESC") return escapeCommand(context);
 	if (key === "CLR") return clearStep(context);
 	if (key === "SET" && currentCommand.pristine && handleSet(source)) return;
 	if (key === "UND") return void programmerActions?.undoProgrammer();
@@ -289,6 +284,15 @@ function selectFixtureFreezeFamily(
 	if (!/^\s*(?:FREEZE|UNFREEZE)\b/i.test(current)) return;
 	if (new RegExp(`(?:^|\\s)${family}(?:\\s|$)`, "i").test(current)) return;
 	void command.replace(`${current} ${family}`, false);
+}
+
+function escapeCommand(context: NumericPadContext) {
+	return void (async () => {
+		if (context.setInteraction && await context.setInteraction.cancel()) return;
+		for (const [type, armed] of clearableArmedStates(context.state))
+			if (armed) context.dispatch({ type, value: false });
+		void context.command.reset();
+	})();
 }
 
 function clearStep(context: NumericPadContext) {
