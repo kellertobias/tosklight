@@ -15,6 +15,10 @@ export function playbackTargetMatches(
 			projection.target === "cue_list" &&
 			projection.cue_list_id === target.cue_list_id
 		);
+	if (target.type === "macro")
+		return projection.target === "macro" && projection.macro_id === target.macro_id;
+	if (target.type === "timecode")
+		return projection.target === "timecode" && projection.timecode_id === target.timecode_id;
 	if (target.type === "group")
 		return (
 			projection.target === "group" && projection.group_id === target.group_id

@@ -966,7 +966,8 @@ async fn record_first_live_cue_with_target(
         assert_eq!(status, StatusCode::OK, "first linked Cue: {result}");
         assert_eq!(
             after.programming_contract_marker(),
-            light_show::ProgrammingContractMarker::Declared(if independent { 3 } else { 2 })
+            // Assigned recording also allocates an independent Cuelist pool owner.
+            light_show::ProgrammingContractMarker::Declared(3)
         );
         let list = after.objects_of_kind("cue_list").next().unwrap();
         if independent {
@@ -1043,12 +1044,53 @@ async fn production_startup_records_first_live_reference_and_reopens_feature_two
         Some(AttributeValue::Normalized(0.5))
     );
     drop(startup);
+    // Construct the historical feature-2 boundary explicitly: current assigned recording
+    // correctly owns a pool number (feature 3), whereas a saved live-reference-only Cue did not.
+    // This test fixture changes persisted bytes; production never downgrades or migrates them.
+    let store = show.store();
+    let document = store.portable_document().unwrap();
+    let list = document.objects_of_kind("cue_list").next().unwrap();
+    let mut body = list.body().clone();
+    body["pool_number"] = serde_json::Value::Null;
+    let list_id = list.key().id().to_owned();
+    drop(store);
+    let connection = rusqlite::Connection::open(&show.path).unwrap();
+    connection
+        .execute(
+            "UPDATE objects SET body_json=?1 WHERE kind='cue_list' AND id=?2",
+            rusqlite::params![body.to_string(), list_id],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE metadata SET value='2' WHERE key=?1",
+            [light_show::PROGRAMMING_CONTRACT_METADATA_KEY],
+        )
+        .unwrap();
+    connection
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        .unwrap();
+    drop(connection);
+    assert_eq!(
+        show.store().programming_contract_marker().unwrap(),
+        light_show::ProgrammingContractMarker::Declared(2)
+    );
     let old = desk.load_at(1);
     assert!(
         old.active_show_error.is_some(),
         "contract1 reader refuses feature2"
     );
     drop(old);
+    let feature_two = desk.load_at(2);
+    assert_eq!(
+        feature_two.active_show_error, None,
+        "contract2 reader accepts feature2"
+    );
+    assert_eq!(
+        feature_two.engine.snapshot().cue_lists[0].cues[0].changes[0].value,
+        Some(AttributeValue::Normalized(0.5))
+    );
+    drop(feature_two);
     let store = show.store();
     let document = store.portable_document().unwrap();
     let list = document.objects_of_kind("cue_list").next().unwrap();
@@ -1109,3 +1151,6 @@ async fn production_startup_records_independent_101_selects_uuid_and_preserves_s
         light_show::ProgrammingContractMarker::Declared(3)
     );
 }
+
+#[path = "automation_playback_recovery_tests.rs"]
+mod automation_playback_recovery_tests;

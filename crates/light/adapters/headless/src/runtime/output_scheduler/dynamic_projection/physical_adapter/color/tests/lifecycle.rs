@@ -329,7 +329,7 @@ impl Output {
         Self {
             engine: Engine::with_programming_contract_support(
                 ProgrammerRegistry::with_clock(clock.clone()),
-                light_core::programming::PROGRAMMING_CONTRACT_VERSION,
+                light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT,
             ),
             clock,
             adapter: ColorAdapter::default(),

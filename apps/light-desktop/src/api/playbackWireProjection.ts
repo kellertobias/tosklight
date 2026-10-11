@@ -429,6 +429,8 @@ function decodeTarget(
 ): PlaybackTargetProjection {
 	const target = enumAt(projection.target, `${path}.target`, [
 		"missing",
+		"macro",
+		"timecode",
 		"cue_list",
 		"dynamic",
 		"group",
@@ -438,6 +440,13 @@ function decodeTarget(
 		"cue_fade",
 	]);
 	if (target === "missing") return { target };
+	if (target === "macro")
+		return { target, macro_id: stringAt(projection.macro_id, `${path}.macro_id`) };
+	if (target === "timecode")
+		return {
+			target,
+			timecode_id: stringAt(projection.timecode_id, `${path}.timecode_id`),
+		};
 	if (target === "cue_list") {
 		return {
 			target,

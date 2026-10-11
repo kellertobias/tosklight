@@ -7,6 +7,8 @@ import { projectCollection } from "./storeProjection";
 import type { PendingMutation, ShowObjectsSnapshot } from "./storeTypes";
 
 export const ALL_COLLECTIONS = new Set<ShowObjectKind>([
+	"macro",
+	"timecode",
 	"dynamic",
 	"group",
 	"preset",
@@ -21,6 +23,8 @@ const PROJECTED_COLLECTIONS: Record<
 	ShowObjectKind,
 	ReadonlySet<ShowObjectKind>
 > = {
+	macro: new Set(["macro"]),
+	timecode: new Set(["timecode"]),
 	dynamic: new Set(["dynamic"]),
 	group: new Set(["group"]),
 	preset: new Set(["preset"]),
@@ -33,6 +37,8 @@ const PROJECTED_COLLECTIONS: Record<
 
 export function emptyShowObjectCollections(): ShowObjectCollections {
 	return {
+		macro: [],
+		timecode: [],
 		dynamic: [],
 		group: [],
 		preset: [],
@@ -50,6 +56,8 @@ export function initialShowObjectsSnapshot(): ShowObjectsSnapshot {
 		authorityGeneration: 0,
 		showRevision: null,
 		eventSequence: null,
+		macros: [],
+		timecodes: [],
 		dynamics: [],
 		groups: [],
 		presets: [],
@@ -80,6 +88,20 @@ export function createShowObjectsSnapshot(
 	const pendingOperations = projectKinds.size > 0 ? [...pending] : [];
 	return {
 		...previous,
+		macros: projectKinds.has("macro")
+			? (projectCollection(
+					"macro",
+					authoritative.macro,
+					pendingOperations,
+				) as ShowObject<"macro">[])
+			: previous.macros,
+		timecodes: projectKinds.has("timecode")
+			? (projectCollection(
+					"timecode",
+					authoritative.timecode,
+					pendingOperations,
+				) as ShowObject<"timecode">[])
+			: previous.timecodes,
 		dynamics: projectKinds.has("dynamic")
 			? (projectCollection(
 					"dynamic",

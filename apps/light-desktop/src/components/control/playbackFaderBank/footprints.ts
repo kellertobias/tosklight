@@ -390,7 +390,10 @@ function claimedBinding(
 						control: { type: "right_button" as const, number: index + 1 },
 					}),
 				);
-	if (position === "wider_right" && cell.row.presentation !== "buttons")
+	if (
+		position === "wider_right" && cell.row.presentation !== "buttons" &&
+		playback.target.type !== "macro" && playback.target.type !== "timecode"
+	)
 		controls.push({ control: { type: "right_fader" } });
 	return {
 		physicalSlot: cell.slot,

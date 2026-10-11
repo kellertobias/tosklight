@@ -106,6 +106,10 @@ function knownPlayback(playback: PlaybackDefinition) {
 function knownTarget(target: PlaybackDefinition["target"]) {
 	if (target.type === "cue_list")
 		return { type: target.type, cue_list_id: target.cue_list_id };
+	if (target.type === "macro")
+		return { type: target.type, macro_id: target.macro_id };
+	if (target.type === "timecode")
+		return { type: target.type, timecode_id: target.timecode_id };
 	if (target.type === "group")
 		return {
 			type: target.type,

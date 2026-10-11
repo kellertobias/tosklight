@@ -57,10 +57,13 @@ fn seed_assignment(rig: &TestRig, target: PlaybackTarget) {
     let definition = PlaybackDefinition {
         name: "Assigned".into(),
         buttons: PlaybackDefinition::default_buttons(&target),
+        has_fader: !matches!(
+            target,
+            PlaybackTarget::Macro { .. } | PlaybackTarget::Timecode { .. }
+        ),
         target,
         button_count: 3,
         fader: light_playback::PlaybackFaderMode::Master,
-        has_fader: true,
         footprint: light_playback::PlaybackFootprint::Normal,
         go_activates: true,
         auto_off: true,

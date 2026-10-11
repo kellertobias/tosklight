@@ -19,6 +19,8 @@ import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerBut
 
 export type PlaybackFamily =
 	| "cue_list"
+	| "macro"
+	| "timecode"
 	| "dynamic"
 	| "group"
 	| "speed_group"
@@ -124,11 +126,19 @@ const faderDescriptions: Record<PlaybackDefinition["fader"], string> = {
 		"Maps the fader from Pause through half speed to the learned speed.",
 };
 
+export type PlaybackAutomationOption = {
+	id: string;
+	name: string;
+	number: number;
+};
+
 type FunctionTabProps = {
 	family: PlaybackFamily;
 	draft: PlaybackDefinition;
 	presentation: "label" | "icon" | "image";
 	cueLists: Array<{ id: string; name: string; number: number }>;
+	macros: readonly PlaybackAutomationOption[];
+	timecodes: readonly PlaybackAutomationOption[];
 	dynamics: ReturnType<typeof useDynamics>;
 	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
 	onFamilyChange: (family: PlaybackFamily) => void;
@@ -145,6 +155,8 @@ function playbackTargetColumn(
 		| "family"
 		| "draft"
 		| "cueLists"
+		| "macros"
+		| "timecodes"
 		| "dynamics"
 		| "groups"
 		| "onSpecialChange"
@@ -155,6 +167,8 @@ function playbackTargetColumn(
 		family,
 		draft,
 		cueLists,
+		macros,
+		timecodes,
 		dynamics,
 		groups,
 		onSpecialChange,
@@ -171,6 +185,22 @@ function playbackTargetColumn(
 		);
 		onChange = (cue_list_id) =>
 			onDraftChange({ ...draft, target: { type: "cue_list", cue_list_id } });
+	} else if (family === "macro" && draft.target.type === "macro") {
+		label = "Macro options";
+		value = draft.target.macro_id;
+		options = macros.map((item) =>
+			numberedOption(item.id, item.number, item.name),
+		);
+		onChange = (macro_id) =>
+			onDraftChange({ ...draft, target: { type: "macro", macro_id } });
+	} else if (family === "timecode" && draft.target.type === "timecode") {
+		label = "Timecode options";
+		value = draft.target.timecode_id;
+		options = timecodes.map((item) =>
+			numberedOption(item.id, item.number, item.name),
+		);
+		onChange = (timecode_id) =>
+			onDraftChange({ ...draft, target: { type: "timecode", timecode_id } });
 	} else if (family === "dynamic" && draft.target.type === "dynamic") {
 		const assignment = draft.target.assignment;
 		label = "Dynamic options";
@@ -241,6 +271,8 @@ function playbackFunctionOptions(
 ): SelectionListOption[] {
 	return [
 		{ value: "cue_list", label: "Cue List" },
+		{ value: "macro", label: "Macro" },
+		{ value: "timecode", label: "Timecode" },
 		...(hasBoundDynamics ? [{ value: "dynamic", label: "Dynamic" }] : []),
 		{ value: "group", label: "Group Master" },
 		{ value: "speed_group", label: "Speed Master" },
@@ -249,28 +281,18 @@ function playbackFunctionOptions(
 	];
 }
 
-export function PlaybackFunctionTab({
-	family,
-	draft,
-	presentation,
-	cueLists,
-	dynamics,
-	groups,
-	onFamilyChange,
-	onSpecialChange,
-	onPresentationChange,
-	onDraftChange,
-}: FunctionTabProps) {
-	const functionOptions = playbackFunctionOptions(dynamics.length > 0);
-	const targetColumn = playbackTargetColumn({
+export function PlaybackFunctionTab(props: FunctionTabProps) {
+	const {
 		family,
 		draft,
-		cueLists,
+		presentation,
 		dynamics,
-		groups,
-		onSpecialChange,
+		onFamilyChange,
+		onPresentationChange,
 		onDraftChange,
-	});
+	} = props;
+	const functionOptions = playbackFunctionOptions(dynamics.length > 0);
+	const targetColumn = playbackTargetColumn(props);
 	const presentationOptions =
 		family !== "none" ? (
 			<FormLayout className="playback-presentation-options">
@@ -781,6 +803,8 @@ export function PlaybackLayoutTab({
 	onDraftChange: (playback: PlaybackDefinition) => void;
 }) {
 	const footprint = draft.footprint ?? { type: "normal" as const };
+	const buttonsOnly =
+		draft.target.type === "macro" || draft.target.type === "timecode";
 	return (
 		<FormLayout labelPlacement="side">
 			<PlaybackFootprintField draft={draft} onDraftChange={onDraftChange} />
@@ -801,7 +825,7 @@ export function PlaybackLayoutTab({
 			{draft.button_count === 0 && (
 				<p className="playback-topology-note">This playback has no buttons.</p>
 			)}
-			{draft.has_fader ? (
+			{draft.has_fader && !buttonsOnly ? (
 				<LayoutChoiceField
 					kind="fader"
 					label="Fader"
@@ -821,7 +845,11 @@ export function PlaybackLayoutTab({
 					}))}
 				/>
 			) : (
-				<p className="playback-topology-note">No fader on this playback.</p>
+				<p className="playback-topology-note">
+					{buttonsOnly
+						? "Macro and Timecode Playbacks use buttons only."
+						: "No fader on this playback."}
+				</p>
 			)}
 			{footprint.type === "taller" && (
 				<LayoutChoiceField
@@ -863,27 +891,29 @@ export function PlaybackLayoutTab({
 								}}
 							/>
 						))}
-					<LayoutChoiceField
-						kind="fader"
-						label="Right fader"
-						value={footprint.right_fader}
-						disabled={fixedFader(draft)}
-						onChange={(right_fader) =>
-							onDraftChange({
-								...draft,
-								footprint: {
-									...footprint,
-									right_fader: right_fader as PlaybackDefinition["fader"],
-								},
-							})
-						}
-						options={faderModes(draft).map((value) => ({
-							value,
-							label: fixedFaderLabel(draft) ?? faderLabels[value],
-							description:
-								fixedFaderDescription(draft) ?? faderDescriptions[value],
-						}))}
-					/>
+					{!buttonsOnly && (
+						<LayoutChoiceField
+							kind="fader"
+							label="Right fader"
+							value={footprint.right_fader}
+							disabled={fixedFader(draft)}
+							onChange={(right_fader) =>
+								onDraftChange({
+									...draft,
+									footprint: {
+										...footprint,
+										right_fader: right_fader as PlaybackDefinition["fader"],
+									},
+								})
+							}
+							options={faderModes(draft).map((value) => ({
+								value,
+								label: fixedFaderLabel(draft) ?? faderLabels[value],
+								description:
+									fixedFaderDescription(draft) ?? faderDescriptions[value],
+							}))}
+						/>
+					)}
 				</>
 			)}
 			{draft.target.type === "speed_group" &&
@@ -1046,6 +1076,8 @@ function defaultButtons(
 	type: PlaybackDefinition["target"]["type"],
 ): PlaybackDefinition["buttons"] {
 	if (type === "cue_list") return ["go_minus", "go", "flash"];
+	if (type === "macro") return ["go", "none", "none"];
+	if (type === "timecode") return ["go", "pause", "off"];
 	if (type === "dynamic") return ["off", "pause", "flash"];
 	if (type === "group") return ["select", "select_dereferenced", "flash"];
 	if (type === "speed_group") return ["double", "half", "learn"];
@@ -1073,6 +1105,8 @@ export function isSpecial(
 }
 function layoutActions(playback: PlaybackDefinition): PlaybackButtonAction[] {
 	if (playback.target.type === "cue_list") return cueActions;
+	if (playback.target.type === "macro") return ["go"];
+	if (playback.target.type === "timecode") return ["go", "pause", "off"];
 	if (playback.target.type === "dynamic")
 		return [
 			"on",
@@ -1120,6 +1154,13 @@ function layoutActionDescription(
 		if (action === "half") return "Halves the current fade time.";
 		if (action === "off")
 			return "Sets the fade time to zero, disabling the fade delay.";
+	}
+	if (playback.target.type === "macro" && action === "go")
+		return "Runs the assigned Macro.";
+	if (playback.target.type === "timecode") {
+		if (action === "go") return "Starts or resumes the assigned Timecode.";
+		if (action === "pause") return "Pauses the assigned Timecode transport.";
+		if (action === "off") return "Stops the assigned Timecode transport.";
 	}
 	return buttonDescriptions[action];
 }

@@ -490,3 +490,31 @@ describe("playback card views", () => {
 		expect(screen.getByRole("status")).toHaveTextContent("SWAP HELD");
 	});
 });
+
+
+it.each(["macro", "timecode"] as const)(
+	"keeps %s push-encoder rows button-only when no value control exists",
+	(kind) => {
+		const change = vi.fn();
+		const press = vi.fn();
+		render(
+			<TouchPlaybackCardView
+				model={{
+					...model,
+					kind,
+					hasFader: false,
+					presentation: "push_encoder",
+					actions: [{ id: "go", label: "GO", onClick: press }],
+				}}
+				callbacks={{ onFaderChange: change }}
+			/>,
+		);
+		expect(screen.queryByRole("group", { name: "Main Cuelist" })).toBeNull();
+		expect(screen.queryByRole("slider")).toBeNull();
+		expect(document.querySelector(".playback-push-encoder")).toBeTruthy();
+		expect(document.querySelector("article")).toHaveAttribute("data-row-units", "2");
+		fireEvent.click(screen.getByRole("button", { name: "GO" }));
+		expect(press).toHaveBeenCalledOnce();
+		expect(change).not.toHaveBeenCalled();
+	},
+);

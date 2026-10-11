@@ -38,6 +38,9 @@ export function decodeShowObjectBody(
 	objectId?: string,
 ): ShowObjectBodies[ShowObjectKind] {
 	switch (kind) {
+		case "macro":
+		case "timecode":
+			return decodePlaybackAutomationMetadata(kind, value, path, objectId);
 		case "dynamic":
 			return decodeDynamic(value, path, objectId);
 		case "group":
@@ -452,4 +455,24 @@ function signedIntegerAt(value: unknown, path: string) {
 	if (!Number.isSafeInteger(value))
 		throw new WireValidationError(path, "integer", value);
 	return value as number;
+}
+
+function decodePlaybackAutomationMetadata(
+	kind: "macro" | "timecode",
+	value: unknown,
+	path: string,
+	objectId?: string,
+): ShowObjectBodies["macro"] {
+	const body = recordAt(value, path);
+	const id = stringAt(body.id, `${path}.id`);
+	if (objectId && id !== objectId)
+		throw new WireValidationError(`${path}.id`, objectId, id);
+	const number = boundedPositiveIntegerAt(
+		body.number,
+		`${path}.number`,
+		kind === "macro" ? 9999 : 4294967295,
+	);
+	if (typeof body.name !== "string")
+		throw new WireValidationError(`${path}.name`, "string", body.name);
+	return { ...body, id, number, name: body.name };
 }

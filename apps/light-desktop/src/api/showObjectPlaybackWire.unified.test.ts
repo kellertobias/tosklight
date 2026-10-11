@@ -174,3 +174,37 @@ describe("canonical Playback configuration reader", () => {
 		).toBe(false);
 	});
 });
+
+describe("all supported assigned Playback targets", () => {
+	it.each([
+		["macro", "macro_id", ["go", "none", "none"]],
+		["timecode", "timecode_id", ["go", "pause", "off"]],
+	] as const)(
+		"decodes sparse %s assignments and their canonical defaults",
+		(type, idKey, buttons) => {
+			const id = "660ad859-56a8-4145-bcf2-f17fbe861555";
+			const page = decodePlaybackPageBody(
+				{
+					number: 2,
+					name: "Proof",
+					assignments: {
+						"103": { name: "Assigned target", target: { type, [idKey]: id } },
+					},
+				},
+				"$",
+			);
+			expect(page.assignments["103"].target).toEqual({ type, [idKey]: id });
+			expect(page.assignments["103"].buttons).toEqual(buttons);
+			const decoded = page.assignments["103"];
+			expect(
+				sameKnownPlayback(decoded, {
+					...decoded,
+					target: { type, [idKey]: "another-target" },
+				} as PlaybackDefinition),
+			).toBe(false);
+			expect(() =>
+				decodePlaybackBody({ name: "Missing target ID", target: { type } }, "$"),
+			).toThrow(new RegExp(idKey));
+		},
+	);
+});

@@ -311,3 +311,31 @@ describe("playback footprint projection", () => {
 		expect(playback.body).toEqual(before);
 	});
 });
+
+
+it.each(["macro", "timecode"] as const)(
+	"keeps %s wider physical buttons without unsupported fader bindings",
+	(family) => {
+		const item = definition(1, {
+			type: "wider",
+			right_buttons: ["go", "none", "none"],
+			right_fader: "master",
+		});
+		item.body.target = family === "macro"
+			? { type: family, macro_id: "macro-1" }
+			: { type: family, timecode_id: "timecode-1" };
+		item.body.has_fader = false;
+		item.body.buttons = ["go", "none", "none"];
+		const result = project([item], { "31": 1 });
+		const bindings = [...result.bindings.values()];
+		expect(result.anchors[0].effective).toBe("wider");
+		expect(bindings.flatMap((binding) => binding.controls).some(({ control }) =>
+			control.type === "anchor_fader" || control.type === "right_fader",
+		)).toBe(false);
+		expect(bindings.find((binding) => binding.position === "wider_right")?.controls)
+			.toContainEqual({
+				physicalButton: 1,
+				control: { type: "right_button", number: 1 },
+			});
+	},
+);

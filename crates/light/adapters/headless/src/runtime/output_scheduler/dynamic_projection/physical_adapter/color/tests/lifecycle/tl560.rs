@@ -6,16 +6,16 @@
 //! `ActiveShowService::commit_programming_preset`, …), reopens the SQLite show, compiles it
 //! through `prepare_show_candidate` and inspects the exact stored payloads. Where output applies,
 //! the reopened snapshot is installed into a fresh `AppState` built by
-//! `test_state_with_family_adapters` (contract 1 plus the explicit all-family Live opt-in) and
+//! `test_state_with_family_adapters` (current contract support plus the all-family Live adapters) and
 //! rendered through `OutputResource::render_with_playback_events`, the production Live boundary
 //! (`dynamic_output_frame` → family lanes → `render_static_family_frame`). The test reads the
 //! published family writes and the actual encoded universe bytes of that same frame.
 //!
-//! Production `SUPPORTED_PROGRAMMING_CONTRACT` stays 0; these desks opt in explicitly.
+//! Reopened canonical assignments retain independent Cuelist addresses and need current reader support.
 use super::*;
 use crate::runtime::AppState;
 use crate::runtime::tests::test_state_with_family_adapters;
-use light_core::programming::PROGRAMMING_CONTRACT_VERSION;
+use light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT;
 use light_engine::RenderResult;
 
 /// Focus Cue record, reopen and replacement independent of Zoom.
@@ -145,7 +145,7 @@ impl Desk {
         let (state, data_dir) = test_state_with_family_adapters(
             programmers.clone(),
             Some(clock.clone()),
-            PROGRAMMING_CONTRACT_VERSION,
+            SUPPORTED_PROGRAMMING_CONTRACT,
         );
         state.output.replace_snapshot(snapshot).unwrap();
         Self {

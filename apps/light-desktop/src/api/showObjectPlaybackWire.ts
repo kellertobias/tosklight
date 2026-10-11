@@ -197,6 +197,8 @@ function decodeTarget(value: unknown, path: string) {
 	const target = recordAt(value, path);
 	const type = enumAt(target.type, `${path}.type`, [
 		"cue_list",
+		"macro",
+		"timecode",
 		"group",
 		"speed_group",
 		"dynamic",
@@ -209,6 +211,18 @@ function decodeTarget(value: unknown, path: string) {
 			...target,
 			type,
 			cue_list_id: stringAt(target.cue_list_id, `${path}.cue_list_id`),
+		};
+	if (type === "macro")
+		return {
+			...target,
+			type,
+			macro_id: stringAt(target.macro_id, `${path}.macro_id`),
+		};
+	if (type === "timecode")
+		return {
+			...target,
+			type,
+			timecode_id: stringAt(target.timecode_id, `${path}.timecode_id`),
 		};
 	if (type === "group")
 		return {
@@ -353,6 +367,8 @@ function defaultButtons(
 	target: PlaybackDefinition["target"],
 ): PlaybackDefinition["buttons"] {
 	if (target.type === "cue_list") return ["go_minus", "go", "flash"];
+	if (target.type === "macro") return ["go", "none", "none"];
+	if (target.type === "timecode") return ["go", "pause", "off"];
 	if (target.type === "group")
 		return ["select", "select_dereferenced", "flash"];
 	if (target.type === "speed_group") return ["double", "half", "learn"];

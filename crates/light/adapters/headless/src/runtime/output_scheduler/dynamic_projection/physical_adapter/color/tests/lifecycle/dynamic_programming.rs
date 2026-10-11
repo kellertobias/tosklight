@@ -29,7 +29,7 @@ use crate::runtime::output_scheduler::dynamic_projection::CapturedDynamicInputs;
 use crate::runtime::output_scheduler::dynamic_projection::programming_projection::hybrid::{
     HybridFamilyRequirementReason, HybridFrameScratch, prepare_captured_hybrid_frame,
 };
-use light_core::programming::{PROGRAMMING_CONTRACT_VERSION, UvIntent};
+use light_core::programming::{SUPPORTED_PROGRAMMING_CONTRACT, UvIntent};
 use light_dynamics::DynamicDefinition;
 use light_dynamics::{
     ActivationBoundary, ActivationPolicy, DynamicDefinitionSnapshot, DynamicFamilyRepresentation,
@@ -212,7 +212,7 @@ impl Live {
         ));
         let engine = Engine::with_programming_contract_support(
             ProgrammerRegistry::with_clock(clock.clone()),
-            PROGRAMMING_CONTRACT_VERSION,
+            SUPPORTED_PROGRAMMING_CONTRACT,
         );
         let prepared = engine.prepare_snapshot(snapshot).unwrap();
         let mut runtime = DynamicRuntime::with_native_color_models(

@@ -31,3 +31,14 @@ export function selectPlaybackPages(
 ): readonly ShowObject<"playback_page">[] {
 	return snapshot.playbackPages;
 }
+
+export function selectMacros(
+	snapshot: ShowObjectsSnapshot,
+): readonly ShowObject<"macro">[] {
+	return snapshot.macros;
+}
+export function selectTimecodes(
+	snapshot: ShowObjectsSnapshot,
+): readonly ShowObject<"timecode">[] {
+	return snapshot.timecodes;
+}

@@ -55,6 +55,8 @@ function validateRelatedObjects(event: Record<string, unknown>) {
 }
 
 const SHOW_OBJECT_KINDS = [
+	"macro",
+	"timecode",
 	"dynamic",
 	"group",
 	"preset",

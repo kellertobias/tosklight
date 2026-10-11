@@ -271,7 +271,7 @@ mod tests {
     }
     fn assigned(id: TimecodeId) -> PlaybackDefinition {
         serde_json::from_value(
-            serde_json::json!({"name":"Timecode","target":{"type":"timecode","timecode_id":id}}),
+            serde_json::json!({"name":"Timecode","target":{"type":"timecode","timecode_id":id},"has_fader":false}),
         )
         .unwrap()
     }

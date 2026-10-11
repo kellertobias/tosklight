@@ -441,6 +441,12 @@ impl PlaybackDefinition {
     }
 
     pub fn reset_incompatible_layout(&mut self) {
+        if matches!(
+            self.target,
+            PlaybackTarget::Macro { .. } | PlaybackTarget::Timecode { .. }
+        ) {
+            self.has_fader = false;
+        }
         if self.layout_is_compatible() {
             return;
         }
@@ -465,7 +471,15 @@ impl PlaybackDefinition {
             }
             self.button_is_compatible(*action)
         });
-        buttons_compatible && self.fader_is_compatible(self.fader) && self.footprint_is_compatible()
+        let fader_available = !self.has_fader
+            || !matches!(
+                self.target,
+                PlaybackTarget::Macro { .. } | PlaybackTarget::Timecode { .. }
+            );
+        buttons_compatible
+            && fader_available
+            && self.fader_is_compatible(self.fader)
+            && self.footprint_is_compatible()
     }
 
     fn button_is_compatible(&self, action: PlaybackButtonAction) -> bool {

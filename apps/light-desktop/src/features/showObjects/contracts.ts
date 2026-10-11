@@ -9,7 +9,15 @@ import type {
 } from "../../api/types";
 import type { StoredDeskLayout, StoredStageLayout } from "../server/contracts";
 
+export interface PlaybackAutomationMetadata {
+	id: string;
+	number: number;
+	name: string;
+}
+
 export type ShowObjectKind =
+	| "macro"
+	| "timecode"
 	| "dynamic"
 	| "group"
 	| "preset"
@@ -20,6 +28,8 @@ export type ShowObjectKind =
 	| "user_layout";
 
 export interface ShowObjectBodies {
+	macro: PlaybackAutomationMetadata;
+	timecode: PlaybackAutomationMetadata;
 	dynamic: DynamicDefinitionProjection;
 	group: StoredGroup;
 	preset: StoredPreset;

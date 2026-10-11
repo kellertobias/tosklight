@@ -8,6 +8,8 @@ import {
 } from "react";
 import type { ShowObject, ShowObjectKind } from "./contracts";
 import {
+	selectMacros,
+	selectTimecodes,
 	selectCueLists,
 	selectDynamics,
 	selectPlaybackPages,
@@ -17,6 +19,8 @@ import {
 import type { ShowObjectsSnapshot, ShowObjectsStore } from "./store";
 
 export {
+	selectMacros,
+	selectTimecodes,
 	selectCueLists,
 	selectDynamics,
 	selectPlaybackPages,
@@ -227,4 +231,14 @@ function equalMutationState(
 		left.status === right.status &&
 		left.error === right.error
 	);
+}
+
+export function useMacros(enabled = true): readonly ShowObject<"macro">[] {
+	return useShowObjectsSelector(selectMacros, shallowEqualArray, enabled);
+}
+
+export function useTimecodes(
+	enabled = true,
+): readonly ShowObject<"timecode">[] {
+	return useShowObjectsSelector(selectTimecodes, shallowEqualArray, enabled);
 }

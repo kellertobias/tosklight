@@ -79,7 +79,7 @@ fn external_timecode_solo_bridge_uses_exact_member_address() {
     let peer = cue_list(vec![Cue::new(1_u16.into())]);
     let peer_id = peer.id;
     let timecode = TimecodeId(Uuid::new_v4());
-    let external:PlaybackDefinition=serde_json::from_value(serde_json::json!({"name":"External Timecode","target":{"type":"timecode","timecode_id":timecode}})).unwrap();
+    let external:PlaybackDefinition=serde_json::from_value(serde_json::json!({"name":"External Timecode","target":{"type":"timecode","timecode_id":timecode},"has_fader":false})).unwrap();
     let a = PlaybackAddress::new(1, 1).unwrap();
     let alias = PlaybackAddress::new(2, 1).unwrap();
     let b = PlaybackAddress::new(2, 2).unwrap();

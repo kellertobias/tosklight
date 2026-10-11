@@ -40,7 +40,9 @@ export function ExpandedPlaybackControls({
 					key={`${index}-${action}`}
 				/>
 			))}
-			{stored.type === "wider" && (
+			{stored.type === "wider" &&
+				playback.target.type !== "macro" &&
+				playback.target.type !== "timecode" && (
 				<label className="expanded-playback-fader">
 					<span>Right fader · {stored.right_fader.replaceAll("_", " ")}</span>
 					<Input

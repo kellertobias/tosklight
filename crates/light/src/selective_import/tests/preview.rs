@@ -986,7 +986,7 @@ fn playback_timecode_dependency_is_imported_and_speed_group_letter_is_preserved(
         "playback_page",
         "99",
         json!({"number":99,"name":"Last page","assignments":{
-            "999":{"name":"Show clock","target":{"type":"timecode","timecode_id":timecode}},
+            "999":{"name":"Show clock","target":{"type":"timecode","timecode_id":timecode},"has_fader":false},
             "1000":{"name":"Speed A","target":{"type":"speed_group","group":"A"},"future_assignment":{"keep":true}}
         }}),
     );

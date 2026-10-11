@@ -1,3 +1,5 @@
+import { TimecodesApiClient } from "../../api/client/timecodes";
+import { TimecodeActionsProvider } from "../../features/timecode/TimecodeActionsContext";
 import {
 	cleanup,
 	fireEvent,
@@ -157,6 +159,10 @@ function PlaybackFaderBank(
 	);
 }
 
+vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (original) => ({
+	...await original<typeof import("../../features/deskSnapshot/DeskSnapshotState")>(),
+	useActiveShowId: () => "show-1",
+}));
 vi.mock("../../features/screens/ScreensContext", () => ({
 	useScreensOptional: () => ({
 		selectSurface: mocks.selectSurface,
@@ -310,6 +316,8 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 			scope: { show_id: "show-1", show_revision: 9 },
 			identity: { kind: "playback", page: 1, position: number },
 			target: playback.target.type,
+			...(playback.target.type === "macro" ? { macro_id: playback.target.macro_id } : {}),
+			...(playback.target.type === "timecode" ? { timecode_id: playback.target.timecode_id } : {}),
 			...(playback.target.type === "group"
 				? {
 						group_id: playback.target.group_id,
@@ -365,6 +373,8 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 });
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	useDynamics: () => [],
+	useMacros: () => [],
+	useTimecodes: () => [],
 	usePortableGroups: (enabled: boolean) => {
 		mocks.portableGroups(enabled);
 		return [];
@@ -2950,3 +2960,82 @@ describe("scrollable software Playback panes", () => {
 		});
 	});
 });
+
+
+describe("assigned Macro and Timecode cards", () => {
+	beforeEach(resetPlaybackFaderMocks);
+	it.each([false, true])("renders Macro ready with its real single-fire control (hardware %s)", (hardwareConnected) => {
+		assignPlayback({ target: { type: "macro", macro_id: "macro-1" }, name: "House open", has_fader: false, buttons: ["go", "none", "none"], button_count: 1 });
+		render(<PhysicalPlaybackFaderBank pageNumber={1} hardwareConnected={hardwareConnected} />);
+		expect(screen.getByText("House open")).toBeTruthy();
+		if (hardwareConnected) expect(screen.getByText("Ready")).toBeTruthy();
+		expect(screen.queryByText("Unavailable")).toBeNull();
+		const go = screen.getByRole("button", { name: /GO/ });
+		expect(go).not.toBeDisabled();
+		fireEvent.click(go);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalled();
+	});
+	it.each([false, true])("renders actual Timecode transport feedback (hardware %s)", async (hardwareConnected) => {
+		assignPlayback({ target: { type: "timecode", timecode_id: "timecode-1" }, name: "Solo transport", has_fader: false, buttons: ["go", "pause", "off"] });
+		const request = vi.fn().mockResolvedValue([{ timecode_id: "timecode-1", revision: 3, state: "playing", frame: 15, duration_frame: 2640, audio_linked: false, cue_list_clips: [] }]);
+		const api = new TimecodesApiClient({ request, blob: vi.fn(), absoluteUrl: (path) => path, currentDeskId: () => "desk-1", sendAction: vi.fn() });
+		render(<TimecodeActionsProvider api={api}><PhysicalPlaybackFaderBank pageNumber={1} hardwareConnected={hardwareConnected} /></TimecodeActionsProvider>);
+		await waitFor(() => expect(screen.getByText("PLAYING")).toBeTruthy());
+		expect(screen.getByText("Frame 15 / 2640")).toBeTruthy();
+		expect(screen.getByText("Solo transport").closest(".running")).toBeTruthy();
+		expect(request).toHaveBeenCalledTimes(1);
+	});
+});
+
+
+it("outlines a failed Timecode authority read but not initial loading", async () => {
+	resetPlaybackFaderMocks();
+	assignPlayback({ target: { type: "timecode", timecode_id: "timecode-1" }, has_fader: false, buttons: ["go", "pause", "off"] });
+	let reject!: (error: Error) => void;
+	const request = vi.fn().mockReturnValue(new Promise((_, fail) => { reject = fail; }));
+	const api = new TimecodesApiClient({ request, blob: vi.fn(), absoluteUrl: (path) => path, currentDeskId: () => "desk-1", sendAction: vi.fn() });
+	const { container } = render(<TimecodeActionsProvider api={api}><PhysicalPlaybackFaderBank pageNumber={1} /></TimecodeActionsProvider>);
+	expect(screen.getByText("Loading transport…")).toBeTruthy();
+	expect(container.querySelector(".playback-runtime-error")).toBeNull();
+	reject(new Error("Transport read failed"));
+	await waitFor(() => expect(screen.getByText("Runtime unavailable")).toBeTruthy());
+	expect(container.querySelector(".playback-runtime-error")).toBeTruthy();
+});
+
+
+it.each(["macro", "timecode"] as const)(
+	"preserves wider %s buttons and row geometry without unsupported value controls",
+	(family) => {
+		resetPlaybackFaderMocks();
+		assignPlayback({
+			target: family === "macro"
+				? { type: family, macro_id: "macro-1" }
+				: { type: family, timecode_id: "timecode-1" },
+			has_fader: false,
+			buttons: ["go", "none", "none"],
+			footprint: {
+				type: "wider", right_buttons: ["go", "none", "none"], right_fader: "master",
+			},
+		});
+		const { container } = render(
+			<PhysicalPlaybackFaderBank
+				pageNumber={1}
+				playbackLayout={{ rows: [{
+					first_position: 1, count: 2, presentation: "push_encoder", button_count: 3,
+				}] }}
+			/>,
+		);
+		expect(container.querySelector(".expanded-playback-controls.wider")).toBeTruthy();
+		expect(container.querySelector(".expanded-playback-fader")).toBeNull();
+		expect(screen.queryByRole("slider")).toBeNull();
+		expect(container.querySelector(".touch-encoder")).toBeNull();
+		const card = container.querySelector("[data-playback-slot='1']");
+		expect(card).toHaveAttribute("data-row-units", "4");
+		expect(card).toHaveAttribute("data-page", "1");
+		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
+			gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+		});
+		expect(screen.getAllByRole("button", { name: /GO/ }).length)
+			.toBeGreaterThanOrEqual(2);
+	},
+);

@@ -212,6 +212,8 @@ export interface PlaybackDefinition {
 	name: string;
 	target:
 		| { type: "cue_list"; cue_list_id: string }
+		| { type: "macro"; macro_id: string }
+		| { type: "timecode"; timecode_id: string }
 		| { type: "group"; group_id: string; initial_master?: number | null }
 		| { type: "speed_group"; group: string }
 		| {

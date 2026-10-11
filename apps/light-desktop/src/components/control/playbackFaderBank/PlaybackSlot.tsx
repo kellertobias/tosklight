@@ -21,6 +21,7 @@ import { playbackHasRuntimeError } from "../playbackRuntimeError";
 import { formatSpeedGroupBpm } from "../speedGroupFormatting";
 import { isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
+import { timecodePlaybackSummary } from "./timecodePlaybackSummary";
 import { playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
 import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
@@ -119,10 +120,9 @@ export function PlaybackSlot({
 				value,
 			})
 		: undefined;
-	const summary =
-		baseSummary && active?.loaded_cue_number != null
-			? { ...baseSummary, detail: "LOADED" }
-			: baseSummary;
+	const { summary, running: transportRunning, error: transportError } = timecodePlaybackSummary(
+		playback, baseSummary, controller.timecodeRuntime, active?.loaded_cue_number,
+	);
 	const { actions, faderActions } = buildPlaybackActions({
 		controller,
 		playback,
@@ -174,7 +174,7 @@ export function PlaybackSlot({
 				],
 			})
 		: null;
-	const className = `${soloClasses} ${playbackHasRuntimeError(playback, runtimeProjection, cue !== null) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
+	const className = `${soloClasses} ${(transportError || playbackHasRuntimeError(playback, runtimeProjection, cue !== null)) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${(active?.enabled !== false && active) || transportRunning ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
 	const cardStyle = playbackCardStyle(
 		slotData,
 		playbackColor,
@@ -233,6 +233,8 @@ function playbackKind(
 	target: PlaybackDefinition["target"]["type"] | undefined,
 ): PlaybackCardKind {
 	if (target === "cue_list") return "cue-list";
+	if (target === "macro") return "macro";
+	if (target === "timecode") return "timecode";
 	if (target === "dynamic") return "dynamic";
 	if (target === "group") return "group-master";
 	if (target === "speed_group") return "speed-group";
@@ -271,6 +273,8 @@ function playbackSummary({
 					? projection.runtime?.manual_xfade_progress
 					: 0,
 		};
+	if (target === "macro") return { label: "Ready", detail: "GO runs Macro" };
+	if (target === "timecode") return { label: "Loading transport…" };
 	if (target === "group")
 		return {
 			label: `${groupFixtureCount ?? 0} Fixture${groupFixtureCount === 1 ? "" : "s"}`,

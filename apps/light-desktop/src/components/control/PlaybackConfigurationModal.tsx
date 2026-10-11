@@ -7,6 +7,8 @@ import { ModalTitleBar } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import {
+	useMacros,
+	useTimecodes,
 	useCueLists,
 	useDynamics,
 	usePortableGroups,
@@ -24,6 +26,7 @@ import {
 	isSpecial,
 	playbackLayoutOptions,
 	type PlaybackFamily,
+	type PlaybackAutomationOption,
 } from "./PlaybackConfigurationTabs";
 
 export { playbackImageDataUrl } from "./PlaybackConfigurationTabs";
@@ -64,10 +67,7 @@ export function PlaybackConfigurationDialog({
 	error,
 	onClose,
 }: PlaybackConfigurationDialogProps) {
-	useShowObjectView("group");
-	useShowObjectView("cue_list");
-	useShowObjectView("dynamic");
-	const { groups, dynamics, cueListObjects, cueLists } =
+	const { groups, dynamics, cueListObjects, cueLists, macros, timecodes } =
 		usePlaybackConfigurationObjects();
 	const saveCueList = useCueListTopologyWriter();
 	const [initialDraft] = useState(() =>
@@ -96,14 +96,14 @@ export function PlaybackConfigurationDialog({
 					? "icon"
 					: "label",
 	);
-	const targetValid = playbackTargetValid(draft, family, dynamics);
-	const currentPayload = cleanPresentation(
-		normalizePlaybackTopology(
-			draft,
-			draft.button_count ?? 3,
-			Boolean(draft.has_fader),
-		),
+	const targetValid = playbackTargetValid(
+		draft,
+		family,
+		dynamics,
+		macros,
+		timecodes,
 	);
+	const currentPayload = playbackPayload(draft);
 	const initialPayload = cleanPresentation(initialDraft);
 	const cueListBehaviorDirty = Boolean(
 		selectedCueList &&
@@ -131,17 +131,7 @@ export function PlaybackConfigurationDialog({
 		let succeeded =
 			family === "none"
 				? await clear(page, slot)
-				: await save(
-						page,
-						slot,
-						cleanPresentation(
-							normalizePlaybackTopology(
-								draft,
-								draft.button_count ?? 3,
-								Boolean(draft.has_fader),
-							),
-						),
-					);
+				: await save(page, slot, playbackPayload(draft));
 		if (
 			succeeded &&
 			selectedCueList &&
@@ -170,6 +160,8 @@ export function PlaybackConfigurationDialog({
 		cueLists,
 		groups,
 		dynamics,
+		macros,
+		timecodes,
 		setFamily,
 		setDraft,
 	);
@@ -186,6 +178,8 @@ export function PlaybackConfigurationDialog({
 			tab={tab}
 			draft={draft}
 			presentation={presentation}
+			macros={macros}
+			timecodes={timecodes}
 			cueLists={cueLists}
 			dynamics={dynamics}
 			groups={groups}
@@ -220,6 +214,8 @@ type DialogViewProps = {
 	draft: PlaybackDefinition;
 	presentation: "label" | "icon" | "image";
 	cueLists: Array<{ id: string; name: string; number: number }>;
+	macros: readonly PlaybackAutomationOption[];
+	timecodes: readonly PlaybackAutomationOption[];
 	dynamics: ReturnType<typeof useDynamics>;
 	groups: ReturnType<typeof usePortableGroups>;
 	options: ReturnType<typeof playbackLayoutOptions>;
@@ -250,6 +246,8 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 		draft,
 		presentation,
 		cueLists,
+		macros,
+		timecodes,
 		dynamics,
 		groups,
 		options,
@@ -327,6 +325,8 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 								family={family}
 								draft={draft}
 								presentation={presentation}
+								macros={macros}
+								timecodes={timecodes}
 								cueLists={cueLists}
 								dynamics={dynamics}
 								groups={groups}
@@ -385,6 +385,8 @@ function playbackTargetValid(
 	draft: PlaybackDefinition,
 	family: PlaybackFamily,
 	dynamics: ReturnType<typeof useDynamics>,
+	macros: readonly PlaybackAutomationOption[],
+	timecodes: readonly PlaybackAutomationOption[],
 ): boolean {
 	const selectedDynamicId =
 		draft.target.type === "dynamic"
@@ -405,11 +407,34 @@ function playbackTargetValid(
 		family === "none" ||
 		((draft.target.type !== "cue_list" || Boolean(draft.target.cue_list_id)) &&
 			(draft.target.type !== "group" || Boolean(draft.target.group_id)) &&
+			(draft.target.type !== "macro" ||
+				macros.some(
+					(item) =>
+						item.id ===
+						(draft.target.type === "macro" ? draft.target.macro_id : ""),
+				)) &&
+			(draft.target.type !== "timecode" ||
+				timecodes.some(
+					(item) =>
+						item.id ===
+						(draft.target.type === "timecode" ? draft.target.timecode_id : ""),
+				)) &&
 			dynamicTargetValid)
 	);
 }
 
 function usePlaybackConfigurationObjects() {
+	useShowObjectView("group");
+	useShowObjectView("cue_list");
+	useShowObjectView("dynamic");
+	useShowObjectView("macro");
+	useShowObjectView("timecode");
+	const macros = useMacros()
+		.map(({ body }) => body)
+		.sort((a, b) => a.number - b.number);
+	const timecodes = useTimecodes()
+		.map(({ body }) => body)
+		.sort((a, b) => a.number - b.number);
 	const groups = usePortableGroups();
 	const storedDynamics = useDynamics();
 	// Only target-bound pool entries can become Playback assignments.
@@ -430,7 +455,7 @@ function usePlaybackConfigurationObjects() {
 			})),
 		[cueListObjects],
 	);
-	return { groups, dynamics, cueListObjects, cueLists };
+	return { groups, dynamics, cueListObjects, cueLists, macros, timecodes };
 }
 
 function playbackFamilyChoosers(
@@ -438,6 +463,8 @@ function playbackFamilyChoosers(
 	cueLists: Array<{ id: string }>,
 	groups: ReadonlyArray<{ id: string }>,
 	dynamics: ReturnType<typeof useDynamics>,
+	macros: readonly PlaybackAutomationOption[],
+	timecodes: readonly PlaybackAutomationOption[],
 	setFamily: (family: PlaybackFamily) => void,
 	setDraft: (draft: PlaybackDefinition) => void,
 ) {
@@ -450,6 +477,7 @@ function playbackFamilyChoosers(
 					cueLists[0]?.id ?? "",
 					groups[0]?.id ?? "",
 					dynamics[0],
+					{ macroId: macros[0]?.id, timecodeId: timecodes[0]?.id },
 				),
 			);
 	};
@@ -511,7 +539,15 @@ export function normalizePlaybackTopology(
 	return {
 		...playback,
 		buttons,
-		footprint: playback.footprint ?? { type: "normal" },
+		footprint:
+			playback.footprint?.type === "wider" && playback.button_count != null
+				? {
+						...playback.footprint,
+						right_buttons: playback.footprint.right_buttons.map((action, index) =>
+							index < buttonCount ? action : "none",
+						) as PlaybackDefinition["buttons"],
+					}
+				: playback.footprint ?? { type: "normal" },
 		button_count: buttonCount,
 		has_fader: playback.has_fader ?? fallbackFader,
 		color: playback.color ?? "#20c997",
@@ -526,6 +562,7 @@ export function withFunctionDefaults(
 	cueListId: string,
 	groupId: string,
 	dynamic?: ReturnType<typeof useDynamics>[number],
+	automation: { macroId?: string; timecodeId?: string } = {},
 ): PlaybackDefinition {
 	if (
 		type === "dynamic" &&
@@ -566,6 +603,14 @@ export function withFunctionDefaults(
 		target = { type, group_id: groupId };
 		buttons = ["select", "select_dereferenced", "flash"];
 		fader = "master";
+	} else if (type === "macro") {
+		target = { type, macro_id: automation.macroId ?? "" };
+		buttons = ["go", "none", "none"];
+		fader = "master";
+	} else if (type === "timecode") {
+		target = { type, timecode_id: automation.timecodeId ?? "" };
+		buttons = ["go", "pause", "off"];
+		fader = "master";
 	} else if (type === "speed_group") {
 		target = { type, group: "A" };
 		buttons = ["double", "half", "learn"];
@@ -589,10 +634,12 @@ export function withFunctionDefaults(
 			: playback.footprint?.type === "wider"
 				? { type: "wider" as const, right_buttons: buttons, right_fader: fader }
 				: { type: "normal" as const };
+	const has_fader =
+		type === "macro" || type === "timecode" ? false : playback.has_fader;
 	return normalizePlaybackTopology(
-		{ ...playback, target, buttons, fader, footprint },
+		{ ...playback, target, buttons, fader, footprint, has_fader },
 		playback.button_count ?? 3,
-		Boolean(playback.has_fader),
+		Boolean(has_fader),
 	);
 }
 
@@ -610,4 +657,14 @@ function playbackDefinitionsEqual(
 	right: PlaybackDefinition,
 ) {
 	return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function playbackPayload(draft: PlaybackDefinition): PlaybackDefinition {
+	return cleanPresentation(
+		normalizePlaybackTopology(
+			draft,
+			draft.button_count ?? 3,
+			Boolean(draft.has_fader),
+		),
+	);
 }

@@ -4,13 +4,15 @@ A Playbacks pane is a configurable control surface for the same show-owned Playb
 
 Configure each row's first position, number of positions and presentation: buttons, faders or push encoders. Preserve gaps between rows when useful. For example, a 20-column, 14-row pane starting at 401 covers positions 401–680 on its displayed page. Pane controls use the same configured Playback actions, fader modes, icons and images as screen controls.
 
-Choose **Pinned** for a fixed page, **Own** for this surface's page selection, or **Follow** another named surface. Following chains cannot contain cycles. Different panes may operate different pages concurrently. The shared command line uses the visibly selected surface's effective page for an undotted Playback number; use an explicit `page.position` to address another page.
+Choose **Pinned** for a fixed page, **Own** for this surface's page selection, or **Follow** another named surface. Following chains cannot contain cycles. Different panes may operate different pages concurrently. The shared command line uses the visibly selected surface's effective page for an undotted Playback number; use an explicit `page.position` to address another page. The command field names the selected surface and its effective page, including when that Screen is closed.
 
 Pressing a held control captures its original Playback address and control source. Changing page while Flash, Swap or another held control is pressed keeps that contribution until release. Release addresses the original Playback even after its cell is no longer displayed. Simultaneous holds remain independent. Page changes themselves never operate Playbacks.
 
 **Take from Screen** copies a selected screen's saved position arrangement into a draft. Review the draft before Apply. The screen may be closed or its hardware disconnected. The saved copy does not silently follow later screen edits and does not copy Playback assignments.
 
 Right-click a cell, or press **SET** and then its control, to open Playback Configuration. A Playback with an actual runtime failure has a red outline. Ordinary command mistakes use the brief red command-line pulse and a short toast above the bar; entered text remains grey after the pulse.
+
+Macro and Timecode assignments use button actions. Macro **GO** runs the assigned Macro once. Timecode **GO** starts or resumes transport, **Pause** pauses it, and **Off** stops it. These assignments have no fader value.
 
 When a Playback runs a Cuelist containing exactly one Cue and no configured icon or image, it shows that Cue's preview. A media-only Cue uses the Media Server's Program or layer picture described in [Cues - Cuelist](../30-Windows/03-cues-and-playbacks.md#cues---cuelist). Layer images retain transparency over a checkerboard. Loading, missing and offline media states are named explicitly. A configured icon or image takes priority; removing it restores the automatic preview. Editing the Cue updates the image, while adding or removing Cues returns the cell to a plain label when it no longer has exactly one Cue.
 

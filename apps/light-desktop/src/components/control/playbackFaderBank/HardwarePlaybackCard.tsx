@@ -142,6 +142,8 @@ export function HardwarePlaybackCard({
 							<small>{value}% master</small>
 						</div>
 					</div>
+				) : playback?.target.type === "macro" || playback?.target.type === "timecode" ? (
+					undefined
 				) : (
 					<div className="hardware-cue-list single" />
 				)

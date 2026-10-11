@@ -17,6 +17,8 @@ import {
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
 
+import { familyFromTarget, playbackLayoutOptions } from "./PlaybackConfigurationTabs";
+
 const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ModalProvider });
 
 const mocks = vi.hoisted(() => ({
@@ -41,6 +43,8 @@ const mocks = vi.hoisted(() => ({
 		auto_off_at_zero?: boolean;
 		auto_off_flash_release?: boolean;
 	}>,
+	macros: [{ id: "macro-1", body: { id: "macro-1", number: 2, name: "Open sequence" } }],
+	timecodes: [{ id: "timecode-1", body: { id: "timecode-1", number: 3, name: "Opening transport" } }],
 	groups: [{ id: "group-1", body: { name: "Front Wash" } }],
 	dynamics: [
 		{
@@ -78,6 +82,8 @@ vi.mock("../files/RootConfinedFilePickerButton", () => ({
 	),
 }));
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
+	useMacros: () => mocks.macros,
+	useTimecodes: () => mocks.timecodes,
 	usePortableGroups: () => mocks.groups,
 	useDynamics: () => mocks.dynamics,
 	useCueLists: () =>
@@ -870,3 +876,152 @@ describe("canonical Dynamic assignment choices", () => {
 		expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
 	});
 });
+
+describe("canonical Macro and Timecode Playback functions", () => {
+	it.each([
+		["macro", ["go", "none", "none"]],
+		["timecode", ["go", "pause", "off"]],
+	] as const)("keeps the %s family and normal button defaults", (type, buttons) => {
+		const target =
+			type === "macro"
+				? ({ type, macro_id: "macro-1" } as const)
+				: ({ type, timecode_id: "timecode-1" } as const);
+		const configured = {
+			...base,
+			target,
+			buttons: [...buttons] as PlaybackDefinition["buttons"],
+		};
+		expect(familyFromTarget(type)).toBe(type);
+		expect(
+			playbackLayoutOptions(configured).map((option) => option.value),
+		).toEqual(type === "macro" ? ["go"] : ["go", "pause", "off"]);
+	});
+});
+
+it.each([
+	"macro",
+	"timecode",
+] as const)("chooses an authoritative %s object and saves exact canonical defaults", async (type) => {
+	show();
+	fireEvent.click(
+		screen.getByRole("radio", {
+			name: type === "macro" ? "Macro" : "Timecode",
+		}),
+	);
+	fireEvent.click(
+		screen.getByRole("radio", {
+			name: type === "macro" ? "2 Open sequence" : "3 Opening transport",
+		}),
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+	await waitFor(() =>
+		expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+			2,
+			4,
+			expect.objectContaining({
+				target:
+					type === "macro"
+						? { type, macro_id: "macro-1" }
+						: { type, timecode_id: "timecode-1" },
+				buttons:
+					type === "macro" ? ["go", "none", "none"] : ["go", "pause", "off"],
+			}),
+		),
+	);
+});
+it("prevents saving a Timecode target removed from the authoritative options", () => {
+	const original = mocks.timecodes;
+	try {
+		mocks.timecodes = [];
+		show({
+			...base,
+			target: { type: "timecode", timecode_id: "removed" },
+			buttons: ["go", "pause", "off"],
+		});
+		fireEvent.change(screen.getByLabelText("Playback name"), {
+			target: { value: "Changed" },
+		});
+		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+	} finally {
+		mocks.timecodes = original;
+	}
+});
+it("masks hidden Timecode buttons on both halves when reducing button count", () => {
+	const normalized = normalizePlaybackTopology(
+		{
+			...base,
+			target: { type: "timecode", timecode_id: "timecode-1" },
+			buttons: ["go", "pause", "off"],
+			button_count: 1,
+			footprint: {
+				type: "wider",
+				right_buttons: ["go", "pause", "off"],
+				right_fader: "master",
+			},
+		},
+		3,
+		true,
+	);
+	expect(normalized.buttons).toEqual(["go", "none", "none"]);
+	expect(normalized.footprint).toMatchObject({
+		right_buttons: ["go", "none", "none"],
+	});
+});
+
+it.each(["macro", "timecode"] as const)(
+	"removes an inherited Cue fader and preserves the %s Wider buttons",
+	(type) => {
+		const configured = withFunctionDefaults(
+			{
+				...base,
+				footprint: {
+					type: "wider",
+					right_buttons: base.buttons,
+					right_fader: "master",
+				},
+			},
+			type,
+			"cue-1",
+			"group-1",
+			undefined,
+			{ macroId: "macro-1", timecodeId: "timecode-1" },
+		);
+		expect(configured.has_fader).toBe(false);
+		expect(configured.footprint).toMatchObject({
+			type: "wider",
+			right_buttons: configured.buttons,
+		});
+	},
+);
+
+it.each(["macro", "timecode"] as const)(
+	"shows only button choices for an expanded %s layout",
+	(type) => {
+		show({
+			...base,
+			target:
+				type === "macro"
+					? { type, macro_id: "macro-1" }
+					: { type, timecode_id: "timecode-1" },
+			buttons:
+				type === "macro" ? ["go", "none", "none"] : ["go", "pause", "off"],
+			footprint: {
+				type: "wider",
+				right_buttons: ["go", "none", "none"],
+				right_fader: "master",
+			},
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		expect(
+			screen.queryByText("Fader", { selector: "label", exact: true }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText("Right fader", { selector: "label", exact: true }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByText("Macro and Timecode Playbacks use buttons only."),
+		).toBeInTheDocument();
+		expect(selectTrigger("Top button")).toHaveTextContent("GO");
+		expect(selectTrigger("Right top button")).toHaveTextContent("GO");
+	},
+);

@@ -14,6 +14,8 @@ import {
 
 export type PlaybackCardKind =
 	| "cue-list"
+	| "macro"
+	| "timecode"
 	| "dynamic"
 	| "group-master"
 	| "speed-group"
@@ -26,6 +28,8 @@ export const PLAYBACK_CARD_DEFAULT_COLORS: Record<
 > = {
 	"cue-list": "#63b46c",
 	dynamic: "#cf4aa8",
+	macro: "#ae81ff",
+	timecode: "#9365d8",
 	"group-master": "#e79a26",
 	"speed-group": "#27c6d5",
 	"special-master": "#e8edf1",
@@ -346,23 +350,27 @@ export function TouchPlaybackCardView({
 			)}
 			{pushEncoder && model.assigned && (
 				<section className="playback-push-encoder">
-					<TouchEncoder
-						label={model.faderLabel}
-						value={model.faderValue / 100}
-						display={model.faderDisplay}
-						disabled={model.disabled}
-						onSet={(value) => callbacks.onFaderChange?.(value * 100)}
-						onStep={(delta) =>
-							callbacks.onFaderChange?.(
-								Math.min(100, Math.max(0, model.faderValue + delta * 100)),
-							)
-						}
-					/>
+					{hasFader ? (
+						<TouchEncoder
+							label={model.faderLabel}
+							value={model.faderValue / 100}
+							display={model.faderDisplay}
+							disabled={model.disabled}
+							onSet={(value) => callbacks.onFaderChange?.(value * 100)}
+							onStep={(delta) =>
+								callbacks.onFaderChange?.(
+									Math.min(100, Math.max(0, model.faderValue + delta * 100)),
+								)
+							}
+						/>
+					) : (
+						<div aria-hidden="true" style={{ flex: 1, minHeight: 0 }} />
+					)}
 					<PlaybackActionButtons actions={model.actions} />
 				</section>
 			)}
 			{singleFaderlessAction && <SingleFaderlessPlaybackAction model={model} />}
-			{!hasFader && model.actions.length > 1 && (
+			{!hasFader && !pushEncoder && model.actions.length > 1 && (
 				<footer
 					className={`faderless-playback-actions action-count-${model.actions.length}`}
 					style={

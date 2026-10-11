@@ -44,3 +44,34 @@ fn macro_target_rejects_nil_identity_and_incompatible_controls() {
         "playback layout is incompatible with its function"
     );
 }
+
+#[test]
+fn macro_target_rejects_fader_but_preserves_button_only_wider_layout() {
+    let mut playback = definition(1, CueListId::new());
+    playback.target = PlaybackTarget::Macro {
+        macro_id: uuid::Uuid::from_u128(71),
+    };
+    playback.buttons = PlaybackDefinition::default_buttons(&playback.target);
+    playback.fader = PlaybackFaderMode::Master;
+    playback.has_fader = true;
+    assert!(
+        playback.validate().is_err(),
+        "automation has no dispatched fader capability"
+    );
+    playback.has_fader = false;
+    playback.footprint = PlaybackFootprint::Wider {
+        right_buttons: PlaybackDefinition::default_buttons(&playback.target),
+        right_fader: PlaybackFaderMode::Master,
+    };
+    playback.validate().unwrap();
+    let restored: PlaybackDefinition =
+        serde_json::from_value(serde_json::to_value(&playback).unwrap()).unwrap();
+    restored.validate().unwrap();
+    assert!(!restored.has_fader);
+    assert_eq!(restored.footprint, playback.footprint);
+    playback.has_fader = true;
+    playback.reset_incompatible_layout();
+    assert!(!playback.has_fader);
+    assert_eq!(playback.footprint, restored.footprint);
+    playback.validate().unwrap();
+}

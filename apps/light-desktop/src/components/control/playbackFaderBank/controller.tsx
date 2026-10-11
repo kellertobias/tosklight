@@ -1,3 +1,5 @@
+import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
+import { visibleTimecodeIds, useVisibleTimecodeRuntime } from "./useVisibleTimecodeRuntime";
 import { playbackAddressKey } from "../../../api/playbackAddress";
 import { useScreensOptional } from "../../../features/screens/ScreensContext";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -104,6 +106,7 @@ export function usePlaybackBankController({
 		activePageNumber,
 		topology.ready && activePageNumber != null,
 	);
+	const timecodeRuntime = useVisibleTimecodeRuntime(useActiveShowId(), visibleTimecodeIds(slots));
 	const authorityReady =
 		topology.ready &&
 		(!needsGroups || groupCollectionReady) &&
@@ -161,6 +164,7 @@ export function usePlaybackBankController({
 		runtimeActions,
 		runtimeStatus,
 		runtimeProjections: projectionAuthority.projections,
+		timecodeRuntime,
 		playbackDesk,
 		commandLineActions,
 		commandLine,
