@@ -22,6 +22,11 @@ const SELECTION_REQUIRED =
 const TRAILING_TOKEN_REJECTION =
 	/^unexpected tokens after (?:level|selection|subset|playback address|playback selection|recording target|Cue transfer address|Cue deletion address|BPM value|Cue number|cue target|Link source|Link destination)$/i;
 
+const TRANSFER_GRAMMAR_REJECTIONS = new Set([
+	"preset move and copy require <family> preset <number> on both sides",
+	"preset move and copy require preset before the number",
+]);
+
 // Explicit input grammar errors; never infer operator errors from arbitrary expected/required text.
 const INPUT_GRAMMAR_REJECTIONS = new Set([
 	"expected a fixture number",
@@ -74,13 +79,20 @@ export function commandErrorFeedback(
 				REVERSED_OPERATOR_REJECTION.test(message) ||
 				SELECTION_REQUIRED.test(message) ||
 				TRAILING_TOKEN_REJECTION.test(message) ||
-				INPUT_GRAMMAR_REJECTIONS.has(message.toLowerCase()))
+				INPUT_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
+				TRANSFER_GRAMMAR_REJECTIONS.has(message.toLowerCase()))
 				? "operator"
 				: "unexpected",
 	};
 }
 
 export function commandErrorSummary(message: string): string {
+	if (
+		TRANSFER_GRAMMAR_REJECTIONS.has(
+			message.replace(/^invalid data:\s*/i, "").toLowerCase(),
+		)
+	)
+		return "Invalid Command";
 	if (
 		/\bno selection\b|\bselection\b.*(?:empty|required)|requires.*selection/i.test(
 			message,

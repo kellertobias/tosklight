@@ -10,6 +10,38 @@ import {
 afterEach(() => vi.restoreAllMocks());
 describe("command rejection classification", () => {
 	it.each([
+		"Preset Move and Copy require <family> PRESET <number> on both sides",
+		"Preset Move and Copy require PRESET before the number",
+	])("keeps actual transfer grammar rejections brief: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		// Native resolveCommand rejects with this status-less Error; history shares it.
+		for (const feedback of [message, `invalid data: ${message}`]) {
+			reportProgrammingCommandError(new Error(feedback));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail).toEqual({
+				message: feedback,
+				kind: "operator",
+			});
+			expect(commandErrorFeedback(feedback).kind).toBe("operator");
+			expect(commandErrorSummary(feedback)).toBe("Invalid Command");
+		}
+		for (const status of [401, 403, 500]) {
+			reportProgrammingCommandError(new ApiRequestError(message, status));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
+		for (const fault of [
+			`${message}: database unavailable`,
+			`${message}: authentication failed`,
+			"Preset Move and Copy execution task failed",
+		]) {
+			reportProgrammingCommandError(new Error(fault));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
+	});
+	it.each([
 		"- requires a fixture selection",
 		"- requires fixture selections on both sides",
 		"Programmer Align requires a non-empty selection",
