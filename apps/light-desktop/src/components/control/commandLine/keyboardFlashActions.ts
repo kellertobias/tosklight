@@ -5,21 +5,45 @@ export type KeyboardHeldAction = "flash" | "swap";
 
 /** Key release always uses the original address and runtime authority. */
 export class KeyboardHeldActions {
+	readonly controlSourceId = `keyboard:${crypto.randomUUID()}`;
 	private held = new HeldPlaybackControls();
 	private keys = new Set<string>();
 	private authority: PlaybackRuntimeActions | null | undefined;
 	syncAuthority(actions: PlaybackRuntimeActions | null) {
-		if (this.authority !== undefined && actions !== this.authority) this.releaseAll();
+		if (this.authority !== undefined && actions !== this.authority)
+			this.releaseAll();
 		this.authority = actions;
 	}
-	press(code: string, address: PlaybackAddressValue, action: KeyboardHeldAction, actions: PlaybackRuntimeActions | null, surfaceId: string) {
+	press(
+		code: string,
+		address: PlaybackAddressValue,
+		action: KeyboardHeldAction,
+		actions: PlaybackRuntimeActions | null,
+	) {
 		if (this.keys.has(code)) return;
 		this.keys.add(code);
-		const controlId = [...code].reduce((value, char) => value * 31 + char.charCodeAt(0), 0) >>> 0;
-		this.held.press(code, address, {surface_id: surfaceId, control_id: controlId}, async (hold, pressed) => {
-			await actions?.playbackAction(hold.address, action, {pressed, control_source: hold.controlSource});
-		});
+		const controlId =
+			[...code].reduce((value, char) => value * 31 + char.charCodeAt(0), 0) >>>
+			0;
+		this.held.press(
+			code,
+			address,
+			{ surface_id: this.controlSourceId, control_id: controlId },
+			async (hold, pressed) => {
+				await actions?.playbackAction(hold.address, action, {
+					pressed,
+					control_source: hold.controlSource,
+				});
+			},
+		);
 	}
-	release(code: string) { if (!this.keys.delete(code)) return false; this.held.release(code); return true; }
-	releaseAll() { this.held.releaseAll(); this.keys.clear(); }
+	release(code: string) {
+		if (!this.keys.delete(code)) return false;
+		this.held.release(code);
+		return true;
+	}
+	releaseAll() {
+		this.held.releaseAll();
+		this.keys.clear();
+	}
 }

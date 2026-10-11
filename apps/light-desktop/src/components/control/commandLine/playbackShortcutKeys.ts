@@ -30,7 +30,12 @@ export function pressPlaybackSlot(
 		void context.runtimeActions?.playbackAction(
 			definition.address,
 			action.replaceAll("_", "-") as PlaybackControlAction,
-			{control_source: {surface_id: context.authority.surfaceId, control_id: slot * 10 + (control?.button ?? 1)}},
+			{
+				control_source: {
+					surface_id: context.heldActions.controlSourceId,
+					control_id: slot * 10 + (control?.button ?? 1),
+				},
+			},
 		);
 		return;
 	}
@@ -40,7 +45,6 @@ export function pressPlaybackSlot(
 		definition.address,
 		action,
 		context.runtimeActions,
-		context.authority.surfaceId,
 	);
 }
 
@@ -93,7 +97,10 @@ export class KeyboardPageActions {
 		this.setActivePage = null;
 	}
 
-	step(authority: Pick<PlaybackShortcutAuthority, "activePage" | "pages">, direction: 1 | -1) {
+	step(
+		authority: Pick<PlaybackShortcutAuthority, "activePage" | "pages">,
+		direction: 1 | -1,
+	) {
 		if (this.pending) return;
 		const target = pageStepTarget(authority, direction);
 		const scope = target == null ? null : this.capture();

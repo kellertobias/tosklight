@@ -1,6 +1,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
+import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
 import { useCommandLineShortcuts } from "./useCommandLineShortcuts";
 
 const appState = {
@@ -195,6 +196,83 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("useCommandLineShortcuts playback keys", () => {
+	it("keeps two mounted shortcut owners independent on the same desk surface and address", async () => {
+		const held = new Set<string>();
+		const send = vi.fn<PlaybackRuntimeActions["playbackAction"]>(
+			async (address, _action, input) => {
+				const source = input.control_source!;
+				const key = `${address.page}.${address.position}:${source.surface_id}:${source.control_id}`;
+				if (input.pressed) held.add(key);
+				else if (input.pressed === false) held.delete(key);
+				return null;
+			},
+		);
+		runtimeActions = { playbackAction: send, setActivePage };
+		// Separate windows deliver distinct events to their mounted listeners.
+		const listeners = vi.spyOn(window, "addEventListener");
+		const first = mount();
+		const firstDown = [...listeners.mock.calls]
+			.reverse()
+			.find(([type]) => type === "keydown")![1] as EventListener;
+		const second = mount();
+		const secondDown = [...listeners.mock.calls]
+			.reverse()
+			.find(([type]) => type === "keydown")![1] as EventListener;
+		const secondUp = [...listeners.mock.calls]
+			.reverse()
+			.find(([type]) => type === "keyup")![1] as EventListener;
+		listeners.mockRestore();
+		const down = (listener: EventListener, code: string) =>
+			act(() =>
+				listener(
+					new KeyboardEvent("keydown", { key: code, code, cancelable: true }),
+				),
+			);
+		down(firstDown, "F8");
+		down(secondDown, "F8");
+		await tick();
+		expect(held.size).toBe(2);
+		const firstSource = send.mock.calls[0][2].control_source;
+		const secondSource = send.mock.calls[1][2].control_source;
+		expect(firstSource).not.toEqual(secondSource);
+		expect(firstSource?.surface_id).not.toBe("main");
+		expect(secondSource?.surface_id).not.toBe("main");
+
+		deskPage = 3;
+		first.rerender({ hardware: false });
+		second.rerender({ hardware: false });
+		await tick();
+		expect(held.size).toBe(2);
+		first.unmount();
+		await tick();
+		expect(held.size).toBe(1);
+		expect(send.mock.calls[2]).toEqual([
+			{ page: 2, position: 8 },
+			"flash",
+			{ pressed: false, control_source: firstSource },
+		]);
+		act(() => secondUp(new KeyboardEvent("keyup", { key: "F8", code: "F8" })));
+		await tick();
+		expect(held.size).toBe(0);
+		expect(send.mock.calls[3]).toEqual([
+			{ page: 2, position: 8 },
+			"flash",
+			{ pressed: false, control_source: secondSource },
+		]);
+
+		down(secondDown, "F1");
+		expect(send).toHaveBeenCalledTimes(4);
+		deskPage = 2;
+		second.rerender({ hardware: false });
+		down(secondDown, "F1");
+		expect(send).toHaveBeenLastCalledWith({ page: 2, position: 1 }, "go", {
+			control_source: {
+				surface_id: secondSource?.surface_id,
+				control_id: expect.any(Number),
+			},
+		});
+	});
+
 	it("holds keyboard Shift only until the physical key is released", () => {
 		mount();
 
@@ -248,7 +326,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			{ page: 2, position: 1 },
 			"go",
 			{
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -263,7 +344,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			{ page: 2, position: 1 },
 			"go-minus",
 			{
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -288,7 +372,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			{ page: 2, position: 1 },
 			"go-minus",
 			{
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -324,7 +411,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"flash",
 			{
 				pressed: true,
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 
@@ -341,7 +431,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"flash",
 			{
 				pressed: false,
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -357,7 +450,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"swap",
 			{
 				pressed: true,
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 
@@ -372,7 +468,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"swap",
 			{
 				pressed: false,
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -396,7 +495,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"flash",
 			{
 				pressed: false,
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -418,7 +520,10 @@ describe("useCommandLineShortcuts playback keys", () => {
 			"flash",
 			{
 				pressed: false,
-				control_source: { surface_id: "main", control_id: expect.any(Number) },
+				control_source: {
+					surface_id: expect.stringMatching(/^keyboard:/),
+					control_id: expect.any(Number),
+				},
 			},
 		);
 	});
@@ -448,7 +553,7 @@ describe("useCommandLineShortcuts playback keys", () => {
 				{
 					pressed: false,
 					control_source: {
-						surface_id: "main",
+						surface_id: expect.stringMatching(/^keyboard:/),
 						control_id: expect.any(Number),
 					},
 				},
