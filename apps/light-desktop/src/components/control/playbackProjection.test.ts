@@ -1,34 +1,37 @@
 import { describe, expect, it } from "vitest";
-import { playbackSlotNumbers } from "./playbackProjection";
-
-describe("playbackSlotNumbers", () => {
-	it("projects consecutive page slots and preserves holes", () => {
-		expect(
-			playbackSlotNumbers(
-				{
-					number: 1,
-					name: "Main",
-					slots: { "20": 44, "22": 7 },
-					virtual_playbacks: {},
-				},
-				20,
-				4,
-			),
-		).toEqual([44, undefined, 7, undefined]);
+import type { PlaybackDefinition } from "../../api/types";
+import { playbackSlotAssignments } from "./playbackProjection";
+const first: PlaybackDefinition = {
+	name: "Front",
+	target: { type: "cue_list", cue_list_id: "front" },
+	buttons: ["go", "pause", "flash"],
+	fader: "master",
+	go_activates: true,
+	auto_off: true,
+	xfade_millis: 0,
+};
+const second: PlaybackDefinition = { ...first, name: "Back" };
+describe("sparse Playback assignment projection", () => {
+	it("projects consecutive positions and preserves holes without remapping definitions", () => {
+		const page = {
+			number: 99,
+			name: "Main",
+			assignments: { "401": first, "403": second },
+		};
+		const projected = playbackSlotAssignments(page, 401, 4);
+		expect(projected).toEqual([first, undefined, second, undefined]);
+		expect(projected[0]).toBe(first);
+		expect(projected[2]).toBe(second);
+		expect(Object.keys(page.assignments)).toEqual(["401", "403"]);
 	});
-
-	it("supports the slot 127 boundary", () => {
+	it("supports exact position1000 boundary and absent page without fabricating assignments", () => {
 		expect(
-			playbackSlotNumbers(
-				{
-					number: 1,
-					name: "Main",
-					slots: { "127": 1000 },
-					virtual_playbacks: {},
-				},
-				127,
+			playbackSlotAssignments(
+				{ number: 99, name: "Last", assignments: { "1000": first } },
+				1000,
 				1,
 			),
-		).toEqual([1000]);
+		).toEqual([first]);
+		expect(playbackSlotAssignments(undefined, 1000, 1)).toEqual([undefined]);
 	});
 });

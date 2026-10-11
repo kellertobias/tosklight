@@ -534,123 +534,104 @@ mod playback_address_tests {
     use super::*;
 
     fn playback(
-        number: u16,
         footprint: light_playback::PlaybackFootprint,
     ) -> light_playback::PlaybackDefinition {
-        light_playback::PlaybackDefinition {
-            number,
-            name: format!("Playback {number}"),
-            target: light_playback::PlaybackTarget::GrandMaster,
-            buttons: [
-                light_playback::PlaybackButtonAction::Blackout,
-                light_playback::PlaybackButtonAction::PauseDynamics,
-                light_playback::PlaybackButtonAction::Flash,
-            ],
-            button_count: 3,
-            fader: light_playback::PlaybackFaderMode::Master,
-            has_fader: true,
-            footprint,
-            go_activates: true,
-            auto_off: true,
-            xfade_millis: 0,
-            color: "#20c997".into(),
-            flash_release: light_playback::FlashReleaseMode::ReleaseAll,
-            protect_from_swap: false,
-            presentation_icon: None,
-            presentation_image: None,
-        }
+        let mut definition = light_playback::PlaybackDefinition::new_cue_list(
+            "OSC test",
+            light_core::CueListId::new(),
+        );
+        definition.footprint = footprint;
+        definition
     }
-
-    fn desk() -> ControlDesk {
-        ControlDesk {
-            hardware_led_brightness: 100,
-            hardware_gooseneck_brightness: 100,
-            hardware_gooseneck_color: 100,
-            id: uuid::Uuid::nil(),
-            name: "Desk".into(),
-            columns: 2,
-            rows: 2,
-            buttons: 3,
-            playback_layout: Some(light_show::PlaybackSurfaceLayout {
-                playbacks_per_row: 2,
-                rows: vec![
-                    light_show::PlaybackSurfaceRow {
-                        first_playback_slot: 11,
-                        has_fader: false,
-                        button_count: 1,
-                    },
-                    light_show::PlaybackSurfaceRow {
-                        first_playback_slot: 31,
-                        has_fader: true,
-                        button_count: 3,
-                    },
-                ],
-            }),
-        }
-    }
-
-    fn snapshot(
-        playbacks: Vec<light_playback::PlaybackDefinition>,
-        slots: &[(u8, u16)],
-    ) -> EngineSnapshot {
+    fn snapshot(assignments: Vec<(u16, light_playback::PlaybackDefinition)>) -> EngineSnapshot {
         EngineSnapshot {
-            playbacks: playbacks.into(),
             playback_pages: vec![light_playback::PlaybackPage {
                 number: 1,
                 name: "Main".into(),
-                slots: slots.iter().copied().collect(),
-                virtual_playbacks: std::collections::HashMap::new(),
+                assignments: assignments.into_iter().collect(),
             }]
             .into(),
             ..EngineSnapshot::default()
         }
     }
-
     #[test]
-    fn dedicated_virtual_osc_address_is_page_qualified_and_range_checked() {
-        let parts = ["light", "main", "virtual-playback", "4", "1901", "go"];
-        let (address, action_index) = osc_playback_address(&parts).unwrap();
-        assert_eq!(
-            address,
-            PlaybackAddress::Virtual(
-                light_playback::VirtualPlaybackAddress::new(4, 1_901).unwrap()
-            )
-        );
-        assert_eq!(action_index, 5);
-
+    fn unified_osc_address_is_page_qualified_and_range_checked() {
+        for (page, position) in [(1, 1), (4, 401), (99, 1000)] {
+            let page_text = page.to_string();
+            let position_text = position.to_string();
+            let parts = [
+                "light",
+                "main",
+                "playback",
+                &page_text,
+                &position_text,
+                "go",
+            ];
+            let (address, action_index) = osc_playback_address(&parts).unwrap();
+            assert_eq!(
+                address,
+                PlaybackAddress::Playback(
+                    light_playback::PlaybackAddress::new(page, position).unwrap()
+                )
+            );
+            assert_eq!(action_index, 5);
+        }
         for invalid in [
-            ["light", "main", "virtual-playback", "4", "1000", "go"],
-            ["light", "main", "virtual-playback", "4", "1001", "go"],
-            ["light", "main", "virtual-playback", "4", "9999", "go"],
+            ["light", "main", "playback", "0", "1", "go"],
+            ["light", "main", "playback", "100", "1", "go"],
+            ["light", "main", "playback", "4", "0", "go"],
+            ["light", "main", "playback", "4", "1001", "go"],
+            ["light", "main", "playback", "bad", "1", "go"],
+            ["light", "main", "virtual-playback", "4", "1901", "go"],
         ] {
             assert!(osc_playback_address(&invalid).is_none());
         }
     }
-
     #[test]
-    fn expanded_physical_slots_resolve_to_one_anchor_and_reject_conflicts() {
-        let wider = playback(
-            1,
-            light_playback::PlaybackFootprint::Wider {
-                right_buttons: [light_playback::PlaybackButtonAction::Go; 3],
-                right_fader: light_playback::PlaybackFaderMode::Master,
-            },
-        );
-        let taller = playback(
-            2,
-            light_playback::PlaybackFootprint::Taller {
-                upper_button: light_playback::PlaybackButtonAction::Flash,
-            },
-        );
+    fn expanded_surface_positions_resolve_one_anchor_and_reject_conflicts() {
+        let (state, data_dir) = crate::runtime::tests::test_state();
+        let desk = state.installation.desk().unwrap();
+        state
+            .installation
+            .update_playback_surface(desk.id, &desk.surface_id, |_| {
+                Ok(light_show::PlaybackSurfaceConfiguration {
+                    name: "OSC test".into(),
+                    page_source: light_show::PlaybackPageSource::Own { page: 1 },
+                    layout: light_show::PlaybackSurfaceLayout {
+                        rows: vec![
+                            light_show::PlaybackSurfaceRow {
+                                first_position: 11,
+                                count: 2,
+                                presentation: light_show::PlaybackControlPresentation::Buttons,
+                                button_count: 1,
+                            },
+                            light_show::PlaybackSurfaceRow {
+                                first_position: 31,
+                                count: 2,
+                                presentation: light_show::PlaybackControlPresentation::Fader,
+                                button_count: 3,
+                            },
+                        ],
+                    },
+                })
+            })
+            .unwrap();
+        let wider = playback(light_playback::PlaybackFootprint::Wider {
+            right_buttons: [light_playback::PlaybackButtonAction::Go; 3],
+            right_fader: light_playback::PlaybackFaderMode::Master,
+        });
+        let taller = playback(light_playback::PlaybackFootprint::Taller {
+            upper_button: light_playback::PlaybackButtonAction::Flash,
+        });
         assert_eq!(
-            expanded_osc_binding(&snapshot(vec![wider.clone()], &[(31, 1)]), 1, &desk(), 32),
+            expanded_osc_binding(&state, &snapshot(vec![(31, wider.clone())]), 1, &desk, 32),
             Some(ExpandedOscBinding {
                 anchor_slot: 31,
                 position: ExpandedOscPosition::WiderRight
             })
         );
         assert_eq!(
-            expanded_osc_binding(&snapshot(vec![taller.clone()], &[(32, 2)]), 1, &desk(), 12),
+            expanded_osc_binding(&state, &snapshot(vec![(32, taller.clone())]), 1, &desk, 12),
             Some(ExpandedOscBinding {
                 anchor_slot: 32,
                 position: ExpandedOscPosition::TallerUpper
@@ -658,21 +639,31 @@ mod playback_address_tests {
         );
         assert_eq!(
             expanded_osc_binding(
-                &snapshot(
-                    vec![
-                        wider.clone(),
-                        taller,
-                        playback(3, light_playback::PlaybackFootprint::Normal),
-                    ],
-                    &[(31, 1), (32, 2), (12, 3)],
-                ),
+                &state,
+                &snapshot(vec![
+                    (31, wider.clone()),
+                    (32, taller.clone()),
+                    (12, playback(light_playback::PlaybackFootprint::Normal))
+                ]),
                 1,
-                &desk(),
-                12,
+                &desk,
+                12
             ),
             None,
-            "the occupied upper position stays independently addressed"
+            "occupied upper position remains independently addressed"
         );
+        assert_eq!(
+            expanded_osc_binding(
+                &state,
+                &snapshot(vec![(11, wider), (32, taller)]),
+                1,
+                &desk,
+                12
+            ),
+            None,
+            "two expanded claims are ambiguous"
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 }
 
