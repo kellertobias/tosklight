@@ -28,6 +28,14 @@ pub(super) fn dispatch_playback_action(
     input: &PoolPlaybackInput,
     context: PlaybackDispatchContext<'_>,
 ) -> Result<PlaybackDispatchOutcome, ApiError> {
+    let scoped_source = context
+        .control_source
+        .scoped_to_desk(context.action.desk_id)
+        .map_err(ApiError::bad_request)?;
+    let context = PlaybackDispatchContext {
+        control_source: &scoped_source,
+        ..context
+    };
     let before_cue = current_cue_id(state, definition);
     let outcome =
         dispatch_playback_action_inner(state, address, definition, action_name, input, &context)?;

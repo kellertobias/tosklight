@@ -421,3 +421,52 @@ fn restoring_permanent_runtime_does_not_restore_held_control_sources() {
     restored.set_flash(address, &source, false).unwrap();
     assert!(restored.permanent_enabled(address));
 }
+
+#[test]
+fn same_declared_surface_on_two_desks_keeps_independent_holds_and_cancellation() {
+    let (mut engine, address, _) = cue_engine();
+    let declared = source("main");
+    let first = declared.scoped_to_desk(Uuid::from_u128(1)).unwrap();
+    let second = declared.scoped_to_desk(Uuid::from_u128(2)).unwrap();
+    engine.on(address).unwrap();
+    engine.set_flash(address, &first, true).unwrap();
+    engine.set_flash(address, &second, true).unwrap();
+    assert_eq!(engine.active().len(), 3);
+    engine.set_flash(address, &first, false).unwrap();
+    assert_eq!(engine.active().len(), 2);
+    assert!(
+        engine
+            .runtime_status_for_playback(address)
+            .unwrap()
+            .playback
+            .flash
+    );
+    engine.set_flash(address, &first, true).unwrap();
+    engine.cancel_control_surface(&first.surface_id);
+    assert_eq!(engine.active().len(), 2);
+    assert!(
+        engine
+            .runtime_status_for_playback(address)
+            .unwrap()
+            .playback
+            .flash
+    );
+    assert!(engine.permanent_enabled(address));
+    engine.cancel_control_source(&second);
+    assert_eq!(engine.active().len(), 1);
+    assert!(engine.permanent_enabled(address));
+}
+
+#[test]
+fn scoped_source_keeps_valid_long_surface_ids_bounded_and_rejects_invalid_input() {
+    let declared = source(&"x".repeat(256));
+    let desk = Uuid::from_u128(1);
+    let scoped = declared.scoped_to_desk(desk).unwrap();
+    scoped.validate().unwrap();
+    assert_eq!(scoped.control_id, declared.control_id);
+    assert_eq!(scoped, declared.scoped_to_desk(desk).unwrap());
+    assert_ne!(scoped, declared.scoped_to_desk(Uuid::from_u128(2)).unwrap());
+    assert!(scoped.surface_id.len() <= 256);
+    assert!(source(&"x".repeat(257)).scoped_to_desk(desk).is_err());
+    assert!(source(" main").scoped_to_desk(desk).is_err());
+}

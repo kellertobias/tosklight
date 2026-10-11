@@ -6,10 +6,19 @@ fn active_osc_subscribers(state: &AppState) -> Vec<OscSubscriber> {
         .integrations
         .active_osc_subscribers(now, Duration::from_secs(20));
     for (client_id, session_id, source) in expired {
-        if let Err(error) =
-            super::playback_control_disconnect::cancel(state, &format!("hardware:{client_id}"))
-        {
-            tracing::error!(error=%error.message,"Expired OSC held controls could not be fully released");
+        if let Some(session) = state.sessions.session(session_id) {
+            if let Err(error) = super::playback_control_disconnect::cancel_for_desk(
+                state,
+                session.desk.id,
+                &format!("hardware:{client_id}"),
+            ) {
+                tracing::error!(error=%error.message,"Expired OSC held controls could not be fully released");
+            }
+        } else {
+            tracing::error!(
+                ?session_id,
+                "Expired OSC control owner session is unavailable"
+            );
         }
         state
             .integrations

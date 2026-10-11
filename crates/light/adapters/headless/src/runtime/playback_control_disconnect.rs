@@ -5,7 +5,21 @@ use light_application::{
     PlaybackRuntimeIdentity, PlaybackUnitOfWork,
 };
 
-pub(in crate::runtime) fn cancel(state: &AppState, surface_id: &str) -> Result<(), ApiError> {
+pub(in crate::runtime) fn cancel_for_desk(
+    state: &AppState,
+    desk_id: uuid::Uuid,
+    surface_id: &str,
+) -> Result<(), ApiError> {
+    let source = light_playback::PlaybackControlSource {
+        surface_id: surface_id.into(),
+        control_id: 0,
+    }
+    .scoped_to_desk(desk_id)
+    .map_err(ApiError::bad_request)?;
+    cancel(state, &source.surface_id)
+}
+
+fn cancel(state: &AppState, surface_id: &str) -> Result<(), ApiError> {
     state
         .playback
         .run_unit_of_work(Disconnect { state, surface_id })

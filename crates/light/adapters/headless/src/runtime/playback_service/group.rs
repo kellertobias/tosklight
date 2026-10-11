@@ -31,7 +31,14 @@ pub(super) fn execute(
             }
             changed
         }
-        PlaybackAction::Flash { pressed } => set_flash(ports, group_id, control_source, pressed),
+        PlaybackAction::Flash { pressed } => set_flash(
+            ports,
+            group_id,
+            &control_source
+                .scoped_to_desk(context.desk_id)
+                .map_err(invalid)?,
+            pressed,
+        ),
         _ => return Err(invalid("action is incompatible with Group runtime")),
     };
     Ok(PlaybackExecution::Target { changed })

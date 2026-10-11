@@ -55,6 +55,15 @@ pub struct PlaybackControlSource {
 }
 
 impl PlaybackControlSource {
+    /// Scope an externally declared surface to its authenticated desk exactly once at ingress.
+    pub fn scoped_to_desk(&self, desk_id: Uuid) -> Result<Self, String> {
+        self.validate()?;
+        Ok(Self {
+            surface_id: Uuid::new_v5(&desk_id, self.surface_id.as_bytes()).to_string(),
+            control_id: self.control_id,
+        })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.surface_id.is_empty()
             || self.surface_id.len() > 256

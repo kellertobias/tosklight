@@ -15,9 +15,11 @@ impl CapturedPreloadPlaybackContext {
     ) -> Result<Vec<light_engine::PlaybackBatchCommand>, String> {
         let mut commands = preload_batch_commands(pending)?;
         for (pending, command) in pending.iter().zip(&mut commands) {
+            let desk_id = pending.origin_desk_id.unwrap_or(self.fallback_desk);
+            command.control_source = pending.control_source.scoped_to_desk(desk_id)?;
             command.activation_origin = Some(light_playback::PlaybackActivationOrigin {
                 at,
-                desk_id: Some(pending.origin_desk_id.unwrap_or(self.fallback_desk)),
+                desk_id: Some(desk_id),
                 surface: if pending.control_source.surface_id.starts_with("hardware:")
                     || pending.control_source.surface_id.starts_with("osc:")
                 {
@@ -64,7 +66,13 @@ mod tests {
         assert_eq!(delayed[1].action, PlaybackBatchAction::Go);
         for (index, command) in delayed.iter().enumerate() {
             assert_eq!(command.address, queue[index].address);
-            assert_eq!(command.control_source, queue[index].control_source);
+            assert_eq!(
+                command.control_source,
+                queue[index]
+                    .control_source
+                    .scoped_to_desk(if index == 0 { fallback } else { authored })
+                    .unwrap()
+            );
             let origin = command.activation_origin.as_ref().unwrap();
             assert_eq!(origin.at, later_at);
             assert_eq!(

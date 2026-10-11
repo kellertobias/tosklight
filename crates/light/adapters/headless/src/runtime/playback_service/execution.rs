@@ -120,7 +120,9 @@ impl ServerPlaybackPorts<'_> {
                         duration_millis: u64::from(duration_millis),
                     },
                     activation_origin: None,
-                    control_source: control_source.clone(),
+                    control_source: control_source
+                        .scoped_to_desk(context.desk_id)
+                        .map_err(invalid)?,
                 },
             )
             .map_err(api_action_error)?;
@@ -155,7 +157,9 @@ impl ServerPlaybackPorts<'_> {
                     action: light_engine::PlaybackAction::SetMasterWithExplicitActivation(
                         level.value(),
                     ),
-                    control_source: control_source.clone(),
+                    control_source: control_source
+                        .scoped_to_desk(context.desk_id)
+                        .map_err(invalid)?,
                     activation_origin: Some(light_playback::PlaybackActivationOrigin {
                         at: self.state.output.application_time(),
                         desk_id: Some(context.desk_id),
