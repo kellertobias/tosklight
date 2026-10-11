@@ -1,3 +1,5 @@
+import { decodeExactAddress } from "./playbackWireProjection";
+import { samePlaybackAddress } from "./playbackAddress";
 import type {
 	ProgrammingUpdateCueSource,
 	ProgrammingUpdateMode,
@@ -120,7 +122,7 @@ export function decodeTargetIdentity(
 			value,
 			path,
 			["family", "object_id", "name"],
-			["playback_number", "cue"],
+			["playback_address", "cue"],
 		),
 	);
 	const family = decodeTargetFamily(target.family, `${path}.family`);
@@ -128,11 +130,11 @@ export function decodeTargetIdentity(
 		scopedUuidAt(target.object_id, `${path}.object_id`);
 	else boundedStringAt(target.object_id, `${path}.object_id`, 256);
 	plainStringAt(target.name, `${path}.name`);
-	if ("playback_number" in target)
+	if ("playback_address" in target)
 		nullableAt(
-			target.playback_number,
-			`${path}.playback_number`,
-			(item, itemPath) => boundedIntegerAt(item, itemPath, 65_535),
+			target.playback_address,
+			`${path}.playback_address`,
+			decodeExactAddress,
 		);
 	if ("cue" in target) nullableAt(target.cue, `${path}.cue`, decodeCueIdentity);
 	assertIdentityShape(family, target, path);
@@ -212,8 +214,8 @@ export function assertIdentityMatchesRequest(
 		throw new WireValidationError(path, "requested Update target", identity);
 	if (target.type !== "cue") return;
 	if (
-		target.playback_number != null &&
-		identity.playback_number !== target.playback_number
+		target.playback_address != null &&
+		(!identity.playback_address || !samePlaybackAddress(identity.playback_address, target.playback_address))
 	)
 		throw new WireValidationError(path, "requested playback context", identity);
 	if (
@@ -252,11 +254,11 @@ export function kindForFamily(
 
 function decodeCueTarget(target: Record<string, unknown>, path: string) {
 	scopedUuidAt(target.cue_list_id, `${path}.cue_list_id`);
-	if ("playback_number" in target)
+	if ("playback_address" in target)
 		nullableAt(
-			target.playback_number,
-			`${path}.playback_number`,
-			(item, itemPath) => boundedIntegerAt(item, itemPath, 65_535),
+			target.playback_address,
+			`${path}.playback_address`,
+			decodeExactAddress,
 		);
 	if ("cue_id" in target)
 		nullableAt(target.cue_id, `${path}.cue_id`, scopedUuidAt);
@@ -283,7 +285,7 @@ function assertIdentityShape(
 	path: string,
 ) {
 	if (family.type === "cue") return;
-	if (target.playback_number != null || target.cue != null)
+	if (target.playback_address != null || target.cue != null)
 		throw new WireValidationError(
 			path,
 			`${family.type} identity without Cue context`,
@@ -295,7 +297,7 @@ function targetFields(value: unknown, path: string) {
 	const record = exactRecordAt(value, path, [
 		"type",
 		"cue_list_id",
-		"playback_number",
+		"playback_address",
 		"cue_id",
 		"cue_number",
 		"validate_active_context",
@@ -307,7 +309,7 @@ function targetFields(value: unknown, path: string) {
 				value,
 				path,
 				["type", "cue_list_id", "validate_active_context"],
-				["playback_number", "cue_id", "cue_number"],
+				["playback_address", "cue_id", "cue_number"],
 			)
 		: ["type", "object_id"];
 }

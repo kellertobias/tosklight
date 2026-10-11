@@ -5,7 +5,7 @@ import type {
 	PlaybackSurfaceLayout,
 	PlaybackSurfaceRow,
 } from "../../../api/types";
-import type { ShowObject } from "../../../features/showObjects/contracts";
+import type { AssignedPlayback } from "./types";
 
 export type PlaybackFootprint =
 	| { type: "normal" }
@@ -38,7 +38,7 @@ export interface PlaybackPhysicalControlBinding {
 export interface PlaybackPhysicalSlotBinding {
 	physicalSlot: number;
 	anchorSlot: number;
-	playbackNumber: number;
+	address: import("../../../api/playbackAddress").PlaybackAddressValue;
 	position: "anchor" | "taller_upper" | "wider_right";
 	controls: PlaybackPhysicalControlBinding[];
 }
@@ -54,7 +54,7 @@ export type PlaybackFootprintCellProjection = PlaybackFootprintGridCell &
 	(
 		| {
 				state: "anchor";
-				playback: PlaybackDefinition;
+				playback: AssignedPlayback;
 				requested: PlaybackFootprint["type"];
 				effective: PlaybackFootprint["type"];
 				claimedSlots: number[];
@@ -67,7 +67,7 @@ export type PlaybackFootprintCellProjection = PlaybackFootprintGridCell &
 		| {
 				state: "claimed";
 				anchorSlot: number;
-				playbackNumber: number;
+				address: import("../../../api/playbackAddress").PlaybackAddressValue;
 				position: "taller_upper" | "wider_right";
 		  }
 		| { state: "unclaimed" }
@@ -82,7 +82,6 @@ export interface PlaybackFootprintProjection {
 }
 
 export interface ProjectPlaybackFootprintsOptions {
-	playbackDefinitions: readonly ShowObject<"playback">[];
 	page: PlaybackPage | undefined;
 	playbackLayout?: PlaybackSurfaceLayout | null;
 	columns: number;
@@ -94,7 +93,7 @@ export interface ProjectPlaybackFootprintsOptions {
 
 type Candidate = {
 	anchor: PlaybackFootprintGridCell;
-	playback: PlaybackDefinition;
+	playback: AssignedPlayback;
 	requested: PlaybackFootprint["type"];
 	target: PlaybackFootprintGridCell | null;
 	position: "taller_upper" | "wider_right" | null;
@@ -107,7 +106,6 @@ type Candidate = {
  * ordinary anchor cells so their dormant control assignments can return on another surface.
  */
 export function projectPlaybackFootprints({
-	playbackDefinitions,
 	page,
 	playbackLayout,
 	columns,
@@ -127,15 +125,11 @@ export function projectPlaybackFootprints({
 	const cellByCoordinate = new Map(
 		cells.map((cell) => [coordinate(cell.rowIndex, cell.columnIndex), cell]),
 	);
-	const playbackByNumber = new Map(
-		playbackDefinitions.map(({ body }) => [body.number, body]),
-	);
-	const playbackAt = (cell: PlaybackFootprintGridCell) => {
-		const number = page?.slots[String(cell.slot)];
-		return number == null ? null : (playbackByNumber.get(number) ?? null);
+	const playbackAt = (cell: PlaybackFootprintGridCell): AssignedPlayback | null => {
+		const definition = page?.assignments[String(cell.slot)];
+		return definition && page ? {...definition, address: {page: page.number, position: cell.slot}} : null;
 	};
-	const isOccupied = (cell: PlaybackFootprintGridCell) =>
-		page?.slots[String(cell.slot)] != null;
+	const isOccupied = (cell: PlaybackFootprintGridCell) => page?.assignments[String(cell.slot)] != null;
 	const candidates = cells.flatMap((cell) => {
 		const playback = playbackAt(cell);
 		return playback
@@ -175,7 +169,7 @@ export function projectPlaybackFootprints({
 				...cell,
 				state: "claimed",
 				anchorSlot: claim.anchor.slot,
-				playbackNumber: claim.playback.number,
+				address: {...claim.playback.address},
 				position: claim.position,
 			};
 		}
@@ -228,13 +222,13 @@ export function footprintGridCells({
 	pageSize,
 	fallbackButtons = 3,
 	fallbackHasFader = true,
-}: Omit<ProjectPlaybackFootprintsOptions, "playbackDefinitions" | "page">) {
+}: Omit<ProjectPlaybackFootprintsOptions, "page">) {
 	if (playbackLayout) {
 		return playbackLayout.rows.flatMap((row, rowIndex) =>
 			Array.from(
-				{ length: playbackLayout.playbacks_per_row },
+				{ length: row.count },
 				(_, columnIndex) => ({
-					slot: row.first_playback_slot + columnIndex,
+					slot: row.first_position + columnIndex,
 					row,
 					rowIndex,
 					columnIndex,
@@ -248,8 +242,9 @@ export function footprintGridCells({
 		return {
 			slot: firstSlot + index,
 			row: {
-				first_playback_slot: firstSlot + rowIndex * safeColumns,
-				has_fader: fallbackHasFader,
+				first_position: firstSlot + rowIndex * safeColumns,
+				count: safeColumns,
+				presentation: (fallbackHasFader ? "fader" : "buttons") as PlaybackSurfaceRow["presentation"],
 				button_count: fallbackButtons,
 			},
 			rowIndex,
@@ -260,7 +255,7 @@ export function footprintGridCells({
 
 function candidateFor(
 	anchor: PlaybackFootprintGridCell,
-	playback: PlaybackDefinition,
+	playback: AssignedPlayback,
 	cells: ReadonlyMap<string, PlaybackFootprintGridCell>,
 	isOccupied: (cell: PlaybackFootprintGridCell) => boolean,
 ): Candidate {
@@ -334,7 +329,7 @@ function footprintOf(playback: PlaybackDefinition): PlaybackFootprint {
 
 function anchorBinding(
 	cell: PlaybackFootprintGridCell,
-	playback: PlaybackDefinition,
+	playback: AssignedPlayback,
 ): PlaybackPhysicalSlotBinding {
 	const controls: PlaybackPhysicalControlBinding[] = Array.from(
 		{ length: Math.min(cell.row.button_count, playback.button_count ?? 3) },
@@ -343,12 +338,12 @@ function anchorBinding(
 			control: { type: "anchor_button", number: index + 1 },
 		}),
 	);
-	if (cell.row.has_fader && (playback.has_fader ?? true))
+	if ((cell.row.presentation !== "buttons") && (playback.has_fader ?? true))
 		controls.push({ control: { type: "anchor_fader" } });
 	return {
 		physicalSlot: cell.slot,
 		anchorSlot: cell.slot,
-		playbackNumber: playback.number,
+		address: {...playback.address},
 		position: "anchor",
 		controls,
 	};
@@ -357,7 +352,7 @@ function anchorBinding(
 function claimedBinding(
 	cell: PlaybackFootprintGridCell,
 	anchorSlot: number,
-	playback: PlaybackDefinition,
+	playback: AssignedPlayback,
 	position: "taller_upper" | "wider_right",
 ): PlaybackPhysicalSlotBinding {
 	const controls: PlaybackPhysicalControlBinding[] =
@@ -372,12 +367,12 @@ function claimedBinding(
 						control: { type: "right_button" as const, number: index + 1 },
 					}),
 				);
-	if (position === "wider_right" && cell.row.has_fader)
+	if (position === "wider_right" && (cell.row.presentation !== "buttons"))
 		controls.push({ control: { type: "right_fader" } });
 	return {
 		physicalSlot: cell.slot,
 		anchorSlot,
-		playbackNumber: playback.number,
+		address: {...playback.address},
 		position,
 		controls,
 	};

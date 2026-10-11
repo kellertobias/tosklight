@@ -60,20 +60,19 @@ function createHarness() {
 }
 
 describe("WebSocketPlaybackEventTransport", () => {
-	it("routes virtual settled feedback to its exact address and updates the internal store key", () => {
+	it("routes settled feedback to its exact address and updates the internal store key", () => {
 		const { observer, transport } = createHarness();
 		const store = new PlaybackRuntimeStore();
 		store.reset(SHOW_ID, DESK_ID);
-		const failed: PlaybackProjection = {
+		const failed: Extract<PlaybackProjection, {target:"dynamic"}> = {
 			scope: { show_id: SHOW_ID, show_revision: 4 },
-			requested: { kind: "virtual", page: 4, playback_number: 1904 },
-			playback_number: 1904,
+			identity: { kind: "playback", page: 4, position: 904 },
 			target: "dynamic",
 			dynamic_id: CUE_LIST_ID,
 			last_known_pool_number: 34,
 			embedded: false,
 			runtime: {
-				playback_number: 1904,
+				owner_address: {page:4,position:904},
 				enabled: true,
 				paused: false,
 				flash: false,
@@ -110,19 +109,19 @@ describe("WebSocketPlaybackEventTransport", () => {
 				store.applyProjection(event.payload.projection, event.sequence);
 		});
 		transport.subscribe(DESK_ID, {
-			identities: [failed.requested], desk: false, telemetry: false,
+			identities: [failed.identity], desk: false, telemetry: false,
 		}, 10, observer);
 		const socket = FakeWebSocket.instances[0];
 		socket.emit("open");
 		expect(JSON.parse(socket.sent[0]).filter.objects).toEqual([
-			{ capability: "playback", id: "virtual-playback:4.1904" },
+			{ capability: "playback", id: "playback:4.904" },
 		]);
 		const off = { ...failed, runtime: { ...failed.runtime!, state: "off", enabled: false } };
 		socket.emit("message", message({
 			type: "event",
 			event: {
 				sequence: 11,
-				object: { capability: "playback", id: "virtual-playback:4.1904" },
+				object: { capability: "playback", id: "playback:4.904" },
 				payload: {
 					type: "playback_runtime_changed",
 					change: { projection: off, transition: null },
@@ -130,9 +129,9 @@ describe("WebSocketPlaybackEventTransport", () => {
 			},
 		}));
 		expect(observer.error).not.toHaveBeenCalled();
-		expect(store.getSnapshot().projections.get("virtual:4.1904")).toEqual([off]);
+		expect(store.getSnapshot().projections.get("playback:4.904")).toEqual([off]);
 		store.applyProjection(failed, 10);
-		expect(store.getSnapshot().projections.get("virtual:4.1904")).toEqual([off]);
+		expect(store.getSnapshot().projections.get("playback:4.904")).toEqual([off]);
 	});
 	it("subscribes only to mounted Playback identities and the desk view", () => {
 		const { observer, transport } = createHarness();
@@ -140,7 +139,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 			DESK_ID,
 			{
 				identities: [
-					{ kind: "playback", playback_number: 2 },
+					{ kind: "playback", page: 1, position: 2 },
 					{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
 					{ kind: "group", group_id: GROUP_ID },
 				],
@@ -157,7 +156,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 				capabilities: ["playback", "desk"],
 				classes: ["transition", "projection", "telemetry"],
 				objects: [
-					{ capability: "playback", id: "playback:2" },
+					{ capability: "playback", id: "playback:1.2" },
 					{ capability: "playback", id: `cuelist:${CUE_LIST_ID}` },
 					{ capability: "playback", id: `group:${GROUP_ID}` },
 					{ capability: "playback", id: "telemetry" },
@@ -180,7 +179,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 		transport.subscribe(
 			DESK_ID,
 			{
-				identities: [{ kind: "playback", playback_number: 2 }],
+				identities: [{ kind: "playback", page: 1, position: 2 }],
 				desk: true,
 				telemetry: false,
 			},
@@ -195,7 +194,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 				capabilities: ["playback", "desk"],
 				classes: ["transition", "projection"],
 				objects: [
-					{ capability: "playback", id: "playback:2" },
+					{ capability: "playback", id: "playback:1.2" },
 					{ capability: "desk", id: `playback-view:${DESK_ID}` },
 				],
 			},
@@ -209,7 +208,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 		const { observer, transport } = createHarness();
 		transport.subscribe(
 			DESK_ID,
-			{ identities: [{ kind: "playback", playback_number: 1 }], desk: false },
+			{ identities: [{ kind: "playback", page: 1, position: 1 }], desk: false },
 			0,
 			observer,
 		);
@@ -235,7 +234,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 		const { observer, transport } = createHarness();
 		transport.subscribe(
 			DESK_ID,
-			{ identities: [{ kind: "playback", playback_number: 1 }], desk: false },
+			{ identities: [{ kind: "playback", page: 1, position: 1 }], desk: false },
 			0,
 			observer,
 		);
@@ -258,7 +257,7 @@ describe("WebSocketPlaybackEventTransport", () => {
 		const { observer, transport } = createHarness();
 		transport.subscribe(
 			DESK_ID,
-			{ identities: [{ kind: "playback", playback_number: 1 }], desk: false },
+			{ identities: [{ kind: "playback", page: 1, position: 1 }], desk: false },
 			0,
 			observer,
 		);

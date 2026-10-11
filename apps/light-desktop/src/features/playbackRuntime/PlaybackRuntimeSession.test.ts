@@ -80,20 +80,20 @@ async function settle() {
 describe("PlaybackRuntimeSession", () => {
 	it("batches mounted identities into one hydration and exact subscription", async () => {
 		const harness = createHarness();
-		const releaseOne = harness.session.activate(playbackIdentity(1));
-		const releaseTwo = harness.session.activate(playbackIdentity(2));
+		const releaseOne = harness.session.activate(playbackIdentity(1, 1));
+		const releaseTwo = harness.session.activate(playbackIdentity(1, 2));
 		harness.session.activateDesk();
 		await settle();
 		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
 		expect(harness.loadSnapshot).toHaveBeenCalledWith([
-			playbackIdentity(1),
-			playbackIdentity(2),
+			playbackIdentity(1, 1),
+			playbackIdentity(1, 2),
 		]);
 		const transport = harness.transport as FakeTransport;
 		expect(transport.subscriptions[0]).toMatchObject({
 			after: 10,
 			scope: {
-				identities: [playbackIdentity(1), playbackIdentity(2)],
+				identities: [playbackIdentity(1, 1), playbackIdentity(1, 2)],
 				desk: true,
 			},
 		});
@@ -112,8 +112,7 @@ describe("PlaybackRuntimeSession", () => {
 				playbackSnapshot(identities, 10, [
 					{
 						scope: { show_id: SHOW_ID, show_revision: 4 },
-						requested: stale,
-						playback_number: null,
+						identity: stale,
 						target: "missing",
 					},
 				]),
@@ -151,11 +150,11 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("hydrates over REST when WebSocket transport is unavailable", async () => {
 		const harness = createHarness(null);
-		harness.session.activate(playbackIdentity(3));
+		harness.session.activate(playbackIdentity(1, 3));
 		await settle();
-		expect(harness.loadSnapshot).toHaveBeenCalledWith([playbackIdentity(3)]);
+		expect(harness.loadSnapshot).toHaveBeenCalledWith([playbackIdentity(1, 3)]);
 		expect(
-			harness.store.getSnapshot().projections.get("playback:3")?.length,
+			harness.store.getSnapshot().projections.get("playback:1.3")?.length,
 		).toBe(1);
 		expect(harness.store.getSnapshot().status).toBe("ready");
 	});
@@ -184,7 +183,7 @@ describe("PlaybackRuntimeSession", () => {
 		await settle();
 
 		expect(transport.subscriptions[0].repair).toHaveBeenCalledWith(18);
-		expect(harness.store.getSnapshot().desk?.active_page).toBe(3);
+		expect(harness.store.getSnapshot().desk?.command_page).toBe(3);
 	});
 
 	it("refreshes an already-mounted desk authority before guarded mutations", async () => {
@@ -229,7 +228,7 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("keeps one runtime subscription while duplicate identity consumers mount and release", async () => {
 		const harness = createHarness();
-		const identity = playbackIdentity(1);
+		const identity = playbackIdentity(1, 1);
 		const releaseFirst = harness.session.activate(identity);
 		await settle();
 		const transport = harness.transport as FakeTransport;
@@ -252,7 +251,7 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("retains hydrated runtime identities across a dormant view lifetime", async () => {
 		const harness = createHarness();
-		const identity = playbackIdentity(1);
+		const identity = playbackIdentity(1, 1);
 		const releaseWarmLease = harness.session.activate(identity);
 		await settle();
 		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
@@ -280,7 +279,7 @@ describe("PlaybackRuntimeSession", () => {
 	it("upgrades a warm lease to visible telemetry without reloading its snapshot", async () => {
 		const harness = createHarness();
 		const transport = harness.transport as FakeTransport;
-		const identity = playbackIdentity(1);
+		const identity = playbackIdentity(1, 1);
 		const releaseWarmLease = harness.session.activate(identity, false);
 		await settle();
 		expect(harness.loadSnapshot).toHaveBeenCalledOnce();
@@ -311,23 +310,23 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("hydrates only a newly added identity and resumes events from the retained cursor", async () => {
 		const harness = createHarness();
-		harness.session.activate(playbackIdentity(1));
+		harness.session.activate(playbackIdentity(1, 1));
 		await settle();
-		harness.session.activate(playbackIdentity(2));
+		harness.session.activate(playbackIdentity(1, 2));
 		await settle();
 
 		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
 		expect(harness.loadSnapshot).toHaveBeenNthCalledWith(1, [
-			playbackIdentity(1),
+			playbackIdentity(1, 1),
 		]);
 		expect(harness.loadSnapshot).toHaveBeenNthCalledWith(2, [
-			playbackIdentity(2),
+			playbackIdentity(1, 2),
 		]);
 		expect((harness.transport as FakeTransport).subscriptions[1]).toMatchObject(
 			{
 				after: 10,
 				scope: {
-					identities: [playbackIdentity(1), playbackIdentity(2)],
+					identities: [playbackIdentity(1, 1), playbackIdentity(1, 2)],
 				},
 			},
 		);
@@ -335,7 +334,7 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("does not install or notify for an irrelevant delivered identity", async () => {
 		const harness = createHarness();
-		harness.session.activate(playbackIdentity(1));
+		harness.session.activate(playbackIdentity(1, 1));
 		await settle();
 		const listener = vi.fn();
 		harness.store.subscribe(listener);
@@ -345,7 +344,7 @@ describe("PlaybackRuntimeSession", () => {
 			payload: { type: "runtime", projection: cueProjection(2, 3) },
 		});
 		expect(listener).not.toHaveBeenCalled();
-		expect(harness.store.getSnapshot().projections.has("playback:2")).toBe(
+		expect(harness.store.getSnapshot().projections.has("playback:1.2")).toBe(
 			false,
 		);
 	});
@@ -364,7 +363,7 @@ describe("PlaybackRuntimeSession", () => {
 		["unrequested", cueProjection(2)],
 	])("rejects a %s snapshot projection", async (_label, projection) => {
 		const harness = createHarness();
-		const identity = playbackIdentity(1);
+		const identity = playbackIdentity(1, 1);
 		harness.loadSnapshot.mockResolvedValueOnce(
 			playbackSnapshot([identity], 10, [projection]),
 		);
@@ -382,10 +381,10 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("repairs a gap from a fresh authoritative cursor before resuming", async () => {
 		const harness = createHarness();
-		harness.session.activate(playbackIdentity(1));
+		harness.session.activate(playbackIdentity(1, 1));
 		await settle();
 		harness.loadSnapshot.mockResolvedValueOnce(
-			playbackSnapshot([playbackIdentity(1)], 18, [cueProjection(1, 4)]),
+			playbackSnapshot([playbackIdentity(1, 1)], 18, [cueProjection(1, 4)]),
 		);
 		(harness.transport as FakeTransport).emit({
 			type: "gap",
@@ -398,7 +397,7 @@ describe("PlaybackRuntimeSession", () => {
 		expect(stream.repair).toHaveBeenCalledWith(18);
 		const projection = harness.store
 			.getSnapshot()
-			.projections.get("playback:1")?.[0];
+			.projections.get("playback:1.1")?.[0];
 		expect(
 			projection?.target === "cue_list" && projection.runtime?.cue_index,
 		).toBe(4);
@@ -406,10 +405,10 @@ describe("PlaybackRuntimeSession", () => {
 
 	it("repairs a malformed event through REST without trusting its sequence", async () => {
 		const harness = createHarness();
-		harness.session.activate(playbackIdentity(1));
+		harness.session.activate(playbackIdentity(1, 1));
 		await settle();
 		harness.loadSnapshot.mockResolvedValueOnce(
-			playbackSnapshot([playbackIdentity(1)], 20, [cueProjection(1, 5)]),
+			playbackSnapshot([playbackIdentity(1, 1)], 20, [cueProjection(1, 5)]),
 		);
 		const first = (harness.transport as FakeTransport).subscriptions[0];
 		first.observer.error(new PlaybackProtocolError("malformed", 19));
@@ -424,7 +423,7 @@ describe("PlaybackRuntimeSession", () => {
 	it("splits large mounted views into bounded targeted snapshots", async () => {
 		const harness = createHarness(null);
 		for (let number = 1; number <= 300; number++)
-			harness.session.activate(playbackIdentity(number));
+			harness.session.activate(playbackIdentity(1, number));
 		await settle();
 		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
 		expect(harness.loadSnapshot.mock.calls[0][0]).toHaveLength(256);

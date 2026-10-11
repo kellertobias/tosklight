@@ -14,7 +14,7 @@ pub struct PlaybackTelemetryTick {
     /// The telemetry sample rate implied by the configured output rate and its divider.
     pub sample_rate_hz: f32,
     pub samples: Vec<PlaybackTelemetrySample>,
-    pub released: Vec<u16>,
+    pub released: Vec<light_playback::PlaybackAddress>,
 }
 
 /// The render-frame divider that brings `rate_hz` nearest ~10 Hz telemetry.
@@ -45,23 +45,26 @@ pub fn telemetry_frame_divider(rate_hz: u16) -> u64 {
 /// and the numbers that disappeared.
 #[derive(Debug, Default)]
 pub struct PlaybackTelemetryDeltas {
-    previous: std::collections::HashMap<u16, PlaybackTelemetrySample>,
+    previous: std::collections::HashMap<light_playback::PlaybackAddress, PlaybackTelemetrySample>,
 }
 
 impl PlaybackTelemetryDeltas {
     pub fn advance(
         &mut self,
         sweep: Vec<PlaybackTelemetrySample>,
-    ) -> (Vec<PlaybackTelemetrySample>, Vec<u16>) {
+    ) -> (
+        Vec<PlaybackTelemetrySample>,
+        Vec<light_playback::PlaybackAddress>,
+    ) {
         let mut next = std::collections::HashMap::with_capacity(sweep.len());
         let mut changed = Vec::new();
         for sample in sweep {
-            if self.previous.get(&sample.playback_number) != Some(&sample) {
+            if self.previous.get(&sample.address) != Some(&sample) {
                 changed.push(sample.clone());
             }
-            next.insert(sample.playback_number, sample);
+            next.insert(sample.address, sample);
         }
-        let mut released: Vec<u16> = self
+        let mut released: Vec<light_playback::PlaybackAddress> = self
             .previous
             .keys()
             .filter(|number| !next.contains_key(number))

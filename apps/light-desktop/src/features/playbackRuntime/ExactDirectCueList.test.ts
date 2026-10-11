@@ -21,16 +21,15 @@ describe("exact direct Cuelist projection isolation", () => {
 		if (base.target !== "cue_list") throw new Error("Expected cue fixture");
 		const aggregate = {
 			...base,
-			requested: { kind: "cue_list" as const, cue_list_id: CUE_LIST_ID },
-			playback_number: null,
+			identity: { kind: "cue_list" as const, cue_list_id: CUE_LIST_ID },
 		};
-		const direct = { ...aggregate, requested: identity, runtime: null };
+		const direct = { ...aggregate, identity: identity, runtime: null };
 		expect(projectionKeys(direct)).toEqual([`direct-cuelist:${CUE_LIST_ID}`]);
 		const store = new PlaybackRuntimeStore();
 		store.reset(SHOW_ID, DESK_ID);
 		store.installSnapshot(
-			playbackSnapshot([aggregate.requested], 10, [aggregate]),
-			[aggregate.requested],
+			playbackSnapshot([aggregate.identity], 10, [aggregate]),
+			[aggregate.identity],
 		);
 		store.applyProjection(direct, 11);
 		expect(

@@ -5,6 +5,11 @@ import type {
 	ShowObjectKind,
 } from "../showObjects/contracts";
 
+export interface PlaybackAddress {
+	page: number;
+	position: number;
+}
+
 export type PlaybackTopologyAction =
 	| {
 			type: "save_cue_list";
@@ -25,97 +30,50 @@ export type PlaybackTopologyAction =
 			expectedRevision: number;
 			expectedObjectId: string;
 	  }
-	| {
-			type: "configure_slot";
-			page: number;
-			slot: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-			expectedPlaybackRevision: number;
-			expectedPlaybackObjectId: string | null;
-			playback: PlaybackDefinition;
-	  }
-	| {
+	| ({
+			type: "assign_playback";
+			address: PlaybackAddress;
+			definition: PlaybackDefinition;
+	  } & PlaybackPageRevisionBasis)
+	| ({
+			type: "update_playback";
+			address: PlaybackAddress;
+			definition: PlaybackDefinition;
+	  } & PlaybackPageRevisionBasis)
+	| ({
+			type: "clear_playback";
+			address: PlaybackAddress;
+	  } & PlaybackPageRevisionBasis)
+	| ({
 			type: "assign_group_master";
 			groupObjectId: string;
 			expectedGroupRevision: number;
-			address: GroupMasterPlaybackAddress;
-	  }
-	| {
-			type: "configure_virtual";
-			page: number;
-			playbackNumber: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-			playback: PlaybackDefinition;
-	  }
-	| {
-			type: "map_existing_playback";
-			page: number;
-			slot: number;
-			playbackNumber: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-			expectedPlaybackRevision: number;
-			expectedPlaybackObjectId: string;
-	  }
-	| {
-			type: "clear_mapped_playback";
-			page: number;
-			slot: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-			expectedPlaybackRevision: number;
-			expectedPlaybackObjectId: string | null;
-	  }
-	| {
-			type: "clear_virtual";
-			page: number;
-			playbackNumber: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-	  }
-	| {
-			type: "create_page";
-			page: number;
-			expectedPageRevision: number;
-			expectedPageObjectId: string | null;
-	  }
-	| {
-			type: "rename_page";
-			page: number;
+			address: PlaybackAddress;
+	  } & PlaybackPageRevisionBasis)
+	| ({
+			type: "create_playback_page";
+			number: number;
 			name: string;
-			expectedPageRevision: number;
-			expectedPageObjectId: string;
-	  };
+	  } & PlaybackPageRevisionBasis)
+	| ({
+			type: "rename_playback_page";
+			number: number;
+			name: string;
+	  } & PlaybackPageRevisionBasis)
+	| ({
+			type: "delete_playback_page";
+			number: number;
+	  } & PlaybackPageRevisionBasis);
 
 export interface PlaybackTopologyRequest {
 	requestId: string;
 	action: PlaybackTopologyAction;
 }
 
-export type GroupMasterPlaybackAddress =
-	| ({
-			kind: "physical";
-			page: number;
-			slot: number;
-	  } & PlaybackTopologyRevisionBasis)
-	| ({
-			kind: "virtual";
-			page: number;
-			playbackNumber: number;
-	  } & PlaybackPageRevisionBasis);
-
 export type PlaybackTopologyResolution =
 	| { kind: "cue_list"; cueListId: string }
 	| { kind: "page"; page: number }
-	| {
-			kind: "page_slot";
-			page: number;
-			slot: number;
-			playbackNumber: number | null;
-	  }
-	| { kind: "virtual"; page: number; playbackNumber: number };
+	| { kind: "playback"; page: number; position: number };
 
 export type PlaybackTopologyObject<K extends ShowObjectKind = ShowObjectKind> =
 	| {
@@ -159,10 +117,15 @@ export interface PlaybackTopologyActions {
 	createPage(
 		page: number,
 		revisionBasis?: PlaybackPageRevisionBasis,
+		name?: string,
 	): Promise<PlaybackTopologyOutcome | null>;
 	renamePage(
 		page: number,
 		name: string,
+		revisionBasis?: ExistingPlaybackPageRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	deletePage(
+		page: number,
 		revisionBasis?: ExistingPlaybackPageRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
 	saveCueList(
@@ -181,55 +144,26 @@ export interface PlaybackTopologyActions {
 		expectedRevision: number,
 		expectedObjectId: string,
 	): Promise<PlaybackTopologyOutcome | null>;
-	configureSlot(
-		page: number,
-		slot: number,
-		playback: PlaybackDefinition,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
+	assignPlayback(
+		address: PlaybackAddress,
+		definition: PlaybackDefinition,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	updatePlayback(
+		address: PlaybackAddress,
+		definition: PlaybackDefinition,
+		revisionBasis?: PlaybackPageRevisionBasis,
+	): Promise<PlaybackTopologyOutcome | null>;
+	clearPlayback(
+		address: PlaybackAddress,
+		revisionBasis?: PlaybackPageRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
 	assignGroupMaster(
 		groupObjectId: string,
 		expectedGroupRevision: number,
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	): Promise<PlaybackTopologyOutcome | null>;
-	assignVirtualGroupMaster(
-		groupObjectId: string,
-		expectedGroupRevision: number,
-		page: number,
-		playbackNumber: number,
+		address: PlaybackAddress,
 		revisionBasis?: PlaybackPageRevisionBasis,
 	): Promise<PlaybackTopologyOutcome | null>;
-	configureVirtual(
-		page: number,
-		playbackNumber: number,
-		playback: PlaybackDefinition,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	): Promise<PlaybackTopologyOutcome | null>;
-	mapExistingPlayback(
-		page: number,
-		slot: number,
-		playbackNumber: number,
-		revisionBasis?: ExistingPlaybackRevisionBasis,
-	): Promise<PlaybackTopologyOutcome | null>;
-	clearMappedPlayback(
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	): Promise<PlaybackTopologyOutcome | null>;
-	clearVirtual(
-		page: number,
-		playbackNumber: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	): Promise<PlaybackTopologyOutcome | null>;
-}
-
-export interface PlaybackTopologyRevisionBasis {
-	expectedPageRevision: number;
-	expectedPageObjectId: string | null;
-	expectedPlaybackRevision: number;
-	expectedPlaybackObjectId: string | null;
 }
 
 export interface PlaybackPageRevisionBasis {
@@ -242,11 +176,6 @@ export interface ExistingPlaybackPageRevisionBasis
 	expectedPageObjectId: string;
 }
 
-export interface ExistingPlaybackRevisionBasis
-	extends Omit<PlaybackTopologyRevisionBasis, "expectedPlaybackObjectId"> {
-	expectedPlaybackObjectId: string;
-}
-
 export interface PlaybackTopologyCapability extends PlaybackTopologyActions {
 	readonly error: Error | null;
 }
@@ -255,7 +184,6 @@ export interface PlaybackTopologyView {
 	ready: boolean;
 	error: Error | null;
 	cueLists: readonly ShowObject<"cue_list">[];
-	playbacks: readonly ShowObject<"playback">[];
 	pages: readonly ShowObject<"playback_page">[];
 }
 

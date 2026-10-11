@@ -167,7 +167,6 @@ impl RuntimeGeneration {
         group_master_levels: GroupMasterLevels,
     ) -> Self {
         let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &current.snapshot.fixtures);
-        let playbacks_changed = !Arc::ptr_eq(&snapshot.playbacks, &current.snapshot.playbacks);
         let playback_pages_changed =
             !Arc::ptr_eq(&snapshot.playback_pages, &current.snapshot.playback_pages);
         let groups_changed = !Arc::ptr_eq(&snapshot.groups, &current.snapshot.groups);
@@ -197,15 +196,9 @@ impl RuntimeGeneration {
             GroupMasterLevels::Released => {
                 Arc::new(GroupMasterIndex::compile(&groups, &snapshot, None))
             }
-            GroupMasterLevels::Preserved
-                if playbacks_changed || playback_pages_changed || groups_changed =>
-            {
-                Arc::new(GroupMasterIndex::compile(
-                    &groups,
-                    &snapshot,
-                    Some(current.group_masters.as_ref()),
-                ))
-            }
+            GroupMasterLevels::Preserved if playback_pages_changed || groups_changed => Arc::new(
+                GroupMasterIndex::compile(&groups, &snapshot, Some(current.group_masters.as_ref())),
+            ),
             GroupMasterLevels::Preserved => Arc::clone(&current.group_masters),
         };
         let (slots, frames, channel_slots) = if fixtures_changed {
@@ -604,14 +597,9 @@ impl GroupMasterIndex {
     ) -> Self {
         let initial_masters = initial_group_masters(snapshot);
         let assigned_groups = snapshot
-            .playbacks
+            .playback_pages
             .iter()
-            .chain(
-                snapshot
-                    .playback_pages
-                    .iter()
-                    .flat_map(|page| page.virtual_playbacks.values()),
-            )
+            .flat_map(|page| page.assignments.values())
             .filter_map(|playback| match &playback.target {
                 PlaybackTarget::Group { group_id, .. } => Some(group_id.as_str()),
                 _ => None,
@@ -715,30 +703,19 @@ impl GroupMasterIndex {
 /// deterministic and keeps malformed divergent input from becoming iteration-order dependent.
 fn initial_group_masters(snapshot: &EngineSnapshot) -> HashMap<String, f32> {
     let mut assignments = snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .filter_map(|playback| match &playback.target {
-            PlaybackTarget::Group {
-                group_id,
-                initial_master: Some(master),
-            } => Some(((0_u8, 0_u8, playback.number), group_id.clone(), *master)),
-            _ => None,
-        })
-        .chain(snapshot.playback_pages.iter().flat_map(|page| {
-            page.virtual_playbacks
-                .values()
-                .filter_map(move |playback| match &playback.target {
+        .flat_map(|page| {
+            page.assignments
+                .iter()
+                .filter_map(move |(&position, playback)| match &playback.target {
                     PlaybackTarget::Group {
                         group_id,
                         initial_master: Some(master),
-                    } => Some((
-                        (1_u8, page.number, playback.number),
-                        group_id.clone(),
-                        *master,
-                    )),
+                    } => Some(((page.number, position), group_id.clone(), *master)),
                     _ => None,
                 })
-        }))
+        })
         .collect::<Vec<_>>();
     assignments.sort_by_key(|(address, _, _)| *address);
     let mut levels = HashMap::new();

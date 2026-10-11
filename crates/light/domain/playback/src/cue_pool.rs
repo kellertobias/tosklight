@@ -49,7 +49,7 @@ impl CueListPoolCatalog {
     /// topology receives the historic enumerate-in-input-order default assignments.
     pub fn build(
         lists: &[CueList],
-        playbacks: &[PlaybackDefinition],
+        playbacks: &[(crate::PlaybackAddress, PlaybackDefinition)],
         pages_absent: bool,
     ) -> Result<Self, String> {
         let mut result = Self {
@@ -58,7 +58,7 @@ impl CueListPoolCatalog {
         };
         let mut legacy = HashMap::<CueListId, BTreeSet<u16>>::new();
         {
-            for playback in playbacks {
+            for (address, playback) in playbacks {
                 if let PlaybackTarget::CueList { cue_list_id } = playback.target
                     && lists
                         .iter()
@@ -67,7 +67,7 @@ impl CueListPoolCatalog {
                     legacy
                         .entry(cue_list_id)
                         .or_default()
-                        .insert(playback.number);
+                        .insert(address.position());
                 }
             }
             if playbacks.is_empty() && pages_absent {
@@ -148,7 +148,7 @@ impl CueListPoolCatalog {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CueChange, CueRecordingContent};
+    use crate::{CueChange, CueRecordingContent, PlaybackAddress};
     use light_core::{AttributeKey, AttributeValue, FixtureId};
     use uuid::Uuid;
 
@@ -175,8 +175,14 @@ mod tests {
     fn legacy_duplicate_assignments_become_canonical_and_explicit_aliases() {
         let mut list = list(1);
         let playbacks = [
-            PlaybackDefinition::new_cue_list(190, "later", list.id),
-            PlaybackDefinition::new_cue_list(101, "first", list.id),
+            (
+                PlaybackAddress::new(1, 190).unwrap(),
+                PlaybackDefinition::new_cue_list("later", list.id),
+            ),
+            (
+                PlaybackAddress::new(1, 101).unwrap(),
+                PlaybackDefinition::new_cue_list("first", list.id),
+            ),
         ];
         let catalog = CueListPoolCatalog::build(&[list.clone()], &playbacks, false).unwrap();
         assert_eq!(catalog.canonical_number(list.id), Some(101));
@@ -194,8 +200,14 @@ mod tests {
         let a = list(1);
         let b = list(2);
         let playbacks = [
-            PlaybackDefinition::new_cue_list(101, "a", a.id),
-            PlaybackDefinition::new_cue_list(101, "b", b.id),
+            (
+                PlaybackAddress::new(1, 101).unwrap(),
+                PlaybackDefinition::new_cue_list("a", a.id),
+            ),
+            (
+                PlaybackAddress::new(1, 101).unwrap(),
+                PlaybackDefinition::new_cue_list("b", b.id),
+            ),
         ];
         assert!(
             CueListPoolCatalog::build(&[a, b], &playbacks, false)
@@ -218,9 +230,14 @@ mod tests {
         assert!(original.get("pool_number").is_none());
         assert!(original.get("legacy_pool_aliases").is_none());
         list.pool_number = Some(101);
-        let mut special = PlaybackDefinition::new_cue_list(101, "special", list.id);
+        let mut special = PlaybackDefinition::new_cue_list("special", list.id);
         special.target = PlaybackTarget::SpeedGroup { group: "A".into() };
-        let catalog = CueListPoolCatalog::build(&[list.clone()], &[special], false).unwrap();
+        let catalog = CueListPoolCatalog::build(
+            &[list.clone()],
+            &[(PlaybackAddress::new(1, 101).unwrap(), special)],
+            false,
+        )
+        .unwrap();
         assert_eq!(catalog.resolve(101), Some(list.id));
         assert_eq!(
             list.cues,

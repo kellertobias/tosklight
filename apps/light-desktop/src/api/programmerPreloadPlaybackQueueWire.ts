@@ -1,3 +1,4 @@
+import { decodeExactAddress } from "./playbackWireProjection";
 import type {
 	ProgrammerPreloadPlaybackQueueEventMessage,
 	ProgrammerPreloadPlaybackQueueProjection,
@@ -23,7 +24,6 @@ const ACTIONS = [
 	"temporary_on",
 	"temporary_off",
 ] as const;
-const SURFACES = ["physical", "virtual", "osc", "matter"] as const;
 const ACTION_SOURCES = [
 	"user_interface",
 	"keyboard",
@@ -83,36 +83,20 @@ export function decodeProgrammerPreloadPlaybackQueueProjection(
 	return {
 		revision: integerAt(projection.revision, `${path}.revision`),
 		actions: arrayAt(projection.actions, `${path}.actions`).map(
-			(entry, index) => decodeEntry(entry, `${path}.actions[${index}]`),
+			(entry, index) => decodePreloadQueueEntry(entry, `${path}.actions[${index}]`),
 		),
 	};
 }
 
-function decodeEntry(value: unknown, path: string) {
-	const entry = exactRecordAt(value, path, [
-		"playback_number",
-		"page",
-		"action",
-		"surface",
-	]);
-	const playbackNumber = integerAt(
-		entry.playback_number,
-		`${path}.playback_number`,
-	);
-	if (playbackNumber > 65_535)
-		throw new WireValidationError(
-			`${path}.playback_number`,
-			"16-bit playback number",
-			playbackNumber,
-		);
-	const page = entry.page == null ? null : integerAt(entry.page, `${path}.page`);
-	if (page !== null && page > 255)
-		throw new WireValidationError(`${path}.page`, "8-bit page", page);
+export function decodePreloadQueueEntry(value: unknown, path: string) {
+	const entry = exactRecordAt(value, path, ["address", "action", "control_source"]);
+	const source = exactRecordAt(entry.control_source, `${path}.control_source`, ["surface_id", "control_id"]);
+	const controlId = integerAt(source.control_id, `${path}.control_source.control_id`);
+	if (controlId > 0xffffffff) throw new WireValidationError(`${path}.control_source.control_id`, "32-bit control ID", controlId);
 	return {
-		playbackNumber,
-		page,
+		address: decodeExactAddress(entry.address, `${path}.address`),
 		action: enumAt(entry.action, `${path}.action`, ACTIONS),
-		surface: enumAt(entry.surface, `${path}.surface`, SURFACES),
+		controlSource: {surface_id: stringAt(source.surface_id, `${path}.control_source.surface_id`), control_id: controlId},
 	};
 }
 

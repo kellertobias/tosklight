@@ -10,48 +10,31 @@ use projection::target_projection;
 
 pub(in crate::runtime) fn application_command(
     request: wire::PlaybackActionRequest,
-) -> Result<(String, application::PlaybackCommand), String> {
-    validate_request_id(&request.request_id)?;
-    Ok((
-        request.request_id,
-        application::PlaybackCommand {
-            address: application_address(request.address)?,
-            action: application_action(request.action)?,
-            surface: match request.surface {
-                wire::PlaybackSurface::Virtual => application::PlaybackSurface::Virtual,
-                wire::PlaybackSurface::Physical => application::PlaybackSurface::Physical,
-            },
-        },
-    ))
+) -> Result<application::PlaybackCommand, String> {
+    let source = light_playback::PlaybackControlSource {
+        surface_id: request.control_source.surface_id,
+        control_id: request.control_source.control_id,
+    };
+    source.validate()?;
+    Ok(application::PlaybackCommand {
+        address: application_address(request.address)?,
+        action: application_action(request.action)?,
+        control_source: source,
+    })
 }
-
 pub(in crate::runtime) fn application_identities(
     identities: Vec<wire::PlaybackRuntimeIdentity>,
 ) -> Result<Vec<application::PlaybackRuntimeIdentity>, String> {
     identities
         .into_iter()
         .map(|identity| match identity {
-            wire::PlaybackRuntimeIdentity::Playback { playback_number }
-                if (1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
-            {
-                Ok(application::PlaybackRuntimeIdentity::Playback(
-                    playback_number,
-                ))
+            wire::PlaybackRuntimeIdentity::Playback { page, position } => {
+                light_playback::PlaybackAddress::new(page, position)
+                    .map(application::PlaybackRuntimeIdentity::Playback)
             }
-            wire::PlaybackRuntimeIdentity::Playback { .. } => {
-                Err("playback_number must be within 1-1000".into())
-            }
-            wire::PlaybackRuntimeIdentity::Virtual {
-                page,
-                playback_number,
-            } => light_playback::VirtualPlaybackAddress::new(page, playback_number)
-                .map(application::PlaybackRuntimeIdentity::Virtual),
             wire::PlaybackRuntimeIdentity::CueList { cue_list_id } if !cue_list_id.is_nil() => Ok(
                 application::PlaybackRuntimeIdentity::CueList(light_core::CueListId(cue_list_id)),
             ),
-            wire::PlaybackRuntimeIdentity::CueList { .. } => {
-                Err("cue_list_id must not be nil".into())
-            }
             wire::PlaybackRuntimeIdentity::DirectCueList { cue_list_id }
                 if !cue_list_id.is_nil() =>
             {
@@ -59,7 +42,8 @@ pub(in crate::runtime) fn application_identities(
                     light_core::CueListId(cue_list_id),
                 ))
             }
-            wire::PlaybackRuntimeIdentity::DirectCueList { .. } => {
+            wire::PlaybackRuntimeIdentity::CueList { .. }
+            | wire::PlaybackRuntimeIdentity::DirectCueList { .. } => {
                 Err("cue_list_id must not be nil".into())
             }
             wire::PlaybackRuntimeIdentity::Group { group_id } => {
@@ -70,7 +54,6 @@ pub(in crate::runtime) fn application_identities(
         })
         .collect()
 }
-
 fn application_address(
     address: wire::PlaybackAddress,
 ) -> Result<application::PlaybackAddress, String> {
@@ -82,36 +65,24 @@ fn application_address(
         wire::PlaybackAddress::Group { group_id } => application::PlaybackGroupId::new(&group_id)
             .map(application::PlaybackAddress::Group)
             .map_err(|error| error.to_string()),
-        wire::PlaybackAddress::Playback { playback_number }
-            if (1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
-        {
-            Ok(application::PlaybackAddress::Pool(playback_number))
+        wire::PlaybackAddress::Playback { page, position } => {
+            light_playback::PlaybackAddress::new(page, position)
+                .map(application::PlaybackAddress::Playback)
         }
-        wire::PlaybackAddress::Playback { .. } => {
-            Err("playback_number must be within 1-1000".into())
-        }
-        wire::PlaybackAddress::Virtual {
-            page,
-            playback_number,
-        } => light_playback::VirtualPlaybackAddress::new(page, playback_number)
-            .map(application::PlaybackAddress::Virtual),
-        wire::PlaybackAddress::CurrentPage { slot }
-            if (1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            Ok(application::PlaybackAddress::CurrentPage { slot })
+        wire::PlaybackAddress::CurrentPage { position } if (1..=1000).contains(&position) => {
+            Ok(application::PlaybackAddress::CurrentPage { position })
         }
         wire::PlaybackAddress::CurrentPage { .. } => {
-            Err("current-page slot must be within 1-127".into())
+            Err("Playback position must be within 1-1000".into())
         }
-        wire::PlaybackAddress::ExplicitPage { page, slot }
-            if (1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page)
-                && (1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            Ok(application::PlaybackAddress::ExplicitPage { page, slot })
-        }
-        wire::PlaybackAddress::ExplicitPage { .. } => {
-            Err("explicit page and slot must be within 1-127".into())
-        }
+    }
+}
+pub(super) fn address_value(
+    address: light_playback::PlaybackAddress,
+) -> wire::PlaybackAddressValue {
+    wire::PlaybackAddressValue {
+        page: address.page(),
+        position: address.position(),
     }
 }
 
@@ -194,7 +165,6 @@ pub(in crate::runtime) fn action_outcome(
     result: application::PlaybackResult,
 ) -> wire::PlaybackActionOutcome {
     wire::PlaybackActionOutcome {
-        request_id: result.context.request_id.clone().unwrap_or_default(),
         correlation_id: result.context.correlation_id,
         requested: requested_address(result.requested),
         resolved: resolved_address(result.resolved),
@@ -217,7 +187,6 @@ pub(in crate::runtime) fn action_outcome(
         desk: result.desk.map(desk_projection),
         event_sequence: result.event_sequence,
         desk_event_sequence: result.desk_event_sequence,
-        replayed: result.replayed,
     }
 }
 
@@ -245,7 +214,7 @@ pub(in crate::runtime) fn telemetry_tick(
         frame: tick.frame,
         sample_rate_hz: tick.sample_rate_hz,
         samples: tick.samples.iter().map(telemetry_sample).collect(),
-        released: tick.released.clone(),
+        released: tick.released.iter().copied().map(address_value).collect(),
     }
 }
 
@@ -253,7 +222,7 @@ fn telemetry_sample(
     sample: &light_playback::PlaybackTelemetrySample,
 ) -> wire::PlaybackTelemetrySample {
     wire::PlaybackTelemetrySample {
-        playback_number: sample.playback_number,
+        address: address_value(sample.address),
         enabled: sample.enabled,
         master: sample.master,
         current_cue: sample
@@ -284,8 +253,7 @@ pub(in crate::runtime) fn runtime_projection(
 ) -> wire::PlaybackRuntimeProjection {
     wire::PlaybackRuntimeProjection {
         scope: show_scope(projection.scope),
-        requested: wire_identity(projection.requested.clone()),
-        playback_number: projection.playback_number,
+        identity: wire_identity(projection.identity.clone()),
         target: target_projection(&projection.target),
     }
 }
@@ -296,8 +264,10 @@ pub(in crate::runtime) fn desk_projection(
     wire::PlaybackDeskProjection {
         scope: show_scope(projection.scope),
         desk_id: projection.desk_id,
-        active_page: projection.active_page,
-        selected_playback: projection.selected_playback,
+        command_page: projection.command_page,
+        selected_surface_id: projection.selected_surface_id,
+        resolved_pages: projection.resolved_pages,
+        selected_playback: projection.selected_playback.map(address_value),
         selected_cue_list: projection.selected_cue_list.map(|id| id.0),
     }
 }
@@ -311,7 +281,7 @@ const fn show_scope(scope: application::PlaybackShowScope) -> wire::PlaybackShow
 
 fn cue_transition(transition: &application::PlaybackCueTransition) -> wire::PlaybackCueTransition {
     wire::PlaybackCueTransition {
-        playback_number: transition.playback_number,
+        playback_address: transition.playback_address.map(address_value),
         cue_list_id: transition.cue_list_id,
         previous: transition.previous.as_ref().map(cue_reference),
         current: transition.current.as_ref().map(cue_reference),
@@ -344,13 +314,10 @@ fn transition_cause(cause: application::PlaybackTransitionCause) -> wire::Playba
 
 fn wire_identity(identity: application::PlaybackRuntimeIdentity) -> wire::PlaybackRuntimeIdentity {
     match identity {
-        application::PlaybackRuntimeIdentity::Playback(playback_number) => {
-            wire::PlaybackRuntimeIdentity::Playback { playback_number }
-        }
-        application::PlaybackRuntimeIdentity::Virtual(address) => {
-            wire::PlaybackRuntimeIdentity::Virtual {
+        application::PlaybackRuntimeIdentity::Playback(address) => {
+            wire::PlaybackRuntimeIdentity::Playback {
                 page: address.page(),
-                playback_number: address.number().get(),
+                position: address.position(),
             }
         }
         application::PlaybackRuntimeIdentity::CueList(cue_list_id) => {
@@ -379,18 +346,12 @@ fn requested_address(address: application::PlaybackAddress) -> wire::PlaybackAdd
         application::PlaybackAddress::Group(group_id) => wire::PlaybackAddress::Group {
             group_id: group_id.as_str().to_owned(),
         },
-        application::PlaybackAddress::Pool(playback_number) => {
-            wire::PlaybackAddress::Playback { playback_number }
-        }
-        application::PlaybackAddress::Virtual(address) => wire::PlaybackAddress::Virtual {
+        application::PlaybackAddress::Playback(address) => wire::PlaybackAddress::Playback {
             page: address.page(),
-            playback_number: address.number().get(),
+            position: address.position(),
         },
-        application::PlaybackAddress::CurrentPage { slot } => {
-            wire::PlaybackAddress::CurrentPage { slot }
-        }
-        application::PlaybackAddress::ExplicitPage { page, slot } => {
-            wire::PlaybackAddress::ExplicitPage { page, slot }
+        application::PlaybackAddress::CurrentPage { position } => {
+            wire::PlaybackAddress::CurrentPage { position }
         }
     }
 }
@@ -404,24 +365,15 @@ fn resolved_address(
                 cue_list_id: cue_list_id.0,
             }
         }
-        application::ResolvedPlaybackAddress::Group {
-            group_id,
-            playback_number,
-        } => wire::ResolvedPlaybackAddress::Group {
-            group_id: group_id.as_str().to_owned(),
-            playback_number,
-        },
-        application::ResolvedPlaybackAddress::Pool { number, page, slot } => {
-            wire::ResolvedPlaybackAddress::Playback {
-                playback_number: number,
-                page,
-                slot,
+        application::ResolvedPlaybackAddress::Group { group_id, .. } => {
+            wire::ResolvedPlaybackAddress::Group {
+                group_id: group_id.as_str().to_owned(),
             }
         }
-        application::ResolvedPlaybackAddress::Virtual(address) => {
-            wire::ResolvedPlaybackAddress::Virtual {
+        application::ResolvedPlaybackAddress::Playback(address) => {
+            wire::ResolvedPlaybackAddress::Playback {
                 page: address.page(),
-                playback_number: address.number().get(),
+                position: address.position(),
             }
         }
     }
@@ -463,20 +415,7 @@ fn pending_action(action: application::PendingPlaybackAction) -> wire::PendingPl
         application::PendingPlaybackAction::DynamicLearnSpeed => {
             wire::PendingPlaybackAction::DynamicLearnSpeed
         }
-        application::PendingPlaybackAction::Fader { value_permyriad } => {
-            wire::PendingPlaybackAction::Fader { value_permyriad }
-        }
     }
-}
-
-fn validate_request_id(request_id: &str) -> Result<(), String> {
-    if request_id.trim().is_empty()
-        || request_id.len() > 128
-        || request_id.chars().any(char::is_control)
-    {
-        return Err("request_id must contain 1-128 printable bytes".into());
-    }
-    Ok(())
 }
 
 #[cfg(test)]

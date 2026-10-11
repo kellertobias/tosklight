@@ -170,7 +170,7 @@ export function HardwareControlSummary() {
 	const cue = (useSequenceMasterFadeMillis() ?? 3000) / 1000;
 	const release = (useReleaseFadeMillis() ?? 3000) / 1000;
 	const runtimeReady = runtimeStatus.status === "ready";
-	const page = runtimeReady ? (playbackDesk?.active_page ?? null) : null;
+	const page = runtimeReady ? (playbackDesk?.command_page ?? null) : null;
 	const openTime = (kind: HardwareTimeKind, value: number) => {
 		const next = String(Number(value.toFixed(1)));
 		setTimeInput(kind);

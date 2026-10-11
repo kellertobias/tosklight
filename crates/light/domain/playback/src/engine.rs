@@ -10,21 +10,20 @@ pub struct PlaybackEngine {
     /// address it.
     pub(crate) jump_counts: HashMap<(CueListId, Uuid), u32>,
     pub(crate) jump_bypass_once: HashSet<CueListId>,
-    pub(crate) control_states: HashMap<PlaybackIdentity, PlaybackControlState>,
+    pub(crate) control_states: HashMap<PlaybackControlKey, PlaybackControlState>,
     pub(crate) active_dynamics: HashMap<uuid::Uuid, ActiveDynamicPlayback>,
-    pub(crate) cuelist_flash_states: HashMap<PlaybackIdentity, CuelistFlashState>,
-    pub(crate) cuelist_swap_states: HashMap<PlaybackIdentity, CuelistFlashState>,
-    pub(crate) dynamic_flash_states: HashMap<PlaybackIdentity, DynamicFlashState>,
-    pub(crate) temporary: HashMap<(PlaybackIdentity, TemporaryPlaybackKind), ActivePlayback>,
-    pub(crate) swap_held: HashSet<PlaybackIdentity>,
+    pub(crate) cuelist_flash_states: HashMap<PlaybackControlKey, CuelistFlashState>,
+    pub(crate) cuelist_swap_states: HashMap<PlaybackControlKey, CuelistFlashState>,
+    pub(crate) dynamic_flash_states: HashMap<PlaybackControlKey, DynamicFlashState>,
+    pub(crate) temporary: HashMap<(PlaybackControlKey, TemporaryPlaybackKind), ActivePlayback>,
+    pub(crate) swap_held: HashSet<PlaybackControlKey>,
     pub(crate) timeline_controlled: HashSet<CueListId>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,
     pub(crate) speed_groups_bpm: [f64; 5],
     pub(crate) speed_groups_paused: [bool; 5],
     pub(crate) sequence_master_fade_millis: u64,
     pub(crate) release_fade_millis: u64,
-    pub(crate) definitions: HashMap<u16, PlaybackDefinition>,
-    pub(crate) virtual_definitions: HashMap<VirtualPlaybackAddress, PlaybackDefinition>,
+    pub(crate) definitions: HashMap<PlaybackAddress, PlaybackDefinition>,
     pub(crate) clock: SharedClock,
     pub(crate) next_activation_ordinal: u64,
     pub(crate) next_transition_ordinal: u64,
@@ -63,7 +62,6 @@ impl PlaybackEngine {
             sequence_master_fade_millis: 0,
             release_fade_millis: 0,
             definitions: HashMap::new(),
-            virtual_definitions: HashMap::new(),
             clock,
             next_activation_ordinal: 1,
             next_transition_ordinal: 1,
@@ -192,64 +190,31 @@ impl PlaybackEngine {
         self.cue_lists.insert(cue_list.id, cue_list);
         Ok(())
     }
-    pub fn register_definition(&mut self, definition: PlaybackDefinition) -> Result<(), String> {
-        PhysicalPlaybackNumber::new(definition.number)?;
-        definition.validate()?;
-        if self.definitions.contains_key(&definition.number) {
-            return Err("duplicate playback number".into());
-        }
-        let cue_list_id = match &definition.target {
-            PlaybackTarget::CueList { cue_list_id } => Some(*cue_list_id),
-            _ => None,
-        };
-        if let Some(cue_list_id) = cue_list_id
-            && !self.cue_lists.contains_key(&cue_list_id)
-        {
-            return Err("playback cue list does not exist".into());
-        }
-        self.definitions.insert(definition.number, definition);
-        Ok(())
-    }
-
-    pub fn definition(&self, number: u16) -> Option<&PlaybackDefinition> {
-        self.definitions.get(&number)
-    }
-
-    pub fn register_virtual_definition(
+    pub fn register_definition(
         &mut self,
-        address: VirtualPlaybackAddress,
+        address: PlaybackAddress,
         definition: PlaybackDefinition,
     ) -> Result<(), String> {
         definition.validate()?;
-        if definition.number != address.number().get() {
-            return Err("virtual playback address and definition number must match".into());
+        if self.definitions.contains_key(&address) {
+            return Err("duplicate Playback address".into());
         }
-        if self.virtual_definitions.contains_key(&address) {
-            return Err("duplicate virtual playback address".into());
+        if let PlaybackTarget::CueList { cue_list_id } = definition.target {
+            if !self.cue_lists.contains_key(&cue_list_id) {
+                return Err("playback cue list does not exist".into());
+            }
         }
-        if let PlaybackTarget::CueList { cue_list_id } = definition.target
-            && !self.cue_lists.contains_key(&cue_list_id)
-        {
-            return Err("playback cue list does not exist".into());
-        }
-        self.virtual_definitions.insert(address, definition);
+        self.definitions.insert(address, definition);
         Ok(())
     }
 
-    pub fn definition_at(&self, identity: PlaybackIdentity) -> Option<&PlaybackDefinition> {
-        match identity {
-            PlaybackIdentity::Physical(number) => self.definitions.get(&number.get()),
-            PlaybackIdentity::Virtual(address) => self.virtual_definitions.get(&address),
-        }
+    pub fn definition(&self, address: PlaybackAddress) -> Option<&PlaybackDefinition> {
+        self.definitions.get(&address)
     }
 
-    pub(crate) fn runtime_key(&self, number: u16) -> Result<PlaybackKey, String> {
-        self.runtime_key_at(PlaybackIdentity::physical(number)?)
-    }
-
-    pub(crate) fn runtime_key_at(&self, identity: PlaybackIdentity) -> Result<PlaybackKey, String> {
+    pub(crate) fn runtime_key(&self, identity: PlaybackAddress) -> Result<PlaybackKey, String> {
         match self
-            .definition_at(identity)
+            .definition(identity)
             .ok_or("playback does not exist")?
             .target
         {
@@ -258,121 +223,100 @@ impl PlaybackEngine {
         }
     }
 
-    pub fn control_state_at(&self, identity: PlaybackIdentity) -> PlaybackControlState {
+    pub fn control_state(
+        &self,
+        address: PlaybackAddress,
+        source: &PlaybackControlSource,
+    ) -> PlaybackControlState {
         self.control_states
-            .get(&identity)
+            .get(&PlaybackControlKey {
+                address,
+                source: source.clone(),
+            })
             .copied()
             .unwrap_or_default()
     }
-
+    /// Assignment aggregates expose pickup conservatively; per-surface readers use control_state.
+    pub fn control_state_at(&self, address: PlaybackAddress) -> PlaybackControlState {
+        self.control_states
+            .iter()
+            .filter(|(held, _)| held.address == address)
+            .find(|(_, state)| state.fader_pickup_required)
+            .or_else(|| {
+                self.control_states
+                    .iter()
+                    .find(|(held, _)| held.address == address)
+            })
+            .map(|(_, state)| *state)
+            .unwrap_or_default()
+    }
+    fn retarget_controls(
+        &mut self,
+        addresses: HashSet<PlaybackAddress>,
+        target: f32,
+        controlling: Option<&PlaybackControlKey>,
+    ) -> bool {
+        let mut changed = false;
+        for (held, state) in &mut self.control_states {
+            if !addresses.contains(&held.address) {
+                continue;
+            }
+            let required =
+                controlling != Some(held) && !(state.observed && state.fader_position == target);
+            let pickup_target = required.then_some(target);
+            changed |= state.fader_pickup_required != required
+                || state.fader_pickup_target != pickup_target;
+            state.fader_pickup_required = required;
+            state.fader_pickup_target = pickup_target;
+        }
+        changed
+    }
     pub(crate) fn retarget_physical_controls(
         &mut self,
-        cue_list_id: CueListId,
+        id: CueListId,
         target: f32,
-        controlling: Option<PlaybackIdentity>,
+        controlling: Option<&PlaybackControlKey>,
     ) -> bool {
-        let identities = self
+        let addresses = self
             .definitions
-            .values()
-            .filter_map(|definition| match definition.target {
-                PlaybackTarget::CueList {
-                    cue_list_id: candidate,
-                } if candidate == cue_list_id
-                    && definition.has_fader
-                    && definition.fader == PlaybackFaderMode::Master =>
-                {
-                    PlaybackIdentity::physical(definition.number).ok()
-                }
-                _ => None,
+            .iter()
+            .filter_map(|(address, definition)| {
+                matches!(definition.target,PlaybackTarget::CueList{cue_list_id} if cue_list_id==id)
+                    .then_some(*address)
             })
-            .collect::<Vec<_>>();
-        let mut changed = false;
-        for identity in identities {
-            let state = self.control_states.entry(identity).or_default();
-            let satisfied =
-                controlling == Some(identity) || (state.observed && state.fader_position == target);
-            let required = !satisfied;
-            let pickup_target = required.then_some(target);
-            changed |= state.fader_pickup_required != required
-                || state.fader_pickup_target != pickup_target;
-            state.fader_pickup_required = required;
-            state.fader_pickup_target = pickup_target;
-        }
-        changed
+            .collect();
+        self.retarget_controls(addresses, target, controlling)
     }
-
     pub(crate) fn retarget_dynamic_physical_controls(
         &mut self,
-        target_id: Uuid,
+        id: Uuid,
         target: f32,
-        controlling: Option<PlaybackIdentity>,
+        controlling: Option<&PlaybackControlKey>,
     ) -> bool {
-        let identities = self
-            .definitions
-            .values()
-            .filter_map(|definition| match &definition.target {
-                PlaybackTarget::Dynamic { assignment }
-                    if assignment.target_id() == target_id
-                        && definition.has_fader
-                        && assignment.fader_mode != DynamicPlaybackFaderMode::None =>
-                {
-                    PlaybackIdentity::physical(definition.number).ok()
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        let mut changed = false;
-        for identity in identities {
-            let state = self.control_states.entry(identity).or_default();
-            let satisfied =
-                controlling == Some(identity) || (state.observed && state.fader_position == target);
-            let required = !satisfied;
-            let pickup_target = required.then_some(target);
-            changed |= state.fader_pickup_required != required
-                || state.fader_pickup_target != pickup_target;
-            state.fader_pickup_required = required;
-            state.fader_pickup_target = pickup_target;
-        }
-        changed
+        let addresses = self.dynamic_identities(id).into_iter().collect();
+        self.retarget_controls(addresses, target, controlling)
     }
-
     pub fn retarget_group_physical_controls(
         &mut self,
-        group_id: &str,
+        id: &str,
         target: f32,
-        controlling: Option<PlaybackIdentity>,
+        controlling: Option<&PlaybackControlKey>,
     ) -> bool {
-        let identities = self
+        let addresses = self
             .definitions
-            .values()
-            .filter_map(|definition| match &definition.target {
-                PlaybackTarget::Group {
-                    group_id: candidate,
-                    ..
-                } if candidate == group_id && definition.has_fader => {
-                    PlaybackIdentity::physical(definition.number).ok()
-                }
-                _ => None,
+            .iter()
+            .filter_map(|(address, definition)| {
+                matches!(&definition.target,PlaybackTarget::Group{group_id,..} if group_id==id)
+                    .then_some(*address)
             })
-            .collect::<Vec<_>>();
-        let mut changed = false;
-        for identity in identities {
-            let state = self.control_states.entry(identity).or_default();
-            let satisfied =
-                controlling == Some(identity) || (state.observed && state.fader_position == target);
-            let required = !satisfied;
-            let pickup_target = required.then_some(target);
-            changed |= state.fader_pickup_required != required
-                || state.fader_pickup_target != pickup_target;
-            state.fader_pickup_required = required;
-            state.fader_pickup_target = pickup_target;
-        }
-        changed
+            .collect();
+        self.retarget_controls(addresses, target, controlling)
     }
 
     pub fn set_group_master_fader_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
         authoritative: f32,
     ) -> Result<PlaybackMutation<()>, String> {
@@ -393,9 +337,9 @@ impl PlaybackEngine {
             return Err("Playback is not assigned to a Group Master".into());
         };
         let group_id = group_id.clone();
-        let identity = PlaybackIdentity::physical(number)?;
+        let identity = PlaybackControlKey::new(number, source)?;
         let mut control_changed = false;
-        let state = match self.control_states.entry(identity) {
+        let state = match self.control_states.entry(identity.clone()) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => {
                 control_changed = true;
@@ -432,7 +376,7 @@ impl PlaybackEngine {
             state.fader_pickup_target = None;
             control_changed = true;
         }
-        control_changed |= self.retarget_group_physical_controls(&group_id, value, Some(identity));
+        control_changed |= self.retarget_group_physical_controls(&group_id, value, Some(&identity));
         Ok(PlaybackMutation::new(
             (),
             if control_changed {
@@ -447,9 +391,11 @@ impl PlaybackEngine {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct DynamicFlashState {
     pub(crate) restore_off: bool,
+    pub(crate) release_activation_inhibited: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct CuelistFlashState {
     pub(crate) restore_off: bool,
+    pub(crate) release_activation_inhibited: bool,
 }

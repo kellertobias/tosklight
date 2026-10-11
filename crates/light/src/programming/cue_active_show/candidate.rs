@@ -53,7 +53,6 @@ pub(super) fn prepare_candidate(
         return Ok(no_change(document, &target, plan));
     }
     let cue_list = cue_list_body(&target, &plan)?;
-    let playback = playback_body(&target, cue_list_id)?;
     let page = page_body(&mut target, cue_list_id)?;
     let mut transaction = document.transaction();
     let companions = if independent {
@@ -67,13 +66,6 @@ pub(super) fn prepare_candidate(
         Vec::new()
     };
     transaction.put("cue_list", cue_list.object_id.clone(), cue_list.raw_body);
-    if let Some(playback) = &playback {
-        transaction.put(
-            "playback",
-            playback.object_id.clone(),
-            playback.raw_body.clone(),
-        );
-    }
     if let Some(page) = &page {
         transaction.put(
             "playback_page",
@@ -90,7 +82,6 @@ pub(super) fn prepare_candidate(
         &plan,
         CandidateObjectIds {
             cue_list: cue_list.object_id,
-            playback: playback.as_ref().map(|body| body.object_id.as_str()),
             page: page.as_ref().map(|body| body.object_id.as_str()),
         },
     )?;
@@ -102,9 +93,6 @@ pub(super) fn prepare_candidate(
         .map(|id| candidate_projection(&candidate, ActiveShowObjectKind::CueList, id))
         .collect::<Result<Vec<_>, _>>()?;
     let mut changed_kinds = vec![ActiveShowObjectKind::CueList];
-    if playback.is_some() {
-        changed_kinds.push(ActiveShowObjectKind::Playback);
-    }
     if page.is_some() {
         changed_kinds.push(ActiveShowObjectKind::PlaybackPage);
     }
@@ -125,7 +113,6 @@ struct PendingBody {
 
 struct CandidateObjectIds<'a> {
     cue_list: String,
-    playback: Option<&'a str>,
     page: Option<&'a str>,
 }
 
@@ -141,7 +128,9 @@ fn plan_recording(
         None => {
             let playback = target
                 .pool_number
-                .or(target.concrete_playback_number)
+                .or(target
+                    .concrete_playback_address
+                    .map(|address| address.position()))
                 .ok_or_else(invalid_topology)?;
             let id = CueListId::new();
             commit
@@ -169,69 +158,24 @@ fn cue_list_body(
     }
 }
 
-fn playback_body(
-    target: &ResolvedCueTarget,
-    cue_list_id: CueListId,
-) -> Result<Option<PendingBody>, ActionError> {
-    if target.playback.is_some() || target.virtual_address.is_some() {
-        return Ok(None);
-    }
-    let Some(number) = target.concrete_playback_number else {
-        return Ok(None);
-    };
-    let name = format!("Cuelist {number}");
-    let playback = PlaybackDefinition::new_cue_list(number, name, cue_list_id);
-    Ok(Some(PendingBody {
-        object_id: number.to_string(),
-        raw_body: serde_json::to_value(playback).map_err(invalid)?,
-    }))
-}
-
 fn page_body(
     target: &mut ResolvedCueTarget,
     cue_list_id: CueListId,
 ) -> Result<Option<PendingBody>, ActionError> {
-    if !target.creates_topology() || target.pool_number.is_some() {
+    if !target.creates_topology() {
         return Ok(None);
     }
-    let playback = target
-        .concrete_playback_number
-        .ok_or_else(invalid_topology)?;
-    if let Some(address) = target.virtual_address {
-        let definition =
-            PlaybackDefinition::new_cue_list(playback, format!("Cuelist {playback}"), cue_list_id);
-        return match &target.page {
-            Some(stored) => {
-                let mut page = stored.typed.clone();
-                page.virtual_playbacks
-                    .insert(address.number().get(), definition);
-                Ok(Some(PendingBody {
-                    object_id: stored.object_id.clone(),
-                    raw_body: lossless_json::merge_typed(&stored.raw_body, &stored.typed, &page)
-                        .map_err(invalid)?,
-                }))
-            }
-            None => {
-                let page = PlaybackPage {
-                    number: address.page(),
-                    name: format!("Page {}", address.page()),
-                    slots: HashMap::new(),
-                    virtual_playbacks: HashMap::from([(address.number().get(), definition)]),
-                };
-                Ok(Some(PendingBody {
-                    object_id: address.page().to_string(),
-                    raw_body: serde_json::to_value(page).map_err(invalid)?,
-                }))
-            }
-        };
-    }
-    let Some(slot) = target.page_slot else {
+    let Some(address) = target.concrete_playback_address else {
         return Ok(None);
     };
+    let definition = PlaybackDefinition::new_cue_list(
+        format!("Cuelist {}.{}", address.page(), address.position()),
+        cue_list_id,
+    );
     match &target.page {
         Some(stored) => {
             let mut page = stored.typed.clone();
-            page.slots.insert(slot.slot, playback);
+            page.assignments.insert(address.position(), definition);
             Ok(Some(PendingBody {
                 object_id: stored.object_id.clone(),
                 raw_body: lossless_json::merge_typed(&stored.raw_body, &stored.typed, &page)
@@ -240,13 +184,12 @@ fn page_body(
         }
         None => {
             let page = PlaybackPage {
-                number: slot.page,
-                name: format!("Page {}", slot.page),
-                slots: HashMap::from([(slot.slot, playback)]),
-                virtual_playbacks: HashMap::new(),
+                number: address.page(),
+                name: format!("Page {}", address.page()),
+                assignments: HashMap::from([(address.position(), definition)]),
             };
             Ok(Some(PendingBody {
-                object_id: slot.page.to_string(),
+                object_id: address.page().to_string(),
                 raw_body: serde_json::to_value(page).map_err(invalid)?,
             }))
         }
@@ -269,10 +212,6 @@ fn no_change(
             projections: ProgrammingCueProjections {
                 show_id: document.id(),
                 cue_list: stored_projection(ActiveShowObjectKind::CueList, cue_list),
-                playback: target
-                    .playback
-                    .as_ref()
-                    .map(|stored| stored_projection(ActiveShowObjectKind::Playback, stored)),
                 page: target
                     .page
                     .as_ref()
@@ -281,7 +220,7 @@ fn no_change(
             recorded_cue: recorded_cue(&plan),
             show_revision: document.revision(),
             event_sequence: None,
-            concrete_playback_number: target.concrete_playback_number,
+            concrete_playback_address: target.concrete_playback_address,
         },
         changed_kinds: Vec::new(),
         companion_projections: Vec::new(),
@@ -299,9 +238,6 @@ fn candidate_result(
     let candidate = document
         .candidate(prepared.transaction())
         .map_err(invalid)?;
-    let playback_id = ids
-        .playback
-        .or_else(|| target.playback.as_ref().map(|item| item.object_id.as_str()));
     let page_id = ids
         .page
         .or_else(|| target.page.as_ref().map(|item| item.object_id.as_str()));
@@ -315,9 +251,6 @@ fn candidate_result(
                 ActiveShowObjectKind::CueList,
                 &ids.cue_list,
             )?,
-            playback: playback_id
-                .map(|id| candidate_projection(&candidate, ActiveShowObjectKind::Playback, id))
-                .transpose()?,
             page: page_id
                 .map(|id| candidate_projection(&candidate, ActiveShowObjectKind::PlaybackPage, id))
                 .transpose()?,
@@ -325,7 +258,7 @@ fn candidate_result(
         recorded_cue: recorded_cue(plan),
         show_revision: candidate.revision(),
         event_sequence: None,
-        concrete_playback_number: target.concrete_playback_number,
+        concrete_playback_address: target.concrete_playback_address,
     })
 }
 

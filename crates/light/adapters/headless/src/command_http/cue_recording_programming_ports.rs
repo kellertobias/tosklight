@@ -165,25 +165,21 @@ fn resolve_command_target(
         CueRecordCommandTarget::Cuelist { number } => {
             light_application::ProgrammingCueRecordTarget::CuelistPool { number }
         }
-        CueRecordCommandTarget::Playback(CommandPlaybackTarget::CurrentPage { slot }) => {
-            let show = ports
-                .state()
-                .active_show
-                .current()
-                .clone()
-                .ok_or("no show is open")?;
-            let page = ports
-                .state()
-                .installation
-                .desk_page(ports.session().desk.id, show.id)
-                .map_err(|error| error.to_string())?;
-            light_application::ProgrammingCueRecordTarget::PageSlot { page, slot }
-        }
-        CueRecordCommandTarget::Playback(CommandPlaybackTarget::ExplicitPage { page, slot }) => {
-            light_application::ProgrammingCueRecordTarget::PageSlot { page, slot }
-        }
-        CueRecordCommandTarget::Playback(CommandPlaybackTarget::Virtual(address)) => {
-            light_application::ProgrammingCueRecordTarget::Virtual { address }
+        CueRecordCommandTarget::Playback(target) => {
+            let (page, position) = match target {
+                CommandPlaybackTarget::CurrentPage { position } => (
+                    ports
+                        .state()
+                        .installation
+                        .command_page(ports.session().desk.id)
+                        .map_err(|error| error.to_string())?,
+                    position,
+                ),
+                CommandPlaybackTarget::ExplicitPage { page, position } => (page, position),
+            };
+            light_application::ProgrammingCueRecordTarget::Playback {
+                address: light_playback::PlaybackAddress::new(page, position)?,
+            }
         }
     })
 }
@@ -214,6 +210,18 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
             "{}:cuelist-select",
             context.request_id.as_deref().unwrap_or("record")
         ));
+        let control_source =
+            match super::cue_navigation_action::control_source(self.state(), context) {
+                Ok(source) => source,
+                Err(error) => {
+                    super::super::emit(
+                        self.state(),
+                        "cue_record_selection_failed",
+                        serde_json::json!({"cue_list_id":cue_list_id.0,"error":error}),
+                    );
+                    return;
+                }
+            };
         let result = super::super::playback_service::execute(
             self.state(),
             Some(self.session()),
@@ -222,7 +230,7 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
             light_application::PlaybackCommand {
                 address: light_application::PlaybackAddress::CueList(cue_list_id),
                 action: light_application::PlaybackAction::Select { pressed: true },
-                surface: playback_surface(context.source),
+                control_source,
             },
         );
         if let Err(error) = result {
@@ -248,7 +256,8 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
             light_application::PlaybackCommand {
                 address: light_application::PlaybackAddress::CueList(cue_list_id),
                 action: light_application::PlaybackAction::GoTo(cue_number),
-                surface: playback_surface(context.source),
+                control_source: super::cue_navigation_action::control_source(self.state(), context)
+                    .ok()?,
             },
         );
         let result = match result {
@@ -266,7 +275,7 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
             .related
             .iter()
             .find(|related| {
-                related.projection.requested
+                related.projection.identity
                     == light_application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id)
             })
             .map(|related| related.projection.clone())
@@ -280,13 +289,14 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
     fn activate_recorded_cue(
         &self,
         context: &ActionContext,
-        playback_number: u16,
+        playback_address: light_playback::PlaybackAddress,
         cue_number: light_application::CueNumber,
     ) -> Option<light_application::ProgrammingCueActivationCompletion> {
         let command = light_application::PlaybackCommand {
-            address: light_application::PlaybackAddress::Pool(playback_number),
+            address: light_application::PlaybackAddress::Playback(playback_address),
             action: light_application::PlaybackAction::GoTo(cue_number.clone()),
-            surface: playback_surface(context.source),
+            control_source: super::cue_navigation_action::control_source(self.state(), context)
+                .ok()?,
         };
         let result = super::super::playback_service::execute(
             self.state(),
@@ -298,7 +308,7 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
         let result = match result {
             Ok(result) => result,
             Err(error) => {
-                report_activation_failure(self, context, playback_number, cue_number, &error);
+                report_activation_failure(self, context, playback_address, cue_number, &error);
                 return None;
             }
         };
@@ -312,7 +322,7 @@ impl ProgrammingCueRecordingPorts for ServerProgrammingPorts<'_> {
 fn report_activation_failure(
     ports: &ServerProgrammingPorts<'_>,
     context: &ActionContext,
-    playback_number: u16,
+    playback_address: light_playback::PlaybackAddress,
     cue_number: light_application::CueNumber,
     error: &super::super::ApiError,
 ) {
@@ -324,19 +334,9 @@ fn report_activation_failure(
             "correlation_id": context.correlation_id,
             "desk_id": context.desk_id,
             "session_id": context.session_id,
-            "playback_number": playback_number,
+            "playback_address": playback_address,
             "cue_number": cue_number.to_string(),
             "error": error.message,
         }),
     );
-}
-
-const fn playback_surface(
-    source: light_application::ActionSource,
-) -> light_application::PlaybackSurface {
-    match source {
-        light_application::ActionSource::Osc => light_application::PlaybackSurface::Osc,
-        light_application::ActionSource::Matter => light_application::PlaybackSurface::Matter,
-        _ => light_application::PlaybackSurface::Virtual,
-    }
 }

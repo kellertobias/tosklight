@@ -2,8 +2,8 @@ use super::temporary;
 use crate::{
     DeskStore, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
-    FixedScreenStageRenderQuality, PlaybackSurfaceLayout, PlaybackSurfaceRow,
-    ProgrammerControlSurfaceConfiguration, ScreenConfiguration, ScreenContent,
+    FixedScreenStageRenderQuality, PlaybackSelection, ProgrammerControlSurfaceConfiguration,
+    ScreenConfiguration, ScreenContent,
 };
 use light_core::ShowId;
 use rusqlite::Connection;
@@ -11,57 +11,19 @@ use std::fs;
 use uuid::Uuid;
 
 #[test]
-fn hardware_illumination_migrates_legacy_desks_and_persists_without_layout_changes() {
-    let path = temporary("hardware-illumination-legacy");
-    let id = Uuid::new_v4();
-    {
-        let conn = Connection::open(&path).unwrap();
-        conn.execute_batch("CREATE TABLE control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3);").unwrap();
-        conn.execute(
-            "INSERT INTO control_desks(id,name) VALUES(?1,'Legacy desk')",
-            [id.to_string()],
-        )
+fn hardware_illumination_rejects_legacy_desks_and_persists_without_layout_changes() {
+    let path = temporary("retired-desk-hardware");
+    let connection = Connection::open(&path).unwrap();
+    connection.execute_batch("CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info VALUES(16); CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO settings VALUES('marker','preserve');").unwrap();
+    drop(connection);
+    let original = fs::read(&path).unwrap();
+    let rejection = crate::inspect_desk_playback_contract(&path)
+        .unwrap()
         .unwrap();
-    }
-    let store = DeskStore::open(&path).unwrap();
-    let desk = store.desk().unwrap();
-    assert_eq!(
-        (
-            desk.id,
-            desk.hardware_led_brightness,
-            desk.hardware_gooseneck_brightness,
-            desk.hardware_gooseneck_color
-        ),
-        (id, 100, 100, 100)
-    );
-    let changed = store
-        .update_desk_with_illumination(
-            id,
-            &desk.name,
-            desk.columns,
-            desk.rows,
-            desk.buttons,
-            None,
-            Some([0, 42, 100]),
-        )
-        .unwrap();
-    assert_eq!(changed.hardware_gooseneck_brightness, 42);
-    for values in [[101, 42, 100], [0, 255, 100], [0, 42, 101]] {
-        assert!(
-            store
-                .update_desk_with_illumination(id, "must not change", 12, 2, 1, None, Some(values))
-                .is_err()
-        );
-        assert_eq!(store.desk().unwrap(), changed);
-    }
-    // Existing layout-only callers must retain illumination.
-    let renamed = store.update_desk(id, "Renamed", 8, 1, 3, None).unwrap();
-    assert_eq!(renamed.hardware_gooseneck_brightness, 42);
-    drop(store);
-    let reopened = DeskStore::open(&path).unwrap();
-    assert_eq!(reopened.desk().unwrap(), renamed);
-    drop(reopened);
-    fs::remove_file(path).unwrap();
+    assert!(rejection.message.contains("separate fresh desk"));
+    assert!(DeskStore::open(&path).is_err());
+    assert_eq!(fs::read(&path).unwrap(), original);
+    let _ = fs::remove_file(path);
 }
 
 #[test]
@@ -70,7 +32,7 @@ fn hardware_illumination_new_desk_and_old_json_default_to_full_white() {
     let store = DeskStore::open(&path).unwrap();
     let desk = store.desk().unwrap();
     let legacy: crate::ControlDesk = serde_json::from_value(
-        serde_json::json!({"id":desk.id,"name":desk.name,"columns":8,"rows":1,"buttons":3}),
+        serde_json::json!({"id":desk.id,"name":desk.name,"columns":8,"rows":1,"buttons":3,"surface_id":"main"}),
     )
     .unwrap();
     assert_eq!(desk, legacy);
@@ -87,10 +49,9 @@ fn hardware_illumination_new_desk_and_old_json_default_to_full_white() {
 }
 
 #[test]
-fn screens_persist_and_keep_independent_pages_per_show() {
+fn screens_persist_central_surface_references() {
     let path = temporary("screens");
     let store = DeskStore::open(&path).unwrap();
-    let show = ShowId::new();
     let id = Uuid::new_v4();
     let screen = ScreenConfiguration {
         not_editable: false,
@@ -99,49 +60,24 @@ fn screens_persist_and_keep_independent_pages_per_show() {
         layout: serde_json::json!({"desks":[],"activeDeskId":""}),
         show_dock: false,
         show_playbacks: true,
-        playback_count: 12,
-        playback_rows: 2,
-        first_playback_slot: 20,
-        page_mode: "independent".into(),
         show_page_controls: false,
         show_programmer: false,
         desired_open: true,
         display_id: Some("display".into()),
         bounds: Some(serde_json::json!({"x":1,"y":2,"width":800,"height":600})),
         fullscreen: true,
-        playback_layout: Some(PlaybackSurfaceLayout {
-            playbacks_per_row: 6,
-            rows: vec![
-                PlaybackSurfaceRow {
-                    first_playback_slot: 20,
-                    has_fader: false,
-                    button_count: 1,
-                },
-                PlaybackSurfaceRow {
-                    first_playback_slot: 40,
-                    has_fader: true,
-                    button_count: 3,
-                },
-            ],
-        }),
+        surface_id: "main".into(),
         content: ScreenContent::Desktop,
     };
-    store.put_screen(screen).unwrap();
-    store.set_screen_page(id, show, 7).unwrap();
+    store.put_screen(uuid::Uuid::nil(), screen).unwrap();
     let restored = store.screen(id).unwrap().unwrap();
-    assert_eq!(restored.first_playback_slot, 20);
-    assert_eq!(restored.playback_count, 12);
-    assert_eq!(
-        restored.playback_layout.unwrap().rows[1].first_playback_slot,
-        40
-    );
-    assert_eq!(store.screen_page(id, show).unwrap(), 7);
+    assert_eq!(restored.surface_id, "main");
     drop(store);
     let _ = fs::remove_file(path);
 }
 
 #[test]
-fn screen_playback_range_must_fit_page_slots() {
+fn screen_requires_registered_playback_surface() {
     let path = temporary("screen-validation");
     let store = DeskStore::open(&path).unwrap();
     let invalid = ScreenConfiguration {
@@ -151,36 +87,17 @@ fn screen_playback_range_must_fit_page_slots() {
         layout: serde_json::json!({}),
         show_dock: true,
         show_playbacks: true,
-        playback_count: 9,
-        playback_rows: 1,
-        first_playback_slot: 120,
-        page_mode: "follow_main".into(),
         show_page_controls: true,
         show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,
         fullscreen: false,
-        playback_layout: None,
+        surface_id: "missing".into(),
         content: ScreenContent::Desktop,
     };
-    assert!(store.put_screen(invalid).is_err());
+    assert!(store.put_screen(uuid::Uuid::nil(), invalid).is_err());
     drop(store);
-    let _ = fs::remove_file(path);
-}
-
-#[test]
-fn control_desks_keep_a_page_per_show() {
-    let path = temporary("control-desks");
-    let desk = DeskStore::open(&path).unwrap();
-    let control = desk.desk().unwrap();
-    let first = ShowId::new();
-    let second = ShowId::new();
-    desk.set_desk_page(control.id, first, 12).unwrap();
-    assert_eq!(desk.desk_page(control.id, first).unwrap(), 12);
-    assert_eq!(desk.desk_page(control.id, second).unwrap(), 1);
-    assert!(desk.set_desk_page(control.id, first, 128).is_err());
-    drop(desk);
     let _ = fs::remove_file(path);
 }
 
@@ -229,9 +146,15 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
     let retained = store.insert_legacy_desk("A kept desk").unwrap();
     let removed = store.insert_legacy_desk("Z superseded wing").unwrap();
     let show_id = ShowId::new();
-    store.set_desk_page(removed.id, show_id, 17).unwrap();
     store
-        .set_selected_playback(removed.id, show_id, Some(23))
+        .set_selected_playback(
+            removed.id,
+            show_id,
+            Some(PlaybackSelection {
+                page: 99,
+                position: 23,
+            }),
+        )
         .unwrap();
     store
         .set_setting(
@@ -269,20 +192,16 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
         layout: serde_json::json!({"desks":[],"activeDeskId":""}),
         show_dock: true,
         show_playbacks: true,
-        playback_count: 8,
-        playback_rows: 1,
-        first_playback_slot: 1,
-        page_mode: "follow_main".into(),
         show_page_controls: true,
         show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,
         fullscreen: false,
-        playback_layout: None,
+        surface_id: "main".into(),
         content: ScreenContent::Desktop,
     };
-    store.put_screen(screen.clone()).unwrap();
+    store.put_screen(uuid::Uuid::nil(), screen.clone()).unwrap();
 
     // Reopening runs the collapse: the first desk by name is the one clients resolve to.
     drop(store);
@@ -327,57 +246,18 @@ fn collapsing_superseded_desks_cleans_only_their_own_installation_state() {
 }
 
 #[test]
-fn legacy_screens_migrate_to_desktop_content() {
-    let path = temporary("legacy-screen-content");
-    {
-        let connection = Connection::open(&path).unwrap();
-        connection
-            .execute_batch(
-                r#"CREATE TABLE schema_info(version INTEGER NOT NULL);
-                INSERT INTO schema_info(version) VALUES(9);
-                CREATE TABLE screens(
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    layout_json TEXT NOT NULL,
-                    show_dock INTEGER NOT NULL,
-                    show_playbacks INTEGER NOT NULL,
-                    playback_count INTEGER NOT NULL,
-                    playback_rows INTEGER NOT NULL,
-                    first_playback_slot INTEGER NOT NULL,
-                    page_mode TEXT NOT NULL,
-                    show_page_controls INTEGER NOT NULL,
-                    desired_open INTEGER NOT NULL,
-                    display_id TEXT,
-                    bounds_json TEXT,
-                    fullscreen INTEGER NOT NULL,
-                    playback_layout_json TEXT
-                );
-                INSERT INTO screens VALUES(
-                    '00000000-0000-0000-0000-000000000025',
-                    'Legacy external screen',
-                    '{"desks":[],"activeDeskId":"legacy"}',
-                    1,1,8,1,1,'follow_main',1,0,NULL,NULL,0,NULL
-                );"#,
-            )
-            .unwrap();
-    }
-    let store = DeskStore::open(&path).unwrap();
-    let screen = store.screens().unwrap().remove(0);
-    assert_eq!(screen.content, ScreenContent::Desktop);
-    assert!(screen.show_dock);
-    assert_eq!(
-        store.programmer_control_surface().unwrap(),
-        ProgrammerControlSurfaceConfiguration {
-            owner_screen_id: None,
-            visible_encoders: 6,
-        }
-    );
-    let version: i64 = store
-        .conn
-        .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
+fn legacy_screens_are_rejected_to_desktop_content() {
+    let path = temporary("retired-desk-legacy");
+    let connection = Connection::open(&path).unwrap();
+    connection.execute_batch("CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info VALUES(16); CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO settings VALUES('marker','preserve');").unwrap();
+    drop(connection);
+    let original = fs::read(&path).unwrap();
+    let rejection = crate::inspect_desk_playback_contract(&path)
+        .unwrap()
         .unwrap();
-    assert_eq!(version, crate::desk::DESK_SCHEMA_VERSION);
-    drop(store);
+    assert!(rejection.message.contains("separate fresh desk"));
+    assert!(DeskStore::open(&path).is_err());
+    assert_eq!(fs::read(&path).unwrap(), original);
     let _ = fs::remove_file(path);
 }
 
@@ -401,26 +281,25 @@ fn programmer_control_surface_persists_one_screen_owner_and_reassigns_deleted_ow
     let path = temporary("programmer-control-owner");
     let store = DeskStore::open(&path).unwrap();
     let screen = store
-        .put_screen(ScreenConfiguration {
-            not_editable: false,
-            id: Uuid::new_v4(),
-            name: "Programmer wing".into(),
-            layout: serde_json::json!({}),
-            show_dock: false,
-            show_playbacks: false,
-            playback_count: 8,
-            playback_rows: 1,
-            first_playback_slot: 1,
-            page_mode: "follow_main".into(),
-            show_page_controls: false,
-            show_programmer: false,
-            desired_open: true,
-            display_id: None,
-            bounds: None,
-            fullscreen: false,
-            playback_layout: None,
-            content: ScreenContent::Desktop,
-        })
+        .put_screen(
+            uuid::Uuid::nil(),
+            ScreenConfiguration {
+                not_editable: false,
+                id: Uuid::new_v4(),
+                name: "Programmer wing".into(),
+                layout: serde_json::json!({}),
+                show_dock: false,
+                show_playbacks: false,
+                show_page_controls: false,
+                show_programmer: false,
+                desired_open: true,
+                display_id: None,
+                bounds: None,
+                fullscreen: false,
+                surface_id: "main".into(),
+                content: ScreenContent::Desktop,
+            },
+        )
         .unwrap();
     assert_eq!(
         store
@@ -475,41 +354,40 @@ fn fixed_screen_content_round_trips_and_forces_dock_off() {
     let id = Uuid::new_v4();
     let cue_list_id = Uuid::new_v4();
     let saved = store
-        .put_screen(ScreenConfiguration {
-            not_editable: false,
-            id,
-            name: "Fixed fixtures".into(),
-            layout: serde_json::json!({"desks":[],"activeDeskId":"preserved"}),
-            show_dock: true,
-            show_playbacks: true,
-            playback_count: 8,
-            playback_rows: 1,
-            first_playback_slot: 1,
-            page_mode: "follow_main".into(),
-            show_page_controls: true,
-            show_programmer: false,
-            desired_open: true,
-            display_id: None,
-            bounds: None,
-            fullscreen: false,
-            playback_layout: None,
-            content: ScreenContent::FixedPane {
-                pane: FixedScreenPane::FixtureSheet {
-                    included_heads: FixedScreenFixtureIncludedHeads::NoSubHeads,
-                    order: FixedScreenFixtureOrder::Active,
-                    active_only: true,
-                    compact_mode: FixedScreenFixtureCompactMode::TextOnly,
-                    cue_list_id: Some(cue_list_id),
-                    columns: vec![
-                        FixedScreenFixtureColumn::Id,
-                        FixedScreenFixtureColumn::Name,
-                        FixedScreenFixtureColumn::Intensity,
-                    ],
-                    show_type: false,
-                    show_group_shortcuts: true,
+        .put_screen(
+            uuid::Uuid::nil(),
+            ScreenConfiguration {
+                not_editable: false,
+                id,
+                name: "Fixed fixtures".into(),
+                layout: serde_json::json!({"desks":[],"activeDeskId":"preserved"}),
+                show_dock: true,
+                show_playbacks: true,
+                show_page_controls: true,
+                show_programmer: false,
+                desired_open: true,
+                display_id: None,
+                bounds: None,
+                fullscreen: false,
+                surface_id: "main".into(),
+                content: ScreenContent::FixedPane {
+                    pane: FixedScreenPane::FixtureSheet {
+                        included_heads: FixedScreenFixtureIncludedHeads::NoSubHeads,
+                        order: FixedScreenFixtureOrder::Active,
+                        active_only: true,
+                        compact_mode: FixedScreenFixtureCompactMode::TextOnly,
+                        cue_list_id: Some(cue_list_id),
+                        columns: vec![
+                            FixedScreenFixtureColumn::Id,
+                            FixedScreenFixtureColumn::Name,
+                            FixedScreenFixtureColumn::Intensity,
+                        ],
+                        show_type: false,
+                        show_group_shortcuts: true,
+                    },
                 },
             },
-        })
+        )
         .unwrap();
     assert!(!saved.show_dock);
     assert_eq!(
@@ -551,17 +429,13 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
         layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
         show_dock: true,
         show_playbacks: true,
-        playback_count: 8,
-        playback_rows: 1,
-        first_playback_slot: 1,
-        page_mode: "follow_main".into(),
         show_page_controls: true,
         show_programmer: false,
         desired_open: true,
         display_id: None,
         bounds: None,
         fullscreen: false,
-        playback_layout: None,
+        surface_id: "main".into(),
         content: ScreenContent::FixedSidePane {
             pane: FixedScreenPane::Cues {
                 cue_list_id: Uuid::new_v4().to_string(),
@@ -571,7 +445,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
         },
     };
 
-    let saved = store.put_screen(base.clone()).unwrap();
+    let saved = store.put_screen(uuid::Uuid::nil(), base.clone()).unwrap();
     assert!(!saved.show_dock);
     assert_eq!(saved.content, base.content);
 
@@ -586,7 +460,7 @@ fn fixed_side_pane_round_trips_with_pixel_width_and_keeps_dock() {
         },
         ..base
     };
-    assert!(store.put_screen(invalid).is_err());
+    assert!(store.put_screen(uuid::Uuid::nil(), invalid).is_err());
     drop(store);
     let _ = fs::remove_file(path);
 }
@@ -627,32 +501,31 @@ fn fixed_side_pane_turns_desktop_dock_off() {
     let path = temporary("fixed-side-control-base");
     let store = DeskStore::open(&path).unwrap();
     let saved = store
-        .put_screen(ScreenConfiguration {
-            not_editable: false,
-            id: Uuid::new_v4(),
-            name: "Side controls".into(),
-            layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
-            show_dock: true,
-            show_playbacks: true,
-            playback_count: 8,
-            playback_rows: 1,
-            first_playback_slot: 1,
-            page_mode: "follow_main".into(),
-            show_page_controls: true,
-            show_programmer: false,
-            desired_open: true,
-            display_id: None,
-            bounds: None,
-            fullscreen: false,
-            playback_layout: None,
-            content: ScreenContent::FixedSidePane {
-                pane: FixedScreenPane::Cues {
-                    cue_list_id: String::new(),
+        .put_screen(
+            uuid::Uuid::nil(),
+            ScreenConfiguration {
+                not_editable: false,
+                id: Uuid::new_v4(),
+                name: "Side controls".into(),
+                layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
+                show_dock: true,
+                show_playbacks: true,
+                show_page_controls: true,
+                show_programmer: false,
+                desired_open: true,
+                display_id: None,
+                bounds: None,
+                fullscreen: false,
+                surface_id: "main".into(),
+                content: ScreenContent::FixedSidePane {
+                    pane: FixedScreenPane::Cues {
+                        cue_list_id: String::new(),
+                    },
+                    side: FixedScreenSide::Left,
+                    width_percent: 22,
                 },
-                side: FixedScreenSide::Left,
-                width_percent: 22,
             },
-        })
+        )
         .unwrap();
 
     assert!(!saved.show_dock);
@@ -671,29 +544,28 @@ fn control_and_empty_screen_content_round_trip_without_desktop_dock() {
         layout: serde_json::json!({"desks":[],"activeDeskId":"main"}),
         show_dock: true,
         show_playbacks: true,
-        playback_count: 8,
-        playback_rows: 1,
-        first_playback_slot: 1,
-        page_mode: "follow_main".into(),
         show_page_controls: true,
         show_programmer: false,
         desired_open: true,
         display_id: None,
         bounds: None,
         fullscreen: false,
-        playback_layout: None,
+        surface_id: "main".into(),
         content: ScreenContent::ControlSurface,
     };
 
-    let control = store.put_screen(base.clone()).unwrap();
+    let control = store.put_screen(uuid::Uuid::nil(), base.clone()).unwrap();
     assert!(!control.show_dock);
     assert_eq!(control.content, ScreenContent::ControlSurface);
     let empty = store
-        .put_screen(ScreenConfiguration {
-            id: Uuid::new_v4(),
-            content: ScreenContent::ControlSurface,
-            ..base
-        })
+        .put_screen(
+            uuid::Uuid::nil(),
+            ScreenConfiguration {
+                id: Uuid::new_v4(),
+                content: ScreenContent::ControlSurface,
+                ..base
+            },
+        )
         .unwrap();
     assert!(!empty.show_dock);
     assert_eq!(empty.content, ScreenContent::ControlSurface);
@@ -712,64 +584,69 @@ fn fixed_screen_content_rejects_invalid_display_settings_without_resolving_refer
         layout: serde_json::json!({}),
         show_dock: false,
         show_playbacks: true,
-        playback_count: 8,
-        playback_rows: 1,
-        first_playback_slot: 1,
-        page_mode: "follow_main".into(),
         show_page_controls: true,
         show_programmer: false,
         desired_open: false,
         display_id: None,
         bounds: None,
         fullscreen: false,
-        playback_layout: None,
+        surface_id: "main".into(),
         content: ScreenContent::Desktop,
     };
     assert!(
         store
-            .put_screen(ScreenConfiguration {
-                content: ScreenContent::FixedPane {
-                    pane: FixedScreenPane::FixtureSheet {
-                        included_heads: FixedScreenFixtureIncludedHeads::All,
-                        order: FixedScreenFixtureOrder::FixtureId,
-                        active_only: false,
-                        compact_mode: FixedScreenFixtureCompactMode::Off,
-                        cue_list_id: Some(Uuid::new_v4()),
-                        columns: vec![],
-                        show_type: true,
-                        show_group_shortcuts: false,
+            .put_screen(
+                uuid::Uuid::nil(),
+                ScreenConfiguration {
+                    content: ScreenContent::FixedPane {
+                        pane: FixedScreenPane::FixtureSheet {
+                            included_heads: FixedScreenFixtureIncludedHeads::All,
+                            order: FixedScreenFixtureOrder::FixtureId,
+                            active_only: false,
+                            compact_mode: FixedScreenFixtureCompactMode::Off,
+                            cue_list_id: Some(Uuid::new_v4()),
+                            columns: vec![],
+                            show_type: true,
+                            show_group_shortcuts: false,
+                        },
                     },
-                },
-                ..base.clone()
-            })
+                    ..base.clone()
+                }
+            )
             .is_err()
     );
     assert!(
         store
-            .put_screen(ScreenConfiguration {
-                content: ScreenContent::FixedPane {
-                    pane: FixedScreenPane::Stage3d {
-                        follow_preload: false,
-                        show_floor_grid: true,
-                        show_beam_guides: true,
-                        render_quality: FixedScreenStageRenderQuality::Full,
-                        environment_brightness: 1.1,
+            .put_screen(
+                uuid::Uuid::nil(),
+                ScreenConfiguration {
+                    content: ScreenContent::FixedPane {
+                        pane: FixedScreenPane::Stage3d {
+                            follow_preload: false,
+                            show_floor_grid: true,
+                            show_beam_guides: true,
+                            render_quality: FixedScreenStageRenderQuality::Full,
+                            environment_brightness: 1.1,
+                        },
                     },
-                },
-                ..base.clone()
-            })
+                    ..base.clone()
+                }
+            )
             .is_err()
     );
     assert!(
         store
-            .put_screen(ScreenConfiguration {
-                content: ScreenContent::FixedPane {
-                    pane: FixedScreenPane::Cues {
-                        cue_list_id: String::new(),
+            .put_screen(
+                uuid::Uuid::nil(),
+                ScreenConfiguration {
+                    content: ScreenContent::FixedPane {
+                        pane: FixedScreenPane::Cues {
+                            cue_list_id: String::new(),
+                        },
                     },
-                },
-                ..base
-            })
+                    ..base
+                }
+            )
             .is_ok()
     );
     drop(store);
@@ -785,21 +662,41 @@ fn selected_playback_is_persisted_per_show_and_survives_reopening() {
         let store = DeskStore::open(&path).unwrap();
         let desk = store.desk().unwrap();
         store
-            .set_selected_playback(desk.id, first_show, Some(17))
+            .set_selected_playback(
+                desk.id,
+                first_show,
+                Some(PlaybackSelection {
+                    page: 1,
+                    position: 17,
+                }),
+            )
             .unwrap();
         store
-            .set_selected_playback(desk.id, second_show, Some(23))
+            .set_selected_playback(
+                desk.id,
+                second_show,
+                Some(PlaybackSelection {
+                    page: 99,
+                    position: 23,
+                }),
+            )
             .unwrap();
         desk.id
     };
     let store = DeskStore::open(&path).unwrap();
     assert_eq!(
         store.selected_playback(desk_id, first_show).unwrap(),
-        Some(17)
+        Some(PlaybackSelection {
+            page: 1,
+            position: 17
+        })
     );
     assert_eq!(
         store.selected_playback(desk_id, second_show).unwrap(),
-        Some(23)
+        Some(PlaybackSelection {
+            page: 99,
+            position: 23
+        })
     );
     assert_eq!(
         store.selected_playback(desk_id, ShowId::new()).unwrap(),
@@ -814,51 +711,18 @@ fn selected_playback_is_persisted_per_show_and_survives_reopening() {
 }
 
 #[test]
-fn a_desk_saved_with_an_osc_alias_keeps_its_configuration_without_one() {
-    let path = temporary("legacy-desk-osc-alias");
-    let desk_id = Uuid::new_v4();
-    let client_id = Uuid::new_v4();
-    {
-        let connection = Connection::open(&path).unwrap();
-        connection
-            .execute_batch(&format!(
-                r#"CREATE TABLE schema_info(version INTEGER NOT NULL);
-                INSERT INTO schema_info(version) VALUES(9);
-                CREATE TABLE control_desks(
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    osc_alias TEXT NOT NULL UNIQUE COLLATE NOCASE,
-                    columns_count INTEGER NOT NULL DEFAULT 8,
-                    rows_count INTEGER NOT NULL DEFAULT 1,
-                    buttons_count INTEGER NOT NULL DEFAULT 3,
-                    playback_layout_json TEXT,
-                    client_id TEXT,
-                    last_connected_at TEXT
-                );
-                INSERT INTO control_desks VALUES(
-                    '{desk_id}','Front of house','main',12,2,3,NULL,'{client_id}','2026-08-01T10:00:00Z'
-                );
-                CREATE TABLE control_desk_pages(
-                    desk_id TEXT NOT NULL,
-                    show_id TEXT NOT NULL,
-                    page INTEGER NOT NULL DEFAULT 1,
-                    PRIMARY KEY(desk_id,show_id),
-                    FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE
-                );"#
-            ))
-            .unwrap();
-    }
-
-    let store = DeskStore::open(&path).unwrap();
-    let desk = store.desk().unwrap();
-    assert_eq!(desk.id, desk_id, "the saved desk survives losing its alias");
-    assert_eq!(desk.name, "Front of house");
-    assert_eq!(desk.columns, 12);
-    assert_eq!(desk.rows, 2);
-    let clients = store.client_desks().unwrap();
-    assert_eq!(clients.len(), 1);
-    assert_eq!(clients[0].client_id, Some(client_id));
-    drop(store);
+fn a_desk_saved_with_an_osc_alias_is_rejected_without_rewriting_configuration() {
+    let path = temporary("retired-desk-a");
+    let connection = Connection::open(&path).unwrap();
+    connection.execute_batch("CREATE TABLE schema_info(version INTEGER NOT NULL); INSERT INTO schema_info VALUES(16); CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO settings VALUES('marker','preserve');").unwrap();
+    drop(connection);
+    let original = fs::read(&path).unwrap();
+    let rejection = crate::inspect_desk_playback_contract(&path)
+        .unwrap()
+        .unwrap();
+    assert!(rejection.message.contains("separate fresh desk"));
+    assert!(DeskStore::open(&path).is_err());
+    assert_eq!(fs::read(&path).unwrap(), original);
     let _ = fs::remove_file(path);
 }
 

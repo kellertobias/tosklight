@@ -54,12 +54,7 @@ pub(super) fn bind_captured_sources(
             let row = inputs.dynamic_playbacks.get(index).ok_or_else(|| {
                 IntentError("Playback source index is outside its captured vector".into())
             })?;
-            let identity = row
-                .playback_identity
-                .or_else(|| PlaybackIdentity::physical(row.playback_number).ok())
-                .ok_or_else(|| {
-                    IntentError("captured Dynamic Playback has no valid identity".into())
-                })?;
+            let identity = row.playback_address;
             Ok(DynamicSourceOrigin::Playback {
                 identity,
                 activated_at: row.activated_at,

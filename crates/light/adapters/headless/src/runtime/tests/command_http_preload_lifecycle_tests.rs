@@ -531,20 +531,8 @@ async fn failed_typed_preload_go_rolls_back_programmer_queue_runtime_and_events(
             .status(),
         StatusCode::OK
     );
-    scenario.state.programming.queue_preload_playback_action(
-        scenario.session.id,
-        1,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
-    );
-    scenario.state.programming.queue_preload_playback_action(
-        scenario.session.id,
-        3,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::On,
-        light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    );
+    scenario.state.programming.queue_preload_playback_action(scenario.session.id, light_playback::PlaybackAddress::new(1, 1).unwrap(), light_programmer::PreloadPlaybackQueueAction::Go, light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 });
+    scenario.state.programming.queue_preload_playback_action(scenario.session.id, light_playback::PlaybackAddress::new(1, 3).unwrap(), light_programmer::PreloadPlaybackQueueAction::On, light_playback::PlaybackControlSource { surface_id: "pane:preload-test".into(), control_id: 3 });
     let before = scenario.state.programming.get(scenario.session.id).unwrap();
     let cursor = scenario.state.events.latest_sequence();
     let response = scenario
@@ -584,11 +572,7 @@ async fn preload_inspection_removes_one_ordered_action_and_rejects_stale_rows() 
         "inspect-enter", 0, 0, 0, 0, serde_json::json!({"type":"enter"}),
     )).await.status(), StatusCode::OK);
     for number in [4, 4, 7] {
-        assert!(scenario.state.programming.queue_preload_playback_action(
-            scenario.session.id, number, Some(2),
-            light_programmer::PreloadPlaybackQueueAction::Go,
-            light_programmer::PreloadPlaybackQueueSurface::Physical,
-        ));
+        assert!(scenario.state.programming.queue_preload_playback_action(scenario.session.id, light_playback::PlaybackAddress::new(2, number).unwrap(), light_programmer::PreloadPlaybackQueueAction::Go, light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: number }));
     }
     let before = scenario.state.programming.get(scenario.session.id).unwrap();
     let output_before = scenario.state.output.snapshot();

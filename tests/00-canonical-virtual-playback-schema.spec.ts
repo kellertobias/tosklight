@@ -11,55 +11,37 @@ const CANONICAL_SHOWS = [
 	["default-stage", new URL("./fixtures/default-stage.show", import.meta.url)],
 ] as const;
 
-test("VPB-CANONICAL @api › canonical shows use the dedicated Virtual Playback schema", async ({
+test("PLAYBACK-CANONICAL @api › owned shows contain unified sparse assignments without retired objects", async ({
 	api,
 }) => {
 	for (const [name, url] of CANONICAL_SHOWS) {
 		const bytes = await fs.readFile(url);
 		const imported = await api.createShow<{ id: string }>({
-			name: `${name}-vpb-schema-${crypto.randomUUID()}`,
+			name: `${name}-unified-schema-${crypto.randomUUID()}`,
 			data_base64: bytes.toString("base64"),
 			overwrite: false,
 		});
 		await api.openShow(imported.id, { transition: "hold_current" });
-		let pages = await api.showObjects<Record<string, unknown>>(
+		expect(await api.showObjects(imported.id, "playback")).toHaveLength(0);
+		expect(
+			await api.showObjects(imported.id, "virtual_playback_exclusion_zones"),
+		).toHaveLength(0);
+		const pages = await api.showObjects<Record<string, unknown>>(
 			imported.id,
 			"playback_page",
 		);
-		if (UPDATE) {
-			for (const page of pages) {
-				if (!("virtual_playbacks" in page.body)) {
-					await api.seedShowObject(
-						imported.id,
-						"playback_page",
-						page.id,
-						{ ...page.body, virtual_playbacks: {} },
-						page.revision,
-					);
-				}
-			}
-			pages = await api.showObjects<Record<string, unknown>>(
-				imported.id,
-				"playback_page",
-			);
-		}
-		const physical =
-			await api.showObjects<{ number: number }>(imported.id, "playback");
 		for (const page of pages) {
-			expect(page.body).toHaveProperty("virtual_playbacks");
-			expect(page.body.virtual_playbacks).toEqual(
-				expect.objectContaining({}),
-			);
-			for (const number of Object.values(
-				page.body.slots as Record<string, number>,
+			expect(page.body).not.toHaveProperty("slots");
+			expect(page.body).not.toHaveProperty("virtual_playbacks");
+			expect(page.body.number).toBeGreaterThanOrEqual(1);
+			expect(page.body.number).toBeLessThanOrEqual(99);
+			for (const [position, definition] of Object.entries(
+				page.body.assignments as Record<string, object>,
 			)) {
-				expect(number).toBeGreaterThanOrEqual(1);
-				expect(number).toBeLessThanOrEqual(1_000);
+				expect(Number(position)).toBeGreaterThanOrEqual(1);
+				expect(Number(position)).toBeLessThanOrEqual(1000);
+				expect(definition).not.toHaveProperty("number");
 			}
-		}
-		for (const playback of physical) {
-			expect(playback.body.number).toBeGreaterThanOrEqual(1);
-			expect(playback.body.number).toBeLessThanOrEqual(1_000);
 		}
 		if (UPDATE) await publishDownloadedShow(api, imported.id, url);
 	}
@@ -70,9 +52,12 @@ async function publishDownloadedShow(
 	showId: string,
 	url: URL,
 ): Promise<void> {
-	const response = await fetch(`${api.baseUrl}/api/v2/shows/${showId}/download`, {
-		headers: { authorization: `Bearer ${api.session?.token}` },
-	});
+	const response = await fetch(
+		`${api.baseUrl}/api/v2/shows/${showId}/download`,
+		{
+			headers: { authorization: `Bearer ${api.session?.token}` },
+		},
+	);
 	expect(response.ok).toBe(true);
 	const target = fileURLToPath(url);
 	const temporary = `${target}.${process.pid}.${crypto.randomUUID()}.tmp`;

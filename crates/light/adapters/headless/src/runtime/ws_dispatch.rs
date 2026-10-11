@@ -125,6 +125,9 @@ fn live_action_timing(action: &LiveAction) -> Option<(&'static str, bool)> {
         | LiveAction::DynamicSpeed(_)
         | LiveAction::DynamicPhase(_)
         | LiveAction::DynamicFixAt(_) => Some(("dynamic", true)),
+        LiveAction::PlaybackSurfaceSelect(_) | LiveAction::PlaybackSurfacePage(_) => {
+            Some(("playback_surface", false))
+        }
         LiveAction::Playback(request) => Some((playback_action_timing(&request.action), true)),
         LiveAction::Macro(_) => Some(("macro_run", true)),
         LiveAction::Timecode(request) => Some((timecode_action_timing(&request.action), true)),
@@ -310,6 +313,25 @@ fn dispatch_action(
                 &action_request(request, context),
             ))
         }),
+        LiveAction::PlaybackSurfaceSelect(request) => {
+            run_interaction(state, session, context, || {
+                ActionOutput::plain(super::playback_surfaces_http::select_live(
+                    state,
+                    session,
+                    &request.surface_id,
+                ))
+            })
+        }
+        LiveAction::PlaybackSurfacePage(request) => {
+            run_interaction(state, session, context, || {
+                ActionOutput::plain(super::playback_surfaces_http::page_live(
+                    state,
+                    session,
+                    &request.surface_id,
+                    request.page,
+                ))
+            })
+        }
         LiveAction::Playback(request) => run_interaction(state, session, context, || {
             ActionOutput::plain(ws_playback_action(
                 state,
@@ -323,14 +345,7 @@ fn dispatch_action(
                 state, session, request,
             ))
         }),
-        LiveAction::Timecode(request) => ActionOutput::plain(
-            timecode_v2::apply_transport_request(state, session.desk.id, request)
-                .and_then(|snapshot| {
-                    serde_json::to_value(snapshot)
-                        .map_err(|error| ApiError::internal(error.to_string()))
-                })
-                .map_err(|error| error.message),
-        ),
+        LiveAction::Timecode(request) => dispatch_timecode(state, session, request),
         LiveAction::CommandLineSet(request) => run_interaction(state, session, context, || {
             ActionOutput::plain(ws_programmer_command_line(
                 state,
@@ -427,6 +442,21 @@ fn dispatch_dynamic_action(
         };
         ActionOutput::plain(result)
     })
+}
+
+fn dispatch_timecode(
+    state: &AppState,
+    session: &Session,
+    request: light_wire::v2::timecode::TimecodeTransportActionRequest,
+) -> ActionOutput {
+    ActionOutput::plain(
+        timecode_v2::apply_transport_request(state, session.desk.id, request)
+            .and_then(|snapshot| {
+                serde_json::to_value(snapshot)
+                    .map_err(|error| ApiError::internal(error.to_string()))
+            })
+            .map_err(|error| error.message),
+    )
 }
 
 fn is_dynamic_action(action: &LiveAction) -> bool {

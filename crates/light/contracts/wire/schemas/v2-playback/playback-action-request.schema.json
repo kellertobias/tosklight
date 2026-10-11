@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PlaybackActionRequest",
-  "description": "One authenticated, idempotent Playback mutation.",
+  "description": "One live control action. Repeated actions execute independently and are never replayed.",
   "type": "object",
   "properties": {
     "action": {
@@ -10,22 +10,14 @@
     "address": {
       "$ref": "#/$defs/PlaybackAddress"
     },
-    "request_id": {
-      "description": "Idempotency is retained for the 4096 most-recent IDs in the live server process. After\neviction or restart, clients repair from a narrow runtime snapshot before retrying.",
-      "type": "string",
-      "maxLength": 128,
-      "minLength": 1
-    },
-    "surface": {
-      "description": "Selects virtual or physical preload-capture semantics. The HTTP source itself is always\nrecorded by the server and cannot be supplied by a caller.",
-      "$ref": "#/$defs/PlaybackSurface"
+    "control_source": {
+      "$ref": "#/$defs/PlaybackControlSource"
     }
   },
   "required": [
-    "request_id",
     "address",
     "action",
-    "surface"
+    "control_source"
   ],
   "$defs": {
     "PlaybackAction": {
@@ -631,42 +623,23 @@
               "type": "string",
               "const": "playback"
             },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            }
-          },
-          "required": [
-            "kind",
-            "playback_number"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "maximum": 99,
+              "minimum": 1
             },
-            "playback_number": {
+            "position": {
               "type": "integer",
               "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+              "maximum": 1000,
+              "minimum": 1
             }
           },
           "required": [
             "kind",
             "page",
-            "playback_number"
+            "position"
           ]
         },
         {
@@ -676,52 +649,38 @@
               "type": "string",
               "const": "current_page"
             },
-            "slot": {
+            "position": {
               "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "format": "uint16",
+              "maximum": 1000,
+              "minimum": 1
             }
           },
           "required": [
             "kind",
-            "slot"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "explicit_page"
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
-            }
-          },
-          "required": [
-            "kind",
-            "page",
-            "slot"
+            "position"
           ]
         }
       ]
     },
-    "PlaybackSurface": {
-      "description": "Deliberate interaction semantics accepted at the HTTP boundary.",
-      "type": "string",
-      "enum": [
-        "virtual",
-        "physical"
+    "PlaybackControlSource": {
+      "type": "object",
+      "properties": {
+        "control_id": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "surface_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "surface_id",
+        "control_id"
       ]
     }
   }

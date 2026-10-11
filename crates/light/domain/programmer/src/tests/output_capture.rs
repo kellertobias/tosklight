@@ -233,10 +233,12 @@ fn output_capture_reuses_playback_queue_across_reads_and_value_only_edits() {
     registry.start(session);
     assert!(registry.queue_preload_playback_action(
         session,
-        7,
-        Some(3),
+        light_playback::PlaybackAddress::new(3, 7).unwrap(),
         PreloadPlaybackQueueAction::Go,
-        PreloadPlaybackQueueSurface::Virtual,
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        },
     ));
     let captured = registry.capture_output_sources();
     let repeated = registry.capture_output_sources();
@@ -341,15 +343,18 @@ fn cold_restore_and_reset_discard_both_cached_sources_even_with_reused_generatio
     ));
     assert!(registry.queue_preload_playback_action(
         session,
-        7,
-        None,
+        light_playback::PlaybackAddress::new(1, 7).unwrap(),
         PreloadPlaybackQueueAction::Go,
-        PreloadPlaybackQueueSurface::Physical,
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        },
     ));
     let before = registry.capture_output_sources();
     let mut replacement = registry.get(session).unwrap();
     replacement.preload_pending[0].value = AttributeValue::Normalized(0.8);
-    replacement.preload_playback_pending[0].playback_number = 9;
+    replacement.preload_playback_pending[0].address =
+        light_playback::PlaybackAddress::new(3, 9).unwrap();
     registry.restore(replacement);
     let restored = registry.capture_output_sources();
     assert_eq!(restored.identity, before.identity);
@@ -361,8 +366,8 @@ fn cold_restore_and_reset_discard_both_cached_sources_even_with_reused_generatio
         restored.preload_playback_queue_generation,
         before.preload_playback_queue_generation,
     );
-    assert_eq!(before.preload_playback_actions[0].playback_number, 7);
-    assert_eq!(restored.preload_playback_actions[0].playback_number, 9);
+    assert_eq!(before.preload_playback_actions[0].address.position(), 7);
+    assert_eq!(restored.preload_playback_actions[0].address.position(), 9);
     assert_eq!(
         before.preload.as_ref().unwrap().pending.fixture_values[0]
             .value
@@ -395,7 +400,7 @@ fn cold_restore_and_reset_discard_both_cached_sources_even_with_reused_generatio
             .is_empty()
     );
     assert_ne!(fresh.identity, before.identity);
-    assert_eq!(restored.preload_playback_actions[0].playback_number, 9);
+    assert_eq!(restored.preload_playback_actions[0].address.position(), 9);
 }
 
 #[test]
@@ -408,10 +413,12 @@ fn queue_only_edits_refresh_capture_without_copying_values_or_changing_older_fra
     for _ in 0..2 {
         assert!(registry.queue_preload_playback_action_with_origin(
             session,
-            7,
-            Some(3),
+            light_playback::PlaybackAddress::new(3, 7).unwrap(),
             PreloadPlaybackQueueAction::Go,
-            PreloadPlaybackQueueSurface::Physical,
+            light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1
+            },
             Some(origin),
         ));
     }
@@ -440,11 +447,19 @@ fn queue_only_edits_refresh_capture_without_copying_values_or_changing_older_fra
         queued.preload_playback_actions[1]
     );
     let action = &queued.preload_playback_actions[0];
-    assert_eq!(action.playback_number, 7);
-    assert_eq!(action.page, Some(3));
+    assert_eq!(
+        action.address,
+        light_playback::PlaybackAddress::new(3, 7).unwrap()
+    );
     assert_eq!(action.origin_desk_id, Some(origin));
     assert_eq!(action.action, PreloadPlaybackQueueAction::Go);
-    assert_eq!(action.surface, PreloadPlaybackQueueSurface::Physical);
+    assert_eq!(
+        action.control_source,
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        }
+    );
 
     let drained = registry.take_preload_playback_actions(session);
     assert_eq!(

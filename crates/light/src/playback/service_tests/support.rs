@@ -3,8 +3,7 @@ use super::*;
 pub(super) fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimeProjection {
     PlaybackRuntimeProjection {
         scope: test_scope(),
-        requested: PlaybackRuntimeIdentity::Playback(number),
-        playback_number: Some(number),
+        identity: PlaybackRuntimeIdentity::Playback(test_address(1, number)),
         target: PlaybackTargetProjection::CueList {
             cue_list_id: light_core::CueListId(Uuid::from_u128(80)),
             runtime: Some(Box::new(CueListRuntimeProjection {
@@ -50,7 +49,9 @@ pub(super) fn find_projection_mut(
 ) -> &mut PlaybackRuntimeProjection {
     projections
         .iter_mut()
-        .find(|projection| projection.requested == PlaybackRuntimeIdentity::Playback(number))
+        .find(|projection| {
+            projection.identity == PlaybackRuntimeIdentity::Playback(test_address(1, number))
+        })
         .expect("test projection should exist")
 }
 
@@ -78,7 +79,9 @@ pub(super) fn test_desk(desk_id: Uuid) -> PlaybackDeskProjection {
     PlaybackDeskProjection {
         scope: test_scope(),
         desk_id,
-        active_page: 1,
+        command_page: 1,
+        selected_surface_id: "main".into(),
+        resolved_pages: std::collections::BTreeMap::from([("main".into(), 1)]),
         selected_playback: None,
         selected_cue_list: None,
     }
@@ -95,10 +98,22 @@ pub(super) fn runtime_event(number: u16) -> crate::EventDraft {
     crate::EventDraft::playback_runtime_changed(
         None,
         PlaybackRuntimeChange {
-            projection: missing_projection(PlaybackRuntimeIdentity::Playback(number)),
+            projection: missing_projection(PlaybackRuntimeIdentity::Playback(test_address(
+                1, number,
+            ))),
             transition: None,
         },
         crate::EventSource::Runtime,
         None,
     )
+}
+
+pub(super) fn test_address(page: u8, position: u16) -> light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(page, position).unwrap()
+}
+pub(super) fn test_control_source() -> light_playback::PlaybackControlSource {
+    light_playback::PlaybackControlSource {
+        surface_id: "main".into(),
+        control_id: 1,
+    }
 }

@@ -28,48 +28,62 @@
         "sequence"
       ]
     },
-    "ProgrammingPreloadPlaybackAction": {
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "toggle",
-            "go",
-            "back",
-            "off",
-            "on",
-            "temporary_on",
-            "temporary_off",
-            "dynamic_pause",
-            "dynamic_restart",
-            "dynamic_double_speed",
-            "dynamic_half_speed",
-            "dynamic_learn_speed"
-          ]
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
         },
-        {
-          "type": "object",
-          "properties": {
-            "fader": {
-              "type": "object",
-              "properties": {
-                "value_permyriad": {
-                  "type": "integer",
-                  "format": "uint16",
-                  "maximum": 65535,
-                  "minimum": 0
-                }
-              },
-              "required": [
-                "value_permyriad"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "fader"
-          ]
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
         }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
+    "PlaybackControlSource": {
+      "type": "object",
+      "properties": {
+        "control_id": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "surface_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "surface_id",
+        "control_id"
+      ]
+    },
+    "ProgrammingPreloadPlaybackAction": {
+      "type": "string",
+      "enum": [
+        "toggle",
+        "go",
+        "back",
+        "off",
+        "on",
+        "temporary_on",
+        "temporary_off",
+        "dynamic_pause",
+        "dynamic_restart",
+        "dynamic_double_speed",
+        "dynamic_half_speed",
+        "dynamic_learn_speed"
       ]
     },
     "ProgrammingPreloadPlaybackQueueItem": {
@@ -78,29 +92,17 @@
         "action": {
           "$ref": "#/$defs/ProgrammingPreloadPlaybackAction"
         },
-        "page": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
+        "address": {
+          "$ref": "#/$defs/PlaybackAddressValue"
         },
-        "playback_number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        },
-        "surface": {
-          "$ref": "#/$defs/ProgrammingPreloadPlaybackSurface"
+        "control_source": {
+          "$ref": "#/$defs/PlaybackControlSource"
         }
       },
       "required": [
-        "playback_number",
+        "address",
         "action",
-        "surface"
+        "control_source"
       ]
     },
     "ProgrammingPreloadPlaybackQueueProjection": {
@@ -121,15 +123,6 @@
       "required": [
         "revision",
         "actions"
-      ]
-    },
-    "ProgrammingPreloadPlaybackSurface": {
-      "type": "string",
-      "enum": [
-        "physical",
-        "virtual",
-        "osc",
-        "matter"
       ]
     }
   }

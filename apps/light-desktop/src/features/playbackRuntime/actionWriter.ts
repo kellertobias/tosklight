@@ -1,9 +1,8 @@
 import type { PlaybackActionRequest } from "../../api/types";
 import {
-	type PoolPlaybackAction,
-	type PoolPlaybackInput,
-	poolPlaybackRequest,
-	virtualPlaybackRequest,
+	type PlaybackControlAction,
+	type PlaybackControlInput,
+	playbackRequest,
 } from "../server/playbackActionMapping";
 import {
 	assertGroupMaster,
@@ -19,7 +18,6 @@ import {
 	groupIdentity,
 	identityKey,
 	playbackIdentity,
-	virtualPlaybackIdentity,
 } from "./contracts";
 import type { PlaybackRuntimeStore } from "./store";
 
@@ -39,6 +37,7 @@ export interface PlaybackDeskPageOutcome {
 export type PlaybackDeskPageApply = (
 	deskId: string,
 	page: number,
+	surfaceId: string,
 ) => Promise<PlaybackDeskPageOutcome>;
 
 type CueListPlaybackIdentity = Extract<
@@ -53,16 +52,10 @@ export interface CueListRuntimeSource {
 
 export interface PlaybackRuntimeActions {
 	setActivePage(page: number): Promise<boolean>;
-	poolPlaybackAction(
-		playbackNumber: number,
-		action: PoolPlaybackAction,
-		input?: PoolPlaybackInput,
-	): Promise<PlaybackOutcome | null>;
-	virtualPlaybackAction(
-		page: number,
-		playbackNumber: number,
-		action: PoolPlaybackAction,
-		input?: PoolPlaybackInput,
+	playbackAction(
+		address: { page: number; position: number },
+		action: PlaybackControlAction,
+		input: PlaybackControlInput,
 	): Promise<PlaybackOutcome | null>;
 	releaseCueListSource(
 		source: CueListRuntimeSource,
@@ -97,8 +90,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		// pages menu extracts setActivePage exactly that way; unbound, `this` was undefined and
 		// the page change threw before issuing its request, silently failing on-screen.
 		this.setActivePage = this.setActivePage.bind(this);
-		this.poolPlaybackAction = this.poolPlaybackAction.bind(this);
-		this.virtualPlaybackAction = this.virtualPlaybackAction.bind(this);
+		this.playbackAction = this.playbackAction.bind(this);
 		this.releaseCueListSource = this.releaseCueListSource.bind(this);
 		this.setGroupMaster = this.setGroupMaster.bind(this);
 		this.setGroupFlash = this.setGroupFlash.bind(this);
@@ -118,44 +110,16 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		}
 	}
 
-	async poolPlaybackAction(
-		playbackNumber: number,
-		action: PoolPlaybackAction,
-		input: PoolPlaybackInput = {},
+	async playbackAction(
+		address: { page: number; position: number },
+		action: PlaybackControlAction,
+		input: PlaybackControlInput,
 	) {
 		try {
-			const request = poolPlaybackRequest(playbackNumber, action, input);
-			if (
-				isPlaybackSafetyRelease(action, input.pressed) &&
-				!this.matchesScope()
-			)
+			const request = playbackRequest(address, action, input);
+			if (isPlaybackSafetyRelease(action, input.pressed) && !this.matchesScope())
 				return this.sendSafetyRelease(request);
-			return await this.execute(playbackNumber, action, input, request);
-		} catch (reason) {
-			return this.rejectSetup(reason);
-		}
-	}
-
-	async virtualPlaybackAction(
-		page: number,
-		playbackNumber: number,
-		action: PoolPlaybackAction,
-		input: PoolPlaybackInput = {},
-	) {
-		try {
-			const identity = virtualPlaybackIdentity(page, playbackNumber);
-			const request = virtualPlaybackRequest(
-				page,
-				playbackNumber,
-				action,
-				input,
-			);
-			if (
-				isPlaybackSafetyRelease(action, input.pressed) &&
-				!this.matchesScope()
-			)
-				return this.sendSafetyRelease(request);
-			return await this.executeIdentity(identity, action, input, request);
+			return await this.executeIdentity(playbackIdentity(address.page, address.position), action, input, request);
 		} catch (reason) {
 			return this.rejectSetup(reason);
 		}
@@ -198,12 +162,15 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			throw new Error("Playback desk page actions are unavailable");
 		const scope = this.options.store.captureScope();
 		if (!this.isCurrent(scope)) return false;
+		const surfaceId = this.options.store.getSnapshot().desk?.selected_surface_id;
+		if (!surfaceId) throw new Error("Selected Playback surface is loading");
 		const token = this.options.store.beginOptimisticPage(page);
 		if (!token) throw new Error("Authoritative Playback desk is loading");
 		try {
 			const outcome = await this.options.applyDeskPage(
 				this.options.deskId,
 				page,
+				surfaceId,
 			);
 			return this.acceptPage(outcome, page, token, scope);
 		} catch (reason) {
@@ -232,24 +199,10 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		return false;
 	}
 
-	private async execute(
-		playbackNumber: number,
-		action: PoolPlaybackAction,
-		input: PoolPlaybackInput,
-		request: PlaybackActionRequest,
-	) {
-		return this.executeIdentity(
-			playbackIdentity(playbackNumber),
-			action,
-			input,
-			request,
-		);
-	}
-
 	private async executeIdentity(
 		identity: PlaybackIdentity,
-		action: PoolPlaybackAction,
-		input: PoolPlaybackInput,
+		action: PlaybackControlAction,
+		input: PlaybackControlInput,
 		request: PlaybackActionRequest,
 	) {
 		const scope = this.options.store.captureScope();
@@ -331,10 +284,6 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 	}
 
 	private assertRunningCueListSource(source: CueListRuntimeSource) {
-		const expectedPlayback =
-			source.identity.kind === "playback"
-				? source.identity.playback_number
-				: null;
 		if (
 			(source.identity.kind === "cue_list" ||
 				source.identity.kind === "direct_cue_list") &&
@@ -346,7 +295,7 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			.projections.get(identityKey(source.identity));
 		const running = projections?.some(
 			(projection) =>
-				projection.playback_number === expectedPlayback &&
+				identityKey(projection.identity) === identityKey(source.identity) &&
 				projection.target === "cue_list" &&
 				projection.cue_list_id === source.cueListId &&
 				projection.runtime !== null,
@@ -356,8 +305,8 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 
 	private optimisticToken(
 		identity: PlaybackIdentity,
-		action: PoolPlaybackAction,
-		input: PoolPlaybackInput,
+		action: PlaybackControlAction,
+		input: PlaybackControlInput,
 	) {
 		return action === "master" && input.value != null
 			? this.options.store.beginOptimisticMaster(identity, input.value)
@@ -379,8 +328,6 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		scope: number,
 	) {
 		if (!this.isCurrent(scope)) return null;
-		if (outcome.request_id !== request.request_id)
-			throw new Error("Playback outcome request ID does not match the request");
 		if (!this.options.store.installOutcome(outcome, token)) return null;
 		this.reportActionError(null);
 		return outcome;
@@ -440,9 +387,8 @@ function assertGroupOutcome(outcome: PlaybackOutcome, groupId: string) {
 		outcome.resolved.group_id !== groupId ||
 		outcome.projection.target !== "group" ||
 		outcome.projection.group_id !== groupId ||
-		outcome.projection.requested.kind !== "group" ||
-		outcome.projection.requested.group_id !== groupId ||
-		outcome.projection.playback_number !== outcome.resolved.playback_number
+		outcome.projection.identity.kind !== "group" ||
+		outcome.projection.identity.group_id !== groupId
 	)
 		throw new Error("Playback outcome does not match the Group request");
 }

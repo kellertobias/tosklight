@@ -22,7 +22,7 @@ fn preview_request_has_strict_semantic_target_and_mode_tags() {
             "target":{
                 "type":"cue",
                 "cue_list_id":CUE_LIST_ID,
-                "playback_number":7,
+                "playback_address":{"page":1,"position":7},
                 "cue_id":CUE_ID,
                 "cue_number":"2.5",
                 "validate_active_context":true
@@ -221,7 +221,7 @@ fn preview_request_json() -> Value {
         "target":{
             "type":"cue",
             "cue_list_id":CUE_LIST_ID,
-            "playback_number":7,
+            "playback_address":{"page":1,"position":7},
             "cue_id":CUE_ID,
             "cue_number":"2.5",
             "validate_active_context":true
@@ -257,7 +257,10 @@ fn direct_action_json() -> Value {
 fn cue_request_target() -> ProgrammingUpdateTarget {
     ProgrammingUpdateTarget::Cue {
         cue_list_id: CUE_LIST_ID,
-        playback_number: Some(7),
+        playback_address: Some(super::super::playback::PlaybackAddressValue {
+            page: 1,
+            position: 7,
+        }),
         cue_id: Some(CUE_ID),
         cue_number: Some("2.5".into()),
         validate_active_context: true,
@@ -269,7 +272,10 @@ fn target_identity() -> ProgrammingUpdateTargetIdentity {
         family: ProgrammingUpdateTargetFamily::Cue,
         object_id: CUE_LIST_ID.to_string(),
         name: "Main Cuelist".into(),
-        playback_number: Some(7),
+        playback_address: Some(super::super::playback::PlaybackAddressValue {
+            page: 1,
+            position: 7,
+        }),
         cue: Some(ProgrammingUpdateCueIdentity {
             id: CUE_ID,
             number: "2.5".into(),

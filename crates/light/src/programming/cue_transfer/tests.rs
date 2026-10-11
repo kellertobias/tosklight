@@ -366,16 +366,7 @@ impl TestRig {
             cue_list(destination_id, "Destination", vec![destination_cue()]),
             "destination",
         );
-        rig.seed(
-            "playback",
-            "1",
-            serde_json::to_value(playback(1, source_id)).unwrap(),
-        );
-        rig.seed(
-            "playback",
-            "2",
-            serde_json::to_value(playback(2, destination_id)).unwrap(),
-        );
+        rig.seed("playback_page","1",json!({"number":1,"name":"Main","assignments":{"1":playback(1,source_id),"2":playback(2,destination_id)}}));
         rig.ports.steps.lock().clear();
         rig
     }
@@ -608,7 +599,9 @@ impl ProgrammingCueTransferPorts for TestPorts {
 
 fn endpoint(playback_number: u16, cue_number: f64) -> ProgrammingCueTransferEndpoint {
     ProgrammingCueTransferEndpoint {
-        address: ProgrammingCueTransferAddress::Pool { playback_number },
+        address: ProgrammingCueTransferAddress::Playback {
+            address: light_playback::PlaybackAddress::new(1, playback_number).unwrap(),
+        },
         cue_number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
     }
 }
@@ -712,7 +705,6 @@ fn cue_list(id: CueListId, name: &str, cues: Vec<Cue>) -> CueList {
 
 fn playback(number: u16, cue_list_id: CueListId) -> PlaybackDefinition {
     PlaybackDefinition {
-        number,
         name: format!("Cuelist {number}"),
         target: PlaybackTarget::CueList { cue_list_id },
         buttons: [PlaybackButtonAction::None; 3],

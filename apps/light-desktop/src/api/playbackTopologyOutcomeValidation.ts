@@ -1,256 +1,42 @@
-import type {
-	PlaybackTopologyAction,
-	PlaybackTopologyObject,
-	PlaybackTopologyResolution,
-} from "../features/playbackTopology/contracts";
-import {
-	sameKnownCueList,
-	sameKnownPlayback,
-} from "./playbackTopologyKnownBodies";
-import type { CueList, PlaybackDefinition, PlaybackPage } from "./types";
+import type { PlaybackTopologyAction, PlaybackTopologyObject, PlaybackTopologyResolution } from "../features/playbackTopology/contracts";
+import { sameKnownCueList, sameKnownPlayback } from "./playbackTopologyKnownBodies";
+import type { CueList, PlaybackPage } from "./types";
 import { WireValidationError } from "./wireValidation";
 
-/** Limits a successful response to authority owned by the submitted action. */
-export function validatePlaybackTopologyObjects(
-	action: PlaybackTopologyAction,
-	resolution: PlaybackTopologyResolution,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (action.type === "save_cue_list")
-		return validateSavedCueList(action, objects, status);
-	if (action.type === "undo_cue_list" || action.type === "redo_cue_list")
-		return validateCueListHistory(action, objects, status);
-	if (action.type === "create_page" || action.type === "rename_page") {
-		if (resolution.kind !== "page")
-			return invalid("Playback Page resolution", resolution);
-		return validatePageAction(action, objects, status);
-	}
-	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
-		if (
-			resolution.kind !== "virtual" ||
-			resolution.page !== action.page ||
-			resolution.playbackNumber !== action.playbackNumber
-		)
-			return invalid("Virtual Playback resolution", resolution);
-		return validateVirtualPlaybackAction(action, objects, status);
-	}
-	if (action.type === "assign_group_master") {
-		if (action.address.kind === "virtual") {
-			if (
-				resolution.kind !== "virtual" ||
-				resolution.page !== action.address.page ||
-				resolution.playbackNumber !== action.address.playbackNumber
-			)
-				return invalid("Virtual Group Master resolution", resolution);
-			return validateAssignedVirtualGroupMaster(action, objects, status);
-		}
-		if (resolution.kind !== "page_slot")
-			return invalid("page-slot Group Master resolution", resolution);
-		return validateAssignedPhysicalGroupMaster(
-			action,
-			resolution.playbackNumber,
-			objects,
-			status,
-		);
-	}
-	if (resolution.kind !== "page_slot")
-		return invalid("page-slot resolution", resolution);
-	if (action.type === "configure_slot")
-		return validateConfiguredSlot(
-			action,
-			resolution.playbackNumber,
-			objects,
-			status,
-		);
-	if (action.type === "map_existing_playback")
-		return validateMappedExistingPlayback(
-			action,
-			resolution.playbackNumber,
-			objects,
-			status,
-		);
-	validateClearedSlot(action, resolution.playbackNumber, objects, status);
-}
-
-function validateAssignedPhysicalGroupMaster(
-	action: Extract<PlaybackTopologyAction, { type: "assign_group_master" }>,
-	playbackNumber: number | null,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (action.address.kind !== "physical")
-		return invalid("a physical Group Master address", action.address);
-	const address = action.address;
-	if (playbackNumber == null)
-		return invalid("an assigned Group Master Playback number", playbackNumber);
-	if (objects.length !== 2)
-		return invalid("only the assigned Page and Playback", objects);
-	const page = matchingPage(objects, address.page);
-	const playback = objects.find(
-		(object) =>
-			object.kind === "playback" &&
-			object.state === "present" &&
-			(object.body as PlaybackDefinition).number === playbackNumber,
-	);
-	if (
-		!page ||
-		(page.body as PlaybackPage).slots[String(address.slot)] !== playbackNumber
-	)
-		invalid("the assigned Group Master Page mapping", objects);
-	if (!playback) invalid("the assigned Group Master Playback", objects);
-	const presentPlayback = playback as Extract<
-		PlaybackTopologyObject,
-		{ state: "present" }
-	>;
-	const target = (presentPlayback.body as PlaybackDefinition).target;
-	if (target.type !== "group" || target.group_id !== action.groupObjectId)
-		invalid("the explicitly requested Group Master target", target);
-	validateStorageId(
-		page.objectId,
-		address.expectedPageObjectId,
-		String(address.page),
-		"Playback Page",
-	);
-	validateStorageId(
-		presentPlayback.objectId,
-		address.expectedPlaybackObjectId,
-		String(playbackNumber),
-		"Playback",
-	);
-	validateConfiguredObjectRevisions(address, page, presentPlayback, status);
-}
-
-function validateAssignedVirtualGroupMaster(
-	action: Extract<PlaybackTopologyAction, { type: "assign_group_master" }>,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (action.address.kind !== "virtual")
-		return invalid("a virtual Group Master address", action.address);
-	const address = action.address;
-	if (objects.length !== 1)
-		return invalid("only the assigned Virtual Playback Page", objects);
-	const page = matchingPage(objects, address.page);
-	if (!page) return invalid("the assigned Virtual Playback Page", objects);
-	validateStorageId(
-		page.objectId,
-		address.expectedPageObjectId,
-		String(address.page),
-		"Playback Page",
-	);
-	validateExactRevision(
-		page.objectRevision,
-		address.expectedPageRevision,
-		status,
-		"Playback Page",
-	);
-	const playback = (page.body as PlaybackPage).virtual_playbacks?.[
-		String(address.playbackNumber)
-	];
-	if (
-		!playback ||
-		playback.number !== address.playbackNumber ||
-		playback.target.type !== "group" ||
-		playback.target.group_id !== action.groupObjectId
-	)
-		invalid("the explicitly requested Virtual Group Master target", playback);
-}
-
-function validateVirtualPlaybackAction(
-	action: Extract<
-		PlaybackTopologyAction,
-		{ type: "configure_virtual" | "clear_virtual" }
-	>,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (objects.length > 1)
-		return invalid("only the authoritative requested Playback Page", objects);
-	const page = matchingPage(objects, action.page);
-	if (!page) {
-		if (
-			action.type === "clear_virtual" &&
-			status === "no_change" &&
-			objects.length === 0
-		)
-			return;
-		return invalid("the authoritative requested Playback Page", objects);
-	}
-	validateStorageId(
-		page.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
-		"Playback Page",
-	);
-	validateExactRevision(
-		page.objectRevision,
-		action.expectedPageRevision,
-		status,
-		"Playback Page",
-	);
-	const stored =
-		(page.body as PlaybackPage).virtual_playbacks?.[
-			String(action.playbackNumber)
-		] ?? null;
-	if (action.type === "clear_virtual") {
-		if (stored) return invalid("cleared Virtual Playback assignment", stored);
+/** Rejects successful responses that escape the Page/Cuelist authority of an intent. */
+export function validatePlaybackTopologyObjects(action: PlaybackTopologyAction, resolution: PlaybackTopologyResolution, objects: PlaybackTopologyObject[], status: "changed" | "no_change") {
+	if (action.type === "save_cue_list") return validateSavedCueList(action, objects, status);
+	if (action.type === "undo_cue_list" || action.type === "redo_cue_list") return validateCueListHistory(action, objects, status);
+	const pageNumber = "address" in action ? action.address.page : action.number;
+	if (objects.length !== 1) return invalid("only the authoritative requested Playback Page", objects);
+	const object = objects[0];
+	if (object.kind !== "playback_page") return invalid("the requested Playback Page", object);
+	validateStorageId(object.objectId, action.expectedPageObjectId, String(pageNumber), "Playback Page");
+	validateExactRevision(object.objectRevision, action.expectedPageRevision, status, "Playback Page");
+	if (action.type === "delete_playback_page") {
+		if (object.state !== "deleted") invalid("the deleted Playback Page", object);
 		return;
 	}
-	if (
-		!stored ||
-		!sameKnownPlayback(stored, action.playback, action.playbackNumber)
-	)
-		return invalid("configured Virtual Playback assignment", stored);
-}
-
-function validatePageAction(
-	action: Extract<
-		PlaybackTopologyAction,
-		{ type: "create_page" | "rename_page" }
-	>,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (objects.length !== 1)
-		return invalid("only the authoritative requested Playback Page", objects);
-	const page = matchingPage(objects, action.page);
-	if (!page)
-		return invalid("the authoritative requested Playback Page", objects);
-	validateStorageId(
-		page.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
-		"Playback Page",
-	);
-	validateExactRevision(
-		page.objectRevision,
-		action.expectedPageRevision,
-		status,
-		"Playback Page",
-	);
-	const body = page.body as PlaybackPage;
-	if (action.type === "rename_page" && body.name !== action.name)
-		invalid("the requested Playback Page name", body.name);
-	if (action.type === "create_page") validateCreatedPage(action, body, status);
-}
-
-function validateCreatedPage(
-	action: Extract<PlaybackTopologyAction, { type: "create_page" }>,
-	body: PlaybackPage,
-	status: "changed" | "no_change",
-) {
-	if (status === "changed") {
-		if (
-			action.expectedPageObjectId !== null ||
-			body.name !== `Page ${action.page}` ||
-			Object.keys(body.slots).length > 0
-		)
-			invalid("the newly created empty Playback Page", body);
+	if (object.state !== "present") return invalid("the present Playback Page", object);
+	const page = object.body as PlaybackPage;
+	if (page.number !== pageNumber) return invalid("the requested Playback Page number", page.number);
+	if ("number" in action) {
+		if (resolution.kind !== "page" || page.name !== action.name) invalid("the requested Playback Page name", page);
+		if (action.type === "create_playback_page" && Object.keys(page.assignments).length)
+			invalid("an empty newly created Playback Page", page.assignments);
 		return;
 	}
-	if (action.expectedPageObjectId === null)
-		invalid("an existing unchanged Playback Page", body);
+	if (resolution.kind !== "playback" || resolution.page !== action.address.page || resolution.position !== action.address.position)
+		return invalid("the requested Playback address", resolution);
+	const definition = page.assignments[String(action.address.position)];
+	if (action.type === "clear_playback") {
+		if (definition) invalid("the cleared Playback position", definition);
+	} else if (action.type === "assign_group_master") {
+		if (definition?.target.type !== "group" || definition.target.group_id !== action.groupObjectId)
+			invalid("the explicitly requested Group Master", definition);
+	} else if (!definition || !sameKnownPlayback(definition, action.definition)) {
+		invalid("the submitted Playback definition", definition);
+	}
 }
 
 function validateSavedCueList(
@@ -309,211 +95,6 @@ function validateCueListHistory(
 	);
 }
 
-function validateConfiguredSlot(
-	action: Extract<PlaybackTopologyAction, { type: "configure_slot" }>,
-	playbackNumber: number | null,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (playbackNumber == null)
-		return invalid("a configured Playback number", playbackNumber);
-	if (objects.length !== 2)
-		return invalid("only the configured Page and Playback", objects);
-	const page = matchingPage(objects, action.page);
-	const playback = objects.find(
-		(object) =>
-			object.kind === "playback" &&
-			object.state === "present" &&
-			(object.body as PlaybackDefinition).number === playbackNumber,
-	);
-	if (
-		!page ||
-		(page.body as PlaybackPage).slots[String(action.slot)] !== playbackNumber
-	)
-		invalid("the configured Page mapping", objects);
-	if (!playback) invalid("the configured Playback", objects);
-	const presentPlayback = playback as Extract<
-		PlaybackTopologyObject,
-		{ state: "present" }
-	>;
-	validateStorageId(
-		page.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
-		"Playback Page",
-	);
-	validateStorageId(
-		presentPlayback.objectId,
-		action.expectedPlaybackObjectId,
-		String(playbackNumber),
-		"Playback",
-	);
-	validateConfigureRevisions(action, page, presentPlayback, status);
-	if (
-		!sameKnownPlayback(
-			presentPlayback.body as PlaybackDefinition,
-			action.playback,
-			playbackNumber,
-		)
-	)
-		invalid("the server-normalized requested Playback", objects);
-}
-
-function validateMappedExistingPlayback(
-	action: Extract<PlaybackTopologyAction, { type: "map_existing_playback" }>,
-	playbackNumber: number | null,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (playbackNumber !== action.playbackNumber)
-		return invalid("the requested existing Playback number", playbackNumber);
-	if (objects.length !== 1)
-		return invalid("only the authoritative mapped Page", objects);
-	const page = matchingPage(objects, action.page);
-	if (
-		!page ||
-		(page.body as PlaybackPage).slots[String(action.slot)] !== playbackNumber
-	)
-		invalid("the authoritative existing-Playback Page mapping", objects);
-	validateStorageId(
-		page.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
-		"Playback Page",
-	);
-	validateExactRevision(
-		page.objectRevision,
-		action.expectedPageRevision,
-		status,
-		"Playback Page",
-	);
-}
-
-function validateClearedSlot(
-	action: Extract<PlaybackTopologyAction, { type: "clear_mapped_playback" }>,
-	playbackNumber: number | null,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (playbackNumber == null)
-		return validateEmptyClear(action, objects, status);
-	if (status !== "changed") invalid("a changed mapped-Playback clear", objects);
-	const deleted = objects.filter(
-		(object) => object.kind === "playback" && object.state === "deleted",
-	);
-	const pages = objects.filter(
-		(object) => object.kind === "playback_page" && object.state === "present",
-	);
-	if (
-		action.expectedPlaybackObjectId === null ||
-		deleted.length !== 1 ||
-		deleted[0].objectId !== action.expectedPlaybackObjectId ||
-		deleted[0].objectRevision !== action.expectedPlaybackRevision + 1
-	)
-		invalid("the exact deleted mapped Playback", objects);
-	if (pages.length + deleted.length !== objects.length || pages.length === 0)
-		invalid("only cleared Pages and the mapped Playback", objects);
-	if (!matchingPage(pages, action.page))
-		invalid("the authoritative cleared Page", objects);
-	const requestedPage = matchingPage(pages, action.page);
-	if (!requestedPage) invalid("the authoritative cleared Page", objects);
-	validateStorageId(
-		requestedPage.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
-		"Playback Page",
-	);
-	validateChangedRevision(
-		requestedPage.objectRevision,
-		action.expectedPageRevision,
-		"Playback Page",
-	);
-	for (const page of pages) {
-		if (page.state !== "present")
-			return invalid("only present cleared Pages", objects);
-		const slots = (page.body as PlaybackPage).slots;
-		if (Object.values(slots).includes(playbackNumber))
-			invalid("Pages without the deleted Playback mapping", objects);
-	}
-}
-
-function validateEmptyClear(
-	action: Extract<PlaybackTopologyAction, { type: "clear_mapped_playback" }>,
-	objects: PlaybackTopologyObject[],
-	status: "changed" | "no_change",
-) {
-	if (status !== "no_change") invalid("a no-change empty-slot clear", objects);
-	if (action.expectedPlaybackObjectId !== null || objects.length > 1)
-		return invalid("at most the requested empty Page", objects);
-	if (objects.length === 0) return;
-	const page = matchingPage(objects, action.page);
-	if (!page || (page.body as PlaybackPage).slots[String(action.slot)] != null)
-		invalid("the requested empty Page", objects);
-	validateStorageId(
-		page.objectId,
-		action.expectedPageObjectId,
-		String(action.page),
-		"Playback Page",
-	);
-	validateNoChangeRevision(
-		page.objectRevision,
-		action.expectedPageRevision,
-		"Playback Page",
-	);
-}
-
-function validateConfigureRevisions(
-	action: Extract<PlaybackTopologyAction, { type: "configure_slot" }>,
-	page: Extract<PlaybackTopologyObject, { state: "present" }>,
-	playback: Extract<PlaybackTopologyObject, { state: "present" }>,
-	status: "changed" | "no_change",
-) {
-	validateConfiguredObjectRevisions(action, page, playback, status);
-}
-
-function validateConfiguredObjectRevisions(
-	authority: {
-		expectedPageRevision: number;
-		expectedPlaybackRevision: number;
-	},
-	page: Extract<PlaybackTopologyObject, { state: "present" }>,
-	playback: Extract<PlaybackTopologyObject, { state: "present" }>,
-	status: "changed" | "no_change",
-) {
-	const pageChanged = validatePossibleRevision(
-		page.objectRevision,
-		authority.expectedPageRevision,
-		status,
-		"Playback Page",
-	);
-	const playbackChanged = validatePossibleRevision(
-		playback.objectRevision,
-		authority.expectedPlaybackRevision,
-		status,
-		"Playback",
-	);
-	if (status === "changed" && !pageChanged && !playbackChanged)
-		invalid("at least one changed configured object revision", [
-			page,
-			playback,
-		]);
-}
-
-function validatePossibleRevision(
-	actual: number,
-	expected: number,
-	status: "changed" | "no_change",
-	label: string,
-) {
-	if (status === "no_change") {
-		validateNoChangeRevision(actual, expected, label);
-		return false;
-	}
-	if (actual !== expected && actual !== expected + 1)
-		invalid(`${label} revision ${expected} or ${expected + 1}`, actual);
-	return actual === expected + 1;
-}
-
 function validateExactRevision(
 	actual: number,
 	expected: number,
@@ -549,15 +130,6 @@ function validateStorageId(
 ) {
 	if (actual !== (expected ?? fallback))
 		invalid(`${label} storage identity ${expected ?? fallback}`, actual);
-}
-
-function matchingPage(objects: PlaybackTopologyObject[], pageNumber: number) {
-	return objects.find(
-		(object) =>
-			object.kind === "playback_page" &&
-			object.state === "present" &&
-			(object.body as PlaybackPage).number === pageNumber,
-	) as Extract<PlaybackTopologyObject, { state: "present" }> | undefined;
 }
 
 function invalid(expected: string, actual: unknown): never {

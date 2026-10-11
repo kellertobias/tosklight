@@ -15,7 +15,7 @@ fn update_undo_snapshot(
         light_core::AttributeValue::Normalized(0.3),
     ));
     let cue_list = light_playback::CueList {
-        pool_number: None,
+        pool_number: Some(7),
         legacy_pool_aliases: Vec::new(),
         id: cue_list_id,
         name: "Update undo".into(),
@@ -37,7 +37,6 @@ fn update_undo_snapshot(
         cues: vec![first, second, light_playback::Cue::new(cue("3"))],
     };
     let playback = light_playback::PlaybackDefinition {
-        number: 7,
         name: "Update playback".into(),
         target: light_playback::PlaybackTarget::CueList { cue_list_id },
         buttons: [light_playback::PlaybackButtonAction::None; 3],
@@ -56,12 +55,10 @@ fn update_undo_snapshot(
     };
     let snapshot = EngineSnapshot {
         cue_lists: vec![cue_list.clone()].into(),
-        playbacks: vec![playback].into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
             name: "Main".into(),
-            slots: HashMap::from([(7, 7)]),
-            virtual_playbacks: HashMap::new(),
+            assignments: HashMap::from([(7, playback)]),
         }].into(),
         ..EngineSnapshot::default()
     };
@@ -133,7 +130,7 @@ fn command_line_update_all_adds_new_group_content_without_using_a_desk_default()
 }
 
 #[test]
-fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_targets() {
+fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets() {
     let (state, data_dir) = test_state();
     let desk = state
         .installation
@@ -152,11 +149,9 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
 
     let fixture = light_core::FixtureId::new();
     let (cue_list, mut snapshot) = update_undo_snapshot(fixture);
-    let mut virtual_playback = snapshot.playbacks[0].clone();
-    virtual_playback.number = 1001;
-    let mut page = snapshot.playback_pages[0].clone();
-    page.virtual_playbacks.insert(1001, virtual_playback);
-    snapshot.playback_pages = vec![page].into();
+    let mut page=snapshot.playback_pages[0].clone();
+    page.assignments.insert(1000,page.assignments[&7].clone());
+    snapshot.playback_pages=vec![page].into();
 
     let show_path = data_dir.join("shows/manual-update-grammar.show");
     let show = state
@@ -171,7 +166,7 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
     state.active_show.replace_current(Some(show));
     state
         .installation
-        .set_selected_playback(session.desk.id, show_id, Some(7))
+        .set_selected_playback(session.desk.id, show_id, Some(light_show::PlaybackSelection{page:1,position:7}))
         .unwrap();
 
     let request = |command: &str| {
@@ -184,7 +179,7 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
         selected.mode,
         update::UpdateMode::Cue(update::CueUpdateMode::ExistingInCurrentCue)
     );
-    assert_eq!(selected.target.playback_number, Some(7));
+    assert_eq!(selected.target.playback_address, Some(cue_programming_test_address(1,7)));
     assert_eq!(selected.target.cue_number.as_deref(), Some("3"));
 
     let explicit = request("UPDATE TRACKED CUELIST 7 CUE 2").unwrap();
@@ -194,20 +189,20 @@ fn manual_update_grammar_resolves_selected_explicit_physical_virtual_and_preset_
     );
     assert_eq!(explicit.target.cue_id, Some(cue_list.cues[1].id));
 
-    let physical = request("UPDATE KNOWN PBK 7").unwrap();
+    let current_page = request("UPDATE KNOWN PBK 7").unwrap();
     assert_eq!(
-        physical.mode,
+        current_page.mode,
         update::UpdateMode::Cue(update::CueUpdateMode::AddToCurrentCue)
     );
-    assert_eq!(physical.target.playback_number, Some(7));
-    assert_eq!(physical.target.cue_id, None);
+    assert_eq!(current_page.target.playback_address, Some(cue_programming_test_address(1,7)));
+    assert_eq!(current_page.target.cue_id, None);
 
-    let virtual_target = request("UPDATE ALL VPBK 1001").unwrap();
+    let explicit_page_target = request("UPDATE ALL PBK 1 . 1000").unwrap();
     assert_eq!(
-        virtual_target.mode,
+        explicit_page_target.mode,
         update::UpdateMode::Cue(update::CueUpdateMode::AddNew)
     );
-    assert_eq!(virtual_target.target.playback_number, Some(1001));
+    assert_eq!(explicit_page_target.target.playback_address, Some(cue_programming_test_address(1,1000)));
 
     let preset = request("UPDATE COLOR PRESET 22").unwrap();
     assert_eq!(preset.target.family, UpdateApiTargetFamily::Preset);
@@ -245,7 +240,7 @@ fn touched_update_target_rejects_a_changed_playback_context_but_explicit_cue_rem
     let first_cue = Uuid::new_v4();
     let second_cue = Uuid::new_v4();
     let active = vec![update::ActiveCueContext {
-        playback_number: 7,
+        playback_address:cue_programming_test_address(1,7),
         cue_list_id,
         cue_id: second_cue,
         cue_number: cue("2"),
@@ -253,7 +248,7 @@ fn touched_update_target_rejects_a_changed_playback_context_but_explicit_cue_rem
     let touched = UpdateApiTarget {
         family: UpdateApiTargetFamily::Cue,
         object_id: Some(cue_list_id.0.to_string()),
-        playback_number: Some(7),
+        playback_address: Some(cue_programming_test_address(1,7)),
         cue_id: Some(first_cue),
         cue_number: Some("1".into()),
         validate_active_context: true,
@@ -296,9 +291,8 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
         .unwrap();
     for _ in 0..3 {
         state
-            .output.execute_playback(EnginePlaybackCommand::Pool {
-                number: 7,
-                action: PoolPlaybackAction::Go,
+            .output.execute_playback(EnginePlaybackCommand::Playback {
+                address:cue_programming_test_address(1,7),action:light_engine::PlaybackAction::Go,activation_origin:None,control_source:cue_programming_test_source(),
             })
             .unwrap();
     }
@@ -346,7 +340,7 @@ fn confirmed_update_rejects_changed_programmer_and_is_one_step_undoable() {
     let target = UpdateApiTarget {
         family: UpdateApiTargetFamily::Cue,
         object_id: Some(cue_list_object_id.clone()),
-        playback_number: Some(7),
+        playback_address: Some(cue_programming_test_address(1,7)),
         cue_id: Some(cue_list.cues[2].id),
         cue_number: Some("3".into()),
         validate_active_context: true,

@@ -118,6 +118,15 @@ pub(super) fn ensure_default_show_available(
         .library()?
         .into_iter()
         .find(|entry| entry.name == super::default_show::name());
+    // An existing default is operator data too. Do not rewrite its identity, migrate it or
+    // replace it before the read-only compatibility gate can enter actionable recovery.
+    if let Some(existing) = &existing {
+        if path.exists() {
+            return desk
+                .relocate_show(existing.id, &path.display().to_string())
+                .map_err(Into::into);
+        }
+    }
     if super::validate_show_file(&path).is_err() {
         preserve_invalid_default_show(data_dir, &path)?;
         super::default_show::initialise(&path)?;
@@ -131,7 +140,14 @@ pub(super) fn ensure_default_show_available(
             &path.display().to_string(),
             false,
         )?;
-        ActiveShowRepository::open(&path)?.set_identity(entry.id, &entry.name, None)?;
+        if super::show_programming_contract::check_show_file(
+            &path,
+            supported_programming_contract(),
+        )
+        .is_ok()
+        {
+            ActiveShowRepository::open(&path)?.set_identity(entry.id, &entry.name, None)?;
+        }
         entry
     };
     Ok(entry)
@@ -147,6 +163,7 @@ pub(super) struct PersistentState {
     pub(super) fixture_library: FixtureLibrary,
     pub(super) configuration: DeskConfiguration,
     pub(super) active_show: Option<ShowEntry>,
+    pub(super) desk_recovery: Option<String>,
 }
 
 impl PersistentState {
@@ -162,6 +179,24 @@ impl PersistentState {
             osc_bind_override,
             output_bind_override,
         } = options;
+        let (data_dir, desk_recovery) = match light_show::inspect_desk_playback_contract(
+            &data_dir.join("desk.sqlite"),
+        )? {
+            Some(rejection) => {
+                let original = data_dir.join("desk.sqlite");
+                let recovery = data_dir.join("recovery").join("desk-contract-17");
+                std::fs::create_dir_all(&recovery)?;
+                let message = format!(
+                    "{} The original database and its SQLite sidecars remain at {}. The separate fresh configuration is at {}.",
+                    rejection.message,
+                    original.display(),
+                    recovery.join("desk.sqlite").display()
+                );
+                tracing::error!(original=%original.display(), recovery=%recovery.display(), "starting in incompatible desk recovery mode");
+                (recovery, Some(message))
+            }
+            None => (data_dir, None),
+        };
         let fixture_package_dir = fixture_package_directory(fixture_package_dir);
         let extensions_dir = extensions_directory(extensions_dir)?;
         tracing::info!(path=%extensions_dir.display(), configuration=%data_dir.join("extensions.json").display(), "resolved native extensions installation paths");
@@ -191,6 +226,7 @@ impl PersistentState {
             fixture_library,
             configuration,
             active_show,
+            desk_recovery,
         })
     }
 }
@@ -321,7 +357,13 @@ fn adopt_show_file(desk: &DeskStore, path: &std::path::Path) -> anyhow::Result<S
         .unwrap_or("show")
         .to_owned();
     let entry = desk.upsert_show(&name, &path.display().to_string(), true)?;
-    ActiveShowRepository::open(&path)?.set_identity(entry.id, &entry.name, None)?;
+    // Incompatible files are catalogued for the visible startup recovery path without first
+    // opening them writable. Compatible files keep the existing activation identity workflow.
+    if super::show_programming_contract::check_show_file(&path, supported_programming_contract())
+        .is_ok()
+    {
+        ActiveShowRepository::open(&path)?.set_identity(entry.id, &entry.name, None)?;
+    }
     desk.set_active_show(Some(entry.id))?;
     tracing::info!(path=%path.display(), show=%entry.name, "opened the show file named at startup");
     Ok(entry)
@@ -357,7 +399,11 @@ impl StartupState {
             load_engine(&persistent, &programmers, programmer_recovery)?;
         let (output_runtime, output_recovery) =
             load_output_runtime(&persistent, &programmers, active_show_error.as_deref())?;
-        let active_show_error = active_show_error.or(output_recovery);
+        let active_show_error = persistent
+            .desk_recovery
+            .clone()
+            .or(active_show_error)
+            .or(output_recovery);
         apply_output_runtime(&engine, &output_runtime);
         let speed_groups = create_speed_groups(&persistent.configuration);
         Ok(Self {
@@ -709,19 +755,14 @@ pub(super) fn finalize_restored_owners_for_startup(
     if state.active_show.error().is_some() {
         return Ok(());
     }
-    let normalized = super::playback_exclusion_normalization::
-        normalize_restored_virtual_playback_exclusions_deferred(state)
-        .map_err(|error| anyhow::anyhow!(error.message))?;
     match state
         .output
         .finalize_restored_owners(&state.playback.render_capability())
     {
         Ok(()) => {
-            if normalized.persistence_pending {
-                if let Err(error) = super::persist_active_playbacks(state) {
-                    tracing::warn!(error=%error.message,
-                        "validated restored Playback normalization persistence is pending");
-                }
+            if let Err(error) = super::persist_active_playbacks(state) {
+                tracing::warn!(error=%error.message,
+                    "validated restored Playback persistence is pending");
             }
             Ok(())
         }
@@ -760,3 +801,7 @@ pub(super) fn finalize_restored_owners_for_startup(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "startup_playback_contract_tests.rs"]
+mod playback_contract_tests;

@@ -10,11 +10,7 @@ import { usePlaybackPagesView } from "../playbackTopology/PlaybackTopologyView";
 import { useLowerSectionSwitch } from "./LowerSectionSwitch";
 import { useScreens } from "./ScreensContext";
 
-/**
- * Page chrome for one secondary screen. Only an `independent` screen owns a
- * page, and it changes it exclusively through the narrow `setScreenPage`
- * action; a missing Page is created by one typed topology action first.
- */
+/** Page changes update the authoritative Own surface page. */
 export function ScreenPageControls({
 	screen,
 	page,
@@ -22,7 +18,7 @@ export function ScreenPageControls({
 	screen: ScreenConfiguration;
 	page: number;
 }) {
-	const { setScreenPage } = useScreens();
+	const { surfaces, setSurfacePage, selectSurface } = useScreens();
 	const sectionSwitch = useLowerSectionSwitch();
 	const topology = usePlaybackPagesView();
 	const actions = usePlaybackTopologyActions();
@@ -30,13 +26,17 @@ export function ScreenPageControls({
 	const authority = useRef(actions);
 	authority.current = actions;
 
-	const independent = screen.page_mode === "independent";
+	const independent =
+		surfaces?.playback_surfaces[screen.surface_id]?.page_source.type === "own";
 	const ready = topology.ready && Boolean(actions);
 	const writable = independent && ready;
 	const pages = topology.pages.map((item) => item.body);
 
 	const setPage = (next: number) => {
-		if (writable) void setScreenPage(screen.id, next);
+		if (writable)
+			void selectSurface(screen.surface_id).then(() =>
+				setSurfacePage(screen.surface_id, next),
+			);
 	};
 	/** Creates the missing Page, then adopts it only under surviving authority. */
 	const createPage = async (next: number) => {
@@ -59,7 +59,10 @@ export function ScreenPageControls({
 	return (
 		<div className="screen-page-controls">
 			{sectionSwitch}
-			<Button disabled={!writable || page <= 1} onClick={() => setPage(page - 1)}>
+			<Button
+				disabled={!writable || page <= 1}
+				onClick={() => setPage(page - 1)}
+			>
 				▲ PAGE UP
 			</Button>
 			<Button

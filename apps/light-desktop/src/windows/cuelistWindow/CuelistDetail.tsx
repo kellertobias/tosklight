@@ -126,7 +126,6 @@ export function CuelistDetail(props: CuelistDetailProps) {
 		props.selectedCuelist,
 		props.active,
 		props.fixedCueListId,
-		props.assignmentNumber,
 	);
 	const cues = selection.cueList?.cues ?? NO_CUES;
 	const editor = useCueEditor({

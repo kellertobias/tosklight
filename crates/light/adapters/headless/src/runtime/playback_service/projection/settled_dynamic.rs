@@ -17,7 +17,7 @@ pub(in crate::runtime) fn settled_dynamic_playback_events(
     snapshot: &EngineSnapshot,
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     changes: &[EventDraft],
-    auto_offs: &[PlaybackIdentity],
+    auto_offs: &[PlaybackAddress],
     start_changes: &[uuid::Uuid],
     output_interval_millis: u64,
 ) -> Vec<EventDraft> {
@@ -37,22 +37,17 @@ pub(in crate::runtime) fn settled_dynamic_playback_events(
         return Vec::new();
     }
     let aliases = snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .filter_map(|definition| {
-            PlaybackIdentity::physical(definition.number)
-                .ok()
-                .map(|identity| (identity, definition))
-        })
-        .chain(snapshot.playback_pages.iter().flat_map(|page| {
-            page.virtual_playbacks
+        .flat_map(|page| {
+            page.assignments
                 .iter()
-                .filter_map(move |(number, definition)| {
-                    light_playback::VirtualPlaybackAddress::new(page.number, *number)
+                .filter_map(move |(position, definition)| {
+                    light_playback::PlaybackAddress::new(page.number, *position)
                         .ok()
-                        .map(|address| (PlaybackIdentity::Virtual(address), definition))
+                        .map(|address| (address, definition))
                 })
-        }))
+        })
         .collect::<Vec<_>>();
     for (identity, definition) in &aliases {
         if auto_offs.contains(identity)
@@ -70,17 +65,11 @@ pub(in crate::runtime) fn settled_dynamic_playback_events(
             if !global_changed && !changed.contains(&assignment.target_id()) {
                 return None;
             }
-            let active = engine.active_dynamic_playback_at(identity)?;
-            let requested = match identity {
-                PlaybackIdentity::Physical(number) => {
-                    PlaybackRuntimeIdentity::Playback(number.get())
-                }
-                PlaybackIdentity::Virtual(address) => PlaybackRuntimeIdentity::Virtual(address),
-            };
+            let active = engine.active_dynamic_playback(identity)?;
+            let requested = PlaybackRuntimeIdentity::Playback(identity);
             let projection = PlaybackRuntimeProjection {
                 scope,
-                requested,
-                playback_number: Some(identity.number()),
+                identity: requested,
                 target: PlaybackTargetProjection::Dynamic {
                     dynamic_id: assignment.dynamic.dynamic_id,
                     last_known_pool_number: assignment.dynamic.last_known_pool_number,

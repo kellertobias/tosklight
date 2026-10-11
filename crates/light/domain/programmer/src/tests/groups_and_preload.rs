@@ -313,10 +313,12 @@ fn disabled_programmer_domain_stays_live_and_playback_verbs_retain_order() {
     ] {
         assert!(registry.queue_preload_playback_action(
             session,
-            1,
-            None,
+            light_playback::PlaybackAddress::new(1, 1).unwrap(),
             PreloadPlaybackQueueAction::try_from(action).unwrap(),
-            PreloadPlaybackQueueSurface::Physical,
+            light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1
+            },
         ));
     }
     let state = registry.get(session).unwrap();

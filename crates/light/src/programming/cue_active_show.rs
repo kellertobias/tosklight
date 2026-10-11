@@ -92,7 +92,6 @@ fn projection_for_kind(
 ) -> Option<&ProgrammingCueObjectProjection> {
     match kind {
         ActiveShowObjectKind::CueList => Some(&result.projections.cue_list),
-        ActiveShowObjectKind::Playback => result.projections.playback.as_ref(),
         ActiveShowObjectKind::PlaybackPage => result.projections.page.as_ref(),
         ActiveShowObjectKind::AttributeConfiguration
         | ActiveShowObjectKind::Group

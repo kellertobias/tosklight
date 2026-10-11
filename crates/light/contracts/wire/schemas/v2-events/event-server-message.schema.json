@@ -1388,14 +1388,11 @@
           "format": "uint",
           "minimum": 0
         },
+        "owner_address": {
+          "$ref": "#/$defs/PlaybackAddressValue"
+        },
         "paused": {
           "type": "boolean"
-        },
-        "playback_number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
         },
         "size": {
           "type": "number",
@@ -1442,7 +1439,7 @@
         }
       },
       "required": [
-        "playback_number",
+        "owner_address",
         "enabled",
         "paused",
         "flash",
@@ -3166,11 +3163,27 @@
           "type": "object",
           "properties": {
             "change": {
-              "$ref": "#/$defs/VirtualPlaybackExclusionZonesChange"
+              "$ref": "#/$defs/PlaybackPreloadScopeChange"
             },
             "type": {
               "type": "string",
-              "const": "virtual_playback_exclusion_zones_changed"
+              "const": "playback_preload_scope_changed"
+            }
+          },
+          "required": [
+            "type",
+            "change"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/PlaybackSoloRegionsChange"
+            },
+            "type": {
+              "type": "string",
+              "const": "playback_solo_regions_changed"
             }
           },
           "required": [
@@ -3801,11 +3814,8 @@
         {
           "type": "object",
           "properties": {
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+            "address": {
+              "$ref": "#/$defs/PlaybackAddressValue"
             },
             "type": {
               "type": "string",
@@ -3814,7 +3824,7 @@
           },
           "required": [
             "type",
-            "playback_number"
+            "address"
           ]
         },
         {
@@ -5746,49 +5756,60 @@
         }
       ]
     },
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
     "PlaybackConfigurationNotification": {
       "type": "object",
       "properties": {
-        "addressing": {
-          "type": "string"
+        "address": {
+          "$ref": "#/$defs/PlaybackAddressValue"
         },
         "desk_id": {
           "type": "string"
-        },
-        "page": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
-        },
-        "playback": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        },
-        "slot": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
         }
       },
       "required": [
         "desk_id",
-        "addressing",
-        "page",
-        "slot",
-        "playback"
+        "address"
+      ]
+    },
+    "PlaybackControlSource": {
+      "type": "object",
+      "properties": {
+        "control_id": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "surface_id": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        }
+      },
+      "required": [
+        "surface_id",
+        "control_id"
       ]
     },
     "PlaybackCueReference": {
@@ -5832,14 +5853,15 @@
             }
           ]
         },
-        "playback_number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
+        "playback_address": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "previous": {
           "anyOf": [
@@ -5858,7 +5880,7 @@
         }
       },
       "required": [
-        "playback_number",
+        "playback_address",
         "cue_list_id",
         "previous",
         "current",
@@ -5870,7 +5892,7 @@
     "PlaybackDeskProjection": {
       "type": "object",
       "properties": {
-        "active_page": {
+        "command_page": {
           "type": "integer",
           "format": "uint8",
           "maximum": 255,
@@ -5879,6 +5901,15 @@
         "desk_id": {
           "type": "string",
           "format": "uuid"
+        },
+        "resolved_pages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          }
         },
         "scope": {
           "$ref": "#/$defs/PlaybackShowScope"
@@ -5891,20 +5922,44 @@
           "format": "uuid"
         },
         "selected_playback": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selected_surface_id": {
+          "type": "string"
         }
       },
       "required": [
         "scope",
         "desk_id",
-        "active_page",
+        "command_page",
+        "selected_surface_id",
+        "resolved_pages",
         "selected_playback"
+      ]
+    },
+    "PlaybackPreloadScopeChange": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "show_id",
+        "revision"
       ]
     },
     "PlaybackRuntimeChange": {
@@ -5938,44 +5993,23 @@
               "type": "string",
               "const": "playback"
             },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "playback_number"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "maximum": 99,
+              "minimum": 1
             },
-            "playback_number": {
+            "position": {
               "type": "integer",
               "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+              "maximum": 1000,
+              "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page",
-            "playback_number"
+            "position"
           ]
         },
         {
@@ -5990,7 +6024,6 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -6008,7 +6041,6 @@
               "const": "direct_cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -6027,7 +6059,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group_id"
@@ -6038,16 +6069,7 @@
     "PlaybackRuntimeProjection": {
       "type": "object",
       "properties": {
-        "playback_number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        },
-        "requested": {
+        "identity": {
           "$ref": "#/$defs/PlaybackRuntimeIdentity"
         },
         "scope": {
@@ -6289,8 +6311,7 @@
       ],
       "required": [
         "scope",
-        "requested",
-        "playback_number"
+        "identity"
       ]
     },
     "PlaybackShowScope": {
@@ -6311,10 +6332,32 @@
         "show_revision"
       ]
     },
+    "PlaybackSoloRegionsChange": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991,
+          "minimum": 0
+        },
+        "show_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "show_id",
+        "revision"
+      ]
+    },
     "PlaybackTelemetrySample": {
       "description": "One sampled volatile runtime row for a numbered Playback. Static topology stays on the\nsnapshot + revisioned event path; a telemetry tick carries only playbacks whose sampled\nvalues changed since the previous tick.",
       "type": "object",
       "properties": {
+        "address": {
+          "$ref": "#/$defs/PlaybackAddressValue"
+        },
         "current_cue": {
           "anyOf": [
             {
@@ -6343,12 +6386,6 @@
           "type": "number",
           "format": "float"
         },
-        "playback_number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        },
         "swap_active": {
           "type": "boolean"
         },
@@ -6357,7 +6394,7 @@
         }
       },
       "required": [
-        "playback_number",
+        "address",
         "enabled",
         "master",
         "current_cue",
@@ -6378,13 +6415,10 @@
           "minimum": 0
         },
         "released": {
-          "description": "Playback numbers that stopped reporting since the previous tick (released/offline).",
+          "description": "Playback addresses that stopped reporting since the previous tick (released/offline).",
           "type": "array",
           "items": {
-            "type": "integer",
-            "format": "uint16",
-            "maximum": 65535,
-            "minimum": 0
+            "$ref": "#/$defs/PlaybackAddressValue"
           }
         },
         "sample_rate_hz": {
@@ -8648,47 +8682,20 @@
       ]
     },
     "ProgrammingPreloadPlaybackAction": {
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "toggle",
-            "go",
-            "back",
-            "off",
-            "on",
-            "temporary_on",
-            "temporary_off",
-            "dynamic_pause",
-            "dynamic_restart",
-            "dynamic_double_speed",
-            "dynamic_half_speed",
-            "dynamic_learn_speed"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "fader": {
-              "type": "object",
-              "properties": {
-                "value_permyriad": {
-                  "type": "integer",
-                  "format": "uint16",
-                  "maximum": 65535,
-                  "minimum": 0
-                }
-              },
-              "required": [
-                "value_permyriad"
-              ]
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "fader"
-          ]
-        }
+      "type": "string",
+      "enum": [
+        "toggle",
+        "go",
+        "back",
+        "off",
+        "on",
+        "temporary_on",
+        "temporary_off",
+        "dynamic_pause",
+        "dynamic_restart",
+        "dynamic_double_speed",
+        "dynamic_half_speed",
+        "dynamic_learn_speed"
       ]
     },
     "ProgrammingPreloadPlaybackQueueChange": {
@@ -8708,29 +8715,17 @@
         "action": {
           "$ref": "#/$defs/ProgrammingPreloadPlaybackAction"
         },
-        "page": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint8",
-          "maximum": 255,
-          "minimum": 0
+        "address": {
+          "$ref": "#/$defs/PlaybackAddressValue"
         },
-        "playback_number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        },
-        "surface": {
-          "$ref": "#/$defs/ProgrammingPreloadPlaybackSurface"
+        "control_source": {
+          "$ref": "#/$defs/PlaybackControlSource"
         }
       },
       "required": [
-        "playback_number",
+        "address",
         "action",
-        "surface"
+        "control_source"
       ]
     },
     "ProgrammingPreloadPlaybackQueueProjection": {
@@ -8751,15 +8746,6 @@
       "required": [
         "revision",
         "actions"
-      ]
-    },
-    "ProgrammingPreloadPlaybackSurface": {
-      "type": "string",
-      "enum": [
-        "physical",
-        "virtual",
-        "osc",
-        "matter"
       ]
     },
     "ProgrammingPreloadValuesChange": {
@@ -9322,8 +9308,7 @@
       "type": "string",
       "enum": [
         "configuration",
-        "screen_page",
-        "playback_page"
+        "playback_surfaces"
       ]
     },
     "SelectiveImportChange": {
@@ -9628,34 +9613,6 @@
             "kind": {
               "type": "string",
               "const": "patch_layer"
-            },
-            "object_id": {
-              "type": "string"
-            },
-            "object_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0
-            }
-          },
-          "required": [
-            "kind",
-            "object_id",
-            "object_revision",
-            "body",
-            "deleted"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "body": true,
-            "deleted": {
-              "type": "boolean"
-            },
-            "kind": {
-              "type": "string",
-              "const": "playback"
             },
             "object_id": {
               "type": "string"
@@ -10489,14 +10446,15 @@
         "object_id": {
           "type": "string"
         },
-        "playback_number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
+        "playback_address": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "validate_active_context": {
           "type": [
@@ -10508,7 +10466,7 @@
       "required": [
         "family",
         "object_id",
-        "playback_number",
+        "playback_address",
         "cue_id",
         "cue_number",
         "validate_active_context"
@@ -10611,25 +10569,6 @@
             "desk_id"
           ]
         }
-      ]
-    },
-    "VirtualPlaybackExclusionZonesChange": {
-      "type": "object",
-      "properties": {
-        "revision": {
-          "type": "integer",
-          "format": "uint64",
-          "maximum": 9007199254740991,
-          "minimum": 0
-        },
-        "show_id": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
-      "required": [
-        "show_id",
-        "revision"
       ]
     },
     "VisualizerConnectionNotification": {

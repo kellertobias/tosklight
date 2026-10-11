@@ -1,73 +1,11 @@
 use crate::{engine::CuelistFlashState, *};
 
 impl PlaybackEngine {
-    pub fn on_at(&mut self, identity: PlaybackIdentity) -> Result<(), String> {
-        match identity {
-            PlaybackIdentity::Physical(number) => self.on(number.get()),
-            PlaybackIdentity::Virtual(address) => {
-                let definition = self
-                    .virtual_definitions
-                    .get(&address)
-                    .ok_or("virtual playback does not exist")?;
-                let PlaybackTarget::CueList { cue_list_id } = definition.target else {
-                    return Err(
-                        "operation is not available for this virtual playback function".into(),
-                    );
-                };
-                let key = PlaybackKey::CueList(cue_list_id);
-                self.disarm_cuelist_flash(cue_list_id);
-                let had_runtime = self.active.contains_key(&key);
-                let was_enabled = self
-                    .active
-                    .get(&key)
-                    .is_some_and(|playback| playback.enabled);
-                if !had_runtime {
-                    self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
-                }
-                if had_runtime {
-                    self.restart_first_cue_if_needed(key, cue_list_id);
-                }
-                let transition_ordinal = (had_runtime && !was_enabled)
-                    .then(|| self.take_transition_ordinal(self.clock.now()));
-                let active = self
-                    .active
-                    .get_mut(&key)
-                    .expect("virtual playback activation inserted runtime");
-                active.playback_identity = Some(identity);
-                activate_normal(active, address.number().get());
-                if let Some(transition_ordinal) = transition_ordinal {
-                    active.transition_ordinal = transition_ordinal;
-                    active.source_history = None;
-                }
-                self.retarget_physical_controls(cue_list_id, 1.0, None);
-                Ok(())
-            }
-        }
-    }
-
-    pub fn off_at(&mut self, identity: PlaybackIdentity) -> Result<bool, String> {
-        match identity {
-            PlaybackIdentity::Physical(number) => self.off(number.get()),
-            PlaybackIdentity::Virtual(_address) => {
-                let key = self.runtime_key_at(identity)?;
-                let PlaybackKey::CueList(cue_list_id) = key;
-                self.reset_jump_counts(cue_list_id);
-                let Some(playback) = self.active.get_mut(&key) else {
-                    return Ok(false);
-                };
-                let was_enabled = playback.enabled;
-                deactivate(playback);
-                self.retarget_physical_controls(cue_list_id, 0.0, None);
-                Ok(was_enabled)
-            }
-        }
-    }
-
-    pub fn on(&mut self, number: u16) -> Result<(), String> {
+    pub fn on(&mut self, number: PlaybackAddress) -> Result<(), String> {
         self.on_mutation(number).map(|_| ())
     }
 
-    pub fn on_mutation(&mut self, number: u16) -> Result<PlaybackMutation<()>, String> {
+    pub fn on_mutation(&mut self, number: PlaybackAddress) -> Result<PlaybackMutation<()>, String> {
         if self.dynamic_assignment(number).is_some() {
             return self.on_dynamic_mutation(number);
         }
@@ -81,19 +19,14 @@ impl PlaybackEngine {
             .is_some_and(|playback| playback.enabled);
         let mut changed = false;
         if !had_runtime {
-            self.go_at_key(
-                key,
-                id,
-                self.clock.now(),
-                Some(PlaybackIdentity::physical(number)?),
-            )?;
+            self.go_at_key(key, id, self.clock.now(), Some(number))?;
             changed = true;
         }
         changed |= self.restart_first_cue_if_needed(key, id);
         let transition_ordinal = (had_runtime && (!was_enabled || changed))
             .then(|| self.take_transition_ordinal(self.clock.now()));
         let active = self.active.get_mut(&key).unwrap();
-        active.playback_identity = None;
+
         changed |= activate_normal(active, number);
         if let Some(transition_ordinal) = transition_ordinal {
             active.transition_ordinal = transition_ordinal;
@@ -158,30 +91,36 @@ impl PlaybackEngine {
         }
     }
 
-    pub fn off(&mut self, number: u16) -> Result<bool, String> {
+    pub fn off(&mut self, number: PlaybackAddress) -> Result<bool, String> {
         self.off_mutation(number).map(|mutation| mutation.value)
     }
 
-    pub fn off_mutation(&mut self, number: u16) -> Result<PlaybackMutation<bool>, String> {
+    pub fn off_mutation(
+        &mut self,
+        number: PlaybackAddress,
+    ) -> Result<PlaybackMutation<bool>, String> {
         if self.dynamic_assignment(number).is_some() {
             return self.off_dynamic_mutation(number);
         }
         let id = self.cue_list_for(number)?;
+        let inhibition = self.inhibit_held_release_activation(number)?;
         let key = PlaybackKey::CueList(id);
         self.reset_jump_counts(id);
         let Some(playback) = self.active.get_mut(&key) else {
-            return Ok(PlaybackMutation::new(false, PlaybackRuntimeEffect::None));
+            return Ok(PlaybackMutation::new(false, inhibition.effect));
         };
         let was_enabled = playback.enabled;
         let changed = deactivate(playback);
         let control_changed = self.retarget_physical_controls(id, 0.0, None);
         Ok(PlaybackMutation::new(
             was_enabled,
-            durable_effect(changed).combine(if control_changed {
-                PlaybackRuntimeEffect::Transient
-            } else {
-                PlaybackRuntimeEffect::None
-            }),
+            durable_effect(changed)
+                .combine(inhibition.effect)
+                .combine(if control_changed {
+                    PlaybackRuntimeEffect::Transient
+                } else {
+                    PlaybackRuntimeEffect::None
+                }),
         ))
     }
 
@@ -190,11 +129,14 @@ impl PlaybackEngine {
             .retain(|(cue_list_id, _), _| *cue_list_id != id);
     }
 
-    pub fn toggle(&mut self, number: u16) -> Result<bool, String> {
+    pub fn toggle(&mut self, number: PlaybackAddress) -> Result<bool, String> {
         self.toggle_mutation(number).map(|mutation| mutation.value)
     }
 
-    pub fn toggle_mutation(&mut self, number: u16) -> Result<PlaybackMutation<bool>, String> {
+    pub fn toggle_mutation(
+        &mut self,
+        number: PlaybackAddress,
+    ) -> Result<PlaybackMutation<bool>, String> {
         if self.dynamic_assignment(number).is_some() {
             return self.toggle_dynamic_mutation(number);
         }
@@ -234,16 +176,22 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), durable_effect(changed)))
     }
 
-    pub fn set_master(&mut self, number: u16, value: f32) -> Result<(), String> {
-        self.set_master_mutation(number, value).map(|_| ())
+    pub fn set_master(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        value: f32,
+    ) -> Result<(), String> {
+        self.set_master_mutation(number, source, value).map(|_| ())
     }
 
     pub fn set_master_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_master_inner_mutation(number, value, false)
+        self.set_master_inner_mutation(number, source, value, false)
     }
 
     /// Starts one engine-owned transition of the target's authoritative master.
@@ -252,7 +200,7 @@ impl PlaybackEngine {
     /// submits the final level and duration once; the Playback tick owns all intermediate values.
     pub fn set_master_transition_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
         value: f32,
         duration_millis: u64,
     ) -> Result<PlaybackMutation<()>, String> {
@@ -264,9 +212,9 @@ impl PlaybackEngine {
         }
         let started_at = self.clock.now();
         if self.dynamic_assignment(number).is_some() {
-            let identity = PlaybackIdentity::physical(number)?;
+            let identity = number;
             let target_id = self
-                .dynamic_target_id_at(identity)
+                .dynamic_target_id(identity)
                 .ok_or("Playback is not assigned to a Dynamic")?;
             if value > 0.0
                 && !self
@@ -274,7 +222,7 @@ impl PlaybackEngine {
                     .get(&target_id)
                     .is_some_and(|active| active.enabled)
             {
-                self.on_dynamic_at_mutation(identity)?;
+                self.on_dynamic_mutation(identity)?;
             }
             let active = self
                 .active_dynamics
@@ -308,12 +256,7 @@ impl PlaybackEngine {
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
         if value > 0.0 && !self.active.contains_key(&key) {
-            self.go_at_key(
-                key,
-                id,
-                started_at,
-                Some(PlaybackIdentity::physical(number)?),
-            )?;
+            self.go_at_key(key, id, started_at, Some(number))?;
         }
         let active = self
             .active
@@ -338,68 +281,23 @@ impl PlaybackEngine {
     /// Set the authoritative level through a virtual fader supplied by a remote control
     /// protocol. Faderless/button-only layouts intentionally have no local fader, but their
     /// playback master remains a valid runtime control and feedback source.
-    pub fn set_virtual_master(&mut self, number: u16, value: f32) -> Result<(), String> {
-        self.set_virtual_master_mutation(number, value).map(|_| ())
+    pub fn set_master_level(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        value: f32,
+    ) -> Result<(), String> {
+        self.set_master_level_mutation(number, source, value)
+            .map(|_| ())
     }
 
-    pub fn set_virtual_master_mutation(
+    pub fn set_master_level_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_master_inner_mutation(number, value, true)
-    }
-
-    pub fn set_virtual_master_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        value: f32,
-    ) -> Result<PlaybackMutation<()>, String> {
-        if let PlaybackIdentity::Physical(number) = identity {
-            return self.set_virtual_master_mutation(number.get(), value);
-        }
-        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
-            return Err("playback master must be within 0-1".into());
-        }
-        let address = identity
-            .virtual_address()
-            .expect("physical identity returned above");
-        let definition = self
-            .definition_at(identity)
-            .ok_or("virtual playback does not exist")?;
-        if definition.fader != PlaybackFaderMode::Master {
-            return Err("virtual master requires the Master fader mode".into());
-        }
-        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
-            return Err("virtual playback master is unavailable for this target".into());
-        };
-        let key = PlaybackKey::CueList(cue_list_id);
-        let auto_off_at_zero = self.cue_lists[&cue_list_id].auto_off_at_zero;
-        if !self.active.contains_key(&key) {
-            self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
-        }
-        let mut changed = false;
-        if let Some(active) = self.active.get_mut(&key) {
-            active.playback_identity = Some(identity);
-            changed |=
-                apply_cuelist_master(active, address.number().get(), value, auto_off_at_zero);
-        }
-        if value == 0.0 && auto_off_at_zero {
-            self.reset_jump_counts(cue_list_id);
-        }
-        let control_changed = self.retarget_physical_controls(cue_list_id, value, None);
-        let addressed_effect = durable_effect(changed);
-        let addressed_effect = addressed_effect.combine(if control_changed {
-            PlaybackRuntimeEffect::Transient
-        } else {
-            PlaybackRuntimeEffect::None
-        });
-        let related_effect = durable_effect(self.auto_off_overwritten());
-        Ok(PlaybackMutation::with_related_effect(
-            (),
-            addressed_effect,
-            related_effect,
-        ))
+        self.set_master_inner_mutation(number, source, value, true)
     }
 
     /// Apply an externally authoritative fader value with explicit start/stop semantics.
@@ -410,9 +308,13 @@ impl PlaybackEngine {
     /// synthesizing a racy Master + On/Off command sequence.
     pub fn set_master_with_explicit_activation_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
+        let source = &PlaybackControlSource {
+            surface_id: "engine:automation".into(),
+            control_id: 0,
+        };
         let target = self
             .definitions
             .get(&number)
@@ -425,7 +327,7 @@ impl PlaybackEngine {
             return Err("explicit fader activation requires a Cuelist or Dynamic Playback".into());
         }
 
-        let fader = self.set_virtual_master_mutation(number, value)?;
+        let fader = self.set_master_level_mutation(number, source, value)?;
         let activation = if value > 0.0 {
             // The virtual-master path starts both Cuelists and Dynamics above zero without
             // engaging physical-fader pickup.
@@ -457,32 +359,30 @@ impl PlaybackEngine {
 
     fn set_master_inner_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
         allow_faderless: bool,
     ) -> Result<PlaybackMutation<()>, String> {
         if self.dynamic_assignment(number).is_some() {
-            return self.set_dynamic_fader_at_mutation_inner(
-                PlaybackIdentity::physical(number)?,
-                value,
-                !allow_faderless,
-            );
+            return self.set_dynamic_fader_mutation_inner(number, source, value, !allow_faderless);
         }
         let mode = self.validate_master(number, value, allow_faderless)?;
         match mode {
-            PlaybackFaderMode::Temp => return self.set_temp_fader_mutation(number, value),
+            PlaybackFaderMode::Temp => return self.set_temp_fader_mutation(number, source, value),
             PlaybackFaderMode::XFade => {
                 return self.set_manual_xfade_inner_mutation(number, value, allow_faderless);
             }
             PlaybackFaderMode::Master => {}
             _ => return Err("fader mode is not handled by the Cuelist engine".into()),
         }
-        self.set_cuelist_master_mutation(number, value, !allow_faderless)
+        self.set_cuelist_master_mutation(number, source, value, !allow_faderless)
     }
 
     pub fn set_configured_fader_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
         mode: PlaybackFaderMode,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
@@ -491,23 +391,21 @@ impl PlaybackEngine {
         }
         // A Dynamic Playback's fader is its master whatever the surface's configured mode.
         if self.dynamic_assignment(number).is_some() {
-            return self.set_dynamic_fader_at_mutation_inner(
-                PlaybackIdentity::physical(number)?,
-                value,
-                true,
-            );
+            return self.set_dynamic_fader_mutation_inner(number, source, value, true);
         }
         match mode {
-            PlaybackFaderMode::Temp => self.set_temp_fader_mutation(number, value),
+            PlaybackFaderMode::Temp => self.set_temp_fader_mutation(number, source, value),
             PlaybackFaderMode::XFade => self.set_manual_xfade_inner_mutation(number, value, true),
-            PlaybackFaderMode::Master => self.set_cuelist_master_mutation(number, value, true),
+            PlaybackFaderMode::Master => {
+                self.set_cuelist_master_mutation(number, source, value, true)
+            }
             _ => Err("fader mode is not handled by the Cuelist engine".into()),
         }
     }
 
     fn validate_master(
         &self,
-        number: u16,
+        number: PlaybackAddress,
         value: f32,
         allow_faderless: bool,
     ) -> Result<PlaybackFaderMode, String> {
@@ -526,20 +424,21 @@ impl PlaybackEngine {
 
     fn set_cuelist_master_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
         physical: bool,
     ) -> Result<PlaybackMutation<()>, String> {
         let id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(id);
         let auto_off_at_zero = self.cue_lists[&id].auto_off_at_zero;
-        let identity = PlaybackIdentity::physical(number)?;
+        let identity = PlaybackControlKey::new(number, source)?;
         let mut control_changed = false;
         if physical {
             if !self.control_states.contains_key(&identity) {
                 let authoritative = self.active.get(&key).map(|active| active.master);
                 self.control_states.insert(
-                    identity,
+                    identity.clone(),
                     PlaybackControlState {
                         fader_pickup_required: authoritative.is_some(),
                         fader_pickup_target: authoritative,
@@ -548,7 +447,7 @@ impl PlaybackEngine {
                 );
                 control_changed = true;
             }
-            let state = self.control_states.entry(identity).or_default();
+            let state = self.control_states.entry(identity.clone()).or_default();
             let previous = state.fader_position;
             let was_observed = state.observed;
             control_changed |= !was_observed || previous != value;
@@ -577,12 +476,7 @@ impl PlaybackEngine {
             }
         }
         if !self.active.contains_key(&key) {
-            self.go_at_key(
-                key,
-                id,
-                self.clock.now(),
-                Some(PlaybackIdentity::physical(number)?),
-            )?;
+            self.go_at_key(key, id, self.clock.now(), Some(number))?;
         }
         let mut changed = false;
         if let Some(active) = self.active.get_mut(&key) {
@@ -591,7 +485,8 @@ impl PlaybackEngine {
         if value == 0.0 && auto_off_at_zero {
             self.reset_jump_counts(id);
         }
-        control_changed |= self.retarget_physical_controls(id, value, physical.then_some(identity));
+        control_changed |=
+            self.retarget_physical_controls(id, value, physical.then_some(&identity));
         let addressed_effect = durable_effect(changed).combine(if control_changed {
             PlaybackRuntimeEffect::Transient
         } else {
@@ -605,31 +500,30 @@ impl PlaybackEngine {
         ))
     }
 
-    pub fn set_flash(&mut self, number: u16, pressed: bool) -> Result<(), String> {
-        self.set_flash_mutation(number, pressed).map(|_| ())
+    pub fn set_flash(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        pressed: bool,
+    ) -> Result<(), String> {
+        self.set_flash_mutation(number, source, pressed).map(|_| ())
     }
 
     pub fn set_flash_mutation(
         &mut self,
-        number: u16,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_flash_at_mutation(PlaybackIdentity::physical(number)?, pressed)
-    }
-
-    pub fn set_flash_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        pressed: bool,
-    ) -> Result<PlaybackMutation<()>, String> {
+        let held = PlaybackControlKey::new(identity, source)?;
         let definition = self
-            .definition_at(identity)
+            .definition(identity)
             .ok_or("playback does not exist")?
             .clone();
         let PlaybackTarget::CueList { cue_list_id } = definition.target else {
             return Err("Flash is available only for Cuelist playbacks".into());
         };
-        let key = (identity, TemporaryPlaybackKind::Flash);
+        let key = (held.clone(), TemporaryPlaybackKind::Flash);
         if pressed {
             if self.temporary.contains_key(&key) {
                 return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
@@ -638,13 +532,18 @@ impl PlaybackEngine {
                 .active
                 .get(&PlaybackKey::CueList(cue_list_id))
                 .is_some_and(|playback| playback.enabled);
-            self.cuelist_flash_states
-                .insert(identity, CuelistFlashState { restore_off });
-            let playback = self.temporary_playback_at(identity, 1.0, true)?;
+            self.cuelist_flash_states.insert(
+                held.clone(),
+                CuelistFlashState {
+                    restore_off,
+                    release_activation_inhibited: false,
+                },
+            );
+            let playback = self.temporary_playback(&held, 1.0, true)?;
             self.temporary.insert(key, playback);
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient));
         }
-        let flash_state = self.cuelist_flash_states.remove(&identity);
+        let flash_state = self.cuelist_flash_states.remove(&held);
         let Some(released) = self.temporary.remove(&key) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         };
@@ -652,8 +551,10 @@ impl PlaybackEngine {
             .cuelist_flash_states
             .keys()
             .chain(self.cuelist_swap_states.keys())
-            .copied()
-            .any(|peer| self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id)));
+            .cloned()
+            .any(|peer| {
+                self.runtime_key(peer.address).ok() == Some(PlaybackKey::CueList(cue_list_id))
+            });
         let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
             && flash_state.is_some_and(|state| state.restore_off)
             && !held_peer;
@@ -662,9 +563,10 @@ impl PlaybackEngine {
         // master, where it still holds every attribute its Cue carries besides intensity.
         let promoted = definition.flash_release == FlashReleaseMode::ReleaseIntensityOnly
             && !auto_off
-            && flash_state.is_some_and(|state| state.restore_off)
+            && flash_state
+                .is_some_and(|state| state.restore_off && !state.release_activation_inhibited)
             && !held_peer
-            && self.promote_intensity_release_at(identity, released, true);
+            && self.promote_intensity_release(identity, released, true);
         let turned_off = if auto_off {
             self.reset_jump_counts(cue_list_id);
             self.active
@@ -682,27 +584,29 @@ impl PlaybackEngine {
         let identities = self
             .cuelist_flash_states
             .keys()
-            .copied()
+            .cloned()
             .filter(|identity| {
-                self.runtime_key_at(*identity).ok() == Some(PlaybackKey::CueList(cue_list_id))
+                self.runtime_key(identity.address).ok() == Some(PlaybackKey::CueList(cue_list_id))
             })
             .collect::<Vec<_>>();
         for identity in identities {
             if let Some(state) = self.cuelist_flash_states.get_mut(&identity) {
                 state.restore_off = false;
+                state.release_activation_inhibited = false;
             }
         }
         let swap_identities = self
             .cuelist_swap_states
             .keys()
-            .copied()
+            .cloned()
             .filter(|identity| {
-                self.runtime_key_at(*identity).ok() == Some(PlaybackKey::CueList(cue_list_id))
+                self.runtime_key(identity.address).ok() == Some(PlaybackKey::CueList(cue_list_id))
             })
             .collect::<Vec<_>>();
         for identity in swap_identities {
             if let Some(state) = self.cuelist_swap_states.get_mut(&identity) {
                 state.restore_off = false;
+                state.release_activation_inhibited = false;
             }
         }
     }
@@ -716,11 +620,11 @@ fn durable_effect(changed: bool) -> PlaybackRuntimeEffect {
     }
 }
 
-fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
+fn activate_normal(playback: &mut ActivePlayback, number: PlaybackAddress) -> bool {
     // ON is idempotent while this Playback is already at its normal master.
     // In particular, do not discard an in-flight Cue transition source merely
     // because ON is repeated while that transition is running.
-    if playback.playback_number == Some(number)
+    if playback.playback_address == Some(number)
         && playback.master == 1.0
         && playback.enabled
         && !playback.temporary
@@ -734,7 +638,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
     {
         return false;
     }
-    let changed = playback.playback_number != Some(number)
+    let changed = playback.playback_address != Some(number)
         || playback.master != 1.0
         || !playback.enabled
         || playback.temporary
@@ -745,7 +649,7 @@ fn activate_normal(playback: &mut ActivePlayback, number: u16) -> bool {
         || playback.manual_xfade_from_index.is_some()
         || playback.manual_xfade_to_index.is_some()
         || playback.manual_xfade_progress != 0.0;
-    playback.playback_number = Some(number);
+    playback.playback_address = Some(number);
     playback.master = 1.0;
     playback.enabled = true;
     playback.fader_zero_auto_off_armed = false;
@@ -785,7 +689,7 @@ pub(crate) fn deactivate(playback: &mut ActivePlayback) -> bool {
 
 fn apply_cuelist_master(
     playback: &mut ActivePlayback,
-    number: u16,
+    number: PlaybackAddress,
     value: f32,
     auto_off_at_zero: bool,
 ) -> bool {
@@ -796,7 +700,7 @@ fn apply_cuelist_master(
         deactivate(playback);
         playback.fader_zero_auto_off_armed = true;
     }
-    playback.playback_number = Some(number);
+    playback.playback_address = Some(number);
     playback.master = value;
     playback.master_transition = None;
     playback.temporary = false;

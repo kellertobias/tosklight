@@ -297,7 +297,7 @@ fn standalone_dynamic_playback_keeps_its_exact_record_without_fabricating_a_cue_
                 target,
             },
             DynamicSourceOrigin::Playback {
-                identity: PlaybackIdentity::physical(4).unwrap(),
+                identity: PlaybackAddress::new(1, 4).unwrap(),
                 activated_at: DateTime::from_timestamp(100, 500).unwrap(),
             },
         )

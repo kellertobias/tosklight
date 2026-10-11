@@ -31,7 +31,7 @@ pub(crate) struct ShowCompileDirty {
     pub(crate) dynamics: bool,
     pub(crate) presets: bool,
     pub(crate) stage_layouts: bool,
-    pub(crate) playbacks: bool,
+    pub(crate) playback_policy: bool,
     pub(crate) playback_pages: bool,
     pub(crate) routes: bool,
     pub(crate) control_mappings: bool,
@@ -48,14 +48,13 @@ pub(crate) fn compile_show_candidate(
     let groups = objects::decode_groups(candidate)?;
     let (dynamics, required_programming_contract) = objects::decode_dynamics(candidate, &groups)?;
     let dynamic_stage_positions = objects::decode_dynamic_stage_positions(candidate)?;
-    let mut playbacks = objects::decode(candidate, "playback")?;
     let mut playback_pages = objects::decode(candidate, "playback_page")?;
     let routes = objects::decode(candidate, "route")?;
     let control_mappings = objects::decode(candidate, "control_mapping")?;
     validate_cuelist_namespace(&cue_lists)?;
-    light_playback::CueListPoolCatalog::build(&cue_lists, &playbacks, playback_pages.is_empty())
+    light_playback::CueListPoolCatalog::build(&cue_lists, &[], false)
         .map_err(|error| crate::ActionError::new(crate::ActionErrorKind::Invalid, error))?;
-    objects::supply_playback_defaults(&cue_lists, &mut playbacks, &mut playback_pages);
+    objects::supply_playback_defaults(&mut playback_pages);
     Ok(EngineSnapshot {
         required_programming_contract,
         native_color_sources: native_sources::compile(candidate, None)?,
@@ -63,7 +62,8 @@ pub(crate) fn compile_show_candidate(
         cue_lists: cue_lists.into(),
         dynamics: dynamics.into(),
         dynamic_stage_positions: dynamic_stage_positions.into(),
-        playbacks: playbacks.into(),
+        playback_solo_regions: objects::decode_solo_regions(candidate)?.into(),
+        playback_preload_scope: objects::decode_preload_scope(candidate)?,
         playback_pages: playback_pages.into(),
         routes: routes.into(),
         control_mappings: control_mappings.into(),
@@ -154,23 +154,17 @@ fn compile_show_candidate_incremental(
 
     // Defaults couple these three small topology projections. Recompile them together whenever
     // any member changes, while leaving patch, geometry, routes, mappings, and groups shared.
-    if dirty.cue_lists || dirty.playbacks || dirty.playback_pages {
-        let mut playbacks = objects::decode(candidate, "playback")?;
+    if dirty.cue_lists || dirty.playback_pages {
         let mut playback_pages = objects::decode(candidate, "playback_page")?;
         validate_cuelist_namespace(snapshot.cue_lists.as_slice())?;
-        light_playback::CueListPoolCatalog::build(
-            snapshot.cue_lists.as_slice(),
-            &playbacks,
-            playback_pages.is_empty(),
-        )
-        .map_err(|error| crate::ActionError::new(crate::ActionErrorKind::Invalid, error))?;
-        objects::supply_playback_defaults(
-            snapshot.cue_lists.as_slice(),
-            &mut playbacks,
-            &mut playback_pages,
-        );
-        snapshot.playbacks = playbacks.into();
+        light_playback::CueListPoolCatalog::build(snapshot.cue_lists.as_slice(), &[], false)
+            .map_err(invalid_candidate)?;
+        objects::supply_playback_defaults(&mut playback_pages);
         snapshot.playback_pages = playback_pages.into();
+    }
+    if dirty.playback_policy {
+        snapshot.playback_solo_regions = objects::decode_solo_regions(candidate)?.into();
+        snapshot.playback_preload_scope = objects::decode_preload_scope(candidate)?;
     }
 
     Ok(snapshot)

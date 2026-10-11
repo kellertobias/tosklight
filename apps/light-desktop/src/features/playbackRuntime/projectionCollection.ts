@@ -20,11 +20,8 @@ export function upsertProjection(
 	current: readonly PlaybackProjection[],
 	projection: PlaybackProjection,
 ) {
-	const key = projection.playback_number ?? null;
-	const next = current.filter((candidate) => candidate.playback_number !== key);
+	const key = identityKey(projection.identity);
+	const next = current.filter((candidate) => identityKey(candidate.identity) !== key);
 	next.push(projection);
-	return next.sort(
-		(left, right) =>
-			(left.playback_number ?? 0) - (right.playback_number ?? 0),
-	);
+	return next.sort((left, right) => identityKey(left.identity).localeCompare(identityKey(right.identity)));
 }

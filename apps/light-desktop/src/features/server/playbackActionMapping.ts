@@ -2,10 +2,10 @@ import type {
 	PlaybackAction,
 	PlaybackActionRequest,
 	PlaybackAddress,
-	PlaybackSurface,
+
 } from "../../api/types";
 
-export type PoolPlaybackAction =
+export type PlaybackControlAction =
 	| "button"
 	| "configured-fader"
 	| "on"
@@ -35,51 +35,30 @@ export type PoolPlaybackAction =
 	| "xfade-on"
 	| "xfade-off";
 
-export interface PoolPlaybackInput {
+export interface PlaybackControlInput {
 	value?: number;
 	pressed?: boolean;
 	button?: number;
 	fader?: number;
 	cue_number?: string;
-	surface?: PlaybackSurface;
+	control_source: { surface_id: string; control_id: number };
 }
 
-export function poolPlaybackRequest(
-	playbackNumber: number,
-	action: PoolPlaybackAction,
-	input: PoolPlaybackInput,
+export function playbackRequest(
+	address: { page: number; position: number },
+	action: PlaybackControlAction,
+	input: PlaybackControlInput,
 ): PlaybackActionRequest {
-	return actionRequest(
-		{ kind: "playback", playback_number: playbackNumber },
-		structuredAction(action, input),
-		input.surface ?? "physical",
-	);
-}
-
-export function virtualPlaybackRequest(
-	page: number,
-	playbackNumber: number,
-	action: PoolPlaybackAction,
-	input: PoolPlaybackInput,
-): PlaybackActionRequest {
-	return actionRequest(
-		{ kind: "virtual", page, playback_number: playbackNumber },
-		structuredAction(action, input),
-		"virtual",
-	);
-}
-
-function actionRequest(
-	address: PlaybackAddress,
-	action: PlaybackAction,
-	surface: PlaybackSurface,
-): PlaybackActionRequest {
-	return { request_id: crypto.randomUUID(), address, action, surface };
+	return {
+		address: { kind: "playback", ...address },
+		action: structuredAction(action, input),
+		control_source: input.control_source,
+	};
 }
 
 function structuredAction(
-	action: PoolPlaybackAction,
-	input: PoolPlaybackInput,
+	action: PlaybackControlAction,
+	input: PlaybackControlInput,
 ): PlaybackAction {
 	const pressed = input.pressed ?? true;
 	if (action === "button")
@@ -111,7 +90,7 @@ function structuredAction(
 	} as PlaybackAction;
 }
 
-function simpleActionType(action: PoolPlaybackAction) {
+function simpleActionType(action: PlaybackControlAction) {
 	return (
 		(
 			{

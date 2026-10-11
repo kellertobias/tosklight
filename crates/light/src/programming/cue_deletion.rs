@@ -15,15 +15,21 @@ use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ProgrammingCueDeletionAddress {
-    Pool { playback_number: u16 },
-    CuelistPool { number: u16 },
-    CurrentPage { expected_page: u8, slot: u8 },
-    PageSlot { page: u8, slot: u8 },
+    Playback {
+        address: light_playback::PlaybackAddress,
+    },
+    CuelistPool {
+        number: u16,
+    },
+    CurrentPage {
+        expected_page: u8,
+        position: u16,
+    },
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ProgrammingCueDeletionAuthority {
-    pub playback_number: u16,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     pub cue_list_id: CueListId,
     pub object_id: String,
     pub object_revision: Revision,

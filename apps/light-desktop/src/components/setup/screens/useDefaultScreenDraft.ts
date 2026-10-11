@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { ControlDesk, PlaybackSurfaceLayout } from "../../../api/types";
+import type {
+	ControlDesk,
+	PlaybackSurfaceLayout,
+	PlaybackSurfaceConfiguration,
+} from "../../../api/types";
 import { defaultDeskPlaybackLayout } from "../screenConfiguration";
 
 export interface ScreenUndoHandle {
@@ -13,6 +17,7 @@ interface DeskSnapshot {
 
 interface DefaultScreenDraftOptions {
 	desk: ControlDesk | null | undefined;
+	surface: PlaybackSurfaceConfiguration | undefined;
 	regularNumberShortcuts: boolean;
 	onKeyboardShortcuts: (enabled: boolean) => void;
 	onPlaybackLayout: (layout: PlaybackSurfaceLayout) => void;
@@ -23,6 +28,7 @@ interface DefaultScreenDraftOptions {
 
 export function useDefaultScreenDraft({
 	desk,
+	surface,
 	regularNumberShortcuts,
 	onKeyboardShortcuts,
 	onPlaybackLayout,
@@ -33,7 +39,7 @@ export function useDefaultScreenDraft({
 	const [draft, setDraft] = useState<ControlDesk | null>(desk ?? null);
 	const [playbackLayout, setPlaybackLayout] =
 		useState<PlaybackSurfaceLayout | null>(() =>
-			desk ? defaultDeskPlaybackLayout(desk) : null,
+			defaultDeskPlaybackLayout(surface),
 		);
 	const [undoHistory, setUndoHistory] = useState<DeskSnapshot[]>([]);
 	const draftRef = useRef<ControlDesk | null>(desk ?? null);
@@ -45,10 +51,10 @@ export function useDefaultScreenDraft({
 		if (!desk || pendingSaves.current > 0) return;
 		draftRef.current = desk;
 		setDraft(desk);
-		const layout = defaultDeskPlaybackLayout(desk);
+		const layout = defaultDeskPlaybackLayout(surface);
 		setPlaybackLayout(layout);
-		onPlaybackLayout(layout);
-	}, [desk, onPlaybackLayout]);
+		if (layout) onPlaybackLayout(layout);
+	}, [desk, surface, onPlaybackLayout]);
 
 	const snapshot = (): DeskSnapshot | null => {
 		const current = draftRef.current ?? desk;
@@ -67,9 +73,9 @@ export function useDefaultScreenDraft({
 		if (remember) rememberCurrent();
 		draftRef.current = next;
 		setDraft(next);
-		const layout = defaultDeskPlaybackLayout(next);
+		const layout = defaultDeskPlaybackLayout(surface);
 		setPlaybackLayout(layout);
-		onPlaybackLayout(layout);
+		if (layout) onPlaybackLayout(layout);
 		pendingSaves.current += 1;
 		saveQueue.current = saveQueue.current
 			.then(() => onPersistDesk(next))

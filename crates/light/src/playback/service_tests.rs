@@ -22,7 +22,7 @@ struct ObservedAction {
     source: ActionSource,
     address: ResolvedPlaybackAddress,
     action: PlaybackAction,
-    surface: PlaybackSurface,
+    control_source: light_playback::PlaybackControlSource,
 }
 
 #[derive(Default)]
@@ -51,8 +51,11 @@ impl PlaybackPorts for FakePorts {
         Ok(*self.current_page.lock())
     }
 
-    fn playback_at(&self, page: u8, slot: u8) -> Result<Option<u16>, ActionError> {
-        Ok(Some(u16::from(page) * 100 + u16::from(slot)))
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn execute(
@@ -60,15 +63,15 @@ impl PlaybackPorts for FakePorts {
         context: &crate::ActionContext,
         address: ResolvedPlaybackAddress,
         action: PlaybackAction,
-        surface: PlaybackSurface,
+        control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
         self.actions.lock().push(ObservedAction {
             source: context.source,
             address,
             action,
-            surface,
+            control_source: control_source.clone(),
         });
-        Ok(PlaybackExecution::Pool {
+        Ok(PlaybackExecution::Playback {
             changed: true,
             pending: None,
         })
@@ -90,7 +93,12 @@ impl PlaybackPorts for FakePorts {
         Ok(Some(PlaybackDeskProjection {
             scope: test_scope(),
             desk_id: context.desk_id,
-            active_page: *self.current_page.lock(),
+            command_page: *self.current_page.lock(),
+            selected_surface_id: "main".into(),
+            resolved_pages: std::collections::BTreeMap::from([(
+                "main".into(),
+                *self.current_page.lock(),
+            )]),
             selected_playback: None,
             selected_cue_list: None,
         }))
@@ -115,7 +123,7 @@ fn current_page_is_resolved_inside_the_ordered_operation() {
     let worker = spawn_action(
         service.clone(),
         Arc::clone(&ports),
-        PlaybackAddress::CurrentPage { slot: 7 },
+        PlaybackAddress::CurrentPage { position: 7 },
     );
     ports.set_current_page(3);
     release_tx.send(()).unwrap();
@@ -124,26 +132,22 @@ fn current_page_is_resolved_inside_the_ordered_operation() {
     let result = worker.join().unwrap().unwrap();
     assert_eq!(
         result.resolved,
-        ResolvedPlaybackAddress::Pool {
-            number: 307,
-            page: Some(3),
-            slot: Some(7),
-        }
+        ResolvedPlaybackAddress::Playback(test_address(3, 7))
     );
 }
 
 #[test]
-fn page_qualified_virtual_addresses_keep_distinct_runtime_identities() {
+fn page_qualified_addresses_keep_distinct_runtime_identities() {
     let service = PlaybackService::default();
     let ports = FakePorts::default();
-    let first = light_playback::VirtualPlaybackAddress::new(1, 1_001).unwrap();
-    let second = light_playback::VirtualPlaybackAddress::new(2, 1_301).unwrap();
+    let first = light_playback::PlaybackAddress::new(1, 401).unwrap();
+    let second = light_playback::PlaybackAddress::new(2, 301).unwrap();
 
     let first_result = service
         .handle(
             envelope(
                 ActionSource::Http,
-                PlaybackAddress::Virtual(first),
+                PlaybackAddress::Playback(first),
                 Some("virtual-page-one"),
             ),
             &ports,
@@ -153,7 +157,7 @@ fn page_qualified_virtual_addresses_keep_distinct_runtime_identities() {
         .handle(
             envelope(
                 ActionSource::Http,
-                PlaybackAddress::Virtual(second),
+                PlaybackAddress::Playback(second),
                 Some("virtual-page-two"),
             ),
             &ports,
@@ -162,19 +166,19 @@ fn page_qualified_virtual_addresses_keep_distinct_runtime_identities() {
 
     assert_eq!(
         first_result.resolved,
-        ResolvedPlaybackAddress::Virtual(first)
+        ResolvedPlaybackAddress::Playback(first)
     );
     assert_eq!(
         second_result.resolved,
-        ResolvedPlaybackAddress::Virtual(second)
+        ResolvedPlaybackAddress::Playback(second)
     );
     assert_eq!(
         ports.projection_reads(),
         vec![
-            PlaybackRuntimeIdentity::Virtual(first),
-            PlaybackRuntimeIdentity::Virtual(first),
-            PlaybackRuntimeIdentity::Virtual(second),
-            PlaybackRuntimeIdentity::Virtual(second),
+            PlaybackRuntimeIdentity::Playback(first),
+            PlaybackRuntimeIdentity::Playback(first),
+            PlaybackRuntimeIdentity::Playback(second),
+            PlaybackRuntimeIdentity::Playback(second),
         ]
     );
 }
@@ -218,8 +222,10 @@ impl PlaybackUnitOfWork for PublishingOperation {
         let projection = PlaybackDeskProjection {
             scope: test_scope(),
             desk_id: self.context.desk_id,
-            active_page: 2,
-            selected_playback: Some(7),
+            command_page: 2,
+            selected_surface_id: "main".into(),
+            resolved_pages: std::collections::BTreeMap::from([("main".into(), 2)]),
+            selected_playback: Some(test_address(1, 7)),
             selected_cue_list: None,
         };
         PlaybackOperation::with_events(
@@ -242,7 +248,7 @@ fn explicit_page_does_not_follow_the_current_page() {
         .handle(
             envelope(
                 ActionSource::Http,
-                PlaybackAddress::ExplicitPage { page: 2, slot: 4 },
+                PlaybackAddress::Playback(test_address(2, 4)),
                 None,
             ),
             &ports,
@@ -251,11 +257,7 @@ fn explicit_page_does_not_follow_the_current_page() {
 
     assert_eq!(
         result.resolved,
-        ResolvedPlaybackAddress::Pool {
-            number: 204,
-            page: Some(2),
-            slot: Some(4),
-        }
+        ResolvedPlaybackAddress::Playback(test_address(2, 4))
     );
 }
 
@@ -272,21 +274,19 @@ fn all_operator_sources_reach_the_same_semantic_action() {
 
     for source in sources {
         service
-            .handle(envelope(source, PlaybackAddress::Pool(12), None), &ports)
+            .handle(
+                envelope(source, PlaybackAddress::Playback(test_address(1, 12)), None),
+                &ports,
+            )
             .unwrap();
     }
 
     let actions = ports.actions();
     assert_eq!(actions.len(), sources.len());
     assert!(actions.iter().all(|observed| {
-        observed.address
-            == ResolvedPlaybackAddress::Pool {
-                number: 12,
-                page: None,
-                slot: None,
-            }
+        observed.address == ResolvedPlaybackAddress::Playback(test_address(1, 12))
             && observed.action == PlaybackAction::Go { pressed: true }
-            && observed.surface == PlaybackSurface::Physical
+            && observed.control_source == test_control_source()
     }));
     assert_eq!(
         actions
@@ -298,35 +298,36 @@ fn all_operator_sources_reach_the_same_semantic_action() {
 }
 
 #[test]
-fn identical_request_replays_without_executing_again() {
+fn identical_live_requests_execute_again() {
     let service = PlaybackService::default();
     let ports = FakePorts::default();
     let first = envelope(
         ActionSource::UserInterface,
-        PlaybackAddress::Pool(8),
+        PlaybackAddress::Playback(test_address(1, 8)),
         Some("request-8"),
     );
-
-    assert!(!service.handle(first.clone(), &ports).unwrap().replayed);
-    assert!(service.handle(first, &ports).unwrap().replayed);
-    assert_eq!(ports.actions().len(), 1);
+    service.handle(first.clone(), &ports).unwrap();
+    service.handle(first, &ports).unwrap();
+    assert_eq!(ports.actions().len(), 2);
     assert_eq!(
         ports.projection_reads(),
         vec![
-            PlaybackRuntimeIdentity::Playback(8),
-            PlaybackRuntimeIdentity::Playback(8),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 8)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 8)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 8)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 8)),
         ]
     );
 }
 
 #[test]
-fn changed_runtime_publishes_one_authoritative_event_and_replay_reuses_it() {
+fn repeated_live_go_publishes_a_new_authoritative_transition() {
     let events = crate::EventBus::new(8);
     let service = PlaybackService::new(events.clone());
     let ports = StatefulPorts::changing(8);
     let request = envelope(
         ActionSource::UserInterface,
-        PlaybackAddress::Pool(8),
+        PlaybackAddress::Playback(test_address(1, 8)),
         Some("runtime-8"),
     );
 
@@ -335,18 +336,20 @@ fn changed_runtime_publishes_one_authoritative_event_and_replay_reuses_it() {
 
     assert_eq!(first.event_sequence, Some(1));
     assert_eq!(first.durability, PlaybackDurability::Durable);
-    assert_eq!(replay.event_sequence, Some(1));
-    assert!(replay.replayed);
-    assert_eq!(ports.executions.load(Ordering::Relaxed), 1);
-    assert_eq!(ports.reads.load(Ordering::Relaxed), 2);
-    assert_eq!(events.latest_sequence(), 1);
+    assert_eq!(replay.event_sequence, Some(2));
+    assert_eq!(ports.executions.load(Ordering::Relaxed), 2);
+    assert_eq!(ports.reads.load(Ordering::Relaxed), 4);
+    assert_eq!(events.latest_sequence(), 2);
     let crate::EventReplay::Events(published) = events.replay(0, &crate::EventFilter::default())
     else {
         panic!("event should remain replayable");
     };
-    assert_eq!(published.len(), 1);
+    assert_eq!(published.len(), 2);
     let event = &published[0];
-    assert_eq!(event.object, Some(crate::EventObject::playback(8)));
+    assert_eq!(
+        event.object,
+        Some(crate::EventObject::playback(test_address(1, 8)))
+    );
     assert!(
         event
             .related_objects
@@ -385,7 +388,7 @@ fn related_runtime_changes_publish_changed_peers_before_the_primary_once() {
     let ports = RelatedRuntimePorts::changing();
     let request = envelope(
         ActionSource::UserInterface,
-        PlaybackAddress::Pool(8),
+        PlaybackAddress::Playback(test_address(1, 8)),
         Some("runtime-with-peer"),
     );
 
@@ -395,30 +398,41 @@ fn related_runtime_changes_publish_changed_peers_before_the_primary_once() {
     assert_eq!(first.event_sequence, Some(2));
     assert_eq!(first.related.len(), 1);
     assert_eq!(
-        first.related[0].projection.requested,
-        PlaybackRuntimeIdentity::Playback(6)
+        first.related[0].projection.identity,
+        PlaybackRuntimeIdentity::Playback(test_address(1, 6))
     );
     assert_eq!(first.related[0].event_sequence, 1);
-    assert_eq!(replay.event_sequence, first.event_sequence);
-    assert_eq!(replay.related[0].event_sequence, 1);
-    assert!(replay.replayed);
-    assert_eq!(ports.executions.load(Ordering::Relaxed), 1);
-    assert_eq!(ports.related_reads.load(Ordering::Relaxed), 1);
+    assert_eq!(replay.event_sequence, None);
+    assert!(replay.related.is_empty());
+    assert_eq!(ports.executions.load(Ordering::Relaxed), 2);
+    assert_eq!(ports.related_reads.load(Ordering::Relaxed), 2);
     assert_eq!(
         ports.related_projection_reads.lock().as_slice(),
         &[
             vec![
-                PlaybackRuntimeIdentity::Playback(6),
-                PlaybackRuntimeIdentity::Playback(7),
+                PlaybackRuntimeIdentity::Playback(test_address(1, 6)),
+                PlaybackRuntimeIdentity::Playback(test_address(1, 7)),
             ],
             vec![
-                PlaybackRuntimeIdentity::Playback(6),
-                PlaybackRuntimeIdentity::Playback(7),
+                PlaybackRuntimeIdentity::Playback(test_address(1, 6)),
+                PlaybackRuntimeIdentity::Playback(test_address(1, 7)),
+            ],
+            vec![
+                PlaybackRuntimeIdentity::Playback(test_address(1, 6)),
+                PlaybackRuntimeIdentity::Playback(test_address(1, 7)),
+            ],
+            vec![
+                PlaybackRuntimeIdentity::Playback(test_address(1, 6)),
+                PlaybackRuntimeIdentity::Playback(test_address(1, 7)),
             ],
         ],
         "the primary and duplicate peer identities must be removed before projection reads"
     );
-    assert_eq!(events.latest_sequence(), 2, "replay must not republish");
+    assert_eq!(
+        events.latest_sequence(),
+        2,
+        "a repeated action with equal projections must not republish"
+    );
 
     let crate::EventReplay::Events(published) = events.replay(0, &crate::EventFilter::default())
     else {
@@ -430,8 +444,8 @@ fn related_runtime_changes_publish_changed_peers_before_the_primary_once() {
             .map(|event| event.object.clone())
             .collect::<Vec<_>>(),
         vec![
-            Some(crate::EventObject::playback(6)),
-            Some(crate::EventObject::playback(8)),
+            Some(crate::EventObject::playback(test_address(1, 6))),
+            Some(crate::EventObject::playback(test_address(1, 8))),
         ],
         "only the changed peer is emitted, in stable peer-before-primary order"
     );
@@ -458,14 +472,14 @@ fn related_runtime_changes_publish_changed_peers_before_the_primary_once() {
 fn no_change_and_capture_do_not_publish_related_runtime_events() {
     for (execution, expected) in [
         (
-            PlaybackExecution::Pool {
+            PlaybackExecution::Playback {
                 changed: false,
                 pending: None,
             },
             PlaybackOutcome::NoChange,
         ),
         (
-            PlaybackExecution::Pool {
+            PlaybackExecution::Playback {
                 changed: false,
                 pending: Some(PendingPlaybackAction::Go),
             },
@@ -478,7 +492,11 @@ fn no_change_and_capture_do_not_publish_related_runtime_events() {
 
         let result = service
             .handle(
-                envelope(ActionSource::Http, PlaybackAddress::Pool(8), None),
+                envelope(
+                    ActionSource::Http,
+                    PlaybackAddress::Playback(test_address(1, 8)),
+                    None,
+                ),
                 &ports,
             )
             .unwrap();
@@ -506,13 +524,13 @@ fn repeated_direct_cuelist_pause_is_an_accepted_no_change() {
 }
 
 #[test]
-fn accepted_pending_durability_is_retained_by_idempotent_replay() {
+fn repeated_live_execution_preserves_pending_durability() {
     let service = PlaybackService::default();
     let mut ports = StatefulPorts::changing(8);
     ports.durability = PlaybackDurability::PersistencePending;
     let request = envelope(
         ActionSource::Http,
-        PlaybackAddress::Pool(8),
+        PlaybackAddress::Playback(test_address(1, 8)),
         Some("pending-persistence"),
     );
 
@@ -521,8 +539,7 @@ fn accepted_pending_durability_is_retained_by_idempotent_replay() {
 
     assert_eq!(first.durability, PlaybackDurability::PersistencePending);
     assert_eq!(replay.durability, PlaybackDurability::PersistencePending);
-    assert!(replay.replayed);
-    assert_eq!(ports.executions.load(Ordering::Relaxed), 1);
+    assert_eq!(ports.executions.load(Ordering::Relaxed), 2);
 }
 
 #[test]
@@ -531,12 +548,16 @@ fn desk_selection_emits_a_separate_desk_local_view_event() {
     let service = PlaybackService::new(events.clone());
     let ports = StatefulPorts::with_execution(
         8,
-        PlaybackExecution::Pool {
+        PlaybackExecution::Playback {
             changed: true,
             pending: None,
         },
     );
-    let mut request = envelope(ActionSource::Http, PlaybackAddress::Pool(8), None);
+    let mut request = envelope(
+        ActionSource::Http,
+        PlaybackAddress::Playback(test_address(1, 8)),
+        None,
+    );
     request.command.action = PlaybackAction::Select { pressed: true };
 
     let result = service.handle(request, &ports).unwrap();
@@ -558,7 +579,7 @@ fn desk_selection_emits_a_separate_desk_local_view_event() {
     else {
         panic!("expected desk-local Playback view change");
     };
-    assert_eq!(projection.selected_playback, Some(8));
+    assert_eq!(projection.selected_playback, Some(test_address(1, 8)));
 }
 
 #[test]
@@ -567,7 +588,11 @@ fn configured_button_uses_the_authoritative_resolved_navigation_cause() {
     let service = PlaybackService::new(events.clone());
     let mut ports = StatefulPorts::changing(8);
     ports.configured_cause = Some(PlaybackTransitionCause::Go);
-    let mut request = envelope(ActionSource::Http, PlaybackAddress::Pool(8), None);
+    let mut request = envelope(
+        ActionSource::Http,
+        PlaybackAddress::Playback(test_address(1, 8)),
+        None,
+    );
     request.command.action = PlaybackAction::ConfiguredButton {
         number: 2,
         pressed: true,
@@ -616,7 +641,11 @@ fn configured_control_numbers_are_validated_before_ports_execute() {
             level: PlaybackLevel::new(0.5),
         },
     ] {
-        let mut request = envelope(ActionSource::Http, PlaybackAddress::Pool(8), None);
+        let mut request = envelope(
+            ActionSource::Http,
+            PlaybackAddress::Playback(test_address(1, 8)),
+            None,
+        );
         request.command.action = action;
         assert_eq!(
             service.handle(request, &ports).unwrap_err().kind,
@@ -636,7 +665,11 @@ fn configured_control_numbers_are_validated_before_ports_execute() {
             level: PlaybackLevel::new(0.5),
         },
     ] {
-        let mut request = envelope(ActionSource::Http, PlaybackAddress::Pool(8), None);
+        let mut request = envelope(
+            ActionSource::Http,
+            PlaybackAddress::Playback(test_address(1, 8)),
+            None,
+        );
         request.command.action = action;
         service.handle(request, &ports).unwrap();
     }
@@ -663,14 +696,14 @@ fn configured_control_numbers_are_validated_before_ports_execute() {
 fn no_change_and_captured_preload_do_not_publish_runtime_events() {
     for (execution, expected) in [
         (
-            PlaybackExecution::Pool {
+            PlaybackExecution::Playback {
                 changed: false,
                 pending: None,
             },
             PlaybackOutcome::NoChange,
         ),
         (
-            PlaybackExecution::Pool {
+            PlaybackExecution::Playback {
                 changed: false,
                 pending: Some(PendingPlaybackAction::Go),
             },
@@ -683,7 +716,11 @@ fn no_change_and_captured_preload_do_not_publish_runtime_events() {
 
         let result = service
             .handle(
-                envelope(ActionSource::Http, PlaybackAddress::Pool(8), None),
+                envelope(
+                    ActionSource::Http,
+                    PlaybackAddress::Playback(test_address(1, 8)),
+                    None,
+                ),
                 &ports,
             )
             .unwrap();
@@ -700,10 +737,15 @@ fn narrow_snapshot_captures_cursor_before_reads_and_replays_a_racing_change() {
     let service = PlaybackService::new(events.clone());
     let ports = SnapshotPorts::new(events.clone());
     let identities = [
-        PlaybackRuntimeIdentity::Playback(4),
+        PlaybackRuntimeIdentity::Playback(test_address(1, 4)),
         PlaybackRuntimeIdentity::CueList(light_core::CueListId(Uuid::from_u128(5))),
     ];
-    let context = envelope(ActionSource::Http, PlaybackAddress::Pool(4), None).context;
+    let context = envelope(
+        ActionSource::Http,
+        PlaybackAddress::Playback(test_address(1, 4)),
+        None,
+    )
+    .context;
 
     let snapshot = service.snapshot(&context, &identities, &ports).unwrap();
 
@@ -717,7 +759,7 @@ fn narrow_snapshot_captures_cursor_before_reads_and_replays_a_racing_change() {
         snapshot
             .projections
             .iter()
-            .map(|projection| projection.requested.clone())
+            .map(|projection| projection.identity.clone())
             .collect::<Vec<_>>(),
         identities
     );
@@ -735,7 +777,12 @@ fn desk_only_snapshot_accepts_an_empty_runtime_identity_list() {
     let events = crate::EventBus::new(8);
     let service = PlaybackService::new(events.clone());
     let ports = SnapshotPorts::new(events);
-    let context = envelope(ActionSource::Http, PlaybackAddress::Pool(4), None).context;
+    let context = envelope(
+        ActionSource::Http,
+        PlaybackAddress::Playback(test_address(1, 4)),
+        None,
+    )
+    .context;
 
     let snapshot = service.snapshot(&context, &[], &ports).unwrap();
 
@@ -750,7 +797,7 @@ fn request_id_cannot_be_reused_for_a_different_action() {
     let ports = FakePorts::default();
     let first = envelope(
         ActionSource::UserInterface,
-        PlaybackAddress::Pool(8),
+        PlaybackAddress::Playback(test_address(1, 8)),
         Some("request-8"),
     );
     service.handle(first.clone(), &ports).unwrap();
@@ -795,8 +842,11 @@ impl PlaybackPorts for OrderedPorts {
         unreachable!("the ordering test uses pool addresses")
     }
 
-    fn playback_at(&self, _page: u8, _slot: u8) -> Result<Option<u16>, ActionError> {
-        unreachable!("the ordering test uses pool addresses")
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn execute(
@@ -804,14 +854,14 @@ impl PlaybackPorts for OrderedPorts {
         _context: &crate::ActionContext,
         address: ResolvedPlaybackAddress,
         _action: PlaybackAction,
-        _surface: PlaybackSurface,
+        _control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
-        let number = address.playback_number().unwrap();
+        let number = address.playback_address().unwrap().position();
         self.entered.send(number).unwrap();
         if number == 1 {
             self.release_first.lock().unwrap().recv().unwrap();
         }
-        Ok(PlaybackExecution::Pool {
+        Ok(PlaybackExecution::Playback {
             changed: true,
             pending: None,
         })
@@ -832,7 +882,9 @@ impl PlaybackPorts for OrderedPorts {
         Ok(Some(PlaybackDeskProjection {
             scope: test_scope(),
             desk_id: context.desk_id,
-            active_page: 1,
+            command_page: 1,
+            selected_surface_id: "main".into(),
+            resolved_pages: std::collections::BTreeMap::from([("main".into(), 1)]),
             selected_playback: None,
             selected_cue_list: None,
         }))
@@ -846,7 +898,11 @@ fn spawn_ordered_action(
 ) -> thread::JoinHandle<Result<PlaybackResult, ActionError>> {
     thread::spawn(move || {
         service.handle(
-            envelope(ActionSource::Osc, PlaybackAddress::Pool(number), None),
+            envelope(
+                ActionSource::Osc,
+                PlaybackAddress::Playback(test_address(1, number)),
+                None,
+            ),
             ports.as_ref(),
         )
     })
@@ -889,23 +945,15 @@ fn envelope_with_action(
         command: PlaybackCommand {
             address,
             action,
-            surface: PlaybackSurface::Physical,
+            control_source: test_control_source(),
         },
     }
 }
 
 fn missing_projection(identity: PlaybackRuntimeIdentity) -> PlaybackRuntimeProjection {
-    let playback_number = match &identity {
-        PlaybackRuntimeIdentity::Playback(number) => Some(*number),
-        PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
-        PlaybackRuntimeIdentity::CueList(_)
-        | PlaybackRuntimeIdentity::DirectCueList(_)
-        | PlaybackRuntimeIdentity::Group(_) => None,
-    };
     PlaybackRuntimeProjection {
         scope: test_scope(),
-        requested: identity,
-        playback_number,
+        identity,
         target: PlaybackTargetProjection::Missing,
     }
 }
@@ -919,7 +967,7 @@ struct StatefulPorts {
     configured_cause: Option<PlaybackTransitionCause>,
     durability: PlaybackDurability,
     addressed_event_required: bool,
-    selected_playback: Mutex<Option<u16>>,
+    selected_playback: Mutex<Option<light_playback::PlaybackAddress>>,
 }
 
 struct RelatedRuntimePorts {
@@ -935,7 +983,7 @@ struct RelatedRuntimePorts {
 impl RelatedRuntimePorts {
     fn changing() -> Self {
         Self::new(
-            PlaybackExecution::Pool {
+            PlaybackExecution::Playback {
                 changed: true,
                 pending: None,
             },
@@ -946,7 +994,7 @@ impl RelatedRuntimePorts {
 
     fn peer_only() -> Self {
         Self::new(
-            PlaybackExecution::Pool {
+            PlaybackExecution::Playback {
                 changed: true,
                 pending: None,
             },
@@ -997,7 +1045,7 @@ impl RelatedRuntimePorts {
             .map(|identity| {
                 projections
                     .iter()
-                    .find(|projection| projection.requested == *identity)
+                    .find(|projection| projection.identity == *identity)
                     .cloned()
                     .unwrap_or_else(|| missing_projection(identity.clone()))
             })
@@ -1010,8 +1058,11 @@ impl PlaybackPorts for RelatedRuntimePorts {
         Ok(1)
     }
 
-    fn playback_at(&self, _page: u8, _slot: u8) -> Result<Option<u16>, ActionError> {
-        Ok(None)
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn execute(
@@ -1019,7 +1070,7 @@ impl PlaybackPorts for RelatedRuntimePorts {
         _context: &crate::ActionContext,
         _address: ResolvedPlaybackAddress,
         _action: PlaybackAction,
-        _surface: PlaybackSurface,
+        _control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
         self.executions.fetch_add(1, Ordering::Relaxed);
         if self.mutate_primary || self.mutate_peer {
@@ -1033,15 +1084,15 @@ impl PlaybackPorts for RelatedRuntimePorts {
         _context: &crate::ActionContext,
         _address: ResolvedPlaybackAddress,
         _action: PlaybackAction,
-        _surface: PlaybackSurface,
+        _control_source: &light_playback::PlaybackControlSource,
     ) -> Result<Vec<PlaybackRuntimeIdentity>, ActionError> {
         self.related_reads.fetch_add(1, Ordering::Relaxed);
         Ok(vec![
-            PlaybackRuntimeIdentity::Playback(6),
-            PlaybackRuntimeIdentity::Playback(8),
-            PlaybackRuntimeIdentity::Playback(7),
-            PlaybackRuntimeIdentity::Playback(6),
-            PlaybackRuntimeIdentity::Playback(8),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 6)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 8)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 7)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 6)),
+            PlaybackRuntimeIdentity::Playback(test_address(1, 8)),
         ])
     }
 
@@ -1076,7 +1127,7 @@ impl StatefulPorts {
     fn changing(number: u16) -> Self {
         Self {
             projection: Mutex::new(cue_projection(number, 1.0)),
-            execution: PlaybackExecution::Pool {
+            execution: PlaybackExecution::Playback {
                 changed: true,
                 pending: None,
             },
@@ -1110,8 +1161,11 @@ impl PlaybackPorts for StatefulPorts {
         Ok(1)
     }
 
-    fn playback_at(&self, _page: u8, _slot: u8) -> Result<Option<u16>, ActionError> {
-        Ok(None)
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn execute(
@@ -1119,14 +1173,14 @@ impl PlaybackPorts for StatefulPorts {
         _context: &crate::ActionContext,
         address: ResolvedPlaybackAddress,
         action: PlaybackAction,
-        _surface: PlaybackSurface,
+        _control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
-        self.executions.fetch_add(1, Ordering::Relaxed);
+        let execution_count = self.executions.fetch_add(1, Ordering::Relaxed) + 1;
         if action == (PlaybackAction::Select { pressed: true }) {
-            *self.selected_playback.lock() = address.playback_number();
+            *self.selected_playback.lock() = address.playback_address();
         }
         if self.mutate {
-            *self.projection.lock() = cue_projection(8, 2.0);
+            *self.projection.lock() = cue_projection(8, (execution_count + 1) as f64);
         }
         Ok(self.execution.clone())
     }
@@ -1155,7 +1209,7 @@ impl PlaybackPorts for StatefulPorts {
     ) -> Result<PlaybackRuntimeProjection, ActionError> {
         self.reads.fetch_add(1, Ordering::Relaxed);
         let mut projection = self.projection.lock().clone();
-        projection.requested = identity;
+        projection.identity = identity;
         Ok(projection)
     }
 
@@ -1188,8 +1242,11 @@ impl PlaybackPorts for SnapshotPorts {
         unreachable!("snapshot does not resolve current-page actions")
     }
 
-    fn playback_at(&self, _page: u8, _slot: u8) -> Result<Option<u16>, ActionError> {
-        unreachable!("snapshot does not resolve page assignments")
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn execute(
@@ -1197,7 +1254,7 @@ impl PlaybackPorts for SnapshotPorts {
         _context: &crate::ActionContext,
         _address: ResolvedPlaybackAddress,
         _action: PlaybackAction,
-        _surface: PlaybackSurface,
+        _control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
         unreachable!("snapshot does not execute actions")
     }

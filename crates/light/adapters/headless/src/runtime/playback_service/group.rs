@@ -4,21 +4,12 @@ pub(super) fn execute(
     ports: &ServerPlaybackPorts<'_>,
     context: &ActionContext,
     group_id: PlaybackGroupId,
-    playback_number: Option<u16>,
+    playback_address: Option<light_playback::PlaybackAddress>,
     action: PlaybackAction,
-    surface: PlaybackSurface,
+    control_source: &light_playback::PlaybackControlSource,
 ) -> Result<PlaybackExecution, ActionError> {
-    if let Some(number) = playback_number {
-        return ports.execute_pool(
-            context,
-            ResolvedPlaybackAddress::Pool {
-                number,
-                page: None,
-                slot: None,
-            },
-            action,
-            surface,
-        );
+    if let Some(address) = playback_address {
+        return ports.execute_playback(context, address, action, control_source);
     }
     let changed = match action {
         PlaybackAction::Master(level) => set_master(ports, context, group_id, level)?,
@@ -40,7 +31,7 @@ pub(super) fn execute(
             }
             changed
         }
-        PlaybackAction::Flash { pressed } => set_flash(ports, group_id, pressed),
+        PlaybackAction::Flash { pressed } => set_flash(ports, group_id, control_source, pressed),
         _ => return Err(invalid("action is incompatible with Group runtime")),
     };
     Ok(PlaybackExecution::Target { changed })
@@ -60,14 +51,16 @@ fn set_master(
     Ok(changed)
 }
 
-fn set_flash(ports: &ServerPlaybackPorts<'_>, group_id: PlaybackGroupId, pressed: bool) -> bool {
-    let value = if pressed { 1.0 } else { 0.0 };
-    if ports.state.output.group_master_flash(group_id.as_str()) == value {
-        return false;
-    }
+fn set_flash(
+    ports: &ServerPlaybackPorts<'_>,
+    group_id: PlaybackGroupId,
+    source: &light_playback::PlaybackControlSource,
+    pressed: bool,
+) -> bool {
+    let before = ports.state.output.group_master_flash(group_id.as_str());
     ports
         .state
         .output
-        .set_group_master_flash(group_id.as_str().to_owned(), value);
-    true
+        .set_group_master_flash_source(group_id.as_str().to_owned(), source, pressed);
+    ports.state.output.group_master_flash(group_id.as_str()) != before
 }

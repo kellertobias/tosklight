@@ -74,14 +74,6 @@ impl PlaybackFamilyEvidence {
                     .occurrence
                     .authored_cue_id
                     .is_some_and(|id| id.is_nil())
-                || source
-                    .playback_number
-                    .is_some_and(|number| number == 0 || number > MAX_VIRTUAL_PLAYBACK)
-                || source.playback_identity.is_some_and(|identity| {
-                    source
-                        .playback_number
-                        .is_some_and(|number| number != identity.number())
-                })
             {
                 return Err(IntentError("invalid retained Playback occurrence".into()));
             }
@@ -530,15 +522,8 @@ fn transferred(
 mod source_wire {
     use super::*;
     #[derive(Serialize, Deserialize)]
-    #[serde(tag = "kind", rename_all = "snake_case")]
-    enum Identity {
-        Physical { number: u16 },
-        Virtual { page: u8, number: u16 },
-    }
-    #[derive(Serialize, Deserialize)]
     struct Source {
-        playback_number: Option<u16>,
-        playback_identity: Option<Identity>,
+        playback_address: Option<PlaybackAddress>,
         cue_list_id: CueListId,
         temporary: bool,
     }
@@ -547,18 +532,9 @@ mod source_wire {
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
         Source {
-            playback_number: value.playback_number,
+            playback_address: value.playback_address,
             cue_list_id: value.cue_list_id,
             temporary: value.temporary,
-            playback_identity: value.playback_identity.map(|identity| match identity {
-                PlaybackIdentity::Physical(number) => Identity::Physical {
-                    number: number.get(),
-                },
-                PlaybackIdentity::Virtual(address) => Identity::Virtual {
-                    page: address.page(),
-                    number: address.number().get(),
-                },
-            }),
         }
         .serialize(serializer)
     }
@@ -566,28 +542,12 @@ mod source_wire {
         deserializer: D,
     ) -> Result<SequenceMasterSource, D::Error> {
         let value = Source::deserialize(deserializer)?;
-        let playback_identity = value
-            .playback_identity
-            .map(|identity| match identity {
-                Identity::Physical { number } => PlaybackIdentity::physical(number),
-                Identity::Virtual { page, number } => {
-                    PlaybackIdentity::virtual_playback(page, number)
-                }
-            })
-            .transpose()
-            .map_err(serde::de::Error::custom)?;
-        if value.cue_list_id.0.is_nil()
-            || playback_identity.is_some_and(|identity| {
-                value
-                    .playback_number
-                    .is_some_and(|number| number != identity.number())
-            })
-        {
+        if value.cue_list_id.0.is_nil() {
             return Err(serde::de::Error::custom("invalid retained Playback source"));
         }
         Ok(SequenceMasterSource {
-            playback_number: value.playback_number,
-            playback_identity,
+            control_source_id: None,
+            playback_address: value.playback_address,
             cue_list_id: value.cue_list_id,
             temporary: value.temporary,
         })

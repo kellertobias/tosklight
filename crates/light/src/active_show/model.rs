@@ -2,7 +2,7 @@ use crate::{ActionContext, ApplicationCommand, CommandFamily};
 use light_core::{AttributeConfiguration, Revision, ShowId};
 use light_dynamics::DynamicDefinition;
 use light_output::OutputRoute;
-use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
+use light_playback::{CueList, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{LosslessBody, PortableJson, PortableShowRevision};
 use serde::{Deserialize, Serialize, Serializer};
@@ -17,7 +17,6 @@ pub enum ActiveShowObjectKind {
     Group,
     Macro,
     PatchLayer,
-    Playback,
     PlaybackPage,
     Preset,
     /// Live tracking: which tracker is which 3D Point, and what a zone does.
@@ -39,7 +38,6 @@ pub enum ActiveShowObjectBody {
     Group(LosslessBody<GroupDefinition>),
     Macro(LosslessBody<crate::CommandMacroDefinition>),
     PatchLayer(LosslessBody<PatchLayer>),
-    Playback(LosslessBody<PlaybackDefinition>),
     PlaybackPage(LosslessBody<PlaybackPage>),
     Preset(LosslessBody<Preset>),
     Psn(LosslessBody<super::PsnConfiguration>),
@@ -61,7 +59,6 @@ impl ActiveShowObjectBody {
             ActiveShowObjectKind::Group => Self::Group(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Macro => Self::Macro(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PatchLayer => Self::PatchLayer(LosslessBody::decode(raw)?),
-            ActiveShowObjectKind::Playback => Self::Playback(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::PlaybackPage => Self::PlaybackPage(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Preset => Self::Preset(LosslessBody::decode(raw)?),
             ActiveShowObjectKind::Psn => Self::Psn(LosslessBody::decode(raw)?),
@@ -80,7 +77,6 @@ impl ActiveShowObjectBody {
             Self::Group(_) => ActiveShowObjectKind::Group,
             Self::Macro(_) => ActiveShowObjectKind::Macro,
             Self::PatchLayer(_) => ActiveShowObjectKind::PatchLayer,
-            Self::Playback(_) => ActiveShowObjectKind::Playback,
             Self::PlaybackPage(_) => ActiveShowObjectKind::PlaybackPage,
             Self::Preset(_) => ActiveShowObjectKind::Preset,
             Self::Psn(_) => ActiveShowObjectKind::Psn,
@@ -99,7 +95,6 @@ impl ActiveShowObjectBody {
             Self::Group(body) => body.encode(),
             Self::Macro(body) => body.encode(),
             Self::PatchLayer(body) => body.encode(),
-            Self::Playback(body) => body.encode(),
             Self::PlaybackPage(body) => body.encode(),
             Self::Preset(body) => body.encode(),
             Self::Psn(body) => body.encode(),
@@ -148,13 +143,6 @@ impl ActiveShowObjectBody {
     pub(crate) fn patch_layer(&self) -> Option<&LosslessBody<PatchLayer>> {
         match self {
             Self::PatchLayer(body) => Some(body),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn playback(&self) -> Option<&LosslessBody<PlaybackDefinition>> {
-        match self {
-            Self::Playback(body) => Some(body),
             _ => None,
         }
     }
@@ -282,8 +270,7 @@ fn validate_family_shape(
         ActiveShowObjectKind::Group => unreachable!("handled above"),
         ActiveShowObjectKind::Macro => &["id", "number", "name", "source"],
         ActiveShowObjectKind::PatchLayer => &["id", "name", "order"],
-        ActiveShowObjectKind::Playback => &["number", "name", "target"],
-        ActiveShowObjectKind::PlaybackPage => &["number", "name", "slots", "virtual_playbacks"],
+        ActiveShowObjectKind::PlaybackPage => &["number", "name", "assignments"],
         // `values` was absent from early empty Presets and is defaulted by the typed model.
         ActiveShowObjectKind::Preset => &["name", "family", "number"],
         ActiveShowObjectKind::Psn => unreachable!("handled above"),
@@ -379,7 +366,7 @@ fn looks_like_other_family(object: &serde_json::Map<String, serde_json::Value>) 
         ],
         &["name", "order"],
         &["number", "name", "target"],
-        &["number", "name", "slots", "virtual_playbacks"],
+        &["number", "name", "assignments"],
         &["name", "family", "number"],
         &["id", "name", "enabled", "trigger", "target"],
         &["positions"],
@@ -659,7 +646,6 @@ impl ActiveShowObjectKind {
             "group" => Some(Self::Group),
             "macro" => Some(Self::Macro),
             "patch_layer" => Some(Self::PatchLayer),
-            "playback" => Some(Self::Playback),
             "playback_page" => Some(Self::PlaybackPage),
             "preset" => Some(Self::Preset),
             "psn" => Some(Self::Psn),
@@ -679,7 +665,6 @@ impl ActiveShowObjectKind {
             Self::Group => "group",
             Self::Macro => "macro",
             Self::PatchLayer => "patch_layer",
-            Self::Playback => "playback",
             Self::PlaybackPage => "playback_page",
             Self::Preset => "preset",
             Self::Psn => "psn",

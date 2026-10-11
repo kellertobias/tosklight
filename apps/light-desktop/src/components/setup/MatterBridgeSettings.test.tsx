@@ -31,9 +31,7 @@ beforeEach(() => {
 		lights: [
 			{
 				endpoint_id: 1,
-				page: 1,
-				playback: 1,
-				playback_number: 10,
+				address: { page: 1, position: 1 },
 				name: "Page 1 Playback 1: Front group",
 				on: true,
 				level: 127,
@@ -42,9 +40,7 @@ beforeEach(() => {
 			},
 			{
 				endpoint_id: 2,
-				page: 1,
-				playback: 2,
-				playback_number: 20,
+				address: { page: 1, position: 2 },
 				name: "Page 1 Playback 2: Main cuelist",
 				on: true,
 				level: 254,

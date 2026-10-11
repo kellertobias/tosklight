@@ -17,8 +17,8 @@ impl Engine {
             .map(MoveInBlackRuntime::diagnostic)
             .collect::<Vec<_>>();
         diagnostics.sort_by(|left, right| {
-            left.playback_number
-                .cmp(&right.playback_number)
+            left.playback_address
+                .cmp(&right.playback_address)
                 .then_with(|| left.fixture_id.0.cmp(&right.fixture_id.0))
         });
         diagnostics

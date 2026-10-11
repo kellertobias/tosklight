@@ -5,7 +5,7 @@
 - Select fixtures or a Group, press **AT**, enter the value, then press **ENT**. Mix command-line input with touch and encoders as needed.
 - **REC** stores Programmer values; clear the Programmer afterwards to check playback output.
 - A single **CUE** addresses a Cue in the selected Cuelist; **CUE CUE** addresses a Cuelist.
-- An undotted playback number uses the current page. Use `page.playback` when you need an explicit page.
+- An undotted playback number uses the visibly selected surface's effective page. Use `page.playback` when you need an explicit page.
 - For timing, explicit per-value TIME takes priority over Cue timing unless **Force Cue Timing** is enabled. [Cue timing and triggers](#cue-timing-and-triggers) explains which Cue owns each time.
 
 ## Intro

@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct MoveInBlackKey {
-    pub(crate) playback_number: Option<u16>,
+    pub(crate) playback_address: Option<light_playback::PlaybackAddress>,
     pub(crate) cue_list_id: light_core::CueListId,
     pub(crate) fixture_id: FixtureId,
 }
@@ -100,7 +100,7 @@ impl MoveInBlackRuntime {
         }
         let target_active = active.iter().find(|playback| {
             playback.enabled
-                && playback.playback_number == key.playback_number
+                && playback.playback_address == key.playback_address
                 && playback.cue_list_id == key.cue_list_id
                 && playback.current_cue_id == Some(self.candidate.target_cue_id)
         });
@@ -173,7 +173,7 @@ impl MoveInBlackRuntime {
         positions.sort_by(|left, right| left.attribute.cmp(&right.attribute));
         MoveInBlackDiagnostic {
             fixture_id: self.candidate.fixture_id,
-            playback_number: self.candidate.playback_number,
+            playback_address: self.candidate.playback_address,
             cue_list_id: self.candidate.cue_list_id,
             current_cue_id: self.candidate.current_cue_id,
             current_cue_number: self.candidate.current_cue_number.clone(),
@@ -292,7 +292,7 @@ impl MoveInBlackRuntime {
         self.handoff_until = None;
         self.cancellation_reason = Some(
             if active.iter().any(|playback| {
-                playback.playback_number == key.playback_number
+                playback.playback_address == key.playback_address
                     && playback.cue_list_id == key.cue_list_id
             }) {
                 "future_target_invalidated".into()

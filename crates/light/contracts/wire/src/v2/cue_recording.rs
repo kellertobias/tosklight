@@ -15,25 +15,15 @@ pub enum CueRecordTarget {
         #[schemars(range(min = 1, max = 1000))]
         number: u16,
     },
-    Pool {
+    Playback {
+        #[schemars(range(min = 1, max = 99))]
+        page: u8,
         #[schemars(range(min = 1, max = 1000))]
-        playback_number: u16,
+        position: u16,
     },
     SelectedPlayback,
-    PageSlot {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1, max = 127))]
-        slot: u8,
-    },
     CueList {
         cue_list_id: Uuid,
-    },
-    Virtual {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1001, max = 39100))]
-        playback_number: u16,
     },
 }
 
@@ -118,7 +108,6 @@ pub struct RecordedCueObjectProjection {
 #[serde(deny_unknown_fields)]
 pub struct CueRecordProjections {
     pub cue_list: RecordedCueObjectProjection,
-    pub playback: Option<RecordedCueObjectProjection>,
     pub page: Option<RecordedCueObjectProjection>,
 }
 
@@ -229,9 +218,9 @@ mod tests {
     #[test]
     fn target_variants_preserve_exact_addressing() {
         let targets = [
-            serde_json::json!({"kind":"pool","playback_number":27}),
+            serde_json::json!({"kind":"playback","page":1,"position":27}),
             serde_json::json!({"kind":"selected_playback"}),
-            serde_json::json!({"kind":"page_slot","page":2,"slot":7}),
+            serde_json::json!({"kind":"playback","page":2,"position":7}),
             serde_json::json!({"kind":"cue_list","cue_list_id":Uuid::from_u128(4)}),
         ];
         for target in targets {
@@ -268,7 +257,7 @@ mod tests {
     fn request() -> Value {
         serde_json::json!({
             "request_id":"cue-record-1",
-            "target":{"kind":"pool","playback_number":27},
+            "target":{"kind":"playback","page":1,"position":27},
             "operation":"overwrite",
             "cue_number":2.5,
             "timing":{"fade_millis":1000},
@@ -297,7 +286,6 @@ mod tests {
                     revision: 3,
                     body: Arc::new(serde_json::json!({"future":true})),
                 },
-                playback: None,
                 page: None,
             },
             show_event_sequence: 9,

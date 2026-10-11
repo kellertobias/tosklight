@@ -1,3 +1,4 @@
+import type { PlaybackAddressValue } from "../../api/playbackAddress";
 import type { PlaybackProjection } from "../playbackRuntime/contracts";
 import type { ShowObject } from "../showObjects/contracts";
 
@@ -20,23 +21,21 @@ export const DEMO_PLAYBACK_SLOTS: readonly number[] = [
 export function demoSlotPlaybackNumbers(
 	pages: readonly ShowObject<"playback_page">[],
 	activePage: number | null,
-): ReadonlyMap<number, number> {
-	const mapped = new Map<number, number>();
+): ReadonlyMap<number, PlaybackAddressValue> {
+	const mapped = new Map<number, PlaybackAddressValue>();
 	if (activePage == null) return mapped;
 	const page = pages.find((candidate) => candidate.body.number === activePage);
 	if (!page) return mapped;
 	for (const slot of DEMO_PLAYBACK_SLOTS) {
-		const playbackNumber = page.body.slots[String(slot)];
-		if (playbackNumber != null) mapped.set(slot, playbackNumber);
+		const definition = page.body.assignments[String(slot)];
+		if (definition) mapped.set(slot, {page:activePage,position:slot});
 	}
 	return mapped;
 }
 
 /** The exact mapped Playback numbers the demo desk must subscribe to. */
-export function demoMappedPlaybackNumbers(
-	mapped: ReadonlyMap<number, number>,
-): readonly number[] {
-	return [...new Set(mapped.values())].sort((left, right) => left - right);
+export function demoMappedPlaybackNumbers(mapped: ReadonlyMap<number, PlaybackAddressValue>): readonly PlaybackAddressValue[] {
+	return [...mapped.values()];
 }
 
 /** Mirrors the desk fader reading: authoritative position, then master. */

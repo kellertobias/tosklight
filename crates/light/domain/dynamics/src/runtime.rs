@@ -68,13 +68,12 @@ pub enum DynamicControllerSource {
         cue_list_id: Uuid,
         instance_link: Uuid,
     },
-    /// Current operational Playback owner. `virtual_page` qualifies a Virtual Playback
-    /// assignment; physical owners and old checkpoints carry none. Surviving controllers refresh
-    /// this through [`DynamicControl::Owner`]; it is not an immutable source-origin record.
+    /// Current operational assignment owner; validated at the Playback boundary.
     Playback {
-        playback_number: u16,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        virtual_page: Option<u8>,
+        #[serde(deserialize_with = "owner::deserialize_playback_owner_page")]
+        page: u8,
+        #[serde(deserialize_with = "owner::deserialize_playback_owner_position")]
+        position: u16,
     },
 }
 

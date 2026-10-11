@@ -5,17 +5,14 @@ import {
 	decodePlaybackTopologyOutcome,
 	encodePlaybackTopologyRequest,
 } from "./playbackTopologyWire";
-import type { CueList, PlaybackDefinition } from "./types";
-
-const CUE_LIST_ID = "22222222-2222-4222-8222-222222222222";
+import type { PlaybackDefinition } from "./types";
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
 const CORRELATION_ID = "44444444-4444-4444-8444-444444444444";
-
-function playback(number = 0): PlaybackDefinition {
+const CUE_LIST_ID = "22222222-2222-4222-8222-222222222222";
+function playback(): PlaybackDefinition {
 	return {
-		number,
 		name: "Front Wash",
-		target: { type: "cue_list" as const, cue_list_id: CUE_LIST_ID },
+		target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
 		buttons: ["toggle", "none", "none"],
 		button_count: 1,
 		fader: "master",
@@ -28,202 +25,55 @@ function playback(number = 0): PlaybackDefinition {
 		protect_from_swap: false,
 	};
 }
-
 function request(
-	type: "configure_slot" | "clear_mapped_playback" = "configure_slot",
-): PlaybackTopologyRequest {
-	const common = {
-		type,
-		page: 4,
-		slot: 2,
-		expectedPageRevision: 7,
-		expectedPageObjectId: "legacy-page-four",
-		expectedPlaybackRevision: 3,
-		expectedPlaybackObjectId: "legacy-playback-seven",
-	};
-	return {
-		requestId: REQUEST_ID,
-		action:
-			type === "configure_slot"
-				? { ...common, type, playback: playback() }
-				: { ...common, type },
-	};
-}
-
-function cueListRequest(): PlaybackTopologyRequest {
-	return {
-		requestId: REQUEST_ID,
-		action: {
-			type: "save_cue_list",
-			cueListId: CUE_LIST_ID,
-			expectedRevision: 4,
-			expectedObjectId: "legacy-main-list",
-			body: cueList(),
-		},
-	};
-}
-
-function mapExistingRequest(
-	pageIdentity: { revision: number; objectId: string | null } = {
-		revision: 7,
-		objectId: "legacy-page-four",
-	},
+	type: "assign_playback" | "update_playback" = "update_playback",
 ): PlaybackTopologyRequest {
 	return {
 		requestId: REQUEST_ID,
 		action: {
-			type: "map_existing_playback",
-			page: 4,
-			slot: 2,
-			playbackNumber: 7,
-			expectedPageRevision: pageIdentity.revision,
-			expectedPageObjectId: pageIdentity.objectId,
-			expectedPlaybackRevision: 3,
-			expectedPlaybackObjectId: "legacy-playback-seven",
+			type,
+			address: { page: 4, position: 680 },
+			expectedPageRevision: 7,
+			expectedPageObjectId: "page-four",
+			definition: playback(),
 		},
 	};
 }
-
-function assignGroupMasterRequest(): PlaybackTopologyRequest {
-	return {
-		requestId: REQUEST_ID,
-		action: {
-			type: "assign_group_master",
-			groupObjectId: "group-front",
-			expectedGroupRevision: 9,
-			address: {
-				kind: "physical",
-				page: 4,
-				slot: 2,
-				expectedPageRevision: 7,
-				expectedPageObjectId: "legacy-page-four",
-				expectedPlaybackRevision: 3,
-				expectedPlaybackObjectId: "legacy-playback-seven",
-			},
-		},
-	};
-}
-
-function assignVirtualGroupMasterRequest(): PlaybackTopologyRequest {
-	return {
-		requestId: REQUEST_ID,
-		action: {
-			type: "assign_group_master",
-			groupObjectId: "group-front",
-			expectedGroupRevision: 9,
-			address: {
-				kind: "virtual",
-				page: 4,
-				playbackNumber: 1901,
-				expectedPageRevision: 7,
-				expectedPageObjectId: "legacy-page-four",
-			},
-		},
-	};
-}
-
-function pageRequest(
-	type: "create_page" | "rename_page",
-): PlaybackTopologyRequest {
-	return {
-		requestId: REQUEST_ID,
-		action:
-			type === "create_page"
-				? {
-						type,
-						page: 5,
-						expectedPageRevision: 0,
-						expectedPageObjectId: null,
-					}
-				: {
-						type,
-						page: 4,
-						name: "Act One",
-						expectedPageRevision: 7,
-						expectedPageObjectId: "legacy-page-four",
-					},
-	};
-}
-
-function cueList(): CueList {
-	return {
-		id: CUE_LIST_ID,
-		name: "Main",
-		priority: 0,
-		mode: "sequence",
-		looped: false,
-		cues: [],
-	};
-}
-
-function pageObject(slots: Record<string, number> = { 2: 7 }) {
+function pageObject() {
 	return {
 		state: "present",
 		kind: "playback_page",
-		object_id: "legacy-page-four",
+		object_id: "page-four",
 		object_revision: 8,
-		body: {
-			number: 4,
-			name: "Page 4",
-			slots,
-			virtual_playbacks: {},
-			future_page: true,
-		},
+		body: { number: 4, name: "Page 4", assignments: { 680: playback() } },
 	};
 }
-
-function playbackObject() {
-	return {
-		state: "present",
-		kind: "playback",
-		object_id: "legacy-playback-seven",
-		object_revision: 4,
-		body: { ...playback(7), future_playback: { keep: true } },
-	};
-}
-
-function cueListObject() {
-	return {
-		state: "present",
-		kind: "cue_list",
-		object_id: "legacy-main-list",
-		object_revision: 5,
-		body: { ...cueList(), future_cue_list: { retained: true } },
-	};
-}
-
-function changedOutcome(overrides: Record<string, unknown> = {}) {
+function outcome(overrides: Record<string, unknown> = {}) {
 	return {
 		request_id: REQUEST_ID,
 		correlation_id: CORRELATION_ID,
 		show_revision: 12,
-		resolution: {
-			kind: "page_slot",
-			page: 4,
-			slot: 2,
-			playback_number: 7,
-		},
+		resolution: { kind: "playback", page: 4, position: 680 },
 		status: "changed",
-		objects: [playbackObject(), pageObject()],
+		objects: [pageObject()],
 		event_sequence: 41,
 		replayed: false,
 		...overrides,
 	};
 }
-
-describe("Playback topology v2 wire", () => {
-	it("encodes one strict configure action with revision metadata", () => {
-		expect(encodePlaybackTopologyRequest(request())).toEqual({
+describe("Unified page topology wire", () => {
+	it.each([
+		"assign_playback",
+		"update_playback",
+	] as const)("encodes %s with page ownership only", (type) => {
+		expect(encodePlaybackTopologyRequest(request(type))).toEqual({
 			request_id: REQUEST_ID,
 			action: {
-				type: "configure_slot",
-				page: 4,
-				slot: 2,
+				type,
+				address: { page: 4, position: 680 },
 				expected_page_revision: 7,
-				expected_page_object_id: "legacy-page-four",
-				expected_playback_revision: 3,
-				expected_playback_object_id: "legacy-playback-seven",
-				playback: {
+				expected_page_object_id: "page-four",
+				definition: {
 					...playback(),
 					footprint: { type: "normal" },
 					presentation_icon: null,
@@ -232,37 +82,326 @@ describe("Playback topology v2 wire", () => {
 			},
 		});
 	});
-
-	it("preserves a zero initial Group Master seed in physical and virtual target edits", () => {
-		const target = {
-			type: "group" as const,
-			group_id: "group-front",
-			initial_master: 0,
+	it("preserves zero Group seed and strips decoded target extensions", () => {
+		const q = request();
+		if (!("definition" in q.action)) throw Error("fixture");
+		q.action.definition = {
+			...playback(),
+			target: { type: "group", group_id: "front", initial_master: 0 },
 		};
-		const physical = request();
-		if (physical.action.type !== "configure_slot")
-			throw new Error("physical configure fixture");
-		physical.action.playback = { ...physical.action.playback, target };
-		expect(encodePlaybackTopologyRequest(physical)).toMatchObject({
-			action: { playback: { target } },
-		});
-		const virtual: PlaybackTopologyRequest = {
-			requestId: REQUEST_ID,
+		expect(encodePlaybackTopologyRequest(q)).toMatchObject({
 			action: {
-				type: "configure_virtual",
-				page: 4,
-				playbackNumber: 1901,
-				expectedPageRevision: 7,
-				expectedPageObjectId: "legacy-page-four",
-				playback: { ...playback(1901), target },
+				definition: {
+					target: { type: "group", group_id: "front", initial_master: 0 },
+				},
 			},
-		};
-		expect(encodePlaybackTopologyRequest(virtual)).toMatchObject({
-			action: { playback: { target } },
+		});
+		q.action.definition = {
+			...playback(),
+			target: { ...playback().target, future_target: true },
+		} as unknown as PlaybackDefinition;
+		expect(encodePlaybackTopologyRequest(q)).toMatchObject({
+			action: { definition: { target: playback().target } },
 		});
 	});
-
-	it("normalizes an omitted Dynamic spatial mapping in a Virtual Playback outcome", () => {
+	it("preserves independent wider controls", () => {
+		const q = request();
+		if (!("definition" in q.action)) throw Error("fixture");
+		q.action.definition.footprint = {
+			type: "wider",
+			right_buttons: ["go_minus", "pause", "flash"],
+			right_fader: "x_fade",
+		};
+		expect(encodePlaybackTopologyRequest(q)).toMatchObject({
+			action: { definition: { footprint: q.action.definition.footprint } },
+		});
+	});
+	it.each([
+		{ page: 0, position: 1 },
+		{ page: 100, position: 1 },
+		{ page: 1, position: 0 },
+		{ page: 1, position: 1001 },
+	])("rejects out-of-contract address %j", (address) => {
+		const q = request();
+		if (!("address" in q.action)) throw Error("fixture");
+		q.action.address = address;
+		expect(() => encodePlaybackTopologyRequest(q)).toThrow("$.action.address");
+	});
+	it.each([
+		{ expectedPageRevision: 0, expectedPageObjectId: "old" },
+		{ expectedPageRevision: 7, expectedPageObjectId: null },
+	])("rejects ambiguous page authority %j", (basis) => {
+		const q = request();
+		expect(() =>
+			encodePlaybackTopologyRequest({
+				...q,
+				action: { ...q.action, ...basis },
+			}),
+		).toThrow("exact present or absent");
+	});
+	it("decodes page-owned assignment and exact storage identity", () => {
+		expect(
+			decodePlaybackTopologyOutcome(outcome(), request(), 11),
+		).toMatchObject({
+			status: "changed",
+			resolution: { kind: "playback", page: 4, position: 680 },
+			objects: [
+				{
+					objectId: "page-four",
+					objectRevision: 8,
+					body: { assignments: { 680: { name: "Front Wash" } } },
+				},
+			],
+		});
+	});
+	it.each([
+		{ bootstrap: {} },
+		{ request_id: "other" },
+		{ show_revision: 11 },
+		{ resolution: { kind: "playback", page: 4, position: 681 } },
+		{ objects: [] },
+		{ objects: [pageObject(), pageObject()] },
+		{ objects: [{ ...pageObject(), object_id: "other" }] },
+		{ objects: [{ ...pageObject(), object_revision: 9 }] },
+		{
+			objects: [
+				{
+					...pageObject(),
+					body: {
+						...pageObject().body,
+						assignments: { 680: { ...playback(), name: "wrong" } },
+					},
+				},
+			],
+		},
+	])("rejects mismatched response authority %j", (override) => {
+		expect(() =>
+			decodePlaybackTopologyOutcome(outcome(override), request(), 11),
+		).toThrow();
+	});
+	it("rejects retired standalone playback and split-page formats", () => {
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				outcome({
+					objects: [
+						{
+							state: "present",
+							kind: "playback",
+							object_id: "old",
+							object_revision: 8,
+							body: playback(),
+						},
+					],
+				}),
+				request(),
+				11,
+			),
+		).toThrow();
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				outcome({
+					objects: [
+						{
+							...pageObject(),
+							body: {
+								number: 4,
+								name: "Page",
+								slots: { 1: 7 },
+								virtual_playbacks: {},
+							},
+						},
+					],
+				}),
+				request(),
+				11,
+			),
+		).toThrow();
+	});
+	it("decodes no-change without event and rejects bumped revision", () => {
+		const { event_sequence, ...base } = outcome();
+		const unchanged = { ...pageObject(), object_revision: 7 };
+		const value = {
+			...base,
+			status: "no_change",
+			show_revision: 11,
+			replayed: true,
+			objects: [unchanged],
+		};
+		expect(decodePlaybackTopologyOutcome(value, request(), 11)).toMatchObject({
+			status: "no_change",
+			replayed: true,
+		});
+		expect(() =>
+			decodePlaybackTopologyOutcome(
+				{ ...value, objects: [pageObject()] },
+				request(),
+				11,
+			),
+		).toThrow("revision 7");
+	});
+	it("clears one exact assignment while preserving unrelated sparse positions", () => {
+		const q: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "clear_playback",
+				address: { page: 4, position: 680 },
+				expectedPageRevision: 7,
+				expectedPageObjectId: "page-four",
+			},
+		};
+		expect(
+			decodePlaybackTopologyOutcome(
+				outcome({
+					objects: [
+						{
+							...pageObject(),
+							body: { ...pageObject().body, assignments: { 999: playback() } },
+						},
+					],
+				}),
+				q,
+				11,
+			).objects,
+		).toHaveLength(1);
+		expect(() => decodePlaybackTopologyOutcome(outcome(), q, 11)).toThrow(
+			"cleared Playback position",
+		);
+	});
+	it("validates explicit Group target", () => {
+		const q: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "assign_group_master",
+				groupObjectId: "front",
+				expectedGroupRevision: 9,
+				address: { page: 4, position: 680 },
+				expectedPageRevision: 7,
+				expectedPageObjectId: "page-four",
+			},
+		};
+		expect(encodePlaybackTopologyRequest(q)).toMatchObject({
+			action: {
+				group_object_id: "front",
+				expected_group_revision: 9,
+				address: { page: 4, position: 680 },
+			},
+		});
+		expect(() => decodePlaybackTopologyOutcome(outcome(), q, 11)).toThrow(
+			"explicitly requested Group",
+		);
+	});
+	it.each([
+		"create_playback_page",
+		"rename_playback_page",
+	] as const)("encodes and decodes %s", (type) => {
+		const isNew = type === "create_playback_page";
+		const q: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type,
+				number: 4,
+				name: "Act 1",
+				expectedPageRevision: isNew ? 0 : 7,
+				expectedPageObjectId: isNew ? null : "page-four",
+			},
+		};
+		expect(encodePlaybackTopologyRequest(q)).toMatchObject({
+			action: { type, number: 4, name: "Act 1" },
+		});
+		expect(
+			decodePlaybackTopologyOutcome(
+				outcome({
+					resolution: { kind: "page", page: 4 },
+					objects: [
+						{
+							...pageObject(),
+							object_id: isNew ? "4" : "page-four",
+							object_revision: isNew ? 1 : 8,
+							body: { number: 4, name: "Act 1", assignments: {} },
+						},
+					],
+				}),
+				q,
+				11,
+			),
+		).toMatchObject({ resolution: { kind: "page", page: 4 } });
+	});
+	it("validates exact page deletion", () => {
+		const q: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "delete_playback_page",
+				number: 4,
+				expectedPageRevision: 7,
+				expectedPageObjectId: "page-four",
+			},
+		};
+		expect(
+			decodePlaybackTopologyOutcome(
+				outcome({
+					resolution: { kind: "page", page: 4 },
+					objects: [
+						{
+							state: "deleted",
+							kind: "playback_page",
+							object_id: "page-four",
+							object_revision: 8,
+						},
+					],
+				}),
+				q,
+				11,
+			).objects[0].state,
+		).toBe("deleted");
+	});
+	it("preserves Cuelist semantic versus storage identities and history", () => {
+		const body = {
+			id: CUE_LIST_ID,
+			name: "Main",
+			priority: 0,
+			mode: "sequence" as const,
+			looped: false,
+			cues: [],
+		};
+		const q: PlaybackTopologyRequest = {
+			requestId: REQUEST_ID,
+			action: {
+				type: "save_cue_list",
+				cueListId: CUE_LIST_ID,
+				expectedRevision: 4,
+				expectedObjectId: "stored-list",
+				body,
+			},
+		};
+		const value = outcome({
+			resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
+			objects: [
+				{
+					state: "present",
+					kind: "cue_list",
+					object_id: "stored-list",
+					object_revision: 5,
+					body,
+				},
+			],
+		});
+		expect(
+			decodePlaybackTopologyOutcome(value, q, 11).objects[0].objectId,
+		).toBe("stored-list");
+		for (const type of ["undo_cue_list", "redo_cue_list"] as const)
+			expect(
+				encodePlaybackTopologyRequest({
+					requestId: REQUEST_ID,
+					action: {
+						type,
+						cueListId: CUE_LIST_ID,
+						expectedRevision: 4,
+						expectedObjectId: "stored-list",
+					},
+				}),
+			).toMatchObject({ action: { type, expected_object_id: "stored-list" } });
+	});
+	it("encodes intent Dynamic assignment and decodes nested stored reference", () => {
 		const fallback = {
 			id: "dynamic-one",
 			pool_number: 1,
@@ -293,853 +432,84 @@ describe("Playback topology v2 wire", () => {
 			auto_off_flash_release: false,
 			auto_off_full_control: true,
 		};
-		const requested = {
-			...playback(1901),
-			name: "Beam Show PWM",
+		const q = request();
+		if (!("definition" in q.action)) throw Error("fixture");
+		q.action.definition = {
+			...playback(),
 			target: { type: "dynamic", assignment },
 		} as unknown as PlaybackDefinition;
-		const action: PlaybackTopologyRequest = {
-			requestId: REQUEST_ID,
-			action: {
-				type: "configure_virtual",
-				page: 4,
-				playbackNumber: 1901,
-				expectedPageRevision: 7,
-				expectedPageObjectId: "legacy-page-four",
-				playback: requested,
-			},
-		};
-		const { dynamic_id, last_known_pool_number, embedded_fallback, ...wire } =
+		expect(encodePlaybackTopologyRequest(q)).toMatchObject({
+			action: { definition: { target: { assignment } } },
+		});
+		const { dynamic_id, last_known_pool_number, embedded_fallback, ...timing } =
 			assignment;
-		const wirePlayback = {
-			...requested,
+		const wireDefinition = {
+			...q.action.definition,
 			target: {
 				type: "dynamic",
 				assignment: {
-					...wire,
+					...timing,
 					dynamic: {
 						dynamic_id,
 						last_known_pool_number,
 						embedded_fallback: {
-							definition: {
-								...embedded_fallback,
-								spatial_mapping: undefined,
-							},
+							definition: { ...embedded_fallback, spatial_mapping: undefined },
 						},
 					},
 				},
 			},
 		};
-		const page = {
-			...pageObject({}),
-			body: {
-				...pageObject({}).body,
-				virtual_playbacks: { "1901": wirePlayback },
-			},
-		};
-
-		const outcome = decodePlaybackTopologyOutcome(
-			changedOutcome({
-				resolution: {
-					kind: "virtual",
-					page: 4,
-					playback_number: 1901,
-				},
-				objects: [page],
-			}),
-			action,
-			11,
-		);
-
-		expect(outcome).toMatchObject({
-			status: "changed",
+		expect(
+			decodePlaybackTopologyOutcome(
+				outcome({
+					objects: [
+						{
+							...pageObject(),
+							body: {
+								...pageObject().body,
+								assignments: { 680: wireDefinition },
+							},
+						},
+					],
+				}),
+				q,
+				11,
+			),
+		).toMatchObject({
 			objects: [
 				{
 					body: {
-						virtual_playbacks: {
-							"1901": {
-								target: {
-									assignment: { embedded_fallback: fallback },
-								},
-							},
+						assignments: {
+							680: { target: { assignment: { embedded_fallback: fallback } } },
 						},
 					},
 				},
 			],
 		});
 	});
-
-	it("encodes every independently assigned wider control", () => {
-		const expanded = request();
-		if (expanded.action.type !== "configure_slot")
-			throw new Error("physical configure fixture");
-		expanded.action.playback = {
-			...expanded.action.playback,
-			footprint: {
-				type: "wider",
-				right_buttons: ["go_minus", "pause", "flash"],
-				right_fader: "x_fade",
-			},
-		};
-
-		expect(encodePlaybackTopologyRequest(expanded)).toMatchObject({
-			action: { playback: { footprint: expanded.action.playback.footprint } },
-		});
-	});
-
-	it("encodes one exact existing-Playback map without a Playback body", () => {
-		expect(encodePlaybackTopologyRequest(mapExistingRequest())).toEqual({
-			request_id: REQUEST_ID,
-			action: {
-				type: "map_existing_playback",
-				page: 4,
-				slot: 2,
-				playback_number: 7,
-				expected_page_revision: 7,
-				expected_page_object_id: "legacy-page-four",
-				expected_playback_revision: 3,
-				expected_playback_object_id: "legacy-playback-seven",
-			},
-		});
-		expect(
-			encodePlaybackTopologyRequest(
-				mapExistingRequest({ revision: 0, objectId: null }),
-			),
-		).toMatchObject({
-			action: {
-				expected_page_revision: 0,
-				expected_page_object_id: null,
-			},
-		});
-	});
-
-	it("encodes an explicit Group Master assignment with all three revision guards", () => {
-		expect(encodePlaybackTopologyRequest(assignGroupMasterRequest())).toEqual({
-			request_id: REQUEST_ID,
-			action: {
-				type: "assign_group_master",
-				group_object_id: "group-front",
-				expected_group_revision: 9,
-				address: {
-					kind: "physical",
-					page: 4,
-					slot: 2,
-					expected_page_revision: 7,
-					expected_page_object_id: "legacy-page-four",
-					expected_playback_revision: 3,
-					expected_playback_object_id: "legacy-playback-seven",
-				},
-			},
-		});
-		const request = assignGroupMasterRequest();
-		if (request.action.type !== "assign_group_master")
-			throw new Error("assignment request fixture");
-		const invalidAction = { ...request.action, expectedGroupRevision: 0 };
-		expect(() =>
-			encodePlaybackTopologyRequest({
-				...request,
-				action: invalidAction,
-			}),
-		).toThrow("existing Group revision");
-	});
-
-	it("encodes and validates a Virtual Group Master assignment", () => {
-		expect(
-			encodePlaybackTopologyRequest(assignVirtualGroupMasterRequest()),
-		).toEqual({
-			request_id: REQUEST_ID,
-			action: {
-				type: "assign_group_master",
-				group_object_id: "group-front",
-				expected_group_revision: 9,
-				address: {
-					kind: "virtual",
-					page: 4,
-					playback_number: 1901,
-					expected_page_revision: 7,
-					expected_page_object_id: "legacy-page-four",
-				},
-			},
-		});
-		const virtualPage = pageObject();
-		virtualPage.body.virtual_playbacks = {
-			"1901": {
-				...playback(1901),
-				target: { type: "group", group_id: "group-front", initial_master: 0 },
-			},
-		};
-		expect(
-			decodePlaybackTopologyOutcome(
-				changedOutcome({
-					resolution: {
-						kind: "virtual",
-						page: 4,
-						playback_number: 1901,
-					},
-					objects: [virtualPage],
-				}),
-				assignVirtualGroupMasterRequest(),
-				11,
-			),
-		).toMatchObject({
-			status: "changed",
-			resolution: { kind: "virtual", page: 4, playbackNumber: 1901 },
-		});
-	});
-
-	it("accepts only the explicitly requested Group in an assignment outcome", () => {
-		const assignedPlayback = {
-			...playbackObject(),
-			body: {
-				...playbackObject().body,
-				target: { type: "group", group_id: "group-front" },
-			},
-		};
-		expect(
-			decodePlaybackTopologyOutcome(
-				changedOutcome({ objects: [assignedPlayback, pageObject()] }),
-				assignGroupMasterRequest(),
-				11,
-			),
-		).toMatchObject({
-			status: "changed",
-			resolution: { kind: "page_slot", page: 4, slot: 2 },
-		});
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				changedOutcome({
-					objects: [
-						{
-							...assignedPlayback,
-							body: {
-								...assignedPlayback.body,
-								target: { type: "group", group_id: "incidental-group" },
-							},
-						},
-						pageObject(),
-					],
-				}),
-				assignGroupMasterRequest(),
-				11,
-			),
-		).toThrow("explicitly requested Group Master target");
-	});
-
-	it("encodes the exact Cuelist storage identity precondition", () => {
-		expect(encodePlaybackTopologyRequest(cueListRequest())).toEqual({
-			request_id: REQUEST_ID,
-			action: {
-				type: "save_cue_list",
-				cue_list_id: CUE_LIST_ID,
-				expected_revision: 4,
-				expected_object_id: "legacy-main-list",
-				body: cueList(),
-			},
-		});
-	});
-
-	it("encodes feature-owned Cuelist undo and redo", () => {
-		for (const type of ["undo_cue_list", "redo_cue_list"] as const) {
-			expect(
-				encodePlaybackTopologyRequest({
-					requestId: REQUEST_ID,
-					action: {
-						type,
-						cueListId: CUE_LIST_ID,
-						expectedRevision: 5,
-						expectedObjectId: "legacy-main-list",
-					},
-				}),
-			).toEqual({
-				request_id: REQUEST_ID,
-				action: {
-					type,
-					cue_list_id: CUE_LIST_ID,
-					expected_revision: 5,
-					expected_object_id: "legacy-main-list",
-				},
-			});
-		}
-	});
-
-	it("encodes exact Page create and rename actions", () => {
-		expect(encodePlaybackTopologyRequest(pageRequest("create_page"))).toEqual({
-			request_id: REQUEST_ID,
-			action: {
-				type: "create_page",
-				page: 5,
-				expected_page_revision: 0,
-				expected_page_object_id: null,
-			},
-		});
-		expect(encodePlaybackTopologyRequest(pageRequest("rename_page"))).toEqual({
-			request_id: REQUEST_ID,
-			action: {
-				type: "rename_page",
-				page: 4,
-				name: "Act One",
-				expected_page_revision: 7,
-				expected_page_object_id: "legacy-page-four",
-			},
-		});
-		const legacyIdentity = "legacy/".repeat(40);
-		const legacyRename = pageRequest("rename_page");
-		if (legacyRename.action.type !== "rename_page")
-			throw new Error("rename request fixture");
-		expect(
-			encodePlaybackTopologyRequest({
-				...legacyRename,
-				action: {
-					...legacyRename.action,
-					expectedPageObjectId: legacyIdentity,
-				},
-			}).action,
-		).toMatchObject({ expected_page_object_id: legacyIdentity });
-
-		for (const action of [
-			{ ...pageRequest("rename_page").action, name: " Act One" },
-			{ ...pageRequest("rename_page").action, name: "x".repeat(81) },
-			{
-				...pageRequest("create_page").action,
-				expectedPageRevision: 1,
-			},
-		])
-			expect(() =>
-				encodePlaybackTopologyRequest({ requestId: REQUEST_ID, action }),
-			).toThrow("$.action");
-	});
-
-	it("keeps decoded target extensions out of the strict action DTO", () => {
-		const configure = request();
-		if (configure.action.type !== "configure_slot")
-			throw new Error("configure");
-		const withExtension = {
-			...playback(),
-			target: {
-				type: "cue_list",
-				cue_list_id: CUE_LIST_ID,
-				future_target: { retained_in_show: true },
-			},
-		} as unknown as PlaybackDefinition;
-		const encoded = encodePlaybackTopologyRequest({
-			...configure,
-			action: { ...configure.action, playback: withExtension },
-		});
-
-		const encodedPlayback = encoded.action as {
-			playback: { target: unknown };
-		};
-		expect(encodedPlayback.playback.target).toEqual({
-			type: "cue_list",
-			cue_list_id: CUE_LIST_ID,
-		});
-	});
-
-	it("decodes an atomic changed outcome with lossless legacy object IDs", () => {
-		const outcome = decodePlaybackTopologyOutcome(
-			changedOutcome(),
-			request(),
-			11,
-		);
-
-		expect(outcome).toMatchObject({
-			status: "changed",
-			requestId: REQUEST_ID,
-			correlationId: CORRELATION_ID,
-			showRevision: 12,
-			eventSequence: 41,
-			resolution: { playbackNumber: 7 },
-			objects: [
-				{
-					kind: "playback",
-					objectId: "legacy-playback-seven",
-					body: { number: 7, future_playback: { keep: true } },
-				},
-				{
-					kind: "playback_page",
-					objectId: "legacy-page-four",
-					body: { number: 4, future_page: true },
-				},
-			],
-		});
-	});
-
-	it("accepts only the one authoritative Page for an existing-Playback map", () => {
-		const outcome = decodePlaybackTopologyOutcome(
-			changedOutcome({ objects: [pageObject()] }),
-			mapExistingRequest(),
-			11,
-		);
-		expect(outcome).toMatchObject({
-			status: "changed",
-			resolution: { playbackNumber: 7 },
-			objects: [
-				{
-					kind: "playback_page",
-					objectId: "legacy-page-four",
-					objectRevision: 8,
-				},
-			],
-		});
-
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				changedOutcome({ objects: [pageObject(), playbackObject()] }),
-				mapExistingRequest(),
-				11,
-			),
-		).toThrow("only the authoritative mapped Page");
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				changedOutcome({
-					resolution: {
-						kind: "page_slot",
-						page: 4,
-						slot: 2,
-						playback_number: 8,
-					},
-					objects: [pageObject({ 2: 8 })],
-				}),
-				mapExistingRequest(),
-				11,
-			),
-		).toThrow("the requested Playback");
-	});
-
-	it("decodes one authoritative Page for create, no-change, and rename", () => {
-		const created = {
-			state: "present",
-			kind: "playback_page",
-			object_id: "5",
-			object_revision: 1,
-			body: {
-				number: 5,
-				name: "Page 5",
-				slots: {},
-				virtual_playbacks: {},
-				future_page: true,
-			},
-		};
-		const create = decodePlaybackTopologyOutcome(
-			{
-				request_id: REQUEST_ID,
-				correlation_id: CORRELATION_ID,
-				show_revision: 12,
-				resolution: { kind: "page", page: 5 },
-				status: "changed",
-				objects: [created],
-				event_sequence: 41,
-				replayed: false,
-			},
-			pageRequest("create_page"),
-			11,
-		);
-		expect(create).toMatchObject({
-			status: "changed",
-			resolution: { kind: "page", page: 5 },
-			objects: [{ objectId: "5", body: { future_page: true } }],
-		});
-
-		const existingCreate: PlaybackTopologyRequest = {
-			requestId: REQUEST_ID,
-			action: {
-				type: "create_page",
-				page: 4,
-				expectedPageRevision: 7,
-				expectedPageObjectId: "legacy-page-four",
-			},
-		};
-		expect(
-			decodePlaybackTopologyOutcome(
-				{
-					request_id: REQUEST_ID,
-					correlation_id: CORRELATION_ID,
-					show_revision: 11,
-					resolution: { kind: "page", page: 4 },
-					status: "no_change",
-					objects: [{ ...pageObject({ 2: 7 }), object_revision: 7 }],
-					replayed: true,
-				},
-				existingCreate,
-				11,
-			),
-		).toMatchObject({ status: "no_change", replayed: true });
-
-		expect(
-			decodePlaybackTopologyOutcome(
-				{
-					request_id: REQUEST_ID,
-					correlation_id: CORRELATION_ID,
-					show_revision: 12,
-					resolution: { kind: "page", page: 4 },
-					status: "changed",
-					objects: [
-						{
-							...pageObject({ 2: 7 }),
-							body: {
-								...pageObject({ 2: 7 }).body,
-								name: "Act One",
-							},
-						},
-					],
-					event_sequence: 41,
-					replayed: false,
-				},
-				pageRequest("rename_page"),
-				11,
-			),
-		).toMatchObject({ status: "changed" });
-	});
-
-	it("rejects malformed Page action authority and outcomes", () => {
-		const rename = pageRequest("rename_page");
-		for (const value of [
-			{
-				request_id: REQUEST_ID,
-				correlation_id: CORRELATION_ID,
-				show_revision: 12,
-				resolution: { kind: "page", page: 5 },
-				status: "changed",
-				objects: [pageObject()],
-				event_sequence: 41,
-				replayed: false,
-			},
-			{
-				request_id: REQUEST_ID,
-				correlation_id: CORRELATION_ID,
-				show_revision: 12,
-				resolution: { kind: "page", page: 4 },
-				status: "changed",
-				objects: [pageObject(), playbackObject()],
-				event_sequence: 41,
-				replayed: false,
-			},
-			{
-				request_id: REQUEST_ID,
-				correlation_id: CORRELATION_ID,
-				show_revision: 12,
-				resolution: { kind: "page", page: 4 },
-				status: "changed",
-				objects: [pageObject()],
-				event_sequence: 41,
-				replayed: false,
-			},
-		])
-			expect(() => decodePlaybackTopologyOutcome(value, rename, 11)).toThrow();
-	});
-
-	it("validates an existing-Playback no-change and exact identity pairs", () => {
-		const { event_sequence: _eventSequence, ...withoutEvent } =
-			changedOutcome();
-		expect(
-			decodePlaybackTopologyOutcome(
-				{
-					...withoutEvent,
-					status: "no_change",
-					show_revision: 11,
-					objects: [{ ...pageObject(), object_revision: 7 }],
-					replayed: true,
-				},
-				mapExistingRequest(),
-				11,
-			),
-		).toMatchObject({ status: "no_change", replayed: true });
-
-		for (const invalidRequest of [
-			mapExistingRequest({ revision: 0, objectId: "legacy-page-four" }),
-			mapExistingRequest({ revision: 7, objectId: null }),
-			{
-				...mapExistingRequest(),
-				action: {
-					...mapExistingRequest().action,
-					expectedPlaybackRevision: 0,
-				},
-			},
-		])
-			expect(() => encodePlaybackTopologyRequest(invalidRequest)).toThrow(
-				"$.action.expected",
-			);
-	});
-
-	it("resolves a saved Cuelist by semantic ID while preserving its storage key", () => {
-		const outcome = decodePlaybackTopologyOutcome(
-			{
-				request_id: REQUEST_ID,
-				correlation_id: CORRELATION_ID,
-				show_revision: 12,
-				resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
-				status: "changed",
-				objects: [cueListObject()],
-				event_sequence: 41,
-				replayed: false,
-			},
-			cueListRequest(),
-			11,
-		);
-
-		expect(outcome.objects[0]).toMatchObject({
-			objectId: "legacy-main-list",
-			body: { id: CUE_LIST_ID },
-		});
-	});
-
-	it("rejects a saved Cuelist whose known body differs from the request", () => {
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				{
-					request_id: REQUEST_ID,
-					correlation_id: CORRELATION_ID,
-					show_revision: 12,
-					resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
-					status: "changed",
-					objects: [
-						{
-							...cueListObject(),
-							body: { ...cueList(), name: "Different" },
-						},
-					],
-					event_sequence: 41,
-					replayed: false,
-				},
-				cueListRequest(),
-				11,
-			),
-		).toThrow(/submitted Cuelist known fields/);
-	});
-
-	it("decodes no-change and multi-page clear without inventing an event", () => {
-		const clear = request("clear_mapped_playback");
-		if (clear.action.type !== "clear_mapped_playback")
-			throw new Error("clear request fixture");
-		const emptyClear: PlaybackTopologyRequest = {
-			...clear,
-			action: {
-				...clear.action,
-				expectedPageRevision: 8,
-				expectedPlaybackRevision: 0,
-				expectedPlaybackObjectId: null,
-			},
-		};
-		const { event_sequence: _eventSequence, ...changedWithoutEvent } =
-			changedOutcome();
-		const outcome = decodePlaybackTopologyOutcome(
-			{
-				...changedWithoutEvent,
-				status: "no_change",
-				show_revision: 11,
-				resolution: {
-					kind: "page_slot",
-					page: 4,
-					slot: 2,
-					playback_number: null,
-				},
-				objects: [pageObject({})],
-				replayed: true,
-			},
-			emptyClear,
-			11,
-		);
-		expect(outcome).toMatchObject({ status: "no_change", replayed: true });
-		expect("eventSequence" in outcome).toBe(false);
-
-		const changed = decodePlaybackTopologyOutcome(
-			changedOutcome({
-				objects: [
-					pageObject({}),
-					{
-						...pageObject({}),
-						object_id: "page-two",
-						body: {
-							number: 2,
-							name: "Page 2",
-							slots: {},
-							virtual_playbacks: {},
-						},
-					},
-					{
-						state: "deleted",
-						kind: "playback",
-						object_id: "legacy-playback-seven",
-						object_revision: 4,
-					},
-				],
-			}),
-			clear,
-			11,
-		);
-		expect(changed.objects).toHaveLength(3);
-	});
-
-	it("strictly rejects undeclared, mismatched, and incomplete authority", () => {
-		for (const [value, path] of [
-			[{ ...changedOutcome(), bootstrap: {} }, "$.bootstrap"],
-			[{ ...changedOutcome(), request_id: "another" }, "$.request_id"],
-			[{ ...changedOutcome(), show_revision: 11 }, "$.show_revision"],
-			[
-				{
-					...changedOutcome(),
-					resolution: {
-						kind: "page_slot",
-						page: 4,
-						slot: 3,
-						playback_number: 7,
-					},
-				},
-				"$.resolution",
-			],
-			[{ ...changedOutcome(), objects: [playbackObject()] }, "$.objects"],
-			[
-				{
-					...changedOutcome(),
-					objects: [{ ...playbackObject(), unexpected: true }, pageObject()],
-				},
-				"$.objects[0].unexpected",
-			],
-		] as const)
-			expect(() => decodePlaybackTopologyOutcome(value, request(), 11)).toThrow(
-				path,
-			);
-
-		for (const objects of [
-			[{ ...playbackObject(), object_revision: 999 }, pageObject()],
-			[playbackObject(), { ...pageObject(), object_id: "another-page" }],
-			[
-				{
-					...playbackObject(),
-					body: { ...playbackObject().body, name: "Unexpected body" },
-				},
-				pageObject(),
-			],
-		] as const)
-			expect(() =>
-				decodePlaybackTopologyOutcome(
-					changedOutcome({ objects }),
-					request(),
-					11,
-				),
-			).toThrow("$.objects");
-
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				changedOutcome({
-					objects: [playbackObject(), pageObject(), cueListObject()],
-				}),
-				request(),
-				11,
-			),
-		).toThrow("only the configured Page and Playback");
-
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				{
-					...changedOutcome(),
-					resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
-					objects: [cueListObject(), playbackObject()],
-				},
-				cueListRequest(),
-				11,
-			),
-		).toThrow("only the authoritative requested Cuelist");
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				{
-					...changedOutcome(),
-					resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
-					objects: [{ ...cueListObject(), object_revision: 999 }],
-				},
-				cueListRequest(),
-				11,
-			),
-		).toThrow("Cuelist revision 5");
-
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				changedOutcome({
-					objects: [
-						{
-							state: "deleted",
-							kind: "playback",
-							object_id: "legacy-playback-seven",
-							object_revision: 4,
-						},
-					],
-				}),
-				request("clear_mapped_playback"),
-				11,
-			),
-		).toThrow("only cleared Pages and the mapped Playback");
-
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				changedOutcome({
-					objects: [
-						pageObject({}),
-						{
-							state: "deleted",
-							kind: "playback",
-							object_id: "another-playback",
-							object_revision: 4,
-						},
-					],
-				}),
-				request("clear_mapped_playback"),
-				11,
-			),
-		).toThrow("exact deleted mapped Playback");
-	});
-
-	it("requires exact unchanged object revisions for a no-change outcome", () => {
-		const { event_sequence: _eventSequence, ...withoutEvent } =
-			changedOutcome();
-		const value = {
-			...withoutEvent,
-			status: "no_change",
-			show_revision: 11,
-			objects: [
-				{ ...playbackObject(), object_revision: 3 },
-				{ ...pageObject(), object_revision: 7 },
-			],
-		};
-		expect(decodePlaybackTopologyOutcome(value, request(), 11)).toMatchObject({
-			status: "no_change",
-		});
-
-		expect(() =>
-			decodePlaybackTopologyOutcome(
-				{
-					...value,
-					objects: [playbackObject(), { ...pageObject(), object_revision: 7 }],
-				},
-				request(),
-				11,
-			),
-		).toThrow("Playback revision 3");
-
-		const cueNoChange = {
-			...value,
-			resolution: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
-			objects: [{ ...cueListObject(), object_revision: 4 }],
-		};
-		expect(
-			decodePlaybackTopologyOutcome(cueNoChange, cueListRequest(), 11),
-		).toMatchObject({ status: "no_change" });
-	});
-
-	it("decodes strict conflict metadata for exact repair", () => {
+	it("decodes strict conflict metadata", () => {
 		expect(
 			decodePlaybackTopologyErrorResponse({
 				kind: "conflict",
-				error: "stale Playback Page revision",
+				error: "stale Page",
 				current_revision: 15,
 				current_related_revision: 9,
 				retryable: false,
 			}),
 		).toEqual({
 			kind: "conflict",
-			error: "stale Playback Page revision",
+			error: "stale Page",
 			currentRevision: 15,
 			currentRelatedRevision: 9,
 			retryable: false,
 		});
+		expect(() =>
+			decodePlaybackTopologyErrorResponse({
+				kind: "internal",
+				error: "failed",
+				retryable: false,
+				hidden: true,
+			}),
+		).toThrow();
 	});
 });

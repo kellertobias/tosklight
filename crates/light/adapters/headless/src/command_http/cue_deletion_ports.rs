@@ -158,11 +158,11 @@ impl ProgrammingCueDeletionPorts for ServerProgrammingCueDeletionPorts {
     fn current_cue_deletion_page(
         &self,
         context: &ActionContext,
-        show_id: ShowId,
+        _show_id: ShowId,
     ) -> Result<u8, ActionError> {
         self.state
             .installation
-            .desk_page(context.desk_id, show_id)
+            .command_page(context.desk_id)
             .map_err(|error| ActionError::new(ActionErrorKind::Unavailable, error.to_string()))
     }
 

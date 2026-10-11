@@ -35,19 +35,12 @@ pub enum ProgrammingCueRecordTarget {
     CuelistPool {
         number: u16,
     },
-    Pool {
-        playback_number: u16,
+    Playback {
+        address: light_playback::PlaybackAddress,
     },
     SelectedPlayback,
-    PageSlot {
-        page: u8,
-        slot: u8,
-    },
     CueList {
         cue_list_id: CueListId,
-    },
-    Virtual {
-        address: light_playback::VirtualPlaybackAddress,
     },
 }
 
@@ -110,19 +103,8 @@ pub enum ProgrammingCueResolvedTarget {
         cue_list_id: CueListId,
     },
     Playback {
-        playback_number: u16,
-        page_slot: Option<ProgrammingCuePageSlot>,
+        address: light_playback::PlaybackAddress,
     },
-    EmptyPageSlot(ProgrammingCuePageSlot),
-    Virtual {
-        address: light_playback::VirtualPlaybackAddress,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ProgrammingCuePageSlot {
-    pub page: u8,
-    pub slot: u8,
 }
 
 /// Narrow live environment needed to resolve desk-local addressing and Merge-active semantics.
@@ -356,7 +338,6 @@ pub struct ProgrammingCueObjectProjection {
 pub struct ProgrammingCueProjections {
     pub show_id: ShowId,
     pub cue_list: ProgrammingCueObjectProjection,
-    pub playback: Option<ProgrammingCueObjectProjection>,
     pub page: Option<ProgrammingCueObjectProjection>,
 }
 
@@ -378,7 +359,7 @@ pub struct ProgrammingCueCommitResult {
     pub show_revision: PortableShowRevision,
     pub event_sequence: Option<u64>,
     /// Concrete Playback which may be taken live after a successful changed normal capture.
-    pub concrete_playback_number: Option<u16>,
+    pub concrete_playback_address: Option<light_playback::PlaybackAddress>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -428,7 +409,7 @@ pub trait ProgrammingCueRecordingPorts: Send + Sync {
     fn activate_recorded_cue(
         &self,
         context: &ActionContext,
-        playback_number: u16,
+        address: light_playback::PlaybackAddress,
         cue_number: CueNumber,
     ) -> Option<ProgrammingCueActivationCompletion>;
 }

@@ -10,6 +10,7 @@ import {
 	withFunctionDefaults,
 } from "../PlaybackConfigurationModal";
 import { cueUpdateTarget, requestUpdateTarget } from "../updateWorkflow";
+import type { AssignedPlayback } from "./types";
 import type { PlaybackBankController } from "./controller";
 import { emptyConfiguration } from "./feedback";
 
@@ -24,7 +25,7 @@ export function isPlaybackSetClickArmed(controller: PlaybackBankController) {
 
 export function openPlaybackConfiguration(
 	controller: PlaybackBankController,
-	playback: PlaybackDefinition | null,
+	playback: AssignedPlayback | null,
 	slot: number,
 ) {
 	const { dispatch, activePageNumber, buttons, topology } = controller;
@@ -36,11 +37,6 @@ export function openPlaybackConfiguration(
 		0,
 		Math.min(3, slotData?.row?.button_count ?? buttons ?? 3),
 	);
-	const playbackObject = playback
-		? topology.playbacks.find(
-				(candidate) => candidate.body.number === playback.number,
-			)
-		: null;
 	controller.setConfiguration({
 		playback: normalizePlaybackTopology(
 			playback ??
@@ -48,11 +44,11 @@ export function openPlaybackConfiguration(
 					activePageNumber,
 					slot,
 					fallbackButtons,
-					slotData?.row?.has_fader ?? true,
+					slotData?.row?.presentation !== "buttons",
 					topology.cueLists[0]?.body.id ?? "",
 				),
 			fallbackButtons,
-			slotData?.row?.has_fader ?? true,
+			slotData?.row?.presentation !== "buttons",
 		),
 		page: activePageNumber,
 		slot,
@@ -60,8 +56,6 @@ export function openPlaybackConfiguration(
 		fallbackButtons,
 		expectedPageRevision: controller.pageObject?.revision ?? 0,
 		expectedPageObjectId: controller.pageObject?.id ?? null,
-		expectedPlaybackRevision: playbackObject?.revision ?? 0,
-		expectedPlaybackObjectId: playbackObject?.id ?? null,
 	});
 	dispatch({ type: "SET_PLAYBACK_SET_ARMED", value: false });
 	dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
@@ -70,12 +64,12 @@ export function openPlaybackConfiguration(
 
 export async function selectPlayback(
 	controller: PlaybackBankController,
-	playback: PlaybackDefinition,
+	playback: AssignedPlayback,
 ) {
-	const outcome = await controller.runtimeActions?.poolPlaybackAction(
-		playback.number,
+	const outcome = await controller.runtimeActions?.playbackAction(
+		playback.address,
 		"select",
-		{ surface: "physical" },
+		{control_source: {surface_id: controller.surfaceId, control_id: playback.address.position * 10}},
 	);
 	if (!outcome) return false;
 	if (controller.selectionPending) void controller.commandLineActions?.reset();
@@ -84,13 +78,13 @@ export async function selectPlayback(
 
 export async function offPlayback(
 	controller: PlaybackBankController,
-	playback: PlaybackDefinition,
+	playback: AssignedPlayback,
 ) {
 	if (!controller.offPending) return false;
-	const outcome = await controller.runtimeActions?.poolPlaybackAction(
-		playback.number,
+	const outcome = await controller.runtimeActions?.playbackAction(
+		playback.address,
 		"off",
-		{ surface: controller.hardware ? "physical" : "virtual" },
+		{control_source: {surface_id: controller.surfaceId, control_id: playback.address.position * 10}},
 	);
 	if (!outcome) return false;
 	await controller.commandLineActions?.reset();
@@ -138,34 +132,23 @@ export async function assignGroupPlayback(
 					controller.activePageNumber,
 					slot,
 					fallbackButtons,
-					slotData?.row?.has_fader ?? true,
+					slotData?.row?.presentation !== "buttons",
 					"",
 				),
 			"group",
 			"",
 			groupId,
 		);
-		const playbackObject = controller.topology.playbacks.find(
-			(candidate) => candidate.body.number === existing?.number,
-		);
-		const outcome = await controller.topologyActions?.configureSlot(
-			controller.activePageNumber,
-			slot,
-			{ ...draft, name: `Group ${groupId}` },
-			{
-				expectedPageRevision: controller.pageObject?.revision ?? 0,
-				expectedPageObjectId: controller.pageObject?.id ?? null,
-				expectedPlaybackRevision: playbackObject?.revision ?? 0,
-				expectedPlaybackObjectId: playbackObject?.id ?? null,
-			},
-		);
+		const configure = existing ? controller.topologyActions?.updatePlayback : controller.topologyActions?.assignPlayback;
+		const outcome = await configure?.({page: controller.activePageNumber, position: slot}, {...draft, name: `Group ${groupId}`}, {
+			expectedPageRevision: controller.pageObject?.revision ?? 0,
+			expectedPageObjectId: controller.pageObject?.id ?? null,
+		});
 		if (!outcome) return false;
 		await controller.commandLineActions?.reset();
 		return true;
 	}
-	const playbackObject = controller.topology.playbacks.find(
-		(candidate) => candidate.body.number === existing?.number,
-	);
+
 	const intent = await controller.setInteraction.choosePlayback(
 		{
 			addressing: controller.playbackAddressing,
@@ -173,8 +156,6 @@ export async function assignGroupPlayback(
 			slot,
 			pageObjectId: controller.pageObject?.id ?? null,
 			pageObjectRevision: controller.pageObject?.revision ?? 0,
-			playbackObjectId: playbackObject?.id ?? null,
-			playbackObjectRevision: playbackObject?.revision ?? 0,
 		},
 		controller.hardware ? "hardware" : "touch",
 	);
@@ -187,7 +168,7 @@ export async function assignGroupPlayback(
 export async function recordPlayback(
 	controller: PlaybackBankController,
 	event: ReactMouseEvent,
-	_playback: PlaybackDefinition | null,
+	_playback: AssignedPlayback | null,
 	cueList: CueList | null | undefined,
 	slot: number,
 ) {
@@ -208,7 +189,7 @@ export async function recordPlayback(
 	);
 	if (!plan) return;
 	const outcome = await controller.cueRecording?.record({
-		target: { kind: "page_slot", page, slot },
+		target: {kind: "playback", page, position: slot},
 		operation: plan.operation,
 		...(plan.cueNumber ? { cueNumber: plan.cueNumber } : {}),
 		timing: {},
@@ -224,7 +205,7 @@ export async function recordPlayback(
 export async function activateHardwareCard(
 	controller: PlaybackBankController,
 	event: ReactMouseEvent<HTMLElement>,
-	playback: PlaybackDefinition | null,
+	playback: AssignedPlayback | null,
 	slot: number,
 ) {
 	if (controller.groupAssignmentPending || controller.setInteractionArmed) {
@@ -247,7 +228,7 @@ export async function activateHardwareCard(
 	if (controller.state.updateArmed) {
 		if (playback.target.type === "cue_list")
 			requestUpdateTarget(
-				cueUpdateTarget(playback.target.cue_list_id, playback.number, null),
+				cueUpdateTarget(playback.target.cue_list_id, playback.address, null),
 			);
 		return;
 	}
@@ -256,7 +237,7 @@ export async function activateHardwareCard(
 		controller.dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
 		controller.dispatch({
 			type: "OPEN_BUILTIN_CUELIST",
-			number: playback.number,
+			number: controller.topology.cueLists.find(object => object.body.id === (playback.target.type === "cue_list" ? playback.target.cue_list_id : ""))?.body.pool_number ?? 1,
 		});
 	}
 }
@@ -267,36 +248,26 @@ export async function assignPlayback(
 ) {
 	const target = controller.state.cueListSetTarget;
 	if (target == null || controller.activePageNumber == null) return;
-	const source = controller.topology.playbacks.find(
-		(candidate) =>
-			candidate.body.number === target &&
-			candidate.body.target.type === "cue_list",
-	);
+	const source = controller.topology.cueLists.find(candidate => candidate.body.pool_number === target);
 	if (!source) return;
-	const outcome = await controller.topologyActions?.mapExistingPlayback(
-		controller.activePageNumber,
-		slot,
-		target,
-		{
-			expectedPageRevision: controller.pageObject?.revision ?? 0,
-			expectedPageObjectId: controller.pageObject?.id ?? null,
-			expectedPlaybackRevision: source.revision,
-			expectedPlaybackObjectId: source.id,
-		},
-	);
+	const draft = emptyConfiguration(controller.activePageNumber, slot, controller.buttons ?? 3, true, source.body.id);
+	const outcome = await controller.topologyActions?.assignPlayback({page: controller.activePageNumber, position: slot}, draft, {
+		expectedPageRevision: controller.pageObject?.revision ?? 0,
+		expectedPageObjectId: controller.pageObject?.id ?? null,
+	});
 	if (!outcome) return;
 	controller.dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
 }
 
 export function requestPlaybackUpdate(
-	playback: PlaybackDefinition | null,
+	playback: AssignedPlayback | null,
 	currentCue: Cue | null | undefined,
 ) {
 	if (!playback || playback.target.type !== "cue_list") return;
 	requestUpdateTarget(
 		cueUpdateTarget(
 			playback.target.cue_list_id,
-			playback.number,
+			playback.address,
 			currentCue?.id ? { id: currentCue.id, number: currentCue.number } : null,
 		),
 	);

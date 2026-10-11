@@ -20,6 +20,15 @@ the applicable compatibility and recovery path above.
 
 ## Declared pre-v1 breaks
 
+- **Unified Playback contract 1 (TL-714).** Pages 1–99 own sparse assignments at positions
+  1–1000. The regular pool, virtual number banks and page-slot maps are removed without
+  migration or legacy aliases. Portable writers require schema floor 10 and
+  `light.playback_contract=1`; desk layouts require schema 17. Incompatible files, runtime,
+  named revisions and Undo/Redo content are refused before writable use. Originals remain
+  unchanged, startup offers visible recovery and a separate fresh show/desk subtree, and
+  affected owned shows must be regenerated. Implementation and combined acceptance are
+  tracked separately in [the feature plan](plans/unified-playbacks.md).
+
 - **Semantic programming contract 1 (TL-552).** ToskLight now supports only programming
   semantic values from contract 1. The additive live Preset reference feature below does not
   restore support for legacy values. A show, desk session, Playback or Output runtime that still holds legacy

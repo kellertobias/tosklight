@@ -52,31 +52,7 @@ class FakeEvents implements ShowObjectsEventTransport {
 
 function collection(kind: ShowObjectKind) {
 	if (kind === "cue_list") return { objects: [], showRevision: 7 };
-	if (kind === "playback")
-		return {
-			objects: [
-				{
-					kind,
-					id: "7",
-					revision: 1,
-					updated_at: "",
-					body: {
-						number: 7,
-						name: "Front",
-						target: {
-							type: "cue_list",
-							cue_list_id: "22222222-2222-4222-8222-222222222222",
-						},
-						buttons: ["blackout", "pause_dynamics", "flash"],
-						fader: "master",
-						go_activates: true,
-						auto_off: true,
-						xfade_millis: 0,
-					},
-				},
-			],
-			showRevision: 7,
-		};
+
 	return {
 		objects: [
 			{
@@ -84,7 +60,24 @@ function collection(kind: ShowObjectKind) {
 				id: "1",
 				revision: 1,
 				updated_at: "",
-				body: { number: 1, name: "Main", slots: { 1: 7 } },
+				body: {
+					number: 1,
+					name: "Main",
+					assignments: {
+						"1": {
+							name: "Front",
+							target: {
+								type: "cue_list",
+								cue_list_id: "22222222-2222-4222-8222-222222222222",
+							},
+							buttons: ["go", "pause", "flash"],
+							fader: "master",
+							go_activates: true,
+							auto_off: true,
+							xfade_millis: 0,
+						},
+					},
+				},
 			},
 		],
 		showRevision: 7,
@@ -103,7 +96,12 @@ function Consumer({
 	return (
 		<div>
 			<span data-testid="ready">{String(view.ready)}</span>
-			<span data-testid="playbacks">{view.playbacks.length}</span>
+			<span data-testid="playbacks">
+				{view.pages.reduce(
+					(sum, p) => sum + Object.keys(p.body.assignments).length,
+					0,
+				)}
+			</span>
 		</div>
 	);
 }
@@ -128,9 +126,9 @@ function ActionConsumer() {
 	return (
 		<button
 			type="button"
-			onClick={() => void actions?.mapExistingPlayback(1, 1, 7)}
+			onClick={() => void actions?.clearPlayback({ page: 1, position: 1 })}
 		>
-			Map existing
+			Clear assignment
 		</button>
 	);
 }
@@ -191,27 +189,26 @@ describe("Playback topology scoped composition", () => {
 		expect(events.subscriptions).toHaveLength(0);
 		expect(actionTransport.apply).not.toHaveBeenCalled();
 		const dormantRenderCount = onRender.mock.calls.length;
-		act(() => store.setCollection(SHOW_ID, "playback", [], 1, 8));
+		act(() => store.setCollection(SHOW_ID, "dynamic", [], 1, 8));
 		expect(onRender).toHaveBeenCalledTimes(dormantRenderCount);
 	});
 
-	it("hydrates and subscribes to only the three portable topology kinds", async () => {
+	it("hydrates and subscribes to only the two portable topology kinds", async () => {
 		const { events, loadCollection } = harness(true);
 		expect(screen.getByTestId("ready")).toHaveTextContent("false");
 
-		await waitFor(() => expect(loadCollection).toHaveBeenCalledTimes(3));
+		await waitFor(() => expect(loadCollection).toHaveBeenCalledTimes(2));
 		await waitFor(() =>
 			expect(screen.getByTestId("ready")).toHaveTextContent("true"),
 		);
 		expect(screen.getByTestId("playbacks")).toHaveTextContent("1");
 		expect(loadCollection.mock.calls.map((call) => call[1]).sort()).toEqual([
 			"cue_list",
-			"playback",
 			"playback_page",
 		]);
 		await waitFor(() => expect(events.subscriptions).toHaveLength(1));
 		expect(events.subscriptions[0].scope).toEqual({
-			kinds: ["cue_list", "playback", "playback_page"],
+			kinds: ["cue_list", "playback_page"],
 			objects: [],
 		});
 	});
@@ -233,7 +230,7 @@ describe("Playback topology scoped composition", () => {
 			objects: [],
 		});
 		const renderCount = onRender.mock.calls.length;
-		act(() => store.setCollection(SHOW_ID, "playback", [], 8, 8));
+		act(() => store.setCollection(SHOW_ID, "dynamic", [], 8, 8));
 		expect(onRender).toHaveBeenCalledTimes(renderCount);
 	});
 
@@ -261,12 +258,14 @@ describe("Playback topology scoped composition", () => {
 
 	it("retains hydrated collections after the authority view unmounts", async () => {
 		const { rendered, store, events } = harness(true);
-		await waitFor(() => expect(store.isCollectionReady("playback")).toBe(true));
+		await waitFor(() =>
+			expect(store.isCollectionReady("playback_page")).toBe(true),
+		);
 
 		rendered.unmount();
 
 		expect(store.isCollectionReady("cue_list")).toBe(true);
-		expect(store.isCollectionReady("playback")).toBe(true);
+		expect(store.isCollectionReady("playback_page")).toBe(true);
 		expect(store.isCollectionReady("playback_page")).toBe(true);
 		expect(events.subscriptions[0].close).toHaveBeenCalledOnce();
 	});
@@ -274,7 +273,7 @@ describe("Playback topology scoped composition", () => {
 	it("keeps its action writer live through StrictMode effect replay", async () => {
 		const store = new ShowObjectsStore();
 		store.reset(SHOW_ID, "session-a");
-		for (const kind of ["cue_list", "playback", "playback_page"] as const)
+		for (const kind of ["cue_list", "playback_page"] as const)
 			store.setCollection(
 				SHOW_ID,
 				kind,
@@ -297,7 +296,7 @@ describe("Playback topology scoped composition", () => {
 			</StrictMode>,
 		);
 		await Promise.resolve();
-		fireEvent.click(screen.getByRole("button", { name: "Map existing" }));
+		fireEvent.click(screen.getByRole("button", { name: "Clear assignment" }));
 
 		await waitFor(() => expect(apply).toHaveBeenCalledOnce());
 	});

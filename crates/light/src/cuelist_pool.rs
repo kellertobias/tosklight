@@ -1,6 +1,6 @@
 //! Portable Cuelist number resolution. These addresses never select physical Playback targets.
 use crate::{ActionError, ActionErrorKind, lossless_json};
-use light_playback::{CueList, CueListPoolCatalog, PlaybackDefinition};
+use light_playback::{CueList, CueListPoolCatalog, PlaybackAddress, PlaybackPage};
 use light_show::{PortableShowDocument, PortableShowTransaction};
 
 pub fn cuelist_pool_catalog(
@@ -10,12 +10,16 @@ pub fn cuelist_pool_catalog(
         .objects_of_kind("cue_list")
         .map(|object| serde_json::from_value::<CueList>(object.body().clone()).map_err(invalid))
         .collect::<Result<Vec<_>, _>>()?;
-    let playbacks = document
-        .objects_of_kind("playback")
-        .map(|object| {
-            serde_json::from_value::<PlaybackDefinition>(object.body().clone()).map_err(invalid)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut playbacks = Vec::new();
+    for object in document.objects_of_kind("playback_page") {
+        let page: PlaybackPage = serde_json::from_value(object.body().clone()).map_err(invalid)?;
+        for (position, definition) in page.assignments {
+            playbacks.push((
+                PlaybackAddress::new(page.number, position).map_err(invalid)?,
+                definition,
+            ));
+        }
+    }
     CueListPoolCatalog::build(
         &lists,
         &playbacks,

@@ -8,7 +8,7 @@ fn without_owner_metadata(mut snapshot: DynamicRuntimeSnapshot) -> DynamicRuntim
         .iter_mut()
         .flat_map(|instance| &mut instance.controllers)
     {
-        controller.source = DynamicControllerSource::physical_playback(0);
+        controller.source = DynamicControllerSource::playback(1, 1).unwrap();
         controller.priority = 0;
     }
     snapshot
@@ -17,7 +17,7 @@ fn without_owner_metadata(mut snapshot: DynamicRuntimeSnapshot) -> DynamicRuntim
 fn paused_current_branches() -> (DynamicRuntime, DynamicRuntime, DynamicController, Uuid) {
     let target = FixtureId::new();
     let mut owner = controller(2301, 3, false);
-    owner.source = DynamicControllerSource::physical_playback(1);
+    owner.source = DynamicControllerSource::playback(1, 1).unwrap();
     let mut current = lane();
     for point in &mut current.legacy_mut().unwrap().keyframes.points {
         point.source = ScalarSource::Current;
@@ -75,7 +75,7 @@ fn owner_refresh_records_replays_and_keeps_instance_clock_and_held_current() {
     let pending_before = pending.snapshot();
     assert!(live_before.instances[0].paused_at_millis.is_some());
 
-    let moved = DynamicControllerSource::virtual_playback(2, 1301);
+    let moved = DynamicControllerSource::playback(2, 1).unwrap();
     let refresh = DynamicControl::Owner {
         controller: owner.id,
         source: moved.clone(),
@@ -138,7 +138,7 @@ fn owner_refresh_rejects_changing_the_runtime_owner_kind_atomically() {
     assert_eq!(
         live.update_controller_owner(
             Uuid::new_v4(),
-            DynamicControllerSource::physical_playback(2),
+            DynamicControllerSource::playback(1, 2).unwrap(),
             4
         ),
         Err(DynamicRuntimeError::MissingController)
@@ -147,25 +147,25 @@ fn owner_refresh_rejects_changing_the_runtime_owner_kind_atomically() {
 }
 
 #[test]
-fn playback_owner_serialization_keeps_old_checkpoints_and_qualifies_virtual_pages() {
-    let legacy: DynamicControllerSource =
-        serde_json::from_value(serde_json::json!({"type": "playback", "playback_number": 7}))
-            .unwrap();
-    assert_eq!(legacy, DynamicControllerSource::physical_playback(7));
-    assert_eq!(
-        serde_json::to_value(&legacy).unwrap(),
-        serde_json::json!({"type": "playback", "playback_number": 7})
+fn playback_owner_serialization_rejects_retired_identity_and_keeps_exact_address() {
+    assert!(
+        serde_json::from_value::<DynamicControllerSource>(
+            serde_json::json!({"type":"playback","playback_number":7})
+        )
+        .is_err()
     );
-    let virtual_owner = DynamicControllerSource::virtual_playback(2, 1301);
-    let encoded = serde_json::to_value(&virtual_owner).unwrap();
+    let owner = DynamicControllerSource::playback(2, 1).unwrap();
+    let encoded = serde_json::to_value(&owner).unwrap();
     assert_eq!(
         encoded,
-        serde_json::json!({"type": "playback", "playback_number": 1301, "virtual_page": 2})
+        serde_json::json!({"type":"playback","page":2,"position":1})
     );
     assert_eq!(
         serde_json::from_value::<DynamicControllerSource>(encoded).unwrap(),
-        virtual_owner
+        owner
     );
+    assert!(DynamicControllerSource::playback(0, 1).is_err());
+    assert!(DynamicControllerSource::playback(1, 1001).is_err());
 }
 
 #[test]
@@ -190,7 +190,7 @@ fn owner_refresh_keeps_random_streams_and_their_future_decisions() {
         decay_ratio: 0.5,
     });
     let mut owner = controller(2303, 2, false);
-    owner.source = DynamicControllerSource::physical_playback(4);
+    owner.source = DynamicControllerSource::playback(1, 4).unwrap();
     let mut live = installed(&definition);
     let instance = live
         .start(start_request(
@@ -213,7 +213,11 @@ fn owner_refresh_keeps_random_streams_and_their_future_decisions() {
     let mut untouched = live.fork_for_pending_preview();
 
     assert_eq!(
-        live.update_controller_owner(owner.id, DynamicControllerSource::physical_playback(8), 6),
+        live.update_controller_owner(
+            owner.id,
+            DynamicControllerSource::playback(1, 8).unwrap(),
+            6
+        ),
         Ok(true)
     );
     assert_eq!(

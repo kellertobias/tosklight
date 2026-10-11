@@ -56,21 +56,21 @@ const queuedPlaybackLabels = {
 	temporary_off: "TEMP OFF",
 } as const;
 
-function queuedPlaybackLabel(action: string, playbackNumber: number) {
+function queuedPlaybackLabel(action: string, address: import("../../api/playbackAddress").PlaybackAddressValue) {
 	const label =
 		queuedPlaybackLabels[action as keyof typeof queuedPlaybackLabels] ??
 		action.replaceAll("_", " ").toUpperCase();
-	return `${label} ${playbackNumber}`;
+	return `${label} ${address.page}.${address.position}`;
 }
 
 function pendingCommandSummary(
 	pendingValueCount: number,
-	actions: readonly { action: string; playbackNumber: number }[],
+	actions: readonly { action: string; address: import("../../api/playbackAddress").PlaybackAddressValue }[],
 ) {
 	return [
 		pendingValueCount ? `PROG ${pendingValueCount}` : "",
 		...actions.map((pending) =>
-			queuedPlaybackLabel(pending.action, pending.playbackNumber),
+			queuedPlaybackLabel(pending.action, pending.address),
 		),
 	]
 		.filter(Boolean)

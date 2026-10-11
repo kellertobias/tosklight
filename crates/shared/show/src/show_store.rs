@@ -39,6 +39,7 @@ pub struct AtomicObjectDelete<'a> {
 
 impl ShowStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        crate::validate_show_playback_contract(path.as_ref())?;
         let mut conn = Connection::open(path)?;
         configure(&conn)?;
         let version = conn

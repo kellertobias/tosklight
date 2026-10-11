@@ -18,16 +18,22 @@ async fn assert_running_panel_release(preload: bool) {
     open_playback_test_show(&app, &token).await;
     install_pool_cuelist_test_state(&state);
     let mut snapshot = (*state.output.snapshot()).clone();
-    for definition in Arc::make_mut(&mut snapshot.playbacks) {
-        definition.number += 8;
-    }
+    let assignments =
+        std::mem::take(&mut Arc::make_mut(&mut snapshot.playback_pages)[0].assignments);
+    Arc::make_mut(&mut snapshot.playback_pages)[0].assignments = assignments
+        .into_iter()
+        .map(|(position, definition)| (position + 8, definition))
+        .collect();
     let mut peer = snapshot.cue_lists[0].clone();
     peer.id = light_core::CueListId::new();
-    Arc::make_mut(&mut snapshot.playbacks)[1].target = light_playback::PlaybackTarget::CueList {
+    Arc::make_mut(&mut snapshot.playback_pages)[0]
+        .assignments
+        .get_mut(&10)
+        .unwrap()
+        .target = light_playback::PlaybackTarget::CueList {
         cue_list_id: peer.id,
     };
     Arc::make_mut(&mut snapshot.cue_lists).push(peer);
-    Arc::make_mut(&mut snapshot.playback_pages)[0].slots = HashMap::from([(7, 9), (8, 10)]);
     state.output.replace_snapshot(snapshot).unwrap();
 
     for number in [9, 10] {
@@ -45,9 +51,6 @@ async fn assert_running_panel_release(preload: bool) {
         assert_eq!(response.status(), StatusCode::OK);
     }
     if preload {
-        state.installation.update_configuration(|configuration| {
-            configuration.preload_virtual_playback_actions = true;
-        });
         assert_preload_key(
             &app,
             &token,
@@ -61,7 +64,7 @@ async fn assert_running_panel_release(preload: bool) {
     assert!(
         state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(10).unwrap())
+            .playback_runtime_status_at(light_playback::PlaybackAddress::new(1, 10).unwrap())
             .is_some_and(|runtime| runtime.playback.enabled)
     );
     let response = post_action(
@@ -77,18 +80,18 @@ async fn assert_running_panel_release(preload: bool) {
     .await;
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["projection"]["playback_number"], 9);
+    assert_eq!(response["projection"]["identity"]["position"], 9);
     assert_eq!(response["outcome"]["status"], "applied");
     assert!(
         !state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(9).unwrap())
+            .playback_runtime_status_at(light_playback::PlaybackAddress::new(1, 9).unwrap())
             .is_some_and(|runtime| runtime.playback.enabled)
     );
     assert!(
         state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(10).unwrap())
+            .playback_runtime_status_at(light_playback::PlaybackAddress::new(1, 10).unwrap())
             .is_some_and(|runtime| runtime.playback.enabled)
     );
     assert_eq!(

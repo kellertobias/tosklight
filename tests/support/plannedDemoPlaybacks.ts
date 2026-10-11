@@ -24,15 +24,15 @@ export async function installPlannedDemoPlaybacks(
 	showId: string,
 	fixtures: readonly PatchedTargetFixture[],
 ) {
-	const existingPlaybacks = await api.showObjects<any>(showId, "playback");
 	const existingPage = await api.showObject<any>(showId, "playback_page", "1");
 	const visibleCueListId = (poolNumber: number) => {
-		const playback = existingPlaybacks.find(
-			(candidate) =>
-				candidate.body.number === poolNumber &&
-				candidate.body.target?.type === "cue_list",
-		);
-		return playback?.body.target.cue_list_id as string | undefined;
+		const position = (
+			{ 1: 102, 2: 101, 3: 106, 4: 108, 8: 107 } as Record<number, number>
+		)[poolNumber];
+		const playback = existingPage?.body.assignments?.[position];
+		return playback?.target?.type === "cue_list"
+			? (playback.target.cue_list_id as string)
+			: undefined;
 	};
 	const cueListIds = {
 		...CUE_LIST_IDS,
@@ -152,34 +152,32 @@ export async function installPlannedDemoPlaybacks(
 			buttons: ["toggle", "go_minus", "flash"],
 		},
 	];
-	for (const item of playbacks)
-		await putPlannedDemoObject(
-			api,
-			showId,
-			"playback",
-			String(item.number),
-			item,
-		);
+	const positions = {
+		1: 102,
+		2: 101,
+		3: 106,
+		4: 108,
+		5: 103,
+		6: 104,
+		7: 105,
+		8: 107,
+		101: 1,
+		102: 2,
+		103: 3,
+		104: 4,
+		105: 5,
+		106: 6,
+	} as Record<number, number>;
+	const assignments = Object.fromEntries(
+		playbacks.map(({ authoredPosition, ...definition }) => [
+			positions[authoredPosition],
+			definition,
+		]),
+	);
 	await putPlannedDemoObject(api, showId, "playback_page", "1", {
 		number: 1,
 		name: "Busking",
-		slots: {
-			1: 101,
-			2: 102,
-			3: 103,
-			4: 104,
-			5: 105,
-			6: 106,
-			11: 2,
-			12: 1,
-			13: 5,
-			14: 6,
-			15: 7,
-			16: 3,
-			17: 8,
-			18: 4,
-		},
-		virtual_playbacks: existingPage?.body.virtual_playbacks ?? {},
+		assignments: { ...(existingPage?.body.assignments ?? {}), ...assignments },
 	});
 	return { cuelists, playbacks };
 }
@@ -257,7 +255,7 @@ function playback(
 ) {
 	const group = target.type === "group";
 	return {
-		number,
+		authoredPosition: number,
 		name,
 		target,
 		buttons: group

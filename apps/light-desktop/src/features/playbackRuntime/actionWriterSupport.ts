@@ -19,7 +19,8 @@ export function cueListReleaseRequest(
 		source.identity.kind === "playback"
 			? {
 					kind: "playback",
-					playback_number: source.identity.playback_number,
+					page: source.identity.page,
+					position: source.identity.position,
 				}
 			: {
 					kind: "cue_list",
@@ -41,10 +42,9 @@ function actionRequest(
 	action: PlaybackAction,
 ): PlaybackActionRequest {
 	return {
-		request_id: crypto.randomUUID(),
 		address,
 		action,
-		surface: "virtual",
+		control_source: { surface_id: "main", control_id: 0 },
 	};
 }
 
@@ -77,8 +77,8 @@ function assertGroupId(groupId: string) {
 }
 
 export function assertPlaybackPage(page: number) {
-	if (!Number.isSafeInteger(page) || page < 1 || page > 127)
-		throw new Error("Playback page must be an integer between 1 and 127");
+	if (!Number.isSafeInteger(page) || page < 1 || page > 99)
+		throw new Error("Playback page must be an integer between 1 and 99");
 }
 
 export function assertPlaybackPageOutcome(

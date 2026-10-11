@@ -5,15 +5,11 @@ pub fn dynamic_playback_controller_id(target_id: Uuid) -> Uuid {
 }
 
 impl PlaybackEngine {
-    pub fn dynamic_assignment(&self, number: u16) -> Option<&DynamicPlaybackAssignment> {
-        self.dynamic_assignment_at(PlaybackIdentity::physical(number).ok()?)
-    }
-
-    pub fn dynamic_assignment_at(
+    pub fn dynamic_assignment(
         &self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Option<&DynamicPlaybackAssignment> {
-        match &self.definition_at(identity)?.target {
+        match &self.definition(identity)?.target {
             PlaybackTarget::Dynamic { assignment } => Some(assignment),
             _ => None,
         }
@@ -38,7 +34,7 @@ impl PlaybackEngine {
 
     pub fn active_dynamic_playbacks(&self) -> Vec<ActiveDynamicPlayback> {
         let mut active = self.active_dynamics.values().cloned().collect::<Vec<_>>();
-        active.sort_by_key(|playback| playback.playback_number);
+        active.sort_by_key(|playback| playback.playback_address);
         active
     }
 
@@ -58,16 +54,20 @@ impl PlaybackEngine {
             .collect()
     }
 
-    pub fn active_dynamic_playback_at(
+    pub fn active_dynamic_playback(
         &self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Option<ActiveDynamicPlayback> {
-        let target_id = self.dynamic_assignment_at(identity)?.target_id();
+        let target_id = self.dynamic_assignment(identity)?.target_id();
         let mut active = self.active_dynamics.get(&target_id)?.clone();
-        let flash = self.dynamic_flash_states.get(&identity).copied();
+        let flash = self
+            .dynamic_flash_states
+            .iter()
+            .find(|(held, _)| held.address == identity)
+            .map(|(_, state)| *state);
         active.flash = flash.is_some();
         active.flash_restore_off = flash.is_some_and(|state| state.restore_off);
-        if matches!(identity, PlaybackIdentity::Physical(_)) {
+        {
             let control = self.control_state_at(identity);
             active.fader_pickup_required = control.fader_pickup_required;
             active.fader_pickup_target = control.fader_pickup_target;
@@ -75,12 +75,12 @@ impl PlaybackEngine {
         Some(active)
     }
 
-    pub fn dynamic_target_id_at(&self, identity: PlaybackIdentity) -> Option<Uuid> {
-        self.dynamic_assignment_at(identity)
+    pub fn dynamic_target_id(&self, identity: PlaybackAddress) -> Option<Uuid> {
+        self.dynamic_assignment(identity)
             .map(DynamicPlaybackAssignment::target_id)
     }
 
-    pub fn dynamic_identities(&self, target_id: Uuid) -> Vec<PlaybackIdentity> {
+    pub fn dynamic_identities(&self, target_id: Uuid) -> Vec<PlaybackAddress> {
         let mut identities = self
             .definitions
             .iter()
@@ -88,48 +88,31 @@ impl PlaybackEngine {
                 let PlaybackTarget::Dynamic { assignment } = &definition.target else {
                     return None;
                 };
-                (assignment.target_id() == target_id)
-                    .then(|| PlaybackIdentity::physical(*number).expect("registered playback"))
+                (assignment.target_id() == target_id).then(|| *number)
             })
-            .chain(
-                self.virtual_definitions
-                    .iter()
-                    .filter_map(|(address, definition)| {
-                        let PlaybackTarget::Dynamic { assignment } = &definition.target else {
-                            return None;
-                        };
-                        (assignment.target_id() == target_id)
-                            .then_some(PlaybackIdentity::Virtual(*address))
-                    }),
-            )
             .collect::<Vec<_>>();
         identities.sort_unstable();
         identities
     }
 
-    pub(crate) fn first_dynamic_identity(&self, target_id: Uuid) -> Option<PlaybackIdentity> {
+    pub(crate) fn first_dynamic_identity(&self, target_id: Uuid) -> Option<PlaybackAddress> {
         self.dynamic_identities(target_id).into_iter().next()
     }
 
-    pub(crate) fn on_dynamic_mutation(
+    pub fn on_dynamic_mutation(
         &mut self,
-        number: u16,
-    ) -> Result<PlaybackMutation<()>, String> {
-        self.on_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn on_dynamic_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Result<PlaybackMutation<()>, String> {
         let assignment = self
-            .dynamic_assignment_at(identity)
+            .dynamic_assignment(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let target_id = assignment.target_id();
-        for peer in self.dynamic_identities(target_id) {
-            if let Some(state) = self.dynamic_flash_states.get_mut(&peer) {
+        let peers = self.dynamic_identities(target_id);
+        for (held, state) in &mut self.dynamic_flash_states {
+            if peers.contains(&held.address) {
                 state.restore_off = false;
+                state.release_activation_inhibited = false;
             }
         }
         let now = self.clock.now();
@@ -148,28 +131,23 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), durable_effect(changed)))
     }
 
-    pub(crate) fn off_dynamic_mutation(
+    pub fn off_dynamic_mutation(
         &mut self,
-        number: u16,
-    ) -> Result<PlaybackMutation<bool>, String> {
-        self.off_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn off_dynamic_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Result<PlaybackMutation<bool>, String> {
         let target_id = self
-            .dynamic_target_id_at(identity)
+            .dynamic_target_id(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
         let held = self
-            .dynamic_identities(target_id)
-            .into_iter()
-            .filter(|peer| self.dynamic_flash_states.contains_key(peer))
+            .dynamic_flash_states
+            .keys()
+            .filter(|held| self.dynamic_target_id(held.address) == Some(target_id))
+            .cloned()
             .collect::<Vec<_>>();
         for peer in &held {
             if let Some(state) = self.dynamic_flash_states.get_mut(peer) {
                 state.restore_off = true;
+                state.release_activation_inhibited = true;
             }
         }
         let Some(active) = self.active_dynamics.get_mut(&target_id) else {
@@ -183,19 +161,12 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new(changed, durable_effect(changed)))
     }
 
-    pub(crate) fn toggle_dynamic_mutation(
+    pub fn toggle_dynamic_mutation(
         &mut self,
-        number: u16,
-    ) -> Result<PlaybackMutation<bool>, String> {
-        self.toggle_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn toggle_dynamic_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Result<PlaybackMutation<bool>, String> {
         let target_id = self
-            .dynamic_target_id_at(identity)
+            .dynamic_target_id(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
         if self
             .active_dynamics
@@ -203,32 +174,35 @@ impl PlaybackEngine {
             .is_some_and(|active| active.enabled)
         {
             return self
-                .off_dynamic_at_mutation(identity)
+                .off_dynamic_mutation(identity)
                 .map(|mutation| mutation.map(|_| false));
         }
-        self.on_dynamic_at_mutation(identity)
+        self.on_dynamic_mutation(identity)
             .map(|mutation| mutation.map(|_| true))
     }
 
-    pub fn set_dynamic_fader_at_mutation(
+    pub fn set_dynamic_fader_mutation(
         &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_dynamic_fader_at_mutation_inner(identity, value, false)
+        self.set_dynamic_fader_mutation_inner(identity, source, value, false)
     }
 
-    pub(crate) fn set_dynamic_fader_at_mutation_inner(
+    pub(crate) fn set_dynamic_fader_mutation_inner(
         &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
         physical: bool,
     ) -> Result<PlaybackMutation<()>, String> {
+        let control = PlaybackControlKey::new(identity, source)?;
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("Dynamic Playback fader must be within 0-1".into());
         }
         let assignment = self
-            .dynamic_assignment_at(identity)
+            .dynamic_assignment(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let target_id = assignment.target_id();
@@ -237,7 +211,7 @@ impl PlaybackEngine {
         }
         let mut control_changed = false;
         if physical {
-            if !self.control_states.contains_key(&identity) {
+            if !self.control_states.contains_key(&control) {
                 // Like a Cuelist master, a fader only has to pick up a running Dynamic's value.
                 let authoritative = self
                     .active_dynamics
@@ -245,7 +219,7 @@ impl PlaybackEngine {
                     .filter(|active| active.enabled)
                     .map(|active| active.fader_value);
                 self.control_states.insert(
-                    identity,
+                    control.clone(),
                     PlaybackControlState {
                         fader_pickup_required: authoritative.is_some(),
                         fader_pickup_target: authoritative,
@@ -254,7 +228,7 @@ impl PlaybackEngine {
                 );
                 control_changed = true;
             }
-            let state = self.control_states.entry(identity).or_default();
+            let state = self.control_states.entry(control.clone()).or_default();
             let previous = state.fader_position;
             let was_observed = state.observed;
             control_changed |= !was_observed || previous != value;
@@ -288,7 +262,7 @@ impl PlaybackEngine {
                 .get(&target_id)
                 .is_some_and(|active| active.enabled)
         {
-            self.on_dynamic_at_mutation(identity)?;
+            self.on_dynamic_mutation(identity)?;
         }
         let now = self.clock.now();
         let active = self
@@ -312,7 +286,7 @@ impl PlaybackEngine {
         }
         let changed = *active != before;
         control_changed |=
-            self.retarget_dynamic_physical_controls(target_id, value, physical.then_some(identity));
+            self.retarget_dynamic_physical_controls(target_id, value, physical.then_some(&control));
         Ok(PlaybackMutation::new(
             (),
             durable_effect(changed).combine(if control_changed {
@@ -325,17 +299,10 @@ impl PlaybackEngine {
 
     pub fn toggle_dynamic_pause_mutation(
         &mut self,
-        number: u16,
-    ) -> Result<PlaybackMutation<()>, String> {
-        self.toggle_dynamic_pause_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn toggle_dynamic_pause_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Result<PlaybackMutation<()>, String> {
         let target_id = self
-            .dynamic_target_id_at(identity)
+            .dynamic_target_id(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
         let active = self
             .active_dynamics
@@ -348,18 +315,11 @@ impl PlaybackEngine {
 
     pub fn restart_dynamic_mutation(
         &mut self,
-        number: u16,
+        identity: PlaybackAddress,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.restart_dynamic_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn restart_dynamic_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-    ) -> Result<PlaybackMutation<()>, String> {
-        self.on_dynamic_at_mutation(identity)?;
+        self.on_dynamic_mutation(identity)?;
         let target_id = self
-            .dynamic_target_id_at(identity)
+            .dynamic_target_id(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
         let now = self.clock.now();
         let active = self
@@ -374,19 +334,11 @@ impl PlaybackEngine {
 
     pub fn scale_dynamic_speed_mutation(
         &mut self,
-        number: u16,
-        double: bool,
-    ) -> Result<PlaybackMutation<()>, String> {
-        self.scale_dynamic_speed_at_mutation(PlaybackIdentity::physical(number)?, double)
-    }
-
-    pub fn scale_dynamic_speed_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
         double: bool,
     ) -> Result<PlaybackMutation<()>, String> {
         let assignment = self
-            .dynamic_assignment_at(identity)
+            .dynamic_assignment(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let target_id = assignment.target_id();
@@ -421,17 +373,10 @@ impl PlaybackEngine {
 
     pub fn tap_dynamic_speed_mutation(
         &mut self,
-        number: u16,
-    ) -> Result<PlaybackMutation<Option<u64>>, String> {
-        self.tap_dynamic_speed_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn tap_dynamic_speed_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Result<PlaybackMutation<Option<u64>>, String> {
         let assignment = self
-            .dynamic_assignment_at(identity)
+            .dynamic_assignment(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let target_id = assignment.target_id();
@@ -471,11 +416,11 @@ impl PlaybackEngine {
 
     pub fn clear_dynamic_learned_speed_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
     ) -> Result<PlaybackMutation<()>, String> {
-        let identity = PlaybackIdentity::physical(number)?;
+        let identity = number;
         let target_id = self
-            .dynamic_target_id_at(identity)
+            .dynamic_target_id(identity)
             .ok_or("Playback is not assigned to a Dynamic")?;
         let Some(active) = self.active_dynamics.get_mut(&target_id) else {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
@@ -489,19 +434,13 @@ impl PlaybackEngine {
 
     pub fn set_dynamic_flash_mutation(
         &mut self,
-        number: u16,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_dynamic_flash_at_mutation(PlaybackIdentity::physical(number)?, pressed)
-    }
-
-    pub fn set_dynamic_flash_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        pressed: bool,
-    ) -> Result<PlaybackMutation<()>, String> {
+        let held = PlaybackControlKey::new(identity, source)?;
         let assignment = self
-            .dynamic_assignment_at(identity)
+            .dynamic_assignment(identity)
             .ok_or("Playback is not assigned to a Dynamic")?
             .clone();
         let target_id = assignment.target_id();
@@ -510,20 +449,29 @@ impl PlaybackEngine {
             .get(&target_id)
             .is_some_and(|active| active.enabled && !active.flash_restore_off);
         if pressed && !self.active_dynamics.contains_key(&target_id) {
-            self.on_dynamic_at_mutation(identity)?;
+            self.on_dynamic_mutation(identity)?;
         }
-        let previous_state = self.dynamic_flash_states.get(&identity).copied();
+        let previous_state = self.dynamic_flash_states.get(&held).copied();
+        if pressed && previous_state.is_some() {
+            return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
+        }
         if pressed {
             self.dynamic_flash_states.insert(
-                identity,
+                held.clone(),
                 DynamicFlashState {
                     restore_off: !durable_enabled,
+                    release_activation_inhibited: false,
                 },
             );
         } else {
-            self.dynamic_flash_states.remove(&identity);
+            self.dynamic_flash_states.remove(&held);
         }
-        let peer_identities = self.dynamic_identities(target_id);
+        let peer_identities = self
+            .dynamic_flash_states
+            .keys()
+            .filter(|held| self.dynamic_target_id(held.address) == Some(target_id))
+            .cloned()
+            .collect::<Vec<_>>();
         let held_peers = peer_identities
             .iter()
             .filter_map(|peer| self.dynamic_flash_states.get(peer).copied())
@@ -533,7 +481,8 @@ impl PlaybackEngine {
         };
         let before = active.clone();
         let promoted = !pressed
-            && previous_state.is_some_and(|state| state.restore_off)
+            && previous_state
+                .is_some_and(|state| state.restore_off && !state.release_activation_inhibited)
             && !assignment.auto_off_flash_release;
         if promoted {
             active.enabled = true;
@@ -542,12 +491,14 @@ impl PlaybackEngine {
             for peer in peer_identities {
                 if let Some(state) = self.dynamic_flash_states.get_mut(&peer) {
                     state.restore_off = false;
+                    state.release_activation_inhibited = false;
                 }
             }
         } else if held_peers.is_empty() {
             active.flash = false;
             if previous_state.is_some_and(|state| state.restore_off)
-                && assignment.auto_off_flash_release
+                && (assignment.auto_off_flash_release
+                    || previous_state.is_some_and(|state| state.release_activation_inhibited))
             {
                 active.enabled = false;
                 active.paused = false;
@@ -573,15 +524,15 @@ impl PlaybackEngine {
 }
 
 fn active_dynamic_playback(
-    identity: PlaybackIdentity,
+    identity: PlaybackAddress,
     assignment: &DynamicPlaybackAssignment,
     now: DateTime<Utc>,
 ) -> ActiveDynamicPlayback {
     ActiveDynamicPlayback {
         start_state: Default::default(),
         dynamic_id: Some(assignment.target_id()),
-        playback_number: identity.number(),
-        playback_identity: identity.virtual_address().map(PlaybackIdentity::Virtual),
+        playback_address: identity,
+
         enabled: true,
         paused: false,
         flash: false,

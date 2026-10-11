@@ -167,7 +167,7 @@ impl FinalizedEngineSnapshot {
     /// The detached destination's physical control state for one Playback address.
     pub fn playback_control_state_at(
         &self,
-        identity: light_playback::PlaybackIdentity,
+        identity: light_playback::PlaybackAddress,
     ) -> light_playback::PlaybackControlState {
         self.prepared
             .runtime
@@ -310,20 +310,11 @@ impl Engine {
         paused_since: Option<DateTime<Utc>>,
     ) -> Result<FinalizedEngineSnapshot, EngineError> {
         for (index, row) in saved.iter().enumerate() {
-            // Identity wrappers can arrive through Serde without their constructors.
-            let identity = match row.playback_identity {
-                None => light_playback::PlaybackIdentity::physical(row.playback_number),
-                Some(light_playback::PlaybackIdentity::Physical(number)) => {
-                    light_playback::PlaybackIdentity::physical(number.get())
-                }
-                Some(light_playback::PlaybackIdentity::Virtual(address)) => {
-                    light_playback::PlaybackIdentity::virtual_playback(
-                        address.page(),
-                        address.number().get(),
-                    )
-                }
-            };
-            identity.map_err(|error| {
+            light_playback::PlaybackAddress::new(
+                row.playback_address.page(),
+                row.playback_address.position(),
+            )
+            .map_err(|error| {
                 EngineError::Invalid(format!("saved Dynamic Playback row {index}: {error}"))
             })?;
             if !row.fader_value.is_finite()
@@ -394,6 +385,11 @@ impl Engine {
             playback.restore_active_dynamics(saved.iter().cloned());
             playback.restore_dynamics_paused_since(paused_since);
         }
+        crate::playback_exclusion::enforce_restored_solo(
+            &mut playback,
+            &prepared.snapshot.playback_solo_regions,
+        )
+        .map_err(EngineError::Invalid)?;
         let cue_dynamic_values = playback.active_cue_dynamic_values();
         let dynamic_playbacks = playback.active_dynamic_playbacks();
         let playback_dynamics_paused = playback.dynamics_paused();
@@ -456,7 +452,6 @@ impl Engine {
         let fixtures_changed = !Arc::ptr_eq(&snapshot.fixtures, &previous.fixtures);
         let playback_changed = fixtures_changed
             || !Arc::ptr_eq(&snapshot.cue_lists, &previous.cue_lists)
-            || !Arc::ptr_eq(&snapshot.playbacks, &previous.playbacks)
             || !Arc::ptr_eq(&snapshot.playback_pages, &previous.playback_pages)
             || !Arc::ptr_eq(&snapshot.groups, &previous.groups)
             || !Arc::ptr_eq(
@@ -517,6 +512,9 @@ impl Engine {
             );
         }
         if !detached_group_masters.is_empty() {
+            self.group_master_flash_sources
+                .lock()
+                .retain(|group_id, _| !detached_group_masters.contains(group_id));
             self.group_master_flashes
                 .write()
                 .retain(|group_id, _| !detached_group_masters.contains(group_id));
@@ -656,14 +654,9 @@ fn detached_cue_list_targets(
 
 fn assigned_cue_list_targets(snapshot: &EngineSnapshot) -> HashSet<light_core::CueListId> {
     snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .chain(
-            snapshot
-                .playback_pages
-                .iter()
-                .flat_map(|page| page.virtual_playbacks.values()),
-        )
+        .flat_map(|page| page.assignments.values())
         .filter_map(|definition| match definition.target {
             light_playback::PlaybackTarget::CueList { cue_list_id } => Some(cue_list_id),
             _ => None,
@@ -684,14 +677,9 @@ fn detached_group_targets(
 
 fn assigned_group_targets(snapshot: &EngineSnapshot) -> HashSet<String> {
     snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .chain(
-            snapshot
-                .playback_pages
-                .iter()
-                .flat_map(|page| page.virtual_playbacks.values()),
-        )
+        .flat_map(|page| page.assignments.values())
         .filter_map(|definition| match &definition.target {
             light_playback::PlaybackTarget::Group { group_id, .. } => Some(group_id.clone()),
             _ => None,
@@ -871,17 +859,12 @@ fn register_playback_definitions(
     playback: &mut PlaybackEngine,
     snapshot: &EngineSnapshot,
 ) -> Result<(), EngineError> {
-    for definition in snapshot.playbacks.iter() {
-        playback
-            .register_definition(definition.clone())
-            .map_err(EngineError::Invalid)?;
-    }
     for page in snapshot.playback_pages.iter() {
-        for (&number, definition) in &page.virtual_playbacks {
-            let address = light_playback::VirtualPlaybackAddress::new(page.number, number)
+        for (&position, definition) in &page.assignments {
+            let address = light_playback::PlaybackAddress::new(page.number, position)
                 .map_err(EngineError::Invalid)?;
             playback
-                .register_virtual_definition(address, definition.clone())
+                .register_definition(address, definition.clone())
                 .map_err(EngineError::Invalid)?;
         }
     }

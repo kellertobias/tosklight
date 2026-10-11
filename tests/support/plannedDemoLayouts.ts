@@ -43,21 +43,9 @@ export function plannedDemoLayout() {
 					pane("busking-beam", "presets", "Beam Presets", 7, 10, 6, 9, {
 						presetFamily: "Beam",
 					}),
-					pane(
-						"busking-playbacks",
-						"virtual_playbacks",
-						"Virtual Playbacks",
-						13,
-						1,
-						12,
-						18,
-						{
-							virtualPlaybackRows: 5,
-							virtualPlaybackColumns: 10,
-							virtualPlaybackPageMode: "pinned",
-							virtualPlaybackPinnedPage: 1,
-						},
-					),
+					pane("busking-playbacks", "playbacks", "Playbacks", 13, 1, 12, 18, {
+						surface_id: "pane:busking-playbacks",
+					}),
 				],
 			},
 			{
@@ -143,6 +131,24 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
 		(layout) => layout.id === sessionId,
 	);
+	await api.request(
+		"POST",
+		"/api/v2/playback-surfaces/pane%3Abusking-playbacks/update",
+		{
+			request_id: crypto.randomUUID(),
+			name: "Busking Playbacks",
+			page_source: { type: "pinned", page: 1 },
+			layout: {
+				rows: Array.from({ length: 5 }, (_, row) => ({
+					first_position: 401 + row * 10,
+					count: 10,
+					presentation: "buttons",
+					button_count: 3,
+				})),
+			},
+		},
+		true,
+	);
 	const body = plannedDemoLayout();
 	const visibleBusking = existing?.body.desks?.find(
 		(desk: any) => desk.name === "Busking",
@@ -150,16 +156,15 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 	if (visibleBusking) {
 		const busking = body.desks.find((desk) => desk.id === "busking");
 		if (!busking) throw new Error("Canonical Busking desktop is unavailable");
-		const visibleVirtualPlaybacks = visibleBusking.panes?.find(
-			(pane: any) => pane.kind === "virtual_playbacks",
+		const visiblePlaybacks = visibleBusking.panes?.find(
+			(pane: any) => pane.kind === "playbacks",
 		);
 		busking.id = visibleBusking.id;
-		if (visibleVirtualPlaybacks) {
-			const plannedVirtualPlaybacks = busking.panes.find(
-				(pane) => pane.kind === "virtual_playbacks",
+		if (visiblePlaybacks) {
+			const plannedPlaybacks = busking.panes.find(
+				(pane) => pane.kind === "playbacks",
 			);
-			if (plannedVirtualPlaybacks)
-				plannedVirtualPlaybacks.id = visibleVirtualPlaybacks.id;
+			if (plannedPlaybacks) plannedPlaybacks.id = visiblePlaybacks.id;
 		}
 		body.activeDeskId = visibleBusking.id;
 	}

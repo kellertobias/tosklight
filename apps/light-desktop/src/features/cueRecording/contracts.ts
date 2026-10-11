@@ -2,12 +2,10 @@ import type { PlaybackProjection } from "../playbackRuntime/contracts";
 import type { ShowObject } from "../showObjects/contracts";
 
 export type CueRecordTarget =
-	| { kind: "pool"; playbackNumber: number }
+	| { kind: "playback"; page: number; position: number }
 	| { kind: "cuelist_pool"; number: number }
 	| { kind: "selected_playback" }
-	| { kind: "page_slot"; page: number; slot: number }
-	| { kind: "cue_list"; cueListId: string }
-	| { kind: "virtual"; page: number; playbackNumber: number };
+	| { kind: "cue_list"; cueListId: string };
 
 export type CueRecordOperation =
 	| "overwrite"
@@ -43,7 +41,6 @@ export interface CueRecordingRequest {
 
 export interface CueRecordProjections {
 	cueList: ShowObject<"cue_list">;
-	playback: ShowObject<"playback"> | null;
 	page: ShowObject<"playback_page"> | null;
 }
 

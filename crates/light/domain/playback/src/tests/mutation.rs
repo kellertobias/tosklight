@@ -6,7 +6,7 @@ fn engine_with_cues(cues: Vec<Cue>) -> (PlaybackEngine, CueListId) {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
     (engine, cue_list_id)
 }
@@ -49,18 +49,18 @@ fn runtime_effect_helpers_preserve_the_strongest_consequence() {
 fn on_and_off_report_exact_durable_changes() {
     let (mut engine, _) = single_cue_engine();
     assert_eq!(
-        engine.on_mutation(1).unwrap().effect,
+        engine.on_mutation(address(1)).unwrap().effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.on_mutation(1).unwrap().effect,
+        engine.on_mutation(address(1)).unwrap().effect,
         PlaybackRuntimeEffect::None
     );
 
-    let off = engine.off_mutation(1).unwrap();
+    let off = engine.off_mutation(address(1)).unwrap();
     assert!(off.value);
     assert_eq!(off.effect, PlaybackRuntimeEffect::Durable);
-    let repeated = engine.off_mutation(1).unwrap();
+    let repeated = engine.off_mutation(address(1)).unwrap();
     assert!(!repeated.value);
     assert_eq!(repeated.effect, PlaybackRuntimeEffect::None);
 }
@@ -70,16 +70,16 @@ fn off_reports_cleanup_even_when_the_playback_was_disabled() {
     let (mut engine, _) = single_cue_engine();
     assert_eq!(
         engine
-            .load_playback_mutation(1, cue_number(1.0))
+            .load_playback_mutation(address(1), cue_number(1.0))
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::Durable
     );
-    let cleanup = engine.off_mutation(1).unwrap();
+    let cleanup = engine.off_mutation(address(1)).unwrap();
     assert!(!cleanup.value);
     assert_eq!(cleanup.effect, PlaybackRuntimeEffect::Durable);
     assert_eq!(
-        engine.off_mutation(1).unwrap().effect,
+        engine.off_mutation(address(1)).unwrap().effect,
         PlaybackRuntimeEffect::None
     );
 }
@@ -92,28 +92,28 @@ fn load_and_pause_suppress_repeated_explicit_state() {
     ]);
     assert_eq!(
         engine
-            .load_playback_mutation(1, cue_number(1.0))
+            .load_playback_mutation(address(1), cue_number(1.0))
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
         engine
-            .load_playback_mutation(1, cue_number(1.0))
+            .load_playback_mutation(address(1), cue_number(1.0))
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
         engine
-            .load_playback_mutation(1, cue_number(2.0))
+            .load_playback_mutation(address(1), cue_number(2.0))
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::Durable
     );
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     assert_eq!(
-        engine.pause_playback_mutation(1).unwrap().effect,
+        engine.pause_playback_mutation(address(1)).unwrap().effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
@@ -133,16 +133,22 @@ fn goto_is_exact_for_the_same_runtime_instant_but_retriggering_is_durable() {
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
 
-    let first = engine.goto_playback_mutation(1, cue_number(1.0)).unwrap();
+    let first = engine
+        .goto_playback_mutation(address(1), cue_number(1.0))
+        .unwrap();
     assert_eq!(first.addressed_effect, PlaybackRuntimeEffect::Durable);
-    let repeated = engine.goto_playback_mutation(1, cue_number(1.0)).unwrap();
+    let repeated = engine
+        .goto_playback_mutation(address(1), cue_number(1.0))
+        .unwrap();
     assert_eq!(repeated.addressed_effect, PlaybackRuntimeEffect::None);
 
     clock.advance_millis(1);
-    let retriggered = engine.goto_playback_mutation(1, cue_number(1.0)).unwrap();
+    let retriggered = engine
+        .goto_playback_mutation(address(1), cue_number(1.0))
+        .unwrap();
     assert_eq!(retriggered.addressed_effect, PlaybackRuntimeEffect::Durable);
 }
 
@@ -169,40 +175,64 @@ fn direct_cue_list_pause_reports_exact_repetition() {
 fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
     let (mut engine, _) = single_cue_engine();
     assert_eq!(
-        engine.set_master_mutation(1, 0.0).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.set_master_mutation(1, 0.4).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.4)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.set_virtual_master_mutation(1, 0.4).unwrap().effect,
+        engine
+            .set_master_level_mutation(address(1), &test_source(address(1).position()), 0.4)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
-    engine.off(1).unwrap();
+    engine.off(address(1)).unwrap();
     assert_eq!(
-        engine.set_master_mutation(1, 0.9).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.9)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_master_mutation(1, 0.9).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.9)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.set_master_mutation(1, 0.0).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.set_master_mutation(1, 0.0).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
-    let identity = PlaybackIdentity::physical(1).unwrap();
-    let control = engine.control_states.get_mut(&identity).unwrap();
+    let identity = address(1);
+    let control = engine.control_states.get_mut(&held(identity)).unwrap();
     control.fader_pickup_required = true;
     control.fader_pickup_target = Some(0.0);
     assert_eq!(
-        engine.set_master_mutation(1, 0.0).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
 }
@@ -210,37 +240,61 @@ fn master_and_pickup_changes_are_detected_without_runtime_snapshots() {
 #[test]
 fn temporary_controls_are_transient_and_duplicate_explicit_state_is_none() {
     let (mut engine, cue_list_id) = single_cue_engine();
-    engine.definitions.get_mut(&1).unwrap().fader = PlaybackFaderMode::Temp;
+    engine.definitions.get_mut(&address(1)).unwrap().fader = PlaybackFaderMode::Temp;
     assert_eq!(
-        engine.set_temp_button_mutation(1, false).unwrap().effect,
+        engine
+            .set_temp_button_mutation(address(1), &test_source(address(1).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.set_temp_button_mutation(1, true).unwrap().effect,
+        engine
+            .set_temp_button_mutation(address(1), &test_source(address(1).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_temp_button_mutation(1, true).unwrap().effect,
+        engine
+            .set_temp_button_mutation(address(1), &test_source(address(1).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.set_temp_button_mutation(1, false).unwrap().effect,
+        engine
+            .set_temp_button_mutation(address(1), &test_source(address(1).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_temp_fader_mutation(1, 0.3).unwrap().effect,
+        engine
+            .set_temp_fader_mutation(address(1), &test_source(address(1).position()), 0.3)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_master_mutation(1, 0.3).unwrap().effect,
+        engine
+            .set_master_mutation(address(1), &test_source(address(1).position()), 0.3)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.set_temp_fader_mutation(1, 0.0).unwrap().effect,
+        engine
+            .set_temp_fader_mutation(address(1), &test_source(address(1).position()), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_temp_fader_mutation(1, 0.0).unwrap().effect,
+        engine
+            .set_temp_fader_mutation(address(1), &test_source(address(1).position()), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(engine.cue_lists[&cue_list_id].id, cue_list_id);
@@ -261,42 +315,66 @@ fn flash_and_swap_release_promotion_is_durable() {
     engine.register(second).unwrap();
     let mut flash = definition(1, first_id);
     flash.flash_release = FlashReleaseMode::ReleaseIntensityOnly;
-    engine.register_definition(flash).unwrap();
+    engine.register_definition(address(1), flash).unwrap();
     let mut swap = definition(2, second_id);
     swap.flash_release = FlashReleaseMode::ReleaseIntensityOnly;
-    engine.register_definition(swap).unwrap();
+    engine.register_definition(address(2), swap).unwrap();
 
     assert_eq!(
-        engine.set_flash_mutation(1, true).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_flash_mutation(1, true).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.set_flash_mutation(1, false).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.set_flash_mutation(1, false).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
 
     assert_eq!(
-        engine.set_swap_mutation(2, true).unwrap().effect,
+        engine
+            .set_swap_mutation(address(2), &test_source(address(2).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_swap_mutation(2, true).unwrap().effect,
+        engine
+            .set_swap_mutation(address(2), &test_source(address(2).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        engine.set_swap_mutation(2, false).unwrap().effect,
+        engine
+            .set_swap_mutation(address(2), &test_source(address(2).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        engine.set_swap_mutation(2, false).unwrap().effect,
+        engine
+            .set_swap_mutation(address(2), &test_source(address(2).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
 }
@@ -310,15 +388,24 @@ fn release_all_flash_remains_transient() {
         .unwrap()
         .auto_off_flash_release = true;
     assert_eq!(
-        engine.set_flash_mutation(1, true).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), true)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_flash_mutation(1, false).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
-        engine.set_flash_mutation(1, false).unwrap().effect,
+        engine
+            .set_flash_mutation(address(1), &test_source(address(1).position()), false)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
 }
@@ -329,40 +416,52 @@ fn manual_and_automatic_xfade_report_endpoint_no_ops() {
         Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
         Cue::new(crate::CueNumber::try_from_legacy_f64(2.0).unwrap()),
     ]);
-    manual.definitions.get_mut(&1).unwrap().fader = PlaybackFaderMode::XFade;
-    manual.on(1).unwrap();
+    manual.definitions.get_mut(&address(1)).unwrap().fader = PlaybackFaderMode::XFade;
+    manual.on(address(1)).unwrap();
     assert_eq!(
-        manual.set_manual_xfade_mutation(1, 0.0).unwrap().effect,
+        manual
+            .set_manual_xfade_mutation(address(1), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        manual.set_manual_xfade_mutation(1, 0.0).unwrap().effect,
+        manual
+            .set_manual_xfade_mutation(address(1), 0.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        manual.set_manual_xfade_mutation(1, 1.0).unwrap().effect,
+        manual
+            .set_manual_xfade_mutation(address(1), 1.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        manual.set_manual_xfade_mutation(1, 1.0).unwrap().effect,
+        manual
+            .set_manual_xfade_mutation(address(1), 1.0)
+            .unwrap()
+            .effect,
         PlaybackRuntimeEffect::None
     );
 
     let (mut automatic, _) = single_cue_engine();
     assert_eq!(
-        automatic.xfade_mutation(1, true).unwrap().effect,
+        automatic.xfade_mutation(address(1), true).unwrap().effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        automatic.xfade_mutation(1, true).unwrap().effect,
+        automatic.xfade_mutation(address(1), true).unwrap().effect,
         PlaybackRuntimeEffect::None
     );
     assert_eq!(
-        automatic.xfade_mutation(1, false).unwrap().effect,
+        automatic.xfade_mutation(address(1), false).unwrap().effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
-        automatic.xfade_mutation(1, false).unwrap().effect,
+        automatic.xfade_mutation(address(1), false).unwrap().effect,
         PlaybackRuntimeEffect::None
     );
 }
@@ -370,10 +469,14 @@ fn manual_and_automatic_xfade_report_endpoint_no_ops() {
 #[test]
 fn timed_xfade_retrigger_is_always_durable() {
     let (mut engine, _) = single_cue_engine();
-    engine.definitions.get_mut(&1).unwrap().xfade_millis = 1_000;
+    engine
+        .definitions
+        .get_mut(&address(1))
+        .unwrap()
+        .xfade_millis = 1_000;
     for on in [true, true, false, false] {
         assert_eq!(
-            engine.xfade_mutation(1, on).unwrap().effect,
+            engine.xfade_mutation(address(1), on).unwrap().effect,
             PlaybackRuntimeEffect::Durable
         );
     }
@@ -382,34 +485,36 @@ fn timed_xfade_retrigger_is_always_durable() {
 #[test]
 fn preload_timing_reports_durable_and_transient_metadata_exactly() {
     let (mut engine, _) = single_cue_engine();
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     let started_at = Utc::now();
     assert_eq!(
         engine
-            .apply_preload_timing_mutation(1, "go", started_at, 500, None)
+            .apply_preload_timing_mutation(address(1), "go", started_at, 500, None)
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::Durable
     );
     assert_eq!(
         engine
-            .apply_preload_timing_mutation(1, "go", started_at, 500, None)
+            .apply_preload_timing_mutation(address(1), "go", started_at, 500, None)
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::None
     );
 
-    engine.set_temp_button(1, true).unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     assert_eq!(
         engine
-            .apply_preload_timing_mutation(1, "temp-on", started_at, 0, None)
+            .apply_preload_timing_mutation(address(1), "temp-on", started_at, 0, None)
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::Transient
     );
     assert_eq!(
         engine
-            .apply_preload_timing_mutation(1, "temp-on", started_at, 0, None)
+            .apply_preload_timing_mutation(address(1), "temp-on", started_at, 0, None)
             .unwrap()
             .effect,
         PlaybackRuntimeEffect::None
@@ -436,18 +541,22 @@ fn auto_off_peer_changes_upgrade_an_otherwise_repeated_on() {
     low_definition.auto_off = false;
     let mut high_definition = definition(2, high_id);
     high_definition.auto_off = false;
-    engine.register_definition(low_definition).unwrap();
-    engine.register_definition(high_definition).unwrap();
-    engine.on(1).unwrap();
+    engine
+        .register_definition(address(1), low_definition)
+        .unwrap();
+    engine
+        .register_definition(address(2), high_definition)
+        .unwrap();
+    engine.on(address(1)).unwrap();
     clock.advance_millis(1);
-    engine.on(2).unwrap();
-    engine.definitions.get_mut(&1).unwrap().auto_off = true;
+    engine.on(address(2)).unwrap();
+    engine.definitions.get_mut(&address(1)).unwrap().auto_off = true;
 
-    let peer_only = engine.on_mutation(2).unwrap();
+    let peer_only = engine.on_mutation(address(2)).unwrap();
     assert_eq!(peer_only.addressed_effect, PlaybackRuntimeEffect::None);
     assert_eq!(peer_only.effect, PlaybackRuntimeEffect::Durable);
-    assert!(!engine.playback_runtime(1).unwrap().enabled);
-    let repeated = engine.on_mutation(2).unwrap();
+    assert!(!engine.playback_runtime(address(1)).unwrap().enabled);
+    let repeated = engine.on_mutation(address(2)).unwrap();
     assert_eq!(repeated.addressed_effect, PlaybackRuntimeEffect::None);
     assert_eq!(repeated.effect, PlaybackRuntimeEffect::None);
 }

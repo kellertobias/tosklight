@@ -1,22 +1,18 @@
 import type { ApiDriver } from "../bench/core/api";
 
 export const PLANNED_DEMO_BENCHMARK_ASSIGNMENTS = [
-	{ name: "ACL Chase", kind: "physical", playbackNumber: 8 },
-	{ name: "Wash Show Waterfall", kind: "virtual", playbackNumber: 1024 },
-	{ name: "Beam Show Circle", kind: "virtual", playbackNumber: 1019 },
-	{ name: "Beam Show PWM", kind: "virtual", playbackNumber: 1001 },
-	{ name: "LED Show Random", kind: "virtual", playbackNumber: 1014 },
-	{ name: "LED Show Random Strobe", kind: "virtual", playbackNumber: 1030 },
-	{ name: "Sunstrip Rain", kind: "virtual", playbackNumber: 1029 },
-	{ name: "Beam Auxiliary Show Circle", kind: "virtual", playbackNumber: 1021 },
-	{ name: "Beam Auxiliary Show PWM", kind: "virtual", playbackNumber: 1004 },
-	{
-		name: "Wash Auxiliary Show Waterfall",
-		kind: "virtual",
-		playbackNumber: 1026,
-	},
-	{ name: "Wash Auxiliary Show Random", kind: "virtual", playbackNumber: 1011 },
-	{ name: "LED Auxiliary Show Sinus", kind: "virtual", playbackNumber: 1018 },
+	{ name: "ACL Chase", page: 1, position: 107 },
+	{ name: "Wash Show Waterfall", page: 1, position: 424 },
+	{ name: "Beam Show Circle", page: 1, position: 419 },
+	{ name: "Beam Show PWM", page: 1, position: 401 },
+	{ name: "LED Show Random", page: 1, position: 414 },
+	{ name: "LED Show Random Strobe", page: 1, position: 430 },
+	{ name: "Sunstrip Rain", page: 1, position: 429 },
+	{ name: "Beam Auxiliary Show Circle", page: 1, position: 421 },
+	{ name: "Beam Auxiliary Show PWM", page: 1, position: 404 },
+	{ name: "Wash Auxiliary Show Waterfall", page: 1, position: 426 },
+	{ name: "Wash Auxiliary Show Random", page: 1, position: 411 },
+	{ name: "LED Auxiliary Show Sinus", page: 1, position: 418 },
 ] as const;
 
 export const PLANNED_DEMO_BENCHMARK_SPEED_GROUPS = {
@@ -27,52 +23,44 @@ export const PLANNED_DEMO_BENCHMARK_SPEED_GROUPS = {
 	E: { bpm: 120, multiplier: 1, phaseOriginDegrees: 0 },
 } as const;
 
+async function action(
+	api: ApiDriver,
+	showId: string,
+	assignment: (typeof PLANNED_DEMO_BENCHMARK_ASSIGNMENTS)[number],
+	action: object,
+) {
+	if (!api.session)
+		throw new Error("Plan 76 benchmark control requires an API session");
+	return api.request(
+		"POST",
+		"/api/v2/playback-actions",
+		{
+			address: {
+				kind: "playback",
+				page: assignment.page,
+				position: assignment.position,
+			},
+			action,
+			control_source: {
+				surface_id:
+					assignment.position >= 401 ? "pane:busking-playbacks" : "main",
+				control_id: assignment.position,
+			},
+		},
+		true,
+		undefined,
+		{ showId, deskId: api.session.desk.id },
+	);
+}
+
 export async function startPlannedDemoBenchmarkLook(
 	api: ApiDriver,
 	showId: string,
 ) {
-	if (!api.session)
-		throw new Error("Plan 76 benchmark activation requires an API session");
 	await api.request("POST", "/api/v2/test/clock/advance", { millis: 0 }, false);
 	for (const assignment of PLANNED_DEMO_BENCHMARK_ASSIGNMENTS) {
-		if (assignment.kind === "physical") {
-			await api.playbackNumberAction(assignment.playbackNumber, "go");
-			continue;
-		}
-		await api.request(
-			"POST",
-			"/api/v2/playback-actions",
-			{
-				request_id: crypto.randomUUID(),
-				address: {
-					kind: "virtual",
-					page: 1,
-					playback_number: assignment.playbackNumber,
-				},
-				action: { type: "master", value: 1 },
-				surface: "virtual",
-			},
-			true,
-			undefined,
-			{ showId, deskId: api.session.desk.id },
-		);
-		await api.request(
-			"POST",
-			"/api/v2/playback-actions",
-			{
-				request_id: crypto.randomUUID(),
-				address: {
-					kind: "virtual",
-					page: 1,
-					playback_number: assignment.playbackNumber,
-				},
-				action: { type: "on", pressed: true },
-				surface: "virtual",
-			},
-			true,
-			undefined,
-			{ showId, deskId: api.session.desk.id },
-		);
+		await action(api, showId, assignment, { type: "master", value: 1 });
+		await action(api, showId, assignment, { type: "on", pressed: true });
 	}
 	await api.request(
 		"POST",
@@ -84,19 +72,13 @@ export async function startPlannedDemoBenchmarkLook(
 		"POST",
 		"/api/v2/playback-runtime/snapshot",
 		{
-			identities: PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) =>
-				assignment.kind === "physical"
-					? { kind: "playback", playback_number: assignment.playbackNumber }
-					: {
-							kind: "virtual",
-							page: 1,
-							playback_number: assignment.playbackNumber,
-						},
+			identities: PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.map(
+				({ page, position }) => ({ kind: "playback", page, position }),
 			),
 		},
 		true,
 		undefined,
-		{ showId, deskId: api.session.desk.id },
+		{ showId, deskId: api.session!.desk.id },
 	);
 }
 
@@ -104,31 +86,8 @@ export async function stopPlannedDemoBenchmarkLook(
 	api: ApiDriver,
 	showId: string,
 ) {
-	if (!api.session)
-		throw new Error("Plan 76 benchmark deactivation requires an API session");
-	for (const assignment of PLANNED_DEMO_BENCHMARK_ASSIGNMENTS) {
-		if (assignment.kind === "physical") {
-			await api.playbackNumberAction(assignment.playbackNumber, "off");
-			continue;
-		}
-		await api.request(
-			"POST",
-			"/api/v2/playback-actions",
-			{
-				request_id: crypto.randomUUID(),
-				address: {
-					kind: "virtual",
-					page: 1,
-					playback_number: assignment.playbackNumber,
-				},
-				action: { type: "off", pressed: true },
-				surface: "virtual",
-			},
-			true,
-			undefined,
-			{ showId, deskId: api.session.desk.id },
-		);
-	}
+	for (const assignment of PLANNED_DEMO_BENCHMARK_ASSIGNMENTS)
+		await action(api, showId, assignment, { type: "off", pressed: true });
 	await api.request(
 		"POST",
 		"/api/v2/test/clock/advance",

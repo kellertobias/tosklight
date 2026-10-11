@@ -215,7 +215,7 @@ fn invalid_embedded_fallback_definition_fails() {
 fn inconsistent_enabled_playback_rows_fail_and_empty_playback_scope_is_passive() {
     let dynamic = definition(serde_json::json!({"type": "targetless"}));
     let mut destination = snapshot(&dynamic, Vec::new());
-    destination.playbacks = vec![
+    let assignments = vec![
         dynamic_playback(&dynamic, 1, serde_json::json!(null)),
         dynamic_playback(
             &dynamic,
@@ -223,11 +223,20 @@ fn inconsistent_enabled_playback_rows_fail_and_empty_playback_scope_is_passive()
             serde_json::json!({"type": "frozen_targets", "targets": []}),
         ),
         serde_json::from_value(serde_json::json!({
-            "number": 3, "name": "Cue list",
+            "name": "Cue list",
             "target": {"type": "cue_list", "cue_list_id": Uuid::new_v4()}
         }))
         .unwrap(),
-    ]
+    ];
+    destination.playback_pages = vec![light_playback::PlaybackPage {
+        number: 1,
+        name: "One".into(),
+        assignments: assignments
+            .into_iter()
+            .enumerate()
+            .map(|(index, definition)| (index as u16 + 1, definition))
+            .collect(),
+    }]
     .into();
     let mut disabled_absent = active_playback(&dynamic, 9);
     disabled_absent.enabled = false;
@@ -253,13 +262,12 @@ fn inconsistent_enabled_playback_rows_fail_and_empty_playback_scope_is_passive()
         .failures
         .iter()
         .map(|failure| {
-            let light_dynamics::DynamicControllerSource::Playback {
-                playback_number, ..
-            } = failure.context.source
+            let light_dynamics::DynamicControllerSource::Playback { position, .. } =
+                failure.context.source
             else {
                 panic!("expected a Playback context: {failure:?}")
             };
-            (playback_number, failure.cause.clone())
+            (position, failure.cause.clone())
         })
         .collect::<Vec<_>>();
     failed.sort_by_key(|(number, _)| *number);
@@ -284,7 +292,10 @@ fn inconsistent_enabled_playback_rows_fail_and_empty_playback_scope_is_passive()
     assert_eq!(
         passive,
         [1, 2].map(|playback_number| (
-            light_dynamics::DynamicControllerSource::physical_playback(playback_number),
+            light_dynamics::DynamicControllerSource::Playback {
+                page: 1,
+                position: playback_number
+            },
             ColdDynamicScopeReason::EmptyScope
         ))
     );
@@ -564,7 +575,7 @@ fn dynamic_playback(
     target_scope: serde_json::Value,
 ) -> light_playback::PlaybackDefinition {
     serde_json::from_value(serde_json::json!({
-        "number": number, "name": "Dynamic playback", "target": {"type": "dynamic", "assignment": {
+        "name": format!("Dynamic playback {number}"), "target": {"type": "dynamic", "assignment": {
             "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": definition.pool_number,
                 "embedded_fallback": {"definition": definition}},
             "target_scope": target_scope
@@ -578,7 +589,7 @@ fn active_playback(
     number: u16,
 ) -> light_playback::ActiveDynamicPlayback {
     serde_json::from_value(serde_json::json!({
-        "dynamic_id": definition.id, "playback_number": number, "enabled": true, "paused": false,
+        "dynamic_id": definition.id, "playback_address": {"page":1,"position":number}, "enabled": true, "paused": false,
         "activated_at": chrono::DateTime::from_timestamp_millis(1000).unwrap()
     }))
     .unwrap()

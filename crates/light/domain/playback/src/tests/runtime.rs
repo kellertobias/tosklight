@@ -317,13 +317,13 @@ fn equal_timestamp_transitions_receive_persistable_monotonic_order() {
     engine.go_at(low_id, started).unwrap();
 
     let high_order = engine
-        .contributions_with_context_at(started, |_, _| false)
+        .contributions_with_context(started, Some(&|_, _| false))
         .into_iter()
         .find(|value| value.source.cue_list_id == high_id)
         .unwrap()
         .transition_ordinal;
     let low_order = engine
-        .contributions_with_context_at(started, |_, _| false)
+        .contributions_with_context(started, Some(&|_, _| false))
         .into_iter()
         .find(|value| value.source.cue_list_id == low_id)
         .unwrap()
@@ -360,14 +360,21 @@ fn concrete_playbacks_share_one_cuelist_runtime() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.register_definition(definition(2, id)).unwrap();
-    engine.goto_playback(1, cue_number(2.0)).unwrap();
-    engine.goto_playback(2, cue_number(3.0)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine
+        .register_definition(address(2), definition(2, id))
+        .unwrap();
+    engine.goto_playback(address(1), cue_number(2.0)).unwrap();
+    engine.goto_playback(address(2), cue_number(3.0)).unwrap();
     let runtime = engine.runtime();
     assert_eq!(runtime.len(), 1);
     assert_eq!(runtime[0].current_cue_number, Some(cue_number(3.0)));
-    assert_eq!(engine.playback_runtime(1), engine.playback_runtime(2));
+    assert_eq!(
+        engine.playback_runtime(address(1)),
+        engine.playback_runtime(address(2))
+    );
     assert_eq!(
         engine.go(id).unwrap().current_cue_number,
         Some(cue_number(3.0))
@@ -387,24 +394,26 @@ fn load_is_silent_consumed_by_go_and_cleared_by_off() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.load_playback(1, cue_number(2.0)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.load_playback(address(1), cue_number(2.0)).unwrap();
     assert!(engine.active().is_empty());
     assert!(engine.contributions().is_empty());
     assert_eq!(engine.runtime()[0].loaded_cue_number, Some(cue_number(2.0)));
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(engine.active()[0].current_cue_number, Some(cue_number(2.0)));
     assert_eq!(engine.active()[0].loaded_cue_number, None);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(engine.active()[0].current_cue_number, Some(cue_number(3.0)));
-    engine.load_playback(1, cue_number(1.0)).unwrap();
-    engine.back_playback(1).unwrap();
+    engine.load_playback(address(1), cue_number(1.0)).unwrap();
+    engine.back_playback(address(1)).unwrap();
     assert_eq!(
         engine.active()[0].loaded_cue_number,
         Some(cue_number(1.0)),
         "GO minus deliberately preserves Load"
     );
-    engine.off(1).unwrap();
+    engine.off(address(1)).unwrap();
     assert_eq!(engine.runtime()[0].loaded_cue_number, None);
 }
 
@@ -419,8 +428,10 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     let loaded_id = original.cues[1].id;
     let mut engine = PlaybackEngine::default();
     engine.register(original.clone()).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.load_playback(1, cue_number(2.0)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.load_playback(address(1), cue_number(2.0)).unwrap();
     let status = engine.runtime_status().remove(0);
     assert_eq!(
         (
@@ -439,7 +450,9 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     let active = engine.active_for_snapshot(&[renumbered.clone()], Utc::now());
     let mut restored = PlaybackEngine::default();
     restored.register(renumbered.clone()).unwrap();
-    restored.register_definition(definition(1, id)).unwrap();
+    restored
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
     restored.restore_active(active);
     let status = restored.runtime_status().remove(0);
     assert_eq!(status.playback.loaded_cue_id, Some(loaded_id));
@@ -449,7 +462,9 @@ fn loaded_feedback_tracks_stable_identity_through_renumber_and_deletion() {
     let active = restored.active_for_snapshot(&[renumbered.clone()], Utc::now());
     let mut deleted = PlaybackEngine::default();
     deleted.register(renumbered).unwrap();
-    deleted.register_definition(definition(1, id)).unwrap();
+    deleted
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
     deleted.restore_active(active);
     let status = deleted.runtime_status().remove(0);
     assert_eq!(status.playback.loaded_cue_id, None);
@@ -470,13 +485,15 @@ fn link_feedback_uses_stable_effective_next_and_load_overrides_it() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list.clone()).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
     let status = engine.runtime_status().remove(0);
     assert_eq!(status.normal_next_cue_number, Some(cue_number(2.0)));
     assert_eq!(status.effective_next_cue_id, Some(destination.id));
 
-    engine.load_playback(1, cue_number(2.0)).unwrap();
+    engine.load_playback(address(1), cue_number(2.0)).unwrap();
     let status = engine.runtime_status().remove(0);
     assert_eq!(status.effective_next_cue_number, Some(cue_number(2.0)));
     assert!(status.effective_next_is_loaded);
@@ -485,10 +502,12 @@ fn link_feedback_uses_stable_effective_next_and_load_overrides_it() {
     let active = engine.active_for_snapshot(&[cue_list.clone()], Utc::now());
     let mut restored = PlaybackEngine::default();
     restored.register(cue_list).unwrap();
-    restored.register_definition(definition(1, id)).unwrap();
+    restored
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
     restored.restore_active(active);
-    restored.off(1).unwrap();
-    restored.go_playback(1).unwrap();
+    restored.off(address(1)).unwrap();
+    restored.go_playback(address(1)).unwrap();
     let status = restored.runtime_status().remove(0);
     assert_eq!(status.effective_next_cue_id, Some(destination.id));
     assert_eq!(status.effective_next_cue_number, Some(cue_number(30.0)));

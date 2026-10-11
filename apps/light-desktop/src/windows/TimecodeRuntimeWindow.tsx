@@ -54,7 +54,6 @@ import {
 import { useCueTimingWriter } from "../features/timecode/useCueTimingWriter";
 import {
 	useCueLists,
-	usePlaybackDefinitions,
 } from "../features/showObjects/ShowObjectsState";
 import type { ShowObject } from "../features/showObjects/contracts";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
@@ -111,18 +110,8 @@ function useTimelineCueLists(
 /// A Cuelist carries no number of its own; the number belongs to the playback that targets it, so
 /// a Cuelist in several playbacks is named by the lowest.
 function useCueListPlaybackNumbers(active: boolean): Map<string, number> {
-	const playbacks = usePlaybackDefinitions(active);
-	return useMemo(() => {
-		const numbers = new Map<string, number>();
-		for (const playback of playbacks) {
-			const target = playback.body.target;
-			if (target.type !== "cue_list") continue;
-			const existing = numbers.get(target.cue_list_id);
-			if (existing === undefined || playback.body.number < existing)
-				numbers.set(target.cue_list_id, playback.body.number);
-		}
-		return numbers;
-	}, [playbacks]);
+	const cueLists = useCueLists();
+	return useMemo(() => new Map(cueLists.flatMap(({body}) => body.pool_number == null ? [] : [[body.id, body.pool_number] as const])), [cueLists]);
 }
 
 export function TimecodeRuntimeWindow({

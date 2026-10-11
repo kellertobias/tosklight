@@ -102,7 +102,7 @@ async fn apply_authenticated_action(
     {
         return Ok(Json(outcome));
     }
-    let mut outcome = execute_action(state, action.clone())?;
+    let mut outcome = execute_action(state, session.desk.id, action.clone())?;
     outcome.request_id = request_id;
     state
         .replay
@@ -113,6 +113,7 @@ async fn apply_authenticated_action(
 
 fn execute_action(
     state: &AppState,
+    desk_id: Uuid,
     action: wire::ScreenConfigurationAction,
 ) -> Result<wire::ScreenConfigurationActionOutcome, ApiError> {
     match action {
@@ -127,10 +128,10 @@ fn execute_action(
             }
             let screen = state
                 .installation
-                .put_screen(domain_screen(configuration)?)
+                .put_screen(desk_id, domain_screen(configuration)?)
                 .map_err(ApiError::store)?;
             emit_screen_changed(state, &screen);
-            outcome(Some(screen), None, None)
+            outcome(Some(screen), None)
         }
         wire::ScreenConfigurationAction::Update { screen_id, patch } => {
             let existing = state
@@ -140,10 +141,10 @@ fn execute_action(
                 .ok_or_else(|| ApiError::not_found("screen"))?;
             let screen = state
                 .installation
-                .put_screen(apply_patch(existing, patch)?)
+                .put_screen(desk_id, apply_patch(existing, patch)?)
                 .map_err(ApiError::store)?;
             emit_screen_changed(state, &screen);
-            outcome(Some(screen), None, None)
+            outcome(Some(screen), None)
         }
         wire::ScreenConfigurationAction::Delete { screen_id } => {
             if state
@@ -167,41 +168,7 @@ fn execute_action(
                 .installation
                 .programmer_control_surface()
                 .map_err(ApiError::store)?;
-            outcome(None, None, Some(programmer_control_surface))
-        }
-        wire::ScreenConfigurationAction::SetPage { screen_id, page } => {
-            let show = state
-                .active_show
-                .current()
-                .clone()
-                .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-            if !state
-                .output
-                .snapshot()
-                .playback_pages
-                .iter()
-                .any(|candidate| candidate.number == page)
-            {
-                return Err(ApiError::bad_request("playback page does not exist"));
-            }
-            let screen = state
-                .installation
-                .screen(screen_id)
-                .map_err(ApiError::store)?
-                .ok_or_else(|| ApiError::not_found("screen"))?;
-            if screen.page_mode != "independent" {
-                return Err(ApiError::bad_request("screen follows the main page"));
-            }
-            state
-                .installation
-                .set_screen_page(screen_id, show.id, page)
-                .map_err(ApiError::store)?;
-            emit(
-                state,
-                "screen_page_changed",
-                serde_json::json!({"screen_id":screen_id,"show_id":show.id,"page":page}),
-            );
-            outcome(Some(screen), Some(page), None)
+            outcome(None, Some(programmer_control_surface))
         }
         wire::ScreenConfigurationAction::UpdateProgrammerControlSurface { patch } => {
             let mut configuration = state
@@ -225,7 +192,7 @@ fn execute_action(
                 "screen_configuration_changed",
                 serde_json::json!({"programmer_control_surface":configuration}),
             );
-            outcome(None, None, Some(configuration))
+            outcome(None, Some(configuration))
         }
     }
 }
@@ -234,26 +201,14 @@ fn screen_snapshot(
     state: &AppState,
     session: &Session,
 ) -> Result<wire::ScreenConfigurationSnapshot, ApiError> {
-    let show = state.active_show.current().clone();
     let screens = state.installation.screens().map_err(ApiError::store)?;
-    let mut active_pages = std::collections::BTreeMap::new();
-    if let Some(show) = show {
-        for screen in &screens {
-            let page = if screen.page_mode == "follow_main" {
-                state.installation.desk_page(session.desk.id, show.id)
-            } else {
-                state.installation.screen_page(screen.id, show.id)
-            }
-            .map_err(ApiError::store)?;
-            active_pages.insert(screen.id, page);
-        }
-    }
+    let surfaces = super::playback_surfaces_http::surface_snapshot(state, session.desk.id)?;
     Ok(wire::ScreenConfigurationSnapshot {
         screens: screens
             .into_iter()
             .map(wire_screen)
             .collect::<Result<_, _>>()?,
-        active_pages,
+        surfaces,
         programmer_control_surface: wire_programmer_control_surface(
             state
                 .installation
@@ -287,12 +242,7 @@ fn apply_patch(
     patch!(layout);
     patch!(show_dock);
     patch!(show_playbacks);
-    patch!(playback_count);
-    patch!(playback_rows);
-    patch!(first_playback_slot);
-    if let Some(page_mode) = patch.page_mode {
-        screen.page_mode = page_mode_string(page_mode).to_owned();
-    }
+    patch!(surface_id);
     patch!(show_page_controls);
     patch!(show_programmer);
     patch!(not_editable);
@@ -308,11 +258,6 @@ fn apply_patch(
         screen.bounds = Some(bounds);
     }
     patch!(fullscreen);
-    if patch.clear_playback_layout {
-        screen.playback_layout = None;
-    } else if let Some(layout) = patch.playback_layout {
-        screen.playback_layout = Some(domain_layout(layout));
-    }
     if let Some(content) = patch.content {
         screen.content = domain_content(content);
     }
@@ -326,10 +271,7 @@ fn domain_screen(screen: wire::ScreenConfiguration) -> Result<ScreenConfiguratio
         layout: screen.layout,
         show_dock: screen.show_dock,
         show_playbacks: screen.show_playbacks,
-        playback_count: screen.playback_count,
-        playback_rows: screen.playback_rows,
-        first_playback_slot: screen.first_playback_slot,
-        page_mode: page_mode_string(screen.page_mode).to_owned(),
+        surface_id: screen.surface_id,
         show_page_controls: screen.show_page_controls,
         show_programmer: screen.show_programmer,
         not_editable: screen.not_editable,
@@ -337,7 +279,6 @@ fn domain_screen(screen: wire::ScreenConfiguration) -> Result<ScreenConfiguratio
         display_id: screen.display_id,
         bounds: screen.bounds,
         fullscreen: screen.fullscreen,
-        playback_layout: screen.playback_layout.map(domain_layout),
         content: domain_content(screen.content),
     })
 }
@@ -349,14 +290,7 @@ fn wire_screen(screen: ScreenConfiguration) -> Result<wire::ScreenConfiguration,
         layout: screen.layout,
         show_dock: screen.show_dock,
         show_playbacks: screen.show_playbacks,
-        playback_count: screen.playback_count,
-        playback_rows: screen.playback_rows,
-        first_playback_slot: screen.first_playback_slot,
-        page_mode: match screen.page_mode.as_str() {
-            "follow_main" => wire::ScreenPageMode::FollowMain,
-            "independent" => wire::ScreenPageMode::Independent,
-            _ => return Err(ApiError::internal("stored screen has an invalid page mode")),
-        },
+        surface_id: screen.surface_id,
         show_page_controls: screen.show_page_controls,
         show_programmer: screen.show_programmer,
         not_editable: screen.not_editable,
@@ -364,7 +298,6 @@ fn wire_screen(screen: ScreenConfiguration) -> Result<wire::ScreenConfiguration,
         display_id: screen.display_id,
         bounds: screen.bounds,
         fullscreen: screen.fullscreen,
-        playback_layout: screen.playback_layout.map(wire_layout),
         content: wire_content(screen.content),
     })
 }
@@ -639,43 +572,6 @@ fn wire_fixture_column(
     }
 }
 
-fn domain_layout(layout: wire::ScreenPlaybackSurfaceLayout) -> light_show::PlaybackSurfaceLayout {
-    light_show::PlaybackSurfaceLayout {
-        playbacks_per_row: layout.playbacks_per_row,
-        rows: layout
-            .rows
-            .into_iter()
-            .map(|row| light_show::PlaybackSurfaceRow {
-                first_playback_slot: row.first_playback_slot,
-                has_fader: row.has_fader,
-                button_count: row.button_count,
-            })
-            .collect(),
-    }
-}
-
-fn wire_layout(layout: light_show::PlaybackSurfaceLayout) -> wire::ScreenPlaybackSurfaceLayout {
-    wire::ScreenPlaybackSurfaceLayout {
-        playbacks_per_row: layout.playbacks_per_row,
-        rows: layout
-            .rows
-            .into_iter()
-            .map(|row| wire::ScreenPlaybackSurfaceRow {
-                first_playback_slot: row.first_playback_slot,
-                has_fader: row.has_fader,
-                button_count: row.button_count,
-            })
-            .collect(),
-    }
-}
-
-const fn page_mode_string(mode: wire::ScreenPageMode) -> &'static str {
-    match mode {
-        wire::ScreenPageMode::FollowMain => "follow_main",
-        wire::ScreenPageMode::Independent => "independent",
-    }
-}
-
 fn emit_screen_changed(state: &AppState, screen: &ScreenConfiguration) {
     emit(
         state,
@@ -686,14 +582,12 @@ fn emit_screen_changed(state: &AppState, screen: &ScreenConfiguration) {
 
 fn outcome(
     screen: Option<ScreenConfiguration>,
-    active_page: Option<u8>,
     programmer_control_surface: Option<light_show::ProgrammerControlSurfaceConfiguration>,
 ) -> Result<wire::ScreenConfigurationActionOutcome, ApiError> {
     Ok(wire::ScreenConfigurationActionOutcome {
         request_id: String::new(),
         replayed: false,
         screen: screen.map(wire_screen).transpose()?,
-        active_page,
         programmer_control_surface: programmer_control_surface.map(wire_programmer_control_surface),
     })
 }

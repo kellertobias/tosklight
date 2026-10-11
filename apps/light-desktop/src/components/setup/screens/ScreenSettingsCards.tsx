@@ -13,6 +13,7 @@ import { configuredServerUrl } from "../../../api/client/serverLocation";
 import type {
 	FixedScreenPane,
 	PlaybackSurfaceLayout,
+	PlaybackPageSource,
 	ProgrammerControlSurfacePatch,
 	ScreenConfiguration,
 } from "../../../api/types";
@@ -21,15 +22,13 @@ import {
 	addPlaybackRow,
 	canAddPlaybackRow,
 	PlaybackLayoutFields,
-	type PlaybackPageMode,
 	playbackLayoutInvalid,
 } from "../PlaybackLayoutModal";
 import {
 	browserScreenUrl,
 	DEFAULT_FIXED_SCREEN_PANE,
 	DEFAULT_FIXED_SIDE_WIDTH_PERCENT,
-	playbackLayoutLegacyFields,
-	screenPlaybackLayout,
+	defaultScreenSurface,
 	updateScreenConfiguration,
 } from "../screenConfiguration";
 import {
@@ -39,6 +38,8 @@ import {
 	fixedPaneLabels,
 	type TextFileOption,
 } from "./FixedPaneSettings";
+
+import { useScreensOptional } from "../../../features/screens/ScreensContext";
 
 /** Content that dedicates its whole layout to the control region. */
 function hasControlSurface(content: ScreenConfiguration["content"]) {
@@ -385,49 +386,71 @@ type ScreenConfigurationTab = "layout" | "settings" | "placement" | "playbacks";
  * cleared number) stays visible across tab switches. Every storable draft applies at once, like
  * the other tabs of Configure Screen.
  */
-/** A screen's playbacks must fit slots 1-127 from its first row onwards. */
-function screenPlaybackDraftInvalid(layout: PlaybackSurfaceLayout) {
-	const first = layout.rows[0]?.first_playback_slot ?? 1;
-	return (
-		playbackLayoutInvalid(layout) ||
-		first + layout.playbacks_per_row * layout.rows.length - 1 > 127
-	);
-}
-
 function useScreenPlaybackDraft(
 	draft: ScreenConfiguration,
-	update: (changes: Partial<ScreenConfiguration>) => void,
+	_update: (changes: Partial<ScreenConfiguration>) => void,
 ) {
+	const server = useScreensOptional();
+	const surfaces = server?.surfaces;
+	const updatePlaybackSurface = server?.updatePlaybackSurface;
+	const surface = surfaces?.playback_surfaces[draft.surface_id];
 	const [layout, setLayout] = useState(() =>
-		structuredClone(screenPlaybackLayout(draft)),
+		structuredClone(surface?.layout ?? defaultScreenSurface(draft.name).layout),
 	);
+	const [pageSource, setPageSource] = useState<PlaybackPageSource>(
+		surface?.page_source ?? { type: "follow", surface_id: "main" },
+	);
+	const [saveError, setSaveError] = useState<string | null>(null);
 	const layoutRef = useRef(layout);
-	const apply = (next: PlaybackSurfaceLayout, pageMode: PlaybackPageMode) => {
-		if (screenPlaybackDraftInvalid(next)) return;
-		const legacy = playbackLayoutLegacyFields(next);
-		update({
-			playback_layout: next,
-			page_mode: pageMode,
-			playback_count: legacy.playback_count,
-			playback_rows: legacy.playback_rows,
-			first_playback_slot: legacy.first_playback_slot,
-		});
-	};
-	const changeLayout = (
-		change: (current: PlaybackSurfaceLayout) => PlaybackSurfaceLayout,
+	const sourceRef = useRef(pageSource);
+	const queue = useRef(Promise.resolve());
+	const apply = (
+		next: PlaybackSurfaceLayout,
+		page_source: PlaybackPageSource,
+		field: "layout" | "page_source",
 	) => {
-		const next = change(layoutRef.current);
-		if (next === layoutRef.current) return;
-		layoutRef.current = next;
-		setLayout(next);
-		apply(next, draft.page_mode);
+		if (
+			!updatePlaybackSurface ||
+			!surfaces ||
+			!surface ||
+			playbackLayoutInvalid(next) ||
+			(page_source.type !== "follow" &&
+				(!Number.isInteger(page_source.page) ||
+					page_source.page < 1 ||
+					page_source.page > 99))
+		)
+			return;
+		queue.current = queue.current
+			.then(async () => {
+				await updatePlaybackSurface(
+					draft.surface_id,
+					field === "layout" ? { layout: next } : { page_source },
+				);
+				setSaveError(null);
+			})
+			.catch((error) => setSaveError(String(error)));
 	};
 	return {
 		layout,
-		invalid: screenPlaybackDraftInvalid(layout),
-		changeLayout,
-		changePageMode: (pageMode: PlaybackPageMode) =>
-			apply(layoutRef.current, pageMode),
+		pageSource,
+		saveError,
+		invalid: !surface || playbackLayoutInvalid(layout),
+		surfaceOptions: Object.entries(surfaces?.playback_surfaces ?? {})
+			.filter(([id]) => id !== draft.surface_id)
+			.map(([id, item]) => ({ id, name: item.name })),
+		changeLayout: (
+			change: (current: PlaybackSurfaceLayout) => PlaybackSurfaceLayout,
+		) => {
+			const next = change(layoutRef.current);
+			layoutRef.current = next;
+			setLayout(next);
+			apply(next, sourceRef.current, "layout");
+		},
+		changePageSource: (source: PlaybackPageSource) => {
+			sourceRef.current = source;
+			setPageSource(source);
+			apply(layoutRef.current, source, "page_source");
+		},
 	};
 }
 
@@ -485,7 +508,8 @@ function ScreenConfigurationModal(
 					/>
 					<div className="screen-configuration-modal-content" data-tab={tab}>
 						{props.saveError && (
-							<ErrorAlert as="p"
+							<ErrorAlert
+								as="p"
 								className="screen-settings-note screen-configuration-wide screen-save-error"
 								role="alert"
 							>
@@ -525,14 +549,18 @@ function ScreenConfigurationModal(
 								<PlaybackLayoutFields
 									layout={playbacks.layout}
 									onLayout={playbacks.changeLayout}
-									pageMode={props.draft.page_mode}
-									onPageMode={playbacks.changePageMode}
+									pageSource={playbacks.pageSource}
+									surfaceOptions={playbacks.surfaceOptions}
+									onPageSource={playbacks.changePageSource}
 								/>
-								{playbacks.invalid && (
-									<ErrorAlert as="p" className="screen-settings-note" role="alert">
-										Not saved yet: use at most 32 playbacks per row and keep
-										every row within playbacks 1-127, counted from the first
-										row's first playback number.
+								{(playbacks.invalid || playbacks.saveError) && (
+									<ErrorAlert
+										as="p"
+										className="screen-settings-note"
+										role="alert"
+									>
+										{playbacks.saveError ??
+											"Not saved yet: register this surface and keep each row within positions 1–1000 with 0–3 buttons."}
 									</ErrorAlert>
 								)}
 							</>
@@ -615,7 +643,11 @@ function ScreenRemovalConfirmation(props: {
 					Cancel
 				</Button>
 			</div>
-			{props.error && <ErrorAlert as="p" role="alert">{props.error}</ErrorAlert>}
+			{props.error && (
+				<ErrorAlert as="p" role="alert">
+					{props.error}
+				</ErrorAlert>
+			)}
 		</div>
 	);
 }
@@ -630,6 +662,24 @@ async function copyScreenBrowserLink(browserLink: string) {
 		void error;
 		return false;
 	}
+}
+
+function useScreenBrowserLink(screenId: string) {
+	const [copyState, setCopyState] = useState<"idle" | "success" | "error">(
+		"idle",
+	);
+	const browserLink = browserScreenUrl(screenId, configuredServerUrl());
+	const copyBrowserLink = async () => {
+		setCopyState(
+			(await copyScreenBrowserLink(browserLink)) ? "success" : "error",
+		);
+	};
+	useEffect(() => {
+		if (copyState === "idle") return;
+		const timer = window.setTimeout(() => setCopyState("idle"), 2500);
+		return () => window.clearTimeout(timer);
+	}, [copyState]);
+	return { copyState, copyBrowserLink };
 }
 
 export function ScreenSettingsCard({
@@ -657,9 +707,6 @@ export function ScreenSettingsCard({
 }) {
 	const [draft, setDraft] = useState(screen);
 	const [configurationOpen, setConfigurationOpen] = useState(false);
-	const [copyState, setCopyState] = useState<"idle" | "success" | "error">(
-		"idle",
-	);
 	const [removeConfirmationOpen, setRemoveConfirmationOpen] = useState(false);
 	const [removeError, setRemoveError] = useState<string | null>(null);
 	const [removing, setRemoving] = useState(false);
@@ -706,17 +753,7 @@ export function ScreenSettingsCard({
 				pending.current -= 1;
 			});
 	};
-	const browserLink = browserScreenUrl(draft.id, configuredServerUrl());
-	const copyBrowserLink = async () => {
-		setCopyState(
-			(await copyScreenBrowserLink(browserLink)) ? "success" : "error",
-		);
-	};
-	useEffect(() => {
-		if (copyState === "idle") return;
-		const timer = window.setTimeout(() => setCopyState("idle"), 2500);
-		return () => window.clearTimeout(timer);
-	}, [copyState]);
+	const { copyState, copyBrowserLink } = useScreenBrowserLink(draft.id);
 	const confirmOwnerRemoval = async () => {
 		if (!updateProgrammerOwner || removing) return;
 		setRemoving(true);
@@ -756,7 +793,11 @@ export function ScreenSettingsCard({
 				}
 			/>
 			{saveError && !configurationOpen && (
-				<ErrorAlert as="p" className="screen-settings-note screen-save-error" role="alert">
+				<ErrorAlert
+					as="p"
+					className="screen-settings-note screen-save-error"
+					role="alert"
+				>
 					Could not save this screen: {saveError}
 				</ErrorAlert>
 			)}

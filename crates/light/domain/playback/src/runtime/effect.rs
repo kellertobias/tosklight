@@ -12,6 +12,9 @@ impl PlaybackEngine {
         } else if self.control_states != before.control_states
             || self.temporary != before.temporary
             || self.swap_held != before.swap_held
+            || self.cuelist_flash_states != before.cuelist_flash_states
+            || self.cuelist_swap_states != before.cuelist_swap_states
+            || self.dynamic_flash_states != before.dynamic_flash_states
         {
             PlaybackRuntimeEffect::Transient
         } else {
@@ -23,7 +26,7 @@ impl PlaybackEngine {
     pub fn numbered_runtime_effects_since(
         &self,
         before: &Self,
-    ) -> Vec<(u16, PlaybackRuntimeEffect)> {
+    ) -> Vec<(PlaybackAddress, PlaybackRuntimeEffect)> {
         runtime_numbers(self, before)
             .into_iter()
             .filter_map(|number| {
@@ -33,7 +36,11 @@ impl PlaybackEngine {
             .collect()
     }
 
-    fn numbered_runtime_effect_since(&self, before: &Self, number: u16) -> PlaybackRuntimeEffect {
+    fn numbered_runtime_effect_since(
+        &self,
+        before: &Self,
+        number: PlaybackAddress,
+    ) -> PlaybackRuntimeEffect {
         if active_playback(self, number) != active_playback(before, number)
             || dynamic_playback(self, number) != dynamic_playback(before, number)
             || cue_jump_counts_differ(self, before, number)
@@ -41,12 +48,14 @@ impl PlaybackEngine {
             PlaybackRuntimeEffect::Durable
         } else if control_state(self, number) != control_state(before, number)
             || temporary_playbacks(self, number) != temporary_playbacks(before, number)
-            || self
-                .swap_held
-                .contains(&PlaybackIdentity::physical(number).expect("valid physical number"))
-                != before
-                    .swap_held
-                    .contains(&PlaybackIdentity::physical(number).expect("valid physical number"))
+            || self.swap_held.iter().any(|held| held.address == number)
+                != before.swap_held.iter().any(|held| held.address == number)
+            || held_target_states(self, &self.cuelist_flash_states, number)
+                != held_target_states(before, &before.cuelist_flash_states, number)
+            || held_target_states(self, &self.cuelist_swap_states, number)
+                != held_target_states(before, &before.cuelist_swap_states, number)
+            || held_target_states(self, &self.dynamic_flash_states, number)
+                != held_target_states(before, &before.dynamic_flash_states, number)
         {
             PlaybackRuntimeEffect::Transient
         } else {
@@ -55,14 +64,15 @@ impl PlaybackEngine {
     }
 }
 
-fn control_state(engine: &PlaybackEngine, number: u16) -> PlaybackControlState {
-    PlaybackIdentity::physical(number)
-        .ok()
-        .map(|identity| engine.control_state_at(identity))
-        .unwrap_or_default()
+fn control_state(engine: &PlaybackEngine, number: PlaybackAddress) -> PlaybackControlState {
+    engine.control_state_at(number)
 }
 
-fn cue_jump_counts_differ(current: &PlaybackEngine, before: &PlaybackEngine, number: u16) -> bool {
+fn cue_jump_counts_differ(
+    current: &PlaybackEngine,
+    before: &PlaybackEngine,
+    number: PlaybackAddress,
+) -> bool {
     let cue_list_id = current
         .definitions
         .get(&number)
@@ -86,97 +96,40 @@ fn cue_jump_counts_differ(current: &PlaybackEngine, before: &PlaybackEngine, num
             .any(|(key, count)| current.jump_counts.get(key) != Some(count))
 }
 
-fn has_cue_jump_counts(engine: &PlaybackEngine, cue_list_id: CueListId) -> bool {
-    engine.jump_counts.keys().any(|(id, _)| *id == cue_list_id)
-}
-
-fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSet<u16> {
+fn runtime_numbers(current: &PlaybackEngine, before: &PlaybackEngine) -> BTreeSet<PlaybackAddress> {
     current
         .definitions
-        .values()
-        .chain(before.definitions.values())
-        .filter_map(|definition| match &definition.target {
-            PlaybackTarget::CueList { cue_list_id }
-                if current
-                    .active
-                    .contains_key(&PlaybackKey::CueList(*cue_list_id))
-                    || before
-                        .active
-                        .contains_key(&PlaybackKey::CueList(*cue_list_id))
-                    || has_cue_jump_counts(current, *cue_list_id)
-                    || has_cue_jump_counts(before, *cue_list_id) =>
-            {
-                Some(definition.number)
-            }
-            PlaybackTarget::Dynamic { assignment }
-                if current
-                    .active_dynamics
-                    .contains_key(&assignment.target_id())
-                    || before.active_dynamics.contains_key(&assignment.target_id()) =>
-            {
-                Some(definition.number)
-            }
-            _ => None,
-        })
-        .chain(
-            current
-                .temporary
-                .keys()
-                .filter_map(|(identity, _)| match identity {
-                    PlaybackIdentity::Physical(number) => Some(number.get()),
-                    PlaybackIdentity::Virtual(_) => None,
-                }),
-        )
-        .chain(
-            before
-                .temporary
-                .keys()
-                .filter_map(|(identity, _)| match identity {
-                    PlaybackIdentity::Physical(number) => Some(number.get()),
-                    PlaybackIdentity::Virtual(_) => None,
-                }),
-        )
-        .chain(
-            current
-                .swap_held
-                .iter()
-                .filter_map(|identity| match identity {
-                    PlaybackIdentity::Physical(number) => Some(number.get()),
-                    PlaybackIdentity::Virtual(_) => None,
-                }),
-        )
-        .chain(
-            before
-                .swap_held
-                .iter()
-                .filter_map(|identity| match identity {
-                    PlaybackIdentity::Physical(number) => Some(number.get()),
-                    PlaybackIdentity::Virtual(_) => None,
-                }),
-        )
+        .keys()
+        .chain(before.definitions.keys())
+        .copied()
+        .chain(current.temporary.keys().map(|(held, _)| held.address))
+        .chain(before.temporary.keys().map(|(held, _)| held.address))
+        .chain(current.swap_held.iter().map(|held| held.address))
+        .chain(before.swap_held.iter().map(|held| held.address))
         .collect()
 }
 
-fn active_playback(engine: &PlaybackEngine, number: u16) -> Option<&ActivePlayback> {
+fn active_playback(engine: &PlaybackEngine, number: PlaybackAddress) -> Option<&ActivePlayback> {
     let key = engine.runtime_key(number).ok()?;
     engine.active.get(&key)
 }
 
-fn dynamic_playback(engine: &PlaybackEngine, number: u16) -> Option<&ActiveDynamicPlayback> {
+fn dynamic_playback(
+    engine: &PlaybackEngine,
+    number: PlaybackAddress,
+) -> Option<&ActiveDynamicPlayback> {
     let target = engine.dynamic_assignment(number)?.target_id();
     engine.active_dynamics.get(&target)
 }
 
 fn temporary_playbacks(
     engine: &PlaybackEngine,
-    number: u16,
+    number: PlaybackAddress,
 ) -> Vec<(TemporaryPlaybackKind, &ActivePlayback)> {
     let mut playbacks = engine
         .temporary
         .iter()
-        .filter(|((candidate, _), _)| {
-            *candidate == PlaybackIdentity::physical(number).expect("valid physical number")
-        })
+        .filter(|((candidate, _), _)| candidate.address == number)
         .map(|((_, kind), playback)| (*kind, playback))
         .collect::<Vec<_>>();
     playbacks.sort_by_key(|(kind, _)| temporary_kind_order(*kind));
@@ -190,4 +143,17 @@ const fn temporary_kind_order(kind: TemporaryPlaybackKind) -> u8 {
         TemporaryPlaybackKind::TempFader => 2,
         TemporaryPlaybackKind::Swap => 3,
     }
+}
+
+// Release behavior belongs to the target shared by every assigned alias, while each
+// held source remains independently identifiable within that target.
+fn held_target_states<'a, T>(
+    engine: &PlaybackEngine,
+    states: &'a HashMap<PlaybackControlKey, T>,
+    address: PlaybackAddress,
+) -> HashMap<&'a PlaybackControlKey, &'a T> {
+    states
+        .iter()
+        .filter(|(held, _)| engine.same_target(held.address, address))
+        .collect()
 }

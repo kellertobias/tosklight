@@ -129,8 +129,8 @@ export class PlaybackRuntimeStore {
 		if (tick.samples.length === 0 && tick.released.length === 0) return false;
 		const telemetry = new Map(this.state.telemetry);
 		for (const sample of tick.samples)
-			telemetry.set(sample.playback_number, sample);
-		for (const number of tick.released) telemetry.delete(number);
+			telemetry.set(identityKey({ kind: "playback", ...sample.address }), sample);
+		for (const address of tick.released) telemetry.delete(identityKey({ kind: "playback", ...address }));
 		this.publish({ telemetry });
 		return true;
 	}
@@ -217,15 +217,10 @@ export class PlaybackRuntimeStore {
 		return true;
 	}
 
-	beginOptimisticMaster(target: number | PlaybackIdentity, value: number) {
-		const key =
-			typeof target === "number" ? `playback:${target}` : identityKey(target);
+	beginOptimisticMaster(target: PlaybackIdentity, value: number) {
+		const key = identityKey(target);
 		const current = this.state.projections.get(key) ?? [];
-		const projection = current.find((candidate) =>
-			typeof target === "number"
-				? candidate.playback_number === target
-				: projectionKeys(candidate).includes(key),
-		);
+		const projection = current.find(candidate => identityKey(candidate.identity) === key);
 		if (!projection) return null;
 		const optimistic = optimisticMaster(projection, value);
 		if (!optimistic) return null;

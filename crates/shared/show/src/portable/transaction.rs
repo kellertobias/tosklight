@@ -287,8 +287,10 @@ impl ShowStore {
     /// Atomically applies all raw object changes or none if the document is stale.
     pub fn apply_portable_transaction(
         &self,
-        changes: PortableShowTransaction,
+        mut changes: PortableShowTransaction,
     ) -> Result<PortableShowCommit, StoreError> {
+        changes.check_playback_contract()?;
+        changes.stamp_playback_contract();
         let tx = immediate_transaction(&self.conn)?;
         ensure_document_revision(&tx, changes.expected)?;
         let sync_request = changes.sync_request.clone();

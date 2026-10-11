@@ -150,12 +150,12 @@ export function HardwarePlaybackCard({
 					void activateHardwareCard(controller, event, playback, slot),
 				onFaderChange: (next) =>
 					playback &&
-					void controller.runtimeActions?.poolPlaybackAction(
-						playback.number,
+					void controller.runtimeActions?.playbackAction(
+						playback.address,
 						"master",
 						{
 							value: next / 100,
-							surface: "physical",
+							control_source: {surface_id: controller.surfaceId, control_id: slotData.slot * 10},
 						},
 					),
 			}}

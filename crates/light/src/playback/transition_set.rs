@@ -24,7 +24,7 @@ impl RelatedTransitionSet {
             &envelope.context,
             resolved,
             envelope.command.action.clone(),
-            envelope.command.surface,
+            &envelope.command.control_source,
         )?;
         identities.retain(|identity| identity != &primary);
         identities.sort_by(compare_identity);
@@ -67,7 +67,7 @@ fn exact_projections(
     let projections = ports.projections(context, identities)?;
     let mapped = projections
         .into_iter()
-        .map(|projection| (projection.requested.clone(), projection))
+        .map(|projection| (projection.identity.clone(), projection))
         .collect::<HashMap<_, _>>();
     if mapped.len() == identities.len()
         && identities
@@ -95,7 +95,7 @@ fn publish_change(
         context,
         PlaybackAction::Off { pressed: true },
         None,
-        before.get(&after.requested)?.clone(),
+        before.get(&after.identity)?.clone(),
         after.clone(),
     )?;
     Some(PlaybackRelatedResult {
@@ -105,48 +105,20 @@ fn publish_change(
 }
 
 fn compare_identity(left: &PlaybackRuntimeIdentity, right: &PlaybackRuntimeIdentity) -> Ordering {
-    match (left, right) {
-        (
-            PlaybackRuntimeIdentity::DirectCueList(left),
-            PlaybackRuntimeIdentity::DirectCueList(right),
-        ) => left.0.as_bytes().cmp(right.0.as_bytes()),
-        (PlaybackRuntimeIdentity::DirectCueList(_), PlaybackRuntimeIdentity::Group(_)) => {
-            Ordering::Less
+    fn key(identity: &PlaybackRuntimeIdentity) -> (u8, Vec<u8>) {
+        match identity {
+            PlaybackRuntimeIdentity::Playback(address) => (
+                0,
+                vec![
+                    address.page(),
+                    (address.position() >> 8) as u8,
+                    address.position() as u8,
+                ],
+            ),
+            PlaybackRuntimeIdentity::CueList(id) => (1, id.0.as_bytes().to_vec()),
+            PlaybackRuntimeIdentity::DirectCueList(id) => (2, id.0.as_bytes().to_vec()),
+            PlaybackRuntimeIdentity::Group(id) => (3, id.as_str().as_bytes().to_vec()),
         }
-        (PlaybackRuntimeIdentity::Group(_), PlaybackRuntimeIdentity::DirectCueList(_)) => {
-            Ordering::Greater
-        }
-        (PlaybackRuntimeIdentity::DirectCueList(_), _) => Ordering::Greater,
-        (_, PlaybackRuntimeIdentity::DirectCueList(_)) => Ordering::Less,
-        (PlaybackRuntimeIdentity::Playback(left), PlaybackRuntimeIdentity::Playback(right)) => {
-            left.cmp(right)
-        }
-        (PlaybackRuntimeIdentity::Virtual(left), PlaybackRuntimeIdentity::Virtual(right)) => {
-            left.cmp(right)
-        }
-        (PlaybackRuntimeIdentity::Playback(_), PlaybackRuntimeIdentity::Virtual(_)) => {
-            Ordering::Less
-        }
-        (PlaybackRuntimeIdentity::Virtual(_), PlaybackRuntimeIdentity::Playback(_)) => {
-            Ordering::Greater
-        }
-        (PlaybackRuntimeIdentity::Playback(_), PlaybackRuntimeIdentity::CueList(_)) => {
-            Ordering::Less
-        }
-        (PlaybackRuntimeIdentity::Virtual(_), PlaybackRuntimeIdentity::CueList(_)) => {
-            Ordering::Less
-        }
-        (PlaybackRuntimeIdentity::CueList(_), PlaybackRuntimeIdentity::Playback(_))
-        | (PlaybackRuntimeIdentity::CueList(_), PlaybackRuntimeIdentity::Virtual(_)) => {
-            Ordering::Greater
-        }
-        (PlaybackRuntimeIdentity::CueList(left), PlaybackRuntimeIdentity::CueList(right)) => {
-            left.0.as_bytes().cmp(right.0.as_bytes())
-        }
-        (PlaybackRuntimeIdentity::Group(left), PlaybackRuntimeIdentity::Group(right)) => {
-            left.as_str().cmp(right.as_str())
-        }
-        (PlaybackRuntimeIdentity::Group(_), _) => Ordering::Greater,
-        (_, PlaybackRuntimeIdentity::Group(_)) => Ordering::Less,
     }
+    key(left).cmp(&key(right))
 }

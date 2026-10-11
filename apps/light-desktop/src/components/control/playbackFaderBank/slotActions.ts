@@ -21,7 +21,7 @@ import {
 	isHeldAction,
 	playbackButtonLabel,
 } from "./feedback";
-import type { PlaybackSnapshotActive } from "./types";
+import type { AssignedPlayback, PlaybackSnapshotActive } from "./types";
 
 export function buildPlaybackActions({
 	controller,
@@ -34,7 +34,7 @@ export function buildPlaybackActions({
 	color,
 }: {
 	controller: PlaybackBankController;
-	playback: PlaybackDefinition | null;
+	playback: AssignedPlayback | null;
 	active: PlaybackSnapshotActive | undefined;
 	selected: boolean;
 	slot: number;
@@ -101,13 +101,13 @@ export function buildPlaybackActions({
 						return;
 					}
 					if (!isHeldAction(action) && action !== "none")
-						void controller.runtimeActions?.poolPlaybackAction(
-							playback.number,
+						void controller.runtimeActions?.playbackAction(
+							playback.address,
 							"button",
 							{
 								button: button + 1,
 								pressed: true,
-								surface: "physical",
+								control_source: {surface_id: controller.surfaceId, control_id: slot * 10 + button + 1},
 							},
 						);
 				},
@@ -129,7 +129,7 @@ export function buildPlaybackActions({
 					event.currentTarget.setPointerCapture?.(event.pointerId);
 					controller.heldActions.press(
 						slot,
-						playback.number,
+						playback.address,
 						button + 1,
 						action,
 					);
@@ -145,10 +145,10 @@ export function buildPlaybackActions({
 
 function runtimeBlackout(
 	controller: PlaybackBankController,
-	playback: PlaybackDefinition | null,
+	playback: AssignedPlayback | null,
 ) {
 	const projection = playback
-		? controller.runtimeProjections.get(playback.number)
+		? controller.runtimeProjections.get(playback.address.position)
 		: undefined;
 	return Boolean(
 		projection?.target === "grand_master" && projection.runtime.blackout,
@@ -157,7 +157,7 @@ function runtimeBlackout(
 
 export function createSlotInterceptors(
 	controller: PlaybackBankController,
-	playback: PlaybackDefinition | null,
+	playback: AssignedPlayback | null,
 	cueList: CueList | null | undefined,
 	slot: number,
 	currentCue: Cue | null | undefined,

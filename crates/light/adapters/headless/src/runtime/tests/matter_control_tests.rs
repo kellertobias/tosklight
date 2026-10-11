@@ -1,3 +1,12 @@
+fn matter_test_address(page:u8,position:u16)->light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(page,position).unwrap()
+}
+fn matter_test_endpoint(state:&AppState,page:u8,position:u16)->u16 {
+    refresh_matter_bridge(state).lights.iter().find(|light|light.address == matter_test_address(page,position)).unwrap().endpoint_id
+}
+fn matter_test_source()->light_playback::PlaybackControlSource {
+    light_playback::PlaybackControlSource {surface_id:"matter-test".into(),control_id:1}
+}
 #[test]
 fn legacy_four_speed_group_configuration_gains_group_e() {
     let configuration: DeskConfiguration =
@@ -21,7 +30,7 @@ fn legacy_four_speed_group_configuration_gains_group_e() {
 }
 
 #[test]
-fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
+fn matter_bridge_writes_and_tracking_feedback_use_explicit_canonical_addresses() {
     let (state, data_dir) = test_state();
     state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     state
@@ -34,22 +43,24 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
         initial
             .lights
             .iter()
-            .map(|light| (light.page, light.playback, light.playback_number))
+            .map(|light| light.address)
             .collect::<Vec<_>>(),
-        vec![(1, 7, 26), (4, 7, 25)]
+        vec![matter_test_address(1,7),matter_test_address(4,7)]
     );
 
-    let physical = state
+    let assigned = state
         .output
         .snapshot()
-        .playbacks
+        .playback_pages
         .iter()
-        .find(|definition| definition.number == 25)
+        .find(|page|page.number == 4)
+        .and_then(|page|page.assignments.get(&7))
         .cloned()
         .unwrap();
     dispatch_playback_action(
         &state,
-        &physical,
+        matter_test_address(4,7),
+        &assigned,
         "fader",
         &PoolPlaybackInput {
             value: Some(0.2),
@@ -63,7 +74,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
             session: None,
             desk: None,
             source: "osc",
-            exclusion_zones: &[],
+            control_source: &matter_test_source(),
             activation_origin: Some(light_playback::PlaybackActivationOrigin {
                 at: state.output.application_time(),
                 desk_id: None,
@@ -77,7 +88,7 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
 
     let status = apply_matter_playback_write(
         &state,
-        matter::endpoint_id(4, 7).unwrap(),
+        matter_test_endpoint(&state,4,7),
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
@@ -88,14 +99,14 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
     let runtime = state.output.playback_runtime();
     let addressed = runtime
         .iter()
-        .find(|playback| playback.playback_number == Some(25))
+        .find(|playback| playback.playback_address == Some(matter_test_address(4,7)))
         .unwrap();
     assert!(addressed.enabled);
     assert!((addressed.master - 0.5).abs() < 0.001);
     assert!(
         (state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(26).unwrap())
+            .playback_runtime_status_at(matter_test_address(1,7))
             .unwrap()
             .playback
             .master
@@ -106,29 +117,28 @@ fn matter_bridge_writes_and_tracking_feedback_use_explicit_global_addresses() {
     assert!(
         runtime
             .iter()
-            .all(|playback| playback.playback_number != Some(26)),
+            .all(|playback| playback.playback_address != Some(matter_test_address(1,7))),
         "page 4/playback 7 must not inherit page 1/playback 7"
     );
     let light = status
         .lights
         .iter()
-        .find(|light| light.page == 4 && light.playback == 7)
+        .find(|light| light.address == matter_test_address(4,7))
         .unwrap();
     assert!(light.on);
     assert_eq!(light.level, 127);
 
     // Automatic tracking/off behavior is mirrored back to the Matter attribute snapshot.
     state
-        .output.execute_playback(EnginePlaybackCommand::Pool {
-            number: 25,
-            action: PoolPlaybackAction::Off,
+        .output.execute_playback(EnginePlaybackCommand::Playback {
+            address:matter_test_address(4,7),action:light_engine::PlaybackAction::Off,activation_origin:None,control_source:matter_test_source(),
         })
         .unwrap();
     let tracked_off = refresh_matter_bridge(&state);
     let light = tracked_off
         .lights
         .iter()
-        .find(|light| light.page == 4 && light.playback == 7)
+        .find(|light| light.address == matter_test_address(4,7))
         .unwrap();
     assert!(!light.on);
     assert_eq!(light.level, 0);
@@ -146,13 +156,12 @@ fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled(
         .installation
         .update_configuration(|configuration| configuration.matter_enabled = true);
     let mut snapshot = matter_test_snapshot();
-    for playback in std::sync::Arc::make_mut(&mut snapshot.playbacks) {
-        playback.go_activates = false;
-        playback.auto_off = false;
+    for page in std::sync::Arc::make_mut(&mut snapshot.playback_pages) {
+      for playback in page.assignments.values_mut() { playback.go_activates=false;playback.auto_off=false; }
     }
     std::sync::Arc::make_mut(&mut snapshot.cue_lists)[0].auto_off_at_zero = false;
     state.output.replace_snapshot(snapshot).unwrap();
-    let endpoint = matter::endpoint_id(4, 7).unwrap();
+    let endpoint = matter_test_endpoint(&state,4,7);
 
     apply_matter_playback_write(
         &state,
@@ -168,7 +177,7 @@ fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled(
         .output
         .playback_runtime()
         .into_iter()
-        .find(|playback| playback.playback_number == Some(25))
+        .find(|playback| playback.playback_address == Some(matter_test_address(4,7)))
         .unwrap();
     assert!(active.enabled);
     assert!((active.master - 0.5).abs() < 0.001);
@@ -187,7 +196,7 @@ fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled(
         .output
         .playback_runtime()
         .into_iter()
-        .find(|playback| playback.playback_number == Some(25))
+        .find(|playback| playback.playback_address == Some(matter_test_address(4,7)))
         .unwrap();
     assert!(!stopped.enabled);
     assert_eq!(stopped.master, 0.0);
@@ -195,130 +204,52 @@ fn matter_fader_explicitly_starts_and_stops_when_authored_policies_are_disabled(
 }
 
 #[test]
-fn matter_activation_checkpoint_keeps_desk_independent_restart_scope() {
-    let (state, data_dir) = test_state();
-    let show = ShowEntry {
-        is_base_show: false,
-        id: light_core::ShowId::new(),
-        name: "Matter restart scope".into(),
-        path: data_dir.join("shows/matter-restart.show").display().to_string(),
-        revision: 1,
-        updated_at: String::new(),
-        created_at: None,
-        last_loaded_at: None,
-        revision_copy: None,
-    };
+fn matter_activation_checkpoint_restores_canonical_origin_and_general_solo_state() {
+    let (state,data_dir)=test_state();
+    let show=ShowEntry { is_base_show:false,id:light_core::ShowId::new(),name:"Matter restart".into(),path:data_dir.join("shows/matter-restart.show").display().to_string(),revision:1,updated_at:String::new(),created_at:None,last_loaded_at:None,revision_copy:None };
     state.active_show.replace_current(Some(show.clone()));
-    let cue_list_id = light_core::CueListId::new();
-    let mut snapshot = restored_exclusion_snapshot(cue_list_id);
-    std::sync::Arc::make_mut(&mut snapshot.playbacks).push(restored_exclusion_playback(
-        2,
-        restored_exclusion_cue_list_id(cue_list_id, 2),
-    ));
-    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0]
-        .slots
-        .insert(2, 2);
+    let mut snapshot=matter_test_snapshot();
+    let mut second=snapshot.cue_lists[0].clone(); second.id=light_core::CueListId::new();
+    let mut first_definition=snapshot.playback_pages[1].assignments[&7].clone();
+    first_definition.target=light_playback::PlaybackTarget::CueList{cue_list_id:snapshot.cue_lists[0].id};
+    let mut second_definition=first_definition.clone(); second_definition.target=light_playback::PlaybackTarget::CueList{cue_list_id:second.id};
+    std::sync::Arc::make_mut(&mut snapshot.cue_lists).push(second);
+    snapshot.playback_pages=vec![light_playback::PlaybackPage {number:1,name:"Matter Solo".into(),assignments:HashMap::from([(1,first_definition),(2,second_definition)])}].into();
+    snapshot.playback_solo_regions=vec![light_playback::PlaybackSoloRegion {id:Uuid::new_v4(),name:"Matter pair".into(),members:vec![matter_test_address(1,1),matter_test_address(1,2)]}].into();
     state.output.replace_snapshot(snapshot).unwrap();
-    state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
-    let desk = state
-        .installation.desk()
-        .unwrap();
-    state
-        .installation.set_desk_page(desk.id, show.id, 1)
-        .unwrap();
-    store_restart_zone(&state, &show, desk.id);
-    let prepared = state
-        .output
-        .prepare_playback_batch(
-            &[light_engine::PlaybackBatchCommand {
-                number: 1_001,
-                page: Some(1),
-                action: light_engine::PlaybackBatchAction::On,
-                exclusion_zones: vec![vec![1_001, 1_002]].into(),
-                activation_origin: Some(light_playback::PlaybackActivationOrigin {
-                    at: state.output.application_time(),
-                    desk_id: Some(desk.id),
-                    surface: light_playback::PlaybackActivationSurface::Virtual,
-                    exclusion_scope: light_playback::PlaybackExclusionScope::Show,
-                }),
-            }],
-            chrono::Utc::now(),
-            0,
-        )
-        .unwrap();
-    state
-        .output
-        .install_prepared_playback_batch(prepared)
-        .unwrap();
-
-    apply_matter_playback_write(
-        &state,
-        matter::endpoint_id(1, 2).unwrap(),
-        matter::MatterPlaybackWrite {
-            on: Some(true),
-            level: None,
-        color: None,
-        },
-    )
-    .unwrap();
-
-    let activation = state
-        .output.playback_runtime()
-        .into_iter()
-        .find(|playback| playback.playback_number == Some(2))
-        .unwrap()
-        .activation
-        .unwrap();
-    assert_eq!(activation.desk_id, None);
-    assert_eq!(
-        activation.surface,
-        light_playback::PlaybackActivationSurface::Matter
-    );
-    assert_eq!(
-        activation.exclusion_scope,
-        light_playback::PlaybackExclusionScope::None
-    );
+    state.installation.update_configuration(|configuration|configuration.matter_enabled=true);
+    state.output.execute_playback(EnginePlaybackCommand::Playback {address:matter_test_address(1,1),action:light_engine::PlaybackAction::On,activation_origin:None,control_source:matter_test_source()}).unwrap();
+    apply_matter_playback_write(&state,matter_test_endpoint(&state,1,2),matter::MatterPlaybackWrite{on:Some(true),..Default::default()}).unwrap();
+    let activation=state.output.playback_runtime().into_iter().find(|playback|playback.playback_address==Some(matter_test_address(1,2))).unwrap().activation.unwrap();
+    assert_eq!(activation.desk_id,None);assert_eq!(activation.surface,light_playback::PlaybackActivationSurface::Matter);
     persist_active_playbacks(&state).unwrap();
-    let checkpoint = state
-        .installation.setting(&active_playbacks_setting(show.id))
-        .unwrap()
-        .unwrap();
-    let restored = serde_json::from_str(&checkpoint).unwrap();
-    state
-        .output.execute_playback(EnginePlaybackCommand::RestoreActive(restored))
-        .unwrap();
-
-    let normalized = normalize_restored_virtual_playback_exclusions(&state).unwrap();
-    assert!(!normalized.provenance_migrated);
-    assert!(normalized.released_playbacks.is_empty());
-    let enabled = state
-        .output.playback_runtime()
-        .into_iter()
-        .filter(|playback| playback.enabled)
-        .filter_map(|playback| playback.playback_number)
-        .collect::<HashSet<_>>();
-    assert_eq!(enabled, HashSet::from([1_001, 2]));
-    let _ = std::fs::remove_dir_all(data_dir);
+    let checkpoint=state.installation.setting(&active_playbacks_setting(show.id)).unwrap().unwrap();
+    state.output.execute_playback(EnginePlaybackCommand::RestoreActive(serde_json::from_str(&checkpoint).unwrap())).unwrap();
+    let enabled=state.output.playback_runtime().into_iter().filter(|playback|playback.enabled).filter_map(|playback|playback.playback_address).collect::<HashSet<_>>();
+    assert_eq!(enabled,HashSet::from([matter_test_address(1,2)]));
+    let _=std::fs::remove_dir_all(data_dir);
 }
 
 #[test]
-fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
+fn matter_master_controls_and_tracks_a_faderless_assignment() {
     let (state, data_dir) = test_state();
     state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     state
         .output.replace_snapshot(matter_test_snapshot())
         .unwrap();
-    let endpoint = matter::endpoint_id(1, 7).unwrap();
+    let endpoint = matter_test_endpoint(&state,1,7);
     let definition = state
         .output.snapshot()
-        .playbacks
+        .playback_pages
         .iter()
-        .find(|definition| definition.number == 26)
+        .find(|page|page.number == 1)
+        .and_then(|page|page.assignments.get(&7))
         .cloned()
         .unwrap();
 
     let rejected = dispatch_playback_action(
         &state,
+        matter_test_address(1,7),
         &definition,
         "fader",
         &PoolPlaybackInput {
@@ -333,7 +264,7 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
             session: None,
             desk: None,
             source: "osc",
-            exclusion_zones: &[],
+            control_source: &matter_test_source(),
             activation_origin: None,
         },
     )
@@ -353,14 +284,14 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
     let runtime = state.output.playback_runtime();
     let active = runtime
         .iter()
-        .find(|playback| playback.playback_number == Some(26))
+        .find(|playback| playback.playback_address == Some(matter_test_address(1,7)))
         .unwrap();
     assert!(active.enabled);
     assert!((active.master - 0.5).abs() < 0.001);
     assert!(
         (state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(26).unwrap())
+            .playback_runtime_status_at(matter_test_address(1,7))
             .unwrap()
             .playback
             .fader_position
@@ -415,16 +346,15 @@ fn matter_virtual_master_controls_and_tracks_a_faderless_assignment() {
         state
             .output.playback_runtime()
             .iter()
-            .find(|playback| playback.playback_number == Some(26))
+            .find(|playback| playback.playback_address == Some(matter_test_address(1,7)))
             .unwrap()
             .master,
         1.0
     );
 
     state
-        .output.execute_playback(EnginePlaybackCommand::Pool {
-            number: 26,
-            action: PoolPlaybackAction::Off,
+        .output.execute_playback(EnginePlaybackCommand::Playback {
+            address:matter_test_address(1,7),action:light_engine::PlaybackAction::Off,activation_origin:None,control_source:matter_test_source(),
         })
         .unwrap();
     let tracked_off = refresh_matter_bridge(&state);
@@ -443,7 +373,6 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
     let (state, data_dir) = test_state();
     state.installation.update_configuration(|configuration| configuration.matter_enabled = true);
     let definition = |number, target, fader| light_playback::PlaybackDefinition {
-        number,
         name: format!("Matter playback {number}"),
         target,
         buttons: [light_playback::PlaybackButtonAction::None; 3],
@@ -467,7 +396,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
                 name: "Front".into(),
                 ..Default::default()
             }].into(),
-            playbacks: vec![
+            playback_pages:vec![light_playback::PlaybackPage {number:1,name:"Matter".into(),assignments:(vec![
                 definition(
                     1,
                     light_playback::PlaybackTarget::Group {
@@ -496,13 +425,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
                     light_playback::PlaybackTarget::GrandMaster,
                     light_playback::PlaybackFaderMode::Master,
                 ),
-            ].into(),
-            playback_pages: vec![light_playback::PlaybackPage {
-                number: 1,
-                name: "Matter".into(),
-                slots: HashMap::from([(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)]),
-                virtual_playbacks: HashMap::new(),
-            }].into(),
+            ]).into_iter().enumerate().map(|(index,definition)|((index+1) as u16,definition)).collect()}].into(),
             ..Default::default()
         })
         .unwrap();
@@ -511,7 +434,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
     let activation = state.active_show.acquire_blocking();
     let rejected = apply_matter_playback_write(
         &state,
-        matter::endpoint_id(1, 1).unwrap(),
+        matter_test_endpoint(&state,1,1),
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
@@ -525,7 +448,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
 
     apply_matter_playback_write(
         &state,
-        matter::endpoint_id(1, 1).unwrap(),
+        matter_test_endpoint(&state,1,1),
         matter::MatterPlaybackWrite {
             on: None,
             level: Some(127),
@@ -536,7 +459,7 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
     for playback in 2..=5 {
         let rejected = apply_matter_playback_write(
             &state,
-            matter::endpoint_id(1, playback).unwrap(),
+            playback,
             matter::MatterPlaybackWrite {
                 on: None,
                 level: Some(127),
@@ -557,10 +480,10 @@ fn matter_writes_reach_eligible_faderless_groups_and_reject_ineligible_targets()
     );
     let matter_values = matter_playback_values(&state, &state.output.snapshot());
     assert!(
-        (matter_values[&1].level - 0.5).abs() < 0.001,
+        (matter_values[&matter_test_address(1,1)].level - 0.5).abs() < 0.001,
         "Matter feedback uses the shared Group Master runtime level"
     );
-    let endpoint = matter::endpoint_id(1, 1).unwrap();
+    let endpoint = matter_test_endpoint(&state,1,1);
     let before_color = refresh_matter_bridge(&state);
     let color_write = matter::MatterColorWrite::ColorTemperature { mireds: 250 };
     let after_color = apply_matter_playback_write(

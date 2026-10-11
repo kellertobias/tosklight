@@ -15,7 +15,7 @@ use crate::light_benchmark::{
     semantic_workload::OMITTED,
 };
 use light_core::{AttributeKey, AttributeValue, FixtureId, ManualClock, SessionId};
-use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction};
+use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PlaybackAction};
 use light_programmer::ProgrammerRegistry;
 use std::{net::SocketAddr, path::Path, sync::Arc};
 
@@ -145,7 +145,12 @@ pub(super) fn build(
                 .collect::<Vec<_>>()
                 .into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Benchmark".into(),
+                assignments: std::collections::HashMap::from([(1, playback)]),
+            }]
+            .into(),
             routes: output_routes.into(),
             groups: vec![group].into(),
             revision: 1,
@@ -153,9 +158,14 @@ pub(super) fn build(
         })
         .map_err(|error| error.to_string())?;
     engine
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 1,
-            action: PoolPlaybackAction::Go,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).expect("valid benchmark address"),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "benchmark".into(),
+                control_id: 1,
+            },
+            action: PlaybackAction::Go,
         })
         .map_err(|error| format!("activate headless stress playback: {error}"))?;
     programmers.set_many(

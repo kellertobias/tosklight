@@ -1,3 +1,4 @@
+import { TouchEncoder } from "../encoders/TouchEncoder";
 import type {
 	CSSProperties,
 	MouseEventHandler,
@@ -53,6 +54,7 @@ export interface PlaybackCardViewModel {
 	className?: string;
 	style?: CSSProperties;
 	color?: string;
+	presentation?: "fader" | "buttons" | "push_encoder";
 	hasFader: boolean;
 	faderValue: number;
 	faderLabel: string;
@@ -299,7 +301,9 @@ export function TouchPlaybackCardView({
 	slots?: PlaybackCardSlots;
 }) {
 	const hasFader = model.assigned && model.hasFader;
-	const singleFaderlessAction = !hasFader && model.actions.length === 1;
+	const pushEncoder = model.presentation === "push_encoder";
+	const singleFaderlessAction =
+		!hasFader && !pushEncoder && model.actions.length === 1;
 	return (
 		// biome-ignore lint/a11y/useKeyWithClickEvents: The article delegates keyboard interaction to its real child controls.
 		<article
@@ -317,7 +321,7 @@ export function TouchPlaybackCardView({
 			{!singleFaderlessAction && (
 				<PlaybackTopWidget summary={model.summary} status={model.status} />
 			)}
-			{hasFader && (
+			{hasFader && !pushEncoder && (
 				<VerticalTouchFaderSurface
 					hardware={false}
 					disabled={model.disabled || !model.assigned}
@@ -330,9 +334,24 @@ export function TouchPlaybackCardView({
 					onChange={callbacks.onFaderChange}
 				/>
 			)}
-			{singleFaderlessAction && (
-				<SingleFaderlessPlaybackAction model={model} />
+			{pushEncoder && model.assigned && (
+				<section className="playback-push-encoder">
+					<TouchEncoder
+						label={model.faderLabel}
+						value={model.faderValue / 100}
+						display={model.faderDisplay}
+						disabled={model.disabled}
+						onSet={(value) => callbacks.onFaderChange?.(value * 100)}
+						onStep={(delta) =>
+							callbacks.onFaderChange?.(
+								Math.min(100, Math.max(0, model.faderValue + delta * 100)),
+							)
+						}
+					/>
+					<PlaybackActionButtons actions={model.actions} />
+				</section>
 			)}
+			{singleFaderlessAction && <SingleFaderlessPlaybackAction model={model} />}
 			{!hasFader && model.actions.length > 1 && (
 				<footer
 					className={`faderless-playback-actions action-count-${model.actions.length}`}

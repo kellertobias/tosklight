@@ -2,26 +2,21 @@ use super::*;
 
 pub(super) fn cuelist_for_page_playback(
     snapshot: &EngineSnapshot,
-    page_number: u8,
-    slot: u8,
-) -> Option<u16> {
-    let number = snapshot
+    page: u8,
+    position: u16,
+) -> Option<light_playback::PlaybackAddress> {
+    snapshot
         .playback_pages
         .iter()
-        .find(|page| page.number == page_number)?
-        .slots
-        .get(&slot)
-        .copied()?;
-    snapshot
-        .playbacks
-        .iter()
-        .any(|definition| definition.number == number)
-        .then_some(number)
+        .find(|candidate| candidate.number == page)?
+        .assignments
+        .get(&position)?;
+    light_playback::PlaybackAddress::new(page, position).ok()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ExpandedOscBinding {
-    pub(super) anchor_slot: u8,
+    pub(super) anchor_slot: u16,
     pub(super) position: ExpandedOscPosition,
 }
 
@@ -32,73 +27,49 @@ pub(super) enum ExpandedOscPosition {
 }
 
 pub(super) fn expanded_osc_binding(
+    state: &AppState,
     snapshot: &EngineSnapshot,
     page_number: u8,
     desk: &ControlDesk,
-    claimed_slot: u8,
+    claimed_slot: u16,
 ) -> Option<ExpandedOscBinding> {
     let page = snapshot
         .playback_pages
         .iter()
         .find(|page| page.number == page_number)?;
-    if page.slots.contains_key(&claimed_slot) {
+    if page.assignments.contains_key(&claimed_slot) {
         return None;
     }
-    let rows = desk.playback_layout.clone().unwrap_or_else(|| {
-        let columns = desk.columns.max(1);
-        light_show::PlaybackSurfaceLayout {
-            playbacks_per_row: columns,
-            rows: (0..desk.rows)
-                .map(|row| light_show::PlaybackSurfaceRow {
-                    first_playback_slot: 1 + row.saturating_mul(columns),
-                    has_fader: true,
-                    button_count: desk.buttons,
-                })
-                .collect(),
-        }
-    });
+    let registry = state.installation.playback_surfaces(desk.id).ok()?;
+    let layout = &registry.get(&desk.surface_id)?.layout;
     let mut claimants = Vec::new();
-    for (row_index, row) in rows.rows.iter().enumerate() {
-        for column in 0..rows.playbacks_per_row {
-            let anchor_slot = row.first_playback_slot.saturating_add(column);
-            let Some(number) = page.slots.get(&anchor_slot) else {
-                continue;
-            };
-            let Some(definition) = snapshot
-                .playbacks
-                .iter()
-                .find(|definition| definition.number == *number)
-            else {
+    for (row_index, row) in layout.rows.iter().enumerate() {
+        for column in 0..row.count {
+            let anchor_slot = row.first_position.checked_add(column)?;
+            let Some(definition) = page.assignments.get(&anchor_slot) else {
                 continue;
             };
             let target = match definition.footprint {
                 light_playback::PlaybackFootprint::Normal => None,
                 light_playback::PlaybackFootprint::Taller { .. } if row_index > 0 => {
-                    let upper = &rows.rows[row_index - 1];
-                    (upper.button_count > 0).then_some((
-                        upper.first_playback_slot.saturating_add(column),
+                    let upper = &layout.rows[row_index - 1];
+                    (upper.button_count > 0 && column < upper.count).then_some((
+                        upper.first_position + column,
                         ExpandedOscPosition::TallerUpper,
                     ))
                 }
-                light_playback::PlaybackFootprint::Taller { .. } => None,
-                light_playback::PlaybackFootprint::Wider { .. }
-                    if column + 1 < rows.playbacks_per_row =>
-                {
-                    Some((
-                        anchor_slot.saturating_add(1),
-                        ExpandedOscPosition::WiderRight,
-                    ))
+                light_playback::PlaybackFootprint::Wider { .. } if column + 1 < row.count => {
+                    Some((anchor_slot + 1, ExpandedOscPosition::WiderRight))
                 }
-                light_playback::PlaybackFootprint::Wider { .. } => None,
+                _ => None,
             };
-            if let Some((target_slot, position)) = target
-                && target_slot == claimed_slot
-                && !page.slots.contains_key(&target_slot)
-            {
-                claimants.push(ExpandedOscBinding {
-                    anchor_slot,
-                    position,
-                });
+            if let Some((position, kind)) = target {
+                if position == claimed_slot && !page.assignments.contains_key(&position) {
+                    claimants.push(ExpandedOscBinding {
+                        anchor_slot,
+                        position: kind,
+                    });
+                }
             }
         }
     }
@@ -107,17 +78,18 @@ pub(super) fn expanded_osc_binding(
 
 pub(super) fn update_target_for_playback(
     state: &AppState,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
 ) -> Result<UpdateApiTarget, String> {
     match &definition.target {
         light_playback::PlaybackTarget::CueList { cue_list_id } => {
             let context = active_update_cue_contexts(state)
                 .into_iter()
-                .find(|context| context.playback_number == definition.number);
+                .find(|context| context.playback_address == address);
             Ok(UpdateApiTarget {
                 family: UpdateApiTargetFamily::Cue,
                 object_id: Some(cue_list_id.0.to_string()),
-                playback_number: Some(definition.number),
+                playback_address: Some(address),
                 cue_id: context.as_ref().map(|context| context.cue_id),
                 cue_number: context.map(|context| context.cue_number.to_string()),
                 validate_active_context: true,
@@ -126,14 +98,14 @@ pub(super) fn update_target_for_playback(
         light_playback::PlaybackTarget::Group { group_id, .. } => Ok(UpdateApiTarget {
             family: UpdateApiTargetFamily::Group,
             object_id: Some(group_id.clone()),
-            playback_number: Some(definition.number),
+            playback_address: Some(address),
             cue_id: None,
             cue_number: None,
             validate_active_context: false,
         }),
         _ => Err(format!(
             "Playback {} is not assigned to a recordable Update target",
-            definition.number
+            format!("{}.{}", address.page(), address.position())
         )),
     }
 }
@@ -141,6 +113,7 @@ pub(super) fn update_target_for_playback(
 pub(super) fn intercept_update_playback_target(
     state: &AppState,
     session: &Session,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     touched: bool,
 ) -> bool {
@@ -152,7 +125,7 @@ pub(super) fn intercept_update_playback_target(
     {
         return false;
     }
-    let target = match update_target_for_playback(state, definition) {
+    let target = match update_target_for_playback(state, address, definition) {
         Ok(target) => target,
         Err(error) => {
             emit(
@@ -161,7 +134,7 @@ pub(super) fn intercept_update_playback_target(
                 serde_json::json!({
                     "desk_id":session.desk.id,
                     "session_id":session.id,
-                    "playback_number":definition.number,
+                    "playback_address":address,
                     "source":"osc",
                     "error":error,
                 }),
@@ -258,43 +231,13 @@ fn handle_osc_page(state: &AppState, parts: &[&str], arguments: &[OscArgument]) 
 }
 
 pub(super) fn osc_playback_address(parts: &[&str]) -> Option<(PlaybackAddress, usize)> {
-    if parts.len() >= 6
-        && parts.first() == Some(&"light")
-        && parts.get(2) == Some(&"virtual-playback")
-    {
-        let page = parts[3].parse::<u8>().ok()?;
-        let number = parts[4].parse::<u16>().ok()?;
-        let address = light_playback::VirtualPlaybackAddress::new(page, number).ok()?;
-        Some((PlaybackAddress::Virtual(address), 5))
-    } else if parts.len() >= 5
-        && parts.first() == Some(&"light")
-        && parts.get(1) == Some(&"playback")
-    {
-        let page = parts[2].parse::<u8>().ok()?;
-        let slot = parts[3].parse::<u8>().ok()?;
-        Some((PlaybackAddress::ExplicitPage { page, slot }, 4))
-    } else if parts.len() >= 4
-        && parts.first() == Some(&"light")
-        && parts
-            .get(1)
-            .is_some_and(|name| *name == "cuelist" || *name == "qlist" || *name == "playback")
-    {
-        Some((PlaybackAddress::Pool(parts[2].parse::<u16>().ok()?), 3))
-    } else if parts.len() >= 5
-        && parts.first() == Some(&"light")
-        && parts
-            .get(2)
-            .is_some_and(|name| *name == "page-playback" || *name == "paged-playback")
-    {
-        Some((
-            PlaybackAddress::CurrentPage {
-                slot: parts[3].parse::<u8>().ok()?,
-            },
-            4,
-        ))
-    } else {
-        None
+    if parts.len() < 6 || parts.first() != Some(&"light") || parts.get(2) != Some(&"playback") {
+        return None;
     }
+    let address =
+        light_playback::PlaybackAddress::new(parts[3].parse().ok()?, parts[4].parse().ok()?)
+            .ok()?;
+    Some((PlaybackAddress::Playback(address), 5))
 }
 
 pub(super) fn osc_playback_session(
@@ -334,13 +277,7 @@ fn osc_playback_context(
     source: Option<&str>,
 ) -> Result<(Option<SocketAddr>, Option<ControlDesk>, Option<Session>), ()> {
     let source_socket = source.and_then(|source| source.parse::<SocketAddr>().ok());
-    let path_alias = if parts.get(2).is_some_and(|part| {
-        *part == "page-playback" || *part == "paged-playback" || *part == "virtual-playback"
-    }) {
-        Some(parts[1])
-    } else {
-        None
-    };
+    let path_alias = parts.get(1).copied();
     let subscribed =
         source_socket.and_then(|source| state.integrations.osc_subscriber_for_source(source));
     let action_alias = path_alias
@@ -370,19 +307,7 @@ pub(super) fn handle_playback_osc(
     arguments: &[OscArgument],
     source: Option<&str>,
 ) -> bool {
-    // Preserve the three established OSC address families as distinct typed intents:
-    //
-    // - `/light/playback/{page}/{slot}` always targets that explicit page.
-    // - `/light/{desk}/virtual-playback/{page}/{number}` targets one dedicated Virtual
-    //   Playback identity without aliasing a physical page slot.
-    // - `/light/{desk}/page-playback/{slot}` resolves the desk's current page under the
-    //   PlaybackService operation gate.
-    // - `/light/playback/{number}` and its Cuelist aliases address the global pool directly.
-    //
-    // Keeping this distinction until the application boundary prevents page changes from
-    // retargeting explicit hardware input while retaining current-page behavior for desk wings.
-    // Parsing stops at typed intent here; address resolution and mutation ordering stay in the
-    // application service, alongside the HTTP and compatibility WebSocket paths.
+    // Explicit address and stable source are retained across page changes and release.
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
     let (pressed, value) = osc_playback_values(arguments);
     if handle_osc_page(state, &parts, arguments) {
@@ -421,30 +346,55 @@ pub(super) fn handle_playback_osc(
     } else {
         parts[action_index]
     };
-    if let (PlaybackAddress::CurrentPage { slot }, Some(desk), Some(show)) = (
-        playback_address.clone(),
-        action_desk.as_ref(),
-        state.active_show.current().clone(),
-    ) && let Ok(page) = state.installation.desk_page(desk.id, show.id)
-        && let Some(binding) = expanded_osc_binding(&state.output.snapshot(), page, desk, slot)
+    if let (PlaybackAddress::Playback(address), Some(desk)) =
+        (playback_address.clone(), action_desk.as_ref())
     {
-        playback_address = PlaybackAddress::CurrentPage {
-            slot: binding.anchor_slot,
-        };
-        match (binding.position, action) {
-            (ExpandedOscPosition::TallerUpper, "button") if input.button == Some(1) => {
-                input.button = Some(4);
+        if let Some(binding) = expanded_osc_binding(
+            state,
+            &state.output.snapshot(),
+            address.page(),
+            desk,
+            address.position(),
+        ) {
+            playback_address = PlaybackAddress::Playback(
+                light_playback::PlaybackAddress::new(address.page(), binding.anchor_slot)
+                    .expect("validated layout address"),
+            );
+            match (binding.position, action) {
+                (ExpandedOscPosition::TallerUpper, "button") if input.button == Some(1) => {
+                    input.button = Some(4)
+                }
+                (ExpandedOscPosition::WiderRight, "button") => {
+                    input.button = input.button.and_then(|button| button.checked_add(3))
+                }
+                (ExpandedOscPosition::WiderRight, "master") => {
+                    action = "configured-fader";
+                    input.button = Some(2);
+                }
+                _ => return false,
             }
-            (ExpandedOscPosition::WiderRight, "button") => {
-                input.button = input.button.and_then(|button| button.checked_add(3));
-            }
-            (ExpandedOscPosition::WiderRight, "master") => {
-                action = "configured-fader";
-                input.button = Some(2);
-            }
-            _ => return false,
         }
     }
+    let fallback_control_id = match &playback_address {
+        PlaybackAddress::Playback(address) => {
+            address.position().saturating_mul(8) + u16::from(input.button.unwrap_or(6))
+        }
+        _ => 0,
+    };
+    let control_id = match arguments.get(1) {
+        Some(OscArgument::Int(value)) => match u16::try_from(*value) {
+            Ok(value) => value,
+            Err(_) => return false,
+        },
+        None => fallback_control_id,
+        _ => return false,
+    };
+    let control_source = light_playback::PlaybackControlSource {
+        surface_id: source_socket
+            .and_then(|socket| state.integrations.osc_control_source_for_source(socket))
+            .unwrap_or_else(|| format!("osc:{}", source.unwrap_or("local"))),
+        control_id,
+    };
     let suppression_input =
         osc_suppression_input(session.as_ref(), source_socket, address, action, pressed);
     if suppression_input.is_some_and(|input| {
@@ -499,6 +449,7 @@ pub(super) fn handle_playback_osc(
         playback_address,
         action,
         &input,
+        control_source,
     ) else {
         return false;
     };
@@ -507,13 +458,13 @@ pub(super) fn handle_playback_osc(
     }
     let changed = matches!(
         result.execution,
-        PlaybackExecution::Pool { changed: true, .. }
+        PlaybackExecution::Playback { changed: true, .. }
     );
-    if changed && let Some(number) = result.resolved.playback_number() {
+    if changed && let Some(number) = result.resolved.playback_address() {
         emit(
             state,
             "playback_changed",
-            serde_json::json!({"playback_number":number,"action":action,"source":"osc","session_id":session.map(|session|session.id)}),
+            serde_json::json!({"playback_address":number,"action":action,"source":"osc","session_id":session.map(|session|session.id)}),
         );
     }
     true
@@ -561,48 +512,20 @@ fn is_physical_record_target(
         return false;
     }
     let snapshot = state.output.snapshot();
-    let playback = match address {
-        PlaybackAddress::Pool(number) => snapshot
-            .playbacks
-            .iter()
-            .find(|playback| playback.number == *number),
-        PlaybackAddress::ExplicitPage { page, slot } => snapshot
-            .playback_pages
-            .iter()
-            .find(|candidate| candidate.number == *page)
-            .and_then(|page| page.slots.get(slot))
-            .and_then(|number| {
-                snapshot
-                    .playbacks
-                    .iter()
-                    .find(|playback| playback.number == *number)
-            }),
-        PlaybackAddress::CurrentPage { slot } => state
-            .active_show
-            .current()
-            .as_ref()
-            .zip(desk)
-            .and_then(|(show, desk)| state.installation.desk_page(desk.id, show.id).ok())
-            .and_then(|page_number| {
-                snapshot
-                    .playback_pages
-                    .iter()
-                    .find(|page| page.number == page_number)
-            })
-            .and_then(|page| page.slots.get(slot))
-            .and_then(|number| {
-                snapshot
-                    .playbacks
-                    .iter()
-                    .find(|playback| playback.number == *number)
-            }),
-        PlaybackAddress::Virtual(address) => snapshot
+    let concrete = match address {
+        PlaybackAddress::Playback(address) => Some(*address),
+        PlaybackAddress::CurrentPage { position } => desk
+            .and_then(|desk| state.installation.command_page(desk.id).ok())
+            .and_then(|page| light_playback::PlaybackAddress::new(page, *position).ok()),
+        PlaybackAddress::CueList(_) | PlaybackAddress::Group(_) => None,
+    };
+    let playback = concrete.and_then(|address| {
+        snapshot
             .playback_pages
             .iter()
             .find(|page| page.number == address.page())
-            .and_then(|page| page.virtual_playbacks.get(&address.number().get())),
-        PlaybackAddress::CueList(_) | PlaybackAddress::Group(_) => None,
-    };
+            .and_then(|page| page.assignments.get(&address.position()))
+    });
     playback.is_none_or(|playback| playback.button_count == 0)
 }
 

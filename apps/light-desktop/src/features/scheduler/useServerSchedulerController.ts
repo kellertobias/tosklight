@@ -250,15 +250,13 @@ function target(
 ): ScheduleDefinition["target"] {
 	if (wire.type === "macro")
 		return { type: "macro", macroId: wire.macro_id, label: wire.macro_id };
-	const id = `${wire.page}:${wire.slot}:${wire.playback_number}`;
+	const id = `${wire.address.page}:${wire.address.position}`;
 	const known = targets.find((candidate) => candidate.id === id);
 	return {
 		type: "playback",
 		playbackId: id,
-		label: known?.label ?? `Playback ${wire.playback_number}`,
-		page: wire.page,
-		slot: wire.slot,
-		playback: wire.playback_number,
+		label: known?.label ?? `Page ${wire.address.page} Playback ${wire.address.position}`,
+		address: {...wire.address},
 		action: wire.action,
 		masterPercent: wire.master_transition
 			? wire.master_transition.level * 100
@@ -293,9 +291,7 @@ function wireTarget(draft: ScheduleDraft): WireTarget {
 		return { type: "macro", macro_id: draft.target.macroId };
 	return {
 		type: "playback",
-		page: draft.target.page,
-		slot: draft.target.slot,
-		playback_number: draft.target.playback,
+		address: {...draft.target.address},
 		action: draft.target.action,
 		master_transition:
 			draft.target.masterPercent == null
@@ -310,23 +306,17 @@ function wireTarget(draft: ScheduleDraft): WireTarget {
 function playbackTargets(
 	objects: ReturnType<ShowObjectsStore["getSnapshot"]>,
 ): PlaybackScheduleTarget[] {
-	const playbacks = new Map(
-		objects.playbacks.map((playback) => [playback.body.number, playback.body]),
-	);
 	const result: PlaybackScheduleTarget[] = [];
 	for (const page of objects.playbackPages) {
-		for (const [slotValue, playbackNumber] of Object.entries(page.body.slots)) {
+		for (const [slotValue, playback] of Object.entries(page.body.assignments)) {
 			const slot = Number(slotValue);
-			const playback = playbacks.get(playbackNumber);
 			if (!playback) continue;
 			const type = playback.target.type;
 			if (!["cue_list", "dynamic", "group"].includes(type)) continue;
 			result.push({
-				id: `${page.body.number}:${slot}:${playbackNumber}`,
+				id: `${page.body.number}:${slot}`,
 				label: playback.name,
-				page: page.body.number,
-				slot,
-				playback: playbackNumber,
+				address: {page:page.body.number,position:slot},
 				supportedActions:
 					type === "group"
 						? ["on", "off", "release", "toggle"]
@@ -336,7 +326,7 @@ function playbackTargets(
 		}
 	}
 	return result.sort(
-		(left, right) => left.page - right.page || left.slot - right.slot,
+		(left, right) => left.address.page - right.address.page || left.address.position - right.address.position,
 	);
 }
 

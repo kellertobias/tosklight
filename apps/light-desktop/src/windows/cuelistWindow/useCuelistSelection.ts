@@ -3,26 +3,24 @@ import {
 	useCueListRuntime,
 	useDirectCueListProjectionMap,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
-import { legacyPlaybackRuntime } from "../../features/playbackRuntime/legacy";
+import { playbackControlRuntime } from "../../features/playbackRuntime/controlRuntime";
 import { cuelistPoolCatalog } from "../../features/playbackTopology/cuelistPoolCatalog";
 import {
 	useCueLists,
-	usePlaybackDefinitions,
 	usePlaybackPages,
 } from "../../features/showObjects/ShowObjectsState";
 
 export function useCuelistPool() {
 	const lists = useCueLists();
-	const playbacks = usePlaybackDefinitions();
 	const pages = usePlaybackPages();
 	return useMemo(
 		() =>
 			cuelistPoolCatalog(
 				lists.map((object) => object.body),
-				playbacks.map((object) => object.body),
+				pages.flatMap(({body}) => Object.entries(body.assignments).map(([position, definition]) => ({...definition, address: {page: body.number, position: Number(position)}}))),
 				pages.length === 0,
 			),
-		[lists, playbacks, pages],
+		[lists, pages],
 	);
 }
 
@@ -30,7 +28,6 @@ export function useSelectedCuelist(
 	selectedCuelist: number | null,
 	enabled = true,
 	fixedCueListId?: string,
-	assignmentNumber?: number | null,
 ) {
 	const pool = useCuelistPool();
 	const cueLists = useCueLists();
@@ -42,24 +39,7 @@ export function useSelectedCuelist(
 	const selectedCueObject = id
 		? cueLists.find((object) => object.body.id === id)
 		: undefined;
-	const ownerNumber =
-		assignmentNumber === null
-			? undefined
-			: (assignmentNumber ??
-				(entry?.cueList.pool_number == null
-					? entry?.assignment?.number
-					: undefined));
-	const assigned = useCueListRuntime(
-		enabled && ownerNumber != null ? id : null,
-		ownerNumber,
-	);
-	const direct = useDirectCueListProjectionMap(
-		enabled && id ? [id] : [],
-		enabled,
-	);
-	const projection = id ? direct.projections.get(id) : undefined;
-	const active =
-		ownerNumber != null ? assigned : legacyPlaybackRuntime(projection);
+	const active = useCueListRuntime(enabled ? id : null);
 	return {
 		pool,
 		selectedPlaybackDefinition: entry,

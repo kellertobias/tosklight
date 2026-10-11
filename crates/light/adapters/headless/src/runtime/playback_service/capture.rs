@@ -6,89 +6,57 @@ impl ServerPlaybackPorts<'_> {
     pub(super) fn capture(
         &self,
         context: &ActionContext,
+        address: light_playback::PlaybackAddress,
         definition: &light_playback::PlaybackDefinition,
         action_name: &str,
         input: &PoolPlaybackInput,
-        surface: PlaybackSurface,
-        page: Option<u8>,
+        control_source: &light_playback::PlaybackControlSource,
     ) -> Result<Option<PendingPlaybackAction>, ActionError> {
         let Some(session) = self.session else {
             return Ok(None);
         };
-        let pending = if matches!(action_name, "master" | "fader")
-            && matches!(
-                definition.target,
-                light_playback::PlaybackTarget::Dynamic { .. }
-            ) {
-            input
-                .value
-                .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
-                .map(
-                    |value| light_programmer::PreloadPlaybackQueueAction::Fader {
-                        value_permyriad: (value * 10_000.0).round() as u16,
-                    },
-                )
-        } else {
-            let temp = predicted_preload_temp_state(self.state, session.id, definition.number);
+        if !self
+            .state
+            .programming
+            .capture_mode(session.id)
+            .is_some_and(|mode| mode.blind)
+            || !capture_enabled(self.state, address)
+        {
+            return Ok(None);
+        }
+        let temp = predicted_preload_temp_state(self.state, session.id, address);
+        let Some(pending) =
             preload_capture_action_with_temp_state(definition, action_name, input, temp)
                 .map_err(api_action_error)?
                 .map(light_programmer::PreloadPlaybackQueueAction::try_from)
                 .transpose()
-                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?
-        };
-        if !self.should_capture(session, pending.as_ref(), surface) {
+                .map_err(invalid)?
+        else {
             return Ok(None);
-        }
-        let pending = pending.expect("capture requires a pending action");
-        self.queue_capture(context, session, definition.number, pending, surface, page)?;
-        Ok(Some(parse_pending(pending)))
-    }
-
-    fn should_capture(
-        &self,
-        session: &Session,
-        pending: Option<&light_programmer::PreloadPlaybackQueueAction>,
-        surface: PlaybackSurface,
-    ) -> bool {
-        self.state
-            .programming
-            .capture_mode(session.id)
-            .is_some_and(|mode| mode.blind)
-            && pending.is_some()
-            && capture_enabled(self.state, surface)
-    }
-
-    fn queue_capture(
-        &self,
-        context: &ActionContext,
-        session: &Session,
-        number: u16,
-        pending: light_programmer::PreloadPlaybackQueueAction,
-        surface: PlaybackSurface,
-        page: Option<u8>,
-    ) -> Result<(), ActionError> {
-        let queue_surface =
-            light_programmer::PreloadPlaybackQueueSurface::try_from(surface_name(surface))
-                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?;
-        self.state
+        };
+        control_source.validate().map_err(invalid)?;
+        if !self
+            .state
             .programming
             .queue_preload_playback_action_with_origin(
                 session.id,
-                number,
-                page,
+                address,
                 pending,
-                queue_surface,
-                Some(session.desk.id),
-            );
+                control_source.clone(),
+                Some(context.desk_id),
+            )
+        {
+            return Err(invalid("Preload capture state is unavailable"));
+        }
         if let Err(error) = persist_programmer(self.state, session) {
             self.mark_persistence_pending(context, "programmer", error);
         }
         emit(
             self.state,
             "programmer_changed",
-            serde_json::json!({"session_id":session.id,"preload_playback_action":pending.legacy_name(),"playback_number":number,"surface":surface_name(surface),"page":page,"changes":["preload_playback_queue"]}),
+            serde_json::json!({"session_id":session.id,"preload_playback_action":pending.legacy_name(),"address":address,"control_source":control_source,"changes":["preload_playback_queue"]}),
         );
-        Ok(())
+        Ok(Some(parse_pending(pending)))
     }
 
     pub(super) fn mark_persistence_pending(

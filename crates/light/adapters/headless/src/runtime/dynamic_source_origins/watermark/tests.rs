@@ -2,8 +2,8 @@ use super::*;
 
 fn sequence() -> DynamicSequenceSource {
     DynamicSequenceSource {
-        playback_number: Some(4),
-        playback_identity: Some(PlaybackIdentity::physical(4).unwrap()),
+        control_source_id: None,
+        playback_address: Some(PlaybackAddress::new(1, 4).unwrap()),
         cue_list_id: CueListId::new(),
         temporary: false,
     }

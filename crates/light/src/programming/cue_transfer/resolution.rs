@@ -79,7 +79,7 @@ fn same_endpoint(
     current: &ResolvedCueTransferEndpoint,
     expected: &ResolvedCueTransferEndpoint,
 ) -> bool {
-    current.playback_number == expected.playback_number
+    current.playback_address == expected.playback_address
         && current.cue_list_id == expected.cue_list_id
         && current.object_id == expected.object_id
         && current.object_revision == expected.object_revision
@@ -90,12 +90,12 @@ pub(super) fn resolve_endpoint(
     endpoint: ProgrammingCueTransferEndpoint,
 ) -> Result<ResolvedCueTransferEndpoint, ActionError> {
     let resolved = resolve_cue_list(document, cue_list_address(endpoint.address)?)?;
-    let playback_number = resolved.playback_number;
+    let playback_address = resolved.playback_address;
     let stored = resolved.stored;
     let cue_list_id = stored.typed.id;
     Ok(ResolvedCueTransferEndpoint {
         requested: endpoint,
-        playback_number,
+        playback_address,
         cue_list_id,
         object_id: stored.object_id,
         object_revision: stored.object_revision,
@@ -114,12 +114,7 @@ fn cue_list_address(address: ProgrammingCueTransferAddress) -> Result<CueListAdd
             CueListAddress::CuelistPool { number }
         }
         ProgrammingCueTransferAddress::CueList { id } => CueListAddress::CueList { id },
-        ProgrammingCueTransferAddress::Pool { playback_number } => {
-            CueListAddress::Pool { playback_number }
-        }
-        ProgrammingCueTransferAddress::PageSlot { page, slot } => {
-            CueListAddress::PageSlot { page, slot }
-        }
+        ProgrammingCueTransferAddress::Playback { address } => CueListAddress::Playback { address },
     })
 }
 
@@ -186,17 +181,6 @@ fn validate_address(address: ProgrammingCueTransferAddress) -> Result<(), Action
         ProgrammingCueTransferAddress::SelectedCuelist => Err(invalid(
             "selected Cuelist must be resolved by the initiating desk",
         )),
-        ProgrammingCueTransferAddress::Pool { playback_number }
-            if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
-        {
-            Err(invalid("playback number must be within 1-1000"))
-        }
-        ProgrammingCueTransferAddress::PageSlot { page, slot }
-            if !(1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page)
-                || !(1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            Err(invalid("page and slot must be within 1-127"))
-        }
         _ => Ok(()),
     }
 }

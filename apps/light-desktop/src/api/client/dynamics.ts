@@ -44,26 +44,10 @@ export class DynamicsApiClient {
 		const request = dynamicRuntimeStopRequest(
 			owner,
 			identity,
-			crypto.randomUUID(),
 		);
-		const value = await this.transport.sendAction(
-			{ type: "playback", request },
-			request.request_id,
-		);
+		const value = await this.transport.sendAction({type: "playback", request});
 		const outcome = decodePlaybackOutcome(value);
-		if (
-			outcome.request_id !== request.request_id ||
-			!(
-				(outcome.requested.kind === "playback" &&
-					request.address.kind === "playback" &&
-					outcome.requested.playback_number ===
-						request.address.playback_number) ||
-				(outcome.requested.kind === "virtual" &&
-					request.address.kind === "virtual" &&
-					outcome.requested.page === request.address.page &&
-					outcome.requested.playback_number === request.address.playback_number)
-			)
-		)
+		if (outcome.requested.kind !== "playback" || request.address.kind !== "playback" || outcome.requested.page !== request.address.page || outcome.requested.position !== request.address.position)
 			throw new WireValidationError(
 				"$.requested",
 				"the exact requested Dynamic stop owner",

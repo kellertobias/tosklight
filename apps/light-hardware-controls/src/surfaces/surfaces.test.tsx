@@ -17,7 +17,13 @@ afterEach(cleanup);
 describe("hardware controller surfaces", () => {
 	it("keeps the playback and programmer console labels", () => {
 		const playback = renderToStaticMarkup(
-			<PlaybackSurface topRowVisible levels={{}} lamps={{}} send={send} />,
+			<PlaybackSurface
+				page={1}
+				topRowVisible
+				levels={{}}
+				lamps={{}}
+				send={send}
+			/>,
 		);
 		const programmer = renderToStaticMarkup(
 			<ProgrammerSurface
@@ -40,7 +46,13 @@ describe("hardware controller surfaces", () => {
 
 	it("keeps the expanded grid and speed-group surfaces", () => {
 		const markup = renderToStaticMarkup(
-			<GridSurface levels={{}} lamps={{}} speedBpms={{}} send={send} />,
+			<GridSurface
+				page={1}
+				levels={{}}
+				lamps={{}}
+				speedBpms={{}}
+				send={send}
+			/>,
 		);
 
 		expect(markup).toContain(">41<");

@@ -1,15 +1,11 @@
-use crate::{
-    Engine,
-    playback_exclusion::{PoolPlaybackTransition, apply_with_exclusions},
-};
+use crate::{Engine, playback_exclusion::apply_with_solo};
 use chrono::{DateTime, Utc};
 use light_core::CueListId;
 use light_playback::{
-    ActiveDynamicPlayback, ActivePlayback, CueNumber, PlaybackContribution, PlaybackEngine,
-    PlaybackIdentity, PlaybackMutation, PlaybackRuntimeEffect, PlaybackRuntimeStatus,
-    VirtualPlaybackAddress,
+    ActiveDynamicPlayback, ActivePlayback, CueNumber, PlaybackAddress, PlaybackContribution,
+    PlaybackControlSource, PlaybackEngine, PlaybackMutation, PlaybackRuntimeEffect,
+    PlaybackRuntimeStatus, PlaybackSoloRegion,
 };
-use std::collections::HashSet;
 
 /// A mutation accepted by the Engine's Playback boundary.
 ///
@@ -20,18 +16,18 @@ pub enum EnginePlaybackCommand {
         id: CueListId,
         action: CueListPlaybackAction,
     },
-    Pool {
-        number: u16,
-        action: PoolPlaybackAction,
-    },
-    Virtual {
-        address: VirtualPlaybackAddress,
-        action: VirtualPlaybackAction,
-        exclusion_zones: Vec<Vec<VirtualPlaybackAddress>>,
+    Playback {
+        address: PlaybackAddress,
+        action: PlaybackAction,
         activation_origin: Option<light_playback::PlaybackActivationOrigin>,
+        control_source: PlaybackControlSource,
     },
-    ReleasePoolBatch(Vec<u16>),
-    ReleaseIdentityBatch(Vec<PlaybackIdentity>),
+    /// Enforce Solo for an externally owned permanent transport after its accepted start.
+    EnforceSoloForTarget {
+        address: PlaybackAddress,
+    },
+    ReleaseAddressBatch(Vec<PlaybackAddress>),
+    CancelControlSurface(String),
     RestoreActive(Vec<ActivePlayback>),
     RestoreActiveDynamics(Vec<ActiveDynamicPlayback>),
     RestoreDynamicsPausedSince(Option<DateTime<Utc>>),
@@ -59,7 +55,7 @@ pub enum CueListPlaybackAction {
 }
 
 #[derive(Clone, Debug)]
-pub enum PoolPlaybackAction {
+pub enum PlaybackAction {
     Go,
     Back,
     Pause,
@@ -68,6 +64,7 @@ pub enum PoolPlaybackAction {
     FastRewind,
     On,
     Off,
+    Release,
     Toggle,
     GoTo(CueNumber),
     Load(CueNumber),
@@ -86,37 +83,7 @@ pub enum PoolPlaybackAction {
         value: f32,
         duration_millis: u64,
     },
-    SetVirtualMaster(f32),
     SetManualXFade(f32),
-    XFade(bool),
-    SetTempButton(bool),
-    ToggleTemp,
-    SetFlash(bool),
-    SetSwap(bool),
-    DynamicRestart,
-    DynamicDoubleSpeed,
-    DynamicHalfSpeed,
-    DynamicLearnSpeed,
-}
-
-/// Actions supported by the dedicated page-qualified Virtual Playback runtime boundary.
-///
-/// This intentionally stays narrower than `PoolPlaybackAction`: unsupported physical fader and
-/// temporary-control semantics must not silently collapse a Virtual address to a pool number.
-#[derive(Clone, Debug, PartialEq)]
-pub enum VirtualPlaybackAction {
-    Go,
-    Back,
-    Pause,
-    FastForward,
-    FastRewind,
-    On,
-    Off,
-    Release,
-    Toggle,
-    GoTo(CueNumber),
-    Load(CueNumber),
-    SetMaster(f32),
     XFade(bool),
     SetTempButton(bool),
     ToggleTemp,
@@ -179,7 +146,7 @@ pub enum EnginePlaybackOutcome {
         effect: PlaybackRuntimeEffect,
     },
     Changed(EnginePlaybackEffect),
-    ChangedPlaybacks(Vec<u16>),
+    ChangedPlaybacks(Vec<PlaybackAddress>),
     DynamicsPaused(bool),
     Applied,
 }
@@ -222,38 +189,44 @@ impl Engine {
         command: EnginePlaybackCommand,
     ) -> Result<EnginePlaybackOutcome, String> {
         let generation = self.generation.load();
-        execute(&mut generation.playback().write(), command)
-    }
-
-    pub fn execute_pool_playback_with_exclusions(
-        &self,
-        number: u16,
-        action: PoolPlaybackAction,
-        exclusion_zones: &[Vec<u16>],
-    ) -> Result<PoolPlaybackTransition, String> {
-        self.execute_pool_playback_with_activation(number, action, exclusion_zones, None)
-    }
-
-    pub fn execute_pool_playback_with_activation(
-        &self,
-        number: u16,
-        action: PoolPlaybackAction,
-        exclusion_zones: &[Vec<u16>],
-        activation_origin: Option<light_playback::PlaybackActivationOrigin>,
-    ) -> Result<PoolPlaybackTransition, String> {
-        let generation = self.generation.load();
-        let (outcome, released_playbacks) = apply_with_exclusions(
+        execute(
             &mut generation.playback().write(),
-            number,
-            exclusion_zones,
-            activation_origin,
-            |playback| execute_pool(playback, number, action),
-        )?;
-        let outcome = combine_release_effect(outcome, &released_playbacks)?;
-        Ok(PoolPlaybackTransition {
-            outcome,
-            released_playbacks,
-        })
+            command,
+            &generation.snapshot().playback_solo_regions,
+        )
+    }
+
+    pub fn enabled_auto_off_playbacks(&self) -> Vec<PlaybackAddress> {
+        let generation = self.generation.load();
+        let playback = generation.playback().read();
+        let mut addresses = generation
+            .snapshot()
+            .playback_pages
+            .iter()
+            .flat_map(|page| {
+                page.assignments
+                    .iter()
+                    .filter_map(|(position, definition)| {
+                        let address = PlaybackAddress::new(page.number, *position).ok()?;
+                        (definition.auto_off
+                            && playback
+                                .playback_runtime(address)
+                                .is_some_and(|runtime| runtime.enabled))
+                        .then_some(address)
+                    })
+            })
+            .collect::<Vec<_>>();
+        addresses.sort_unstable();
+        addresses.dedup();
+        addresses
+    }
+
+    pub fn permanent_playback_enabled(&self, address: PlaybackAddress) -> bool {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .permanent_enabled(address)
     }
 
     pub fn active_playbacks(&self) -> Vec<ActivePlayback> {
@@ -270,18 +243,30 @@ impl Engine {
 
     pub fn playback_runtime_status_at(
         &self,
-        identity: light_playback::PlaybackIdentity,
+        identity: light_playback::PlaybackAddress,
     ) -> Option<PlaybackRuntimeStatus> {
         self.generation
             .load()
             .playback()
             .read()
-            .runtime_status_at(identity)
+            .runtime_status_for_playback(identity)
+    }
+
+    pub fn playback_control_state(
+        &self,
+        address: PlaybackAddress,
+        control_source: &light_playback::PlaybackControlSource,
+    ) -> light_playback::PlaybackControlState {
+        self.generation
+            .load()
+            .playback()
+            .read()
+            .control_state(address, control_source)
     }
 
     pub fn playback_control_state_at(
         &self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> light_playback::PlaybackControlState {
         self.generation
             .load()
@@ -346,15 +331,15 @@ impl Engine {
             .active_dynamic_playbacks()
     }
 
-    pub fn active_dynamic_playback_at(
+    pub fn active_dynamic_playback(
         &self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Option<ActiveDynamicPlayback> {
         self.generation
             .load()
             .playback()
             .read()
-            .active_dynamic_playback_at(identity)
+            .active_dynamic_playback(identity)
     }
 
     pub fn active_dynamic_playbacks_for_persistence(&self) -> Vec<ActiveDynamicPlayback> {
@@ -372,44 +357,27 @@ impl Engine {
     /// the opt-out setting enabled.
     pub fn auto_off_fully_controlled_dynamic_playbacks(
         &self,
-        numbers: impl IntoIterator<Item = u16>,
-    ) -> Vec<u16> {
-        self.auto_off_fully_controlled_dynamic_playbacks_at(
-            numbers
-                .into_iter()
-                .filter_map(|number| PlaybackIdentity::physical(number).ok()),
-        )
-        .into_iter()
-        .filter_map(|identity| match identity {
-            PlaybackIdentity::Physical(number) => Some(number.get()),
-            PlaybackIdentity::Virtual(_) => None,
-        })
-        .collect()
-    }
-
-    pub fn auto_off_fully_controlled_dynamic_playbacks_at(
-        &self,
-        identities: impl IntoIterator<Item = PlaybackIdentity>,
-    ) -> Vec<PlaybackIdentity> {
+        identities: impl IntoIterator<Item = PlaybackAddress>,
+    ) -> Vec<PlaybackAddress> {
         let generation = self.generation.load();
         let mut playback = generation.playback().write();
         let mut changed = Vec::new();
         for identity in identities {
             if !playback
-                .dynamic_assignment_at(identity)
+                .dynamic_assignment(identity)
                 .is_some_and(|assignment| assignment.auto_off_full_control)
                 || !playback
-                    .active_dynamic_playback_at(identity)
+                    .active_dynamic_playback(identity)
                     .is_some_and(|active| active.enabled)
             {
                 continue;
             }
-            let turned_off = if playback.dynamic_assignment_at(identity).is_some() {
+            let turned_off = if playback.dynamic_assignment(identity).is_some() {
                 playback
-                    .off_dynamic_at_mutation(identity)
+                    .off_dynamic_mutation(identity)
                     .is_ok_and(|mutation| mutation.value)
             } else {
-                playback.off_at(identity).unwrap_or(false)
+                playback.off(identity).unwrap_or(false)
             };
             if turned_off {
                 changed.push(identity);
@@ -443,9 +411,10 @@ impl Engine {
             .load()
             .playback()
             .read()
-            .contributions_with_context_at(at, |_, attribute| {
-                light_playback::attribute_uses_snap_transition(attribute)
-            })
+            .contributions_with_context(
+                at,
+                Some(&|_, attribute| light_playback::attribute_uses_snap_transition(attribute)),
+            )
     }
 
     pub fn playback_dynamics(&self) -> PlaybackDynamicsProjection {
@@ -461,33 +430,56 @@ impl Engine {
 pub(crate) fn execute(
     playback: &mut PlaybackEngine,
     command: EnginePlaybackCommand,
+    regions: &[PlaybackSoloRegion],
 ) -> Result<EnginePlaybackOutcome, String> {
     match command {
-        EnginePlaybackCommand::CueList { id, action } => execute_cue_list(playback, id, action),
-        EnginePlaybackCommand::Pool { number, action } => execute_pool(playback, number, action),
-        EnginePlaybackCommand::Virtual {
+        EnginePlaybackCommand::CueList { id, action } => {
+            let was_enabled = playback
+                .runtime()
+                .iter()
+                .any(|runtime| runtime.cue_list_id == id && runtime.enabled);
+            let outcome = execute_cue_list(playback, id, action)?;
+            if !was_enabled
+                && playback
+                    .runtime()
+                    .iter()
+                    .any(|runtime| runtime.cue_list_id == id && runtime.enabled)
+            {
+                crate::playback_exclusion::enforce_direct_cue_solo(playback, id, regions)?;
+            }
+            Ok(outcome)
+        }
+        EnginePlaybackCommand::Playback {
             address,
             action,
-            exclusion_zones,
             activation_origin,
-        } => execute_virtual(
+            control_source,
+        } => apply_with_solo(
             playback,
             address,
-            action,
-            &exclusion_zones,
+            &action,
+            regions,
             activation_origin,
+            &control_source,
         ),
-        EnginePlaybackCommand::ReleasePoolBatch(numbers) => Ok(
-            EnginePlaybackOutcome::ChangedPlaybacks(release_pool_batch(playback, numbers)),
+        EnginePlaybackCommand::EnforceSoloForTarget { address } => {
+            let effect =
+                crate::playback_exclusion::enforce_target_solo(playback, address, regions)?;
+            Ok(EnginePlaybackOutcome::Changed(
+                EnginePlaybackEffect::from_addressed(effect),
+            ))
+        }
+        EnginePlaybackCommand::CancelControlSurface(surface_id) => Ok(
+            EnginePlaybackOutcome::Changed(playback.cancel_control_surface(&surface_id).into()),
         ),
-        EnginePlaybackCommand::ReleaseIdentityBatch(identities) => {
+        EnginePlaybackCommand::ReleaseAddressBatch(addresses) => {
             let mut released = Vec::new();
-            for identity in identities {
+            for address in addresses {
                 if playback
-                    .release_at_mutation(identity)
+                    .release_mutation(address)
                     .is_ok_and(|mutation| mutation.effect.changed())
                 {
-                    released.push(identity.number());
+                    released.push(address);
                 }
             }
             released.sort_unstable();
@@ -496,10 +488,12 @@ pub(crate) fn execute(
         }
         EnginePlaybackCommand::RestoreActive(active) => {
             playback.restore_active(active);
+            crate::playback_exclusion::enforce_restored_solo(playback, regions)?;
             Ok(EnginePlaybackOutcome::Applied)
         }
         EnginePlaybackCommand::RestoreActiveDynamics(active) => {
             playback.restore_active_dynamics(active);
+            crate::playback_exclusion::enforce_restored_solo(playback, regions)?;
             Ok(EnginePlaybackOutcome::Applied)
         }
         EnginePlaybackCommand::RestoreDynamicsPausedSince(paused_at) => {
@@ -514,170 +508,6 @@ pub(crate) fn execute(
             playback.toggle_dynamics_paused(),
         )),
     }
-}
-
-pub(crate) fn execute_virtual(
-    playback: &mut PlaybackEngine,
-    address: VirtualPlaybackAddress,
-    action: VirtualPlaybackAction,
-    exclusion_zones: &[Vec<VirtualPlaybackAddress>],
-    activation_origin: Option<light_playback::PlaybackActivationOrigin>,
-) -> Result<EnginePlaybackOutcome, String> {
-    let identity = PlaybackIdentity::Virtual(address);
-    let was_enabled = playback.is_active_at(identity);
-    let addressed_effect = match action {
-        VirtualPlaybackAction::Go => {
-            playback.go_playback_at(identity)?;
-            PlaybackRuntimeEffect::Durable
-        }
-        VirtualPlaybackAction::Back => {
-            playback.back_playback_at(identity)?;
-            PlaybackRuntimeEffect::Durable
-        }
-        VirtualPlaybackAction::Pause => {
-            if playback.dynamic_assignment_at(identity).is_some() {
-                playback.toggle_dynamic_pause_at_mutation(identity)?.effect
-            } else {
-                playback.pause_playback_at_mutation(identity)?.effect
-            }
-        }
-        VirtualPlaybackAction::FastForward => {
-            playback.fast_forward_playback_at(identity)?;
-            PlaybackRuntimeEffect::Durable
-        }
-        VirtualPlaybackAction::FastRewind => {
-            playback.fast_rewind_playback_at(identity)?;
-            PlaybackRuntimeEffect::Durable
-        }
-        VirtualPlaybackAction::On => {
-            if playback.dynamic_assignment_at(identity).is_some() {
-                playback.on_dynamic_at_mutation(identity)?;
-            } else {
-                playback.on_at(identity)?;
-            }
-            if was_enabled {
-                PlaybackRuntimeEffect::None
-            } else {
-                PlaybackRuntimeEffect::Durable
-            }
-        }
-        VirtualPlaybackAction::Off => {
-            let changed = if playback.dynamic_assignment_at(identity).is_some() {
-                playback.off_dynamic_at_mutation(identity)?.value
-            } else {
-                playback.off_at(identity)?
-            };
-            if changed {
-                PlaybackRuntimeEffect::Durable
-            } else {
-                PlaybackRuntimeEffect::None
-            }
-        }
-        VirtualPlaybackAction::Release => playback.release_at_mutation(identity)?.effect,
-        VirtualPlaybackAction::Toggle => {
-            if playback.dynamic_assignment_at(identity).is_some() {
-                playback.toggle_dynamic_at_mutation(identity)?;
-            } else if was_enabled {
-                playback.off_at(identity)?;
-            } else {
-                playback.on_at(identity)?;
-            }
-            PlaybackRuntimeEffect::Durable
-        }
-        VirtualPlaybackAction::GoTo(cue) => {
-            playback.goto_playback_at_mutation(identity, cue)?.effect
-        }
-        VirtualPlaybackAction::Load(cue) => {
-            playback.load_playback_at_mutation(identity, cue)?.effect
-        }
-        VirtualPlaybackAction::SetMaster(value) => {
-            if playback.dynamic_assignment_at(identity).is_some() {
-                playback
-                    .set_dynamic_fader_at_mutation(identity, value)?
-                    .effect
-            } else {
-                playback
-                    .set_virtual_master_at_mutation(identity, value)?
-                    .effect
-            }
-        }
-        VirtualPlaybackAction::XFade(on) => playback.xfade_at_mutation(identity, on)?.effect,
-        VirtualPlaybackAction::SetTempButton(active) => {
-            playback
-                .set_temp_button_at_mutation(identity, active)?
-                .effect
-        }
-        VirtualPlaybackAction::ToggleTemp => playback.toggle_temp_at_mutation(identity)?.effect,
-        VirtualPlaybackAction::SetFlash(pressed) => {
-            if playback.dynamic_assignment_at(identity).is_some() {
-                playback
-                    .set_dynamic_flash_at_mutation(identity, pressed)?
-                    .effect
-            } else {
-                playback.set_flash_at_mutation(identity, pressed)?.effect
-            }
-        }
-        VirtualPlaybackAction::SetSwap(pressed) => {
-            playback.set_swap_at_mutation(identity, pressed)?.effect
-        }
-        VirtualPlaybackAction::DynamicRestart => {
-            playback.restart_dynamic_at_mutation(identity)?.effect
-        }
-        VirtualPlaybackAction::DynamicDoubleSpeed => {
-            playback
-                .scale_dynamic_speed_at_mutation(identity, true)?
-                .effect
-        }
-        VirtualPlaybackAction::DynamicHalfSpeed => {
-            playback
-                .scale_dynamic_speed_at_mutation(identity, false)?
-                .effect
-        }
-        VirtualPlaybackAction::DynamicLearnSpeed => {
-            playback.tap_dynamic_speed_at_mutation(identity)?.effect
-        }
-    };
-    let is_enabled = playback.is_active_at(identity);
-    let mut peer_effect = PlaybackRuntimeEffect::None;
-    if !was_enabled && is_enabled {
-        if let Some(origin) = activation_origin {
-            playback.record_activation_at(identity, origin);
-        }
-        let peers: Vec<_> = virtual_exclusion_peers(exclusion_zones, address)
-            .into_iter()
-            .map(PlaybackIdentity::Virtual)
-            .collect();
-        playback.adopt_solo_handover(identity, &peers)?;
-        for peer in peers {
-            peer_effect = peer_effect.combine(playback.release_at_mutation(peer)?.effect);
-        }
-    }
-    Ok(EnginePlaybackOutcome::Changed(
-        EnginePlaybackEffect::from_addressed(addressed_effect).with_related(peer_effect),
-    ))
-}
-
-fn virtual_exclusion_peers(
-    zones: &[Vec<VirtualPlaybackAddress>],
-    activated: VirtualPlaybackAddress,
-) -> std::collections::BTreeSet<VirtualPlaybackAddress> {
-    zones
-        .iter()
-        .filter(|zone| zone.contains(&activated))
-        .flat_map(|zone| zone.iter().copied())
-        .filter(|address| *address != activated)
-        .collect()
-}
-
-fn release_pool_batch(playback: &mut PlaybackEngine, numbers: Vec<u16>) -> Vec<u16> {
-    let mut seen = HashSet::with_capacity(numbers.len());
-    let mut changed = numbers
-        .into_iter()
-        .filter(|number| seen.insert(*number))
-        .filter(|number| playback.off(*number).unwrap_or(false))
-        .collect::<Vec<_>>();
-    changed.sort_unstable();
-    changed
 }
 
 fn execute_cue_list(
@@ -739,89 +569,92 @@ fn execute_cue_list(
     }
 }
 
-pub(crate) fn execute_pool(
+pub(crate) fn execute_addressed(
     playback: &mut PlaybackEngine,
-    number: u16,
-    action: PoolPlaybackAction,
+    number: PlaybackAddress,
+    action: PlaybackAction,
+    source: &PlaybackControlSource,
 ) -> Result<EnginePlaybackOutcome, String> {
     let effects = match action {
-        PoolPlaybackAction::Go => playback
+        PlaybackAction::Go => playback
             .go_playback(number)
             .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
-        PoolPlaybackAction::Back => playback
+        PlaybackAction::Back => playback
             .back_playback(number)
             .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
-        PoolPlaybackAction::Pause if playback.dynamic_assignment(number).is_some() => {
+        PlaybackAction::Pause if playback.dynamic_assignment(number).is_some() => {
             playback.toggle_dynamic_pause_mutation(number)?.into()
         }
-        PoolPlaybackAction::Pause => playback.pause_playback_mutation(number)?.into(),
-        PoolPlaybackAction::TogglePause => toggle_pause(playback, number)?,
-        PoolPlaybackAction::FastForward => playback
+        PlaybackAction::Pause => playback.pause_playback_mutation(number)?.into(),
+        PlaybackAction::TogglePause => toggle_pause(playback, number)?,
+        PlaybackAction::FastForward => playback
             .fast_forward_playback(number)
             .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
-        PoolPlaybackAction::FastRewind => playback
+        PlaybackAction::FastRewind => playback
             .fast_rewind_playback(number)
             .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable))?,
-        PoolPlaybackAction::On => playback.on_mutation(number)?.into(),
-        PoolPlaybackAction::Off => playback.off_mutation(number)?.into(),
-        PoolPlaybackAction::Toggle => playback.toggle_mutation(number)?.into(),
-        PoolPlaybackAction::GoTo(cue) => playback.goto_playback_mutation(number, cue)?.into(),
-        PoolPlaybackAction::Load(cue) => playback.load_playback_mutation(number, cue)?.into(),
-        PoolPlaybackAction::SetMaster(value) => playback.set_master_mutation(number, value)?.into(),
-        PoolPlaybackAction::SetMasterWithExplicitActivation(value) => playback
+        PlaybackAction::On => playback.on_mutation(number)?.into(),
+        PlaybackAction::Off => playback.off_mutation(number)?.into(),
+        PlaybackAction::Release => playback.release_mutation(number)?.into(),
+        PlaybackAction::Toggle => playback.toggle_mutation(number)?.into(),
+        PlaybackAction::GoTo(cue) => playback.goto_playback_mutation(number, cue)?.into(),
+        PlaybackAction::Load(cue) => playback.load_playback_mutation(number, cue)?.into(),
+        PlaybackAction::SetMaster(value) => {
+            playback.set_master_mutation(number, source, value)?.into()
+        }
+        PlaybackAction::SetMasterWithExplicitActivation(value) => playback
             .set_master_with_explicit_activation_mutation(number, value)?
             .into(),
-        PoolPlaybackAction::SetConfiguredFader { mode, value } => playback
-            .set_configured_fader_mutation(number, mode, value)?
+        PlaybackAction::SetConfiguredFader { mode, value } => playback
+            .set_configured_fader_mutation(number, source, mode, value)?
             .into(),
-        PoolPlaybackAction::SetGroupMasterFader {
+        PlaybackAction::SetGroupMasterFader {
             value,
             authoritative,
         } => playback
-            .set_group_master_fader_mutation(number, value, authoritative)?
+            .set_group_master_fader_mutation(number, source, value, authoritative)?
             .into(),
-        PoolPlaybackAction::SetMasterTransition {
+        PlaybackAction::SetMasterTransition {
             value,
             duration_millis,
         } => playback
             .set_master_transition_mutation(number, value, duration_millis)?
             .into(),
-        PoolPlaybackAction::SetVirtualMaster(value) => {
-            playback.set_virtual_master_mutation(number, value)?.into()
-        }
-        PoolPlaybackAction::SetManualXFade(value) => {
+        PlaybackAction::SetManualXFade(value) => {
             playback.set_manual_xfade_mutation(number, value)?.into()
         }
-        PoolPlaybackAction::XFade(on) => playback.xfade_mutation(number, on)?.into(),
-        PoolPlaybackAction::SetTempButton(active) => {
-            playback.set_temp_button_mutation(number, active)?.into()
-        }
-        PoolPlaybackAction::ToggleTemp => playback.toggle_temp_mutation(number)?.into(),
-        PoolPlaybackAction::SetFlash(pressed) => {
+        PlaybackAction::XFade(on) => playback.xfade_mutation(number, on)?.into(),
+        PlaybackAction::SetTempButton(active) => playback
+            .set_temp_button_mutation(number, source, active)?
+            .into(),
+        PlaybackAction::ToggleTemp => playback.toggle_temp_mutation(number, source)?.into(),
+        PlaybackAction::SetFlash(pressed) => {
             if playback.dynamic_assignment(number).is_some() {
-                playback.set_dynamic_flash_mutation(number, pressed)?.into()
+                playback
+                    .set_dynamic_flash_mutation(number, source, pressed)?
+                    .into()
             } else {
-                playback.set_flash_mutation(number, pressed)?.into()
+                playback.set_flash_mutation(number, source, pressed)?.into()
             }
         }
-        PoolPlaybackAction::SetSwap(pressed) => playback.set_swap_mutation(number, pressed)?.into(),
-        PoolPlaybackAction::DynamicRestart => playback.restart_dynamic_mutation(number)?.into(),
-        PoolPlaybackAction::DynamicDoubleSpeed => {
+        PlaybackAction::SetSwap(pressed) => {
+            playback.set_swap_mutation(number, source, pressed)?.into()
+        }
+        PlaybackAction::DynamicRestart => playback.restart_dynamic_mutation(number)?.into(),
+        PlaybackAction::DynamicDoubleSpeed => {
             playback.scale_dynamic_speed_mutation(number, true)?.into()
         }
-        PoolPlaybackAction::DynamicHalfSpeed => {
+        PlaybackAction::DynamicHalfSpeed => {
             playback.scale_dynamic_speed_mutation(number, false)?.into()
         }
-        PoolPlaybackAction::DynamicLearnSpeed => {
-            playback.tap_dynamic_speed_mutation(number)?.into()
-        }
+        PlaybackAction::DynamicLearnSpeed => playback.tap_dynamic_speed_mutation(number)?.into(),
     };
     Ok(EnginePlaybackOutcome::Changed(effects))
 }
 
 fn toggle_pause(
     playback: &mut PlaybackEngine,
-    number: u16,
+    number: PlaybackAddress,
 ) -> Result<EnginePlaybackEffect, String> {
     if playback.dynamic_assignment(number).is_some() {
         return playback
@@ -840,18 +673,6 @@ fn toggle_pause(
             .pause_playback_mutation(number)
             .map(EnginePlaybackEffect::from)
     }
-}
-
-pub(crate) fn combine_release_effect(
-    outcome: EnginePlaybackOutcome,
-    released: &[u16],
-) -> Result<EnginePlaybackOutcome, String> {
-    let EnginePlaybackOutcome::Changed(effects) = outcome else {
-        return Err("unexpected pool Playback outcome".into());
-    };
-    Ok(EnginePlaybackOutcome::Changed(
-        effects.with_related(durable_effect(!released.is_empty())),
-    ))
 }
 
 pub(crate) const fn addressed_effect(effect: PlaybackRuntimeEffect) -> EnginePlaybackEffect {

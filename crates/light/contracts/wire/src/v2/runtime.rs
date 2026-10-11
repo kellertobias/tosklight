@@ -31,19 +31,6 @@ impl RuntimeSessionRole {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct RuntimePlaybackSurfaceRow {
-    pub first_playback_slot: u8,
-    pub has_fader: bool,
-    pub button_count: u8,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-pub struct RuntimePlaybackSurfaceLayout {
-    pub playbacks_per_row: u8,
-    pub rows: Vec<RuntimePlaybackSurfaceRow>,
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeControlDesk {
     #[serde(default = "default_hardware_illumination")]
     #[schemars(range(min = 0, max = 100))]
@@ -59,8 +46,7 @@ pub struct RuntimeControlDesk {
     pub columns: u8,
     pub rows: u8,
     pub buttons: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub playback_layout: Option<RuntimePlaybackSurfaceLayout>,
+    pub surface_id: String,
 }
 
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]

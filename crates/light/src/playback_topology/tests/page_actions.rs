@@ -6,6 +6,7 @@ fn create_page_commits_one_default_projection_and_replays_once() {
     let revision = rig.show_revision();
     let action = PlaybackTopologyAction::CreatePage {
         page: 4,
+        name: "Page 4".into(),
         expected_page_revision: 0,
         expected_page_object_id: None,
     };
@@ -26,7 +27,7 @@ fn create_page_commits_one_default_projection_and_replays_once() {
     assert_eq!(projection.object_id(), "4");
     assert_eq!(
         projection.raw_body().unwrap().as_ref(),
-        &json!({"number":4,"name":"Page 4","slots":{},"virtual_playbacks":{}})
+        &json!({"number":4,"name":"Page 4","assignments":{}})
     );
     assert_eq!(rig.steps(), mutation_steps());
     assert_one_event(&rig, 1);
@@ -40,10 +41,10 @@ fn create_page_commits_one_default_projection_and_replays_once() {
 }
 
 #[test]
-fn create_existing_page_is_no_change_without_normalizing_legacy_json() {
+fn create_existing_page_is_no_change_without_normalizing_raw_json() {
     let rig = TestRig::new();
     let raw = json!({
-        "number":2,"name":"Wing","slots":{"7":19},"virtual_playbacks":{},
+        "number":2,"name":"Wing","assignments":{},
         "future_layout":{"columns":12}
     });
     rig.seed("playback_page", "legacy-page-two", &raw);
@@ -54,6 +55,7 @@ fn create_existing_page_is_no_change_without_normalizing_legacy_json() {
             rig.show_revision(),
             PlaybackTopologyAction::CreatePage {
                 page: 2,
+                name: "Page 2".into(),
                 expected_page_revision: 1,
                 expected_page_object_id: Some("legacy-page-two".into()),
             },
@@ -78,15 +80,10 @@ fn create_existing_page_is_no_change_without_normalizing_legacy_json() {
 fn rename_page_is_lossless_replayable_and_semantically_idempotent() {
     let rig = TestRig::new();
     rig.seed(
-        "playback",
-        "8",
-        &serde_json::to_value(playback(8, "House")).unwrap(),
-    );
-    rig.seed(
         "playback_page",
         "legacy-page-three",
         &json!({
-            "number":3,"name":"Before","slots":{"2":8},"virtual_playbacks":{},
+            "number":3,"name":"Before","assignments":{"2":playback(8,"House")},
             "future_layout":{"columns":8}
         }),
     );
@@ -107,7 +104,7 @@ fn rename_page_is_lossless_replayable_and_semantically_idempotent() {
     );
     let page = changed.outcome.objects()[0].raw_body().unwrap();
     assert_eq!(page["name"], "Act One");
-    assert_eq!(page["slots"], json!({"2":8}));
+    assert_eq!(page["assignments"]["2"]["name"], "House");
     assert_eq!(page["future_layout"]["columns"], 8);
     assert_one_event(&rig, 1);
 
@@ -145,12 +142,12 @@ fn page_actions_reject_stale_authority_invalid_names_and_canonical_collisions() 
     rig.seed(
         "playback_page",
         "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
+        &json!({"number":1,"name":"Main","assignments":{}}),
     );
     rig.seed(
         "playback_page",
         "2",
-        &json!({"number":9,"name":"Occupied","slots":{},"virtual_playbacks":{}}),
+        &json!({"number":9,"name":"Occupied","assignments":{}}),
     );
     let revision = rig.show_revision();
 
@@ -192,6 +189,7 @@ fn page_actions_reject_stale_authority_invalid_names_and_canonical_collisions() 
             revision,
             PlaybackTopologyAction::CreatePage {
                 page: 2,
+                name: "Page 2".into(),
                 expected_page_revision: 0,
                 expected_page_object_id: None,
             },

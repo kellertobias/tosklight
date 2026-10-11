@@ -45,16 +45,14 @@ pub(super) async fn desk() -> (AppState, PathBuf, Router, String, Session, Uuid,
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![operational_fixture(fixture)].into(),
             dynamics: vec![dynamic].into(),
-            playbacks: vec![
-                playback_test_definition(1, target.clone()),
-                playback_test_definition(2, target.clone()),
-            ]
-            .into(),
             playback_pages: vec![light_playback::PlaybackPage {
                 number: 1,
                 name: "Aliases".into(),
-                slots: HashMap::from([(1, 1), (2, 2)]),
-                virtual_playbacks: HashMap::from([(1001, playback_test_definition(1001, target))]),
+                assignments: HashMap::from([
+                    (1, playback_test_definition(1, target.clone())),
+                    (2, playback_test_definition(2, target.clone())),
+                    (101, playback_test_definition(101, target)),
+                ]),
             }]
             .into(),
             ..Default::default()
@@ -77,11 +75,9 @@ pub(super) fn render(state: &AppState) {
 fn assert_alias_feedback(state: &AppState, cursor: u64, expected: DynamicPlaybackRuntimeState) {
     let changes = playback_runtime_events(state, cursor);
     for identity in [
-        PlaybackRuntimeIdentity::Playback(1),
-        PlaybackRuntimeIdentity::Playback(2),
-        PlaybackRuntimeIdentity::Virtual(
-            light_playback::VirtualPlaybackAddress::new(1, 1001).unwrap(),
-        ),
+        PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+        PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(1, 2).unwrap()),
+        PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(1, 101).unwrap()),
     ] {
         let projection = changes
             .iter()
@@ -93,7 +89,7 @@ fn assert_alias_feedback(state: &AppState, cursor: u64, expected: DynamicPlaybac
                 else {
                     return None;
                 };
-                (change.projection.requested == identity).then_some(&change.projection)
+                (change.projection.identity == identity).then_some(&change.projection)
             })
             .unwrap_or_else(|| panic!("missing settled feedback for {identity:?}"));
         let light_application::PlaybackTargetProjection::Dynamic {
@@ -115,8 +111,8 @@ async fn committed_dynamic_start_replaces_pre_tick_feedback_for_physical_and_vir
         Some(&token),
         session.desk.id,
         serde_json::json!({
-            "request_id":"alias-start", "address":{"kind":"playback","playback_number":2},
-            "surface":"physical", "action":{"type":"on","pressed":true}
+            "address":{"kind":"playback","page":1,"position":2},
+            "control_source":{"surface_id":"main","control_id":1}, "action":{"type":"on","pressed":true}
         }),
     )
     .await;
@@ -168,8 +164,8 @@ async fn full_control_auto_off_replaces_feedback_for_every_shared_dynamic_alias(
         Some(&token),
         session.desk.id,
         serde_json::json!({
-            "request_id":"alias-auto-off", "address":{"kind":"playback","playback_number":2},
-            "surface":"physical", "action":{"type":"on","pressed":true}
+            "address":{"kind":"playback","page":1,"position":2},
+            "control_source":{"surface_id":"main","control_id":1}, "action":{"type":"on","pressed":true}
         }),
     )
     .await;
@@ -184,7 +180,7 @@ async fn full_control_auto_off_replaces_feedback_for_every_shared_dynamic_alias(
     assert!(
         !state
             .output
-            .active_dynamic_playback_at(light_playback::PlaybackIdentity::physical(2).unwrap())
+            .active_dynamic_playback(light_playback::PlaybackAddress::new(1, 2).unwrap())
             .unwrap()
             .enabled,
         "persistent Programmer must auto-off the fully controlled direct Playback"

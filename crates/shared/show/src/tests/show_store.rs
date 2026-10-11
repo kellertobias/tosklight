@@ -82,12 +82,12 @@ fn missing_exact_object_snapshot_still_returns_the_current_revision() {
 fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
     let path = temporary("atomic-objects");
     let (show, _) = ShowStore::create(&path, "Atomic objects").unwrap();
-    let page = serde_json::json!({"number":1,"slots":{"1":41}});
+    let page = serde_json::json!({"number":1,"assignments":{"1":{"name":"Original"}}});
     let playback = serde_json::json!({"number":41,"name":"Original"});
     show.put_object("playback_page", "1", &page, 0).unwrap();
-    show.put_object("playback", "41", &playback, 0).unwrap();
+    show.put_object("group", "41", &playback, 0).unwrap();
 
-    let changed_page = serde_json::json!({"number":1,"slots":{"1":42}});
+    let changed_page = serde_json::json!({"number":1,"assignments":{"1":{"name":"Changed"}}});
     let changed_playback = serde_json::json!({"number":41,"name":"Changed"});
     assert!(matches!(
         show.mutate_objects_atomically(
@@ -99,7 +99,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
                     expected: 1,
                 },
                 AtomicObjectWrite {
-                    kind: "playback",
+                    kind: "group",
                     id: "41",
                     body: &changed_playback,
                     expected: 0,
@@ -113,7 +113,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
         })
     ));
     let stored_page = show.objects("playback_page").unwrap().remove(0);
-    let stored_playback = show.objects("playback").unwrap().remove(0);
+    let stored_playback = show.objects("group").unwrap().remove(0);
     assert_eq!((stored_page.revision, stored_page.body), (1, page.clone()));
     assert_eq!(
         (stored_playback.revision, stored_playback.body),
@@ -130,7 +130,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
                     expected: 1,
                 },
                 AtomicObjectWrite {
-                    kind: "playback",
+                    kind: "group",
                     id: "41",
                     body: &changed_playback,
                     expected: 1,
@@ -142,7 +142,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
         vec![2, 2]
     );
 
-    let cleared_page = serde_json::json!({"number":1,"slots":{}});
+    let cleared_page = serde_json::json!({"number":1,"assignments":{}});
     assert!(matches!(
         show.mutate_objects_atomically(
             &[AtomicObjectWrite {
@@ -152,7 +152,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
                 expected: 2,
             }],
             &[AtomicObjectDelete {
-                kind: "playback",
+                kind: "group",
                 id: "41",
                 expected: 1,
             }],
@@ -166,7 +166,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
         show.objects("playback_page").unwrap().remove(0).body,
         changed_page
     );
-    assert_eq!(show.objects("playback").unwrap().len(), 1);
+    assert_eq!(show.objects("group").unwrap().len(), 1);
 
     show.mutate_objects_atomically(
         &[AtomicObjectWrite {
@@ -176,7 +176,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
             expected: 2,
         }],
         &[AtomicObjectDelete {
-            kind: "playback",
+            kind: "group",
             id: "41",
             expected: 2,
         }],
@@ -186,7 +186,7 @@ fn related_object_writes_and_deletes_roll_back_together_on_revision_conflict() {
         show.objects("playback_page").unwrap().remove(0).body,
         cleared_page
     );
-    assert!(show.objects("playback").unwrap().is_empty());
+    assert!(show.objects("group").unwrap().is_empty());
     let _ = fs::remove_file(path);
 }
 

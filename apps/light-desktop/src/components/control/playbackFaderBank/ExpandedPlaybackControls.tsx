@@ -1,3 +1,4 @@
+import type { PlaybackAddressValue } from "../../../api/playbackAddress";
 import { Button, Input } from "@tosklight/ui";
 import type { PlaybackButtonAction } from "../../../api/types";
 import type { PlaybackBankController } from "./controller";
@@ -34,7 +35,7 @@ export function ExpandedPlaybackControls({
 					action={action}
 					button={index + 4}
 					controller={controller}
-					playbackNumber={playback.number}
+					address={playback.address}
 					key={`${index}-${action}`}
 				/>
 			))}
@@ -48,13 +49,16 @@ export function ExpandedPlaybackControls({
 						defaultValue={0}
 						disabled={!controller.runtimeActions}
 						onChange={(event) =>
-							void controller.runtimeActions?.poolPlaybackAction(
-								playback.number,
+							void controller.runtimeActions?.playbackAction(
+								playback.address,
 								"configured-fader",
 								{
 									fader: 2,
 									value: Number(event.currentTarget.value) / 100,
-									surface: "physical",
+									control_source: {
+										surface_id: controller.surfaceId,
+										control_id: slotData.slot * 10 + 2,
+									},
 								},
 							)
 						}
@@ -67,21 +71,24 @@ export function ExpandedPlaybackControls({
 
 function ExpandedButton({
 	controller,
-	playbackNumber,
+	address,
 	button,
 	action,
 }: {
 	controller: PlaybackBankController;
-	playbackNumber: number;
+	address: PlaybackAddressValue;
 	button: number;
 	action: PlaybackButtonAction;
 }) {
 	const send = (pressed: boolean) =>
-		void controller.runtimeActions?.poolPlaybackAction(
-			playbackNumber,
-			"button",
-			{ button, pressed, surface: "physical" },
-		);
+		void controller.runtimeActions?.playbackAction(address, "button", {
+			button,
+			pressed,
+			control_source: {
+				surface_id: controller.surfaceId,
+				control_id: address.position * 10 + button,
+			},
+		});
 	return (
 		<Button
 			type="button"
@@ -91,11 +98,20 @@ function ExpandedButton({
 			onPointerDown={(event) => {
 				if (!isHeldAction(action)) return;
 				event.currentTarget.setPointerCapture?.(event.pointerId);
-				send(true);
+				controller.heldActions.press(address.position, address, button, action);
 			}}
-			onPointerUp={() => isHeldAction(action) && send(false)}
-			onPointerCancel={() => isHeldAction(action) && send(false)}
-			onLostPointerCapture={() => isHeldAction(action) && send(false)}
+			onPointerUp={() =>
+				isHeldAction(action) &&
+				controller.heldActions.releaseButton(address.position, button)
+			}
+			onPointerCancel={() =>
+				isHeldAction(action) &&
+				controller.heldActions.releaseButton(address.position, button)
+			}
+			onLostPointerCapture={() =>
+				isHeldAction(action) &&
+				controller.heldActions.releaseButton(address.position, button)
+			}
 		>
 			{playbackButtonLabel(action)}
 		</Button>

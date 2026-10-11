@@ -23,9 +23,9 @@ export function programmingUpdateTarget(
 		return {
 			type: "cue",
 			cue_list_id: target.object_id,
-			...(target.playback_number == null
+			...(target.playback_address == null
 				? {}
-				: { playback_number: target.playback_number }),
+				: { playback_address: target.playback_address }),
 			...(target.cue_id == null ? {} : { cue_id: target.cue_id }),
 			...(target.cue_number == null ? {} : { cue_number: target.cue_number }),
 			validate_active_context: target.validate_active_context ?? false,
@@ -194,9 +194,9 @@ function targetFromIdentity(
 	return {
 		type: "cue",
 		cue_list_id: target.object_id,
-		...(target.playback_number == null
+		...(target.playback_address == null
 			? {}
-			: { playback_number: target.playback_number }),
+			: { playback_address: target.playback_address }),
 		...(target.cue == null
 			? {}
 			: { cue_id: target.cue.id, cue_number: target.cue.number }),

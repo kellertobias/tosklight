@@ -153,7 +153,7 @@ fn retained_entry_bytes(
 fn runtime_projection_retained_bytes(projection: &crate::PlaybackRuntimeProjection) -> usize {
     use crate::{PlaybackRuntimeIdentity, PlaybackTargetProjection};
     let mut bytes = size_of_val(projection);
-    if let PlaybackRuntimeIdentity::Group(group) = &projection.requested {
+    if let PlaybackRuntimeIdentity::Group(group) = &projection.identity {
         bytes = bytes.saturating_add(group.as_str().len());
     }
     bytes.saturating_add(match &projection.target {
@@ -277,8 +277,9 @@ mod tests {
                     show_id: show_id.0,
                     show_revision: 1,
                 },
-                requested: PlaybackRuntimeIdentity::Playback(1),
-                playback_number: Some(1),
+                identity: PlaybackRuntimeIdentity::Playback(
+                    light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                ),
                 target: PlaybackTargetProjection::Group {
                     group_id: "g".repeat(group_bytes),
                     master: 1.0,

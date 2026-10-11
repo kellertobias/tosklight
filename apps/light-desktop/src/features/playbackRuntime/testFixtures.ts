@@ -1,8 +1,9 @@
-import type {
+import {
 	PlaybackDesk,
 	PlaybackIdentity,
 	PlaybackProjection,
 	PlaybackSnapshot,
+	identityKey,
 } from "./contracts";
 
 export const SHOW_ID = "11111111-1111-4111-8111-111111111111";
@@ -13,11 +14,11 @@ export const GROUP_ID = "front wash";
 export function cueProjection(
 	playbackNumber = 1,
 	cueIndex = 0,
+	page = 1,
 ): PlaybackProjection {
 	return {
 		scope: { show_id: SHOW_ID, show_revision: 4 },
-		requested: { kind: "playback", playback_number: playbackNumber },
-		playback_number: playbackNumber,
+		identity: { kind: "playback", page, position: playbackNumber },
 		target: "cue_list",
 		cue_list_id: CUE_LIST_ID,
 		runtime: {
@@ -59,7 +60,10 @@ export function deskProjection(activePage = 1): PlaybackDesk {
 	return {
 		scope: { show_id: SHOW_ID, show_revision: 4 },
 		desk_id: DESK_ID,
-		active_page: activePage,
+		command_page: activePage,
+		selected_surface_id: "main",
+		resolved_pages: { main: activePage },
+		selected_cue_list: null,
 		selected_playback: null,
 	};
 }
@@ -71,8 +75,7 @@ export function groupProjection(
 ): PlaybackProjection {
 	return {
 		scope: { show_id: SHOW_ID, show_revision: 4 },
-		requested: { kind: "group", group_id: groupId },
-		playback_number: playbackNumber,
+		identity: {kind:"group",group_id:groupId},
 		target: "group",
 		group_id: groupId,
 		master,
@@ -87,20 +90,16 @@ export function playbackSnapshot(
 	identities: readonly PlaybackIdentity[],
 	cursor = 10,
 	projections = identities.map((identity) =>
-		identity.kind === "playback"
-			? cueProjection(identity.playback_number)
-			: identity.kind === "virtual"
-				? {
-						...cueProjection(identity.playback_number),
-						requested: identity,
-					}
-				: identity.kind === "cue_list" || identity.kind === "direct_cue_list"
-					? {
-							...cueProjection(1),
-							requested: identity,
-							playback_number: null,
-						}
-					: groupProjection(identity.group_id),
+		identity.kind === "group"
+			? groupProjection(identity.group_id)
+			: {
+					...cueProjection(
+						identity.kind === "playback" ? identity.position : 1,
+						0,
+						identity.kind === "playback" ? identity.page : 1,
+					),
+					identity,
+				},
 	),
 ): PlaybackSnapshot {
 	return {
@@ -111,7 +110,7 @@ export function playbackSnapshot(
 }
 
 export function runtimeEvent(projection = cueProjection(), sequence = 11) {
-	const playbackNumber = projection.playback_number ?? 1;
+	const key = identityKey(projection.identity);
 	return {
 		type: "event",
 		event: {
@@ -119,7 +118,7 @@ export function runtimeEvent(projection = cueProjection(), sequence = 11) {
 			occurred_at: "2026-07-19T10:00:01Z",
 			desk_id: null,
 			class: "transition",
-			object: { capability: "playback", id: `playback:${playbackNumber}` },
+			object: { capability: "playback", id: key },
 			related_objects: [
 				{ capability: "playback", id: `cuelist:${CUE_LIST_ID}` },
 			],

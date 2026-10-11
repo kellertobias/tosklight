@@ -1,16 +1,15 @@
 use crate::{controls::activation::deactivate, engine::CuelistFlashState, *};
 
 impl PlaybackEngine {
-    pub(crate) fn temporary_playback_at(
+    pub(crate) fn temporary_playback(
         &mut self,
-        identity: PlaybackIdentity,
+        held: &PlaybackControlKey,
         master: f32,
         flash: bool,
     ) -> Result<ActivePlayback, String> {
-        let number = identity.number();
-        let definition = self
-            .definition_at(identity)
-            .ok_or("playback does not exist")?;
+        let identity = held.address;
+        let number = identity;
+        let definition = self.definition(identity).ok_or("playback does not exist")?;
         let PlaybackTarget::CueList { cue_list_id } = definition.target else {
             return Err("temporary control is available only for Cuelist playbacks".into());
         };
@@ -25,8 +24,9 @@ impl PlaybackEngine {
             .get(&active_key)
             .cloned()
             .unwrap_or_else(|| new_active_playback(Some(number), cue_list, now, master, true));
-        playback.playback_number = Some(number);
-        playback.playback_identity = identity.virtual_address().map(PlaybackIdentity::Virtual);
+        playback.playback_address = Some(number);
+
+        playback.control_source_id = Some(held.source_id());
         playback.enabled = true;
         playback.temporary = true;
         playback.flash = flash;
@@ -63,27 +63,29 @@ impl PlaybackEngine {
         Ok(playback)
     }
 
-    pub fn toggle_temp(&mut self, number: u16) -> Result<bool, String> {
-        self.toggle_temp_mutation(number)
+    pub fn toggle_temp(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+    ) -> Result<bool, String> {
+        self.toggle_temp_mutation(number, source)
             .map(|mutation| mutation.value)
     }
 
-    pub fn toggle_temp_mutation(&mut self, number: u16) -> Result<PlaybackMutation<bool>, String> {
-        self.toggle_temp_at_mutation(PlaybackIdentity::physical(number)?)
-    }
-
-    pub fn toggle_temp_at_mutation(
+    pub fn toggle_temp_mutation(
         &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
     ) -> Result<PlaybackMutation<bool>, String> {
-        let key = (identity, TemporaryPlaybackKind::TempButton);
+        let held = PlaybackControlKey::new(identity, source)?;
+        let key = (held.clone(), TemporaryPlaybackKind::TempButton);
         if self.temporary.remove(&key).is_some() {
             return Ok(PlaybackMutation::new(
                 false,
                 PlaybackRuntimeEffect::Transient,
             ));
         }
-        let playback = self.temporary_playback_at(identity, 1.0, false)?;
+        let playback = self.temporary_playback(&held, 1.0, false)?;
         self.temporary.insert(key, playback);
         Ok(PlaybackMutation::new(
             true,
@@ -91,33 +93,32 @@ impl PlaybackEngine {
         ))
     }
 
-    pub fn set_temp_button(&mut self, number: u16, active: bool) -> Result<(), String> {
-        self.set_temp_button_mutation(number, active).map(|_| ())
+    pub fn set_temp_button(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        active: bool,
+    ) -> Result<(), String> {
+        self.set_temp_button_mutation(number, source, active)
+            .map(|_| ())
     }
 
     pub fn set_temp_button_mutation(
         &mut self,
-        number: u16,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         active: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_temp_button_at_mutation(PlaybackIdentity::physical(number)?, active)
-    }
-
-    pub fn set_temp_button_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        active: bool,
-    ) -> Result<PlaybackMutation<()>, String> {
-        let key = (identity, TemporaryPlaybackKind::TempButton);
+        let held = PlaybackControlKey::new(identity, source)?;
+        let key = (held.clone(), TemporaryPlaybackKind::TempButton);
         if active {
             if self.temporary.contains_key(&key) {
                 return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
             }
-            let playback = self.temporary_playback_at(identity, 1.0, false)?;
+            let playback = self.temporary_playback(&held, 1.0, false)?;
             self.temporary.insert(key, playback);
         } else {
-            self.definition_at(identity)
-                .ok_or("playback does not exist")?;
+            self.definition(identity).ok_or("playback does not exist")?;
             if self.temporary.remove(&key).is_none() {
                 return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
             }
@@ -125,27 +126,27 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient))
     }
 
-    pub fn set_temp_fader(&mut self, number: u16, value: f32) -> Result<(), String> {
-        self.set_temp_fader_mutation(number, value).map(|_| ())
+    pub fn set_temp_fader(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        value: f32,
+    ) -> Result<(), String> {
+        self.set_temp_fader_mutation(number, source, value)
+            .map(|_| ())
     }
 
     pub fn set_temp_fader_mutation(
         &mut self,
-        number: u16,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_temp_fader_at_mutation(PlaybackIdentity::physical(number)?, value)
-    }
-
-    pub fn set_temp_fader_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        value: f32,
-    ) -> Result<PlaybackMutation<()>, String> {
+        let held = PlaybackControlKey::new(identity, source)?;
         if !value.is_finite() || !(0.0..=1.0).contains(&value) {
             return Err("playback Temp fader must be within 0-1".into());
         }
-        let key = (identity, TemporaryPlaybackKind::TempFader);
+        let key = (held.clone(), TemporaryPlaybackKind::TempFader);
         if value == 0.0 {
             let effect = if self.temporary.remove(&key).is_some() {
                 PlaybackRuntimeEffect::Transient
@@ -161,48 +162,52 @@ impl PlaybackEngine {
             playback.master = value;
             playback.fader_position = value;
         } else {
-            let playback = self.temporary_playback_at(identity, value, false)?;
+            let playback = self.temporary_playback(&held, value, false)?;
             self.temporary.insert(key, playback);
         }
         Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Transient))
     }
 
-    pub fn set_swap(&mut self, number: u16, pressed: bool) -> Result<(), String> {
-        self.set_swap_mutation(number, pressed).map(|_| ())
+    pub fn set_swap(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        pressed: bool,
+    ) -> Result<(), String> {
+        self.set_swap_mutation(number, source, pressed).map(|_| ())
     }
 
     pub fn set_swap_mutation(
         &mut self,
-        number: u16,
+        identity: PlaybackAddress,
+        source: &PlaybackControlSource,
         pressed: bool,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.set_swap_at_mutation(PlaybackIdentity::physical(number)?, pressed)
-    }
-
-    pub fn set_swap_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        pressed: bool,
-    ) -> Result<PlaybackMutation<()>, String> {
+        let held = PlaybackControlKey::new(identity, source)?;
         let cue_list_id = match self
-            .definition_at(identity)
+            .definition(identity)
             .ok_or("playback does not exist")?
             .target
         {
             PlaybackTarget::CueList { cue_list_id } => cue_list_id,
             _ => return Err("Swap is available only for Cuelist playbacks".into()),
         };
-        let key = (identity, TemporaryPlaybackKind::Swap);
+        let key = (held.clone(), TemporaryPlaybackKind::Swap);
         if pressed {
-            let mut changed = self.swap_held.insert(identity);
+            let mut changed = self.swap_held.insert(held.clone());
             if !self.temporary.contains_key(&key) {
                 let restore_off = !self
                     .active
                     .get(&PlaybackKey::CueList(cue_list_id))
                     .is_some_and(|playback| playback.enabled);
-                self.cuelist_swap_states
-                    .insert(identity, CuelistFlashState { restore_off });
-                let playback = self.temporary_playback_at(identity, 1.0, true)?;
+                self.cuelist_swap_states.insert(
+                    held.clone(),
+                    CuelistFlashState {
+                        restore_off,
+                        release_activation_inhibited: false,
+                    },
+                );
+                let playback = self.temporary_playback(&held, 1.0, true)?;
                 self.temporary.insert(key, playback);
                 changed = true;
             }
@@ -213,9 +218,9 @@ impl PlaybackEngine {
             };
             return Ok(PlaybackMutation::new((), effect));
         }
-        let swap_state = self.cuelist_swap_states.remove(&identity);
+        let swap_state = self.cuelist_swap_states.remove(&held);
         let released = self.temporary.remove(&key);
-        let changed = self.swap_held.remove(&identity) || released.is_some();
+        let changed = self.swap_held.remove(&held) || released.is_some();
         if !changed {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         }
@@ -223,17 +228,19 @@ impl PlaybackEngine {
             .cuelist_swap_states
             .keys()
             .chain(self.cuelist_flash_states.keys())
-            .copied()
-            .any(|peer| self.runtime_key_at(peer).ok() == Some(PlaybackKey::CueList(cue_list_id)));
+            .cloned()
+            .any(|peer| {
+                self.runtime_key(peer.address).ok() == Some(PlaybackKey::CueList(cue_list_id))
+            });
         let auto_off = self.cue_lists[&cue_list_id].auto_off_flash_release
             && swap_state.is_some_and(|state| state.restore_off)
             && !held_peer;
         let promoted = !auto_off
-            && swap_state.is_some_and(|state| state.restore_off)
+            && swap_state
+                .is_some_and(|state| state.restore_off && !state.release_activation_inhibited)
             && !held_peer
-            && released.is_some_and(|released| {
-                self.promote_intensity_release_at(identity, released, false)
-            });
+            && released
+                .is_some_and(|released| self.promote_intensity_release(identity, released, false));
         let turned_off = if auto_off {
             self.active
                 .get_mut(&PlaybackKey::CueList(cue_list_id))
@@ -249,13 +256,13 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), effect))
     }
 
-    pub(crate) fn promote_intensity_release_at(
+    pub(crate) fn promote_intensity_release(
         &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
         mut released: ActivePlayback,
         clear_restore_off: bool,
     ) -> bool {
-        let Ok(key) = self.runtime_key_at(identity) else {
+        let Ok(key) = self.runtime_key(identity) else {
             return false;
         };
         let inserted = !self.active.contains_key(&key);
@@ -278,7 +285,13 @@ impl PlaybackEngine {
         }
         changed
     }
-    pub fn button(&mut self, number: u16, button: u8, pressed: bool) -> Result<(), String> {
+    pub fn button(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        button: u8,
+        pressed: bool,
+    ) -> Result<(), String> {
         let action = *self
             .definitions
             .get(&number)
@@ -305,15 +318,15 @@ impl PlaybackEngine {
             PlaybackButtonAction::GoMinus => self.back_playback(number).map(|_| ()),
             PlaybackButtonAction::FastForward => self.fast_forward_playback(number).map(|_| ()),
             PlaybackButtonAction::FastRewind => self.fast_rewind_playback(number).map(|_| ()),
-            PlaybackButtonAction::Flash => self.set_flash(number, pressed),
+            PlaybackButtonAction::Flash => self.set_flash(number, source, pressed),
             PlaybackButtonAction::Temp => {
                 if pressed {
-                    self.toggle_temp(number).map(|_| ())
+                    self.toggle_temp(number, source).map(|_| ())
                 } else {
                     Ok(())
                 }
             }
-            PlaybackButtonAction::Swap => self.set_swap(number, pressed),
+            PlaybackButtonAction::Swap => self.set_swap(number, source, pressed),
             PlaybackButtonAction::DynamicRestart => {
                 self.restart_dynamic_mutation(number).map(|_| ())
             }

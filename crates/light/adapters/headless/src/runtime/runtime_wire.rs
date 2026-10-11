@@ -14,20 +14,7 @@ pub(super) fn desk(desk: ControlDesk) -> wire::RuntimeControlDesk {
         columns: desk.columns,
         rows: desk.rows,
         buttons: desk.buttons,
-        playback_layout: desk
-            .playback_layout
-            .map(|layout| wire::RuntimePlaybackSurfaceLayout {
-                playbacks_per_row: layout.playbacks_per_row,
-                rows: layout
-                    .rows
-                    .into_iter()
-                    .map(|row| wire::RuntimePlaybackSurfaceRow {
-                        first_playback_slot: row.first_playback_slot,
-                        has_fader: row.has_fader,
-                        button_count: row.button_count,
-                    })
-                    .collect(),
-            }),
+        surface_id: desk.surface_id,
     }
 }
 

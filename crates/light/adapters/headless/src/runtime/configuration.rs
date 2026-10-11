@@ -290,8 +290,6 @@ pub(super) struct DeskConfiguration {
     /// Start only a transactionally new Playback/Cuelist/first-Cue topology after recording.
     pub(super) start_after_first_recording: bool,
     pub(super) preload_programmer_changes: bool,
-    pub(super) preload_physical_playback_actions: bool,
-    pub(super) preload_virtual_playback_actions: bool,
     /// Allow Show Patch's scoped Stage preview selection to identify fixtures on DMX.
     pub(super) patch_preview_highlight_dmx: bool,
     /// Installation-wide semantic Highlight contribution. A missing field means the installation
@@ -378,8 +376,6 @@ impl Default for DeskConfiguration {
             color_programming_model_default: light_core::ColorProgrammingModel::Direct,
             start_after_first_recording: false,
             preload_programmer_changes: true,
-            preload_physical_playback_actions: false,
-            preload_virtual_playback_actions: true,
             patch_preview_highlight_dmx: false,
             highlight_look: light_fixture::HighlightLook::default(),
             highlight_legacy_overrides_acknowledged: false,
@@ -638,8 +634,6 @@ mod highlight_look_tests {
         let fresh = DeskConfiguration::default();
         assert!(!fresh.command_line_at_uses_programmer_fade);
         assert!(fresh.preload_programmer_changes);
-        assert!(!fresh.preload_physical_playback_actions);
-        assert!(fresh.preload_virtual_playback_actions);
     }
 
     #[test]
@@ -648,14 +642,10 @@ mod highlight_look_tests {
         let object = stored.as_object_mut().unwrap();
         object.insert("command_line_at_uses_programmer_fade".into(), true.into());
         object.insert("preload_programmer_changes".into(), false.into());
-        object.insert("preload_physical_playback_actions".into(), true.into());
-        object.insert("preload_virtual_playback_actions".into(), false.into());
 
         let decoded: DeskConfiguration = serde_json::from_value(stored).unwrap();
         assert!(decoded.command_line_at_uses_programmer_fade);
         assert!(!decoded.preload_programmer_changes);
-        assert!(decoded.preload_physical_playback_actions);
-        assert!(!decoded.preload_virtual_playback_actions);
     }
 
     #[test]

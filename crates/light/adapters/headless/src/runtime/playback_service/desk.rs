@@ -204,8 +204,13 @@ fn set_page(
     show_id: light_core::ShowId,
     page: u8,
 ) -> Result<(), ApiError> {
+    let _ = show_id;
+    let selected = state
+        .installation
+        .selected_playback_surface(desk_id)
+        .map_err(ApiError::store)?;
     state
         .installation
-        .set_desk_page(desk_id, show_id, page)
+        .set_playback_surface_page(desk_id, &selected, page)
         .map_err(ApiError::store)
 }

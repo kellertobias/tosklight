@@ -346,21 +346,12 @@ pub(super) fn runtime_stop_owner(
     use light_dynamics::DynamicControllerSource;
     use light_wire::v2::dynamics::DynamicRuntimeStopOwner;
     match source {
-        DynamicControllerSource::Playback {
-            playback_number,
-            virtual_page: Some(page),
-        } if light_playback::VirtualPlaybackAddress::new(*page, *playback_number).is_ok() => {
-            Some(DynamicRuntimeStopOwner::VirtualPlayback {
+        DynamicControllerSource::Playback { page, position }
+            if light_playback::PlaybackAddress::new(*page, *position).is_ok() =>
+        {
+            Some(DynamicRuntimeStopOwner::Playback {
                 page: *page,
-                playback_number: *playback_number,
-            })
-        }
-        DynamicControllerSource::Playback {
-            playback_number,
-            virtual_page: None,
-        } if light_playback::PhysicalPlaybackNumber::new(*playback_number).is_ok() => {
-            Some(DynamicRuntimeStopOwner::PhysicalPlayback {
-                playback_number: *playback_number,
+                position: *position,
             })
         }
         _ => None,
@@ -458,14 +449,9 @@ pub(super) fn dynamic_source_label(source: &light_dynamics::DynamicControllerSou
     match source {
         light_dynamics::DynamicControllerSource::Programmer { .. } => "Programmer".into(),
         light_dynamics::DynamicControllerSource::Cue { .. } => "Cue".into(),
-        light_dynamics::DynamicControllerSource::Playback {
-            playback_number,
-            virtual_page: None,
-        } => format!("Playback {playback_number}"),
-        light_dynamics::DynamicControllerSource::Playback {
-            playback_number,
-            virtual_page: Some(page),
-        } => format!("Virtual Playback {playback_number} (page {page})"),
+        light_dynamics::DynamicControllerSource::Playback { page, position } => {
+            format!("Playback {page}.{position}")
+        }
     }
 }
 

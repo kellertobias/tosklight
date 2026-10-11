@@ -65,73 +65,35 @@ pub enum PlaybackTopologyAction {
         #[schemars(length(min = 1, max = 128))]
         expected_object_id: String,
     },
-    ConfigureSlot {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1, max = 127))]
-        slot: u8,
+    AssignPlayback {
+        address: super::playback::PlaybackAddressValue,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         expected_page_revision: u64,
         #[ts(type = "string | null")]
         expected_page_object_id: PlaybackTopologyObjectIdentity,
-        #[schemars(range(max = 9007199254740991_u64))]
-        #[ts(type = "number")]
-        expected_playback_revision: u64,
-        #[ts(type = "string | null")]
-        expected_playback_object_id: PlaybackTopologyObjectIdentity,
-        playback: PlaybackTopologyPlaybackDefinition,
+        definition: PlaybackTopologyPlaybackDefinition,
     },
-    AssignGroupMaster {
-        #[schemars(length(min = 1, max = 128))]
-        group_object_id: String,
-        #[schemars(range(max = 9007199254740991_u64))]
-        #[ts(type = "number")]
-        expected_group_revision: u64,
-        address: PlaybackTopologyGroupMasterAddress,
-    },
-    ConfigureVirtual {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1001, max = 39100))]
-        playback_number: u16,
+    UpdatePlayback {
+        address: super::playback::PlaybackAddressValue,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         expected_page_revision: u64,
         #[ts(type = "string | null")]
         expected_page_object_id: PlaybackTopologyObjectIdentity,
-        playback: PlaybackTopologyPlaybackDefinition,
+        definition: PlaybackTopologyPlaybackDefinition,
     },
-    MapExistingPlayback {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1, max = 127))]
-        slot: u8,
-        #[schemars(range(min = 1, max = 1000))]
-        playback_number: u16,
-        #[schemars(range(max = 9007199254740991_u64))]
-        #[ts(type = "number")]
-        expected_page_revision: u64,
-        #[ts(type = "string | null")]
-        expected_page_object_id: PlaybackTopologyObjectIdentity,
-        #[schemars(range(max = 9007199254740991_u64))]
-        #[ts(type = "number")]
-        expected_playback_revision: u64,
-        #[ts(type = "string | null")]
-        expected_playback_object_id: PlaybackTopologyObjectIdentity,
-    },
-    CreatePage {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
+    ClearPlayback {
+        address: super::playback::PlaybackAddressValue,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         expected_page_revision: u64,
         #[ts(type = "string | null")]
         expected_page_object_id: PlaybackTopologyObjectIdentity,
     },
-    RenamePage {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
+    CreatePlaybackPage {
+        #[schemars(range(min = 1, max = 99))]
+        number: u8,
         #[schemars(length(min = 1, max = 80))]
         name: String,
         #[schemars(range(max = 9007199254740991_u64))]
@@ -140,59 +102,33 @@ pub enum PlaybackTopologyAction {
         #[ts(type = "string | null")]
         expected_page_object_id: PlaybackTopologyObjectIdentity,
     },
-    ClearMappedPlayback {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1, max = 127))]
-        slot: u8,
-        #[schemars(range(max = 9007199254740991_u64))]
-        #[ts(type = "number")]
-        expected_page_revision: u64,
-        #[ts(type = "string | null")]
-        expected_page_object_id: PlaybackTopologyObjectIdentity,
-        #[schemars(range(max = 9007199254740991_u64))]
-        #[ts(type = "number")]
-        expected_playback_revision: u64,
-        #[ts(type = "string | null")]
-        expected_playback_object_id: PlaybackTopologyObjectIdentity,
-    },
-    ClearVirtual {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1001, max = 39100))]
-        playback_number: u16,
+    RenamePlaybackPage {
+        #[schemars(range(min = 1, max = 99))]
+        number: u8,
+        #[schemars(length(min = 1, max = 80))]
+        name: String,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         expected_page_revision: u64,
         #[ts(type = "string | null")]
         expected_page_object_id: PlaybackTopologyObjectIdentity,
     },
-}
-
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum PlaybackTopologyGroupMasterAddress {
-    Physical {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1, max = 127))]
-        slot: u8,
+    DeletePlaybackPage {
+        #[schemars(range(min = 1, max = 99))]
+        number: u8,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         expected_page_revision: u64,
         #[ts(type = "string | null")]
         expected_page_object_id: PlaybackTopologyObjectIdentity,
+    },
+    AssignGroupMaster {
+        #[schemars(length(min = 1, max = 128))]
+        group_object_id: String,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
-        expected_playback_revision: u64,
-        #[ts(type = "string | null")]
-        expected_playback_object_id: PlaybackTopologyObjectIdentity,
-    },
-    Virtual {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1001, max = 39100))]
-        playback_number: u16,
+        expected_group_revision: u64,
+        address: super::playback::PlaybackAddressValue,
         #[schemars(range(max = 9007199254740991_u64))]
         #[ts(type = "number")]
         expected_page_revision: u64,
@@ -203,8 +139,6 @@ pub enum PlaybackTopologyGroupMasterAddress {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackTopologyPlaybackDefinition {
-    #[schemars(range(max = 39100))]
-    pub number: u16,
     #[schemars(length(min = 1, max = 80))]
     pub name: String,
     pub target: PlaybackTopologyTarget,
@@ -390,7 +324,7 @@ pub struct PlaybackTopologyActionOutcome {
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum PlaybackTopologyActionState {
     Changed {
         objects: Vec<PlaybackTopologyObjectProjection>,
@@ -404,33 +338,25 @@ pub enum PlaybackTopologyActionState {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PlaybackTopologyResolution {
     CueList {
         cue_list_id: Uuid,
     },
-    PageSlot {
-        #[schemars(range(min = 1, max = 127))]
+    Playback {
+        #[schemars(range(min = 1, max = 99))]
         page: u8,
-        #[schemars(range(min = 1, max = 127))]
-        slot: u8,
         #[schemars(range(min = 1, max = 1000))]
-        playback_number: Option<u16>,
-    },
-    Virtual {
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-        #[schemars(range(min = 1001, max = 39100))]
-        playback_number: u16,
+        position: u16,
     },
     Page {
-        #[schemars(range(min = 1, max = 127))]
+        #[schemars(range(min = 1, max = 99))]
         page: u8,
     },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "state", rename_all = "snake_case")]
 pub enum PlaybackTopologyObjectProjection {
     Present {
         kind: ShowObjectKind,
@@ -451,7 +377,6 @@ pub enum PlaybackTopologyObjectProjection {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PlaybackTopologyErrorResponse {
     pub kind: PlaybackTopologyErrorKind,
     pub error: String,

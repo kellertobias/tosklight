@@ -1,8 +1,8 @@
 use crate::{
     ActionError, ActionErrorKind, PlaybackRuntimeIdentity, ProgrammingCueActivationCompletion,
     ProgrammingCueCommit, ProgrammingCueCommitResult, ProgrammingCueObjectProjection,
-    ProgrammingCuePageSlot, ProgrammingCueRecordOperation, ProgrammingCueRecordRequest,
-    ProgrammingCueRecordTarget, ProgrammingCueRecordingEnvironment, ProgrammingCueResolvedTarget,
+    ProgrammingCueRecordOperation, ProgrammingCueRecordRequest, ProgrammingCueRecordTarget,
+    ProgrammingCueRecordingEnvironment, ProgrammingCueResolvedTarget,
     ProgrammingCueShowRevisionExpectation, ProgrammingRecordedCue,
 };
 
@@ -49,16 +49,6 @@ fn validate_target(target: ProgrammingCueRecordTarget) -> Result<(), ActionError
         ProgrammingCueRecordTarget::CuelistPool { number } if !(1..=1000).contains(&number) => {
             Err(invalid("Cuelist number must be within 1-1000"))
         }
-        ProgrammingCueRecordTarget::Pool { playback_number }
-            if !(1..=1_000).contains(&playback_number) =>
-        {
-            Err(invalid("Playback number must be within 1-1000"))
-        }
-        ProgrammingCueRecordTarget::PageSlot { page, slot }
-            if !(1..=127).contains(&page) || !(1..=127).contains(&slot) =>
-        {
-            Err(invalid("Playback page and slot must be within 1-127"))
-        }
         ProgrammingCueRecordTarget::CueList { cue_list_id } if cue_list_id.0.is_nil() => {
             Err(invalid("Cue recording requires a valid Cuelist id"))
         }
@@ -80,40 +70,19 @@ pub(super) fn validate_environment(
             ProgrammingCueResolvedTarget::CueList { .. },
         ) => true,
         (
-            ProgrammingCueRecordTarget::Pool { playback_number },
-            ProgrammingCueResolvedTarget::Playback {
-                playback_number: resolved,
-                page_slot: None,
-            },
-        ) => playback_number == resolved,
+            ProgrammingCueRecordTarget::Playback { address },
+            ProgrammingCueResolvedTarget::Playback { address: resolved },
+        ) => address == resolved,
         (
             ProgrammingCueRecordTarget::SelectedPlayback,
-            ProgrammingCueResolvedTarget::Playback {
-                page_slot: None, ..
-            },
+            ProgrammingCueResolvedTarget::Playback { .. },
         ) => true,
-        (
-            ProgrammingCueRecordTarget::SelectedPlayback,
-            ProgrammingCueResolvedTarget::Virtual { .. },
-        ) => true,
-        (
-            ProgrammingCueRecordTarget::PageSlot { page, slot },
-            ProgrammingCueResolvedTarget::Playback {
-                page_slot: Some(resolved),
-                ..
-            }
-            | ProgrammingCueResolvedTarget::EmptyPageSlot(resolved),
-        ) => resolved == ProgrammingCuePageSlot { page, slot },
         (
             ProgrammingCueRecordTarget::CueList { cue_list_id },
             ProgrammingCueResolvedTarget::CueList {
                 cue_list_id: resolved,
             },
         ) => cue_list_id == resolved,
-        (
-            ProgrammingCueRecordTarget::Virtual { address },
-            ProgrammingCueResolvedTarget::Virtual { address: resolved },
-        ) => address == resolved,
         _ => false,
     };
     if target_matches {
@@ -144,11 +113,10 @@ pub(super) fn validate_completion(
     let creation_matches = completion.created_topology
         == (completion.changed
             && completion.projections.cue_list.object_revision == 1
-            && (completion.projections.playback.is_some()
+            && (completion.projections.page.is_some()
                 || matches!(
                     request.target,
-                    ProgrammingCueRecordTarget::Virtual { .. }
-                        | ProgrammingCueRecordTarget::CuelistPool { .. }
+                    ProgrammingCueRecordTarget::CuelistPool { .. }
                 )));
     if event_matches
         && revision_matches
@@ -163,14 +131,13 @@ pub(super) fn validate_completion(
 }
 
 pub(super) fn validate_activation(
-    playback: u16,
+    playback: light_playback::PlaybackAddress,
     completion: &ProgrammingCueCommitResult,
     activation: &ProgrammingCueActivationCompletion,
 ) -> Result<(), ActionError> {
     let projection = &activation.projection;
     let current = projection.current_cue();
-    if projection.requested == PlaybackRuntimeIdentity::Playback(playback)
-        && projection.playback_number == Some(playback)
+    if projection.identity == PlaybackRuntimeIdentity::Playback(playback)
         && activation
             .event_sequence
             .is_none_or(|sequence| sequence > 0)
@@ -186,100 +153,42 @@ pub(super) fn validate_activation(
 
 fn topology_matches(commit: &ProgrammingCueCommit, result: &ProgrammingCueCommitResult) -> bool {
     let projections = &result.projections;
-    let cue_list = serde_json::from_value::<light_playback::CueList>(
+    let Ok(cue_list) = serde_json::from_value::<light_playback::CueList>(
         projections.cue_list.raw_body.as_ref().clone(),
-    );
-    let Ok(cue_list) = cue_list else {
+    ) else {
         return false;
     };
     match commit.environment().target {
         ProgrammingCueResolvedTarget::CuelistPool { number } => {
             (cue_list.pool_number == Some(number) || cue_list.legacy_pool_aliases.contains(&number))
-                && projections.playback.is_none()
                 && projections.page.is_none()
-                && result.concrete_playback_number.is_none()
+                && result.concrete_playback_address.is_none()
         }
         ProgrammingCueResolvedTarget::CueList { cue_list_id } => {
             cue_list.id == cue_list_id
-                && projections.playback.is_none()
                 && projections.page.is_none()
-                && result.concrete_playback_number.is_none()
+                && result.concrete_playback_address.is_none()
         }
-        ProgrammingCueResolvedTarget::Playback {
-            playback_number,
-            page_slot,
-        } => {
-            playback_matches(projections.playback.as_ref(), playback_number, cue_list.id)
-                && page_slot_matches(projections.page.as_ref(), page_slot, playback_number)
-                && result.concrete_playback_number == Some(playback_number)
+        ProgrammingCueResolvedTarget::Playback { address } => {
+            result.concrete_playback_address == Some(address)
+                && projections.page.as_ref().is_some_and(|projection| {
+                    serde_json::from_value::<light_playback::PlaybackPage>(
+                        projection.raw_body.as_ref().clone(),
+                    )
+                    .is_ok_and(|page| {
+                        page.number == address.page()
+                            && page
+                                .assignments
+                                .get(&address.position())
+                                .is_some_and(|playback| {
+                                    playback.target
+                                        == light_playback::PlaybackTarget::CueList {
+                                            cue_list_id: cue_list.id,
+                                        }
+                                })
+                    })
+                })
         }
-        ProgrammingCueResolvedTarget::EmptyPageSlot(page_slot) => {
-            let Some(playback_number) = result.concrete_playback_number else {
-                return false;
-            };
-            playback_matches(projections.playback.as_ref(), playback_number, cue_list.id)
-                && page_slot_matches(projections.page.as_ref(), Some(page_slot), playback_number)
-        }
-        ProgrammingCueResolvedTarget::Virtual { address } => {
-            result.concrete_playback_number == Some(address.number().get())
-                && projections.playback.is_none()
-                && virtual_playback_matches(projections.page.as_ref(), address, cue_list.id)
-        }
-    }
-}
-
-fn virtual_playback_matches(
-    projection: Option<&ProgrammingCueObjectProjection>,
-    address: light_playback::VirtualPlaybackAddress,
-    cue_list_id: light_core::CueListId,
-) -> bool {
-    let Some(projection) = projection else {
-        return false;
-    };
-    serde_json::from_value::<light_playback::PlaybackPage>(projection.raw_body.as_ref().clone())
-        .ok()
-        .filter(|page| page.number == address.page())
-        .and_then(|page| page.virtual_playbacks.get(&address.number().get()).cloned())
-        .is_some_and(|playback| {
-            playback.number == address.number().get()
-                && playback.target == light_playback::PlaybackTarget::CueList { cue_list_id }
-        })
-}
-
-fn playback_matches(
-    projection: Option<&ProgrammingCueObjectProjection>,
-    number: u16,
-    cue_list_id: light_core::CueListId,
-) -> bool {
-    let Some(projection) = projection else {
-        return false;
-    };
-    serde_json::from_value::<light_playback::PlaybackDefinition>(
-        projection.raw_body.as_ref().clone(),
-    )
-    .is_ok_and(|playback| {
-        playback.number == number
-            && playback.target == light_playback::PlaybackTarget::CueList { cue_list_id }
-    })
-}
-
-fn page_slot_matches(
-    projection: Option<&ProgrammingCueObjectProjection>,
-    page_slot: Option<ProgrammingCuePageSlot>,
-    playback_number: u16,
-) -> bool {
-    match (projection, page_slot) {
-        (None, None) => true,
-        (Some(projection), Some(page_slot)) => {
-            serde_json::from_value::<light_playback::PlaybackPage>(
-                projection.raw_body.as_ref().clone(),
-            )
-            .is_ok_and(|page| {
-                page.number == page_slot.page
-                    && page.slots.get(&page_slot.slot) == Some(&playback_number)
-            })
-        }
-        _ => false,
     }
 }
 
@@ -292,9 +201,6 @@ fn validate_projections(
         && projections.cue_list.kind == crate::ActiveShowObjectKind::CueList
         && object_is_valid(&projections.cue_list)
         && cue_presence_matches(&projections.cue_list.raw_body, &result.recorded_cue)
-        && projections.playback.as_ref().is_none_or(|projection| {
-            projection.kind == crate::ActiveShowObjectKind::Playback && object_is_valid(projection)
-        })
         && projections.page.as_ref().is_none_or(|projection| {
             projection.kind == crate::ActiveShowObjectKind::PlaybackPage
                 && object_is_valid(projection)

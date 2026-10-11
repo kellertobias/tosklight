@@ -335,24 +335,8 @@ fn validate_recurring_time(at: NaiveTime) -> Result<(), ScheduleValidationError>
 fn validate_target(target: &ScheduleTarget) -> Result<(), ScheduleValidationError> {
     match target {
         ScheduleTarget::Playback {
-            page,
-            slot,
-            playback_number,
-            master_transition,
-            ..
+            master_transition, ..
         } => {
-            for (field, value) in [
-                ("target.page", page),
-                ("target.slot", slot),
-                ("target.playback_number", playback_number),
-            ] {
-                if *value == 0 {
-                    return Err(ScheduleValidationError::new(
-                        field,
-                        "Playback identity values start at 1",
-                    ));
-                }
-            }
             if let Some(transition) = master_transition {
                 if !transition.level.is_finite() || !(0.0..=1.0).contains(&transition.level) {
                     return Err(ScheduleValidationError::new(

@@ -132,33 +132,17 @@ fn set_target(
         .ok_or_else(|| {
             ActionError::new(ActionErrorKind::Invalid, "ASSIGN target is not pending")
         })?;
-    let (page, slot) = match address {
-        PlaybackAddress::ExplicitPage { page, slot } => (page, slot),
-        PlaybackAddress::CurrentPage { slot } => (current_page(state, session)?, slot),
-        PlaybackAddress::Pool(_) => {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                "an ASSIGN source requires a physical page Playback destination",
-            ));
-        }
-        PlaybackAddress::Virtual(address) => {
-            return Err(ActionError::new(
-                ActionErrorKind::Invalid,
-                format!(
-                    "Virtual {}.{} has no authoritative typed ASSIGN Playback target",
-                    address.page(),
-                    address.number().get()
-                ),
-            ));
-        }
+    let (page, position) = match address {
+        PlaybackAddress::Playback(address) => (address.page(), address.position()),
+        PlaybackAddress::CurrentPage { position } => (current_page(state, session)?, position),
         PlaybackAddress::CueList(_) | PlaybackAddress::Group(_) => {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
-                "this OSC address does not identify a configurable Playback",
+                "This OSC address does not identify a configurable Playback",
             ));
         }
     };
-    let command = format!("{pending} PBK {page} . {slot}");
+    let command = format!("{pending} PBK {page} . {position}");
     let context = ActionContext::operator(session.desk.id, session.id.0, ActionSource::Osc);
     match execute_existing_command(
         state,
@@ -185,15 +169,10 @@ fn target(
     address: PlaybackAddress,
 ) -> Result<ProgrammingCueRecordTarget, ActionError> {
     Ok(match address {
-        PlaybackAddress::Pool(playback_number) => {
-            ProgrammingCueRecordTarget::Pool { playback_number }
-        }
-        PlaybackAddress::ExplicitPage { page, slot } => {
-            ProgrammingCueRecordTarget::PageSlot { page, slot }
-        }
-        PlaybackAddress::CurrentPage { slot } => ProgrammingCueRecordTarget::PageSlot {
-            page: current_page(state, session)?,
-            slot,
+        PlaybackAddress::Playback(address) => ProgrammingCueRecordTarget::Playback { address },
+        PlaybackAddress::CurrentPage { position } => ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(current_page(state, session)?, position)
+                .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error))?,
         },
         PlaybackAddress::CueList(cue_list_id) => {
             ProgrammingCueRecordTarget::CueList { cue_list_id }
@@ -201,29 +180,15 @@ fn target(
         PlaybackAddress::Group(_) => {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
-                "Group runtime cannot be a cue record target",
+                "Group runtime cannot be a Cue record target",
             ));
         }
-        PlaybackAddress::Virtual(address) => virtual_cue_target(state, address)?,
     })
 }
-
-fn virtual_cue_target(
-    _state: &AppState,
-    address: light_playback::VirtualPlaybackAddress,
-) -> Result<ProgrammingCueRecordTarget, ActionError> {
-    Ok(ProgrammingCueRecordTarget::Virtual { address })
-}
-
 fn current_page(state: &AppState, session: &Session) -> Result<u8, ActionError> {
-    let show = state
-        .active_show
-        .current()
-        .clone()
-        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "no show is open"))?;
     state
         .installation
-        .desk_page(session.desk.id, show.id)
+        .command_page(session.desk.id)
         .map_err(|error| ActionError::new(ActionErrorKind::Invalid, error.to_string()))
 }
 
@@ -257,26 +222,14 @@ fn emit_result(
 
 fn playback_target_identity(address: &PlaybackAddress) -> serde_json::Value {
     match address {
-        PlaybackAddress::CurrentPage { slot } => {
-            serde_json::json!({"addressing":"current_page","slot":slot})
+        PlaybackAddress::Playback(address) => {
+            serde_json::json!({"kind":"playback","page":address.page(),"position":address.position()})
         }
-        PlaybackAddress::ExplicitPage { page, slot } => {
-            serde_json::json!({"addressing":"explicit_page","page":page,"slot":slot})
+        PlaybackAddress::CurrentPage { position } => {
+            serde_json::json!({"kind":"current_page","position":position})
         }
-        PlaybackAddress::Pool(playback) => {
-            serde_json::json!({"addressing":"pool","playback":playback})
-        }
-        PlaybackAddress::Virtual(address) => serde_json::json!({
-            "addressing":"virtual",
-            "page":address.page(),
-            "playback":address.number().get(),
-        }),
-        PlaybackAddress::CueList(cue_list) => {
-            serde_json::json!({"addressing":"cuelist","cuelist":cue_list})
-        }
-        PlaybackAddress::Group(group) => {
-            serde_json::json!({"addressing":"group","group":group.as_str()})
-        }
+        PlaybackAddress::CueList(id) => serde_json::json!({"kind":"cue_list","cue_list_id":id.0}),
+        PlaybackAddress::Group(id) => serde_json::json!({"kind":"group","group_id":id.as_str()}),
     }
 }
 

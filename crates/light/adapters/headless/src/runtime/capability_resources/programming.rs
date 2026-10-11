@@ -634,35 +634,27 @@ impl ProgrammingResource {
     pub(in crate::runtime) fn queue_preload_playback_action(
         &self,
         session_id: SessionId,
-        playback_number: u16,
-        page: Option<u8>,
+        address: light_playback::PlaybackAddress,
         action: light_programmer::PreloadPlaybackQueueAction,
-        surface: light_programmer::PreloadPlaybackQueueSurface,
+        control_source: light_playback::PlaybackControlSource,
     ) -> bool {
-        self.programmers.queue_preload_playback_action(
-            session_id,
-            playback_number,
-            page,
-            action,
-            surface,
-        )
+        self.programmers
+            .queue_preload_playback_action(session_id, address, action, control_source)
     }
 
     pub(in crate::runtime) fn queue_preload_playback_action_with_origin(
         &self,
         session_id: SessionId,
-        playback_number: u16,
-        page: Option<u8>,
+        address: light_playback::PlaybackAddress,
         action: light_programmer::PreloadPlaybackQueueAction,
-        surface: light_programmer::PreloadPlaybackQueueSurface,
+        control_source: light_playback::PlaybackControlSource,
         origin_desk_id: Option<Uuid>,
     ) -> bool {
         self.programmers.queue_preload_playback_action_with_origin(
             session_id,
-            playback_number,
-            page,
+            address,
             action,
-            surface,
+            control_source,
             origin_desk_id,
         )
     }

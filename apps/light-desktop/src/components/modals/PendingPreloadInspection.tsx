@@ -1,7 +1,6 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useState } from "react";
 import type { AttributeValue } from "../../api/types/playback";
-import { virtualPlaybackPage } from "../../api/virtualPlaybackAddress";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
 import type { PlaybackTopologyView } from "../../features/playbackTopology/contracts";
 import { usePlaybackTopologyView } from "../../features/playbackTopology/PlaybackTopologyView";
@@ -41,16 +40,8 @@ function pendingPlaybackLabel(
 	entry: ProgrammerPreloadPlaybackQueueEntry,
 	topology: PlaybackTopologyView,
 ) {
-	const virtual = virtualPlaybackPage(entry.playbackNumber) !== null;
-	const definition = !topology.ready
-		? undefined
-		: virtual
-			? topology.pages.find((page) => page.body.number === entry.page)?.body
-					.virtual_playbacks[String(entry.playbackNumber)]
-			: topology.playbacks.find(
-					(playback) => playback.body.number === entry.playbackNumber,
-				)?.body;
-	return `${virtual ? "Virtual" : "Physical"} Playback pool ${entry.playbackNumber}${entry.page == null ? "" : ` · captured page ${entry.page}`}${definition?.name?.trim() ? ` · current name: ${definition.name}` : ""} · ${entry.action.replaceAll("_", " ").toUpperCase()} · ${entry.surface}`;
+	const definition = topology.ready ? topology.pages.find(page => page.body.number === entry.address.page)?.body.assignments[String(entry.address.position)] : undefined;
+	return `Page ${entry.address.page} Playback ${entry.address.position}${definition?.name?.trim() ? ` · current name: ${definition.name}` : ""} · ${entry.action.replaceAll("_", " ").toUpperCase()} · ${entry.controlSource.surface_id}`;
 }
 
 export function PendingPreloadInspection({

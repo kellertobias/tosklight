@@ -57,7 +57,7 @@ pub fn prepare_normalized_show_candidate_incremental(
             "dynamic" => dirty.dynamics = true,
             "preset" => dirty.presets = true,
             "stage_layout" => dirty.stage_layouts = true,
-            "playback" => dirty.playbacks = true,
+            "playback_solo_regions" | "playback_preload_scope" => dirty.playback_policy = true,
             "playback_page" => dirty.playback_pages = true,
             "route" => dirty.routes = true,
             "control_mapping" => dirty.control_mappings = true,

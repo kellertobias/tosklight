@@ -57,13 +57,15 @@ impl ServerProgrammingPorts<'_> {
         let concrete = if let Some(id) = explicit {
             ProgrammingCueTransferAddress::CueList { id }
         } else {
-            let playback_number = self
+            let selection = self
                 .state()
                 .installation
                 .selected_playback(self.session().desk.id, request.show_id)
                 .map_err(|error| error.to_string())?
                 .ok_or("no Cuelist is selected on this desk")?;
-            ProgrammingCueTransferAddress::Pool { playback_number }
+            ProgrammingCueTransferAddress::Playback {
+                address: light_playback::PlaybackAddress::new(selection.page, selection.position)?,
+            }
         };
         if matches!(
             request.source.address,

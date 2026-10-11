@@ -31,9 +31,11 @@ pub(crate) fn put_legacy_object(
     expected: Revision,
     writer_contract: u16,
 ) -> Result<Revision, StoreError> {
+    crate::validate_playback_object(kind, id, body)?;
     crate::programming_contract::check_direct_writes(writer_contract, [(kind, id, body)])?;
     let tx = immediate_transaction(conn)?;
     let revision = write_checked(&tx, kind, id, body, expected, &timestamp())?;
+    crate::playback_contract::stamp_direct_playback_write(&tx, [kind].into_iter())?;
     crate::programming_contract::stamp_direct_write(&tx, writer_contract, [kind].into_iter())?;
     bump_revision(&tx)?;
     tx.commit()?;
@@ -46,6 +48,9 @@ pub(crate) fn mutate_legacy_objects(
     deletes: &[AtomicObjectDelete<'_>],
     writer_contract: u16,
 ) -> Result<Vec<Revision>, StoreError> {
+    for write in writes {
+        crate::validate_playback_object(write.kind, write.id, write.body)?;
+    }
     crate::programming_contract::check_direct_writes(
         writer_contract,
         writes
@@ -55,6 +60,10 @@ pub(crate) fn mutate_legacy_objects(
     let tx = immediate_transaction(conn)?;
     let timestamp = timestamp();
     let revisions = apply_checked_writes(&tx, writes, &timestamp)?;
+    crate::playback_contract::stamp_direct_playback_write(
+        &tx,
+        writes.iter().map(|write| write.kind),
+    )?;
     let deleted = apply_checked_deletes(&tx, deletes)?;
     crate::programming_contract::stamp_direct_write(
         &tx,
@@ -82,6 +91,7 @@ pub(crate) fn undo_legacy_object(
         .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
     ensure_expected(Some(&current), expected)?;
     let previous = previous_history(&tx, kind, id)?;
+    crate::validate_playback_object(kind, id, &serde_json::from_str(&previous.body_json)?)?;
     let revision = next_revision(expected)?;
     archive_redo(&tx, &PortableShowObjectKey::new(kind, id), current)?;
     restore_history(
@@ -108,6 +118,7 @@ pub(crate) fn prepare_undo(
         .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
     ensure_expected(Some(&current), expected)?;
     let previous = previous_history(&tx, kind, id)?;
+    crate::validate_playback_object(kind, id, &serde_json::from_str(&previous.body_json)?)?;
     let undo = PortableShowObjectUndo::new(
         PortableShowObjectKey::new(kind, id),
         serde_json::from_str(&previous.body_json)?,
@@ -129,6 +140,7 @@ pub(crate) fn prepare_redo(
         .ok_or_else(|| StoreError::Sql(rusqlite::Error::QueryReturnedNoRows))?;
     ensure_expected(Some(&current), expected)?;
     let next = next_redo(&tx, kind, id)?;
+    crate::validate_playback_object(kind, id, &serde_json::from_str(&next.body_json)?)?;
     let redo = PortableShowObjectRedo::new(
         PortableShowObjectKey::new(kind, id),
         serde_json::from_str(&next.body_json)?,

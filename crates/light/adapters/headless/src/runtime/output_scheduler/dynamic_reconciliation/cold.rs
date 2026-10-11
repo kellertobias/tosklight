@@ -28,7 +28,7 @@ pub(in crate::runtime) struct ColdDynamicReconciliationContext {
     pub controller_id: Uuid,
     pub source: light_dynamics::DynamicControllerSource,
     /// Page-qualified identity of a Playback row, when the row carries one.
-    pub playback_identity: Option<PlaybackIdentity>,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
 }
 
 impl ColdDynamicReconciliationContext {
@@ -40,7 +40,7 @@ impl ColdDynamicReconciliationContext {
             flow,
             controller_id: controller.id,
             source: controller.source.clone(),
-            playback_identity: None,
+            playback_address: None,
         }
     }
 
@@ -56,7 +56,7 @@ impl ColdDynamicReconciliationContext {
                 programmer_id,
                 instance_link: Some(instance_link),
             },
-            playback_identity: None,
+            playback_address: None,
         }
     }
 
@@ -68,7 +68,7 @@ impl ColdDynamicReconciliationContext {
                 cue_list_id,
                 instance_link,
             },
-            playback_identity: None,
+            playback_address: None,
         }
     }
 
@@ -80,7 +80,7 @@ impl ColdDynamicReconciliationContext {
             flow: ColdDynamicReconciliationFlow::Playback,
             controller_id,
             source: dynamic_playback_owner(playback),
-            playback_identity: playback.playback_identity,
+            playback_address: Some(playback.playback_address),
         }
     }
 }

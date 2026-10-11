@@ -8,12 +8,14 @@ use light_wire::v2::macros as wire;
 
 pub(super) fn application_trigger(
     trigger: wire::MacroTrigger,
-) -> light_application::CommandMacroTrigger {
-    match trigger {
+) -> Result<light_application::CommandMacroTrigger, String> {
+    Ok(match trigger {
         wire::MacroTrigger::Pool => light_application::CommandMacroTrigger::Pool,
         wire::MacroTrigger::Editor => light_application::CommandMacroTrigger::Editor,
-        wire::MacroTrigger::Playback { playback_number } => {
-            light_application::CommandMacroTrigger::Playback { playback_number }
+        wire::MacroTrigger::Playback { address } => {
+            light_application::CommandMacroTrigger::Playback {
+                address: light_playback::PlaybackAddress::new(address.page, address.position)?,
+            }
         }
         wire::MacroTrigger::CommandLine => light_application::CommandMacroTrigger::CommandLine,
         wire::MacroTrigger::Http => light_application::CommandMacroTrigger::Http,
@@ -23,15 +25,20 @@ pub(super) fn application_trigger(
         wire::MacroTrigger::Schedule => light_application::CommandMacroTrigger::Schedule,
         wire::MacroTrigger::Timecode => light_application::CommandMacroTrigger::Timecode,
         wire::MacroTrigger::Tracking => light_application::CommandMacroTrigger::Tracking,
-    }
+    })
 }
 
 pub(super) fn trigger_wire(trigger: light_application::CommandMacroTrigger) -> wire::MacroTrigger {
     match trigger {
         light_application::CommandMacroTrigger::Pool => wire::MacroTrigger::Pool,
         light_application::CommandMacroTrigger::Editor => wire::MacroTrigger::Editor,
-        light_application::CommandMacroTrigger::Playback { playback_number } => {
-            wire::MacroTrigger::Playback { playback_number }
+        light_application::CommandMacroTrigger::Playback { address } => {
+            wire::MacroTrigger::Playback {
+                address: light_wire::v2::playback::PlaybackAddressValue {
+                    page: address.page(),
+                    position: address.position(),
+                },
+            }
         }
         light_application::CommandMacroTrigger::CommandLine => wire::MacroTrigger::CommandLine,
         light_application::CommandMacroTrigger::Http => wire::MacroTrigger::Http,

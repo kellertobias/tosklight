@@ -262,7 +262,7 @@ impl InstallationResource {
         columns: u8,
         rows: u8,
         buttons: u8,
-        playback_layout: Option<light_show::PlaybackSurfaceLayout>,
+        surface_id: String,
         illumination: Option<[u8; 3]>,
     ) -> Result<ControlDesk, light_show::StoreError> {
         self.desk.lock().update_desk_with_illumination(
@@ -271,26 +271,87 @@ impl InstallationResource {
             columns,
             rows,
             buttons,
-            playback_layout,
+            surface_id,
             illumination,
         )
     }
 
-    pub(in crate::runtime) fn desk_page(
+    pub(in crate::runtime) fn playback_surfaces(
         &self,
         desk_id: Uuid,
-        show_id: light_core::ShowId,
-    ) -> Result<u8, light_show::StoreError> {
-        self.desk.lock().desk_page(desk_id, show_id)
+    ) -> Result<light_show::PlaybackSurfaceRegistry, light_show::StoreError> {
+        self.desk.lock().playback_surfaces(desk_id)
     }
-
-    pub(in crate::runtime) fn set_desk_page(
+    pub(in crate::runtime) fn put_playback_surfaces(
         &self,
         desk_id: Uuid,
-        show_id: light_core::ShowId,
+        surfaces: &light_show::PlaybackSurfaceRegistry,
+    ) -> Result<(), light_show::StoreError> {
+        self.desk.lock().put_playback_surfaces(desk_id, surfaces)
+    }
+    pub(in crate::runtime) fn update_playback_surface(
+        &self,
+        desk_id: Uuid,
+        id: &str,
+        edit: impl FnOnce(
+            Option<light_show::PlaybackSurfaceConfiguration>,
+        )
+            -> Result<light_show::PlaybackSurfaceConfiguration, light_show::StoreError>,
+    ) -> Result<(), light_show::StoreError> {
+        let desk = self.desk.lock();
+        let mut surfaces = desk.playback_surfaces(desk_id)?;
+        let next = edit(surfaces.get(id).cloned())?;
+        surfaces.insert(id.to_owned(), next);
+        desk.put_playback_surfaces(desk_id, &surfaces)
+    }
+    pub(in crate::runtime) fn selected_playback_surface(
+        &self,
+        desk_id: Uuid,
+    ) -> Result<String, light_show::StoreError> {
+        self.desk.lock().selected_playback_surface(desk_id)
+    }
+    pub(in crate::runtime) fn select_playback_surface(
+        &self,
+        desk_id: Uuid,
+        id: &str,
+    ) -> Result<(), light_show::StoreError> {
+        self.desk.lock().select_playback_surface(desk_id, id)
+    }
+    pub(in crate::runtime) fn set_playback_surface_page(
+        &self,
+        desk_id: Uuid,
+        surface_id: &str,
         page: u8,
     ) -> Result<(), light_show::StoreError> {
-        self.desk.lock().set_desk_page(desk_id, show_id, page)
+        let desk = self.desk.lock();
+        let mut surfaces = desk.playback_surfaces(desk_id)?;
+        let surface = surfaces.get_mut(surface_id).ok_or_else(|| {
+            light_show::StoreError::Invalid("Playback surface does not exist".into())
+        })?;
+        if !matches!(
+            surface.page_source,
+            light_show::PlaybackPageSource::Own { .. }
+        ) {
+            return Err(light_show::StoreError::Invalid(
+                "Only an Own page selection can be changed directly".into(),
+            ));
+        }
+        surface.page_source = light_show::PlaybackPageSource::Own { page };
+        desk.put_playback_surfaces(desk_id, &surfaces)
+    }
+    pub(in crate::runtime) fn command_page(
+        &self,
+        desk_id: Uuid,
+    ) -> Result<u8, light_show::StoreError> {
+        let desk = self.desk.lock();
+        let surfaces = desk.playback_surfaces(desk_id)?;
+        let selected = desk.selected_playback_surface(desk_id)?;
+        light_show::resolve_playback_surface_pages(&surfaces)?
+            .get(&selected)
+            .copied()
+            .ok_or_else(|| {
+                light_show::StoreError::Invalid("Selected Playback surface is missing".into())
+            })
     }
 
     pub(in crate::runtime) fn selected_cue_list(
@@ -315,7 +376,7 @@ impl InstallationResource {
         &self,
         desk_id: Uuid,
         show_id: light_core::ShowId,
-    ) -> Result<Option<u16>, light_show::StoreError> {
+    ) -> Result<Option<light_show::PlaybackSelection>, light_show::StoreError> {
         self.desk.lock().selected_playback(desk_id, show_id)
     }
 
@@ -323,7 +384,7 @@ impl InstallationResource {
         &self,
         desk_id: Uuid,
         show_id: light_core::ShowId,
-        playback: Option<u16>,
+        playback: Option<light_show::PlaybackSelection>,
     ) -> Result<(), light_show::StoreError> {
         self.desk
             .lock()
@@ -332,9 +393,10 @@ impl InstallationResource {
 
     pub(in crate::runtime) fn put_screen(
         &self,
+        desk_id: Uuid,
         screen: ScreenConfiguration,
     ) -> Result<ScreenConfiguration, light_show::StoreError> {
-        self.desk.lock().put_screen(screen)
+        self.desk.lock().put_screen(desk_id, screen)
     }
 
     pub(in crate::runtime) fn screens(
@@ -367,23 +429,6 @@ impl InstallationResource {
         self.desk
             .lock()
             .put_programmer_control_surface(configuration)
-    }
-
-    pub(in crate::runtime) fn screen_page(
-        &self,
-        screen_id: Uuid,
-        show_id: light_core::ShowId,
-    ) -> Result<u8, light_show::StoreError> {
-        self.desk.lock().screen_page(screen_id, show_id)
-    }
-
-    pub(in crate::runtime) fn set_screen_page(
-        &self,
-        screen_id: Uuid,
-        show_id: light_core::ShowId,
-        page: u8,
-    ) -> Result<(), light_show::StoreError> {
-        self.desk.lock().set_screen_page(screen_id, show_id, page)
     }
 
     pub(in crate::runtime) fn bootstrap_desk_data(

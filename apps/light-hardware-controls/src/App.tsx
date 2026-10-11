@@ -13,146 +13,148 @@ import type { OscBridge } from "./transport/oscBridge";
 type ControllerTab = "console" | "grid" | "settings";
 
 interface AppProps {
-  bridge?: OscBridge;
-  nativeBridge?: NativeHardwareBridge;
-  simulatorBridge?: NativeSimulatorBridge;
+	bridge?: OscBridge;
+	nativeBridge?: NativeHardwareBridge;
+	simulatorBridge?: NativeSimulatorBridge;
 }
 
 export function App({ bridge, nativeBridge, simulatorBridge }: AppProps = {}) {
-  const controller = useHardwareController({
-    bridge,
-    nativeBridge,
-    simulatorBridge,
-  });
-  const [tab, setTab] = useState<ControllerTab>("console");
-  const { feedback, settings, send } = controller;
+	const controller = useHardwareController({
+		bridge,
+		nativeBridge,
+		simulatorBridge,
+	});
+	const [tab, setTab] = useState<ControllerTab>("console");
+	const { feedback, settings, send } = controller;
 
-  return (
-    <main
-      className={[
-        feedback.updateArmed ? "update-armed" : "",
-        controller.activeMode === "native" ? "native-mode" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <header>
-        <h1>
-          ToskLight <span>Hardware Controls</span>
-        </h1>
-        {feedback.updateArmed && (
-          <strong className="hardware-update-state" role="status">
-            UPDATE ARMED · touch an assigned playback
-          </strong>
-        )}
-        <ModeSelector
-          activeMode={controller.activeMode}
-          setMode={controller.setMode}
-        />
-        <LinkStatus
-          activeMode={controller.activeMode}
-          connected={feedback.connected}
-          page={feedback.page}
-          device={controller.device}
-          lastInput={controller.lastInput}
-          linkError={controller.linkError}
-        />
-      </header>
-      <ControllerNavigation
-        tab={tab}
-        setTab={setTab}
-        topRowVisible={settings.top}
-        setTopRowVisible={controller.setTopRowVisible}
-      />
-      {tab === "console" ? (
-        <section className="console-layout">
-          <NavigationRail
-            page={feedback.page}
-            alignActive={feedback.alignActive}
-            send={send}
-            nativePageControls={controller.activeMode === "native-simulator"}
-          />
-          <PlaybackSurface
-            topRowVisible={settings.top}
-            levels={feedback.levels}
-            lamps={feedback.lamps}
-            send={send}
-            nativeSimulator={controller.activeMode === "native-simulator"}
-          />
-          <ProgrammerSurface
-            updateArmed={feedback.updateArmed}
-            lamps={feedback.lamps}
-            highlight={feedback.highlight}
-            send={send}
-            nativeSimulator={controller.activeMode === "native-simulator"}
-          />
-        </section>
-      ) : tab === "grid" ? (
-        <GridSurface
-          levels={feedback.levels}
-          lamps={feedback.lamps}
-          speedBpms={feedback.speedBpms}
-          send={send}
-        />
-      ) : (
-        <SettingsSurface
-          connected={feedback.connected}
-          activeMode={controller.activeMode}
-          settings={settings}
-          updateSettings={controller.updateSettings}
-          connect={controller.connect}
-        />
-      )}
-    </main>
-  );
+	return (
+		<main
+			className={[
+				feedback.updateArmed ? "update-armed" : "",
+				controller.activeMode === "native" ? "native-mode" : "",
+			]
+				.filter(Boolean)
+				.join(" ")}
+		>
+			<header>
+				<h1>
+					ToskLight <span>Hardware Controls</span>
+				</h1>
+				{feedback.updateArmed && (
+					<strong className="hardware-update-state" role="status">
+						UPDATE ARMED · touch an assigned playback
+					</strong>
+				)}
+				<ModeSelector
+					activeMode={controller.activeMode}
+					setMode={controller.setMode}
+				/>
+				<LinkStatus
+					activeMode={controller.activeMode}
+					connected={feedback.connected}
+					page={feedback.page}
+					device={controller.device}
+					lastInput={controller.lastInput}
+					linkError={controller.linkError}
+				/>
+			</header>
+			<ControllerNavigation
+				tab={tab}
+				setTab={setTab}
+				topRowVisible={settings.top}
+				setTopRowVisible={controller.setTopRowVisible}
+			/>
+			{tab === "console" ? (
+				<section className="console-layout">
+					<NavigationRail
+						page={feedback.page}
+						alignActive={feedback.alignActive}
+						send={send}
+						nativePageControls={controller.activeMode === "native-simulator"}
+					/>
+					<PlaybackSurface
+						page={feedback.page}
+						topRowVisible={settings.top}
+						levels={feedback.levels}
+						lamps={feedback.lamps}
+						send={send}
+						nativeSimulator={controller.activeMode === "native-simulator"}
+					/>
+					<ProgrammerSurface
+						updateArmed={feedback.updateArmed}
+						lamps={feedback.lamps}
+						highlight={feedback.highlight}
+						send={send}
+						nativeSimulator={controller.activeMode === "native-simulator"}
+					/>
+				</section>
+			) : tab === "grid" ? (
+				<GridSurface
+					page={feedback.page}
+					levels={feedback.levels}
+					lamps={feedback.lamps}
+					speedBpms={feedback.speedBpms}
+					send={send}
+				/>
+			) : (
+				<SettingsSurface
+					connected={feedback.connected}
+					activeMode={controller.activeMode}
+					settings={settings}
+					updateSettings={controller.updateSettings}
+					connect={controller.connect}
+				/>
+			)}
+		</main>
+	);
 }
 
 interface ControllerNavigationProps {
-  tab: ControllerTab;
-  setTab: (tab: ControllerTab) => void;
-  topRowVisible: boolean;
-  setTopRowVisible: (visible: boolean) => void;
+	tab: ControllerTab;
+	setTab: (tab: ControllerTab) => void;
+	topRowVisible: boolean;
+	setTopRowVisible: (visible: boolean) => void;
 }
 
 function ControllerNavigation({
-  tab,
-  setTab,
-  topRowVisible,
-  setTopRowVisible,
+	tab,
+	setTab,
+	topRowVisible,
+	setTopRowVisible,
 }: ControllerNavigationProps) {
-  return (
-    <nav>
-      <button
-        type="button"
-        className={tab === "console" ? "active" : ""}
-        onClick={() => setTab("console")}
-      >
-        Playback Console
-      </button>
-      <button
-        type="button"
-        className={tab === "grid" ? "active" : ""}
-        onClick={() => setTab("grid")}
-      >
-        Button Grid 41–90
-      </button>
-      <button
-        type="button"
-        className={tab === "settings" ? "active" : ""}
-        onClick={() => setTab("settings")}
-      >
-        Settings
-      </button>
-      {tab === "console" && (
-        <label>
-          <input
-            type="checkbox"
-            checked={topRowVisible}
-            onChange={(event) => setTopRowVisible(event.target.checked)}
-          />{" "}
-          Show 21–40
-        </label>
-      )}
-    </nav>
-  );
+	return (
+		<nav>
+			<button
+				type="button"
+				className={tab === "console" ? "active" : ""}
+				onClick={() => setTab("console")}
+			>
+				Playback Console
+			</button>
+			<button
+				type="button"
+				className={tab === "grid" ? "active" : ""}
+				onClick={() => setTab("grid")}
+			>
+				Button Grid 41–90
+			</button>
+			<button
+				type="button"
+				className={tab === "settings" ? "active" : ""}
+				onClick={() => setTab("settings")}
+			>
+				Settings
+			</button>
+			{tab === "console" && (
+				<label>
+					<input
+						type="checkbox"
+						checked={topRowVisible}
+						onChange={(event) => setTopRowVisible(event.target.checked)}
+					/>{" "}
+					Show 21–40
+				</label>
+			)}
+		</nav>
+	);
 }

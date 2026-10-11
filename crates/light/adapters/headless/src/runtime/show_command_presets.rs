@@ -200,7 +200,7 @@ fn numbered_object(tokens: &[String], family: &str) -> Result<String, String> {
     let parsed = number
         .parse::<u16>()
         .map_err(|_| format!("{family} number is invalid"))?;
-    if parsed == 0 || parsed > light_playback::MAX_PLAYBACKS {
+    if parsed == 0 || parsed > 1000 {
         return Err(format!("{family} number must be within 1-1000"));
     }
     Ok(parsed.to_string())

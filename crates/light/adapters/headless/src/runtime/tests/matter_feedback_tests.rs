@@ -5,7 +5,6 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     let mut snapshot = matter_test_snapshot();
     let cue_list_id = snapshot.cue_lists[0].id;
     let definition = |number, fader, has_fader| light_playback::PlaybackDefinition {
-        number,
         name: format!("Matter playback {number}"),
         target: light_playback::PlaybackTarget::CueList { cue_list_id },
         buttons: [light_playback::PlaybackButtonAction::None; 3],
@@ -22,29 +21,26 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         presentation_icon: None,
         presentation_image: None,
     };
-    snapshot.playbacks = vec![
-        definition(27, light_playback::PlaybackFaderMode::Temp, false),
-        definition(28, light_playback::PlaybackFaderMode::XFade, false),
-    ]
-    .into();
     snapshot.playback_pages = vec![light_playback::PlaybackPage {
-        number: 3,
-        name: "Matter".into(),
-        slots: HashMap::from([(1, 27), (2, 28)]),
-        virtual_playbacks: HashMap::new(),
-    }]
-    .into();
+        number: 3, name: "Matter".into(),
+        assignments: HashMap::from([
+            (1, definition(27, light_playback::PlaybackFaderMode::Temp, false)),
+            (2, definition(28, light_playback::PlaybackFaderMode::XFade, false)),
+        ]),
+    }].into();
     state.output.replace_snapshot(snapshot).unwrap();
 
     let faderless_xfade = state
         .output.snapshot()
-        .playbacks
+        .playback_pages
         .iter()
-        .find(|definition| definition.number == 28)
+        .find(|page| page.number == 3)
+        .and_then(|page|page.assignments.get(&2))
         .cloned()
         .unwrap();
     let rejected = dispatch_playback_action(
         &state,
+        light_playback::PlaybackAddress::new(3,2).unwrap(),
         &faderless_xfade,
         "fader",
         &PoolPlaybackInput {
@@ -59,7 +55,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
             session: None,
             desk: None,
             source: "osc",
-            exclusion_zones: &[],
+            control_source: &light_playback::PlaybackControlSource { surface_id:"matter-test".into(),control_id:1 },
             activation_origin: None,
         },
     )
@@ -69,7 +65,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     for playback in 1..=2 {
         apply_matter_playback_write(
             &state,
-            matter::endpoint_id(3, playback).unwrap(),
+            refresh_matter_bridge(&state).lights.iter().find(|light|light.address == light_playback::PlaybackAddress::new(3,playback).unwrap()).unwrap().endpoint_id,
             matter::MatterPlaybackWrite {
                 on: None,
                 level: Some(127),
@@ -83,14 +79,14 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         status
             .lights
             .iter()
-            .map(|light| (light.playback_number, light.level, light.on))
+            .map(|light| (light.address, light.level, light.on))
             .collect::<Vec<_>>(),
-        vec![(27, 127, true), (28, 127, true)]
+        vec![(light_playback::PlaybackAddress::new(3,1).unwrap(),127,true),(light_playback::PlaybackAddress::new(3,2).unwrap(),127,true)]
     );
 
     apply_matter_playback_write(
         &state,
-        matter::endpoint_id(3, 1).unwrap(),
+        refresh_matter_bridge(&state).lights.iter().find(|light|light.address == light_playback::PlaybackAddress::new(3,1).unwrap()).unwrap().endpoint_id,
         matter::MatterPlaybackWrite {
             on: Some(false),
             level: None,
@@ -102,7 +98,7 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
     assert_eq!(status.lights[0].level, 0);
     assert!(!status.lights[0].on);
 
-    let xfade_endpoint = matter::endpoint_id(3, 2).unwrap();
+    let xfade_endpoint = refresh_matter_bridge(&state).lights.iter().find(|light|light.address == light_playback::PlaybackAddress::new(3,2).unwrap()).unwrap().endpoint_id;
     let off = apply_matter_playback_write(
         &state,
         xfade_endpoint,
@@ -131,16 +127,18 @@ fn matter_feedback_tracks_faderless_temp_and_manual_xfade_positions() {
         state
             .output.playback_runtime()
             .iter()
-            .find(|playback| playback.playback_number == Some(28))
+            .find(|playback| playback.playback_address == Some(light_playback::PlaybackAddress::new(3,2).unwrap()))
             .unwrap()
             .manual_xfade_position,
         1.0
     );
 
     state
-        .output.execute_playback(EnginePlaybackCommand::Pool {
-            number: 28,
-            action: PoolPlaybackAction::Off,
+        .output.execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(3,2).unwrap(),
+            action: light_engine::PlaybackAction::Off,
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource { surface_id:"matter-test".into(),control_id:1 },
         })
         .unwrap();
     let tracked_off = refresh_matter_bridge(&state);
@@ -208,7 +206,6 @@ fn matter_values_include_only_cuelist_dynamic_and_group_targets() {
         },
     };
     let definition = |number, target| light_playback::PlaybackDefinition {
-        number,
         name: format!("Matter target {number}"),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
         target,
@@ -225,7 +222,7 @@ fn matter_values_include_only_cuelist_dynamic_and_group_targets() {
         presentation_icon: None,
         presentation_image: None,
     };
-    snapshot.playbacks = vec![
+    let definitions = vec![
         definition(10, light_playback::PlaybackTarget::CueList { cue_list_id }),
         definition(20, dynamic_target),
         definition(
@@ -242,15 +239,11 @@ fn matter_values_include_only_cuelist_dynamic_and_group_targets() {
         definition(50, light_playback::PlaybackTarget::ProgrammerFade),
         definition(60, light_playback::PlaybackTarget::CueFade),
         definition(70, light_playback::PlaybackTarget::GrandMaster),
-    ]
-    .into();
+    ];
     snapshot.playback_pages = vec![light_playback::PlaybackPage {
-        number: 5,
-        name: "Matter target filter".into(),
-        slots: HashMap::from([(1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60), (7, 70)]),
-        virtual_playbacks: HashMap::new(),
-    }]
-    .into();
+        number:5,name:"Matter target filter".into(),
+        assignments: definitions.into_iter().enumerate().map(|(index,definition)|((index+1) as u16,definition)).collect(),
+    }].into();
 
     let values = matter_playback_values(&state, &snapshot);
 
@@ -259,24 +252,23 @@ fn matter_values_include_only_cuelist_dynamic_and_group_targets() {
             .keys()
             .copied()
             .collect::<std::collections::BTreeSet<_>>(),
-        std::collections::BTreeSet::from([10, 20, 30])
+        std::collections::BTreeSet::from([light_playback::PlaybackAddress::new(5,1).unwrap(),light_playback::PlaybackAddress::new(5,2).unwrap(),light_playback::PlaybackAddress::new(5,3).unwrap()])
     );
     let status = matter::MatterBridgeAdapter::default().reconcile(
         true,
         &snapshot.playback_pages,
-        &snapshot.playbacks,
         &values,
     );
     assert_eq!(
         status
             .lights
             .iter()
-            .map(|light| (light.endpoint_id, light.playback_number))
+            .map(|light| (light.endpoint_id, light.address))
             .collect::<Vec<_>>(),
         vec![
-            (matter::endpoint_id(5, 1).unwrap(), 10),
-            (matter::endpoint_id(5, 2).unwrap(), 20),
-            (matter::endpoint_id(5, 3).unwrap(), 30),
+            (1, light_playback::PlaybackAddress::new(5,1).unwrap()),
+            (2, light_playback::PlaybackAddress::new(5,2).unwrap()),
+            (3, light_playback::PlaybackAddress::new(5,3).unwrap()),
         ]
     );
     let _ = std::fs::remove_dir_all(data_dir);

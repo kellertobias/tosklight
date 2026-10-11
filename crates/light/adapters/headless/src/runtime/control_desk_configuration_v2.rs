@@ -7,11 +7,6 @@ use light_wire::v2::control_desk_configuration as wire;
 const REQUEST_CACHE_ENTRY_LIMIT: usize = 1_024;
 
 pub(super) fn router() -> Router<AppState> {
-    // Retain the established /actions endpoint: installed clients use its typed Update and
-    // SetPage union with the existing replay cache. Illumination extends that sparse Update;
-    // renaming it to /update would require a coordinated transport migration for those clients.
-    // The desk is the operand, and there is one. The path carried its id while it could be one
-    // of several, which is also why the action below had to compare a caller's desk against it.
     Router::new().route("/api/v2/control-desk/actions", post(apply_action))
 }
 
@@ -53,10 +48,6 @@ async fn execute_action(
         wire::ControlDeskConfigurationAction::Update { patch } => {
             update_control_desk(state, desk_id, patch)
         }
-        wire::ControlDeskConfigurationAction::SetPage {
-            page,
-            existing_only,
-        } => set_playback_page(state, session, page, existing_only).await,
         wire::ControlDeskConfigurationAction::RemoveClient { client_id } => {
             remove_historical_client(state, session, client_id)
         }
@@ -69,10 +60,6 @@ fn update_control_desk(
     patch: wire::ControlDeskConfigurationPatch,
 ) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
     let current = state.installation.desk().map_err(ApiError::store)?;
-    let layout = patch
-        .playback_layout
-        .map(domain_layout)
-        .or(current.playback_layout);
     let desk = state
         .installation
         .update_desk(
@@ -81,7 +68,7 @@ fn update_control_desk(
             patch.columns.unwrap_or(current.columns),
             patch.rows.unwrap_or(current.rows),
             patch.buttons.unwrap_or(current.buttons),
-            layout,
+            patch.surface_id.unwrap_or(current.surface_id),
             Some([
                 patch
                     .hardware_led_brightness
@@ -102,61 +89,7 @@ fn update_control_desk(
         serde_json::json!({"desk":desk}),
     );
     send_osc_feedback(state, false);
-    Ok(outcome(desk, None, None, None))
-}
-
-async fn set_playback_page(
-    state: &AppState,
-    session: &Session,
-    page: u8,
-    existing_only: bool,
-) -> Result<wire::ControlDeskConfigurationActionOutcome, ApiError> {
-    let _activation = state.active_show.acquire().await;
-    let show = state
-        .active_show
-        .current()
-        .clone()
-        .ok_or_else(|| ApiError::bad_request("no show is open"))?;
-    let context = operator_action_context(session, light_application::ActionSource::Http);
-    let completed = if existing_only {
-        state
-            .playback
-            .run_unit_of_work(playback_service::ChangePage::existing(
-                state,
-                show.id,
-                context,
-                session.desk.id,
-                page,
-            ))
-    } else {
-        playback_service::ChangePage {
-            state,
-            show: &show,
-            context,
-            desk_id: session.desk.id,
-            page,
-        }
-        .run()
-    };
-    let availability = completed.output?;
-    if !availability.available() {
-        return Err(ApiError::bad_request("playback page does not exist"));
-    }
-    let page_creation_event_sequence = availability.event_sequence();
-    let event_sequence = completed.event_sequences.first().copied();
-    emit(
-        state,
-        "playback_page_changed",
-        serde_json::json!({"desk_id":session.desk.id,"show_id":show.id,"page":page}),
-    );
-    send_osc_feedback(state, false);
-    let desk = state.installation.desk().map_err(ApiError::store)?;
-    Ok(outcome(
-        desk,
-        Some(page),
-        event_sequence,
-        page_creation_event_sequence,
-    ))
+    Ok(outcome(desk, None))
 }
 
 fn remove_historical_client(
@@ -209,42 +142,21 @@ fn ensure_client_is_removable(
 
 fn outcome(
     desk: ControlDesk,
-    page: Option<u8>,
     event_sequence: Option<u64>,
-    page_creation_event_sequence: Option<u64>,
 ) -> wire::ControlDeskConfigurationActionOutcome {
     wire::ControlDeskConfigurationActionOutcome {
         request_id: String::new(),
         replayed: false,
         desk: runtime_wire::desk(desk),
         removed: false,
-        page,
         event_sequence,
-        page_creation_event_sequence,
     }
 }
 
 fn removed_outcome(desk: ControlDesk) -> wire::ControlDeskConfigurationActionOutcome {
-    let mut outcome = outcome(desk, None, None, None);
+    let mut outcome = outcome(desk, None);
     outcome.removed = true;
     outcome
-}
-
-fn domain_layout(
-    layout: light_wire::v2::runtime::RuntimePlaybackSurfaceLayout,
-) -> light_show::PlaybackSurfaceLayout {
-    light_show::PlaybackSurfaceLayout {
-        playbacks_per_row: layout.playbacks_per_row,
-        rows: layout
-            .rows
-            .into_iter()
-            .map(|row| light_show::PlaybackSurfaceRow {
-                first_playback_slot: row.first_playback_slot,
-                has_fader: row.has_fader,
-                button_count: row.button_count,
-            })
-            .collect(),
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

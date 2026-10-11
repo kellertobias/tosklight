@@ -13,7 +13,6 @@ export function emptyConfiguration(
 	cueListId: string,
 ): PlaybackDefinition {
 	return {
-		number: 0,
 		name: `Playback ${page}.${slot}`,
 		target: { type: "cue_list", cue_list_id: cueListId },
 		buttons: ["go_minus", "go", "flash"],

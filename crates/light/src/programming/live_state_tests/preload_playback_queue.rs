@@ -1,6 +1,6 @@
 use super::*;
 use crate::{ActionErrorKind, EventObject};
-use light_programmer::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
+use light_programmer::PreloadPlaybackQueueAction;
 
 struct QueuePorts {
     registry: ProgrammerRegistry,
@@ -17,10 +17,12 @@ impl ProgrammingPorts for QueuePorts {
         if command == "QUEUE" {
             programmers.queue_preload_playback_action(
                 SessionId(context.session_id.unwrap()),
-                7,
-                None,
+                light_playback::PlaybackAddress::new(1, 7).unwrap(),
                 PreloadPlaybackQueueAction::Go,
-                PreloadPlaybackQueueSurface::Virtual,
+                light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
             );
         }
         ProgrammingExecution::Accepted {
@@ -98,10 +100,12 @@ impl QueueSetup {
             .run_external_interaction(context, &self.ports, || {
                 self.registry.queue_preload_playback_action(
                     SessionId(context.session_id.unwrap()),
-                    number,
-                    page,
+                    light_playback::PlaybackAddress::new(page.unwrap_or(1), number).unwrap(),
                     PreloadPlaybackQueueAction::Toggle,
-                    PreloadPlaybackQueueSurface::Physical,
+                    light_playback::PlaybackControlSource {
+                        surface_id: "main".into(),
+                        control_id: 1,
+                    },
                 )
             })
             .unwrap()
@@ -133,7 +137,7 @@ fn snapshot_is_authenticated_and_preserves_ordered_duplicates() {
             .projection
             .actions
             .iter()
-            .map(|action| action.playback_number)
+            .map(|action| action.address.position())
             .collect::<Vec<_>>(),
         [3, 3]
     );
@@ -142,9 +146,9 @@ fn snapshot_is_authenticated_and_preserves_ordered_duplicates() {
             .projection
             .actions
             .iter()
-            .map(|action| action.page)
+            .map(|action| action.address.page())
             .collect::<Vec<_>>(),
-        [Some(4), None]
+        [4, 1]
     );
 
     // An identity from before the collapse reads the desk's queue rather than being turned away.

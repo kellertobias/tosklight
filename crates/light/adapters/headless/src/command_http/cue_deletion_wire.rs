@@ -12,14 +12,20 @@ pub(super) fn application_command(
         request.request_id,
         application::ProgrammingCueDeletionRequest {
             show_id,
-            address: address(request.address),
+            address: address(request.address)?,
             cue_number: request
                 .cue_number
                 .parse()
                 .map_err(|error: String| format!("cue_number is invalid: {error}"))?,
             expectation: application::ProgrammingCueDeletionExpectation::Exact(
                 application::ProgrammingCueDeletionAuthority {
-                    playback_number: request.authority.playback_number,
+                    playback_address: request
+                        .authority
+                        .playback_address
+                        .map(|value| {
+                            light_playback::PlaybackAddress::new(value.page, value.position)
+                        })
+                        .transpose()?,
                     cue_list_id: light_core::CueListId(request.authority.cue_list_id),
                     object_id: request.authority.object_id,
                     object_revision: request.authority.object_revision,
@@ -80,22 +86,29 @@ fn validate_request(request: &wire::CueDeletionRequest) -> Result<(), String> {
     Ok(())
 }
 
-const fn address(value: wire::CueDeletionAddress) -> application::ProgrammingCueDeletionAddress {
-    match value {
-        wire::CueDeletionAddress::Pool { playback_number } => {
-            application::ProgrammingCueDeletionAddress::Pool { playback_number }
+fn address(
+    value: wire::CueDeletionAddress,
+) -> Result<application::ProgrammingCueDeletionAddress, String> {
+    Ok(match value {
+        wire::CueDeletionAddress::Playback { page, position } => {
+            application::ProgrammingCueDeletionAddress::Playback {
+                address: light_playback::PlaybackAddress::new(page, position)?,
+            }
+        }
+        wire::CueDeletionAddress::CuelistPool { number } => {
+            application::ProgrammingCueDeletionAddress::CuelistPool { number }
         }
         wire::CueDeletionAddress::CurrentPage {
             expected_page,
-            slot,
-        } => application::ProgrammingCueDeletionAddress::CurrentPage {
-            expected_page,
-            slot,
-        },
-        wire::CueDeletionAddress::PageSlot { page, slot } => {
-            application::ProgrammingCueDeletionAddress::PageSlot { page, slot }
+            position,
+        } => {
+            light_playback::PlaybackAddress::new(expected_page, position)?;
+            application::ProgrammingCueDeletionAddress::CurrentPage {
+                expected_page,
+                position,
+            }
         }
-    }
+    })
 }
 
 fn projection(

@@ -20,7 +20,7 @@ import { HardwareLightingSettings } from "./HardwareLightingSettings";
 import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import {
 	createScreenConfiguration,
-	playbackLayoutLegacyFields,
+	defaultScreenSurface,
 } from "./screenConfiguration";
 import { KnownClientsModal } from "./screens/DefaultScreenPicker";
 import {
@@ -161,7 +161,11 @@ export function ProgrammerControlSurfaceSettings() {
 				Attributes &amp; encoders.
 			</small>
 			{ownerClosed && (
-				<ErrorAlert as="div" className="programmer-control-owner-warning" role="alert">
+				<ErrorAlert
+					as="div"
+					className="programmer-control-owner-warning"
+					role="alert"
+				>
 					<span>{`Encoders unavailable — assigned to ${owner?.name}`}</span>
 					<Button
 						variant="warning"
@@ -187,13 +191,18 @@ function useAddScreenAction(
 ) {
 	const server = useScreens();
 	const { state } = useApp();
-	const create = () =>
-		void server.saveScreen(
-			createScreenConfiguration(server.screens?.screens ?? [], {
-				desks: state.desks,
-				activeDeskId: state.activeDeskId,
-			}),
+	const create = async () => {
+		const screen = createScreenConfiguration(server.screens?.screens ?? [], {
+			desks: state.desks,
+			activeDeskId: state.activeDeskId,
+		});
+		if (!server.surfaces) return;
+		await server.updatePlaybackSurface(
+			screen.surface_id,
+			defaultScreenSurface(screen.name),
 		);
+		await server.saveScreen(screen);
+	};
 	const createRef = useRef(create);
 	createRef.current = create;
 	useEffect(() => {
@@ -241,13 +250,17 @@ export function ScreensSetup({
 		(layout: PlaybackSurfaceLayout) =>
 			dispatch({
 				type: "SET_PLAYBACK_LAYOUT",
-				columns: layout.playbacks_per_row,
+				columns: Math.max(1, ...layout.rows.map((row) => row.count)),
 				rows: layout.rows.length,
 			}),
 		[dispatch],
 	);
 	const defaultScreen = useDefaultScreenDraft({
 		desk: server.session?.desk,
+		surface:
+			server.surfaces?.playback_surfaces[
+				server.session?.desk.surface_id ?? "main"
+			],
 		regularNumberShortcuts: state.regularNumberShortcuts,
 		onKeyboardShortcuts: updateKeyboardShortcuts,
 		onPlaybackLayout: updatePlaybackLayout,
@@ -337,23 +350,48 @@ export function ScreensSetup({
 				/>
 			)}
 			{defaultPlaybackModalOpen && defaultScreen.playbackLayout && (
-				<PlaybackLayoutModal
+				<MainPlaybackLayoutModal
 					initialLayout={defaultScreen.playbackLayout}
-					pageMode="follow_main"
-					pageModeLocked
 					onClose={() => setDefaultPlaybackModalOpen(false)}
-					onSave={(layout) => {
-						const legacy = playbackLayoutLegacyFields(layout);
-						defaultScreen.updateDesk({
-							columns: legacy.columns,
-							rows: legacy.rows,
-							buttons: legacy.buttons,
-							playback_layout: layout,
-						});
-						setDefaultPlaybackModalOpen(false);
-					}}
 				/>
 			)}
 		</div>
+	);
+}
+
+function MainPlaybackLayoutModal({
+	initialLayout,
+	onClose,
+}: {
+	initialLayout: PlaybackSurfaceLayout;
+	onClose: () => void;
+}) {
+	const server = useScreens();
+	const surfaceId = server.session?.desk.surface_id ?? "main";
+	const surface = server.surfaces?.playback_surfaces[surfaceId];
+	if (!surface || !server.surfaces) return null;
+	return (
+		<PlaybackLayoutModal
+			initialLayout={initialLayout}
+			pageSource={surface.page_source}
+			surfaceOptions={Object.entries(server.surfaces.playback_surfaces)
+				.filter(([id]) => id !== surfaceId)
+				.map(([id, item]) => ({ id, name: item.name }))}
+			onClose={onClose}
+			onSave={async (layout, page_source) => {
+				const patch = {
+					...(JSON.stringify(layout) !== JSON.stringify(surface.layout)
+						? { layout }
+						: {}),
+					...(JSON.stringify(page_source) !==
+					JSON.stringify(surface.page_source)
+						? { page_source }
+						: {}),
+				};
+				if (Object.keys(patch).length)
+					await server.updatePlaybackSurface(surfaceId, patch);
+				onClose();
+			}}
+		/>
 	);
 }

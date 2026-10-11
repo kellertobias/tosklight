@@ -95,13 +95,6 @@ impl OutcomeCommon {
                     &projections.cue_list,
                     application::ActiveShowObjectKind::CueList,
                 )?,
-                playback: projections
-                    .playback
-                    .as_ref()
-                    .map(|projection| {
-                        object_projection(projection, application::ActiveShowObjectKind::Playback)
-                    })
-                    .transpose()?,
                 page: projections
                     .page
                     .as_ref()
@@ -187,25 +180,13 @@ fn target(value: wire::CueRecordTarget) -> Result<application::ProgrammingCueRec
             }
             application::ProgrammingCueRecordTarget::CuelistPool { number }
         }
-        wire::CueRecordTarget::Pool { playback_number }
-            if (1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
-        {
-            application::ProgrammingCueRecordTarget::Pool { playback_number }
-        }
-        wire::CueRecordTarget::Pool { .. } => {
-            return Err("playback_number must be within 1-1000".into());
+        wire::CueRecordTarget::Playback { page, position } => {
+            application::ProgrammingCueRecordTarget::Playback {
+                address: light_playback::PlaybackAddress::new(page, position)?,
+            }
         }
         wire::CueRecordTarget::SelectedPlayback => {
             application::ProgrammingCueRecordTarget::SelectedPlayback
-        }
-        wire::CueRecordTarget::PageSlot { page, slot }
-            if (1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page)
-                && (1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            application::ProgrammingCueRecordTarget::PageSlot { page, slot }
-        }
-        wire::CueRecordTarget::PageSlot { .. } => {
-            return Err("page and slot must be within 1-127".into());
         }
         wire::CueRecordTarget::CueList { cue_list_id } if !cue_list_id.is_nil() => {
             application::ProgrammingCueRecordTarget::CueList {
@@ -215,12 +196,6 @@ fn target(value: wire::CueRecordTarget) -> Result<application::ProgrammingCueRec
         wire::CueRecordTarget::CueList { .. } => {
             return Err("cue_list_id must not be nil".into());
         }
-        wire::CueRecordTarget::Virtual {
-            page,
-            playback_number,
-        } => application::ProgrammingCueRecordTarget::Virtual {
-            address: light_playback::VirtualPlaybackAddress::new(page, playback_number)?,
-        },
     })
 }
 
@@ -283,30 +258,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn target_mapping_rejects_invalid_addresses() {
-        assert!(target(wire::CueRecordTarget::Pool { playback_number: 0 }).is_err());
-        assert!(target(wire::CueRecordTarget::PageSlot { page: 1, slot: 0 }).is_err());
+    fn target_mapping_requires_canonical_bounds_and_existing_identity() {
+        for (page, position) in [(0, 1), (100, 1), (1, 0), (1, 1001)] {
+            assert!(target(wire::CueRecordTarget::Playback { page, position }).is_err());
+        }
         assert!(
             target(wire::CueRecordTarget::CueList {
                 cue_list_id: uuid::Uuid::nil()
             })
             .is_err()
         );
-        assert!(
-            target(wire::CueRecordTarget::Virtual {
-                page: 1,
-                playback_number: 1301,
-            })
-            .is_err()
-        );
         assert_eq!(
-            target(wire::CueRecordTarget::Virtual {
-                page: 1,
-                playback_number: 1001,
+            target(wire::CueRecordTarget::Playback {
+                page: 99,
+                position: 1000
             }),
-            Ok(application::ProgrammingCueRecordTarget::Virtual {
-                address: light_playback::VirtualPlaybackAddress::new(1, 1001)
-                    .expect("valid virtual address"),
+            Ok(application::ProgrammingCueRecordTarget::Playback {
+                address: light_playback::PlaybackAddress::new(99, 1000).unwrap()
             })
         );
     }

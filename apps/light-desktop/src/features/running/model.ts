@@ -88,7 +88,7 @@ export function buildRunningRows(input: RunningModelInput): RunningRow[] {
 			// Pool identity and runtime-control identity are deliberately separate. A
 			// direct Cuelist release stops the shared logical runtime regardless of the
 			// software, hardware, OSC, or Playback surface that started it.
-			number: source.cueListNumber ?? source.playbackNumber,
+			number: source.cueListNumber ?? (source.identity.kind === "playback" ? source.identity.position : null),
 			name: source.cueList?.name ?? source.label,
 			status: source.runtime.paused ? "Paused" : "Running",
 			cueNumber,

@@ -4,18 +4,17 @@ import type {
 	PlaybackSurfaceRow,
 } from "../../../api/types";
 import type { ShowObject } from "../../../features/showObjects/contracts";
-import { playbackSlotNumbers } from "../playbackProjection";
+import { playbackSlotAssignments } from "../playbackProjection";
 import { projectPlaybackFootprints } from "./footprints";
 import type { PlaybackGroup, PlaybackSlotProjection } from "./types";
 
 export function playbackRowUnits(row: PlaybackSurfaceRow, hardware: boolean) {
-	if (hardware) return row.has_fader ? 2 : 1;
-	return row.has_fader ? 4 : row.button_count > 1 ? 2 : 1;
+	if (hardware) return row.presentation !== "buttons" ? 2 : 1;
+	return row.presentation !== "buttons" ? 4 : row.button_count > 1 ? 2 : 1;
 }
 
 export function projectPlaybackSlots({
 	cueLists,
-	playbackDefinitions,
 	groups,
 	page,
 	playbackLayout,
@@ -24,7 +23,6 @@ export function projectPlaybackSlots({
 	pageSize,
 }: {
 	cueLists: readonly ShowObject<"cue_list">[];
-	playbackDefinitions: readonly ShowObject<"playback">[];
 	groups: readonly PlaybackGroup[];
 	page: PlaybackPage | undefined;
 	playbackLayout: PlaybackSurfaceLayout | null | undefined;
@@ -34,19 +32,18 @@ export function projectPlaybackSlots({
 }): PlaybackSlotProjection[] {
 	const cells = playbackLayout
 		? playbackLayout.rows.flatMap((row, rowIndex) =>
-				Array.from({ length: columns }, (_, columnIndex) => ({
-					slot: row.first_playback_slot + columnIndex,
+				Array.from({ length: row.count }, (_, columnIndex) => ({
+					slot: row.first_position + columnIndex,
 					row,
 					rowIndex,
 				})),
 			)
-		: playbackSlotNumbers(page, firstSlot, pageSize).map((_, index) => ({
+		: playbackSlotAssignments(page, firstSlot, pageSize).map((_, index) => ({
 				slot: firstSlot + index,
 				row: null,
 				rowIndex: Math.floor(index / columns),
 			}));
 	const footprints = projectPlaybackFootprints({
-		playbackDefinitions,
 		page,
 		playbackLayout,
 		columns,
@@ -59,10 +56,8 @@ export function projectPlaybackSlots({
 	return cells.flatMap(({ slot, row, rowIndex }) => {
 		const footprint = footprintBySlot.get(slot);
 		if (footprint?.state === "claimed") return [];
-		const number = page?.slots[String(slot)];
-		const playback =
-			playbackDefinitions.find((candidate) => candidate.body.number === number)
-				?.body ?? null;
+		const definition = page?.assignments[String(slot)];
+		const playback = definition && page ? {...definition, address: {page: page.number, position: slot}} : null;
 		const cueListId =
 			playback?.target.type === "cue_list" ? playback.target.cue_list_id : null;
 		const cue = cueListId

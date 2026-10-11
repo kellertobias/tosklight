@@ -2,7 +2,6 @@ import type { PlaybackProjection } from "../features/playbackRuntime/contracts";
 import type {
 	ProgrammerPreloadPlaybackAction,
 	ProgrammerPreloadPlaybackQueueEntry,
-	ProgrammerPreloadPlaybackSurface,
 } from "../features/programmerPreloadPlaybackQueue/contracts";
 import {
 	enumAt,
@@ -22,43 +21,7 @@ const ACTIONS = [
 	"temporary_on",
 	"temporary_off",
 ] as const satisfies readonly ProgrammerPreloadPlaybackAction[];
-const SURFACES = [
-	"physical",
-	"virtual",
-	"osc",
-	"matter",
-] as const satisfies readonly ProgrammerPreloadPlaybackSurface[];
-
-export function decodePreloadExecutedAction(
-	value: unknown,
-	path: string,
-): ProgrammerPreloadPlaybackQueueEntry {
-	const item = exactRecordAt(value, path, [
-		"playback_number",
-		"page",
-		"action",
-		"surface",
-	]);
-	const playbackNumber = integerAt(
-		item.playback_number,
-		`${path}.playback_number`,
-	);
-	const page = item.page == null ? null : integerAt(item.page, `${path}.page`);
-	if (playbackNumber > 65_535)
-		throw new WireValidationError(
-			`${path}.playback_number`,
-			"16-bit playback number",
-			playbackNumber,
-		);
-	if (page !== null && page > 255)
-		throw new WireValidationError(`${path}.page`, "8-bit page", page);
-	return {
-		playbackNumber,
-		page,
-		action: enumAt(item.action, `${path}.action`, ACTIONS),
-		surface: enumAt(item.surface, `${path}.surface`, SURFACES),
-	};
-}
+export { decodePreloadQueueEntry as decodePreloadExecutedAction } from "./programmerPreloadPlaybackQueueWire";
 
 export function decodeStrictPlaybackProjection(
 	value: unknown,
@@ -96,8 +59,7 @@ function assertProjectionShape(value: unknown, path: string) {
 								: [];
 	exactRecordAt(value, path, [
 		"scope",
-		"requested",
-		"playback_number",
+		"identity",
 		"target",
 		...variant,
 	]);
@@ -105,7 +67,7 @@ function assertProjectionShape(value: unknown, path: string) {
 		"show_id",
 		"show_revision",
 	]);
-	assertIdentity(projection.requested, `${path}.requested`);
+	assertIdentity(projection.identity, `${path}.identity`);
 	if (target === "cue_list" && projection.runtime != null)
 		assertCueRuntime(projection.runtime, `${path}.runtime`);
 	if (target === "dynamic" && projection.runtime != null)
@@ -124,7 +86,7 @@ function assertProjectionShape(value: unknown, path: string) {
 
 function assertDynamicRuntime(value: unknown, path: string) {
 	exactRecordAt(value, path, [
-		"playback_number",
+		"owner_address",
 		"enabled",
 		"paused",
 		"flash",
@@ -158,24 +120,8 @@ function assertDynamicRuntime(value: unknown, path: string) {
 
 function assertIdentity(value: unknown, path: string) {
 	const identity = recordAt(value, path);
-	const kind = enumAt(identity.kind, `${path}.kind`, [
-		"playback",
-		"virtual",
-		"cue_list",
-		"direct_cue_list",
-		"group",
-	]);
-	exactRecordAt(value, path, [
-		"kind",
-		kind === "playback"
-			? "playback_number"
-			: kind === "virtual"
-				? "page"
-				: kind === "cue_list" || kind === "direct_cue_list"
-					? "cue_list_id"
-					: "group_id",
-		...(kind === "virtual" ? ["playback_number"] : []),
-	]);
+	const kind = enumAt(identity.kind, `${path}.kind`, ["playback", "cue_list", "direct_cue_list", "group"]);
+	exactRecordAt(value, path, kind === "playback" ? ["kind", "page", "position"] : ["kind", kind === "group" ? "group_id" : "cue_list_id"]);
 }
 
 function assertCueRuntime(value: unknown, path: string) {

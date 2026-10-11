@@ -10,20 +10,19 @@ import {
 } from "../playbackRuntime/PlaybackRuntimeView";
 import type { ShowObject } from "../showObjects/contracts";
 import {
-	usePlaybackDefinitions,
 	usePlaybackPages,
 	usePortableGroups,
 	useShowObjectCollectionsReady,
 } from "../showObjects/ShowObjectsState";
 import { useShowObjectView } from "../showObjects/ShowObjectsView";
 
-const GROUP_KINDS = ["group", "playback", "playback_page"] as const;
+const GROUP_KINDS = ["group", "playback_page"] as const;
 const NO_GROUPS: readonly RuntimeGroup[] = [];
 
 export interface GroupRuntimeState {
 	master: number;
 	flashLevel: number;
-	playbackNumber: number | null;
+	playbackAddress: {page: number; position: number} | null;
 }
 
 export type RuntimeGroup = ShowObject<"group"> & {
@@ -50,16 +49,14 @@ export function useGroupRuntimeAuthority(
 	enabled = true,
 ): GroupRuntimeAuthority {
 	useShowObjectView("group", enabled);
-	useShowObjectView("playback", enabled);
 	useShowObjectView("playback_page", enabled);
 	const collectionReady = useShowObjectCollectionsReady(GROUP_KINDS, enabled);
 	const portable = usePortableGroups(enabled);
-	const playbacks = usePlaybackDefinitions(enabled);
 	const pages = usePlaybackPages(enabled);
 	const groupIds = useMemo(
 		() =>
-			enabled && collectionReady ? assignedGroupIds(playbacks, pages) : [],
-		[collectionReady, enabled, pages, playbacks],
+			enabled && collectionReady ? assignedGroupIds(pages) : [],
+		[collectionReady, enabled, pages],
 	);
 	const needsRuntime = groupIds.length > 0;
 	const runtimeEnabled = enabled && collectionReady && needsRuntime;
@@ -143,7 +140,7 @@ function projectRuntimeGroups(
 				? {
 						master: groupProjection.master,
 						flashLevel: groupProjection.flash_level,
-						playbackNumber: groupProjection.playback_number,
+						playbackAddress: groupProjection.identity.kind === "playback" ? {page: groupProjection.identity.page, position: groupProjection.identity.position} : null,
 					}
 				: null,
 		};
@@ -157,14 +154,12 @@ function projectRuntimeGroups(
 }
 
 function assignedGroupIds(
-	playbacks: readonly ShowObject<"playback">[],
 	pages: readonly ShowObject<"playback_page">[],
 ) {
 	const ids = new Set<string>();
-	for (const { body } of playbacks)
-		if (body.target.type === "group") ids.add(body.target.group_id);
+
 	for (const { body } of pages)
-		for (const playback of Object.values(body.virtual_playbacks))
+		for (const playback of Object.values(body.assignments))
 			if (playback.target.type === "group") ids.add(playback.target.group_id);
 	return [...ids].sort((left, right) => left.localeCompare(right));
 }

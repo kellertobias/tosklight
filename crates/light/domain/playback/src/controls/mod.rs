@@ -2,6 +2,7 @@ mod activation;
 mod dynamic;
 mod mutation;
 mod navigation;
+mod source_ownership;
 mod temporary;
 mod xfade;
 

@@ -5,6 +5,7 @@ interface PageOperation {
 	baseSequence: number;
 	order: number;
 	page: number;
+	surfaceId: string;
 }
 
 export class PlaybackDeskState {
@@ -41,7 +42,7 @@ export class PlaybackDeskState {
 	installUnsequenced(projection: PlaybackDesk, baseSequence: number) {
 		if (this.sequence > baseSequence) return this.render();
 		this.authoritative = projection;
-		this.reconcile(projection.active_page);
+		this.reconcile(projection);
 		return this.render();
 	}
 
@@ -52,6 +53,7 @@ export class PlaybackDeskState {
 			baseSequence: this.sequence,
 			order: ++this.order,
 			page,
+			surfaceId: this.authoritative.selected_surface_id,
 		};
 		this.operations.set(operation.token, operation);
 		this.latestToken = operation.token;
@@ -70,7 +72,14 @@ export class PlaybackDeskState {
 		) {
 			this.authoritative = {
 				...this.authoritative,
-				active_page: operation.page,
+				command_page:
+					this.authoritative.selected_surface_id === operation.surfaceId
+						? operation.page
+						: this.authoritative.command_page,
+				resolved_pages: {
+					...this.authoritative.resolved_pages,
+					[operation.surfaceId]: operation.page,
+				},
 			};
 			if (sequence != null) this.sequence = Math.max(this.sequence, sequence);
 		}
@@ -84,14 +93,14 @@ export class PlaybackDeskState {
 	private install(projection: PlaybackDesk, sequence: number) {
 		this.authoritative = projection;
 		this.sequence = sequence;
-		this.reconcile(projection.active_page);
+		this.reconcile(projection);
 	}
 
-	private reconcile(activePage: number) {
-		const matching = [...this.operations.values()]
-			.filter((operation) => operation.page === activePage)
-			.sort((left, right) => right.order - left.order)[0];
-		if (matching) this.discardThrough(matching.order);
+	private reconcile(projection: PlaybackDesk) {
+		for (const operation of this.operations.values())
+			if (projection.resolved_pages[operation.surfaceId] === operation.page)
+				this.operations.delete(operation.token);
+		this.selectLatest();
 	}
 
 	private discardThrough(order: number) {
@@ -118,11 +127,18 @@ export class PlaybackDeskState {
 
 	private render() {
 		if (!this.authoritative) return null;
-		const page = this.latestToken
-			? this.operations.get(this.latestToken)?.page
-			: undefined;
-		return page == null
-			? this.authoritative
-			: { ...this.authoritative, active_page: page };
+		if (!this.operations.size) return this.authoritative;
+		const resolved_pages = { ...this.authoritative.resolved_pages };
+		for (const operation of [...this.operations.values()].sort(
+			(left, right) => left.order - right.order,
+		))
+			resolved_pages[operation.surfaceId] = operation.page;
+		return {
+			...this.authoritative,
+			resolved_pages,
+			command_page:
+				resolved_pages[this.authoritative.selected_surface_id] ??
+				this.authoritative.command_page,
+		};
 	}
 }

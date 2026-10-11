@@ -95,11 +95,12 @@ pub(super) fn cue_list(cues: Vec<Cue>) -> CueList {
 pub(super) fn target(
     list: &CueList,
     index: usize,
-    playback_number: Option<u16>,
+    playback_address: Option<u16>,
 ) -> ResolvedCueTarget {
     ResolvedCueTarget {
         cue_list_id: list.id,
-        playback_number,
+        playback_address: playback_address
+            .map(|position| light_playback::PlaybackAddress::new(1, position).unwrap()),
         cue_id: list.cues[index].id,
         cue_number: list.cues[index].number.clone(),
     }

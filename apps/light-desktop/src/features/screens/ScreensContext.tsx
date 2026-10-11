@@ -15,7 +15,9 @@ export function ScreensProvider({
 }: PropsWithChildren<{ source: ScreensContextValue }>) {
 	const saveScreen = useStableCallback(source.saveScreen);
 	const deleteScreen = useStableCallback(source.deleteScreen);
-	const setScreenPage = useStableCallback(source.setScreenPage);
+	const setSurfacePage = useStableCallback(source.setSurfacePage);
+	const selectSurface = useStableCallback(source.selectSurface);
+	const updatePlaybackSurface = useStableCallback(source.updatePlaybackSurface);
 	const updateProgrammerControlSurface = useStableCallback(
 		source.updateProgrammerControlSurface,
 	);
@@ -25,12 +27,15 @@ export function ScreensProvider({
 	const value = useMemo(
 		() => ({
 			screens: source.screens,
+			surfaces: source.screens?.surfaces ?? source.surfaces,
 			bootstrap: source.bootstrap,
 			session: source.session,
 			screenAttachment: source.screenAttachment ?? null,
 			saveScreen,
 			deleteScreen,
-			setScreenPage,
+			setSurfacePage,
+			selectSurface,
+			updatePlaybackSurface,
 			updateProgrammerControlSurface,
 			updateControlDesk,
 			selectControlDesk,
@@ -38,12 +43,15 @@ export function ScreensProvider({
 		}),
 		[
 			source.screens,
+			source.surfaces,
 			source.bootstrap,
 			source.session,
 			source.screenAttachment,
 			saveScreen,
 			deleteScreen,
-			setScreenPage,
+			setSurfacePage,
+			selectSurface,
+			updatePlaybackSurface,
 			updateProgrammerControlSurface,
 			updateControlDesk,
 			selectControlDesk,

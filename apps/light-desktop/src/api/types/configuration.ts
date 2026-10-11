@@ -54,8 +54,6 @@ export interface DeskConfiguration {
 	color_programming_model_default?: "direct" | "intent";
 	start_after_first_recording: boolean;
 	preload_programmer_changes: boolean;
-	preload_physical_playback_actions: boolean;
-	preload_virtual_playback_actions: boolean;
 	patch_preview_highlight_dmx?: boolean;
 	highlight_look?: HighlightLookConfiguration;
 	highlight_look_feedback?: string[];
@@ -103,9 +101,7 @@ export interface MatterPairingData {
 
 export interface MatterPlaybackLight {
 	endpoint_id: number;
-	page: number;
-	playback: number;
-	playback_number: number;
+	address: { page: number; position: number };
 	name: string;
 	on: boolean;
 	level: number;

@@ -4,7 +4,7 @@ use crate::DeskStore;
 use rusqlite::Connection;
 
 #[test]
-fn a_legacy_desk_database_receives_one_identity_that_survives_every_reopen() {
+fn a_legacy_desk_database_is_refused_without_changing_identity_or_settings() {
     let path = temporary("desk-identity-legacy");
     {
         // A desk database from before identities: settings exist, the identity does not.
@@ -15,16 +15,9 @@ fn a_legacy_desk_database_receives_one_identity_that_survives_every_reopen() {
         )
         .unwrap();
     }
-    let first = DeskStore::open(&path).unwrap().desk_identity().unwrap();
-    assert!(!first.is_nil());
-    let reopened = DeskStore::open(&path).unwrap();
-    assert_eq!(reopened.desk_identity().unwrap(), first);
-    // Unrelated settings are untouched by the seed.
-    assert_eq!(
-        reopened.setting("active_show_id").unwrap().as_deref(),
-        Some("00000000-0000-0000-0000-000000000001")
-    );
-    drop(reopened);
+    let original = std::fs::read(&path).unwrap();
+    assert!(DeskStore::open(&path).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
     let _ = std::fs::remove_file(path);
 }
 

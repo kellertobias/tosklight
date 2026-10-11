@@ -3,8 +3,8 @@ use light_playback::CueNumber;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum CueLinkAddress {
     Selected,
-    Pool { playback_number: u16 },
-    PageSlot { page: u8, slot: u8 },
+    CurrentPage { position: u16 },
+    ExplicitPage { page: u8, position: u16 },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -44,20 +44,24 @@ fn source(tokens: &[String]) -> Result<(CueLinkAddress, CueNumber), String> {
     let first = number::<u16>(tokens.get(1), "playback number")?;
     let (address, cue_index) = if tokens.get(2).is_some_and(|token| token == ".") {
         (
-            CueLinkAddress::PageSlot {
+            CueLinkAddress::ExplicitPage {
                 page: u8::try_from(first).map_err(|_| "page number is invalid")?,
-                slot: number::<u8>(tokens.get(3), "page playback number")?,
+                position: number::<u16>(tokens.get(3), "page playback number")?,
             },
             4,
         )
     } else {
-        (
-            CueLinkAddress::Pool {
-                playback_number: first,
-            },
-            2,
-        )
+        (CueLinkAddress::CurrentPage { position: first }, 2)
     };
+    match address {
+        CueLinkAddress::CurrentPage { position } => {
+            light_playback::PlaybackAddress::new(1, position)?;
+        }
+        CueLinkAddress::ExplicitPage { page, position } => {
+            light_playback::PlaybackAddress::new(page, position)?;
+        }
+        CueLinkAddress::Selected => {}
+    }
     Ok((address, cue_number(&tokens[cue_index..], "Link source")?))
 }
 
@@ -107,7 +111,13 @@ mod tests {
         assert_eq!(pool.delay_millis, 2_000);
         assert_eq!(pool.source_number.to_string(), "1.5");
         let page = parse("LINK SET 2.3 CUE 1 AT CUE 4").unwrap().unwrap();
-        assert_eq!(page.address, CueLinkAddress::PageSlot { page: 2, slot: 3 });
+        assert_eq!(
+            page.address,
+            CueLinkAddress::ExplicitPage {
+                page: 2,
+                position: 3
+            }
+        );
     }
 
     #[test]

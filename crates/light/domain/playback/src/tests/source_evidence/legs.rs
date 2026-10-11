@@ -31,7 +31,7 @@ fn manual_engine(
     engine.register(cue_list).unwrap();
     let mut def = definition(1, id);
     def.fader = PlaybackFaderMode::XFade;
-    engine.register_definition(def).unwrap();
+    engine.register_definition(address(1), def).unwrap();
     (engine, clock, id, ids)
 }
 
@@ -39,15 +39,15 @@ fn manual_engine(
 fn manual_leg_uses_compiled_endpoints_and_keeps_one_occurrence_through_reversal_and_completion() {
     let (mut engine, clock, id, cues) = manual_engine(&[0.0, 0.8, 0.2], 1_000);
     let at = clock.now();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let arbitration = engine.active()[0].transition_ordinal;
     clock.advance_millis(500);
     assert_eq!(
         sample(&engine, clock.now()).value.value,
         AttributeValue::Normalized(0.4)
     );
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     let middle = evidence(&engine, clock.now());
     assert!(
         (sample(&engine, clock.now())
@@ -73,19 +73,19 @@ fn manual_leg_uses_compiled_endpoints_and_keeps_one_occurrence_through_reversal_
         clock.now()
     );
     let leg = middle.entries()[1].occurrence.clone();
-    engine.set_manual_xfade(1, 0.0).unwrap();
+    engine.set_manual_xfade(address(1), 0.0).unwrap();
     assert_eq!(
         evidence(&engine, clock.now()).entries(),
         &middle.entries()[..1]
     );
-    engine.set_manual_xfade(1, 0.8).unwrap();
+    engine.set_manual_xfade(address(1), 0.8).unwrap();
     assert!(Arc::ptr_eq(&middle, &evidence(&engine, clock.now())));
     engine.pause(id).unwrap();
     clock.advance_millis(2_000);
-    engine.set_manual_xfade(1, 0.6).unwrap();
+    engine.set_manual_xfade(address(1), 0.6).unwrap();
     assert!(Arc::ptr_eq(&middle, &evidence(&engine, clock.now())));
     engine.resume(id).unwrap();
-    engine.set_manual_xfade(1, 1.0).unwrap();
+    engine.set_manual_xfade(address(1), 1.0).unwrap();
     assert_eq!(engine.active()[0].transition_ordinal, arbitration);
     assert_eq!(engine.active()[0].activated_at, clock.now());
     assert_eq!(evidence(&engine, clock.now()).entries()[0].occurrence, leg);
@@ -94,9 +94,9 @@ fn manual_leg_uses_compiled_endpoints_and_keeps_one_occurrence_through_reversal_
 #[test]
 fn manual_equal_endpoints_and_cancellation_keep_distinct_action_identity() {
     let (mut engine, clock, id, _) = manual_engine(&[0.4, 0.4, 0.6], 1_000);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let original = evidence(&engine, clock.now());
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     let manual = evidence(&engine, clock.now());
     assert_eq!(manual.entries().len(), 2);
     assert_ne!(
@@ -105,12 +105,12 @@ fn manual_equal_endpoints_and_cancellation_keep_distinct_action_identity() {
     );
     engine.pause(id).unwrap();
     clock.advance_millis(1_000);
-    engine.go_playback(1).unwrap(); // The existing resumed-GO branch cancels the manual route.
+    engine.go_playback(address(1)).unwrap(); // The existing resumed-GO branch cancels the manual route.
     assert!(engine.active()[0].manual_xfade_from_index.is_none());
     assert!(Arc::ptr_eq(&original, &evidence(&engine, clock.now())));
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     let second_manual = evidence(&engine, clock.now());
-    engine.go_playback(1).unwrap(); // Running GO captures the actual manual interior.
+    engine.go_playback(address(1)).unwrap(); // Running GO captures the actual manual interior.
     let captured = evidence(&engine, clock.now());
     assert!(Arc::ptr_eq(&captured, &second_manual));
     clock.advance_millis(500);
@@ -120,11 +120,11 @@ fn manual_equal_endpoints_and_cancellation_keep_distinct_action_identity() {
 #[test]
 fn manual_completion_before_observation_and_restore_never_reconstruct_old_identity() {
     let (mut engine, clock, id, _) = manual_engine(&[0.2, 0.8, 0.4], 1_000);
-    engine.go_playback(1).unwrap();
-    engine.set_manual_xfade(1, 1.0).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.set_manual_xfade(address(1), 1.0).unwrap();
     let completed = evidence(&engine, clock.now());
     assert_eq!(completed.entries().len(), 1);
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     let leg_ordinal = engine.active()[0]
         .source_history
         .as_ref()
@@ -136,14 +136,14 @@ fn manual_completion_before_observation_and_restore_never_reconstruct_old_identi
     let mut restored = PlaybackEngine::with_clock(clock.clone());
     restored.register(engine.cue_lists[&id].clone()).unwrap();
     restored
-        .register_definition(engine.definitions[&1].clone())
+        .register_definition(address(1), engine.definitions[&address(1)].clone())
         .unwrap();
     restored.restore_active(state);
     assert_eq!(sample(&restored, clock.now()).value.value, expected_value);
     assert!(sample(&restored, clock.now()).family_evidence.is_none());
-    restored.set_manual_xfade(1, 0.0).unwrap();
+    restored.set_manual_xfade(address(1), 0.0).unwrap();
     assert!(sample(&restored, clock.now()).family_evidence.is_none());
-    restored.go_playback(1).unwrap();
+    restored.go_playback(address(1)).unwrap();
     assert!(
         restored.active()[0]
             .source_history
@@ -157,20 +157,24 @@ fn manual_completion_before_observation_and_restore_never_reconstruct_old_identi
 #[test]
 fn temporary_replay_has_its_own_boundary_and_idempotent_controls_keep_it() {
     let (mut engine, clock, _, _) = manual_engine(&[0.2, 0.8], 1_000);
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let arbitration = engine.active()[0].transition_ordinal;
     let next_arbitration = engine.next_transition_ordinal;
     clock.advance_millis(500);
-    engine.set_temp_button(1, true).unwrap();
-    let identity = PlaybackIdentity::physical(1).unwrap();
-    let key = (identity, TemporaryPlaybackKind::TempButton);
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    let identity = address(1);
+    let key = (held(identity), TemporaryPlaybackKind::TempButton);
     let first_action = engine.temporary[&key]
         .source_history
         .as_ref()
         .unwrap()
         .action_ordinal();
-    engine.set_temp_button(1, true).unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     assert_eq!(
         engine.temporary[&key]
             .source_history
@@ -199,8 +203,12 @@ fn temporary_replay_has_its_own_boundary_and_idempotent_controls_keep_it() {
         entries.entries()[1].occurrence.action_changed_at,
         clock.now()
     );
-    engine.set_temp_button(1, false).unwrap();
-    engine.set_temp_button(1, true).unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), false)
+        .unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     assert!(
         engine.temporary[&key]
             .source_history
@@ -223,12 +231,13 @@ fn temporary_automatic_transition_uses_stored_endpoint_sources_and_preserves_arb
     let clock = Arc::new(light_core::ManualClock::new(Utc::now()));
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.set_temp_button(1, true).unwrap();
-    let key = (
-        PlaybackIdentity::physical(1).unwrap(),
-        TemporaryPlaybackKind::TempButton,
-    );
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    let key = (held(address(1)), TemporaryPlaybackKind::TempButton);
     let action = engine.temporary[&key]
         .source_history
         .as_ref()
@@ -253,7 +262,7 @@ fn provenance_watermark_is_monotonic_and_exhaustion_never_changes_values_or_arbi
     engine.reserve_source_occurrence_watermark(u64::MAX - 1);
     engine.reserve_source_occurrence_watermark(1);
     assert_eq!(engine.source_occurrence_watermark(), u64::MAX - 1);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(
         evidence(&engine, clock.now()).entries()[0]
             .occurrence
@@ -262,16 +271,18 @@ fn provenance_watermark_is_monotonic_and_exhaustion_never_changes_values_or_arbi
     );
     assert_eq!(engine.source_occurrence_watermark(), u64::MAX);
     engine.reserve_source_occurrence_watermark(0);
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     assert_eq!(
         sample(&engine, clock.now()).value.value,
         AttributeValue::Normalized(0.5)
     );
     assert!(sample(&engine, clock.now()).family_evidence.is_none());
     assert_eq!(engine.active()[0].transition_ordinal, 1);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(engine.active()[0].transition_ordinal, 2);
-    engine.set_temp_button(1, true).unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     assert!(
         engine
             .temporary
@@ -296,9 +307,9 @@ fn manual_tracking_wrap_completion_recovers_only_proven_outgoing_rows() {
     engine.register(cue_list).unwrap();
     let mut def = definition(1, id);
     def.fader = PlaybackFaderMode::XFade;
-    engine.register_definition(def).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.register_definition(address(1), def).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let outgoing = engine
         .contributions_with_context(clock.now(), None)
         .into_iter()
@@ -306,14 +317,14 @@ fn manual_tracking_wrap_completion_recovers_only_proven_outgoing_rows() {
         .unwrap()
         .family_evidence
         .unwrap();
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     let middle = engine
         .contributions_with_context(clock.now(), None)
         .into_iter()
         .find(|row| row.value.fixture_id == fixture_b)
         .unwrap();
     assert_eq!(middle.value.value, AttributeValue::Normalized(0.4));
-    engine.set_manual_xfade(1, 1.0).unwrap();
+    engine.set_manual_xfade(address(1), 1.0).unwrap();
     let completed = engine
         .contributions_with_context(clock.now(), None)
         .into_iter()
@@ -329,11 +340,11 @@ fn manual_tracking_wrap_completion_recovers_only_proven_outgoing_rows() {
 #[test]
 fn manual_snap_override_selects_target_even_when_fader_reverses_to_zero() {
     let (mut engine, clock, _, cues) = manual_engine(&[0.2, 0.8], 1_000);
-    engine.go_playback(1).unwrap();
-    engine.set_manual_xfade(1, 0.5).unwrap();
-    engine.set_manual_xfade(1, 0.0).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.0).unwrap();
     let snapped = engine
-        .contributions_with_context_at(clock.now(), |_, _| true)
+        .contributions_with_context(clock.now(), Some(&|_, _| true))
         .pop()
         .unwrap();
     assert_eq!(snapped.value.value, AttributeValue::Normalized(0.8));
@@ -345,8 +356,8 @@ fn manual_snap_override_selects_target_even_when_fader_reverses_to_zero() {
 #[test]
 fn temporary_deleted_hold_and_release_promotion_keep_actual_historical_sources() {
     let (mut engine, clock, id, _) = manual_engine(&[0.2, 0.8, 0.4], 1_000);
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     clock.advance_millis(500);
     let original = evidence(&engine, clock.now());
     let mut replacement = engine.cue_lists[&id].clone();
@@ -355,7 +366,9 @@ fn temporary_deleted_hold_and_release_promotion_keep_actual_historical_sources()
     engine.active.clear();
     engine.register(replacement).unwrap();
     engine.restore_active(retained);
-    engine.set_temp_button(1, true).unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     let held = engine
         .contributions_with_context(clock.now(), None)
         .into_iter()
@@ -368,11 +381,19 @@ fn temporary_deleted_hold_and_release_promotion_keep_actual_historical_sources()
     ));
 
     let (mut engine, clock, id, _) = manual_engine(&[0.4], 0);
-    engine.definitions.get_mut(&1).unwrap().flash_release = FlashReleaseMode::ReleaseIntensityOnly;
-    engine.set_flash(1, true).unwrap();
+    engine
+        .definitions
+        .get_mut(&address(1))
+        .unwrap()
+        .flash_release = FlashReleaseMode::ReleaseIntensityOnly;
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     let flashed = evidence(&engine, clock.now());
     assert!(flashed.entries()[0].occurrence.source.temporary);
-    engine.set_flash(1, false).unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), false)
+        .unwrap();
     assert!(!engine.active[&PlaybackKey::CueList(id)].temporary);
     assert!(Arc::ptr_eq(&flashed, &evidence(&engine, clock.now())));
 }
@@ -380,33 +401,40 @@ fn temporary_deleted_hold_and_release_promotion_keep_actual_historical_sources()
 #[test]
 fn temporary_peers_and_preview_actions_have_isolated_occurrences_and_counters() {
     let (mut engine, clock, _, _) = manual_engine(&[0.4, 0.6], 1_000);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let live_watermark = engine.source_occurrence_watermark();
     let mut preview = engine.fork_for_preview(clock.now());
-    preview.set_manual_xfade(1, 0.5).unwrap();
-    preview.set_temp_button(1, true).unwrap();
+    preview.set_manual_xfade(address(1), 0.5).unwrap();
+    preview
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     assert_eq!(engine.source_occurrence_watermark(), live_watermark);
     assert!(engine.temporary.is_empty());
     assert!(engine.active()[0].manual_xfade_from_index.is_none());
-    engine.set_flash(1, true).unwrap();
-    engine.set_temp_button(1, true).unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    engine
+        .set_temp_button(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     let ordinals: HashSet<_> = engine
         .temporary
         .values()
         .map(|playback| playback.source_history.as_ref().unwrap().action_ordinal())
         .collect();
     assert_eq!(ordinals.len(), 2);
-    engine.set_temp_fader(1, 0.3).unwrap();
-    let key = (
-        PlaybackIdentity::physical(1).unwrap(),
-        TemporaryPlaybackKind::TempFader,
-    );
+    engine
+        .set_temp_fader(address(1), &test_source(address(1).position()), 0.3)
+        .unwrap();
+    let key = (held(address(1)), TemporaryPlaybackKind::TempFader);
     let fader = engine.temporary[&key]
         .source_history
         .as_ref()
         .unwrap()
         .action_ordinal();
-    engine.set_temp_fader(1, 0.8).unwrap();
+    engine
+        .set_temp_fader(address(1), &test_source(address(1).position()), 0.8)
+        .unwrap();
     assert_eq!(
         engine.temporary[&key]
             .source_history
@@ -420,15 +448,17 @@ fn temporary_peers_and_preview_actions_have_isolated_occurrences_and_counters() 
 #[test]
 fn removing_a_captured_route_does_not_reuse_its_warmed_phase_proof() {
     let (mut engine, clock, _, _) = manual_engine(&[0.0, 1.0, 0.0], 1_000);
-    engine.definitions.get_mut(&1).unwrap().fader = PlaybackFaderMode::Master;
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.definitions.get_mut(&address(1)).unwrap().fader = PlaybackFaderMode::Master;
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     clock.advance_millis(250);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     clock.advance_millis(250);
     assert_eq!(evidence(&engine, clock.now()).entries().len(), 3);
-    engine.set_virtual_master(1, 0.5).unwrap();
-    engine.on(1).unwrap();
+    engine
+        .set_master_level(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
+    engine.on(address(1)).unwrap();
     let resumed = sample(&engine, clock.now());
     assert_eq!(resumed.value.value, AttributeValue::Normalized(0.75));
     assert!(resumed.family_evidence.is_none());
@@ -439,10 +469,10 @@ fn removing_a_captured_route_does_not_reuse_its_warmed_phase_proof() {
 #[test]
 fn chaser_retiming_at_last_cue_cannot_reuse_a_different_previous_route() {
     let (mut engine, clock, id, _) = manual_engine(&[0.0, 1.0, 0.0], 1_000);
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     clock.advance_millis(250);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let _ = evidence(&engine, clock.now());
     let cue_list = engine.cue_lists.get_mut(&id).unwrap();
     cue_list.mode = CueListMode::Chaser;

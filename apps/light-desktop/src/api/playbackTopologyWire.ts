@@ -8,10 +8,6 @@ import type {
 import type { ShowObjectKind } from "../features/showObjects/contracts";
 import { validatePlaybackTopologyObjects } from "./playbackTopologyOutcomeValidation";
 import {
-	decodePlaybackPageResolution,
-	encodePlaybackPageAction,
-} from "./playbackTopologyPageWire";
-import {
 	arrayAt,
 	booleanAt,
 	boundedPositiveIntegerAt,
@@ -25,16 +21,10 @@ import {
 } from "./playbackWirePrimitives";
 import { decodeShowObjectBody } from "./showObjectBodyWire";
 import type { PlaybackDefinition } from "./types";
-import {
-	isVirtualPlaybackNumberForPage,
-	MAX_VIRTUAL_PLAYBACK_NUMBER,
-	virtualPlaybackBankStart,
-} from "./virtualPlaybackAddress";
 import { WireValidationError } from "./wireValidation";
 
 const TOPOLOGY_KINDS = [
 	"cue_list",
-	"playback",
 	"playback_page",
 ] as const satisfies readonly ShowObjectKind[];
 const ERROR_KINDS = [
@@ -153,179 +143,31 @@ function encodeAction(action: PlaybackTopologyAction) {
 			expected_object_id: action.expectedObjectId,
 			body: action.body,
 		};
-	if (action.type === "create_page" || action.type === "rename_page")
-		return encodePlaybackPageAction(action);
-	if (action.type === "assign_group_master") {
-		const expectedGroupRevision = revisionAt(
-			action.expectedGroupRevision,
-			"$.action.expectedGroupRevision",
-		);
-		if (expectedGroupRevision < 1)
-			invalid(
-				"$.action.expectedGroupRevision",
-				"an existing Group revision",
-				expectedGroupRevision,
-			);
-		return {
-			type: action.type,
-			group_object_id: printableStringAt(
-				action.groupObjectId,
-				"$.action.groupObjectId",
-				128,
-			),
-			expected_group_revision: expectedGroupRevision,
-			address: encodeGroupMasterAddress(action.address),
-		};
-	}
-	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
-		const page = boundedPositiveIntegerAt(action.page, "$.action.page", 127);
-		const playbackNumber = boundedVirtualPlaybackNumber(
-			action.playbackNumber,
-			"$.action.playbackNumber",
-		);
-		validateVirtualPlaybackBank(
-			page,
-			playbackNumber,
-			"$.action.playbackNumber",
-		);
-		const shared = {
-			type: action.type,
-			page,
-			playback_number: playbackNumber,
-			expected_page_revision: revisionAt(
-				action.expectedPageRevision,
-				"$.action.expectedPageRevision",
-			),
-			expected_page_object_id: action.expectedPageObjectId,
-		};
-		return action.type === "configure_virtual"
-			? {
-					...shared,
-					playback: encodePlayback(
-						action.playback,
-						MAX_VIRTUAL_PLAYBACK_NUMBER,
-					),
-				}
-			: shared;
-	}
-	const shared = {
-		type: action.type,
-		page: boundedPositiveIntegerAt(action.page, "$.action.page", 127),
-		slot: boundedPositiveIntegerAt(action.slot, "$.action.slot", 127),
-		expected_page_revision: revisionAt(
-			action.expectedPageRevision,
-			"$.action.expectedPageRevision",
-		),
-		expected_page_object_id: action.expectedPageObjectId,
-		expected_playback_revision: revisionAt(
-			action.expectedPlaybackRevision,
-			"$.action.expectedPlaybackRevision",
-		),
-		expected_playback_object_id: action.expectedPlaybackObjectId,
-	};
-	if (action.type === "configure_slot")
-		return { ...shared, playback: encodePlayback(action.playback) };
-	if (action.type === "map_existing_playback") {
-		validateExistingPlaybackAuthority(action);
-		return {
-			...shared,
-			playback_number: boundedPositiveIntegerAt(
-				action.playbackNumber,
-				"$.action.playbackNumber",
-				1000,
-			),
-		};
-	}
-	return shared;
-}
-
-function encodeGroupMasterAddress(
-	address: Extract<
-		PlaybackTopologyAction,
-		{ type: "assign_group_master" }
-	>["address"],
-) {
-	const page = boundedPositiveIntegerAt(
-		address.page,
-		"$.action.address.page",
-		127,
-	);
 	const pageAuthority = {
-		expected_page_revision: revisionAt(
-			address.expectedPageRevision,
-			"$.action.address.expectedPageRevision",
-		),
-		expected_page_object_id: address.expectedPageObjectId,
+		expected_page_revision: revisionAt(action.expectedPageRevision, "$.action.expectedPageRevision"),
+		expected_page_object_id: action.expectedPageObjectId,
 	};
-	if (address.kind === "virtual") {
-		const playbackNumber = boundedVirtualPlaybackNumber(
-			address.playbackNumber,
-			"$.action.address.playbackNumber",
-		);
-		validateVirtualPlaybackBank(
-			page,
-			playbackNumber,
-			"$.action.address.playbackNumber",
-		);
-		return {
-			kind: address.kind,
-			page,
-			playback_number: playbackNumber,
-			...pageAuthority,
-		};
+	if ((action.expectedPageObjectId === null) !== (action.expectedPageRevision === 0))
+		invalid("$.action", "an exact present or absent Page identity", action);
+	if ("number" in action) {
+		const shared = {type: action.type, number: boundedPositiveIntegerAt(action.number, "$.action.number", 99), ...pageAuthority};
+		return "name" in action ? {...shared, name: printableStringAt(action.name, "$.action.name", 80)} : shared;
 	}
+	const shared = {type: action.type, address: encodeAddress(action.address), ...pageAuthority};
+	if (action.type === "assign_group_master")
+		return {...shared, group_object_id: printableStringAt(action.groupObjectId, "$.action.groupObjectId", 128), expected_group_revision: revisionAt(action.expectedGroupRevision, "$.action.expectedGroupRevision")};
+	return "definition" in action ? {...shared, definition: encodePlayback(action.definition)} : shared;
+}
+
+function encodeAddress(address: {page: number; position: number}) {
 	return {
-		kind: address.kind,
-		page,
-		slot: boundedPositiveIntegerAt(address.slot, "$.action.address.slot", 127),
-		...pageAuthority,
-		expected_playback_revision: revisionAt(
-			address.expectedPlaybackRevision,
-			"$.action.address.expectedPlaybackRevision",
-		),
-		expected_playback_object_id: address.expectedPlaybackObjectId,
+		page: boundedPositiveIntegerAt(address.page, "$.action.address.page", 99),
+		position: boundedPositiveIntegerAt(address.position, "$.action.address.position", 1000),
 	};
 }
 
-function validateExistingPlaybackAuthority(
-	action: Extract<PlaybackTopologyAction, { type: "map_existing_playback" }>,
-) {
-	const pageIsAbsent = action.expectedPageObjectId === null;
-	if (pageIsAbsent !== (action.expectedPageRevision === 0))
-		invalid(
-			"$.action.expectedPageRevision",
-			"an exact present or absent Page identity",
-			action.expectedPageRevision,
-		);
-	if (!pageIsAbsent)
-		printableStringAt(
-			action.expectedPageObjectId,
-			"$.action.expectedPageObjectId",
-			128,
-		);
-	if (action.expectedPlaybackRevision < 1)
-		invalid(
-			"$.action.expectedPlaybackRevision",
-			"an existing Playback revision",
-			action.expectedPlaybackRevision,
-		);
-	printableStringAt(
-		action.expectedPlaybackObjectId,
-		"$.action.expectedPlaybackObjectId",
-		128,
-	);
-}
-
-function encodePlayback(playback: PlaybackDefinition, maximum = 1_000) {
-	const number = revisionAt(playback.number, "$.action.playback.number");
-	if (number > maximum)
-		invalid(
-			"$.action.playback.number",
-			`integer between 0 and ${maximum}`,
-			number,
-		);
+function encodePlayback(playback: PlaybackDefinition) {
 	return {
-		number,
 		name: plainStringAt(playback.name, "$.action.playback.name"),
 		target: encodeTarget(playback.target),
 		buttons: playback.buttons,
@@ -397,137 +239,28 @@ function boundedMasterAt(value: unknown, path: string) {
 	return number;
 }
 
-function decodeResolution(
-	value: unknown,
-	action: PlaybackTopologyAction,
-): PlaybackTopologyResolution {
+function decodeResolution(value: unknown, action: PlaybackTopologyAction): PlaybackTopologyResolution {
 	const resolution = recordAt(value, "$.resolution");
-	const kind = enumAt(resolution.kind, "$.resolution.kind", [
-		"cue_list",
-		"page",
-		"page_slot",
-		"virtual",
-	]);
+	const kind = enumAt(resolution.kind, "$.resolution.kind", ["cue_list", "page", "playback"]);
 	if (kind === "cue_list") {
 		exactRecordAt(resolution, "$.resolution", ["kind", "cue_list_id"]);
-		const cueListId = stringAt(
-			resolution.cue_list_id,
-			"$.resolution.cue_list_id",
-		);
-		if (
-			(action.type !== "save_cue_list" &&
-				action.type !== "undo_cue_list" &&
-				action.type !== "redo_cue_list") ||
-			action.cueListId !== cueListId
-		)
+		const cueListId = stringAt(resolution.cue_list_id, "$.resolution.cue_list_id");
+		if (!("cueListId" in action) || action.cueListId !== cueListId)
 			invalid("$.resolution", "the requested Cuelist", resolution);
-		return { kind, cueListId };
+		return {kind, cueListId};
 	}
+	const page = boundedPositiveIntegerAt(resolution.page, "$.resolution.page", 99);
 	if (kind === "page") {
-		if (action.type !== "create_page" && action.type !== "rename_page")
+		exactRecordAt(resolution, "$.resolution", ["kind", "page"]);
+		if (!("number" in action) || action.number !== page)
 			invalid("$.resolution", "the requested Playback Page", resolution);
-		return decodePlaybackPageResolution(resolution, action);
+		return {kind, page};
 	}
-	if (kind === "virtual") {
-		exactRecordAt(resolution, "$.resolution", [
-			"kind",
-			"page",
-			"playback_number",
-		]);
-		const page = boundedPositiveIntegerAt(
-			resolution.page,
-			"$.resolution.page",
-			127,
-		);
-		const playbackNumber = boundedVirtualPlaybackNumber(
-			resolution.playback_number,
-			"$.resolution.playback_number",
-		);
-		validateVirtualPlaybackBank(
-			page,
-			playbackNumber,
-			"$.resolution.playback_number",
-		);
-		if (
-			!(action.type === "configure_virtual" || action.type === "clear_virtual"
-				? action.page === page && action.playbackNumber === playbackNumber
-				: action.type === "assign_group_master" &&
-					action.address.kind === "virtual" &&
-					action.address.page === page &&
-					action.address.playbackNumber === playbackNumber)
-		)
-			invalid("$.resolution", "the requested Virtual Playback", resolution);
-		return { kind, page, playbackNumber };
-	}
-	exactRecordAt(resolution, "$.resolution", [
-		"kind",
-		"page",
-		"slot",
-		"playback_number",
-	]);
-	const page = boundedPositiveIntegerAt(
-		resolution.page,
-		"$.resolution.page",
-		127,
-	);
-	const slot = boundedPositiveIntegerAt(
-		resolution.slot,
-		"$.resolution.slot",
-		127,
-	);
-	const playbackNumber =
-		resolution.playback_number == null
-			? null
-			: boundedPositiveIntegerAt(
-					resolution.playback_number,
-					"$.resolution.playback_number",
-					1000,
-				);
-	if (
-		action.type === "save_cue_list" ||
-		action.type === "undo_cue_list" ||
-		action.type === "redo_cue_list" ||
-		action.type === "create_page" ||
-		action.type === "rename_page" ||
-		action.type === "configure_virtual" ||
-		action.type === "clear_virtual" ||
-		(action.type === "assign_group_master"
-			? action.address.kind !== "physical" ||
-				action.address.page !== page ||
-				action.address.slot !== slot
-			: action.page !== page || action.slot !== slot)
-	)
-		invalid("$.resolution", "the requested page slot", resolution);
-	if (
-		action.type === "map_existing_playback" &&
-		action.playbackNumber !== playbackNumber
-	)
-		invalid(
-			"$.resolution.playback_number",
-			"the requested Playback",
-			playbackNumber,
-		);
-	return { kind, page, slot, playbackNumber };
-}
-
-function boundedVirtualPlaybackNumber(value: unknown, path: string) {
-	const number = boundedPositiveIntegerAt(
-		value,
-		path,
-		MAX_VIRTUAL_PLAYBACK_NUMBER,
-	);
-	if (number < 1_001) invalid(path, "integer between 1001 and 39100", number);
-	return number;
-}
-
-function validateVirtualPlaybackBank(
-	page: number,
-	number: number,
-	path: string,
-) {
-	if (isVirtualPlaybackNumberForPage(page, number)) return;
-	const start = virtualPlaybackBankStart(page);
-	invalid(path, `integer between ${start} and ${start + 299}`, number);
+	exactRecordAt(resolution, "$.resolution", ["kind", "page", "position"]);
+	const position = boundedPositiveIntegerAt(resolution.position, "$.resolution.position", 1000);
+	if (!("address" in action) || action.address.page !== page || action.address.position !== position)
+		invalid("$.resolution", "the requested Playback address", resolution);
+	return {kind, page, position};
 }
 
 function decodeObjects(value: unknown): PlaybackTopologyObject[] {

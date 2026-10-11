@@ -4,14 +4,13 @@ import type {
 	PlaybackPage,
 	PlaybackSurfaceLayout,
 } from "../../../api/types";
-import type { ShowObject } from "../../../features/showObjects/contracts";
+type TestDefinition = { fixtureKey: number; body: PlaybackDefinition };
 import { projectPlaybackFootprints } from "./footprints";
 
 const layout: PlaybackSurfaceLayout = {
-	playbacks_per_row: 3,
 	rows: [
-		{ first_playback_slot: 11, has_fader: false, button_count: 1 },
-		{ first_playback_slot: 31, has_fader: true, button_count: 3 },
+		{ first_position: 11, count: 3, presentation: "buttons", button_count: 1 },
+		{ first_position: 31, count: 3, presentation: "fader", button_count: 3 },
 	],
 };
 
@@ -25,9 +24,8 @@ function definition(
 				right_buttons: PlaybackDefinition["buttons"];
 				right_fader: PlaybackDefinition["fader"];
 		  },
-): ShowObject<"playback"> {
+): TestDefinition {
 	const body: PlaybackDefinition & { footprint: typeof footprint } = {
-		number,
 		name: `Playback ${number}`,
 		target: { type: "cue_list", cue_list_id: `cue-list-${number}` },
 		buttons: ["go_minus", "go", "flash"],
@@ -39,29 +37,24 @@ function definition(
 		xfade_millis: 0,
 		footprint,
 	};
-	return {
-		kind: "playback",
-		id: `playback-${number}`,
-		revision: 1,
-		updated_at: "",
-		body,
-	};
-}
-
-function page(slots: Record<string, number>): PlaybackPage {
-	return { number: 1, name: "Main", slots, virtual_playbacks: {} };
+	return { fixtureKey: number, body };
 }
 
 function project(
-	definitions: ShowObject<"playback">[],
+	definitions: TestDefinition[],
 	slots: Record<string, number>,
 	playbackLayout: PlaybackSurfaceLayout = layout,
 ) {
+	const assignments = Object.fromEntries(
+		Object.entries(slots).map(([position, key]) => [
+			position,
+			definitions.find((d) => d.fixtureKey === key)!.body,
+		]),
+	);
 	return projectPlaybackFootprints({
-		playbackDefinitions: definitions,
-		page: page(slots),
+		page: { number: 1, name: "Main", assignments },
 		playbackLayout,
-		columns: playbackLayout.playbacks_per_row,
+		columns: playbackLayout.rows[0].count,
 		firstSlot: 1,
 		pageSize: 6,
 	});
@@ -125,7 +118,7 @@ describe("playback footprint projection", () => {
 		expect(result.bindings.get(12)).toEqual({
 			physicalSlot: 12,
 			anchorSlot: 32,
-			playbackNumber: 4,
+			address: { page: 1, position: 32 },
 			position: "taller_upper",
 			controls: [{ physicalButton: 1, control: { type: "taller_button" } }],
 		});
@@ -153,7 +146,7 @@ describe("playback footprint projection", () => {
 		expect(result.bindings.get(32)).toEqual({
 			physicalSlot: 32,
 			anchorSlot: 31,
-			playbackNumber: 7,
+			address: { page: 1, position: 31 },
 			position: "wider_right",
 			controls: [
 				{
@@ -226,10 +219,6 @@ describe("playback footprint projection", () => {
 			{ slot: 31, effective: "normal", fallbackReason: "neighbor_occupied" },
 			{ slot: 32, effective: "normal", fallbackReason: null },
 		]);
-		expect(project([wider], { "31": 2, "32": 99 }).anchors[0]).toMatchObject({
-			effective: "normal",
-			fallbackReason: "neighbor_occupied",
-		});
 	});
 
 	it("falls every claimant back when wider and taller footprints want the same cell", () => {
@@ -267,8 +256,7 @@ describe("playback footprint projection", () => {
 		});
 		const before = structuredClone(playback.body);
 		const small = projectPlaybackFootprints({
-			playbackDefinitions: [playback],
-			page: page({ "1": 9 }),
+			page: { number: 1, name: "Main", assignments: { 1: playback.body } },
 			columns: 1,
 			firstSlot: 1,
 			pageSize: 1,

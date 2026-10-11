@@ -1,3 +1,4 @@
+import { samePlaybackAddress } from "../../../api/playbackAddress";
 import type {
 	PlaybackCardKind,
 	PlaybackCardSummary,
@@ -10,7 +11,7 @@ import type {
 	PlaybackRuntimeProjection,
 } from "../../../api/types";
 import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
-import { legacyPlaybackRuntime } from "../../../features/playbackRuntime/legacy";
+import { playbackControlRuntime } from "../../../features/playbackRuntime/controlRuntime";
 import {
 	poolSurfaceKey,
 	resolveConfiguredPoolPresentation,
@@ -86,17 +87,17 @@ export function PlaybackSlot({
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const runtimeProjection = playback
-		? controller.runtimeProjections.get(playback.number)
+		? controller.runtimeProjections.get(playback.address.position)
 		: undefined;
-	const active = legacyPlaybackRuntime(runtimeProjection);
+	const active = playbackControlRuntime(runtimeProjection);
 	const selected =
-		playback?.number === controller.playbackDesk?.selected_playback;
+		Boolean(playback && controller.playbackDesk?.selected_playback && samePlaybackAddress(playback.address, controller.playbackDesk.selected_playback));
 	const configuredButtons =
 		row?.button_count ?? (controller.hardware ? 3 : (controller.buttons ?? 3));
 	const buttonCount = playback
 		? Math.min(configuredButtons, playback.button_count ?? configuredButtons)
 		: configuredButtons;
-	const hasFader = (row?.has_fader ?? true) && (playback?.has_fader ?? true);
+	const hasFader = (row?.presentation !== "buttons") && (playback?.has_fader ?? true);
 	const value = playbackFaderValue(
 		playback,
 		active,

@@ -3,30 +3,23 @@ use super::*;
 fn queue(registry: &ProgrammerRegistry, session: SessionId, number: u16) {
     assert!(registry.queue_preload_playback_action(
         session,
-        number,
-        None,
+        light_playback::PlaybackAddress::new(1, number).unwrap(),
         PreloadPlaybackQueueAction::Go,
-        PreloadPlaybackQueueSurface::Virtual,
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        },
     ));
 }
 
 #[test]
-fn persisted_queue_actions_accept_old_json_and_omit_an_unknown_page() {
-    let legacy = serde_json::json!({
-        "playback_number": 7,
-        "action": "go",
-        "surface": "virtual",
-    });
-    let action: PreloadPlaybackAction = serde_json::from_value(legacy.clone()).unwrap();
-    assert_eq!(action.page, None);
+fn persisted_queue_actions_require_canonical_address_and_control_source() {
+    let legacy = serde_json::json!({"playback_number":7,"action":"go","surface":"virtual"});
+    assert!(serde_json::from_value::<PreloadPlaybackAction>(legacy).is_err());
+    let canonical = serde_json::json!({"address":{"page":99,"position":1000},"action":"go","control_source":{"surface_id":"main","control_id":1}});
+    let action: PreloadPlaybackAction = serde_json::from_value(canonical.clone()).unwrap();
     assert_eq!(action.origin_desk_id, None);
-    assert_eq!(serde_json::to_value(&action).unwrap(), legacy);
-
-    let with_page = PreloadPlaybackAction {
-        page: Some(3),
-        ..action
-    };
-    assert_eq!(serde_json::to_value(with_page).unwrap()["page"], 3);
+    assert_eq!(serde_json::to_value(action).unwrap(), canonical);
 }
 
 #[test]
@@ -38,10 +31,12 @@ fn captured_origin_round_trips_with_the_persisted_queue_action() {
 
     assert!(registry.queue_preload_playback_action_with_origin(
         session,
-        7,
-        Some(3),
+        light_playback::PlaybackAddress::new(3, 7).unwrap(),
         PreloadPlaybackQueueAction::Go,
-        PreloadPlaybackQueueSurface::Physical,
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        },
         Some(desk_id),
     ));
 
@@ -68,7 +63,7 @@ fn append_retains_order_and_duplicates_and_advances_generation() {
     assert_eq!(
         actions
             .iter()
-            .map(|item| item.playback_number)
+            .map(|item| item.address.position())
             .collect::<Vec<_>>(),
         [7, 7]
     );

@@ -109,8 +109,9 @@ mod tests {
         let now = Utc::now();
         let source = SequenceMasterSource {
             cue_list_id: list.id,
-            playback_number: None,
-            playback_identity: None,
+            playback_address: None,
+            control_source_id: None,
+
             temporary: false,
         };
         let previous =

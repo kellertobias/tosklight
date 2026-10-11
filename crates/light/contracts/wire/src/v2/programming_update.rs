@@ -48,7 +48,7 @@ pub enum ProgrammingUpdateTarget {
         cue_list_id: Uuid,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional = nullable)]
-        playback_number: Option<u16>,
+        playback_address: Option<super::playback::PlaybackAddressValue>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional = nullable)]
         cue_id: Option<Uuid>,
@@ -101,7 +101,7 @@ pub struct ProgrammingUpdateTargetIdentity {
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<super::playback::PlaybackAddressValue>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub cue: Option<ProgrammingUpdateCueIdentity>,

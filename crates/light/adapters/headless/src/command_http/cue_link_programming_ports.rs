@@ -46,27 +46,33 @@ impl ServerProgrammingPorts<'_> {
         let cue_list_id = if let Some(id) = selected_cue_list {
             id
         } else {
-            let playback_number = match parsed.address {
-                CueLinkAddress::Selected => self
-                    .state()
-                    .installation
-                    .selected_playback(context.desk_id, entry.id)
-                    .map_err(|error| error.to_string())?
-                    .ok_or("no playback is selected")?,
-                CueLinkAddress::Pool { playback_number } => playback_number,
-                CueLinkAddress::PageSlot { page, slot } => snapshot
-                    .playback_pages
-                    .iter()
-                    .find(|candidate| candidate.number == page)
-                    .and_then(|candidate| candidate.slots.get(&slot))
-                    .copied()
-                    .ok_or("page playback is unassigned")?,
+            let address = match parsed.address {
+                CueLinkAddress::Selected => {
+                    let selection = self
+                        .state()
+                        .installation
+                        .selected_playback(context.desk_id, entry.id)
+                        .map_err(|error| error.to_string())?
+                        .ok_or("No Playback selected")?;
+                    light_playback::PlaybackAddress::new(selection.page, selection.position)?
+                }
+                CueLinkAddress::CurrentPage { position } => light_playback::PlaybackAddress::new(
+                    self.state()
+                        .installation
+                        .command_page(context.desk_id)
+                        .map_err(|error| error.to_string())?,
+                    position,
+                )?,
+                CueLinkAddress::ExplicitPage { page, position } => {
+                    light_playback::PlaybackAddress::new(page, position)?
+                }
             };
             let definition = snapshot
-                .playbacks
+                .playback_pages
                 .iter()
-                .find(|definition| definition.number == playback_number)
-                .ok_or("playback does not exist")?;
+                .find(|page| page.number == address.page())
+                .and_then(|page| page.assignments.get(&address.position()))
+                .ok_or("Playback is not assigned")?;
             let PlaybackTarget::CueList { cue_list_id } = definition.target else {
                 return Err("playback is not assigned to a Cuelist".into());
             };

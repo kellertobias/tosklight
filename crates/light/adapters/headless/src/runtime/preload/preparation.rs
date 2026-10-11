@@ -22,11 +22,7 @@ pub(super) fn prepare_preload_commit(
     validate_playback_definitions(&pending, &state.output.snapshot())?;
     let committed_at = state.programming.clock().now();
     let programmer_fade_millis = state.installation.configuration().programmer_fade_millis;
-    let zones = VirtualPlaybackExclusionResolver::read(state)
-        .map(|resolver| resolver.zone_numbers())
-        .unwrap_or_default()
-        .into();
-    let playback_context = CapturedPreloadPlaybackContext::new(zones, session.desk.id);
+    let playback_context = CapturedPreloadPlaybackContext::new(session.desk.id);
     let commands = playback_context.commands(&pending, committed_at)?;
     let prepared_playback =
         state
@@ -75,26 +71,16 @@ fn validate_playback_definitions(
     snapshot: &EngineSnapshot,
 ) -> Result<(), String> {
     for action in pending {
-        let exists = if action.playback_number >= light_playback::MIN_VIRTUAL_PLAYBACK {
-            action.page.is_some_and(|page_number| {
-                snapshot
-                    .playback_pages
-                    .iter()
-                    .find(|page| page.number == page_number)
-                    .is_some_and(|page| {
-                        page.virtual_playbacks.contains_key(&action.playback_number)
-                    })
-            })
-        } else {
-            snapshot
-                .playbacks
-                .iter()
-                .any(|definition| definition.number == action.playback_number)
-        };
+        let exists = snapshot
+            .playback_pages
+            .iter()
+            .find(|page| page.number == action.address.page())
+            .is_some_and(|page| page.assignments.contains_key(&action.address.position()));
         if !exists {
             return Err(format!(
-                "playback {} no longer exists",
-                action.playback_number
+                "playback {}.{} no longer exists",
+                action.address.page(),
+                action.address.position()
             ));
         }
     }
@@ -102,34 +88,19 @@ fn validate_playback_definitions(
 }
 
 fn changed_identities(prepared: &light_engine::PreparedPlaybackBatch) -> Vec<PlaybackIdentity> {
-    let mut identities = prepared
-        .changed_playback_numbers()
+    let addresses = prepared
+        .changed_playback_addresses()
+        .chain(
+            prepared
+                .outcomes()
+                .iter()
+                .flat_map(|outcome| outcome.released_playbacks.iter().copied()),
+        )
+        .collect::<std::collections::BTreeSet<_>>();
+    addresses
+        .into_iter()
         .map(PlaybackIdentity::Playback)
-        .collect::<Vec<_>>();
-    for outcome in prepared.outcomes() {
-        if outcome.addressed_effect.changed()
-            && let Some(page) = outcome.page
-            && let Ok(address) = light_playback::VirtualPlaybackAddress::new(page, outcome.number)
-        {
-            identities.push(PlaybackIdentity::Virtual(address));
-        }
-        if outcome.page.is_some() {
-            identities.extend(outcome.released_playbacks.iter().filter_map(|number| {
-                light_playback::VirtualPlaybackAddress::from_number(*number)
-                    .ok()
-                    .map(PlaybackIdentity::Virtual)
-            }));
-        }
-    }
-    identities.sort_by_key(|identity| match identity {
-        PlaybackIdentity::Playback(number) => (0_u8, 0_u8, *number),
-        PlaybackIdentity::Virtual(address) => (1, address.page(), address.number().get()),
-        PlaybackIdentity::CueList(_)
-        | PlaybackIdentity::DirectCueList(_)
-        | PlaybackIdentity::Group(_) => (2, 0, 0),
-    });
-    identities.dedup();
-    identities
+        .collect()
 }
 
 fn validate_projections(
@@ -141,7 +112,7 @@ fn validate_projections(
     }
     let scope = projections.first().map(|projection| projection.scope);
     for (identity, projection) in identities.iter().zip(projections) {
-        if projection.requested != *identity || Some(projection.scope) != scope {
+        if projection.identity != *identity || Some(projection.scope) != scope {
             return Err("Playback projection batch returned mismatched authority".into());
         }
     }

@@ -170,7 +170,7 @@ impl ProgrammingUpdatePorts for ServerProgrammingUpdatePorts {
             .into_iter()
             .filter_map(|playback| {
                 Some(ActiveCueContext {
-                    playback_number: playback.playback_number?,
+                    playback_address: playback.playback_address?,
                     cue_list_id: playback.cue_list_id,
                     cue_id: playback.current_cue_id?,
                     cue_number: playback.current_cue_number?,

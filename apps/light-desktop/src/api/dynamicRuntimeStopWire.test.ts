@@ -14,9 +14,9 @@ const ids = {
 	controllerId: "33333333-3333-4333-8333-333333333333",
 };
 const owner = {
-	kind: "virtual_playback" as const,
+	kind: "playback" as const,
 	page: 2,
-	playback_number: 1303,
+	position: 303,
 };
 function transport(
 	sendAction: LiveClientTransport["sendAction"],
@@ -31,9 +31,8 @@ function transport(
 	} as unknown as LiveClientTransport;
 }
 function outcome(request: PlaybackActionRequest) {
-	const base = cueProjection(1303);
+	const base = cueProjection(303, 0, 2);
 	return {
-		request_id: request.request_id,
 		correlation_id: ids.controllerId,
 		requested: request.address,
 		resolved: request.address,
@@ -41,8 +40,7 @@ function outcome(request: PlaybackActionRequest) {
 		durability: "durable",
 		projection: {
 			scope: base.scope,
-			requested: request.address,
-			playback_number: 1303,
+			identity: request.address,
 			target: "dynamic",
 			dynamic_id: ids.dynamicId,
 			last_known_pool_number: 100,
@@ -53,39 +51,30 @@ function outcome(request: PlaybackActionRequest) {
 		desk: null,
 		event_sequence: 12,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 describe("guarded live Dynamic Stop boundary", () => {
 	it.each([
-		{ kind: "physical_playback" as const, playback_number: 12 },
+		{ kind: "playback" as const, page: 1, position: 12 },
 		owner,
 	])("keeps exact typed address and three source IDs for %j", (target) => {
-		const request = dynamicRuntimeStopRequest(target, ids, "request");
+		const request = dynamicRuntimeStopRequest(target, ids);
 		expect(request.action).toEqual({
 			type: "runtime_stop_dynamic",
 			dynamic_id: ids.dynamicId,
 			instance_id: ids.instanceId,
 			controller_id: ids.controllerId,
 		});
-		expect(request.address).toEqual(
-			target.kind === "physical_playback"
-				? { kind: "playback", playback_number: 12 }
-				: { kind: "virtual", page: 2, playback_number: 1303 },
-		);
+		expect(request.address).toEqual(target);
 	});
 	it.each([
-		{ kind: "virtual_playback", page: 0, playback_number: 1303 },
-		{ kind: "virtual_playback", page: 128, playback_number: 39103 },
-		{ kind: "virtual_playback", page: 255, playback_number: 1303 },
-		{ kind: "virtual_playback", page: 2, playback_number: 12 },
-		{ kind: "virtual_playback", page: 1, playback_number: 1303 },
-		{ kind: "virtual_playback", page: 2, playback_number: 1300 },
-		{ kind: "physical_playback", playback_number: 1303 },
-		{ kind: "virtual_playback", page: 2, playback_number: 0 },
-		{ kind: "physical_playback", playback_number: 65536 },
-		{ kind: "physical_playback", playback_number: 12, page: 2 },
-		{ kind: "cue", cue_id: ids.dynamicId },
+		{ kind: "playback", page: 0, position: 1 },
+		{ kind: "playback", page: 100, position: 1 },
+		{ kind: "playback", page: 1, position: 0 },
+		{ kind: "playback", page: 1, position: 1001 },
+		{ kind: "physical_playback", playback_number: 12 },
+		{ kind: "virtual_playback", page: 2, playback_number: 1303 },
+		{ kind: "playback", page: 1, position: 1, surface: "physical" },
 		null,
 	])("rejects malformed or undeclared owner %j", (value) => {
 		expect(() => decodeDynamicRuntimeStopOwner(value, "$.stop_owner")).toThrow(
@@ -126,29 +115,22 @@ describe("guarded live Dynamic Stop boundary", () => {
 		expect(send).toHaveBeenCalledTimes(1);
 		send.mockImplementationOnce(async (action) => ({
 			...outcome(action.request),
-			request_id: "other",
-		}));
-		await expect(client.stopRuntimeLive(owner, ids)).rejects.toThrow(
-			/exact requested Dynamic stop owner/,
-		);
-		send.mockImplementationOnce(async (action) => ({
-			...outcome(action.request),
-			requested: { kind: "virtual", page: 3, playback_number: 1303 },
+			requested: { kind: "playback", page: 3, position: 303 },
 		}));
 		await expect(client.stopRuntimeLive(owner, ids)).rejects.toThrow();
 	});
 	it("accepts semantically identical returned addresses with reordered keys", async () => {
 		const send = vi.fn(async (action) => ({
 			...outcome(action.request),
-			requested: { playback_number: 1303, page: 2, kind: "virtual" },
+			requested: { position: 303, page: 2, kind: "playback" },
 		}));
 		await expect(
 			new DynamicsApiClient(transport(send)).stopRuntimeLive(owner, ids),
 		).resolves.toBeUndefined();
 	});
 	it.each([
-		{ kind: "physical_playback" as const, playback_number: 1000 },
-		{ kind: "virtual_playback" as const, page: 127, playback_number: 39100 },
+		{ kind: "playback" as const, page: 1, position: 1000 },
+		{ kind: "playback" as const, page: 99, position: 1000 },
 	])("accepts exact domain boundary owner %j", (target) => {
 		expect(decodeDynamicRuntimeStopOwner(target, "$.stop_owner")).toEqual(
 			target,

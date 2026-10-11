@@ -58,23 +58,16 @@ export type ProgrammerControlAction =
 
 export type PlaybackControl = "fader" | `button/${1 | 2 | 3}`;
 
-/**
- * Canonical relative OSC paths used after the `/light/{desk}/` prefix.
- *
- * `pagePlayback` follows the desk's current page. `explicitPlayback` deliberately omits the desk
- * alias because `/light/playback/{page}/{slot}` is global and never follows a page change.
- */
+/** Canonical relative OSC paths after the authenticated `/light/{desk}/` prefix. */
 export const controlSurfaceOscPaths = {
 	page: "page",
-	pagePlayback: (slot: number) => `page-playback/${slot}`,
-	pagePlaybackControl: (slot: number, control: PlaybackControl) =>
-		`page-playback/${slot}/${control}`,
-	explicitPlayback: (page: number, slot: number) => `playback/${page}/${slot}`,
+	explicitPlayback: (page: number, position: number) =>
+		`playback/${page}/${position}`,
 	explicitPlaybackControl: (
 		page: number,
-		slot: number,
+		position: number,
 		control: PlaybackControl,
-	) => `playback/${page}/${slot}/${control}`,
+	) => `playback/${page}/${position}/${control}`,
 	programmer: (action: ProgrammerControlAction) => `programmer/${action}`,
 	programmerFade: (kind: "programmer" | "cue" | "release") =>
 		`programmer/${kind === "programmer" ? "prog" : kind}-fade`,
@@ -85,9 +78,9 @@ export const controlSurfaceOscPaths = {
 	navigation: "nav",
 } as const;
 
-export function feedbackPagePlaybackOffset(parts: readonly string[]): number {
-	const canonical = parts.indexOf("page-playback");
-	return canonical >= 0 ? canonical : parts.indexOf("paged-playback");
+export function feedbackPlaybackOffset(parts: readonly string[]): number {
+	const offset = parts.indexOf("playback");
+	return offset > 0 && parts[offset - 1] === "feedback" ? offset : -1;
 }
 
 export const attachedHighlightKeys: readonly {
@@ -121,3 +114,13 @@ export const attachedPlaybackLayout = {
 	navigationEncoder: 7,
 	speedGroups: inclusiveRange(1, 5),
 } as const;
+
+/** Stable physical control identity for the fixed attached-simulator wiring, independent of page. */
+export function attachedPlaybackControlId(
+	position: number,
+	control: PlaybackControl,
+): number {
+	return (
+		position * 8 + (control === "fader" ? 6 : Number(control.split("/")[1]))
+	);
+}

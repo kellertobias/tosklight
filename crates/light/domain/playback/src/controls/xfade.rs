@@ -1,13 +1,13 @@
 use crate::*;
 
 impl PlaybackEngine {
-    pub fn set_manual_xfade(&mut self, number: u16, value: f32) -> Result<(), String> {
+    pub fn set_manual_xfade(&mut self, number: PlaybackAddress, value: f32) -> Result<(), String> {
         self.set_manual_xfade_mutation(number, value).map(|_| ())
     }
 
     pub fn set_manual_xfade_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
         value: f32,
     ) -> Result<PlaybackMutation<()>, String> {
         self.set_manual_xfade_inner_mutation(number, value, false)
@@ -15,7 +15,7 @@ impl PlaybackEngine {
 
     pub(crate) fn set_manual_xfade_inner_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
         value: f32,
         allow_faderless: bool,
     ) -> Result<PlaybackMutation<()>, String> {
@@ -65,8 +65,9 @@ impl PlaybackEngine {
             let ordinal = self.take_source_occurrence_ordinal();
             let active = &self.active[&key];
             let source = SequenceMasterSource {
-                playback_number: Some(number),
-                playback_identity: None,
+                control_source_id: None,
+                playback_address: Some(number),
+
                 cue_list_id,
                 temporary: false,
             };
@@ -108,13 +109,13 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), effect))
     }
 
-    pub fn xfade(&mut self, number: u16, on: bool) -> Result<(), String> {
+    pub fn xfade(&mut self, number: PlaybackAddress, on: bool) -> Result<(), String> {
         self.xfade_mutation(number, on).map(|_| ())
     }
 
     pub fn xfade_mutation(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
         on: bool,
     ) -> Result<PlaybackMutation<()>, String> {
         let duration = self
@@ -126,23 +127,18 @@ impl PlaybackEngine {
         let key = PlaybackKey::CueList(id);
         let mut changed = false;
         if on && !self.active.contains_key(&key) {
-            self.go_at_key(
-                key,
-                id,
-                self.clock.now(),
-                Some(PlaybackIdentity::physical(number)?),
-            )?;
+            self.go_at_key(key, id, self.clock.now(), Some(number))?;
             self.active.get_mut(&key).unwrap().master = 0.0;
             changed = true;
         }
         let now = self.clock.now();
         let active = self.active.get_mut(&key).ok_or("playback is not active")?;
-        changed |= active.playback_number != Some(number) || (on && !active.enabled);
+        changed |= active.playback_address != Some(number) || (on && !active.enabled);
         if on {
             active.enabled = true;
             active.fader_zero_auto_off_armed = false;
         }
-        active.playback_number = Some(number);
+        active.playback_address = Some(number);
         if duration == 0 {
             let target = if on { 1.0 } else { 0.0 };
             changed |= active.master != target || (!on && active.enabled);
@@ -170,85 +166,16 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), effect))
     }
 
-    pub fn xfade_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-        on: bool,
-    ) -> Result<PlaybackMutation<()>, String> {
-        if let PlaybackIdentity::Physical(number) = identity {
-            return self.xfade_mutation(number.get(), on);
-        }
-        let address = identity
-            .virtual_address()
-            .expect("physical identity returned above");
-        let definition = self
-            .definition_at(identity)
-            .ok_or("virtual playback does not exist")?;
-        let duration = definition.xfade_millis;
-        let PlaybackTarget::CueList { cue_list_id } = definition.target else {
-            return Err("virtual playback does not have cues".into());
-        };
-        let key = PlaybackKey::CueList(cue_list_id);
-        let mut changed = false;
-        if on && !self.active.contains_key(&key) {
-            self.go_at_key(key, cue_list_id, self.clock.now(), Some(identity))?;
-            self.active.get_mut(&key).unwrap().master = 0.0;
-            changed = true;
-        }
-        let now = self.clock.now();
-        let active = self
-            .active
-            .get_mut(&key)
-            .ok_or("virtual playback is not active")?;
-        changed |= active.playback_identity != Some(identity) || (on && !active.enabled);
-        if on {
-            active.enabled = true;
-            active.fader_zero_auto_off_armed = false;
-        }
-        active.playback_number = Some(address.number().get());
-        active.playback_identity = Some(identity);
-        if duration == 0 {
-            let target = if on { 1.0 } else { 0.0 };
-            changed |= active.master != target || (!on && active.enabled);
-            active.master = target;
-            if !on {
-                active.enabled = false;
-                active.fader_zero_auto_off_armed = false;
-                active.activation = None;
-            }
-        } else {
-            active.master_transition = Some(PlaybackMasterTransition {
-                from: active.master,
-                to: if on { 1.0 } else { 0.0 },
-                started_at: now,
-                duration_millis: duration,
-                release_after: !on,
-            });
-            changed = true;
-        }
-        Ok(PlaybackMutation::new(
-            (),
-            if changed {
-                PlaybackRuntimeEffect::Durable
-            } else {
-                PlaybackRuntimeEffect::None
-            },
-        ))
-    }
-
     /// Applies the timing envelope owned by one atomic Preload GO after the retained action verb
     /// has executed against the playback's then-current state. This does not rewrite Cue data:
     /// explicit Cue/attribute timing still wins, while a zero Cue time falls back to Programmer
     /// Fade for this transition only.
-    pub fn preload_timing_state(&self, number: u16) -> Option<PlaybackPreloadTimingState> {
-        self.preload_timing_state_at(PlaybackIdentity::physical(number).ok()?)
-    }
 
-    pub fn preload_timing_state_at(
+    pub fn preload_timing_state(
         &self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
     ) -> Option<PlaybackPreloadTimingState> {
-        let key = self.runtime_key_at(identity).ok()?;
+        let key = self.runtime_key(identity).ok()?;
         self.active
             .get(&key)
             .map(|playback| PlaybackPreloadTimingState {
@@ -260,7 +187,7 @@ impl PlaybackEngine {
 
     pub fn apply_preload_timing(
         &mut self,
-        number: u16,
+        number: PlaybackAddress,
         action: &str,
         started_at: DateTime<Utc>,
         fallback_millis: u64,
@@ -272,45 +199,31 @@ impl PlaybackEngine {
 
     pub fn apply_preload_timing_mutation(
         &mut self,
-        number: u16,
-        action: &str,
-        started_at: DateTime<Utc>,
-        fallback_millis: u64,
-        previous: Option<PlaybackPreloadTimingState>,
-    ) -> Result<PlaybackMutation<()>, String> {
-        self.apply_preload_timing_at_mutation(
-            PlaybackIdentity::physical(number)?,
-            action,
-            started_at,
-            fallback_millis,
-            previous,
-        )
-    }
-
-    pub fn apply_preload_timing_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
         action: &str,
         started_at: DateTime<Utc>,
         fallback_millis: u64,
         previous: Option<PlaybackPreloadTimingState>,
     ) -> Result<PlaybackMutation<()>, String> {
         if !matches!(
-            self.definition_at(identity)
+            self.definition(identity)
                 .map(|definition| &definition.target),
             Some(PlaybackTarget::CueList { .. })
         ) {
             return Err("preload timing is available only for Cuelist playbacks".into());
         }
-        let key = self.runtime_key_at(identity)?;
+        let key = self.runtime_key(identity)?;
         let durable = self.active.get_mut(&key).is_some_and(|playback| {
             apply_active_preload_timing(playback, action, started_at, fallback_millis, previous)
         });
         let transient = action == "temp-on"
             && self
                 .temporary
-                .get_mut(&(identity, TemporaryPlaybackKind::TempButton))
-                .is_some_and(|playback| {
+                .iter_mut()
+                .filter(|((held, kind), _)| {
+                    held.address == identity && *kind == TemporaryPlaybackKind::TempButton
+                })
+                .any(|(_, playback)| {
                     apply_temporary_preload_timing(playback, started_at, fallback_millis)
                 });
         let effect = effect_if(durable, PlaybackRuntimeEffect::Durable)
@@ -323,16 +236,16 @@ fn apply_manual_xfade(
     active: &mut ActivePlayback,
     cue_list: &CueList,
     compiled: &Arc<CompiledCueList>,
-    number: u16,
+    number: PlaybackAddress,
     value: f32,
     now: DateTime<Utc>,
     leg_history: Option<PlaybackSourceHistory>,
 ) -> bool {
-    let mut changed = active.playback_number != Some(number)
+    let mut changed = active.playback_address != Some(number)
         || !active.enabled
         || active.fader_position != value
         || active.manual_xfade_position != value;
-    active.playback_number = Some(number);
+    active.playback_address = Some(number);
     active.enabled = true;
     active.fader_zero_auto_off_armed = false;
     active.fader_position = value;

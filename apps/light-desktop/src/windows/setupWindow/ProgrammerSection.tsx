@@ -1,4 +1,5 @@
 import { ErrorAlert } from "@tosklight/ui";
+import { PlaybackPreloadScopeSettings } from "./PlaybackPreloadScopeSettings";
 import { NewShowDefaultsSettings } from "./ColorModelSettings";
 import {
 	Button,
@@ -278,32 +279,8 @@ function PreloadSettings({
 						})
 					}
 				/>
-				<SwitchField
-					label="Preload physical playback actions"
-					offLabel="Ignore"
-					onLabel="Capture"
-					description="Physical Flash and hardware/physical fader movements remain live and are not captured by Preload."
-					checked={draft.preload_physical_playback_actions}
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							preload_physical_playback_actions: event.target.checked,
-						})
-					}
-				/>
-				<SwitchField
-					label="Preload virtual playback actions"
-					offLabel="Ignore"
-					onLabel="Capture"
-					checked={draft.preload_virtual_playback_actions}
-					onChange={(event) =>
-						controller.editDraft({
-							...draft,
-							preload_virtual_playback_actions: event.target.checked,
-						})
-					}
-				/>
 			</FormLayout>
+			<PlaybackPreloadScopeSettings />
 		</article>
 	);
 }

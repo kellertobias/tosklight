@@ -1,11 +1,11 @@
 use crate::{ActionError, ActionErrorKind, ActiveShowObjectKind, PlaybackTopologyObjectProjection};
 use light_core::{CueListId, Revision};
-use light_playback::{CueList, MAX_PLAYBACKS, PlaybackDefinition, PlaybackPage};
+use light_playback::{CueList, PlaybackPage};
 use light_programmer::GroupDefinition;
 use light_show::{PortableShowCandidate, PortableShowDocument, PortableShowObject};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 pub(super) struct Stored<T> {
     pub object_id: String,
@@ -19,15 +19,6 @@ pub(super) fn find_cue_list(
     id: CueListId,
 ) -> Result<Option<Stored<CueList>>, ActionError> {
     find_unique(document, "cue_list", |value: &CueList| value.id == id)
-}
-
-pub(super) fn find_playback(
-    document: &PortableShowDocument,
-    number: u16,
-) -> Result<Option<Stored<PlaybackDefinition>>, ActionError> {
-    find_unique(document, "playback", |value: &PlaybackDefinition| {
-        value.number == number
-    })
 }
 
 pub(super) fn find_page(
@@ -82,19 +73,6 @@ pub(super) fn pages(
         .collect()
 }
 
-pub(super) fn next_playback_number(document: &PortableShowDocument) -> Result<u16, ActionError> {
-    let mut used = HashSet::new();
-    for object in document.objects_of_kind("playback") {
-        used.insert(decode::<PlaybackDefinition>(object)?.number);
-    }
-    for page in pages(document)? {
-        used.extend(page.typed.slots.into_values());
-    }
-    (1..=MAX_PLAYBACKS)
-        .find(|number| !used.contains(number))
-        .ok_or_else(|| conflict("no free Playback number is available"))
-}
-
 pub(super) fn candidate_projection(
     candidate: &PortableShowCandidate<'_>,
     kind: ActiveShowObjectKind,
@@ -134,20 +112,6 @@ pub(super) fn cue_list_object_id(
         stored,
         id.0.to_string(),
         "Cuelist",
-    )
-}
-
-pub(super) fn playback_object_id(
-    document: &PortableShowDocument,
-    stored: Option<&Stored<PlaybackDefinition>>,
-    number: u16,
-) -> Result<String, ActionError> {
-    existing_or_vacant_object_id(
-        document,
-        ActiveShowObjectKind::Playback,
-        stored,
-        number.to_string(),
-        "Playback",
     )
 }
 

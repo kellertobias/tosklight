@@ -1,85 +1,85 @@
 use super::*;
-
 #[derive(Clone)]
 pub(super) struct CommandPlaybackAddress {
-    pub(super) playback: u16,
+    pub(super) playback: light_playback::PlaybackAddress,
     pub(super) cue: Option<light_playback::CueNumber>,
     application: light_application::PlaybackAddress,
 }
-
 impl CommandPlaybackAddress {
-    /// CUE navigation was the last production reader; it now parses its own syntactic address and
-    /// lets the Playback application service resolve it. The remaining production callers use only
-    /// `playback` and `cue`, so this stays as the characterization of the current-page versus
-    /// explicit-page mapping that `parse_update_playback_address` still depends on.
     #[cfg(test)]
     pub(super) fn application_address(self) -> light_application::PlaybackAddress {
         self.application
     }
 }
-
-pub(super) fn page_playback(snapshot: &EngineSnapshot, page: u8, slot: u8) -> Result<u16, String> {
-    snapshot
+pub(super) fn page_playback(
+    snapshot: &EngineSnapshot,
+    page: u8,
+    position: u16,
+) -> Result<light_playback::PlaybackAddress, String> {
+    let address = light_playback::PlaybackAddress::new(page, position)?;
+    if snapshot
         .playback_pages
         .iter()
-        .find(|item| item.number == page)
-        .and_then(|item| item.slots.get(&slot))
-        .copied()
-        .ok_or_else(|| format!("page {page} slot {slot} is not assigned"))
+        .any(|item| item.number == page && item.assignments.contains_key(&position))
+    {
+        Ok(address)
+    } else {
+        Err(format!("Playback {address} is not assigned"))
+    }
 }
-
 pub(super) fn parse_playback_address(
     tokens: &[String],
     require_playback_token: bool,
     snapshot: &EngineSnapshot,
+    current_page: u8,
 ) -> Result<(CommandPlaybackAddress, usize), String> {
-    let mut index = 0;
-    if require_playback_token {
-        // The manual addresses a playback with PBK. SET edits a value or opens a configuration.
-        if tokens.get(index).is_none_or(|token| token != "PBK") {
-            return Err("playback address must start with PBK".into());
-        }
-        index += 1;
-    }
-    let first = tokens
-        .get(index)
-        .ok_or("playback number is required")?
-        .parse::<u16>()
-        .map_err(|_| "playback number is invalid")?;
-    index += 1;
-    let (playback, application) = if tokens.get(index).is_some_and(|token| token == ".") {
-        index += 1;
-        let slot = tokens
-            .get(index)
-            .ok_or("page playback number is required")?
-            .parse::<u8>()
-            .map_err(|_| "page playback number is invalid")?;
-        index += 1;
-        let page = first.try_into().map_err(|_| "page number is invalid")?;
-        (
-            page_playback(snapshot, page, slot)?,
-            light_application::PlaybackAddress::ExplicitPage { page, slot },
-        )
+    let prefixed;
+    let input = if require_playback_token {
+        tokens
     } else {
-        (first, light_application::PlaybackAddress::Pool(first))
+        prefixed = std::iter::once("PBK".to_owned())
+            .chain(tokens.iter().cloned())
+            .collect::<Vec<_>>();
+        prefixed.as_slice()
     };
+    let (target, rest) = command_http::playback_address_command::parse(input)?;
+    let used = input.len() - rest.len() - usize::from(!require_playback_token);
+    let (page, position) = match target {
+        command_http::playback_address_command::CommandPlaybackTarget::CurrentPage { position } => {
+            (current_page, position)
+        }
+        command_http::playback_address_command::CommandPlaybackTarget::ExplicitPage {
+            page,
+            position,
+        } => (page, position),
+    };
+    let playback = page_playback(snapshot, page, position)?;
+    let application = match target {
+        command_http::playback_address_command::CommandPlaybackTarget::CurrentPage { position } => {
+            light_application::PlaybackAddress::CurrentPage { position }
+        }
+        command_http::playback_address_command::CommandPlaybackTarget::ExplicitPage {
+            page,
+            position,
+        } => light_application::PlaybackAddress::Playback(light_playback::PlaybackAddress::new(
+            page, position,
+        )?),
+    };
+    let mut index = used;
     let cue = if tokens.get(index).is_some_and(|token| token == "CUE") {
         index += 1;
-        let mut cue = tokens
+        let mut value = tokens
             .get(index)
-            .ok_or("CUE requires a cue number")?
+            .ok_or("CUE requires a Cue number")?
             .clone();
         index += 1;
         while tokens.get(index).is_some_and(|token| token == ".") {
-            cue.push('.');
+            value.push('.');
             index += 1;
-            cue.push_str(tokens.get(index).ok_or("DOT requires another cue part")?);
+            value.push_str(tokens.get(index).ok_or("DOT requires another Cue part")?);
             index += 1;
         }
-        let cue = cue
-            .parse::<light_playback::CueNumber>()
-            .map_err(|error| format!("cue number is invalid: {error}"))?;
-        Some(cue)
+        Some(value.parse::<light_playback::CueNumber>()?)
     } else {
         None
     };
@@ -92,45 +92,14 @@ pub(super) fn parse_playback_address(
         index,
     ))
 }
-
 pub(super) fn parse_update_playback_address(
     tokens: &[String],
     current_page: u8,
     snapshot: &EngineSnapshot,
 ) -> Result<CommandPlaybackAddress, String> {
-    if tokens.first().is_none_or(|token| token != "PBK") {
-        return Err("playback address must start with PBK".into());
-    }
-
-    // Update follows the control-surface playback model: PBK <slot> addresses
-    // that slot on this desk's current page, while PBK <page> . <slot> keeps an
-    // explicit page stable when the operator changes pages.
-    let (explicit, current_slot) = if tokens.get(2).is_some_and(|token| token == ".") {
-        (tokens.to_vec(), None)
-    } else {
-        let slot = tokens
-            .get(1)
-            .ok_or("playback number is required")?
-            .parse::<u8>()
-            .map_err(|_| "playback number is invalid")?;
-        if slot == 0 || slot > 127 {
-            return Err("playback number must be within 1-127".into());
-        }
-        let mut explicit = vec![
-            "PBK".to_string(),
-            current_page.to_string(),
-            ".".to_string(),
-            slot.to_string(),
-        ];
-        explicit.extend(tokens.iter().skip(2).cloned());
-        (explicit, Some(slot))
-    };
-    let (mut address, used) = parse_playback_address(&explicit, true, snapshot)?;
-    if used != explicit.len() {
-        return Err("unexpected tokens after Update playback target".into());
-    }
-    if let Some(slot) = current_slot {
-        address.application = light_application::PlaybackAddress::CurrentPage { slot };
+    let (address, used) = parse_playback_address(tokens, true, snapshot, current_page)?;
+    if used != tokens.len() {
+        return Err("Unexpected tokens after Update Playback target".into());
     }
     Ok(address)
 }
@@ -277,7 +246,7 @@ pub(super) fn programmer_cue(
 pub(super) fn cue_list_for_playback(
     store: &ActiveShowRepository,
     snapshot: &EngineSnapshot,
-    playback: u16,
+    address: light_playback::PlaybackAddress,
 ) -> Result<
     (
         light_playback::PlaybackDefinition,
@@ -287,22 +256,25 @@ pub(super) fn cue_list_for_playback(
     String,
 > {
     let definition = snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .find(|item| item.number == playback)
+        .find(|page| page.number == address.page())
+        .and_then(|page| page.assignments.get(&address.position()))
         .cloned()
-        .ok_or_else(|| format!("Cuelist {playback} does not exist"))?;
+        .ok_or_else(|| format!("Playback {address} does not exist"))?;
     let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else {
-        return Err(format!("Cuelist {playback} does not contain Cues"));
+        return Err(format!("Playback {address} does not contain Cues"));
     };
-    let id = cue_list_id.0.to_string();
     let object = store
         .objects("cue_list")
         .map_err(|error| error.to_string())?
         .into_iter()
-        .find(|object| object.id == id)
+        .find(|object| {
+            object.body.get("id").and_then(serde_json::Value::as_str)
+                == Some(&cue_list_id.0.to_string())
+        })
         .ok_or("Cuelist does not exist")?;
-    let cue_list =
+    let cue_list: light_playback::CueList =
         serde_json::from_value(object.body.clone()).map_err(|error| error.to_string())?;
     Ok((definition, object, cue_list))
 }

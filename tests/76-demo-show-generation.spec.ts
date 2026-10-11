@@ -13,7 +13,7 @@ import {
 	PLANNED_DEMO_CONTROL_FIXTURES,
 	PLANNED_DEMO_PHYSICAL_INSTANCES,
 } from "./support/plannedDemoManifest";
-import { PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES } from "./support/plannedDemoVirtualPlaybackZones";
+import { PLANNED_DEMO_SOLO_REGIONS } from "./support/plannedDemoSoloRegions";
 
 const DEMO_SHOW_ASSET = process.env.LIGHT_DEMO_SHOW_OUTPUT
 	? path.resolve(process.env.LIGHT_DEMO_SHOW_OUTPUT)
@@ -264,9 +264,9 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		(model) => model.includes("Truss") || model.includes("Pipe"),
 	);
 	expect(trusses).toHaveLength(24);
-	expect(instancesOf((model) => model.startsWith("Stage Element"))).toHaveLength(
-		20,
-	);
+	expect(
+		instancesOf((model) => model.startsWith("Stage Element")),
+	).toHaveLength(20);
 	const curtains = instancesOf((model) => model.startsWith("Curtain"));
 	expect(curtains).toHaveLength(4);
 	expect(
@@ -338,7 +338,9 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		presets.find((preset) => preset.body.name === "Tungsten White"),
 	).toBeDefined();
 	// Colour presets are universal: one shared colour for any selected fixture.
-	for (const preset of presets.filter((preset) => preset.body.family === "Color")) {
+	for (const preset of presets.filter(
+		(preset) => preset.body.family === "Color",
+	)) {
 		expect(Object.keys(preset.body.universal_values ?? {})).toEqual(["color"]);
 		expect(preset.body.values ?? {}).toEqual({});
 	}
@@ -366,18 +368,20 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			?.body.phase.ordering,
 	).toEqual({ type: "grid_linear", angle_degrees: 90 });
 	const [page] = await api.showObjects<any>(showId, "playback_page");
-	expect(Object.keys(page.body.virtual_playbacks)).toHaveLength(30);
-	const exclusionZones = await api.request<{ zones: unknown[] }>(
+	expect(
+		Object.values(page.body.assignments).filter(
+			(definition: any) => definition.target.type === "dynamic",
+		),
+	).toHaveLength(30);
+	const soloRegions = await api.request<{ regions: unknown[] }>(
 		"GET",
-		"/api/v2/virtual-playback-exclusion-zones",
+		"/api/v2/playback-solo-regions",
 		undefined,
 		true,
 		undefined,
 		{ showId },
 	);
-	expect(exclusionZones.zones).toEqual(
-		PLANNED_DEMO_VIRTUAL_PLAYBACK_EXCLUSION_ZONES,
-	);
+	expect(soloRegions.regions).toEqual(PLANNED_DEMO_SOLO_REGIONS);
 
 	const layout = generatedShow.layout;
 	expect(layout.desks.map((desk) => desk.name)).toEqual([

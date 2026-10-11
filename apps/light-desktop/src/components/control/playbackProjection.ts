@@ -1,2 +1,4 @@
-import type { PlaybackPage } from "../../api/types";
-export function playbackSlotNumbers(page: PlaybackPage | undefined, firstSlot: number, count: number): Array<number | undefined> { return Array.from({length:count},(_,index)=>page?.slots[String(firstSlot+index)]); }
+import type { PlaybackDefinition, PlaybackPage } from "../../api/types";
+export function playbackSlotAssignments(page: PlaybackPage | undefined, firstPosition: number, count: number): Array<PlaybackDefinition | undefined> {
+	return Array.from({length: count}, (_, index) => page?.assignments[String(firstPosition + index)]);
+}

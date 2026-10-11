@@ -5,18 +5,24 @@ mod connection;
 mod desk;
 mod error;
 mod model;
+mod playback_contract;
 mod portable;
 mod programming_contract;
 mod show_store;
 
-pub use desk::DeskStore;
+pub use desk::{
+    DeskPlaybackIncompatibility, DeskStore, PlaybackSurfaceRegistry,
+    inspect_desk_playback_contract, resolve_playback_surface_pages,
+};
 pub use error::StoreError;
 pub use model::{
     ClientDesk, ControlDesk, FixedScreenFixtureColumn, FixedScreenFixtureCompactMode,
     FixedScreenFixtureIncludedHeads, FixedScreenFixtureOrder, FixedScreenPane, FixedScreenSide,
-    FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession, PlaybackSurfaceLayout,
-    PlaybackSurfaceRow, ProgrammerControlSurfaceConfiguration, RevisionCopySource,
-    ScreenConfiguration, ScreenContent, ShowEntry, ShowRevision, VersionedObject,
+    FixedScreenStageRenderQuality, FixedScreenTextMode, PersistedSession,
+    PlaybackControlPresentation, PlaybackPageSource, PlaybackSelection,
+    PlaybackSurfaceConfiguration, PlaybackSurfaceLayout, PlaybackSurfaceRow,
+    ProgrammerControlSurfaceConfiguration, RevisionCopySource, ScreenConfiguration, ScreenContent,
+    ShowEntry, ShowRevision, VersionedObject,
 };
 pub use portable::{
     CueThumbnail, CueThumbnailEntry, FixtureProfileDigest, FixtureProfileRevision,
@@ -51,3 +57,8 @@ pub(crate) use connection::set_schema_version;
 
 #[cfg(test)]
 mod tests;
+
+pub use playback_contract::{
+    PLAYBACK_CONTRACT_METADATA_KEY, PLAYBACK_CONTRACT_VERSION, validate_playback_object,
+    validate_playback_runtime, validate_show_playback_contract,
+};

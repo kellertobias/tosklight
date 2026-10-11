@@ -8,18 +8,10 @@ export type ProgrammerPreloadPlaybackAction =
 	| "temporary_on"
 	| "temporary_off";
 
-/** The application surface retained with a captured playback interaction. */
-export type ProgrammerPreloadPlaybackSurface =
-	| "virtual"
-	| "physical"
-	| "osc"
-	| "matter";
-
 export interface ProgrammerPreloadPlaybackQueueEntry {
-	playbackNumber: number;
-	page: number | null;
+	address: import("../../api/playbackAddress").PlaybackAddressValue;
 	action: ProgrammerPreloadPlaybackAction;
-	surface: ProgrammerPreloadPlaybackSurface;
+	controlSource: { surface_id: string; control_id: number };
 }
 
 /** The Programmer's ordered pending playback actions. */

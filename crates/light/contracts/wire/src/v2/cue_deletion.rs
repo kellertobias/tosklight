@@ -10,14 +10,14 @@ use uuid::Uuid;
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum CueDeletionAddress {
-    Pool { playback_number: u16 },
-    CurrentPage { expected_page: u8, slot: u8 },
-    PageSlot { page: u8, slot: u8 },
+    Playback { page: u8, position: u16 },
+    CuelistPool { number: u16 },
+    CurrentPage { expected_page: u8, position: u16 },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct CueDeletionAuthority {
-    pub playback_number: u16,
+    pub playback_address: Option<super::playback::PlaybackAddressValue>,
     pub cue_list_id: Uuid,
     #[schemars(length(min = 1, max = 256))]
     pub object_id: String,
@@ -128,10 +128,10 @@ mod tests {
     fn request_ignores_unknown_fields_and_keeps_scope_server_authored() {
         let request = serde_json::json!({
             "request_id":"delete-1",
-            "address":{"type":"current_page","expected_page":2,"slot":3},
+            "address":{"type":"current_page","expected_page":2,"position":3},
             "cue_number":"2.5",
             "authority":{
-                "playback_number":7,
+                "playback_address":{"page":2,"position":3},
                 "cue_list_id":Uuid::from_u128(1),
                 "object_id":"stored-list",
                 "object_revision":4,
@@ -156,12 +156,15 @@ mod tests {
 
     #[test]
     fn tagged_addresses_ignore_extras_but_validate_known_fields_and_outcomes_remain_strict() {
-        let address = serde_json::json!({"type":"pool","playback_number":1,"page":2});
+        let address = serde_json::json!({"type":"playback","position":1,"page":2,"future":true});
         assert_eq!(
             serde_json::from_value::<CueDeletionAddress>(address).unwrap(),
-            CueDeletionAddress::Pool { playback_number: 1 }
+            CueDeletionAddress::Playback {
+                page: 2,
+                position: 1
+            }
         );
-        let address = serde_json::json!({"type":"pool","playback_number":"one"});
+        let address = serde_json::json!({"type":"playback","page":2,"position":"one"});
         assert!(serde_json::from_value::<CueDeletionAddress>(address).is_err());
         let outcome = serde_json::json!({"status":"changed","unexpected":true});
         assert!(serde_json::from_value::<CueDeletionOutcome>(outcome).is_err());

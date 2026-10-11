@@ -203,10 +203,7 @@ function useChoosePlayback({
 				scope,
 			});
 			if (intent?.type === "assign_object") {
-				const address =
-					intent.playback.addressing === "virtual"
-						? `VPBK ${intent.playback.playbackNumber}`
-						: `PBK ${intent.playback.addressing === "explicit_page" ? `${intent.playback.pageNumber} . ` : ""}${intent.playback.slot}`;
+				const address = `PBK ${intent.playback.pageNumber} . ${intent.playback.slot}`;
 				await command?.execute(`${intent.sourceCommand} AT ${address}`);
 			}
 			if (intent && stateRef.current) await writeVisibleState(stateRef.current);
@@ -215,26 +212,8 @@ function useChoosePlayback({
 					expectedPageRevision: intent.playback.pageObjectRevision,
 					expectedPageObjectId: intent.playback.pageObjectId,
 				};
-				if (intent.playback.addressing === "virtual")
-					await topology?.assignVirtualGroupMaster(
-						intent.group.objectId,
-						intent.group.objectRevision,
-						intent.playback.pageNumber,
-						intent.playback.playbackNumber,
-						options,
-					);
-				else
-					await topology?.assignGroupMaster(
-						intent.group.objectId,
-						intent.group.objectRevision,
-						intent.playback.pageNumber,
-						intent.playback.slot,
-						{
-							...options,
-							expectedPlaybackRevision: intent.playback.playbackObjectRevision,
-							expectedPlaybackObjectId: intent.playback.playbackObjectId,
-						},
-					);
+				await topology?.assignGroupMaster(intent.group.objectId, intent.group.objectRevision,
+					{page: intent.playback.pageNumber, position: intent.playback.slot}, options);
 			}
 			if (intent?.type === "open_playback_settings")
 				routeControlSurfaceIntentWithFeedback(intent);

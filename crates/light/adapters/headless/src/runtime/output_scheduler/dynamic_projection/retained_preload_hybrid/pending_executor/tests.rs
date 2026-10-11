@@ -9,7 +9,7 @@ use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::fami
 use crate::runtime::position_readout::PendingPositionReadoutSource;
 use light_core::programming::{PositionIntent, ProgrammingOwner};
 use light_dynamics::DynamicSpeedTransport;
-use light_programmer::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
+use light_programmer::PreloadPlaybackQueueAction;
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
@@ -344,10 +344,12 @@ fn a_queued_preload_playback_is_a_passive_status_without_live_fallback() {
     bench.publish_next();
     assert!(rig.programmers.queue_preload_playback_action(
         rig.session,
-        1,
-        None,
+        light_playback::PlaybackAddress::new(1, 1).unwrap(),
         PreloadPlaybackQueueAction::Go,
-        PreloadPlaybackQueueSurface::Physical,
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        }
     ));
     bench.status_becomes(PendingEpisodeStatus::QueuePreviewUnavailable);
     assert!(

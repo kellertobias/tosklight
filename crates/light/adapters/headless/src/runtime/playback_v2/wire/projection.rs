@@ -28,7 +28,7 @@ pub(super) fn target_projection(
             runtime: runtime
                 .as_ref()
                 .map(|runtime| wire::DynamicPlaybackRuntimeProjection {
-                    playback_number: runtime.active.playback_number,
+                    owner_address: super::address_value(runtime.active.playback_address),
                     enabled: runtime.active.enabled,
                     paused: runtime.active.paused,
                     flash: runtime.active.flash,

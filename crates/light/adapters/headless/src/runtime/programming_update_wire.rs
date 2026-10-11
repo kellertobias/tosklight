@@ -134,7 +134,7 @@ fn application_target(
     Ok(match target {
         wire::ProgrammingUpdateTarget::Cue {
             cue_list_id,
-            playback_number,
+            playback_address,
             cue_id,
             cue_number,
             validate_active_context,
@@ -146,7 +146,9 @@ fn application_target(
                 .transpose()?;
             application::ProgrammingUpdateTargetRequest::Cue {
                 cue_list_id: CueListId(cue_list_id),
-                playback_number,
+                playback_address: playback_address
+                    .map(|value| light_playback::PlaybackAddress::new(value.page, value.position))
+                    .transpose()?,
                 cue_id,
                 cue_number,
                 validate_active_context,

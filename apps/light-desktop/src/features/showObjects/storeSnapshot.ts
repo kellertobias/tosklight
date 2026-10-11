@@ -12,7 +12,6 @@ export const ALL_COLLECTIONS = new Set<ShowObjectKind>([
 	"preset",
 	"cue_list",
 	"patch_layer",
-	"playback",
 	"playback_page",
 	"stage_layout",
 	"user_layout",
@@ -27,7 +26,6 @@ const PROJECTED_COLLECTIONS: Record<
 	preset: new Set(["preset"]),
 	cue_list: new Set(["cue_list"]),
 	patch_layer: new Set(["patch_layer"]),
-	playback: new Set(["playback"]),
 	playback_page: new Set(["playback_page"]),
 	stage_layout: new Set(["stage_layout"]),
 	user_layout: new Set(["user_layout"]),
@@ -40,7 +38,6 @@ export function emptyShowObjectCollections(): ShowObjectCollections {
 		preset: [],
 		cue_list: [],
 		patch_layer: [],
-		playback: [],
 		playback_page: [],
 		stage_layout: [],
 		user_layout: [],
@@ -58,7 +55,6 @@ export function initialShowObjectsSnapshot(): ShowObjectsSnapshot {
 		presets: [],
 		cueLists: [],
 		patchLayers: [],
-		playbacks: [],
 		playbackPages: [],
 		stageLayouts: [],
 		userLayouts: [],
@@ -119,13 +115,7 @@ export function createShowObjectsSnapshot(
 					pendingOperations,
 				) as ShowObject<"patch_layer">[])
 			: previous.patchLayers,
-		playbacks: projectKinds.has("playback")
-			? (projectCollection(
-					"playback",
-					authoritative.playback,
-					pendingOperations,
-				) as ShowObject<"playback">[])
-			: previous.playbacks,
+
 		playbackPages: projectKinds.has("playback_page")
 			? (projectCollection(
 					"playback_page",

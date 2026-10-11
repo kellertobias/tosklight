@@ -1,5 +1,5 @@
-use super::{DeskStore, validate_playback_surface};
-use crate::{ClientDesk, ControlDesk, PlaybackSurfaceLayout, StoreError};
+use super::DeskStore;
+use crate::{ClientDesk, ControlDesk, PlaybackSelection, StoreError};
 use chrono::Utc;
 use light_core::ShowId;
 use rusqlite::{OptionalExtension, params};
@@ -25,7 +25,7 @@ impl DeskStore {
     /// Separate from [`Self::desk`] so a read can stay a read: answering what an installation holds
     /// must not write a row into it.
     fn stored_desk(&self) -> Result<Option<ControlDesk>, StoreError> {
-        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json,hardware_led_brightness,hardware_gooseneck_brightness,hardware_gooseneck_color FROM control_desks ORDER BY name COLLATE NOCASE")?;
+        let mut statement = self.conn.prepare("SELECT id,name,columns_count,rows_count,buttons_count,surface_id,hardware_led_brightness,hardware_gooseneck_brightness,hardware_gooseneck_color FROM control_desks ORDER BY name COLLATE NOCASE")?;
         let mut rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -33,7 +33,7 @@ impl DeskStore {
                 row.get::<_, u8>(2)?,
                 row.get::<_, u8>(3)?,
                 row.get::<_, u8>(4)?,
-                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(5)?,
                 row.get::<_, u8>(6)?,
                 row.get::<_, u8>(7)?,
                 row.get::<_, u8>(8)?,
@@ -48,7 +48,7 @@ impl DeskStore {
             columns,
             rows,
             buttons,
-            playback_layout,
+            surface_id,
             hardware_led_brightness,
             hardware_gooseneck_brightness,
             hardware_gooseneck_color,
@@ -62,9 +62,7 @@ impl DeskStore {
             columns,
             rows,
             buttons,
-            playback_layout: playback_layout
-                .map(|value| serde_json::from_str(&value))
-                .transpose()?,
+            surface_id,
         }))
     }
 
@@ -165,7 +163,7 @@ impl DeskStore {
             columns: 8,
             rows: 1,
             buttons: 3,
-            playback_layout: None,
+            surface_id: "main".into(),
         };
         self.conn.execute("INSERT INTO control_desks(id,name,columns_count,rows_count,buttons_count) VALUES (?1,?2,?3,?4,?5)",params![desk.id.to_string(),desk.name,desk.columns,desk.rows,desk.buttons])?;
         Ok(desk)
@@ -178,9 +176,9 @@ impl DeskStore {
         columns: u8,
         rows: u8,
         buttons: u8,
-        playback_layout: Option<PlaybackSurfaceLayout>,
+        surface_id: String,
     ) -> Result<ControlDesk, StoreError> {
-        self.update_desk_with_illumination(id, name, columns, rows, buttons, playback_layout, None)
+        self.update_desk_with_illumination(id, name, columns, rows, buttons, surface_id, None)
     }
 
     pub fn update_desk_with_illumination(
@@ -190,7 +188,7 @@ impl DeskStore {
         columns: u8,
         rows: u8,
         buttons: u8,
-        playback_layout: Option<PlaybackSurfaceLayout>,
+        surface_id: String,
         illumination: Option<[u8; 3]>,
     ) -> Result<ControlDesk, StoreError> {
         let current = self.desk()?;
@@ -220,33 +218,13 @@ impl DeskStore {
                 "invalid control desk configuration".into(),
             ));
         }
-        let playback_layout =
-            playback_layout.or_else(|| self.desk().ok().and_then(|desk| desk.playback_layout));
-        if let Some(layout) = &playback_layout {
-            validate_playback_surface(layout)?;
+        if !self.playback_surfaces(id)?.contains_key(&surface_id) {
+            return Err(StoreError::Invalid(format!(
+                "Unknown Playback surface {surface_id}"
+            )));
         }
-        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,playback_layout_json=?5,hardware_led_brightness=?7,hardware_gooseneck_brightness=?8,hardware_gooseneck_color=?9 WHERE id=?6",params![name.trim(),columns,rows,buttons,playback_layout.as_ref().map(serde_json::to_string).transpose()?,id.to_string(),illumination[0],illumination[1],illumination[2]])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
+        if self.conn.execute("UPDATE control_desks SET name=?1,columns_count=?2,rows_count=?3,buttons_count=?4,surface_id=?5,hardware_led_brightness=?7,hardware_gooseneck_brightness=?8,hardware_gooseneck_color=?9 WHERE id=?6",params![name.trim(),columns,rows,buttons,surface_id,id.to_string(),illumination[0],illumination[1],illumination[2]])?!=1{return Err(StoreError::Invalid("control desk does not exist".into()));}
         self.desk()
-    }
-
-    pub fn desk_page(&self, desk: Uuid, show: ShowId) -> Result<u8, StoreError> {
-        Ok(self
-            .conn
-            .query_row(
-                "SELECT page FROM control_desk_pages WHERE desk_id=?1 AND show_id=?2",
-                params![desk.to_string(), show.0.to_string()],
-                |row| row.get(0),
-            )
-            .optional()?
-            .unwrap_or(1))
-    }
-
-    pub fn set_desk_page(&self, desk: Uuid, show: ShowId, page: u8) -> Result<(), StoreError> {
-        if !(1..=127).contains(&page) {
-            return Err(StoreError::Invalid("page must be within 1-127".into()));
-        }
-        self.conn.execute("INSERT INTO control_desk_pages(desk_id,show_id,page) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET page=excluded.page",params![desk.to_string(),show.0.to_string(),page])?;
-        Ok(())
     }
 
     /// Explicit Cuelist selection is separate from physical Playback selection and scoped to a show.
@@ -288,29 +266,40 @@ impl DeskStore {
         Ok(())
     }
 
-    pub fn selected_playback(&self, desk: Uuid, show: ShowId) -> Result<Option<u16>, StoreError> {
-        self.conn
+    pub fn selected_playback(
+        &self,
+        desk: Uuid,
+        show: ShowId,
+    ) -> Result<Option<PlaybackSelection>, StoreError> {
+        let serialized: Option<String> = self
+            .conn
             .query_row(
                 "SELECT playback FROM control_desk_selections WHERE desk_id=?1 AND show_id=?2",
                 params![desk.to_string(), show.0.to_string()],
                 |row| row.get(0),
             )
-            .optional()
-            .map_err(Into::into)
+            .optional()?;
+        serialized
+            .map(|value| serde_json::from_str(&value).map_err(Into::into))
+            .transpose()
     }
 
     pub fn set_selected_playback(
         &self,
         desk: Uuid,
         show: ShowId,
-        playback: Option<u16>,
+        playback: Option<PlaybackSelection>,
     ) -> Result<(), StoreError> {
-        if playback.is_some_and(|number| !(1..=1_000).contains(&number)) {
-            return Err(StoreError::Invalid("playback must be within 1-1000".into()));
+        if playback.is_some_and(|address| {
+            !(1..=99).contains(&address.page) || !(1..=1000).contains(&address.position)
+        }) {
+            return Err(StoreError::Invalid(
+                "Playback address must have page 1-99 and position 1-1000".into(),
+            ));
         }
         match playback {
-            Some(number) => {
-                self.conn.execute("INSERT INTO control_desk_selections(desk_id,show_id,playback) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET playback=excluded.playback", params![desk.to_string(),show.0.to_string(),number])?;
+            Some(address) => {
+                self.conn.execute("INSERT INTO control_desk_selections(desk_id,show_id,playback) VALUES (?1,?2,?3) ON CONFLICT(desk_id,show_id) DO UPDATE SET playback=excluded.playback", params![desk.to_string(),show.0.to_string(),serde_json::to_string(&address)?])?;
             }
             None => {
                 self.conn.execute(
@@ -336,7 +325,7 @@ pub(super) fn delete_desks(
             "DELETE FROM control_desk_cuelist_selections WHERE desk_id=?1",
             params![desk_id],
         )?;
-        transaction.execute("DELETE FROM control_desk_pages WHERE desk_id=?1", [desk_id])?;
+
         transaction.execute(
             "DELETE FROM control_desk_selections WHERE desk_id=?1",
             [desk_id],

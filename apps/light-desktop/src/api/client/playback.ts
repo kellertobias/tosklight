@@ -7,6 +7,8 @@ import type {
 	PlaybackActionRequest,
 	PlaybackRuntimeIdentity,
 	PlaybackRuntimeSnapshot,
+	PlaybackSurfacesSnapshot,
+	PlaybackSurfaceConfiguration,
 	ScreenConfigurationAction,
 	ScreenConfigurationActionOutcome,
 	ScreenConfigurationActionRequest,
@@ -18,6 +20,7 @@ import type {
 	ProgrammerControlSurfacePatch as WireProgrammerControlSurfacePatch,
 	ScreenConfiguration as WireScreenConfiguration,
 } from "../generated/light-wire";
+import { decodePlaybackSurfaces } from "../playbackSurfacesWire";
 import { decodePlaybackOutcome, decodePlaybackSnapshot } from "../playbackWire";
 import type {
 	ControlDesk,
@@ -31,14 +34,12 @@ import type { LiveClientTransport } from "./transport";
 import type { HardwareLightingPatch } from "../types/desk";
 
 // Rust Option patch fields may be absent; preserve that intent at the boundary.
-type ControlDeskIntent = Exclude<ControlDeskConfigurationAction, { type: "update" }> | {
-	type: "update";
-	patch: Partial<ControlDeskConfigurationPatch>;
-};
-
-interface PlaybackPageSelectionOptions {
-	existingOnly?: boolean;
-}
+type ControlDeskIntent =
+	| Exclude<ControlDeskConfigurationAction, { type: "update" }>
+	| {
+			type: "update";
+			patch: Partial<ControlDeskConfigurationPatch>;
+	  };
 
 export class PlaybackApiClient {
 	private screensById = new Map<string, ScreenConfiguration>();
@@ -82,29 +83,17 @@ export class PlaybackApiClient {
 			},
 		);
 		const outcome = decodePlaybackOutcome(value);
-		if (outcome.request_id !== request.request_id)
-			throw new WireValidationError(
-				"$.request_id",
-				`request ID ${request.request_id}`,
-				outcome.request_id,
-			);
 		return outcome;
 	}
 
 	async playbackRuntimeLiveAction(
 		request: PlaybackActionRequest,
 	): Promise<PlaybackActionOutcome> {
-		const value = await this.transport.sendAction(
-			{ type: "playback", request },
-			request.request_id,
-		);
+		const value = await this.transport.sendAction({
+			type: "playback",
+			request,
+		});
 		const outcome = decodePlaybackOutcome(value);
-		if (outcome.request_id !== request.request_id)
-			throw new WireValidationError(
-				"$.request_id",
-				`request ID ${request.request_id}`,
-				outcome.request_id,
-			);
 		return outcome;
 	}
 
@@ -140,8 +129,44 @@ export class PlaybackApiClient {
 		this.screensById.delete(id);
 	}
 
-	async setScreenPage(id: string, page: number): Promise<void> {
-		await this.screenAction({ type: "set_page", screen_id: id, page });
+	async setSurfacePage(
+		surfaceId: string,
+		page: number,
+	): Promise<PlaybackSurfacesSnapshot> {
+		return decodePlaybackSurfaces(
+			await this.transport.sendAction({
+				type: "playback_surface_page",
+				request: { surface_id: surfaceId, page },
+			}),
+		);
+	}
+	async selectSurface(surfaceId: string): Promise<PlaybackSurfacesSnapshot> {
+		return decodePlaybackSurfaces(
+			await this.transport.sendAction({
+				type: "playback_surface_select",
+				request: { surface_id: surfaceId },
+			}),
+		);
+	}
+	async playbackSurfaces(): Promise<PlaybackSurfacesSnapshot> {
+		return decodePlaybackSurfaces(
+			await this.transport.request("/api/v2/playback-surfaces"),
+		);
+	}
+	async updatePlaybackSurface(
+		surfaceId: string,
+		patch: Partial<PlaybackSurfaceConfiguration>,
+	): Promise<PlaybackSurfacesSnapshot> {
+		return decodePlaybackSurfaces(
+			await this.transport.request(
+				`/api/v2/playback-surfaces/${encodeURIComponent(surfaceId)}/update`,
+				{
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ request_id: crypto.randomUUID(), ...patch }),
+				},
+			),
+		);
 	}
 
 	async updateProgrammerControlSurface(
@@ -174,21 +199,13 @@ export class PlaybackApiClient {
 		return configuration as ProgrammerControlSurfaceConfiguration;
 	}
 
-	async setPlaybackPage(
-		deskId: string,
-		page: number,
-		options: PlaybackPageSelectionOptions = {},
-	) {
-		const outcome = await this.controlDeskAction(deskId, {
-			type: "set_page",
-			page,
-			existing_only: options.existingOnly ?? false,
-		});
+	async setPlaybackPage(deskId: string, page: number, surfaceId: string) {
+		const outcome = await this.setSurfacePage(surfaceId, page);
 		return {
-			desk_id: outcome.desk.id,
-			page: outcome.page ?? page,
-			event_sequence: outcome.event_sequence,
-			page_creation_event_sequence: outcome.page_creation_event_sequence,
+			desk_id: deskId,
+			page: outcome.resolved_pages[surfaceId],
+			event_sequence: null,
+			page_creation_event_sequence: null,
 		};
 	}
 
@@ -237,7 +254,6 @@ export class PlaybackApiClient {
 				path = `/api/v2/screens/${action.screen_id}/delete`;
 				request = { request_id: requestId };
 				break;
-			case "set_page":
 			case "update_programmer_control_surface":
 				path = "/api/v2/screens/actions";
 				request = { request_id: requestId, action };
@@ -254,7 +270,9 @@ export class PlaybackApiClient {
 		deskId: string,
 		action: ControlDeskIntent,
 	): Promise<ControlDeskConfigurationActionOutcome> {
-		const request: Omit<ControlDeskConfigurationActionRequest, "action"> & { action: ControlDeskIntent } = {
+		const request: Omit<ControlDeskConfigurationActionRequest, "action"> & {
+			action: ControlDeskIntent;
+		} = {
 			request_id: crypto.randomUUID(),
 			action,
 		};
@@ -267,10 +285,7 @@ export class PlaybackApiClient {
 }
 
 function wireScreen(screen: ScreenConfiguration): WireScreenConfiguration {
-	return {
-		...screen,
-		playback_layout: screen.playback_layout ?? null,
-	};
+	return screen;
 }
 
 function screenPatch(
@@ -285,13 +300,7 @@ function screenPatch(
 		content: changed(current.content, next.content),
 		show_dock: changed(current.show_dock, next.show_dock),
 		show_playbacks: changed(current.show_playbacks, next.show_playbacks),
-		playback_count: changed(current.playback_count, next.playback_count),
-		playback_rows: changed(current.playback_rows, next.playback_rows),
-		first_playback_slot: changed(
-			current.first_playback_slot,
-			next.first_playback_slot,
-		),
-		page_mode: changed(current.page_mode, next.page_mode),
+		surface_id: changed(current.surface_id, next.surface_id),
 		show_page_controls: changed(
 			current.show_page_controls,
 			next.show_page_controls,
@@ -307,15 +316,6 @@ function screenPatch(
 		bounds: next.bounds == null ? null : changed(current.bounds, next.bounds),
 		clear_bounds: current.bounds != null && next.bounds == null,
 		fullscreen: changed(current.fullscreen, next.fullscreen),
-		playback_layout:
-			next.playback_layout == null
-				? null
-				: changed(
-						current.playback_layout ?? null,
-						next.playback_layout ?? null,
-					),
-		clear_playback_layout:
-			current.playback_layout != null && next.playback_layout == null,
 	};
 }
 
@@ -330,14 +330,27 @@ function controlDeskPatch(
 		columns: changed(current?.columns, next.columns),
 		rows: changed(current?.rows, next.rows),
 		buttons: changed(current?.buttons, next.buttons),
-		hardware_led_brightness: next.hardware_led_brightness == null ? null : changed(current?.hardware_led_brightness ?? 100, next.hardware_led_brightness),
-		hardware_gooseneck_brightness: next.hardware_gooseneck_brightness == null ? null : changed(current?.hardware_gooseneck_brightness ?? 100, next.hardware_gooseneck_brightness),
-		hardware_gooseneck_color: next.hardware_gooseneck_color == null ? null : changed(current?.hardware_gooseneck_color ?? 100, next.hardware_gooseneck_color),
-		playback_layout:
-			next.playback_layout == null ||
-			JSON.stringify(current?.playback_layout) ===
-				JSON.stringify(next.playback_layout)
+		hardware_led_brightness:
+			next.hardware_led_brightness == null
 				? null
-				: next.playback_layout,
+				: changed(
+						current?.hardware_led_brightness ?? 100,
+						next.hardware_led_brightness,
+					),
+		hardware_gooseneck_brightness:
+			next.hardware_gooseneck_brightness == null
+				? null
+				: changed(
+						current?.hardware_gooseneck_brightness ?? 100,
+						next.hardware_gooseneck_brightness,
+					),
+		hardware_gooseneck_color:
+			next.hardware_gooseneck_color == null
+				? null
+				: changed(
+						current?.hardware_gooseneck_color ?? 100,
+						next.hardware_gooseneck_color,
+					),
+		surface_id: changed(current?.surface_id, next.surface_id),
 	};
 }

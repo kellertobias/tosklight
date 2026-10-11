@@ -214,8 +214,8 @@ mod tests {
     #[test]
     fn control_paths_remain_scoped_to_the_desk_alias() {
         assert_eq!(
-            control_address("stage-left", "/page-playback/3/button/1/"),
-            "/light/stage-left/page-playback/3/button/1"
+            control_address("stage-left", "/playback/2/3/button/1/"),
+            "/light/stage-left/playback/2/3/button/1"
         );
     }
 

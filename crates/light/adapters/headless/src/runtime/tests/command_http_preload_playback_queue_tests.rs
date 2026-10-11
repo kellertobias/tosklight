@@ -13,13 +13,7 @@ async fn preload_playback_queue_snapshot_is_exact_user_authenticated_and_narrow(
         .await;
     assert_eq!(legacy.status(), StatusCode::OK);
 
-    scenario.state.programming.queue_preload_playback_action(
-        scenario.session.id,
-        7,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::TemporaryOn,
-        light_programmer::PreloadPlaybackQueueSurface::Osc,
-    );
+    scenario.state.programming.queue_preload_playback_action(scenario.session.id, light_playback::PlaybackAddress::new(1, 7).unwrap(), light_programmer::PreloadPlaybackQueueAction::TemporaryOn, light_playback::PlaybackControlSource { surface_id: "hardware:test-client".into(), control_id: 7 });
     let response = scenario.preload_playback_queue_snapshot().await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[header::ETAG], "\"0\"");
@@ -27,9 +21,9 @@ async fn preload_playback_queue_snapshot_is_exact_user_authenticated_and_narrow(
     assert!(snapshot["projection"].get("user_id").is_none());
     assert_eq!(snapshot["projection"]["revision"], 0);
     assert_eq!(snapshot["projection"]["actions"], serde_json::json!([{
-        "playback_number": 7,
+        "address": {"page": 1, "position": 7},
         "action": "temporary_on",
-        "surface": "osc",
+        "control_source": {"surface_id": "hardware:test-client", "control_id": 7},
     }]));
     assert!(snapshot.get("programmer").is_none());
     let _ = std::fs::remove_dir_all(&scenario.data_dir);

@@ -157,7 +157,7 @@ pub(super) fn application_update_target(
             let resolved = resolve_update_cue_target(target, &active_update_cue_contexts(state))?;
             Ok(ProgrammingUpdateTargetRequest::Cue {
                 cue_list_id: resolved.cue_list_id,
-                playback_number: resolved.playback_number,
+                playback_address: resolved.playback_address,
                 cue_id: Some(resolved.cue_id),
                 cue_number: Some(resolved.cue_number),
                 validate_active_context: target.validate_active_context,

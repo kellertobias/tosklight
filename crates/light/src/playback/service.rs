@@ -6,19 +6,15 @@ use super::{
 };
 use crate::{ActionContext, ActionEnvelope, ActionError, ActionErrorKind, EventBus, EventDraft};
 use parking_lot::Mutex;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 use std::sync::Arc;
-use uuid::Uuid;
 
 use super::projection::validate_snapshot_identities;
 use super::transition_set::RelatedTransitionSet;
 
-const REQUEST_CACHE_LIMIT: usize = 4_096;
-
 #[derive(Clone)]
 pub struct PlaybackService {
     operation: Arc<Mutex<()>>,
-    replay: Arc<Mutex<ReplayCache>>,
     events: EventBus,
 }
 
@@ -32,7 +28,6 @@ impl PlaybackService {
     pub fn new(events: EventBus) -> Self {
         Self {
             operation: Arc::default(),
-            replay: Arc::default(),
             events,
         }
     }
@@ -48,12 +43,7 @@ impl PlaybackService {
     ) -> Result<PlaybackResult, ActionError> {
         let _ordered = self.operation.lock();
         ports.authorize(&envelope.context)?;
-        if let Some(result) = self.cached(&envelope)? {
-            return Ok(result);
-        }
-        let result = self.apply(&envelope, ports)?;
-        self.remember(&envelope, &result);
-        Ok(result)
+        self.apply(&envelope, ports)
     }
 
     // @tour playback-runtime:10 Order one Playback action
@@ -70,16 +60,18 @@ impl PlaybackService {
             controller_id,
         } = envelope.command.action
         {
-            if !matches!(
-                envelope.command.address,
-                PlaybackAddress::Pool(_) | PlaybackAddress::Virtual(_)
-            ) {
+            if !matches!(envelope.command.address, PlaybackAddress::Playback(_)) {
                 return Err(ActionError::new(
                     ActionErrorKind::Invalid,
                     "Runtime Dynamic Stop requires an exact Playback owner address",
                 ));
             }
-            let address = resolve(&envelope.command.address, &envelope.context, ports)?;
+            let address = resolve(
+                &envelope.command.address,
+                &envelope.context,
+                &envelope.command.control_source,
+                ports,
+            )?;
             ports.validate_runtime_dynamic_stop(
                 &envelope.context,
                 &address,
@@ -95,7 +87,12 @@ impl PlaybackService {
         };
         let envelope = normalized.as_ref().unwrap_or(envelope);
         validate_address_action(&envelope.command.address, envelope.command.action.clone())?;
-        let resolved = resolve(&envelope.command.address, &envelope.context, ports)?;
+        let resolved = resolve(
+            &envelope.command.address,
+            &envelope.context,
+            &envelope.command.control_source,
+            ports,
+        )?;
         let identity = runtime_identity(&resolved);
         let before = ports.projection(&envelope.context, identity.clone())?;
         let related = RelatedTransitionSet::capture(
@@ -115,7 +112,7 @@ impl PlaybackService {
             &envelope.context,
             resolved.clone(),
             envelope.command.action.clone(),
-            envelope.command.surface,
+            &envelope.command.control_source,
         )?;
         let durability = ports.durability();
         let outcome = outcome(&execution);
@@ -150,7 +147,7 @@ impl PlaybackService {
         let event_sequence =
             primary_event_sequence.or_else(|| related.last().map(|change| change.event_sequence));
         let desk_event_sequence = if applied && desk != before_desk {
-            desk.map(|projection| {
+            desk.clone().map(|projection| {
                 self.events
                     .publish(EventDraft::playback_view_changed(
                         &envelope.context,
@@ -173,7 +170,6 @@ impl PlaybackService {
             desk,
             event_sequence,
             desk_event_sequence,
-            replayed: false,
         })
     }
 
@@ -223,25 +219,6 @@ impl PlaybackService {
             event_sequences,
         }
     }
-
-    fn cached(
-        &self,
-        envelope: &ActionEnvelope<PlaybackCommand>,
-    ) -> Result<Option<PlaybackResult>, ActionError> {
-        let Some(key) = ReplayKey::from_envelope(envelope) else {
-            return Ok(None);
-        };
-        self.replay.lock().get(&key, &envelope.command)
-    }
-
-    fn remember(&self, envelope: &ActionEnvelope<PlaybackCommand>, result: &PlaybackResult) {
-        let Some(key) = ReplayKey::from_envelope(envelope) else {
-            return;
-        };
-        self.replay
-            .lock()
-            .insert(key, envelope.command.clone(), result.clone());
-    }
 }
 
 fn runtime_identity(address: &ResolvedPlaybackAddress) -> PlaybackRuntimeIdentity {
@@ -250,8 +227,7 @@ fn runtime_identity(address: &ResolvedPlaybackAddress) -> PlaybackRuntimeIdentit
         ResolvedPlaybackAddress::Group { group_id, .. } => {
             PlaybackRuntimeIdentity::Group(group_id.clone())
         }
-        ResolvedPlaybackAddress::Pool { number, .. } => PlaybackRuntimeIdentity::Playback(*number),
-        ResolvedPlaybackAddress::Virtual(address) => PlaybackRuntimeIdentity::Virtual(*address),
+        ResolvedPlaybackAddress::Playback(address) => PlaybackRuntimeIdentity::Playback(*address),
     }
 }
 
@@ -263,7 +239,7 @@ fn validate_snapshot_projections(
     let requested = identities.iter().cloned().collect::<HashSet<_>>();
     if projections
         .iter()
-        .any(|projection| !requested.contains(&projection.requested))
+        .any(|projection| !requested.contains(&projection.identity))
     {
         return Err(ActionError::new(
             ActionErrorKind::Internal,
@@ -272,7 +248,7 @@ fn validate_snapshot_projections(
     }
     let projected = projections
         .iter()
-        .map(|projection| projection.requested.clone())
+        .map(|projection| projection.identity.clone())
         .collect::<HashSet<_>>();
     if requested != projected {
         return Err(ActionError::new(
@@ -294,22 +270,39 @@ fn validate_snapshot_projections(
 
 fn resolve(
     address: &PlaybackAddress,
-    context: &crate::ActionContext,
+    context: &ActionContext,
+    source: &light_playback::PlaybackControlSource,
     ports: &dyn PlaybackPorts,
 ) -> Result<ResolvedPlaybackAddress, ActionError> {
+    source
+        .validate()
+        .map_err(|message| ActionError::new(ActionErrorKind::Invalid, message))?;
     match address {
         PlaybackAddress::CueList(id) => Ok(ResolvedPlaybackAddress::CueList(*id)),
         PlaybackAddress::Group(group_id) => Ok(ResolvedPlaybackAddress::Group {
             group_id: group_id.clone(),
-            playback_number: ports.group_playback(context, group_id.clone())?,
+            playback_address: ports.group_playback(context, group_id.clone())?,
         }),
-        PlaybackAddress::Pool(number) => Ok(pool(*number, None, None)),
-        PlaybackAddress::Virtual(address) => Ok(ResolvedPlaybackAddress::Virtual(*address)),
-        PlaybackAddress::CurrentPage { slot } => {
+        PlaybackAddress::Playback(address) => resolve_assignment(*address, ports),
+        PlaybackAddress::CurrentPage { position } => {
             let page = ports.current_page(context)?;
-            resolve_page(page, *slot, ports)
+            let address = light_playback::PlaybackAddress::new(page, *position)
+                .map_err(|message| ActionError::new(ActionErrorKind::Invalid, message))?;
+            resolve_assignment(address, ports)
         }
-        PlaybackAddress::ExplicitPage { page, slot } => resolve_page(*page, *slot, ports),
+    }
+}
+fn resolve_assignment(
+    address: light_playback::PlaybackAddress,
+    ports: &dyn PlaybackPorts,
+) -> Result<ResolvedPlaybackAddress, ActionError> {
+    if ports.playback_exists(address)? {
+        Ok(ResolvedPlaybackAddress::Playback(address))
+    } else {
+        Err(ActionError::new(
+            ActionErrorKind::NotFound,
+            "Playback is not assigned",
+        ))
     }
 }
 
@@ -348,92 +341,16 @@ fn validate_address_action(
     Ok(())
 }
 
-fn resolve_page(
-    page: u8,
-    slot: u8,
-    ports: &dyn PlaybackPorts,
-) -> Result<ResolvedPlaybackAddress, ActionError> {
-    ports
-        .playback_at(page, slot)?
-        .map(|number| pool(number, Some(page), Some(slot)))
-        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "paged playback"))
-}
-
-const fn pool(number: u16, page: Option<u8>, slot: Option<u8>) -> ResolvedPlaybackAddress {
-    ResolvedPlaybackAddress::Pool { number, page, slot }
-}
-
 pub(super) fn outcome(execution: &PlaybackExecution) -> PlaybackOutcome {
     match execution {
-        PlaybackExecution::Pool {
+        PlaybackExecution::Playback {
             pending: Some(action),
             ..
         } => PlaybackOutcome::Captured(*action),
         PlaybackExecution::ActiveList { changed: false, .. }
         | PlaybackExecution::Target { changed: false }
-        | PlaybackExecution::Pool { changed: false, .. }
+        | PlaybackExecution::Playback { changed: false, .. }
         | PlaybackExecution::Released(false) => PlaybackOutcome::NoChange,
         _ => PlaybackOutcome::Applied,
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct ReplayKey {
-    desk_id: Uuid,
-    session_id: Option<Uuid>,
-    request_id: String,
-}
-
-impl ReplayKey {
-    fn from_envelope(envelope: &ActionEnvelope<PlaybackCommand>) -> Option<Self> {
-        Some(Self {
-            desk_id: envelope.context.desk_id,
-            session_id: envelope.context.session_id,
-            request_id: envelope.context.request_id.clone()?,
-        })
-    }
-}
-
-struct ReplayEntry {
-    command: PlaybackCommand,
-    result: PlaybackResult,
-}
-
-#[derive(Default)]
-struct ReplayCache {
-    entries: HashMap<ReplayKey, ReplayEntry>,
-    order: VecDeque<ReplayKey>,
-}
-
-impl ReplayCache {
-    fn get(
-        &self,
-        key: &ReplayKey,
-        command: &PlaybackCommand,
-    ) -> Result<Option<PlaybackResult>, ActionError> {
-        let Some(entry) = self.entries.get(key) else {
-            return Ok(None);
-        };
-        if entry.command != *command {
-            return Err(ActionError::new(
-                ActionErrorKind::Conflict,
-                "request_id was already used for a different playback operation",
-            ));
-        }
-        let mut result = entry.result.clone();
-        result.replayed = true;
-        Ok(Some(result))
-    }
-
-    fn insert(&mut self, key: ReplayKey, command: PlaybackCommand, result: PlaybackResult) {
-        if !self.entries.contains_key(&key) {
-            self.order.push_back(key.clone());
-        }
-        self.entries.insert(key, ReplayEntry { command, result });
-        while self.entries.len() > REQUEST_CACHE_LIMIT {
-            if let Some(oldest) = self.order.pop_front() {
-                self.entries.remove(&oldest);
-            }
-        }
     }
 }

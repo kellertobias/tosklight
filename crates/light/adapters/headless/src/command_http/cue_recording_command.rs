@@ -29,7 +29,7 @@ pub(super) fn parse(command: &str) -> Result<Option<CueRecordCommand>, String> {
     let Some(root) = body.first().map(String::as_str) else {
         return Ok(None);
     };
-    if !matches!(root, "CUE" | "CUELIST" | "PBK" | "VPBK") {
+    if !matches!(root, "CUE" | "CUELIST" | "PBK") {
         return Ok(None);
     }
     let (target, cue_number) = target(body)?;
@@ -70,7 +70,7 @@ fn target(body: &[String]) -> Result<(CueRecordCommandTarget, Option<CueNumber>)
                 .ok_or("Cuelist number is required")?
                 .parse::<u16>()
                 .map_err(|_| "Cuelist number is invalid")?;
-            if !(1..=light_playback::MAX_PLAYBACKS).contains(&number) {
+            if !(1..=1000).contains(&number) {
                 return Err("Cuelist number must be within 1-1000".into());
             }
             Ok((
@@ -78,14 +78,14 @@ fn target(body: &[String]) -> Result<(CueRecordCommandTarget, Option<CueNumber>)
                 trailing_cue(&body[2..])?,
             ))
         }
-        Some("PBK" | "VPBK") => {
+        Some("PBK") => {
             let (target, rest) = playback_address_command::parse(body)?;
             Ok((
                 CueRecordCommandTarget::Playback(target),
                 trailing_cue(rest)?,
             ))
         }
-        _ => Err("expected CUE, CUELIST, PBK, or VPBK recording target".into()),
+        _ => Err("expected CUE, CUELIST, or PBK recording target".into()),
     }
 }
 
@@ -126,22 +126,19 @@ mod tests {
     }
 
     #[test]
-    fn parses_current_explicit_and_virtual_playbacks() {
+    fn parses_current_and_explicit_playbacks() {
         assert_eq!(
             parse("RECORD PBK 6").unwrap().unwrap().target,
-            CueRecordCommandTarget::Playback(CommandPlaybackTarget::CurrentPage { slot: 6 })
+            CueRecordCommandTarget::Playback(CommandPlaybackTarget::CurrentPage { position: 6 })
         );
         assert_eq!(
             parse("RECORD PBK 2.6 CUE 3").unwrap().unwrap().target,
             CueRecordCommandTarget::Playback(CommandPlaybackTarget::ExplicitPage {
                 page: 2,
-                slot: 6,
+                position: 6,
             })
         );
-        assert!(matches!(
-            parse("RECORD VPBK 1001").unwrap().unwrap().target,
-            CueRecordCommandTarget::Playback(CommandPlaybackTarget::Virtual(_))
-        ));
+        assert!(parse("RECORD VPBK 1001").unwrap().is_none());
     }
 
     #[test]

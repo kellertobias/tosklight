@@ -22,14 +22,14 @@ export const cueTarget: UpdateTargetIdentity = {
 	family: { type: "cue" },
 	object_id: "cue-list-a",
 	name: "Main Cuelist",
-	playback_number: 7,
+	playback_address: { page: 1, position: 7 },
 	cue: { id: "cue-2", number: "2" },
 };
 
 export const cueRequestTarget: ProgrammingUpdateTarget = {
 	type: "cue",
 	cue_list_id: "cue-list-a",
-	playback_number: 7,
+	playback_address: { page: 1, position: 7 },
 	cue_id: "cue-2",
 	cue_number: "2",
 	validate_active_context: true,
@@ -200,9 +200,9 @@ function requestTargetFor(
 	return {
 		type: "cue",
 		cue_list_id: target.object_id,
-		...(target.playback_number == null
+		...(target.playback_address == null
 			? {}
-			: { playback_number: target.playback_number }),
+			: { playback_address: target.playback_address }),
 		...(target.cue == null
 			? {}
 			: { cue_id: target.cue.id, cue_number: target.cue.number }),

@@ -46,7 +46,8 @@ impl CueTransferScenario {
             light_core::FixtureId::new(),
             light_core::FixtureId::new(),
         ];
-        let (source, destination, source_cue_id) = transfer_cue_lists(fixtures);
+        let (mut source, mut destination, source_cue_id) = transfer_cue_lists(fixtures);
+        source.pool_number=Some(1);destination.pool_number=Some(2);
         let show_path = data_dir.join("shows/cue-transfer.show");
         let show_id = initialise_show(&show_path, "Cue transfer").unwrap();
         let store = ActiveShowRepository::open(&show_path).unwrap();
@@ -66,19 +67,8 @@ impl CueTransferScenario {
                 )
                 .unwrap();
         }
-        for definition in [
-            transfer_playback(1, source.id),
-            transfer_playback(2, destination.id),
-        ] {
-            store
-                .put_object(
-                    "playback",
-                    &definition.number.to_string(),
-                    &serde_json::to_value(&definition).unwrap(),
-                    0,
-                )
-                .unwrap();
-        }
+        let page=light_playback::PlaybackPage {number:1,name:"Transfer".into(),assignments:HashMap::from([(1,transfer_playback(1,source.id)),(2,transfer_playback(2,destination.id))])};
+        store.put_object("playback_page","1",&serde_json::to_value(&page).unwrap(),0).unwrap();
         let entry = ShowEntry {
             is_base_show: false,
             id: show_id,
@@ -106,9 +96,9 @@ impl CueTransferScenario {
 
     fn baseline(&self) -> CueTransferBaseline {
         let store = ActiveShowRepository::open(&self.show_path).unwrap();
-        let (_, source, _) = cue_list_for_playback(&store, &self.state.output.snapshot(), 1).unwrap();
+        let (_, source, _) = cue_list_for_playback(&store, &self.state.output.snapshot(), cue_programming_test_address(1,1)).unwrap();
         let (_, destination, _) =
-            cue_list_for_playback(&store, &self.state.output.snapshot(), 2).unwrap();
+            cue_list_for_playback(&store, &self.state.output.snapshot(), cue_programming_test_address(1,2)).unwrap();
         CueTransferBaseline {
             source_body: source.body,
             source_revision: source.revision,
@@ -230,7 +220,6 @@ fn transfer_playback(
     cue_list_id: light_core::CueListId,
 ) -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
-        number,
         name: format!("Cuelist {number}"),
         target: light_playback::PlaybackTarget::CueList { cue_list_id },
         buttons: [light_playback::PlaybackButtonAction::None; 3],

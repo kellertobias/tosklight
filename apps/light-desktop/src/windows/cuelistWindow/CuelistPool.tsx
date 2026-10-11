@@ -1,3 +1,4 @@
+import { playbackAddressKey } from "../../api/playbackAddress";
 import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import { ModalFrame } from "@tosklight/ui/modals";
 import {
@@ -38,7 +39,7 @@ import {
 	smartChoiceRecordPlan,
 } from "../../features/recordUpdateOptions/options";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
-import { runtimeMaster } from "../../features/playbackRuntime/legacy";
+import { runtimeMaster } from "../../features/playbackRuntime/controlRuntime";
 import {
 	useDirectCueListProjectionMap,
 	usePlaybackProjectionMap,
@@ -51,7 +52,6 @@ import {
 } from "../../features/poolPresentation/poolPresentation";
 import {
 	useCueLists,
-	usePlaybackDefinitions,
 	usePlaybackPages,
 } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../../features/showObjects/ShowObjectsView";
@@ -94,7 +94,7 @@ interface PoolSlotProps {
 	presentation: ResolvedPoolPresentation;
 }
 
-const CUELIST_POOL_KINDS = ["cue_list", "playback", "playback_page"] as const;
+const CUELIST_POOL_KINDS = ["cue_list", "playback_page"] as const;
 
 function CuelistPoolSlot(props: PoolSlotProps) {
 	const { number, playback, runtimeMaster, usage } = props;
@@ -127,7 +127,7 @@ function CuelistPoolSlot(props: PoolSlotProps) {
 									? [`Alias of Cuelist ${playback.canonicalNumber}`]
 									: []),
 								playback.assignment
-									? `Playback ${playback.assignment.number}${usage.length ? ` · pages ${usage.join(", ")}` : " · no page assignment"}`
+									? `Playback ${playback.assignment.address.position}${usage.length ? ` · pages ${usage.join(", ")}` : " · no page assignment"}`
 									: "Not assigned to a playback",
 							]
 						: undefined,
@@ -219,11 +219,11 @@ function releasePoolCueList(
 					directRuntimes.projections.get(playback.cueList.id),
 				) == null &&
 				playback.assignment &&
-				runtimeMaster(assignedRuntimes.get(playback.assignment.number)) !=
+				runtimeMaster(assignedRuntimes.get(playbackAddressKey(playback.assignment.address))) !=
 					null
 					? {
 							kind: "playback",
-							playback_number: playback.assignment.number,
+							...playback.assignment.address,
 						}
 					: { kind: "direct_cue_list", cue_list_id: playback.cueList.id },
 			cueListId: playback.cueList.id,
@@ -257,7 +257,7 @@ function useCuelistPoolActions(props: CuelistPoolProps) {
 	const assignedRuntimes = usePlaybackProjectionMap(
 		props.active
 			? catalog.flatMap((entry) =>
-					entry.assignment ? [entry.assignment.number] : [],
+					entry.assignment ? [entry.assignment.address] : [],
 				)
 			: [],
 	);
@@ -416,33 +416,24 @@ function usePoolSlots(
 		| undefined
 	>,
 	assignedRuntimes: ReturnType<typeof usePlaybackProjectionMap>,
-	playbackDefinitions: ReturnType<typeof usePlaybackDefinitions>,
 ) {
 	return useMemo(() => {
 		const byNumber = new Map(
 			pool.map((playback) => [playback.number, playback]),
 		);
-		const usageByNumber = new Map<number, number[]>();
-		for (const page of pages ?? []) {
-			for (const playbackNumber of Object.values(page.slots)) {
-				const pages = usageByNumber.get(playbackNumber) ?? [];
-				if (!pages.includes(page.number)) pages.push(page.number);
-				usageByNumber.set(playbackNumber, pages);
-			}
-		}
+		const usageByCueList = new Map<string, number[]>();
 		const assignedMasterByCueList = new Map<string, number>();
-		for (const definition of playbackDefinitions) {
-			const target = definition.body.target;
-			const projection = assignedRuntimes.get(definition.body.number);
-			if (
-				target.type !== "cue_list" ||
-				projection?.target !== "cue_list" ||
-				projection.cue_list_id !== target.cue_list_id
-			)
-				continue;
-			const master = runtimeMaster(projection);
-			if (master != null)
-				assignedMasterByCueList.set(target.cue_list_id, master);
+		for (const page of pages ?? []) {
+			for (const [position, definition] of Object.entries(page.assignments)) {
+				if (definition.target.type !== "cue_list") continue;
+				const id = definition.target.cue_list_id;
+				const usage = usageByCueList.get(id) ?? [];
+				if (!usage.includes(page.number)) usage.push(page.number);
+				usageByCueList.set(id, usage);
+				const projection = assignedRuntimes.get(playbackAddressKey({page:page.number, position:Number(position)}));
+				const master = runtimeMaster(projection);
+				if (master != null) assignedMasterByCueList.set(id, master);
+			}
 		}
 		const normalizedSearch = search.toLowerCase();
 		return Array.from({ length: 1000 }, (_, index) => ({
@@ -457,7 +448,7 @@ function usePoolSlots(
 				) ??
 				null,
 			usage:
-				usageByNumber.get(byNumber.get(index + 1)?.assignment?.number ?? -1) ??
+				usageByCueList.get(byNumber.get(index + 1)?.cueList.id ?? "") ??
 				[],
 		})).filter(
 			({ number, playback }) =>
@@ -465,7 +456,7 @@ function usePoolSlots(
 				playback?.cueList.name.toLowerCase().includes(normalizedSearch) ||
 				String(number).includes(search),
 		);
-	}, [pages, pool, runtimes, assignedRuntimes, search, playbackDefinitions]);
+	}, [pages, pool, runtimes, assignedRuntimes, search]);
 }
 
 type CuelistPoolItem = ReturnType<typeof usePoolSlots>[number];
@@ -758,13 +749,8 @@ export function CuelistPool(props: CuelistPoolProps) {
 		pool.map((entry) => entry.cueList.id),
 		props.active,
 	).projections;
-	const playbackDefinitions = usePlaybackDefinitions(props.active);
 	const assignedRuntimes = usePlaybackProjectionMap(
-		props.active
-			? playbackDefinitions
-					.filter((definition) => definition.body.target.type === "cue_list")
-					.map((definition) => definition.body.number)
-			: [],
+		props.active ? pages.flatMap(({body:page}) => Object.keys(page.assignments).map(position => ({page:page.number, position:Number(position)}))) : [],
 	);
 	const filteredPool = usePoolSlots(
 		pool,
@@ -772,7 +758,6 @@ export function CuelistPool(props: CuelistPoolProps) {
 		pages.map((object) => object.body),
 		runtimes,
 		assignedRuntimes,
-		playbackDefinitions,
 	);
 	const workflowMessage =
 		state.cueListSetTarget != null

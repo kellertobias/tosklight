@@ -6,10 +6,12 @@ fn exact_direct_status_never_reports_assignment_owned_or_retained_off_runtime() 
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    let virtual_address = VirtualPlaybackAddress::new(1, 1001).unwrap();
     engine
-        .register_virtual_definition(virtual_address, definition(1001, id))
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    let virtual_address = PlaybackAddress::new(2, 1).unwrap();
+    engine
+        .register_definition(virtual_address, definition(1001, id))
         .unwrap();
 
     engine.go(id).unwrap();
@@ -22,7 +24,7 @@ fn exact_direct_status_never_reports_assignment_owned_or_retained_off_runtime() 
     );
     assert!(engine.runtime_status_for_cue_list(id).is_some());
 
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     assert!(engine.runtime_status_for_direct_cue_list(id).is_none());
     assert!(
         engine
@@ -31,7 +33,7 @@ fn exact_direct_status_never_reports_assignment_owned_or_retained_off_runtime() 
             .playback
             .enabled
     );
-    engine.off(1).unwrap();
+    engine.off(address(1)).unwrap();
     assert!(
         !engine
             .runtime_status_for_cue_list(id)
@@ -41,13 +43,11 @@ fn exact_direct_status_never_reports_assignment_owned_or_retained_off_runtime() 
     );
     assert!(engine.runtime_status_for_direct_cue_list(id).is_none());
 
-    engine
-        .on_at(PlaybackIdentity::Virtual(virtual_address))
-        .unwrap();
+    engine.on(virtual_address).unwrap();
     assert!(engine.runtime_status_for_direct_cue_list(id).is_none());
     assert!(
         engine
-            .runtime_status_at(PlaybackIdentity::Virtual(virtual_address))
+            .runtime_status_for_playback(virtual_address)
             .unwrap()
             .playback
             .enabled

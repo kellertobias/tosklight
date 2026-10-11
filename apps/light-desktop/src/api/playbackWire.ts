@@ -12,6 +12,7 @@ import type {
 import {
 	arrayAt,
 	booleanAt,
+	boundedPositiveIntegerAt,
 	enumAt,
 	integerAt,
 	nullable,
@@ -22,6 +23,7 @@ import {
 	stringAt,
 } from "./playbackWirePrimitives";
 import {
+	decodeExactAddress,
 	decodePlaybackDesk,
 	decodePlaybackProjection,
 } from "./playbackWireProjection";
@@ -66,34 +68,12 @@ function assertRuntimeRoute(
 	routes: Array<{ capability: string; id: string }>,
 	projection: ReturnType<typeof decodePlaybackProjection>,
 ) {
-	// A Virtual Playback is addressed by its page and number and carries its own route, so it is
-	// never announced under the flat Playback number the desk also knows it by.
-	if (projection.requested.kind === "virtual") {
-		if (projection.target === "group")
-			assertPlaybackRoute(routes, `group:${projection.group_id}`);
-		assertPlaybackRoute(
-			routes,
-			`virtual-playback:${projection.requested.page}.${projection.requested.playback_number}`,
-		);
-		return;
-	}
-	if (projection.target === "group") {
-		assertPlaybackRoute(routes, `group:${projection.group_id}`);
-		if (projection.playback_number != null)
-			assertPlaybackRoute(routes, `playback:${projection.playback_number}`);
-		return;
-	}
-	const expected =
-		projection.playback_number == null
-			? projection.target === "cue_list"
-				? `cuelist:${projection.cue_list_id}`
-				: projection.requested.kind === "cue_list" ||
-						projection.requested.kind === "direct_cue_list"
-					? `cuelist:${projection.requested.cue_list_id}`
-					: projection.requested.kind === "playback"
-						? `playback:${projection.requested.playback_number}`
-						: `group:${projection.requested.group_id}`
-			: `playback:${projection.playback_number}`;
+	const identity = projection.identity;
+	const expected = identity.kind === "playback"
+		? `playback:${identity.page}.${identity.position}`
+		: identity.kind === "group"
+			? `group:${identity.group_id}`
+			: `cuelist:${identity.cue_list_id}`;
 	assertPlaybackRoute(routes, expected);
 }
 
@@ -181,11 +161,7 @@ function decodePlaybackTransition(
 		};
 	};
 	return {
-		playback_number: nullable(
-			transition.playback_number,
-			`${path}.playback_number`,
-			positiveIntegerAt,
-		),
+		playback_address: nullable(transition.playback_address, `${path}.playback_address`, decodeExactAddress),
 		cue_list_id: stringAt(transition.cue_list_id, `${path}.cue_list_id`),
 		previous: nullable(transition.previous, `${path}.previous`, cueReference),
 		current: nullable(transition.current, `${path}.current`, cueReference),
@@ -232,7 +208,7 @@ function decodeTelemetryTick(
 			),
 		),
 		released: arrayAt(tick.released, `${path}.released`).map((entry, index) =>
-			integerAt(entry, `${path}.released[${index}]`),
+			decodeExactAddress(entry, `${path}.released[${index}]`),
 		),
 	};
 }
@@ -242,10 +218,7 @@ function decodeTelemetrySample(
 	path: string,
 ): import("../features/playbackRuntime/contracts").PlaybackTelemetry {
 	return {
-		playback_number: positiveIntegerAt(
-			sample.playback_number,
-			`${path}.playback_number`,
-		),
+		address: decodeExactAddress(sample.address, `${path}.address`),
 		enabled: booleanAt(sample.enabled, `${path}.enabled`),
 		master: numberAt(sample.master, `${path}.master`),
 		current_cue: nullable(
@@ -328,7 +301,6 @@ export function decodePlaybackOutcome(value: unknown): PlaybackActionOutcome {
 	);
 	assertRelatedOutcomeSet(projection, related, eventSequence);
 	return {
-		request_id: stringAt(outcome.request_id, "$.request_id"),
 		correlation_id: stringAt(outcome.correlation_id, "$.correlation_id"),
 		requested: decodeRequestedAddress(outcome.requested, "$.requested"),
 		resolved: decodeResolvedAddress(outcome.resolved, "$.resolved"),
@@ -346,7 +318,6 @@ export function decodePlaybackOutcome(value: unknown): PlaybackActionOutcome {
 			"$.desk_event_sequence",
 			integerAt,
 		),
-		replayed: booleanAt(outcome.replayed, "$.replayed"),
 	};
 }
 
@@ -402,97 +373,19 @@ function decodeRelatedOutcome(value: unknown, path: string) {
 
 function decodeRequestedAddress(value: unknown, path: string): PlaybackAddress {
 	const address = recordAt(value, path);
-	const kind = enumAt(address.kind, `${path}.kind`, [
-		"cue_list",
-		"group",
-		"playback",
-		"virtual",
-		"current_page",
-		"explicit_page",
-	]);
-	if (kind === "cue_list")
-		return {
-			kind,
-			cue_list_id: stringAt(address.cue_list_id, `${path}.cue_list_id`),
-		};
-	if (kind === "group")
-		return {
-			kind,
-			group_id: opaqueStringAt(address.group_id, `${path}.group_id`, 256),
-		};
-	if (kind === "playback")
-		return {
-			kind,
-			playback_number: positiveIntegerAt(
-				address.playback_number,
-				`${path}.playback_number`,
-			),
-		};
-	if (kind === "virtual")
-		return {
-			kind,
-			page: positiveIntegerAt(address.page, `${path}.page`),
-			playback_number: positiveIntegerAt(
-				address.playback_number,
-				`${path}.playback_number`,
-			),
-		};
-	if (kind === "current_page")
-		return {
-			kind,
-			slot: positiveIntegerAt(address.slot, `${path}.slot`),
-		};
-	return {
-		kind,
-		page: positiveIntegerAt(address.page, `${path}.page`),
-		slot: positiveIntegerAt(address.slot, `${path}.slot`),
-	};
+	const kind = enumAt(address.kind, `${path}.kind`, ["cue_list", "group", "playback", "current_page"]);
+	if (kind === "cue_list") return { kind, cue_list_id: stringAt(address.cue_list_id, `${path}.cue_list_id`) };
+	if (kind === "group") return { kind, group_id: opaqueStringAt(address.group_id, `${path}.group_id`, 256) };
+	if (kind === "current_page") return { kind, position: boundedPositiveIntegerAt(address.position, `${path}.position`, 1000) };
+	return { kind, ...decodeExactAddress(address, path) };
 }
 
-function decodeResolvedAddress(
-	value: unknown,
-	path: string,
-): ResolvedPlaybackAddress {
+function decodeResolvedAddress(value: unknown, path: string): ResolvedPlaybackAddress {
 	const address = recordAt(value, path);
-	const kind = enumAt(address.kind, `${path}.kind`, [
-		"cue_list",
-		"group",
-		"playback",
-		"virtual",
-	]);
-	if (kind === "cue_list")
-		return {
-			kind,
-			cue_list_id: stringAt(address.cue_list_id, `${path}.cue_list_id`),
-		};
-	if (kind === "group")
-		return {
-			kind,
-			group_id: opaqueStringAt(address.group_id, `${path}.group_id`, 256),
-			playback_number: nullable(
-				address.playback_number,
-				`${path}.playback_number`,
-				positiveIntegerAt,
-			),
-		};
-	if (kind === "virtual")
-		return {
-			kind,
-			page: positiveIntegerAt(address.page, `${path}.page`),
-			playback_number: positiveIntegerAt(
-				address.playback_number,
-				`${path}.playback_number`,
-			),
-		};
-	return {
-		kind,
-		playback_number: positiveIntegerAt(
-			address.playback_number,
-			`${path}.playback_number`,
-		),
-		page: nullable(address.page, `${path}.page`, positiveIntegerAt),
-		slot: nullable(address.slot, `${path}.slot`, positiveIntegerAt),
-	};
+	const kind = enumAt(address.kind, `${path}.kind`, ["cue_list", "group", "playback"]);
+	if (kind === "cue_list") return { kind, cue_list_id: stringAt(address.cue_list_id, `${path}.cue_list_id`) };
+	if (kind === "group") return { kind, group_id: opaqueStringAt(address.group_id, `${path}.group_id`, 256) };
+	return { kind, ...decodeExactAddress(address, path) };
 }
 
 function decodeActionOutcome(value: unknown, path: string): PlaybackOutcome {

@@ -93,12 +93,6 @@ pub struct ConfigurationPatch {
     pub preload_programmer_changes: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]
-    pub preload_physical_playback_actions: Option<bool>,
-    #[serde(default)]
-    #[ts(optional = nullable)]
-    pub preload_virtual_playback_actions: Option<bool>,
-    #[serde(default)]
-    #[ts(optional = nullable)]
     pub patch_preview_highlight_dmx: Option<bool>,
     #[serde(default)]
     #[ts(optional = nullable)]

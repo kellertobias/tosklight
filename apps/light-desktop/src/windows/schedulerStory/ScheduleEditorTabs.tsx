@@ -107,9 +107,7 @@ export function draftFromScheduleEditor(
 			type: "playback",
 			playbackId: target.id,
 			label: target.label,
-			page: target.page,
-			slot: target.slot,
-			playback: target.playback,
+			address: {...target.address},
 			action: form.action,
 			masterPercent:
 				form.setMaster && target.supportsMaster
@@ -284,7 +282,7 @@ function ActionFields({
 				value={form.playbackId}
 				options={playbackTargets.map((candidate) => ({
 					value: candidate.id,
-					label: `Page ${candidate.page} · Slot ${candidate.slot} · Playback ${candidate.playback} · ${candidate.label}`,
+					label: `Page ${candidate.address.page} · Playback ${candidate.address.position} · ${candidate.label}`,
 				}))}
 				onChange={(value) => {
 					const next = playbackTargets.find(

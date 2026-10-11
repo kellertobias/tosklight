@@ -40,6 +40,8 @@ pub struct Engine {
     pub(crate) programmer_releases: Mutex<crate::programmer_release::ProgrammerReleaseMemo>,
     pub(crate) preload_sources: Mutex<crate::preload_sources::PreloadSourceMemo>,
     pub(crate) group_master_flashes: RwLock<HashMap<String, f32>>,
+    pub(crate) group_master_flash_sources:
+        Mutex<HashMap<String, HashMap<light_playback::PlaybackControlSource, f32>>>,
     pub(crate) group_master_transitions: Mutex<HashMap<String, GroupMasterTransition>>,
     /// Runtime-only Group color intent. It deliberately stays out of the portable show and desk
     /// persistence; external controllers must restore it after a process restart.
@@ -159,6 +161,7 @@ impl Engine {
             programmer_addresses: Mutex::new(Default::default()),
             programmer_memo: Mutex::new(Default::default()),
             group_master_flashes: RwLock::new(HashMap::new()),
+            group_master_flash_sources: Mutex::new(HashMap::new()),
             group_master_transitions: Mutex::new(HashMap::new()),
             group_colors: RwLock::new(HashMap::new()),
             highlight_layers: RwLock::new(HashMap::new()),

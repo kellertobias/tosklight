@@ -1,14 +1,7 @@
 import { normalizePatchHiddenColumns } from "../reducerHelpers";
-import {
-	MAX_PLAYBACK_PAGE,
-	VIRTUAL_PLAYBACKS_PER_PAGE,
-} from "../../api/virtualPlaybackAddress";
 import type { AppState, PaneModel } from "../../types";
 import type { Action } from "../appActions";
 import { clamp } from "../reducerHelpers";
-
-export const MAX_VIRTUAL_PLAYBACK_CELLS = VIRTUAL_PLAYBACKS_PER_PAGE;
-export { MAX_PLAYBACK_PAGE };
 
 function updateActivePane(
 	state: AppState,
@@ -115,93 +108,9 @@ export function reducePaneOptions(
 				...pane,
 				runningFilter: action.filter,
 			}));
-		case "SET_VIRTUAL_PLAYBACK_GRID": {
-			const grid = normalizeVirtualPlaybackGrid(
-				action.rows,
-				action.columns,
-				action.changed,
-			);
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? {
-												...pane,
-												virtualPlaybackRows: grid.rows,
-												virtualPlaybackColumns: grid.columns,
-											}
-										: pane,
-								),
-							},
-				),
-			};
-		}
-		case "SET_VIRTUAL_PLAYBACK_PAGE_MODE":
-			return {
-				...state,
-				desks: state.desks.map((desk) =>
-					desk.id !== state.activeDeskId
-						? desk
-						: {
-								...desk,
-								panes: desk.panes.map((pane) =>
-									pane.id === action.id
-										? {
-												...pane,
-												virtualPlaybackPageMode: action.mode,
-												virtualPlaybackPinnedPage: normalizePlaybackPage(
-													action.pinnedPage ??
-														pane.virtualPlaybackPinnedPage ??
-														1,
-												),
-											}
-										: pane,
-								),
-							},
-				),
-			};
+		case "SET_PANE_PLAYBACK_SURFACE":
+			return updateActivePane(state, action.id, pane => ({...pane, surface_id: action.surfaceId}));
 		default:
 			return undefined;
 	}
-}
-
-export function normalizeVirtualPlaybackGrid(
-	rows: number,
-	columns: number,
-	changed: "rows" | "columns" = "columns",
-) {
-	const normalizedRows = normalizedGridDimension(rows);
-	const normalizedColumns = normalizedGridDimension(columns);
-	if (normalizedRows * normalizedColumns <= MAX_VIRTUAL_PLAYBACK_CELLS)
-		return { rows: normalizedRows, columns: normalizedColumns };
-	if (changed === "rows")
-		return {
-			rows: Math.max(
-				1,
-				Math.floor(MAX_VIRTUAL_PLAYBACK_CELLS / normalizedColumns),
-			),
-			columns: normalizedColumns,
-		};
-	return {
-		rows: normalizedRows,
-		columns: Math.max(
-			1,
-			Math.floor(MAX_VIRTUAL_PLAYBACK_CELLS / normalizedRows),
-		),
-	};
-}
-
-function normalizedGridDimension(value: number) {
-	if (!Number.isFinite(value)) return 1;
-	return clamp(Math.trunc(value), 1, MAX_VIRTUAL_PLAYBACK_CELLS);
-}
-
-function normalizePlaybackPage(value: number) {
-	if (!Number.isFinite(value)) return 1;
-	return clamp(Math.trunc(value), 1, MAX_PLAYBACK_PAGE);
 }

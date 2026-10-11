@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Cue, PlaybackSnapshot } from "../../api/types";
+import type { Cue, PlaybackControlState } from "../../api/types";
 import type { CueTimingProgressByRow } from "./CueTable";
 
-type CuelistRuntime = PlaybackSnapshot["active"][number] | undefined;
+type CuelistRuntime = PlaybackControlState | undefined;
 
 function timestampMillis(value: string | null | undefined): number | null {
 	if (!value) return null;

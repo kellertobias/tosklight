@@ -1,3 +1,4 @@
+import type { PlaybackAddressValue } from "../../api/playbackAddress";
 import { cuelistPoolCatalog } from "../playbackTopology/cuelistPoolCatalog";
 import type { PlaybackRuntimeStore } from "../playbackRuntime/store";
 import type { ShowObject, ShowObjectKind } from "../showObjects/contracts";
@@ -16,7 +17,7 @@ export interface CueRecordingWriterOptions {
 	store: ShowObjectsStore;
 	playbackRuntimeStore: PlaybackRuntimeStore;
 	transport: CueRecordingTransport;
-	selectedPlayback(): number | null;
+	selectedPlayback(): PlaybackAddressValue | null;
 	loadObject<K extends ShowObjectKind>(
 		showId: string,
 		kind: K,
@@ -143,18 +144,9 @@ export class CueRecordingWriter implements CueRecordingActions {
 			);
 			return;
 		}
-		const { cueList, playback, page } = outcome.projections;
+		const { cueList, page } = outcome.projections;
 		const installs = [
 			{ kind: "cue_list" as const, objectId: cueList.id, object: cueList },
-			...(playback
-				? [
-						{
-							kind: "playback" as const,
-							objectId: playback.id,
-							object: playback,
-						},
-					]
-				: []),
 			...(page
 				? [
 						{
@@ -183,7 +175,7 @@ export class CueRecordingWriter implements CueRecordingActions {
 		error: Error,
 		target: CueRecordTarget,
 		generation: number,
-		selectedPlayback: number | null,
+		selectedPlayback: PlaybackAddressValue | null,
 		selectedCueList: string | null,
 	) {
 		const failure = transportFailure(error);
@@ -206,14 +198,14 @@ export class CueRecordingWriter implements CueRecordingActions {
 	private async repairTarget(
 		target: CueRecordTarget,
 		generation: number,
-		selectedPlayback: number | null,
+		selectedPlayback: PlaybackAddressValue | null,
 		selectedCueList: string | null,
 	) {
 		if (target.kind === "cuelist_pool") {
 			const snapshot = this.options.store.getSnapshot();
 			const entry = cuelistPoolCatalog(
 				snapshot.cueLists.map((object) => object.body),
-				snapshot.playbacks.map((object) => object.body),
+				snapshot.playbackPages.flatMap(({body}) => Object.entries(body.assignments).map(([position, definition]) => ({...definition, address: {page: body.number, position: Number(position)}}))),
 				snapshot.playbackPages.length === 0,
 			).find((candidate) => candidate.number === target.number);
 			const object =
@@ -225,33 +217,13 @@ export class CueRecordingWriter implements CueRecordingActions {
 		}
 		if (target.kind === "cue_list")
 			return this.repairCueList(target.cueListId, generation);
-		if (target.kind === "pool")
-			return this.repairPlayback(target.playbackNumber, generation);
-		if (target.kind === "selected_playback") {
-			if (selectedCueList)
-				return this.repairCueList(selectedCueList, generation);
-			return selectedPlayback == null
-				? undefined
-				: this.repairPlayback(selectedPlayback, generation);
-		}
-		const page = await this.repairObject(
-			"playback_page",
-			String(target.page),
-			generation,
-		);
-		if (target.kind === "virtual") {
-			const virtual =
-				page?.body.virtual_playbacks[String(target.playbackNumber)];
-			if (virtual?.target.type === "cue_list")
-				await this.repairObject(
-					"cue_list",
-					virtual.target.cue_list_id,
-					generation,
-				);
-			return;
-		}
-		const playback = page?.body.slots[String(target.slot)];
-		if (playback != null) await this.repairPlayback(playback, generation);
+		const address = target.kind === "playback" ? target : selectedPlayback;
+		if (target.kind === "selected_playback" && selectedCueList) return this.repairCueList(selectedCueList, generation);
+		if (!address) return;
+		const existing = this.options.store.getSnapshot().playbackPages.find(object => object.body.number === address.page);
+		const page = await this.repairObject("playback_page", existing?.id ?? String(address.page), generation);
+		const definition = page?.body.assignments[String(address.position)];
+		if (definition?.target.type === "cue_list") await this.repairCueList(definition.target.cue_list_id, generation);
 	}
 
 	private repairCueList(id: string, generation: number) {
@@ -259,20 +231,6 @@ export class CueRecordingWriter implements CueRecordingActions {
 			.getSnapshot()
 			.cueLists.find((object) => object.body.id === id);
 		return this.repairObject("cue_list", object?.id ?? id, generation);
-	}
-
-	private async repairPlayback(number: number, generation: number) {
-		const playback = await this.repairObject(
-			"playback",
-			String(number),
-			generation,
-		);
-		if (playback?.body.target.type === "cue_list")
-			await this.repairObject(
-				"cue_list",
-				playback.body.target.cue_list_id,
-				generation,
-			);
 	}
 
 	private async repairObject<K extends ShowObjectKind>(

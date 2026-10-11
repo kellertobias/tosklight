@@ -1,265 +1,47 @@
 use super::*;
 use serde_json::json;
-
 #[test]
-fn all_semantic_actions_have_strict_readable_discriminants() {
-    let actions = [
-        json!({
-            "request_id":"save",
-            "action":{"type":"save_cue_list","cue_list_id":Uuid::nil(),
-                "expected_revision":3,"expected_object_id":null,
-                "body":{"id":Uuid::nil(),"future":true}}
-        }),
-        json!({
-            "request_id":"configure",
-            "action":{"type":"configure_slot","page":2,"slot":4,
-                "expected_page_revision":5,"expected_page_object_id":null,
-                "expected_playback_revision":6,"expected_playback_object_id":null,
-                "playback":playback_json()}
-        }),
-        assign_group_request(),
-        assign_virtual_group_request(),
-        json!({
-            "request_id":"clear",
-            "action":{"type":"clear_mapped_playback","page":2,"slot":4,
-                "expected_page_revision":5,"expected_page_object_id":null,
-                "expected_playback_revision":6,"expected_playback_object_id":null}
-        }),
-        map_existing_request(),
-        create_page_request(),
-        rename_page_request(),
-    ];
-    for action in actions {
-        serde_json::from_value::<PlaybackTopologyActionRequest>(action).unwrap();
-    }
-}
-
-#[test]
-fn playback_footprints_default_legacy_requests_and_round_trip_typed_extra_controls() {
-    let legacy =
-        serde_json::from_value::<PlaybackTopologyActionRequest>(configure_request()).unwrap();
-    let PlaybackTopologyAction::ConfigureSlot { playback, .. } = legacy.action else {
-        panic!("expected configure-slot action")
-    };
-    assert_eq!(playback.footprint, None);
-
-    let mut taller = configure_request();
-    taller["action"]["playback"]["footprint"] = json!({"type":"taller","upper_button":"pause"});
-    let taller: PlaybackTopologyActionRequest = serde_json::from_value(taller.clone()).unwrap();
-    assert_eq!(
-        serde_json::to_value(taller).unwrap()["action"]["playback"]["footprint"],
-        json!({"type":"taller","upper_button":"pause"})
-    );
-
-    let mut wider = configure_request();
-    wider["action"]["playback"]["footprint"] = json!({
-        "type":"wider",
-        "right_buttons":["go","pause","flash"],
-        "right_fader":"x_fade"
-    });
-    let expected = wider["action"]["playback"]["footprint"].clone();
-    let wider: PlaybackTopologyActionRequest = serde_json::from_value(wider).unwrap();
-    assert_eq!(
-        serde_json::to_value(wider).unwrap()["action"]["playback"]["footprint"],
-        expected
-    );
-}
-
-#[test]
-fn unknown_fields_are_tolerated_while_required_authority_stays_typed() {
-    for forged in [
-        "show_id",
-        "user_id",
-        "desk_id",
-        "session_id",
-        "correlation_id",
-    ] {
-        let mut request = configure_request();
-        request[forged] = json!("forged");
-        serde_json::from_value::<PlaybackTopologyActionRequest>(request).unwrap();
-    }
-    let mut action = configure_request();
-    action["action"]["object_kind"] = json!("playback");
-    serde_json::from_value::<PlaybackTopologyActionRequest>(action).unwrap();
-    let mut playback = configure_request();
-    playback["action"]["playback"]["future"] = json!(true);
-    serde_json::from_value::<PlaybackTopologyActionRequest>(playback).unwrap();
-    let mut target = configure_request();
-    target["action"]["playback"]["target"]["future"] = json!(true);
-    serde_json::from_value::<PlaybackTopologyActionRequest>(target).unwrap();
-
-    for field in ["expected_page_object_id", "expected_playback_object_id"] {
-        let mut missing = configure_request();
-        missing["action"].as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
-    }
-    for field in ["group_object_id", "expected_group_revision", "address"] {
-        let mut missing = assign_group_request();
-        missing["action"].as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
-    }
-    for mut request in [create_page_request(), rename_page_request()] {
-        request["action"]
-            .as_object_mut()
-            .unwrap()
-            .remove("expected_page_object_id");
-        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(request).is_err());
-    }
-    let mut page = rename_page_request();
-    page["action"]["future"] = json!(true);
-    serde_json::from_value::<PlaybackTopologyActionRequest>(page).unwrap();
-    let missing_save_identity = json!({
-        "request_id":"save",
-        "action":{"type":"save_cue_list","cue_list_id":Uuid::nil(),
-            "expected_revision":3,"body":{"id":Uuid::nil()}}
-    });
+fn sparse_assignment_uses_one_address_and_one_page_guard() {
+    let schema = serde_json::to_value(schemars::schema_for!(PlaybackTopologyAction)).unwrap();
+    let variants = schema["oneOf"].as_array().unwrap();
+    let assignment = variants
+        .iter()
+        .find(|v| v["properties"]["type"]["const"] == "assign_playback")
+        .unwrap();
+    assert!(assignment["properties"].get("address").is_some());
     assert!(
-        serde_json::from_value::<PlaybackTopologyActionRequest>(missing_save_identity).is_err()
+        assignment["properties"]
+            .get("expected_page_revision")
+            .is_some()
     );
-    let mut map = map_existing_request();
-    map["action"]["target"] = json!({"type":"cue_list"});
-    serde_json::from_value::<PlaybackTopologyActionRequest>(map).unwrap();
-    for field in ["expected_page_object_id", "expected_playback_object_id"] {
-        let mut missing = map_existing_request();
-        missing["action"].as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<PlaybackTopologyActionRequest>(missing).is_err());
+    assert!(
+        assignment["properties"]
+            .get("expected_playback_revision")
+            .is_none()
+    );
+}
+#[test]
+fn old_split_topology_actions_are_rejected() {
+    for action in [
+        "configure_slot",
+        "configure_virtual",
+        "map_existing_playback",
+        "clear_virtual",
+    ] {
+        assert!(serde_json::from_value::<PlaybackTopologyAction>(json!({"type":action})).is_err());
     }
 }
-
 #[test]
-fn assign_group_master_round_trips_without_a_client_authored_playback() {
-    for request in [assign_group_request(), assign_virtual_group_request()] {
-        let decoded =
-            serde_json::from_value::<PlaybackTopologyActionRequest>(request.clone()).unwrap();
-        let encoded = serde_json::to_value(decoded).unwrap();
-        assert_eq!(encoded, request);
-        assert!(encoded["action"].get("playback").is_none());
-        assert!(encoded["action"].get("selection").is_none());
-    }
-}
-
-#[test]
-fn assign_group_master_schema_bounds_identity_address_and_revisions() {
-    let schema =
-        serde_json::to_value(schemars::schema_for!(PlaybackTopologyActionRequest)).unwrap();
-    let variant = find_schema_variant(&schema, "assign_group_master")
-        .expect("assign_group_master schema variant");
-    let properties = &variant["properties"];
-    assert_eq!(properties["group_object_id"]["minLength"], 1);
-    assert_eq!(properties["group_object_id"]["maxLength"], 128);
-    assert_eq!(
-        properties["expected_group_revision"]["maximum"],
-        9_007_199_254_740_991_u64
-    );
-    let physical = find_schema_variant(&schema, "physical").expect("physical address variant");
-    assert_eq!(physical["properties"]["page"]["minimum"], 1);
-    assert_eq!(physical["properties"]["slot"]["maximum"], 127);
-    let virtual_address = find_schema_variant(&schema, "virtual").expect("virtual address variant");
-    assert_eq!(
-        virtual_address["properties"]["playback_number"]["minimum"],
-        1001
-    );
-    assert_eq!(
-        virtual_address["properties"]["playback_number"]["maximum"],
-        39100
-    );
-}
-
-#[test]
-fn changed_and_no_change_outcomes_enforce_event_and_projection_shapes() {
-    let present = json!({"state":"present","kind":"playback","object_id":"7",
-        "object_revision":4,"body":{"number":7}});
-    let changed = json!({"request_id":"r","correlation_id":Uuid::nil(),"show_revision":9,
-        "resolution":{"kind":"page_slot","page":1,"slot":2,"playback_number":7},
-        "status":"changed","objects":[present.clone()],"event_sequence":10,"replayed":false});
-    serde_json::from_value::<PlaybackTopologyActionOutcome>(changed).unwrap();
-    let no_change = json!({"request_id":"r","correlation_id":Uuid::nil(),"show_revision":9,
-        "resolution":{"kind":"page_slot","page":1,"slot":2,"playback_number":null},
-        "status":"no_change","objects":[present],"replayed":true});
-    serde_json::from_value::<PlaybackTopologyActionOutcome>(no_change).unwrap();
-    let invalid = json!({"request_id":"r","correlation_id":Uuid::nil(),"show_revision":9,
-        "resolution":{"kind":"cue_list","cue_list_id":Uuid::nil()},
-        "status":"no_change","objects":[],"event_sequence":10,"replayed":false});
-    assert!(serde_json::from_value::<PlaybackTopologyActionOutcome>(invalid).is_err());
-    let unknown = json!({"request_id":"r","correlation_id":Uuid::nil(),"show_revision":9,
-        "resolution":{"kind":"cue_list","cue_list_id":Uuid::nil()},
-        "status":"no_change","objects":[],"future":true,"replayed":false});
-    assert!(serde_json::from_value::<PlaybackTopologyActionOutcome>(unknown).is_err());
-}
-
-#[test]
-fn deleted_projection_cannot_smuggle_a_body() {
-    let invalid = json!({"state":"deleted","kind":"playback","object_id":"2",
-        "object_revision":4,"body":{"number":2}});
-    assert!(serde_json::from_value::<PlaybackTopologyObjectProjection>(invalid).is_err());
-}
-
-fn configure_request() -> Value {
-    json!({"request_id":"configure","action":{"type":"configure_slot","page":2,"slot":4,
-        "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
-        "expected_playback_revision":6,"expected_playback_object_id":"legacy-six",
-        "playback":playback_json()}})
-}
-
-fn assign_group_request() -> Value {
-    json!({"request_id":"assign-group","action":{"type":"assign_group_master",
-        "group_object_id":"front","expected_group_revision":3,
-        "address":{"kind":"physical","page":2,"slot":4,
-            "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
-            "expected_playback_revision":6,"expected_playback_object_id":"legacy-six"}}})
-}
-
-fn assign_virtual_group_request() -> Value {
-    json!({"request_id":"assign-virtual-group","action":{"type":"assign_group_master",
-        "group_object_id":"front","expected_group_revision":3,
-        "address":{"kind":"virtual","page":2,"playback_number":1301,
-            "expected_page_revision":5,"expected_page_object_id":"legacy-page-two"}}})
-}
-
-fn find_schema_variant<'a>(value: &'a Value, discriminant: &str) -> Option<&'a Value> {
-    match value {
-        Value::Object(object) => {
-            if object
-                .get("properties")
-                .and_then(|properties| properties.get("type").or_else(|| properties.get("kind")))
-                .and_then(|kind| kind.get("const"))
-                == Some(&Value::String(discriminant.into()))
-            {
-                return Some(value);
-            }
-            object
-                .values()
-                .find_map(|child| find_schema_variant(child, discriminant))
+fn clear_uses_address_and_tolerates_future_fields() {
+    let action:PlaybackTopologyAction=serde_json::from_value(json!({"type":"clear_playback","address":{"page":99,"position":1000},"expected_page_revision":4,"expected_page_object_id":"page99","future":true})).unwrap();
+    assert!(matches!(
+        action,
+        PlaybackTopologyAction::ClearPlayback {
+            address: super::super::playback::PlaybackAddressValue {
+                page: 99,
+                position: 1000
+            },
+            ..
         }
-        Value::Array(values) => values
-            .iter()
-            .find_map(|child| find_schema_variant(child, discriminant)),
-        _ => None,
-    }
-}
-
-fn map_existing_request() -> Value {
-    json!({"request_id":"map-existing","action":{"type":"map_existing_playback",
-        "page":2,"slot":4,"playback_number":12,
-        "expected_page_revision":5,"expected_page_object_id":"legacy-page-two",
-        "expected_playback_revision":6,"expected_playback_object_id":"legacy-twelve"}})
-}
-
-fn create_page_request() -> Value {
-    json!({"request_id":"create-page","action":{"type":"create_page","page":3,
-        "expected_page_revision":0,"expected_page_object_id":null}})
-}
-
-fn rename_page_request() -> Value {
-    json!({"request_id":"rename-page","action":{"type":"rename_page","page":3,
-        "name":"Act One","expected_page_revision":4,
-        "expected_page_object_id":"legacy-page-three"}})
-}
-
-fn playback_json() -> Value {
-    json!({"number":7,"name":"Main","target":{"type":"grand_master"},
-        "buttons":["blackout","pause_dynamics","flash"],"button_count":3,
-        "fader":"master","has_fader":true,"go_activates":true,"auto_off":true,
-        "xfade_millis":0,"color":"#20c997","flash_release":"release_all",
-        "protect_from_swap":false})
+    ));
 }

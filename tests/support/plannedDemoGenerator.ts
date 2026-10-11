@@ -8,7 +8,7 @@ import { installPlannedDemoPatch } from "./plannedDemoPatch";
 import { installPlannedDemoPlaybacks } from "./plannedDemoPlaybacks";
 import { installPlannedDemoPresets } from "./plannedDemoPresets";
 import { installPlannedDemoScenery } from "./plannedDemoScenery";
-import { installPlannedDemoVirtualPlaybackExclusionZones } from "./plannedDemoVirtualPlaybackZones";
+import { installPlannedDemoSoloRegions } from "./plannedDemoSoloRegions";
 
 export async function generatePlannedDemo(
 	api: ApiDriver,
@@ -28,8 +28,7 @@ export async function generatePlannedDemo(
 		patch.fixtures,
 	);
 	const dynamics = await installPlannedDemoDynamics(api, showId);
-	const virtualPlaybackExclusionZones =
-		await installPlannedDemoVirtualPlaybackExclusionZones(api, showId);
+	const playbackSoloRegions = await installPlannedDemoSoloRegions(api, showId);
 	const layout = await installPlannedDemoLayout(api, showId);
 	return {
 		outputRoutes,
@@ -40,7 +39,7 @@ export async function generatePlannedDemo(
 		presets,
 		topology,
 		dynamics,
-		virtualPlaybackExclusionZones,
+		playbackSoloRegions,
 		layout,
 	};
 }

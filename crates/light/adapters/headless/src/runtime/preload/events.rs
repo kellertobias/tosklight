@@ -4,7 +4,10 @@ use std::collections::{BTreeMap, HashMap};
 
 pub(super) struct PreloadChangeEvents {
     pub(super) changes: Vec<(light_application::EventDraft, PlaybackProjection)>,
-    exclusion_activations: Vec<(u16, Vec<u16>)>,
+    exclusion_activations: Vec<(
+        light_playback::PlaybackAddress,
+        Vec<light_playback::PlaybackAddress>,
+    )>,
 }
 
 pub(super) fn preload_change_events(
@@ -101,11 +104,11 @@ fn final_event_cause(
     actions: &[StagedPreloadPlaybackAction],
     identity: PlaybackIdentity,
 ) -> FinalEventCause {
-    let Some(number) = event_playback_number(&identity) else {
+    let Some(number) = event_playback_address(&identity) else {
         return no_event_cause();
     };
     for action in actions.iter().rev() {
-        if action.playback_number == number && action.addressed_effect_changed {
+        if action.address == number && action.addressed_effect_changed {
             return FinalEventCause {
                 action: application_action(action.action),
                 addressed_effect_changed: true,
@@ -132,11 +135,11 @@ fn navigation_cause(
     actions: &[StagedPreloadPlaybackAction],
     identity: PlaybackIdentity,
 ) -> Option<light_application::PlaybackTransitionCause> {
-    let Some(number) = event_playback_number(&identity) else {
+    let Some(number) = event_playback_address(&identity) else {
         return None;
     };
     actions.iter().rev().find_map(|action| {
-        if action.playback_number != number || !action.addressed_effect_changed {
+        if action.address != number || !action.addressed_effect_changed {
             return None;
         }
         match action.action {
@@ -154,8 +157,17 @@ fn navigation_cause(
 fn final_exclusion_activations(
     transitions: &[(PlaybackIdentity, PlaybackProjection, PlaybackProjection)],
     actions: &[StagedPreloadPlaybackAction],
-) -> Vec<(u16, Vec<u16>)> {
-    let mut attributed = BTreeMap::<usize, (u16, Vec<u16>)>::new();
+) -> Vec<(
+    light_playback::PlaybackAddress,
+    Vec<light_playback::PlaybackAddress>,
+)> {
+    let mut attributed = BTreeMap::<
+        usize,
+        (
+            light_playback::PlaybackAddress,
+            Vec<light_playback::PlaybackAddress>,
+        ),
+    >::new();
     for number in final_released_numbers(transitions) {
         let Some((index, action)) = final_action_for(number, actions) else {
             continue;
@@ -163,7 +175,7 @@ fn final_exclusion_activations(
         if action.released_playbacks.contains(&number) {
             attributed
                 .entry(index)
-                .or_insert_with(|| (action.playback_number, Vec::new()))
+                .or_insert_with(|| (action.address, Vec::new()))
                 .1
                 .push(number);
         }
@@ -173,17 +185,16 @@ fn final_exclusion_activations(
 
 fn final_released_numbers(
     transitions: &[(PlaybackIdentity, PlaybackProjection, PlaybackProjection)],
-) -> impl Iterator<Item = u16> + '_ {
+) -> impl Iterator<Item = light_playback::PlaybackAddress> + '_ {
     transitions
         .iter()
         .filter(|(_, before, after)| playback_was_released(before, after))
-        .filter_map(|(identity, _, _)| event_playback_number(identity))
+        .filter_map(|(identity, _, _)| event_playback_address(identity))
 }
 
-fn event_playback_number(identity: &PlaybackIdentity) -> Option<u16> {
+fn event_playback_address(identity: &PlaybackIdentity) -> Option<light_playback::PlaybackAddress> {
     match identity {
-        PlaybackIdentity::Playback(number) => Some(*number),
-        PlaybackIdentity::Virtual(address) => Some(address.number().get()),
+        PlaybackIdentity::Playback(address) => Some(*address),
         PlaybackIdentity::CueList(_)
         | PlaybackIdentity::DirectCueList(_)
         | PlaybackIdentity::Group(_) => None,
@@ -191,34 +202,40 @@ fn event_playback_number(identity: &PlaybackIdentity) -> Option<u16> {
 }
 
 fn final_action_for(
-    number: u16,
+    number: light_playback::PlaybackAddress,
     actions: &[StagedPreloadPlaybackAction],
 ) -> Option<(usize, &StagedPreloadPlaybackAction)> {
     actions.iter().enumerate().rev().find(|(_, action)| {
-        (action.playback_number == number && action.addressed_effect_changed)
+        (action.address == number && action.addressed_effect_changed)
             || action.released_playbacks.contains(&number)
     })
 }
 
 fn playback_was_released(before: &PlaybackProjection, after: &PlaybackProjection) -> bool {
-    before
-        .cue_list_runtime()
-        .is_some_and(|runtime| runtime.enabled)
-        && !after
-            .cue_list_runtime()
-            .is_some_and(|runtime| runtime.enabled)
+    permanent_playback_enabled(before) && !permanent_playback_enabled(after)
+}
+
+fn permanent_playback_enabled(projection: &PlaybackProjection) -> bool {
+    match &projection.target {
+        light_application::PlaybackTargetProjection::CueList { runtime, .. } => {
+            runtime.as_ref().is_some_and(|runtime| runtime.enabled)
+        }
+        light_application::PlaybackTargetProjection::Dynamic { runtime, .. } => runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.active.enabled && !runtime.active.flash_restore_off),
+        _ => false,
+    }
 }
 
 fn identity_sort_key(identity: PlaybackIdentity) -> (u8, u128) {
     match identity {
-        PlaybackIdentity::Playback(number) => (0, u128::from(number)),
-        PlaybackIdentity::Virtual(address) => (
-            1,
-            u128::from(address.page()) * 10_000 + u128::from(address.number().get()),
+        PlaybackIdentity::Playback(address) => (
+            0,
+            u128::from(address.page()) * 1001 + u128::from(address.position()),
         ),
-        PlaybackIdentity::CueList(id) => (2, id.0.as_u128()),
-        PlaybackIdentity::DirectCueList(id) => (3, id.0.as_u128()),
-        PlaybackIdentity::Group(_) => (4, 0),
+        PlaybackIdentity::CueList(id) => (1, id.0.as_u128()),
+        PlaybackIdentity::DirectCueList(id) => (2, id.0.as_u128()),
+        PlaybackIdentity::Group(_) => (3, 0),
     }
 }
 
@@ -268,10 +285,82 @@ fn application_action(
         light_programmer::PreloadPlaybackQueueAction::DynamicLearnSpeed => {
             light_application::PlaybackAction::DynamicLearnSpeed { pressed: true }
         }
-        light_programmer::PreloadPlaybackQueueAction::Fader { value_permyriad } => {
-            light_application::PlaybackAction::Master(light_application::PlaybackLevel::new(
-                f32::from(value_permyriad) / 10_000.0,
-            ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn dynamic(position: u16, enabled: bool, flash_restore_off: bool) -> PlaybackProjection {
+        let address = light_playback::PlaybackAddress::new(1, position).unwrap();
+        let active = serde_json::from_value(serde_json::json!({
+            "playback_address": address, "enabled": enabled, "paused": false,
+            "flash": flash_restore_off, "flash_restore_off": flash_restore_off,
+            "activated_at": chrono::Utc::now(),
+        }))
+        .unwrap();
+        PlaybackProjection {
+            scope: light_application::PlaybackShowScope {
+                show_id: uuid::Uuid::nil(),
+                show_revision: 1,
+            },
+            identity: PlaybackIdentity::Playback(address),
+            target: light_application::PlaybackTargetProjection::Dynamic {
+                dynamic_id: None,
+                last_known_pool_number: position,
+                embedded: false,
+                runtime: Some(Box::new(
+                    light_application::DynamicPlaybackRuntimeProjection {
+                        active,
+                        state: light_application::DynamicPlaybackRuntimeState::Pending,
+                        instance_id: None,
+                        controller_id: uuid::Uuid::nil(),
+                        winning_controller_id: None,
+                        controller_status:
+                            light_application::DynamicPlaybackControllerStatus::Missing,
+                        target_count: 0,
+                        compatible_target_count: 0,
+                        missing_target_count: 0,
+                        unpatched_target_count: 0,
+                        lane_count: 0,
+                        supported_address_count: 0,
+                        skipped_address_count: 0,
+                        speed_source: light_application::DynamicPlaybackSpeedSource::Fixed,
+                        effective_speed_multiplier: 1.0,
+                        effective_duration_millis: None,
+                        warning: None,
+                    },
+                )),
+            },
         }
+    }
+    #[test]
+    fn committed_dynamic_release_precedes_lower_address_activation() {
+        let before = [dynamic(1, false, false), dynamic(401, true, false)];
+        let after = [dynamic(1, true, false), dynamic(401, false, false)];
+        let transitions = ordered_transitions(
+            before
+                .into_iter()
+                .map(|p| (p.identity.clone(), p))
+                .collect(),
+            after.into_iter().map(|p| (p.identity.clone(), p)).collect(),
+        )
+        .unwrap();
+        assert_eq!(
+            transitions[0].0,
+            PlaybackIdentity::Playback(light_playback::PlaybackAddress::new(1, 401).unwrap())
+        );
+        assert!(playback_was_released(&transitions[0].1, &transitions[0].2));
+    }
+    #[test]
+    fn formerly_off_dynamic_flash_is_not_a_permanent_release() {
+        assert!(!playback_was_released(
+            &dynamic(1, true, true),
+            &dynamic(1, false, false)
+        ));
+        assert!(playback_was_released(
+            &dynamic(1, true, false),
+            &dynamic(1, false, false)
+        ));
     }
 }

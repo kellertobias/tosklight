@@ -117,8 +117,6 @@ export function reduceNavigation(
 			return { ...state, controlMode: action.value };
 		case "SET_PANE_SETTINGS":
 			return { ...state, paneSettingsId: action.id };
-		case "SET_VIRTUAL_PLAYBACK_ZONE_EDIT":
-			return { ...state, virtualPlaybackZoneEdit: action.edit };
 		case "TOGGLE_MAXIMIZE":
 			return {
 				...state,

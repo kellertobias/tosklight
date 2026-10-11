@@ -102,9 +102,15 @@
           "properties": {
             "kind": {
               "type": "string",
-              "const": "pool"
+              "const": "playback"
             },
-            "playback_number": {
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 99,
+              "minimum": 1
+            },
+            "position": {
               "type": "integer",
               "format": "uint16",
               "maximum": 1000,
@@ -113,7 +119,8 @@
           },
           "required": [
             "kind",
-            "playback_number"
+            "page",
+            "position"
           ]
         },
         {
@@ -131,32 +138,6 @@
         {
           "type": "object",
           "properties": {
-            "kind": {
-              "type": "string",
-              "const": "page_slot"
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            }
-          },
-          "required": [
-            "kind",
-            "page",
-            "slot"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
             "cue_list_id": {
               "type": "string",
               "format": "uuid"
@@ -169,32 +150,6 @@
           "required": [
             "kind",
             "cue_list_id"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 39100,
-              "minimum": 1001
-            }
-          },
-          "required": [
-            "kind",
-            "page",
-            "playback_number"
           ]
         }
       ]

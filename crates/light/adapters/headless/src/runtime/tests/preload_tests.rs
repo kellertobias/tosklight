@@ -8,7 +8,7 @@ fn test_control_desk() -> ControlDesk {
         columns: 8,
         rows: 1,
         buttons: 3,
-        playback_layout: None,
+        surface_id: "main".into(),
     }
 }
 
@@ -16,7 +16,6 @@ fn preload_test_playback(
     buttons: [light_playback::PlaybackButtonAction; 3],
 ) -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
-        number: 1,
         name: "Preload test".into(),
         target: light_playback::PlaybackTarget::CueList {
             cue_list_id: light_core::CueListId::new(),
@@ -63,7 +62,6 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
         cues: vec![light_playback::Cue::new(cue("1"))],
     };
     let playback = |number, target| light_playback::PlaybackDefinition {
-        number,
         name: format!("Atomic Preload {number}"),
         target,
         buttons: [light_playback::PlaybackButtonAction::None; 3],
@@ -92,35 +90,15 @@ fn preload_atomicity_test_snapshot() -> EngineSnapshot {
             cue_list(second_cue_list_id, "Atomic Preload B"),
         ]
         .into(),
-        playbacks: vec![
-            playback(
-                1,
-                light_playback::PlaybackTarget::CueList {
-                    cue_list_id: first_cue_list_id,
-                },
-            ),
-            playback(
-                2,
-                light_playback::PlaybackTarget::CueList {
-                    cue_list_id: second_cue_list_id,
-                },
-            ),
-            playback(
-                3,
-                light_playback::PlaybackTarget::Group {
-                    group_id: "front".into(),
-                    initial_master: None,
-                },
-            ),
-        ]
-        .into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 1,
             name: "Preload".into(),
-            slots: HashMap::from([(1, 1), (2, 2)]),
-            virtual_playbacks: HashMap::new(),
-        }]
-        .into(),
+            assignments: HashMap::from([
+                (1, playback(1, light_playback::PlaybackTarget::CueList { cue_list_id: first_cue_list_id })),
+                (2, playback(2, light_playback::PlaybackTarget::CueList { cue_list_id: second_cue_list_id })),
+                (3, playback(3, light_playback::PlaybackTarget::Group { group_id: "front".into(), initial_master: None })),
+            ]),
+        }].into(),
         ..Default::default()
     }
 }
@@ -143,7 +121,7 @@ fn preload_auto_off_test_snapshot() -> EngineSnapshot {
             light_core::AttributeKey("pan".into()),
             light_core::AttributeValue::Normalized(0.8),
         ));
-    std::sync::Arc::make_mut(&mut snapshot.playbacks)[0].auto_off = true;
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0].assignments.get_mut(&1).unwrap().auto_off = true;
     snapshot
 }
 
@@ -172,7 +150,6 @@ fn matter_test_snapshot() -> EngineSnapshot {
         cues: vec![light_playback::Cue::new(cue("1"))],
     };
     let definition = |number, has_fader| light_playback::PlaybackDefinition {
-        number,
         name: format!("Matter playback {number}"),
         target: light_playback::PlaybackTarget::CueList { cue_list_id },
         buttons: [light_playback::PlaybackButtonAction::None; 3],
@@ -191,19 +168,16 @@ fn matter_test_snapshot() -> EngineSnapshot {
     };
     EngineSnapshot {
         cue_lists: vec![cue_list].into(),
-        playbacks: vec![definition(25, true), definition(26, false)].into(),
         playback_pages: vec![
             light_playback::PlaybackPage {
                 number: 1,
                 name: "Main".into(),
-                slots: HashMap::from([(7, 26)]),
-                virtual_playbacks: HashMap::new(),
+                assignments: HashMap::from([(7, definition(26,false))]),
             },
             light_playback::PlaybackPage {
                 number: 4,
                 name: "Matter".into(),
-                slots: HashMap::from([(7, 25)]),
-                virtual_playbacks: HashMap::new(),
+                assignments: HashMap::from([(7, definition(25,true))]),
             },
         ]
         .into(),
@@ -281,47 +255,23 @@ fn preload_capture_resolves_real_buttons_canonicalizes_temp_and_excludes_live_co
 }
 
 #[test]
-fn preload_batch_keeps_dynamic_controls_and_quantized_fader_in_operator_order() {
+fn preload_batch_keeps_permanent_dynamic_controls_in_operator_order() {
     use light_programmer::PreloadPlaybackQueueAction as Action;
-    let pending = [
-        Action::DynamicPause,
-        Action::DynamicRestart,
-        Action::DynamicDoubleSpeed,
-        Action::DynamicHalfSpeed,
-        Action::DynamicLearnSpeed,
-        Action::Fader {
-            value_permyriad: 5_000,
-        },
-    ]
-    .into_iter()
-    .map(|action| light_programmer::PreloadPlaybackAction {
-        playback_number: 1,
-        origin_desk_id: None,
-        page: Some(2),
-        action,
-        surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    })
-    .collect::<Vec<_>>();
-
+    let address = light_playback::PlaybackAddress::new(2, 401).unwrap();
+    let control_source = light_playback::PlaybackControlSource { surface_id: "pane:preload-test".into(), control_id: 7 };
+    let pending = [Action::DynamicPause, Action::DynamicRestart, Action::DynamicDoubleSpeed, Action::DynamicHalfSpeed, Action::DynamicLearnSpeed]
+        .into_iter().map(|action| light_programmer::PreloadPlaybackAction {
+            address, origin_desk_id: None, action, control_source: control_source.clone(),
+        }).collect::<Vec<_>>();
     let commands = preload_batch_commands(&pending).unwrap();
-
-    assert!(commands.iter().all(|command| command.page == Some(2)));
-    assert_eq!(
-        commands
-            .iter()
-            .map(|command| command.action)
-            .collect::<Vec<_>>(),
-        vec![
-            light_engine::PlaybackBatchAction::TogglePause,
-            light_engine::PlaybackBatchAction::DynamicRestart,
-            light_engine::PlaybackBatchAction::DynamicDoubleSpeed,
-            light_engine::PlaybackBatchAction::DynamicHalfSpeed,
-            light_engine::PlaybackBatchAction::DynamicLearnSpeed,
-            light_engine::PlaybackBatchAction::SetFader {
-                value_permyriad: 5_000
-            },
-        ]
-    );
+    assert!(commands.iter().all(|command| command.address == address && command.control_source == control_source));
+    assert_eq!(commands.iter().map(|command| command.action).collect::<Vec<_>>(), vec![
+        light_engine::PlaybackBatchAction::TogglePause,
+        light_engine::PlaybackBatchAction::DynamicRestart,
+        light_engine::PlaybackBatchAction::DynamicDoubleSpeed,
+        light_engine::PlaybackBatchAction::DynamicHalfSpeed,
+        light_engine::PlaybackBatchAction::DynamicLearnSpeed,
+    ]);
 }
 
 #[test]
@@ -340,20 +290,8 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
         .replace_snapshot(preload_atomicity_test_snapshot())
         .unwrap();
     assert!(state.programming.arm_preload(session.id, true));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        1,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
-    ));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        3,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::On,
-        light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    ));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 1).unwrap(), light_programmer::PreloadPlaybackQueueAction::Go, light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 }, None));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 3).unwrap(), light_programmer::PreloadPlaybackQueueAction::On, light_playback::PlaybackControlSource { surface_id: "pane:preload-test".into(), control_id: 3 }, None));
     let programmer_before = state.programming.get(session.id).unwrap();
 
     let error = commit_preload(&state, &session).unwrap_err();
@@ -378,12 +316,12 @@ fn preload_rejects_a_late_invalid_action_without_publishing_earlier_actions() {
 
 #[test]
 fn committed_preload_publishes_the_exact_typed_playback_change() {
-    assert_preload_typed_exclusion_change(1, 1_002);
+    assert_preload_typed_exclusion_change(1, 402);
 }
 
 #[test]
 fn committed_preload_publishes_cross_page_exclusion_release_before_activation() {
-    assert_preload_typed_exclusion_change(2, 1_302);
+    assert_preload_typed_exclusion_change(2, 402);
 }
 
 fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
@@ -398,55 +336,30 @@ fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
     };
     state.programming.start(session.id);
     let mut snapshot = preload_atomicity_test_snapshot();
-    let mut virtual_one = snapshot.playbacks[0].clone();
-    virtual_one.number = 1_001;
-    let mut virtual_two = snapshot.playbacks[1].clone();
-    virtual_two.number = peer_number;
-    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0].virtual_playbacks =
-        HashMap::from([(1_001, virtual_one)]);
+    let incoming = snapshot.playback_pages[0].assignments[&1].clone();
+    let peer = snapshot.playback_pages[0].assignments[&2].clone();
+    std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0].assignments.insert(401, incoming);
     if peer_page == 1 {
-        std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0]
-            .virtual_playbacks
-            .insert(peer_number, virtual_two);
+        std::sync::Arc::make_mut(&mut snapshot.playback_pages)[0].assignments.insert(peer_number, peer);
     } else {
         std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
-            number: peer_page,
-            name: "Peer page".into(),
-            slots: HashMap::new(),
-            virtual_playbacks: HashMap::from([(peer_number, virtual_two)]),
+            number: peer_page, name: "Peer page".into(), assignments: HashMap::from([(peer_number, peer)]),
         });
     }
+    snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        id: Uuid::new_v4(), name: "Preload Solo".into(),
+        members: vec![light_playback::PlaybackAddress::new(1, 401).unwrap(), light_playback::PlaybackAddress::new(peer_page, peer_number).unwrap()],
+    }].into();
     state.output.replace_snapshot(snapshot).unwrap();
-    let show = state
-        .installation
-        .upsert_show(
-            "Preload exclusions",
-            &data_dir
-                .join("shows/preload-exclusions.show")
-                .display()
-                .to_string(),
-            false,
-        )
-        .unwrap();
-    state.active_show.replace_current(Some(show.clone()));
-    state
-        .installation
-        .set_desk_page(session.desk.id, show.id, 1)
-        .unwrap();
-    let zones = test_virtual_playback_exclusion_store(vec![VirtualPlaybackExclusionZone {
-        id: "preload-zone".into(),
-        name: "Preload zone".into(),
-        playback_numbers: vec![1_001, peer_number],
-    }]);
-    persist_test_virtual_playback_exclusions(&state, show.id, &zones);
+    let show = state.installation.upsert_show("Preload Solo", &data_dir.join("shows/preload-solo.show").display().to_string(), false).unwrap();
+    state.active_show.replace_current(Some(show));
     let prepared = state
         .output
         .prepare_playback_batch(
             &[light_engine::PlaybackBatchCommand {
-                number: peer_number,
-                page: Some(peer_page),
+                address: light_playback::PlaybackAddress::new(peer_page, peer_number).unwrap(),
+                control_source: light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 },
                 action: light_engine::PlaybackBatchAction::On,
-                exclusion_zones: std::sync::Arc::default(),
                 activation_origin: None,
             }],
             chrono::Utc::now(),
@@ -458,20 +371,8 @@ fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
         .install_prepared_playback_batch(prepared)
         .unwrap();
     assert!(state.programming.arm_preload(session.id, true));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        1_001,
-        Some(1),
-        light_programmer::PreloadPlaybackQueueAction::On,
-        light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    ));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        1_001,
-        Some(1),
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    ));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 401).unwrap(), light_programmer::PreloadPlaybackQueueAction::On, light_playback::PlaybackControlSource { surface_id: "pane:preload-test".into(), control_id: 401 }, None));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 401).unwrap(), light_programmer::PreloadPlaybackQueueAction::Go, light_playback::PlaybackControlSource { surface_id: "pane:preload-test".into(), control_id: 401 }, None));
 
     let response = commit_preload(&state, &session).unwrap();
 
@@ -495,22 +396,18 @@ fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
         panic!("committed Preload should retain its semantic event");
     };
     assert_eq!(events.len(), 4);
-    let virtual_identity = |number| {
-        light_application::PlaybackRuntimeIdentity::Virtual(
-            light_playback::VirtualPlaybackAddress::from_number(number).unwrap(),
-        )
-    };
+    let identity = |page, position| light_application::PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(page, position).unwrap());
     for (event, (expected_identity, expected_enabled)) in events.iter().zip([
         (
-            light_application::PlaybackRuntimeIdentity::Playback(2),
+            identity(1, 2),
             false,
         ),
-        (virtual_identity(peer_number), false),
+        (identity(peer_page, peer_number), false),
         (
-            light_application::PlaybackRuntimeIdentity::Playback(1),
+            identity(1, 1),
             true,
         ),
-        (virtual_identity(1_001), true),
+        (identity(1, 401), true),
     ]) {
         assert_eq!(
             event.source,
@@ -522,8 +419,8 @@ fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
         else {
             panic!("expected a typed Playback runtime change");
         };
-        assert_eq!(change.projection.requested, expected_identity);
-        if expected_identity == virtual_identity(1_001) {
+        assert_eq!(change.projection.identity, expected_identity);
+        if expected_identity == identity(1, 401) {
             assert_eq!(
                 change.transition.as_ref().unwrap().cause,
                 light_application::PlaybackTransitionCause::Go
@@ -552,73 +449,33 @@ fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
 }
 
 #[test]
-fn staged_preload_applies_exclusions_without_mutating_the_source_engine() {
+fn staged_preload_applies_solo_without_mutating_the_source_engine() {
     let (state, data_dir) = test_state();
-    state
-        .output
-        .replace_snapshot(preload_atomicity_test_snapshot())
-        .unwrap();
-    state
-        .output
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 2,
-            action: PoolPlaybackAction::On,
-        })
-        .unwrap();
-    let pending = light_programmer::PreloadPlaybackAction {
-        playback_number: 1,
-        origin_desk_id: None,
-        page: None,
-        action: light_programmer::PreloadPlaybackQueueAction::On,
-        surface: light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    };
-    let source = state.output.playback_runtime();
-    let pending = vec![pending];
-    let mut commands = preload_batch_commands(&pending).unwrap();
-    commands[0].exclusion_zones = vec![vec![1, 2]].into();
-    let prepared = state
-        .output
-        .prepare_playback_batch(&commands, chrono::Utc::now(), 0)
-        .unwrap();
+    let first = light_playback::PlaybackAddress::new(1, 1).unwrap();
+    let second = light_playback::PlaybackAddress::new(1, 2).unwrap();
+    let source = light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 };
+    let mut snapshot = preload_atomicity_test_snapshot();
+    snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        id: Uuid::new_v4(), name: "Preload Solo".into(), members: vec![first, second],
+    }].into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    state.output.execute_playback(EnginePlaybackCommand::Playback {
+        address: second, action: light_engine::PlaybackAction::On, control_source: source.clone(), activation_origin: None,
+    }).unwrap();
+    let pending = vec![light_programmer::PreloadPlaybackAction {
+        address: first, origin_desk_id: None, action: light_programmer::PreloadPlaybackQueueAction::On, control_source: source,
+    }];
+    let commands = preload_batch_commands(&pending).unwrap();
+    let prepared = state.output.prepare_playback_batch(&commands, chrono::Utc::now(), 0).unwrap();
     let actions = staged_preload_actions(&pending, &prepared);
-
-    assert!(
-        source
-            .iter()
-            .any(|runtime| { runtime.playback_number == Some(2) && runtime.enabled })
-    );
-    assert!(
-        source
-            .iter()
-            .all(|runtime| runtime.playback_number != Some(1))
-    );
     let unchanged = state.output.playback_runtime();
-    assert!(
-        unchanged
-            .iter()
-            .any(|runtime| { runtime.playback_number == Some(2) && runtime.enabled })
-    );
-    assert!(
-        unchanged
-            .iter()
-            .all(|runtime| runtime.playback_number != Some(1))
-    );
-    state
-        .output
-        .install_prepared_playback_batch(prepared)
-        .unwrap();
+    assert!(unchanged.iter().any(|runtime| runtime.playback_address == Some(second) && runtime.enabled));
+    assert!(unchanged.iter().all(|runtime| runtime.playback_address != Some(first)));
+    state.output.install_prepared_playback_batch(prepared).unwrap();
     let result = state.output.playback_runtime();
-    assert!(
-        result
-            .iter()
-            .any(|runtime| { runtime.playback_number == Some(1) && runtime.enabled })
-    );
-    assert!(
-        result
-            .iter()
-            .any(|runtime| { runtime.playback_number == Some(2) && !runtime.enabled })
-    );
-    assert_eq!(actions[0].released_playbacks, vec![2]);
+    assert!(result.iter().any(|runtime| runtime.playback_address == Some(first) && runtime.enabled));
+    assert!(result.iter().all(|runtime| runtime.playback_address != Some(second) || !runtime.enabled));
+    assert_eq!(actions[0].released_playbacks, vec![second]);
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -651,19 +508,15 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
     state.active_show.replace_current(Some(show));
     state
         .output
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 1,
-            action: PoolPlaybackAction::On,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            action: light_engine::PlaybackAction::On,
+            control_source: light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 },
+            activation_origin: None,
         })
         .unwrap();
     assert!(state.programming.arm_preload(session.id, true));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        2,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical,
-    ));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 2).unwrap(), light_programmer::PreloadPlaybackQueueAction::Go, light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 2 }, None));
 
     let response = commit_preload(&state, &session).unwrap();
 
@@ -687,7 +540,7 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
                 panic!("expected Playback runtime events");
             };
             (
-                change.projection.playback_number.unwrap(),
+                match change.projection.identity { light_application::PlaybackRuntimeIdentity::Playback(address) => address.position(), _ => panic!("expected exact playback address") },
                 change.projection.cue_list_runtime().unwrap().enabled,
             )
         })
@@ -698,75 +551,37 @@ fn committed_preload_publishes_auto_off_before_the_activating_playback() {
 }
 
 #[test]
-fn explicit_page_preload_does_not_borrow_current_page_exclusions() {
+fn explicit_page_preload_keeps_captured_address_after_selected_page_changes() {
     let (state, data_dir) = test_state();
-    let desk = state.installation.desk().unwrap();
-    let session = Session {
-        capability: light_core::SurfaceCapability::Programming,
-        id: SessionId::new(),
-        token: "explicit-preload-page".into(),
-        connected: true,
-        desk,
-    };
+    let session = Session { capability: light_core::SurfaceCapability::Programming, id: SessionId::new(), token: "explicit-preload-page".into(), connected: true, desk: state.installation.desk().unwrap() };
     state.programming.start(session.id);
     let mut snapshot = preload_atomicity_test_snapshot();
+    let mut independent = snapshot.cue_lists[0].clone();
+    independent.id = light_core::CueListId::new();
+    let target = independent.id;
+    std::sync::Arc::make_mut(&mut snapshot.cue_lists).push(independent);
+    let incoming = light_playback::PlaybackAddress::new(2, 1).unwrap();
+    let peer = light_playback::PlaybackAddress::new(1, 2).unwrap();
     std::sync::Arc::make_mut(&mut snapshot.playback_pages).push(light_playback::PlaybackPage {
-        number: 2,
-        name: "Explicit".into(),
-        slots: HashMap::from([(1, 1)]),
-        virtual_playbacks: HashMap::new(),
+        number: 2, name: "Explicit".into(), assignments: HashMap::from([(1, light_playback::PlaybackDefinition::new_cue_list("Independent", target))]),
     });
+    snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        id: Uuid::new_v4(), name: "Main only".into(), members: vec![light_playback::PlaybackAddress::new(1, 1).unwrap(), peer],
+    }].into();
     state.output.replace_snapshot(snapshot).unwrap();
-    let show = state
-        .installation
-        .upsert_show(
-            "Explicit Preload page",
-            &data_dir
-                .join("shows/explicit-preload-page.show")
-                .display()
-                .to_string(),
-            false,
-        )
-        .unwrap();
-    state.active_show.replace_current(Some(show.clone()));
-    state
-        .installation
-        .set_desk_page(session.desk.id, show.id, 1)
-        .unwrap();
-    let zones = test_virtual_playback_exclusion_store(vec![VirtualPlaybackExclusionZone {
-        id: "current-page-zone".into(),
-        name: "Current page".into(),
-        playback_numbers: vec![1_001, 1_002],
-    }]);
-    persist_test_virtual_playback_exclusions(&state, show.id, &zones);
-    state
-        .output
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 2,
-            action: PoolPlaybackAction::On,
-        })
-        .unwrap();
+    let show = state.installation.upsert_show("Explicit Preload page", &data_dir.join("shows/explicit-preload-page.show").display().to_string(), false).unwrap();
+    state.active_show.replace_current(Some(show));
+    let source = light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 };
+    state.output.execute_playback(EnginePlaybackCommand::Playback { address: peer, action: light_engine::PlaybackAction::On, control_source: source.clone(), activation_origin: None }).unwrap();
     assert!(state.programming.arm_preload(session.id, true));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        1,
-        Some(2),
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Virtual,
-    ));
-
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, incoming, light_programmer::PreloadPlaybackQueueAction::Go, source.clone(), None));
+    state.installation.set_playback_surface_page(session.desk.id, "main", 3).unwrap();
     let response = commit_preload(&state, &session).unwrap();
-
-    assert_eq!(response["playback_actions"][0]["page"], 2);
+    assert_eq!(response["playback_actions"][0]["address"], serde_json::json!({"page": 2, "position": 1}));
+    assert_eq!(response["playback_actions"][0]["control_source"], serde_json::to_value(source).unwrap());
     assert_eq!(response["playback_event_sequences"], serde_json::json!([1]));
-    let enabled = state
-        .output
-        .playback_runtime()
-        .into_iter()
-        .filter(|runtime| runtime.enabled)
-        .filter_map(|runtime| runtime.playback_number)
-        .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(enabled, std::collections::BTreeSet::from([1, 2]));
+    let enabled = state.output.playback_runtime().into_iter().filter(|runtime| runtime.enabled).filter_map(|runtime| runtime.playback_address).collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(enabled, std::collections::BTreeSet::from([incoming, peer]));
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
@@ -816,7 +631,7 @@ fn real_go_queue_only_dynamic_on_is_immediately_active_and_persists_without_samp
         .replace_snapshot(EngineSnapshot {
             fixtures: vec![operational_fixture(fixture)].into(),
             dynamics: vec![dynamic].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![light_playback::PlaybackPage { number: 1, name: "Dynamic".into(), assignments: HashMap::from([(1, playback)]) }].into(),
             ..Default::default()
         })
         .unwrap();
@@ -833,13 +648,7 @@ fn real_go_queue_only_dynamic_on_is_immediately_active_and_persists_without_samp
         .unwrap();
     state.active_show.replace_current(Some(show.clone()));
     assert!(state.programming.arm_preload(session.id, true));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        1,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::On,
-        light_programmer::PreloadPlaybackQueueSurface::Physical
-    ));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 1).unwrap(), light_programmer::PreloadPlaybackQueueAction::On, light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 }, None));
     assert!(
         state
             .programming
@@ -877,7 +686,7 @@ fn real_go_queue_only_dynamic_on_is_immediately_active_and_persists_without_samp
         .filter_map(|event| match &event.payload {
             light_application::ApplicationEvent::Playback(
                 light_application::PlaybackEvent::RuntimeChanged(change),
-            ) if change.projection.playback_number == Some(1) => Some(&change.projection),
+            ) if change.projection.identity == light_application::PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(1, 1).unwrap()) => Some(&change.projection),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -922,13 +731,7 @@ fn real_go_rejects_invalid_pending_owner_after_activation_and_restores_programme
     snapshot.dynamics = vec![definition.clone()].into();
     state.output.replace_snapshot(snapshot).unwrap();
     assert!(state.programming.arm_preload(session.id, true));
-    assert!(state.programming.queue_preload_playback_action(
-        session.id,
-        1,
-        None,
-        light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical
-    ));
+    assert!(state.programming.queue_preload_playback_action_with_origin(session.id, light_playback::PlaybackAddress::new(1, 1).unwrap(), light_programmer::PreloadPlaybackQueueAction::Go, light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 }, None));
     // Restore a legacy retained row directly. The queue itself is valid; only the new strict
     // final-owner reconciliation after activation can reject this negative Dynamic size.
     let mut programmer = state.programming.get(session.id).unwrap();
@@ -968,10 +771,9 @@ fn real_go_rejects_invalid_pending_owner_after_activation_and_restores_programme
         .output
         .prepare_playback_batch(
             &[light_engine::PlaybackBatchCommand {
-                number: 1,
-                page: None,
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+                control_source: light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 },
                 action: light_engine::PlaybackBatchAction::Go,
-                exclusion_zones: Arc::from([]),
                 activation_origin: None,
             }],
             state.programming.clock().now(),

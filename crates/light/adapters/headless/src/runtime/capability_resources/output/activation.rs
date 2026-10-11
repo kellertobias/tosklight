@@ -63,20 +63,15 @@ fn rebind_restored_playback_controllers(
                 .expect("finalized restored Dynamic Playback has a stable target identity");
             // Use the assignment selected by destination restoration, including
             // the virtual page; another assignment of the same target may differ.
-            let playback = match active.playback_identity {
-                Some(light_playback::PlaybackIdentity::Virtual(address)) => snapshot
-                    .playback_pages
-                    .iter()
-                    .find(|page| page.number == address.page())
-                    .and_then(|page| page.virtual_playbacks.get(&address.number().get())),
-                _ => snapshot
-                    .playbacks
-                    .iter()
-                    .find(|playback| playback.number == active.playback_number),
-            }
-            .ok_or_else(|| {
-                IntentError("finalized Dynamic Playback assignment is missing".into())
-            })?;
+            let address = active.playback_address;
+            let playback = snapshot
+                .playback_pages
+                .iter()
+                .find(|page| page.number == address.page())
+                .and_then(|page| page.assignments.get(&address.position()))
+                .ok_or_else(|| {
+                    IntentError("finalized Dynamic Playback assignment is missing".into())
+                })?;
             let light_playback::PlaybackTarget::Dynamic { assignment } = &playback.target else {
                 return Err(IntentError(
                     "finalized Playback assignment is not Dynamic".into(),

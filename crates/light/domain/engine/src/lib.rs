@@ -112,13 +112,12 @@ pub use model::{
 };
 pub use playback::{
     CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackEffect, EnginePlaybackOutcome,
-    PlaybackDynamicsProjection, PoolPlaybackAction, VirtualPlaybackAction,
+    PlaybackAction, PlaybackDynamicsProjection,
 };
 pub use playback_batch::{
     PlaybackBatchAction, PlaybackBatchCommand, PlaybackBatchOutcome, PreparedPlaybackBatch,
     PreparedPreloadPlaybackBatch,
 };
-pub use playback_exclusion::PoolPlaybackTransition;
 pub use playback_start::PlaybackStartFrame;
 pub use point_projection::{POINT_AXIS_METRES, ResolvedPointPose};
 pub use render_phases::{

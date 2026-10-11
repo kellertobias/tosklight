@@ -26,7 +26,7 @@ use light_output::{
     DmxFrame, NetworkOutput, OutputHealth, Protocol, UsbEndpointDocument, UsbOutputFanout,
     run_scheduler_dynamic_wakeable,
 };
-use light_playback::{PlaybackIdentity, TimecodeTransportAction, TimecodeTransportState};
+use light_playback::{PlaybackAddress, TimecodeTransportAction, TimecodeTransportState};
 use light_wire::v2::visualization::VisualizationScope;
 use parking_lot::Mutex;
 use std::{
@@ -194,7 +194,7 @@ pub(super) struct Config {
     pub dynamic_snapshot: Arc<DynamicSnapshotPublication>,
     pub dynamic_source_origins: super::dynamic_source_origins::SharedDynamicSourceOrigins,
     pub speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
-    pub dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
+    pub dynamic_auto_offs: Arc<Mutex<Vec<PlaybackAddress>>>,
     pub visualization_frames: Arc<VisualizationFrameHub>,
     pub action_timing: ActionTimingResource,
     pub data_dir: std::path::PathBuf,
@@ -242,7 +242,7 @@ struct Runtime {
     pub(super) dynamic_source_origins: super::dynamic_source_origins::SharedDynamicSourceOrigins,
     pub(super) speed_groups: Arc<Mutex<[light_control::speed::SpeedGroupController; 5]>>,
     pub(super) rate: Arc<AtomicU16>,
-    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<PlaybackIdentity>>>,
+    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<PlaybackAddress>>>,
     pub(super) visualization_frames: Arc<VisualizationFrameHub>,
     pub(super) action_timing: ActionTimingResource,
     pub(super) programmer_reconciliation_cache: Arc<ProgrammerReconciliationCache>,
@@ -577,7 +577,7 @@ pub(in crate::runtime) fn claim_automatic_cue_action_batches(
     for transition in frame.claim_automatic_cue_action_transitions() {
         let Some(playback) = frame.captured_active_playbacks().iter().find(|playback| {
             playback.cue_list_id == transition.cue_list_id
-                && playback.playback_number == transition.playback_number
+                && playback.playback_address == transition.playback_address
                 && playback.current_cue_id == Some(transition.current.id)
                 && playback.transition_ordinal == transition.transition_ordinal
         }) else {

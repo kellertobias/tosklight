@@ -14,53 +14,52 @@ fn dynamic_playback(
     definition: &DynamicDefinition,
     priority: i16,
     xfade_millis: u64,
-) -> light_playback::PlaybackDefinition {
-    serde_json::from_value(serde_json::json!({
-        "number": number, "name": format!("Dynamic {number}"), "xfade_millis": xfade_millis,
+) -> (u16, light_playback::PlaybackDefinition) {
+    (number,serde_json::from_value(serde_json::json!({
+         "name": format!("Dynamic {number}"), "xfade_millis": xfade_millis,
         "target": {"type": "dynamic", "assignment": {
             "priority": priority,
             "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": definition.pool_number,
                 "embedded_fallback": {"definition": definition}}
         }}
     }))
-    .unwrap()
+    .unwrap())
 }
 
 /// A same-numbered unrelated assignment. A number-only release lookup would pick its xfade.
-fn decoy_playback(number: u16, xfade_millis: u64) -> light_playback::PlaybackDefinition {
-    serde_json::from_value(serde_json::json!({
-        "number": number, "name": "Decoy", "xfade_millis": xfade_millis,
-        "target": {"type": "cue_list", "cue_list_id": Uuid::new_v4()}
-    }))
-    .unwrap()
+fn decoy_playback(number: u16, xfade_millis: u64) -> (u16, light_playback::PlaybackDefinition) {
+    (
+        number,
+        serde_json::from_value(serde_json::json!({
+             "name": "Decoy", "xfade_millis": xfade_millis,
+            "target": {"type": "cue_list", "cue_list_id": Uuid::new_v4()}
+        }))
+        .unwrap(),
+    )
 }
 
 fn page(
     number: u8,
-    playbacks: Vec<light_playback::PlaybackDefinition>,
+    playbacks: Vec<(u16, light_playback::PlaybackDefinition)>,
 ) -> light_playback::PlaybackPage {
     light_playback::PlaybackPage {
         number,
         name: format!("Page {number}"),
-        slots: HashMap::new(),
-        virtual_playbacks: playbacks
-            .into_iter()
-            .map(|playback| (playback.number, playback))
-            .collect(),
+        assignments: playbacks.into_iter().collect(),
     }
 }
 
 fn row(
     definition: &DynamicDefinition,
-    identity: PlaybackIdentity,
+    identity: PlaybackAddress,
 ) -> light_playback::ActiveDynamicPlayback {
     let mut row: light_playback::ActiveDynamicPlayback =
         serde_json::from_value(serde_json::json!({
-            "dynamic_id": definition.id, "playback_number": identity.number(), "enabled": true,
+            "dynamic_id": definition.id, "playback_address": identity, "enabled": true,
             "paused": false, "activated_at": chrono::DateTime::from_timestamp_millis(10).unwrap()
         }))
         .unwrap();
-    row.playback_identity = Some(identity);
+    row.playback_address = identity;
     row
 }
 
@@ -100,7 +99,10 @@ fn without_owner_metadata(mut snapshot: DynamicRuntimeSnapshot) -> DynamicRuntim
         .iter_mut()
         .flat_map(|instance| &mut instance.controllers)
     {
-        controller.source = DynamicControllerSource::physical_playback(0);
+        controller.source = DynamicControllerSource::Playback {
+            page: 1,
+            position: 1,
+        };
         controller.priority = 0;
     }
     snapshot
@@ -132,10 +134,10 @@ fn labels(source: &DynamicControllerSource) -> (String, String) {
 }
 
 #[test]
-fn moved_physical_playback_refreshes_owner_priority_labels_and_release_in_retained_history() {
+fn moved_playback_refreshes_owner_priority_labels_and_release_in_retained_history() {
     let (definition, mut snapshot, mut live) = setup();
-    snapshot.playbacks = vec![dynamic_playback(1, &definition, 2, 100)].into();
-    let mut rows = vec![row(&definition, PlaybackIdentity::physical(1).unwrap())];
+    snapshot.playback_pages = vec![page(1, vec![dynamic_playback(1, &definition, 2, 100)])].into();
+    let mut rows = vec![row(&definition, PlaybackAddress::new(1, 1).unwrap())];
     let mut cursor = live.begin_control_recording(NonZeroUsize::new(64).unwrap());
     let mut pending = live.fork_for_pending_preview();
     reconcile_dynamic_playbacks(&mut live, 100, &snapshot, &rows);
@@ -145,24 +147,39 @@ fn moved_physical_playback_refreshes_owner_priority_labels_and_release_in_retain
     let before = live.snapshot();
     assert_eq!(
         owner_of(&live, &definition),
-        (DynamicControllerSource::physical_playback(1), 2)
+        (
+            DynamicControllerSource::Playback {
+                page: 1,
+                position: 1
+            },
+            2
+        )
     );
     assert_eq!(before.instances[0].paused_at_millis, Some(150));
 
     // The assignment moves from Playback 1 to Playback 5 and gains priority 7; an unrelated
     // assignment now occupies Playback 1 with a different xfade.
-    snapshot.playbacks = vec![
-        decoy_playback(1, 40),
-        dynamic_playback(5, &definition, 7, 900),
-    ]
+    snapshot.playback_pages = vec![page(
+        1,
+        vec![
+            decoy_playback(1, 40),
+            dynamic_playback(5, &definition, 7, 900),
+        ],
+    )]
     .into();
-    rows[0] = row(&definition, PlaybackIdentity::physical(5).unwrap());
+    rows[0] = row(&definition, PlaybackAddress::new(1, 5).unwrap());
     rows[0].paused = true;
     reconcile_dynamic_playbacks(&mut live, 200, &snapshot, &rows);
     let moved = live.snapshot();
     assert_eq!(
         owner_of(&live, &definition),
-        (DynamicControllerSource::physical_playback(5), 7)
+        (
+            DynamicControllerSource::Playback {
+                page: 1,
+                position: 5
+            },
+            7
+        )
     );
     assert_eq!(moved.instances[0].id, before.instances[0].id);
     assert_eq!(moved.instances[0].started_at_millis, 10);
@@ -174,7 +191,7 @@ fn moved_physical_playback_refreshes_owner_priority_labels_and_release_in_retain
     let owner = owner_of(&live, &definition).0;
     assert_eq!(
         labels(&owner),
-        ("Playback 5".to_owned(), "playback:5".to_owned())
+        ("Playback 1.5".to_owned(), "playback:1.5".to_owned())
     );
     replay_since(&live, &mut pending, &mut cursor);
     let unchanged = live.control_cursor();
@@ -189,31 +206,31 @@ fn moved_physical_playback_refreshes_owner_priority_labels_and_release_in_retain
 }
 
 #[test]
-fn virtual_owner_release_is_page_qualified_when_numbers_collide() {
+fn owner_release_is_page_qualified_when_positions_collide() {
     let (definition, mut snapshot, mut live) = setup();
-    // Unvalidated/legacy rows share number 1301 across physical, page 1 and page 2.
-    snapshot.playbacks = vec![decoy_playback(1301, 40)].into();
+    // Three valid pages share one position; the exact owner determines release timing.
     snapshot.playback_pages = vec![
-        page(1, vec![decoy_playback(1301, 60)]),
-        page(2, vec![dynamic_playback(1301, &definition, 3, 750)]),
+        page(99, vec![decoy_playback(301, 40)]),
+        page(1, vec![decoy_playback(301, 60)]),
+        page(2, vec![dynamic_playback(301, &definition, 3, 750)]),
     ]
     .into();
-    let mut rows = vec![row(
-        &definition,
-        PlaybackIdentity::virtual_playback(2, 1301).unwrap(),
-    )];
+    let mut rows = vec![row(&definition, PlaybackAddress::new(2, 301).unwrap())];
     reconcile_dynamic_playbacks(&mut live, 100, &snapshot, &rows);
     let owner = owner_of(&live, &definition);
     assert_eq!(
         owner,
-        (DynamicControllerSource::virtual_playback(2, 1301), 3)
+        (
+            DynamicControllerSource::Playback {
+                page: 2,
+                position: 301
+            },
+            3
+        )
     );
     assert_eq!(
         labels(&owner.0),
-        (
-            "Virtual Playback 1301 (page 2)".to_owned(),
-            "virtual-playback:2:1301".to_owned()
-        )
+        ("Playback 2.301".to_owned(), "playback:2.301".to_owned())
     );
     let mut released = live.fork_for_pending_preview();
     reconcile_dynamic_playbacks(&mut released, 200, &snapshot, &[]);
@@ -222,18 +239,21 @@ fn virtual_owner_release_is_page_qualified_when_numbers_collide() {
     // Moving to page 3 refreshes the page-qualified owner; release follows the new page.
     let before = live.snapshot();
     snapshot.playback_pages = vec![
-        page(2, vec![decoy_playback(1301, 60)]),
-        page(3, vec![dynamic_playback(1601, &definition, -4, 320)]),
+        page(2, vec![decoy_playback(301, 60)]),
+        page(3, vec![dynamic_playback(601, &definition, -4, 320)]),
     ]
     .into();
-    rows[0] = row(
-        &definition,
-        PlaybackIdentity::virtual_playback(3, 1601).unwrap(),
-    );
+    rows[0] = row(&definition, PlaybackAddress::new(3, 601).unwrap());
     reconcile_dynamic_playbacks(&mut live, 300, &snapshot, &rows);
     assert_eq!(
         owner_of(&live, &definition),
-        (DynamicControllerSource::virtual_playback(3, 1601), -4)
+        (
+            DynamicControllerSource::Playback {
+                page: 3,
+                position: 601
+            },
+            -4
+        )
     );
     assert_eq!(
         without_owner_metadata(live.snapshot()),
@@ -244,28 +264,28 @@ fn virtual_owner_release_is_page_qualified_when_numbers_collide() {
 }
 
 #[test]
-fn missing_or_deleted_assignment_releases_immediately_and_legacy_owner_uses_its_bank() {
+fn deleted_assignment_releases_immediately_and_checkpoint_owner_keeps_its_page() {
     let (definition, mut snapshot, mut live) = setup();
     snapshot.playback_pages =
-        vec![page(2, vec![dynamic_playback(1301, &definition, 1, 500)])].into();
-    let rows = [row(
-        &definition,
-        PlaybackIdentity::virtual_playback(2, 1301).unwrap(),
-    )];
+        vec![page(2, vec![dynamic_playback(301, &definition, 1, 500)])].into();
+    let rows = [row(&definition, PlaybackAddress::new(2, 301).unwrap())];
     reconcile_dynamic_playbacks(&mut live, 100, &snapshot, &rows);
     let controller = light_playback::dynamic_playback_controller_id(definition.id);
 
-    // A checkpoint written before page qualification carries only the Virtual number.
-    let mut legacy = live.fork_for_pending_preview();
-    legacy
+    // A canonical checkpoint retains the exact page-qualified controller owner.
+    let mut checkpoint = live.fork_for_pending_preview();
+    checkpoint
         .update_controller_owner(
             controller,
-            DynamicControllerSource::physical_playback(1301),
+            DynamicControllerSource::Playback {
+                page: 2,
+                position: 301,
+            },
             1,
         )
         .unwrap();
-    reconcile_dynamic_playbacks(&mut legacy, 200, &snapshot, &[]);
-    assert_eq!(release_duration(&legacy), 500);
+    reconcile_dynamic_playbacks(&mut checkpoint, 200, &snapshot, &[]);
+    assert_eq!(release_duration(&checkpoint), 500);
 
     // The deleted assignment follows the explicit immediate-release fallback.
     snapshot.playback_pages = vec![page(2, Vec::new())].into();
@@ -276,15 +296,16 @@ fn missing_or_deleted_assignment_releases_immediately_and_legacy_owner_uses_its_
 #[test]
 fn cold_reconciliation_records_the_same_owner_refresh_as_warm_and_failure_keeps_live() {
     let (definition, mut snapshot, mut live) = setup();
-    snapshot.playbacks = vec![dynamic_playback(1, &definition, 2, 100)].into();
-    let rows = vec![row(&definition, PlaybackIdentity::physical(1).unwrap())];
+    snapshot.playback_pages = vec![page(1, vec![dynamic_playback(1, &definition, 2, 100)])].into();
+    let rows = vec![row(&definition, PlaybackAddress::new(1, 1).unwrap())];
     reconcile_dynamic_playbacks(&mut live, 100, &snapshot, &rows);
     let cursor = live.begin_control_recording(NonZeroUsize::new(64).unwrap());
     let live_before = live.snapshot();
 
     let mut destination = snapshot.clone();
-    destination.playbacks = vec![dynamic_playback(5, &definition, 7, 900)].into();
-    let moved = vec![row(&definition, PlaybackIdentity::physical(5).unwrap())];
+    destination.playback_pages =
+        vec![page(1, vec![dynamic_playback(5, &definition, 7, 900)])].into();
+    let moved = vec![row(&definition, PlaybackAddress::new(1, 5).unwrap())];
     let inputs = |playbacks| ColdDynamicReconciliationInputs {
         captured_at_millis: 200,
         snapshot: &destination,
@@ -302,7 +323,13 @@ fn cold_reconciliation_records_the_same_owner_refresh_as_warm_and_failure_keeps_
     assert_eq!(cold.snapshot(), warm.snapshot());
     assert_eq!(
         owner_of(&cold, &definition),
-        (DynamicControllerSource::physical_playback(5), 7)
+        (
+            DynamicControllerSource::Playback {
+                page: 1,
+                position: 5
+            },
+            7
+        )
     );
     for candidate in [&warm, &cold] {
         let mut retained = live.fork_for_pending_preview();
@@ -310,13 +337,19 @@ fn cold_reconciliation_records_the_same_owner_refresh_as_warm_and_failure_keeps_
         replay_since(candidate, &mut retained, &mut replayed);
         assert_eq!(
             owner_of(&retained, &definition),
-            (DynamicControllerSource::physical_playback(5), 7)
+            (
+                DynamicControllerSource::Playback {
+                    page: 1,
+                    position: 5
+                },
+                7
+            )
         );
     }
 
     // A destination with an unresolvable enabled row rejects the private candidate as a whole.
     let mut failing = moved.clone();
-    failing.push(row(&definition, PlaybackIdentity::physical(9).unwrap()));
+    failing.push(row(&definition, PlaybackAddress::new(1, 9).unwrap()));
     failing[1].dynamic_id = Some(Uuid::new_v4());
     let mut rejected = live.fork_for_cold_install();
     let error = reconcile_cold_dynamic_candidate(&mut rejected, inputs(&failing)).unwrap_err();
@@ -324,7 +357,13 @@ fn cold_reconciliation_records_the_same_owner_refresh_as_warm_and_failure_keeps_
     assert_eq!(live.snapshot(), live_before);
     assert_eq!(
         owner_of(&live, &definition),
-        (DynamicControllerSource::physical_playback(1), 2)
+        (
+            DynamicControllerSource::Playback {
+                page: 1,
+                position: 1
+            },
+            2
+        )
     );
     assert!(live.controls_since(cursor).unwrap().unwrap().is_empty());
 }
@@ -333,8 +372,8 @@ fn cold_reconciliation_records_the_same_owner_refresh_as_warm_and_failure_keeps_
 fn warm_reconciliation_receipts_keep_rejections_and_intentionally_empty_recovery_distinct() {
     use light_playback::DynamicPlaybackStartOutcome as Outcome;
     let (definition, mut snapshot, mut runtime) = setup();
-    snapshot.playbacks = vec![dynamic_playback(1, &definition, 0, 0)].into();
-    let mut active = row(&definition, PlaybackIdentity::physical(1).unwrap());
+    snapshot.playback_pages = vec![page(1, vec![dynamic_playback(1, &definition, 0, 0)])].into();
+    let mut active = row(&definition, PlaybackAddress::new(1, 1).unwrap());
     active.size = f32::NAN;
     let (_, rejected) = reconcile_dynamic_playbacks_with_sources(
         &mut runtime,

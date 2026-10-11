@@ -8,36 +8,26 @@ pub use light_playback::CueNumber;
 pub enum PlaybackAddress {
     CueList(CueListId),
     Group(PlaybackGroupId),
-    Pool(u16),
-    Virtual(light_playback::VirtualPlaybackAddress),
-    CurrentPage { slot: u8 },
-    ExplicitPage { page: u8, slot: u8 },
+    Playback(light_playback::PlaybackAddress),
+    CurrentPage { position: u16 },
 }
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ResolvedPlaybackAddress {
     CueList(CueListId),
     Group {
         group_id: PlaybackGroupId,
-        playback_number: Option<u16>,
+        playback_address: Option<light_playback::PlaybackAddress>,
     },
-    Pool {
-        number: u16,
-        page: Option<u8>,
-        slot: Option<u8>,
-    },
-    Virtual(light_playback::VirtualPlaybackAddress),
+    Playback(light_playback::PlaybackAddress),
 }
-
 impl ResolvedPlaybackAddress {
-    pub const fn playback_number(&self) -> Option<u16> {
+    pub const fn playback_address(&self) -> Option<light_playback::PlaybackAddress> {
         match self {
             Self::CueList(_) => None,
             Self::Group {
-                playback_number, ..
-            } => *playback_number,
-            Self::Pool { number, .. } => Some(*number),
-            Self::Virtual(address) => Some(address.number().get()),
+                playback_address, ..
+            } => *playback_address,
+            Self::Playback(address) => Some(*address),
         }
     }
 }
@@ -200,19 +190,11 @@ impl PlaybackAction {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum PlaybackSurface {
-    Physical,
-    Virtual,
-    Osc,
-    Matter,
-}
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PlaybackCommand {
     pub address: PlaybackAddress,
     pub action: PlaybackAction,
-    pub surface: PlaybackSurface,
+    pub control_source: light_playback::PlaybackControlSource,
 }
 
 impl ApplicationCommand for PlaybackCommand {
@@ -235,7 +217,6 @@ pub enum PendingPlaybackAction {
     DynamicDoubleSpeed,
     DynamicHalfSpeed,
     DynamicLearnSpeed,
-    Fader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Debug)]
@@ -249,7 +230,7 @@ pub enum PlaybackExecution {
     Target {
         changed: bool,
     },
-    Pool {
+    Playback {
         changed: bool,
         pending: Option<PendingPlaybackAction>,
     },
@@ -288,5 +269,4 @@ pub struct PlaybackResult {
     pub desk: Option<PlaybackDeskProjection>,
     pub event_sequence: Option<u64>,
     pub desk_event_sequence: Option<u64>,
-    pub replayed: bool,
 }

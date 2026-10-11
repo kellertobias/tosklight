@@ -5,15 +5,16 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
+use super::PlaybackAddressValue;
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PlaybackRuntimeIdentity {
     Playback {
-        playback_number: u16,
-    },
-    Virtual {
+        #[schemars(range(min = 1, max = 99))]
         page: u8,
-        playback_number: u16,
+        #[schemars(range(min = 1, max = 1000))]
+        position: u16,
     },
     CueList {
         cue_list_id: Uuid,
@@ -30,8 +31,7 @@ pub enum PlaybackRuntimeIdentity {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackRuntimeProjection {
     pub scope: PlaybackShowScope,
-    pub requested: PlaybackRuntimeIdentity,
-    pub playback_number: Option<u16>,
+    pub identity: PlaybackRuntimeIdentity,
     #[serde(flatten)]
     pub target: PlaybackTargetProjection,
 }
@@ -83,7 +83,7 @@ pub enum PlaybackTargetProjection {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicPlaybackRuntimeProjection {
-    pub playback_number: u16,
+    pub owner_address: PlaybackAddressValue,
     pub enabled: bool,
     pub paused: bool,
     pub flash: bool,
@@ -300,12 +300,14 @@ pub struct GrandMasterRuntimeProjection {
     pub dynamics_paused: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackDeskProjection {
     pub scope: PlaybackShowScope,
     pub desk_id: Uuid,
-    pub active_page: u8,
-    pub selected_playback: Option<u16>,
+    pub command_page: u8,
+    pub selected_surface_id: String,
+    pub resolved_pages: std::collections::BTreeMap<String, u8>,
+    pub selected_playback: Option<PlaybackAddressValue>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub selected_cue_list: Option<Uuid>,
@@ -329,7 +331,7 @@ pub struct PlaybackRuntimeChange {
 /// values changed since the previous tick.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackTelemetrySample {
-    pub playback_number: u16,
+    pub address: PlaybackAddressValue,
     pub enabled: bool,
     pub master: f32,
     pub current_cue: Option<PlaybackCueReference>,
@@ -351,13 +353,13 @@ pub struct PlaybackTelemetryTick {
     pub sample_rate_hz: f32,
     /// Only the playbacks whose sampled values changed since the previous tick.
     pub samples: Vec<PlaybackTelemetrySample>,
-    /// Playback numbers that stopped reporting since the previous tick (released/offline).
-    pub released: Vec<u16>,
+    /// Playback addresses that stopped reporting since the previous tick (released/offline).
+    pub released: Vec<PlaybackAddressValue>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackCueTransition {
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<PlaybackAddressValue>,
     pub cue_list_id: Uuid,
     pub previous: Option<PlaybackCueReference>,
     pub current: Option<PlaybackCueReference>,

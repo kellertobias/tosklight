@@ -1,5 +1,5 @@
 import { Button } from "@tosklight/ui";
-import type { PlaybackDefinition } from "../../../api/types";
+import type { AssignedPlayback } from "./types";
 import {
 	assignPlayback,
 	isPlaybackSetClickArmed,
@@ -27,7 +27,7 @@ export function PlaybackOffTarget({
 	playback,
 }: {
 	controller: PlaybackBankController;
-	playback: PlaybackDefinition | null;
+	playback: AssignedPlayback | null;
 }) {
 	if (!controller.offPending || !playback) return null;
 	return (
@@ -72,7 +72,7 @@ export function PlaybackConfigurationTarget({
 	slot,
 }: {
 	controller: PlaybackBankController;
-	playback: PlaybackDefinition | null;
+	playback: AssignedPlayback | null;
 	slot: number;
 }) {
 	if (controller.assignmentPending || !isPlaybackSetClickArmed(controller))

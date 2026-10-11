@@ -12,7 +12,7 @@ use uuid::Uuid;
 pub enum ProgrammingUpdateTargetRequest {
     Cue {
         cue_list_id: CueListId,
-        playback_number: Option<u16>,
+        playback_address: Option<light_playback::PlaybackAddress>,
         cue_id: Option<Uuid>,
         cue_number: Option<light_playback::CueNumber>,
         validate_active_context: bool,

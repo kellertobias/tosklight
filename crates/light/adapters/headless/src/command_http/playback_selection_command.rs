@@ -9,7 +9,7 @@ pub(super) enum PlaybackSelectionTarget {
 pub(super) fn parse(command: &str) -> Result<Option<PlaybackSelectionTarget>, String> {
     let (tokens, _timing) = super::super::tokenize_programmer_command(command)?;
     match tokens.first().map(String::as_str) {
-        Some("PBK" | "VPBK") => {
+        Some("PBK") => {
             let (target, rest) = playback_address_command::parse(&tokens)?;
             if !rest.is_empty() {
                 return Err("unexpected tokens after playback address".into());
@@ -23,7 +23,7 @@ pub(super) fn parse(command: &str) -> Result<Option<PlaybackSelectionTarget>, St
             let number = tokens[1]
                 .parse::<u16>()
                 .map_err(|_| "Cuelist number is invalid")?;
-            if !(1..=light_playback::MAX_PLAYBACKS).contains(&number) {
+            if !(1..=1000).contains(&number) {
                 return Err("Cuelist number must be within 1-1000".into());
             }
             Ok(Some(PlaybackSelectionTarget::Cuelist { number }))
@@ -40,13 +40,13 @@ mod tests {
     fn parses_only_manual_selection_roots() {
         assert_eq!(
             parse("PBK 6").unwrap().unwrap(),
-            PlaybackSelectionTarget::Playback(CommandPlaybackTarget::CurrentPage { slot: 6 })
+            PlaybackSelectionTarget::Playback(CommandPlaybackTarget::CurrentPage { position: 6 })
         );
         assert_eq!(
             parse("CUELIST 4").unwrap().unwrap(),
             PlaybackSelectionTarget::Cuelist { number: 4 }
         );
-        assert!(parse("VPBK 1001").unwrap().is_some());
+        assert!(parse("VPBK 1001").unwrap().is_none());
         assert!(parse("PLAYBACK 6").unwrap().is_none());
         assert!(parse("CUE 2").unwrap().is_none());
         assert!(parse("PBK 6 CUE 2").is_err());

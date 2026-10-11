@@ -8,6 +8,7 @@ import {
 
 const desk: ControlDesk = {
 	id: "desk-1",
+	surface_id: "main",
 	name: "Main desk",
 	columns: 8,
 	rows: 1,
@@ -24,6 +25,7 @@ describe("default screen mutation history", () => {
 		const { result } = renderHook(() =>
 			useDefaultScreenDraft({
 				desk,
+				surface: undefined,
 				regularNumberShortcuts: true,
 				onKeyboardShortcuts: updateKeyboardShortcuts,
 				onPlaybackLayout: updatePlaybackLayout,

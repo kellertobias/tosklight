@@ -58,7 +58,6 @@ function changedOutcome() {
 					],
 				},
 			},
-			playback: null,
 			page: null,
 		},
 		show_event_sequence: 12,

@@ -2,17 +2,16 @@
 
 use crate::{ActionError, ActionErrorKind};
 use light_core::CueListId;
-use light_playback::{CueList, PlaybackDefinition, PlaybackPage, PlaybackTarget};
+use light_playback::{CueList, PlaybackAddress, PlaybackPage, PlaybackTarget};
 use light_show::{PortableShowDocument, PortableShowObject};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::programming) enum CueListAddress {
-    Pool { playback_number: u16 },
+    Playback { address: PlaybackAddress },
     CuelistPool { number: u16 },
     CueList { id: CueListId },
-    PageSlot { page: u8, slot: u8 },
 }
 
 #[derive(Clone)]
@@ -24,7 +23,7 @@ pub(in crate::programming) struct StoredCueList {
 }
 
 pub(in crate::programming) struct ResolvedCueList {
-    pub playback_number: u16,
+    pub playback_address: Option<PlaybackAddress>,
     pub stored: StoredCueList,
 }
 
@@ -32,42 +31,42 @@ pub(in crate::programming) fn resolve_cue_list(
     document: &PortableShowDocument,
     address: CueListAddress,
 ) -> Result<ResolvedCueList, ActionError> {
-    if matches!(
-        address,
-        CueListAddress::CuelistPool { .. } | CueListAddress::CueList { .. }
-    ) {
-        let catalog = crate::cuelist_pool_catalog(document)?;
-        let (number, id) = match address {
-            CueListAddress::CuelistPool { number } => (
-                number,
-                catalog
-                    .resolve(number)
-                    .ok_or_else(|| missing(format!("Cuelist {number} does not exist")))?,
-            ),
-            CueListAddress::CueList { id } => (
-                catalog
-                    .canonical_number(id)
-                    .ok_or_else(|| missing("selected Cuelist does not exist"))?,
-                id,
-            ),
-            _ => unreachable!(),
-        };
-        return Ok(ResolvedCueList {
-            playback_number: number,
+    match address {
+        CueListAddress::CuelistPool { number } => {
+            let id = crate::cuelist_pool_catalog(document)?
+                .resolve(number)
+                .ok_or_else(|| missing(format!("Cuelist {number} does not exist")))?;
+            Ok(ResolvedCueList {
+                playback_address: None,
+                stored: find_cue_list(document, id)?,
+            })
+        }
+        CueListAddress::CueList { id } => Ok(ResolvedCueList {
+            playback_address: None,
             stored: find_cue_list(document, id)?,
-        });
+        }),
+        CueListAddress::Playback { address } => {
+            let page = find_page(document, address.page())?;
+            let playback = page.assignments.get(&address.position()).ok_or_else(|| {
+                missing(format!(
+                    "Playback {}.{} is not recorded",
+                    address.page(),
+                    address.position()
+                ))
+            })?;
+            let PlaybackTarget::CueList { cue_list_id } = playback.target else {
+                return Err(invalid(format!(
+                    "Playback {}.{} does not contain Cues",
+                    address.page(),
+                    address.position()
+                )));
+            };
+            Ok(ResolvedCueList {
+                playback_address: Some(address),
+                stored: find_cue_list(document, cue_list_id)?,
+            })
+        }
     }
-    let playback_number = resolve_playback_number(document, address)?;
-    let playback = find_playback(document, playback_number)?;
-    let PlaybackTarget::CueList { cue_list_id } = playback.target else {
-        return Err(invalid(format!(
-            "Cuelist {playback_number} does not contain Cues"
-        )));
-    };
-    Ok(ResolvedCueList {
-        playback_number,
-        stored: find_cue_list(document, cue_list_id)?,
-    })
 }
 
 pub(in crate::programming) fn exact_cue_list(
@@ -95,23 +94,6 @@ pub(in crate::programming) fn exact_cue_list(
         raw_body: object.body().clone(),
         typed,
     })
-}
-
-fn resolve_playback_number(
-    document: &PortableShowDocument,
-    address: CueListAddress,
-) -> Result<u16, ActionError> {
-    match address {
-        CueListAddress::Pool { playback_number } => Ok(playback_number),
-        CueListAddress::CuelistPool { .. } | CueListAddress::CueList { .. } => {
-            unreachable!("independent addresses are resolved before physical topology")
-        }
-        CueListAddress::PageSlot { page, slot } => find_page(document, page)?
-            .slots
-            .get(&slot)
-            .copied()
-            .ok_or_else(|| missing(format!("page {page} slot {slot} is not assigned"))),
-    }
 }
 
 fn find_cue_list(
@@ -154,17 +136,6 @@ fn stored_cue_list(object: &PortableShowObject, typed: CueList) -> StoredCueList
         raw_body: object.body().clone(),
         typed,
     }
-}
-
-fn find_playback(
-    document: &PortableShowDocument,
-    number: u16,
-) -> Result<PlaybackDefinition, ActionError> {
-    find_unique(document, "playback", "Playback", |object| {
-        let value = decode::<PlaybackDefinition>(object.body(), "Playback")?;
-        Ok((value.number == number).then_some(value))
-    })?
-    .ok_or_else(|| missing(format!("Cuelist {number} does not exist")))
 }
 
 fn find_page(document: &PortableShowDocument, number: u8) -> Result<PlaybackPage, ActionError> {

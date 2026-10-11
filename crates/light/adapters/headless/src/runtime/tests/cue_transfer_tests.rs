@@ -102,7 +102,7 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     let scenario = CueTransferScenario::new();
     let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     let (_, destination_object, _) =
-        cue_list_for_playback(&store, &scenario.state.output.snapshot(), 2).unwrap();
+        cue_list_for_playback(&store, &scenario.state.output.snapshot(), cue_programming_test_address(1,2)).unwrap();
     let mut body = destination_object.body;
     let cues = body["cues"].as_array_mut().unwrap();
     cues[0]["future_cue_metadata"] = serde_json::json!({"position": "first"});
@@ -134,7 +134,7 @@ fn cue_copy_preserves_extensions_on_duplicate_id_destination_cues() {
     let (_, destination_object, destination) = cue_list_for_playback(
         &ActiveShowRepository::open(&scenario.show_path).unwrap(),
         &scenario.state.output.snapshot(),
-        2,
+        cue_programming_test_address(1,2),
     )
     .unwrap();
     assert_eq!(
@@ -158,7 +158,7 @@ fn selected_cuelist_shorthand_resolves_once_from_the_initiating_desk() {
     scenario
         .state
         .installation
-        .set_selected_playback(scenario.session.desk.id, show_id, Some(1))
+        .set_selected_playback(scenario.session.desk.id, show_id, Some(light_show::PlaybackSelection{page:1,position:1}))
         .unwrap();
 
     let response = dispatch_cue_transfer(
@@ -169,7 +169,7 @@ fn selected_cuelist_shorthand_resolves_once_from_the_initiating_desk() {
     assert!(response.ok, "selected Cuelist copy failed: {:?}", response.error);
 
     let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
-    let (_, _, list) = cue_list_for_playback(&store, &scenario.state.output.snapshot(), 1).unwrap();
+    let (_, _, list) = cue_list_for_playback(&store, &scenario.state.output.snapshot(), cue_programming_test_address(1,1)).unwrap();
     assert_eq!(
         list.cues
             .iter()
@@ -245,7 +245,7 @@ fn pool_object_move_copy_requires_typed_compatible_addresses_and_is_atomic() {
     )
     .unwrap();
     let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
-    let physical_before = store.objects("playback").unwrap();
+    let assignment_pages_before = store.objects("playback_page").unwrap();
     let copied = store.objects("cue_list").unwrap();
     let source = copied.iter().find(|object| object.body["pool_number"] == 1).unwrap();
     let copy = copied.iter().find(|object| object.body["pool_number"] == 3).unwrap();
@@ -253,16 +253,9 @@ fn pool_object_move_copy_requires_typed_compatible_addresses_and_is_atomic() {
     assert_ne!(source.body["id"], copied_target);
     assert_ne!(source.body["cues"][0]["id"], copy.body["cues"][0]["id"]);
     assert!(copy.body.get("legacy_pool_aliases").is_none_or(|aliases| aliases.as_array().unwrap().is_empty()));
-    assert!(!physical_before.iter().any(|object| object.id == "3"));
+    assert!(!assignment_pages_before.iter().any(|object|object.body["assignments"].get("3").is_some()));
 
-    let page = light_playback::PlaybackPage {
-        number: 1,
-        name: "Main".into(),
-        slots: std::collections::HashMap::from([(1, 1)]),
-        virtual_playbacks: std::collections::HashMap::new(),
-    };
-    let page_body = serde_json::to_value(page).unwrap();
-    store.put_object("playback_page", "1", &page_body, 0).unwrap();
+    let page_body=assignment_pages_before.iter().find(|object|object.id=="1").unwrap().body.clone();
     execute_programmer_command(
         &scenario.state,
         &scenario.session,
@@ -273,8 +266,8 @@ fn pool_object_move_copy_requires_typed_compatible_addresses_and_is_atomic() {
     assert!(!moved.iter().any(|object| object.body["pool_number"] == 3));
     assert_eq!(moved.iter().find(|object| object.body["pool_number"] == 4).unwrap().body["id"], copied_target);
     assert_eq!(
-        store.objects("playback").unwrap().iter().map(|object| (&object.id, object.revision, &object.body)).collect::<Vec<_>>(),
-        physical_before.iter().map(|object| (&object.id, object.revision, &object.body)).collect::<Vec<_>>(),
+        store.objects("playback_page").unwrap().iter().map(|object| (&object.id, object.revision, &object.body)).collect::<Vec<_>>(),
+        assignment_pages_before.iter().map(|object| (&object.id, object.revision, &object.body)).collect::<Vec<_>>(),
     );
     assert_eq!(store.objects("playback_page").unwrap().iter().find(|object| object.id == "1").unwrap().body, page_body);
 
@@ -366,9 +359,9 @@ fn execute_and_verify_cue_transfer(
     assert!(response.ok, "Cue transfer failed: {:?}", response.error);
     let store = ActiveShowRepository::open(&scenario.show_path).unwrap();
     let (_, source_object, source) =
-        cue_list_for_playback(&store, &scenario.state.output.snapshot(), 1).unwrap();
+        cue_list_for_playback(&store, &scenario.state.output.snapshot(), cue_programming_test_address(1,1)).unwrap();
     let (_, destination_object, destination) =
-        cue_list_for_playback(&store, &scenario.state.output.snapshot(), 2).unwrap();
+        cue_list_for_playback(&store, &scenario.state.output.snapshot(), cue_programming_test_address(1,2)).unwrap();
     assert_eq!(
         store.portable_revision().unwrap().value(),
         before.show_revision + 1
@@ -504,80 +497,40 @@ fn verify_transferred_state(
 }
 
 #[test]
-fn cue_addresses_use_cue_for_pool_and_page_playbacks() {
-    let snapshot = EngineSnapshot {
-        playback_pages: vec![light_playback::PlaybackPage {
-            number: 4,
-            name: "Page 4".into(),
-            slots: HashMap::from([(7, 25)]),
-            virtual_playbacks: HashMap::new(),
-        }].into(),
-        ..Default::default()
-    };
-    let pool = ["PBK", "25", "CUE", "2", ".", "5"].map(String::from);
-    let (address, used) = parse_playback_address(&pool, true, &snapshot).unwrap();
-    assert_eq!((address.playback, address.cue.clone(), used), (25, Some(cue("2.5")), 6));
-    assert_eq!(
-        address.application_address(),
-        light_application::PlaybackAddress::Pool(25)
-    );
-    let pool_only = ["PBK", "25"].map(String::from);
-    let (address, used) = parse_playback_address(&pool_only, true, &snapshot).unwrap();
-    assert_eq!((address.playback, address.cue, used), (25, None, 2));
-    let page = ["PBK", "4", ".", "7", "CUE", "12"].map(String::from);
-    let (address, used) = parse_playback_address(&page, true, &snapshot).unwrap();
-    assert_eq!((address.playback, address.cue.clone(), used), (25, Some(cue("12")), 6));
-    assert_eq!(
-        address.application_address(),
-        light_application::PlaybackAddress::ExplicitPage { page: 4, slot: 7 }
-    );
-    let page_only = ["PBK", "4", ".", "7"].map(String::from);
-    let (address, used) = parse_playback_address(&page_only, true, &snapshot).unwrap();
-    assert_eq!((address.playback, address.cue, used), (25, None, 4));
-    let old_entangled = ["PBK", "4", "PBK", "7", ".", "12"].map(String::from);
-    let (_, used) = parse_playback_address(&old_entangled, true, &snapshot).unwrap();
-    assert_ne!(used, old_entangled.len());
+fn cue_addresses_use_cue_for_current_and_explicit_page_playbacks() {
+    let list_id=light_core::CueListId::new();
+    let snapshot=EngineSnapshot {playback_pages:vec![light_playback::PlaybackPage {number:4,name:"Page4".into(),assignments:HashMap::from([(7,transfer_playback(7,list_id)),(25,transfer_playback(25,list_id))])}].into(),..Default::default()};
+    let current=["PBK","25","CUE","2",".","5"].map(String::from);
+    let (address,used)=parse_playback_address(&current,true,&snapshot,4).unwrap();
+    assert_eq!((address.playback,address.cue.clone(),used),(cue_programming_test_address(4,25),Some(cue("2.5")),6));
+    assert_eq!(address.application_address(),light_application::PlaybackAddress::CurrentPage{position:25});
+    let current_only=["PBK","25"].map(String::from);
+    let (address,used)=parse_playback_address(&current_only,true,&snapshot,4).unwrap();
+    assert_eq!((address.playback,address.cue,used),(cue_programming_test_address(4,25),None,2));
+    let explicit=["PBK","4",".","7","CUE","12"].map(String::from);
+    let (address,used)=parse_playback_address(&explicit,true,&snapshot,1).unwrap();
+    assert_eq!((address.playback,address.cue.clone(),used),(cue_programming_test_address(4,7),Some(cue("12")),6));
+    assert_eq!(address.application_address(),light_application::PlaybackAddress::Playback(cue_programming_test_address(4,7)));
+    let explicit_only=["PBK","4",".","7"].map(String::from);
+    let (address,used)=parse_playback_address(&explicit_only,true,&snapshot,1).unwrap();
+    assert_eq!((address.playback,address.cue,used),(cue_programming_test_address(4,7),None,4));
+    let obsolete=["PBK","4","PBK","7",".","12"].map(String::from);
+    assert!(parse_playback_address(&obsolete,true,&snapshot,4).is_err());
 }
 
 #[test]
 fn update_addresses_keep_current_page_and_explicit_page_distinct() {
-    let snapshot = EngineSnapshot {
-        playback_pages: vec![
-            light_playback::PlaybackPage {
-                number: 1,
-                name: "Page 1".into(),
-                slots: HashMap::from([(7, 11)]),
-                virtual_playbacks: HashMap::new(),
-            },
-            light_playback::PlaybackPage {
-                number: 4,
-                name: "Page 4".into(),
-                slots: HashMap::from([(7, 25)]),
-                virtual_playbacks: HashMap::new(),
-            },
-        ].into(),
-        ..Default::default()
-    };
-    let current = ["PBK", "7", "CUE", "2", ".", "5"].map(String::from);
-    let explicit = ["PBK", "1", ".", "7", "CUE", "2", ".", "5"].map(String::from);
-
-    let page_one = parse_update_playback_address(&current, 1, &snapshot).unwrap();
-    let page_four = parse_update_playback_address(&current, 4, &snapshot).unwrap();
-    let pinned = parse_update_playback_address(&explicit, 4, &snapshot).unwrap();
-
-    assert_eq!((page_one.playback, page_one.cue.clone()), (11, Some(cue("2.5"))));
-    assert_eq!((page_four.playback, page_four.cue.clone()), (25, Some(cue("2.5"))));
-    assert_eq!((pinned.playback, pinned.cue.clone()), (11, Some(cue("2.5"))));
-    assert_eq!(
-        page_one.application_address(),
-        light_application::PlaybackAddress::CurrentPage { slot: 7 }
-    );
-    assert_eq!(
-        page_four.application_address(),
-        light_application::PlaybackAddress::CurrentPage { slot: 7 }
-    );
-    assert_eq!(
-        pinned.application_address(),
-        light_application::PlaybackAddress::ExplicitPage { page: 1, slot: 7 }
-    );
+    let list_id=light_core::CueListId::new();
+    let snapshot=EngineSnapshot {playback_pages:[1,4].into_iter().map(|number|light_playback::PlaybackPage{number,name:format!("Page{number}"),assignments:HashMap::from([(7,transfer_playback(7,list_id))])}).collect::<Vec<_>>().into(),..Default::default()};
+    let current=["PBK","7","CUE","2",".","5"].map(String::from);
+    let explicit=["PBK","1",".","7","CUE","2",".","5"].map(String::from);
+    let page_one=parse_update_playback_address(&current,1,&snapshot).unwrap();
+    let page_four=parse_update_playback_address(&current,4,&snapshot).unwrap();
+    let pinned=parse_update_playback_address(&explicit,4,&snapshot).unwrap();
+    assert_eq!((page_one.playback,page_one.cue.clone()),(cue_programming_test_address(1,7),Some(cue("2.5"))));
+    assert_eq!((page_four.playback,page_four.cue.clone()),(cue_programming_test_address(4,7),Some(cue("2.5"))));
+    assert_eq!((pinned.playback,pinned.cue.clone()),(cue_programming_test_address(1,7),Some(cue("2.5"))));
+    assert_eq!(page_one.application_address(),light_application::PlaybackAddress::CurrentPage{position:7});
+    assert_eq!(page_four.application_address(),light_application::PlaybackAddress::CurrentPage{position:7});
+    assert_eq!(pinned.application_address(),light_application::PlaybackAddress::Playback(cue_programming_test_address(1,7)));
 }

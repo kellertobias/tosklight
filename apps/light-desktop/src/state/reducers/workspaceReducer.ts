@@ -23,22 +23,13 @@ function addWindow(
 			kind === "help"
 				? "Help"
 				: kind === "virtual_playbacks"
-					? "Virtual Playbacks"
+					? "Playbacks"
 					: kind === "file_manager"
 						? "File Manager"
 						: kind === "text_editor"
 							? "Text Editor"
 							: cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind),
-		...(kind === "virtual_playbacks"
-			? {
-					virtualPlaybackRows: 2,
-					virtualPlaybackColumns: 2,
-					virtualPlaybackPageMode: "follow_main" as const,
-					virtualPlaybackPinnedPage: 1,
-					virtualPlaybackCells: [],
-					virtualPlaybackExclusionZones: [],
-				}
-			: {}),
+		...(kind === "virtual_playbacks" ? {surface_id: `pane:${kind}-${Date.now()}`} : {}),
 		...(kind === "file_manager" ? { fileManagerShowHidden: false } : {}),
 		...(kind === "text_editor"
 			? { textEditorReadOnly: false, textEditorMode: "plain" as const }

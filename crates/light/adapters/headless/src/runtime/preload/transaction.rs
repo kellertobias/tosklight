@@ -88,10 +88,9 @@ fn executed_preload_projection(
         .iter()
         .map(
             |action| light_application::ProgrammingPreloadExecutedPlaybackAction {
-                playback_number: action.playback_number,
-                page: action.page,
+                address: action.address,
                 action: application_queue_action(action.action),
-                surface: application_queue_surface(action.surface),
+                control_source: action.control_source.clone(),
             },
         )
         .collect()
@@ -115,20 +114,6 @@ const fn application_queue_action(
         Domain::DynamicDoubleSpeed => Application::DynamicDoubleSpeed,
         Domain::DynamicHalfSpeed => Application::DynamicHalfSpeed,
         Domain::DynamicLearnSpeed => Application::DynamicLearnSpeed,
-        Domain::Fader { value_permyriad } => Application::Fader { value_permyriad },
-    }
-}
-
-const fn application_queue_surface(
-    surface: light_programmer::PreloadPlaybackQueueSurface,
-) -> light_application::ProgrammingPreloadPlaybackSurface {
-    use light_application::ProgrammingPreloadPlaybackSurface as Application;
-    use light_programmer::PreloadPlaybackQueueSurface as Domain;
-    match surface {
-        Domain::Physical => Application::Physical,
-        Domain::Virtual => Application::Virtual,
-        Domain::Osc => Application::Osc,
-        Domain::Matter => Application::Matter,
     }
 }
 
@@ -175,17 +160,7 @@ fn executed_preload_action(
     committed_at: chrono::DateTime<chrono::Utc>,
     programmer_fade_millis: u64,
 ) -> serde_json::Value {
-    let mut executed = serde_json::json!({
-        "playback_number":action.playback_number,
-        "action":action.action.legacy_name(),
-        "surface":action.surface.name(),
-        "started_at":committed_at,
-        "fallback_millis":programmer_fade_millis
-    });
-    if let Some(page) = action.page {
-        executed["page"] = page.into();
-    }
-    executed
+    serde_json::json!({"address":action.address,"action":action.action.legacy_name(),"control_source":action.control_source,"started_at":committed_at,"fallback_millis":programmer_fade_millis})
 }
 
 fn persist_preload_commit(

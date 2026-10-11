@@ -51,7 +51,7 @@ pub(super) fn active_update_cue_contexts(state: &AppState) -> Vec<update::Active
         .into_iter()
         .filter_map(|playback| {
             Some(update::ActiveCueContext {
-                playback_number: playback.playback_number?,
+                playback_address: playback.playback_address?,
                 cue_list_id: playback.cue_list_id,
                 cue_id: playback.current_cue_id?,
                 cue_number: playback.current_cue_number?,
@@ -83,13 +83,13 @@ pub(super) fn resolve_update_cue_target(
         .transpose()
         .map_err(ApiError::bad_request)?;
     if target.validate_active_context {
-        let playback_number = target.playback_number.ok_or_else(|| {
-            ApiError::bad_request("a live Update target requires playback_number")
+        let playback_address = target.playback_address.ok_or_else(|| {
+            ApiError::bad_request("a live Update target requires playback_address")
         })?;
         let cue_list_id = parse_update_cue_list_id(target)?;
         let context = active
             .iter()
-            .find(|context| context.playback_number == playback_number)
+            .find(|context| context.playback_address == playback_address)
             .ok_or_else(|| {
                 ApiError::conflict("the touched playback is no longer active; preview Update again")
             })?;
@@ -112,7 +112,7 @@ pub(super) fn resolve_update_cue_target(
             })?);
             update::CueTargetRequest::Explicit(update::ResolvedCueTarget {
                 cue_list_id,
-                playback_number: target.playback_number,
+                playback_address: target.playback_address,
                 cue_id,
                 cue_number: requested_number.ok_or_else(|| {
                     ApiError::bad_request("explicit Cue Update requires cue_number")
@@ -124,14 +124,14 @@ pub(super) fn resolve_update_cue_target(
                 .find(|context| {
                     context.cue_id == cue_id
                         && target
-                            .playback_number
-                            .is_none_or(|number| context.playback_number == number)
+                            .playback_address
+                            .is_none_or(|number| context.playback_address == number)
                 })
                 .ok_or_else(|| ApiError::bad_request("explicit Cue context is no longer active"))?;
             update::CueTargetRequest::Explicit(update::ResolvedCueTarget::from(context))
         }
-    } else if let Some(playback_number) = target.playback_number {
-        update::CueTargetRequest::ActivePlayback { playback_number }
+    } else if let Some(playback_address) = target.playback_address {
+        update::CueTargetRequest::ActivePlayback { playback_address }
     } else {
         update::CueTargetRequest::PoolCueList {
             cue_list_id: parse_update_cue_list_id(target)?,

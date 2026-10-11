@@ -976,111 +976,62 @@ describe("appReducer legacy pane layout hydration", () => {
 		});
 		const [virtual, files, notes] = legacy.desks[0].panes;
 
-		expect(virtual.virtualPlaybackRows ?? 2).toBe(2);
-		expect(virtual.virtualPlaybackColumns ?? 2).toBe(2);
-		expect(virtual.virtualPlaybackPageMode ?? "follow_main").toBe(
-			"follow_main",
-		);
-		expect(virtual.virtualPlaybackPinnedPage ?? 1).toBe(1);
-		expect(virtual.virtualPlaybackCells ?? []).toEqual([]);
-		expect(virtual.virtualPlaybackExclusionZones ?? []).toEqual([]);
+		expect(virtual.surface_id).toBeUndefined();
 		expect(files.fileManagerShowHidden ?? false).toBe(false);
 		expect(notes.textEditorReadOnly ?? false).toBe(false);
 		expect(notes.textEditorMode ?? "plain").toBe("plain");
 	});
 
-	it("accepts a full 20 by 15 Virtual Playback page and bounds larger products", () => {
-		const desks = [
-			{
-				id: "virtual-workspace",
-				name: "Virtual workspace",
-				panes: [
-					{
-						id: "virtual",
-						kind: "virtual_playbacks" as const,
-						title: "Virtual Playbacks",
-						x: 1,
-						y: 1,
-						width: 8,
-						height: 8,
-					},
-				],
-			},
-		];
+	it("persists only the selected central Playback surface reference", () => {
 		const hydrated = appReducer(initialState, {
 			type: "HYDRATE_LAYOUT",
-			desks,
-			activeDeskId: "virtual-workspace",
+			activeDeskId: "workspace",
+			desks: [
+				{
+					id: "workspace",
+					name: "Workspace",
+					panes: [
+						{
+							id: "playbacks",
+							kind: "virtual_playbacks",
+							title: "Playbacks",
+							x: 1,
+							y: 1,
+							width: 8,
+							height: 8,
+						},
+						{
+							id: "other",
+							kind: "cues",
+							title: "Cues",
+							x: 9,
+							y: 1,
+							width: 8,
+							height: 8,
+						},
+					],
+				},
+			],
 		});
-		const ordinary = appReducer(hydrated, {
-			type: "SET_VIRTUAL_PLAYBACK_GRID",
-			id: "virtual",
-			rows: 20,
-			columns: 15,
-			changed: "columns",
+		const selected = appReducer(hydrated, {
+			type: "SET_PANE_PLAYBACK_SURFACE",
+			id: "playbacks",
+			surfaceId: "screen-b",
 		});
-		expect(ordinary.desks[0].panes[0]).toMatchObject({
-			virtualPlaybackRows: 20,
-			virtualPlaybackColumns: 15,
+		expect(selected.desks[0].panes[0]).toEqual({
+			...hydrated.desks[0].panes[0],
+			surface_id: "screen-b",
 		});
-
-		const bounded = appReducer(ordinary, {
-			type: "SET_VIRTUAL_PLAYBACK_GRID",
-			id: "virtual",
-			rows: 20,
-			columns: 500,
-			changed: "columns",
+		expect(selected.desks[0].panes[1]).toBe(hydrated.desks[0].panes[1]);
+		expect(hydrated.desks[0].panes[0].surface_id).toBeUndefined();
+		const replaced = appReducer(selected, {
+			type: "SET_PANE_PLAYBACK_SURFACE",
+			id: "playbacks",
+			surfaceId: "pane:playbacks",
 		});
-		expect(bounded.desks[0].panes[0]).toMatchObject({
-			virtualPlaybackRows: 20,
-			virtualPlaybackColumns: 15,
-		});
-	});
-
-	it("persists Follow Main and bounded Pinned page settings", () => {
-		const desks = [
-			{
-				id: "virtual-workspace",
-				name: "Virtual workspace",
-				panes: [
-					{
-						id: "virtual-surface",
-						kind: "virtual_playbacks" as const,
-						title: "Virtual Playbacks",
-						x: 1,
-						y: 1,
-						width: 8,
-						height: 8,
-					},
-				],
-			},
-		];
-		const hydrated = appReducer(initialState, {
-			type: "HYDRATE_LAYOUT",
-			desks,
-			activeDeskId: "virtual-workspace",
-		});
-		const pinned = appReducer(hydrated, {
-			type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
-			id: "virtual-surface",
-			mode: "pinned",
-			pinnedPage: 999,
-		});
-		expect(pinned.desks[0].panes[0]).toMatchObject({
-			id: "virtual-surface",
-			virtualPlaybackPageMode: "pinned",
-			virtualPlaybackPinnedPage: 127,
-		});
-		const followed = appReducer(pinned, {
-			type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
-			id: "virtual-surface",
-			mode: "follow_main",
-		});
-		expect(followed.desks[0].panes[0]).toMatchObject({
-			id: "virtual-surface",
-			virtualPlaybackPageMode: "follow_main",
-			virtualPlaybackPinnedPage: 127,
-		});
+		expect(replaced.desks[0].panes[0].surface_id).toBe("pane:playbacks");
+		expect(replaced.desks[0].panes[0]).not.toHaveProperty("page_source");
+		expect(replaced.desks[0].panes[0]).not.toHaveProperty("layout");
 	});
 });
 

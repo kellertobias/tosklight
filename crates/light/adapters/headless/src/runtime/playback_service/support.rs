@@ -1,26 +1,10 @@
-use light_application::{
-    ActionContext, ActionError, ActionErrorKind, ActionSource, PlaybackSurface,
-};
+use light_application::{ActionContext, ActionError, ActionErrorKind, ActionSource};
 
 use super::{ApiError, AppState, Session};
 
 pub(super) fn playback_definition(
     state: &AppState,
-    number: u16,
-) -> Result<light_playback::PlaybackDefinition, ActionError> {
-    state
-        .output
-        .snapshot()
-        .playbacks
-        .iter()
-        .find(|playback| playback.number == number)
-        .cloned()
-        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "playback"))
-}
-
-pub(super) fn virtual_playback_definition(
-    state: &AppState,
-    address: light_playback::VirtualPlaybackAddress,
+    address: light_playback::PlaybackAddress,
 ) -> Result<light_playback::PlaybackDefinition, ActionError> {
     state
         .output
@@ -28,34 +12,24 @@ pub(super) fn virtual_playback_definition(
         .playback_pages
         .iter()
         .find(|page| page.number == address.page())
-        .and_then(|page| page.virtual_playbacks.get(&address.number().get()))
+        .and_then(|page| page.assignments.get(&address.position()))
         .cloned()
-        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "virtual playback"))
+        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "Playback not found"))
 }
-
 pub(super) fn resolve_group_playback(
     snapshot: &light_engine::EngineSnapshot,
     group_id: &str,
-) -> Result<Option<u16>, ActionError> {
-    snapshot
-        .groups
-        .iter()
-        .find(|group| group.id == group_id)
-        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "Group not found"))?;
-    Ok(snapshot
-        .playbacks
-        .iter()
-        .filter(|playback| {
-            matches!(
-                &playback.target,
-                light_playback::PlaybackTarget::Group {
-                    group_id: assigned_id,
-                    ..
-                } if assigned_id == group_id
-            )
-        })
-        .map(|playback| playback.number)
-        .min())
+) -> Result<Option<light_playback::PlaybackAddress>, ActionError> {
+    if !snapshot.groups.iter().any(|group| group.id == group_id) {
+        return Err(ActionError::new(
+            ActionErrorKind::NotFound,
+            "Group not found",
+        ));
+    }
+    Ok(snapshot.playback_pages.iter().flat_map(|page| page.assignments.iter().filter_map(move |(position,definition)| {
+      matches!(&definition.target,light_playback::PlaybackTarget::Group{group_id:assigned,..} if assigned==group_id)
+        .then(||light_playback::PlaybackAddress::new(page.number,*position).ok()).flatten()
+    })).min())
 }
 
 pub(super) fn operator_context(
@@ -68,20 +42,12 @@ pub(super) fn operator_context(
     request_id.map_or(context.clone(), |id| context.with_request_id(id))
 }
 
-pub(super) fn capture_enabled(state: &AppState, surface: PlaybackSurface) -> bool {
-    let configuration = state.installation.configuration();
-    if surface == PlaybackSurface::Virtual {
-        configuration.preload_virtual_playback_actions
-    } else {
-        configuration.preload_physical_playback_actions
-    }
-}
-
-pub(super) fn captures_preload(source: ActionSource) -> bool {
-    matches!(
-        source,
-        ActionSource::UserInterface | ActionSource::Keyboard | ActionSource::Http
-    )
+pub(super) fn capture_enabled(state: &AppState, address: light_playback::PlaybackAddress) -> bool {
+    state
+        .output
+        .snapshot()
+        .playback_preload_scope
+        .contains(address)
 }
 
 pub(super) fn invalid(message: impl Into<String>) -> ActionError {

@@ -1,21 +1,20 @@
+use crate::PreloadPlaybackQueueAction;
 use crate::ProgrammerRegistry;
 use crate::groups::GroupProgrammerValue;
-use crate::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
 use chrono::{DateTime, Utc};
 use light_core::{AttributeKey, AttributeValue, SessionId};
+use light_playback::{PlaybackAddress, PlaybackControlSource};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PreloadPlaybackAction {
-    pub playback_number: u16,
+    pub address: PlaybackAddress,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin_desk_id: Option<Uuid>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page: Option<u8>,
     pub action: PreloadPlaybackQueueAction,
-    pub surface: PreloadPlaybackQueueSurface,
+    pub control_source: PlaybackControlSource,
 }
 
 impl ProgrammerRegistry {
@@ -175,28 +174,24 @@ impl ProgrammerRegistry {
     pub fn queue_preload_playback_action(
         &self,
         session: SessionId,
-        playback_number: u16,
-        page: Option<u8>,
+        address: PlaybackAddress,
         action: PreloadPlaybackQueueAction,
-        surface: PreloadPlaybackQueueSurface,
+        control_source: PlaybackControlSource,
     ) -> bool {
         self.queue_preload_playback_action_with_origin(
             session,
-            playback_number,
-            page,
+            address,
             action,
-            surface,
+            control_source,
             None,
         )
     }
-
     pub fn queue_preload_playback_action_with_origin(
         &self,
         _session: SessionId,
-        playback_number: u16,
-        page: Option<u8>,
+        address: PlaybackAddress,
         action: PreloadPlaybackQueueAction,
-        surface: PreloadPlaybackQueueSurface,
+        control_source: PlaybackControlSource,
         origin_desk_id: Option<Uuid>,
     ) -> bool {
         let mutation_gate = self.mutation_gate();
@@ -207,11 +202,10 @@ impl ProgrammerRegistry {
         };
         state.checkpoint();
         state.preload_playback_pending.push(PreloadPlaybackAction {
-            playback_number,
+            address,
             origin_desk_id,
-            page,
             action,
-            surface,
+            control_source,
         });
         state.last_activity = self.clock.now();
         drop(states);

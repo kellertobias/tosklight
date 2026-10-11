@@ -604,8 +604,7 @@ pub struct DynamicRuntimeInstanceProjection {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DynamicRuntimeStopOwner {
-    PhysicalPlayback { playback_number: u16 },
-    VirtualPlayback { page: u8, playback_number: u16 },
+    Playback { page: u8, position: u16 },
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]

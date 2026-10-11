@@ -1,6 +1,6 @@
 use super::super::{ApiError, PoolPlaybackInput};
 use light_application::{
-    ActionSource, CueNumber, PendingPlaybackAction, PlaybackAction, PlaybackLevel, PlaybackSurface,
+    ActionSource, CueNumber, PendingPlaybackAction, PlaybackAction, PlaybackLevel,
 };
 
 pub(super) fn parse_action(
@@ -89,7 +89,7 @@ fn parse_cue_number(input: &PoolPlaybackInput, go_to: bool) -> Result<PlaybackAc
     })
 }
 
-pub(super) fn legacy_action(action: PlaybackAction) -> (&'static str, PoolPlaybackInput) {
+pub(super) fn dispatch_action_input(action: PlaybackAction) -> (&'static str, PoolPlaybackInput) {
     let pressed = action.clone().pressed();
     let (name, value, cue_number, button) = structured_action(action);
     (
@@ -115,7 +115,7 @@ fn structured_action(
         PlaybackAction::Load(number) => ("load", None, Some(number.to_string()), None),
         PlaybackAction::ConfiguredButton { number, .. } => ("button", None, None, Some(number)),
         PlaybackAction::ConfiguredFader { .. } => {
-            unreachable!("configured faders are resolved before legacy dispatch")
+            unreachable!("configured faders are resolved before assignment dispatch")
         }
         _ => (simple_action_name(action), None, None, None),
     }
@@ -127,7 +127,7 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Back { .. } => "go-minus",
         PlaybackAction::Pause { .. } => "pause",
         // The numbered control dispatcher exposes the immediate release as Off.
-        // Direct Cuelist and dedicated virtual runtimes handle Release as a typed action.
+        // Direct Cuelist runtime handles Release as a typed action.
         PlaybackAction::Release => "off",
         PlaybackAction::On { .. } => "on",
         PlaybackAction::Off { .. } => "off",
@@ -164,23 +164,13 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
     }
 }
 
-pub(super) const fn surface_name(surface: PlaybackSurface) -> &'static str {
-    match surface {
-        PlaybackSurface::Physical => "physical",
-        PlaybackSurface::Virtual => "virtual",
-        PlaybackSurface::Osc => "osc",
-        PlaybackSurface::Matter => "matter",
-    }
-}
-
 pub(super) const fn activation_surface(
-    surface: PlaybackSurface,
+    source: ActionSource,
 ) -> light_playback::PlaybackActivationSurface {
-    match surface {
-        PlaybackSurface::Physical => light_playback::PlaybackActivationSurface::Physical,
-        PlaybackSurface::Virtual => light_playback::PlaybackActivationSurface::Virtual,
-        PlaybackSurface::Osc => light_playback::PlaybackActivationSurface::Osc,
-        PlaybackSurface::Matter => light_playback::PlaybackActivationSurface::Matter,
+    match source {
+        ActionSource::Osc => light_playback::PlaybackActivationSurface::Osc,
+        ActionSource::Matter => light_playback::PlaybackActivationSurface::Matter,
+        _ => light_playback::PlaybackActivationSurface::Virtual,
     }
 }
 
@@ -201,7 +191,6 @@ pub(super) fn parse_pending(
         Queued::DynamicDoubleSpeed => PendingPlaybackAction::DynamicDoubleSpeed,
         Queued::DynamicHalfSpeed => PendingPlaybackAction::DynamicHalfSpeed,
         Queued::DynamicLearnSpeed => PendingPlaybackAction::DynamicLearnSpeed,
-        Queued::Fader { value_permyriad } => PendingPlaybackAction::Fader { value_permyriad },
     }
 }
 

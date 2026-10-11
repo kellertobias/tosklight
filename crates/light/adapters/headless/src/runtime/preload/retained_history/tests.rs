@@ -9,9 +9,7 @@ use light_dynamics::{
     DynamicTargetScope, Rational, ScalarSourceResolver, SpeedGroup, TimedDynamicControl,
 };
 use light_engine::Engine;
-use light_programmer::{
-    PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface, ProgrammerRegistry,
-};
+use light_programmer::{PreloadPlaybackQueueAction, ProgrammerRegistry};
 use std::time::{Duration, Instant};
 
 fn capacity(value: usize) -> NonZeroUsize {
@@ -769,10 +767,12 @@ fn queue_snapshot_epoch_and_size_validation_precede_processing() {
     rig.programmers.arm_preload(rig.session, true);
     assert!(rig.programmers.queue_preload_playback_action(
         rig.session,
-        1,
-        None,
+        light_playback::PlaybackAddress::new(1, 1).unwrap(),
         PreloadPlaybackQueueAction::Go,
-        PreloadPlaybackQueueSurface::Physical
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        }
     ));
     let queued = rig.capture(false);
     assert!(matches!(

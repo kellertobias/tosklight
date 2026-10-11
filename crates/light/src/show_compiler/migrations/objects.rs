@@ -142,7 +142,6 @@ fn migrate_with_group_masters(
         "cue_list" => migrate_cue_list(object)?,
         "dynamic" => object.body().clone(),
         "group" => migrate_group(object)?,
-        "playback" => migrate_playback(object, group_master_levels)?,
         "playback_page" => migrate_playback_page(object, group_master_levels)?,
         "preset" => migrate_preset(object)?,
         "route" => migrate_route(object)?,
@@ -477,58 +476,6 @@ fn migrate_preset(object: PortableShowCandidateObject<'_>) -> Result<Value, Acti
     Ok(migrated)
 }
 
-fn migrate_playback(
-    object: PortableShowCandidateObject<'_>,
-    group_master_levels: &std::collections::HashMap<String, f32>,
-) -> Result<Value, ActionError> {
-    let mut playback = serde_json::from_value::<PlaybackDefinition>(object.body().clone())
-        .map_err(|error| invalid_object(object, error))?;
-    let before = serde_json::to_value(&playback).map_err(|error| invalid_object(object, error))?;
-    let playback_number = playback.number;
-    migrate_targetless_dynamic_assignment(
-        &mut playback,
-        DynamicAssignmentIdentity::Physical(playback_number),
-    )
-    .map_err(|error| invalid_object(object, error))?;
-    reconcile_playback_group_master(&mut playback, group_master_levels);
-    let canonical =
-        serde_json::to_value(playback).map_err(|error| invalid_object(object, error))?;
-    let mut migrated = object.body().clone();
-    lossless_json::apply_delta(&mut migrated, &before, &canonical);
-    let body = required_object_mut(&mut migrated, object)?;
-    let canonical = canonical_object(&canonical, object)?;
-    for field in [
-        "number",
-        "name",
-        "target",
-        "buttons",
-        "button_count",
-        "fader",
-        "has_fader",
-        "footprint",
-        "go_activates",
-        "auto_off",
-        "xfade_millis",
-        "color",
-        "flash_release",
-        "protect_from_swap",
-        "presentation_icon",
-        "presentation_image",
-    ] {
-        if !body.contains_key(field)
-            && let Some(value) = canonical.get(field)
-        {
-            body.insert(field.into(), value.clone());
-        }
-    }
-    if body.get("fader").and_then(Value::as_str) == Some("speed")
-        && let Some(value) = canonical.get("fader")
-    {
-        body.insert("fader".into(), value.clone());
-    }
-    Ok(migrated)
-}
-
 fn migrate_playback_page(
     object: PortableShowCandidateObject<'_>,
     group_master_levels: &std::collections::HashMap<String, f32>,
@@ -537,13 +484,11 @@ fn migrate_playback_page(
         .map_err(|error| invalid_object(object, error))?;
     let before = serde_json::to_value(&page).map_err(|error| invalid_object(object, error))?;
     let page_number = page.number;
-    for (number, playback) in &mut page.virtual_playbacks {
+    for (number, playback) in &mut page.assignments {
         migrate_targetless_dynamic_assignment(
             playback,
-            DynamicAssignmentIdentity::Virtual {
-                page: page_number,
-                number: *number,
-            },
+            light_playback::PlaybackAddress::new(page_number, *number)
+                .map_err(|error| invalid_object(object, error))?,
         )
         .map_err(|error| invalid_object(object, error))?;
         reconcile_playback_group_master(playback, group_master_levels);
@@ -580,31 +525,16 @@ fn reconcile_group_master_levels(
     candidate: PortableShowCandidate<'_>,
 ) -> Result<std::collections::HashMap<String, f32>, ActionError> {
     let mut assignments = Vec::new();
-    for object in candidate.objects_of_kind("playback") {
-        let playback = serde_json::from_value::<PlaybackDefinition>(object.body().clone())
-            .map_err(|error| invalid_object(object, error))?;
-        if let PlaybackTarget::Group {
-            group_id,
-            initial_master,
-        } = playback.target
-        {
-            assignments.push(((0_u8, 0_u8, playback.number), group_id, initial_master));
-        }
-    }
     for object in candidate.objects_of_kind("playback_page") {
         let page = serde_json::from_value::<light_playback::PlaybackPage>(object.body().clone())
             .map_err(|error| invalid_object(object, error))?;
-        for playback in page.virtual_playbacks.into_values() {
+        for (position, playback) in page.assignments {
             if let PlaybackTarget::Group {
                 group_id,
                 initial_master,
             } = playback.target
             {
-                assignments.push((
-                    (1_u8, page.number, playback.number),
-                    group_id,
-                    initial_master,
-                ));
+                assignments.push(((page.number, position), group_id, initial_master));
             }
         }
     }
@@ -667,15 +597,9 @@ fn reconcile_group_master_levels(
     Ok(levels)
 }
 
-#[derive(Clone, Copy)]
-enum DynamicAssignmentIdentity {
-    Physical(u16),
-    Virtual { page: u8, number: u16 },
-}
-
 fn migrate_targetless_dynamic_assignment(
     playback: &mut PlaybackDefinition,
-    identity: DynamicAssignmentIdentity,
+    identity: light_playback::PlaybackAddress,
 ) -> Result<bool, String> {
     let light_playback::PlaybackTarget::Dynamic { assignment } = &mut playback.target else {
         return Ok(false);
@@ -705,12 +629,7 @@ fn migrate_targetless_dynamic_assignment(
     };
     let original = &assignment.dynamic.embedded_fallback.definition;
     let mut migrated = original.as_ref().clone();
-    let name = match identity {
-        DynamicAssignmentIdentity::Physical(number) => format!("physical:{number}"),
-        DynamicAssignmentIdentity::Virtual { page, number } => {
-            format!("virtual:{page}:{number}")
-        }
-    };
+    let name = format!("playback:{}:{}", identity.page(), identity.position());
     migrated.reidentify(uuid::Uuid::new_v5(&original.id, name.as_bytes()));
     migrated.target_binding = target_binding;
     assignment.dynamic.dynamic_id = None;

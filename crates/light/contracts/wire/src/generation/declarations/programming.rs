@@ -242,7 +242,6 @@ fn programming_preload(config: &Config) -> Vec<String> {
         ProgrammingPreloadValuesErrorKind::decl(config),
         ProgrammingPreloadValuesErrorResponse::decl(config),
         ProgrammingPreloadPlaybackAction::decl(config),
-        ProgrammingPreloadPlaybackSurface::decl(config),
         ProgrammingPreloadPlaybackQueueItem::decl(config),
         ProgrammingPreloadPlaybackQueueProjection::decl(config),
         ProgrammingPreloadPlaybackQueueChange::decl(config),

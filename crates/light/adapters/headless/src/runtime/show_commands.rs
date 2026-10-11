@@ -103,87 +103,10 @@ fn update_recorded_cue_list(
     .map_err(|error| error.message)
 }
 
-fn new_cue_list(
-    playback: u16,
-    cue: light_playback::Cue,
-) -> (light_playback::CueList, light_playback::PlaybackDefinition) {
-    let cue_list_id = light_core::CueListId::new();
-    let list = light_playback::CueList {
-        pool_number: None,
-        legacy_pool_aliases: Vec::new(),
-        id: cue_list_id,
-        name: format!("Cuelist {playback}"),
-        priority: 0,
-        mode: light_playback::CueListMode::Sequence,
-        looped: false,
-        chaser_step_millis: 1_000,
-        speed_group: None,
-        intensity_priority_mode: light_playback::IntensityPriorityMode::Htp,
-        wrap_mode: Some(light_playback::WrapMode::Off),
-        restart_mode: light_playback::RestartMode::FirstCue,
-        force_cue_timing: false,
-        disable_cue_timing: false,
-        auto_off_at_zero: false,
-        auto_off_flash_release: false,
-        chaser_xfade_millis: 0,
-        chaser_xfade_percent: Some(0),
-        speed_multiplier: 1.0,
-        cues: vec![cue],
-    };
-    let definition = light_playback::PlaybackDefinition {
-        number: playback,
-        name: list.name.clone(),
-        target: light_playback::PlaybackTarget::CueList { cue_list_id },
-        buttons: [
-            light_playback::PlaybackButtonAction::GoMinus,
-            light_playback::PlaybackButtonAction::Go,
-            light_playback::PlaybackButtonAction::Flash,
-        ],
-        button_count: 3,
-        fader: light_playback::PlaybackFaderMode::Master,
-        has_fader: true,
-        footprint: light_playback::PlaybackFootprint::Normal,
-        go_activates: true,
-        auto_off: true,
-        xfade_millis: 0,
-        color: "#20c997".into(),
-        flash_release: light_playback::FlashReleaseMode::default(),
-        protect_from_swap: false,
-        presentation_icon: None,
-        presentation_image: None,
-    };
-    (list, definition)
-}
-
-fn store_new_cue_list(
-    playback: u16,
-    cue: light_playback::Cue,
-) -> Result<Vec<light_application::ActiveShowObjectMutation>, String> {
-    let (list, definition) = new_cue_list(playback, cue);
-    let list_id = list.id.0.to_string();
-    let playback_id = playback.to_string();
-    Ok(vec![
-        put_active_show_object(
-            light_application::ActiveShowObjectKind::CueList,
-            list_id,
-            0,
-            serde_json::to_value(list).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.message)?,
-        put_active_show_object(
-            light_application::ActiveShowObjectKind::Playback,
-            playback_id,
-            0,
-            serde_json::to_value(definition).map_err(|error| error.to_string())?,
-        )
-        .map_err(|error| error.message)?,
-    ])
-}
-
 pub(super) fn store_cue_at(
     state: &AppState,
     session: &Session,
-    playback: u16,
+    playback: light_playback::PlaybackAddress,
     requested: Option<light_playback::CueNumber>,
     timing: CommandTiming,
     operation: RecordOperation,
@@ -202,30 +125,15 @@ pub(super) fn store_cue_at(
     if operation != RecordOperation::Overwrite && requested.is_none() {
         return Err("RECORD + and RECORD - require an explicit CUE target".into());
     }
-    let mutations = if let Some(definition) = snapshot
-        .playbacks
-        .iter()
-        .find(|item| item.number == playback)
-    {
-        let (_, object, list) = cue_list_for_playback(&store, &snapshot, definition.number)?;
-        vec![update_recorded_cue_list(
-            &object,
-            list,
-            &programmer,
-            requested,
-            timing,
-            operation,
-        )?]
-    } else {
-        if operation == RecordOperation::Subtract {
-            return Err(format!("Cuelist {playback} does not exist"));
-        }
-        if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback) {
-            return Err("Cuelist number must be within 1-1000".into());
-        }
-        let number = requested.unwrap_or_else(|| light_playback::CueNumber::from(1_u8));
-        store_new_cue_list(playback, programmer_cue(&programmer, number, timing))?
-    };
+    let (_, object, list) = cue_list_for_playback(&store, &snapshot, playback)?;
+    let mutations = vec![update_recorded_cue_list(
+        &object,
+        list,
+        &programmer,
+        requested,
+        timing,
+        operation,
+    )?];
     let action = active_show_object_action(context.clone(), entry.id, mutations);
     let result = run_active_show_object_action_in_programming_interaction(state, action)
         .map_err(|error| error.message)?;

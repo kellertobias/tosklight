@@ -1,9 +1,6 @@
 import type { ApiDriver } from "../bench/core/api";
 import { putPlannedDemoObject } from "./plannedDemoObjects";
-import {
-	PAN_TRAVEL_DEGREES,
-	TILT_TRAVEL_DEGREES,
-} from "./plannedDemoSemantic";
+import { PAN_TRAVEL_DEGREES, TILT_TRAVEL_DEGREES } from "./plannedDemoSemantic";
 
 /**
  * Programming contract 1 (TL-552/TL-648): Position, Color and Zoom lanes are typed family lanes,
@@ -142,7 +139,7 @@ export function plannedDemoDynamicDefinitions() {
 export async function installPlannedDemoDynamics(
 	api: ApiDriver,
 	showId: string,
-	options: { assignVirtualPlaybacks?: boolean } = {},
+	options: { assignPlaybacks?: boolean } = {},
 ) {
 	const requestedDefinitions = plannedDemoDynamicDefinitions();
 	const existing = await api.showObjects<any>(showId, "dynamic");
@@ -178,7 +175,7 @@ export async function installPlannedDemoDynamics(
 		);
 		definitions.push(created.object.body);
 	}
-	if (options.assignVirtualPlaybacks !== false)
+	if (options.assignPlaybacks !== false)
 		await installPlannedDemoDynamicPlaybacks(api, showId, definitions);
 	return definitions;
 }
@@ -190,10 +187,10 @@ export async function installPlannedDemoDynamicPlaybacks(
 ) {
 	const [page] = await api.showObjects<any>(showId, "playback_page");
 	if (!page) throw new Error("Plan 76 Busking Playback page is missing");
-	const virtual_playbacks = Object.fromEntries(
+	const assignments = Object.fromEntries(
 		definitions.map((dynamicDefinition, index) => {
-			const number = 1001 + index;
-			return [String(number), dynamicPlayback(number, dynamicDefinition)];
+			const position = 401 + index;
+			return [String(position), dynamicPlayback(dynamicDefinition)];
 		}),
 	);
 	await api.seedShowObject(
@@ -202,11 +199,11 @@ export async function installPlannedDemoDynamicPlaybacks(
 		page.id,
 		{
 			...page.body,
-			virtual_playbacks,
+			assignments: { ...page.body.assignments, ...assignments },
 		},
 		page.revision,
 	);
-	return virtual_playbacks;
+	return assignments;
 }
 
 function definition(
@@ -277,7 +274,11 @@ const scalarValue = (value: number) => ({
 	value: { kind: "scalar", value },
 });
 
-function familyLane(address: object, configuration: object, randomGroupId?: string) {
+function familyLane(
+	address: object,
+	configuration: object,
+	randomGroupId?: string,
+) {
 	return {
 		speed_multiplier: { numerator: 1, denominator: 1 },
 		width: 1,
@@ -435,9 +436,8 @@ function value(scalar: number) {
 	return { type: "value", value: scalar };
 }
 
-function dynamicPlayback(number: number, dynamicDefinition: any) {
+function dynamicPlayback(dynamicDefinition: any) {
 	return {
-		number,
 		name: dynamicDefinition.name,
 		target: {
 			type: "dynamic",

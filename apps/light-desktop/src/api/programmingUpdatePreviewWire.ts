@@ -129,7 +129,7 @@ function targetEntryKey(entry: ProgrammingUpdateTargetEntry) {
 	return [
 		"cue",
 		entry.object.object_id,
-		target.playback_number ?? "",
+		target.playback_address ? `${target.playback_address.page}.${target.playback_address.position}` : "",
 		target.cue_id ?? "",
 		target.cue_number ?? "",
 	].join(":");

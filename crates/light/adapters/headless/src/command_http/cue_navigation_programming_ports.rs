@@ -27,11 +27,6 @@ impl ServerProgrammingPorts<'_> {
         let result =
             cue_navigation_action::execute(self.state(), self.session(), context, parsed.clone())
                 .and_then(|transition| {
-                    // Replaying the same request ID repeats neither the runtime transition nor the
-                    // command-line reset, the history entry, or the compatibility notification.
-                    if transition.replayed {
-                        return Ok((1, None, true));
-                    }
                     if matches!(policy, ExecutionPolicy::Compatibility) && transition.applied {
                         cue_navigation_action::emit_compatibility_change(
                             self.state(),

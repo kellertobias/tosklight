@@ -1,6 +1,6 @@
 use super::{
     ApiError, AppState, ControlDesk, PlaybackDispatchContext, PoolPlaybackInput,
-    ProgrammingLockPolicy, Session, cuelist_for_page_playback, dispatch_playback_action, emit,
+    ProgrammingLockPolicy, Session, dispatch_playback_action, emit,
     intercept_update_playback_target, persist_active_playbacks, persist_output_runtime,
     persist_programmer, predicted_preload_temp_state, preload_capture_action_with_temp_state,
     run_programming_interaction, set_group_playback_master,
@@ -9,11 +9,9 @@ use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource,
     PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackDurability,
     PlaybackExecution, PlaybackGroupId, PlaybackPorts, PlaybackResult, PlaybackRuntimeIdentity,
-    PlaybackSurface, ResolvedPlaybackAddress,
+    ResolvedPlaybackAddress,
 };
-use light_engine::{
-    CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome, VirtualPlaybackAction,
-};
+use light_engine::{CueListPlaybackAction, EnginePlaybackCommand, EnginePlaybackOutcome};
 
 #[path = "playback_service/capture.rs"]
 mod capture;
@@ -22,7 +20,9 @@ mod configured_controls;
 #[path = "playback_service/conversion.rs"]
 mod conversion;
 #[path = "playback_service/desk.rs"]
-mod desk;
+pub(super) mod desk;
+#[path = "playback_service/execution.rs"]
+mod execution;
 #[path = "playback_service/group.rs"]
 mod group;
 #[path = "playback_service/ports.rs"]
@@ -43,12 +43,12 @@ pub(in crate::runtime) use projection::prepared_runtime_projections;
 
 use configured_controls::configured_control_definition;
 use conversion::{
-    action_touched, activation_surface, legacy_action, parse_action, parse_pending, source_name,
-    surface_name,
+    action_touched, activation_surface, dispatch_action_input, parse_action, parse_pending,
+    source_name,
 };
 use support::{
-    action_error, api_action_error, capture_enabled, captures_preload, invalid, operator_context,
-    playback_definition, resolve_group_playback, virtual_playback_definition,
+    action_error, api_action_error, capture_enabled, invalid, operator_context,
+    playback_definition, resolve_group_playback,
 };
 
 pub(super) fn osc_action(
@@ -58,11 +58,12 @@ pub(super) fn osc_action(
     address: PlaybackAddress,
     action_name: &str,
     input: &PoolPlaybackInput,
+    control_source: light_playback::PlaybackControlSource,
 ) -> Result<PlaybackResult, ApiError> {
     let command = PlaybackCommand {
         address,
         action: parse_action(action_name, input)?,
-        surface: PlaybackSurface::Osc,
+        control_source,
     };
     let desk_id = desk
         .map(|desk| desk.id)

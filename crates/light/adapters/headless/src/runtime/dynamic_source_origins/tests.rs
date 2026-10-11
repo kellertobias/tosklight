@@ -4,7 +4,7 @@ use super::*;
 mod field_scopes;
 
 #[test]
-fn engine_source_descriptors_round_trip_every_programmer_scope_and_playback_identity() {
+fn engine_source_descriptors_round_trip_every_programmer_scope_and_playback_address() {
     use light_engine::ContributionSourceId as Source;
     let programmer = ProgrammerId::new();
     let mut sources = vec![
@@ -16,13 +16,13 @@ fn engine_source_descriptors_round_trip_every_programmer_scope_and_playback_iden
     ];
     for identity in [
         None,
-        Some(PlaybackIdentity::physical(4).unwrap()),
-        Some(PlaybackIdentity::virtual_playback(2, 1301).unwrap()),
+        Some(PlaybackAddress::new(1, 4).unwrap()),
+        Some(PlaybackAddress::new(2, 1).unwrap()),
     ] {
         for temporary in [false, true] {
             sources.push(Source::playback(SequenceMasterSource {
-                playback_number: identity.map(|id| id.number()),
-                playback_identity: identity,
+                control_source_id: None,
+                playback_address: identity,
                 cue_list_id: CueListId::new(),
                 temporary,
             }));
@@ -127,8 +127,8 @@ fn changed_order(mut origin: DynamicSourceOrigin, order: u64) -> DynamicSourceOr
 
 fn source(temporary: bool) -> DynamicSequenceSource {
     SequenceMasterSource {
-        playback_number: Some(1_301),
-        playback_identity: Some(PlaybackIdentity::virtual_playback(2, 1_301).unwrap()),
+        control_source_id: None,
+        playback_address: Some(PlaybackAddress::new(2, 1).unwrap()),
         cue_list_id: CueListId::new(),
         temporary,
     }
@@ -338,8 +338,8 @@ fn exact_cue_source_time_kind_and_standalone_playback_survive_roundtrip() {
         panic!()
     };
     assert_eq!(
-        sequence.sequence_master_source().playback_identity,
-        Some(PlaybackIdentity::virtual_playback(2, 1_301).unwrap())
+        sequence.sequence_master_source().playback_address,
+        Some(PlaybackAddress::new(2, 1).unwrap())
     );
     assert_eq!(
         temporary_kind.unwrap().playback_kind(),
@@ -357,7 +357,7 @@ fn exact_cue_source_time_kind_and_standalone_playback_survive_roundtrip() {
     assert_ne!(first, second);
 
     let standalone = DynamicSourceOrigin::Playback {
-        identity: PlaybackIdentity::physical(42).unwrap(),
+        identity: PlaybackAddress::new(1, 42).unwrap(),
         activated_at: DateTime::from_timestamp(300, 654_321_123).unwrap(),
     };
     let playback_key = binding(&standalone);
@@ -495,15 +495,15 @@ fn restore_revalidates_ids_and_playback_domains_after_deserialization() {
     let DynamicSourceOrigin::Cue { source, .. } = &mut invalid_page.records[0].origin else {
         panic!()
     };
-    let mut identity = serde_json::to_value(source.playback_identity.unwrap()).unwrap();
+    let mut identity = serde_json::to_value(source.playback_address.unwrap()).unwrap();
     identity["page"] = serde_json::json!(3);
-    source.playback_identity = Some(serde_json::from_value(identity).unwrap());
+    source.playback_address = Some(serde_json::from_value(identity).unwrap());
     assert!(DynamicSourceOrigins::restore(invalid_page, [id]).is_err());
     let mut mismatch = catalogue.snapshot();
     let DynamicSourceOrigin::Cue { source, .. } = &mut mismatch.records[0].origin else {
         panic!()
     };
-    source.playback_number = Some(1_302);
+    source.playback_address = Some(PlaybackAddress::new(2, 2).unwrap());
     assert!(DynamicSourceOrigins::restore(mismatch, [id]).is_err());
 }
 
@@ -995,4 +995,22 @@ fn key_and_authored_retains_equal_the_record_retain() {
         },
     );
     assert_eq!(removed, 1);
+}
+
+#[test]
+fn cold_evidence_keeps_temporary_source_uuid_as_historical_provenance() {
+    let source = SequenceMasterSource {
+        playback_address: Some(PlaybackAddress::new(2, 1).unwrap()),
+        control_source_id: Some(Uuid::from_u128(991)),
+        cue_list_id: CueListId(Uuid::from_u128(992)),
+        temporary: true,
+    };
+    let evidence = DynamicSequenceSource::from(source);
+    let restored: DynamicSequenceSource =
+        serde_json::from_value(serde_json::to_value(evidence).unwrap()).unwrap();
+    assert_eq!(restored.sequence_master_source(), source);
+    assert_eq!(restored.control_source_id, Some(Uuid::from_u128(991)));
+    assert!(restored.temporary);
+    // This evidence descriptor is not an ActivePlayback restore payload. Actual cold runtime
+    // restoration/reset of holds is exercised by Playback's fresh-engine integration regression.
 }

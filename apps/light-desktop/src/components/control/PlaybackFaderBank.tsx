@@ -2,7 +2,7 @@ import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { memo, useEffect, useId, useState } from "react";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
-import { PhysicalPlaybackConfigurationModal } from "./PhysicalPlaybackConfigurationModal";
+import { AssignedPlaybackConfigurationModal } from "./AssignedPlaybackConfigurationModal";
 import { openPlaybackConfiguration } from "./playbackFaderBank/actions";
 import {
 	type PlaybackFaderBankProps,
@@ -25,27 +25,21 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 				)
 					return true;
 				if (
-					intent.type !== "open_playback_settings" ||
-					intent.playback.addressing === "virtual"
+					intent.type !== "open_playback_settings"
 				)
 					return false;
 				const playbackIdentity = intent.playback;
 				const slotData = controller.slots.find(
 					(candidate) => candidate.slot === playbackIdentity.slot,
 				);
-				const playbackObject = controller.topology.playbacks.find(
-					(candidate) => candidate.body.number === slotData?.playback?.number,
-				);
+
 				return (
 					controller.activePageNumber === playbackIdentity.pageNumber &&
 					controller.playbackAddressing === playbackIdentity.addressing &&
 					(controller.pageObject?.id ?? null) ===
 						playbackIdentity.pageObjectId &&
 					(controller.pageObject?.revision ?? 0) ===
-						playbackIdentity.pageObjectRevision &&
-					(playbackObject?.id ?? null) === playbackIdentity.playbackObjectId &&
-					(playbackObject?.revision ?? 0) ===
-						playbackIdentity.playbackObjectRevision
+						playbackIdentity.pageObjectRevision
 				);
 			},
 			handle: (intent) => {
@@ -57,9 +51,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 				const slot =
 					intent.type === "configure_playback"
 						? intent.slot
-						: intent.playback.addressing === "virtual"
-							? null
-							: intent.playback.slot;
+						: intent.playback.slot;
 				if (slot == null) return;
 				const slotData = controller.slots.find(
 					(candidate) => candidate.slot === slot,
@@ -75,7 +67,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					page?: number | null;
 					slot?: number | null;
 				}>).detail;
-				if (detail.addressing === "virtual" || detail.slot == null) return;
+				if (detail.slot == null) return;
 				if (
 					detail.addressing === "explicit_page" &&
 					detail.page !== controller.activePageNumber
@@ -115,7 +107,10 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			<>
 				{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 				<div
-					className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"}`}
+					onPointerDownCapture={() => { void controller.selectSurface(); }}
+					data-playback-surface={controller.surfaceId}
+					data-command-surface={controller.playbackDesk?.selected_surface_id === controller.surfaceId}
+					className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"} ${controller.playbackDesk?.selected_surface_id === controller.surfaceId ? "command-surface" : ""}`}
 					onContextMenu={(event) => {
 						event.preventDefault();
 						const card = (event.target as Element).closest<HTMLElement>(
@@ -139,12 +134,12 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 						<PlaybackSlot
 							controller={controller}
 							slotData={slotData}
-							key={`${slotData.slot}-${slotData.playback?.number ?? "empty"}`}
+							key={`${slotData.slot}-${slotData.playback?.address.position ?? "empty"}`}
 						/>
 					))}
 				</div>
 				{controller.configuration && (
-					<PhysicalPlaybackConfigurationModal
+					<AssignedPlaybackConfigurationModal
 						{...controller.configuration}
 						onClose={() => controller.setConfiguration(null)}
 					/>
@@ -161,6 +156,7 @@ function equalPlaybackFaderBankProps(
 	right: PlaybackFaderBankProps,
 ) {
 	return (
+		(left.surfaceId ?? "main") === (right.surfaceId ?? "main") &&
 		(left.pageNumber ?? null) === (right.pageNumber ?? null) &&
 		(left.firstSlot ?? 1) === (right.firstSlot ?? 1) &&
 		(left.count ?? null) === (right.count ?? null) &&
@@ -176,7 +172,7 @@ function equalPlaybackLayout(
 	right: PlaybackFaderBankProps["playbackLayout"],
 ) {
 	if (left === right) return true;
-	if (!left || !right || left.playbacks_per_row !== right.playbacks_per_row)
+	if (!left || !right)
 		return false;
 	return (
 		left.rows.length === right.rows.length &&
@@ -184,8 +180,8 @@ function equalPlaybackLayout(
 			const candidate = right.rows[index];
 			if (!candidate) return false;
 			return (
-				row.first_playback_slot === candidate.first_playback_slot &&
-				row.has_fader === candidate.has_fader &&
+				row.first_position === candidate.first_position && row.count === candidate.count &&
+				row.presentation === candidate.presentation &&
 				row.button_count === candidate.button_count
 			);
 		})

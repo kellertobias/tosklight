@@ -13,7 +13,6 @@ import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import {
 	useCueLists,
 	useDynamics,
-	usePlaybackDefinitions,
 	usePortableGroups,
 } from "../../features/showObjects/ShowObjectsState";
 import {
@@ -285,20 +284,7 @@ function usePlaybackConfigurationObjects() {
 		[storedDynamics],
 	);
 	const cueListObjects = useCueLists();
-	const playbackDefinitions = usePlaybackDefinitions();
-	const cueListNumbers = useMemo(() => {
-		const numbers = new Map<string, number>();
-		for (const { body } of [...playbackDefinitions].sort((left, right) => left.body.number - right.body.number)) {
-			if (body.target.type === "cue_list" && !numbers.has(body.target.cue_list_id))
-				numbers.set(body.target.cue_list_id, body.number);
-		}
-		return numbers;
-	}, [playbackDefinitions]);
-	const cueLists = useMemo(() => cueListObjects.map(({ body }, index) => ({
-		id: body.id,
-		name: body.name || body.id,
-		number: cueListNumbers.get(body.id) ?? index + 1,
-	})), [cueListNumbers, cueListObjects]);
+	const cueLists = useMemo(() => cueListObjects.map(({body}) => ({id: body.id, name: body.name || body.id, number: body.pool_number ?? 0})), [cueListObjects]);
 	return { groups, dynamics, cueListObjects, cueLists };
 }
 

@@ -1,6 +1,6 @@
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
 import type { PlaybackTopologyCapability } from "../../../features/playbackTopology/contracts";
-import type { PoolPlaybackAction } from "../../../features/server/playbackActionMapping";
+import type { PlaybackControlAction } from "../../../features/server/playbackActionMapping";
 import { canAdvancePlaybackPage } from "../PlaybackPageDialogs";
 import type {
 	KeyboardHeldAction,
@@ -27,19 +27,20 @@ export function pressPlaybackSlot(
 	if (!definition || !action || action === "none") return;
 	if (!isHeldAction(action)) {
 		if (event.repeat) return;
-		void context.runtimeActions?.poolPlaybackAction(
-			definition.number,
-			action.replaceAll("_", "-") as PoolPlaybackAction,
-			{ surface: "physical" },
+		void context.runtimeActions?.playbackAction(
+			definition.address,
+			action.replaceAll("_", "-") as PlaybackControlAction,
+			{control_source: {surface_id: context.authority.surfaceId, control_id: slot * 10 + (control?.button ?? 1)}},
 		);
 		return;
 	}
 	if (event.repeat) return;
 	context.heldActions.press(
 		event.code,
-		definition.number,
+		definition.address,
 		action,
 		context.runtimeActions,
+		context.authority.surfaceId,
 	);
 }
 

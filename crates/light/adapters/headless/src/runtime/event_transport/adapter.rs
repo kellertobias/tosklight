@@ -192,7 +192,7 @@ fn wire_desk_payload(event: &application::DeskEvent) -> wire::EventPayload {
     match event {
         application::DeskEvent::PlaybackViewChanged(projection) => {
             wire::EventPayload::PlaybackViewChanged {
-                projection: super::super::playback_v2::desk_projection(*projection),
+                projection: super::super::playback_v2::desk_projection(projection.clone()),
             }
         }
         application::DeskEvent::ConfigurationChanged(change) => {
@@ -322,9 +322,17 @@ fn wire_payload(
             change: Box::new(selective_import::wire_change(change)),
         },
         application::ApplicationEvent::Show(
-            application::ShowEvent::VirtualPlaybackExclusionZonesChanged(change),
-        ) => wire::EventPayload::VirtualPlaybackExclusionZonesChanged {
-            change: light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionZonesChange {
+            application::ShowEvent::PlaybackPreloadScopeChanged(change),
+        ) => wire::EventPayload::PlaybackPreloadScopeChanged {
+            change: light_wire::v2::playback::PlaybackPreloadScopeChange {
+                show_id: change.show_id.0,
+                revision: change.revision,
+            },
+        },
+        application::ApplicationEvent::Show(
+            application::ShowEvent::PlaybackSoloRegionsChanged(change),
+        ) => wire::EventPayload::PlaybackSoloRegionsChanged {
+            change: light_wire::v2::playback_solo::PlaybackSoloRegionsChange {
                 show_id: change.show_id.0,
                 revision: change.revision,
             },
@@ -471,11 +479,8 @@ fn wire_screen_notification(change: application::ScreenNotification) -> wire::Sc
             application::ScreenNotificationKind::Configuration => {
                 wire::ScreenNotificationKind::Configuration
             }
-            application::ScreenNotificationKind::ScreenPage => {
-                wire::ScreenNotificationKind::ScreenPage
-            }
-            application::ScreenNotificationKind::PlaybackPage => {
-                wire::ScreenNotificationKind::PlaybackPage
+            application::ScreenNotificationKind::PlaybackSurfaces => {
+                wire::ScreenNotificationKind::PlaybackSurfaces
             }
         },
     }
@@ -630,10 +635,10 @@ fn wire_operator_notification(
             revision: *revision,
             notification: wire::PlaybackConfigurationNotification {
                 desk_id: notification.desk_id.clone(),
-                addressing: notification.addressing.clone(),
-                page: notification.page,
-                slot: notification.slot,
-                playback: notification.playback,
+                address: light_wire::v2::playback::PlaybackAddressValue {
+                    page: notification.address.page(),
+                    position: notification.address.position(),
+                },
             },
         },
         App::UpdateWorkflow {
@@ -677,7 +682,12 @@ fn wire_update_workflow(
                         }
                     },
                     object_id: target.object_id.clone(),
-                    playback_number: target.playback_number,
+                    playback_address: target.playback_address.map(|address| {
+                        light_wire::v2::playback::PlaybackAddressValue {
+                            page: address.page(),
+                            position: address.position(),
+                        }
+                    }),
                     cue_id: target.cue_id.clone(),
                     cue_number: target.cue_number.clone(),
                     validate_active_context: target.validate_active_context,
@@ -748,7 +758,6 @@ fn wire_show_object_change(change: &application::ActiveShowObjectChange) -> wire
         application::ActiveShowObjectKind::Group => variant!(Group),
         application::ActiveShowObjectKind::Macro => variant!(Macro),
         application::ActiveShowObjectKind::PatchLayer => variant!(PatchLayer),
-        application::ActiveShowObjectKind::Playback => variant!(Playback),
         application::ActiveShowObjectKind::PlaybackPage => variant!(PlaybackPage),
         application::ActiveShowObjectKind::Preset => variant!(Preset),
         application::ActiveShowObjectKind::Schedule => variant!(Schedule),

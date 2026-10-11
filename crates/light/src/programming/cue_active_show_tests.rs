@@ -2,10 +2,9 @@ use super::*;
 use crate::{
     ActionSource, ActiveShowPorts, ActiveShowUnitOfWork, ApplicationEvent, BackupIdentity,
     EventFilter, EventReplay, ProgrammingCueActivationPolicy, ProgrammingCueCapturePolicy,
-    ProgrammingCuePageSlot, ProgrammingCueProjections, ProgrammingCueRecordOperation,
-    ProgrammingCueRecordRequest, ProgrammingCueRecordTarget, ProgrammingCueRecordTiming,
-    ProgrammingCueRecordingEnvironment, ProgrammingCueResolvedTarget,
-    ProgrammingCueShowRevisionExpectation, ShowEvent,
+    ProgrammingCueProjections, ProgrammingCueRecordOperation, ProgrammingCueRecordRequest,
+    ProgrammingCueRecordTarget, ProgrammingCueRecordTiming, ProgrammingCueRecordingEnvironment,
+    ProgrammingCueResolvedTarget, ProgrammingCueShowRevisionExpectation, ShowEvent,
 };
 use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, ShowId};
 use light_engine::EngineSnapshot;
@@ -22,7 +21,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 #[test]
-fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
+fn empty_position_creates_one_lossless_two_object_transaction_and_event() {
     let rig = TestRig::new();
     rig.seed(
         "playback_page",
@@ -30,15 +29,18 @@ fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
         json!({
             "number":1,
             "name":"Main",
-            "slots":{},
-            "virtual_playbacks":{},
+            "assignments":{},
             "future":{"columns":10}
         }),
     );
     let before = rig.document().revision();
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::PageSlot { page: 1, slot: 3 },
-        ProgrammingCueResolvedTarget::EmptyPageSlot(ProgrammingCuePageSlot { page: 1, slot: 3 }),
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 3).unwrap(),
+        },
+        ProgrammingCueResolvedTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 3).unwrap(),
+        },
         ProgrammingCueRecordOperation::Overwrite,
         None,
         capture(0.5),
@@ -51,17 +53,11 @@ fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
 
     assert!(result.changed);
     assert_eq!(result.show_revision.value(), before.value() + 1);
-    assert_eq!(result.concrete_playback_number, Some(1));
-    assert_eq!(result.projections.cue_list.object_revision, 1);
     assert_eq!(
-        result
-            .projections
-            .playback
-            .as_ref()
-            .unwrap()
-            .object_revision,
-        1
+        result.concrete_playback_address,
+        Some(light_playback::PlaybackAddress::new(1, 3).unwrap())
     );
+    assert_eq!(result.projections.cue_list.object_revision, 1);
     assert_eq!(result.projections.page.as_ref().unwrap().object_revision, 2);
     assert_eq!(
         result.projections.page.as_ref().unwrap().raw_body["future"]["columns"],
@@ -87,7 +83,7 @@ fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
     let ApplicationEvent::Show(ShowEvent::ObjectsChanged(change)) = &events[0].payload else {
         panic!("expected one ShowObjects event")
     };
-    assert_eq!(change.changes.len(), 3);
+    assert_eq!(change.changes.len(), 2);
     assert_eq!(
         change
             .changes
@@ -96,30 +92,28 @@ fn empty_page_slot_creates_one_lossless_three_object_transaction_and_event() {
             .collect::<Vec<_>>(),
         [
             ActiveShowObjectKind::CueList,
-            ActiveShowObjectKind::Playback,
             ActiveShowObjectKind::PlaybackPage,
         ]
     );
 }
 
 #[test]
-fn empty_virtual_playback_creates_cuelist_and_embedded_assignment_atomically() {
+fn last_position_on_last_page_records_atomically() {
     let rig = TestRig::new();
     rig.seed(
         "playback_page",
         "1",
         json!({
-            "number":1,
-            "name":"Main",
-            "slots":{},
-            "virtual_playbacks":{},
+            "number":99,
+            "name":"Last",
+            "assignments":{},
             "future":{"columns":10}
         }),
     );
-    let address = light_playback::VirtualPlaybackAddress::from_number(1_001).unwrap();
+    let address = light_playback::PlaybackAddress::new(99, 1000).unwrap();
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::Virtual { address },
-        ProgrammingCueResolvedTarget::Virtual { address },
+        ProgrammingCueRecordTarget::Playback { address },
+        ProgrammingCueResolvedTarget::Playback { address },
         ProgrammingCueRecordOperation::Overwrite,
         None,
         capture(0.5),
@@ -132,13 +126,15 @@ fn empty_virtual_playback_creates_cuelist_and_embedded_assignment_atomically() {
 
     assert!(result.changed);
     assert!(result.created_topology);
-    assert_eq!(result.concrete_playback_number, Some(1_001));
-    assert!(result.projections.playback.is_none());
+    assert_eq!(
+        result.concrete_playback_address,
+        Some(light_playback::PlaybackAddress::new(99, 1000).unwrap())
+    );
     let page = result.projections.page.as_ref().unwrap();
     assert_eq!(page.raw_body["future"]["columns"], 10);
-    assert_eq!(page.raw_body["virtual_playbacks"]["1001"]["number"], 1_001);
+    assert!(page.raw_body["assignments"]["1000"].get("number").is_none());
     assert_eq!(
-        page.raw_body["virtual_playbacks"]["1001"]["target"]["type"],
+        page.raw_body["assignments"]["1000"]["target"]["type"],
         "cue_list"
     );
     assert_eq!(rig.document().objects_of_kind("playback").count(), 0);
@@ -146,15 +142,14 @@ fn empty_virtual_playback_creates_cuelist_and_embedded_assignment_atomically() {
 }
 
 #[test]
-fn recording_first_cue_at_unallocated_pool_number_needs_no_page_assignment() {
+fn recording_first_cue_at_empty_address_creates_sparse_page_assignment() {
     let rig = TestRig::new();
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::Pool {
-            playback_number: 101,
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 101).unwrap(),
         },
         ProgrammingCueResolvedTarget::Playback {
-            playback_number: 101,
-            page_slot: None,
+            address: light_playback::PlaybackAddress::new(1, 101).unwrap(),
         },
         ProgrammingCueRecordOperation::Overwrite,
         None,
@@ -167,12 +162,15 @@ fn recording_first_cue_at_unallocated_pool_number_needs_no_page_assignment() {
     assert!(result.changed);
     assert!(result.created_topology);
     assert_eq!(result.recorded_cue.number.to_string(), "1");
-    assert_eq!(result.concrete_playback_number, Some(101));
-    assert!(result.projections.page.is_none());
-    assert_eq!(rig.document().objects_of_kind("playback_page").count(), 0);
+    assert_eq!(
+        result.concrete_playback_address,
+        Some(light_playback::PlaybackAddress::new(1, 101).unwrap())
+    );
+    assert!(result.projections.page.is_some());
+    assert_eq!(rig.document().objects_of_kind("playback_page").count(), 1);
     assert_eq!(rig.document().objects_of_kind("cue_list").count(), 1);
     assert_eq!(
-        result.projections.playback.as_ref().unwrap().raw_body["target"]["type"],
+        result.projections.page.as_ref().unwrap().raw_body["assignments"]["101"]["target"]["type"],
         "cue_list"
     );
 }
@@ -181,18 +179,21 @@ fn recording_first_cue_at_unallocated_pool_number_needs_no_page_assignment() {
 fn reserved_pool_identity_rejects_recording_without_mutating_special_assignment() {
     let rig = TestRig::new();
     let mut playback =
-        light_playback::PlaybackDefinition::new_cue_list(101, "Speed A", CueListId::new());
+        light_playback::PlaybackDefinition::new_cue_list("Speed A", CueListId::new());
     playback.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
     let body = serde_json::to_value(&playback).unwrap();
-    rig.seed("playback", "101", body.clone());
+    rig.seed(
+        "playback_page",
+        "1",
+        json!({"number":1,"name":"Main","assignments":{"101":body.clone()}}),
+    );
     let revision = rig.document().revision();
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::Pool {
-            playback_number: 101,
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 101).unwrap(),
         },
         ProgrammingCueResolvedTarget::Playback {
-            playback_number: 101,
-            page_slot: None,
+            address: light_playback::PlaybackAddress::new(1, 101).unwrap(),
         },
         ProgrammingCueRecordOperation::Overwrite,
         None,
@@ -203,16 +204,12 @@ fn reserved_pool_identity_rejects_recording_without_mutating_special_assignment(
         .commit_programming_cue(&rig.context(), &commit, &rig.ports)
         .unwrap_err();
     assert_eq!(error.kind, ActionErrorKind::Invalid);
-    assert!(error.message.contains("Choose an empty Cuelist number"));
+    assert!(error.message.contains("assignment is preserved"));
     assert_eq!(rig.document().revision(), revision);
     assert_eq!(rig.document().objects_of_kind("cue_list").count(), 0);
     assert_eq!(
-        rig.document()
-            .objects_of_kind("playback")
-            .next()
-            .unwrap()
-            .body(),
-        &body
+        rig.document().object("playback_page", "1").unwrap().body()["assignments"]["101"],
+        body
     );
     assert_eq!(rig.service.events().latest_sequence(), 0);
 }
@@ -221,10 +218,11 @@ fn reserved_pool_identity_rejects_recording_without_mutating_special_assignment(
 fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
     let rig = TestRig::new();
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::Pool { playback_number: 8 },
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 8).unwrap(),
+        },
         ProgrammingCueResolvedTarget::Playback {
-            playback_number: 8,
-            page_slot: None,
+            address: light_playback::PlaybackAddress::new(1, 8).unwrap(),
         },
         ProgrammingCueRecordOperation::Merge,
         None,
@@ -241,9 +239,11 @@ fn merge_active_without_existing_topology_creates_the_first_pool_cue() {
         result.recorded_cue.number,
         crate::CueNumber::try_from_legacy_f64(1.0).unwrap()
     );
-    assert_eq!(result.concrete_playback_number, Some(8));
-    assert!(result.projections.playback.is_some());
-    assert!(result.projections.page.is_none());
+    assert_eq!(
+        result.concrete_playback_address,
+        Some(light_playback::PlaybackAddress::new(1, 8).unwrap())
+    );
+    assert!(result.projections.page.is_some());
 }
 
 #[test]
@@ -296,10 +296,11 @@ fn record_options_on_an_inactive_one_cue_list_store_as_documented() {
 fn frozen_cuelist_defaults_apply_only_when_recording_creates_topology() {
     let new_rig = TestRig::new();
     let new_commit = new_rig.commit_with_defaults(
-        ProgrammingCueRecordTarget::Pool { playback_number: 8 },
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 8).unwrap(),
+        },
         ProgrammingCueResolvedTarget::Playback {
-            playback_number: 8,
-            page_slot: None,
+            address: light_playback::PlaybackAddress::new(1, 8).unwrap(),
         },
         ProgrammingCueRecordOperation::Overwrite,
         None,
@@ -413,7 +414,6 @@ fn changed_cue_preserves_unknown_list_and_keyed_cue_fields() {
         .as_f64()
         .unwrap();
     assert!((level - 0.8).abs() < 0.000_001);
-    assert!(result.projections.playback.is_none());
     assert!(result.projections.page.is_none());
 }
 
@@ -499,10 +499,11 @@ fn empty_subtract_deletes_the_exact_cue_but_not_the_cuelist() {
 fn runtime_prepare_failure_rolls_back_before_backup_commit_install_and_event() {
     let rig = TestRig::with_prepare_failure();
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::Pool { playback_number: 7 },
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
+        },
         ProgrammingCueResolvedTarget::Playback {
-            playback_number: 7,
-            page_slot: None,
+            address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
         },
         ProgrammingCueRecordOperation::Overwrite,
         None,
@@ -801,11 +802,15 @@ mod semantic_storage;
 fn independent_empty_cuelist_101_preserves_reserved_playback_and_creates_no_assignment() {
     let rig = TestRig::new();
     let mut definition =
-        light_playback::PlaybackDefinition::new_cue_list(101, "Reserved speed", CueListId::new());
+        light_playback::PlaybackDefinition::new_cue_list("Reserved speed", CueListId::new());
     definition.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
     definition.reset_incompatible_layout();
     let speed = serde_json::to_value(definition).unwrap();
-    rig.seed("playback", "101", speed.clone());
+    rig.seed(
+        "playback_page",
+        "1",
+        json!({"number":1,"name":"Main","assignments":{"101":speed.clone()}}),
+    );
     let commit = rig.commit(
         ProgrammingCueRecordTarget::CuelistPool { number: 101 },
         ProgrammingCueResolvedTarget::CuelistPool { number: 101 },
@@ -818,9 +823,8 @@ fn independent_empty_cuelist_101_preserves_reserved_playback_and_creates_no_assi
         .commit_programming_cue(&rig.context(), &commit, &rig.ports)
         .unwrap();
     assert!(result.created_topology);
-    assert!(result.projections.playback.is_none());
     assert!(result.projections.page.is_none());
-    assert_eq!(result.concrete_playback_number, None);
+    assert_eq!(result.concrete_playback_address, None);
     assert_eq!(result.projections.cue_list.raw_body["pool_number"], 101);
     assert_eq!(
         result.projections.cue_list.raw_body["cues"]
@@ -830,6 +834,9 @@ fn independent_empty_cuelist_101_preserves_reserved_playback_and_creates_no_assi
         1
     );
     let document = rig.document();
-    assert_eq!(document.object("playback", "101").unwrap().body(), &speed);
-    assert_eq!(document.objects_of_kind("playback").count(), 1);
+    assert_eq!(
+        document.object("playback_page", "1").unwrap().body()["assignments"]["101"],
+        speed
+    );
+    assert_eq!(document.objects_of_kind("playback").count(), 0);
 }

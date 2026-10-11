@@ -101,7 +101,6 @@
               "const": "present"
             }
           },
-          "additionalProperties": false,
           "required": [
             "state",
             "kind",
@@ -130,7 +129,6 @@
               "const": "deleted"
             }
           },
-          "additionalProperties": false,
           "required": [
             "state",
             "kind",
@@ -154,7 +152,6 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -165,63 +162,25 @@
           "properties": {
             "kind": {
               "type": "string",
-              "const": "page_slot"
+              "const": "playback"
             },
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 127,
+              "maximum": 99,
               "minimum": 1
             },
-            "playback_number": {
-              "type": [
-                "integer",
-                "null"
-              ],
+            "position": {
+              "type": "integer",
               "format": "uint16",
               "maximum": 1000,
               "minimum": 1
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page",
-            "slot",
-            "playback_number"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 39100,
-              "minimum": 1001
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "page",
-            "playback_number"
+            "position"
           ]
         },
         {
@@ -234,11 +193,10 @@
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 127,
+              "maximum": 99,
               "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page"
@@ -255,7 +213,6 @@
         "group",
         "macro",
         "patch_layer",
-        "playback",
         "playback_page",
         "preset",
         "psn",

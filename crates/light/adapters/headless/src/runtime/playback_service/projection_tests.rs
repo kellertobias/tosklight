@@ -24,7 +24,9 @@ fn automatic_follow_and_wait_publish_exact_direct_feedback_without_assignment_al
     };
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
     engine.go(id).unwrap();
     engine.go(id).unwrap();
     for cause in [
@@ -32,7 +34,7 @@ fn automatic_follow_and_wait_publish_exact_direct_feedback_without_assignment_al
         light_playback::AutomaticPlaybackTransitionCause::Wait,
     ] {
         let transition = light_playback::AutomaticPlaybackTransition {
-            playback_number: None,
+            playback_address: None,
             cue_list_id: id,
             previous: previous.clone(),
             current: current.clone(),
@@ -43,7 +45,7 @@ fn automatic_follow_and_wait_publish_exact_direct_feedback_without_assignment_al
         let status = engine.runtime_status_for_cue_list(id).unwrap();
         let exact = automatic_source_projection(test_scope(), &transition, Some(&status)).unwrap();
         assert_eq!(
-            exact.projection.requested,
+            exact.projection.identity,
             PlaybackRuntimeIdentity::DirectCueList(id)
         );
         assert_eq!(
@@ -54,7 +56,7 @@ fn automatic_follow_and_wait_publish_exact_direct_feedback_without_assignment_al
             exact.projection.current_cue().unwrap().number,
             current.number
         );
-        engine.on(1).unwrap();
+        engine.on(address(1)).unwrap();
         let reassigned = engine.runtime_status_for_cue_list(id).unwrap();
         let retired =
             automatic_source_projection(test_scope(), &transition, Some(&reassigned)).unwrap();
@@ -73,25 +75,34 @@ fn every_assignment_projects_one_shared_cuelist_runtime() {
     let second = definition(2, cue_list_id);
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(first.clone()).unwrap();
-    engine.register_definition(second.clone()).unwrap();
-    engine.goto_playback(1, cue("2")).unwrap();
-    engine.goto_playback(2, cue("3")).unwrap();
+    engine
+        .register_definition(address(1), first.clone())
+        .unwrap();
+    engine
+        .register_definition(address(2), second.clone())
+        .unwrap();
+    engine.goto_playback(address(1), cue("2")).unwrap();
+    engine.goto_playback(address(2), cue("3")).unwrap();
     let scope = test_scope();
-    let first = engine
-        .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
-        .unwrap();
-    let second = engine
-        .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
-        .unwrap();
+    let first = engine.runtime_status_for_playback(address(1)).unwrap();
+    let second = engine.runtime_status_for_playback(address(2)).unwrap();
     let direct = engine.runtime_status_for_cue_list(cue_list_id).unwrap();
     for (requested, number, status) in [
-        (PlaybackRuntimeIdentity::Playback(1), Some(1), &first),
-        (PlaybackRuntimeIdentity::Playback(2), Some(2), &second),
+        (
+            PlaybackRuntimeIdentity::Playback(address(1)),
+            Some(address(1)),
+            &first,
+        ),
+        (
+            PlaybackRuntimeIdentity::Playback(address(2)),
+            Some(address(2)),
+            &second,
+        ),
         (PlaybackRuntimeIdentity::CueList(cue_list_id), None, &direct),
     ] {
-        let projection = cue_list_projection(scope, requested, number, cue_list_id, Some(status));
-        assert_eq!(projection.playback_number, number);
+        let projection =
+            cue_list_projection(scope, requested.clone(), number, cue_list_id, Some(status));
+        assert_eq!(projection.identity, requested);
         assert_eq!(
             projection.current_cue().map(|item| item.number.clone()),
             Some(cue("3"))
@@ -111,7 +122,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
             definition_id: definition.id,
             controller: light_dynamics::DynamicController {
                 id: playback_controller,
-                source: light_dynamics::DynamicControllerSource::physical_playback(7),
+                source: light_dynamics::DynamicControllerSource::playback(1, 7).unwrap(),
                 priority: 0,
                 activated_at_millis: 10,
                 size: 0.75,
@@ -187,8 +198,7 @@ fn dynamic_projection_reports_hidden_controller_identity_speed_and_coverage() {
     let active = ActiveDynamicPlayback {
         start_state: Default::default(),
         dynamic_id: Some(definition.id),
-        playback_number: 7,
-        playback_identity: None,
+        playback_address: address(7),
         enabled: true,
         paused: false,
         flash: false,
@@ -344,7 +354,6 @@ fn cue_list() -> CueList {
 
 fn definition(number: u16, cue_list_id: CueListId) -> PlaybackDefinition {
     PlaybackDefinition {
-        number,
         name: format!("Playback {number}"),
         target: light_playback::PlaybackTarget::CueList { cue_list_id },
         buttons: [
@@ -462,4 +471,8 @@ fn projection_fixture(
         "address": patched.then_some(1)
     }))
     .unwrap()
+}
+
+fn address(position: u16) -> light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(1, position).unwrap()
 }

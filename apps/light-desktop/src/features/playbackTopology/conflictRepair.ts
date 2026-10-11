@@ -32,54 +32,10 @@ export async function repairPlaybackTopologyConflict(
 		action.type === "redo_cue_list"
 	)
 		return repairCueList(options, action, generation);
-	if (
-		action.type === "create_page" ||
-		action.type === "rename_page" ||
-		action.type === "configure_virtual" ||
-		action.type === "clear_virtual"
-	)
-		return repairPage(options, action, generation);
-	if (action.type === "map_existing_playback")
-		return repairExistingPlaybackMap(options, action, generation);
-	if (action.type === "assign_group_master") {
+	if (action.type === "assign_group_master")
 		await repairObject(options, "group", action.groupObjectId, generation);
-		if (action.address.kind === "virtual")
-			return repairObject(
-				options,
-				"playback_page",
-				action.address.expectedPageObjectId ?? String(action.address.page),
-				generation,
-			);
-		return repairMappedSlot(
-			options,
-			action.address.page,
-			action.address.slot,
-			generation,
-		);
-	}
-	await repairMappedSlot(options, action.page, action.slot, generation);
-}
-
-async function repairPage(
-	options: PlaybackTopologyRepairOptions,
-	action: Extract<
-		PlaybackTopologyAction,
-		{
-			type:
-				| "create_page"
-				| "rename_page"
-				| "configure_virtual"
-				| "clear_virtual";
-		}
-	>,
-	generation: number,
-) {
-	await repairObject(
-		options,
-		"playback_page",
-		action.expectedPageObjectId ?? String(action.page),
-		generation,
-	);
+	const page = "address" in action ? action.address.page : action.number;
+	return repairObject(options, "playback_page", action.expectedPageObjectId ?? String(page), generation);
 }
 
 export function playbackTopologyTransportFailure(reason: unknown) {
@@ -121,61 +77,6 @@ async function repairCueList(
 		stale?.id ?? action.cueListId,
 		generation,
 	);
-}
-
-async function repairExistingPlaybackMap(
-	options: PlaybackTopologyRepairOptions,
-	action: Extract<PlaybackTopologyAction, { type: "map_existing_playback" }>,
-	generation: number,
-) {
-	await repairObject(
-		options,
-		"playback_page",
-		action.expectedPageObjectId ?? String(action.page),
-		generation,
-	);
-	await repairObject(
-		options,
-		"playback",
-		action.expectedPlaybackObjectId,
-		generation,
-	);
-}
-
-async function repairMappedSlot(
-	options: PlaybackTopologyRepairOptions,
-	pageNumber: number,
-	slot: number,
-	generation: number,
-) {
-	const before = options.store.getSnapshot();
-	const stalePage = before.playbackPages.find(
-		(object) => object.body.number === pageNumber,
-	);
-	const staleNumber = stalePage?.body.slots[String(slot)];
-	const stalePlayback = before.playbacks.find(
-		(object) => object.body.number === staleNumber,
-	);
-	const page = await repairObject(
-		options,
-		"playback_page",
-		stalePage?.id ?? String(pageNumber),
-		generation,
-	);
-	if (stalePlayback)
-		await repairObject(options, "playback", stalePlayback.id, generation);
-	const playbackNumber = page?.body.slots[String(slot)];
-	if (playbackNumber == null) return;
-	const currentPlayback = options.store
-		.getSnapshot()
-		.playbacks.find((object) => object.body.number === playbackNumber);
-	if (currentPlayback?.id !== stalePlayback?.id)
-		await repairObject(
-			options,
-			"playback",
-			currentPlayback?.id ?? String(playbackNumber),
-			generation,
-		);
 }
 
 async function repairObject<K extends ShowObjectKind>(

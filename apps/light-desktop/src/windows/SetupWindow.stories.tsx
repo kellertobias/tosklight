@@ -169,8 +169,6 @@ const configuration: DeskConfiguration = {
 	cuelist_auto_off_flash_release_default: false,
 	start_after_first_recording: false,
 	preload_programmer_changes: true,
-	preload_physical_playback_actions: true,
-	preload_virtual_playback_actions: true,
 	patch_preview_highlight_dmx: false,
 	highlight_look: {
 		intensity: 1,

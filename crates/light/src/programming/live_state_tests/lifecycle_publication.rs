@@ -238,10 +238,12 @@ fn count_changes_publish_after_authoritative_events_while_same_count_and_replay_
         .run_external_interaction(&context, &ports, || {
             registry.queue_preload_playback_action(
                 session,
-                1,
-                None,
+                light_playback::PlaybackAddress::new(1, 1).unwrap(),
                 light_programmer::PreloadPlaybackQueueAction::Go,
-                light_programmer::PreloadPlaybackQueueSurface::Physical,
+                light_playback::PlaybackControlSource {
+                    surface_id: "main".into(),
+                    control_id: 1,
+                },
             )
         })
         .unwrap();

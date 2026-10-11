@@ -2,7 +2,7 @@ use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
 use rusqlite::{Connection, TransactionBehavior};
 
-pub(crate) const SHOW_SCHEMA_VERSION: i64 = 9;
+pub(crate) const SHOW_SCHEMA_VERSION: i64 = 10;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -17,6 +17,10 @@ pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     if schema_version(&tx)? < 9 {
         super::venue_copies::separate_venue_multipatch_copies(&tx)?;
     }
+    tx.execute(
+        "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO NOTHING",
+        [crate::PLAYBACK_CONTRACT_METADATA_KEY, "1"],
+    )?;
     set_schema_version(&tx, SHOW_SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())

@@ -103,7 +103,7 @@ pub(super) struct UpdateApiTarget {
     #[serde(default, alias = "cue_list_id")]
     pub(super) object_id: Option<String>,
     #[serde(default)]
-    pub(super) playback_number: Option<u16>,
+    pub(super) playback_address: Option<light_playback::PlaybackAddress>,
     #[serde(default)]
     pub(super) cue_id: Option<Uuid>,
     #[serde(default)]

@@ -30,10 +30,12 @@ fn preload_take_live_and_release_publish_one_boolean_transition_each() {
     external(&service, &context, &ports, || {
         registry.queue_preload_playback_action(
             session,
-            1,
-            None,
+            light_playback::PlaybackAddress::new(1, 1).unwrap(),
             light_programmer::PreloadPlaybackQueueAction::Go,
-            light_programmer::PreloadPlaybackQueueSurface::Physical,
+            light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
         )
     });
     assert!(lifecycle_events(&events).is_empty());

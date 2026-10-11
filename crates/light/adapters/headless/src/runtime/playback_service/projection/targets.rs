@@ -11,7 +11,7 @@ use light_control::speed::{
 };
 use light_core::CueListId;
 use light_engine::EngineSnapshot;
-use light_playback::{PlaybackIdentity, PlaybackRuntimeStatus};
+use light_playback::PlaybackRuntimeStatus;
 
 use super::super::super::{application_millis, speed_group_index};
 use super::super::{ServerPlaybackPorts, invalid};
@@ -19,14 +19,13 @@ use super::super::{ServerPlaybackPorts, invalid};
 pub(super) fn cue_list_projection(
     scope: PlaybackShowScope,
     requested: PlaybackRuntimeIdentity,
-    playback_number: Option<u16>,
+    _playback_address: Option<light_playback::PlaybackAddress>,
     cue_list_id: CueListId,
     status: Option<&PlaybackRuntimeStatus>,
 ) -> PlaybackRuntimeProjection {
     PlaybackRuntimeProjection {
         scope,
-        requested,
-        playback_number,
+        identity: requested,
         target: PlaybackTargetProjection::CueList {
             cue_list_id,
             runtime: status.map(runtime_projection).map(Box::new),
@@ -37,26 +36,10 @@ pub(super) fn cue_list_projection(
 fn runtime_projection(status: &PlaybackRuntimeStatus) -> CueListRuntimeProjection {
     let playback = &status.playback;
     CueListRuntimeProjection {
-        owner: status
-            .source
-            .playback_identity
-            .or_else(|| {
-                status
-                    .source
-                    .playback_number
-                    .and_then(|number| PlaybackIdentity::physical(number).ok())
-            })
-            .map(|identity| match identity {
-                PlaybackIdentity::Physical(number) => {
-                    PlaybackRuntimeIdentity::Playback(number.get())
-                }
-                PlaybackIdentity::Virtual(address) => PlaybackRuntimeIdentity::Virtual(address),
-            })
-            .or_else(|| {
-                (status.source.playback_number.is_none()
-                    && status.source.playback_identity.is_none())
-                .then_some(PlaybackRuntimeIdentity::DirectCueList(playback.cue_list_id))
-            }),
+        owner: Some(status.source.playback_address.map_or(
+            PlaybackRuntimeIdentity::DirectCueList(playback.cue_list_id),
+            PlaybackRuntimeIdentity::Playback,
+        )),
         cue_index: playback.cue_index,
         previous_index: playback.previous_index,
         current: cue(playback.current_cue_id, playback.current_cue_number.clone()),
@@ -141,7 +124,7 @@ pub(super) fn group_projection(
     ports: &ServerPlaybackPorts<'_>,
     snapshot: &EngineSnapshot,
     group_id: &str,
-    identity: Option<light_playback::PlaybackIdentity>,
+    identity: Option<light_playback::PlaybackAddress>,
 ) -> Result<PlaybackTargetProjection, ActionError> {
     // An absent Group is a per-item fact, not a snapshot failure: a stale identity (a Group
     // deleted, or one named by the previous show) projects as Missing while every other

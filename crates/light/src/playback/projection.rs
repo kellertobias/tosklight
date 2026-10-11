@@ -10,8 +10,7 @@ pub const MAX_PLAYBACK_SNAPSHOT_IDENTITIES: usize = 256;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum PlaybackRuntimeIdentity {
-    Playback(u16),
-    Virtual(light_playback::VirtualPlaybackAddress),
+    Playback(light_playback::PlaybackAddress),
     CueList(CueListId),
     /// Only the unassigned/direct Cuelist source, never its assignment aggregate.
     DirectCueList(CueListId),
@@ -23,8 +22,7 @@ pub struct PlaybackRuntimeProjection {
     pub scope: PlaybackShowScope,
     /// The exact identity requested by the caller. A Cuelist identity may expand to multiple
     /// assigned Playbacks in a repair snapshot.
-    pub requested: PlaybackRuntimeIdentity,
-    pub playback_number: Option<u16>,
+    pub identity: PlaybackRuntimeIdentity,
     pub target: PlaybackTargetProjection,
 }
 
@@ -283,12 +281,14 @@ pub struct GrandMasterRuntimeProjection {
     pub dynamics_paused: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackDeskProjection {
     pub scope: PlaybackShowScope,
     pub desk_id: Uuid,
-    pub active_page: u8,
-    pub selected_playback: Option<u16>,
+    pub command_page: u8,
+    pub selected_surface_id: String,
+    pub resolved_pages: std::collections::BTreeMap<String, u8>,
+    pub selected_playback: Option<light_playback::PlaybackAddress>,
     pub selected_cue_list: Option<CueListId>,
 }
 

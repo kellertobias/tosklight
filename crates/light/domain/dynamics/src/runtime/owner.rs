@@ -6,18 +6,11 @@
 use super::*;
 
 impl DynamicControllerSource {
-    pub const fn physical_playback(playback_number: u16) -> Self {
-        Self::Playback {
-            playback_number,
-            virtual_page: None,
+    pub fn playback(page: u8, position: u16) -> Result<Self, DynamicRuntimeError> {
+        if !(1..=99).contains(&page) || !(1..=1000).contains(&position) {
+            return Err(DynamicRuntimeError::InvalidController);
         }
-    }
-
-    pub const fn virtual_playback(page: u8, playback_number: u16) -> Self {
-        Self::Playback {
-            playback_number,
-            virtual_page: Some(page),
-        }
+        Ok(Self::Playback { page, position })
     }
 
     /// Only the operational address of the same runtime owner may change.
@@ -38,6 +31,9 @@ impl DynamicRuntime {
         source: DynamicControllerSource,
         priority: i16,
     ) -> Result<bool, DynamicRuntimeError> {
+        if let DynamicControllerSource::Playback { page, position } = &source {
+            DynamicControllerSource::playback(*page, *position)?;
+        }
         let (instance_id, controller) = self
             .controller(controller_id)
             .ok_or(DynamicRuntimeError::MissingController)?;
@@ -58,5 +54,30 @@ impl DynamicRuntime {
         controller.source = source;
         controller.priority = priority;
         Ok(true)
+    }
+}
+
+pub(super) fn deserialize_playback_owner_page<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u8, D::Error> {
+    let page = u8::deserialize(deserializer)?;
+    if (1..=99).contains(&page) {
+        Ok(page)
+    } else {
+        Err(serde::de::Error::custom(
+            "Playback page must be within 1-99",
+        ))
+    }
+}
+pub(super) fn deserialize_playback_owner_position<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u16, D::Error> {
+    let position = u16::deserialize(deserializer)?;
+    if (1..=1000).contains(&position) {
+        Ok(position)
+    } else {
+        Err(serde::de::Error::custom(
+            "Playback position must be within 1-1000",
+        ))
     }
 }

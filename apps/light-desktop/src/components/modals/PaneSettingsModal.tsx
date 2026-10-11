@@ -1,3 +1,4 @@
+import { PlaybackSoloSettings } from "./PlaybackSoloSettings";
 import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
@@ -13,19 +14,15 @@ import {
 	WindowSettings,
 	type WindowSettingsTab,
 } from "@tosklight/ui/window-kit";
-import { useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
 	usePlaybackDeskView,
 	usePlaybackRuntimeStatus,
 } from "../../features/playbackRuntime/PlaybackRuntimeView";
-import type { VirtualPlaybackZone } from "../../features/virtualPlaybackZones/contracts";
+import type { PlaybackSoloRegion } from "../../features/playbackSolo/contracts";
 import { useDesktopBridge } from "../../platform/desktop";
 import { PRESET_FAMILIES } from "../../presetFamilies";
 import { useApp } from "../../state/AppContext";
-import {
-	MAX_PLAYBACK_PAGE,
-	MAX_VIRTUAL_PLAYBACK_CELLS,
-} from "../../state/reducers/paneOptionsReducer";
 import {
 	type FixtureSheetColumn,
 	GRID_COLUMNS,
@@ -42,7 +39,7 @@ import {
 	useFixtureSheetCuelistAuthority,
 } from "../../windows/fixtureSheetCuelistAuthority";
 import { StageVizSettings } from "../../windows/stageWindow/StageVizSettings";
-import { useVirtualPlaybackSurfaceZones } from "../control/virtualPlayback/useVirtualPlaybackSurfaceZones";
+import { PlaybackPaneSettings } from "./PlaybackPaneSettings";
 import {
 	importCsvGroup,
 	PATCH_IMPORT_CSV_EVENT,
@@ -56,122 +53,6 @@ import {
 	useCuePaneCuelistPlaybacks,
 } from "./cuePaneCuelistAuthority";
 import { VisualizationPaneSettings } from "./VisualizationPaneSettings";
-
-function VirtualPlaybackZoneEditor({
-	zone,
-	zones,
-	saving,
-	persist,
-	onEdit,
-}: {
-	zone: VirtualPlaybackZone;
-	zones: readonly VirtualPlaybackZone[];
-	saving: boolean;
-	persist: (zones: readonly VirtualPlaybackZone[]) => void;
-	onEdit: (zone: VirtualPlaybackZone) => void;
-}) {
-	const [name, setName] = useState(zone.name);
-	const saveName = () => {
-		const trimmed = name.trim();
-		if (!trimmed || trimmed === zone.name) return;
-		setName(trimmed);
-		persist(
-			zones.map((candidate) =>
-				candidate.id === zone.id ? { ...candidate, name: trimmed } : candidate,
-			),
-		);
-	};
-	return (
-		<article className="virtual-playback-zone-editor">
-			<header>
-				<TextField
-					label={`Name for ${zone.name}`}
-					maxLength={80}
-					value={name}
-					disabled={saving}
-					onChange={(event) => setName(event.target.value)}
-				/>
-				<Button
-					disabled={saving || !name.trim() || name.trim() === zone.name}
-					onClick={saveName}
-				>
-					Save name
-				</Button>
-				<Button disabled={saving} onClick={() => onEdit(zone)}>
-					Edit Region
-				</Button>
-				<Button
-					className="danger"
-					disabled={saving}
-					onClick={() =>
-						persist(zones.filter((candidate) => candidate.id !== zone.id))
-					}
-				>
-					Delete region
-				</Button>
-			</header>
-			<small>
-				Virtual Playbacks {zone.playbackNumbers.join(", ")} · region order{" "}
-				{zones.findIndex((candidate) => candidate.id === zone.id) + 1}
-			</small>
-		</article>
-	);
-}
-
-function VirtualPlaybackZoneSettings({
-	pane,
-	onEditZone,
-}: {
-	pane: PaneModel;
-	onEditZone: (zone: VirtualPlaybackZone) => void;
-}) {
-	const desk = usePlaybackDeskView(true);
-	const runtimeStatus = usePlaybackRuntimeStatus();
-	const authorityReady = runtimeStatus.status === "ready" && desk !== null;
-	const surface = useVirtualPlaybackSurfaceZones({
-		surfaceId: pane.id,
-		active: true,
-		authorityReady,
-		pageMode:
-			(pane.virtualPlaybackPageMode ?? "follow_main") === "pinned"
-				? {
-						type: "pinned",
-						page: pane.virtualPlaybackPinnedPage ?? 1,
-					}
-				: { type: "follow_main" },
-	});
-	return (
-		<section
-			className="virtual-playback-zone-settings"
-			aria-label="Playback Solo Regions"
-		>
-			<p>
-				Shift-select at least two cells in the pane to create a region. A newly
-				activated member releases the other active members; creating or editing
-				a region never operates a playback.
-			</p>
-			{surface.saving && <p role="status">Saving Playback Solo Regions…</p>}
-			{!surface.ready ? (
-				<ErrorAlert as="p" role={surface.error ? "alert" : "status"}>
-					{surface.error ?? "Loading Playback Solo Regions…"}
-				</ErrorAlert>
-			) : surface.zones.length === 0 ? (
-				<p>No Solo Regions are configured for this show.</p>
-			) : (
-				surface.zones.map((zone) => (
-					<VirtualPlaybackZoneEditor
-						key={zone.id}
-						zone={zone}
-						zones={surface.zones}
-						saving={surface.saving}
-						persist={(next) => void surface.persist(next)}
-						onEdit={onEditZone}
-					/>
-				))
-			)}
-		</section>
-	);
-}
 
 function CuePaneSettings({
 	pane,
@@ -466,87 +347,6 @@ export function RunningPaneSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
-function VirtualPlaybackGridSettings({ pane }: { pane: PaneModel }) {
-	const { dispatch } = useApp();
-	const rows = pane.virtualPlaybackRows ?? 2;
-	const columns = pane.virtualPlaybackColumns ?? 2;
-	const pageMode = pane.virtualPlaybackPageMode ?? "follow_main";
-	const pinnedPage = pane.virtualPlaybackPinnedPage ?? 1;
-	return (
-		<>
-			<FormLayout labelPlacement="side">
-				<NumberField
-					label="Rows"
-					min="1"
-					max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
-					value={rows}
-					onChange={(event) =>
-						dispatch({
-							type: "SET_VIRTUAL_PLAYBACK_GRID",
-							id: pane.id,
-							rows: Number(event.target.value),
-							columns,
-							changed: "rows",
-						})
-					}
-				/>
-				<NumberField
-					label="Columns"
-					min="1"
-					max={String(MAX_VIRTUAL_PLAYBACK_CELLS)}
-					value={columns}
-					onChange={(event) =>
-						dispatch({
-							type: "SET_VIRTUAL_PLAYBACK_GRID",
-							id: pane.id,
-							rows,
-							columns: Number(event.target.value),
-							changed: "columns",
-						})
-					}
-				/>
-				<MultiValueToggleField
-					label="Page mode"
-					value={pageMode}
-					onChange={(mode) =>
-						dispatch({
-							type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
-							id: pane.id,
-							mode,
-							pinnedPage,
-						})
-					}
-					options={[
-						{ value: "follow_main", label: "Follow Main" },
-						{ value: "pinned", label: "Pinned" },
-					]}
-				/>
-				{pageMode === "pinned" && (
-					<NumberField
-						label="Pinned page"
-						min="1"
-						max={String(MAX_PLAYBACK_PAGE)}
-						value={pinnedPage}
-						onChange={(event) =>
-							dispatch({
-								type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE",
-								id: pane.id,
-								mode: "pinned",
-								pinnedPage: Number(event.target.value),
-							})
-						}
-					/>
-				)}
-			</FormLayout>
-			<p role="status">
-				{(rows * columns).toLocaleString()} of{" "}
-				{MAX_VIRTUAL_PLAYBACK_CELLS.toLocaleString()} available Virtual Playback
-				positions.
-			</p>
-		</>
-	);
-}
-
 function PresetPoolPaneSettings({ pane }: { pane: PaneModel }) {
 	const { state, dispatch } = useApp();
 	const family = pane.presetFamily ?? state.presetFamily;
@@ -815,32 +615,6 @@ export function PatchPaneSettings({ pane }: { pane: PaneModel }) {
 	);
 }
 
-function VirtualPlaybackExclusionSettings({
-	pane,
-	close,
-}: {
-	pane: PaneModel;
-	close: () => void;
-}) {
-	const { dispatch } = useApp();
-	return (
-		<VirtualPlaybackZoneSettings
-			pane={pane}
-			onEditZone={(zone) => {
-				dispatch({
-					type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT",
-					edit: {
-						zoneId: zone.id,
-						name: zone.name,
-						playbackNumbers: [...zone.playbackNumbers],
-					},
-				});
-				close();
-			}}
-		/>
-	);
-}
-
 function paneSpecificTabs(
 	pane: PaneModel,
 	cuePaneCueLists: readonly CuePaneCuelistPlayback[],
@@ -927,12 +701,12 @@ function paneSpecificTabs(
 			{
 				id: "virtual",
 				label: "Virtual Playbacks",
-				content: <VirtualPlaybackGridSettings pane={pane} />,
+				content: <PlaybackPaneSettings pane={pane} />,
 			},
 			{
 				id: "virtual-exclusion-zones",
 				label: "Solo Regions",
-				content: <VirtualPlaybackExclusionSettings pane={pane} close={close} />,
+				content: <PlaybackSoloSettings />,
 			},
 		);
 	if (pane.kind === "file_manager")

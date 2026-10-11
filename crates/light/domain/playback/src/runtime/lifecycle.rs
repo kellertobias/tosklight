@@ -13,7 +13,7 @@ impl PlaybackEngine {
             if !playback.enabled {
                 continue;
             }
-            let Some(number) = playback.playback_number else {
+            let Some(number) = playback.playback_address else {
                 continue;
             };
             if !self.definitions.get(&number).is_some_and(|d| d.auto_off) {
@@ -72,11 +72,7 @@ impl PlaybackEngine {
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
         self.control_states.clear();
         for mut playback in playbacks {
-            let addressed_identity = playback.playback_identity.or_else(|| {
-                playback
-                    .playback_number
-                    .and_then(|number| PlaybackIdentity::physical(number).ok())
-            });
+            let addressed_identity = playback.playback_address;
             if let Some(identity) = addressed_identity {
                 let identity = if self.identity_targets_cue_list(identity, playback.cue_list_id) {
                     identity
@@ -87,9 +83,8 @@ impl PlaybackEngine {
                 } else {
                     continue;
                 };
-                playback.playback_identity =
-                    identity.virtual_address().map(PlaybackIdentity::Virtual);
-                playback.playback_number = Some(identity.number());
+
+                playback.playback_address = Some(identity);
             }
             let key = PlaybackKey::CueList(playback.cue_list_id);
             let Some(cue_list) = self.cue_lists.get(&playback.cue_list_id) else {
@@ -175,12 +170,8 @@ impl PlaybackEngine {
         }
     }
 
-    fn identity_targets_cue_list(
-        &self,
-        identity: PlaybackIdentity,
-        cue_list_id: CueListId,
-    ) -> bool {
-        self.definition_at(identity).is_some_and(|definition| {
+    fn identity_targets_cue_list(&self, identity: PlaybackAddress, cue_list_id: CueListId) -> bool {
+        self.definition(identity).is_some_and(|definition| {
             matches!(
                 definition.target,
                 PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
@@ -188,7 +179,7 @@ impl PlaybackEngine {
         })
     }
 
-    fn first_identity_for_cue_list(&self, cue_list_id: CueListId) -> Option<PlaybackIdentity> {
+    fn first_identity_for_cue_list(&self, cue_list_id: CueListId) -> Option<PlaybackAddress> {
         self.definitions
             .iter()
             .filter(|(_, definition)| {
@@ -197,20 +188,7 @@ impl PlaybackEngine {
                     PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
                 )
             })
-            .map(|(number, _)| {
-                PlaybackIdentity::physical(*number).expect("registered physical number")
-            })
-            .chain(
-                self.virtual_definitions
-                    .iter()
-                    .filter(|(_, definition)| {
-                        matches!(
-                            definition.target,
-                            PlaybackTarget::CueList { cue_list_id: assigned } if assigned == cue_list_id
-                        )
-                    })
-                    .map(|(address, _)| PlaybackIdentity::Virtual(*address)),
-            )
+            .map(|(number, _)| *number)
             .min()
     }
 
@@ -220,20 +198,17 @@ impl PlaybackEngine {
     ) {
         self.active_dynamics.clear();
         self.dynamic_flash_states.clear();
-        let mut restored_origins = HashMap::<Uuid, PlaybackIdentity>::new();
+        let mut restored_origins = HashMap::<Uuid, PlaybackAddress>::new();
         for mut playback in playbacks {
-            let persisted_identity = playback.playback_identity.unwrap_or_else(|| {
-                PlaybackIdentity::physical(playback.playback_number)
-                    .expect("persisted physical Dynamic Playback number")
-            });
+            let persisted_identity = playback.playback_address;
             let Some(target_id) = playback
                 .dynamic_id
-                .or_else(|| self.dynamic_target_id_at(persisted_identity))
+                .or_else(|| self.dynamic_target_id(persisted_identity))
             else {
                 continue;
             };
             let Some(identity) = self
-                .dynamic_target_id_at(persisted_identity)
+                .dynamic_target_id(persisted_identity)
                 .filter(|candidate| *candidate == target_id)
                 .map(|_| persisted_identity)
                 .or_else(|| self.first_dynamic_identity(target_id))
@@ -258,8 +233,8 @@ impl PlaybackEngine {
             playback.fader_pickup_required = false;
             playback.fader_pickup_target = None;
             playback.dynamic_id = Some(target_id);
-            playback.playback_number = identity.number();
-            playback.playback_identity = identity.virtual_address().map(PlaybackIdentity::Virtual);
+            playback.playback_address = identity;
+
             let replace = self.active_dynamics.get(&target_id).is_none_or(|current| {
                 playback.activated_at > current.activated_at
                     || (playback.activated_at == current.activated_at
@@ -292,9 +267,8 @@ impl PlaybackEngine {
                 active.fader_pickup_required = false;
                 active.fader_pickup_target = None;
                 active.dynamic_id = Some(*target_id);
-                active.playback_number = identity.number();
-                active.playback_identity =
-                    identity.virtual_address().map(PlaybackIdentity::Virtual);
+                active.playback_address = identity;
+
                 Some(active)
             })
             .collect()
@@ -387,7 +361,6 @@ impl PlaybackEngine {
                     sequence_master_fade_millis: self.sequence_master_fade_millis,
                     release_fade_millis: self.release_fade_millis,
                     definitions: self.definitions.clone(),
-                    virtual_definitions: self.virtual_definitions.clone(),
                     clock: Arc::clone(&self.clock),
                     next_activation_ordinal: self.next_activation_ordinal,
                     next_transition_ordinal: self.next_transition_ordinal,
@@ -436,5 +409,5 @@ fn restored_runtime_wins(candidate: &ActivePlayback, current: &ActivePlayback) -
     if candidate.transition_ordinal != current.transition_ordinal {
         return candidate.transition_ordinal > current.transition_ordinal;
     }
-    candidate.playback_identity < current.playback_identity
+    candidate.playback_address < current.playback_address
 }

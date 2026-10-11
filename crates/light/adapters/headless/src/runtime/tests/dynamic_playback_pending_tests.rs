@@ -12,10 +12,10 @@ fn projections(state: &AppState) -> Vec<light_application::PlaybackRuntimeProjec
             light_application::ActionSource::Scheduler,
         ),
         &[
-            PlaybackRuntimeIdentity::Playback(1),
-            PlaybackRuntimeIdentity::Playback(2),
-            PlaybackRuntimeIdentity::Virtual(
-                light_playback::VirtualPlaybackAddress::new(1, 1001).unwrap(),
+            PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+            PlaybackRuntimeIdentity::Playback(light_playback::PlaybackAddress::new(1, 2).unwrap()),
+            PlaybackRuntimeIdentity::Playback(
+                light_playback::PlaybackAddress::new(1, 101).unwrap(),
             ),
         ],
     )
@@ -31,7 +31,7 @@ fn assert_state(state: &AppState, expected: DynamicPlaybackRuntimeState) {
         else {
             panic!("expected Dynamic projection");
         };
-        assert_eq!(runtime.state, expected, "alias {:?}", projection.requested);
+        assert_eq!(runtime.state, expected, "alias {:?}", projection.identity);
         if expected == DynamicPlaybackRuntimeState::Pending {
             assert!(
                 runtime.warning.is_none(),
@@ -44,8 +44,8 @@ fn assert_state(state: &AppState, expected: DynamicPlaybackRuntimeState) {
 
 async fn on(app: &Router, token: &str, session: &Session) {
     let response=post_action(app,Some(token),session.desk.id,serde_json::json!({
-        "request_id":Uuid::new_v4().to_string(),"address":{"kind":"playback","playback_number":2},
-        "surface":"physical","action":{"type":"on","pressed":true}
+        "address":{"kind":"playback","page":1,"position":2},
+        "control_source":{"surface_id":"main","control_id":1},"action":{"type":"on","pressed":true}
     })).await;
     let status = response.status();
     let outcome = json(response).await;
@@ -91,21 +91,31 @@ async fn legacy_active_runtime_without_transient_state_waits_for_real_reconcilia
 
 #[tokio::test]
 async fn same_clock_reactivation_rejects_old_receipt_and_accepted_disappearance_is_failed() {
-    use light_engine::{EnginePlaybackCommand as Command, PoolPlaybackAction as Action};
+    use light_engine::{EnginePlaybackCommand as Command, PlaybackAction as Action};
     use light_playback::DynamicPlaybackStartOutcome as Outcome;
     let (state, dir, app, token, session, id, _) = desk().await;
     on(&app, &token, &session).await;
     let engine = state.output.engine();
     let previous = engine.active_dynamic_playbacks()[0].clone();
     engine
-        .execute_playback(Command::Pool {
-            number: 2,
+        .execute_playback(Command::Playback {
+            address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
             action: Action::Off,
         })
         .unwrap();
     engine
-        .execute_playback(Command::Pool {
-            number: 1,
+        .execute_playback(Command::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1,
+            },
             action: Action::On,
         })
         .unwrap();

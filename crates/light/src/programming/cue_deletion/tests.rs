@@ -27,7 +27,9 @@ fn deletion_is_lossless_and_commits_one_runtime_install_and_show_event() {
     let rig = TestRig::new(3);
     let request = rig.exact_request(
         2.0,
-        ProgrammingCueDeletionAddress::Pool { playback_number: 1 },
+        ProgrammingCueDeletionAddress::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+        },
     );
     let deleted_id = rig.cue_id(2.0);
 
@@ -59,7 +61,7 @@ fn replay_precedes_page_lock_and_show_reads_and_if_match_is_part_of_identity() {
         2.0,
         ProgrammingCueDeletionAddress::CurrentPage {
             expected_page: 1,
-            slot: 1,
+            position: 1,
         },
     );
     let revision = rig.show_revision();
@@ -97,7 +99,9 @@ fn missing_stale_and_sole_cue_rejections_are_atomic() {
     let before = stale.show_revision();
     let mut request = stale.exact_request(
         2.0,
-        ProgrammingCueDeletionAddress::Pool { playback_number: 1 },
+        ProgrammingCueDeletionAddress::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+        },
     );
     let ProgrammingCueDeletionExpectation::Exact(authority) = &mut request.expectation else {
         unreachable!()
@@ -177,7 +181,7 @@ impl TestRig {
             cue_number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
             expectation: ProgrammingCueDeletionExpectation::Exact(
                 ProgrammingCueDeletionAuthority {
-                    playback_number: 1,
+                    playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
                     cue_list_id: self.cue_list_id,
                     object_id: "legacy-cuelist-key".into(),
                     object_revision: 1,
@@ -190,7 +194,9 @@ impl TestRig {
     fn current_request(&self, cue_number: f64) -> ProgrammingCueDeletionRequest {
         ProgrammingCueDeletionRequest {
             show_id: self.show_id,
-            address: ProgrammingCueDeletionAddress::Pool { playback_number: 1 },
+            address: ProgrammingCueDeletionAddress::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
+            },
             cue_number: crate::CueNumber::try_from_legacy_f64(cue_number).unwrap(),
             expectation: ProgrammingCueDeletionExpectation::Current,
         }
@@ -285,7 +291,6 @@ fn seed_show(store: &ShowStore, cue_list_id: CueListId, cue_count: usize) {
         .put_object("cue_list", "legacy-cuelist-key", &body, 0)
         .unwrap();
     let playback = PlaybackDefinition {
-        number: 1,
         name: "Cuelist 1".into(),
         target: PlaybackTarget::CueList { cue_list_id },
         buttons: [PlaybackButtonAction::None; 3],
@@ -302,14 +307,10 @@ fn seed_show(store: &ShowStore, cue_list_id: CueListId, cue_count: usize) {
         presentation_icon: None,
         presentation_image: None,
     };
-    store
-        .put_object("playback", "1", &serde_json::to_value(playback).unwrap(), 0)
-        .unwrap();
     let page = PlaybackPage {
         number: 1,
         name: "Main".into(),
-        slots: [(1, 1)].into_iter().collect(),
-        virtual_playbacks: Default::default(),
+        assignments: [(1, playback)].into_iter().collect(),
     };
     store
         .put_object(

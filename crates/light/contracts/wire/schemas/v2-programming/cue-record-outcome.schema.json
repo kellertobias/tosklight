@@ -323,22 +323,11 @@
               "type": "null"
             }
           ]
-        },
-        "playback": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RecordedCueObjectProjection"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "cue_list",
-        "playback",
         "page"
       ]
     },
@@ -576,14 +565,11 @@
           "format": "uint",
           "minimum": 0
         },
+        "owner_address": {
+          "$ref": "#/$defs/PlaybackAddressValue"
+        },
         "paused": {
           "type": "boolean"
-        },
-        "playback_number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
         },
         "size": {
           "type": "number",
@@ -630,7 +616,7 @@
         }
       },
       "required": [
-        "playback_number",
+        "owner_address",
         "enabled",
         "paused",
         "flash",
@@ -716,6 +702,27 @@
         "towards_low"
       ]
     },
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
     "PlaybackCueReference": {
       "type": "object",
       "properties": {
@@ -741,44 +748,23 @@
               "type": "string",
               "const": "playback"
             },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "playback_number"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "maximum": 99,
+              "minimum": 1
             },
-            "playback_number": {
+            "position": {
               "type": "integer",
               "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+              "maximum": 1000,
+              "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page",
-            "playback_number"
+            "position"
           ]
         },
         {
@@ -793,7 +779,6 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -811,7 +796,6 @@
               "const": "direct_cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -830,7 +814,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group_id"
@@ -841,16 +824,7 @@
     "PlaybackRuntimeProjection": {
       "type": "object",
       "properties": {
-        "playback_number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
-        },
-        "requested": {
+        "identity": {
           "$ref": "#/$defs/PlaybackRuntimeIdentity"
         },
         "scope": {
@@ -1092,8 +1066,7 @@
       ],
       "required": [
         "scope",
-        "requested",
-        "playback_number"
+        "identity"
       ]
     },
     "PlaybackShowScope": {

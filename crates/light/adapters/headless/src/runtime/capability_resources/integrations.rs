@@ -80,6 +80,17 @@ impl IntegrationResource {
         }
     }
 
+    pub(in crate::runtime) fn osc_control_source_for_source(
+        &self,
+        source: SocketAddr,
+    ) -> Option<String> {
+        self.osc_subscribers
+            .lock()
+            .iter()
+            .find(|(_, subscriber)| subscriber.command_source == source)
+            .map(|(client_id, _)| format!("hardware:{client_id}"))
+    }
+
     pub(in crate::runtime) fn osc_subscriber_for_source(
         &self,
         source: SocketAddr,
@@ -224,13 +235,23 @@ impl IntegrationResource {
         &self,
         now: Instant,
         timeout: Duration,
-    ) -> (Vec<OscSubscriber>, Vec<(SessionId, SocketAddr)>, bool) {
+    ) -> (
+        Vec<OscSubscriber>,
+        Vec<(String, SessionId, SocketAddr)>,
+        bool,
+    ) {
         let mut subscribers = self.osc_subscribers.lock();
         let before = subscribers.len();
         let expired = subscribers
-            .values()
-            .filter(|subscriber| now.duration_since(subscriber.last_seen) >= timeout)
-            .map(|subscriber| (subscriber.session_id, subscriber.command_source))
+            .iter()
+            .filter(|(_, subscriber)| now.duration_since(subscriber.last_seen) >= timeout)
+            .map(|(client_id, subscriber)| {
+                (
+                    client_id.clone(),
+                    subscriber.session_id,
+                    subscriber.command_source,
+                )
+            })
             .collect::<Vec<_>>();
         subscribers.retain(|_, subscriber| now.duration_since(subscriber.last_seen) < timeout);
         let changed = before != subscribers.len();

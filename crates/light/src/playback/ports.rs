@@ -1,6 +1,6 @@
 use super::{
     PlaybackAction, PlaybackDeskProjection, PlaybackDurability, PlaybackExecution, PlaybackGroupId,
-    PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackSurface, PlaybackTransitionCause,
+    PlaybackRuntimeIdentity, PlaybackRuntimeProjection, PlaybackTransitionCause,
     ResolvedPlaybackAddress,
 };
 use crate::{ActionContext, ActionError};
@@ -14,14 +14,17 @@ pub trait PlaybackPorts: Send + Sync {
 
     fn current_page(&self, context: &ActionContext) -> Result<u8, ActionError>;
 
-    fn playback_at(&self, page: u8, slot: u8) -> Result<Option<u16>, ActionError>;
+    fn playback_exists(
+        &self,
+        address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError>;
 
     /// Resolves a Group's optional assigned Playback and rejects forged or stale assignments.
     fn group_playback(
         &self,
         _context: &ActionContext,
         _group_id: PlaybackGroupId,
-    ) -> Result<Option<u16>, ActionError> {
+    ) -> Result<Option<light_playback::PlaybackAddress>, ActionError> {
         Ok(None)
     }
 
@@ -45,7 +48,7 @@ pub trait PlaybackPorts: Send + Sync {
         context: &ActionContext,
         address: ResolvedPlaybackAddress,
         action: PlaybackAction,
-        surface: PlaybackSurface,
+        control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError>;
 
     /// Reports whether an accepted live-state mutation reached its durable store.
@@ -78,7 +81,7 @@ pub trait PlaybackPorts: Send + Sync {
         _context: &ActionContext,
         _address: ResolvedPlaybackAddress,
         _action: PlaybackAction,
-        _surface: PlaybackSurface,
+        _control_source: &light_playback::PlaybackControlSource,
     ) -> Result<Vec<PlaybackRuntimeIdentity>, ActionError> {
         Ok(Vec::new())
     }

@@ -347,7 +347,7 @@ async fn dynamic_delete_action(
         definition: Arc::new(definition.clone()),
     };
     let mut mutations = Vec::new();
-    for kind in ["cue_list", "playback"] {
+    for kind in ["cue_list", "playback_page"] {
         let (_, objects) = store
             .objects_with_portable_revision(kind)
             .map_err(ApiError::store)?;
@@ -356,7 +356,7 @@ async fn dynamic_delete_action(
                 mutations.push(put_active_show_object(
                     match kind {
                         "cue_list" => light_application::ActiveShowObjectKind::CueList,
-                        "playback" => light_application::ActiveShowObjectKind::Playback,
+                        "playback_page" => light_application::ActiveShowObjectKind::PlaybackPage,
                         _ => unreachable!(),
                     },
                     referenced.id,

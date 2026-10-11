@@ -396,7 +396,7 @@ function indexLimitingGroups(
 	for (const group of groups) {
 		if (
 			group.runtime == null ||
-			group.runtime.playbackNumber == null ||
+			group.runtime.playbackAddress == null ||
 			group.runtime.master >= 1
 		)
 			continue;

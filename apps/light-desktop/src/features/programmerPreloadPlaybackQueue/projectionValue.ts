@@ -1,8 +1,8 @@
+import { assertPlaybackAddress } from "../../api/playbackAddress";
 import type {
 	ProgrammerPreloadPlaybackAction,
 	ProgrammerPreloadPlaybackQueueEntry,
 	ProgrammerPreloadPlaybackQueueProjection,
-	ProgrammerPreloadPlaybackSurface,
 } from "./contracts";
 import { ProgrammerPreloadPlaybackQueueProtocolError } from "./transport";
 
@@ -15,13 +15,6 @@ const ACTIONS = new Set<ProgrammerPreloadPlaybackAction>([
 	"temporary_on",
 	"temporary_off",
 ]);
-const SURFACES = new Set<ProgrammerPreloadPlaybackSurface>([
-	"virtual",
-	"physical",
-	"osc",
-	"matter",
-]);
-
 export function canonicalPreloadPlaybackQueueProjection(
 	projection: ProgrammerPreloadPlaybackQueueProjection,
 ): ProgrammerPreloadPlaybackQueueProjection {
@@ -39,21 +32,11 @@ export function assertPreloadPlaybackQueueCursor(cursor: number) {
 function canonicalEntry(
 	entry: ProgrammerPreloadPlaybackQueueEntry,
 ): ProgrammerPreloadPlaybackQueueEntry {
-	assertPlaybackNumber(entry.playbackNumber);
-	if (entry.page !== null) assertPage(entry.page);
+	try { assertPlaybackAddress(entry.address); } catch { protocolError("address is invalid"); }
 	if (!ACTIONS.has(entry.action)) protocolError("action is not supported");
-	if (!SURFACES.has(entry.surface)) protocolError("surface is not supported");
-	return Object.freeze({ ...entry });
-}
-
-function assertPage(value: number) {
-	if (!Number.isInteger(value) || value < 0 || value > 255)
-		protocolError("page must be an unsigned 8-bit integer");
-}
-
-function assertPlaybackNumber(value: number) {
-	if (!Number.isInteger(value) || value < 0 || value > 65_535)
-		protocolError("playback number must be an unsigned 16-bit integer");
+	assertIdentifier(entry.controlSource.surface_id, "surface ID");
+	if (!Number.isSafeInteger(entry.controlSource.control_id) || entry.controlSource.control_id < 0 || entry.controlSource.control_id > 0xffffffff) protocolError("control ID is invalid");
+	return Object.freeze({ ...entry, address: Object.freeze({...entry.address}), controlSource: Object.freeze({...entry.controlSource}) });
 }
 
 function assertIdentifier(value: string, label: string) {

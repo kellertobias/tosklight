@@ -21,18 +21,14 @@ pub enum ProgrammingCueTransferAddress {
     /// Adapter-level shorthand for the Cuelist selected on the initiating desk. Command adapters
     /// must freeze this to a concrete Pool address before entering the show-domain transaction.
     SelectedCuelist,
-    Pool {
-        playback_number: u16,
+    Playback {
+        address: light_playback::PlaybackAddress,
     },
     CuelistPool {
         number: u16,
     },
     CueList {
         id: light_core::CueListId,
-    },
-    PageSlot {
-        page: u8,
-        slot: u8,
     },
 }
 
@@ -136,7 +132,7 @@ pub(crate) struct CueTransferAuthority {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ResolvedCueTransferEndpoint {
     pub requested: ProgrammingCueTransferEndpoint,
-    pub playback_number: u16,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     pub cue_list_id: CueListId,
     pub object_id: String,
     pub object_revision: Revision,

@@ -47,15 +47,15 @@ export function configuredUpdateMode(
 
 export function cueUpdateTarget(
 	objectId: string,
-	playbackNumber?: number,
+	playbackAddress?: {page: number; position: number},
 	cue?: { id: string; number: string } | null,
 ): UpdateTargetRequest {
 	return {
 		family: { type: "cue" },
 		object_id: objectId,
-		...(playbackNumber == null ? {} : { playback_number: playbackNumber }),
+		...(playbackAddress == null ? {} : { playback_address: playbackAddress }),
 		...(cue ? { cue_id: cue.id, cue_number: cue.number } : {}),
-		...(playbackNumber != null ? { validate_active_context: true } : {}),
+		...(playbackAddress != null ? { validate_active_context: true } : {}),
 	};
 }
 
@@ -65,13 +65,13 @@ export function requestFromUpdateIdentity(
 	return {
 		family: target.family,
 		object_id: target.object_id,
-		...(target.playback_number == null
+		...(target.playback_address == null
 			? {}
-			: { playback_number: target.playback_number }),
+			: { playback_address: target.playback_address }),
 		...(target.cue
 			? { cue_id: target.cue.id, cue_number: target.cue.number }
 			: {}),
-		...(target.playback_number == null
+		...(target.playback_address == null
 			? {}
 			: { validate_active_context: true }),
 	};
@@ -103,7 +103,7 @@ export function updateTargetKey(target: UpdateTargetIdentity) {
 	return [
 		target.family.type,
 		target.object_id,
-		target.playback_number ?? "",
+		target.playback_address ? `${target.playback_address.page}.${target.playback_address.position}` : "",
 		target.cue?.id ?? "",
 	].join(":");
 }

@@ -52,11 +52,10 @@ pub use cue_recording::{
     ProgrammingCueActivationCompletion, ProgrammingCueActivationPolicy,
     ProgrammingCueActivationResult, ProgrammingCueActiveShowPorts, ProgrammingCueCapturePolicy,
     ProgrammingCueCommit, ProgrammingCueCommitResult, ProgrammingCueObjectProjection,
-    ProgrammingCuePageSlot, ProgrammingCueProjections, ProgrammingCueRecordOperation,
-    ProgrammingCueRecordOutcome, ProgrammingCueRecordRequest, ProgrammingCueRecordResult,
-    ProgrammingCueRecordTarget, ProgrammingCueRecordTiming, ProgrammingCueRecordingEnvironment,
-    ProgrammingCueRecordingPorts, ProgrammingCueResolvedTarget,
-    ProgrammingCueShowRevisionExpectation, ProgrammingRecordedCue,
+    ProgrammingCueProjections, ProgrammingCueRecordOperation, ProgrammingCueRecordOutcome,
+    ProgrammingCueRecordRequest, ProgrammingCueRecordResult, ProgrammingCueRecordTarget,
+    ProgrammingCueRecordTiming, ProgrammingCueRecordingEnvironment, ProgrammingCueRecordingPorts,
+    ProgrammingCueResolvedTarget, ProgrammingCueShowRevisionExpectation, ProgrammingRecordedCue,
 };
 pub use cue_transfer::{
     ProgrammingCueTransferAddress, ProgrammingCueTransferChoiceRequest,
@@ -107,7 +106,7 @@ pub use preload_lifecycle::{
 pub use preload_playback_queue_projection::{
     ProgrammingPreloadPlaybackAction, ProgrammingPreloadPlaybackQueueChange,
     ProgrammingPreloadPlaybackQueueItem, ProgrammingPreloadPlaybackQueueProjection,
-    ProgrammingPreloadPlaybackQueueSnapshot, ProgrammingPreloadPlaybackSurface,
+    ProgrammingPreloadPlaybackQueueSnapshot,
 };
 pub use preload_preview_demand::{PreloadPreviewDemand, preload_preview_demand};
 pub use preload_values_action::{

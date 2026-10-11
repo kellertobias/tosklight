@@ -1,4 +1,4 @@
-use crate::PlaybackRetainedValue;
+use crate::{PlaybackAddress, PlaybackRetainedValue};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use light_core::CueListId;
 use uuid::Uuid;
@@ -29,7 +29,7 @@ pub struct PlaybackCueReference {
 /// One final playback state produced by a scheduler tick.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AutomaticPlaybackTransition {
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<PlaybackAddress>,
     pub cue_list_id: CueListId,
     pub previous: PlaybackCueReference,
     pub current: PlaybackCueReference,
@@ -122,13 +122,13 @@ impl PlaybackEngine {
             .active
             .iter()
             .filter(|(_, playback)| emptied(playback))
-            .map(|(key, _)| *key)
+            .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
         let temporary = self
             .temporary
             .iter()
             .filter(|(_, playback)| emptied(playback))
-            .map(|(key, _)| *key)
+            .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
         for key in active {
             if let Some(playback) = self.active.get_mut(&key) {
@@ -613,7 +613,7 @@ fn cue_transition(
     advanced_steps: u64,
 ) -> AutomaticPlaybackTransition {
     AutomaticPlaybackTransition {
-        playback_number: playback.playback_number,
+        playback_address: playback.playback_address,
         cue_list_id: playback.cue_list_id,
         previous: cue_reference(&cue_list.cues[previous_index]),
         current: cue_reference(&cue_list.cues[playback.cue_index]),

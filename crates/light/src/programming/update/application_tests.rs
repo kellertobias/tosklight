@@ -334,14 +334,14 @@ fn confirmed_live_cue_update_rejects_an_unpinned_preview_target() {
         AttributeValue::Normalized(0.8),
     );
     rig.set_active_contexts(vec![ActiveCueContext {
-        playback_number: 7,
+        playback_address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
         cue_list_id,
         cue_id: first.id,
         cue_number: first.number,
     }]);
     let target = ProgrammingUpdateTargetRequest::Cue {
         cue_list_id,
-        playback_number: Some(7),
+        playback_address: Some(light_playback::PlaybackAddress::new(1, 7).unwrap()),
         cue_id: None,
         cue_number: None,
         validate_active_context: true,
@@ -357,7 +357,7 @@ fn confirmed_live_cue_update_rejects_an_unpinned_preview_target() {
         )
         .unwrap();
     rig.set_active_contexts(vec![ActiveCueContext {
-        playback_number: 7,
+        playback_address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
         cue_list_id,
         cue_id: second.id,
         cue_number: second.number,
@@ -398,7 +398,7 @@ fn cue_update_preserves_legacy_storage_identity_and_revalidates_live_context() {
         AttributeValue::Normalized(0.8),
     );
     let active = ActiveCueContext {
-        playback_number: 7,
+        playback_address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
         cue_list_id,
         cue_id,
         cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
@@ -488,13 +488,13 @@ fn target_menu_uses_one_capture_one_document_and_distinct_playback_contexts() {
     ));
     rig.set_active_contexts(vec![
         ActiveCueContext {
-            playback_number: 7,
+            playback_address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
             cue_list_id,
             cue_id,
             cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
         },
         ActiveCueContext {
-            playback_number: 8,
+            playback_address: light_playback::PlaybackAddress::new(1, 8).unwrap(),
             cue_list_id,
             cue_id,
             cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
@@ -516,8 +516,8 @@ fn target_menu_uses_one_capture_one_document_and_distinct_playback_contexts() {
     assert_eq!(cue_entries[0].object.object_id, "legacy-menu-cuelist");
     assert_eq!(cue_entries[1].object.object_id, "legacy-menu-cuelist");
     assert_ne!(
-        cue_entries[0].existing_preview.target.playback_number,
-        cue_entries[1].existing_preview.target.playback_number
+        cue_entries[0].existing_preview.target.playback_address,
+        cue_entries[1].existing_preview.target.playback_address
     );
     let preset = all
         .entries
@@ -622,7 +622,7 @@ fn group_target(object_id: &str) -> ProgrammingUpdateTargetRequest {
 fn cue_target(cue_list_id: CueListId, cue_id: Uuid) -> ProgrammingUpdateTargetRequest {
     ProgrammingUpdateTargetRequest::Cue {
         cue_list_id,
-        playback_number: Some(7),
+        playback_address: Some(light_playback::PlaybackAddress::new(1, 7).unwrap()),
         cue_id: Some(cue_id),
         cue_number: Some(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
         validate_active_context: true,

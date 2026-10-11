@@ -1,3 +1,4 @@
+import type { PlaybackAddressValue } from "../../api/playbackAddress";
 import {
 	createContext,
 	type PropsWithChildren,
@@ -24,14 +25,13 @@ import {
 	groupIdentity,
 	identityKey,
 	playbackIdentity,
-	virtualPlaybackIdentity,
 } from "./contracts";
 import {
 	equalGroupProjectionSelection,
 	type GroupProjectionSelection,
 	selectGroupProjections,
 } from "./groupProjectionSelection";
-import { legacyPlaybackRuntime } from "./legacy";
+import { playbackControlRuntime } from "./controlRuntime";
 import {
 	PlaybackRuntimeSession,
 	type PlaybackRuntimeSessionOptions,
@@ -134,7 +134,7 @@ export function PlaybackRuntimeViewProvider({
 							: undefined,
 						onActionStarted: (request) =>
 							frontendPerformanceDiagnostics.recordPlaybackAction(
-								request.request_id,
+								crypto.randomUUID(),
 								playbackActionDiagnosticLabel(request.action),
 							),
 						onError,
@@ -232,30 +232,15 @@ export function usePlaybackDeskView(enabled = true) {
 	);
 }
 
-export function usePlaybackProjection(
-	playbackNumber: number | null | undefined,
-) {
-	const identity = useMemo(
-		() => (playbackNumber == null ? [] : [playbackIdentity(playbackNumber)]),
-		[playbackNumber],
-	);
-	usePlaybackRuntimeView(identity);
-	return usePlaybackSelector(
-		useCallback(
-			(state: PlaybackRuntimeState) =>
-				playbackNumber == null
-					? undefined
-					: state.projections
-							.get(`playback:${playbackNumber}`)
-							?.find((item) => item.playback_number === playbackNumber),
-			[playbackNumber],
-		),
-		Object.is,
-	);
+export function usePlaybackProjection(address: PlaybackAddressValue | null | undefined) {
+	const key = address ? identityKey(playbackIdentity(address.page, address.position)) : null;
+	const identities = useMemo(() => address ? [playbackIdentity(address.page, address.position)] : [], [key]);
+	usePlaybackRuntimeView(identities);
+	return usePlaybackSelector(useCallback((state: PlaybackRuntimeState) => key ? state.projections.get(key)?.[0] : undefined, [key]), Object.is);
 }
 
-export function usePlaybackRuntime(playbackNumber: number | null | undefined) {
-	return legacyPlaybackRuntime(usePlaybackProjection(playbackNumber));
+export function usePlaybackRuntime(address: PlaybackAddressValue | null | undefined) {
+	return playbackControlRuntime(usePlaybackProjection(address));
 }
 
 /**
@@ -264,21 +249,9 @@ export function usePlaybackRuntime(playbackNumber: number | null | undefined) {
  * Reads the desk-lifetime store only: a freshly-mounted window renders the retained samples
  * immediately and keeps applying pushed delta ticks — no snapshot fetch and no polling.
  */
-export function usePlaybackTelemetry(
-	playbackNumber: number | null | undefined,
-	enabled = true,
-) {
-	return usePlaybackSelector(
-		useCallback(
-			(state: PlaybackRuntimeState) =>
-				playbackNumber == null
-					? null
-					: (state.telemetry.get(playbackNumber) ?? null),
-			[playbackNumber],
-		),
-		Object.is,
-		enabled,
-	);
+export function usePlaybackTelemetry(address: PlaybackAddressValue | null | undefined, enabled = true) {
+	const key = address ? identityKey(playbackIdentity(address.page, address.position)) : null;
+	return usePlaybackSelector(useCallback((state: PlaybackRuntimeState) => key ? state.telemetry.get(key) ?? null : null, [key]), Object.is, enabled);
 }
 
 /** The complete retained telemetry map, keyed by playback number. */
@@ -290,120 +263,20 @@ export function usePlaybackTelemetryMap(enabled = true) {
 	);
 }
 
-export function useCueListRuntime(
-	cueListId: string | null | undefined,
-	playbackNumber?: number | null,
-) {
-	const identities = useMemo(
-		() => (cueListId ? [cueListIdentity(cueListId)] : []),
-		[cueListId],
-	);
+export function useCueListRuntime(cueListId: string | null | undefined) {
+	const identities = useMemo(() => cueListId ? [cueListIdentity(cueListId)] : [], [cueListId]);
 	usePlaybackRuntimeView(identities);
-	const projection = usePlaybackSelector(
-		useCallback(
-			(state: PlaybackRuntimeState) => {
-				const candidates = cueListId
-					? state.projections.get(`cuelist:${cueListId}`)
-					: undefined;
-				return (
-					candidates?.find(
-						(item) => item.playback_number === (playbackNumber ?? null),
-					) ?? candidates?.[0]
-				);
-			},
-			[cueListId, playbackNumber],
-		),
-		Object.is,
-	);
-	return legacyPlaybackRuntime(projection);
+	const projection = usePlaybackSelector(useCallback((state: PlaybackRuntimeState) => cueListId ? state.projections.get(`cuelist:${cueListId}`)?.[0] : undefined, [cueListId]), Object.is);
+	return playbackControlRuntime(projection);
 }
 
-export function usePlaybackProjectionMap(playbackNumbers: readonly number[]) {
-	const canonical = [...new Set(playbackNumbers)].sort((a, b) => a - b);
-	const key = canonical.join(",");
-	const identities = useMemo(
-		() => canonical.map(playbackIdentity),
-		// The canonical numeric key owns array equality.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[key],
-	);
+/** Exact-address map shared by screens, panes, attached hardware and software controls. */
+export function usePlaybackProjectionMap(addresses: readonly PlaybackAddressValue[]) {
+	const canonical = [...new Map(addresses.map(address => [identityKey(playbackIdentity(address.page, address.position)), address])).entries()].sort(([left], [right]) => left.localeCompare(right));
+	const key = canonical.map(([id]) => id).join(",");
+	const identities = useMemo(() => canonical.map(([, address]) => playbackIdentity(address.page, address.position)), [key]);
 	usePlaybackRuntimeView(identities);
-	return usePlaybackSelector(
-		useCallback(
-			(state: PlaybackRuntimeState) =>
-				new Map(
-					canonical.map((number) => [
-						number,
-						state.projections
-							.get(`playback:${number}`)
-							?.find((item) => item.playback_number === number),
-					]),
-				),
-			// The same canonical key denotes the selected number set.
-			// eslint-disable-next-line react-hooks/exhaustive-deps
-			[key],
-		),
-		equalProjectionMap,
-		playbackNumbers.length > 0,
-	);
-}
-
-export function useVirtualPlaybackProjectionMap(
-	addresses: readonly { page: number; playbackNumber: number }[],
-) {
-	const canonical = [
-		...new Map(
-			addresses.map((address) => [
-				`${address.page}.${address.playbackNumber}`,
-				address,
-			]),
-		).values(),
-	].sort(
-		(left, right) =>
-			left.page - right.page || left.playbackNumber - right.playbackNumber,
-	);
-	const key = canonical
-		.map((address) => `${address.page}.${address.playbackNumber}`)
-		.join(",");
-	const identities = useMemo(
-		() =>
-			canonical.map((address) =>
-				virtualPlaybackIdentity(address.page, address.playbackNumber),
-			),
-		// The canonical address key owns array equality.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[key],
-	);
-	usePlaybackRuntimeView(identities);
-	return usePlaybackSelector(
-		useCallback(
-			(state: PlaybackRuntimeState) =>
-				new Map(
-					canonical.map((address) => {
-						const identity = virtualPlaybackIdentity(
-							address.page,
-							address.playbackNumber,
-						);
-						return [
-							identityKey(identity),
-							state.projections
-								.get(identityKey(identity))
-								?.find(
-									(item) =>
-										item.requested.kind === "virtual" &&
-										item.requested.page === address.page &&
-										item.requested.playback_number === address.playbackNumber,
-								),
-						] as const;
-					}),
-				),
-			// The same canonical key denotes the selected address set.
-			// eslint-disable-next-line react-hooks/exhaustive-deps
-			[key],
-		),
-		equalProjectionMap,
-		addresses.length > 0,
-	);
+	return usePlaybackSelector(useCallback((state: PlaybackRuntimeState) => new Map(canonical.map(([id]) => [id, state.projections.get(id)?.[0]])), [key]), equalProjectionMap, addresses.length > 0);
 }
 
 export interface DirectCueListProjectionSelection {
@@ -527,14 +400,14 @@ function directCueListSelection(
 		const candidates = state.projections.get(`direct-cuelist:${cueListId}`);
 		const requested = candidates?.filter(
 			(projection) =>
-				projection.requested.kind === "direct_cue_list" &&
-				projection.requested.cue_list_id === cueListId,
+				projection.identity.kind === "direct_cue_list" &&
+				projection.identity.cue_list_id === cueListId,
 		);
 		// The exact direct source stays separate from Cuelist aggregate aliases.
 		if (!candidates?.length) ready = false;
 		projections.set(
 			cueListId,
-			requested?.find((projection) => projection.playback_number === null),
+			requested?.[0],
 		);
 	}
 	return { ready, projections };

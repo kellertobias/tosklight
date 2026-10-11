@@ -254,7 +254,7 @@ fn collision_found_after_an_earlier_valid_mapping_rolls_back_the_entire_snapshot
     let second = Uuid::from_u128(3);
     let collision = programmer_dynamic_controller_id(owner, second);
     let mut occupied = instance(owner, collision, 13);
-    occupied.controllers[0].source = DynamicControllerSource::physical_playback(1);
+    occupied.controllers[0].source = DynamicControllerSource::playback(1, 1).unwrap();
     let mut stored = snapshot(vec![
         instance(owner, first, 11),
         instance(owner, second, 12),

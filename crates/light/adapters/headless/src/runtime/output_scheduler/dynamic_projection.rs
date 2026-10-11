@@ -787,7 +787,7 @@ pub(super) fn dynamic_contributions_with_auto_off(
     apply_auto_off: bool,
 ) -> (
     Vec<ContributionBatch>,
-    Vec<PlaybackIdentity>,
+    Vec<PlaybackAddress>,
     Vec<light_application::EventDraft>,
     light_dynamics::DynamicRuntimeSnapshot,
     Vec<light_dynamics::DynamicRuntimeSample>,
@@ -821,7 +821,7 @@ pub(in crate::runtime) fn dynamic_contributions_prepared(
     apply_auto_off: bool,
 ) -> (
     Vec<ContributionBatch>,
-    Vec<PlaybackIdentity>,
+    Vec<PlaybackAddress>,
     Vec<light_application::EventDraft>,
     light_dynamics::DynamicRuntimeSnapshot,
     Vec<light_dynamics::DynamicRuntimeSample>,
@@ -852,7 +852,7 @@ fn dynamic_contributions_inner(
     apply_auto_off: bool,
 ) -> (
     Vec<ContributionBatch>,
-    Vec<PlaybackIdentity>,
+    Vec<PlaybackAddress>,
     Vec<light_application::EventDraft>,
     light_dynamics::DynamicRuntimeSnapshot,
     Vec<light_dynamics::DynamicRuntimeSample>,
@@ -943,7 +943,7 @@ fn dynamic_contributions_inner(
                 now,
             ),
         };
-        engine.auto_off_fully_controlled_dynamic_playbacks_at(fully_controlled)
+        engine.auto_off_fully_controlled_dynamic_playbacks(fully_controlled)
     } else {
         Vec::new()
     };

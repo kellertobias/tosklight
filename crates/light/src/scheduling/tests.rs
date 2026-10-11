@@ -18,9 +18,7 @@ fn time(hour: u32, minute: u32) -> NaiveTime {
 
 fn playback_target() -> ScheduleTarget {
     ScheduleTarget::Playback {
-        page: 1,
-        slot: 2,
-        playback_number: 17,
+        address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
         action: ScheduledPlaybackAction::Go,
         master_transition: None,
     }
@@ -449,18 +447,16 @@ fn playback_target_and_master_transition_are_bounded() {
         every_seconds: 300,
         enabled_at: utc("2026-01-01T00:00:00Z"),
     });
+    assert!(light_playback::PlaybackAddress::new(1, 0).is_err());
+    assert!(light_playback::PlaybackAddress::new(100, 2).is_err());
+    assert!(
+        serde_json::from_value::<ScheduleTarget>(serde_json::json!({
+            "type":"playback","address":{"page":1,"position":0},"action":"toggle"
+        }))
+        .is_err()
+    );
     definition.target = ScheduleTarget::Playback {
-        page: 1,
-        slot: 0,
-        playback_number: 17,
-        action: ScheduledPlaybackAction::Toggle,
-        master_transition: None,
-    };
-    assert_eq!(definition.validate().unwrap_err().field, "target.slot");
-    definition.target = ScheduleTarget::Playback {
-        page: 1,
-        slot: 2,
-        playback_number: 17,
+        address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
         action: ScheduledPlaybackAction::Toggle,
         master_transition: Some(PlaybackMasterTransition {
             level: 0.5,

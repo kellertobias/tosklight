@@ -8,7 +8,6 @@ export type {
 	PlaybackRuntimeIdentity,
 	PlaybackRuntimeProjection,
 	PlaybackRuntimeSnapshot,
-	PlaybackSurface,
 	PlaybackTelemetrySample,
 	PlaybackTelemetryTick,
 } from "./generated/light-wire";

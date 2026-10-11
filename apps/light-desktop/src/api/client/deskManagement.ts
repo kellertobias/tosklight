@@ -357,10 +357,7 @@ function configurationPatch(
 			configuration.color_programming_model_default ?? null,
 		start_after_first_recording: configuration.start_after_first_recording,
 		preload_programmer_changes: configuration.preload_programmer_changes,
-		preload_physical_playback_actions:
-			configuration.preload_physical_playback_actions,
-		preload_virtual_playback_actions:
-			configuration.preload_virtual_playback_actions,
+
 		patch_preview_highlight_dmx:
 			configuration.patch_preview_highlight_dmx ?? false,
 		highlight_look: configuration.highlight_look ?? {

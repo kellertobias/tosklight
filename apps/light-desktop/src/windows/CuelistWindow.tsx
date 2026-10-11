@@ -1,3 +1,4 @@
+import { samePlaybackAddress } from "../api/playbackAddress";
 import { useEffect, useState } from "react";
 import {
 	consumeObjectEditorRequest,
@@ -52,7 +53,7 @@ export function CuelistWindow({
 	const tab = builtIn ? state.cuelistBuiltInView : localTab;
 	useShowObjectView("group", active && tab !== "pool");
 	useShowObjectView("cue_list", active);
-	useShowObjectView("playback", active);
+
 	useShowObjectView("playback_page", active && tab === "pool");
 	const firstAvailableCuelist = pool[0]?.number ?? 1;
 	const hasFixedCueListId = fixedCueListId !== undefined;
@@ -62,7 +63,7 @@ export function CuelistWindow({
 	const selectedByDesk = playbackDesk?.selected_cue_list
 		? pool.find((entry) => entry.cueList.id === playbackDesk.selected_cue_list)
 		: pool.find(
-				(entry) => entry.assignment?.number === playbackDesk?.selected_playback,
+				(entry) => entry.assignment && playbackDesk?.selected_playback && samePlaybackAddress(entry.assignment.address, playbackDesk.selected_playback),
 			);
 	const paneSelectedCuelist =
 		cueListSource === "follow-selection"
@@ -155,13 +156,6 @@ export function CuelistWindow({
 			onOpenSettings={() => openSettings(selectedCuelist)}
 			thumbnails={thumbnails}
 			fixedCueListId={fixedCueListId}
-			assignmentNumber={
-				cueListSource === "follow-selection"
-					? playbackDesk?.selected_cue_list
-						? null
-						: (playbackDesk?.selected_playback ?? undefined)
-					: undefined
-			}
 			viewOnly={viewOnly}
 		/>
 	);

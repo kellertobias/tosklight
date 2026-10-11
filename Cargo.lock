@@ -3764,6 +3764,7 @@ dependencies = [
  "chrono",
  "light-core",
  "light-dynamics",
+ "light-playback",
  "parking_lot",
  "rustc-hash 2.1.3",
  "serde",

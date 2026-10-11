@@ -11,18 +11,27 @@ use uuid::Uuid;
 
 use super::events::EventSnapshotCursor;
 
-/// One authenticated, idempotent Playback mutation.
+/// One live control action. Repeated actions execute independently and are never replayed.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackActionRequest {
-    /// Idempotency is retained for the 4096 most-recent IDs in the live server process. After
-    /// eviction or restart, clients repair from a narrow runtime snapshot before retrying.
-    #[schemars(length(min = 1, max = 128))]
-    pub request_id: String,
     pub address: PlaybackAddress,
     pub action: PlaybackAction,
-    /// Selects virtual or physical preload-capture semantics. The HTTP source itself is always
-    /// recorded by the server and cannot be supplied by a caller.
-    pub surface: PlaybackSurface,
+    pub control_source: PlaybackControlSource,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackAddressValue {
+    #[schemars(range(min = 1, max = 99))]
+    pub page: u8,
+    #[schemars(range(min = 1, max = 1000))]
+    pub position: u16,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Hash, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackControlSource {
+    #[schemars(length(min = 1, max = 256))]
+    pub surface_id: String,
+    pub control_id: u16,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -36,23 +45,19 @@ pub enum PlaybackAddress {
         group_id: String,
     },
     Playback {
-        playback_number: u16,
-    },
-    Virtual {
+        #[schemars(range(min = 1, max = 99))]
         page: u8,
-        playback_number: u16,
+        #[schemars(range(min = 1, max = 1000))]
+        position: u16,
     },
     CurrentPage {
-        slot: u8,
-    },
-    ExplicitPage {
-        page: u8,
-        slot: u8,
+        #[schemars(range(min = 1, max = 1000))]
+        position: u16,
     },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ResolvedPlaybackAddress {
     CueList {
         cue_list_id: Uuid,
@@ -60,25 +65,13 @@ pub enum ResolvedPlaybackAddress {
     Group {
         #[schemars(length(min = 1, max = 256))]
         group_id: String,
-        playback_number: Option<u16>,
     },
     Playback {
-        playback_number: u16,
-        page: Option<u8>,
-        slot: Option<u8>,
-    },
-    Virtual {
+        #[schemars(range(min = 1, max = 99))]
         page: u8,
-        playback_number: u16,
+        #[schemars(range(min = 1, max = 1000))]
+        position: u16,
     },
-}
-
-/// Deliberate interaction semantics accepted at the HTTP boundary.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum PlaybackSurface {
-    Virtual,
-    Physical,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -190,7 +183,6 @@ pub enum PlaybackAction {
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackActionOutcome {
-    pub request_id: String,
     pub correlation_id: Uuid,
     pub requested: PlaybackAddress,
     pub resolved: ResolvedPlaybackAddress,
@@ -206,7 +198,6 @@ pub struct PlaybackActionOutcome {
     /// Sequence of a separate desk-local view event when selection changed.
     #[ts(as = "Option<f64>", optional = nullable)]
     pub desk_event_sequence: Option<u64>,
-    pub replayed: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -246,7 +237,6 @@ pub enum PendingPlaybackAction {
     DynamicDoubleSpeed,
     DynamicHalfSpeed,
     DynamicLearnSpeed,
-    Fader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -270,7 +260,6 @@ pub enum PlaybackErrorKind {
 
 /// Requested identities for an authoritative, deliberately narrow repair snapshot.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
 pub struct PlaybackRuntimeSnapshotRequest {
     #[schemars(length(max = 256))]
     pub identities: Vec<PlaybackRuntimeIdentity>,
@@ -293,14 +282,12 @@ pub struct PlaybackOverview {
     #[ts(type = "unknown[]")]
     pub cue_lists: Vec<serde_json::Value>,
     #[ts(type = "unknown[]")]
-    pub pool: Vec<serde_json::Value>,
-    #[ts(type = "unknown[]")]
     pub pages: Vec<serde_json::Value>,
     #[ts(type = "unknown[]")]
     pub active: Vec<serde_json::Value>,
     pub desk: super::runtime::RuntimeControlDesk,
-    pub active_page: u8,
-    pub selected_playback: Option<u16>,
+    pub surfaces: super::playback_surfaces::PlaybackSurfacesSnapshot,
+    pub selected_playback: Option<PlaybackAddressValue>,
     #[ts(type = "unknown")]
     pub authoritative_controls: serde_json::Value,
 }
@@ -308,86 +295,90 @@ pub struct PlaybackOverview {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn http_surface_cannot_claim_an_external_action_source() {
-        for forged in ["osc", "matter"] {
-            let value = serde_json::json!({
-                "request_id": "request-1",
-                "address": {"kind": "playback", "playback_number": 1},
-                "action": {"type": "go", "pressed": true},
-                "surface": forged,
-            });
-            assert!(serde_json::from_value::<PlaybackActionRequest>(value).is_err());
+    fn unified_action_retains_address_and_control_source() {
+        let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
+            "address":{"kind":"playback","page":99,"position":1000},
+            "action":{"type":"flash","pressed":true},
+            "control_source":{"surface_id":"pane:abc","control_id":2},
+            "future_transport_hint":true
+        }))
+        .unwrap();
+        assert_eq!(
+            request.address,
+            PlaybackAddress::Playback {
+                page: 99,
+                position: 1000
+            }
+        );
+        assert_eq!(request.control_source.surface_id, "pane:abc");
+        assert_eq!(request.action, PlaybackAction::Flash { pressed: true });
+    }
+    #[test]
+    fn old_split_addresses_are_rejected() {
+        for address in [
+            serde_json::json!({"kind":"virtual","page":4,"playback_number":1001}),
+            serde_json::json!({"kind":"playback","playback_number":1}),
+            serde_json::json!({"kind":"explicit_page","page":2,"slot":4}),
+        ] {
+            assert!(serde_json::from_value::<PlaybackAddress>(address).is_err());
         }
     }
-
     #[test]
-    fn action_is_a_readable_discriminated_contract() {
-        let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
-            "request_id": "request-2",
-            "address": {"kind": "explicit_page", "page": 2, "slot": 4},
-            "action": {"type": "master", "value": 0.75},
-            "surface": "physical",
-        }))
-        .expect("decode playback action");
-        assert_eq!(
-            request.address,
-            PlaybackAddress::ExplicitPage { page: 2, slot: 4 }
-        );
-        assert_eq!(request.surface, PlaybackSurface::Physical);
+    fn address_schema_declares_operator_limits() {
+        let json = serde_json::to_value(schemars::schema_for!(PlaybackAddressValue)).unwrap();
+        assert_eq!(json["properties"]["page"]["maximum"], 99);
+        assert_eq!(json["properties"]["position"]["maximum"], 1000);
     }
-
     #[test]
-    fn dedicated_virtual_address_retains_page_and_full_number() {
-        let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
-            "request_id": "virtual-4-1001",
-            "address": {"kind": "virtual", "page": 4, "playback_number": 1001},
-            "action": {"type": "toggle", "pressed": true},
-            "surface": "virtual",
-        }))
-        .expect("decode dedicated Virtual Playback action");
-        assert_eq!(
-            request.address,
-            PlaybackAddress::Virtual {
-                page: 4,
-                playback_number: 1_001
-            }
-        );
+    fn live_request_has_no_replay_identity_or_surface_switch() {
+        let json = serde_json::to_value(schemars::schema_for!(PlaybackActionRequest)).unwrap();
+        assert!(json["properties"].get("request_id").is_none());
+        assert!(json["properties"].get("surface").is_none());
     }
+}
 
-    #[test]
-    fn snapshot_allows_a_desk_only_or_bounded_identity_list_in_schema() {
-        let schema = schemars::schema_for!(PlaybackRuntimeSnapshotRequest);
-        let json = serde_json::to_value(schema).expect("serialize schema");
-        assert!(json["properties"]["identities"].get("minItems").is_none());
-        assert_eq!(json["properties"]["identities"]["maxItems"], 256);
-    }
+/// Show-owned capture eligibility. No page restriction means every page.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackPositionRange {
+    #[schemars(range(min = 1, max = 1000))]
+    pub start: u16,
+    #[schemars(range(min = 1, max = 1000))]
+    pub end: u16,
+}
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackPreloadScope {
+    pub position_ranges: Vec<PlaybackPositionRange>,
+    pub pages: Option<Vec<u8>>,
+}
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackPreloadScopeSnapshot {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub scope: PlaybackPreloadScope,
+}
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackPreloadScopeUpdateRequest {
+    pub request_id: String,
+    #[ts(type = "number")]
+    pub expected_revision: u64,
+    pub scope: PlaybackPreloadScope,
+}
 
-    #[test]
-    fn group_address_is_opaque_and_tolerates_future_fields() {
-        let request: PlaybackActionRequest = serde_json::from_value(serde_json::json!({
-            "request_id": "group-master",
-            "address": {
-                "kind": "group",
-                "group_id": " Front · 1 ",
-                "playback_number": 2
-            },
-            "action": {"type": "master", "value": 0.5, "velocity": 3},
-            "surface": "virtual",
-            "future_transport_hint": true,
-        }))
-        .expect("decode Group action");
-        assert_eq!(
-            request.address,
-            PlaybackAddress::Group {
-                group_id: " Front · 1 ".into()
-            }
-        );
-        assert_eq!(
-            request.action,
-            PlaybackAction::Master { value: 0.5 },
-            "additional fields cannot forge a different action"
-        );
-    }
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackPreloadScopeUpdateOutcome {
+    pub request_id: String,
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub scope: PlaybackPreloadScope,
+    pub replayed: bool,
+    pub changed: bool,
+}
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PlaybackPreloadScopeChange {
+    pub show_id: Uuid,
+    #[ts(type = "number")]
+    pub revision: u64,
 }

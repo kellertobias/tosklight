@@ -22,7 +22,7 @@ interface CueRecordingProviderProps {
 	store: ShowObjectsStore;
 	playbackRuntimeStore: PlaybackRuntimeStore;
 	transport: CueRecordingTransport | null;
-	selectedPlayback(): number | null;
+	selectedPlayback(): import("../../api/playbackAddress").PlaybackAddressValue | null;
 	loadObject<K extends ShowObjectKind>(
 		showId: string,
 		kind: K,

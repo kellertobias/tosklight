@@ -60,7 +60,6 @@ const SHOW_OBJECT_KINDS = [
 	"preset",
 	"cue_list",
 	"patch_layer",
-	"playback",
 	"playback_page",
 	"stage_layout",
 	"user_layout",

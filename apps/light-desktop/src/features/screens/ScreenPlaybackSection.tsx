@@ -16,16 +16,17 @@ export function ScreenPlaybackSection({
 }: {
 	screen: ScreenConfiguration;
 }) {
-	const { screens, bootstrap } = useScreens();
+	const { screens, surfaces, bootstrap } = useScreens();
 	const sectionSwitch = useLowerSectionSwitch();
 	const page = useScreenPlaybackPage(screen, screens);
+	const layout = surfaces?.playback_surfaces[screen.surface_id]?.layout;
 	const pageControls = screenShowsPageControls(screen);
 	const sideColumn = pageControls || Boolean(sectionSwitch);
 	return (
 		<section
 			className={`screen-playbacks ${sideColumn ? "" : "playbacks-only"}`}
 		>
-			{page == null ? (
+			{page == null || !layout ? (
 				<div
 					className="playback-fader-bank playback-authority-status"
 					role="status"
@@ -35,10 +36,8 @@ export function ScreenPlaybackSection({
 			) : (
 				<PlaybackFaderBank
 					pageNumber={page}
-					firstSlot={screen.first_playback_slot}
-					count={screen.playback_count}
-					rows={screen.playback_rows}
-					playbackLayout={screen.playback_layout}
+					surfaceId={screen.surface_id}
+					playbackLayout={layout}
 					hardwareConnected={Boolean(bootstrap?.hardware_connected)}
 				/>
 			)}

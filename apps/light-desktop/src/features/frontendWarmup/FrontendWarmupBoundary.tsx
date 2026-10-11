@@ -37,12 +37,10 @@ const SHOW_OBJECT_PRIORITIES: ReadonlyArray<{
 	{ kind: "playback_page", priority: "near-future" },
 	{ kind: "dynamic", priority: "near-future" },
 	{ kind: "cue_list", priority: "idle" },
-	{ kind: "playback", priority: "idle" },
 ];
 const PLAYBACK_DEPENDENCIES: readonly ShowObjectKind[] = [
 	"group",
 	"cue_list",
-	"playback",
 	"playback_page",
 ];
 const MAX_WARM_PLAYBACK_IDENTITIES = 4096;
@@ -352,11 +350,9 @@ function playbackIdentities(
 	>,
 ) {
 	return [
-		...snapshot.playbacks.flatMap(({ body }) =>
-			body.target.type === "group" ? [groupIdentity(body.target.group_id)] : [],
-		),
+		...snapshot.playbackPages.flatMap(({body}) => Object.values(body.assignments).flatMap(definition => definition.target.type === "group" ? [groupIdentity(definition.target.group_id)] : [])),
 		...snapshot.cueLists.map(({ id }) => cueListIdentity(id)),
-		...snapshot.playbacks.map(({ body }) => playbackIdentity(body.number)),
+		...snapshot.playbackPages.flatMap(({body}) => Object.keys(body.assignments).map(position => playbackIdentity(body.number, Number(position)))),
 	]
 		.filter(
 			(identity, index, values) =>
@@ -463,7 +459,6 @@ function showObjectCollection(
 	if (kind === "preset") return snapshot.presets;
 	if (kind === "dynamic") return snapshot.dynamics;
 	if (kind === "cue_list") return snapshot.cueLists;
-	if (kind === "playback") return snapshot.playbacks;
 	return snapshot.playbackPages;
 }
 

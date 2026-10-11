@@ -924,7 +924,7 @@ struct CueLayout {
 impl CueLayout {
     fn context(&self, index: usize) -> ActiveCueContext {
         ActiveCueContext {
-            playback_number: PLAYBACK,
+            playback_address: light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap(),
             cue_list_id: self.cue_list_id,
             cue_id: self.cues[index].id,
             cue_number: self.cues[index].number.clone(),
@@ -934,7 +934,7 @@ impl CueLayout {
     fn target(&self, index: usize) -> ProgrammingUpdateTargetRequest {
         ProgrammingUpdateTargetRequest::Cue {
             cue_list_id: self.cue_list_id,
-            playback_number: Some(PLAYBACK),
+            playback_address: Some(light_playback::PlaybackAddress::new(1, PLAYBACK).unwrap()),
             cue_id: Some(self.cues[index].id),
             cue_number: Some(self.cues[index].number.clone()),
             validate_active_context: true,

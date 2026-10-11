@@ -69,8 +69,8 @@ fn angle_mask(component: ProgrammingComponent) -> DynamicSemanticValue {
 
 fn cue_row() -> light_playback::ActiveCueDynamicValue {
     let source = SequenceMasterSource {
-        playback_number: Some(1_301),
-        playback_identity: Some(PlaybackIdentity::virtual_playback(2, 1_301).unwrap()),
+        control_source_id: None,
+        playback_address: Some(PlaybackAddress::new(2, 1).unwrap()),
         cue_list_id: CueListId(Uuid::from_u128(42)),
         temporary: false,
     };
@@ -81,7 +81,7 @@ fn cue_row() -> light_playback::ActiveCueDynamicValue {
         output_enabled: true,
         sequence_master: 0.6,
         snap_sequence_master: 0.7,
-        playback_number: source.playback_number,
+        playback_address: source.playback_address,
         cue_list_id: source.cue_list_id,
         authored_cue_id: Uuid::from_u128(43),
         current_cue_id: Uuid::from_u128(44),

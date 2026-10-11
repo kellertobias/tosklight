@@ -294,14 +294,14 @@ fn manual_legs_are_exact_and_unproven_restored_targets_stay_unknown() {
     engine.register(cue_list.clone()).unwrap();
     let mut playback = definition(1, id);
     playback.fader = PlaybackFaderMode::XFade;
-    engine.register_definition(playback).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.register_definition(address(1), playback).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let _ = evidence(&engine, start);
     let ordinal = engine.active()[0].transition_ordinal;
-    engine.set_manual_xfade(1, 0.5).unwrap();
+    engine.set_manual_xfade(address(1), 0.5).unwrap();
     assert_eq!(engine.active()[0].transition_ordinal, ordinal);
     assert_eq!(evidence(&engine, start).entries().len(), 2);
-    engine.set_manual_xfade(1, 1.0).unwrap();
+    engine.set_manual_xfade(address(1), 1.0).unwrap();
     assert_eq!(evidence(&engine, start).entries().len(), 1);
 
     let mut engine = PlaybackEngine::default();
@@ -439,18 +439,27 @@ fn original_control_source_is_pinned_before_first_observation() {
     let clock = Arc::new(light_core::ManualClock::new(at));
     let mut engine = PlaybackEngine::with_clock(clock);
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.register_definition(definition(2, id)).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.set_virtual_master(2, 0.5).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine
+        .register_definition(address(2), definition(2, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine
+        .set_master_level(address(2), &test_source(address(2).position()), 0.5)
+        .unwrap();
     let first = evidence(&engine, at);
     assert_eq!(
-        first.entries()[0].occurrence.source.playback_number,
-        Some(1)
+        first.entries()[0].occurrence.source.playback_address,
+        Some(address(1))
     );
-    assert_eq!(sample(&engine, at).source.playback_number, Some(2));
+    assert_eq!(
+        sample(&engine, at).source.playback_address,
+        Some(address(2))
+    );
     let temporary = engine
-        .temporary_playback_at(PlaybackIdentity::physical(2).unwrap(), 1.0, false)
+        .temporary_playback(&held(address(2)), 1.0, false)
         .unwrap();
     assert!(temporary.source_history.is_some());
 }

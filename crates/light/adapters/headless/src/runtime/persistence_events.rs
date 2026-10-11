@@ -186,24 +186,11 @@ pub(super) fn persist_active_playbacks(state: &AppState) -> Result<(), ApiError>
 pub(super) fn serialize_active_playbacks(
     runtime: &[light_playback::ActivePlayback],
 ) -> Result<String, ApiError> {
-    let persisted_runtime = runtime
+    let persisted = runtime
         .iter()
-        .cloned()
-        .map(|mut runtime| {
-            runtime.playback_number = None;
-            runtime.playback_identity = None;
-            runtime
-        })
-        .collect::<Vec<_>>();
-    let persisted = persisted_runtime
-        .iter()
-        .zip(runtime.iter())
-        .map(|(runtime, source)| PersistedActivePlayback {
-            runtime,
-            playback_number: source.playback_number,
-            playback_identity: source.playback_identity.as_ref().filter(|identity| {
-                matches!(identity, light_playback::PlaybackIdentity::Virtual(_))
-            }),
+        .filter(|source| source.control_source_id.is_none())
+        .map(|source| PersistedActivePlayback {
+            runtime: source,
             activation: source.activation.as_ref(),
             transition_ordinal: source.transition_ordinal,
             fader_zero_auto_off_armed: source.fader_zero_auto_off_armed,
@@ -228,10 +215,6 @@ pub(super) fn serialize_active_playbacks(
 struct PersistedActivePlayback<'a> {
     #[serde(flatten)]
     runtime: &'a light_playback::ActivePlayback,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    playback_number: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    playback_identity: Option<&'a light_playback::PlaybackIdentity>,
     #[serde(skip_serializing_if = "Option::is_none")]
     activation: Option<&'a light_playback::PlaybackActivationProvenance>,
     #[serde(skip_serializing_if = "is_zero")]
@@ -358,13 +341,9 @@ fn typed_capability_event(
             revision,
             kind: ScreenNotificationKind::Configuration,
         }),
-        "screen_page_changed" => EventDraft::screens_changed(ScreenNotification {
+        "playback_surfaces_changed" => EventDraft::screens_changed(ScreenNotification {
             revision,
-            kind: ScreenNotificationKind::ScreenPage,
-        }),
-        "playback_page_changed" => EventDraft::screens_changed(ScreenNotification {
-            revision,
-            kind: ScreenNotificationKind::PlaybackPage,
+            kind: ScreenNotificationKind::PlaybackSurfaces,
         }),
         "show_opened" => show_library_event(revision, ShowLibraryNotificationKind::ShowOpened),
         "show_renamed" => show_library_event(revision, ShowLibraryNotificationKind::ShowRenamed),
@@ -540,7 +519,7 @@ struct UpdatePayload {
 struct UpdateTargetPayload {
     family: UpdateTargetFamilyPayload,
     object_id: String,
-    playback_number: Option<u16>,
+    playback_address: Option<light_playback::PlaybackAddress>,
     cue_id: Option<String>,
     cue_number: Option<String>,
     validate_active_context: Option<bool>,
@@ -563,7 +542,7 @@ impl UpdateTargetPayload {
         Some(light_application::UpdateTargetNotification {
             family,
             object_id: self.object_id,
-            playback_number: self.playback_number,
+            playback_address: self.playback_address,
             cue_id: self.cue_id,
             cue_number: self.cue_number,
             validate_active_context: self.validate_active_context,

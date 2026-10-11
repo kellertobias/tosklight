@@ -13,14 +13,10 @@ function request(): PlaybackTopologyRequest {
 	return {
 		requestId: REQUEST_ID,
 		action: {
-			type: "map_existing_playback",
-			page: 1,
-			slot: 2,
-			playbackNumber: 7,
+			type: "clear_playback",
+			address: { page: 1, position: 2 },
 			expectedPageRevision: 3,
 			expectedPageObjectId: "1",
-			expectedPlaybackRevision: 4,
-			expectedPlaybackObjectId: "7",
 		},
 	};
 }
@@ -30,12 +26,7 @@ function outcome() {
 		request_id: REQUEST_ID,
 		correlation_id: "33333333-3333-4333-8333-333333333333",
 		show_revision: 8,
-		resolution: {
-			kind: "page_slot",
-			page: 1,
-			slot: 2,
-			playback_number: 7,
-		},
+		resolution: { kind: "playback", page: 1, position: 2 },
 		status: "changed",
 		objects: [
 			{
@@ -46,8 +37,7 @@ function outcome() {
 				body: {
 					number: 1,
 					name: "Page 1",
-					slots: { 2: 7 },
-					virtual_playbacks: {},
+					assignments: {},
 				},
 			},
 		],
@@ -60,8 +50,9 @@ function createPageRequest(): PlaybackTopologyRequest {
 	return {
 		requestId: REQUEST_ID,
 		action: {
-			type: "create_page",
-			page: 2,
+			type: "create_playback_page",
+			number: 2,
+			name: "Page 2",
 			expectedPageRevision: 0,
 			expectedPageObjectId: null,
 		},
@@ -84,8 +75,7 @@ function createPageOutcome() {
 				body: {
 					number: 2,
 					name: "Page 2",
-					slots: {},
-					virtual_playbacks: {},
+					assignments: {},
 				},
 			},
 		],
@@ -134,14 +124,10 @@ describe("Playback topology v2 HTTP adapter", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
 			action: {
-				type: "map_existing_playback",
-				page: 1,
-				slot: 2,
-				playback_number: 7,
+				type: "clear_playback",
+				address: { page: 1, position: 2 },
 				expected_page_revision: 3,
 				expected_page_object_id: "1",
-				expected_playback_revision: 4,
-				expected_playback_object_id: "7",
 			},
 		});
 		expect(String(url)).not.toMatch(/bootstrap|api\/v1\/playbacks/);
@@ -195,8 +181,9 @@ describe("Playback topology v2 HTTP adapter", () => {
 		expect(JSON.parse(String(init?.body))).toEqual({
 			request_id: REQUEST_ID,
 			action: {
-				type: "create_page",
-				page: 2,
+				type: "create_playback_page",
+				number: 2,
+				name: "Page 2",
 				expected_page_revision: 0,
 				expected_page_object_id: null,
 			},

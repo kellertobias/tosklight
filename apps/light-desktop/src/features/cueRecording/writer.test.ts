@@ -55,34 +55,25 @@ function cueList(
 }
 
 function playback(
-	revision: number,
 	name = "Main",
-	number = 7,
 	cueListId = CUE_LIST_ID,
-): ShowObject<"playback"> {
+): ShowObject<"playback_page">["body"]["assignments"][string] {
 	return {
-		kind: "playback",
-		id: String(number),
-		revision,
-		updated_at: "",
-		body: {
-			number,
-			name,
-			target: { type: "cue_list", cue_list_id: cueListId },
-			buttons: ["go_minus", "go", "flash"],
-			button_count: 3,
-			fader: "master",
-			has_fader: true,
-			go_activates: true,
-			auto_off: true,
-			xfade_millis: 0,
-		},
+		name,
+		target: { type: "cue_list", cue_list_id: cueListId },
+		buttons: ["go_minus", "go", "flash"],
+		button_count: 3,
+		fader: "master",
+		has_fader: true,
+		go_activates: true,
+		auto_off: true,
+		xfade_millis: 0,
 	};
 }
 
 function page(
 	revision: number,
-	slots: Record<string, number> = { 2: 7 },
+	assignments: Record<string, ReturnType<typeof playback>> = { 2: playback() },
 	number = 4,
 ): ShowObject<"playback_page"> {
 	return {
@@ -90,7 +81,7 @@ function page(
 		id: String(number),
 		revision,
 		updated_at: "",
-		body: { number, name: `Page ${number}`, slots, virtual_playbacks: {} },
+		body: { number, name: `Page ${number}`, assignments },
 	};
 }
 
@@ -100,8 +91,7 @@ function runtimeProjection(
 ): PlaybackProjection {
 	const common = {
 		scope: { show_id: SHOW_ID, show_revision: showRevision },
-		requested: { kind: "playback" as const, playback_number: 7 },
-		playback_number: 7,
+		identity: { kind: "playback" as const, page: 4, position: 2 },
 	};
 	return target === "missing"
 		? { ...common, target }
@@ -114,7 +104,6 @@ function outcome(
 		status?: "changed" | "no_change";
 		replayed?: boolean;
 		cueList?: ShowObject<"cue_list">;
-		playback?: ShowObject<"playback"> | null;
 		page?: ShowObject<"playback_page"> | null;
 		runtime?: PlaybackProjection | null;
 	} = {},
@@ -128,7 +117,6 @@ function outcome(
 		recordedCue: { id: CUE_ID, number: "1", deleted: false },
 		projections: {
 			cueList: options.cueList ?? cueList(2, "Response"),
-			playback: options.playback === undefined ? playback(2) : options.playback,
 			page: options.page === undefined ? page(2) : options.page,
 		},
 	};
@@ -148,9 +136,9 @@ function outcome(
 
 function input(
 	target: RecordCueInput["target"] = {
-		kind: "page_slot",
+		kind: "playback",
 		page: 4,
-		slot: 2,
+		position: 2,
 	},
 ): RecordCueInput {
 	return {
@@ -170,12 +158,14 @@ function setup(
 		async (_showId: string, _kind: ShowObjectKind, _objectId: string) =>
 			null as ShowObject | null,
 	),
-	selectedPlayback: () => number | null = () => 7,
+	selectedPlayback: () => { page: number; position: number } | null = () => ({
+		page: 4,
+		position: 2,
+	}),
 ) {
 	const store = new ShowObjectsStore();
 	store.reset(SHOW_ID, "user-a:session-a");
 	store.setCollection(SHOW_ID, "cue_list", [cueList(1, "Original")], 10);
-	store.setCollection(SHOW_ID, "playback", [playback(1)], 10);
 	store.setCollection(SHOW_ID, "playback_page", [page(1)], 10);
 	store.installShowRevision(SHOW_ID, 7);
 	const playbackRuntimeStore = new PlaybackRuntimeStore();
@@ -221,25 +211,21 @@ describe("CueRecordingWriter", () => {
 		const afterResponse = store.getSnapshot();
 		expect(afterResponse).toMatchObject({ showRevision: 8 });
 		expect(afterResponse.cueLists[0].body.cues[0].name).toBe("Response");
-		expect(afterResponse.playbacks[0].revision).toBe(2);
 		expect(afterResponse.playbackPages[0].revision).toBe(2);
 		expect(afterResponse.groups).toBe(unrelatedGroups);
 		expect(
-			playbackRuntimeStore.getSnapshot().projections.get("playback:7")?.[0]
+			playbackRuntimeStore.getSnapshot().projections.get("playback:4.2")?.[0]
 				.target,
 		).toBe("cue_list");
 
-		store.applyChange(
-			showChange(12, cueList(2, "Duplicate event"), playback(2), page(2)),
-		);
+		store.applyChange(showChange(12, cueList(2, "Duplicate event"), page(2)));
 		playbackRuntimeStore.applyProjection(runtimeProjection("missing"), 21);
 
 		expect(store.getSnapshot().cueLists).toBe(afterResponse.cueLists);
-		expect(store.getSnapshot().playbacks).toBe(afterResponse.playbacks);
 		expect(store.getSnapshot().playbackPages).toBe(afterResponse.playbackPages);
 		expect(store.getSnapshot().cueLists[0].body.cues[0].name).toBe("Response");
 		expect(
-			playbackRuntimeStore.getSnapshot().projections.get("playback:7")?.[0]
+			playbackRuntimeStore.getSnapshot().projections.get("playback:4.2")?.[0]
 				.target,
 		).toBe("cue_list");
 	});
@@ -252,20 +238,14 @@ describe("CueRecordingWriter", () => {
 				request: CueRecordingRequest,
 			) =>
 				outcome(request.requestId, {
-					playback: playback(1),
 					page: page(1),
 				}),
 		);
 		const { store, writer } = setup(record);
-		const storedPlayback = {
-			...playback(1),
-			updated_at: "2026-07-20T12:00:00Z",
-		};
 		const storedPage = {
 			...page(1),
 			updated_at: "2026-07-20T12:00:01Z",
 		};
-		store.setCollection(SHOW_ID, "playback", [storedPlayback], 10);
 		store.setCollection(SHOW_ID, "playback_page", [storedPage], 10);
 		const before = store.getSnapshot();
 
@@ -275,11 +255,8 @@ describe("CueRecordingWriter", () => {
 
 		const after = store.getSnapshot();
 		expect(after.cueLists).not.toBe(before.cueLists);
-		expect(after.playbacks).toBe(before.playbacks);
 		expect(after.playbackPages).toBe(before.playbackPages);
-		expect(after.playbacks[0]).toBe(storedPlayback);
 		expect(after.playbackPages[0]).toBe(storedPage);
-		expect(after.playbacks[0].updated_at).toBe("2026-07-20T12:00:00Z");
 		expect(after.playbackPages[0].updated_at).toBe("2026-07-20T12:00:01Z");
 	});
 
@@ -297,9 +274,7 @@ describe("CueRecordingWriter", () => {
 		await vi.waitFor(() => expect(record).toHaveBeenCalledOnce());
 		const request = record.mock.calls[0][2];
 
-		store.applyChange(
-			showChange(12, cueList(2, "Event first"), playback(2), page(2)),
-		);
+		store.applyChange(showChange(12, cueList(2, "Event first"), page(2)));
 		playbackRuntimeStore.applyProjection(runtimeProjection("cue_list"), 21);
 		const afterEvent = store.getSnapshot();
 		pending.resolve(
@@ -311,13 +286,12 @@ describe("CueRecordingWriter", () => {
 
 		await writing;
 		expect(store.getSnapshot().cueLists).toBe(afterEvent.cueLists);
-		expect(store.getSnapshot().playbacks).toBe(afterEvent.playbacks);
 		expect(store.getSnapshot().playbackPages).toBe(afterEvent.playbackPages);
 		expect(store.getSnapshot().cueLists[0].body.cues[0].name).toBe(
 			"Event first",
 		);
 		expect(
-			playbackRuntimeStore.getSnapshot().projections.get("playback:7")?.[0]
+			playbackRuntimeStore.getSnapshot().projections.get("playback:4.2")?.[0]
 				.target,
 		).toBe("cue_list");
 	});
@@ -362,8 +336,8 @@ describe("CueRecordingWriter", () => {
 					status: "no_change",
 					replayed: true,
 					cueList: cueList(1, "Ignored response"),
-					playback: playback(1, "Ignored response"),
-					page: page(1, { 2: 999 }),
+
+					page: page(1, { 2: playback("Ignored response") }),
 				}),
 		);
 		const { store, playbackRuntimeStore, writer } = setup(record);
@@ -377,7 +351,6 @@ describe("CueRecordingWriter", () => {
 
 		const after = store.getSnapshot();
 		expect(after.cueLists).toBe(before.cueLists);
-		expect(after.playbacks).toBe(before.playbacks);
 		expect(after.playbackPages).toBe(before.playbackPages);
 		expect(after.cueLists[0].body.cues[0].name).toBe("Original");
 		expect(playbackRuntimeStore.getSnapshot()).toBe(runtimeBefore);
@@ -475,15 +448,13 @@ describe("CueRecordingWriter", () => {
 		expect(onError).toHaveBeenLastCalledWith(second);
 	});
 
-	it("repairs only the Page-to-Playback-to-Cuelist chain on conflict", async () => {
+	it("repairs only the Page assignment-to-Cuelist chain on conflict", async () => {
 		const conflict = conflictError(9);
 		const repairedPage = page(9);
-		const repairedPlayback = playback(9, "Repaired playback");
 		const repairedCueList = cueList(9, "Repaired Cue");
 		const loadObject = vi.fn(
 			async (_showId: string, kind: ShowObjectKind, objectId: string) => {
 				if (kind === "playback_page" && objectId === "4") return repairedPage;
-				if (kind === "playback" && objectId === "7") return repairedPlayback;
 				if (kind === "cue_list" && objectId === CUE_LIST_ID)
 					return repairedCueList;
 				return null;
@@ -497,27 +468,25 @@ describe("CueRecordingWriter", () => {
 		);
 
 		expect(
-			await writer.record(input({ kind: "page_slot", page: 4, slot: 2 })),
+			await writer.record(input({ kind: "playback", page: 4, position: 2 })),
 		).toBeNull();
 
 		expect(loadObject.mock.calls).toEqual([
 			[SHOW_ID, "playback_page", "4"],
-			[SHOW_ID, "playback", "7"],
 			[SHOW_ID, "cue_list", CUE_LIST_ID],
 		]);
 		expect(store.getSnapshot()).toMatchObject({ showRevision: 9 });
 		expect(store.getSnapshot().playbackPages).toEqual([repairedPage]);
-		expect(store.getSnapshot().playbacks).toEqual([repairedPlayback]);
 		expect(store.getSnapshot().cueLists).toEqual([repairedCueList]);
 		expect(onError).toHaveBeenLastCalledWith(conflict);
 	});
 
 	it("repairs the request-time selected Playback when selection changes in flight", async () => {
 		const pending = deferred<CueRecordingOutcome>();
-		let selectedPlayback = 7;
+		let selectedPlayback = { page: 4, position: 2 };
 		const loadObject = vi.fn(
 			async (_showId: string, kind: ShowObjectKind, objectId: string) => {
-				if (kind === "playback" && objectId === "7") return playback(9);
+				if (kind === "playback_page" && objectId === "4") return page(9);
 				if (kind === "cue_list" && objectId === CUE_LIST_ID)
 					return cueList(9, "Repaired");
 				return null;
@@ -530,12 +499,12 @@ describe("CueRecordingWriter", () => {
 		);
 		const writing = writer.record(input({ kind: "selected_playback" }));
 		await Promise.resolve();
-		selectedPlayback = 8;
+		selectedPlayback = { page: 4, position: 3 };
 		pending.reject(conflictError(9));
 
 		expect(await writing).toBeNull();
 		expect(loadObject.mock.calls).toEqual([
-			[SHOW_ID, "playback", "7"],
+			[SHOW_ID, "playback_page", "4"],
 			[SHOW_ID, "cue_list", CUE_LIST_ID],
 		]);
 	});
@@ -575,8 +544,10 @@ describe("CueRecordingWriter", () => {
 		const desk = {
 			scope: { show_id: SHOW_ID, show_revision: 7 },
 			desk_id: "desk-a",
-			active_page: 1,
-			selected_playback: 101,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
+			selected_playback: { page: 1, position: 101 },
 			selected_cue_list: CUE_LIST_ID,
 		};
 		playbackRuntimeStore.applyDesk(desk, 1);
@@ -605,7 +576,7 @@ describe("CueRecordingWriter", () => {
 		);
 		await vi.waitFor(() => expect(loadObject).toHaveBeenCalledOnce());
 		store.applyChange(
-			showChange(13, cueList(10, "Newer event"), null, null, 10),
+			showChange(13, cueList(10, "Newer event"), null, 10),
 		);
 		repair.resolve(cueList(9, "Stale repair"));
 
@@ -688,7 +659,6 @@ function conflictError(currentRevision: number) {
 function showChange(
 	eventSequence: number,
 	cueListObject: ShowObject<"cue_list">,
-	playbackObject: ShowObject<"playback"> | null,
 	pageObject: ShowObject<"playback_page"> | null,
 	showRevision = 8,
 ): ShowObjectsChange {
@@ -704,17 +674,6 @@ function showChange(
 				body: cueListObject.body,
 				deleted: false,
 			},
-			...(playbackObject
-				? [
-						{
-							kind: "playback" as const,
-							objectId: playbackObject.id,
-							objectRevision: playbackObject.revision,
-							body: playbackObject.body,
-							deleted: false,
-						},
-					]
-				: []),
 			...(pageObject
 				? [
 						{
@@ -733,7 +692,6 @@ function showChange(
 function installReplacementAuthority(store: ShowObjectsStore) {
 	store.reset(SHOW_ID, "user-a:session-b");
 	store.setCollection(SHOW_ID, "cue_list", [cueList(20, "Replacement")]);
-	store.setCollection(SHOW_ID, "playback", [playback(20)]);
 	store.setCollection(SHOW_ID, "playback_page", [page(20)]);
 	store.installShowRevision(SHOW_ID, 20);
 }

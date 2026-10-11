@@ -1,0 +1,121 @@
+import { describe, expect, it, vi } from "vitest";
+import { HttpPlaybackSoloTransport } from "./transport";
+
+const SHOW_ID = "11111111-1111-4111-8111-111111111111";
+const SCOPE = { showId: SHOW_ID };
+const ZONES = [
+	{ id: "paired", name: "Paired", members: [{page:1,position:1},{page:2,position:201}] },
+] as const;
+
+function json(value: unknown, status = 200) {
+	return new Response(JSON.stringify(value), {
+		status,
+		headers: { "content-type": "application/json" },
+	});
+}
+
+function transport(fetchImplementation: typeof globalThis.fetch) {
+	return new HttpPlaybackSoloTransport({
+		baseUrl: "http://127.0.0.1:5000/",
+		sessionToken: "session-token",
+		deskBoundaryToken: "desk-boundary",
+		fetch: fetchImplementation,
+	});
+}
+
+describe("HttpPlaybackSoloTransport", () => {
+	it("ignores late error/open/message callbacks after explicit teardown", () => {
+		let socket!: EventTarget & {
+			send: ReturnType<typeof vi.fn>;
+			close: ReturnType<typeof vi.fn>;
+		};
+		class FakeSocket extends EventTarget {
+			send = vi.fn();
+			close = vi.fn(() => this.dispatchEvent(new Event("error")));
+			constructor() {
+				super();
+				socket = this;
+			}
+		}
+		const observer = {
+			ready: vi.fn(),
+			changed: vi.fn(),
+			gap: vi.fn(),
+			error: vi.fn(),
+			closed: vi.fn(),
+		};
+		const stream = new HttpPlaybackSoloTransport({
+			baseUrl: "http://127.0.0.1:5000",
+			sessionToken: "session-token",
+			webSocket: FakeSocket as unknown as typeof WebSocket,
+		}).subscribe(SCOPE, observer);
+		stream.close();
+		socket.dispatchEvent(new Event("open"));
+		socket.dispatchEvent(new MessageEvent("message", { data: "invalid json" }));
+		socket.dispatchEvent(new Event("close"));
+		expect(socket.send).not.toHaveBeenCalled();
+		expect(observer.error).not.toHaveBeenCalled();
+		expect(observer.closed).not.toHaveBeenCalled();
+	});
+	it("loads a show-global snapshot without a desk header", async () => {
+		const request = vi
+			.fn<typeof globalThis.fetch>()
+			.mockResolvedValueOnce(
+				json({ show_id: SHOW_ID, revision: 4, regions: [] }),
+			);
+		await expect(transport(request).loadSnapshot(SCOPE)).resolves.toMatchObject(
+			{
+				showId: SHOW_ID,
+				revision: 4,
+			},
+		);
+		const [url, init] = request.mock.calls[0];
+		expect(url).toBe(
+			"http://127.0.0.1:5000/api/v2/playback-solo-regions",
+		);
+		const headers = new Headers(init?.headers);
+		expect(headers.get("x-tosk-show")).toBe(SHOW_ID);
+		expect(headers.get("x-tosk-desk")).toBeNull();
+	});
+
+	it("posts one retry-safe show-global update", async () => {
+		const request = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
+			json({
+				show_id: SHOW_ID,
+				revision: 5,
+				regions: [
+					{
+						id: "paired",
+						name: "Paired",
+						members: [{page:1,position:1},{page:2,position:201}],
+					},
+				],
+				request_id: "request-a",
+				replayed: false,
+				changed: true,
+			}),
+		);
+		await expect(
+			transport(request).save(SCOPE, 4, ZONES, "request-a"),
+		).resolves.toMatchObject({
+			revision: 5,
+			regions: [{ members: [{page:1,position:1},{page:2,position:201}] }],
+		});
+		const [url, init] = request.mock.calls[0];
+		expect(url).toBe(
+			"http://127.0.0.1:5000/api/v2/playback-solo-regions/update",
+		);
+		expect(init?.method).toBe("POST");
+		expect(JSON.parse(String(init?.body))).toEqual({
+			request_id: "request-a",
+			expected_revision: 4,
+			regions: [
+				{
+					id: "paired",
+					name: "Paired",
+					members: [{page:1,position:1},{page:2,position:201}],
+				},
+			],
+		});
+	});
+});

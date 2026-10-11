@@ -250,7 +250,7 @@ fn object_reference(
 fn cue_target(context: &ActiveCueContext) -> ProgrammingUpdateTargetRequest {
     ProgrammingUpdateTargetRequest::Cue {
         cue_list_id: context.cue_list_id,
-        playback_number: Some(context.playback_number),
+        playback_address: Some(context.playback_address),
         cue_id: Some(context.cue_id),
         cue_number: Some(context.cue_number.clone()),
         validate_active_context: true,

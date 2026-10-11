@@ -74,7 +74,7 @@ pub(super) fn resolve_requested_cue(
 ) -> Result<ResolvedCueTarget, ActionError> {
     let ProgrammingUpdateTargetRequest::Cue {
         cue_list_id,
-        playback_number,
+        playback_address,
         cue_id,
         cue_number,
         validate_active_context,
@@ -85,22 +85,22 @@ pub(super) fn resolve_requested_cue(
     if *validate_active_context {
         return validate_active_cue(
             *cue_list_id,
-            *playback_number,
+            *playback_address,
             *cue_id,
             cue_number.clone(),
             active,
         );
     }
-    let target = match (*cue_id, *playback_number) {
-        (Some(cue_id), playback_number) => CueTargetRequest::Explicit(ResolvedCueTarget {
+    let target = match (*cue_id, *playback_address) {
+        (Some(cue_id), playback_address) => CueTargetRequest::Explicit(ResolvedCueTarget {
             cue_list_id: *cue_list_id,
-            playback_number,
+            playback_address,
             cue_id,
             cue_number: cue_number
                 .clone()
                 .ok_or_else(|| invalid("explicit Cue requires cue_number"))?,
         }),
-        (None, Some(playback_number)) => CueTargetRequest::ActivePlayback { playback_number },
+        (None, Some(playback_address)) => CueTargetRequest::ActivePlayback { playback_address },
         (None, None) => CueTargetRequest::PoolCueList {
             cue_list_id: *cue_list_id,
         },
@@ -110,16 +110,16 @@ pub(super) fn resolve_requested_cue(
 
 fn validate_active_cue(
     cue_list_id: CueListId,
-    playback_number: Option<u16>,
+    playback_address: Option<light_playback::PlaybackAddress>,
     cue_id: Option<uuid::Uuid>,
     cue_number: Option<light_playback::CueNumber>,
     active: &[super::ActiveCueContext],
 ) -> Result<ResolvedCueTarget, ActionError> {
-    let playback_number = playback_number
-        .ok_or_else(|| invalid("live Cue Update target requires playback_number"))?;
+    let playback_address = playback_address
+        .ok_or_else(|| invalid("live Cue Update target requires playback_address"))?;
     let context = active
         .iter()
-        .find(|context| context.playback_number == playback_number)
+        .find(|context| context.playback_address == playback_address)
         .ok_or_else(|| conflict("the touched playback is no longer active"))?;
     if context.cue_list_id != cue_list_id
         || cue_id.is_some_and(|cue_id| cue_id != context.cue_id)

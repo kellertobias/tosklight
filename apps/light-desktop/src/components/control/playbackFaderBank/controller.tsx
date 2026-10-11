@@ -1,3 +1,5 @@
+import { playbackAddressKey } from "../../../api/playbackAddress";
+import { useScreensOptional } from "../../../features/screens/ScreensContext";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
 	PlaybackDefinition,
@@ -35,6 +37,7 @@ import { playbackRowUnits, projectPlaybackSlots } from "./projection";
 import type { PlaybackConfigurationState } from "./types";
 
 export interface PlaybackFaderBankProps {
+	surfaceId?: string;
 	pageNumber?: number;
 	firstSlot?: number;
 	count?: number;
@@ -45,6 +48,7 @@ export interface PlaybackFaderBankProps {
 }
 
 export function usePlaybackBankController({
+	surfaceId = "main",
 	pageNumber,
 	firstSlot = 1,
 	count,
@@ -53,6 +57,9 @@ export function usePlaybackBankController({
 	playbackLayout,
 	hardwareConnected = false,
 }: PlaybackFaderBankProps) {
+	const surfaces = useScreensOptional();
+	const surface = surfaces?.surfaces?.playback_surfaces[surfaceId];
+	playbackLayout = surface?.layout ?? playbackLayout;
 	const topology = usePlaybackTopologyView();
 	const topologyActions = usePlaybackTopologyActions();
 	const runtimeActions = usePlaybackRuntimeActions();
@@ -68,9 +75,17 @@ export function usePlaybackBankController({
 	const hardware = Boolean(hardwareConnected || state.midiProfile);
 	const pageSize = count ?? state.playbackColumns * state.playbackRows;
 	const rowCount = playbackLayout?.rows.length ?? rows ?? state.playbackRows;
-	const columns =
-		playbackLayout?.playbacks_per_row ?? Math.ceil(pageSize / rowCount);
-	const activePageNumber = pageNumber ?? playbackDesk?.active_page ?? null;
+	const columns = Math.max(
+		1,
+		...(playbackLayout?.rows.map((row) => row.count) ?? [
+			Math.ceil(pageSize / rowCount),
+		]),
+	);
+	const activePageNumber =
+		pageNumber ??
+		playbackDesk?.resolved_pages[surfaceId] ??
+		surfaces?.surfaces?.resolved_pages[surfaceId] ??
+		null;
 	const pageObject = topology.pages.find(
 		(candidate) => candidate.body.number === activePageNumber,
 	);
@@ -84,6 +99,7 @@ export function usePlaybackBankController({
 	});
 	const projectionAuthority = useVisiblePlaybackProjections(
 		slots,
+		activePageNumber,
 		topology.ready && activePageNumber != null,
 	);
 	const authorityReady =
@@ -128,16 +144,17 @@ export function usePlaybackBankController({
 	);
 	useEffect(() => setConfiguration(null), [activePageNumber, topology.ready]);
 	const heldActions = useMemo(
-		() => new HeldPlaybackActions(runtimeActions),
-		[runtimeActions],
+		() => new HeldPlaybackActions(runtimeActions, surfaceId),
+		[runtimeActions, surfaceId],
 	);
 	useEffect(() => () => heldActions.releaseAll(), [heldActions]);
-	const rowTracks = playbackLayout
-		? playbackLayout.rows
-				.map((row) => `minmax(0, ${playbackRowUnits(row, hardware)}fr)`)
-				.join(" ")
-		: `repeat(${rowCount}, minmax(0, 1fr))`;
+	useEffect(() => {
+		heldActions.releaseAll();
+	}, [heldActions, activePageNumber]);
+	const rowTracks = playbackRowTracks(playbackLayout, hardware, rowCount);
 	return {
+		surfaceId,
+		selectSurface: () => surfaces?.selectSurface(surfaceId),
 		topology,
 		topologyActions,
 		runtimeActions,
@@ -162,18 +179,7 @@ export function usePlaybackBankController({
 		cueRecordChoice,
 		chooseCueRecordOperation,
 		resolveCueRecordChoice,
-		assignmentPending: state.cueListSetTarget != null,
-		selectionPending: /^SELECT\s*$/i.test(commandLine?.text ?? ""),
-		offPending: /^OFF\s*$/i.test(commandLine?.text ?? ""),
-		dynamicAssignmentPending: /^ASSIGN\s+DYNAMIC\s+\d+\s*$/i.test(
-			commandLine?.text ?? "",
-		),
-		groupAssignmentPending:
-			setInteraction?.state?.phase === "group_source_pending" ||
-			setInteraction?.state?.phase === "object_source_pending" ||
-			(!setInteraction &&
-				/^ASSIGN\s+GROUP\s+\S+\s*$/i.test(commandLine?.text ?? "")),
-		setInteractionArmed: setInteraction?.state?.phase === "set_armed",
+		...playbackCommandModes(state, commandLine?.text ?? "", setInteraction),
 		playbackAddressing:
 			pageNumber == null
 				? ("current_page" as const)
@@ -224,7 +230,6 @@ function useProjectedSlots(options: ProjectedSlotsOptions) {
 			pageSize,
 			playbackLayout,
 			topology.cueLists,
-			topology.playbacks,
 		],
 	);
 	const withoutGroups = useMemo(() => projectSlots(current, []), [current]);
@@ -250,7 +255,6 @@ function projectSlots(
 ) {
 	return projectPlaybackSlots({
 		cueLists: options.topology.cueLists,
-		playbackDefinitions: options.topology.playbacks,
 		groups,
 		page: options.pageObject?.body,
 		playbackLayout: options.playbackLayout,
@@ -262,25 +266,38 @@ function projectSlots(
 
 function useVisiblePlaybackProjections(
 	slots: ReturnType<typeof projectPlaybackSlots>,
+	page: number | null,
 	enabled: boolean,
 ) {
-	const numbers = useMemo(
+	const addresses = useMemo(
 		() =>
-			slots.flatMap((slot) => (slot.playback ? [slot.playback.number] : [])),
-		[slots],
+			page == null
+				? []
+				: slots.flatMap((slot) =>
+						slot.playback ? [slot.playback.address] : [],
+					),
+		[slots, page],
 	);
-	const projections = usePlaybackProjectionMap(enabled ? numbers : []);
-	const loaded = numbers.every(
-		(number) => projections.get(number) !== undefined,
+	const exactProjections = usePlaybackProjectionMap(enabled ? addresses : []);
+	const projections = new Map(
+		slots.flatMap((slot) => {
+			if (!slot.playback) return [];
+			const projection = exactProjections.get(
+				playbackAddressKey(slot.playback.address),
+			);
+			return projection ? [[slot.slot, projection] as const] : [];
+		}),
+	);
+	const loaded = addresses.every((address) =>
+		exactProjections.has(playbackAddressKey(address)),
 	);
 	const matches = slots.every(
-		({ playback }) =>
-			!playback ||
-			projectionMatches(playback, projections.get(playback.number)),
+		({ playback, slot }) =>
+			!playback || projectionMatches(playback, projections.get(slot)),
 	);
 	const targetKey = JSON.stringify(
 		slots.flatMap(({ playback }) =>
-			playback ? [[playback.number, playback.target]] : [],
+			playback ? [[playback.address, playback.target]] : [],
 		),
 	);
 	const reconciling = usePlaybackTopologyRuntimeReconciliation(
@@ -301,7 +318,36 @@ function projectionMatches(
 	playback: PlaybackDefinition,
 	projection: PlaybackRuntimeProjection | undefined,
 ) {
-	if (!projection || projection.playback_number !== playback.number)
-		return false;
+	if (!projection) return false;
 	return playbackTargetMatches(playback.target, projection);
+}
+
+function playbackRowTracks(
+	layout: PlaybackSurfaceLayout | null | undefined,
+	hardware: boolean,
+	rows: number,
+) {
+	return layout
+		? layout.rows
+				.map((row) => `minmax(0, ${playbackRowUnits(row, hardware)}fr)`)
+				.join(" ")
+		: `repeat(${rows}, minmax(0, 1fr))`;
+}
+
+function playbackCommandModes(
+	state: ReturnType<typeof useApp>["state"],
+	commandText: string,
+	setInteraction: ReturnType<typeof useSetInteraction>,
+) {
+	return {
+		assignmentPending: state.cueListSetTarget != null,
+		selectionPending: /^SELECT\s*$/i.test(commandText),
+		offPending: /^OFF\s*$/i.test(commandText),
+		dynamicAssignmentPending: /^ASSIGN\s+DYNAMIC\s+\d+\s*$/i.test(commandText),
+		groupAssignmentPending:
+			setInteraction?.state?.phase === "group_source_pending" ||
+			setInteraction?.state?.phase === "object_source_pending" ||
+			(!setInteraction && /^ASSIGN\s+GROUP\s+\S+\s*$/i.test(commandText)),
+		setInteractionArmed: setInteraction?.state?.phase === "set_armed",
+	};
 }

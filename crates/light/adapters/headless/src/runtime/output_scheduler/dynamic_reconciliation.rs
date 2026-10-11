@@ -19,52 +19,31 @@ pub(in crate::runtime) use cold::{
     ColdDynamicReconciliationInputs, reconcile_cold_dynamic_candidate,
 };
 
-/// Current operational owner of an active Dynamic Playback row: its page-qualified Virtual
-/// assignment when the row carries one, otherwise its physical number.
+/// Current assignment owner of the shared target runtime.
 pub(in crate::runtime) fn dynamic_playback_owner(
     active: &light_playback::ActiveDynamicPlayback,
 ) -> light_dynamics::DynamicControllerSource {
-    match active.playback_identity {
-        Some(PlaybackIdentity::Virtual(address)) => {
-            light_dynamics::DynamicControllerSource::virtual_playback(
-                address.page(),
-                address.number().get(),
-            )
-        }
-        _ => light_dynamics::DynamicControllerSource::physical_playback(active.playback_number),
+    light_dynamics::DynamicControllerSource::Playback {
+        page: active.playback_address.page(),
+        position: active.playback_address.position(),
     }
 }
-
-/// Release xfade of the controller's current owner. A Virtual owner resolves only on its own
-/// page and a physical owner only among physical Playbacks, so equal numbers never alias. An
-/// owner whose assignment is missing or deleted releases immediately (the explicit fallback).
-/// A legacy owner recorded before page qualification derives its page from the Virtual
-/// number bank; physical numbers never fall inside that bank.
 fn playback_release_millis(
     snapshot: &light_engine::EngineSnapshot,
     source: &light_dynamics::DynamicControllerSource,
 ) -> u64 {
-    let light_dynamics::DynamicControllerSource::Playback {
-        playback_number,
-        virtual_page,
-    } = *source
-    else {
+    let light_dynamics::DynamicControllerSource::Playback { page, position } = *source else {
         return 0;
     };
-    let page =
-        virtual_page.or_else(|| light_playback::virtual_playback_page_for_number(playback_number));
-    match page {
-        Some(page) => snapshot
-            .playback_pages
-            .iter()
-            .find(|candidate| candidate.number == page)
-            .and_then(|page| page.virtual_playbacks.get(&playback_number)),
-        None => snapshot
-            .playbacks
-            .iter()
-            .find(|playback| playback.number == playback_number),
+    if light_playback::PlaybackAddress::new(page, position).is_err() {
+        return 0;
     }
-    .map_or(0, |playback| playback.xfade_millis)
+    snapshot
+        .playback_pages
+        .iter()
+        .find(|candidate| candidate.number == page)
+        .and_then(|page| page.assignments.get(&position))
+        .map_or(0, |definition| definition.xfade_millis)
 }
 pub(super) use flows::*;
 
@@ -106,17 +85,11 @@ fn dynamic_playback_definition<'a>(
     snapshot: &'a light_engine::EngineSnapshot,
     active: &light_playback::ActiveDynamicPlayback,
 ) -> Option<&'a light_playback::PlaybackDefinition> {
-    match active.playback_identity {
-        Some(light_playback::PlaybackIdentity::Virtual(address)) => snapshot
-            .playback_pages
-            .iter()
-            .find(|page| page.number == address.page())
-            .and_then(|page| page.virtual_playbacks.get(&address.number().get())),
-        _ => snapshot
-            .playbacks
-            .iter()
-            .find(|playback| playback.number == active.playback_number),
-    }
+    snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == active.playback_address.page())
+        .and_then(|page| page.assignments.get(&active.playback_address.position()))
 }
 
 fn effective_dynamic_playback_speed(
@@ -137,12 +110,8 @@ fn dynamic_playback_controller_id(playback: &light_playback::ActiveDynamicPlayba
     if let Some(target_id) = playback.dynamic_id {
         return light_playback::dynamic_playback_controller_id(target_id);
     }
-    let address = match playback.playback_identity {
-        Some(light_playback::PlaybackIdentity::Virtual(address)) => {
-            (u128::from(address.page()) << 16) | u128::from(address.number().get())
-        }
-        _ => u128::from(playback.playback_number),
-    };
+    let address = (u128::from(playback.playback_address.page()) << 16)
+        | u128::from(playback.playback_address.position());
     Uuid::from_u128(0x4459_4e41_4d49_432d_504c_4159_4241_434b ^ address)
 }
 

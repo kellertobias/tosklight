@@ -17,7 +17,7 @@ pub enum PlaybackTransitionCause {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlaybackCueTransition {
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     pub cue_list_id: Uuid,
     pub previous: Option<PlaybackCueReference>,
     pub current: Option<PlaybackCueReference>,
@@ -81,7 +81,10 @@ fn manual_transition(
     }
     let cue_list_id = after.cue_list_id().or_else(|| before.cue_list_id())?;
     Some(PlaybackCueTransition {
-        playback_number: after.playback_number.or(before.playback_number),
+        playback_address: match &after.identity {
+            super::PlaybackRuntimeIdentity::Playback(address) => Some(*address),
+            _ => None,
+        },
         cue_list_id: cue_list_id.0,
         previous,
         current,

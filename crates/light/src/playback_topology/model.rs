@@ -1,7 +1,8 @@
 use crate::{ActionContext, ActiveShowObjectKind, ApplicationCommand, CommandFamily};
 use light_core::{CueListId, Revision, ShowId};
-use light_playback::{CueList, PlaybackDefinition};
+use light_playback::{CueList, PlaybackAddress, PlaybackDefinition};
 use light_show::PortableShowRevision;
+use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -19,7 +20,7 @@ impl ApplicationCommand for PlaybackTopologyCommand {
     const FAMILY: CommandFamily = CommandFamily::Show;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum PlaybackTopologyAction {
     SaveCueList {
         cue_list_id: CueListId,
@@ -39,38 +40,31 @@ pub enum PlaybackTopologyAction {
         expected_revision: Revision,
         expected_object_id: String,
     },
-    ConfigureSlot {
-        page: u8,
-        slot: u8,
+    AssignPlayback {
+        address: PlaybackAddress,
         expected_page_revision: Revision,
         expected_page_object_id: Option<String>,
-        expected_playback_revision: Revision,
-        expected_playback_object_id: Option<String>,
         playback: PlaybackDefinition,
+    },
+    UpdatePlayback {
+        address: PlaybackAddress,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
+        playback: PlaybackDefinition,
+    },
+    ClearPlayback {
+        address: PlaybackAddress,
+        expected_page_revision: Revision,
+        expected_page_object_id: Option<String>,
     },
     AssignGroupMaster {
         group_object_id: String,
         expected_group_revision: Revision,
         address: GroupMasterPlaybackAddress,
     },
-    ConfigureVirtual {
-        page: u8,
-        number: u16,
-        expected_page_revision: Revision,
-        expected_page_object_id: Option<String>,
-        playback: PlaybackDefinition,
-    },
-    MapExistingPlayback {
-        page: u8,
-        slot: u8,
-        playback_number: u16,
-        expected_page_revision: Revision,
-        expected_page_object_id: Option<String>,
-        expected_playback_revision: Revision,
-        expected_playback_object_id: Option<String>,
-    },
     CreatePage {
         page: u8,
+        name: String,
         expected_page_revision: Revision,
         expected_page_object_id: Option<String>,
     },
@@ -80,57 +74,23 @@ pub enum PlaybackTopologyAction {
         expected_page_revision: Revision,
         expected_page_object_id: Option<String>,
     },
-    ClearMappedPlayback {
+    DeletePage {
         page: u8,
-        slot: u8,
-        expected_page_revision: Revision,
-        expected_page_object_id: Option<String>,
-        expected_playback_revision: Revision,
-        expected_playback_object_id: Option<String>,
-    },
-    ClearVirtual {
-        page: u8,
-        number: u16,
         expected_page_revision: Revision,
         expected_page_object_id: Option<String>,
     },
 }
-
-#[derive(Clone, Debug)]
-pub enum GroupMasterPlaybackAddress {
-    Physical {
-        page: u8,
-        slot: u8,
-        expected_page_revision: Revision,
-        expected_page_object_id: Option<String>,
-        expected_playback_revision: Revision,
-        expected_playback_object_id: Option<String>,
-    },
-    Virtual {
-        page: u8,
-        playback_number: u16,
-        expected_page_revision: Revision,
-        expected_page_object_id: Option<String>,
-    },
+#[derive(Clone, Debug, Serialize)]
+pub struct GroupMasterPlaybackAddress {
+    pub address: PlaybackAddress,
+    pub expected_page_revision: Revision,
+    pub expected_page_object_id: Option<String>,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PlaybackTopologyResolution {
-    CueList {
-        cue_list_id: CueListId,
-    },
-    PageSlot {
-        page: u8,
-        slot: u8,
-        playback_number: Option<u16>,
-    },
-    Virtual {
-        page: u8,
-        playback_number: u16,
-    },
-    Page {
-        page: u8,
-    },
+    CueList { cue_list_id: CueListId },
+    Playback { address: PlaybackAddress },
+    Page { page: u8 },
 }
 
 /// Exact authoritative state of one object involved in the action.

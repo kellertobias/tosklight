@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import type { ServerState } from "../features/server/useServerState";
-import { HttpVirtualPlaybackZonesTransport } from "../features/virtualPlaybackZones/transport";
+import { HttpPreloadScopeTransport } from "../features/playbackPreloadScope/transport";
+import { HttpPlaybackSoloTransport } from "../features/playbackSolo/transport";
 import { configuredServerUrl } from "./client/serverLocation";
 import { browserDeskBoundaryToken } from "./PatchTransport";
 import { HttpPlaybackTopologyTransport } from "./PlaybackTopologyTransport";
@@ -24,8 +25,12 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 		() => (options ? new HttpPlaybackTopologyTransport(options) : null),
 		[options],
 	);
-	const virtualPlaybackZonesTransport = useMemo(
-		() => (options ? new HttpVirtualPlaybackZonesTransport(options) : null),
+	const playbackSoloTransport = useMemo(
+		() => (options ? new HttpPlaybackSoloTransport(options) : null),
+		[options],
+	);
+	const playbackPreloadScopeTransport = useMemo(
+		() => (options ? new HttpPreloadScopeTransport(options) : null),
 		[options],
 	);
 	const showId = state.bootstrap?.active_show?.id ?? null;
@@ -35,7 +40,7 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 		state.session?.session_id ?? "",
 		state.session?.client_id ?? "",
 	].join("|");
-	const virtualPlaybackZonesAuthority = showId
+	const playbackSoloAuthority = showId
 		? { authorityId, scope: { showId } }
 		: null;
 	const applyPlaybackRuntimeAction = useCallback(
@@ -49,16 +54,15 @@ export function usePlaybackTopologyBoundaries(state: ServerState) {
 		[],
 	);
 	const applyPlaybackDeskPage = useCallback(
-		(desk: string, page: number) =>
-			playbackClientRef.current.setPlaybackPage(desk, page, {
-				existingOnly: true,
-			}),
+		(desk: string, page: number, surfaceId: string) =>
+			playbackClientRef.current.setPlaybackPage(desk, page, surfaceId),
 		[],
 	);
 	return {
 		playbackTopologyTransport,
-		virtualPlaybackZonesTransport,
-		virtualPlaybackZonesAuthority,
+		playbackSoloTransport,
+		playbackSoloAuthority,
+		playbackPreloadScopeTransport,
 		applyPlaybackRuntimeAction,
 		applyPlaybackDeskPage,
 	};

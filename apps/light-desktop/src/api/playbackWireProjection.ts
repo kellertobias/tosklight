@@ -12,6 +12,7 @@ import type {
 	SpeedGroupRuntimeProjection,
 } from "./generated/light-wire";
 import {
+	boundedPositiveIntegerAt,
 	booleanAt,
 	enumAt,
 	integerAt,
@@ -31,7 +32,6 @@ export function decodePlaybackIdentity(
 	const identity = recordAt(value, path);
 	const kind = enumAt(identity.kind, `${path}.kind`, [
 		"playback",
-		"virtual",
 		"cue_list",
 		"direct_cue_list",
 		"group",
@@ -39,19 +39,8 @@ export function decodePlaybackIdentity(
 	if (kind === "playback")
 		return {
 			kind,
-			playback_number: positiveIntegerAt(
-				identity.playback_number,
-				`${path}.playback_number`,
-			),
-		};
-	if (kind === "virtual")
-		return {
-			kind,
-			page: positiveIntegerAt(identity.page, `${path}.page`),
-			playback_number: positiveIntegerAt(
-				identity.playback_number,
-				`${path}.playback_number`,
-			),
+			page: boundedPositiveIntegerAt(identity.page, `${path}.page`, 99),
+			position: boundedPositiveIntegerAt(identity.position, `${path}.position`, 1000),
 		};
 	if (kind === "cue_list" || kind === "direct_cue_list")
 		return {
@@ -344,10 +333,7 @@ function decodeDynamicRuntime(
 ): DynamicPlaybackRuntimeProjection {
 	const runtime = recordAt(value, path);
 	return {
-		playback_number: positiveIntegerAt(
-			runtime.playback_number,
-			`${path}.playback_number`,
-		),
+		owner_address: decodeExactAddress(runtime.owner_address, `${path}.owner_address`),
 		enabled: booleanAt(runtime.enabled, `${path}.enabled`),
 		paused: booleanAt(runtime.paused, `${path}.paused`),
 		flash: booleanAt(runtime.flash, `${path}.flash`),
@@ -543,15 +529,7 @@ export function decodePlaybackProjection(
 	const projection = recordAt(value, path);
 	return {
 		scope: decodeScope(projection.scope, `${path}.scope`),
-		requested: decodePlaybackIdentity(
-			projection.requested,
-			`${path}.requested`,
-		),
-		playback_number: nullable(
-			projection.playback_number,
-			`${path}.playback_number`,
-			positiveIntegerAt,
-		),
+		identity: decodePlaybackIdentity(projection.identity, `${path}.identity`),
 		...decodeTarget(projection, path),
 	};
 }
@@ -564,19 +542,14 @@ export function decodePlaybackDesk(
 	return {
 		scope: decodeScope(projection.scope, `${path}.scope`),
 		desk_id: stringAt(projection.desk_id, `${path}.desk_id`),
-		active_page: positiveIntegerAt(
-			projection.active_page,
-			`${path}.active_page`,
-		),
+		command_page: boundedPositiveIntegerAt(projection.command_page, `${path}.command_page`, 99),
+		selected_surface_id: stringAt(projection.selected_surface_id, `${path}.selected_surface_id`),
+		resolved_pages: Object.fromEntries(Object.entries(recordAt(projection.resolved_pages, `${path}.resolved_pages`)).map(([id, page]) => [id, boundedPositiveIntegerAt(page, `${path}.resolved_pages.${id}`, 99)])),
 		selected_cue_list:
 			projection.selected_cue_list == null
 				? null
 				: stringAt(projection.selected_cue_list, `${path}.selected_cue_list`),
-		selected_playback: nullable(
-			projection.selected_playback,
-			`${path}.selected_playback`,
-			positiveIntegerAt,
-		),
+		selected_playback: nullable(projection.selected_playback, `${path}.selected_playback`, decodeExactAddress),
 	};
 }
 
@@ -590,4 +563,12 @@ export function assertSameShow(
 			`active show ${showId}`,
 			projection.scope.show_id,
 		);
+}
+
+export function decodeExactAddress(value: unknown, path: string): {page:number;position:number} {
+	const address = recordAt(value, path);
+	return {
+		page: boundedPositiveIntegerAt(address.page, `${path}.page`, 99),
+		position: boundedPositiveIntegerAt(address.position, `${path}.position`, 1000),
+	};
 }

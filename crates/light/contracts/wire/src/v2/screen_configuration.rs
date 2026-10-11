@@ -3,7 +3,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
 use ts_rs::TS;
 use uuid::Uuid;
 
@@ -137,26 +136,6 @@ pub enum FixedScreenSide {
     Right,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-pub struct ScreenPlaybackSurfaceRow {
-    pub first_playback_slot: u8,
-    pub has_fader: bool,
-    pub button_count: u8,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-pub struct ScreenPlaybackSurfaceLayout {
-    pub playbacks_per_row: u8,
-    pub rows: Vec<ScreenPlaybackSurfaceRow>,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ScreenPageMode {
-    FollowMain,
-    Independent,
-}
-
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ScreenConfiguration {
     pub id: Uuid,
@@ -165,10 +144,7 @@ pub struct ScreenConfiguration {
     pub layout: Value,
     pub show_dock: bool,
     pub show_playbacks: bool,
-    pub playback_count: u8,
-    pub playback_rows: u8,
-    pub first_playback_slot: u8,
-    pub page_mode: ScreenPageMode,
+    pub surface_id: String,
     pub show_page_controls: bool,
     /// Programmer command line above this optional screen's encoders.
     #[serde(default)]
@@ -178,7 +154,6 @@ pub struct ScreenConfiguration {
     #[ts(type = "unknown")]
     pub bounds: Option<Value>,
     pub fullscreen: bool,
-    pub playback_layout: Option<ScreenPlaybackSurfaceLayout>,
     #[serde(default)]
     pub content: ScreenContent,
     /// Whether this screen may change programming.
@@ -193,8 +168,7 @@ pub struct ScreenConfiguration {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ScreenConfigurationSnapshot {
     pub screens: Vec<ScreenConfiguration>,
-    #[ts(type = "Record<string, number>")]
-    pub active_pages: BTreeMap<Uuid, u8>,
+    pub surfaces: super::playback_surfaces::PlaybackSurfacesSnapshot,
     pub programmer_control_surface: ProgrammerControlSurfaceConfiguration,
 }
 
@@ -252,11 +226,6 @@ pub enum ScreenConfigurationAction {
     Delete {
         screen_id: Uuid,
     },
-    SetPage {
-        screen_id: Uuid,
-        #[schemars(range(min = 1, max = 127))]
-        page: u8,
-    },
     UpdateProgrammerControlSurface {
         patch: ProgrammerControlSurfacePatch,
     },
@@ -269,10 +238,7 @@ pub struct ScreenConfigurationPatch {
     pub layout: Option<Value>,
     pub show_dock: Option<bool>,
     pub show_playbacks: Option<bool>,
-    pub playback_count: Option<u8>,
-    pub playback_rows: Option<u8>,
-    pub first_playback_slot: Option<u8>,
-    pub page_mode: Option<ScreenPageMode>,
+    pub surface_id: Option<String>,
     pub show_page_controls: Option<bool>,
     pub show_programmer: Option<bool>,
     pub desired_open: Option<bool>,
@@ -284,9 +250,6 @@ pub struct ScreenConfigurationPatch {
     #[serde(default)]
     pub clear_bounds: bool,
     pub fullscreen: Option<bool>,
-    pub playback_layout: Option<ScreenPlaybackSurfaceLayout>,
-    #[serde(default)]
-    pub clear_playback_layout: bool,
     pub content: Option<ScreenContent>,
     pub not_editable: Option<bool>,
 }
@@ -296,6 +259,5 @@ pub struct ScreenConfigurationActionOutcome {
     pub request_id: String,
     pub replayed: bool,
     pub screen: Option<ScreenConfiguration>,
-    pub active_page: Option<u8>,
     pub programmer_control_surface: Option<ProgrammerControlSurfaceConfiguration>,
 }

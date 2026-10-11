@@ -111,10 +111,9 @@ fn commit(
             .map(|action| {
                 super::preload_playback_queue_wire::queue_item(
                     application::ProgrammingPreloadPlaybackQueueItem {
-                        playback_number: action.playback_number,
-                        page: action.page,
+                        address: action.address,
                         action: action.action,
-                        surface: action.surface,
+                        control_source: action.control_source.clone(),
                     },
                 )
             })

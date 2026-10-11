@@ -63,14 +63,14 @@ const mocks = vi.hoisted(() => ({
 	},
 	/** Contradictory legacy authority. Nothing under test may read it. */
 	legacyPlaybacks: {
-		pool: [] as PlaybackDefinition[],
+		pool: [] as import("../../components/control/playbackFaderBank/types").AssignedPlayback[],
 		active: [] as Array<Record<string, unknown>>,
 		pages: [] as Array<Record<string, unknown>>,
 		cue_lists: [] as CueList[],
 		active_page: 1,
 		selected_playback: null as number | null,
 	},
-	pool: [] as PlaybackDefinition[],
+	pool: [] as import("../../components/control/playbackFaderBank/types").AssignedPlayback[],
 	cueLists: [] as CueList[],
 	pages: [] as Array<Record<string, unknown>>,
 	showObjectsStore: {
@@ -115,16 +115,22 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 			updated_at: "",
 			body,
 		})),
-	usePlaybackDefinitions: () =>
-		mocks.pool.map((body) => ({
-			kind: "playback",
-			id: String(body.number),
-			revision: 1,
-			updated_at: "",
-			body,
-		})),
 	usePlaybackPages: () =>
-		mocks.pages.map((body) => ({
+		(mocks.pages.length
+			? mocks.pages
+			: [
+					{
+						number: 1,
+						name: "Main",
+						assignments: Object.fromEntries(
+							mocks.pool.map((p) => {
+								const { address, ...definition } = p;
+								return [address.position, definition];
+							}),
+						),
+					},
+				]
+		).map((body) => ({
 			kind: "playback_page",
 			id: String(body.number),
 			revision: 1,
@@ -164,7 +170,7 @@ const ENCORE_CUE_LIST = "encore";
 
 function cuelistPlayback(number: number, name: string, cueListId: string) {
 	return {
-		number,
+		address: { page: 1, position: number },
 		name,
 		target: { type: "cue_list", cue_list_id: cueListId },
 		buttons: ["go", "go_minus", "flash"],
@@ -172,13 +178,14 @@ function cuelistPlayback(number: number, name: string, cueListId: string) {
 		go_activates: true,
 		auto_off: true,
 		xfade_millis: 0,
-	} satisfies PlaybackDefinition;
+	} satisfies import("../../components/control/playbackFaderBank/types").AssignedPlayback;
 }
 
 function cueListBody(id: string, name: string, cueNames: string[]): CueList {
 	return {
 		id,
 		name,
+		pool_number: id === MAIN_CUE_LIST ? 1 : 2,
 		priority: 10,
 		mode: "sequence",
 		looped: false,
@@ -212,10 +219,9 @@ function cueListRuntimeProjection(
 	const live = base.runtime;
 	return {
 		...base,
-		requested,
-		playback_number: runtime.playbackNumber,
+		identity: requested,
 		cue_list_id: cueListId,
-		runtime: { ...live, master: runtime.master },
+		runtime: { ...live, master: runtime.master, owner: requested },
 	};
 }
 
@@ -241,7 +247,10 @@ class PlaybackAuthority {
 	desk(): PlaybackDesk {
 		return {
 			...deskProjection(1),
-			selected_playback: this.selectedPlayback,
+			selected_playback:
+				this.selectedPlayback === null
+					? null
+					: { page: 1, position: this.selectedPlayback },
 			selected_cue_list: this.selectedCueList,
 		};
 	}
@@ -268,8 +277,7 @@ class PlaybackAuthority {
 			return cueListRuntimeProjection(requested, cueListId, runtime);
 		return {
 			scope: { show_id: SHOW_ID, show_revision: 1 },
-			requested,
-			playback_number: null,
+			identity: requested,
 			target: "cue_list",
 			cue_list_id: cueListId,
 			runtime: null,
@@ -280,7 +288,7 @@ class PlaybackAuthority {
 		for (const [cueListId, runtime] of this.cuelists)
 			if (runtime.playbackNumber === playbackNumber)
 				return cueListRuntimeProjection(
-					{ kind: "playback", playback_number: playbackNumber },
+					{ kind: "playback", page: 1, position: playbackNumber },
 					cueListId,
 					runtime,
 				);
@@ -299,7 +307,7 @@ class PlaybackAuthority {
 				if (identity.kind === "cue_list")
 					return this.cuelistProjection(identity.cue_list_id);
 				if (identity.kind === "playback")
-					return this.playbackProjection(identity.playback_number);
+					return this.playbackProjection(identity.position);
 				return null;
 			})
 			.filter((projection): projection is PlaybackProjection => !!projection);
@@ -410,10 +418,9 @@ beforeEach(() => {
 			)
 				throw new Error("missing Cuelist projection");
 			return {
-				request_id: request.request_id,
 				correlation_id: "55555555-5555-4555-8555-555555555555",
 				requested: request.address,
-				resolved: { kind: "playback", playback_number: 1, page: 1, slot: 1 },
+				resolved: { kind: "playback", page: 1, position: 1 },
 				outcome: { status: "applied" },
 				durability: "durable",
 				projection: {
@@ -424,7 +431,6 @@ beforeEach(() => {
 				desk: null,
 				event_sequence: 50,
 				desk_event_sequence: null,
-				replayed: false,
 			};
 		});
 	mocks.state.storeArmed = false;
@@ -472,7 +478,7 @@ describe("Cuelist follow-selection desk authority", () => {
 		expect(
 			within(view.container).queryByText("Main opening"),
 		).not.toBeInTheDocument();
-		expect(authority.requestedKeys()).toContain("direct-cuelist:encore");
+		expect(authority.requestedKeys()).toContain("cuelist:encore");
 		authority.selectedCueList = null;
 		await act(async () => {
 			authority.publishDesk();
@@ -700,7 +706,7 @@ describe("Cuelist Pool master authority", () => {
 		).toHaveTextContent("2");
 		expect(main).toHaveClass("running");
 		expect(authority.requestedKeys()).toContain(
-			identityKey({ kind: "playback", playback_number: 7 }),
+			identityKey({ kind: "playback", page: 1, position: 7 }),
 		);
 	});
 
@@ -762,14 +768,14 @@ describe("Cuelist Pool master authority", () => {
 
 		expect(authority.requestedKeys()).toEqual(
 			new Set([
-				"playback:1",
-				"playback:2",
+				"playback:1.1",
+				"playback:1.2",
 				"direct-cuelist:main",
 				"direct-cuelist:encore",
 			]),
 		);
 		expect(mocks.showObjectKindsView).toHaveBeenCalledWith(
-			["cue_list", "playback", "playback_page"],
+			["cue_list", "playback_page"],
 			true,
 		);
 	});
@@ -796,9 +802,9 @@ describe("Cuelist Pool workflows over scoped authority", () => {
 			expect(mocks.applyPlaybackAction).toHaveBeenCalledOnce(),
 		);
 		expect(mocks.applyPlaybackAction.mock.calls[0]?.[2]).toMatchObject({
-			address: { kind: "playback", playback_number: 1 },
+			address: { kind: "playback", page: 1, position: 1 },
 			action: { type: "release" },
-			surface: "virtual",
+			control_source: { surface_id: "main", control_id: 0 },
 		});
 		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
 		expect(mocks.recordCue).not.toHaveBeenCalled();

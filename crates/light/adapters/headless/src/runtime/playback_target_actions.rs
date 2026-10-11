@@ -12,7 +12,7 @@ pub(super) struct PlaybackTargetOutcome {
     pub(super) changed: bool,
     pub(super) addressed_event_required: bool,
     pub(super) persistence_pending: bool,
-    pub(super) released_playbacks: Vec<u16>,
+    pub(super) released_playbacks: Vec<light_playback::PlaybackAddress>,
     pub(super) persistence: PlaybackPersistencePlan,
 }
 
@@ -62,44 +62,43 @@ impl PlaybackTargetOutcome {
     }
 }
 
-fn execute_pool_with_exclusions(
+fn execute_addressed(
     state: &AppState,
-    number: u16,
-    action: PoolPlaybackAction,
-    exclusion_zones: &[Vec<u16>],
+    address: light_playback::PlaybackAddress,
+    action: light_engine::PlaybackAction,
+    control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
-    let transition = state
-        .output
-        .execute_pool_playback_with_activation(
-            number,
-            action.clone(),
-            exclusion_zones,
+    let outcome = super::playback_solo::execute_engine(
+        state,
+        EnginePlaybackCommand::Playback {
+            address,
+            action: action.clone(),
             activation_origin,
-        )
-        .map_err(ApiError::bad_request)?;
-    let EnginePlaybackOutcome::Changed(effect) = transition.outcome else {
-        return Err(ApiError::internal("unexpected pool Playback outcome"));
+            control_source: control_source.clone(),
+        },
+    )?;
+    let EnginePlaybackOutcome::Changed(effect) = outcome else {
+        return Err(ApiError::internal("unexpected Playback outcome"));
     };
     Ok(PlaybackTargetOutcome {
         changed: effect.changed(),
         addressed_event_required: effect.addressed.changed()
             && may_change_unprojected_runtime(action),
         persistence_pending: false,
-        released_playbacks: transition.released_playbacks,
+        released_playbacks: Vec::new(),
         persistence: PlaybackPersistencePlan::for_cuelist(effect.aggregate),
     })
 }
 
-fn may_change_unprojected_runtime(action: PoolPlaybackAction) -> bool {
+fn may_change_unprojected_runtime(action: light_engine::PlaybackAction) -> bool {
     matches!(
         action,
-        PoolPlaybackAction::On
-            | PoolPlaybackAction::Load(_)
-            | PoolPlaybackAction::SetMaster(_)
-            | PoolPlaybackAction::SetConfiguredFader { .. }
-            | PoolPlaybackAction::SetVirtualMaster(_)
-            | PoolPlaybackAction::XFade(_)
+        light_engine::PlaybackAction::On
+            | light_engine::PlaybackAction::Load(_)
+            | light_engine::PlaybackAction::SetMaster(_)
+            | light_engine::PlaybackAction::SetConfiguredFader { .. }
+            | light_engine::PlaybackAction::XFade(_)
     )
 }
 
@@ -107,21 +106,14 @@ pub(super) fn apply_playback_master(
     state: &AppState,
     context: &light_application::ActionContext,
     session: Option<&Session>,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     source: &str,
-    exclusion_zones: &[Vec<u16>],
+    control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
-    let software_fader = activation_origin.as_ref().map_or(source == "ui", |origin| {
-        matches!(
-            origin.surface,
-            light_playback::PlaybackActivationSurface::Virtual
-                | light_playback::PlaybackActivationSurface::Matter
-        )
-    });
-    let virtual_fader = software_fader || (source == "matter" && !definition.has_fader);
-    if !definition.has_fader && !virtual_fader {
+    if !definition.has_fader {
         return Err(ApiError::bad_request("playback does not have a fader"));
     }
     let value = input
@@ -134,26 +126,16 @@ pub(super) fn apply_playback_master(
         definition.target,
         PlaybackTarget::CueList { .. } | PlaybackTarget::Dynamic { .. }
     ) {
-        let mut outcome = if virtual_fader {
-            execute_pool_with_exclusions(
-                state,
-                definition.number,
-                PoolPlaybackAction::SetVirtualMaster(value),
-                exclusion_zones,
-                activation_origin,
-            )
-        } else {
-            execute_pool_with_exclusions(
-                state,
-                definition.number,
-                PoolPlaybackAction::SetConfiguredFader {
-                    mode: definition.fader,
-                    value,
-                },
-                exclusion_zones,
-                activation_origin,
-            )
-        }?;
+        let mut outcome = execute_addressed(
+            state,
+            address,
+            light_engine::PlaybackAction::SetConfiguredFader {
+                mode: definition.fader,
+                value,
+            },
+            control_source,
+            activation_origin,
+        )?;
         if matches!(definition.target, PlaybackTarget::Dynamic { .. }) {
             outcome.persistence = outcome
                 .persistence
@@ -165,19 +147,21 @@ pub(super) fn apply_playback_master(
         state,
         context,
         session,
+        address,
         definition,
         input,
         value,
-        !virtual_fader,
+        control_source,
     )
 }
 
 pub(super) fn apply_direct_playback_action(
     state: &AppState,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action: &str,
     input: &PoolPlaybackInput,
-    exclusion_zones: &[Vec<u16>],
+    control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<Option<PlaybackTargetOutcome>, ApiError> {
     let cue = || {
@@ -192,25 +176,25 @@ pub(super) fn apply_direct_playback_action(
             })
     };
     let outcome = match action {
-        "go-to" => execute_pool_with_exclusions(
+        "go-to" => execute_addressed(
             state,
-            definition.number,
-            PoolPlaybackAction::GoTo(cue()?),
-            exclusion_zones,
+            address,
+            light_engine::PlaybackAction::GoTo(cue()?),
+            control_source,
             activation_origin,
         )?,
-        "load" => execute_pool_with_exclusions(
+        "load" => execute_addressed(
             state,
-            definition.number,
-            PoolPlaybackAction::Load(cue()?),
-            exclusion_zones,
+            address,
+            light_engine::PlaybackAction::Load(cue()?),
+            control_source,
             activation_origin,
         )?,
-        "xfade-on" | "xfade-off" => execute_pool_with_exclusions(
+        "xfade-on" | "xfade-off" => execute_addressed(
             state,
-            definition.number,
-            PoolPlaybackAction::XFade(action == "xfade-on"),
-            exclusion_zones,
+            address,
+            light_engine::PlaybackAction::XFade(action == "xfade-on"),
+            control_source,
             activation_origin,
         )?,
         "temp-on" | "temp-off" => {
@@ -219,33 +203,33 @@ pub(super) fn apply_direct_playback_action(
                     "Temp is available only for a Cuelist playback",
                 ));
             }
-            execute_pool_with_exclusions(
+            execute_addressed(
                 state,
-                definition.number,
-                PoolPlaybackAction::SetTempButton(action == "temp-on"),
-                exclusion_zones,
+                address,
+                light_engine::PlaybackAction::SetTempButton(action == "temp-on"),
+                control_source,
                 activation_origin,
             )?
         }
-        "dynamic-restart" => execute_pool_with_exclusions(
+        "dynamic-restart" => execute_addressed(
             state,
-            definition.number,
-            PoolPlaybackAction::DynamicRestart,
-            exclusion_zones,
+            address,
+            light_engine::PlaybackAction::DynamicRestart,
+            control_source,
             activation_origin,
         )?,
-        "dynamic-double-speed" => execute_pool_with_exclusions(
+        "dynamic-double-speed" => execute_addressed(
             state,
-            definition.number,
-            PoolPlaybackAction::DynamicDoubleSpeed,
-            exclusion_zones,
+            address,
+            light_engine::PlaybackAction::DynamicDoubleSpeed,
+            control_source,
             activation_origin,
         )?,
-        "dynamic-half-speed" => execute_pool_with_exclusions(
+        "dynamic-half-speed" => execute_addressed(
             state,
-            definition.number,
-            PoolPlaybackAction::DynamicHalfSpeed,
-            exclusion_zones,
+            address,
+            light_engine::PlaybackAction::DynamicHalfSpeed,
+            control_source,
             activation_origin,
         )?,
         _ => return Ok(None),
@@ -256,6 +240,7 @@ pub(super) fn apply_direct_playback_action(
 pub(super) fn select_playback_target(
     state: &AppState,
     desk: Option<&ControlDesk>,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action: Action,
 ) -> Result<bool, ApiError> {
@@ -285,12 +270,24 @@ pub(super) fn select_playback_target(
         .installation
         .set_selected_cue_list(desk.id, show.id, None)
         .map_err(ApiError::store)?;
-    if selected == Some(definition.number) {
+    if selected
+        == Some(light_show::PlaybackSelection {
+            page: address.page(),
+            position: address.position(),
+        })
+    {
         return Ok(selected_cue_list.is_some());
     }
     state
         .installation
-        .set_selected_playback(desk.id, show.id, Some(definition.number))
+        .set_selected_playback(
+            desk.id,
+            show.id,
+            Some(light_show::PlaybackSelection {
+                page: address.page(),
+                position: address.position(),
+            }),
+        )
         .map_err(ApiError::store)?;
     Ok(true)
 }
@@ -298,25 +295,26 @@ pub(super) fn select_playback_target(
 fn apply_cuelist_action(
     state: &AppState,
     session: Option<&Session>,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     cue_list_id: light_core::CueListId,
     action: Action,
     pressed: bool,
-    exclusion_zones: &[Vec<u16>],
+    control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let command = match action {
-        Action::On => Some(PoolPlaybackAction::On),
-        Action::Off => Some(PoolPlaybackAction::Off),
-        Action::Toggle => Some(PoolPlaybackAction::Toggle),
-        Action::Go => Some(PoolPlaybackAction::Go),
-        Action::GoMinus => Some(PoolPlaybackAction::Back),
-        Action::Pause => Some(PoolPlaybackAction::TogglePause),
-        Action::FastForward => Some(PoolPlaybackAction::FastForward),
-        Action::FastRewind => Some(PoolPlaybackAction::FastRewind),
-        Action::Flash => Some(PoolPlaybackAction::SetFlash(pressed)),
-        Action::Temp => Some(PoolPlaybackAction::ToggleTemp),
-        Action::Swap => Some(PoolPlaybackAction::SetSwap(pressed)),
+        Action::On => Some(light_engine::PlaybackAction::On),
+        Action::Off => Some(light_engine::PlaybackAction::Off),
+        Action::Toggle => Some(light_engine::PlaybackAction::Toggle),
+        Action::Go => Some(light_engine::PlaybackAction::Go),
+        Action::GoMinus => Some(light_engine::PlaybackAction::Back),
+        Action::Pause => Some(light_engine::PlaybackAction::TogglePause),
+        Action::FastForward => Some(light_engine::PlaybackAction::FastForward),
+        Action::FastRewind => Some(light_engine::PlaybackAction::FastRewind),
+        Action::Flash => Some(light_engine::PlaybackAction::SetFlash(pressed)),
+        Action::Temp => Some(light_engine::PlaybackAction::ToggleTemp),
+        Action::Swap => Some(light_engine::PlaybackAction::SetSwap(pressed)),
         Action::Select => None,
         Action::SelectContents => {
             let session =
@@ -332,35 +330,30 @@ fn apply_cuelist_action(
         }
     };
     if let Some(command) = command {
-        return execute_pool_with_exclusions(
-            state,
-            definition.number,
-            command,
-            exclusion_zones,
-            activation_origin,
-        );
+        return execute_addressed(state, address, command, control_source, activation_origin);
     }
     Ok(PlaybackTargetOutcome::changed(action != Action::Select))
 }
 
 fn apply_dynamic_action(
     state: &AppState,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action: Action,
     pressed: bool,
-    exclusion_zones: &[Vec<u16>],
+    control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let command = match action {
-        Action::On => PoolPlaybackAction::On,
-        Action::Off => PoolPlaybackAction::Off,
-        Action::Toggle => PoolPlaybackAction::Toggle,
-        Action::Pause => PoolPlaybackAction::TogglePause,
-        Action::Flash => PoolPlaybackAction::SetFlash(pressed),
-        Action::DynamicRestart => PoolPlaybackAction::DynamicRestart,
-        Action::DynamicDoubleSpeed => PoolPlaybackAction::DynamicDoubleSpeed,
-        Action::DynamicHalfSpeed => PoolPlaybackAction::DynamicHalfSpeed,
-        Action::DynamicLearnSpeed => PoolPlaybackAction::DynamicLearnSpeed,
+        Action::On => light_engine::PlaybackAction::On,
+        Action::Off => light_engine::PlaybackAction::Off,
+        Action::Toggle => light_engine::PlaybackAction::Toggle,
+        Action::Pause => light_engine::PlaybackAction::TogglePause,
+        Action::Flash => light_engine::PlaybackAction::SetFlash(pressed),
+        Action::DynamicRestart => light_engine::PlaybackAction::DynamicRestart,
+        Action::DynamicDoubleSpeed => light_engine::PlaybackAction::DynamicDoubleSpeed,
+        Action::DynamicHalfSpeed => light_engine::PlaybackAction::DynamicHalfSpeed,
+        Action::DynamicLearnSpeed => light_engine::PlaybackAction::DynamicLearnSpeed,
         Action::None => return Ok(PlaybackTargetOutcome::changed(false)),
         _ => {
             return Err(ApiError::bad_request(
@@ -368,13 +361,8 @@ fn apply_dynamic_action(
             ));
         }
     };
-    let mut outcome = execute_pool_with_exclusions(
-        state,
-        definition.number,
-        command,
-        exclusion_zones,
-        activation_origin,
-    )?;
+    let mut outcome =
+        execute_addressed(state, address, command, control_source, activation_origin)?;
     outcome.persistence = outcome
         .persistence
         .combine(PlaybackPersistencePlan::output_runtime());
@@ -385,36 +373,49 @@ pub(super) fn apply_playback_target_action(
     state: &AppState,
     context: &light_application::ActionContext,
     session: Option<&Session>,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action: Action,
     input: &PoolPlaybackInput,
     pressed: bool,
-    exclusion_zones: &[Vec<u16>],
+    control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     if let PlaybackTarget::CueList { cue_list_id } = &definition.target {
         return apply_cuelist_action(
             state,
             session,
+            address,
             definition,
             *cue_list_id,
             action,
             pressed,
-            exclusion_zones,
+            control_source,
             activation_origin,
         );
     }
     if matches!(definition.target, PlaybackTarget::Dynamic { .. }) {
         return apply_dynamic_action(
             state,
+            address,
             definition,
             action,
             pressed,
-            exclusion_zones,
+            control_source,
             activation_origin,
         );
     }
-    apply_specialized_target_action(state, context, session, definition, action, input, pressed)
+    apply_specialized_target_action(
+        state,
+        context,
+        session,
+        address,
+        definition,
+        action,
+        input,
+        pressed,
+        control_source,
+    )
 }
 
 #[cfg(test)]

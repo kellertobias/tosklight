@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import type { ShowObjectKind } from "../showObjects/contracts";
 import {
 	useCueLists,
-	usePlaybackDefinitions,
 	usePlaybackPages,
 	useShowObjectCollectionsReady,
 	useShowObjectsStatus,
@@ -12,7 +11,6 @@ import type { PlaybackPagesView, PlaybackTopologyView } from "./contracts";
 
 const TOPOLOGY_KINDS = [
 	"cue_list",
-	"playback",
 	"playback_page",
 ] as const satisfies readonly ShowObjectKind[];
 const PAGE_KINDS = [
@@ -29,17 +27,15 @@ export function usePlaybackTopologyView(enabled = true): PlaybackTopologyView {
 	const authorityReady = enabled && collectionsReady;
 	const { error } = useShowObjectsStatus(enabled);
 	const cueLists = useCueLists(enabled);
-	const playbacks = usePlaybackDefinitions(enabled);
 	const pages = usePlaybackPages(enabled);
 	return useMemo(
 		() => ({
 			ready: authorityReady,
 			error: enabled ? error : null,
 			cueLists: authorityReady ? cueLists : [],
-			playbacks: authorityReady ? playbacks : [],
 			pages: authorityReady ? pages : [],
 		}),
-		[authorityReady, cueLists, enabled, error, pages, playbacks],
+		[authorityReady, cueLists, enabled, error, pages],
 	);
 }
 

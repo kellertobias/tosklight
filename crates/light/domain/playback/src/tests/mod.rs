@@ -1,4 +1,17 @@
 use crate::*;
+fn address(position: u16) -> PlaybackAddress {
+    PlaybackAddress::new(1, position).unwrap()
+}
+fn test_source(position: u16) -> PlaybackControlSource {
+    PlaybackControlSource {
+        surface_id: "hardware:test".into(),
+        control_id: position,
+    }
+}
+
+fn held(address: PlaybackAddress) -> PlaybackControlKey {
+    PlaybackControlKey::new(address, &test_source(address.position())).unwrap()
+}
 
 fn cue_number(value: f64) -> CueNumber {
     CueNumber::try_from_legacy_f64(value).unwrap()
@@ -35,9 +48,8 @@ fn list(cues: Vec<Cue>) -> CueList {
         cues,
     }
 }
-fn definition(number: u16, cue_list_id: CueListId) -> PlaybackDefinition {
+fn definition(number: impl std::fmt::Display, cue_list_id: CueListId) -> PlaybackDefinition {
     PlaybackDefinition {
-        number,
         name: format!("Playback {number}"),
         target: PlaybackTarget::CueList { cue_list_id },
         buttons: [

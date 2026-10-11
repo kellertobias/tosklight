@@ -126,7 +126,7 @@ mod tests {
     use super::*;
     use crate::{
         NormalProgrammerValueMutation, NormalProgrammerValueTiming, PreloadPlaybackQueueAction,
-        PreloadPlaybackQueueSurface, ProgrammerSnapshot,
+        ProgrammerSnapshot,
     };
     use light_core::{AttributeKey, AttributeValue, FixtureId};
     use std::sync::Arc;
@@ -264,10 +264,12 @@ mod tests {
 
         assert!(registry.queue_preload_playback_action(
             session,
-            1,
-            None,
+            light_playback::PlaybackAddress::new(1, 1).unwrap(),
             PreloadPlaybackQueueAction::Go,
-            PreloadPlaybackQueueSurface::Physical,
+            light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1
+            },
         ));
         assert!(!preload_active(&registry));
         assert_eq!(registry.take_preload_playback_actions(session).len(), 1);

@@ -65,12 +65,11 @@ pub struct ProgrammingPreloadRuntimeChange {
     pub event_sequence: u64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingPreloadExecutedPlaybackAction {
-    pub playback_number: u16,
-    pub page: Option<u8>,
+    pub address: light_playback::PlaybackAddress,
     pub action: super::ProgrammingPreloadPlaybackAction,
-    pub surface: super::ProgrammingPreloadPlaybackSurface,
+    pub control_source: light_playback::PlaybackControlSource,
 }
 
 #[derive(Clone, Debug, PartialEq)]

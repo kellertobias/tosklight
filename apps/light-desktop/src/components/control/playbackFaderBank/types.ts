@@ -1,17 +1,20 @@
+import type { PlaybackAddressValue } from "../../../api/playbackAddress";
 import type {
 	CueList,
 	PlaybackDefinition,
 	PlaybackSurfaceRow,
 } from "../../../api/types";
-import type { LegacyPlaybackRuntime } from "../../../features/playbackRuntime/legacy";
+import type { PlaybackControlRuntime } from "../../../features/playbackRuntime/controlRuntime";
 import type { ShowObject } from "../../../features/showObjects/contracts";
 import type { PlaybackFootprintCellProjection } from "./footprints";
 
-export type PlaybackSnapshotActive = LegacyPlaybackRuntime;
+export type AssignedPlayback = PlaybackDefinition & { address: PlaybackAddressValue };
+
+export type PlaybackSnapshotActive = PlaybackControlRuntime;
 export type PlaybackGroup = ShowObject<"group">;
 
 export type PlaybackSlotProjection = {
-	playback: PlaybackDefinition | null;
+	playback: AssignedPlayback | null;
 	cue: CueList | null;
 	group: PlaybackGroup | null;
 	slot: number;
@@ -31,6 +34,4 @@ export type PlaybackConfigurationState = {
 	fallbackButtons: number;
 	expectedPageRevision: number;
 	expectedPageObjectId: string | null;
-	expectedPlaybackRevision: number;
-	expectedPlaybackObjectId: string | null;
 };

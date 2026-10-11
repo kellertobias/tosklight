@@ -22,6 +22,27 @@
     "mode"
   ],
   "$defs": {
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
     "ProgrammingUpdateCueMode": {
       "type": "string",
       "enum": [
@@ -98,14 +119,15 @@
                 "null"
               ]
             },
-            "playback_number": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+            "playback_address": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PlaybackAddressValue"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "type": {
               "type": "string",

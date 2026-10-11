@@ -89,8 +89,8 @@ export function updateOutcomeLabel(item: UpdatePreviewItem) {
 
 export function updateTargetContext(target: UpdateTargetIdentity) {
 	const parts = [targetFamilyLabel(target)];
-	if (target.playback_number != null && target.family.type !== "cue") {
-		parts.push(`Playback ${target.playback_number}`);
+	if (target.playback_address != null && target.family.type !== "cue") {
+		parts.push(`Page ${target.playback_address.page} Playback ${target.playback_address.position}`);
 	}
 	if (target.cue) parts.push(`Current Cue ${target.cue.number}`);
 	return parts.join(" · ");

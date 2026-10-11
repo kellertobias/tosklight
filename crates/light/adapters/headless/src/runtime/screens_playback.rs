@@ -40,14 +40,13 @@ pub(super) fn ensure_playback_page_for_advance(
     else {
         return Ok(PlaybackPageAvailability::Missing);
     };
-    if last.slots.is_empty() || last.number.checked_add(1) != Some(requested) {
+    if last.assignments.is_empty() || last.number.checked_add(1) != Some(requested) {
         return Ok(PlaybackPageAvailability::Missing);
     }
     let page = light_playback::PlaybackPage {
         number: requested,
         name: format!("Page {requested}"),
-        slots: HashMap::new(),
-        virtual_playbacks: HashMap::new(),
+        assignments: HashMap::new(),
     };
     let mutation = playback_layout_mutations::put_page(page, 0)?;
     let action = active_show_object_action(context.clone(), show.id, vec![mutation]);

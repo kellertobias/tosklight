@@ -221,18 +221,43 @@ pub(super) fn refresh_matter_bridge(state: &AppState) -> matter::MatterBridgeSta
         state
             .integrations
             .matter_bridge()
-            .reconcile(false, &[], &[], &HashMap::new());
+            .reconcile(false, &[], &HashMap::new());
         state.integrations.matter_bridge().status()
     } else {
         let snapshot = state.output.snapshot();
         let values = matter_playback_values(state, &snapshot);
-        state.integrations.matter_bridge().reconcile(
+        const ENDPOINTS_KEY: &str = "matter.playback_endpoints.v1";
+        let saved = match state.installation.setting(ENDPOINTS_KEY) {
+            Ok(saved) => saved,
+            Err(error) => {
+                if let Some(transport) = state.integrations.matter_transport() {
+                    transport.stop();
+                }
+                return state
+                    .integrations
+                    .matter_bridge()
+                    .fail(format!("Cannot read Matter endpoint settings: {error}"));
+            }
+        };
+        state.integrations.matter_bridge().reconcile_persisted(
             true,
             &snapshot.playback_pages,
-            &snapshot.playbacks,
             &values,
+            saved.as_deref(),
+            |serialized| {
+                state
+                    .installation
+                    .set_setting(ENDPOINTS_KEY, serialized)
+                    .map_err(|error| format!("Cannot save Matter endpoint allocation: {error}"))
+            },
         )
     };
+    if adapter.transport == matter::MatterTransportState::Failed {
+        if let Some(transport) = state.integrations.matter_transport() {
+            transport.stop();
+        }
+        return adapter;
+    }
     let Some(transport) = state.integrations.matter_transport() else {
         return adapter;
     };
@@ -285,27 +310,26 @@ pub(super) async fn matter_bridge_sync(
 pub(super) fn matter_playback_values(
     state: &AppState,
     snapshot: &EngineSnapshot,
-) -> HashMap<u16, matter::PlaybackValue> {
-    let runtime = state
-        .output
-        .playback_runtime_status()
-        .into_iter()
-        .filter_map(|status| {
-            status
-                .playback
-                .playback_number
-                .map(|number| (number, status))
-        })
-        .collect::<HashMap<_, _>>();
+) -> HashMap<light_playback::PlaybackAddress, matter::PlaybackValue> {
     snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .filter(|definition| matter_exposes_target(&definition.target))
-        .map(|definition| {
+        .flat_map(|page| {
+            page.assignments
+                .iter()
+                .filter_map(move |(position, definition)| {
+                    light_playback::PlaybackAddress::new(page.number, *position)
+                        .ok()
+                        .map(|address| (address, definition))
+                })
+        })
+        .filter(|(_, definition)| matter_exposes_target(&definition.target))
+        .map(|(address, definition)| {
             use light_playback::PlaybackTarget;
             let value = match &definition.target {
-                PlaybackTarget::CueList { .. } => runtime
-                    .get(&definition.number)
+                PlaybackTarget::CueList { .. } => state
+                    .output
+                    .playback_runtime_status_at(address)
                     .map(|status| match definition.fader {
                         light_playback::PlaybackFaderMode::Temp => matter::PlaybackValue::new(
                             status.temporary_master,
@@ -321,15 +345,13 @@ pub(super) fn matter_playback_values(
                         ),
                     })
                     .unwrap_or_default(),
-                PlaybackTarget::Dynamic { .. } => {
-                    light_playback::PlaybackIdentity::physical(definition.number)
-                        .ok()
-                        .and_then(|identity| state.output.active_dynamic_playback_at(identity))
-                        .map(|playback| {
-                            matter::PlaybackValue::new(playback.fader_value, playback.enabled)
-                        })
-                        .unwrap_or_default()
-                }
+                PlaybackTarget::Dynamic { .. } => state
+                    .output
+                    .active_dynamic_playback(address)
+                    .map(|playback| {
+                        matter::PlaybackValue::new(playback.fader_value, playback.enabled)
+                    })
+                    .unwrap_or_default(),
                 PlaybackTarget::Group { group_id, .. } => state
                     .output
                     .group_master(group_id)
@@ -347,7 +369,7 @@ pub(super) fn matter_playback_values(
                     unreachable!("Matter target eligibility is filtered before value projection")
                 }
             };
-            (definition.number, value)
+            (address, value)
         })
         .collect()
 }
@@ -362,7 +384,7 @@ fn matter_exposes_target(target: &light_playback::PlaybackTarget) -> bool {
 }
 
 /// Apply the protocol-independent result of a Matter On/Off or Level Control write through the
-/// same global playback dispatcher used by attached desk surfaces. A protocol transport can call
+/// same canonical playback dispatcher used by attached desk surfaces. A protocol transport can call
 /// this seam after commissioning without acquiring a desk-local current-page context.
 #[allow(dead_code)]
 pub(super) fn apply_matter_playback_write(
@@ -389,25 +411,26 @@ pub(super) fn apply_matter_playback_write(
             light_application::ActionSource::Matter,
         ),
         light_application::PlaybackCommand {
-            address: light_application::PlaybackAddress::Pool(resolved.playback_number),
+            address: light_application::PlaybackAddress::Playback(resolved.address),
             action: light_application::PlaybackAction::Master(
                 light_application::PlaybackLevel::new(resolved.level),
             ),
-            surface: light_application::PlaybackSurface::Matter,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: format!("matter:{}", resolved.endpoint_id),
+                control_id: 1,
+            },
         },
     )?;
     let changed = matches!(
         result.execution,
-        light_application::PlaybackExecution::Pool { changed: true, .. }
+        light_application::PlaybackExecution::Playback { changed: true, .. }
     );
     if changed {
         emit(
             state,
             "playback_changed",
             serde_json::json!({
-                "page":resolved.page,
-                "playback":resolved.playback,
-                "playback_number":resolved.playback_number,
+                "address":resolved.address,
                 "action":"fader",
                 "source":"matter"
             }),
@@ -417,9 +440,10 @@ pub(super) fn apply_matter_playback_write(
         let group_id = state
             .output
             .snapshot()
-            .playbacks
+            .playback_pages
             .iter()
-            .find(|definition| definition.number == resolved.playback_number)
+            .find(|page| page.number == resolved.address.page())
+            .and_then(|page| page.assignments.get(&resolved.address.position()))
             .and_then(|definition| match &definition.target {
                 light_playback::PlaybackTarget::Group { group_id, .. } => Some(group_id.clone()),
                 _ => None,
@@ -434,9 +458,7 @@ pub(super) fn apply_matter_playback_write(
                 state,
                 "playback_changed",
                 serde_json::json!({
-                    "page":resolved.page,
-                    "playback":resolved.playback,
-                    "playback_number":resolved.playback_number,
+                    "address":resolved.address,
                     "action":"color",
                     "source":"matter"
                 }),

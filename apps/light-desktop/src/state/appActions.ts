@@ -4,8 +4,6 @@ import type {
 	FixtureSheetColumn,
 	GridRect,
 	TextEditorMode,
-	VirtualPlaybackExclusionZone,
-	VirtualPlaybackPageMode,
 	VisualizationRow,
 	WindowSettings,
 } from "../types";
@@ -23,10 +21,6 @@ export type Action =
 	| { type: "TOGGLE_CONTROL_MODE" }
 	| { type: "SET_CONTROL_MODE"; value: AppState["controlMode"] }
 	| { type: "SET_PANE_SETTINGS"; id: string | null }
-	| {
-			type: "SET_VIRTUAL_PLAYBACK_ZONE_EDIT";
-			edit: AppState["virtualPlaybackZoneEdit"];
-	  }
 	| { type: "SET_PANE_RECT"; id: string; rect: Partial<GridRect> }
 	| { type: "SET_PANE_GROUP_SHORTCUTS"; id: string; value: boolean }
 	| { type: "SET_PANE_FIXTURE_ACTIVE_ONLY"; id: string; value: boolean }
@@ -124,31 +118,7 @@ export type Action =
 			id: string;
 			filter: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
 	  }
-	| {
-			type: "SET_VIRTUAL_PLAYBACK_GRID";
-			id: string;
-			rows: number;
-			columns: number;
-			changed?: "rows" | "columns";
-	  }
-	| {
-			type: "SET_VIRTUAL_PLAYBACK_PAGE_MODE";
-			id: string;
-			mode: VirtualPlaybackPageMode;
-			pinnedPage?: number;
-	  }
-	| {
-			type: "SET_VIRTUAL_PLAYBACK_CELL";
-			id: string;
-			index: number;
-			playbackNumber?: number | null;
-			action?: "go" | "toggle";
-	  }
-	| {
-			type: "SET_VIRTUAL_PLAYBACK_EXCLUSION_ZONES";
-			id: string;
-			zones: VirtualPlaybackExclusionZone[];
-	  }
+	| { type: "SET_PANE_PLAYBACK_SURFACE"; id: string; surfaceId: string }
 	| { type: "SET_FILE_MANAGER_SHOW_HIDDEN"; id: string; value: boolean }
 	| { type: "SET_TEXT_EDITOR_FILE"; id: string; root: string; path: string }
 	| {

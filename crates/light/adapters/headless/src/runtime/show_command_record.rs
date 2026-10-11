@@ -227,7 +227,7 @@ fn record_cue(
         store_cue_at(
             state,
             session,
-            playback,
+            light_playback::PlaybackAddress::new(playback.page, playback.position)?,
             Some(parse_command_cue_number(&body[1..])?),
             timing,
             operation,
@@ -235,7 +235,15 @@ fn record_cue(
         )?;
         return Ok(1);
     }
-    let (address, used) = parse_playback_address(body, true, snapshot)?;
+    let (address, used) = parse_playback_address(
+        body,
+        true,
+        snapshot,
+        state
+            .installation
+            .command_page(session.desk.id)
+            .map_err(|error| error.to_string())?,
+    )?;
     if used != body.len() {
         return Err("unexpected tokens after cue target".into());
     }

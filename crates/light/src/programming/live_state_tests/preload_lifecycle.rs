@@ -3,8 +3,7 @@ use crate::{ActionErrorKind, ProgrammingPreloadLifecycleState};
 use chrono::Utc;
 use light_core::{AttributeKey, AttributeValue, ShowId};
 use light_programmer::{
-    PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface, PreloadProgrammerValueMutation,
-    ProgrammerAlignmentMode,
+    PreloadPlaybackQueueAction, PreloadProgrammerValueMutation, ProgrammerAlignmentMode,
 };
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -53,10 +52,9 @@ impl ProgrammingPreloadLifecyclePorts for LifecyclePorts {
             executed: actions
                 .iter()
                 .map(|action| ProgrammingPreloadExecutedPlaybackAction {
-                    playback_number: action.playback_number,
-                    page: action.page,
+                    address: action.address,
                     action: ProgrammingPreloadPlaybackAction::Go,
-                    surface: ProgrammingPreloadPlaybackSurface::Physical,
+                    control_source: action.control_source.clone(),
                 })
                 .collect(),
             runtime_changes: Vec::new(),
@@ -186,10 +184,12 @@ impl LifecycleSetup {
     fn queue(&self, playback_number: u16) {
         assert!(self.registry.queue_preload_playback_action(
             self.session,
-            playback_number,
-            None,
+            light_playback::PlaybackAddress::new(1, playback_number).unwrap(),
             PreloadPlaybackQueueAction::Go,
-            PreloadPlaybackQueueSurface::Physical,
+            light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 1
+            },
         ));
     }
 }
@@ -355,7 +355,9 @@ fn go_checks_selection_commits_once_and_replay_repeats_no_effect_or_event() {
     assert!(first.queue_event_sequence.is_some());
     assert_eq!(first.commit.as_ref().unwrap().executed_playback_actions, 1);
     assert_eq!(
-        first.commit.as_ref().unwrap().executed[0].playback_number,
+        first.commit.as_ref().unwrap().executed[0]
+            .address
+            .position(),
         8
     );
     assert_eq!(setup.ports.commits.load(Ordering::SeqCst), 1);

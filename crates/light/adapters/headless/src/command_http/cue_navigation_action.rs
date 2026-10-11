@@ -9,17 +9,15 @@ use super::{
     cue_navigation_command::CueNavigationCommand, playback_address_command::CommandPlaybackTarget,
 };
 use light_application::{
-    ActionContext, ActionSource, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackOutcome,
-    PlaybackSurface,
+    ActionContext, PlaybackAction, PlaybackAddress, PlaybackCommand, PlaybackOutcome,
 };
 
 use super::super::{AppState, Session};
 
 pub(super) struct CueNavigationTransition {
-    pub playback: u16,
+    pub playback: light_playback::PlaybackAddress,
     /// One real semantic transition; `false` for an exact no-change action.
     pub applied: bool,
-    pub replayed: bool,
 }
 
 pub(super) fn execute(
@@ -37,44 +35,57 @@ pub(super) fn execute(
         PlaybackCommand {
             address,
             action: action(parsed),
-            surface: surface(context.source),
+            control_source: control_source(state, context)?,
         },
     )
     .map_err(|error| error.message)?;
     let playback = result
         .resolved
-        .playback_number()
+        .playback_address()
         .ok_or("Cue command resolved to a Cuelist without a playback")?;
     Ok(CueNavigationTransition {
         playback,
         applied: result.outcome == PlaybackOutcome::Applied,
-        replayed: result.replayed,
     })
 }
 
 /// Resolves desk selection and page topology; the Cue itself is resolved by the Playback service.
-fn resolve_address(target: CommandPlaybackTarget) -> PlaybackAddress {
+pub(in crate::runtime) fn resolve_address(target: CommandPlaybackTarget) -> PlaybackAddress {
     match target {
-        CommandPlaybackTarget::CurrentPage { slot } => PlaybackAddress::CurrentPage { slot },
-        CommandPlaybackTarget::ExplicitPage { page, slot } => {
-            PlaybackAddress::ExplicitPage { page, slot }
+        CommandPlaybackTarget::CurrentPage { position } => {
+            PlaybackAddress::CurrentPage { position }
         }
-        CommandPlaybackTarget::Virtual(address) => PlaybackAddress::Virtual(address),
+        CommandPlaybackTarget::ExplicitPage { page, position } => PlaybackAddress::Playback(
+            light_playback::PlaybackAddress::new(page, position)
+                .expect("validated command address"),
+        ),
     }
+}
+pub(super) fn control_source(
+    state: &AppState,
+    context: &ActionContext,
+) -> Result<light_playback::PlaybackControlSource, String> {
+    Ok(light_playback::PlaybackControlSource {
+        surface_id: state
+            .installation
+            .selected_playback_surface(context.desk_id)
+            .map_err(|error| error.to_string())?,
+        control_id: 1,
+    })
 }
 
 /// Temporary per-object facade notification, isolated to compatibility consumers.
 pub(super) fn emit_compatibility_change(
     state: &AppState,
     session: &Session,
-    playback: u16,
+    playback: light_playback::PlaybackAddress,
     parsed: CueNavigationCommand,
 ) {
     super::super::emit(
         state,
         "playback_changed",
         serde_json::json!({
-            "playback_number":playback,
+            "playback_address":playback,
             "action":if parsed.load { "load" } else { "go-to" },
             "cue_number":parsed.cue_number,
             "session_id":session.id,
@@ -87,14 +98,5 @@ fn action(parsed: CueNavigationCommand) -> PlaybackAction {
         PlaybackAction::Load(parsed.cue_number)
     } else {
         PlaybackAction::GoTo(parsed.cue_number)
-    }
-}
-
-const fn surface(source: ActionSource) -> PlaybackSurface {
-    match source {
-        ActionSource::Osc => PlaybackSurface::Osc,
-        ActionSource::Matter => PlaybackSurface::Matter,
-        ActionSource::UserInterface | ActionSource::Http => PlaybackSurface::Virtual,
-        _ => PlaybackSurface::Physical,
     }
 }

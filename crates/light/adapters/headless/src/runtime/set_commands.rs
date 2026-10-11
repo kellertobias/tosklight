@@ -29,10 +29,7 @@ pub(super) fn execute_set_command(
     _context: &light_application::ActionContext,
 ) -> Result<usize, String> {
     if tokens.iter().any(|token| token == "AT") {
-        return Err(
-            "SET does not assign objects; use ASSIGN <source> AT PBK <address> or ASSIGN <source> AT VPBK <number>"
-                .into(),
-        );
+        return Err("SET does not assign objects; use ASSIGN <source> AT PBK <address>".into());
     }
     if tokens.first().is_some_and(|token| token == "DYNAMIC") {
         let [_, number] = tokens else {
@@ -95,14 +92,22 @@ pub(super) fn execute_set_command(
         return Err("SET requires an editable value or object".into());
     }
     let snapshot = state.output.snapshot();
-    let (address, used) = parse_playback_address(tokens, false, &snapshot)?;
+    let (address, used) = parse_playback_address(
+        tokens,
+        false,
+        &snapshot,
+        state
+            .installation
+            .command_page(session.desk.id)
+            .map_err(|error| error.to_string())?,
+    )?;
     if used != tokens.len() {
         return Err("unexpected tokens after playback selection".into());
     }
     emit(
         state,
         "playback_configuration_requested",
-        serde_json::json!({"playback":address.playback,"cue":address.cue}),
+        serde_json::json!({"desk_id":session.desk.id,"address":address.playback}),
     );
     Ok(0)
 }
@@ -124,7 +129,7 @@ pub(super) fn execute_assign_command(
             if !rest.is_empty() {
                 return Err("unexpected tokens after playback address".into());
             }
-            emit_assignment_configuration_request(state, session, target);
+            emit_assignment_configuration_request(state, session, target)?;
             return Ok(0);
         }
     };
@@ -134,7 +139,7 @@ pub(super) fn execute_assign_command(
     }
     if source.first().is_some_and(|token| token == "GROUP") {
         if source.len() != 2 {
-            return Err("expected ASSIGN GROUP <number> AT PBK or VPBK <address>".into());
+            return Err("expected ASSIGN GROUP <number> AT PBK <address>".into());
         }
         return assign_group_target(state, session, context, &source[1], target);
     }
@@ -147,28 +152,25 @@ fn emit_assignment_configuration_request(
     state: &AppState,
     session: &Session,
     target: crate::runtime::command_http::playback_address_command::CommandPlaybackTarget,
-) {
+) -> Result<(), String> {
     use crate::runtime::command_http::playback_address_command::CommandPlaybackTarget;
-    let body = match target {
-        CommandPlaybackTarget::CurrentPage { slot } => serde_json::json!({
-            "desk_id": session.desk.id,
-            "addressing": "current_page",
-            "slot": slot,
-        }),
-        CommandPlaybackTarget::ExplicitPage { page, slot } => serde_json::json!({
-            "desk_id": session.desk.id,
-            "addressing": "explicit_page",
-            "page": page,
-            "slot": slot,
-        }),
-        CommandPlaybackTarget::Virtual(address) => serde_json::json!({
-            "desk_id": session.desk.id,
-            "addressing": "virtual",
-            "page": address.page(),
-            "playback": address.number().get(),
-        }),
+    let (page, position) = match target {
+        CommandPlaybackTarget::CurrentPage { position } => (
+            state
+                .installation
+                .command_page(session.desk.id)
+                .map_err(|error| error.to_string())?,
+            position,
+        ),
+        CommandPlaybackTarget::ExplicitPage { page, position } => (page, position),
     };
-    emit(state, "playback_configuration_requested", body);
+    let address = light_playback::PlaybackAddress::new(page, position)?;
+    emit(
+        state,
+        "playback_configuration_requested",
+        serde_json::json!({"desk_id":session.desk.id,"address":address}),
+    );
+    Ok(())
 }
 
 fn assignment_playback(
@@ -179,8 +181,7 @@ fn assignment_playback(
 ) -> Result<light_playback::PlaybackDefinition, String> {
     if source.len() != 2 {
         return Err(
-            "expected ASSIGN <CUELIST|DYNAMIC|MACRO|TIMECODE> <number> AT PBK or VPBK <address>"
-                .into(),
+            "expected ASSIGN <CUELIST|DYNAMIC|MACRO|TIMECODE> <number> AT PBK <address>".into(),
         );
     }
     let number = source[1]
@@ -195,7 +196,7 @@ fn assignment_playback(
                 .iter()
                 .find(|list| list.id == id)
                 .ok_or_else(|| format!("Cuelist {number} does not exist"))?;
-            let presentation = snapshot.playbacks.iter().find(|playback| matches!(playback.target, light_playback::PlaybackTarget::CueList { cue_list_id } if cue_list_id == id));
+            let presentation = snapshot.playback_pages.iter().flat_map(|page|page.assignments.values()).find(|playback| matches!(playback.target, light_playback::PlaybackTarget::CueList { cue_list_id } if cue_list_id == id));
             (
                 list.name.clone(),
                 presentation
@@ -309,17 +310,8 @@ fn assignment_playback(
             ));
         }
     };
-    let playback_number = match target_address {
-        crate::runtime::command_http::playback_address_command::CommandPlaybackTarget::Virtual(
-            address,
-        ) => address.number().get(),
-        _ => existing_assignment(state, context, target_address)?
-            .map(|playback| playback.number)
-            .unwrap_or_else(|| next_playback_number(&snapshot)),
-    };
     let mut playback = existing_assignment(state, context, target_address)?.unwrap_or_else(|| {
         light_playback::PlaybackDefinition {
-            number: playback_number,
             name: name.clone(),
             buttons: light_playback::PlaybackDefinition::default_buttons(&target),
             button_count: 3,
@@ -337,7 +329,6 @@ fn assignment_playback(
             target: target.clone(),
         }
     });
-    playback.number = playback_number;
     playback.name = name;
     playback.color = color;
     playback.presentation_icon = icon;
@@ -346,114 +337,59 @@ fn assignment_playback(
     Ok(playback)
 }
 
-fn next_playback_number(snapshot: &EngineSnapshot) -> u16 {
-    (1..=light_playback::MAX_PLAYBACKS)
-        .find(|number| {
-            snapshot
-                .playbacks
-                .iter()
-                .all(|playback| playback.number != *number)
-        })
-        .unwrap_or(light_playback::MAX_PLAYBACKS)
-}
-
 fn resolved_target(
     state: &AppState,
     context: &light_application::ActionContext,
     target: crate::runtime::command_http::playback_address_command::CommandPlaybackTarget,
-) -> Result<(u8, Option<u8>, Option<u16>), String> {
+) -> Result<light_playback::PlaybackAddress, String> {
     use crate::runtime::command_http::playback_address_command::CommandPlaybackTarget;
-    Ok(match target {
-        CommandPlaybackTarget::CurrentPage { slot } => (
+    let (page, position) = match target {
+        CommandPlaybackTarget::CurrentPage { position } => (
             state
                 .installation
-                .desk_page(context.desk_id, active_show_store(state)?.0.id)
+                .command_page(context.desk_id)
                 .map_err(|error| error.to_string())?,
-            Some(slot),
-            None,
+            position,
         ),
-        CommandPlaybackTarget::ExplicitPage { page, slot } => (page, Some(slot), None),
-        CommandPlaybackTarget::Virtual(address) => {
-            (address.page(), None, Some(address.number().get()))
-        }
-    })
+        CommandPlaybackTarget::ExplicitPage { page, position } => (page, position),
+    };
+    light_playback::PlaybackAddress::new(page, position)
 }
-
-fn page_and_playback_objects(
+fn page_objects(
     state: &AppState,
     page: u8,
-    slot: Option<u8>,
 ) -> Result<
     (
-        Option<light_show::VersionedObject>,
         Option<light_show::VersionedObject>,
         Option<light_playback::PlaybackPage>,
     ),
     String,
 > {
     let (_, store) = active_show_store(state)?;
-    let page_object = store
+    let object = store
         .objects("playback_page")
         .map_err(|error| error.to_string())?
         .into_iter()
-        .find(|object| object.id == page.to_string());
-    let definition = page_object
+        .find(|object| object.body["number"] == page);
+    let definition = object
         .as_ref()
         .map(|object| {
             serde_json::from_value::<light_playback::PlaybackPage>(object.body.clone())
-                .map_err(|error| format!("invalid stored Playback page: {error}"))
+                .map_err(|error| error.to_string())
         })
         .transpose()?;
-    let playback_number = slot.and_then(|slot| {
-        definition
-            .as_ref()
-            .and_then(|definition| definition.slots.get(&slot).copied())
-    });
-    let playback_object = match playback_number {
-        Some(number) => store
-            .objects("playback")
-            .map_err(|error| error.to_string())?
-            .into_iter()
-            .find(|object| object.id == number.to_string()),
-        None => None,
-    };
-    Ok((page_object, playback_object, definition))
+    Ok((object, definition))
 }
-
 pub(super) fn existing_assignment(
     state: &AppState,
     context: &light_application::ActionContext,
     target: crate::runtime::command_http::playback_address_command::CommandPlaybackTarget,
 ) -> Result<Option<light_playback::PlaybackDefinition>, String> {
-    use crate::runtime::command_http::playback_address_command::CommandPlaybackTarget;
-    let snapshot = state.output.snapshot();
-    match target {
-        CommandPlaybackTarget::CurrentPage { slot } => {
-            let page = state
-                .installation
-                .desk_page(context.desk_id, active_show_store(state)?.0.id)
-                .map_err(|error| error.to_string())?;
-            let (_, _, definition) = page_and_playback_objects(state, page, Some(slot))?;
-            Ok(definition
-                .and_then(|page| page.slots.get(&slot).copied())
-                .and_then(|number| snapshot.playbacks.iter().find(|item| item.number == number))
-                .cloned())
-        }
-        CommandPlaybackTarget::ExplicitPage { page, slot } => {
-            let (_, _, definition) = page_and_playback_objects(state, page, Some(slot))?;
-            Ok(definition
-                .and_then(|page| page.slots.get(&slot).copied())
-                .and_then(|number| snapshot.playbacks.iter().find(|item| item.number == number))
-                .cloned())
-        }
-        CommandPlaybackTarget::Virtual(address) => {
-            let (_, _, definition) = page_and_playback_objects(state, address.page(), None)?;
-            Ok(definition
-                .and_then(|page| page.virtual_playbacks.get(&address.number().get()).cloned()))
-        }
-    }
+    let address = resolved_target(state, context, target)?;
+    Ok(page_objects(state, address.page())?
+        .1
+        .and_then(|page| page.assignments.get(&address.position()).cloned()))
 }
-
 fn configure_assignment_target(
     state: &AppState,
     session: &Session,
@@ -466,26 +402,25 @@ fn configure_assignment_target(
         .portable_revision()
         .map_err(|error| error.to_string())?
         .value();
-    let (page, slot, virtual_number) = resolved_target(state, context, target)?;
-    let (page_object, playback_object, _) = page_and_playback_objects(state, page, slot)?;
-    let action = if let Some(number) = virtual_number {
-        light_application::PlaybackTopologyAction::ConfigureVirtual {
-            page,
-            number,
-            expected_page_revision: page_object.as_ref().map_or(0, |object| object.revision),
-            expected_page_object_id: page_object.as_ref().map(|object| object.id.clone()),
+    let address = resolved_target(state, context, target)?;
+    let (page_object, page) = page_objects(state, address.page())?;
+    let expected_page_revision = page_object.as_ref().map_or(0, |object| object.revision);
+    let expected_page_object_id = page_object.as_ref().map(|object| object.id.clone());
+    let action = if page
+        .as_ref()
+        .is_some_and(|page| page.assignments.contains_key(&address.position()))
+    {
+        light_application::PlaybackTopologyAction::UpdatePlayback {
+            address,
+            expected_page_revision,
+            expected_page_object_id,
             playback,
         }
     } else {
-        light_application::PlaybackTopologyAction::ConfigureSlot {
-            page,
-            slot: slot.expect("physical assignment has a slot"),
-            expected_page_revision: page_object.as_ref().map_or(0, |object| object.revision),
-            expected_page_object_id: page_object.as_ref().map(|object| object.id.clone()),
-            expected_playback_revision: playback_object
-                .as_ref()
-                .map_or(0, |object| object.revision),
-            expected_playback_object_id: playback_object.as_ref().map(|object| object.id.clone()),
+        light_application::PlaybackTopologyAction::AssignPlayback {
+            address,
+            expected_page_revision,
+            expected_page_object_id,
             playback,
         }
     };
@@ -511,7 +446,6 @@ fn configure_assignment_target(
         .map_err(|error| error.message)?;
     Ok(())
 }
-
 fn assign_group_target(
     state: &AppState,
     session: &Session,
@@ -524,37 +458,23 @@ fn assign_group_target(
         .portable_revision()
         .map_err(|error| error.to_string())?
         .value();
-    let group_object = store
+    let group = store
         .objects("group")
         .map_err(|error| error.to_string())?
         .into_iter()
         .find(|object| object.id == group_id)
-        .ok_or_else(|| format!("group {group_id} does not exist"))?;
-    let (page, slot, virtual_number) = resolved_target(state, context, target)?;
-    let (page_object, playback_object, _) = page_and_playback_objects(state, page, slot)?;
+        .ok_or_else(|| format!("Group {group_id} does not exist"))?;
+    let address = resolved_target(state, context, target)?;
+    let (page_object, _) = page_objects(state, address.page())?;
+    let address = light_application::GroupMasterPlaybackAddress {
+        address,
+        expected_page_revision: page_object.as_ref().map_or(0, |object| object.revision),
+        expected_page_object_id: page_object.map(|object| object.id),
+    };
     let request_id = context
         .request_id
         .clone()
         .unwrap_or_else(|| format!("assign-group-master-{}", context.correlation_id));
-    let address = if let Some(playback_number) = virtual_number {
-        light_application::GroupMasterPlaybackAddress::Virtual {
-            page,
-            playback_number,
-            expected_page_revision: page_object.as_ref().map_or(0, |object| object.revision),
-            expected_page_object_id: page_object.as_ref().map(|object| object.id.clone()),
-        }
-    } else {
-        light_application::GroupMasterPlaybackAddress::Physical {
-            page,
-            slot: slot.expect("physical assignment has a slot"),
-            expected_page_revision: page_object.as_ref().map_or(0, |object| object.revision),
-            expected_page_object_id: page_object.as_ref().map(|object| object.id.clone()),
-            expected_playback_revision: playback_object
-                .as_ref()
-                .map_or(0, |object| object.revision),
-            expected_playback_object_id: playback_object.map(|object| object.id),
-        }
-    };
     let action = light_application::ActionEnvelope {
         context: context
             .clone()
@@ -563,8 +483,8 @@ fn assign_group_target(
         command: light_application::PlaybackTopologyCommand {
             show_id: entry.id,
             action: light_application::PlaybackTopologyAction::AssignGroupMaster {
-                group_object_id: group_object.id,
-                expected_group_revision: group_object.revision,
+                group_object_id: group.id,
+                expected_group_revision: group.revision,
                 address,
             },
         },

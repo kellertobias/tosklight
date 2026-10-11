@@ -206,7 +206,7 @@ pub enum MacroTrigger {
     Pool,
     Editor,
     Playback {
-        playback_number: u16,
+        address: super::playback::PlaybackAddressValue,
     },
     CommandLine,
     Http,

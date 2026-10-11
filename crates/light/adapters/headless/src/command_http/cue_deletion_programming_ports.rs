@@ -44,7 +44,13 @@ impl ServerProgrammingPorts<'_> {
                 &context,
                 &ProgrammingCueDeletionRequest {
                     show_id,
-                    address: parsed.address,
+                    address: match parsed.address {
+                        super::cue_deletion_command::CueDeletionCommandAddress::CuelistPool{number}=>light_application::ProgrammingCueDeletionAddress::CuelistPool{number},
+                        super::cue_deletion_command::CueDeletionCommandAddress::Playback(target)=>match target {
+                            super::playback_address_command::CommandPlaybackTarget::CurrentPage{position}=>light_application::ProgrammingCueDeletionAddress::CurrentPage{expected_page:self.state().installation.command_page(context.desk_id).map_err(|error|error.to_string())?,position},
+                            super::playback_address_command::CommandPlaybackTarget::ExplicitPage{page,position}=>light_application::ProgrammingCueDeletionAddress::Playback{address:light_playback::PlaybackAddress::new(page,position)?},
+                        },
+                    },
                     cue_number: parsed.cue_number,
                     expectation: ProgrammingCueDeletionExpectation::Current,
                 },

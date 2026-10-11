@@ -46,7 +46,8 @@ import { ShowLifecycleProvider } from "../features/showLifecycle/ShowLifecycleCo
 import { ShowObjectsViewProvider } from "../features/showObjects/ShowObjectsView";
 import { SoundToLightProvider } from "../features/soundToLight/SoundToLightContext";
 import { TimecodeActionsProvider } from "../features/timecode/TimecodeActionsContext";
-import { VirtualPlaybackZonesProvider } from "../features/virtualPlaybackZones/VirtualPlaybackZonesContext";
+import { PreloadScopeProvider } from "../features/playbackPreloadScope/PreloadScopeContext";
+import { PlaybackSoloProvider } from "../features/playbackSolo/PlaybackSoloContext";
 import { VisualizerViewProvider } from "../features/visualizerView/VisualizerViewContext";
 import type { VisualizerViewPatch } from "./client/visualizerView";
 import { supplementalEventSource } from "./runtimeModels";
@@ -133,7 +134,10 @@ function useProviderDataSources(
 		screenAttachment,
 		saveScreen: value.saveScreen,
 		deleteScreen: value.deleteScreen,
-		setScreenPage: value.setScreenPage,
+		surfaces: value.screens?.surfaces ?? null,
+		setSurfacePage: value.setSurfacePage,
+		selectSurface: value.selectSurface,
+		updatePlaybackSurface: value.updatePlaybackSurface,
 		updateProgrammerControlSurface: value.updateProgrammerControlSurface,
 		updateControlDesk: value.updateControlDesk,
 		selectControlDesk: value.selectControlDesk,
@@ -540,60 +544,65 @@ function ServerShowProviderStack({
 						loadObject={boundaries.loadShowObject}
 						onError={boundaries.reportPlaybackTopologyError}
 					>
-						<VirtualPlaybackZonesProvider
-							authority={boundaries.virtualPlaybackZonesAuthority}
-							transport={boundaries.virtualPlaybackZonesTransport}
+						<PreloadScopeProvider
+							authority={boundaries.playbackSoloAuthority}
+							transport={boundaries.playbackPreloadScopeTransport}
 						>
-							<GroupRecordingProvider
-								showId={showId}
-								store={state.showObjectsStore}
-								transport={boundaries.groupRecordingTransport}
-								loadGroup={boundaries.loadGroupForRepair}
-								onError={boundaries.reportGroupRecordingError}
+							<PlaybackSoloProvider
+								authority={boundaries.playbackSoloAuthority}
+								transport={boundaries.playbackSoloTransport}
 							>
-								<PresetRecordingProvider
+								<GroupRecordingProvider
 									showId={showId}
 									store={state.showObjectsStore}
-									transport={boundaries.presetRecordingTransport}
-									loadPreset={boundaries.loadPresetForRepair}
-									onError={boundaries.reportPresetRecordingError}
+									transport={boundaries.groupRecordingTransport}
+									loadGroup={boundaries.loadGroupForRepair}
+									onError={boundaries.reportGroupRecordingError}
 								>
-									<CueRecordingProvider
+									<PresetRecordingProvider
 										showId={showId}
 										store={state.showObjectsStore}
-										playbackRuntimeStore={state.playbackRuntimeStore}
-										transport={boundaries.cueRecordingTransport}
-										selectedPlayback={boundaries.selectedCueRecordingPlayback}
-										loadObject={boundaries.loadShowObject}
-										onError={boundaries.reportCueRecordingError}
+										transport={boundaries.presetRecordingTransport}
+										loadPreset={boundaries.loadPresetForRepair}
+										onError={boundaries.reportPresetRecordingError}
 									>
-										<ServerProgrammingProviders
-											state={state}
-											boundaries={boundaries}
-											value={value}
+										<CueRecordingProvider
+											showId={showId}
+											store={state.showObjectsStore}
+											playbackRuntimeStore={state.playbackRuntimeStore}
+											transport={boundaries.cueRecordingTransport}
+											selectedPlayback={boundaries.selectedCueRecordingPlayback}
+											loadObject={boundaries.loadShowObject}
+											onError={boundaries.reportCueRecordingError}
 										>
-											<SelectiveImportProvider source={selectiveImportSource}>
-												<FilesProvider source={data.fileSource}>
-													<ScreensProvider source={data.screenSource}>
-														<DeskLoadingStateProvider
-															loading={state.deskLoading}
-														>
-															<FamilyEncodersProvider
-																client={state.api.familyEncoders}
-																showId={showId}
-																enabled={state.status === "connected"}
+											<ServerProgrammingProviders
+												state={state}
+												boundaries={boundaries}
+												value={value}
+											>
+												<SelectiveImportProvider source={selectiveImportSource}>
+													<FilesProvider source={data.fileSource}>
+														<ScreensProvider source={data.screenSource}>
+															<DeskLoadingStateProvider
+																loading={state.deskLoading}
 															>
-																{children}
-															</FamilyEncodersProvider>
-														</DeskLoadingStateProvider>
-													</ScreensProvider>
-												</FilesProvider>
-											</SelectiveImportProvider>
-										</ServerProgrammingProviders>
-									</CueRecordingProvider>
-								</PresetRecordingProvider>
-							</GroupRecordingProvider>
-						</VirtualPlaybackZonesProvider>
+																<FamilyEncodersProvider
+																	client={state.api.familyEncoders}
+																	showId={showId}
+																	enabled={state.status === "connected"}
+																>
+																	{children}
+																</FamilyEncodersProvider>
+															</DeskLoadingStateProvider>
+														</ScreensProvider>
+													</FilesProvider>
+												</SelectiveImportProvider>
+											</ServerProgrammingProviders>
+										</CueRecordingProvider>
+									</PresetRecordingProvider>
+								</GroupRecordingProvider>
+							</PlaybackSoloProvider>
+						</PreloadScopeProvider>
 					</PlaybackTopologyProvider>
 				</ShowObjectsViewProvider>
 			</ServerVisualizationRuntimeBoundary>

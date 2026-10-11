@@ -875,10 +875,11 @@ pub(super) fn apply_transport_action(
     id: TimecodeId,
     action: light_playback::TimecodeTransportAction,
 ) -> Result<light_application::timeline::TimecodeRuntimeOutcome, ApiError> {
-    state
-        .timecodes
-        .handle(id, action)
-        .map_err(|error| ApiError::bad_request(error.message))
+    super::output_scheduler::ordered_output_operation(&state.playback.render_capability(), || {
+        light_application::PlaybackOperation::new(super::playback_solo::timecode_action(
+            state, id, action,
+        ))
+    })
 }
 
 pub(super) fn apply_cue_action(
@@ -898,13 +899,32 @@ pub(super) fn apply_cue_action(
     };
     ensure_installed(state, show_id, id)?;
     let entry = active_entry(state, show_id)?;
-    apply_installed_cue_action(&state.timecodes, &entry.path, action)
+    apply_installed_cue_action_with_handler(
+        &state.timecodes,
+        &entry.path,
+        action,
+        |id, transport| super::playback_solo::timecode_action(state, id, transport).map(|_| ()),
+    )
 }
 
 pub(super) fn apply_installed_cue_action(
     timecodes: &light_application::timeline::TimecodeRuntimeService,
     show_path: &str,
     action: &light_playback::CueAction,
+) -> Result<Option<u64>, ApiError> {
+    apply_installed_cue_action_with_handler(timecodes, show_path, action, |id, transport| {
+        timecodes
+            .handle(id, transport)
+            .map(|_| ())
+            .map_err(|error| ApiError::bad_request(error.message))
+    })
+}
+
+pub(super) fn apply_installed_cue_action_with_handler(
+    timecodes: &light_application::timeline::TimecodeRuntimeService,
+    show_path: &str,
+    action: &light_playback::CueAction,
+    mut handle: impl FnMut(TimecodeId, light_playback::TimecodeTransportAction) -> Result<(), ApiError>,
 ) -> Result<Option<u64>, ApiError> {
     let (id, transport, completion) = match action {
         light_playback::CueAction::Jump { .. } => return Ok(None),
@@ -934,9 +954,7 @@ pub(super) fn apply_installed_cue_action(
                         .ok_or_else(|| ApiError::bad_request("Timecode marker does not exist"))?
                 }
             };
-            timecodes
-                .handle(*timecode_id, light_playback::TimecodeTransportAction::Go)
-                .map_err(|error| ApiError::bad_request(error.message))?;
+            handle(*timecode_id, light_playback::TimecodeTransportAction::Go)?;
             let completion = timecodes
                 .remaining_millis(*timecode_id, frame)
                 .map_err(|error| ApiError::bad_request(error.message))?;
@@ -947,9 +965,7 @@ pub(super) fn apply_installed_cue_action(
             )
         }
     };
-    timecodes
-        .handle(id, transport)
-        .map_err(|error| ApiError::bad_request(error.message))?;
+    handle(id, transport)?;
     Ok(completion)
 }
 

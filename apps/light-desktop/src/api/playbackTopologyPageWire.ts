@@ -13,21 +13,21 @@ import { WireValidationError } from "./wireValidation";
 
 type PageAction = Extract<
 	PlaybackTopologyAction,
-	{ type: "create_page" | "rename_page" }
+	{ type: "create_playback_page" | "rename_playback_page" | "delete_playback_page" }
 >;
 
 export function encodePlaybackPageAction(action: PageAction) {
 	validatePageAuthority(action);
 	const shared = {
 		type: action.type,
-		page: boundedPositiveIntegerAt(action.page, "$.action.page", 127),
+		number: boundedPositiveIntegerAt(action.number, "$.action.number", 99),
 		expected_page_revision: integerAt(
 			action.expectedPageRevision,
 			"$.action.expectedPageRevision",
 		),
 		expected_page_object_id: action.expectedPageObjectId,
 	};
-	if (action.type === "create_page") return shared;
+	if (action.type === "delete_playback_page") return shared;
 	const name = normalizePlaybackPageName(action.name);
 	if (name !== action.name)
 		invalid(
@@ -46,9 +46,9 @@ export function decodePlaybackPageResolution(
 	const page = boundedPositiveIntegerAt(
 		resolution.page,
 		"$.resolution.page",
-		127,
+		99,
 	);
-	if (page !== action.page)
+	if (page !== action.number)
 		invalid("$.resolution", "the requested Playback Page", resolution);
 	return { kind: "page", page };
 }
@@ -61,7 +61,7 @@ function validatePageAuthority(action: PageAction) {
 			"an exact present or absent Page identity",
 			action.expectedPageRevision,
 		);
-	if (action.type === "rename_page" && absent)
+	if (action.type !== "create_playback_page" && absent)
 		invalid(
 			"$.action.expectedPageObjectId",
 			"an existing Playback Page identity",

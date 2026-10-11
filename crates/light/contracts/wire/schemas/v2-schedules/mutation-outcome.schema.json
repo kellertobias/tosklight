@@ -42,6 +42,27 @@
     "event_sequence"
   ],
   "$defs": {
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
     "ScheduleCalendarRule": {
       "oneOf": [
         {
@@ -340,6 +361,9 @@
             "action": {
               "$ref": "#/$defs/SchedulePlaybackAction"
             },
+            "address": {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
             "master_transition": {
               "anyOf": [
                 {
@@ -350,24 +374,6 @@
                 }
               ]
             },
-            "page": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            },
             "type": {
               "type": "string",
               "const": "playback"
@@ -375,9 +381,7 @@
           },
           "required": [
             "type",
-            "page",
-            "slot",
-            "playback_number",
+            "address",
             "action"
           ]
         },

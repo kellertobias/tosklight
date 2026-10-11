@@ -12,7 +12,7 @@ use crate::light_benchmark::{
 };
 use chrono::{TimeZone, Utc};
 use light_core::{AttributeKey, AttributeValue, CueListId, FixtureId, ManualClock, SessionId};
-use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PoolPlaybackAction};
+use light_engine::{Engine, EnginePlaybackCommand, EngineSnapshot, PlaybackAction};
 use light_fixture::{
     FixtureDefinition, PatchedFixture, PatchedHead, SplitPatch, read_fixture_package,
 };
@@ -255,7 +255,12 @@ pub fn build(
                 .collect::<Vec<_>>()
                 .into(),
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![playback].into(),
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Benchmark".into(),
+                assignments: std::collections::HashMap::from([(1, playback)]),
+            }]
+            .into(),
             routes: output_routes.into(),
             groups: groups.into(),
             revision: 1,
@@ -263,9 +268,14 @@ pub fn build(
         })
         .map_err(|error| error.to_string())?;
     engine
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 1,
-            action: PoolPlaybackAction::Go,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 1).expect("valid benchmark address"),
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "benchmark".into(),
+                control_id: 1,
+            },
+            action: PlaybackAction::Go,
         })
         .map_err(|error| format!("activate sustained-show playback: {error}"))?;
     programmers.set_many(
@@ -644,7 +654,6 @@ fn demo_playback_for_groups(group_ids: &[String]) -> (CueList, PlaybackDefinitio
         cues: vec![cue],
     };
     let playback = PlaybackDefinition {
-        number: 1,
         name: "Sustained benchmark-show playback".into(),
         target: PlaybackTarget::CueList { cue_list_id },
         footprint: PlaybackFootprint::Normal,

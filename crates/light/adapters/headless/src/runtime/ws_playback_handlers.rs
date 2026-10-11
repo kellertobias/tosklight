@@ -12,11 +12,7 @@ pub(super) fn ws_playback_action(
         "/api/v2/events playback.action",
         &command.payload,
     );
-    if request.request_id != command.request_id {
-        return Err("playback payload request_id must match the WebSocket request_id".into());
-    }
-    let (_, application_command) =
-        playback_v2::application_command(request).map_err(|error| error.to_string())?;
+    let application_command = playback_v2::application_command(request)?;
     let context = context
         .cloned()
         .ok_or_else(|| "playback action requires an interaction context".to_owned())?;

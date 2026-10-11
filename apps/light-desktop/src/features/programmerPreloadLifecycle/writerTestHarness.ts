@@ -76,10 +76,9 @@ export function queue(revision = 2, empty = false) {
 			? []
 			: [
 					{
-						playbackNumber: 9,
-						page: null,
+						address: { page: 1, position: 9 },
 						action: "go" as const,
-						surface: "physical" as const,
+						controlSource: { surface_id: "main", control_id: 9 },
 					},
 				],
 	};
@@ -173,7 +172,12 @@ export function lifecycleWriterHarness(
 		cursor: 13,
 		projection: {
 			deskId: DESK_ID,
-			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
+			alignment: {
+				revision: 0,
+				mode: "off" as const,
+				binding: null,
+				fixtureCount: 0,
+			},
 			commandLine: {
 				text: "FIXTURE",
 				target: "FIXTURE",

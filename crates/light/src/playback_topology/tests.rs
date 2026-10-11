@@ -19,181 +19,12 @@ use serde_json::{Value, json};
 use std::{path::PathBuf, sync::Arc};
 use uuid::Uuid;
 
+#[path = "tests/canonical_assignments.rs"]
+mod canonical_assignments;
 #[path = "tests/group_master_assignment.rs"]
 mod group_master_assignment;
-#[path = "tests/map_existing.rs"]
-mod map_existing;
 #[path = "tests/page_actions.rs"]
 mod page_actions;
-#[path = "tests/virtual_playbacks.rs"]
-mod virtual_playbacks;
-
-#[test]
-fn macro_playback_assignment_requires_and_persists_portable_macro_identity() {
-    let rig = TestRig::new();
-    let macro_id = Uuid::from_u128(71);
-    let macro_body = serde_json::to_value(crate::CommandMacroDefinition {
-        id: macro_id,
-        number: 71,
-        name: "Preset fixtures".into(),
-        source: "Fixture 1 At 50".into(),
-        presentation: crate::MacroPresentation::default(),
-    })
-    .unwrap();
-    rig.seed("macro", &macro_id.to_string(), &macro_body);
-    let target = PlaybackTarget::Macro { macro_id };
-    let mut requested = playback(0, "Macro 71");
-    requested.target = target.clone();
-    requested.buttons = PlaybackDefinition::default_buttons(&target);
-    requested.fader = PlaybackDefinition::default_fader(&target);
-    requested.has_fader = false;
-
-    let result = rig
-        .handle(
-            "assign-macro",
-            rig.show_revision(),
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 1,
-                expected_page_revision: 0,
-                expected_page_object_id: None,
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
-                playback: requested,
-            },
-        )
-        .unwrap();
-
-    assert!(matches!(
-        result.outcome,
-        PlaybackTopologyOutcome::Changed { .. }
-    ));
-    let document = rig.document();
-    let stored: PlaybackDefinition = serde_json::from_value(
-        document
-            .objects_of_kind("playback")
-            .next()
-            .unwrap()
-            .body()
-            .clone(),
-    )
-    .unwrap();
-    assert_eq!(stored.target, target);
-    assert!(!stored.has_fader);
-}
-
-#[test]
-fn macro_playback_assignment_rejects_a_missing_macro_without_mutation() {
-    let rig = TestRig::new();
-    let macro_id = Uuid::from_u128(118);
-    let target = PlaybackTarget::Macro { macro_id };
-    let mut requested = playback(0, "Missing Macro");
-    requested.target = target.clone();
-    requested.buttons = PlaybackDefinition::default_buttons(&target);
-    requested.has_fader = false;
-    let before = rig.show_revision();
-
-    let error = rig
-        .handle(
-            "assign-missing-macro",
-            before,
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 1,
-                expected_page_revision: 0,
-                expected_page_object_id: None,
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
-                playback: requested,
-            },
-        )
-        .unwrap_err();
-
-    assert_eq!(error.kind, ActionErrorKind::NotFound);
-    assert_eq!(rig.show_revision(), before);
-    assert!(rig.document().objects_of_kind("playback").next().is_none());
-}
-
-#[test]
-fn timecode_target_persists_for_physical_and_virtual_playbacks() {
-    for (virtual_playback, expected_number) in [(false, 1_u16), (true, 1001_u16)] {
-        let rig = TestRig::new();
-        let timecode_id = light_playback::TimecodeId(Uuid::from_u128(70));
-        let timecode = light_playback::TimecodeDefinition {
-            id: timecode_id,
-            number: 70,
-            name: "House timeline".into(),
-            duration: Some(light_playback::TimecodeFrame(1_000)),
-            transport_offset: light_playback::TimecodeFrame::ZERO,
-            auto_start: false,
-            audio: None,
-            markers: Vec::new(),
-            lanes: Vec::new(),
-        };
-        rig.seed(
-            "timecode",
-            &timecode_id.0.to_string(),
-            &serde_json::to_value(timecode).unwrap(),
-        );
-        let target = PlaybackTarget::Timecode { timecode_id };
-        let mut requested = playback(0, "Timecode 70");
-        requested.target = target.clone();
-        requested.buttons = PlaybackDefinition::default_buttons(&target);
-        requested.has_fader = false;
-
-        let action = if virtual_playback {
-            PlaybackTopologyAction::ConfigureVirtual {
-                page: 1,
-                number: expected_number,
-                expected_page_revision: 0,
-                expected_page_object_id: None,
-                playback: requested,
-            }
-        } else {
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 1,
-                expected_page_revision: 0,
-                expected_page_object_id: None,
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
-                playback: requested,
-            }
-        };
-        rig.handle("assign-timecode", rig.show_revision(), action)
-            .unwrap();
-
-        let document = rig.document();
-        let stored = if virtual_playback {
-            let page: light_playback::PlaybackPage = serde_json::from_value(
-                document
-                    .objects_of_kind("playback_page")
-                    .next()
-                    .unwrap()
-                    .body()
-                    .clone(),
-            )
-            .unwrap();
-            page.virtual_playbacks
-                .get(&expected_number)
-                .unwrap()
-                .clone()
-        } else {
-            serde_json::from_value::<PlaybackDefinition>(
-                document
-                    .objects_of_kind("playback")
-                    .next()
-                    .unwrap()
-                    .body()
-                    .clone(),
-            )
-            .unwrap()
-        };
-        assert_eq!(stored.target, target);
-        assert!(!stored.has_fader);
-        assert_eq!(stored.buttons[0], light_playback::PlaybackButtonAction::Go);
-    }
-}
 
 #[test]
 fn save_cue_list_is_lossless_and_semantic_repetition_is_no_change() {
@@ -357,449 +188,18 @@ fn save_cue_list_out_timing_is_forward_compatible_and_reversible() {
 }
 
 #[test]
-fn storage_identity_conflicts_stop_before_topology_mutation() {
-    let cue_rig = TestRig::new();
-    let cue_list_id = CueListId::new();
-    let cue_list = cue_list(cue_list_id, "Original");
-    let cue_body = serde_json::to_value(&cue_list).unwrap();
-    cue_rig.seed("cue_list", "legacy-main", &cue_body);
-
-    let cue_error = cue_rig
-        .handle(
-            "stale-cue-identity",
-            cue_rig.show_revision(),
-            PlaybackTopologyAction::SaveCueList {
-                cue_list_id,
-                expected_revision: 1,
-                expected_object_id: Some("replacement-main".into()),
-                cue_list,
-                raw_body: Arc::new(cue_body),
-            },
-        )
-        .unwrap_err();
-
-    assert_eq!(cue_error.kind, ActionErrorKind::Conflict);
-    assert_eq!(cue_error.current_related_revision, Some(1));
-    assert_eq!(cue_rig.steps(), ["authorize", "begin"]);
-    assert_one_event(&cue_rig, 0);
-
-    let slot_rig = TestRig::new();
-    slot_rig.seed(
-        "playback",
-        "legacy-seven",
-        &serde_json::to_value(playback(7, "Original")).unwrap(),
-    );
-    slot_rig.seed(
-        "playback_page",
-        "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{"1":7},"virtual_playbacks":{}}),
-    );
-    let slot_error = slot_rig
-        .handle(
-            "stale-slot-identity",
-            slot_rig.show_revision(),
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 1,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("legacy-page-one".into()),
-                expected_playback_revision: 1,
-                expected_playback_object_id: Some("replacement-seven".into()),
-                playback: playback(7, "Changed"),
-            },
-        )
-        .unwrap_err();
-
-    assert_eq!(slot_error.kind, ActionErrorKind::Conflict);
-    assert_eq!(slot_error.current_related_revision, Some(1));
-    assert_eq!(slot_rig.steps(), ["authorize", "begin"]);
-    assert_one_event(&slot_rig, 0);
-}
-
-#[test]
-fn canonical_storage_key_collisions_stop_before_topology_mutation() {
-    let cue_rig = TestRig::new();
-    let requested_id = CueListId::new();
-    let occupied = cue_list(CueListId::new(), "Occupied");
-    cue_rig.seed(
-        "cue_list",
-        &requested_id.0.to_string(),
-        &serde_json::to_value(&occupied).unwrap(),
-    );
-    let requested = cue_list(requested_id, "Requested");
-    let requested_body = serde_json::to_value(&requested).unwrap();
-    let cue_revision = cue_rig.show_revision();
-
-    let cue_error = cue_rig
-        .handle(
-            "occupied-cue-key",
-            cue_revision,
-            PlaybackTopologyAction::SaveCueList {
-                cue_list_id: requested_id,
-                expected_revision: 0,
-                expected_object_id: None,
-                cue_list: requested,
-                raw_body: Arc::new(requested_body),
-            },
-        )
-        .unwrap_err();
-
-    assert_eq!(cue_error.kind, ActionErrorKind::Conflict);
-    assert_eq!(cue_error.current_related_revision, Some(1));
-    assert_eq!(cue_rig.show_revision(), cue_revision);
-    let cue_document = cue_rig.document();
-    assert_eq!(
-        cue_document
-            .object("cue_list", &requested_id.0.to_string())
-            .unwrap()
-            .body()["id"],
-        occupied.id.0.to_string()
-    );
-    assert_eq!(cue_rig.steps(), ["authorize", "begin"]);
-    assert_one_event(&cue_rig, 0);
-
-    let playback_rig = TestRig::new();
-    playback_rig.seed(
-        "playback",
-        "1",
-        &serde_json::to_value(playback(7, "Occupied")).unwrap(),
-    );
-    playback_rig.seed(
-        "playback_page",
-        "legacy-page-one",
-        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
-    );
-    let playback_revision = playback_rig.show_revision();
-
-    let playback_error = playback_rig
-        .handle(
-            "occupied-playback-key",
-            playback_revision,
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 1,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("legacy-page-one".into()),
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
-                playback: playback(999, "Requested"),
-            },
-        )
-        .unwrap_err();
-
-    assert_eq!(playback_error.kind, ActionErrorKind::Conflict);
-    assert_eq!(playback_error.current_related_revision, Some(1));
-    assert_eq!(playback_rig.show_revision(), playback_revision);
-    let playback_document = playback_rig.document();
-    assert_eq!(
-        playback_document.object("playback", "1").unwrap().body()["number"],
-        7
-    );
-    assert!(
-        playback_document
-            .object("playback_page", "legacy-page-one")
-            .unwrap()
-            .body()["slots"]
-            .as_object()
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(playback_rig.steps(), ["authorize", "begin"]);
-    assert_one_event(&playback_rig, 0);
-}
-
-#[test]
-fn configure_empty_slot_allocates_once_and_commits_playback_and_page_together() {
-    let rig = TestRig::new();
-    rig.seed(
-        "playback_page",
-        "legacy-page-one",
-        &json!({
-            "number":1,
-            "name":"Main",
-            "slots":{},
-            "virtual_playbacks":{},
-            "future":{"columns":12}
-        }),
-    );
-
-    let result = rig
-        .handle(
-            "configure-1",
-            rig.show_revision(),
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 4,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("legacy-page-one".into()),
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
-                playback: playback(999, "House"),
-            },
-        )
-        .unwrap();
-
-    assert_eq!(
-        result.outcome.resolution(),
-        PlaybackTopologyResolution::PageSlot {
-            page: 1,
-            slot: 4,
-            playback_number: Some(1),
-        }
-    );
-    assert_eq!(result.outcome.objects().len(), 2);
-    assert_eq!(
-        result.outcome.objects()[0].kind(),
-        ActiveShowObjectKind::Playback
-    );
-    assert_eq!(result.outcome.objects()[0].raw_body().unwrap()["number"], 1);
-    assert_eq!(result.outcome.objects()[1].object_id(), "legacy-page-one");
-    assert_eq!(
-        result.outcome.objects()[1].raw_body().unwrap()["future"]["columns"],
-        12
-    );
-    assert_eq!(rig.steps(), mutation_steps());
-    assert_one_event(&rig, 2);
-}
-
-#[test]
-fn legacy_semantic_configure_is_no_change_without_normalizing_raw_json() {
-    let rig = TestRig::new();
-    let legacy = json!({
-        "number":7,
-        "name":"Legacy",
-        "target":{"type":"grand_master"},
-        "future":{"keep":true}
-    });
-    rig.seed("playback", "legacy-seven", &legacy);
-    rig.seed(
-        "playback_page",
-        "1",
-        &json!({"number":1,"name":"Main","slots":{"2":7},"virtual_playbacks":{}}),
-    );
-    let decoded: PlaybackDefinition = serde_json::from_value(legacy.clone()).unwrap();
-
-    let result = rig
-        .handle(
-            "legacy-noop",
-            rig.show_revision(),
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 2,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("1".into()),
-                expected_playback_revision: 1,
-                expected_playback_object_id: Some("legacy-seven".into()),
-                playback: decoded,
-            },
-        )
-        .unwrap();
-
-    assert!(matches!(
-        result.outcome,
-        PlaybackTopologyOutcome::NoChange { .. }
-    ));
-    let playback = result
-        .outcome
-        .objects()
-        .iter()
-        .find(|projection| projection.kind() == ActiveShowObjectKind::Playback)
-        .unwrap()
-        .raw_body()
-        .unwrap();
-    assert_eq!(playback.as_ref(), &legacy);
-    assert!(playback.get("buttons").is_none());
-    assert_eq!(rig.steps(), ["authorize", "begin"]);
-    assert_one_event(&rig, 0);
-}
-
-#[test]
-fn changed_playback_preserves_nested_extensions_and_returns_unchanged_page_authority() {
-    let rig = TestRig::new();
-    let mut raw = serde_json::to_value(playback(7, "Before")).unwrap();
-    raw["future_playback"] = json!({"keep":true});
-    raw["target"]["future_target"] = json!([1, 2, 3]);
-    rig.seed("playback", "legacy-seven", &raw);
-    rig.seed(
-        "playback_page",
-        "page-one",
-        &json!({
-            "number":1,
-            "name":"Main",
-            "slots":{"2":7},
-            "virtual_playbacks":{},
-            "future_page":true
-        }),
-    );
-    let mut changed: PlaybackDefinition = serde_json::from_value(raw).unwrap();
-    changed.name = "After".into();
-
-    let result = rig
-        .handle(
-            "change-playback",
-            rig.show_revision(),
-            PlaybackTopologyAction::ConfigureSlot {
-                page: 1,
-                slot: 2,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("page-one".into()),
-                expected_playback_revision: 1,
-                expected_playback_object_id: Some("legacy-seven".into()),
-                playback: changed,
-            },
-        )
-        .unwrap();
-
-    assert_eq!(result.outcome.objects().len(), 2);
-    let playback = result.outcome.objects()[0].raw_body().unwrap();
-    assert_eq!(playback["name"], "After");
-    assert_eq!(playback["future_playback"]["keep"], true);
-    assert_eq!(playback["target"]["future_target"], json!([1, 2, 3]));
-    assert_eq!(result.outcome.objects()[1].object_id(), "page-one");
-    assert_eq!(
-        result.outcome.objects()[1].raw_body().unwrap()["future_page"],
-        true
-    );
-    assert_one_event(&rig, 1);
-}
-
-#[test]
-fn clear_removes_one_playback_from_every_page_in_one_event() {
-    let rig = TestRig::new();
-    let cue_list_id = CueListId::new();
-    rig.seed(
-        "cue_list",
-        &cue_list_id.0.to_string(),
-        &serde_json::to_value(cue_list(cue_list_id, "Keep source")).unwrap(),
-    );
-    let mut removed = playback(9, "Clear me");
-    removed.target = PlaybackTarget::CueList { cue_list_id };
-    removed.buttons = PlaybackDefinition::default_buttons(&removed.target);
-    removed.fader = PlaybackDefinition::default_fader(&removed.target);
-    rig.seed(
-        "playback",
-        "legacy-nine",
-        &serde_json::to_value(removed).unwrap(),
-    );
-    rig.seed(
-        "playback",
-        "3",
-        &serde_json::to_value(playback(3, "Keep me")).unwrap(),
-    );
-    rig.seed(
-        "playback_page",
-        "page-a",
-        &json!({
-            "number":1,
-            "name":"One",
-            "slots":{"1":9,"2":3},
-            "virtual_playbacks":{},
-            "future":"a"
-        }),
-    );
-    rig.seed(
-        "playback_page",
-        "page-b",
-        &json!({
-            "number":2,
-            "name":"Two",
-            "slots":{"7":9},
-            "virtual_playbacks":{},
-            "future":"b"
-        }),
-    );
-    let before = rig.show_revision();
-
-    let result = rig
-        .handle(
-            "clear-1",
-            before,
-            PlaybackTopologyAction::ClearMappedPlayback {
-                page: 1,
-                slot: 1,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("page-a".into()),
-                expected_playback_revision: 1,
-                expected_playback_object_id: Some("legacy-nine".into()),
-            },
-        )
-        .unwrap();
-
-    assert_eq!(result.outcome.show_revision().value(), before + 1);
-    assert_eq!(result.outcome.objects().len(), 3);
-    assert!(result.outcome.objects().iter().any(|projection| matches!(
-        projection,
-        PlaybackTopologyObjectProjection::Deleted {
-            kind: ActiveShowObjectKind::Playback,
-            object_id,
-            object_revision: 2,
-        } if object_id == "legacy-nine"
-    )));
-    let document = rig.document();
-    assert!(document.object("playback", "legacy-nine").is_none());
-    assert!(
-        document
-            .object("cue_list", &cue_list_id.0.to_string())
-            .is_some()
-    );
-    for page in document.objects_of_kind("playback_page") {
-        let body: light_playback::PlaybackPage =
-            serde_json::from_value(page.body().clone()).unwrap();
-        assert!(!body.slots.values().any(|number| *number == 9));
-        assert!(page.body().get("future").is_some());
-    }
-    assert_eq!(rig.steps(), mutation_steps());
-    assert_one_event(&rig, 3);
-}
-
-#[test]
-fn empty_clear_is_no_change_and_does_not_prepare_or_emit() {
-    let rig = TestRig::new();
-    rig.seed(
-        "playback_page",
-        "1",
-        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
-    );
-
-    let result = rig
-        .handle(
-            "clear-empty",
-            rig.show_revision(),
-            PlaybackTopologyAction::ClearMappedPlayback {
-                page: 1,
-                slot: 2,
-                expected_page_revision: 1,
-                expected_page_object_id: Some("1".into()),
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
-            },
-        )
-        .unwrap();
-
-    assert!(matches!(
-        result.outcome,
-        PlaybackTopologyOutcome::NoChange { .. }
-    ));
-    assert_eq!(result.outcome.event_sequence(), None);
-    assert_eq!(rig.steps(), ["authorize", "begin"]);
-    assert_one_event(&rig, 0);
-}
-
-#[test]
 fn exact_replay_returns_original_authority_without_a_second_transaction_or_event() {
     let rig = TestRig::new();
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
+        &json!({"number":1,"name":"Main","assignments":{}}),
     );
-    let action = PlaybackTopologyAction::ConfigureSlot {
-        page: 1,
-        slot: 1,
+    let action = PlaybackTopologyAction::AssignPlayback {
+        address: address(1, 1),
         expected_page_revision: 1,
         expected_page_object_id: Some("1".into()),
-        expected_playback_revision: 0,
-        expected_playback_object_id: None,
+
         playback: playback(0, "Replay"),
     };
     let expected = rig.show_revision();
@@ -812,7 +212,7 @@ fn exact_replay_returns_original_authority_without_a_second_transaction_or_event
     assert_eq!(replay.outcome, first.outcome);
     assert_eq!(replay.correlation_id, first.correlation_id);
     assert_eq!(rig.steps(), ["authorize"]);
-    assert_one_event(&rig, 2);
+    assert_one_event(&rig, 1);
 }
 
 #[test]
@@ -821,15 +221,13 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
+        &json!({"number":1,"name":"Main","assignments":{}}),
     );
-    let action = PlaybackTopologyAction::ConfigureSlot {
-        page: 1,
-        slot: 1,
+    let action = PlaybackTopologyAction::AssignPlayback {
+        address: address(1, 1),
         expected_page_revision: 0,
         expected_page_object_id: Some("1".into()),
-        expected_playback_revision: 0,
-        expected_playback_object_id: None,
+
         playback: playback(0, "Conflict"),
     };
     let error = rig
@@ -845,13 +243,10 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
         .handle(
             "show-conflict",
             0,
-            PlaybackTopologyAction::ClearMappedPlayback {
-                page: 1,
-                slot: 1,
+            PlaybackTopologyAction::ClearPlayback {
+                address: address(1, 1),
                 expected_page_revision: 1,
                 expected_page_object_id: Some("1".into()),
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
             },
         )
         .unwrap_err();
@@ -861,13 +256,10 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
 
     rig.clear_steps();
     let current = rig.show_revision();
-    let noop = PlaybackTopologyAction::ClearMappedPlayback {
-        page: 1,
-        slot: 1,
+    let noop = PlaybackTopologyAction::ClearPlayback {
+        address: address(1, 1),
         expected_page_revision: 1,
         expected_page_object_id: Some("1".into()),
-        expected_playback_revision: 0,
-        expected_playback_object_id: None,
     };
     rig.handle("collision", current, noop.clone()).unwrap();
     rig.clear_steps();
@@ -875,13 +267,10 @@ fn show_object_and_request_conflicts_stop_before_side_effects() {
         .handle(
             "collision",
             current,
-            PlaybackTopologyAction::ClearMappedPlayback {
-                page: 1,
-                slot: 2,
+            PlaybackTopologyAction::ClearPlayback {
+                address: address(1, 2),
                 expected_page_revision: 1,
                 expected_page_object_id: Some("1".into()),
-                expected_playback_revision: 0,
-                expected_playback_object_id: None,
             },
         )
         .unwrap_err();
@@ -895,15 +284,12 @@ fn replay_identity_isolated_by_desk_and_session() {
     rig.seed(
         "playback_page",
         "1",
-        &json!({"number":1,"name":"Main","slots":{},"virtual_playbacks":{}}),
+        &json!({"number":1,"name":"Main","assignments":{}}),
     );
-    let action = PlaybackTopologyAction::ClearMappedPlayback {
-        page: 1,
-        slot: 1,
+    let action = PlaybackTopologyAction::ClearPlayback {
+        address: address(1, 1),
         expected_page_revision: 1,
         expected_page_object_id: Some("1".into()),
-        expected_playback_revision: 0,
-        expected_playback_object_id: None,
     };
     let show_revision = rig.show_revision();
     for (desk, session) in [(1, 3), (10, 3), (1, 30)] {
@@ -928,13 +314,10 @@ fn replay_identity_isolated_by_desk_and_session() {
 #[test]
 fn request_actor_session_and_exact_show_revision_are_required_before_opening_show() {
     let rig = TestRig::new();
-    let action = PlaybackTopologyAction::ClearMappedPlayback {
-        page: 1,
-        slot: 1,
+    let action = PlaybackTopologyAction::ClearPlayback {
+        address: address(1, 1),
         expected_page_revision: 0,
         expected_page_object_id: None,
-        expected_playback_revision: 0,
-        expected_playback_object_id: None,
     };
     let operator =
         ActionContext::operator(Uuid::from_u128(1), Uuid::from_u128(3), ActionSource::Http);
@@ -996,8 +379,14 @@ struct TestRig {
 
 impl TestRig {
     fn new() -> Self {
-        let path =
-            std::env::temp_dir().join(format!("light-playback-topology-{}.sqlite", Uuid::new_v4()));
+        let scratch = PathBuf::from(std::env::var_os("LIGHT_TMP_DIR").unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../..")
+                .join(".artifacts/tmp")
+                .into_os_string()
+        }));
+        std::fs::create_dir_all(&scratch).unwrap();
+        let path = scratch.join(format!("light-playback-topology-{}.sqlite", Uuid::new_v4()));
         let (store, show_id) = ShowStore::create(&path, "Playback topology test").unwrap();
         drop(store);
         let active_show = crate::ActiveShowService::new(EventBus::new(32));
@@ -1199,10 +588,9 @@ impl PlaybackTopologyPorts for TestPorts {
     }
 }
 
-fn playback(number: u16, name: &str) -> PlaybackDefinition {
+fn playback(_number: u16, name: &str) -> PlaybackDefinition {
     let target = PlaybackTarget::GrandMaster;
     PlaybackDefinition {
-        number,
         name: name.into(),
         buttons: PlaybackDefinition::default_buttons(&target),
         fader: PlaybackDefinition::default_fader(&target),
@@ -1229,24 +617,31 @@ fn cue_list_playback(number: u16, cue_list_id: CueListId) -> PlaybackDefinition 
     value
 }
 
-fn map_existing_action(
+fn address(page: u8, position: u16) -> light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(page, position).unwrap()
+}
+fn assigned(rig: &TestRig, page: u8, position: u16) -> PlaybackDefinition {
+    let document = rig.document();
+    let page = document
+        .objects_of_kind("playback_page")
+        .find(|object| object.body()["number"] == page)
+        .unwrap();
+    serde_json::from_value(page.body()["assignments"][position.to_string()].clone()).unwrap()
+}
+fn assignment(
     page: u8,
-    slot: u8,
-    playback_number: u16,
-    page_revision: u64,
-    page_object_id: &str,
+    position: u16,
+    playback: PlaybackDefinition,
+    revision: u64,
+    id: Option<&str>,
 ) -> PlaybackTopologyAction {
-    PlaybackTopologyAction::MapExistingPlayback {
-        page,
-        slot,
-        playback_number,
-        expected_page_revision: page_revision,
-        expected_page_object_id: Some(page_object_id.into()),
-        expected_playback_revision: 1,
-        expected_playback_object_id: Some("legacy-twelve".into()),
+    PlaybackTopologyAction::AssignPlayback {
+        address: address(page, position),
+        playback,
+        expected_page_revision: revision,
+        expected_page_object_id: id.map(str::to_owned),
     }
 }
-
 fn cue_list(id: CueListId, name: &str) -> CueList {
     CueList {
         pool_number: None,

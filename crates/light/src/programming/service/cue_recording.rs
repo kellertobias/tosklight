@@ -96,11 +96,6 @@ impl ProgrammingService {
             let objects = std::iter::once(&projections.cue_list)
                 .chain(
                     created_cue_list
-                        .then_some(projections.playback.as_ref())
-                        .flatten(),
-                )
-                .chain(
-                    created_cue_list
                         .then_some(projections.page.as_ref())
                         .flatten(),
                 )
@@ -283,7 +278,7 @@ fn activate_if_authorized(
             succeeded: false,
         });
     }
-    let activation = if let Some(playback) = completion.concrete_playback_number {
+    let activation = if let Some(playback) = completion.concrete_playback_address {
         let Some(activation) = ports.activate_recorded_cue(
             &envelope.context,
             playback,
@@ -310,8 +305,7 @@ fn activate_if_authorized(
                 succeeded: false,
             });
         };
-        if !matches!(activation.projection.requested, crate::PlaybackRuntimeIdentity::CueList(id) | crate::PlaybackRuntimeIdentity::DirectCueList(id) if id == list.id)
-            || activation.projection.playback_number.is_some()
+        if !matches!(activation.projection.identity, crate::PlaybackRuntimeIdentity::CueList(id) | crate::PlaybackRuntimeIdentity::DirectCueList(id) if id == list.id)
             || !activation.projection.current_cue().is_some_and(|cue| {
                 cue.id == completion.recorded_cue.id && cue.number == completion.recorded_cue.number
             })
@@ -347,7 +341,7 @@ fn should_activate(
         && !completion.recorded_cue.deleted
         && source == CueRecordingCapturedSource::Normal
         && commit.environment().start_after_first_recording
-        && (completion.concrete_playback_number.is_some()
+        && (completion.concrete_playback_address.is_some()
             || matches!(
                 commit.environment().target,
                 crate::ProgrammingCueResolvedTarget::CuelistPool { .. }

@@ -82,19 +82,8 @@ impl EventObject {
         )
     }
 
-    pub fn playback(number: u16) -> Self {
-        Self::new(EventCapability::Playback, format!("playback:{number}"))
-    }
-
-    pub fn virtual_playback(address: light_playback::VirtualPlaybackAddress) -> Self {
-        Self::new(
-            EventCapability::Playback,
-            format!(
-                "virtual-playback:{}.{}",
-                address.page(),
-                address.number().get()
-            ),
-        )
+    pub fn playback(address: light_playback::PlaybackAddress) -> Self {
+        Self::new(EventCapability::Playback, format!("playback:{address}"))
     }
 
     /// The one shared route for sampled playback telemetry ticks.
@@ -215,7 +204,8 @@ pub enum ShowEvent {
     OutputRouteChanged(OutputRouteChange),
     ObjectsChanged(ActiveShowObjectsChange),
     SelectiveImportApplied(SelectiveShowImportChange),
-    VirtualPlaybackExclusionZonesChanged(VirtualPlaybackExclusionZonesChange),
+    PlaybackSoloRegionsChanged(PlaybackSoloRegionsChange),
+    PlaybackPreloadScopeChanged(PlaybackPreloadScopeChange),
     ShowLibraryChanged(ShowLibraryNotification),
     FixtureLibraryChanged(FixtureLibraryNotification),
     ScheduleRuntimeChanged(crate::ScheduleRuntimeChange),
@@ -255,8 +245,7 @@ pub struct ArchitectSyncNotification {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ScreenNotificationKind {
     Configuration,
-    ScreenPage,
-    PlaybackPage,
+    PlaybackSurfaces,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -358,10 +347,7 @@ pub struct GroupConfigurationNotification {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
 pub struct PlaybackConfigurationNotification {
     pub desk_id: String,
-    pub addressing: String,
-    pub page: Option<u8>,
-    pub slot: Option<u8>,
-    pub playback: Option<u16>,
+    pub address: light_playback::PlaybackAddress,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
@@ -376,7 +362,7 @@ pub enum UpdateTargetFamilyNotification {
 pub struct UpdateTargetNotification {
     pub family: UpdateTargetFamilyNotification,
     pub object_id: String,
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     pub cue_id: Option<String>,
     pub cue_number: Option<String>,
     pub validate_active_context: Option<bool>,
@@ -437,7 +423,13 @@ pub enum OperatorNotification {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VirtualPlaybackExclusionZonesChange {
+pub struct PlaybackSoloRegionsChange {
+    pub show_id: ShowId,
+    pub revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlaybackPreloadScopeChange {
     pub show_id: ShowId,
     pub revision: u64,
 }
@@ -645,12 +637,10 @@ impl EventDraft {
         }
     }
 
-    pub fn virtual_playback_exclusion_zones_changed(
-        change: VirtualPlaybackExclusionZonesChange,
-    ) -> Self {
+    pub fn playback_solo_regions_changed(change: PlaybackSoloRegionsChange) -> Self {
         let object = EventObject::new(
             EventCapability::Show,
-            format!("virtual-playback-exclusion-zones:{}", change.show_id.0),
+            format!("playback-solo-regions:{}", change.show_id.0),
         );
         Self {
             desk_id: None,
@@ -660,9 +650,25 @@ impl EventDraft {
             source: EventSource::Action(ActionSource::Http),
             correlation_id: None,
             delivery: DeliveryPolicy::Lossless,
-            payload: ApplicationEvent::Show(ShowEvent::VirtualPlaybackExclusionZonesChanged(
-                change,
-            )),
+            payload: ApplicationEvent::Show(ShowEvent::PlaybackSoloRegionsChanged(change)),
+        }
+    }
+
+    /// Volatile sampled playback telemetry: replaceable, telemetry-class, one shared route.
+    pub fn playback_preload_scope_changed(change: PlaybackPreloadScopeChange) -> Self {
+        let object = EventObject::new(
+            EventCapability::Show,
+            format!("playback-preload-scope:{}", change.show_id.0),
+        );
+        Self {
+            desk_id: None,
+            class: EventClass::Projection,
+            object: Some(object),
+            related_objects: Vec::new(),
+            source: EventSource::Action(ActionSource::Http),
+            correlation_id: None,
+            delivery: DeliveryPolicy::Lossless,
+            payload: ApplicationEvent::Show(ShowEvent::PlaybackPreloadScopeChanged(change)),
         }
     }
 
@@ -872,10 +878,8 @@ impl EventDraft {
 
 fn playback_routes(change: &PlaybackRuntimeChange) -> (Option<EventObject>, Vec<EventObject>) {
     let mut routes = Vec::with_capacity(3);
-    if let PlaybackRuntimeIdentity::Virtual(address) = change.projection.requested {
-        routes.push(EventObject::virtual_playback(address));
-    } else if let Some(number) = change.projection.playback_number {
-        routes.push(EventObject::playback(number));
+    if let PlaybackRuntimeIdentity::Playback(address) = change.projection.identity {
+        routes.push(EventObject::playback(address));
     }
     if let Some(cue_list_id) = change.projection.cue_list_id() {
         routes.push(EventObject::cue_list(cue_list_id.0));
@@ -884,9 +888,8 @@ fn playback_routes(change: &PlaybackRuntimeChange) -> (Option<EventObject>, Vec<
         routes.push(EventObject::group(group_id));
     }
     if routes.is_empty() {
-        routes.push(match &change.projection.requested {
+        routes.push(match &change.projection.identity {
             PlaybackRuntimeIdentity::Playback(number) => EventObject::playback(*number),
-            PlaybackRuntimeIdentity::Virtual(address) => EventObject::virtual_playback(*address),
             PlaybackRuntimeIdentity::CueList(id) | PlaybackRuntimeIdentity::DirectCueList(id) => {
                 EventObject::cue_list(id.0)
             }

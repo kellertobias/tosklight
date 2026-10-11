@@ -17,7 +17,7 @@ export type ProgrammingUpdateTarget =
 	| {
 			type: "cue";
 			cue_list_id: string;
-			playback_number?: number | null;
+			playback_address?: {page: number; position: number} | null;
 			cue_id?: string | null;
 			cue_number?: string | null;
 			validate_active_context: boolean;

@@ -353,8 +353,6 @@ const CONFIGURATION_FIELDS = Object.keys({
 	color_programming_model_default: true,
 	start_after_first_recording: true,
 	preload_programmer_changes: true,
-	preload_physical_playback_actions: true,
-	preload_virtual_playback_actions: true,
 	patch_preview_highlight_dmx: true,
 	highlight_look: true,
 	highlight_look_feedback: true,
@@ -392,8 +390,6 @@ export function configurationFieldsForSection(
 			return [
 				"command_line_at_uses_programmer_fade",
 				"preload_programmer_changes",
-				"preload_physical_playback_actions",
-				"preload_virtual_playback_actions",
 			];
 		case "preferences-defaults":
 			return [

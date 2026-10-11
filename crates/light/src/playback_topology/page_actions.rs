@@ -17,10 +17,12 @@ pub(super) fn create_page(
     document: &PortableShowDocument,
     command: &PlaybackTopologyCommand,
     number: u8,
+    name: &str,
     expected_revision: u64,
     expected_object_id: Option<&str>,
 ) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
     validate_page(number)?;
+    validate_name(name)?;
     let stored = validated_page(document, number, expected_revision, expected_object_id)?;
     let resolution = PlaybackTopologyResolution::Page { page: number };
     if let Some(stored) = stored.as_ref() {
@@ -36,9 +38,8 @@ pub(super) fn create_page(
     }
     let desired = PlaybackPage {
         number,
-        name: format!("Page {number}"),
-        slots: HashMap::new(),
-        virtual_playbacks: HashMap::new(),
+        name: name.to_owned(),
+        assignments: HashMap::new(),
     };
     desired.validate().map_err(invalid)?;
     let object_id = page_object_id(document, None, number)?;
@@ -92,7 +93,7 @@ pub(super) fn rename_page(
     )
 }
 
-fn validated_page(
+pub(super) fn validated_page(
     document: &PortableShowDocument,
     number: u8,
     expected_revision: u64,
@@ -124,4 +125,30 @@ fn validate_name(name: &str) -> Result<(), ActionError> {
     Err(invalid(
         "Playback Page name must be 1-80 characters without surrounding whitespace",
     ))
+}
+
+pub(super) fn delete_page(
+    document: &PortableShowDocument,
+    command: &PlaybackTopologyCommand,
+    number: u8,
+    expected_revision: u64,
+    expected_object_id: Option<&str>,
+) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
+    validate_page(number)?;
+    let stored = validated_page(document, number, expected_revision, expected_object_id)?;
+    let resolution = PlaybackTopologyResolution::Page { page: number };
+    let Some(stored) = stored else {
+        return Ok(no_change(document, command, resolution, Vec::new()));
+    };
+    changed_present(
+        document,
+        command,
+        resolution,
+        Vec::new(),
+        vec![(
+            ActiveShowObjectKind::PlaybackPage,
+            stored.object_id,
+            stored.object_revision + 1,
+        )],
+    )
 }

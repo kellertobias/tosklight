@@ -4,7 +4,7 @@
 use super::*;
 
 pub(in crate::runtime) struct DynamicPlaybackControl {
-    pub(in crate::runtime) identity: PlaybackIdentity,
+    pub(in crate::runtime) identity: PlaybackAddress,
     pub(in crate::runtime) master: f32,
     pub(in crate::runtime) crossfade_non_intensity: bool,
     pub(in crate::runtime) auto_off_full_control: bool,
@@ -19,7 +19,7 @@ pub(in crate::runtime) fn fully_controlled_dynamic_playbacks(
     programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     cue_values: &[light_playback::ActiveCueDynamicValue],
     now: chrono::DateTime<chrono::Utc>,
-) -> Vec<PlaybackIdentity> {
+) -> Vec<PlaybackAddress> {
     if !controls
         .values()
         .any(|control| control.auto_off_full_control)
@@ -46,7 +46,7 @@ pub(super) fn fully_controlled_dynamic_playbacks_from<'a>(
     runtime: &light_dynamics::DynamicRuntimeSnapshot,
     programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     cue_values: &[light_playback::ActiveCueDynamicValue],
-) -> Vec<PlaybackIdentity> {
+) -> Vec<PlaybackAddress> {
     if !controls
         .values()
         .any(|control| control.auto_off_full_control)
@@ -58,7 +58,7 @@ pub(super) fn fully_controlled_dynamic_playbacks_from<'a>(
         .filter(|(source, _)| !source.temporary)
         .collect::<Vec<_>>();
     let mut addresses = HashMap::<
-        PlaybackIdentity,
+        PlaybackAddress,
         Vec<(
             light_dynamics::LegacyDynamicSample<'_>,
             &DynamicPlaybackControl,
@@ -205,12 +205,8 @@ pub(super) fn persistent_fat_values(
 
 fn candidate_playback_identity(
     source: light_playback::SequenceMasterSource,
-) -> Option<PlaybackIdentity> {
-    source.playback_identity.or_else(|| {
-        source
-            .playback_number
-            .and_then(|number| PlaybackIdentity::physical(number).ok())
-    })
+) -> Option<PlaybackAddress> {
+    source.playback_address
 }
 
 fn persistent_dynamic_wins_dynamic(

@@ -129,7 +129,7 @@ struct RuntimeResources {
     pub(super) dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
     pub(super) dynamic_snapshot: Arc<DynamicSnapshotPublication>,
     pub(super) dynamic_source_origins: SharedDynamicSourceOrigins,
-    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
+    pub(super) dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackAddress>>>,
     pub(super) visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     pub(super) internal_audio: Arc<Mutex<super::internal_audio::InternalAudioRuntime>>,
 }

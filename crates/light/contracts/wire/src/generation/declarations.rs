@@ -25,6 +25,8 @@ use crate::v2::output_control::*;
 use crate::v2::output_runtime::*;
 use crate::v2::patch::*;
 use crate::v2::playback::*;
+use crate::v2::playback_solo::*;
+use crate::v2::playback_surfaces::*;
 use crate::v2::playback_topology::*;
 use crate::v2::preload_lifecycle::*;
 use crate::v2::preload_playback_queue::*;
@@ -48,7 +50,6 @@ use crate::v2::show_sync::*;
 use crate::v2::speed_group::*;
 use crate::v2::stage_layout::*;
 use crate::v2::timecode::*;
-use crate::v2::virtual_playback_zones::*;
 use crate::v2::visualization::*;
 use crate::v2::visualizer_view::*;
 
@@ -84,7 +85,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(runtime(config));
     declarations.extend(schedules(config));
     declarations.extend(screen_configuration(config));
-    declarations.extend(virtual_playback_zones(config));
+    declarations.extend(playback_solo(config));
     declarations.extend(visualization(config));
     declarations.extend(visualizer_view(config));
     declarations.extend(selective_import(config));
@@ -505,9 +506,6 @@ fn screen_configuration(config: &Config) -> Vec<String> {
         FixedScreenPane::decl(config),
         FixedScreenSide::decl(config),
         ScreenContent::decl(config),
-        ScreenPlaybackSurfaceRow::decl(config),
-        ScreenPlaybackSurfaceLayout::decl(config),
-        ScreenPageMode::decl(config),
         ScreenConfiguration::decl(config),
         ScreenConfigurationSnapshot::decl(config),
         ProgrammerControlSurfaceConfiguration::decl(config),
@@ -572,8 +570,6 @@ fn runtime(config: &Config) -> Vec<String> {
     vec![
         RuntimeSessionCreateRequest::decl(config),
         RuntimeSessionRole::decl(config),
-        RuntimePlaybackSurfaceRow::decl(config),
-        RuntimePlaybackSurfaceLayout::decl(config),
         RuntimeControlDesk::decl(config),
         RuntimeSessionResponse::decl(config),
         RuntimeRevisionCopySource::decl(config),
@@ -620,13 +616,23 @@ fn show_sync(config: &Config) -> Vec<String> {
     ]
 }
 
-fn virtual_playback_zones(config: &Config) -> Vec<String> {
+fn playback_solo(config: &Config) -> Vec<String> {
     vec![
-        VirtualPlaybackExclusionZone::decl(config),
-        VirtualPlaybackExclusionSnapshot::decl(config),
-        VirtualPlaybackExclusionUpdateRequest::decl(config),
-        VirtualPlaybackExclusionUpdateOutcome::decl(config),
-        VirtualPlaybackExclusionZonesChange::decl(config),
+        PlaybackControlPresentation::decl(config),
+        PlaybackSurfaceRow::decl(config),
+        PlaybackSurfaceLayout::decl(config),
+        PlaybackPageSource::decl(config),
+        PlaybackSurfaceConfiguration::decl(config),
+        PlaybackSurfacesSnapshot::decl(config),
+        PlaybackSurfacesUpdateRequest::decl(config),
+        PlaybackSurfaceSelectRequest::decl(config),
+        PlaybackSurfacePageRequest::decl(config),
+        PlaybackSurfacePageLiveActionRequest::decl(config),
+        PlaybackSoloRegion::decl(config),
+        PlaybackSoloSnapshot::decl(config),
+        PlaybackSoloUpdateRequest::decl(config),
+        PlaybackSoloUpdateOutcome::decl(config),
+        PlaybackSoloRegionsChange::decl(config),
     ]
 }
 
@@ -705,7 +711,14 @@ fn event_subscription(config: &Config) -> Vec<String> {
 
 fn playback_projection(config: &Config) -> Vec<String> {
     vec![
-        PlaybackSurface::decl(config),
+        PlaybackPositionRange::decl(config),
+        PlaybackPreloadScope::decl(config),
+        PlaybackPreloadScopeSnapshot::decl(config),
+        PlaybackPreloadScopeUpdateRequest::decl(config),
+        PlaybackPreloadScopeUpdateOutcome::decl(config),
+        PlaybackPreloadScopeChange::decl(config),
+        PlaybackAddressValue::decl(config),
+        PlaybackControlSource::decl(config),
         PlaybackAddress::decl(config),
         ResolvedPlaybackAddress::decl(config),
         PlaybackAction::decl(config),
@@ -817,7 +830,6 @@ fn playback_topology(config: &Config) -> Vec<String> {
         PlaybackTopologyDynamicFaderMode::decl(config),
         PlaybackTopologyDynamicResumePolicy::decl(config),
         PlaybackTopologyPlaybackDefinition::decl(config),
-        PlaybackTopologyGroupMasterAddress::decl(config),
         PlaybackTopologyAction::decl(config),
         PlaybackTopologyActionRequest::decl(config),
         PlaybackTopologyResolution::decl(config),

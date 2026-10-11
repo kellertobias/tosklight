@@ -51,7 +51,7 @@ function timingLabel(schedule: ScheduleProjection) {
 function targetLabel(schedule: ScheduleProjection) {
 	const target = schedule.definition.target;
 	if (target.type === "macro") return `Start Macro · ${target.label}`;
-	return `Page ${target.page} · Playback ${target.playback} · ${playbackActionLabel(target.action)}`;
+	return `Page ${target.address.page} · Playback ${target.address.position} · ${playbackActionLabel(target.action)}`;
 }
 
 function resultLabel(schedule: ScheduleProjection) {

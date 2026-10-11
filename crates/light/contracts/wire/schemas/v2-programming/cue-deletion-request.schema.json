@@ -30,7 +30,13 @@
         {
           "type": "object",
           "properties": {
-            "playback_number": {
+            "page": {
+              "type": "integer",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0
+            },
+            "position": {
               "type": "integer",
               "format": "uint16",
               "maximum": 65535,
@@ -38,12 +44,32 @@
             },
             "type": {
               "type": "string",
-              "const": "pool"
+              "const": "playback"
             }
           },
           "required": [
             "type",
-            "playback_number"
+            "page",
+            "position"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "cuelist_pool"
+            }
+          },
+          "required": [
+            "type",
+            "number"
           ]
         },
         {
@@ -55,10 +81,10 @@
               "maximum": 255,
               "minimum": 0
             },
-            "slot": {
+            "position": {
               "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
+              "format": "uint16",
+              "maximum": 65535,
               "minimum": 0
             },
             "type": {
@@ -69,33 +95,7 @@
           "required": [
             "type",
             "expected_page",
-            "slot"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
-            },
-            "type": {
-              "type": "string",
-              "const": "page_slot"
-            }
-          },
-          "required": [
-            "type",
-            "page",
-            "slot"
+            "position"
           ]
         }
       ]
@@ -122,19 +122,43 @@
           "maximum": 9007199254740991,
           "minimum": 0
         },
-        "playback_number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
+        "playback_address": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "playback_number",
         "cue_list_id",
         "object_id",
         "object_revision",
         "cue_id"
+      ]
+    },
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
       ]
     }
   }

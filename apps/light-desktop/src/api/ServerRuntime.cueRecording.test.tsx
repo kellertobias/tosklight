@@ -15,7 +15,6 @@ import type {
 } from "../features/showObjects/contracts";
 import {
 	useCueLists,
-	usePlaybackDefinitions,
 	usePlaybackPages,
 } from "../features/showObjects/ShowObjectsState";
 import { useShowObjectKindsView } from "../features/showObjects/ShowObjectsView";
@@ -29,7 +28,7 @@ const SESSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const DESK_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const CUE_LIST_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const CUE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-const CUE_KINDS = ["cue_list", "playback", "playback_page"] as const;
+const CUE_KINDS = ["cue_list", "playback_page"] as const;
 
 const boundaries = vi.hoisted(() => ({
 	loadCollection: vi.fn(),
@@ -175,7 +174,7 @@ function RecordCueButton() {
 			type="button"
 			onClick={() =>
 				void actions?.record({
-					target: { kind: "page_slot", page: 4, slot: 2 },
+					target: { kind: "playback", page: 4, position: 2 },
 					operation: "overwrite",
 					cueNumber: "1",
 					timing: {},
@@ -193,13 +192,14 @@ function RecordCueButton() {
 function CueValuesProbe() {
 	useShowObjectKindsView(CUE_KINDS);
 	const cueLists = useCueLists();
-	const playbacks = usePlaybackDefinitions();
+	const playbacks = usePlaybackPages().flatMap((page) =>
+		Object.values(page.body.assignments),
+	);
 	const pages = usePlaybackPages();
 	return (
 		<span data-testid="cue-values">
 			{cueLists[0]?.body.cues[0]?.name ?? "No Cue"}/
-			{playbacks[0]?.body.name ?? "No Playback"}/
-			{pages[0]?.body.name ?? "No Page"}
+			{playbacks[0]?.name ?? "No Playback"}/{pages[0]?.body.name ?? "No Page"}
 		</span>
 	);
 }
@@ -243,24 +243,19 @@ function cueList(revision: number, cueName: string): ShowObject<"cue_list"> {
 	};
 }
 
-function playback(revision: number, name: string): ShowObject<"playback"> {
+function playback(
+	name: string,
+): ShowObject<"playback_page">["body"]["assignments"][string] {
 	return {
-		kind: "playback",
-		id: "7",
-		revision,
-		updated_at: "",
-		body: {
-			number: 7,
-			name,
-			target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
-			buttons: ["go_minus", "go", "flash"],
-			button_count: 3,
-			fader: "master",
-			has_fader: true,
-			go_activates: true,
-			auto_off: true,
-			xfade_millis: 0,
-		},
+		name,
+		target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
+		buttons: ["go_minus", "go", "flash"],
+		button_count: 3,
+		fader: "master",
+		has_fader: true,
+		go_activates: true,
+		auto_off: true,
+		xfade_millis: 0,
 	};
 }
 
@@ -270,13 +265,12 @@ function page(revision: number, name: string): ShowObject<"playback_page"> {
 		id: "4",
 		revision,
 		updated_at: "",
-		body: { number: 4, name, slots: { 2: 7 }, virtual_playbacks: {} },
+		body: { number: 4, name, assignments: { 2: playback(name) } },
 	};
 }
 
 function objectsFor(kind: ShowObjectKind, revision: number, label: string) {
 	if (kind === "cue_list") return [cueList(revision, label)];
-	if (kind === "playback") return [playback(revision, label)];
 	if (kind === "playback_page") return [page(revision, label)];
 	return [];
 }
@@ -284,7 +278,7 @@ function objectsFor(kind: ShowObjectKind, revision: number, label: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ServerRuntime Cue recording boundary", () => {
-	it("stays dormant until a Cue view mounts and isolates three-object outcomes and events", async () => {
+	it("stays dormant until a Cue view mounts and isolates page-owned outcomes and events", async () => {
 		boundaries.loadCollection.mockReset();
 		boundaries.loadObjectSnapshot.mockReset();
 		boundaries.loadObject.mockReset();
@@ -320,7 +314,7 @@ describe("ServerRuntime Cue recording boundary", () => {
 				recordedCue: { id: CUE_ID, number: "1", deleted: false },
 				projections: {
 					cueList: cueList(2, "Outcome"),
-					playback: playback(2, "Outcome"),
+
 					page: page(2, "Outcome"),
 				},
 				showEventSequence: 12,
@@ -344,7 +338,7 @@ describe("ServerRuntime Cue recording boundary", () => {
 				"Initial/Initial/Initial",
 			),
 		);
-		expect(boundaries.loadCollection).toHaveBeenCalledTimes(3);
+		expect(boundaries.loadCollection).toHaveBeenCalledTimes(2);
 		expect(boundaries.subscribeShowObjects).toHaveBeenCalledOnce();
 		const rendersBeforeOutcome = unrelatedRenders;
 
@@ -358,7 +352,7 @@ describe("ServerRuntime Cue recording boundary", () => {
 			SHOW_ID,
 			7,
 			expect.objectContaining({
-				target: { kind: "page_slot", page: 4, slot: 2 },
+				target: { kind: "playback", page: 4, position: 2 },
 			}),
 		);
 		expect(unrelatedRenders).toBe(rendersBeforeOutcome);
@@ -376,13 +370,6 @@ describe("ServerRuntime Cue recording boundary", () => {
 							objectId: CUE_LIST_ID,
 							objectRevision: 3,
 							body: cueList(3, "Event").body,
-							deleted: false,
-						},
-						{
-							kind: "playback",
-							objectId: "7",
-							objectRevision: 3,
-							body: playback(3, "Event").body,
 							deleted: false,
 						},
 						{

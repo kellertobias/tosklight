@@ -1,11 +1,10 @@
 use super::{
     PlaybackTopologyCommand, PlaybackTopologyObjectProjection, PlaybackTopologyResolution,
-    stored::{Stored, candidate_projection, invalid, stored_projection},
+    stored::{candidate_projection, invalid},
 };
 use crate::active_show::PreparedActiveShowTransaction;
 use crate::show_compiler::prepare_show_candidate_exact_transaction;
 use crate::{ActionError, ActiveShowObjectChange, ActiveShowObjectKind};
-use light_playback::{PlaybackDefinition, PlaybackPage};
 use light_show::{PortableShowDocument, PortableShowRevision, PortableShowTransaction};
 use serde_json::Value;
 use std::sync::Arc;
@@ -16,32 +15,6 @@ pub(super) struct PreparedTopology {
     pub resolution: PlaybackTopologyResolution,
     pub objects: Arc<[PlaybackTopologyObjectProjection]>,
     pub changes: Vec<ActiveShowObjectChange>,
-}
-
-pub(super) fn changed_configure(
-    document: &PortableShowDocument,
-    command: &PlaybackTopologyCommand,
-    resolution: PlaybackTopologyResolution,
-    writes: Vec<(ActiveShowObjectKind, String, Value)>,
-    playback: Option<Stored<PlaybackDefinition>>,
-    page: Option<Stored<PlaybackPage>>,
-) -> Result<PreparedActiveShowTransaction<PreparedTopology>, ActionError> {
-    let mut prepared = changed_present(document, command, resolution, writes, Vec::new())?;
-    let state = match &mut prepared {
-        PreparedActiveShowTransaction::PreparedCommit { state, .. } => state,
-        PreparedActiveShowTransaction::NoChange(_) => unreachable!("configure has a change"),
-    };
-    ensure_present_projection(
-        &mut state.objects,
-        ActiveShowObjectKind::Playback,
-        playback.as_ref(),
-    );
-    ensure_present_projection(
-        &mut state.objects,
-        ActiveShowObjectKind::PlaybackPage,
-        page.as_ref(),
-    );
-    Ok(prepared)
 }
 
 pub(super) fn changed_present(
@@ -124,27 +97,6 @@ pub(super) fn no_change(
         objects: objects.into(),
         changes: Vec::new(),
     })
-}
-
-fn ensure_present_projection<T>(
-    objects: &mut Arc<[PlaybackTopologyObjectProjection]>,
-    kind: ActiveShowObjectKind,
-    stored: Option<&Stored<T>>,
-) {
-    if objects.iter().any(|object| object.kind() == kind) {
-        return;
-    }
-    let Some(stored) = stored else {
-        debug_assert!(
-            false,
-            "new configured object must be among changed projections"
-        );
-        return;
-    };
-    let mut expanded = objects.to_vec();
-    expanded.push(stored_projection(kind, stored));
-    expanded.sort_by_key(|projection| projection.kind() != ActiveShowObjectKind::Playback);
-    *objects = expanded.into();
 }
 
 fn object_change(projection: &PlaybackTopologyObjectProjection) -> ActiveShowObjectChange {

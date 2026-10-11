@@ -1,7 +1,7 @@
 //! Exact Running-row owner validation. The caller holds PlaybackService's operation lock.
 use super::*;
 use light_dynamics::DynamicControllerSource;
-use light_playback::{PlaybackIdentity, PlaybackTarget};
+use light_playback::PlaybackTarget;
 use uuid::Uuid;
 
 pub(super) fn validate(
@@ -17,24 +17,14 @@ pub(super) fn validate(
             "The running Dynamic owner changed. Refresh Running and retry.",
         )
     };
-    let (identity, source, definition) = match address {
-        ResolvedPlaybackAddress::Pool { number, .. } => (
-            PlaybackIdentity::physical(*number).map_err(invalid)?,
-            DynamicControllerSource::Playback {
-                playback_number: *number,
-                virtual_page: None,
-            },
-            playback_definition(state, *number)?,
-        ),
-        ResolvedPlaybackAddress::Virtual(address) => (
-            PlaybackIdentity::Virtual(*address),
-            DynamicControllerSource::Playback {
-                playback_number: address.number().get(),
-                virtual_page: Some(address.page()),
-            },
-            virtual_playback_definition(state, *address)?,
-        ),
-        _ => return Err(conflict()),
+    let ResolvedPlaybackAddress::Playback(identity) = address else {
+        return Err(conflict());
+    };
+    let identity = *identity;
+    let definition = playback_definition(state, identity)?;
+    let source = DynamicControllerSource::Playback {
+        page: identity.page(),
+        position: identity.position(),
     };
     let PlaybackTarget::Dynamic { assignment } = &definition.target else {
         return Err(conflict());
@@ -44,7 +34,7 @@ pub(super) fn validate(
     }
     let active = state
         .output
-        .active_dynamic_playback_at(identity)
+        .active_dynamic_playback(identity)
         .ok_or_else(conflict)?;
     if !active.enabled || active.dynamic_id != Some(dynamic_id) {
         return Err(conflict());

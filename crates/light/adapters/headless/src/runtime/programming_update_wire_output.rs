@@ -84,13 +84,18 @@ fn wire_request_target(
     match target {
         application::ProgrammingUpdateTargetRequest::Cue {
             cue_list_id,
-            playback_number,
+            playback_address,
             cue_id,
             cue_number,
             validate_active_context,
         } => wire::ProgrammingUpdateTarget::Cue {
             cue_list_id: cue_list_id.0,
-            playback_number,
+            playback_address: playback_address.map(|address| {
+                light_wire::v2::playback::PlaybackAddressValue {
+                    page: address.page(),
+                    position: address.position(),
+                }
+            }),
             cue_id,
             cue_number: cue_number.map(|number| number.to_string()),
             validate_active_context,
@@ -125,7 +130,6 @@ fn wire_kind(
         | app::ActiveShowObjectKind::PatchLayer
         | app::ActiveShowObjectKind::Dynamic
         | app::ActiveShowObjectKind::Macro
-        | app::ActiveShowObjectKind::Playback
         | app::ActiveShowObjectKind::PlaybackPage
         | app::ActiveShowObjectKind::Psn
         | app::ActiveShowObjectKind::Schedule
@@ -166,7 +170,12 @@ fn wire_target_identity(
         family,
         object_id: target.object_id,
         name: target.name,
-        playback_number: target.playback_number,
+        playback_address: target.playback_address.map(|address| {
+            light_wire::v2::playback::PlaybackAddressValue {
+                page: address.page(),
+                position: address.position(),
+            }
+        }),
         cue: target.cue.map(|cue| wire::ProgrammingUpdateCueIdentity {
             id: cue.id,
             number: cue.number.to_string(),

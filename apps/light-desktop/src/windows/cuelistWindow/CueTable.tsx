@@ -1,7 +1,7 @@
 import { Button } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import type { CSSProperties, ReactNode } from "react";
-import type { Cue, PlaybackSnapshot } from "../../api/types";
+import type { Cue, PlaybackControlState } from "../../api/types";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import {
 	useReleaseFadeMillis,
@@ -298,7 +298,7 @@ function CueTableRow({
 	cue: Cue;
 	index: number;
 	cues: Cue[];
-	active: PlaybackSnapshot["active"][number] | undefined;
+	active: PlaybackControlState | undefined;
 	selected: boolean;
 	disabled: boolean;
 	propertyEditable: boolean;
@@ -443,7 +443,7 @@ export function CueTable({
 	command,
 }: {
 	cues: Cue[];
-	active: PlaybackSnapshot["active"][number] | undefined;
+	active: PlaybackControlState | undefined;
 	selectedCue: number;
 	settingsOpen: boolean;
 	thumbnails: Record<number, string>;

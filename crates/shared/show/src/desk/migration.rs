@@ -9,13 +9,11 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS show_library(id TEXT PRIMARY KEY,name TEXT NOT NULL UNIQUE COLLATE NOCASE,path TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1,updated_at TEXT NOT NULL,created_at TEXT,last_loaded_at TEXT,revision_source_show_id TEXT,revision_source_show_name TEXT,revision_source_revision INTEGER,revision_source_name TEXT,revision_copy_created_at TEXT,is_base_show INTEGER NOT NULL DEFAULT 0 CHECK(is_base_show IN(0,1)));
       CREATE TABLE IF NOT EXISTS show_revisions(show_id TEXT NOT NULL,revision INTEGER NOT NULL,name TEXT NOT NULL,path TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(show_id,revision),FOREIGN KEY(show_id) REFERENCES show_library(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
+      CREATE TABLE IF NOT EXISTS control_desks(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,surface_id TEXT NOT NULL DEFAULT 'main',client_id TEXT,last_connected_at TEXT);
       CREATE TABLE IF NOT EXISTS desk_clients(client_id TEXT PRIMARY KEY,last_connected_at TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS control_desk_pages(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS control_desk_cuelist_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,cue_list_id TEXT NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,playback_layout_json TEXT,content_json TEXT NOT NULL DEFAULT '{"type":"desktop"}',show_programmer INTEGER NOT NULL DEFAULT 0,not_editable INTEGER NOT NULL DEFAULT 0);
-      CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback TEXT NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,surface_id TEXT NOT NULL,content_json TEXT NOT NULL DEFAULT '{"type":"desktop"}',show_programmer INTEGER NOT NULL DEFAULT 0,not_editable INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS programmer_control_surface(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner_screen_id TEXT,visible_encoders INTEGER NOT NULL DEFAULT 6 CHECK(visible_encoders IN(4,6)),FOREIGN KEY(owner_screen_id) REFERENCES screens(id) ON DELETE SET NULL);
       INSERT OR IGNORE INTO programmer_control_surface(singleton,owner_screen_id,visible_encoders) VALUES(1,NULL,6);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL);"#,
@@ -25,12 +23,6 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "show_library",
         "revision_source_show_id",
         "revision_source_show_id TEXT",
-    )?;
-    add_column_if_missing(
-        &tx,
-        "control_desks",
-        "playback_layout_json",
-        "playback_layout_json TEXT",
     )?;
     add_column_if_missing(&tx, "control_desks", "client_id", "client_id TEXT")?;
     add_column_if_missing(
@@ -42,12 +34,6 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     tx.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS control_desks_client_id ON control_desks(client_id) WHERE client_id IS NOT NULL",
         [],
-    )?;
-    add_column_if_missing(
-        &tx,
-        "screens",
-        "playback_layout_json",
-        "playback_layout_json TEXT",
     )?;
     add_column_if_missing(
         &tx,
@@ -291,8 +277,8 @@ fn drop_desk_osc_alias(conn: &mut Connection) -> Result<(), StoreError> {
 fn rebuild_control_desks(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction()?;
     tx.execute_batch(
-        r#"CREATE TABLE control_desks_without_alias(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,playback_layout_json TEXT,client_id TEXT,last_connected_at TEXT);
-      INSERT INTO control_desks_without_alias(id,name,columns_count,rows_count,buttons_count,playback_layout_json,client_id,last_connected_at) SELECT id,name,columns_count,rows_count,buttons_count,playback_layout_json,client_id,last_connected_at FROM control_desks;
+        r#"CREATE TABLE control_desks_without_alias(id TEXT PRIMARY KEY,name TEXT NOT NULL,columns_count INTEGER NOT NULL DEFAULT 8,rows_count INTEGER NOT NULL DEFAULT 1,buttons_count INTEGER NOT NULL DEFAULT 3,surface_id TEXT NOT NULL DEFAULT 'main',client_id TEXT,last_connected_at TEXT);
+      INSERT INTO control_desks_without_alias(id,name,columns_count,rows_count,buttons_count,surface_id,client_id,last_connected_at) SELECT id,name,columns_count,rows_count,buttons_count,surface_id,client_id,last_connected_at FROM control_desks;
       DROP TABLE control_desks;
       ALTER TABLE control_desks_without_alias RENAME TO control_desks;
       CREATE UNIQUE INDEX IF NOT EXISTS control_desks_client_id ON control_desks(client_id) WHERE client_id IS NOT NULL;"#,

@@ -1,3 +1,9 @@
+fn cue_programming_test_address(page:u8,position:u16)->light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(page,position).unwrap()
+}
+fn cue_programming_test_source()->light_playback::PlaybackControlSource {
+    light_playback::PlaybackControlSource {surface_id:"cue-programming-test".into(),control_id:1}
+}
 fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
     let list = light_playback::CueList {
         pool_number: None,
@@ -26,7 +32,6 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
         ],
     };
     let definition = |number| light_playback::PlaybackDefinition {
-        number,
         name: format!("Playback {number}"),
         target: light_playback::PlaybackTarget::CueList {
             cue_list_id: list_id,
@@ -51,12 +56,10 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
     };
     EngineSnapshot {
         cue_lists: vec![list].into(),
-        playbacks: vec![definition(1), definition(2)].into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 4,
             name: "Page 4".into(),
-            slots: HashMap::from([(6, 1), (7, 2)]),
-            virtual_playbacks: HashMap::new(),
+            assignments: HashMap::from([(6, definition(1)), (7, definition(2))]),
         }].into(),
         ..Default::default()
     }
@@ -66,7 +69,7 @@ fn cue_selection_snapshot(list_id: light_core::CueListId) -> EngineSnapshot {
 fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     let (state, data_dir) = test_state();
     let first_desk = state.installation.desk().unwrap();
-    let second_desk = state.installation.desk().unwrap();
+    let second_desk = test_control_desk();
     let show_id = light_core::ShowId::new();
     state.active_show.replace_current(Some(ShowEntry {
         is_base_show: false,
@@ -84,20 +87,20 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         .output.replace_snapshot(cue_selection_snapshot(list_id))
         .unwrap();
     state
-        .installation.set_selected_playback(first_desk.id, show_id, Some(1))
+        .installation.set_selected_playback(first_desk.id, show_id, Some(light_show::PlaybackSelection{page:4,position:6}))
         .unwrap();
     state
-        .installation.set_selected_playback(second_desk.id, show_id, Some(2))
+        .installation.set_selected_playback(second_desk.id, show_id, Some(light_show::PlaybackSelection{page:4,position:7}))
         .unwrap();
     state
-        .installation.set_desk_page(first_desk.id, show_id, 4)
+        .installation.set_playback_surface_page(first_desk.id,"main",4)
         .unwrap();
     state
-        .installation.set_desk_page(second_desk.id, show_id, 4)
+        .installation.set_playback_surface_page(second_desk.id,"main",4)
         .unwrap();
     handle_playback_osc(
         &state,
-        "/light/front/page-playback/7/select",
+        "/light/front/playback/4/7/select",
         &[OscArgument::Bool(true)],
         None,
     );
@@ -105,10 +108,10 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         state
             .installation.selected_playback(first_desk.id, show_id)
             .unwrap(),
-        Some(2)
+        Some(light_show::PlaybackSelection{page:4,position:7})
     );
     state
-        .installation.set_selected_playback(first_desk.id, show_id, Some(1))
+        .installation.set_selected_playback(first_desk.id, show_id, Some(light_show::PlaybackSelection{page:4,position:6}))
         .unwrap();
     let first = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -129,7 +132,7 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         &first,
         "GO TO PBK 6 CUE 2",
         light_application::ActionSource::Keyboard,
-        1,
+        cue_programming_test_address(4,6),
         Some(cue("2")),
         None,
     );
@@ -139,14 +142,14 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         &first,
         "LOAD PBK 6 CUE 1",
         light_application::ActionSource::Osc,
-        1,
+        cue_programming_test_address(4,6),
         Some(cue("3")),
         Some(cue("1")),
     );
-    for number in [1, 2] {
+    for position in [6, 7] {
         let runtime = state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(number).unwrap())
+            .playback_runtime_status_at(cue_programming_test_address(4,position))
             .unwrap();
         assert_eq!(
             (
@@ -158,10 +161,10 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
     }
     execute_programmer_command(&state, &first, "GO TO PBK 7 CUE 1").unwrap();
     execute_programmer_command(&state, &first, "LOAD PBK 4 . 7 CUE 2").unwrap();
-    for number in [1, 2] {
+    for position in [6, 7] {
         let runtime = state
             .output
-            .playback_runtime_status_at(light_playback::PlaybackIdentity::physical(number).unwrap())
+            .playback_runtime_status_at(cue_programming_test_address(4,position))
             .unwrap();
         assert_eq!(
             (
@@ -175,7 +178,7 @@ fn canonical_navigation_uses_current_and_explicit_page_playbacks() {
         state
             .installation.selected_playback(first.desk.id, show_id)
             .unwrap(),
-        Some(1)
+        Some(light_show::PlaybackSelection{page:4,position:6})
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -185,7 +188,7 @@ fn execute_cue_and_assert_typed_event(
     session: &Session,
     command: &str,
     source: light_application::ActionSource,
-    playback: u16,
+    playback: light_playback::PlaybackAddress,
     current: Option<light_playback::CueNumber>,
     loaded: Option<light_playback::CueNumber>,
 ) {
@@ -207,7 +210,7 @@ fn execute_cue_and_assert_typed_event(
                 &event.payload,
                 light_application::ApplicationEvent::Playback(
                     light_application::PlaybackEvent::RuntimeChanged(change)
-                ) if change.projection.playback_number == Some(playback)
+                ) if change.projection.identity == light_application::PlaybackRuntimeIdentity::Playback(playback)
             )
         })
         .expect("the addressed Playback projection must be published");
@@ -219,7 +222,7 @@ fn execute_cue_and_assert_typed_event(
     else {
         panic!("expected typed Playback runtime event");
     };
-    assert_eq!(change.projection.playback_number, Some(playback));
+    assert_eq!(change.projection.identity, light_application::PlaybackRuntimeIdentity::Playback(playback));
     let runtime = change.projection.cue_list_runtime().unwrap();
     assert_eq!(runtime.current.as_ref().map(|cue| cue.number.clone()), current);
     assert_eq!(runtime.loaded.as_ref().map(|cue| cue.number.clone()), loaded);

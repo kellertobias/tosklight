@@ -38,9 +38,9 @@ fn preview_go_off_and_temp_use_pinned_time_and_leave_live_runtime_unchanged() {
     let cue_list_id = cue_list.id;
     let mut live = PlaybackEngine::with_clock(clock.clone());
     live.register(cue_list).unwrap();
-    live.register_definition(definition(1, cue_list_id))
+    live.register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
-    live.on(1).unwrap();
+    live.on(address(1)).unwrap();
     let live_active = live.active.clone();
     let live_controls = live.control_states.clone();
     let live_ordinals = (live.next_activation_ordinal, live.next_transition_ordinal);
@@ -57,14 +57,18 @@ fn preview_go_off_and_temp_use_pinned_time_and_leave_live_runtime_unchanged() {
     ));
     clock.advance_millis(4_000);
 
-    let active = preview.go_playback(1).unwrap();
+    let active = preview.go_playback(address(1)).unwrap();
     assert_eq!(active.cue_index, 1);
     assert_eq!(active.activated_at, sampled_at);
-    assert!(preview.off(1).unwrap());
+    assert!(preview.off(address(1)).unwrap());
     assert!(!preview.active[&PlaybackKey::CueList(cue_list_id)].enabled);
-    assert!(preview.toggle_temp(1).unwrap());
-    let identity = PlaybackIdentity::physical(1).unwrap();
-    let temporary = &preview.temporary[&(identity, TemporaryPlaybackKind::TempButton)];
+    assert!(
+        preview
+            .toggle_temp(address(1), &test_source(address(1).position()))
+            .unwrap()
+    );
+    let identity = address(1);
+    let temporary = &preview.temporary[&(held(identity), TemporaryPlaybackKind::TempButton)];
     assert_eq!(
         temporary.activated_at,
         sampled_at + ChronoDuration::microseconds(1)

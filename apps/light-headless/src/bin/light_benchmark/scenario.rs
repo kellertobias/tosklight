@@ -14,7 +14,7 @@ use light_dynamics::{
 };
 use light_engine::{
     ContributionBatch, ContributionSample, ContributionSourceId, Engine, EnginePlaybackCommand,
-    EngineSnapshot, PoolPlaybackAction,
+    EngineSnapshot, PlaybackAction,
 };
 use light_fixture::{
     ChannelBehavior, ChannelResolution, FixtureChannel, FixtureProfile, PatchedFixture, SplitPatch,
@@ -130,7 +130,12 @@ impl BenchmarkScenario {
             .replace_snapshot(EngineSnapshot {
                 fixtures: fixtures.into(),
                 cue_lists: vec![cue_list].into(),
-                playbacks: vec![playback].into(),
+                playback_pages: vec![light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Benchmark".into(),
+                    assignments: std::collections::HashMap::from([(1, playback)]),
+                }]
+                .into(),
                 routes: routes.into(),
                 groups: vec![group].into(),
                 revision: 1,
@@ -138,9 +143,15 @@ impl BenchmarkScenario {
             })
             .map_err(|error| error.to_string())?;
         engine
-            .execute_playback(EnginePlaybackCommand::Pool {
-                number: 1,
-                action: PoolPlaybackAction::Go,
+            .execute_playback(EnginePlaybackCommand::Playback {
+                address: light_playback::PlaybackAddress::new(1, 1)
+                    .expect("valid benchmark address"),
+                activation_origin: None,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: "benchmark".into(),
+                    control_id: 1,
+                },
+                action: PlaybackAction::Go,
             })
             .map_err(|error| format!("activate benchmark playback: {error}"))?;
         programmers.set_many(
@@ -420,7 +431,6 @@ fn playback(fixture_footprint: u16) -> (CueList, PlaybackDefinition) {
         cues: vec![cue],
     };
     let playback = PlaybackDefinition {
-        number: 1,
         name: "Benchmark playback".into(),
         target: PlaybackTarget::CueList { cue_list_id },
         footprint: PlaybackFootprint::Normal,

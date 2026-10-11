@@ -263,7 +263,7 @@ fn new_recording_and_playback_use_backend_canonical_defaults_and_explicit_zeroes
     assert_eq!(first.fade_millis, 0);
     assert_eq!(first.delay_millis, 0);
     assert_eq!(first.trigger, CueTrigger::Follow { delay_millis: 0 });
-    let playback = PlaybackDefinition::new_cue_list(7, "Cuelist 7", cue_list_id);
+    let playback = PlaybackDefinition::new_cue_list("Cuelist 7", cue_list_id);
     assert_eq!(
         playback.buttons,
         [

@@ -113,7 +113,7 @@ pub(in crate::runtime) fn start_execution(
                 definition,
                 source_revision,
                 context: host.context.clone(),
-                trigger: application_trigger(trigger),
+                trigger: application_trigger(trigger).map_err(ApiError::bad_request)?,
                 only_line,
             },
             host,
@@ -185,7 +185,7 @@ pub(super) fn start_macro_from_playback(
     state: &AppState,
     session: &Session,
     macro_id: Uuid,
-    playback_number: u16,
+    address: light_playback::PlaybackAddress,
 ) -> Result<(), ApiError> {
     let show_id = state
         .active_show
@@ -199,7 +199,12 @@ pub(super) fn start_macro_from_playback(
         session,
         definition,
         revision,
-        wire::MacroTrigger::Playback { playback_number },
+        wire::MacroTrigger::Playback {
+            address: light_wire::v2::playback::PlaybackAddressValue {
+                page: address.page(),
+                position: address.position(),
+            },
+        },
         None,
         show_id,
     )?;

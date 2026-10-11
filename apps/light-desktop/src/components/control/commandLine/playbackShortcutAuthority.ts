@@ -1,3 +1,4 @@
+import type { AssignedPlayback } from "../playbackFaderBank/types";
 import { useCallback, useMemo } from "react";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
 import type { PlaybackInteractionIdentity } from "../../../features/controlSurfaceInteraction/contracts";
@@ -7,7 +8,6 @@ import {
 } from "../../../features/playbackRuntime/PlaybackRuntimeView";
 import type { ShowObjectKind } from "../../../features/showObjects/contracts";
 import {
-	usePlaybackDefinitions,
 	usePlaybackPages,
 	useShowObjectCollectionsReady,
 } from "../../../features/showObjects/ShowObjectsState";
@@ -16,7 +16,6 @@ import { useShowObjectKindsView } from "../../../features/showObjects/ShowObject
 /** Keyboard shortcuts address Pages and their mapped Playbacks, nothing else. */
 const SHORTCUT_KINDS = [
 	"playback_page",
-	"playback",
 ] as const satisfies readonly ShowObjectKind[];
 
 export interface PlaybackShortcutAuthority {
@@ -26,10 +25,11 @@ export interface PlaybackShortcutAuthority {
 	activePage: number | null;
 	pages: readonly PlaybackPage[];
 	/** Resolves slot 1-8 on the authoritative current Page. */
-	slotPlayback: (slot: number) => PlaybackDefinition | null;
+	surfaceId: string;
+	slotPlayback: (slot: number) => AssignedPlayback | null;
 	/** Resolves the first physical button, including a claimed wider right column. */
 	slotControl?: (slot: number) => {
-		playback: PlaybackDefinition;
+		playback: AssignedPlayback;
 		action: PlaybackDefinition["buttons"][number];
 		button: number;
 	} | null;
@@ -39,6 +39,7 @@ export interface PlaybackShortcutAuthority {
 const NO_PAGES: readonly PlaybackPage[] = [];
 
 const DORMANT: PlaybackShortcutAuthority = {
+	surfaceId: "main",
 	ready: false,
 	activePage: null,
 	pages: NO_PAGES,
@@ -61,33 +62,21 @@ export function usePlaybackShortcutAuthority(
 		enabled,
 	);
 	const pageObjects = usePlaybackPages(enabled);
-	const playbackObjects = usePlaybackDefinitions(enabled);
 	const desk = usePlaybackDeskView(enabled);
 	const runtimeStatus = usePlaybackRuntimeStatus(enabled);
 	const runtimeReady = enabled && runtimeStatus.status === "ready";
-	const activePage = runtimeReady ? (desk?.active_page ?? null) : null;
+	const activePage = runtimeReady ? (desk?.command_page ?? null) : null;
 	const ready = definitionsReady && runtimeReady && activePage != null;
 	const pages = useMemo(
 		() => (ready ? pageObjects.map((page) => page.body) : NO_PAGES),
 		[pageObjects, ready],
 	);
-	const playbacks = useMemo(
-		() => (ready ? playbackObjects.map((playback) => playback.body) : []),
-		[playbackObjects, ready],
-	);
-	const slotPlayback = useCallback(
-		(slot: number) => {
-			if (!ready) return null;
-			const page = pages.find((candidate) => candidate.number === activePage);
-			const playbackNumber = page?.slots[String(slot)];
-			if (playbackNumber == null) return null;
-			const match = playbacks.find(
-				(candidate) => candidate.number === playbackNumber,
-			);
-			return match ?? null;
-		},
-		[activePage, pages, playbacks, ready],
-	);
+	const surfaceId = desk?.selected_surface_id ?? "main";
+	const slotPlayback = useCallback((position: number): AssignedPlayback | null => {
+		if (!ready || activePage == null) return null;
+		const definition = pages.find(candidate => candidate.number === activePage)?.assignments[String(position)];
+		return definition ? {...definition, address: {page: activePage, position}} : null;
+	}, [activePage, pages, ready]);
 	const playbackIdentity = useCallback(
 		(slot: number): PlaybackInteractionIdentity | null => {
 			if (!ready || activePage == null) return null;
@@ -95,31 +84,16 @@ export function usePlaybackShortcutAuthority(
 				(candidate) => candidate.body.number === activePage,
 			);
 			let resolvedSlot = slot;
-			let playbackNumber = page?.body.slots[String(resolvedSlot)];
-			if (playbackNumber == null && slot > 1) {
-				const leftNumber = page?.body.slots[String(slot - 1)];
-				const left = playbackObjects.find(
-					(candidate) => candidate.body.number === leftNumber,
-				);
-				if (left?.body.footprint?.type === "wider") {
-					resolvedSlot = slot - 1;
-					playbackNumber = leftNumber;
-				}
-			}
-			const playback = playbackObjects.find(
-				(candidate) => candidate.body.number === playbackNumber,
-			);
+			if (!page?.body.assignments[String(slot)] && slot > 1 && page?.body.assignments[String(slot - 1)]?.footprint?.type === "wider") resolvedSlot = slot - 1;
 			return {
 				addressing: "current_page",
 				pageNumber: activePage,
 				slot: resolvedSlot,
 				pageObjectId: page?.id ?? null,
 				pageObjectRevision: page?.revision ?? 0,
-				playbackObjectId: playback?.id ?? null,
-				playbackObjectRevision: playback?.revision ?? 0,
 			};
 		},
-		[activePage, pageObjects, playbackObjects, ready],
+		[activePage, pageObjects, ready],
 	);
 	const slotControl = useCallback(
 		(slot: number) => {
@@ -141,8 +115,9 @@ export function usePlaybackShortcutAuthority(
 		() =>
 			enabled
 				? {
+						surfaceId,
 						ready,
-						activePage,
+			activePage,
 						pages,
 						slotPlayback,
 						slotControl,
@@ -150,6 +125,7 @@ export function usePlaybackShortcutAuthority(
 					}
 				: DORMANT,
 		[
+			surfaceId,
 			activePage,
 			enabled,
 			pages,

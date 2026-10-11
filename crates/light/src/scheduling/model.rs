@@ -144,9 +144,7 @@ pub enum MonthWeekOrdinal {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ScheduleTarget {
     Playback {
-        page: u16,
-        slot: u16,
-        playback_number: u16,
+        address: light_playback::PlaybackAddress,
         action: ScheduledPlaybackAction,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         master_transition: Option<PlaybackMasterTransition>,

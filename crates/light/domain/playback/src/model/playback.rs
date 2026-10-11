@@ -1,129 +1,163 @@
 use crate::*;
 
-pub const MAX_PLAYBACKS: u16 = 1_000;
-pub const MAX_PLAYBACK_PAGES: u8 = 127;
-pub const MAX_PAGE_SLOTS: u8 = 127;
-pub const MIN_VIRTUAL_PLAYBACK: u16 = 1_001;
-pub const VIRTUAL_PLAYBACKS_PER_PAGE: u16 = 300;
-pub const MAX_VIRTUAL_PLAYBACK: u16 =
-    MIN_VIRTUAL_PLAYBACK + (MAX_PLAYBACK_PAGES as u16 * VIRTUAL_PLAYBACKS_PER_PAGE) - 1;
+pub const MAX_PLAYBACK_POSITIONS: u16 = 1_000;
+pub const MAX_PLAYBACK_PAGES: u8 = 99;
 
-pub const fn virtual_playback_page_start(page: u8) -> Option<u16> {
-    if page == 0 || page > MAX_PLAYBACK_PAGES {
-        return None;
-    }
-    Some(MIN_VIRTUAL_PLAYBACK + ((page as u16 - 1) * VIRTUAL_PLAYBACKS_PER_PAGE))
-}
-
-pub const fn virtual_playback_page_for_number(number: u16) -> Option<u8> {
-    if number < MIN_VIRTUAL_PLAYBACK || number > MAX_VIRTUAL_PLAYBACK {
-        return None;
-    }
-    Some(((number - MIN_VIRTUAL_PLAYBACK) / VIRTUAL_PLAYBACKS_PER_PAGE) as u8 + 1)
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PhysicalPlaybackNumber(u16);
-
-impl PhysicalPlaybackNumber {
-    pub fn new(number: u16) -> Result<Self, String> {
-        if (1..=MAX_PLAYBACKS).contains(&number) {
-            Ok(Self(number))
-        } else {
-            Err("physical playback number must be within 1-1000".into())
-        }
-    }
-
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct VirtualPlaybackNumber(u16);
-
-impl VirtualPlaybackNumber {
-    pub fn new(number: u16) -> Result<Self, String> {
-        if (MIN_VIRTUAL_PLAYBACK..=MAX_VIRTUAL_PLAYBACK).contains(&number) {
-            Ok(Self(number))
-        } else {
-            Err("virtual playback number must be within 1001-39100".into())
-        }
-    }
-
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct VirtualPlaybackAddress {
+/// One show-owned assignment position, independent of the surface displaying it.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct PlaybackAddress {
     page: u8,
-    number: VirtualPlaybackNumber,
+    position: u16,
 }
 
-impl VirtualPlaybackAddress {
-    pub fn new(page: u8, number: u16) -> Result<Self, String> {
-        let page_start = virtual_playback_page_start(page)
-            .ok_or_else(|| "virtual playback page must be within 1-127".to_owned())?;
-        let page_end = page_start + VIRTUAL_PLAYBACKS_PER_PAGE - 1;
-        if !(page_start..=page_end).contains(&number) {
-            return Err(format!(
-                "virtual playback page {page} requires a playback number within {page_start}-{page_end}"
-            ));
+impl PlaybackAddress {
+    pub fn new(page: u8, position: u16) -> Result<Self, String> {
+        if !(1..=MAX_PLAYBACK_PAGES).contains(&page) {
+            return Err("Playback page must be within 1-99".into());
         }
-        Ok(Self {
-            page,
-            number: VirtualPlaybackNumber::new(number)?,
-        })
-    }
-
-    pub fn from_number(number: u16) -> Result<Self, String> {
-        let page = virtual_playback_page_for_number(number)
-            .ok_or_else(|| "virtual playback number must be within 1001-39100".to_owned())?;
-        Self::new(page, number)
+        if !(1..=MAX_PLAYBACK_POSITIONS).contains(&position) {
+            return Err("Playback position must be within 1-1000".into());
+        }
+        Ok(Self { page, position })
     }
 
     pub const fn page(self) -> u8 {
         self.page
     }
-
-    pub const fn number(self) -> VirtualPlaybackNumber {
-        self.number
+    pub const fn position(self) -> u16 {
+        self.position
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum PlaybackIdentity {
-    Physical(PhysicalPlaybackNumber),
-    Virtual(VirtualPlaybackAddress),
+impl<'de> Deserialize<'de> for PlaybackAddress {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Stored {
+            page: u8,
+            position: u16,
+        }
+        let stored = Stored::deserialize(deserializer)?;
+        Self::new(stored.page, stored.position).map_err(serde::de::Error::custom)
+    }
 }
 
-impl PlaybackIdentity {
-    pub fn physical(number: u16) -> Result<Self, String> {
-        Ok(Self::Physical(PhysicalPlaybackNumber::new(number)?))
+impl std::fmt::Display for PlaybackAddress {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}.{}", self.page, self.position)
     }
+}
 
-    pub fn virtual_playback(page: u8, number: u16) -> Result<Self, String> {
-        let address = VirtualPlaybackAddress::new(page, number)?;
-        Ok(Self::Virtual(address))
+/// Stable ownership of one physical or software control across its press/release pair.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackControlSource {
+    pub surface_id: String,
+    pub control_id: u16,
+}
+
+impl PlaybackControlSource {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.surface_id.is_empty()
+            || self.surface_id.len() > 256
+            || self.surface_id.trim() != self.surface_id
+            || self.surface_id.contains('\0')
+        {
+            return Err("Playback control requires a valid stable surface id".into());
+        }
+        Ok(())
     }
+}
 
-    pub const fn number(self) -> u16 {
-        match self {
-            Self::Physical(number) => number.get(),
-            Self::Virtual(address) => address.number.get(),
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct PlaybackControlKey {
+    pub address: PlaybackAddress,
+    pub source: PlaybackControlSource,
+}
+
+impl PlaybackControlKey {
+    pub fn new(address: PlaybackAddress, source: &PlaybackControlSource) -> Result<Self, String> {
+        source.validate()?;
+        Ok(Self {
+            address,
+            source: source.clone(),
+        })
+    }
+    pub fn source_id(&self) -> Uuid {
+        let mut bytes = Vec::new();
+        bytes.push(self.address.page());
+        bytes.extend_from_slice(&self.address.position().to_be_bytes());
+        bytes.extend_from_slice(&(self.source.surface_id.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(self.source.surface_id.as_bytes());
+        bytes.extend_from_slice(&self.source.control_id.to_be_bytes());
+        Uuid::new_v5(&Uuid::from_u128(0x504c41594241434b5f434f4e54524f4c), &bytes)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackSoloRegion {
+    pub id: Uuid,
+    pub name: String,
+    pub members: Vec<PlaybackAddress>,
+}
+
+impl PlaybackSoloRegion {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.id.is_nil() || self.name.trim().is_empty() || self.name.len() > 80 {
+            return Err("Solo region requires an id and a name of 1-80 characters".into());
+        }
+        let unique = self.members.iter().copied().collect::<HashSet<_>>();
+        if unique.len() != self.members.len() {
+            return Err("Solo region members must not be duplicated".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackPositionRange {
+    pub start: u16,
+    pub end: u16,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct PlaybackPreloadScope {
+    pub position_ranges: Vec<PlaybackPositionRange>,
+    pub pages: Option<Vec<u8>>,
+}
+impl Default for PlaybackPreloadScope {
+    fn default() -> Self {
+        Self {
+            position_ranges: vec![PlaybackPositionRange {
+                start: 1,
+                end: MAX_PLAYBACK_POSITIONS,
+            }],
+            pages: None,
         }
     }
-
-    pub const fn virtual_address(self) -> Option<VirtualPlaybackAddress> {
-        match self {
-            Self::Physical(_) => None,
-            Self::Virtual(address) => Some(address),
+}
+impl PlaybackPreloadScope {
+    pub fn validate(&self) -> Result<(), String> {
+        for range in &self.position_ranges {
+            if range.start == 0 || range.end > MAX_PLAYBACK_POSITIONS || range.start > range.end {
+                return Err("invalid Preload position range".into());
+            }
         }
+        if let Some(pages) = &self.pages {
+            let mut unique = HashSet::new();
+            for page in pages {
+                if !(1..=MAX_PLAYBACK_PAGES).contains(page) || !unique.insert(*page) {
+                    return Err("invalid Preload page restriction".into());
+                }
+            }
+        }
+        Ok(())
+    }
+    pub fn contains(&self, address: PlaybackAddress) -> bool {
+        self.pages
+            .as_ref()
+            .is_none_or(|pages| pages.contains(&address.page()))
+            && self
+                .position_ranges
+                .iter()
+                .any(|range| (range.start..=range.end).contains(&address.position()))
     }
 }
 
@@ -302,9 +336,8 @@ pub enum FlashReleaseMode {
     ReleaseIntensityOnly,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PlaybackDefinition {
-    pub number: u16,
     pub name: String,
     pub target: PlaybackTarget,
     #[serde(default)]
@@ -404,19 +437,15 @@ impl PlaybackDefinition {
         }
         self.buttons = Self::default_buttons(&self.target);
         self.fader = Self::default_fader(&self.target);
-        self.footprint = if self.number > MAX_PLAYBACKS {
-            PlaybackFootprint::Normal
-        } else {
-            match self.footprint {
-                PlaybackFootprint::Normal => PlaybackFootprint::Normal,
-                PlaybackFootprint::Taller { .. } => PlaybackFootprint::Taller {
-                    upper_button: PlaybackButtonAction::None,
-                },
-                PlaybackFootprint::Wider { .. } => PlaybackFootprint::Wider {
-                    right_buttons: Self::default_buttons(&self.target),
-                    right_fader: Self::default_fader(&self.target),
-                },
-            }
+        self.footprint = match self.footprint {
+            PlaybackFootprint::Normal => PlaybackFootprint::Normal,
+            PlaybackFootprint::Taller { .. } => PlaybackFootprint::Taller {
+                upper_button: PlaybackButtonAction::None,
+            },
+            PlaybackFootprint::Wider { .. } => PlaybackFootprint::Wider {
+                right_buttons: Self::default_buttons(&self.target),
+                right_fader: Self::default_fader(&self.target),
+            },
         };
     }
 
@@ -533,26 +562,20 @@ impl PlaybackDefinition {
     fn footprint_is_compatible(&self) -> bool {
         match self.footprint {
             PlaybackFootprint::Normal => true,
-            PlaybackFootprint::Taller { upper_button } => {
-                self.number <= MAX_PLAYBACKS && self.button_is_compatible(upper_button)
-            }
+            PlaybackFootprint::Taller { upper_button } => self.button_is_compatible(upper_button),
             PlaybackFootprint::Wider {
                 right_buttons,
                 right_fader,
             } => {
-                self.number <= MAX_PLAYBACKS
-                    && right_buttons
-                        .into_iter()
-                        .all(|action| self.button_is_compatible(action))
+                right_buttons
+                    .into_iter()
+                    .all(|action| self.button_is_compatible(action))
                     && self.fader_is_compatible(right_fader)
             }
         }
     }
 
     pub fn validate(&self) -> Result<(), String> {
-        if !(1..=MAX_VIRTUAL_PLAYBACK).contains(&self.number) {
-            return Err("playback number must be physical 1-1000 or virtual 1001-39100".into());
-        }
         if self.name.trim().is_empty() || self.name.len() > 80 {
             return Err("playback name must contain 1-80 characters".into());
         }
@@ -644,7 +667,6 @@ impl<'de> Deserialize<'de> for PlaybackDefinition {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         struct StoredPlaybackDefinition {
-            number: u16,
             name: String,
             target: PlaybackTarget,
             #[serde(default)]
@@ -688,7 +710,6 @@ impl<'de> Deserialize<'de> for PlaybackDefinition {
             fader = PlaybackFaderMode::LearnedPercentage;
         }
         Ok(Self {
-            number: stored.number,
             name: stored.name,
             target: stored.target,
             buttons,
@@ -708,37 +729,21 @@ impl<'de> Deserialize<'de> for PlaybackDefinition {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlaybackPage {
     pub number: u8,
     pub name: String,
-    #[serde(default)]
-    pub slots: HashMap<u8, u16>,
-    /// Sparse dedicated Virtual Playback assignments for this page.
-    ///
-    /// Keys are the operator-visible numbers in this page's 300-number Virtual Playback bank.
-    /// They are intentionally separate from physical page slots.
-    pub virtual_playbacks: HashMap<u16, PlaybackDefinition>,
+    pub assignments: HashMap<u16, PlaybackDefinition>,
 }
 
 impl PlaybackPage {
     pub fn validate(&self) -> Result<(), String> {
         if !(1..=MAX_PLAYBACK_PAGES).contains(&self.number) {
-            return Err("page number must be within 1-127".into());
+            return Err("Playback page must be within 1-99".into());
         }
-        if self.slots.iter().any(|(slot, playback)| {
-            !(1..=MAX_PAGE_SLOTS).contains(slot) || !(1..=MAX_PLAYBACKS).contains(playback)
-        }) {
-            return Err("page slots must be within 1-127 and reference playbacks 1-1000".into());
-        }
-        for (number, playback) in &self.virtual_playbacks {
-            VirtualPlaybackAddress::new(self.number, *number)?;
-            if playback.number != *number {
-                return Err(
-                    "virtual playback assignment key must match its playback number".into(),
-                );
-            }
-            playback.validate()?;
+        for (position, definition) in &self.assignments {
+            PlaybackAddress::new(self.number, *position)?;
+            definition.validate()?;
         }
         Ok(())
     }

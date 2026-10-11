@@ -6,7 +6,7 @@ fn addressed_runtime_hidden_from_projection_still_publishes_once() {
     let service = PlaybackService::new(events.clone());
     let mut ports = StatefulPorts::with_execution(
         8,
-        PlaybackExecution::Pool {
+        PlaybackExecution::Playback {
             changed: true,
             pending: None,
         },
@@ -14,7 +14,7 @@ fn addressed_runtime_hidden_from_projection_still_publishes_once() {
     ports.addressed_event_required = true;
     let request = envelope(
         ActionSource::UserInterface,
-        PlaybackAddress::Pool(8),
+        PlaybackAddress::Playback(test_address(1, 8)),
         Some("hidden-runtime-effect"),
     );
 
@@ -22,10 +22,9 @@ fn addressed_runtime_hidden_from_projection_still_publishes_once() {
     let replay = service.handle(request, &ports).unwrap();
 
     assert_eq!(first.event_sequence, Some(1));
-    assert_eq!(replay.event_sequence, Some(1));
-    assert!(replay.replayed);
-    assert_eq!(events.latest_sequence(), 1);
-    assert_eq!(ports.executions.load(Ordering::Relaxed), 1);
+    assert_eq!(replay.event_sequence, Some(2));
+    assert_eq!(events.latest_sequence(), 2);
+    assert_eq!(ports.executions.load(Ordering::Relaxed), 2);
 }
 
 #[test]
@@ -36,7 +35,11 @@ fn peer_only_runtime_change_does_not_force_an_equal_primary_event() {
 
     let result = service
         .handle(
-            envelope(ActionSource::Http, PlaybackAddress::Pool(8), None),
+            envelope(
+                ActionSource::Http,
+                PlaybackAddress::Playback(test_address(1, 8)),
+                None,
+            ),
             &ports,
         )
         .unwrap();
@@ -49,5 +52,8 @@ fn peer_only_runtime_change_does_not_force_an_equal_primary_event() {
         panic!("the peer transition should remain replayable");
     };
     assert_eq!(published.len(), 1);
-    assert_eq!(published[0].object, Some(crate::EventObject::playback(6)));
+    assert_eq!(
+        published[0].object,
+        Some(crate::EventObject::playback(test_address(1, 6)))
+    );
 }

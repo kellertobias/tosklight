@@ -1,8 +1,6 @@
 mod candidate;
 mod change;
-mod map_existing;
 mod model;
-mod page;
 mod page_actions;
 mod ports;
 mod replay;

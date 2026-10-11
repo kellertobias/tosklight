@@ -31,16 +31,20 @@ fn cue_release_removes_only_its_cuelist_contribution_and_reveals_the_underlay() 
     upper_playback.auto_off = false;
     let mut lower_playback = definition(2, lower_id);
     lower_playback.auto_off = false;
-    engine.register_definition(upper_playback).unwrap();
-    engine.register_definition(lower_playback).unwrap();
-    engine.go_playback(2).unwrap();
-    engine.go_playback(1).unwrap();
+    engine
+        .register_definition(address(1), upper_playback)
+        .unwrap();
+    engine
+        .register_definition(address(2), lower_playback)
+        .unwrap();
+    engine.go_playback(address(2)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
         AttributeValue::Normalized(1.0)
     );
 
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
         AttributeValue::Normalized(0.4),
@@ -68,9 +72,11 @@ fn move_in_black_looks_through_dark_cues_and_uses_future_position_timing() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
 
     let candidates = engine.move_in_black_candidates();
     assert_eq!(candidates.len(), 1);
@@ -132,8 +138,10 @@ fn semantic_move_in_black_retains_missing_underlay_and_omits_a_release_target() 
         let id = cues.id;
         let mut engine = PlaybackEngine::default();
         engine.register(cues).unwrap();
-        engine.register_definition(definition(1, id)).unwrap();
-        engine.go_playback(1).unwrap();
+        engine
+            .register_definition(address(1), definition(1, id))
+            .unwrap();
+        engine.go_playback(address(1)).unwrap();
         let candidates = engine.move_in_black_candidates();
         if release {
             assert!(candidates.is_empty());
@@ -159,9 +167,11 @@ fn move_in_black_does_not_look_across_the_end_of_a_cuelist() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert!(engine.move_in_black_candidates().is_empty());
 }
 
@@ -182,10 +192,10 @@ fn snap_attributes_bypass_cue_crossfades() {
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
 
     let halfway = started + ChronoDuration::milliseconds(500);
     clock.set(halfway);
@@ -217,8 +227,8 @@ fn snap_attributes_bypass_playback_master_crossfades() {
     playback.xfade_millis = 1_000;
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
-    engine.register_definition(playback).unwrap();
-    engine.xfade(1, true).unwrap();
+    engine.register_definition(address(1), playback).unwrap();
+    engine.xfade(address(1), true).unwrap();
 
     let halfway = started + ChronoDuration::milliseconds(500);
     clock.set(halfway);

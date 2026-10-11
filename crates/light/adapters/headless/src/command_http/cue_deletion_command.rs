@@ -1,8 +1,14 @@
-use light_application::{CueNumber, ProgrammingCueDeletionAddress};
+use super::playback_address_command::CommandPlaybackTarget;
+use light_application::CueNumber;
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum CueDeletionCommandAddress {
+    CuelistPool { number: u16 },
+    Playback(CommandPlaybackTarget),
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ParsedCueDeletionCommand {
-    pub address: ProgrammingCueDeletionAddress,
+    pub address: CueDeletionCommandAddress,
     pub cue_number: CueNumber,
 }
 
@@ -21,20 +27,15 @@ pub(crate) fn parse(command: &str) -> Result<Option<ParsedCueDeletionCommand>, S
     let tokens = tokens(command);
     let first = number::<u16>(tokens.get(2), "playback number")?;
     let (address, cue_index) = if tokens[1] == "CUELIST" {
-        (
-            ProgrammingCueDeletionAddress::CuelistPool { number: first },
-            3,
-        )
-    } else if tokens.get(3).is_some_and(|token| token == ".") {
-        let page = u8::try_from(first).map_err(|_| "page number is invalid")?;
-        let slot = number::<u8>(tokens.get(4), "page playback number")?;
-        (ProgrammingCueDeletionAddress::PageSlot { page, slot }, 5)
+        if !(1..=1000).contains(&first) {
+            return Err("Cuelist number must be within 1-1000".into());
+        }
+        (CueDeletionCommandAddress::CuelistPool { number: first }, 3)
     } else {
+        let (target, rest) = super::playback_address_command::parse(&tokens[1..])?;
         (
-            ProgrammingCueDeletionAddress::Pool {
-                playback_number: first,
-            },
-            3,
+            CueDeletionCommandAddress::Playback(target),
+            tokens.len() - rest.len(),
         )
     };
     if tokens.get(cue_index).is_none_or(|token| token != "CUE") {
@@ -89,17 +90,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_pool_and_explicit_page_without_live_resolution() {
+    fn parses_current_and_explicit_page_without_live_resolution() {
         let pool = parse("DEL PBK 7 CUE 2,5").unwrap().unwrap();
         assert!(matches!(
             pool.address,
-            ProgrammingCueDeletionAddress::Pool { playback_number: 7 }
+            CueDeletionCommandAddress::Playback(CommandPlaybackTarget::CurrentPage { position: 7 })
         ));
         assert_eq!(pool.cue_number.to_string(), "2.5");
         let page = parse("DELETE PBK 2 . 3 CUE 4").unwrap().unwrap();
         assert!(matches!(
             page.address,
-            ProgrammingCueDeletionAddress::PageSlot { page: 2, slot: 3 }
+            CueDeletionCommandAddress::Playback(CommandPlaybackTarget::ExplicitPage {
+                page: 2,
+                position: 3
+            })
         ));
     }
 
@@ -116,13 +120,13 @@ mod tests {
     fn cuelist_delete_uses_independent_address_without_reinterpreting_pbk() {
         assert_eq!(
             parse("DELETE CUELIST 101 CUE 2").unwrap().unwrap().address,
-            ProgrammingCueDeletionAddress::CuelistPool { number: 101 }
+            CueDeletionCommandAddress::CuelistPool { number: 101 }
         );
         assert_eq!(
             parse("DELETE PBK 101 CUE 2").unwrap().unwrap().address,
-            ProgrammingCueDeletionAddress::Pool {
-                playback_number: 101
-            }
+            CueDeletionCommandAddress::Playback(CommandPlaybackTarget::CurrentPage {
+                position: 101
+            })
         );
     }
 

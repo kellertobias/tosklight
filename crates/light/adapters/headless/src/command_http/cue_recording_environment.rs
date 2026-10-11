@@ -1,7 +1,6 @@
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, PlaybackCueReference, ProgrammingCuePageSlot,
-    ProgrammingCueRecordRequest, ProgrammingCueRecordTarget, ProgrammingCueRecordingEnvironment,
-    ProgrammingCueResolvedTarget,
+    ActionContext, ActionError, ActionErrorKind, PlaybackCueReference, ProgrammingCueRecordRequest,
+    ProgrammingCueRecordTarget, ProgrammingCueRecordingEnvironment, ProgrammingCueResolvedTarget,
 };
 
 use super::super::AppState;
@@ -36,31 +35,21 @@ fn resolve_target(
     state: &AppState,
     context: &ActionContext,
     target: ProgrammingCueRecordTarget,
-    snapshot: &light_engine::EngineSnapshot,
+    _snapshot: &light_engine::EngineSnapshot,
 ) -> Result<ProgrammingCueResolvedTarget, ActionError> {
-    match target {
+    Ok(match target {
         ProgrammingCueRecordTarget::CuelistPool { number } => {
-            Ok(ProgrammingCueResolvedTarget::CuelistPool { number })
+            ProgrammingCueResolvedTarget::CuelistPool { number }
         }
-        ProgrammingCueRecordTarget::Pool { playback_number } => {
-            Ok(ProgrammingCueResolvedTarget::Playback {
-                playback_number,
-                page_slot: None,
-            })
-        }
-        ProgrammingCueRecordTarget::SelectedPlayback => selected_playback(state, context),
-        ProgrammingCueRecordTarget::PageSlot { page, slot } => {
-            page_slot(snapshot, ProgrammingCuePageSlot { page, slot })
+        ProgrammingCueRecordTarget::Playback { address } => {
+            ProgrammingCueResolvedTarget::Playback { address }
         }
         ProgrammingCueRecordTarget::CueList { cue_list_id } => {
-            Ok(ProgrammingCueResolvedTarget::CueList { cue_list_id })
+            ProgrammingCueResolvedTarget::CueList { cue_list_id }
         }
-        ProgrammingCueRecordTarget::Virtual { address } => {
-            Ok(ProgrammingCueResolvedTarget::Virtual { address })
-        }
-    }
+        ProgrammingCueRecordTarget::SelectedPlayback => return selected_playback(state, context),
+    })
 }
-
 fn selected_playback(
     state: &AppState,
     context: &ActionContext,
@@ -77,46 +66,14 @@ fn selected_playback(
     {
         return Ok(ProgrammingCueResolvedTarget::CueList { cue_list_id });
     }
-    let playback_number = state
+    let selection = state
         .installation
         .selected_playback(context.desk_id, show.id)
         .map_err(|error| invalid(error.to_string()))?
-        .ok_or_else(|| not_found("no playback is selected"))?;
-    if let Ok(address) = light_playback::VirtualPlaybackAddress::from_number(playback_number) {
-        return Ok(ProgrammingCueResolvedTarget::Virtual { address });
-    }
+        .ok_or_else(|| not_found("No Playback selected"))?;
     Ok(ProgrammingCueResolvedTarget::Playback {
-        playback_number,
-        page_slot: None,
-    })
-}
-
-fn page_slot(
-    snapshot: &light_engine::EngineSnapshot,
-    page_slot: ProgrammingCuePageSlot,
-) -> Result<ProgrammingCueResolvedTarget, ActionError> {
-    let playback = snapshot
-        .playback_pages
-        .iter()
-        .find(|page| page.number == page_slot.page)
-        .and_then(|page| page.slots.get(&page_slot.slot))
-        .copied();
-    let Some(playback_number) = playback else {
-        return Ok(ProgrammingCueResolvedTarget::EmptyPageSlot(page_slot));
-    };
-    if !snapshot
-        .playbacks
-        .iter()
-        .any(|playback| playback.number == playback_number)
-    {
-        return Err(invalid(format!(
-            "Playback page {} slot {} references missing playback {playback_number}",
-            page_slot.page, page_slot.slot
-        )));
-    }
-    Ok(ProgrammingCueResolvedTarget::Playback {
-        playback_number,
-        page_slot: Some(page_slot),
+        address: light_playback::PlaybackAddress::new(selection.page, selection.position)
+            .map_err(invalid)?,
     })
 }
 
@@ -139,19 +96,14 @@ fn active_cue(
     };
     let runtime = state.output.playback_runtime_status();
     let mut candidates = runtime.iter().filter(|status| match target {
-        ProgrammingCueResolvedTarget::Playback {
-            playback_number, ..
-        } => status.playback.playback_number == Some(playback_number),
+        ProgrammingCueResolvedTarget::Playback { address } => {
+            status.playback.playback_address == Some(address)
+        }
         ProgrammingCueResolvedTarget::CueList { cue_list_id } => {
             status.playback.cue_list_id == cue_list_id
         }
         ProgrammingCueResolvedTarget::CuelistPool { .. } => {
             pool_id == Some(status.playback.cue_list_id)
-        }
-        ProgrammingCueResolvedTarget::EmptyPageSlot(_) => false,
-        ProgrammingCueResolvedTarget::Virtual { address } => {
-            status.playback.playback_identity
-                == Some(light_playback::PlaybackIdentity::Virtual(address))
         }
     });
     let first = candidates.find_map(runtime_current_cue);
@@ -183,19 +135,4 @@ fn invalid(message: impl Into<String>) -> ActionError {
 
 fn not_found(message: impl Into<String>) -> ActionError {
     ActionError::new(ActionErrorKind::NotFound, message)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_page_or_slot_resolves_to_exact_empty_slot() {
-        let snapshot = light_engine::EngineSnapshot::default();
-        let requested = ProgrammingCuePageSlot { page: 7, slot: 3 };
-        assert_eq!(
-            page_slot(&snapshot, requested).unwrap(),
-            ProgrammingCueResolvedTarget::EmptyPageSlot(requested)
-        );
-    }
 }

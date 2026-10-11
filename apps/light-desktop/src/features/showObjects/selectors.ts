@@ -25,11 +25,6 @@ export function selectCueLists(
 	return snapshot.cueLists;
 }
 
-export function selectPlaybacks(
-	snapshot: ShowObjectsSnapshot,
-): readonly ShowObject<"playback">[] {
-	return snapshot.playbacks;
-}
 
 export function selectPlaybackPages(
 	snapshot: ShowObjectsSnapshot,

@@ -283,29 +283,23 @@ fn apply_playback_feedback(
     let snapshot = state.output.snapshot();
     let page = explicit_page
         .and_then(|page| u8::try_from(page).ok())
-        .or_else(|| {
-            state
-                .active_show
-                .current()
-                .and_then(|show| state.installation.desk_page(desk.id, show.id).ok())
-        })
+        .or_else(|| state.installation.command_page(desk.id).ok())
         .unwrap_or(1);
-    let playback_number = u8::try_from(slot).ok().and_then(|slot| {
-        snapshot
-            .playback_pages
-            .iter()
-            .find(|candidate| candidate.number == page)
-            .and_then(|page| page.slots.get(&slot).copied())
-    });
-    let active = playback_number.and_then(|number| {
+    let address = light_playback::PlaybackAddress::new(page, slot).ok();
+    let assigned = snapshot
+        .playback_pages
+        .iter()
+        .find(|candidate| candidate.number == page)
+        .is_some_and(|page| page.assignments.contains_key(&slot));
+    let active = address.and_then(|address| {
         state
             .output
             .active_playbacks()
             .into_iter()
-            .find(|active| active.playback_number == Some(number))
+            .find(|active| active.playback_address == Some(address))
     });
-    feedback.available = playback_number.is_some();
-    feedback.enabled = playback_number.is_some();
+    feedback.available = assigned;
+    feedback.enabled = assigned;
     feedback.selected = active.is_some();
     feedback.lamp = if feedback.selected {
         LampState::On
@@ -551,12 +545,10 @@ pub(super) fn apply_bound_control(
             session.as_ref(),
             &desk,
             context,
-            light_application::PlaybackAddress::CurrentPage {
-                slot: u8::try_from(*slot)
-                    .map_err(|_| PortError::new("playback slot exceeds 255"))?,
-            },
+            light_application::PlaybackAddress::CurrentPage { position: *slot },
             *control,
             input,
+            host,
         ),
         (
             CanonicalControlIntent::PlaybackExplicit {
@@ -570,14 +562,17 @@ pub(super) fn apply_bound_control(
             session.as_ref(),
             &desk,
             context,
-            light_application::PlaybackAddress::ExplicitPage {
-                page: u8::try_from(*page)
-                    .map_err(|_| PortError::new("playback page exceeds 255"))?,
-                slot: u8::try_from(*slot)
-                    .map_err(|_| PortError::new("playback slot exceeds 255"))?,
-            },
+            light_application::PlaybackAddress::Playback(
+                light_playback::PlaybackAddress::new(
+                    u8::try_from(*page)
+                        .map_err(|_| PortError::new("Playback page out of range"))?,
+                    *slot,
+                )
+                .map_err(PortError::new)?,
+            ),
             *control,
             input,
+            host,
         ),
         (CanonicalControlIntent::GrandMaster, ControlInput::Absolute { value, .. }) => {
             // The persisted checkpoint and selected show must belong to the same activation.
@@ -971,6 +966,7 @@ fn execute_playback(
     address: light_application::PlaybackAddress,
     control: PlaybackControl,
     input: &ControlInput,
+    host: &HostControlContext,
 ) -> Result<(), PortError> {
     let action = match (control, input) {
         (PlaybackControl::Master, ControlInput::Absolute { value, .. }) => {
@@ -1008,7 +1004,15 @@ fn execute_playback(
         light_application::PlaybackCommand {
             address,
             action,
-            surface: light_application::PlaybackSurface::Physical,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: format!(
+                    "extension:{}:{}:{}",
+                    host.extension_instance_id.len(),
+                    host.extension_instance_id,
+                    control_id(input)
+                ),
+                control_id: 1,
+            },
         },
     )
     .map_err(|error| PortError::new(error.message))?;

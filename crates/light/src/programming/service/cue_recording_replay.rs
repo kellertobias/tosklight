@@ -127,7 +127,6 @@ fn retained_entry_bytes(
 ) -> usize {
     let projections = result.outcome.projections();
     let bodies = std::iter::once(&projections.cue_list)
-        .chain(projections.playback.iter())
         .chain(projections.page.iter())
         .map(|projection| json_bytes(&projection.raw_body))
         .sum::<usize>();

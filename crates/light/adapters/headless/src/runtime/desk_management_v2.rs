@@ -508,12 +508,6 @@ fn patched_configuration(
     if let Some(value) = patch.preload_programmer_changes {
         configuration.preload_programmer_changes = value;
     }
-    if let Some(value) = patch.preload_physical_playback_actions {
-        configuration.preload_physical_playback_actions = value;
-    }
-    if let Some(value) = patch.preload_virtual_playback_actions {
-        configuration.preload_virtual_playback_actions = value;
-    }
     if let Some(value) = patch.patch_preview_highlight_dmx {
         configuration.patch_preview_highlight_dmx = value;
     }

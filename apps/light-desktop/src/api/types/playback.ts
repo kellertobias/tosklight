@@ -148,59 +148,38 @@ export interface CueList {
 	speed_multiplier?: number;
 }
 
-export interface PlaybackSnapshot {
-	cue_lists: CueList[];
-	pool: PlaybackDefinition[];
-	pages: PlaybackPage[];
-	active: Array<{
-		playback_number?: number | null;
-		cue_list_id: string;
-		cue_index: number;
-		previous_index?: number | null;
-		paused: boolean;
-		activated_at?: string;
-		paused_at?: string | null;
-		cue_timing?: CueTimingRuntimeProjection | null;
-		transition_ordinal?: number;
-		master: number;
-		fader_position?: number;
-		fader_pickup_required?: boolean;
-		fader_pickup_target?: number | null;
-		flash: boolean;
-		transition_timing_bypassed?: boolean;
-		manual_xfade_position?: number;
-		manual_xfade_direction?: "towards_high" | "towards_low";
-		manual_xfade_progress?: number;
-		temporary_active?: boolean;
-		temporary_master?: number;
-		swap_active?: boolean;
-		enabled?: boolean;
-		current_cue_number?: string | null;
-		loaded_cue_number?: string | null;
-		normal_next_cue_number?: string | null;
-		effective_next_cue_number?: string | null;
-		effective_next_is_loaded?: boolean;
-		deleted_cue_hold?: {
-			deleted_number: string;
-			previous_number?: string | null;
-			next_number?: string | null;
-		} | null;
-	}>;
-	desk: ControlDesk;
-	active_page: number;
-	selected_playback?: number | null;
-	authoritative_controls?: {
-		speed_groups: SpeedSnapshot[];
-		groups: Array<{ id: string; master: number; flash_level: number }>;
-		grand_master: {
-			level: number;
-			blackout: boolean;
-			flash_active: boolean;
-			dynamics_paused: boolean;
-		};
-		programmer_fade_millis: number;
-		cue_fade_millis: number;
-	};
+export interface PlaybackControlState {
+	cue_list_id: string;
+	cue_index: number;
+	previous_index?: number | null;
+	paused: boolean;
+	activated_at?: string;
+	paused_at?: string | null;
+	cue_timing?: CueTimingRuntimeProjection | null;
+	transition_ordinal?: number;
+	master: number;
+	fader_position?: number;
+	fader_pickup_required?: boolean;
+	fader_pickup_target?: number | null;
+	flash: boolean;
+	transition_timing_bypassed?: boolean;
+	manual_xfade_position?: number;
+	manual_xfade_direction?: "towards_high" | "towards_low";
+	manual_xfade_progress?: number;
+	temporary_active?: boolean;
+	temporary_master?: number;
+	swap_active?: boolean;
+	enabled?: boolean;
+	current_cue_number?: string | null;
+	loaded_cue_number?: string | null;
+	normal_next_cue_number?: string | null;
+	effective_next_cue_number?: string | null;
+	effective_next_is_loaded?: boolean;
+	deleted_cue_hold?: {
+		deleted_number: string;
+		previous_number?: string | null;
+		next_number?: string | null;
+	} | null;
 }
 
 export type PlaybackButtonAction =
@@ -230,7 +209,6 @@ export type PlaybackButtonAction =
 	| "none";
 
 export interface PlaybackDefinition {
-	number: number;
 	name: string;
 	target:
 		| { type: "cue_list"; cue_list_id: string }
@@ -282,6 +260,5 @@ export interface PlaybackDefinition {
 export interface PlaybackPage {
 	number: number;
 	name: string;
-	slots: Record<string, number>;
-	virtual_playbacks: Record<string, PlaybackDefinition>;
+	assignments: Record<string, PlaybackDefinition>;
 }

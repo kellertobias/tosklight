@@ -13,8 +13,7 @@ import {
 function missingGroup(groupId: string): PlaybackProjection {
 	return {
 		scope: { show_id: SHOW_ID, show_revision: 4 },
-		requested: { kind: "group", group_id: groupId },
-		playback_number: null,
+		identity: { kind: "group", group_id: groupId },
 		target: "missing",
 	};
 }

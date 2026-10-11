@@ -11,18 +11,17 @@ fn shared_group_master_faders_require_pickup_and_retarget_peers() {
     first.buttons = PlaybackDefinition::default_buttons(&target);
     first.fader = PlaybackDefinition::default_fader(&target);
     let mut second = first.clone();
-    second.number = 2;
     second.name = "Playback 2".into();
     let mut engine = PlaybackEngine::default();
-    engine.register_definition(first).unwrap();
-    engine.register_definition(second).unwrap();
+    engine.register_definition(address(1), first).unwrap();
+    engine.register_definition(address(2), second).unwrap();
 
     let held = engine
-        .set_group_master_fader_mutation(1, 0.2, 0.75)
+        .set_group_master_fader_mutation(address(1), &test_source(address(1).position()), 0.2, 0.75)
         .unwrap();
     assert_eq!(held.effect, PlaybackRuntimeEffect::Transient);
     assert_eq!(
-        engine.control_state_at(PlaybackIdentity::physical(1).unwrap()),
+        engine.control_state_at(address(1)),
         PlaybackControlState {
             fader_position: 0.2,
             fader_pickup_required: true,
@@ -31,37 +30,29 @@ fn shared_group_master_faders_require_pickup_and_retarget_peers() {
         }
     );
 
+    // The second attached source must be observed before peer retargeting.
     engine
-        .set_group_master_fader_mutation(1, 0.8, 0.75)
+        .set_group_master_fader_mutation(address(2), &test_source(2), 0.0, 0.75)
         .unwrap();
-    assert!(
-        !engine
-            .control_state_at(PlaybackIdentity::physical(1).unwrap())
-            .fader_pickup_required
-    );
+    engine
+        .set_group_master_fader_mutation(address(1), &test_source(address(1).position()), 0.8, 0.75)
+        .unwrap();
+    assert!(!engine.control_state_at(address(1)).fader_pickup_required);
     assert_eq!(
-        engine
-            .control_state_at(PlaybackIdentity::physical(2).unwrap())
-            .fader_pickup_target,
+        engine.control_state_at(address(2)).fader_pickup_target,
         Some(0.8)
     );
 
-    engine.set_group_master_fader_mutation(2, 0.3, 0.8).unwrap();
-    assert!(
-        engine
-            .control_state_at(PlaybackIdentity::physical(2).unwrap())
-            .fader_pickup_required
-    );
-    engine.set_group_master_fader_mutation(2, 0.9, 0.8).unwrap();
-    assert!(
-        !engine
-            .control_state_at(PlaybackIdentity::physical(2).unwrap())
-            .fader_pickup_required
-    );
+    engine
+        .set_group_master_fader_mutation(address(2), &test_source(address(2).position()), 0.3, 0.8)
+        .unwrap();
+    assert!(engine.control_state_at(address(2)).fader_pickup_required);
+    engine
+        .set_group_master_fader_mutation(address(2), &test_source(address(2).position()), 0.9, 0.8)
+        .unwrap();
+    assert!(!engine.control_state_at(address(2)).fader_pickup_required);
     assert_eq!(
-        engine
-            .control_state_at(PlaybackIdentity::physical(1).unwrap())
-            .fader_pickup_target,
+        engine.control_state_at(address(1)).fader_pickup_target,
         Some(0.9)
     );
 }
@@ -82,15 +73,17 @@ fn preload_transition_uses_one_timestamp_and_programmer_fade_only_as_fallback() 
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.set_control_timing([120.0, 90.0, 60.0, 30.0, 15.0], 7_000, 0);
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
 
     let committed_at = started + ChronoDuration::milliseconds(750);
     clock.set(committed_at);
-    let previous = engine.preload_timing_state(1);
-    engine.go_playback(1).unwrap();
+    let previous = engine.preload_timing_state(address(1));
+    engine.go_playback(address(1)).unwrap();
     engine
-        .apply_preload_timing(1, "go", committed_at, 2_000, previous)
+        .apply_preload_timing(address(1), "go", committed_at, 2_000, previous)
         .unwrap();
 
     let active = &engine.runtime()[0];
@@ -120,12 +113,14 @@ fn explicit_cue_time_remains_authoritative_for_a_preload_transition() {
     let started = Utc::now();
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
-    let previous = engine.preload_timing_state(1);
-    engine.go_playback(1).unwrap();
     engine
-        .apply_preload_timing(1, "go", started, 2_000, previous)
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
+    let previous = engine.preload_timing_state(address(1));
+    engine.go_playback(address(1)).unwrap();
+    engine
+        .apply_preload_timing(address(1), "go", started, 2_000, previous)
         .unwrap();
     assert!(
         (contribution_level(
@@ -148,8 +143,12 @@ fn pool_master_scales_intensity_without_scaling_ltp_attributes() {
     let id = list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.set_master(1, 0.5).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
     let values = engine.contributions();
     assert_eq!(
         values
@@ -186,19 +185,21 @@ fn virtual_master_controls_faderless_playback_without_adding_a_local_fader() {
     ];
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(playback).unwrap();
+    engine.register_definition(address(1), playback).unwrap();
 
     assert_eq!(
-        engine.set_master(1, 0.5),
+        engine.set_master(address(1), &test_source(address(1).position()), 0.5),
         Err("playback does not have a fader".into())
     );
-    engine.set_virtual_master(1, 0.5).unwrap();
+    engine
+        .set_master_level(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
     let runtime = &engine.runtime()[0];
     assert!(runtime.enabled);
     assert_eq!(runtime.master, 0.5);
     assert_eq!(
         engine
-            .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+            .runtime_status_for_playback(address(1))
             .unwrap()
             .playback
             .fader_position,
@@ -224,17 +225,19 @@ fn virtual_master_drives_faderless_manual_xfade_without_enabling_local_input() {
     playback.has_fader = false;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(playback).unwrap();
+    engine.register_definition(address(1), playback).unwrap();
 
     assert_eq!(
-        engine.set_master(1, 0.5),
+        engine.set_master(address(1), &test_source(address(1).position()), 0.5),
         Err("playback does not have a fader".into())
     );
     assert_eq!(
-        engine.set_manual_xfade(1, 0.5),
+        engine.set_manual_xfade(address(1), 0.5),
         Err("playback is not configured for manual X-fade".into())
     );
-    engine.set_virtual_master(1, 0.5).unwrap();
+    engine
+        .set_master_level(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
     let runtime = &engine.runtime()[0];
     assert!(runtime.enabled);
     assert_eq!(runtime.fader_position, 0.5);
@@ -261,46 +264,44 @@ fn full_later_same_timestamp_playback_auto_offs_covered_playback_but_99_percent_
     let mut engine = PlaybackEngine::with_clock(clock);
     engine.register(first).unwrap();
     engine.register(second).unwrap();
-    engine.register_definition(definition(1, first_id)).unwrap();
     engine
-        .register_definition(definition(2, second_id))
+        .register_definition(address(1), definition(1, first_id))
         .unwrap();
-    engine.on(1).unwrap();
-    engine.set_master(2, 0.99).unwrap();
+    engine
+        .register_definition(address(2), definition(2, second_id))
+        .unwrap();
+    engine.on(address(1)).unwrap();
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 0.99)
+        .unwrap();
     assert_eq!(engine.active().len(), 2);
-    engine.set_master(2, 1.0).unwrap();
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 1.0)
+        .unwrap();
     assert_eq!(engine.active().len(), 1);
-    assert_eq!(engine.active()[0].playback_number, Some(2));
+    assert_eq!(engine.active()[0].playback_address, Some(address(2)));
 }
 
 #[test]
-fn page_and_pool_validation_enforce_public_ranges() {
-    let fixture = FixtureId::new();
-    let mut cue = Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap());
-    cue.changes.push(value(fixture, "pan", 0.1));
-    let list = list(vec![cue]);
-    let mut invalid = definition(1001, list.id);
-    assert!(invalid.validate().is_ok());
-    invalid.number = 39_101;
-    assert!(invalid.validate().is_err());
-    invalid.number = 1;
-    assert!(invalid.validate().is_ok());
+fn page_and_assignment_validation_enforce_public_ranges() {
+    let definition = definition(1000, CueListId::new());
+    definition.validate().unwrap();
+    assert!(PlaybackAddress::new(1, 1001).is_err());
+    assert!(PlaybackAddress::new(100, 1).is_err());
     assert!(
         PlaybackPage {
             number: 0,
             name: "Bad".into(),
-            slots: HashMap::new(),
-            virtual_playbacks: HashMap::new(),
+            assignments: HashMap::new()
         }
         .validate()
         .is_err()
     );
     assert!(
         PlaybackPage {
-            number: 127,
+            number: 99,
             name: "Last".into(),
-            slots: HashMap::from([(127, 1000)]),
-            virtual_playbacks: HashMap::new(),
+            assignments: HashMap::from([(1000, definition)])
         }
         .validate()
         .is_ok()
@@ -319,19 +320,25 @@ fn toggle_retains_cue_and_flash_keep_running_retains_current_cue() {
     let id = list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(engine.active()[0].cue_index, 1);
-    assert!(!engine.toggle(1).unwrap());
+    assert!(!engine.toggle(address(1)).unwrap());
     assert!(engine.active().is_empty());
-    engine.set_flash(1, true).unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), true)
+        .unwrap();
     assert_eq!(engine.active()[0].cue_index, 1);
     // Releasing the Flash lets the playback go, and the Cue it was sitting on is still the one it
     // returns to when the operator turns it on again.
-    engine.set_flash(1, false).unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), false)
+        .unwrap();
     assert!(engine.active().is_empty());
-    assert!(engine.toggle(1).unwrap());
+    assert!(engine.toggle(address(1)).unwrap());
     assert_eq!(engine.active()[0].cue_index, 1);
 }
 
@@ -449,17 +456,14 @@ fn expanded_footprints_round_trip_typed_controls_and_reject_incompatible_or_virt
         "playback layout is incompatible with its function"
     );
 
-    definition.number = MAX_PLAYBACKS + 1;
     definition.footprint = PlaybackFootprint::Wider {
         right_buttons: PlaybackDefinition::default_buttons(&definition.target),
         right_fader: PlaybackDefinition::default_fader(&definition.target),
     };
-    assert_eq!(
-        definition.validate().unwrap_err(),
-        "playback layout is incompatible with its function"
-    );
+    definition.validate().unwrap();
+    let expected = definition.footprint.clone();
     definition.reset_incompatible_layout();
-    assert_eq!(definition.footprint, PlaybackFootprint::Normal);
+    assert_eq!(definition.footprint, expected);
     definition.validate().unwrap();
 }
 
@@ -470,12 +474,11 @@ fn group_master_initial_seed_is_optional_portable_and_range_checked() {
         initial_master: Some(0.375),
     };
     let mut definition = PlaybackDefinition {
-        number: 1,
         name: "Front".into(),
         buttons: PlaybackDefinition::default_buttons(&target),
         fader: PlaybackDefinition::default_fader(&target),
         target,
-        ..definition(1, CueListId::new())
+        ..definition(address(1), CueListId::new())
     };
     definition.validate().unwrap();
     let stored = serde_json::to_value(&definition).unwrap();

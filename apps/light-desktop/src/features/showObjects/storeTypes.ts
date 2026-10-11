@@ -15,7 +15,6 @@ export interface ShowObjectsSnapshot {
 	presets: readonly ShowObject<"preset">[];
 	cueLists: readonly ShowObject<"cue_list">[];
 	patchLayers: readonly ShowObject<"patch_layer">[];
-	playbacks: readonly ShowObject<"playback">[];
 	playbackPages: readonly ShowObject<"playback_page">[];
 	stageLayouts: readonly ShowObject<"stage_layout">[];
 	userLayouts: readonly ShowObject<"user_layout">[];

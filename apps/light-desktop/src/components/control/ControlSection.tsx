@@ -36,7 +36,7 @@ export function ControlSection() {
 	);
 	const playbacks = (
 		<PlaybackFaderBank
-			playbackLayout={session?.desk.playback_layout}
+			surfaceId={session?.desk.surface_id ?? "main"}
 			hardwareConnected={hardwareConnected}
 		/>
 	);

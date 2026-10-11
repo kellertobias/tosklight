@@ -13,11 +13,6 @@ import {
 	recordAt,
 	stringAt,
 } from "./playbackWirePrimitives";
-import {
-	MAX_VIRTUAL_PLAYBACK_NUMBER,
-	isVirtualPlaybackNumberForPage,
-	virtualPlaybackBankStart,
-} from "./virtualPlaybackAddress";
 import { WireValidationError } from "./wireValidation";
 
 const BUTTON_ACTIONS = [
@@ -51,15 +46,9 @@ export function decodePlaybackBody(
 	value: unknown,
 	path: string,
 	_objectId?: string,
-	maximumNumber = 1_000,
 ): PlaybackDefinition {
 	const playback = recordAt(value, path);
-	// Legacy portable objects may retain a non-numeric storage ID; `number` is the desk identity.
-	const number = positiveIntegerAt(
-		playback.number,
-		`${path}.number`,
-		maximumNumber,
-	);
+	if ("number" in playback) invalid(`${path}.number`, "no redundant playback number", playback.number);
 	const target = decodeTarget(playback.target, `${path}.target`);
 	const buttons = arrayAt(
 		playback.buttons ?? defaultButtons(target),
@@ -84,7 +73,6 @@ export function decodePlaybackBody(
 	const footprint = decodeFootprint(playback.footprint, `${path}.footprint`);
 	return {
 		...playback,
-		number,
 		name: plainStringAt(playback.name, `${path}.name`),
 		target,
 		buttons: buttons.map((button, index) =>
@@ -174,54 +162,19 @@ export function decodePlaybackPageBody(
 	_objectId?: string,
 ): PlaybackPage {
 	const page = recordAt(value, path);
-	// Page object keys are lossless storage identities and need not equal the page number.
-	const pageNumber = positiveIntegerAt(page.number, `${path}.number`, 127);
-	const slots = recordAt(page.slots ?? {}, `${path}.slots`);
-	const decodedSlots = Object.fromEntries(
-		Object.entries(slots).map(([slot, number]) => [
-			String(positiveIntegerAt(Number(slot), `${path}.slots.${slot}`, 127)),
-			positiveIntegerAt(number, `${path}.slots.${slot}`, 1000),
-		]),
-	);
-	const virtualPlaybacks = recordAt(
-		page.virtual_playbacks,
-		`${path}.virtual_playbacks`,
-	);
-	const decodedVirtualPlaybacks = Object.fromEntries(
-		Object.entries(virtualPlaybacks).map(([number, playback]) => {
-			const decodedNumber = positiveIntegerAt(
-				Number(number),
-				`${path}.virtual_playbacks.${number}`,
-				MAX_VIRTUAL_PLAYBACK_NUMBER,
-			);
-			if (!isVirtualPlaybackNumberForPage(pageNumber, decodedNumber))
-				throw new WireValidationError(
-					`${path}.virtual_playbacks.${number}`,
-					`integer in page ${pageNumber}'s bank ${virtualPlaybackBankStart(pageNumber)}-${virtualPlaybackBankStart(pageNumber) + 299}`,
-					number,
-				);
-			const decoded = decodePlaybackBody(
-				playback,
-				`${path}.virtual_playbacks.${number}`,
-				undefined,
-				MAX_VIRTUAL_PLAYBACK_NUMBER,
-			);
-			if (decoded.number !== decodedNumber)
-				throw new WireValidationError(
-					`${path}.virtual_playbacks.${number}.number`,
-					String(decodedNumber),
-					decoded.number,
-				);
-			return [String(decodedNumber), decoded];
+	const pageNumber = positiveIntegerAt(page.number, `${path}.number`, 99);
+	if ("slots" in page || "virtual_playbacks" in page)
+		invalid(path, "a unified sparse Playback Page", page);
+	const assignments = recordAt(page.assignments, `${path}.assignments`);
+	const decodedAssignments = Object.fromEntries(
+		Object.entries(assignments).map(([position, definition]) => {
+			const decodedPosition = positiveIntegerAt(Number(position), `${path}.assignments.${position}`, 1000);
+			if (String(decodedPosition) !== position)
+				invalid(`${path}.assignments.${position}`, "a canonical position key", position);
+			return [position, decodePlaybackBody(definition, `${path}.assignments.${position}`)];
 		}),
 	);
-	return {
-		...page,
-		number: pageNumber,
-		name: plainStringAt(page.name, `${path}.name`),
-		slots: decodedSlots,
-		virtual_playbacks: decodedVirtualPlaybacks,
-	} as PlaybackPage;
+	return { number: pageNumber, name: plainStringAt(page.name, `${path}.name`), assignments: decodedAssignments };
 }
 
 function decodeTarget(value: unknown, path: string) {

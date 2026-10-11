@@ -77,12 +77,11 @@ pub struct PlaybackPreloadTimingState {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ActivePlayback {
+    #[serde(skip)]
+    pub control_source_id: Option<Uuid>,
     #[serde(default)]
-    pub playback_number: Option<u16>,
-    /// Stable address authority for runtimes which cannot be identified by the legacy scalar
-    /// Playback number alone. Older persisted physical and direct-Cuelist rows omit this field.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_identity: Option<PlaybackIdentity>,
+    pub playback_address: Option<PlaybackAddress>,
+
     /// Internal restart authority. Public runtime payloads deliberately omit this field.
     #[serde(default, skip_serializing)]
     pub activation: Option<PlaybackActivationProvenance>,
@@ -243,7 +242,7 @@ pub struct ActiveCueDynamicValue {
     pub output_enabled: bool,
     pub sequence_master: f32,
     pub snap_sequence_master: f32,
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<PlaybackAddress>,
     pub cue_list_id: CueListId,
     /// Cue containing the surviving stored Dynamic row. Tracking through later sparse Cues
     /// preserves this identity; a replacement or generated restoration belongs to its own Cue.
@@ -270,9 +269,8 @@ pub struct ActiveDynamicPlayback {
     pub start_state: DynamicPlaybackStartState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dynamic_id: Option<Uuid>,
-    pub playback_number: u16,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_identity: Option<PlaybackIdentity>,
+    pub playback_address: PlaybackAddress,
+
     pub enabled: bool,
     pub paused: bool,
     #[serde(default)]
@@ -330,8 +328,7 @@ pub enum DynamicPlaybackStartOutcome {
 impl PartialEq for ActiveDynamicPlayback {
     fn eq(&self, other: &Self) -> bool {
         self.dynamic_id == other.dynamic_id
-            && self.playback_number == other.playback_number
-            && self.playback_identity == other.playback_identity
+            && self.playback_address == other.playback_address
             && self.enabled == other.enabled
             && self.paused == other.paused
             && self.flash == other.flash
@@ -368,7 +365,7 @@ pub struct MoveInBlackTargetValue {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MoveInBlackCandidate {
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<PlaybackAddress>,
     pub cue_list_id: CueListId,
     pub current_cue_id: Uuid,
     pub current_cue_number: CueNumber,
@@ -385,8 +382,9 @@ pub struct MoveInBlackCandidate {
 /// leaking playback concerns into programmer and show data.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SequenceMasterSource {
-    pub playback_number: Option<u16>,
-    pub playback_identity: Option<PlaybackIdentity>,
+    pub playback_address: Option<PlaybackAddress>,
+    pub control_source_id: Option<Uuid>,
+
     pub cue_list_id: CueListId,
     pub temporary: bool,
 }
@@ -414,32 +412,16 @@ impl CueDynamicSourceKey {
     pub fn controller_id(self, instance_link: Uuid) -> Uuid {
         const NAMESPACE: Uuid = Uuid::from_u128(0x4355455f_44594e41_4d494353_5f563100);
         let source = self.source();
-        let mut key = [0_u8; 37];
+        let mut key = [0_u8; 53];
+        if let Some(control) = source.control_source_id {
+            key[37..53].copy_from_slice(control.as_bytes());
+        }
         key[..16].copy_from_slice(source.cue_list_id.0.as_bytes());
         key[16..32].copy_from_slice(instance_link.as_bytes());
-        let identity = source.playback_identity.or_else(|| {
-            source
-                .playback_number
-                .and_then(|number| PlaybackIdentity::physical(number).ok())
-        });
-        match identity {
-            Some(PlaybackIdentity::Physical(number)) => {
-                key[32] = 1;
-                key[34..36].copy_from_slice(&number.get().to_be_bytes());
-            }
-            Some(PlaybackIdentity::Virtual(address)) => {
-                key[32] = 2;
-                key[33] = address.page();
-                key[34..36].copy_from_slice(&address.number().get().to_be_bytes());
-            }
-            None => {
-                if let Some(number) = source.playback_number {
-                    // An unqualified nonphysical legacy number is not a direct Cuelist source.
-                    // Preserve its namespace without inventing a physical/virtual assignment.
-                    key[32] = 3;
-                    key[34..36].copy_from_slice(&number.to_be_bytes());
-                }
-            }
+        if let Some(address) = source.playback_address {
+            key[32] = 1;
+            key[33] = address.page();
+            key[34..36].copy_from_slice(&address.position().to_be_bytes());
         }
         key[36] = match self {
             Self::Normal { .. } => 0,
@@ -485,8 +467,9 @@ impl ActivePlayback {
     }
     pub(crate) fn sequence_master_source(&self) -> SequenceMasterSource {
         SequenceMasterSource {
-            playback_number: self.playback_number,
-            playback_identity: self.playback_identity,
+            playback_address: self.playback_address,
+            control_source_id: self.control_source_id,
+
             cue_list_id: self.cue_list_id,
             temporary: self.temporary,
         }
@@ -601,15 +584,15 @@ pub(crate) fn reset_manual_transition(playback: &mut ActivePlayback) {
 }
 
 pub(crate) fn new_active_playback(
-    playback_number: Option<u16>,
+    playback_address: Option<PlaybackAddress>,
     cue_list: &CueList,
     now: DateTime<Utc>,
     master: f32,
     enabled: bool,
 ) -> ActivePlayback {
     ActivePlayback {
-        playback_number,
-        playback_identity: None,
+        playback_address,
+        control_source_id: None,
         activation: None,
         transition_ordinal: 0,
         cue_list_id: cue_list.id,

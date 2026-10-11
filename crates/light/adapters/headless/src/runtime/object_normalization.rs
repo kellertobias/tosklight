@@ -11,7 +11,6 @@ pub(super) fn normalize_object_body(
         "cue_list" => normalize_cue_list(state, object_id, body)?,
         "group" => normalize_group(object_id, body)?,
         "preset" => normalize_preset(object_id, body)?,
-        "playback" => normalize_playback(object_id, body)?,
         "playback_page" => normalize_playback_page(object_id, body)?,
         "route" => normalize_route(body)?,
         _ => return Ok(body),
@@ -71,21 +70,6 @@ fn normalize_preset(
     }
     preset.number = address.number;
     serde_json::to_value(preset).map_err(|error| ApiError::internal(error.to_string()))
-}
-
-fn normalize_playback(
-    object_id: &str,
-    body: serde_json::Value,
-) -> Result<serde_json::Value, ApiError> {
-    let playback = serde_json::from_value::<light_playback::PlaybackDefinition>(body)
-        .map_err(|error| ApiError::bad_request(error.to_string()))?;
-    if object_id != playback.number.to_string() {
-        return Err(ApiError::bad_request(
-            "playback object id must match its playback number",
-        ));
-    }
-    playback.validate().map_err(ApiError::bad_request)?;
-    serde_json::to_value(playback).map_err(|error| ApiError::internal(error.to_string()))
 }
 
 fn normalize_playback_page(

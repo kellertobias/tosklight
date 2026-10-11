@@ -6,7 +6,7 @@ import { HeldDemoButtons } from "./heldDemoButtons";
 function deferredActions() {
 	const settle: Array<() => void> = [];
 	const calls: Array<{
-		playbackNumber: number;
+		address: { page: number; position: number };
 		action: string;
 		input: unknown;
 	}> = [];
@@ -15,9 +15,8 @@ function deferredActions() {
 		releaseCueListSource: vi.fn(async () => null),
 		setGroupMaster: vi.fn(async () => null),
 		setGroupFlash: vi.fn(async () => null),
-		virtualPlaybackAction: vi.fn(async () => null),
-		poolPlaybackAction: vi.fn(async (playbackNumber, action, input) => {
-			calls.push({ playbackNumber, action, input });
+		playbackAction: vi.fn(async (address, action, input) => {
+			calls.push({ address, action, input });
 			await new Promise<void>((resolve) => settle.push(resolve));
 			return null;
 		}),
@@ -26,33 +25,51 @@ function deferredActions() {
 }
 
 describe("HeldDemoButtons", () => {
-	it("sends a physical press for the mapped Playback number and button", async () => {
+	it("sends a exact press for the assigned address and button", async () => {
 		const { actions, calls, settle } = deferredActions();
 		const held = new HeldDemoButtons(actions);
-		held.press(2, 17, 3);
+		held.press(2, { page: 1, position: 17 }, 3);
 		await flush();
 		expect(calls).toEqual([
 			{
-				playbackNumber: 17,
+				address: { page: 1, position: 17 },
 				action: "button",
-				input: { button: 3, pressed: true, surface: "physical" },
+				input: {
+					button: 3,
+					pressed: true,
+					control_source: { surface_id: "demo", control_id: 23 },
+				},
 			},
 		]);
 		settle.shift()?.();
 	});
 
-	it("releases the originally pressed Playback number after a topology change", async () => {
+	it("releases the originally pressed address after a topology change", async () => {
 		const { actions, calls, settle } = deferredActions();
 		const held = new HeldDemoButtons(actions);
-		held.press(1, 11, 1);
+		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
 		// The desk Page remaps slot 1 while the operator still holds the button.
 		held.releaseButton(1, 1);
 		settle.shift()?.();
 		await flush();
-		expect(calls.map((call) => [call.playbackNumber, call.input])).toEqual([
-			[11, { button: 1, pressed: true, surface: "physical" }],
-			[11, { button: 1, pressed: false, surface: "physical" }],
+		expect(calls.map((call) => [call.address.position, call.input])).toEqual([
+			[
+				11,
+				{
+					button: 1,
+					pressed: true,
+					control_source: { surface_id: "demo", control_id: 11 },
+				},
+			],
+			[
+				11,
+				{
+					button: 1,
+					pressed: false,
+					control_source: { surface_id: "demo", control_id: 11 },
+				},
+			],
 		]);
 		settle.shift()?.();
 	});
@@ -60,7 +77,7 @@ describe("HeldDemoButtons", () => {
 	it("holds the release until the press it belongs to has settled", async () => {
 		const { actions, calls, settle } = deferredActions();
 		const held = new HeldDemoButtons(actions);
-		held.press(1, 11, 1);
+		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
 		expect(calls).toHaveLength(1);
 
@@ -75,37 +92,58 @@ describe("HeldDemoButtons", () => {
 		settle.shift()?.();
 	});
 
-	it("ignores a repeated press of the same held Playback number", async () => {
+	it("ignores a repeated press of the same held address", async () => {
 		const { actions, calls, settle } = deferredActions();
 		const held = new HeldDemoButtons(actions);
-		held.press(1, 11, 1);
-		held.press(1, 11, 1);
+		held.press(1, { page: 1, position: 11 }, 1);
+		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
 		expect(calls).toHaveLength(1);
 		settle.shift()?.();
 	});
 
-	it("releases a superseded Playback number before pressing the new one", async () => {
+	it("releases a superseded address before pressing the new one", async () => {
 		const { actions, calls, settle } = deferredActions();
 		const held = new HeldDemoButtons(actions);
-		held.press(1, 11, 1);
+		held.press(1, { page: 1, position: 11 }, 1);
 		await flush();
-		held.press(1, 12, 1);
+		held.press(1, { page: 1, position: 12 }, 1);
 		settle.shift()?.();
 		await drain(settle, calls, 3);
-		expect(calls.map((call) => [call.playbackNumber, call.input])).toEqual([
-			[11, { button: 1, pressed: true, surface: "physical" }],
-			[11, { button: 1, pressed: false, surface: "physical" }],
-			[12, { button: 1, pressed: true, surface: "physical" }],
+		expect(calls.map((call) => [call.address.position, call.input])).toEqual([
+			[
+				11,
+				{
+					button: 1,
+					pressed: true,
+					control_source: { surface_id: "demo", control_id: 11 },
+				},
+			],
+			[
+				11,
+				{
+					button: 1,
+					pressed: false,
+					control_source: { surface_id: "demo", control_id: 11 },
+				},
+			],
+			[
+				12,
+				{
+					button: 1,
+					pressed: true,
+					control_source: { surface_id: "demo", control_id: 11 },
+				},
+			],
 		]);
 	});
 
 	it("releases every held button exactly once", async () => {
 		const { actions, calls, settle } = deferredActions();
 		const held = new HeldDemoButtons(actions);
-		held.press(1, 11, 1);
-		held.press(1, 11, 2);
-		held.press(21, 31, 1);
+		held.press(1, { page: 1, position: 11 }, 1);
+		held.press(1, { page: 1, position: 11 }, 2);
+		held.press(21, { page: 1, position: 31 }, 1);
 		await drain(settle, calls, 3);
 		held.releaseAll();
 		held.releaseAll();
@@ -116,14 +154,14 @@ describe("HeldDemoButtons", () => {
 		expect(
 			calls
 				.filter((call) => !(call.input as { pressed: boolean }).pressed)
-				.map((call) => call.playbackNumber),
+				.map((call) => call.address.position),
 		).toEqual([11, 11, 31]);
 	});
 
 	it("stays inert without an authoritative action layer", async () => {
 		const held = new HeldDemoButtons(null);
 		expect(() => {
-			held.press(1, 11, 1);
+			held.press(1, { page: 1, position: 11 }, 1);
 			held.releaseAll();
 			held.releaseButton(1, 1);
 		}).not.toThrow();

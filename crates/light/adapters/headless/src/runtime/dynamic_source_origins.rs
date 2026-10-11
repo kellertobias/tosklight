@@ -6,7 +6,7 @@ use light_core::{
     programming::{IntentError, ProgrammingComponent, ProgrammingFieldScope, ProgrammingOwner},
 };
 use light_dynamics::DynamicSourceOccurrenceId;
-use light_playback::{PlaybackIdentity, SequenceMasterSource, TemporaryPlaybackKind};
+use light_playback::{PlaybackAddress, SequenceMasterSource, TemporaryPlaybackKind};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
@@ -61,49 +61,38 @@ pub(super) enum DynamicProgrammerSourceLane {
 /// A serializable copy of real Playback master ownership, without changing the Playback schema.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub(super) struct DynamicSequenceSource {
-    pub playback_number: Option<u16>,
-    #[serde(with = "playback_identity_wire::optional")]
-    pub playback_identity: Option<PlaybackIdentity>,
+    pub playback_address: Option<PlaybackAddress>,
+    /// Cold historical evidence only; never restores a held control on startup.
+    pub control_source_id: Option<Uuid>,
     pub cue_list_id: CueListId,
     pub temporary: bool,
 }
-
 impl From<SequenceMasterSource> for DynamicSequenceSource {
     fn from(source: SequenceMasterSource) -> Self {
         Self {
-            playback_number: source.playback_number,
-            playback_identity: source.playback_identity,
+            playback_address: source.playback_address,
+            control_source_id: source.control_source_id,
             cue_list_id: source.cue_list_id,
             temporary: source.temporary,
         }
     }
 }
-
 impl DynamicSequenceSource {
     pub fn sequence_master_source(self) -> SequenceMasterSource {
         SequenceMasterSource {
-            playback_number: self.playback_number,
-            playback_identity: self.playback_identity,
+            playback_address: self.playback_address,
+            control_source_id: self.control_source_id,
             cue_list_id: self.cue_list_id,
             temporary: self.temporary,
         }
     }
-
     fn validate(self) -> Result<(), IntentError> {
         non_nil(self.cue_list_id.0, "Cue List")?;
-        if let Some(number) = self.playback_number {
-            if number == 0 || number > light_playback::MAX_VIRTUAL_PLAYBACK {
-                return Err(invalid("Playback number is outside its domain"));
-            }
+        if let Some(address) = self.playback_address {
+            validate_playback_address(address)?;
         }
-        if let Some(identity) = self.playback_identity {
-            validate_playback_identity(identity)?;
-            if self
-                .playback_number
-                .is_some_and(|number| number != identity.number())
-            {
-                return Err(invalid("Playback number and identity disagree"));
-            }
+        if let Some(source) = self.control_source_id {
+            non_nil(source, "Control source")?;
         }
         Ok(())
     }
@@ -160,8 +149,7 @@ pub(super) enum DynamicSourceOrigin {
         transition_ordinal: u64,
     },
     Playback {
-        #[serde(with = "playback_identity_wire")]
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
         activated_at: DateTime<Utc>,
     },
     /// Preserve the original fixed row, including its complete payload and timing. This is
@@ -515,7 +503,7 @@ impl DynamicSourceOrigin {
                 non_nil(*cue_id, "Cue")?;
                 non_nil(*instance_link, "authored Dynamic link")?;
             }
-            Self::Playback { identity, .. } => validate_playback_identity(*identity)?,
+            Self::Playback { identity, .. } => validate_playback_address(*identity)?,
             Self::StaticBaseline { sources } => {
                 if sources.is_empty() {
                     return Err(invalid("static dependency requires actual source evidence"));
@@ -896,15 +884,10 @@ fn validate_binding(binding: DynamicSourceBinding) -> Result<(), IntentError> {
     }
 }
 
-fn validate_playback_identity(identity: PlaybackIdentity) -> Result<(), IntentError> {
-    match identity {
-        PlaybackIdentity::Physical(number) => PlaybackIdentity::physical(number.get()),
-        PlaybackIdentity::Virtual(address) => {
-            PlaybackIdentity::virtual_playback(address.page(), address.number().get())
-        }
-    }
-    .map(|_| ())
-    .map_err(IntentError)
+fn validate_playback_address(address: PlaybackAddress) -> Result<(), IntentError> {
+    PlaybackAddress::new(address.page(), address.position())
+        .map(|_| ())
+        .map_err(IntentError)
 }
 
 fn non_nil(id: Uuid, what: &str) -> Result<(), IntentError> {
@@ -964,14 +947,14 @@ fn compare_static_sources(
             DynamicStaticSource::Playback { source: b },
         ) => (
             a.cue_list_id.0,
-            a.playback_number,
-            a.playback_identity,
+            a.playback_address,
+            a.control_source_id,
             a.temporary,
         )
             .cmp(&(
                 b.cue_list_id.0,
-                b.playback_number,
-                b.playback_identity,
+                b.playback_address,
+                b.control_source_id,
                 b.temporary,
             )),
         (DynamicStaticSource::Programmer { .. }, DynamicStaticSource::Playback { .. }) => {
@@ -979,77 +962,6 @@ fn compare_static_sources(
         }
         (DynamicStaticSource::Playback { .. }, DynamicStaticSource::Programmer { .. }) => {
             std::cmp::Ordering::Greater
-        }
-    }
-}
-
-// Keep this checkpoint's representation independent of Playback's serde implementation. In
-// particular, internally tagged enums cannot encode a transparent integer newtype variant.
-mod playback_identity_wire {
-    use super::*;
-
-    #[derive(Serialize, Deserialize)]
-    #[serde(tag = "kind", rename_all = "snake_case")]
-    enum Identity {
-        Physical { number: u16 },
-        Virtual { page: u8, number: u16 },
-    }
-
-    impl From<PlaybackIdentity> for Identity {
-        fn from(value: PlaybackIdentity) -> Self {
-            match value {
-                PlaybackIdentity::Physical(number) => Self::Physical {
-                    number: number.get(),
-                },
-                PlaybackIdentity::Virtual(address) => Self::Virtual {
-                    page: address.page(),
-                    number: address.number().get(),
-                },
-            }
-        }
-    }
-
-    impl Identity {
-        fn decode(self) -> Result<PlaybackIdentity, String> {
-            match self {
-                Self::Physical { number } => PlaybackIdentity::physical(number),
-                Self::Virtual { page, number } => PlaybackIdentity::virtual_playback(page, number),
-            }
-        }
-    }
-
-    pub fn serialize<S: serde::Serializer>(
-        value: &PlaybackIdentity,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        Identity::from(*value).serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D: serde::Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<PlaybackIdentity, D::Error> {
-        Identity::deserialize(deserializer)?
-            .decode()
-            .map_err(serde::de::Error::custom)
-    }
-
-    pub mod optional {
-        use super::*;
-
-        pub fn serialize<S: serde::Serializer>(
-            value: &Option<PlaybackIdentity>,
-            serializer: S,
-        ) -> Result<S::Ok, S::Error> {
-            value.map(Identity::from).serialize(serializer)
-        }
-
-        pub fn deserialize<'de, D: serde::Deserializer<'de>>(
-            deserializer: D,
-        ) -> Result<Option<PlaybackIdentity>, D::Error> {
-            Option::<Identity>::deserialize(deserializer)?
-                .map(Identity::decode)
-                .transpose()
-                .map_err(serde::de::Error::custom)
         }
     }
 }

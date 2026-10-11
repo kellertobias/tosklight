@@ -1,8 +1,7 @@
 //! Configuration-dependent semantic metadata for Playback runtime events.
 
 use light_application::{
-    ActionContext, ActionError, ActionErrorKind, PlaybackAction, PlaybackTransitionCause,
-    ResolvedPlaybackAddress,
+    ActionContext, ActionError, PlaybackAction, PlaybackTransitionCause, ResolvedPlaybackAddress,
 };
 
 use super::ServerPlaybackPorts;
@@ -19,18 +18,10 @@ pub(super) fn transition_cause(
     ) {
         return Ok(None);
     }
-    let ResolvedPlaybackAddress::Pool { number, .. } = address else {
+    let Some(address) = address.playback_address() else {
         return Ok(None);
     };
-    let definition = ports
-        .state
-        .output
-        .snapshot()
-        .playbacks
-        .iter()
-        .find(|definition| definition.number == number)
-        .cloned()
-        .ok_or_else(|| ActionError::new(ActionErrorKind::NotFound, "playback"))?;
+    let definition = super::playback_definition(ports.state, address)?;
     let (definition, action) = super::configured_control_definition(&definition, action)?;
     Ok(configured_transition_cause(&definition, action))
 }

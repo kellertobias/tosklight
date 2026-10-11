@@ -9,7 +9,7 @@ use light_application::{
 #[cfg(test)]
 use light_core::CueListId;
 use light_engine::EngineSnapshot;
-use light_playback::{PlaybackIdentity, PlaybackTarget};
+use light_playback::{PlaybackAddress, PlaybackTarget};
 
 use super::{ServerPlaybackPorts, invalid, resolve_group_playback};
 
@@ -28,67 +28,43 @@ pub(in crate::runtime) fn automatic_changes(
     scope: PlaybackShowScope,
     transitions: Vec<light_playback::AutomaticPlaybackTransition>,
 ) -> Vec<AutomaticPlaybackProjection> {
-    if transitions.is_empty() {
-        return Vec::new();
-    }
-    transitions
-        .into_iter()
-        .flat_map(|transition| {
-            let requested = transition.playback_number.map_or(
-                PlaybackRuntimeIdentity::CueList(transition.cue_list_id),
-                PlaybackRuntimeIdentity::Playback,
-            );
-            let status = transition.playback_number.map_or_else(
-                || engine.playback_runtime_status_for_cue_list(transition.cue_list_id),
-                |number| {
-                    PlaybackIdentity::physical(number)
-                        .ok()
-                        .and_then(|identity| engine.playback_runtime_status_at(identity))
-                },
-            );
-            let exact_status = engine.playback_runtime_status_for_cue_list(transition.cue_list_id);
-            let exact = automatic_source_projection(scope, &transition, exact_status.as_ref());
-            let aggregate = AutomaticPlaybackProjection {
-                projection: cue_list_projection(
-                    scope,
-                    requested,
-                    transition.playback_number,
-                    transition.cue_list_id,
-                    status.as_ref(),
-                ),
-                transition,
-            };
-            std::iter::once(aggregate).chain(exact)
-        })
-        .collect()
+    let snapshot = engine.snapshot();
+    transitions.into_iter().flat_map(|transition| {
+      let mut addresses=snapshot.playback_pages.iter().flat_map(|page|page.assignments.iter().filter_map(move |(position,definition)| {
+        matches!(definition.target,PlaybackTarget::CueList{cue_list_id} if cue_list_id==transition.cue_list_id)
+          .then(||PlaybackAddress::new(page.number,*position).ok()).flatten()
+      })).collect::<Vec<_>>();
+      addresses.sort();addresses.dedup();
+      let mut changes=addresses.into_iter().map(|address|AutomaticPlaybackProjection {
+        projection:cue_list_projection(scope,PlaybackRuntimeIdentity::Playback(address),Some(address),transition.cue_list_id,engine.playback_runtime_status_at(address).as_ref()),transition:transition.clone()
+      }).collect::<Vec<_>>();
+      let status=engine.playback_runtime_status_for_cue_list(transition.cue_list_id);
+      changes.push(AutomaticPlaybackProjection{projection:cue_list_projection(scope,PlaybackRuntimeIdentity::CueList(transition.cue_list_id),None,transition.cue_list_id,status.as_ref()),transition:transition.clone()});
+      if let Some(exact)=automatic_source_projection(scope,&transition,status.as_ref()) {if !changes.iter().any(|change|change.projection.identity==exact.projection.identity) {changes.push(exact);}}
+      changes
+    }).collect()
 }
-
-/// Additional exact source feedback leaves the existing aggregate/assignment event unchanged.
 pub(super) fn automatic_source_projection(
     scope: PlaybackShowScope,
     transition: &light_playback::AutomaticPlaybackTransition,
     status: Option<&light_playback::PlaybackRuntimeStatus>,
 ) -> Option<AutomaticPlaybackProjection> {
-    let (requested, number) = match status.and_then(|status| status.source.playback_identity) {
-        Some(PlaybackIdentity::Virtual(address)) => (
-            PlaybackRuntimeIdentity::Virtual(address),
-            Some(address.number().get()),
-        ),
-        _ if transition.playback_number.is_none() => (
-            PlaybackRuntimeIdentity::DirectCueList(transition.cue_list_id),
-            None,
-        ),
+    let identity = match status.and_then(|status| status.source.playback_address) {
+        Some(address) if transition.playback_address != Some(address) => {
+            PlaybackRuntimeIdentity::Playback(address)
+        }
+        None if transition.playback_address.is_none() => {
+            PlaybackRuntimeIdentity::DirectCueList(transition.cue_list_id)
+        }
         _ => return None,
     };
-    let status = if matches!(requested, PlaybackRuntimeIdentity::DirectCueList(_)) {
-        status.filter(|status| {
-            status.source.playback_number.is_none() && status.source.playback_identity.is_none()
-        })
+    let status = if matches!(identity, PlaybackRuntimeIdentity::DirectCueList(_)) {
+        status.filter(|status| status.source.playback_address.is_none())
     } else {
         status
     };
     Some(AutomaticPlaybackProjection {
-        projection: cue_list_projection(scope, requested, number, transition.cue_list_id, status),
+        projection: cue_list_projection(scope, identity, None, transition.cue_list_id, status),
         transition: transition.clone(),
     })
 }
@@ -103,9 +79,6 @@ pub(super) fn projection(
     match identity {
         PlaybackRuntimeIdentity::Playback(number) => {
             project_playback(ports, &snapshot, scope, identity, number)
-        }
-        PlaybackRuntimeIdentity::Virtual(address) => {
-            project_virtual(ports, &snapshot, scope, identity, address)
         }
         PlaybackRuntimeIdentity::CueList(cue_list_id) => Ok(cue_list_projection(
             scope,
@@ -167,7 +140,9 @@ pub(super) fn desk_projection(
                 show_revision: snapshot.revision,
             },
             desk_id: context.desk_id,
-            active_page: 1,
+            command_page: 1,
+            selected_surface_id: "main".into(),
+            resolved_pages: std::collections::BTreeMap::from([("main".into(), 1)]),
             selected_playback: None,
             selected_cue_list: None,
         }));
@@ -175,20 +150,30 @@ pub(super) fn desk_projection(
     let active_page = ports
         .state
         .installation
-        .desk_page(context.desk_id, show.id)
+        .command_page(context.desk_id)
         .map_err(|error| invalid(error.to_string()))?;
     let selected_playback = ports
         .state
         .installation
         .selected_playback(context.desk_id, show.id)
-        .map_err(|error| invalid(error.to_string()))?;
+        .map_err(|error| invalid(error.to_string()))?
+        .map(|selection| {
+            light_playback::PlaybackAddress::new(selection.page, selection.position)
+                .map_err(invalid)
+        })
+        .transpose()?;
+    let surfaces =
+        crate::runtime::playback_surfaces_http::surface_snapshot(ports.state, context.desk_id)
+            .map_err(super::api_action_error)?;
     Ok(Some(PlaybackDeskProjection {
         scope: PlaybackShowScope {
             show_id: show.id.0,
             show_revision: snapshot.revision,
         },
         desk_id: context.desk_id,
-        active_page,
+        command_page: active_page,
+        selected_surface_id: surfaces.selected_surface_id,
+        resolved_pages: surfaces.resolved_pages,
         selected_playback,
         selected_cue_list: ports
             .state
@@ -208,9 +193,6 @@ fn project_identity(
     match identity {
         PlaybackRuntimeIdentity::Playback(number) => {
             result.push(project_playback(ports, snapshot, scope, identity, number)?);
-        }
-        PlaybackRuntimeIdentity::Virtual(address) => {
-            result.push(project_virtual(ports, snapshot, scope, identity, address)?);
         }
         PlaybackRuntimeIdentity::CueList(cue_list_id) => {
             let status = ports
@@ -246,36 +228,33 @@ fn project_identity(
     Ok(())
 }
 
-fn project_virtual(
+fn project_playback(
     ports: &ServerPlaybackPorts<'_>,
     snapshot: &EngineSnapshot,
     scope: PlaybackShowScope,
     requested: PlaybackRuntimeIdentity,
-    address: light_playback::VirtualPlaybackAddress,
+    address: light_playback::PlaybackAddress,
 ) -> Result<PlaybackRuntimeProjection, ActionError> {
     let definition = snapshot
         .playback_pages
         .iter()
         .find(|page| page.number == address.page())
-        .and_then(|page| page.virtual_playbacks.get(&address.number().get()));
+        .and_then(|page| page.assignments.get(&address.position()));
     let Some(definition) = definition else {
         return Ok(PlaybackRuntimeProjection {
             scope,
-            requested,
-            playback_number: Some(address.number().get()),
+            identity: requested,
+
             target: PlaybackTargetProjection::Missing,
         });
     };
     let target = match &definition.target {
         PlaybackTarget::CueList { cue_list_id } => {
-            let status = ports
-                .state
-                .output
-                .playback_runtime_status_at(PlaybackIdentity::Virtual(address));
+            let status = ports.state.output.playback_runtime_status_at(address);
             return Ok(cue_list_projection(
                 scope,
                 requested,
-                Some(address.number().get()),
+                Some(address),
                 *cue_list_id,
                 status.as_ref(),
             ));
@@ -287,7 +266,7 @@ fn project_virtual(
             runtime: ports
                 .state
                 .output
-                .active_dynamic_playback_at(PlaybackIdentity::Virtual(address))
+                .active_dynamic_playback(address)
                 .map(|active| {
                     Box::new(dynamic_runtime_projection(
                         ports, snapshot, assignment, active,
@@ -322,8 +301,8 @@ fn project_virtual(
     };
     Ok(PlaybackRuntimeProjection {
         scope,
-        requested,
-        playback_number: Some(address.number().get()),
+        identity: requested,
+
         target,
     })
 }
@@ -338,7 +317,7 @@ fn project_group(
     // A stale or forged Group->Playback assignment must not fail the whole runtime snapshot: the
     // Group stays visible and simply projects with no assigned Playback until the operator
     // reassigns it. Operator actions still reject the stale assignment through the action port.
-    let playback_number = match resolve_group_playback(snapshot, group_id.as_str()) {
+    let playback_address = match resolve_group_playback(snapshot, group_id.as_str()) {
         Ok(number) => number,
         Err(error) if error.kind == ActionErrorKind::Conflict => None,
         // A Group absent from the active show (deleted, or named by a previous show's layout)
@@ -346,8 +325,7 @@ fn project_group(
         Err(error) if error.kind == ActionErrorKind::NotFound => {
             return Ok(PlaybackRuntimeProjection {
                 scope,
-                requested,
-                playback_number: None,
+                identity: requested,
                 target: PlaybackTargetProjection::Missing,
             });
         }
@@ -355,96 +333,8 @@ fn project_group(
     };
     Ok(PlaybackRuntimeProjection {
         scope,
-        requested,
-        playback_number,
-        target: group_projection(
-            ports,
-            snapshot,
-            group_id.as_str(),
-            playback_number.and_then(|number| PlaybackIdentity::physical(number).ok()),
-        )?,
-    })
-}
-
-fn project_playback(
-    ports: &ServerPlaybackPorts<'_>,
-    snapshot: &EngineSnapshot,
-    scope: PlaybackShowScope,
-    requested: PlaybackRuntimeIdentity,
-    number: u16,
-) -> Result<PlaybackRuntimeProjection, ActionError> {
-    let Some(definition) = snapshot
-        .playbacks
-        .iter()
-        .find(|definition| definition.number == number)
-    else {
-        return Ok(PlaybackRuntimeProjection {
-            scope,
-            requested,
-            playback_number: Some(number),
-            target: PlaybackTargetProjection::Missing,
-        });
-    };
-    let target = match &definition.target {
-        PlaybackTarget::CueList { cue_list_id } => {
-            let status = PlaybackIdentity::physical(number)
-                .ok()
-                .and_then(|identity| ports.state.output.playback_runtime_status_at(identity));
-            return Ok(cue_list_projection(
-                scope,
-                requested,
-                Some(number),
-                *cue_list_id,
-                status.as_ref(),
-            ));
-        }
-        PlaybackTarget::Dynamic { assignment } => PlaybackTargetProjection::Dynamic {
-            dynamic_id: assignment.dynamic.dynamic_id,
-            last_known_pool_number: assignment.dynamic.last_known_pool_number,
-            embedded: assignment.dynamic.dynamic_id.is_none(),
-            runtime: PlaybackIdentity::physical(number)
-                .ok()
-                .and_then(|identity| ports.state.output.active_dynamic_playback_at(identity))
-                .map(|active| {
-                    Box::new(dynamic_runtime_projection(
-                        ports, snapshot, assignment, active,
-                    ))
-                }),
-        },
-        PlaybackTarget::Macro { macro_id } => PlaybackTargetProjection::Macro {
-            macro_id: *macro_id,
-        },
-        PlaybackTarget::Timecode { timecode_id } => PlaybackTargetProjection::Timecode {
-            timecode_id: *timecode_id,
-        },
-        PlaybackTarget::Group { group_id, .. } => group_projection(
-            ports,
-            snapshot,
-            group_id,
-            PlaybackIdentity::physical(number).ok(),
-        )?,
-        PlaybackTarget::SpeedGroup { group } => speed_projection(ports, group)?,
-        PlaybackTarget::GrandMaster => grand_master_projection(ports),
-        PlaybackTarget::ProgrammerFade => PlaybackTargetProjection::ProgrammerFade {
-            millis: ports
-                .state
-                .installation
-                .configuration()
-                .programmer_fade_millis,
-        },
-        PlaybackTarget::CueFade => PlaybackTargetProjection::CueFade {
-            millis: ports
-                .state
-                .installation
-                .configuration()
-                .sequence_master_fade_millis,
-        },
-    };
-    Ok(PlaybackRuntimeProjection {
-        scope,
-        requested,
-        playback_number: Some(number),
-        target,
+        identity: requested,
+        target: group_projection(ports, snapshot, group_id.as_str(), playback_address)?,
     })
 }
 

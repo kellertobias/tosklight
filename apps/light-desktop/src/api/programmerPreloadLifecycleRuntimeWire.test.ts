@@ -26,18 +26,18 @@ const request: ProgrammerPreloadLifecycleRequest = {
 	},
 };
 function response(): WireOutcome {
-	const physical = cueProjection(11);
-	const virtual = cueProjection(1301);
+	const first = cueProjection(11, 0, 2);
+	const second = cueProjection(301, 0, 2);
 	if (
-		physical.target !== "cue_list" ||
-		!physical.runtime ||
-		virtual.target !== "cue_list" ||
-		!virtual.runtime
+		first.target !== "cue_list" ||
+		!first.runtime ||
+		second.target !== "cue_list" ||
+		!second.runtime
 	)
 		throw new Error("running fixture required");
-	physical.runtime.owner = { kind: "playback", playback_number: 11 };
-	virtual.requested = { kind: "virtual", page: 2, playback_number: 1301 };
-	virtual.runtime.owner = { kind: "virtual", page: 2, playback_number: 1301 };
+	first.runtime.owner = { kind: "playback", page: 2, position: 11 };
+	second.identity = { kind: "playback", page: 2, position: 301 };
+	second.runtime.owner = { kind: "playback", page: 2, position: 301 };
 	return {
 		request_id: request.requestId,
 		correlation_id: "55555555-5555-4555-8555-555555555555",
@@ -65,17 +65,20 @@ function response(): WireOutcome {
 			programmer_fade_millis: 0,
 			executed_playback_actions: 2,
 			executed: [
-				{ playback_number: 11, page: 2, action: "on", surface: "physical" },
 				{
-					playback_number: 1301,
-					page: 2,
+					address: { page: 2, position: 11 },
+					action: "on",
+					control_source: { surface_id: "main", control_id: 11 },
+				},
+				{
+					address: { page: 2, position: 301 },
 					action: "toggle",
-					surface: "virtual",
+					control_source: { surface_id: "screen-2", control_id: 301 },
 				},
 			],
 			runtime_changes: [
-				{ projection: physical, event_sequence: 11 },
-				{ projection: virtual, event_sequence: 12 },
+				{ projection: first, event_sequence: 11 },
+				{ projection: second, event_sequence: 12 },
 			],
 		},
 	};
@@ -88,7 +91,7 @@ function firstRuntime(body: WireOutcome) {
 }
 
 describe("Preload commit exact runtime owners", () => {
-	it("accepts physical and virtual owners in one realistic committed GO response", () => {
+	it("accepts two surface-independent owners in one realistic committed GO response", () => {
 		const body = response();
 		const decoded = decodeProgrammerPreloadLifecycleOutcome(body, request);
 		expect(decoded.commit?.executedPlaybackActions).toBe(2);
@@ -97,12 +100,12 @@ describe("Preload commit exact runtime owners", () => {
 		).toEqual([11, 12]);
 		const changes = decoded.commit!.runtimeChanges;
 		expect(changes[0].projection).toMatchObject({
-			requested: { kind: "playback", playback_number: 11 },
-			runtime: { owner: { kind: "playback", playback_number: 11 } },
+			identity: { kind: "playback", page: 2, position: 11 },
+			runtime: { owner: { kind: "playback", page: 2, position: 11 } },
 		});
 		expect(changes[1].projection).toMatchObject({
-			requested: { kind: "virtual", page: 2, playback_number: 1301 },
-			runtime: { owner: { kind: "virtual", page: 2, playback_number: 1301 } },
+			identity: { kind: "playback", page: 2, position: 301 },
+			runtime: { owner: { kind: "playback", page: 2, position: 301 } },
 		});
 		expect(body.commit?.runtime_changes[0].projection).toEqual(
 			changes[0].projection,
@@ -111,7 +114,7 @@ describe("Preload commit exact runtime owners", () => {
 	it.each([
 		undefined,
 		null,
-	])("accepts legacy missing/null owner %s", (owner) => {
+	])("accepts declared optional missing/null owner %s", (owner) => {
 		const body = response();
 		for (const change of body.commit!.runtime_changes) {
 			if (change.projection.target !== "cue_list" || !change.projection.runtime)
@@ -126,7 +129,7 @@ describe("Preload commit exact runtime owners", () => {
 	it("keeps an aggregate requested identity distinct from exact Direct activation owner", () => {
 		const body = response();
 		const projection = firstRuntime(body);
-		projection.requested = { kind: "cue_list", cue_list_id: CUE_LIST_ID };
+		projection.identity = { kind: "cue_list", cue_list_id: CUE_LIST_ID };
 		projection.runtime!.owner = {
 			kind: "direct_cue_list",
 			cue_list_id: CUE_LIST_ID,
@@ -134,14 +137,14 @@ describe("Preload commit exact runtime owners", () => {
 		const decoded = decodeProgrammerPreloadLifecycleOutcome(body, request)
 			.commit!.runtimeChanges[0].projection;
 		expect(decoded).toMatchObject({
-			requested: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
+			identity: { kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			runtime: { owner: { kind: "direct_cue_list", cue_list_id: CUE_LIST_ID } },
 		});
 	});
 	it("accepts a declared Direct request without changing its exact owner", () => {
 		const body = response();
 		const projection = firstRuntime(body);
-		projection.requested = {
+		projection.identity = {
 			kind: "direct_cue_list",
 			cue_list_id: CUE_LIST_ID,
 		};
@@ -153,7 +156,7 @@ describe("Preload commit exact runtime owners", () => {
 			decodeProgrammerPreloadLifecycleOutcome(body, request).commit!
 				.runtimeChanges[0].projection,
 		).toMatchObject({
-			requested: projection.requested,
+			identity: projection.identity,
 			runtime: { owner: projection.runtime!.owner },
 		});
 	});
@@ -167,13 +170,13 @@ describe("Preload commit exact runtime owners", () => {
 	});
 
 	it.each([
-		{ kind: "playback", playback_number: 0 },
-		{ kind: "virtual", page: 0, playback_number: 1301 },
-		{ kind: "virtual", page: 2, playback_number: 0 },
+		{ kind: "playback", page: 2, position: 0 },
+		{ kind: "playback", page: 0, position: 301 },
+		{ kind: "playback", page: 2, position: 0 },
 		{ kind: "undeclared" },
-		{ kind: "playback", playback_number: 11, foreign: true },
+		{ kind: "playback", page: 2, position: 11, foreign: true },
 		{ kind: "direct_cue_list", cue_list_id: CUE_LIST_ID, playback_number: 11 },
-		{ kind: "virtual", page: 2 },
+		{ kind: "playback", page: 2 },
 	])("rejects malformed/foreign owner %#", (owner) => {
 		const body = response();
 		firstRuntime(body).runtime!.owner =
@@ -196,7 +199,13 @@ function dynamicResponse(active: boolean, embedded: boolean): WireOutcome {
 	for (const change of body.commit!.runtime_changes) {
 		const original = change.projection;
 		const runtime: DynamicPlaybackRuntimeProjection = {
-			playback_number: original.playback_number!,
+			owner_address: {
+				page: 2,
+				position:
+					original.identity.kind === "playback"
+						? original.identity.position
+						: 11,
+			},
 			enabled: true,
 			paused: false,
 			flash: false,
@@ -228,8 +237,7 @@ function dynamicResponse(active: boolean, embedded: boolean): WireOutcome {
 		};
 		change.projection = {
 			scope: original.scope,
-			requested: original.requested,
-			playback_number: original.playback_number,
+			identity: original.identity,
 			target: "dynamic",
 			dynamic_id: embedded ? null : "88888888-8888-4888-8888-888888888888",
 			last_known_pool_number: 100,
@@ -246,7 +254,7 @@ describe("Preload committed standalone Dynamic projections", () => {
 		[true, true],
 		[false, false],
 		[false, true],
-	])("preserves physical/virtual identity and exact Dynamic runtime active=%s embedded=%s", (active, embedded) => {
+	])("preserves exact cross-page Playback identity and exact Dynamic runtime active=%s embedded=%s", (active, embedded) => {
 		const body = dynamicResponse(active, embedded);
 		const decoded = decodeProgrammerPreloadLifecycleOutcome(body, request);
 		expect(decoded.commit!.executedPlaybackActions).toBe(2);
@@ -256,14 +264,15 @@ describe("Preload committed standalone Dynamic projections", () => {
 		expect(
 			decoded.commit!.runtimeChanges.map((change) => change.projection),
 		).toEqual(body.commit!.runtime_changes.map((change) => change.projection));
-		expect(decoded.commit!.runtimeChanges[0].projection.requested).toEqual({
+		expect(decoded.commit!.runtimeChanges[0].projection.identity).toEqual({
 			kind: "playback",
-			playback_number: 11,
-		});
-		expect(decoded.commit!.runtimeChanges[1].projection.requested).toEqual({
-			kind: "virtual",
 			page: 2,
-			playback_number: 1301,
+			position: 11,
+		});
+		expect(decoded.commit!.runtimeChanges[1].projection.identity).toEqual({
+			kind: "playback",
+			page: 2,
+			position: 301,
 		});
 	});
 	it.each([
@@ -271,7 +280,11 @@ describe("Preload committed standalone Dynamic projections", () => {
 		["projection", { embedded: "yes" }, "embedded"],
 		["projection", { last_known_pool_number: 0 }, "last_known_pool_number"],
 		["runtime", { foreign: true }, "foreign"],
-		["runtime", { owner: { kind: "playback", playback_number: 11 } }, "owner"],
+		[
+			"runtime",
+			{ owner: { kind: "playback", page: 2, position: 11 } },
+			"owner",
+		],
 		["runtime", { state: "undeclared" }, "state"],
 		["runtime", { playback_number: 0 }, "playback_number"],
 		["runtime", { target_count: -1 }, "target_count"],

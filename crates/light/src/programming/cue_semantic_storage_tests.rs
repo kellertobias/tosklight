@@ -529,10 +529,11 @@ fn recorded_rig(intent: &Intent) -> (TestRig, CueListId) {
 fn recorded_rig_with(rig: TestRig, intent: &Intent) -> (TestRig, CueListId) {
     seed_group(&rig);
     let commit = rig.commit(
-        ProgrammingCueRecordTarget::Pool { playback_number: 6 },
+        ProgrammingCueRecordTarget::Playback {
+            address: light_playback::PlaybackAddress::new(1, 6).unwrap(),
+        },
         ProgrammingCueResolvedTarget::Playback {
-            playback_number: 6,
-            page_slot: None,
+            address: light_playback::PlaybackAddress::new(1, 6).unwrap(),
         },
         ProgrammingCueRecordOperation::Overwrite,
         Some(1.0),
@@ -847,8 +848,7 @@ impl ProgrammingCueRecordingPorts for ServicePorts<'_> {
     ) -> Result<ProgrammingCueRecordingEnvironment, ActionError> {
         Ok(ProgrammingCueRecordingEnvironment {
             target: ProgrammingCueResolvedTarget::Playback {
-                playback_number: self.playback_number,
-                page_slot: None,
+                address: light_playback::PlaybackAddress::new(1, self.playback_number).unwrap(),
             },
             active_cue: None::<PlaybackCueReference>,
             cuelist_auto_off_at_zero_default: false,
@@ -871,7 +871,7 @@ impl ProgrammingCueRecordingPorts for ServicePorts<'_> {
     fn activate_recorded_cue(
         &self,
         _context: &ActionContext,
-        _playback_number: u16,
+        _address: light_playback::PlaybackAddress,
         _cue_number: CueNumber,
     ) -> Option<ProgrammingCueActivationCompletion> {
         self.activations.fetch_add(1, Ordering::Relaxed);
@@ -949,7 +949,9 @@ fn every_capture_lane_records_the_same_exact_intent_through_the_programming_serv
             .with_request_id(format!("tl606-{lane:?}")),
             command: ProgrammingCueRecordRequest {
                 show_id: rig.show_id,
-                target: ProgrammingCueRecordTarget::Pool { playback_number: 9 },
+                target: ProgrammingCueRecordTarget::Playback {
+                    address: light_playback::PlaybackAddress::new(1, 9).unwrap(),
+                },
                 operation: ProgrammingCueRecordOperation::Overwrite,
                 cue_number: Some(CueNumber::try_from_legacy_f64(1.0).unwrap()),
                 timing: ProgrammingCueRecordTiming::default(),
@@ -982,7 +984,7 @@ fn every_capture_lane_records_the_same_exact_intent_through_the_programming_serv
             recorded_cue: recorded_cue.clone(),
             show_revision: *show_revision,
             event_sequence: Some(1),
-            concrete_playback_number: Some(9),
+            concrete_playback_address: Some(light_playback::PlaybackAddress::new(1, 9).unwrap()),
         };
         let cue_list_id = assert_recorded_everywhere(&rig, &committed, &intent);
         assert_named_semantic_facts(

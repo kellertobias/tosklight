@@ -15,7 +15,10 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import type { PlaybackActionRequest } from "../../api/types";
+import type {
+	PlaybackActionRequest,
+	PlaybackDefinition,
+} from "../../api/types";
 import type { PlaybackRuntimeActionApply } from "../playbackRuntime/actionWriter";
 import type { PlaybackIdentity } from "../playbackRuntime/contracts";
 import { PlaybackRuntimeViewProvider } from "../playbackRuntime/PlaybackRuntimeView";
@@ -77,7 +80,7 @@ class FakeTransport implements PlaybackEventTransport {
 		const scope = this.subscriptions.at(-1)?.scope;
 		return (scope?.identities ?? [])
 			.flatMap((identity) =>
-				identity.kind === "playback" ? [identity.playback_number] : [],
+				identity.kind === "playback" ? [identity.position] : [],
 			)
 			.sort((left, right) => left - right);
 	}
@@ -85,14 +88,36 @@ class FakeTransport implements PlaybackEventTransport {
 
 function page(
 	number: number,
-	slots: Record<string, number>,
+	slots: Record<string, number | PlaybackDefinition>,
 ): ShowObject<"playback_page"> {
 	return {
 		kind: "playback_page",
 		id: `page-${number}`,
 		revision: 1,
 		updated_at: "2026-07-19T10:00:00Z",
-		body: { number, name: `Page ${number}`, slots, virtual_playbacks: {} },
+		body: {
+			number,
+			name: `Page ${number}`,
+			assignments: Object.fromEntries(
+				Object.entries(slots).map(([position, value]) => [
+					position,
+					typeof value === "object"
+						? value
+						: {
+								name: `Fixture ${value}`,
+								target: {
+									type: "cue_list",
+									cue_list_id: "33333333-3333-4333-8333-333333333333",
+								},
+								buttons: ["go", "pause", "flash"],
+								fader: "master",
+								go_activates: true,
+								auto_off: true,
+								xfade_millis: 0,
+							},
+				]),
+			),
+		},
 	};
 }
 
@@ -117,23 +142,24 @@ interface HarnessOptions {
 
 function appliedOutcome(request: PlaybackActionRequest) {
 	return {
-		request_id: request.request_id,
 		correlation_id: "55555555-5555-4555-8555-555555555555",
 		requested: request.address,
-		resolved: {
-			kind: "playback" as const,
-			playback_number: 11,
-			page: 1,
-			slot: 1,
+		resolved: request.address as {
+			kind: "playback";
+			page: number;
+			position: number;
 		},
 		outcome: { status: "applied" as const },
 		durability: "durable" as const,
-		projection: cueProjection(11),
+		projection: cueProjection(
+			request.address.kind === "playback" ? request.address.position : 11,
+			0,
+			request.address.kind === "playback" ? request.address.page : 1,
+		),
 		related: [],
 		desk: null,
 		event_sequence: 12,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 
@@ -170,11 +196,11 @@ function buttonSends(applyAction: ApplyActionMock) {
 					{
 						playbackNumber:
 							request.address.kind === "playback"
-								? request.address.playback_number
+								? request.address.position
 								: null,
 						button: request.action.number,
 						pressed: request.action.pressed,
-						surface: request.surface,
+						controlSource: request.control_source,
 					},
 				]
 			: [],
@@ -212,7 +238,7 @@ describe("DemoPlaybackControls", () => {
 		// Slot 9 is mapped on the Page but is not a demo slot, so 99 stays out.
 		await waitFor(() =>
 			expect(transport.latestPlaybackNumbers).toEqual([
-				11, 12, 13, 14, 21, 22, 23, 24,
+				4, 11, 12, 13, 14, 15, 16, 17,
 			]),
 		);
 	});
@@ -248,7 +274,7 @@ describe("DemoPlaybackControls", () => {
 		const { store, view } = harness();
 		render(view());
 		await settled();
-		const projection = cueProjection(12);
+		const projection = cueProjection(16);
 		if (projection.target !== "cue_list" || !projection.runtime)
 			throw new Error("fixture must expose a cue list runtime");
 		projection.runtime.fader_position = 0.4;
@@ -269,9 +295,16 @@ describe("DemoPlaybackControls", () => {
 		await settled();
 		expect(applyAction).toHaveBeenCalledOnce();
 		const request = applyAction.mock.calls[0][2];
-		expect(request.address).toEqual({ kind: "playback", playback_number: 13 });
+		expect(request.address).toEqual({
+			kind: "playback",
+			page: 1,
+			position: 17,
+		});
 		expect(request.action).toEqual({ type: "master", value: 0.75 });
-		expect(request.surface).toBe("physical");
+		expect(request.control_source).toEqual({
+			surface_id: "demo",
+			control_id: 170,
+		});
 	});
 
 	it("sends a physical press and a release for the same button", async () => {
@@ -283,12 +316,22 @@ describe("DemoPlaybackControls", () => {
 		fireEvent.pointerUp(button(11, 2), { pointerId: 1 });
 		await settled();
 		expect(buttonSends(applyAction)).toEqual([
-			{ playbackNumber: 11, button: 2, pressed: true, surface: "physical" },
-			{ playbackNumber: 11, button: 2, pressed: false, surface: "physical" },
+			{
+				playbackNumber: 11,
+				button: 2,
+				pressed: true,
+				controlSource: { surface_id: "demo", control_id: 112 },
+			},
+			{
+				playbackNumber: 11,
+				button: 2,
+				pressed: false,
+				controlSource: { surface_id: "demo", control_id: 112 },
+			},
 		]);
 	});
 
-	it("releases the originally held Playback number after the Page remaps the slot", async () => {
+	it("releases the original exact address and source after its assignment changes", async () => {
 		const { applyAction, view } = harness();
 		const rendered = render(view());
 		await settled();
@@ -298,7 +341,7 @@ describe("DemoPlaybackControls", () => {
 		mocks.pagesView = {
 			ready: true,
 			error: null,
-			pages: [page(1, { ...DEMO_PAGE.body.slots, "11": 77 })],
+			pages: [page(1, { ...DEMO_PAGE.body.assignments, "11": 77 })],
 		};
 		rendered.rerender(view());
 		await settled();
@@ -306,8 +349,18 @@ describe("DemoPlaybackControls", () => {
 		await settled();
 
 		expect(buttonSends(applyAction)).toEqual([
-			{ playbackNumber: 11, button: 1, pressed: true, surface: "physical" },
-			{ playbackNumber: 11, button: 1, pressed: false, surface: "physical" },
+			{
+				playbackNumber: 11,
+				button: 1,
+				pressed: true,
+				controlSource: { surface_id: "demo", control_id: 111 },
+			},
+			{
+				playbackNumber: 11,
+				button: 1,
+				pressed: false,
+				controlSource: { surface_id: "demo", control_id: 111 },
+			},
 		]);
 	});
 
@@ -368,8 +421,18 @@ describe("DemoPlaybackControls", () => {
 		release(button(13));
 		await settled();
 		expect(buttonSends(applyAction)).toEqual([
-			{ playbackNumber: 22, button: 1, pressed: true, surface: "physical" },
-			{ playbackNumber: 22, button: 1, pressed: false, surface: "physical" },
+			{
+				playbackNumber: 13,
+				button: 1,
+				pressed: true,
+				controlSource: { surface_id: "demo", control_id: 131 },
+			},
+			{
+				playbackNumber: 13,
+				button: 1,
+				pressed: false,
+				controlSource: { surface_id: "demo", control_id: 131 },
+			},
 		]);
 	});
 
@@ -382,8 +445,18 @@ describe("DemoPlaybackControls", () => {
 		rendered.unmount();
 		await settled();
 		expect(buttonSends(applyAction)).toEqual([
-			{ playbackNumber: 23, button: 1, pressed: true, surface: "physical" },
-			{ playbackNumber: 23, button: 1, pressed: false, surface: "physical" },
+			{
+				playbackNumber: 14,
+				button: 1,
+				pressed: true,
+				controlSource: { surface_id: "demo", control_id: 141 },
+			},
+			{
+				playbackNumber: 14,
+				button: 1,
+				pressed: false,
+				controlSource: { surface_id: "demo", control_id: 141 },
+			},
 		]);
 	});
 
@@ -397,7 +470,12 @@ describe("DemoPlaybackControls", () => {
 		await settled();
 		const releases = buttonSends(applyAction).filter((send) => !send.pressed);
 		expect(releases).toEqual([
-			{ playbackNumber: 24, button: 1, pressed: false, surface: "physical" },
+			{
+				playbackNumber: 15,
+				button: 1,
+				pressed: false,
+				controlSource: { surface_id: "demo", control_id: 151 },
+			},
 		]);
 	});
 
@@ -415,8 +493,18 @@ describe("DemoPlaybackControls", () => {
 		await settled();
 
 		expect(buttonSends(applyAction)).toEqual([
-			{ playbackNumber: 11, button: 1, pressed: true, surface: "physical" },
-			{ playbackNumber: 11, button: 1, pressed: false, surface: "physical" },
+			{
+				playbackNumber: 11,
+				button: 1,
+				pressed: true,
+				controlSource: { surface_id: "demo", control_id: 111 },
+			},
+			{
+				playbackNumber: 11,
+				button: 1,
+				pressed: false,
+				controlSource: { surface_id: "demo", control_id: 111 },
+			},
 		]);
 		expect(button(11)).toBeDisabled();
 	});

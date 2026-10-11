@@ -55,7 +55,6 @@ fn application_playback(
     let target = application_target(value.target)?;
     let fader = normalize_legacy_fader(&target, application_fader(value.fader));
     Ok(playback::PlaybackDefinition {
-        number: value.number,
         name: value.name,
         target,
         buttons: value.buttons.map(application_button),
@@ -208,48 +207,6 @@ fn application_target(
     })
 }
 
-fn application_group_master_address(
-    value: wire::PlaybackTopologyGroupMasterAddress,
-) -> Result<application::GroupMasterPlaybackAddress, String> {
-    Ok(match value {
-        wire::PlaybackTopologyGroupMasterAddress::Physical {
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
-        } => application::GroupMasterPlaybackAddress::Physical {
-            page,
-            slot,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision: input_revision(
-                expected_playback_revision,
-                "expected_playback_revision",
-            )?,
-            expected_playback_object_id: expected_playback_object_id.into_option(),
-        },
-        wire::PlaybackTopologyGroupMasterAddress::Virtual {
-            page,
-            playback_number,
-            expected_page_revision,
-            expected_page_object_id,
-        } => application::GroupMasterPlaybackAddress::Virtual {
-            page,
-            playback_number,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-        },
-    })
-}
-
 fn application_button(value: wire::PlaybackTopologyButtonAction) -> playback::PlaybackButtonAction {
     use playback::PlaybackButtonAction as Output;
     use wire::PlaybackTopologyButtonAction as Input;
@@ -322,25 +279,15 @@ fn wire_resolution(
                 cue_list_id: cue_list_id.0,
             }
         }
-        application::PlaybackTopologyResolution::PageSlot {
-            page,
-            slot,
-            playback_number,
-        } => wire::PlaybackTopologyResolution::PageSlot {
-            page,
-            slot,
-            playback_number,
-        },
+        application::PlaybackTopologyResolution::Playback { address } => {
+            wire::PlaybackTopologyResolution::Playback {
+                page: address.page(),
+                position: address.position(),
+            }
+        }
         application::PlaybackTopologyResolution::Page { page } => {
             wire::PlaybackTopologyResolution::Page { page }
         }
-        application::PlaybackTopologyResolution::Virtual {
-            page,
-            playback_number,
-        } => wire::PlaybackTopologyResolution::Virtual {
-            page,
-            playback_number,
-        },
     }
 }
 
@@ -384,7 +331,6 @@ fn wire_kind(
     use light_wire::v2::events::ShowObjectKind as Output;
     match kind {
         Input::CueList => Ok(Output::CueList),
-        Input::Playback => Ok(Output::Playback),
         Input::PlaybackPage => Ok(Output::PlaybackPage),
         Input::AttributeConfiguration
         | Input::Group
@@ -435,27 +381,21 @@ mod tests {
             action: wire::PlaybackTopologyAction::AssignGroupMaster {
                 group_object_id: "front".into(),
                 expected_group_revision: revision,
-                address: wire::PlaybackTopologyGroupMasterAddress::Physical {
+                address: light_wire::v2::playback::PlaybackAddressValue {
                     page: 2,
-                    slot: 4,
-                    expected_page_revision: 5,
-                    expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
-                        "page-two".into(),
-                    ),
-                    expected_playback_revision: 6,
-                    expected_playback_object_id: wire::PlaybackTopologyObjectIdentity::Present(
-                        "playback-six".into(),
-                    ),
+                    position: 401,
                 },
+                expected_page_revision: 5,
+                expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
+                    "page-two".into(),
+                ),
             },
         }
     }
-
     #[test]
     fn group_master_assignment_maps_every_authority_field() {
         let show_id = ShowId(uuid::Uuid::from_u128(1));
         let (request_id, command) = application_command(show_id, assign_group_request(3)).unwrap();
-
         assert_eq!(request_id, "assign-front");
         assert_eq!(command.show_id, show_id);
         let application::PlaybackTopologyAction::AssignGroupMaster {
@@ -464,28 +404,17 @@ mod tests {
             address,
         } = command.action
         else {
-            panic!("expected AssignGroupMaster action");
+            panic!("expected AssignGroupMaster");
         };
         assert_eq!(group_object_id, "front");
         assert_eq!(expected_group_revision, 3);
-        let application::GroupMasterPlaybackAddress::Physical {
-            page,
-            slot,
-            expected_page_revision,
-            expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
-        } = address
-        else {
-            panic!("expected physical Group Master address");
-        };
-        assert_eq!((page, slot), (2, 4));
-        assert_eq!(expected_page_revision, 5);
-        assert_eq!(expected_page_object_id.as_deref(), Some("page-two"));
-        assert_eq!(expected_playback_revision, 6);
-        assert_eq!(expected_playback_object_id.as_deref(), Some("playback-six"));
+        assert_eq!(
+            address.address,
+            playback::PlaybackAddress::new(2, 401).unwrap()
+        );
+        assert_eq!(address.expected_page_revision, 5);
+        assert_eq!(address.expected_page_object_id.as_deref(), Some("page-two"));
     }
-
     #[test]
     fn group_master_assignment_rejects_unsafe_javascript_revisions() {
         let error = application_command(
@@ -493,43 +422,24 @@ mod tests {
             assign_group_request(JAVASCRIPT_MAX_SAFE_INTEGER + 1),
         )
         .unwrap_err();
-
         assert!(error.contains("expected_group_revision"));
         assert!(error.contains("maximum safe integer"));
     }
-
     #[test]
-    fn virtual_group_master_assignment_maps_exact_page_contained_authority() {
-        let request = wire::PlaybackTopologyActionRequest {
-            request_id: "assign-virtual-front".into(),
-            action: wire::PlaybackTopologyAction::AssignGroupMaster {
-                group_object_id: "front".into(),
-                expected_group_revision: 3,
-                address: wire::PlaybackTopologyGroupMasterAddress::Virtual {
-                    page: 2,
-                    playback_number: 1301,
-                    expected_page_revision: 5,
-                    expected_page_object_id: wire::PlaybackTopologyObjectIdentity::Present(
-                        "page-two".into(),
-                    ),
-                },
-            },
-        };
-
-        let (_, command) = application_command(ShowId(uuid::Uuid::from_u128(1)), request).unwrap();
-        let application::PlaybackTopologyAction::AssignGroupMaster { address, .. } = command.action
-        else {
-            panic!("expected AssignGroupMaster action");
-        };
-        assert!(matches!(
-            address,
-            application::GroupMasterPlaybackAddress::Virtual {
-                page: 2,
-                playback_number: 1301,
-                expected_page_revision: 5,
-                expected_page_object_id: Some(ref id),
-            } if id == "page-two"
-        ));
+    fn group_master_assignment_rejects_address_outside_shared_bounds() {
+        for (page, position) in [(0, 401), (100, 401), (2, 0), (2, 1001)] {
+            let mut request = assign_group_request(3);
+            if let wire::PlaybackTopologyAction::AssignGroupMaster { address, .. } =
+                &mut request.action
+            {
+                *address = light_wire::v2::playback::PlaybackAddressValue { page, position };
+            }
+            assert!(
+                application_command(ShowId(uuid::Uuid::from_u128(1)), request)
+                    .unwrap_err()
+                    .contains("Playback address")
+            );
+        }
     }
 
     #[test]

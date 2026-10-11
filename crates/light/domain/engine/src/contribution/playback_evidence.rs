@@ -100,8 +100,7 @@ mod tests {
             PlaybackFamilyEvidence::try_new(vec![PlaybackFamilyEntry {
                 occurrence: PlaybackSourceOccurrence {
                     source: SequenceMasterSource {
-                        playback_number: None,
-                        playback_identity: None,
+                        playback_address: None,
                         cue_list_id: CueListId::new(),
                         temporary: true,
                     },

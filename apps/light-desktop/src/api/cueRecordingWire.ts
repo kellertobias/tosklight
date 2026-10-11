@@ -105,7 +105,13 @@ export function decodeCueRecordingOutcome(
 		runtime:
 			outcome.runtime == null
 				? null
-				: decodeRuntime(outcome.runtime, showId, showRevision, projections),
+				: decodeRuntime(
+						outcome.runtime,
+						showId,
+						showRevision,
+						projections,
+						request,
+					),
 	};
 }
 
@@ -133,7 +139,6 @@ function decodeProjections(
 ): CueRecordProjections {
 	const projections = exactRecordAt(value, "$.projections", [
 		"cue_list",
-		"playback",
 		"page",
 	]);
 	const cueList = decodeProjection(
@@ -141,14 +146,6 @@ function decodeProjections(
 		"cue_list",
 		"$.projections.cue_list",
 	);
-	const playback =
-		projections.playback == null
-			? null
-			: decodeProjection(
-					projections.playback,
-					"playback",
-					"$.projections.playback",
-				);
 	const page =
 		projections.page == null
 			? null
@@ -158,15 +155,6 @@ function decodeProjections(
 					"$.projections.page",
 				);
 	if (
-		playback?.body.target.type === "cue_list" &&
-		playback.body.target.cue_list_id !== cueList.body.id
-	)
-		invalid(
-			"$.projections.playback.body.target.cue_list_id",
-			`recorded Cuelist ${cueList.body.id}`,
-			playback.body.target.cue_list_id,
-		);
-	if (
 		request.target.kind === "cue_list" &&
 		cueList.body.id !== request.target.cueListId
 	)
@@ -175,7 +163,7 @@ function decodeProjections(
 			request.target.cueListId,
 			cueList.body.id,
 		);
-	validateTargetTopology(request.target, cueList.body.id, playback, page);
+	validateTargetTopology(request.target, cueList.body.id, page);
 	if (
 		request.target.kind === "cuelist_pool" &&
 		cueList.body.pool_number !== request.target.number &&
@@ -186,82 +174,35 @@ function decodeProjections(
 			`Cuelist address ${request.target.number}`,
 			cueList.body.pool_number,
 		);
-	return { cueList, playback, page };
+	return { cueList, page };
 }
 
 function validateTargetTopology(
 	target: CueRecordTarget,
 	cueListId: string,
-	playback: CueRecordProjections["playback"],
 	page: CueRecordProjections["page"],
 ) {
 	if (target.kind === "cue_list" || target.kind === "cuelist_pool") {
-		if (playback || page)
-			invalid("$.projections", "no Playback topology for a direct Cuelist", {
-				playback,
-				page,
-			});
-		return;
-	}
-	if (target.kind === "virtual") {
-		if (playback)
-			invalid(
-				"$.projections.playback",
-				"no standalone Virtual Playback",
-				playback,
-			);
-		if (!page) invalid("$.projections.page", "Virtual Playback page", page);
-		if (page.body.number !== target.page)
-			invalid(
-				"$.projections.page.body.number",
-				String(target.page),
-				page.body.number,
-			);
-		const virtual = page.body.virtual_playbacks[String(target.playbackNumber)];
-		if (
-			!virtual ||
-			virtual.number !== target.playbackNumber ||
-			virtual.target.type !== "cue_list" ||
-			virtual.target.cue_list_id !== cueListId
-		)
-			invalid(
-				`$.projections.page.body.virtual_playbacks.${target.playbackNumber}`,
-				`Virtual Playback assigned to Cuelist ${cueListId}`,
-				virtual,
-			);
-		return;
-	}
-	if (target.kind === "selected_playback" && !playback && !page) return;
-	if (!playback)
-		invalid("$.projections.playback", "resolved Playback projection", playback);
-	if (target.kind === "pool" && playback.body.number !== target.playbackNumber)
-		invalid(
-			"$.projections.playback.body.number",
-			String(target.playbackNumber),
-			playback.body.number,
-		);
-	if (target.kind !== "page_slot") {
 		if (page)
-			invalid("$.projections.page", "no Playback page projection", page);
+			invalid("$.projections.page", "no Page for a direct Cuelist", page);
 		return;
 	}
-	if (!page)
-		invalid("$.projections.page", "resolved Playback page projection", page);
-	if (page.body.number !== target.page)
+	if (target.kind === "selected_playback") return;
+	if (!page || page.body.number !== target.page)
+		invalid("$.projections.page", "the requested Playback Page", page);
+	const definition = page.body.assignments[String(target.position)];
+	if (
+		definition?.target.type !== "cue_list" ||
+		definition.target.cue_list_id !== cueListId
+	)
 		invalid(
-			"$.projections.page.body.number",
-			String(target.page),
-			page.body.number,
-		);
-	if (page.body.slots[String(target.slot)] !== playback.body.number)
-		invalid(
-			`$.projections.page.body.slots.${target.slot}`,
-			`Playback ${playback.body.number}`,
-			page.body.slots[String(target.slot)],
+			`$.projections.page.body.assignments.${target.position}`,
+			"the recorded Cuelist assignment",
+			definition,
 		);
 }
 
-function decodeProjection<K extends "cue_list" | "playback" | "playback_page">(
+function decodeProjection<K extends "cue_list" | "playback_page">(
 	value: unknown,
 	kind: K,
 	path: string,
@@ -322,6 +263,7 @@ function decodeRuntime(
 	showId: string,
 	showRevision: number,
 	projections: CueRecordProjections,
+	request: CueRecordingRequest,
 ) {
 	const runtime = exactRecordAt(value, "$.runtime", [
 		"projection",
@@ -343,7 +285,7 @@ function decodeRuntime(
 			String(showRevision),
 			projection.scope.show_revision,
 		);
-	validateRuntimePlayback(projection, projections);
+	validateRuntimePlayback(projection, projections, request);
 	return {
 		projection,
 		eventSequence: integerAt(
@@ -356,16 +298,44 @@ function decodeRuntime(
 function validateRuntimePlayback(
 	projection: ReturnType<typeof decodePlaybackProjection>,
 	projections: CueRecordProjections,
+	request: CueRecordingRequest,
 ) {
-	const playback = projections.playback;
-	if (!playback)
-		invalid("$.runtime", "no runtime for a direct Cuelist action", projection);
-	if (projection.playback_number !== playback.body.number)
+	const owner = projection.identity;
+	if (owner.kind === "playback") {
+		const page = projections.page;
+		const definition = page?.body.assignments[String(owner.position)];
+		if (
+			!page ||
+			page.body.number !== owner.page ||
+			definition?.target.type !== "cue_list" ||
+			definition.target.cue_list_id !== projections.cueList.id
+		)
+			invalid(
+				"$.runtime.projection.identity",
+				"the recorded Page assignment",
+				owner,
+			);
+		if (
+			request.target.kind === "playback" &&
+			(owner.page !== request.target.page ||
+				owner.position !== request.target.position)
+		)
+			invalid(
+				"$.runtime.projection.identity",
+				"the exact requested Playback address",
+				owner,
+			);
+	} else if (
+		(owner.kind !== "direct_cue_list" && owner.kind !== "cue_list") ||
+		owner.cue_list_id !== projections.cueList.id
+	) {
 		invalid(
-			"$.runtime.projection.playback_number",
-			String(playback.body.number),
-			projection.playback_number,
+			"$.runtime.projection.identity",
+			"the recorded Cuelist owner",
+			owner,
 		);
+	}
+
 	if (
 		projection.target !== "cue_list" ||
 		projection.cue_list_id !== projections.cueList.id
@@ -380,45 +350,20 @@ function validateRuntimePlayback(
 }
 
 function encodeTarget(target: CueRecordTarget) {
-	if (target.kind === "cuelist_pool")
-		return { kind: target.kind, number: target.number };
-	if (target.kind === "pool")
-		return { kind: target.kind, playback_number: target.playbackNumber };
-	if (target.kind === "page_slot")
-		return { kind: target.kind, page: target.page, slot: target.slot };
 	if (target.kind === "cue_list")
 		return { kind: target.kind, cue_list_id: target.cueListId };
-	if (target.kind === "virtual")
-		return {
-			kind: target.kind,
-			page: target.page,
-			playback_number: target.playbackNumber,
-		};
-	return { kind: target.kind };
+	return target;
 }
-
 function validateRequest(request: CueRecordingRequest) {
 	printableAt(request.requestId, "$.requestId", 128);
 	if (request.target.kind === "cuelist_pool")
 		boundedPositiveInteger(request.target.number, "$.target.number", 1000);
-	if (request.target.kind === "pool")
-		boundedPositiveInteger(
-			request.target.playbackNumber,
-			"$.target.playbackNumber",
-			1000,
-		);
-	if (request.target.kind === "page_slot") {
-		boundedPositiveInteger(request.target.page, "$.target.page", 127);
-		boundedPositiveInteger(request.target.slot, "$.target.slot", 127);
+	if (request.target.kind === "playback") {
+		boundedPositiveInteger(request.target.page, "$.target.page", 99);
+		boundedPositiveInteger(request.target.position, "$.target.position", 1000);
 	}
 	if (request.target.kind === "cue_list")
 		uuidAt(request.target.cueListId, "$.target.cueListId");
-	if (request.target.kind === "virtual") {
-		boundedPositiveInteger(request.target.page, "$.target.page", 127);
-		const number = request.target.playbackNumber;
-		if (!Number.isInteger(number) || number < 1001 || number > 39100)
-			invalid("$.target.playbackNumber", "integer within 1001-39100", number);
-	}
 	if (request.cueNumber != null) cueNumberAt(request.cueNumber, "$.cueNumber");
 	if (request.name != null) printableAt(request.name, "$.name", 256);
 	if (request.timing.fadeMillis != null)

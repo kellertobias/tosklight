@@ -9,11 +9,10 @@ export function sameKnownCueList(actual: CueList, requested: CueList) {
 export function sameKnownPlayback(
 	actual: PlaybackDefinition,
 	requested: PlaybackDefinition,
-	number: number,
 ) {
 	return (
-		stableJson(knownPlayback(actual, number)) ===
-		stableJson(knownPlayback(requested, number))
+		stableJson(knownPlayback(actual)) ===
+		stableJson(knownPlayback(requested))
 	);
 }
 
@@ -85,13 +84,12 @@ function knownChangeFields(
 	};
 }
 
-function knownPlayback(playback: PlaybackDefinition, number: number) {
+function knownPlayback(playback: PlaybackDefinition) {
 	const fader =
 		playback.target.type === "speed_group" && playback.fader === "speed"
 			? "learned_percentage"
 			: playback.fader;
 	return {
-		number,
 		name: playback.name,
 		target: knownTarget(playback.target),
 		buttons: playback.buttons,

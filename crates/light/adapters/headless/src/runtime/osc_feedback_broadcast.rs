@@ -5,7 +5,12 @@ fn active_osc_subscribers(state: &AppState) -> Vec<OscSubscriber> {
     let (active, expired, changed) = state
         .integrations
         .active_osc_subscribers(now, Duration::from_secs(20));
-    for (session_id, source) in expired {
+    for (client_id, session_id, source) in expired {
+        if let Err(error) =
+            super::playback_control_disconnect::cancel(state, &format!("hardware:{client_id}"))
+        {
+            tracing::error!(error=%error.message,"Expired OSC held controls could not be fully released");
+        }
         state
             .integrations
             .remove_suppression_source(session_id, source);
@@ -48,7 +53,13 @@ pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {
         let Some(desk) = osc_control_desk(state) else {
             continue;
         };
-        let page = state.installation.desk_page(desk.id, show.id).unwrap_or(1);
+        let page = state
+            .installation
+            .playback_surfaces(desk.id)
+            .ok()
+            .and_then(|surfaces| light_show::resolve_playback_surface_pages(&surfaces).ok())
+            .and_then(|pages| pages.get(&desk.surface_id).copied())
+            .unwrap_or(1);
         let selected = state
             .installation
             .selected_playback(desk.id, show.id)
@@ -67,7 +78,9 @@ pub(super) fn send_osc_feedback(state: &AppState, _full: bool) {
             subscriber: &subscriber,
             desk: &desk,
             page,
-            selected_playback: selected,
+            selected_playback: selected.and_then(|selection| {
+                light_playback::PlaybackAddress::new(selection.page, selection.position).ok()
+            }),
             snapshot: &snapshot,
             runtime: &runtime,
             speed_groups: &speed_groups,

@@ -3,19 +3,19 @@ use super::*;
 pub(super) fn predicted_preload_temp_state(
     state: &AppState,
     session: SessionId,
-    number: u16,
+    address: light_playback::PlaybackAddress,
 ) -> bool {
     let mut active = state
         .output
         .playback_runtime_status()
         .into_iter()
-        .find(|status| status.playback.playback_number == Some(number))
+        .find(|status| status.playback.playback_address == Some(address))
         .is_some_and(|status| status.temporary_active);
     if let Some(programmer) = state.programming.get(session) {
         for pending in programmer
             .preload_playback_pending
             .iter()
-            .filter(|pending| pending.playback_number == number)
+            .filter(|pending| pending.address == address)
         {
             match pending.action.legacy_name() {
                 "temp-on" => active = true,

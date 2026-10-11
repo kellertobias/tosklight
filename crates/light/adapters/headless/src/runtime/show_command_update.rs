@@ -71,68 +71,63 @@ fn parse_mode(
 
 fn playback_definition(
     snapshot: &EngineSnapshot,
-    number: u16,
+    address: light_playback::PlaybackAddress,
 ) -> Option<&light_playback::PlaybackDefinition> {
     snapshot
-        .playbacks
+        .playback_pages
         .iter()
-        .find(|definition| definition.number == number)
-        .or_else(|| {
-            snapshot
-                .playback_pages
-                .iter()
-                .find_map(|page| page.virtual_playbacks.get(&number))
-        })
+        .find(|page| page.number == address.page())
+        .and_then(|page| page.assignments.get(&address.position()))
 }
-
 pub(super) fn cuelist_pool_id(
     snapshot: &EngineSnapshot,
     number: u16,
 ) -> Result<light_core::CueListId, String> {
-    let catalog = light_playback::CueListPoolCatalog::build(
-        snapshot.cue_lists.as_slice(),
-        snapshot.playbacks.as_slice(),
-        false,
-    )?;
-    catalog
+    let assignments: Vec<_> = snapshot
+        .playback_pages
+        .iter()
+        .flat_map(|page| {
+            page.assignments.iter().map(move |(position, definition)| {
+                (
+                    light_playback::PlaybackAddress::new(page.number, *position)
+                        .expect("validated snapshot"),
+                    definition.clone(),
+                )
+            })
+        })
+        .collect();
+    light_playback::CueListPoolCatalog::build(&snapshot.cue_lists, &assignments, false)?
         .resolve(number)
         .ok_or_else(|| format!("Cuelist {number} does not exist"))
 }
-
 fn playback_cue_list_id(
     snapshot: &EngineSnapshot,
-    number: u16,
+    address: light_playback::PlaybackAddress,
 ) -> Result<light_core::CueListId, String> {
-    let definition = playback_definition(snapshot, number)
-        .ok_or_else(|| format!("playback {number} does not exist"))?;
+    let definition = playback_definition(snapshot, address)
+        .ok_or_else(|| format!("Playback {address} does not exist"))?;
     let light_playback::PlaybackTarget::CueList { cue_list_id } = definition.target else {
-        return Err(format!("playback {number} is not assigned to a Cuelist"));
+        return Err(format!("Playback {address} is not assigned to a Cuelist"));
     };
     Ok(cue_list_id)
 }
-
-fn playback_number(
+fn playback_address(
     state: &AppState,
     session: &Session,
-    snapshot: &EngineSnapshot,
+    _snapshot: &EngineSnapshot,
     target: CommandPlaybackTarget,
-) -> Result<u16, String> {
-    match target {
-        CommandPlaybackTarget::CurrentPage { slot } => {
-            let show = state
-                .active_show
-                .current()
-                .clone()
-                .ok_or("no show is open")?;
-            let page = state
+) -> Result<light_playback::PlaybackAddress, String> {
+    let (page, position) = match target {
+        CommandPlaybackTarget::CurrentPage { position } => (
+            state
                 .installation
-                .desk_page(session.desk.id, show.id)
-                .unwrap_or(1);
-            page_playback(snapshot, page, slot)
-        }
-        CommandPlaybackTarget::ExplicitPage { page, slot } => page_playback(snapshot, page, slot),
-        CommandPlaybackTarget::Virtual(address) => Ok(address.number().get()),
-    }
+                .command_page(session.desk.id)
+                .map_err(|error| error.to_string())?,
+            position,
+        ),
+        CommandPlaybackTarget::ExplicitPage { page, position } => (page, position),
+    };
+    light_playback::PlaybackAddress::new(page, position)
 }
 
 fn parse_cue_number(tokens: &[String]) -> Result<light_playback::CueNumber, String> {
@@ -165,7 +160,7 @@ fn parse_cue_number(tokens: &[String]) -> Result<light_playback::CueNumber, Stri
 fn explicit_cue_request(
     snapshot: &EngineSnapshot,
     cue_list_id: light_core::CueListId,
-    playback_number: Option<u16>,
+    playback_address: Option<light_playback::PlaybackAddress>,
     number: light_playback::CueNumber,
     mode: CommandUpdateMode,
 ) -> Result<UpdateApiRequest, String> {
@@ -183,7 +178,7 @@ fn explicit_cue_request(
         target: UpdateApiTarget {
             family: UpdateApiTargetFamily::Cue,
             object_id: Some(cue_list_id.0.to_string()),
-            playback_number,
+            playback_address,
             cue_id: Some(cue.id),
             cue_number: Some(cue.number.to_string()),
             validate_active_context: false,
@@ -219,6 +214,7 @@ fn selected_cue_request(
         .selected_playback(session.desk.id, show.id)
         .map_err(|error| error.to_string())?
         .ok_or("no Cuelist is selected; select one with CUELIST or PBK")?;
+    let playback = light_playback::PlaybackAddress::new(playback.page, playback.position)?;
     explicit_cue_request(
         snapshot,
         playback_cue_list_id(snapshot, playback)?,
@@ -259,15 +255,15 @@ fn playback_cue_request(
 ) -> Result<UpdateApiRequest, String> {
     let (target, rest) = playback_address_command::parse(tokens)?;
     if !rest.is_empty() {
-        return Err("PBK and VPBK Update the current Cue; remove the extra Cue address".into());
+        return Err("PBK Update the current Cue; remove the extra Cue address".into());
     }
-    let playback = playback_number(state, session, snapshot, target)?;
+    let playback = playback_address(state, session, snapshot, target)?;
     let cue_list_id = playback_cue_list_id(snapshot, playback)?;
     Ok(UpdateApiRequest {
         target: UpdateApiTarget {
             family: UpdateApiTargetFamily::Cue,
             object_id: Some(cue_list_id.0.to_string()),
-            playback_number: Some(playback),
+            playback_address: Some(playback),
             cue_id: None,
             cue_number: None,
             validate_active_context: false,
@@ -324,7 +320,7 @@ fn object_update_request(
         target: UpdateApiTarget {
             family,
             object_id: Some(object_id),
-            playback_number: None,
+            playback_address: None,
             cue_id: None,
             cue_number: None,
             validate_active_context: false,
@@ -345,10 +341,10 @@ pub(super) fn update_request(
     let default = super::command_http::record_update_option::update_default(state);
     let (mode, target) = parse_mode(body, default);
     match target.first().map(String::as_str) {
-        None => Err("UPDATE requires CUE, CUELIST, PBK, VPBK, GROUP, or a Preset address".into()),
+        None => Err("UPDATE requires CUE, CUELIST, PBK, GROUP, or a Preset address".into()),
         Some("CUE") => selected_cue_request(state, session, snapshot, &target[1..], mode),
         Some("CUELIST") => cuelist_cue_request(snapshot, &target[1..], mode),
-        Some("PBK" | "VPBK") => playback_cue_request(state, session, snapshot, target, mode),
+        Some("PBK") => playback_cue_request(state, session, snapshot, target, mode),
         _ => object_update_request(target, mode),
     }
 }

@@ -25,12 +25,11 @@ pub(super) use programmer::{control_action_programmer_values, profile_head_owner
 
 #[derive(Debug)]
 pub(super) struct StagedPreloadPlaybackAction {
-    pub(super) playback_number: u16,
-    pub(super) page: Option<u8>,
+    pub(super) address: light_playback::PlaybackAddress,
     pub(super) action: light_programmer::PreloadPlaybackQueueAction,
-    pub(super) surface: light_programmer::PreloadPlaybackQueueSurface,
+    pub(super) control_source: light_playback::PlaybackControlSource,
     pub(super) addressed_effect_changed: bool,
-    pub(super) released_playbacks: Vec<u16>,
+    pub(super) released_playbacks: Vec<light_playback::PlaybackAddress>,
 }
 
 pub(super) fn preload_batch_commands(
@@ -66,15 +65,11 @@ pub(super) fn preload_batch_commands(
                 light_programmer::PreloadPlaybackQueueAction::DynamicLearnSpeed => {
                     PlaybackBatchAction::DynamicLearnSpeed
                 }
-                light_programmer::PreloadPlaybackQueueAction::Fader { value_permyriad } => {
-                    PlaybackBatchAction::SetFader { value_permyriad }
-                }
             };
             Ok(PlaybackBatchCommand {
-                number: pending.playback_number,
-                page: pending.page,
+                address: pending.address,
+                control_source: pending.control_source.clone(),
                 action,
-                exclusion_zones: std::sync::Arc::default(),
                 activation_origin: None,
             })
         })
@@ -96,12 +91,11 @@ fn staged_preload_action(
     pending: &light_programmer::PreloadPlaybackAction,
     outcome: &PlaybackBatchOutcome,
 ) -> StagedPreloadPlaybackAction {
-    debug_assert_eq!(pending.playback_number, outcome.number);
+    debug_assert_eq!(pending.address, outcome.address);
     StagedPreloadPlaybackAction {
-        playback_number: pending.playback_number,
-        page: pending.page,
+        address: pending.address,
         action: pending.action,
-        surface: pending.surface,
+        control_source: pending.control_source.clone(),
         addressed_effect_changed: outcome.addressed_effect.changed(),
         released_playbacks: outcome.released_playbacks.clone(),
     }

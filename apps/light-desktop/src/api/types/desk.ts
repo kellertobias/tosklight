@@ -1,3 +1,4 @@
+import type { PlaybackSurfacesSnapshot } from "../generated/light-wire";
 export interface ShowEntry {
     description?: string;
 	is_base_show?: boolean;
@@ -75,18 +76,7 @@ export interface ProgrammerState {
 		>
 	>;
 	preload_group_active?: Record<string, Record<string, unknown>>;
-	preload_playback_pending?: Array<{
-		playback_number: number;
-		action:
-			| "toggle"
-			| "go"
-			| "go-minus"
-			| "off"
-			| "on"
-			| "temp-on"
-			| "temp-off";
-		surface: "physical" | "virtual" | string;
-	}>;
+	preload_playback_pending?: Array<{address: {page: number; position: number}; action: string}>;
 	group_values?: Record<
 		string,
 		Record<
@@ -188,7 +178,7 @@ export interface ControlDesk {
 	columns: number;
 	rows: number;
 	buttons: number;
-	playback_layout?: PlaybackSurfaceLayout | null;
+	surface_id: string;
 	hardware_led_brightness?: number;
 	hardware_gooseneck_brightness?: number;
 	hardware_gooseneck_color?: number;
@@ -198,16 +188,7 @@ export type HardwareLightingPatch = Partial<Pick<ControlDesk,
 	"hardware_led_brightness" | "hardware_gooseneck_brightness" | "hardware_gooseneck_color"
 >>;
 
-export interface PlaybackSurfaceRow {
-	first_playback_slot: number;
-	has_fader: boolean;
-	button_count: number;
-}
-
-export interface PlaybackSurfaceLayout {
-	playbacks_per_row: number;
-	rows: PlaybackSurfaceRow[];
-}
+export type { PlaybackSurfaceRow, PlaybackSurfaceLayout, PlaybackPageSource, PlaybackSurfaceConfiguration } from "@tosklight/ui/playback";
 
 export type FixedScreenFixtureSheetColumn =
 	| "id"
@@ -275,10 +256,7 @@ export interface ScreenConfiguration {
 	content: ScreenContent;
 	show_dock: boolean;
 	show_playbacks: boolean;
-	playback_count: number;
-	playback_rows: number;
-	first_playback_slot: number;
-	page_mode: "follow_main" | "independent";
+	surface_id: string;
 	show_page_controls: boolean;
 	/** Programmer command line above this screen's encoders. */
 	show_programmer: boolean;
@@ -291,12 +269,11 @@ export interface ScreenConfiguration {
 	display_id: string | null;
 	bounds: { x: number; y: number; width: number; height: number } | null;
 	fullscreen: boolean;
-	playback_layout?: PlaybackSurfaceLayout | null;
 }
 
 export interface ScreenSnapshot {
 	screens: ScreenConfiguration[];
-	active_pages: Record<string, number>;
+	surfaces: PlaybackSurfacesSnapshot;
 	programmer_control_surface: ProgrammerControlSurfaceConfiguration;
 }
 

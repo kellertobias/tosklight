@@ -50,7 +50,7 @@ fn apply_snap_attributes(generation: &RuntimeGeneration, candidate: &mut MoveInB
 
 fn candidate_key(candidate: &MoveInBlackCandidate) -> MoveInBlackKey {
     MoveInBlackKey {
-        playback_number: candidate.playback_number,
+        playback_address: candidate.playback_address,
         cue_list_id: candidate.cue_list_id,
         fixture_id: candidate.fixture_id,
     }

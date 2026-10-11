@@ -124,7 +124,10 @@ pub(super) fn validate_lights(
     let mut endpoints = BTreeSet::new();
     let mut result = Vec::with_capacity(lights.len());
     for light in lights {
-        if light.endpoint_id == 0 || light.endpoint_id == AGGREGATOR_ENDPOINT_ID {
+        if light.endpoint_id == 0
+            || light.endpoint_id == AGGREGATOR_ENDPOINT_ID
+            || light.endpoint_id == u16::MAX
+        {
             return Err(format!(
                 "Matter playback endpoint {} is reserved",
                 light.endpoint_id

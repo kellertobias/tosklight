@@ -6,7 +6,7 @@
 //! [`MatterBridgeAdapter::status`] as its endpoint/attribute snapshot and routes controller writes
 //! through [`MatterBridgeAdapter::resolve_write`].
 
-use light_playback::{MAX_PAGE_SLOTS, MAX_PLAYBACK_PAGES, PlaybackDefinition, PlaybackPage};
+use light_playback::{PlaybackAddress, PlaybackPage};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -110,10 +110,7 @@ pub enum MatterTransportState {
 pub struct MatterPlaybackLight {
     /// Stable Matter endpoint ID derived from the explicit page/playback address.
     pub endpoint_id: u16,
-    pub page: u8,
-    pub playback: u8,
-    /// Playback-pool number currently assigned to this explicit address.
-    pub playback_number: u16,
+    pub address: PlaybackAddress,
     pub name: String,
     pub on: bool,
     /// Matter Level Control value in the inclusive range `0..=254`.
@@ -204,9 +201,7 @@ impl MatterColorWrite {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ResolvedMatterPlaybackWrite {
     pub endpoint_id: u16,
-    pub page: u8,
-    pub playback: u8,
-    pub playback_number: u16,
+    pub address: PlaybackAddress,
     pub level: f32,
     pub color: Option<MatterColorWrite>,
 }
@@ -240,18 +235,90 @@ impl std::fmt::Display for MatterBridgeError {
 #[derive(Debug, Default)]
 pub struct MatterBridgeAdapter {
     status: RwLock<MatterBridgeStatus>,
+    allocations: RwLock<Vec<MatterEndpointAllocation>>,
 }
 
 impl MatterBridgeAdapter {
+    /// Persist reservations before exposing newly allocated endpoints to the transport.
+    pub fn reconcile_persisted(
+        &self,
+        enabled: bool,
+        pages: &[PlaybackPage],
+        values: &HashMap<PlaybackAddress, PlaybackValue>,
+        saved: Option<&str>,
+        persist: impl FnOnce(&str) -> Result<(), String>,
+    ) -> MatterBridgeStatus {
+        if !enabled {
+            return self.reconcile(false, pages, values);
+        }
+        let result = (|| {
+            let previous: Vec<MatterEndpointAllocation> = saved
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|error| format!("Cannot read saved Matter endpoint allocation: {error}"))?
+                .unwrap_or_default();
+            let mut cached = self.allocations.write();
+            let mut merged = previous.clone();
+            for allocation in cached.iter() {
+                if !merged.contains(allocation) {
+                    merged.push(allocation.clone());
+                }
+            }
+            let next = allocate_endpoints(pages, values, &merged)?;
+            if next != previous {
+                let serialized = serde_json::to_string(&next).map_err(|error| error.to_string())?;
+                persist(&serialized)?;
+            }
+            *cached = next;
+            Ok::<_, String>(())
+        })();
+        match result {
+            Ok(()) => {
+                {
+                    let mut status = self.status.write();
+                    if status.transport == MatterTransportState::Failed {
+                        status.transport = MatterTransportState::AdapterReady;
+                        status.limitation = None;
+                    }
+                }
+                self.reconcile(true, pages, values)
+            }
+            Err(error) => self.fail(error),
+        }
+    }
+
+    pub fn fail(&self, error: String) -> MatterBridgeStatus {
+        let mut status = self.status.write();
+        let changed = status.transport != MatterTransportState::Failed
+            || !status.lights.is_empty()
+            || status.limitation.as_deref() != Some(error.as_str());
+        status.enabled = true;
+        status.transport = MatterTransportState::Failed;
+        status.lights.clear();
+        status.commissionable = false;
+        status.network_running = false;
+        if changed {
+            status.revision = status.revision.saturating_add(1);
+        }
+        status.limitation = Some(error);
+        status.clone()
+    }
+
     pub fn reconcile(
         &self,
         enabled: bool,
         pages: &[PlaybackPage],
-        definitions: &[PlaybackDefinition],
-        values: &HashMap<u16, PlaybackValue>,
+        values: &HashMap<PlaybackAddress, PlaybackValue>,
     ) -> MatterBridgeStatus {
+        if enabled {
+            let next = allocate_endpoints(pages, values, &self.allocations.read());
+            match next {
+                Ok(next) => *self.allocations.write() = next,
+                Err(error) => return self.fail(error),
+            }
+        }
         let mut lights = if enabled {
-            build_lights(pages, definitions, values)
+            build_lights(pages, values, &self.allocations.read())
         } else {
             Vec::new()
         };
@@ -459,42 +526,84 @@ impl MatterBridgeAdapter {
         };
         Ok(ResolvedMatterPlaybackWrite {
             endpoint_id,
-            page: light.page,
-            playback: light.playback,
-            playback_number: light.playback_number,
+            address: light.address,
             level: f32::from(matter_level) / f32::from(MAX_MATTER_LEVEL),
             color: write.color,
         })
     }
 }
 
-/// Endpoint zero is the Matter root endpoint, so explicit playback addresses start at one.
-pub fn endpoint_id(page: u8, playback: u8) -> Option<u16> {
-    if !(1..=MAX_PLAYBACK_PAGES).contains(&page) || !(1..=MAX_PAGE_SLOTS).contains(&playback) {
-        return None;
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MatterEndpointAllocation {
+    pub address: PlaybackAddress,
+    pub endpoint_id: u16,
+}
+
+/// Keep removed addresses reserved so removing and restoring an assignment cannot redirect a
+/// commissioned controller to another playback. The root, aggregator and null endpoint IDs are reserved.
+fn allocate_endpoints(
+    pages: &[PlaybackPage],
+    values: &HashMap<PlaybackAddress, PlaybackValue>,
+    saved: &[MatterEndpointAllocation],
+) -> Result<Vec<MatterEndpointAllocation>, String> {
+    let mut addresses = std::collections::BTreeSet::new();
+    let mut endpoints = std::collections::BTreeSet::new();
+    for allocation in saved {
+        if allocation.endpoint_id == 0
+            || allocation.endpoint_id >= 0xfffe
+            || !addresses.insert(allocation.address)
+            || !endpoints.insert(allocation.endpoint_id)
+        {
+            return Err(
+                "Saved Matter endpoint allocation contains a reserved ID or duplicate address/ID"
+                    .into(),
+            );
+        }
     }
-    Some(1 + u16::from(page - 1) * u16::from(MAX_PAGE_SLOTS) + u16::from(playback - 1))
+    let required = pages
+        .iter()
+        .flat_map(|page| {
+            page.assignments
+                .keys()
+                .filter_map(move |position| PlaybackAddress::new(page.number, *position).ok())
+        })
+        .filter(|address| values.contains_key(address))
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut result = saved.to_vec();
+    let mut available = (1..0xfffe).filter(|id| !endpoints.contains(id));
+    for address in required {
+        if addresses.contains(&address) {
+            continue;
+        }
+        let endpoint_id = available.next().ok_or_else(||
+            "Matter endpoint capacity is exhausted; remove unused saved endpoint reservations or reduce exposed assignments".to_string())?;
+        result.push(MatterEndpointAllocation {
+            address,
+            endpoint_id,
+        });
+    }
+    Ok(result)
 }
 
 fn build_lights(
     pages: &[PlaybackPage],
-    definitions: &[PlaybackDefinition],
-    values: &HashMap<u16, PlaybackValue>,
+    values: &HashMap<PlaybackAddress, PlaybackValue>,
+    allocations: &[MatterEndpointAllocation],
 ) -> Vec<MatterPlaybackLight> {
-    let definitions = definitions
+    let endpoints = allocations
         .iter()
-        .map(|definition| (definition.number, definition))
+        .map(|entry| (entry.address, entry.endpoint_id))
         .collect::<HashMap<_, _>>();
     let mut lights = BTreeMap::new();
     for page in pages {
-        for (&playback, &playback_number) in &page.slots {
-            let Some(endpoint_id) = endpoint_id(page.number, playback) else {
+        for (&position, definition) in &page.assignments {
+            let Ok(address) = PlaybackAddress::new(page.number, position) else {
                 continue;
             };
-            let Some(definition) = definitions.get(&playback_number) else {
+            let Some(&endpoint_id) = endpoints.get(&address) else {
                 continue;
             };
-            let Some(value) = values.get(&playback_number).copied() else {
+            let Some(value) = values.get(&address).copied() else {
                 continue;
             };
             let normalized = if value.active && value.level.is_finite() {
@@ -515,12 +624,10 @@ fn build_lights(
                 endpoint_id,
                 MatterPlaybackLight {
                     endpoint_id,
-                    page: page.number,
-                    playback,
-                    playback_number,
+                    address,
                     name: format!(
                         "Page {} Playback {}: {}",
-                        page.number, playback, definition.name
+                        page.number, position, definition.name
                     ),
                     on: value.active && level > 0,
                     level,

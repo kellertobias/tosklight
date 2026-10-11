@@ -3,7 +3,8 @@ use light_playback::{
     PlaybackCueReference as DomainPlaybackCueReference,
 };
 pub use light_playback::{
-    PhysicalPlaybackNumber, PlaybackIdentity, VirtualPlaybackAddress, VirtualPlaybackNumber,
+    PlaybackControlKey, PlaybackControlSource, PlaybackPositionRange, PlaybackPreloadScope,
+    PlaybackSoloRegion,
 };
 use std::sync::Arc;
 
@@ -20,7 +21,7 @@ mod transition_set;
 pub use command::{
     CueNumber, PendingPlaybackAction, PlaybackAction, PlaybackAddress, PlaybackCommand,
     PlaybackDurability, PlaybackExecution, PlaybackLevel, PlaybackOutcome, PlaybackRelatedResult,
-    PlaybackResult, PlaybackSurface, ResolvedPlaybackAddress,
+    PlaybackResult, ResolvedPlaybackAddress,
 };
 pub use event::{
     PlaybackCueTransition, PlaybackRuntimeChange, PlaybackTransitionCause,
@@ -82,7 +83,7 @@ fn automatic_playback_event(change: AutomaticPlaybackProjection) -> EventDraft {
         PlaybackRuntimeChange {
             projection: change.projection,
             transition: Some(PlaybackCueTransition {
-                playback_number: transition.playback_number,
+                playback_address: transition.playback_address,
                 cue_list_id: transition.cue_list_id.0,
                 previous: Some(cue_reference(transition.previous)),
                 current: Some(cue_reference(transition.current)),
@@ -128,7 +129,7 @@ mod tests {
         let cue_list_id = Default::default();
         let drafts =
             automatic_playback_events([automatic_projection(AutomaticPlaybackTransition {
-                playback_number: Some(12),
+                playback_address: Some(light_playback::PlaybackAddress::new(2, 12).unwrap()),
                 cue_list_id,
                 previous: domain_cue(2, 1.0),
                 current: domain_cue(3, 4.0),
@@ -165,7 +166,7 @@ mod tests {
         let published = publish_automatic_playback_events(
             &bus,
             [automatic_projection(AutomaticPlaybackTransition {
-                playback_number: None,
+                playback_address: None,
                 cue_list_id: Default::default(),
                 previous: domain_cue(1, 1.0),
                 current: domain_cue(2, 2.0),
@@ -190,7 +191,7 @@ mod tests {
     fn automatic_projection(
         transition: AutomaticPlaybackTransition,
     ) -> AutomaticPlaybackProjection {
-        let requested = transition.playback_number.map_or(
+        let identity = transition.playback_address.map_or(
             PlaybackRuntimeIdentity::CueList(transition.cue_list_id),
             PlaybackRuntimeIdentity::Playback,
         );
@@ -200,8 +201,7 @@ mod tests {
                     show_id: Uuid::nil(),
                     show_revision: 0,
                 },
-                requested,
-                playback_number: transition.playback_number,
+                identity,
                 target: PlaybackTargetProjection::CueList {
                     cue_list_id: transition.cue_list_id,
                     runtime: None,

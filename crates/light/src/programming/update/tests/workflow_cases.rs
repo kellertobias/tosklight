@@ -5,13 +5,13 @@ fn pool_cuelist_requires_one_concrete_active_playback_context() {
     let cue_list_id = CueListId(Uuid::from_u128(10));
     let contexts = vec![
         ActiveCueContext {
-            playback_number: 1,
+            playback_address: light_playback::PlaybackAddress::new(1, 1).unwrap(),
             cue_list_id,
             cue_id: Uuid::from_u128(11),
             cue_number: crate::CueNumber::try_from_legacy_f64(1.0).unwrap(),
         },
         ActiveCueContext {
-            playback_number: 2,
+            playback_address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
             cue_list_id,
             cue_id: Uuid::from_u128(12),
             cue_number: crate::CueNumber::try_from_legacy_f64(2.0).unwrap(),
@@ -25,11 +25,16 @@ fn pool_cuelist_requires_one_concrete_active_playback_context() {
         })
     );
     let concrete = resolve_cue_target(
-        &CueTargetRequest::ActivePlayback { playback_number: 2 },
+        &CueTargetRequest::ActivePlayback {
+            playback_address: light_playback::PlaybackAddress::new(1, 2).unwrap(),
+        },
         &contexts,
     )
     .unwrap();
-    assert_eq!(concrete.playback_number, Some(2));
+    assert_eq!(
+        concrete.playback_address,
+        Some(light_playback::PlaybackAddress::new(1, 2).unwrap())
+    );
     assert_eq!(
         concrete.cue_number,
         crate::CueNumber::try_from_legacy_f64(2.0).unwrap()

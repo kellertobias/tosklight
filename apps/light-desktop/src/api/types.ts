@@ -75,7 +75,7 @@ export type UpdateMode =
 export interface UpdateTargetRequest {
 	family: UpdateTargetFamily;
 	object_id: string;
-	playback_number?: number;
+	playback_address?: {page: number; position: number};
 	cue_id?: string;
 	cue_number?: string;
 	validate_active_context?: boolean;
@@ -102,7 +102,7 @@ export interface UpdateTargetIdentity {
 	family: UpdateTargetFamily;
 	object_id: string;
 	name: string;
-	playback_number?: number;
+	playback_address?: {page: number; position: number};
 	cue?: UpdateCueIdentity;
 }
 

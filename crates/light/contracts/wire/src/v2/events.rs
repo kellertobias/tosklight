@@ -4,6 +4,7 @@ use super::{
     command_line::ProgrammingInteractionChange,
     macros::MacroExecutionSnapshot,
     playback::{PlaybackDeskProjection, PlaybackRuntimeChange, PlaybackTelemetryTick},
+    playback_solo::PlaybackSoloRegionsChange,
     preload_playback_queue::ProgrammingPreloadPlaybackQueueChange,
     preload_values::ProgrammingPreloadValuesChange,
     programmer_lifecycle::ProgrammingLifecycleChange,
@@ -13,7 +14,6 @@ use super::{
     schedules::ScheduleRuntimeChange,
     speed_group::SpeedGroupChange,
     timecode::TimecodeTransportSnapshot,
-    virtual_playback_zones::VirtualPlaybackExclusionZonesChange,
 };
 
 use schemars::JsonSchema;
@@ -243,8 +243,11 @@ pub enum EventPayload {
     SelectiveImportApplied {
         change: Box<SelectiveImportChange>,
     },
-    VirtualPlaybackExclusionZonesChanged {
-        change: VirtualPlaybackExclusionZonesChange,
+    PlaybackPreloadScopeChanged {
+        change: super::playback::PlaybackPreloadScopeChange,
+    },
+    PlaybackSoloRegionsChanged {
+        change: PlaybackSoloRegionsChange,
     },
     HighlightChanged {
         change: HighlightChange,
@@ -336,8 +339,7 @@ pub struct ArchitectSyncNotification {
 #[serde(rename_all = "snake_case")]
 pub enum ScreenNotificationKind {
     Configuration,
-    ScreenPage,
-    PlaybackPage,
+    PlaybackSurfaces,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -458,10 +460,7 @@ pub struct GroupConfigurationNotification {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PlaybackConfigurationNotification {
     pub desk_id: String,
-    pub addressing: String,
-    pub page: Option<u8>,
-    pub slot: Option<u8>,
-    pub playback: Option<u16>,
+    pub address: super::playback::PlaybackAddressValue,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -476,7 +475,7 @@ pub enum UpdateTargetFamilyNotification {
 pub struct UpdateTargetNotification {
     pub family: UpdateTargetFamilyNotification,
     pub object_id: String,
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<super::playback::PlaybackAddressValue>,
     pub cue_id: Option<String>,
     pub cue_number: Option<String>,
     pub validate_active_context: Option<bool>,
@@ -689,14 +688,6 @@ pub enum ShowObjectChange {
         body: Option<serde_json::Value>,
         deleted: bool,
     },
-    Playback {
-        object_id: String,
-        #[ts(type = "number")]
-        object_revision: u64,
-        #[ts(type = "unknown | null")]
-        body: Option<serde_json::Value>,
-        deleted: bool,
-    },
     PlaybackPage {
         object_id: String,
         #[ts(type = "number")]
@@ -756,7 +747,6 @@ pub enum ShowObjectKind {
     Group,
     Macro,
     PatchLayer,
-    Playback,
     PlaybackPage,
     Preset,
     Psn,
@@ -874,12 +864,6 @@ mod show_object_tests {
                 body: Some(json!({"id":"main"})),
                 deleted: false,
             },
-            ShowObjectChange::Playback {
-                object_id: "1".into(),
-                object_revision: 1,
-                body: Some(json!({"number":1})),
-                deleted: false,
-            },
             ShowObjectChange::PlaybackPage {
                 object_id: "1".into(),
                 object_revision: 1,
@@ -910,7 +894,6 @@ mod show_object_tests {
             "cue_list",
             "group",
             "patch_layer",
-            "playback",
             "playback_page",
             "preset",
             "stage_layout",

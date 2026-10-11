@@ -704,10 +704,12 @@ fn adapter_rejects_foreign_programmer_and_uncaptured_queue_before_touching_branc
     assert!(matches!(result, Err(ref reason) if reason.contains("another Programmer")));
     assert!(rig.programmers.queue_preload_playback_action(
         rig.session,
-        1,
-        None,
+        light_playback::PlaybackAddress::new(1, 1).unwrap(),
         light_programmer::PreloadPlaybackQueueAction::Go,
-        light_programmer::PreloadPlaybackQueueSurface::Physical
+        light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 1
+        }
     ));
     let queued = rig.capture();
     let mut evaluator =

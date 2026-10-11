@@ -137,7 +137,7 @@ pub struct UpdateTargetIdentity {
     pub object_id: String,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cue: Option<CueIdentity>,
 }
@@ -148,7 +148,7 @@ impl UpdateTargetIdentity {
             family: UpdateTargetFamily::Cue,
             object_id: cue_list.id.0.to_string(),
             name: cue_list.name.clone(),
-            playback_number: target.playback_number,
+            playback_address: target.playback_address,
             cue: Some(CueIdentity {
                 id: current_cue.id,
                 number: current_cue.number.clone(),
@@ -161,7 +161,7 @@ impl UpdateTargetIdentity {
             family: UpdateTargetFamily::Preset,
             object_id: id.to_owned(),
             name: preset.name.clone(),
-            playback_number: None,
+            playback_address: None,
             cue: None,
         }
     }
@@ -171,7 +171,7 @@ impl UpdateTargetIdentity {
             family: UpdateTargetFamily::Group,
             object_id: group.id.clone(),
             name: group.name.clone(),
-            playback_number: None,
+            playback_address: None,
             cue: None,
         }
     }

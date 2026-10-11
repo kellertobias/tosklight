@@ -39,54 +39,22 @@ fn exclusion_candidates_match_only_interactions_that_can_activate() {
 }
 
 #[test]
-fn dedicated_virtual_runtime_never_collapses_unsupported_buttons_to_pool_actions() {
+fn configured_dispatch_preserves_button_configuration_without_identity_specific_mapping() {
     let mut definition = test_definition();
-    definition.number = 1_001;
     definition.button_count = 1;
-    definition.buttons = [
-        light_playback::PlaybackButtonAction::Toggle,
-        light_playback::PlaybackButtonAction::None,
-        light_playback::PlaybackButtonAction::None,
-    ];
-    assert_eq!(
-        virtual_runtime_action(
-            &definition,
-            PlaybackAction::ConfiguredButton {
-                number: 1,
-                pressed: true,
-            }
-        )
-        .unwrap(),
-        Some(VirtualPlaybackAction::Toggle)
-    );
-    assert_eq!(
-        virtual_runtime_action(
-            &definition,
-            PlaybackAction::ConfiguredButton {
-                number: 1,
-                pressed: false,
-            }
-        )
-        .unwrap(),
-        None
-    );
-
-    definition.buttons[0] = light_playback::PlaybackButtonAction::Select;
-    assert!(
-        virtual_runtime_action(
-            &definition,
-            PlaybackAction::ConfiguredButton {
-                number: 1,
-                pressed: true,
-            }
-        )
-        .is_err()
-    );
+    for button in [light_playback::PlaybackButtonAction::Toggle,light_playback::PlaybackButtonAction::Select] {
+        definition.buttons[0] = button;
+        for pressed in [true,false] {
+            let (resolved, action) = super::configured_controls::configured_control_definition(&definition, PlaybackAction::ConfiguredButton {number:1,pressed}).unwrap();
+            assert_eq!(resolved.buttons[0], button);
+            let (name,input) = super::conversion::dispatch_action_input(action);
+            assert_eq!(name,"button");assert_eq!(input.button,Some(1));assert_eq!(input.pressed,Some(pressed));
+        }
+    }
 }
 
 fn test_definition() -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
-        number: 1,
         name: "test".into(),
         target: light_playback::PlaybackTarget::CueList {
             cue_list_id: light_core::CueListId::new(),

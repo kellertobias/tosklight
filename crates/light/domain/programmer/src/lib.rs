@@ -82,7 +82,7 @@ pub use output_capture::{
     ProgrammerOutputSourceCapture, ProgrammerPreloadOutputSource, ProgrammerPreloadPendingOutput,
 };
 pub use preload::PreloadPlaybackAction;
-pub use preload_playback_queue::{PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface};
+pub use preload_playback_queue::PreloadPlaybackQueueAction;
 pub use preload_release::{ReleasedPreloadColors, ReleasedPreloadFixtureColor};
 pub use preload_values::{
     PreloadProgrammerFixtureValue, PreloadProgrammerGroupValue, PreloadProgrammerValueMutation,

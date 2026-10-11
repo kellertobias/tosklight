@@ -2,7 +2,6 @@ import type { DynamicDefinitionProjection } from "../../api/types";
 import type {
 	CueList,
 	PatchLayer,
-	PlaybackDefinition,
 	PlaybackPage,
 	StoredGroup,
 	StoredPreset,
@@ -16,7 +15,6 @@ export type ShowObjectKind =
 	| "preset"
 	| "cue_list"
 	| "patch_layer"
-	| "playback"
 	| "playback_page"
 	| "stage_layout"
 	| "user_layout";
@@ -27,7 +25,6 @@ export interface ShowObjectBodies {
 	preset: StoredPreset;
 	cue_list: CueList;
 	patch_layer: PatchLayer;
-	playback: PlaybackDefinition;
 	playback_page: PlaybackPage;
 	stage_layout: StoredStageLayout;
 	user_layout: StoredDeskLayout;

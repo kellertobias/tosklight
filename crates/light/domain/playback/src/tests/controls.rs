@@ -17,15 +17,17 @@ fn cue_jump_count_exhausts_then_continues_normally() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
 
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     assert_eq!(
         engine.runtime()[0].current_cue_number,
         Some(cue_number(1.0))
     );
     for expected in [2.0, 1.0, 2.0, 1.0, 2.0, 3.0] {
-        engine.go_playback(1).unwrap();
+        engine.go_playback(address(1)).unwrap();
         assert_eq!(
             engine.runtime()[0].current_cue_number,
             Some(cue_number(expected))
@@ -51,11 +53,13 @@ fn each_jump_point_keeps_an_independent_runtime_count() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
 
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     for expected in [1.0, 2.0, 3.0] {
-        engine.go_playback(1).unwrap();
+        engine.go_playback(address(1)).unwrap();
         assert_eq!(
             engine.runtime()[0].current_cue_number,
             Some(cue_number(expected))
@@ -75,17 +79,19 @@ fn off_and_restart_reset_every_jump_count() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
 
-    engine.on(1).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.on(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(engine.jump_counts.values().next(), Some(&1));
-    engine.off(1).unwrap();
+    engine.off(address(1)).unwrap();
     assert!(engine.jump_counts.is_empty());
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     for expected in [2.0, 1.0, 2.0, 1.0] {
-        engine.go_playback(1).unwrap();
+        engine.go_playback(address(1)).unwrap();
         assert_eq!(
             engine.runtime()[0].current_cue_number,
             Some(cue_number(expected))
@@ -103,11 +109,13 @@ fn fast_forward_skips_and_resets_a_jump_point() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
 
-    engine.on(1).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.fast_forward_playback(1).unwrap();
+    engine.on(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.fast_forward_playback(address(1)).unwrap();
     assert_eq!(
         engine.runtime()[0].current_cue_number,
         Some(cue_number(3.0))
@@ -125,14 +133,16 @@ fn goto_resets_jump_points_that_it_bypasses() {
     let id = cue_list.id;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
 
-    engine.on(1).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
+    engine.on(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
     assert_eq!(engine.jump_counts.values().next(), Some(&1));
-    engine.go_playback(1).unwrap();
-    engine.goto_playback(1, cue_number(3.0)).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.goto_playback(address(1), cue_number(3.0)).unwrap();
     assert!(engine.jump_counts.is_empty());
 }
 
@@ -155,11 +165,11 @@ fn fast_navigation_bypasses_only_the_current_transition_timing() {
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     clock.advance_millis(20_000);
-    engine.fast_forward_playback(1).unwrap();
+    engine.fast_forward_playback(address(1)).unwrap();
     let pan = engine
         .contributions()
         .into_iter()
@@ -171,7 +181,7 @@ fn fast_navigation_bypasses_only_the_current_transition_timing() {
     assert_eq!(stored.changes[0].fade_millis, Some(8_000));
     assert_eq!(stored.changes[0].delay_millis, Some(4_000));
 
-    engine.fast_rewind_playback(1).unwrap();
+    engine.fast_rewind_playback(address(1)).unwrap();
     let pan = engine
         .contributions()
         .into_iter()
@@ -190,47 +200,55 @@ fn off_requires_zero_pickup_without_moving_the_recorded_fader() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
-    engine.set_master(1, 0.6).unwrap();
-    engine.on(1).unwrap();
-    engine.off(1).unwrap();
-    let identity = PlaybackIdentity::physical(1).unwrap();
-    let runtime = engine.runtime_status_at(identity).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.6)
+        .unwrap();
+    engine.on(address(1)).unwrap();
+    engine.off(address(1)).unwrap();
+    let identity = address(1);
+    let runtime = engine.runtime_status_for_playback(identity).unwrap();
     let runtime = &runtime.playback;
     assert_eq!(runtime.fader_position, 0.6);
     assert!(runtime.fader_pickup_required);
     assert_eq!(runtime.fader_pickup_target, Some(0.0));
 
-    engine.set_master(1, 0.9).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.9)
+        .unwrap();
     assert!(!engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 1.0);
     assert_eq!(
         engine
-            .runtime_status_at(identity)
+            .runtime_status_for_playback(identity)
             .unwrap()
             .playback
             .fader_pickup_target,
         Some(0.0)
     );
-    engine.set_master(1, 0.0).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.0)
+        .unwrap();
     assert!(
         !engine
-            .runtime_status_at(identity)
+            .runtime_status_for_playback(identity)
             .unwrap()
             .playback
             .fader_pickup_required
     );
     assert_eq!(
         engine
-            .runtime_status_at(identity)
+            .runtime_status_for_playback(identity)
             .unwrap()
             .playback
             .fader_pickup_target,
         None
     );
     assert!(!engine.runtime()[0].enabled);
-    engine.set_master(1, 0.4).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.4)
+        .unwrap();
     assert!(!engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 0.4);
 }
@@ -246,16 +264,16 @@ fn explicit_fader_activation_ignores_cuelist_zero_policy() {
     playback.auto_off = false;
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
-    engine.register_definition(playback).unwrap();
+    engine.register_definition(address(1), playback).unwrap();
 
     engine
-        .set_master_with_explicit_activation_mutation(1, 0.4)
+        .set_master_with_explicit_activation_mutation(address(1), 0.4)
         .unwrap();
     assert!(engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 0.4);
 
     engine
-        .set_master_with_explicit_activation_mutation(1, 0.0)
+        .set_master_with_explicit_activation_mutation(address(1), 0.0)
         .unwrap();
     assert!(!engine.runtime()[0].enabled);
     assert_eq!(engine.runtime()[0].master, 0.0);
@@ -274,16 +292,22 @@ fn cuelist_zero_auto_off_resumes_only_its_own_current_cue() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
-    engine.goto_playback(1, cue_number(2.0)).unwrap();
+    engine.goto_playback(address(1), cue_number(2.0)).unwrap();
     let cue_id = engine.runtime()[0].current_cue_id;
 
-    engine.set_master(1, 1.0).unwrap();
-    engine.set_master(1, 0.0).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 1.0)
+        .unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.0)
+        .unwrap();
     assert!(!engine.runtime()[0].enabled);
     assert!(engine.runtime()[0].fader_zero_auto_off_armed);
-    engine.set_master(1, 0.6).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.6)
+        .unwrap();
 
     let runtime = &engine.runtime()[0];
     assert!(runtime.enabled);
@@ -303,16 +327,24 @@ fn cuelist_flash_auto_off_is_armed_only_by_the_flash_that_started_it() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
 
-    engine.set_flash(1, true).unwrap();
-    engine.set_flash(1, false).unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), false)
+        .unwrap();
     assert!(engine.runtime().is_empty());
 
-    engine.on(1).unwrap();
-    engine.set_flash(1, true).unwrap();
-    engine.set_flash(1, false).unwrap();
+    engine.on(address(1)).unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    engine
+        .set_flash(address(1), &test_source(address(1).position()), false)
+        .unwrap();
     assert!(engine.runtime()[0].enabled);
 }
 
@@ -327,7 +359,7 @@ fn cuelist_flash_and_swap_share_keep_running_or_release_all_policy() {
         let mut engine = PlaybackEngine::default();
         engine.register(cue_list).unwrap();
         engine
-            .register_definition(definition(1, cue_list_id))
+            .register_definition(address(1), definition(1, cue_list_id))
             .unwrap();
         engine
     };
@@ -335,33 +367,47 @@ fn cuelist_flash_and_swap_share_keep_running_or_release_all_policy() {
     // A Flash the operator never turned on lets go of the whole look when it is released. Swap
     // keeps its held playback running at zero master so the swapped-away state can return.
     let mut flashed = build(false);
-    PlaybackEngine::set_flash(&mut flashed, 1, true).unwrap();
-    PlaybackEngine::set_flash(&mut flashed, 1, false).unwrap();
+    PlaybackEngine::set_flash(&mut flashed, address(1), &test_source(1), true).unwrap();
+    PlaybackEngine::set_flash(&mut flashed, address(1), &test_source(1), false).unwrap();
     assert!(flashed.runtime().iter().all(|runtime| !runtime.enabled));
 
     let mut swapped = build(false);
-    PlaybackEngine::set_swap(&mut swapped, 1, true).unwrap();
-    PlaybackEngine::set_swap(&mut swapped, 1, false).unwrap();
+    PlaybackEngine::set_swap(&mut swapped, address(1), &test_source(1), true).unwrap();
+    PlaybackEngine::set_swap(&mut swapped, address(1), &test_source(1), false).unwrap();
     let runtime = &swapped.runtime()[0];
     assert!(runtime.enabled);
     assert_eq!(runtime.master, 0.0);
 
     for release in [
-        PlaybackEngine::set_flash as fn(&mut PlaybackEngine, u16, bool) -> Result<(), String>,
+        PlaybackEngine::set_flash
+            as fn(
+                &mut PlaybackEngine,
+                PlaybackAddress,
+                &PlaybackControlSource,
+                bool,
+            ) -> Result<(), String>,
         PlaybackEngine::set_swap,
     ] {
         let mut release_all = build(true);
-        release(&mut release_all, 1, true).unwrap();
-        release(&mut release_all, 1, false).unwrap();
+        release(&mut release_all, address(1), &test_source(1), true).unwrap();
+        release(&mut release_all, address(1), &test_source(1), false).unwrap();
         assert!(release_all.runtime().iter().all(|runtime| !runtime.enabled));
     }
 
     let mut combined_hold = build(false);
-    combined_hold.set_flash(1, true).unwrap();
-    combined_hold.set_swap(1, true).unwrap();
-    combined_hold.set_flash(1, false).unwrap();
+    combined_hold
+        .set_flash(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    combined_hold
+        .set_swap(address(1), &test_source(address(1).position()), true)
+        .unwrap();
+    combined_hold
+        .set_flash(address(1), &test_source(address(1).position()), false)
+        .unwrap();
     assert!(combined_hold.active.is_empty());
-    combined_hold.set_swap(1, false).unwrap();
+    combined_hold
+        .set_swap(address(1), &test_source(address(1).position()), false)
+        .unwrap();
     assert!(combined_hold.active.values().any(|runtime| runtime.enabled));
 }
 
@@ -374,14 +420,14 @@ fn physical_shared_runtime_keeps_legacy_serializable_number_provenance() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
 
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     let runtime = engine.runtime_status();
 
-    assert_eq!(runtime[0].playback.playback_number, Some(1));
-    assert_eq!(runtime[0].playback.playback_identity, None);
+    assert_eq!(runtime[0].playback.playback_address, Some(address(1)));
+
     serde_json::to_value(runtime).unwrap();
 }
 
@@ -395,32 +441,44 @@ fn physical_faders_take_over_one_shared_master_independently() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
     engine
-        .register_definition(definition(2, cue_list_id))
+        .register_definition(address(2), definition(2, cue_list_id))
         .unwrap();
 
-    engine.set_virtual_master(1, 0.5).unwrap();
+    engine
+        .set_master_level(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.5);
-    engine.set_master(1, 0.6).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.6)
+        .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.5);
-    engine.set_master(1, 0.4).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.4)
+        .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.4);
 
-    engine.set_master(2, 0.8).unwrap();
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 0.8)
+        .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.4);
-    engine.set_master(2, 0.3).unwrap();
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 0.3)
+        .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.3);
 
-    engine.set_virtual_master(1, 0.7).unwrap();
+    engine
+        .set_master_level(address(1), &test_source(address(1).position()), 0.7)
+        .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.7);
     let one = engine
-        .runtime_status_at(PlaybackIdentity::physical(1).unwrap())
+        .runtime_status_for_playback(address(1))
         .unwrap()
         .playback;
     let two = engine
-        .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+        .runtime_status_for_playback(address(2))
         .unwrap()
         .playback;
     assert_eq!(one.fader_position, 0.4);
@@ -438,38 +496,50 @@ fn restored_shared_master_requires_each_physical_fader_to_reacquire() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list.clone()).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
     engine
-        .register_definition(definition(2, cue_list_id))
+        .register_definition(address(2), definition(2, cue_list_id))
         .unwrap();
-    engine.set_virtual_master(1, 0.6).unwrap();
+    engine
+        .set_master_level(address(1), &test_source(address(1).position()), 0.6)
+        .unwrap();
     let persisted = engine.runtime();
 
     let mut restored = PlaybackEngine::default();
     restored.register(cue_list).unwrap();
     restored
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
     restored
-        .register_definition(definition(2, cue_list_id))
+        .register_definition(address(2), definition(2, cue_list_id))
         .unwrap();
     restored.restore_active(persisted);
+    // Each attached source is first observed; no source is synthesized from its assignment.
+    for number in [1, 2] {
+        restored
+            .set_master(address(number), &test_source(number), 0.9)
+            .unwrap();
+    }
     for number in [1, 2] {
         let status = restored
-            .runtime_status_at(PlaybackIdentity::physical(number).unwrap())
+            .runtime_status_for_playback(address(number))
             .unwrap();
         assert!(status.playback.fader_pickup_required);
         assert_eq!(status.playback.fader_pickup_target, Some(0.6));
     }
 
-    restored.set_master(1, 0.7).unwrap();
+    restored
+        .set_master(address(1), &test_source(address(1).position()), 0.7)
+        .unwrap();
     assert_eq!(restored.runtime()[0].master, 0.6);
-    restored.set_master(1, 0.5).unwrap();
+    restored
+        .set_master(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
     assert_eq!(restored.runtime()[0].master, 0.5);
     assert!(
         restored
-            .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+            .runtime_status_for_playback(address(2))
             .unwrap()
             .playback
             .fader_pickup_required
@@ -492,34 +562,48 @@ fn temp_is_a_separate_entry_and_never_auto_offs_the_underlying_playback() {
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(a).unwrap();
     engine.register(b).unwrap();
-    engine.register_definition(definition(1, a_id)).unwrap();
-    engine.register_definition(definition(2, b_id)).unwrap();
-    engine.on(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, a_id))
+        .unwrap();
+    engine
+        .register_definition(address(2), definition(2, b_id))
+        .unwrap();
+    engine.on(address(1)).unwrap();
     clock.advance_millis(1);
-    assert!(engine.toggle_temp(2).unwrap());
+    assert!(
+        engine
+            .toggle_temp(address(2), &test_source(address(2).position()))
+            .unwrap()
+    );
     assert!(engine.runtime()[0].enabled);
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey("pan".into()))],
         AttributeValue::Normalized(0.8)
     );
-    assert!(!engine.toggle_temp(2).unwrap());
+    assert!(
+        !engine
+            .toggle_temp(address(2), &test_source(address(2).position()))
+            .unwrap()
+    );
     assert!(engine.runtime()[0].enabled);
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey("pan".into()))],
         AttributeValue::Normalized(0.2)
     );
 
-    let mut temp_definition = engine.definitions[&2].clone();
+    let mut temp_definition = engine.definitions[&address(2)].clone();
     temp_definition.fader = PlaybackFaderMode::Temp;
-    engine.definitions.insert(2, temp_definition);
-    engine.set_master(2, 0.5).unwrap();
+    engine.definitions.insert(address(2), temp_definition);
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 0.5)
+        .unwrap();
     assert_eq!(engine.runtime_status()[1].temporary_master, 0.5);
-    engine.set_master(2, 0.0).unwrap();
-    assert!(
-        !engine.runtime_status().iter().any(|status| {
-            status.playback.playback_number == Some(2) && status.temporary_active
-        })
-    );
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 0.0)
+        .unwrap();
+    assert!(!engine.runtime_status().iter().any(|status| {
+        status.playback.playback_address == Some(address(2)) && status.temporary_active
+    }));
 }
 
 #[test]
@@ -543,36 +627,43 @@ fn keep_running_release_and_swap_protection_preserve_normal_runtime() {
     engine.register(a).unwrap();
     engine.register(b).unwrap();
     engine.register(c).unwrap();
-    engine.register_definition(definition(1, a_id)).unwrap();
-    engine.register_definition(definition(2, b_id)).unwrap();
+    engine
+        .register_definition(address(1), definition(1, a_id))
+        .unwrap();
+    engine
+        .register_definition(address(2), definition(2, b_id))
+        .unwrap();
     let mut c_definition = definition(3, c_id);
     c_definition.protect_from_swap = true;
-    engine.register_definition(c_definition).unwrap();
-    engine.on(1).unwrap();
-    engine.on(3).unwrap();
+    engine
+        .register_definition(address(3), c_definition)
+        .unwrap();
+    engine.on(address(1)).unwrap();
+    engine.on(address(3)).unwrap();
 
-    engine.set_flash(2, true).unwrap();
+    engine
+        .set_flash(address(2), &test_source(address(2).position()), true)
+        .unwrap();
     let flash_status = engine
         .runtime_status()
         .into_iter()
-        .find(|status| status.playback.playback_number == Some(2))
+        .find(|status| status.playback.playback_address == Some(address(2)))
         .unwrap();
     assert!(flash_status.playback.flash);
     assert!(flash_status.temporary_active);
-    engine.set_flash(2, false).unwrap();
-    assert!(
-        engine
-            .runtime_status()
-            .into_iter()
-            .all(|status| { status.playback.playback_number != Some(2) || !status.playback.flash })
-    );
+    engine
+        .set_flash(address(2), &test_source(address(2).position()), false)
+        .unwrap();
+    assert!(engine.runtime_status().into_iter().all(|status| {
+        status.playback.playback_address != Some(address(2)) || !status.playback.flash
+    }));
     // The Flash was the only thing running this playback, so releasing it lets go of the whole
     // look rather than leaving its non-intensity values behind at zero master.
     assert!(
         engine
             .runtime()
             .into_iter()
-            .all(|runtime| runtime.playback_number != Some(2) || !runtime.enabled)
+            .all(|runtime| runtime.playback_address != Some(address(2)) || !runtime.enabled)
     );
     assert!(
         engine
@@ -584,9 +675,11 @@ fn keep_running_release_and_swap_protection_preserve_normal_runtime() {
     let a_before = engine
         .runtime()
         .into_iter()
-        .find(|runtime| runtime.playback_number == Some(1))
+        .find(|runtime| runtime.playback_address == Some(address(1)))
         .unwrap();
-    engine.set_swap(2, true).unwrap();
+    engine
+        .set_swap(address(2), &test_source(address(2).position()), true)
+        .unwrap();
     let fixtures = engine
         .contributions()
         .into_iter()
@@ -595,11 +688,13 @@ fn keep_running_release_and_swap_protection_preserve_normal_runtime() {
     assert!(!fixtures.contains(&fixture_a));
     assert!(fixtures.contains(&fixture_b));
     assert!(fixtures.contains(&fixture_c));
-    engine.set_swap(2, false).unwrap();
+    engine
+        .set_swap(address(2), &test_source(address(2).position()), false)
+        .unwrap();
     let a_after = engine
         .runtime()
         .into_iter()
-        .find(|runtime| runtime.playback_number == Some(1))
+        .find(|runtime| runtime.playback_address == Some(address(1)))
         .unwrap();
     assert_eq!(a_after.cue_index, a_before.cue_index);
     assert_eq!(a_after.master, a_before.master);
@@ -629,15 +724,19 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
     let mut engine = PlaybackEngine::default();
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(playback_definition.clone())
+        .register_definition(address(1), playback_definition.clone())
         .unwrap();
-    engine.on(1).unwrap();
-    engine.set_master(1, 0.25).unwrap();
+    engine.on(address(1)).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.25)
+        .unwrap();
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
         AttributeValue::Normalized(0.25)
     );
-    engine.set_master(1, 1.0).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 1.0)
+        .unwrap();
     assert_eq!(
         engine.runtime()[0].current_cue_number,
         Some(cue_number(2.0))
@@ -650,12 +749,16 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
         engine.runtime()[0].manual_xfade_direction,
         ManualXFadeDirection::TowardsLow
     );
-    engine.set_master(1, 1.0).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 1.0)
+        .unwrap();
     assert_eq!(
         engine.runtime()[0].current_cue_number,
         Some(cue_number(2.0))
     );
-    engine.set_master(1, 0.5).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.5)
+        .unwrap();
     assert_eq!(
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())],
         AttributeValue::Normalized(0.75)
@@ -666,11 +769,15 @@ fn manual_xfade_uses_authoritative_alternating_progress_and_survives_restore() {
     restored
         .register(engine.cue_lists[&cue_list_id].clone())
         .unwrap();
-    restored.register_definition(playback_definition).unwrap();
+    restored
+        .register_definition(address(1), playback_definition)
+        .unwrap();
     restored.restore_active(runtime);
     assert_eq!(restored.runtime()[0].manual_xfade_position, 0.5);
     assert_eq!(restored.runtime()[0].manual_xfade_progress, 0.5);
-    restored.set_master(1, 0.0).unwrap();
+    restored
+        .set_master(address(1), &test_source(address(1).position()), 0.0)
+        .unwrap();
     assert_eq!(
         restored.runtime()[0].current_cue_number,
         Some(cue_number(3.0))
@@ -690,9 +797,9 @@ fn pause_dynamics_does_not_freeze_ordinary_cue_transitions() {
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
-    engine.on(1).unwrap();
+    engine.on(address(1)).unwrap();
     clock.advance_millis(500);
     let level = |engine: &PlaybackEngine| {
         resolve(engine.contributions())[&(fixture, AttributeKey::intensity())]
@@ -775,7 +882,6 @@ fn dynamic_playback_definition(
         },
     };
     PlaybackDefinition {
-        number,
         name: format!("Dynamic Playback {number}"),
         buttons: PlaybackDefinition::default_buttons(&target),
         button_count: 3,
@@ -805,16 +911,16 @@ fn explicit_fader_activation_ignores_dynamic_zero_policy() {
     definition.go_activates = false;
     definition.auto_off = false;
     let mut engine = PlaybackEngine::default();
-    engine.register_definition(definition).unwrap();
+    engine.register_definition(address(17), definition).unwrap();
 
     engine
-        .set_master_with_explicit_activation_mutation(17, 0.6)
+        .set_master_with_explicit_activation_mutation(address(17), 0.6)
         .unwrap();
     assert!(engine.active_dynamic_playbacks()[0].enabled);
     assert_eq!(engine.active_dynamic_playbacks()[0].fader_value, 0.6);
 
     engine
-        .set_master_with_explicit_activation_mutation(17, 0.0)
+        .set_master_with_explicit_activation_mutation(address(17), 0.0)
         .unwrap();
     assert!(!engine.active_dynamic_playbacks()[0].enabled);
     assert_eq!(engine.active_dynamic_playbacks()[0].fader_value, 0.0);
@@ -827,9 +933,13 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
     let definition =
         dynamic_playback_definition(17, DynamicPlaybackFaderMode::SizeAndMaster, false);
     let mut engine = PlaybackEngine::with_clock(clock.clone());
-    engine.register_definition(definition.clone()).unwrap();
+    engine
+        .register_definition(address(17), definition.clone())
+        .unwrap();
 
-    engine.set_master(17, 0.5).unwrap();
+    engine
+        .set_master(address(17), &test_source(address(17).position()), 0.5)
+        .unwrap();
     let active = &engine.active_dynamic_playbacks()[0];
     assert!(active.enabled);
     assert_eq!(
@@ -837,9 +947,11 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
         (0.5, 0.5, 0.5)
     );
 
-    engine.toggle_dynamic_pause_mutation(17).unwrap();
+    engine.toggle_dynamic_pause_mutation(address(17)).unwrap();
     assert!(engine.active_dynamic_playbacks()[0].paused);
-    engine.scale_dynamic_speed_mutation(17, true).unwrap();
+    engine
+        .scale_dynamic_speed_mutation(address(17), true)
+        .unwrap();
     assert_eq!(
         engine.active_dynamic_playbacks()[0]
             .local_speed_multiplier
@@ -847,30 +959,40 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
         2.0
     );
     clock.advance_millis(25);
-    engine.restart_dynamic_mutation(17).unwrap();
+    engine.restart_dynamic_mutation(address(17)).unwrap();
     assert_eq!(
         engine.active_dynamic_playbacks()[0].activated_at,
         started + chrono::Duration::milliseconds(25)
     );
     assert!(!engine.active_dynamic_playbacks()[0].paused);
 
-    engine.off(17).unwrap();
-    engine.set_dynamic_flash_mutation(17, true).unwrap();
+    engine.off(address(17)).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(17), &test_source(address(17).position()), true)
+        .unwrap();
     assert!(engine.active_dynamic_playbacks()[0].enabled);
     assert!(engine.active_dynamic_playbacks()[0].flash);
-    engine.set_dynamic_flash_mutation(17, false).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(17), &test_source(address(17).position()), false)
+        .unwrap();
     assert!(!engine.active_dynamic_playbacks()[0].enabled);
     assert!(!engine.active_dynamic_playbacks()[0].flash);
 
-    engine.on(17).unwrap();
-    engine.set_master(17, 0.0).unwrap();
+    engine.on(address(17)).unwrap();
+    engine
+        .set_master(address(17), &test_source(address(17).position()), 0.0)
+        .unwrap();
     assert!(!engine.active_dynamic_playbacks()[0].enabled);
 
-    engine.on(17).unwrap();
-    engine.set_master(17, 0.4).unwrap();
+    engine.on(address(17)).unwrap();
+    engine
+        .set_master(address(17), &test_source(address(17).position()), 0.4)
+        .unwrap();
     let persisted = engine.active_dynamic_playbacks();
     let mut restored = PlaybackEngine::with_clock(clock);
-    restored.register_definition(definition).unwrap();
+    restored
+        .register_definition(address(17), definition)
+        .unwrap();
     restored.restore_active_dynamics(persisted.clone());
     assert_eq!(restored.active_dynamic_playbacks(), persisted);
 }
@@ -879,13 +1001,25 @@ fn dynamic_playback_fader_pause_speed_flash_and_restore_are_authoritative() {
 fn configured_physical_fader_moves_a_dynamic_playback_master() {
     let definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, false);
     let mut engine = PlaybackEngine::with_clock(Arc::new(light_core::ManualClock::new(Utc::now())));
-    engine.register_definition(definition.clone()).unwrap();
+    engine
+        .register_definition(address(18), definition.clone())
+        .unwrap();
 
     engine
-        .set_configured_fader_mutation(18, definition.fader, 1.0)
+        .set_configured_fader_mutation(
+            address(18),
+            &test_source(address(18).position()),
+            definition.fader,
+            1.0,
+        )
         .unwrap();
     engine
-        .set_configured_fader_mutation(18, definition.fader, 0.5)
+        .set_configured_fader_mutation(
+            address(18),
+            &test_source(address(18).position()),
+            definition.fader,
+            0.5,
+        )
         .unwrap();
     let active = &engine.active_dynamic_playbacks()[0];
     assert!(active.enabled);
@@ -896,31 +1030,38 @@ fn configured_physical_fader_moves_a_dynamic_playback_master() {
 fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignments() {
     let first = dynamic_playback_definition(21, DynamicPlaybackFaderMode::SizeAndMaster, false);
     let mut second = first.clone();
-    second.number = 22;
+
     second.name = "Second Dynamic control".into();
     let mut virtual_definition = first.clone();
-    virtual_definition.number = 1_001;
     virtual_definition.name = "Virtual Dynamic control".into();
     let surviving_second = second.clone();
     let surviving_virtual = virtual_definition.clone();
-    let virtual_address = VirtualPlaybackAddress::new(1, 1_001).unwrap();
+    let virtual_address = PlaybackAddress::new(2, 1).unwrap();
     let target_id = match &first.target {
         PlaybackTarget::Dynamic { assignment } => assignment.target_id(),
         _ => unreachable!(),
     };
     let mut engine = PlaybackEngine::default();
-    engine.register_definition(first).unwrap();
-    engine.register_definition(second).unwrap();
+    engine.register_definition(address(21), first).unwrap();
+    engine.register_definition(address(22), second).unwrap();
     engine
-        .register_virtual_definition(virtual_address, virtual_definition)
+        .register_definition(virtual_address, virtual_definition)
         .unwrap();
 
-    engine.on(21).unwrap();
+    engine.on(address(21)).unwrap();
+    engine.toggle_dynamic_pause_mutation(address(22)).unwrap();
     engine
-        .toggle_dynamic_pause_at_mutation(PlaybackIdentity::physical(22).unwrap())
+        .set_master(address(21), &test_source(21), 1.0)
         .unwrap();
     engine
-        .set_dynamic_fader_at_mutation(PlaybackIdentity::Virtual(virtual_address), 0.35)
+        .set_master(address(22), &test_source(22), 1.0)
+        .unwrap();
+    engine
+        .set_dynamic_fader_mutation(
+            virtual_address,
+            &test_source(virtual_address.position()),
+            0.35,
+        )
         .unwrap();
 
     let active = engine.active_dynamic_playbacks();
@@ -931,40 +1072,34 @@ fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignment
         (active[0].fader_value, active[0].size, active[0].master),
         (0.35, 0.35, 0.35)
     );
-    for identity in [
-        PlaybackIdentity::physical(21).unwrap(),
-        PlaybackIdentity::physical(22).unwrap(),
-        PlaybackIdentity::Virtual(virtual_address),
-    ] {
-        let projected = engine.active_dynamic_playback_at(identity).unwrap();
+    for identity in [address(21), address(22), virtual_address] {
+        let projected = engine.active_dynamic_playback(identity).unwrap();
         assert_eq!(projected.dynamic_id, Some(target_id));
         assert!(projected.paused);
         assert_eq!(projected.master, 0.35);
-        assert_eq!(
-            projected.fader_pickup_required,
-            matches!(identity, PlaybackIdentity::Physical(_))
-        );
+        assert_eq!(projected.fader_pickup_required, identity != virtual_address);
         assert_eq!(
             projected.fader_pickup_target,
-            matches!(identity, PlaybackIdentity::Physical(_)).then_some(0.35)
+            (identity != virtual_address).then_some(0.35)
         );
     }
 
-    assert!(engine.off_dynamic_mutation(22).unwrap().value);
+    assert!(engine.off_dynamic_mutation(address(22)).unwrap().value);
     assert!(!engine.active_dynamic_playbacks()[0].enabled);
 
-    engine.on(21).unwrap();
+    engine.on(address(21)).unwrap();
     let mut next = PlaybackEngine::default();
-    next.register_definition(surviving_second).unwrap();
-    next.register_virtual_definition(virtual_address, surviving_virtual)
+    next.register_definition(address(22), surviving_second)
+        .unwrap();
+    next.register_definition(virtual_address, surviving_virtual)
         .unwrap();
     let preserved = engine.active_dynamics_for_snapshot(&next);
     assert_eq!(preserved.len(), 1);
-    assert_eq!(preserved[0].playback_number, 22);
-    assert_eq!(preserved[0].playback_identity, None);
+    assert_eq!(preserved[0].playback_address, address(22));
+
     next.restore_active_dynamics(preserved);
     assert!(
-        next.active_dynamic_playback_at(PlaybackIdentity::Virtual(virtual_address))
+        next.active_dynamic_playback(virtual_address)
             .is_some_and(|active| active.enabled)
     );
     assert!(
@@ -977,53 +1112,66 @@ fn target_bound_dynamic_runtime_is_shared_across_physical_and_virtual_assignment
 fn shared_dynamic_physical_faders_pick_up_independently_and_software_bypasses_pickup() {
     let first = dynamic_playback_definition(41, DynamicPlaybackFaderMode::Master, false);
     let mut second = first.clone();
-    second.number = 42;
-    let mut engine = PlaybackEngine::default();
-    engine.register_definition(first).unwrap();
-    engine.register_definition(second).unwrap();
 
-    engine.set_virtual_master_mutation(41, 0.6).unwrap();
-    engine.set_master_mutation(41, 0.2).unwrap();
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(address(41), first).unwrap();
+    engine.register_definition(address(42), second).unwrap();
+
+    engine
+        .set_master_level_mutation(address(41), &test_source(address(41).position()), 0.6)
+        .unwrap();
+    engine
+        .set_master_mutation(address(42), &test_source(42), 0.0)
+        .unwrap();
+    engine
+        .set_master_mutation(address(41), &test_source(address(41).position()), 0.2)
+        .unwrap();
     assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.6);
     assert_eq!(
         engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(41).unwrap())
+            .active_dynamic_playback(address(41))
             .unwrap()
             .fader_pickup_target,
         Some(0.6)
     );
 
-    engine.set_master_mutation(41, 0.7).unwrap();
+    engine
+        .set_master_mutation(address(41), &test_source(address(41).position()), 0.7)
+        .unwrap();
     assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.7);
     assert!(
         !engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(41).unwrap())
+            .active_dynamic_playback(address(41))
             .unwrap()
             .fader_pickup_required
     );
     assert_eq!(
         engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(42).unwrap())
+            .active_dynamic_playback(address(42))
             .unwrap()
             .fader_pickup_target,
         Some(0.7)
     );
 
-    engine.set_virtual_master_mutation(42, 0.4).unwrap();
+    engine
+        .set_master_level_mutation(address(42), &test_source(address(42).position()), 0.4)
+        .unwrap();
     assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.4);
     for number in [41, 42] {
         assert_eq!(
             engine
-                .active_dynamic_playback_at(PlaybackIdentity::physical(number).unwrap())
+                .active_dynamic_playback(address(number))
                 .unwrap()
                 .fader_pickup_target,
             Some(0.4)
         );
     }
-    engine.set_master_mutation(42, 0.4).unwrap();
+    engine
+        .set_master_mutation(address(42), &test_source(address(42).position()), 0.4)
+        .unwrap();
     assert!(
         !engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(42).unwrap())
+            .active_dynamic_playback(address(42))
             .unwrap()
             .fader_pickup_required
     );
@@ -1033,19 +1181,21 @@ fn shared_dynamic_physical_faders_pick_up_independently_and_software_bypasses_pi
 fn shared_dynamic_flash_holds_remain_assignment_local_until_the_last_release() {
     let first = dynamic_playback_definition(51, DynamicPlaybackFaderMode::Master, false);
     let mut second = first.clone();
-    second.number = 52;
-    let mut engine = PlaybackEngine::default();
-    engine.register_definition(first).unwrap();
-    engine.register_definition(second).unwrap();
 
-    engine.set_dynamic_flash_mutation(51, true).unwrap();
-    engine.set_dynamic_flash_mutation(52, true).unwrap();
+    let mut engine = PlaybackEngine::default();
+    engine.register_definition(address(51), first).unwrap();
+    engine.register_definition(address(52), second).unwrap();
+
+    engine
+        .set_dynamic_flash_mutation(address(51), &test_source(address(51).position()), true)
+        .unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(52), &test_source(address(52).position()), true)
+        .unwrap();
     assert_eq!(engine.active_dynamic_playbacks().len(), 1);
     assert!(engine.active_dynamic_playbacks()[0].enabled);
     for number in [51, 52] {
-        let projected = engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(number).unwrap())
-            .unwrap();
+        let projected = engine.active_dynamic_playback(address(number)).unwrap();
         assert!(projected.flash);
         assert!(projected.flash_restore_off);
     }
@@ -1055,22 +1205,16 @@ fn shared_dynamic_flash_holds_remain_assignment_local_until_the_last_release() {
     assert!(!persisted[0].flash);
     assert!(!persisted[0].flash_restore_off);
 
-    engine.set_dynamic_flash_mutation(51, false).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(51), &test_source(address(51).position()), false)
+        .unwrap();
     assert!(engine.active_dynamic_playbacks()[0].enabled);
-    assert!(
-        !engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(51).unwrap())
-            .unwrap()
-            .flash
-    );
-    assert!(
-        engine
-            .active_dynamic_playback_at(PlaybackIdentity::physical(52).unwrap())
-            .unwrap()
-            .flash
-    );
+    assert!(!engine.active_dynamic_playback(address(51)).unwrap().flash);
+    assert!(engine.active_dynamic_playback(address(52)).unwrap().flash);
 
-    engine.set_dynamic_flash_mutation(52, false).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(52), &test_source(address(52).position()), false)
+        .unwrap();
     let active = &engine.active_dynamic_playbacks()[0];
     assert!(!active.enabled);
     assert!(!active.flash);
@@ -1085,10 +1229,14 @@ fn dynamic_flash_release_without_auto_off_promotes_the_shared_target_on() {
     };
     assignment.auto_off_flash_release = false;
     let mut engine = PlaybackEngine::default();
-    engine.register_definition(definition).unwrap();
+    engine.register_definition(address(53), definition).unwrap();
 
-    engine.set_dynamic_flash_mutation(53, true).unwrap();
-    engine.set_dynamic_flash_mutation(53, false).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(53), &test_source(address(53).position()), true)
+        .unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(53), &test_source(address(53).position()), false)
+        .unwrap();
 
     let active = &engine.active_dynamic_playbacks()[0];
     assert!(active.enabled);
@@ -1100,18 +1248,26 @@ fn dynamic_flash_release_without_auto_off_promotes_the_shared_target_on() {
 fn dynamic_flash_auto_off_is_armed_only_when_that_flash_started_the_target() {
     let definition = dynamic_playback_definition(54, DynamicPlaybackFaderMode::Master, false);
     let mut engine = PlaybackEngine::default();
-    engine.register_definition(definition).unwrap();
+    engine.register_definition(address(54), definition).unwrap();
 
-    engine.on(54).unwrap();
-    engine.set_dynamic_flash_mutation(54, true).unwrap();
-    engine.set_dynamic_flash_mutation(54, false).unwrap();
+    engine.on(address(54)).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(54), &test_source(address(54).position()), true)
+        .unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(54), &test_source(address(54).position()), false)
+        .unwrap();
     let active = &engine.active_dynamic_playbacks()[0];
     assert!(active.enabled);
     assert!(!active.flash);
 
-    engine.off(54).unwrap();
-    engine.set_dynamic_flash_mutation(54, true).unwrap();
-    engine.set_dynamic_flash_mutation(54, false).unwrap();
+    engine.off(address(54)).unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(54), &test_source(address(54).position()), true)
+        .unwrap();
+    engine
+        .set_dynamic_flash_mutation(address(54), &test_source(address(54).position()), false)
+        .unwrap();
     let active = &engine.active_dynamic_playbacks()[0];
     assert!(!active.enabled);
     assert!(!active.flash);
@@ -1121,17 +1277,21 @@ fn dynamic_flash_auto_off_is_armed_only_when_that_flash_started_the_target() {
 fn legacy_duplicate_dynamic_runtime_rows_restore_deterministically_by_latest_activation() {
     let first = dynamic_playback_definition(31, DynamicPlaybackFaderMode::Master, false);
     let mut second = first.clone();
-    second.number = 32;
+
     let mut source = PlaybackEngine::default();
-    source.register_definition(first.clone()).unwrap();
-    source.register_definition(second.clone()).unwrap();
-    source.on(31).unwrap();
+    source
+        .register_definition(address(31), first.clone())
+        .unwrap();
+    source
+        .register_definition(address(32), second.clone())
+        .unwrap();
+    source.on(address(31)).unwrap();
     let mut older = source.active_dynamic_playbacks()[0].clone();
     older.dynamic_id = None;
-    older.playback_number = 31;
+    older.playback_address = address(31);
     older.master = 0.2;
     let mut newer = older.clone();
-    newer.playback_number = 32;
+    newer.playback_address = address(32);
     newer.master = 0.8;
     newer.activated_at += chrono::Duration::milliseconds(1);
 
@@ -1140,13 +1300,17 @@ fn legacy_duplicate_dynamic_runtime_rows_restore_deterministically_by_latest_act
         vec![newer.clone(), older.clone()],
     ] {
         let mut restored = PlaybackEngine::default();
-        restored.register_definition(first.clone()).unwrap();
-        restored.register_definition(second.clone()).unwrap();
+        restored
+            .register_definition(address(31), first.clone())
+            .unwrap();
+        restored
+            .register_definition(address(32), second.clone())
+            .unwrap();
         restored.restore_active_dynamics(rows);
         let active = restored.active_dynamic_playbacks();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].master, 0.8);
-        assert_eq!(active[0].playback_number, 32);
+        assert_eq!(active[0].playback_address, address(32));
         assert!(active[0].dynamic_id.is_some());
     }
 }
@@ -1163,16 +1327,20 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(cue_list).unwrap();
     engine
-        .register_definition(definition(1, cue_list_id))
+        .register_definition(address(1), definition(1, cue_list_id))
         .unwrap();
     engine
-        .register_definition(definition(2, cue_list_id))
+        .register_definition(address(2), definition(2, cue_list_id))
         .unwrap();
-    engine.set_master(1, 0.2).unwrap();
-    engine.set_master(2, 0.2).unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.2)
+        .unwrap();
+    engine
+        .set_master(address(2), &test_source(address(2).position()), 0.2)
+        .unwrap();
 
     engine
-        .set_master_transition_mutation(1, 0.8, 1_000)
+        .set_master_transition_mutation(address(1), 0.8, 1_000)
         .unwrap();
     assert_eq!(engine.runtime()[0].master, 0.2);
     clock.advance_millis(500);
@@ -1180,7 +1348,7 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     assert!((engine.runtime()[0].master - 0.5).abs() < 0.001);
     assert_eq!(
         engine
-            .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+            .runtime_status_for_playback(address(2))
             .unwrap()
             .playback
             .fader_pickup_target,
@@ -1191,7 +1359,7 @@ fn scheduled_master_transitions_are_advanced_by_the_playback_tick() {
     assert_eq!(engine.runtime()[0].master, 0.8);
     assert_eq!(
         engine
-            .runtime_status_at(PlaybackIdentity::physical(2).unwrap())
+            .runtime_status_for_playback(address(2))
             .unwrap()
             .playback
             .fader_pickup_target,
@@ -1206,12 +1374,14 @@ fn dynamic_master_transition_does_not_rewrite_the_physical_fader_assignment() {
     let clock = Arc::new(light_core::ManualClock::new(started));
     let definition = dynamic_playback_definition(17, DynamicPlaybackFaderMode::Size, false);
     let mut engine = PlaybackEngine::with_clock(clock.clone());
-    engine.register_definition(definition).unwrap();
-    engine.set_master(17, 0.4).unwrap();
+    engine.register_definition(address(17), definition).unwrap();
+    engine
+        .set_master(address(17), &test_source(address(17).position()), 0.4)
+        .unwrap();
     let before = engine.active_dynamic_playbacks()[0].clone();
 
     engine
-        .set_master_transition_mutation(17, 0.2, 1_000)
+        .set_master_transition_mutation(address(17), 0.2, 1_000)
         .unwrap();
     clock.advance_millis(500);
     engine.tick(started + chrono::Duration::milliseconds(500), None);
@@ -1236,17 +1406,29 @@ fn dynamic_playback_tap_learns_local_cycle_and_double_half_adjust_it() {
     let clock = Arc::new(light_core::ManualClock::new(started));
     let definition = dynamic_playback_definition(19, DynamicPlaybackFaderMode::Master, false);
     let mut engine = PlaybackEngine::with_clock(clock.clone());
-    engine.register_definition(definition).unwrap();
+    engine.register_definition(address(19), definition).unwrap();
 
-    assert_eq!(engine.tap_dynamic_speed_mutation(19).unwrap().value, None);
+    assert_eq!(
+        engine
+            .tap_dynamic_speed_mutation(address(19))
+            .unwrap()
+            .value,
+        None
+    );
     clock.advance_millis(800);
     assert_eq!(
-        engine.tap_dynamic_speed_mutation(19).unwrap().value,
+        engine
+            .tap_dynamic_speed_mutation(address(19))
+            .unwrap()
+            .value,
         Some(800)
     );
     clock.advance_millis(1_000);
     assert_eq!(
-        engine.tap_dynamic_speed_mutation(19).unwrap().value,
+        engine
+            .tap_dynamic_speed_mutation(address(19))
+            .unwrap()
+            .value,
         Some(900)
     );
     assert_eq!(
@@ -1254,17 +1436,23 @@ fn dynamic_playback_tap_learns_local_cycle_and_double_half_adjust_it() {
         Some(900)
     );
 
-    engine.scale_dynamic_speed_mutation(19, true).unwrap();
+    engine
+        .scale_dynamic_speed_mutation(address(19), true)
+        .unwrap();
     assert_eq!(
         engine.active_dynamic_playbacks()[0].learned_duration_millis,
         Some(450)
     );
-    engine.scale_dynamic_speed_mutation(19, false).unwrap();
+    engine
+        .scale_dynamic_speed_mutation(address(19), false)
+        .unwrap();
     assert_eq!(
         engine.active_dynamic_playbacks()[0].learned_duration_millis,
         Some(900)
     );
-    engine.clear_dynamic_learned_speed_mutation(19).unwrap();
+    engine
+        .clear_dynamic_learned_speed_mutation(address(19))
+        .unwrap();
     assert_eq!(
         engine.active_dynamic_playbacks()[0].learned_duration_millis,
         None

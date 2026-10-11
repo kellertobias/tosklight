@@ -1,10 +1,7 @@
 use super::{ProgrammingPorts, ProgrammingService};
 use crate::{ActionContext, ActionError, ActionErrorKind};
 use light_core::SessionId;
-use light_programmer::{
-    PreloadPlaybackAction, PreloadPlaybackQueueAction, PreloadPlaybackQueueSurface,
-    ProgrammerRegistry,
-};
+use light_programmer::{PreloadPlaybackAction, PreloadPlaybackQueueAction, ProgrammerRegistry};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -29,23 +26,13 @@ pub enum ProgrammingPreloadPlaybackAction {
     DynamicDoubleSpeed,
     DynamicHalfSpeed,
     DynamicLearnSpeed,
-    Fader { value_permyriad: u16 },
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ProgrammingPreloadPlaybackSurface {
-    Physical,
-    Virtual,
-    Osc,
-    Matter,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProgrammingPreloadPlaybackQueueItem {
-    pub playback_number: u16,
-    pub page: Option<u8>,
+    pub address: light_playback::PlaybackAddress,
     pub action: ProgrammingPreloadPlaybackAction,
-    pub surface: ProgrammingPreloadPlaybackSurface,
+    pub control_source: light_playback::PlaybackControlSource,
 }
 
 /// Exact-user authority for the ordered playback actions queued by Preload capture.
@@ -142,8 +129,8 @@ fn queue_identity(context: &ActionContext) -> Result<SessionId, ActionError> {
 
 fn queue_item(action: &PreloadPlaybackAction) -> ProgrammingPreloadPlaybackQueueItem {
     ProgrammingPreloadPlaybackQueueItem {
-        playback_number: action.playback_number,
-        page: action.page,
+        address: action.address,
+        control_source: action.control_source.clone(),
         action: match action.action {
             PreloadPlaybackQueueAction::Toggle => ProgrammingPreloadPlaybackAction::Toggle,
             PreloadPlaybackQueueAction::Go => ProgrammingPreloadPlaybackAction::Go,
@@ -171,15 +158,6 @@ fn queue_item(action: &PreloadPlaybackAction) -> ProgrammingPreloadPlaybackQueue
             PreloadPlaybackQueueAction::DynamicLearnSpeed => {
                 ProgrammingPreloadPlaybackAction::DynamicLearnSpeed
             }
-            PreloadPlaybackQueueAction::Fader { value_permyriad } => {
-                ProgrammingPreloadPlaybackAction::Fader { value_permyriad }
-            }
-        },
-        surface: match action.surface {
-            PreloadPlaybackQueueSurface::Physical => ProgrammingPreloadPlaybackSurface::Physical,
-            PreloadPlaybackQueueSurface::Virtual => ProgrammingPreloadPlaybackSurface::Virtual,
-            PreloadPlaybackQueueSurface::Osc => ProgrammingPreloadPlaybackSurface::Osc,
-            PreloadPlaybackQueueSurface::Matter => ProgrammingPreloadPlaybackSurface::Matter,
         },
     }
 }

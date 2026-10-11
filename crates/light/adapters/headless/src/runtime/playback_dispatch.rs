@@ -13,7 +13,7 @@ pub(super) struct PlaybackDispatchContext<'a> {
     pub(super) session: Option<&'a Session>,
     pub(super) desk: Option<&'a ControlDesk>,
     pub(super) source: &'a str,
-    pub(super) exclusion_zones: &'a [Vec<u16>],
+    pub(super) control_source: &'a light_playback::PlaybackControlSource,
     pub(super) activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 }
 
@@ -22,13 +22,15 @@ pub(super) struct PlaybackDispatchContext<'a> {
 /// shared by the registry's user identity.
 pub(super) fn dispatch_playback_action(
     state: &AppState,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action_name: &str,
     input: &PoolPlaybackInput,
     context: PlaybackDispatchContext<'_>,
 ) -> Result<PlaybackDispatchOutcome, ApiError> {
     let before_cue = current_cue_id(state, definition);
-    let outcome = dispatch_playback_action_inner(state, definition, action_name, input, &context)?;
+    let outcome =
+        dispatch_playback_action_inner(state, address, definition, action_name, input, &context)?;
     if outcome.changed {
         dispatch_entered_cue_actions(state, definition, before_cue)?;
     }
@@ -38,7 +40,7 @@ pub(super) fn dispatch_playback_action(
         emit(
             state,
             "playback_exclusion_applied",
-            serde_json::json!({"desk_id":desk.id,"activated_playback":definition.number,"released_playbacks":outcome.released_playbacks,"source":context.source}),
+            serde_json::json!({"desk_id":desk.id,"activated_playback":address,"released_playbacks":outcome.released_playbacks,"source":context.source}),
         );
     }
     let failures = persist_playback_plan(state, outcome.persistence);
@@ -49,7 +51,7 @@ pub(super) fn dispatch_playback_action(
             serde_json::json!({
                 "desk_id": context.desk.map(|desk| desk.id),
                 "session_id": context.session.map(|session| session.id),
-                "playback_number": definition.number,
+                "playback_address": address,
                 "source": context.source,
                 "failures": failures.iter().map(|(domain, error)| serde_json::json!({
                     "domain": domain,
@@ -135,6 +137,7 @@ fn persist_playback_domain(
 
 pub(super) fn dispatch_playback_action_inner(
     state: &AppState,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action_name: &str,
     input: &PoolPlaybackInput,
@@ -146,19 +149,21 @@ pub(super) fn dispatch_playback_action_inner(
             state,
             context.action,
             context.session,
+            address,
             definition,
             input,
             context.source,
-            context.exclusion_zones,
+            context.control_source,
             context.activation_origin,
         );
     }
     if let Some(outcome) = apply_direct_playback_action(
         state,
+        address,
         definition,
         action_name,
         input,
-        context.exclusion_zones,
+        context.control_source,
         context.activation_origin,
     )? {
         return Ok(outcome);
@@ -174,16 +179,18 @@ pub(super) fn dispatch_playback_action_inner(
     {
         return Ok(PlaybackTargetOutcome::changed(false));
     }
-    let selection_changed = select_playback_target(state, context.desk, definition, action)?;
+    let selection_changed =
+        select_playback_target(state, context.desk, address, definition, action)?;
     let outcome = apply_playback_target_action(
         state,
         context.action,
         context.session,
+        address,
         definition,
         action,
         input,
         pressed,
-        context.exclusion_zones,
+        context.control_source,
         context.activation_origin,
     )?;
     Ok(outcome.combine(PlaybackTargetOutcome::changed(selection_changed)))

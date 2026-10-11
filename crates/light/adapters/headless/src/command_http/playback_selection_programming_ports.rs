@@ -4,8 +4,8 @@ use super::{
     programming_ports::{CommandLineProgrammer, ServerProgrammingPorts, clear_command_line},
 };
 use light_application::{
-    ActionContext, ActionSource, ExecutionPolicy, PlaybackAction, PlaybackAddress, PlaybackCommand,
-    PlaybackSurface, ProgrammingExecution,
+    ActionContext, ExecutionPolicy, PlaybackAction, PlaybackAddress, PlaybackCommand,
+    ProgrammingExecution,
 };
 
 impl ServerProgrammingPorts<'_> {
@@ -61,14 +61,19 @@ impl ServerProgrammingPorts<'_> {
             PlaybackCommand {
                 address,
                 action: PlaybackAction::Select { pressed: true },
-                surface: surface(context.source),
+                control_source: match super::cue_navigation_action::control_source(
+                    self.state(),
+                    context,
+                ) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return Some(self.recording_execution(context, command, Err(error)));
+                    }
+                },
             },
         )
         .map_err(|error| error.message)
-        .and_then(|result| {
-            if result.replayed {
-                return Ok((1, None, true));
-            }
+        .and_then(|_result| {
             clear_command_line(programmers, self.session())?;
             Ok((
                 1,
@@ -81,20 +86,5 @@ impl ServerProgrammingPorts<'_> {
 }
 
 fn address(target: CommandPlaybackTarget) -> PlaybackAddress {
-    match target {
-        CommandPlaybackTarget::CurrentPage { slot } => PlaybackAddress::CurrentPage { slot },
-        CommandPlaybackTarget::ExplicitPage { page, slot } => {
-            PlaybackAddress::ExplicitPage { page, slot }
-        }
-        CommandPlaybackTarget::Virtual(address) => PlaybackAddress::Virtual(address),
-    }
-}
-
-const fn surface(source: ActionSource) -> PlaybackSurface {
-    match source {
-        ActionSource::Osc => PlaybackSurface::Osc,
-        ActionSource::Matter => PlaybackSurface::Matter,
-        ActionSource::UserInterface | ActionSource::Http => PlaybackSurface::Virtual,
-        _ => PlaybackSurface::Physical,
-    }
+    super::cue_navigation_action::resolve_address(target)
 }

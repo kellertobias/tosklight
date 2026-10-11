@@ -326,9 +326,9 @@ function routeUpdateWorkflow(
 			const target: UpdateTargetRequest = {
 				family: { type: event.target.family },
 				object_id: event.target.object_id,
-				...(event.target.playback_number == null
+				...(event.target.playback_address == null
 					? {}
-					: { playback_number: event.target.playback_number }),
+					: { playback_address: event.target.playback_address }),
 				...(event.target.cue_id == null ? {} : { cue_id: event.target.cue_id }),
 				...(event.target.cue_number == null
 					? {}

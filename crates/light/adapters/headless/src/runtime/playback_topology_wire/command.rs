@@ -27,59 +27,88 @@ pub(in crate::runtime) fn application_command(
             expected_revision: input_revision(expected_revision, "expected_revision")?,
             expected_object_id,
         },
-        action @ wire::PlaybackTopologyAction::ConfigureSlot { .. } => {
-            application_configure_slot(action)?
-        }
+        wire::PlaybackTopologyAction::AssignPlayback {
+            address,
+            expected_page_revision,
+            expected_page_object_id,
+            definition,
+        } => application::PlaybackTopologyAction::AssignPlayback {
+            address: application_address(address)?,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+            playback: application_playback(definition)?,
+        },
+        wire::PlaybackTopologyAction::UpdatePlayback {
+            address,
+            expected_page_revision,
+            expected_page_object_id,
+            definition,
+        } => application::PlaybackTopologyAction::UpdatePlayback {
+            address: application_address(address)?,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+            playback: application_playback(definition)?,
+        },
+        wire::PlaybackTopologyAction::ClearPlayback {
+            address,
+            expected_page_revision,
+            expected_page_object_id,
+        } => application::PlaybackTopologyAction::ClearPlayback {
+            address: application_address(address)?,
+            expected_page_revision: input_revision(
+                expected_page_revision,
+                "expected_page_revision",
+            )?,
+            expected_page_object_id: expected_page_object_id.into_option(),
+        },
         wire::PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision,
             address,
+            expected_page_revision,
+            expected_page_object_id,
         } => application::PlaybackTopologyAction::AssignGroupMaster {
             group_object_id,
             expected_group_revision: input_revision(
                 expected_group_revision,
                 "expected_group_revision",
             )?,
-            address: application_group_master_address(address)?,
+            address: application::GroupMasterPlaybackAddress {
+                address: application_address(address)?,
+                expected_page_revision: input_revision(
+                    expected_page_revision,
+                    "expected_page_revision",
+                )?,
+                expected_page_object_id: expected_page_object_id.into_option(),
+            },
         },
-        wire::PlaybackTopologyAction::ConfigureVirtual {
-            page,
-            playback_number,
-            expected_page_revision,
-            expected_page_object_id,
-            playback,
-        } => application::PlaybackTopologyAction::ConfigureVirtual {
-            page,
-            number: playback_number,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-            playback: application_playback(playback)?,
-        },
-        action @ wire::PlaybackTopologyAction::MapExistingPlayback { .. } => {
-            application_map_existing_playback(action)?
-        }
-        wire::PlaybackTopologyAction::CreatePage {
-            page,
+        wire::PlaybackTopologyAction::CreatePlaybackPage {
+            number,
+            name,
             expected_page_revision,
             expected_page_object_id,
         } => application::PlaybackTopologyAction::CreatePage {
-            page,
+            page: number,
+            name,
             expected_page_revision: input_revision(
                 expected_page_revision,
                 "expected_page_revision",
             )?,
             expected_page_object_id: expected_page_object_id.into_option(),
         },
-        wire::PlaybackTopologyAction::RenamePage {
-            page,
+        wire::PlaybackTopologyAction::RenamePlaybackPage {
+            number,
             name,
             expected_page_revision,
             expected_page_object_id,
         } => application::PlaybackTopologyAction::RenamePage {
-            page,
+            page: number,
             name,
             expected_page_revision: input_revision(
                 expected_page_revision,
@@ -87,35 +116,12 @@ pub(in crate::runtime) fn application_command(
             )?,
             expected_page_object_id: expected_page_object_id.into_option(),
         },
-        wire::PlaybackTopologyAction::ClearMappedPlayback {
-            page,
-            slot,
+        wire::PlaybackTopologyAction::DeletePlaybackPage {
+            number,
             expected_page_revision,
             expected_page_object_id,
-            expected_playback_revision,
-            expected_playback_object_id,
-        } => application::PlaybackTopologyAction::ClearMappedPlayback {
-            page,
-            slot,
-            expected_page_revision: input_revision(
-                expected_page_revision,
-                "expected_page_revision",
-            )?,
-            expected_page_object_id: expected_page_object_id.into_option(),
-            expected_playback_revision: input_revision(
-                expected_playback_revision,
-                "expected_playback_revision",
-            )?,
-            expected_playback_object_id: expected_playback_object_id.into_option(),
-        },
-        wire::PlaybackTopologyAction::ClearVirtual {
-            page,
-            playback_number,
-            expected_page_revision,
-            expected_page_object_id,
-        } => application::PlaybackTopologyAction::ClearVirtual {
-            page,
-            number: playback_number,
+        } => application::PlaybackTopologyAction::DeletePage {
+            page: number,
             expected_page_revision: input_revision(
                 expected_page_revision,
                 "expected_page_revision",
@@ -129,62 +135,10 @@ pub(in crate::runtime) fn application_command(
     ))
 }
 
-fn application_configure_slot(
-    action: wire::PlaybackTopologyAction,
-) -> Result<application::PlaybackTopologyAction, String> {
-    let wire::PlaybackTopologyAction::ConfigureSlot {
-        page,
-        slot,
-        expected_page_revision,
-        expected_page_object_id,
-        expected_playback_revision,
-        expected_playback_object_id,
-        playback,
-    } = action
-    else {
-        unreachable!("caller passes only ConfigureSlot")
-    };
-    Ok(application::PlaybackTopologyAction::ConfigureSlot {
-        page,
-        slot,
-        expected_page_revision: input_revision(expected_page_revision, "expected_page_revision")?,
-        expected_page_object_id: expected_page_object_id.into_option(),
-        expected_playback_revision: input_revision(
-            expected_playback_revision,
-            "expected_playback_revision",
-        )?,
-        expected_playback_object_id: expected_playback_object_id.into_option(),
-        playback: application_playback(playback)?,
-    })
-}
-
-fn application_map_existing_playback(
-    action: wire::PlaybackTopologyAction,
-) -> Result<application::PlaybackTopologyAction, String> {
-    let wire::PlaybackTopologyAction::MapExistingPlayback {
-        page,
-        slot,
-        playback_number,
-        expected_page_revision,
-        expected_page_object_id,
-        expected_playback_revision,
-        expected_playback_object_id,
-    } = action
-    else {
-        unreachable!("caller passes only MapExistingPlayback")
-    };
-    Ok(application::PlaybackTopologyAction::MapExistingPlayback {
-        page,
-        slot,
-        playback_number,
-        expected_page_revision: input_revision(expected_page_revision, "expected_page_revision")?,
-        expected_page_object_id: expected_page_object_id.into_option(),
-        expected_playback_revision: input_revision(
-            expected_playback_revision,
-            "expected_playback_revision",
-        )?,
-        expected_playback_object_id: expected_playback_object_id.into_option(),
-    })
+fn application_address(
+    value: light_wire::v2::playback::PlaybackAddressValue,
+) -> Result<playback::PlaybackAddress, String> {
+    playback::PlaybackAddress::new(value.page, value.position)
 }
 
 fn application_save_cue_list(

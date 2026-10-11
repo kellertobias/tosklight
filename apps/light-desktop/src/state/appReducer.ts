@@ -5,7 +5,6 @@ import { reduceHydration } from "./reducers/hydrationReducer";
 import { reduceNavigation } from "./reducers/navigationReducer";
 import { reducePaneGeometry } from "./reducers/paneGeometryReducer";
 import { reducePaneOptions } from "./reducers/paneOptionsReducer";
-import { reduceVirtualPane } from "./reducers/virtualPaneReducer";
 import { reduceWorkspace } from "./reducers/workspaceReducer";
 
 export type { Action } from "./appActions";
@@ -16,7 +15,6 @@ const reducers = [
 	reduceHydration,
 	reducePaneGeometry,
 	reducePaneOptions,
-	reduceVirtualPane,
 	reduceWorkspace,
 	reduceControls,
 ];

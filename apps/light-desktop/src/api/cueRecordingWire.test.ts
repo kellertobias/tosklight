@@ -14,9 +14,9 @@ const CORRELATION_ID = "55555555-5555-4555-8555-555555555555";
 
 function request(
 	target: CueRecordingRequest["target"] = {
-		kind: "page_slot",
+		kind: "playback",
 		page: 4,
-		slot: 2,
+		position: 2,
 	},
 ): CueRecordingRequest {
 	return {
@@ -67,14 +67,15 @@ function wireCueList(revision = 2, body = cueListBody()) {
 
 function wirePlayback(cueListId = CUE_LIST_ID) {
 	return {
-		id: "7",
-		revision: 2,
-		body: {
-			number: 7,
-			name: "Main",
-			target: { type: "cue_list", cue_list_id: cueListId },
-			buttons: ["go_minus", "go", "flash"],
-		},
+		name: "Main",
+		target: { type: "cue_list", cue_list_id: cueListId },
+		buttons: ["go_minus", "go", "flash"],
+		button_count: 3,
+		fader: "master",
+		has_fader: true,
+		go_activates: true,
+		auto_off: true,
+		xfade_millis: 0,
 	};
 }
 
@@ -85,8 +86,7 @@ function wirePage() {
 		body: {
 			number: 4,
 			name: "Page 4",
-			slots: { 2: 7 },
-			virtual_playbacks: {},
+			assignments: { 2: wirePlayback() },
 		},
 	};
 }
@@ -102,7 +102,7 @@ function changedOutcome(overrides: Record<string, unknown> = {}) {
 		recorded_cue: { id: CUE_ID, number: "1", deleted: false },
 		projections: {
 			cue_list: wireCueList(),
-			playback: wirePlayback(),
+
 			page: wirePage(),
 		},
 		show_event_sequence: 12,
@@ -121,7 +121,7 @@ function noChangeOutcome(overrides: Record<string, unknown> = {}) {
 		show_revision: 7,
 		projections: {
 			cue_list: wireCueList(1),
-			playback: wirePlayback(),
+
 			page: wirePage(),
 		},
 	});
@@ -132,8 +132,7 @@ function runtime(showId = SHOW_ID) {
 	return {
 		projection: {
 			scope: { show_id: showId, show_revision: 8 },
-			requested: { kind: "playback", playback_number: 7 },
-			playback_number: 7,
+			identity: { kind: "playback", page: 4, position: 2 },
 			target: "cue_list",
 			cue_list_id: CUE_LIST_ID,
 			runtime: null,
@@ -148,21 +147,21 @@ describe("Cue recording v2 wire", () => {
 			[CueRecordingRequest["target"], Record<string, unknown>]
 		> = [
 			[
-				{ kind: "pool", playbackNumber: 7 },
-				{ kind: "pool", playback_number: 7 },
+				{ kind: "playback", page: 99, position: 1000 },
+				{ kind: "playback", page: 99, position: 1000 },
 			],
 			[{ kind: "selected_playback" }, { kind: "selected_playback" }],
 			[
-				{ kind: "page_slot", page: 4, slot: 2 },
-				{ kind: "page_slot", page: 4, slot: 2 },
+				{ kind: "playback", page: 4, position: 2 },
+				{ kind: "playback", page: 4, position: 2 },
 			],
 			[
 				{ kind: "cue_list", cueListId: CUE_LIST_ID },
 				{ kind: "cue_list", cue_list_id: CUE_LIST_ID },
 			],
 			[
-				{ kind: "virtual", page: 1, playbackNumber: 1001 },
-				{ kind: "virtual", page: 1, playback_number: 1001 },
+				{ kind: "cuelist_pool", number: 101 },
+				{ kind: "cuelist_pool", number: 101 },
 			],
 		];
 
@@ -221,7 +220,6 @@ describe("Cue recording v2 wire", () => {
 			recordedCue: { id: CUE_ID, number: "1", deleted: false },
 			projections: {
 				cueList: { kind: "cue_list", id: CUE_LIST_ID, revision: 2 },
-				playback: { kind: "playback", id: "7", revision: 2 },
 				page: { kind: "playback_page", id: "4", revision: 2 },
 			},
 			runtime: { eventSequence: 21 },
@@ -252,7 +250,7 @@ describe("Cue recording v2 wire", () => {
 			recorded_cue: { id: CUE_ID, number: "1", deleted: true },
 			projections: {
 				cue_list: wireCueList(2, { ...cueListBody(), cues: [] }),
-				playback: null,
+
 				page: null,
 			},
 		});
@@ -301,11 +299,18 @@ describe("Cue recording v2 wire", () => {
 			changedOutcome({
 				projections: {
 					cue_list: wireCueList(),
-					playback: wirePlayback("88888888-8888-4888-8888-888888888888"),
-					page: null,
+					page: {
+						...wirePage(),
+						body: {
+							...wirePage().body,
+							assignments: {
+								2: wirePlayback("88888888-8888-4888-8888-888888888888"),
+							},
+						},
+					},
 				},
 			}),
-			"$.projections.playback.body.target.cue_list_id",
+			"$.projections.page.body.assignments.2",
 		],
 		[
 			"runtime Show scope",
@@ -332,10 +337,13 @@ describe("Cue recording v2 wire", () => {
 			changedOutcome({
 				runtime: {
 					...runtime(),
-					projection: { ...runtime().projection, playback_number: 8 },
+					projection: {
+						...runtime().projection,
+						identity: { kind: "playback", page: 4, position: 8 },
+					},
 				},
 			}),
-			"$.runtime.projection.playback_number",
+			"$.runtime.projection.identity",
 		],
 		[
 			"runtime Cuelist identity",
@@ -375,7 +383,7 @@ describe("Cue recording v2 wire", () => {
 								id: "77777777-7777-4777-8777-777777777777",
 							},
 						},
-						playback: null,
+
 						page: null,
 					},
 				}),
@@ -395,20 +403,14 @@ describe("Cue recording v2 wire", () => {
 		],
 		[
 			"Pool Playback identity",
-			request({ kind: "pool", playbackNumber: 8 }),
+			request({ kind: "playback", page: 4, position: 8 }),
 			changedOutcome({
 				projections: {
 					cue_list: wireCueList(),
-					playback: wirePlayback(),
+
 					page: null,
 				},
 			}),
-			"$.projections.playback.body.number",
-		],
-		[
-			"selected Playback page",
-			request({ kind: "selected_playback" }),
-			changedOutcome(),
 			"$.projections.page",
 		],
 		[
@@ -417,7 +419,7 @@ describe("Cue recording v2 wire", () => {
 			changedOutcome({
 				projections: {
 					cue_list: wireCueList(),
-					playback: wirePlayback(),
+
 					page: null,
 				},
 			}),
@@ -429,14 +431,19 @@ describe("Cue recording v2 wire", () => {
 			changedOutcome({
 				projections: {
 					cue_list: wireCueList(),
-					playback: wirePlayback(),
+
 					page: {
 						...wirePage(),
-						body: { ...wirePage().body, slots: { 2: 9 } },
+						body: {
+							...wirePage().body,
+							assignments: {
+								2: wirePlayback("88888888-8888-4888-8888-888888888888"),
+							},
+						},
 					},
 				},
 			}),
-			"$.projections.page.body.slots.2",
+			"$.projections.page.body.assignments.2",
 		],
 	] as const)("rejects %s topology", (_label, action, value, path) => {
 		expect(() => decodeCueRecordingOutcome(value, action, SHOW_ID, 7)).toThrow(
@@ -464,10 +471,13 @@ describe("Cue recording v2 wire", () => {
 	it("rejects requests outside backend bounds", () => {
 		for (const malformed of [
 			{ ...request(), requestId: "\u0000" },
-			{ ...request(), target: { kind: "pool" as const, playbackNumber: 0 } },
 			{
 				...request(),
-				target: { kind: "page_slot" as const, page: 128, slot: 1 },
+				target: { kind: "playback" as const, page: 1, position: 0 },
+			},
+			{
+				...request(),
+				target: { kind: "playback" as const, page: 128, position: 1 },
 			},
 			{
 				...request(),
@@ -521,7 +531,7 @@ describe("independent Cuelist recording topology", () => {
 		const outcome = changedOutcome({
 			projections: {
 				cue_list: { id: "legacy-list-key", revision: 2, body },
-				playback: null,
+
 				page: null,
 			},
 		});
@@ -539,7 +549,7 @@ describe("independent Cuelist recording topology", () => {
 		const body = { ...cueListBody(), pool_number: 101 };
 		const projections = {
 			cue_list: { ...wireCueList(), body },
-			playback: null,
+
 			page: null,
 		};
 		expect(() =>
@@ -560,5 +570,80 @@ describe("independent Cuelist recording topology", () => {
 				7,
 			),
 		).toThrow();
+	});
+});
+
+describe("Cue recording exact runtime owner", () => {
+	it("rejects a different assigned position even when it targets the same Cuelist", () => {
+		const value = changedOutcome({
+			projections: {
+				cue_list: wireCueList(),
+				page: {
+					...wirePage(),
+					body: {
+						...wirePage().body,
+						assignments: { 2: wirePlayback(), 3: wirePlayback() },
+					},
+				},
+			},
+			runtime: {
+				...runtime(),
+				projection: {
+					...runtime().projection,
+					identity: { kind: "playback", page: 4, position: 3 },
+				},
+			},
+		});
+		expect(() =>
+			decodeCueRecordingOutcome(value, request(), SHOW_ID, 7),
+		).toThrow("$.runtime.projection.identity");
+	});
+	it("rejects selected runtime identity whose actual assignment targets a different Cuelist", () => {
+		const value = changedOutcome({
+			projections: {
+				cue_list: wireCueList(),
+				page: {
+					...wirePage(),
+					body: {
+						...wirePage().body,
+						assignments: {
+							2: wirePlayback("88888888-8888-4888-8888-888888888888"),
+						},
+					},
+				},
+			},
+			runtime: runtime(),
+		});
+		expect(() =>
+			decodeCueRecordingOutcome(
+				value,
+				request({ kind: "selected_playback" }),
+				SHOW_ID,
+				7,
+			),
+		).toThrow("$.runtime.projection.identity");
+	});
+	it("rejects a direct runtime identity that names a different Cuelist", () => {
+		const value = changedOutcome({
+			projections: { cue_list: wireCueList(), page: null },
+			runtime: {
+				...runtime(),
+				projection: {
+					...runtime().projection,
+					identity: {
+						kind: "direct_cue_list",
+						cue_list_id: "88888888-8888-4888-8888-888888888888",
+					},
+				},
+			},
+		});
+		expect(() =>
+			decodeCueRecordingOutcome(
+				value,
+				request({ kind: "cue_list", cueListId: CUE_LIST_ID }),
+				SHOW_ID,
+				7,
+			),
+		).toThrow("$.runtime.projection.identity");
 	});
 });

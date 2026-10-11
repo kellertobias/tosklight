@@ -23,7 +23,7 @@ export function usePlaybackPageControl() {
 	const [pagePickerOpen, setPagePickerOpen] = useState(false);
 	const [renamePage, setRenamePage] = useState<PlaybackPageObject | null>(null);
 	const runtimeReady = runtimeStatus.status === "ready";
-	const activePageNumber = runtimeReady ? (desk?.active_page ?? null) : null;
+	const activePageNumber = runtimeReady ? (desk?.command_page ?? null) : null;
 	const activePage = topology.pages.find(
 		(page) => page.body.number === activePageNumber,
 	);

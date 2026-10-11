@@ -33,6 +33,28 @@ const model: PlaybackCardViewModel = {
 afterEach(cleanup);
 
 describe("playback card views", () => {
+	it("renders a push encoder row with the same exact playback action callbacks", () => {
+		const change = vi.fn();
+		const press = vi.fn();
+		render(
+			<TouchPlaybackCardView
+				model={{
+					...model,
+					presentation: "push_encoder",
+					actions: [{ id: "push", label: "Push", onClick: press }],
+				}}
+				callbacks={{ onFaderChange: change }}
+			/>,
+		);
+		expect(screen.queryByRole("slider", { name: "Main Cuelist" })).toBeNull();
+		fireEvent.keyDown(screen.getByRole("group", { name: "Main Cuelist" }), {
+			key: "ArrowUp",
+		});
+		expect(change).toHaveBeenCalledWith(62.1);
+		fireEvent.click(screen.getByRole("button", { name: "Push" }));
+		expect(press).toHaveBeenCalledOnce();
+	});
+
 	it("emits touch fader changes without owning playback services", () => {
 		const change = vi.fn();
 		render(

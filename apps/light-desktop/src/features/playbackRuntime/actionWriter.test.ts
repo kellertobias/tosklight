@@ -20,7 +20,6 @@ function outcome(
 	eventSequence: number | null = 12,
 ): PlaybackOutcome {
 	return {
-		request_id: request.request_id,
 		correlation_id: "55555555-5555-4555-8555-555555555555",
 		requested: request.address,
 		resolved:
@@ -28,9 +27,8 @@ function outcome(
 				? request.address
 				: {
 						kind: "playback",
-						playback_number: projection.playback_number ?? 1,
 						page: 1,
-						slot: 1,
+						position: projection.identity.kind === "playback" ? projection.identity.position : 1,
 					},
 		outcome: { status: eventSequence == null ? "no_change" : "applied" },
 		durability: "durable",
@@ -39,7 +37,6 @@ function outcome(
 		desk: null,
 		event_sequence: eventSequence,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 
@@ -54,7 +51,7 @@ function masterProjection(value: number): PlaybackProjection {
 }
 
 function runtime(store: PlaybackRuntimeStore) {
-	const projection = store.getSnapshot().projections.get("playback:1")?.[0];
+	const projection = store.getSnapshot().projections.get("playback:1.1")?.[0];
 	if (projection?.target !== "cue_list" || !projection.runtime)
 		throw new Error("expected a running Cuelist projection");
 	return projection.runtime;
@@ -62,7 +59,7 @@ function runtime(store: PlaybackRuntimeStore) {
 
 function readyStore() {
 	const store = new PlaybackRuntimeStore();
-	const identity = playbackIdentity(1);
+	const identity = playbackIdentity(1, 1);
 	store.reset(SHOW_ID, DESK_ID, "authority-a");
 	store.installSnapshot(playbackSnapshot([identity]), [identity]);
 	return store;
@@ -71,8 +68,7 @@ function readyStore() {
 function directCueProjection(cueIndex = 0): PlaybackProjection {
 	return {
 		...cueProjection(1, cueIndex),
-		requested: cueListIdentity("33333333-3333-4333-8333-333333333333"),
-		playback_number: null,
+		identity: cueListIdentity("33333333-3333-4333-8333-333333333333"),
 	};
 }
 
@@ -114,13 +110,11 @@ function groupOutcome(
 	if (request.address.kind !== "group" || projection.target !== "group")
 		throw new Error("Group outcome fixture requires a Group request");
 	return {
-		request_id: request.request_id,
 		correlation_id: "55555555-5555-4555-8555-555555555555",
 		requested: request.address,
 		resolved: {
 			kind: "group",
 			group_id: request.address.group_id,
-			playback_number: projection.playback_number,
 		},
 		outcome: { status: eventSequence == null ? "no_change" : "applied" },
 		durability: "durable",
@@ -129,7 +123,6 @@ function groupOutcome(
 		desk: null,
 		event_sequence: eventSequence,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 
@@ -143,7 +136,7 @@ function groupMaster(store: PlaybackRuntimeStore) {
 }
 
 function playbackSourceIdentity(playbackNumber: number) {
-	return { kind: "playback", playback_number: playbackNumber } as const;
+	return { kind: "playback", page:1, position: playbackNumber } as const;
 }
 
 function cueListSourceIdentity(cueListId: string) {
@@ -181,11 +174,10 @@ describe("PlaybackRuntimeActionWriter", () => {
 			onActionStarted,
 		});
 
-		await writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+		await writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} });
 
 		expect(onActionStarted).toHaveBeenCalledOnce();
 		expect(onActionStarted.mock.calls[0]?.[0]).toMatchObject({
-			request_id: expect.any(String),
 			action: { type: "go", pressed: true },
 		});
 	});
@@ -203,13 +195,13 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 
 		const result = writer.setActivePage(2);
-		expect(store.getSnapshot().desk?.active_page).toBe(2);
+		expect(store.getSnapshot().desk?.command_page).toBe(2);
 		pending.resolve(pageOutcome(2));
 
 		await expect(result).resolves.toBe(true);
-		expect(applyDeskPage).toHaveBeenCalledWith(DESK_ID, 2);
+		expect(applyDeskPage).toHaveBeenCalledWith(DESK_ID, 2, "main");
 		expect(store.applyDesk(deskProjection(2), 11)).toBe(false);
-		expect(store.getSnapshot().desk?.active_page).toBe(2);
+		expect(store.getSnapshot().desk?.command_page).toBe(2);
 	});
 
 	it("settles a page response after its authoritative desk event", async () => {
@@ -228,7 +220,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		pending.resolve(pageOutcome(3, 12));
 
 		await expect(result).resolves.toBe(true);
-		expect(store.getSnapshot().desk?.active_page).toBe(3);
+		expect(store.getSnapshot().desk?.command_page).toBe(3);
 	});
 
 	it("rolls back a failed page selection without disabling a retry", async () => {
@@ -248,7 +240,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 
 		await expect(writer.setActivePage(4)).resolves.toBe(false);
-		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().desk?.command_page).toBe(1);
 		expect(store.getSnapshot().status).toBe("ready");
 		expect(store.getSnapshot().error?.message).toBe("page rejected");
 		expect(onError).toHaveBeenLastCalledWith(
@@ -257,7 +249,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 
 		await expect(writer.setActivePage(2)).resolves.toBe(true);
 		expect(applyDeskPage).toHaveBeenCalledTimes(2);
-		expect(store.getSnapshot().desk?.active_page).toBe(2);
+		expect(store.getSnapshot().desk?.command_page).toBe(2);
 		expect(store.getSnapshot().status).toBe("ready");
 		expect(store.getSnapshot().error).toBeNull();
 		expect(onError).toHaveBeenLastCalledWith(null);
@@ -274,7 +266,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 
 		await expect(writer.setActivePage(6)).resolves.toBe(false);
-		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().desk?.command_page).toBe(1);
 		expect(store.getSnapshot().error?.message).toBe(
 			"Playback page response does not match the active desk request",
 		);
@@ -294,7 +286,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 
 		await expect(writer.setActivePage(6)).resolves.toBe(false);
-		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().desk?.command_page).toBe(1);
 		expect(store.getSnapshot().error?.message).toBe(
 			"Playback page selection unexpectedly created a Page",
 		);
@@ -311,11 +303,11 @@ describe("PlaybackRuntimeActionWriter", () => {
 			applyDeskPage,
 		});
 
-		await expect(writer.setActivePage(128)).resolves.toBe(false);
+		await expect(writer.setActivePage(100)).resolves.toBe(false);
 		expect(applyDeskPage).not.toHaveBeenCalled();
-		expect(store.getSnapshot().desk?.active_page).toBe(1);
+		expect(store.getSnapshot().desk?.command_page).toBe(1);
 		expect(store.getSnapshot().error?.message).toBe(
-			"Playback page must be an integer between 1 and 127",
+			"Playback page must be an integer between 1 and 99",
 		);
 	});
 
@@ -334,7 +326,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		await expect(writer.setActivePage(2)).resolves.toBe(false);
 		expect(applyDeskPage).not.toHaveBeenCalled();
 		expect(store.getSnapshot().error?.message).toBe(
-			"Authoritative Playback desk is loading",
+			"Selected Playback surface is loading",
 		);
 	});
 
@@ -377,19 +369,19 @@ describe("PlaybackRuntimeActionWriter", () => {
 			repair,
 		});
 
-		const result = await writer.poolPlaybackAction(1, "button", {
+		const result = await writer.playbackAction({page:1,position:1}, "button", {
 			button: 1,
 			pressed: true,
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:1},
 		});
 
 		expect(applyAction).toHaveBeenCalledOnce();
 		expect(repair).toHaveBeenCalledOnce();
 		expect(repair).toHaveBeenCalledWith(retryable);
 		expect(requests[0]).toMatchObject({
-			address: { kind: "playback", playback_number: 1 },
+			address: { kind: "playback", page:1, position: 1 },
 			action: { type: "configured_button", number: 1, pressed: true },
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:1},
 		});
 		expect(result).toBeNull();
 		expect(store.getSnapshot().error).toBe(retryable);
@@ -422,9 +414,9 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(requests).toHaveLength(1);
 		expect(repair).toHaveBeenCalledOnce();
 		expect(requests[0]).toMatchObject({
-			address: { kind: "playback", playback_number: 1 },
+			address: { kind: "playback", page:1, position: 1 },
 			action: { type: "release" },
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:0},
 		});
 		expect(result).toBeNull();
 	});
@@ -455,7 +447,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 					cue_list_id: "33333333-3333-4333-8333-333333333333",
 				},
 				action: { type: "release" },
-				surface: "virtual",
+				control_source: {surface_id:"main",control_id:0},
 			}),
 		);
 	});
@@ -491,7 +483,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 			kind: "direct_cue_list" as const,
 			cue_list_id: aggregate.cue_list_id,
 		};
-		const exact = { ...aggregate, requested: identity };
+		const exact = { ...aggregate, identity };
 		const store = new PlaybackRuntimeStore();
 		store.reset(SHOW_ID, DESK_ID);
 		store.installSnapshot(playbackSnapshot([identity], 10, [exact]), [
@@ -619,9 +611,9 @@ describe("PlaybackRuntimeActionWriter", () => {
 			onError,
 		});
 
-		const result = writer.poolPlaybackAction(1, "master", {
+		const result = writer.playbackAction({page:1,position:1}, "master", {
 			value: 0.35,
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:1},
 		});
 		expect(runtime(store).master).toBe(0.35);
 		pending.reject(Object.assign(new Error("conflict"), { status: 409 }));
@@ -634,9 +626,9 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(onError).toHaveBeenCalledWith(expect.any(Error));
 
 		await expect(
-			writer.poolPlaybackAction(1, "master", {
+			writer.playbackAction({page:1,position:1}, "master", {
 				value: 0.6,
-				surface: "virtual",
+				control_source: {surface_id:"main",control_id:1},
 			}),
 		).resolves.not.toBeNull();
 		expect(attempts).toBe(2);
@@ -664,7 +656,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 
 		await expect(
-			writer.poolPlaybackAction(1, "go", { surface: "virtual" }),
+			writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} }),
 		).resolves.toBeNull();
 		expect(runtime(store).cue_index).toBe(beforeCue);
 		expect(store.getSnapshot().pendingKeys.size).toBe(0);
@@ -675,7 +667,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		);
 
 		await expect(
-			writer.poolPlaybackAction(1, "go", { surface: "virtual" }),
+			writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} }),
 		).resolves.not.toBeNull();
 		expect(attempts).toBe(2);
 		expect(runtime(store).cue_index).toBe(1);
@@ -700,7 +692,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 			onError,
 		});
 
-		const result = writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+		const result = writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} });
 		const sessionError = new Error("Playback session failed");
 		store.setError(sessionError);
 		if (!request) throw new Error("request was not captured");
@@ -724,7 +716,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 				outcome(request, projection, 12),
 		});
 
-		await writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+		await writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} });
 		const afterResponse = store.getSnapshot();
 
 		expect(store.applyProjection(projection, 12)).toBe(false);
@@ -747,7 +739,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		});
 		const projection = cueProjection(1, 3);
 
-		const result = writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+		const result = writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} });
 		store.applyProjection(projection, 13);
 		if (!request) throw new Error("request was not captured");
 		pending.resolve(outcome(request, projection, 13));
@@ -773,7 +765,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 			onError,
 		});
 
-		const result = writer.poolPlaybackAction(1, "go", { surface: "virtual" });
+		const result = writer.playbackAction({page:1,position:1}, "go", { control_source: {surface_id:"main",control_id:1} });
 		store.reset(SHOW_ID, DESK_ID, "authority-b");
 		if (!request) throw new Error("request was not captured");
 		pending.resolve(outcome(request, cueProjection(1, 4), 14));
@@ -803,10 +795,10 @@ describe("PlaybackRuntimeActionWriter", () => {
 			store,
 			applyAction,
 		});
-		const press = writer.poolPlaybackAction(1, "button", {
+		const press = writer.playbackAction({page:1,position:1}, "button", {
 			button: 1,
 			pressed: true,
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:1},
 		});
 		await Promise.resolve();
 		writer.stop();
@@ -815,17 +807,17 @@ describe("PlaybackRuntimeActionWriter", () => {
 		await expect(press).resolves.toBeNull();
 
 		await expect(
-			writer.poolPlaybackAction(1, "button", {
+			writer.playbackAction({page:1,position:1}, "button", {
 				button: 1,
 				pressed: false,
-				surface: "virtual",
+				control_source: {surface_id:"main",control_id:1},
 			}),
 		).rejects.toBe(retryable);
 
 		expect(applyAction).toHaveBeenCalledTimes(2);
 		expect(requests[1]).toMatchObject({
 			action: { type: "configured_button", number: 1, pressed: false },
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:1},
 		});
 		expect(store.getSnapshot().projections.size).toBe(0);
 	});
@@ -850,7 +842,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(request).toMatchObject({
 			address: { kind: "group", group_id: GROUP_ID },
 			action: { type: "master", value: 0.35 },
-			surface: "virtual",
+			control_source: {surface_id:"main",control_id:0},
 		});
 		expect(request).not.toHaveProperty("address.playback_number");
 		if (!request) throw new Error("request was not captured");
@@ -864,7 +856,7 @@ describe("PlaybackRuntimeActionWriter", () => {
 		expect(groupMaster(store)).toBe(0.35);
 	});
 
-	it("settles event-before-response, replay, and no-change Group outcomes", async () => {
+	it("settles event-before-response and no-change Group outcomes", async () => {
 		const store = groupReadyStore();
 		const pending = deferred<PlaybackOutcome>();
 		let request: PlaybackActionRequest | null = null;
@@ -887,9 +879,8 @@ describe("PlaybackRuntimeActionWriter", () => {
 		if (!request) throw new Error("request was not captured");
 		pending.resolve({
 			...groupOutcome(request, projection, 13),
-			replayed: true,
 		});
-		await expect(result).resolves.toMatchObject({ replayed: true });
+		await expect(result).resolves.not.toBeNull();
 		expect(groupMaster(store)).toBe(0.6);
 
 		applyAction.mockImplementationOnce(async (_showId, _deskId, value) => ({
@@ -972,7 +963,6 @@ describe("PlaybackRuntimeActionWriter", () => {
 			resolved: {
 				kind: "group" as const,
 				group_id: "other",
-				playback_number: null,
 			},
 		}));
 		const invalidWriter = new PlaybackRuntimeActionWriter({

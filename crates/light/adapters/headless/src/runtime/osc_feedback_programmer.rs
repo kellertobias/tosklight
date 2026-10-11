@@ -498,13 +498,8 @@ pub(super) fn osc_dynamic_source(source: &light_dynamics::DynamicControllerSourc
             cue_list_id,
             instance_link,
         } => format!("cue:{cue_list_id}:{instance_link}"),
-        light_dynamics::DynamicControllerSource::Playback {
-            playback_number,
-            virtual_page: None,
-        } => format!("playback:{playback_number}"),
-        light_dynamics::DynamicControllerSource::Playback {
-            playback_number,
-            virtual_page: Some(page),
-        } => format!("virtual-playback:{page}:{playback_number}"),
+        light_dynamics::DynamicControllerSource::Playback { page, position } => {
+            format!("playback:{page}.{position}")
+        }
     }
 }

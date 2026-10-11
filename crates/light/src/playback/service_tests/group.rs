@@ -3,14 +3,14 @@ use crate::ActionContext;
 
 struct GroupPorts {
     inner: FakePorts,
-    playback: Option<u16>,
+    playback: Option<light_playback::PlaybackAddress>,
 }
 
 impl GroupPorts {
     fn new(playback: Option<u16>) -> Self {
         Self {
             inner: FakePorts::default(),
-            playback,
+            playback: playback.map(|position| test_address(1, position)),
         }
     }
 
@@ -28,15 +28,18 @@ impl PlaybackPorts for GroupPorts {
         self.inner.current_page(context)
     }
 
-    fn playback_at(&self, page: u8, slot: u8) -> Result<Option<u16>, ActionError> {
-        self.inner.playback_at(page, slot)
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn group_playback(
         &self,
         _context: &ActionContext,
         _group_id: PlaybackGroupId,
-    ) -> Result<Option<u16>, ActionError> {
+    ) -> Result<Option<light_playback::PlaybackAddress>, ActionError> {
         Ok(self.playback)
     }
 
@@ -45,9 +48,9 @@ impl PlaybackPorts for GroupPorts {
         context: &ActionContext,
         address: ResolvedPlaybackAddress,
         action: PlaybackAction,
-        surface: PlaybackSurface,
+        control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
-        self.inner.execute(context, address, action, surface)
+        self.inner.execute(context, address, action, control_source)
     }
 
     fn projection(
@@ -88,7 +91,7 @@ fn master_resolves_assignment_and_retains_group_runtime_identity() {
         result.resolved,
         ResolvedPlaybackAddress::Group {
             group_id: group_id.clone(),
-            playback_number: Some(8),
+            playback_address: Some(test_address(1, 8)),
         }
     );
     assert_eq!(

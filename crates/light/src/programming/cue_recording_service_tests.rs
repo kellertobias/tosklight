@@ -223,15 +223,15 @@ fn failed_standalone_first_record_activation_retains_values_and_replays_without_
             let mut result = self.inner.completion();
             Arc::make_mut(&mut result.projections.cue_list.raw_body)["pool_number"] =
                 serde_json::json!(101);
-            result.projections.playback = None;
-            result.concrete_playback_number = None;
+            result.projections.page = None;
+            result.concrete_playback_address = None;
             *self.committed.lock() = Some(result.clone());
             Ok(result)
         }
         fn activate_recorded_cue(
             &self,
             _: &ActionContext,
-            _: u16,
+            _: light_playback::PlaybackAddress,
             _: CueNumber,
         ) -> Option<ProgrammingCueActivationCompletion> {
             panic!("standalone Cuelist must not activate an unrelated physical playback");
@@ -614,7 +614,9 @@ impl Setup {
             .with_request_id(request_id),
             command: ProgrammingCueRecordRequest {
                 show_id: self.show_id,
-                target: ProgrammingCueRecordTarget::Pool { playback_number: 7 },
+                target: ProgrammingCueRecordTarget::Playback {
+                    address: light_playback::PlaybackAddress::new(1, 7).unwrap(),
+                },
                 operation: ProgrammingCueRecordOperation::Overwrite,
                 cue_number: Some(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
                 timing: ProgrammingCueRecordTiming::default(),
@@ -739,8 +741,7 @@ impl TestPorts {
             speed_multiplier: 1.0,
             cues: vec![cue],
         };
-        let playback =
-            light_playback::PlaybackDefinition::new_cue_list(self.playback, "Test", cue_list_id);
+        let playback = light_playback::PlaybackDefinition::new_cue_list("Test", cue_list_id);
         ProgrammingCueCommitResult {
             changed: self.changed,
             created_topology: self.created_topology,
@@ -752,13 +753,14 @@ impl TestPorts {
                     object_revision: if self.created_topology { 1 } else { 2 },
                     raw_body: Arc::new(serde_json::to_value(cue_list).unwrap()),
                 },
-                playback: Some(ProgrammingCueObjectProjection {
-                    kind: crate::ActiveShowObjectKind::Playback,
-                    object_id: self.playback.to_string(),
+                page: Some(ProgrammingCueObjectProjection {
+                    kind: crate::ActiveShowObjectKind::PlaybackPage,
+                    object_id: "1".into(),
                     object_revision: 1,
-                    raw_body: Arc::new(serde_json::to_value(playback).unwrap()),
+                    raw_body: Arc::new(
+                        serde_json::json!({"number":1,"name":"Main","assignments":{self.playback.to_string():playback}}),
+                    ),
                 }),
-                page: None,
             },
             recorded_cue: ProgrammingRecordedCue {
                 id: self.cue_id,
@@ -767,7 +769,9 @@ impl TestPorts {
             },
             show_revision: PortableShowRevision::from_value(if self.changed { 2 } else { 1 }),
             event_sequence: self.changed.then_some(41),
-            concrete_playback_number: Some(self.playback),
+            concrete_playback_address: Some(
+                light_playback::PlaybackAddress::new(1, self.playback).unwrap(),
+            ),
         }
     }
 }
@@ -786,8 +790,7 @@ impl ProgrammingCueRecordingPorts for TestPorts {
         *self.last_context.lock() = Some(context.clone());
         Ok(ProgrammingCueRecordingEnvironment {
             target: ProgrammingCueResolvedTarget::Playback {
-                playback_number: self.playback,
-                page_slot: None,
+                address: light_playback::PlaybackAddress::new(1, self.playback).unwrap(),
             },
             active_cue: None,
             cuelist_auto_off_at_zero_default: false,
@@ -812,7 +815,7 @@ impl ProgrammingCueRecordingPorts for TestPorts {
     fn activate_recorded_cue(
         &self,
         _context: &ActionContext,
-        playback_number: u16,
+        address: light_playback::PlaybackAddress,
         _cue_number: CueNumber,
     ) -> Option<ProgrammingCueActivationCompletion> {
         self.activations.fetch_add(1, Ordering::Relaxed);
@@ -820,7 +823,7 @@ impl ProgrammingCueRecordingPorts for TestPorts {
             return None;
         }
         Some(ProgrammingCueActivationCompletion {
-            projection: runtime_projection(self.show_id, playback_number, self.cue_id),
+            projection: runtime_projection(self.show_id, address.position(), self.cue_id),
             event_sequence: self.activation_event.then_some(42),
         })
     }
@@ -832,8 +835,9 @@ fn runtime_projection(show_id: ShowId, playback: u16, cue_id: Uuid) -> PlaybackR
             show_id: show_id.0,
             show_revision: 2,
         },
-        requested: PlaybackRuntimeIdentity::Playback(playback),
-        playback_number: Some(playback),
+        identity: PlaybackRuntimeIdentity::Playback(
+            light_playback::PlaybackAddress::new(1, playback).unwrap(),
+        ),
         target: PlaybackTargetProjection::CueList {
             cue_list_id: CueListId::new(),
             runtime: Some(Box::new(CueListRuntimeProjection {

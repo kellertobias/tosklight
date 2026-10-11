@@ -26,7 +26,7 @@ pub enum CommandMacroTrigger {
     Pool,
     Editor,
     Playback {
-        playback_number: u16,
+        address: light_playback::PlaybackAddress,
     },
     CommandLine,
     Http,

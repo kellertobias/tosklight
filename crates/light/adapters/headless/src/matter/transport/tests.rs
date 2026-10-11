@@ -17,9 +17,7 @@ use std::sync::mpsc;
 fn light(endpoint_id: u16, name: &str, on: bool, level: u8) -> MatterPlaybackLight {
     MatterPlaybackLight {
         endpoint_id,
-        page: 1,
-        playback: endpoint_id as u8,
-        playback_number: endpoint_id,
+        address: light_playback::PlaybackAddress::new(1, endpoint_id.min(1000).max(1)).unwrap(),
         name: name.into(),
         on,
         level,

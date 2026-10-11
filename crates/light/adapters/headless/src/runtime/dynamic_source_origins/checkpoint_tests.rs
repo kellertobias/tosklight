@@ -517,7 +517,7 @@ mod operation_witnesses {
         };
         let controller = DynamicController {
             id: Uuid::from_u128(61_412),
-            source: DynamicControllerSource::physical_playback(1),
+            source: DynamicControllerSource::playback(1, 1).unwrap(),
             priority: 1,
             activated_at_millis: 0,
             size: 2.0,

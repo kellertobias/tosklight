@@ -15,16 +15,23 @@ import {
 
 describe("playback row height units", () => {
 	const oneButton = {
-		first_playback_slot: 1,
-		has_fader: false,
+		first_position: 1,
+		count: 1,
+		presentation: "buttons" as const,
 		button_count: 1,
 	};
 	const multipleButtons = {
-		first_playback_slot: 11,
-		has_fader: false,
+		first_position: 11,
+		count: 1,
+		presentation: "buttons" as const,
 		button_count: 3,
 	};
-	const fader = { first_playback_slot: 21, has_fader: true, button_count: 1 };
+	const fader = {
+		first_position: 21,
+		count: 1,
+		presentation: "fader" as const,
+		button_count: 1,
+	};
 
 	it("uses 1/1/2 units with attached hardware", () => {
 		expect(
@@ -87,6 +94,7 @@ const mocks = vi.hoisted(() => ({
 			{
 				id: "front",
 				name: "Front sequence",
+				pool_number: 1,
 				cues: [] as Array<Record<string, any>>,
 				mode: "sequence",
 				priority: 0,
@@ -98,6 +106,27 @@ const mocks = vi.hoisted(() => ({
 	},
 	scopedCueLists: [] as Array<Record<string, any>>,
 }));
+
+function canonicalPage(page: {
+	number: number;
+	name: string;
+	slots: Record<string, number>;
+}) {
+	return {
+		number: page.number,
+		name: page.name,
+		assignments: Object.fromEntries(
+			Object.entries(page.slots).flatMap(([position, fixtureId]) => {
+				const fixture = mocks.playbacks.pool.find(
+					(p) => p.number === fixtureId,
+				);
+				if (!fixture) return [];
+				const { number, ...definition } = fixture;
+				return [[position, definition]];
+			}),
+		),
+	};
+}
 
 function PlaybackFaderBank(
 	props: ComponentProps<typeof PhysicalPlaybackFaderBank>,
@@ -169,15 +198,16 @@ vi.mock("../../features/playbackTopology/PlaybackTopologyView", () => ({
 				id: `page-object-${body.number}`,
 				revision: 3,
 				updated_at: "",
-				body,
+				body: canonicalPage(body),
 			})),
 		};
 	},
 }));
 vi.mock("../../features/playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => ({
-		configureSlot: mocks.savePlaybackSlot,
-		clearMappedPlayback: mocks.clearPlaybackSlot,
+		assignPlayback: mocks.savePlaybackSlot,
+		updatePlayback: mocks.savePlaybackSlot,
+		clearPlayback: mocks.clearPlaybackSlot,
 		mapExistingPlayback: mocks.mapExistingPlayback,
 		error: mocks.error ? new Error(mocks.error) : null,
 	}),
@@ -191,8 +221,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 		);
 		return {
 			scope: { show_id: "show-1", show_revision: 9 },
-			requested: { kind: "playback", playback_number: number },
-			playback_number: number,
+			identity: { kind: "playback", page: 1, position: number },
 			target: "cue_list",
 			cue_list_id:
 				mocks.runtimeCueListIdOverride ?? playback.target.cue_list_id,
@@ -238,15 +267,13 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 		if (!playback)
 			return {
 				scope: { show_id: "show-1", show_revision: 9 },
-				requested: { kind: "playback", playback_number: number },
-				playback_number: number,
+				identity: { kind: "playback", page: 1, position: number },
 				target: "missing",
 			};
 		if (mocks.runtimeProjectionMismatch)
 			return {
 				scope: { show_id: "show-1", show_revision: 9 },
-				requested: { kind: "playback", playback_number: number },
-				playback_number: number,
+				identity: { kind: "playback", page: 1, position: number },
 				target: "missing",
 			};
 		if (playback.target.type === "cue_list")
@@ -256,8 +283,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 		);
 		return {
 			scope: { show_id: "show-1", show_revision: 9 },
-			requested: { kind: "playback", playback_number: number },
-			playback_number: number,
+			identity: { kind: "playback", page: 1, position: number },
 			target: playback.target.type,
 			...(playback.target.type === "group"
 				? {
@@ -273,7 +299,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 	};
 	return {
 		usePlaybackRuntimeActions: () => ({
-			poolPlaybackAction: mocks.poolPlaybackAction,
+			playbackAction: mocks.poolPlaybackAction,
 		}),
 		usePlaybackRuntimeAuthority: () => null,
 		usePlaybackRuntimeStatus: () => ({
@@ -283,11 +309,29 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 		usePlaybackDeskView: () => ({
 			scope: { show_id: "show-1", show_revision: 9 },
 			desk_id: "desk-1",
-			active_page: mocks.playbacks.active_page,
-			selected_playback: mocks.playbacks.selected_playback,
+			command_page: mocks.playbacks.active_page,
+			selected_surface_id: "main",
+			resolved_pages: { main: mocks.playbacks.active_page },
+			selected_playback:
+				mocks.playbacks.selected_playback == null
+					? null
+					: { page: 1, position: 1 },
 		}),
-		usePlaybackProjectionMap: (numbers: number[]) =>
-			new Map(numbers.map((number) => [number, projection(number)])),
+		usePlaybackProjectionMap: (
+			addresses: Array<{ page: number; position: number }>,
+		) =>
+			new Map(
+				addresses.map((address) => {
+					const number = mocks.playbacks.pages.find(
+						(p) => p.number === address.page,
+					)?.slots[String(address.position)];
+					const value = projection(number ?? address.position);
+					return [
+						`playback:${address.page}.${address.position}`,
+						{ ...value, identity: { kind: "playback", ...address } },
+					];
+				}),
+			),
 	};
 });
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
@@ -319,7 +363,7 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 			id: String(body.number),
 			revision: 1,
 			updated_at: "",
-			body,
+			body: canonicalPage(body),
 		})),
 }));
 vi.mock("../../features/showObjects/ShowObjectsView", () => ({
@@ -353,6 +397,7 @@ function resetPlaybackFaderMocks() {
 		{
 			id: "front",
 			name: "Front sequence",
+			pool_number: 1,
 			cues: [],
 			mode: "sequence",
 			priority: 0,
@@ -499,11 +544,25 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		const { container } = render(
 			<PlaybackFaderBank
 				playbackLayout={{
-					playbacks_per_row: 1,
 					rows: [
-						{ first_playback_slot: 1, has_fader: false, button_count: 1 },
-						{ first_playback_slot: 11, has_fader: false, button_count: 3 },
-						{ first_playback_slot: 21, has_fader: true, button_count: 1 },
+						{
+							first_position: 1,
+							count: 1,
+							presentation: "buttons" as const,
+							button_count: 1,
+						},
+						{
+							first_position: 11,
+							count: 1,
+							presentation: "buttons" as const,
+							button_count: 3,
+						},
+						{
+							first_position: 21,
+							count: 1,
+							presentation: "fader" as const,
+							button_count: 1,
+						},
 					],
 				}}
 			/>,
@@ -533,8 +592,14 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		const { container } = render(
 			<PlaybackFaderBank
 				playbackLayout={{
-					playbacks_per_row: 2,
-					rows: [{ first_playback_slot: 1, has_fader: true, button_count: 3 }],
+					rows: [
+						{
+							first_position: 1,
+							count: 2,
+							presentation: "fader" as const,
+							button_count: 3,
+						},
+					],
 				}}
 			/>,
 		);
@@ -551,11 +616,15 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		);
 		expect(extraButton).not.toBeNull();
 		if (extraButton) fireEvent.click(extraButton);
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
-			button: 4,
-			pressed: true,
-			surface: "physical",
-		});
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 4,
+				pressed: true,
+				control_source: { surface_id: "main", control_id: 14 },
+			},
+		);
 		expect(screen.getAllByRole("slider")).toHaveLength(2);
 	});
 
@@ -573,8 +642,14 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		const { container } = render(
 			<PlaybackFaderBank
 				playbackLayout={{
-					playbacks_per_row: 2,
-					rows: [{ first_playback_slot: 1, has_fader: true, button_count: 3 }],
+					rows: [
+						{
+							first_position: 1,
+							count: 2,
+							presentation: "fader" as const,
+							button_count: 3,
+						},
+					],
 				}}
 			/>,
 		);
@@ -601,11 +676,25 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		const { container } = render(
 			<PlaybackFaderBank
 				playbackLayout={{
-					playbacks_per_row: 1,
 					rows: [
-						{ first_playback_slot: 1, has_fader: false, button_count: 1 },
-						{ first_playback_slot: 11, has_fader: false, button_count: 3 },
-						{ first_playback_slot: 21, has_fader: true, button_count: 1 },
+						{
+							first_position: 1,
+							count: 1,
+							presentation: "buttons" as const,
+							button_count: 1,
+						},
+						{
+							first_position: 11,
+							count: 1,
+							presentation: "buttons" as const,
+							button_count: 3,
+						},
+						{
+							first_position: 21,
+							count: 1,
+							presentation: "fader" as const,
+							button_count: 1,
+						},
 					],
 				}}
 			/>,
@@ -621,7 +710,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	});
 
 	it("assigns the selected Cuelist source to the touched physical page slot", async () => {
-		mocks.playbacks.pool = [playbackDefinition(12)];
+		mocks.scopedCueLists[0].pool_number = 12;
 		render(<PlaybackFaderBank count={1} />);
 		fireEvent.click(
 			screen.getByRole("button", {
@@ -629,12 +718,13 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			}),
 		);
 		await waitFor(() =>
-			expect(mocks.mapExistingPlayback).toHaveBeenCalledWith(1, 1, 12, {
-				expectedPageRevision: 3,
-				expectedPageObjectId: "page-object-1",
-				expectedPlaybackRevision: 5,
-				expectedPlaybackObjectId: "playback-object-12",
-			}),
+			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				expect.objectContaining({
+					target: { type: "cue_list", cue_list_id: "front" },
+				}),
+				{ expectedPageRevision: 3, expectedPageObjectId: "page-object-1" },
+			),
 		);
 		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
 		expect(mocks.refresh).not.toHaveBeenCalled();
@@ -741,9 +831,13 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		);
 
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "off", {
-				surface: actionSurface,
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"off",
+				{
+					control_source: { surface_id: "main", control_id: 10 },
+				},
+			),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
 		expect(mocks.resetCommandLine).toHaveBeenCalledOnce();
@@ -766,9 +860,13 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Turn off Neighbor" }));
 
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(8, "off", {
-				surface: "virtual",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 2 },
+				"off",
+				{
+					control_source: { surface_id: "main", control_id: 20 },
+				},
+			),
 		);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(
 			7,
@@ -802,14 +900,14 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
 		expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
-			1,
-			1,
-			expect.objectContaining({ number: 0, button_count: 3, has_fader: true }),
+			{ page: 1, position: 1 },
+			expect.objectContaining({
+				button_count: 3,
+				has_fader: true,
+			}),
 			{
 				expectedPageRevision: 3,
 				expectedPageObjectId: "page-object-1",
-				expectedPlaybackRevision: 0,
-				expectedPlaybackObjectId: null,
 			},
 		);
 	});
@@ -831,8 +929,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 
 		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
 		expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
-			1,
-			1,
+			{ page: 1, position: 1 },
 			expect.objectContaining({
 				name: "Group 21",
 				target: { type: "group", group_id: "21" },
@@ -855,7 +952,12 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			{ ...mocks.playbacks.cue_lists[0], id: "legacy", name: "Legacy" },
 		];
 		mocks.scopedCueLists = [
-			{ ...mocks.playbacks.cue_lists[0], id: "scoped", name: "Scoped" },
+			{
+				...mocks.playbacks.cue_lists[0],
+				id: "scoped",
+				name: "Scoped",
+				pool_number: 1,
+			},
 		];
 
 		render(<PlaybackFaderBank count={1} />);
@@ -926,7 +1028,7 @@ describe("PlaybackFaderBank configuration shortcuts", () => {
 			target: {
 				family: { type: "cue" },
 				object_id: "front",
-				playback_number: 7,
+				playback_address: { page: 1, position: 1 },
 				cue_id: "cue-2",
 				cue_number: 2,
 				validate_active_context: true,
@@ -945,9 +1047,13 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 		render(<PlaybackFaderBank count={1} />);
 		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select", {
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"select",
+				{
+					control_source: { surface_id: "main", control_id: 10 },
+				},
+			),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
 		expect(mocks.refresh).not.toHaveBeenCalled();
@@ -975,9 +1081,13 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 		const card = container.querySelector(".hardware-playback-card")!;
 		fireEvent.click(card.querySelector("header b")!);
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "select", {
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"select",
+				{
+					control_source: { surface_id: "main", control_id: 10 },
+				},
+			),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
 		expect(mocks.dispatch).toHaveBeenCalledWith({
@@ -986,7 +1096,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 		});
 		expect(mocks.dispatch).toHaveBeenCalledWith({
 			type: "OPEN_BUILTIN_CUELIST",
-			number: 7,
+			number: 1,
 		});
 	});
 
@@ -1031,18 +1141,30 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			screen.getByRole("slider", { name: "Page 1 playback 1 fader" }),
 			{ target: { value: "42" } },
 		);
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
-			button: 1,
-			pressed: true,
-			surface: "physical",
-		});
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "master", {
-			value: 0.42,
-			surface: "physical",
-		});
-		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "select", {
-			surface: "physical",
-		});
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 1,
+				pressed: true,
+				control_source: { surface_id: "main", control_id: 11 },
+			},
+		);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 },
+			"master",
+			{
+				value: 0.42,
+				control_source: { surface_id: "main", control_id: 10 },
+			},
+		);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(
+			{ page: 1, position: 1 },
+			"select",
+			{
+				control_source: { surface_id: "main", control_id: 10 },
+			},
+		);
 	});
 });
 
@@ -1087,7 +1209,7 @@ describe("PlaybackFaderBank Record targets", () => {
 		for (const call of mocks.recordCue.mock.calls)
 			expect(call).toEqual([
 				{
-					target: { kind: "page_slot", page: 3, slot: 1 },
+					target: { kind: "playback", page: 3, position: 1 },
 					operation: "overwrite",
 					timing: {},
 					cueOnly: false,
@@ -1128,7 +1250,7 @@ describe("PlaybackFaderBank Record targets", () => {
 		fireEvent.click(screen.getByRole("button", { name: "GO +" }));
 		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
 		expect(mocks.recordCue).toHaveBeenCalledWith({
-			target: { kind: "page_slot", page: 3, slot: 1 },
+			target: { kind: "playback", page: 3, position: 1 },
 			operation: "overwrite",
 			timing: {},
 			cueOnly: false,
@@ -1169,7 +1291,7 @@ describe("PlaybackFaderBank Record targets", () => {
 		fireEvent.click(screen.getByRole("button", { name: label }));
 		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
 		expect(mocks.recordCue).toHaveBeenCalledWith({
-			target: { kind: "page_slot", page: 1, slot: 1 },
+			target: { kind: "playback", page: 1, position: 1 },
 			operation,
 			...(exactCue ? { cueNumber: "2.0" } : {}),
 			timing: {},
@@ -1220,7 +1342,7 @@ describe("PlaybackFaderBank Record targets", () => {
 		).toBeNull();
 		expect(mocks.recordCue).toHaveBeenCalledWith(
 			expect.objectContaining({
-				target: { kind: "page_slot", page: 1, slot: 1 },
+				target: { kind: "playback", page: 1, position: 1 },
 				operation,
 			}),
 		);
@@ -1247,7 +1369,7 @@ describe("PlaybackFaderBank Record targets", () => {
 		);
 		await waitFor(() =>
 			expect(mocks.recordCue).toHaveBeenCalledWith({
-				target: { kind: "page_slot", page: 4, slot: 1 },
+				target: { kind: "playback", page: 4, position: 1 },
 				operation: "overwrite",
 				timing: {},
 				cueOnly: false,
@@ -1328,15 +1450,19 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			});
 			fireEvent.pointerUp(slider, { clientX: 50, clientY: 120, pointerId: 1 });
 			await waitFor(() =>
-				expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "master", {
-					value: 1,
-					surface: "virtual",
-				}),
+				expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+					{ page: 1, position: 1 },
+					"master",
+					{
+						value: 1,
+						control_source: { surface_id: "main", control_id: 10 },
+					},
+				),
 			);
 		}
 	});
 
-	it("commits rapid and slow touch fader changes as absolute virtual-surface values", async () => {
+	it("commits rapid and slow touch fader changes as absolute values with retained surface source", async () => {
 		assignPlayback({ target: { type: "group", group_id: "group-front" } });
 		render(<PlaybackFaderBank count={1} />);
 		const fader = screen.getByRole("slider", { name: "Group master" });
@@ -1344,23 +1470,36 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		fireEvent.input(fader, { target: { value: "87" } });
 		fireEvent.input(fader, { target: { value: "13" } });
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "master", {
-				value: 0.13,
-				surface: "virtual",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+				{ page: 1, position: 1 },
+				"master",
+				{
+					value: 0.13,
+					control_source: { surface_id: "main", control_id: 10 },
+				},
+			),
 		);
 
 		fireEvent.input(fader, { target: { value: "42" } });
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "master", {
-				value: 0.42,
-				surface: "virtual",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+				{ page: 1, position: 1 },
+				"master",
+				{
+					value: 0.42,
+					control_source: { surface_id: "main", control_id: 10 },
+				},
+			),
 		);
-		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(7, "master", {
-			value: expect.any(Number),
-			surface: "physical",
-		});
+		expect(
+			mocks.poolPlaybackAction.mock.calls.every(
+				([address, action, options]) =>
+					address.page === 1 &&
+					address.position === 1 &&
+					action === "master" &&
+					options.control_source.surface_id === "main",
+			),
+		).toBe(true);
 	});
 	it("keeps the zero Group Master warning with the intensity instead of the summary", () => {
 		assignPlayback({ target: { type: "group", group_id: "group-front" } });
@@ -1385,25 +1524,37 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		fireEvent.pointerDown(go, { pointerId: 3 });
 		expect(go).toHaveClass("playback-button-active");
 		fireEvent.click(go);
-		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "button", {
-			button: 1,
-			pressed: true,
-			surface: "physical",
-		});
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 1,
+				pressed: true,
+				control_source: { surface_id: "main", control_id: 11 },
+			},
+		);
 		const flash = screen.getByRole("button", { name: "FLASH" });
 		fireEvent.pointerDown(flash, { pointerId: 4 });
 		fireEvent.pointerUp(flash, { pointerId: 4 });
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
-				pressed: true,
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"flash",
+				{
+					pressed: true,
+					control_source: { surface_id: "main", control_id: 13 },
+				},
+			),
 		);
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
-				pressed: false,
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"flash",
+				{
+					pressed: false,
+					control_source: { surface_id: "main", control_id: 13 },
+				},
+			),
 		);
 	});
 
@@ -1422,10 +1573,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		await waitFor(() =>
 			expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
 		);
-		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
-			pressed: false,
-			surface: "physical",
-		});
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 },
+			"flash",
+			{
+				pressed: false,
+				control_source: { surface_id: "main", control_id: 13 },
+			},
+		);
 	});
 
 	it("releases a held Flash when the bank unmounts", async () => {
@@ -1439,10 +1594,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		await waitFor(() =>
 			expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
 		);
-		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
-			pressed: false,
-			surface: "physical",
-		});
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 },
+			"flash",
+			{
+				pressed: false,
+				control_source: { surface_id: "main", control_id: 13 },
+			},
+		);
 	});
 
 	it("orders release after a delayed press and retains its original semantic", async () => {
@@ -1461,10 +1620,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			pointerId: 4,
 		});
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
-				pressed: true,
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"flash",
+				{
+					pressed: true,
+					control_source: { surface_id: "main", control_id: 13 },
+				},
+			),
 		);
 		mocks.playbacks.pool = [
 			playbackDefinition(7, { buttons: ["go", "go_minus", "swap"] }),
@@ -1475,10 +1638,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
 		resolvePress({ status: "changed" });
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(7, "flash", {
-				pressed: false,
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+				{ page: 1, position: 1 },
+				"flash",
+				{
+					pressed: false,
+					control_source: { surface_id: "main", control_id: 13 },
+				},
+			),
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2);
 		expect(screen.getByRole("button", { name: "SWAP" })).toBeInTheDocument();
@@ -1500,10 +1667,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			pointerId: 4,
 		});
 		await waitFor(() =>
-			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(7, "flash", {
-				pressed: true,
-				surface: "physical",
-			}),
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				"flash",
+				{
+					pressed: true,
+					control_source: { surface_id: "main", control_id: 13 },
+				},
+			),
 		);
 	});
 
@@ -1541,8 +1712,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			<PlaybackFaderBank
 				count={1}
 				playbackLayout={{
-					playbacks_per_row: 1,
-					rows: [{ first_playback_slot: 1, has_fader: false, button_count: 1 }],
+					rows: [
+						{
+							first_position: 1,
+							count: 1,
+							presentation: "buttons" as const,
+							button_count: 1,
+						},
+					],
 				}}
 			/>,
 		);
@@ -1554,8 +1731,14 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			<PlaybackFaderBank
 				count={1}
 				playbackLayout={{
-					playbacks_per_row: 1,
-					rows: [{ first_playback_slot: 1, has_fader: false, button_count: 2 }],
+					rows: [
+						{
+							first_position: 1,
+							count: 1,
+							presentation: "buttons" as const,
+							button_count: 2,
+						},
+					],
 				}}
 			/>,
 		);
@@ -1598,16 +1781,26 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 		const temp = screen.getByRole("button", { name: "TEMP" });
 		fireEvent.click(temp);
 		fireEvent.click(temp);
-		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(1, 7, "button", {
-			button: 1,
-			pressed: true,
-			surface: "physical",
-		});
-		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(2, 7, "button", {
-			button: 1,
-			pressed: true,
-			surface: "physical",
-		});
+		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(
+			1,
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 1,
+				pressed: true,
+				control_source: { surface_id: "main", control_id: 11 },
+			},
+		);
+		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(
+			2,
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 1,
+				pressed: true,
+				control_source: { surface_id: "main", control_id: 11 },
+			},
+		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2);
 	});
 
@@ -1746,12 +1939,13 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 		expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() =>
-			expect(mocks.clearPlaybackSlot).toHaveBeenCalledWith(1, 1, {
-				expectedPageRevision: 3,
-				expectedPageObjectId: "page-object-1",
-				expectedPlaybackRevision: 5,
-				expectedPlaybackObjectId: "playback-object-7",
-			}),
+			expect(mocks.clearPlaybackSlot).toHaveBeenCalledWith(
+				{ page: 1, position: 1 },
+				{
+					expectedPageRevision: 3,
+					expectedPageObjectId: "page-object-1",
+				},
+			),
 		);
 		await waitFor(() =>
 			expect(

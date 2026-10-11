@@ -11,7 +11,6 @@ import {
 	selectCueLists,
 	selectDynamics,
 	selectPlaybackPages,
-	selectPlaybacks,
 	selectPortableGroups,
 	selectPresets,
 } from "./selectors";
@@ -21,7 +20,6 @@ export {
 	selectCueLists,
 	selectDynamics,
 	selectPlaybackPages,
-	selectPlaybacks,
 	selectPortableGroups,
 	selectPresets,
 } from "./selectors";
@@ -78,11 +76,6 @@ export function useCueLists(enabled = true): readonly ShowObject<"cue_list">[] {
 	return useShowObjectsSelector(selectCueLists, shallowEqualArray, enabled);
 }
 
-export function usePlaybackDefinitions(
-	enabled = true,
-): readonly ShowObject<"playback">[] {
-	return useShowObjectsSelector(selectPlaybacks, shallowEqualArray, enabled);
-}
 
 export function usePlaybackPages(
 	enabled = true,

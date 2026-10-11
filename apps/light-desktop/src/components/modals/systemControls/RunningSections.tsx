@@ -112,13 +112,7 @@ function PlaybackRow({
 			<span>
 				<b>{playback.label}</b>
 				<small>
-					{playback.identity.kind === "virtual"
-						? `Page ${playback.identity.page} · Virtual playback ${playback.identity.playback_number}`
-						: playback.playbackNumber == null
-							? "Direct Cuelist"
-							: playback.locations?.length
-								? `${playback.locations.map(({ page, slot }) => `Page ${page} · Playback ${slot}`).join(", ")}`
-								: `Playback assignment ${playback.playbackNumber}`}{" "}
+					{playback.identity.kind === "playback" ? `Page ${playback.identity.page} · Playback ${playback.identity.position}` : "Direct Cuelist"}{" "}
 					· Cue {cueNumber} · {Math.round(playback.runtime.master * 100)}% ·{" "}
 					{playback.runtime.paused ? "Paused" : "Running"}
 				</small>
@@ -126,11 +120,7 @@ function PlaybackRow({
 			<Button
 				className="danger"
 				aria-label={`Turn off ${
-					playback.identity.kind === "virtual"
-						? "Virtual playback"
-						: playback.playbackNumber == null
-							? "Direct Cuelist"
-							: "Playback"
+					playback.identity.kind === "playback" ? "Playback" : "Direct Cuelist"
 				} ${playback.label}`}
 				disabled={!releaseAvailable}
 				onClick={() => onRelease(playback)}

@@ -8,7 +8,7 @@ use super::error::UpdateError;
 /// playback number prevents two active instances of one Cuelist from being collapsed together.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ActiveCueContext {
-    pub playback_number: u16,
+    pub playback_address: light_playback::PlaybackAddress,
     pub cue_list_id: CueListId,
     pub cue_id: Uuid,
     pub cue_number: light_playback::CueNumber,
@@ -17,7 +17,7 @@ pub struct ActiveCueContext {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ResolvedCueTarget {
     pub cue_list_id: CueListId,
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     pub cue_id: Uuid,
     pub cue_number: light_playback::CueNumber,
 }
@@ -26,7 +26,7 @@ impl From<&ActiveCueContext> for ResolvedCueTarget {
     fn from(context: &ActiveCueContext) -> Self {
         Self {
             cue_list_id: context.cue_list_id,
-            playback_number: Some(context.playback_number),
+            playback_address: Some(context.playback_address),
             cue_id: context.cue_id,
             cue_number: context.cue_number.clone(),
         }
@@ -38,7 +38,9 @@ pub enum CueTargetRequest {
     /// An explicit Cue is already resolved through the normal command/pool addressing path.
     Explicit(ResolvedCueTarget),
     /// A concrete playback must currently have one authoritative Cue.
-    ActivePlayback { playback_number: u16 },
+    ActivePlayback {
+        playback_address: light_playback::PlaybackAddress,
+    },
     /// A pool Cuelist without an explicit Cue is valid only with one concrete active context.
     PoolCueList { cue_list_id: CueListId },
 }
@@ -49,11 +51,15 @@ pub fn resolve_cue_target(
 ) -> Result<ResolvedCueTarget, UpdateError> {
     match request {
         CueTargetRequest::Explicit(target) => Ok(target.clone()),
-        CueTargetRequest::ActivePlayback { playback_number } => resolve_unique_context(
+        CueTargetRequest::ActivePlayback { playback_address } => resolve_unique_context(
             active
                 .iter()
-                .filter(|context| context.playback_number == *playback_number),
-            format!("playback {playback_number}"),
+                .filter(|context| context.playback_address == *playback_address),
+            format!(
+                "Playback {}.{}",
+                playback_address.page(),
+                playback_address.position()
+            ),
         ),
         CueTargetRequest::PoolCueList { cue_list_id } => resolve_unique_context(
             active

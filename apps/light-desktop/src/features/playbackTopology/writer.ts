@@ -7,13 +7,12 @@ import {
 } from "./conflictRepair";
 import type {
 	ExistingPlaybackPageRevisionBasis,
-	ExistingPlaybackRevisionBasis,
 	PlaybackPageRevisionBasis,
+	PlaybackAddress,
 	PlaybackTopologyAction,
 	PlaybackTopologyActions,
 	PlaybackTopologyOutcome,
 	PlaybackTopologyRequest,
-	PlaybackTopologyRevisionBasis,
 	PlaybackTopologyTransport,
 } from "./contracts";
 import { existingPageRevisions, readyPageRevisions } from "./pageAuthority";
@@ -32,10 +31,9 @@ export interface PlaybackTopologyWriterOptions {
 	onError?: (error: Error | null) => void;
 }
 
-/** Serializes each portable topology intent as one revision-checked Show action. */
+/** Serializes page-backed portable assignments as revision-checked Show intents. */
 export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 	private readonly lifecycle: PlaybackTopologyWriterLifecycle;
-
 	constructor(private readonly options: PlaybackTopologyWriterOptions) {
 		this.lifecycle = new PlaybackTopologyWriterLifecycle(
 			options.showId,
@@ -43,23 +41,37 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			options.transport,
 		);
 	}
-
-	createPage(page: number, revisionBasis?: PlaybackPageRevisionBasis) {
-		return this.lifecycle.enqueue((generation) =>
-			this.createPageNow(generation, page, revisionBasis),
-		);
+	stop() {
+		this.lifecycle.stop();
 	}
-
+	createPage(
+		page: number,
+		basis?: PlaybackPageRevisionBasis,
+		name = `Page ${page}`,
+	) {
+		return this.pageIntent("create_playback_page", page, name, basis);
+	}
 	renamePage(
 		page: number,
 		name: string,
-		revisionBasis?: ExistingPlaybackPageRevisionBasis,
+		basis?: ExistingPlaybackPageRevisionBasis,
 	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.renamePageNow(generation, page, name, revisionBasis),
-		);
+		return this.pageIntent("rename_playback_page", page, name, basis);
 	}
-
+	deletePage(page: number, basis?: ExistingPlaybackPageRevisionBasis) {
+		return this.lifecycle.enqueue((generation) => {
+			const revisions = existingPageRevisions(this.options.store, page, basis);
+			return revisions
+				? this.apply(
+						{ type: "delete_playback_page", number: page, ...revisions },
+						generation,
+					)
+				: this.fail(
+						`Authoritative Playback Page ${page} is not available`,
+						generation,
+					);
+		});
+	}
 	saveCueList(
 		cueListId: string,
 		expectedRevision: number,
@@ -67,16 +79,18 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 		body: CueList,
 	) {
 		return this.lifecycle.enqueue((generation) =>
-			this.saveCueListNow(
+			this.apply(
+				{
+					type: "save_cue_list",
+					cueListId,
+					expectedRevision,
+					expectedObjectId,
+					body,
+				},
 				generation,
-				cueListId,
-				expectedRevision,
-				expectedObjectId,
-				body,
 			),
 		);
 	}
-
 	undoCueList(
 		cueListId: string,
 		expectedRevision: number,
@@ -94,7 +108,6 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			),
 		);
 	}
-
 	redoCueList(
 		cueListId: string,
 		expectedRevision: number,
@@ -112,431 +125,105 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			),
 		);
 	}
-
-	configureSlot(
-		page: number,
-		slot: number,
-		playback: PlaybackDefinition,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
+	assignPlayback(
+		address: PlaybackAddress,
+		definition: PlaybackDefinition,
+		basis?: PlaybackPageRevisionBasis,
 	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.configureSlotNow(generation, page, slot, playback, revisionBasis),
-		);
+		return this.assignmentIntent("assign_playback", address, definition, basis);
 	}
-
+	updatePlayback(
+		address: PlaybackAddress,
+		definition: PlaybackDefinition,
+		basis?: PlaybackPageRevisionBasis,
+	) {
+		return this.assignmentIntent("update_playback", address, definition, basis);
+	}
+	clearPlayback(address: PlaybackAddress, basis?: PlaybackPageRevisionBasis) {
+		return this.lifecycle.enqueue((generation) => {
+			const revisions = readyPageRevisions(
+				this.options.store,
+				address.page,
+				basis,
+			);
+			return revisions
+				? this.apply(
+						{ type: "clear_playback", address, ...revisions },
+						generation,
+					)
+				: this.fail("Authoritative Playback Pages are loading", generation);
+		});
+	}
 	assignGroupMaster(
 		groupObjectId: string,
 		expectedGroupRevision: number,
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
+		address: PlaybackAddress,
+		basis?: PlaybackPageRevisionBasis,
 	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.assignGroupMasterNow(
-				generation,
-				groupObjectId,
-				expectedGroupRevision,
-				page,
-				slot,
-				revisionBasis,
-			),
-		);
+		return this.lifecycle.enqueue((generation) => {
+			const group = this.options.store
+				.getSnapshot()
+				.groups.find((object) => object.id === groupObjectId);
+			if (!group || group.revision !== expectedGroupRevision)
+				return this.fail(
+					"Authoritative Group is stale or unavailable",
+					generation,
+				);
+			const revisions = readyPageRevisions(
+				this.options.store,
+				address.page,
+				basis,
+			);
+			return revisions
+				? this.apply(
+						{
+							type: "assign_group_master",
+							groupObjectId,
+							expectedGroupRevision,
+							address,
+							...revisions,
+						},
+						generation,
+					)
+				: this.fail("Authoritative Playback Pages are loading", generation);
+		});
 	}
-
-	assignVirtualGroupMaster(
-		groupObjectId: string,
-		expectedGroupRevision: number,
-		page: number,
-		playbackNumber: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
+	private assignmentIntent(
+		type: "assign_playback" | "update_playback",
+		address: PlaybackAddress,
+		definition: PlaybackDefinition,
+		basis?: PlaybackPageRevisionBasis,
 	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.assignVirtualGroupMasterNow(
-				generation,
-				groupObjectId,
-				expectedGroupRevision,
-				page,
-				playbackNumber,
-				revisionBasis,
-			),
-		);
+		return this.lifecycle.enqueue((generation) => {
+			const revisions = readyPageRevisions(
+				this.options.store,
+				address.page,
+				basis,
+			);
+			return revisions
+				? this.apply({ type, address, definition, ...revisions }, generation)
+				: this.fail("Authoritative Playback Pages are loading", generation);
+		});
 	}
-
-	configureVirtual(
-		page: number,
-		playbackNumber: number,
-		playback: PlaybackDefinition,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.configureVirtualNow(
-				generation,
-				page,
-				playbackNumber,
-				playback,
-				revisionBasis,
-			),
-		);
-	}
-
-	mapExistingPlayback(
-		page: number,
-		slot: number,
-		playbackNumber: number,
-		revisionBasis?: ExistingPlaybackRevisionBasis,
-	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.mapExistingPlaybackNow(
-				generation,
-				page,
-				slot,
-				playbackNumber,
-				revisionBasis,
-			),
-		);
-	}
-
-	clearMappedPlayback(
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.clearMappedPlaybackNow(generation, page, slot, revisionBasis),
-		);
-	}
-
-	clearVirtual(
-		page: number,
-		playbackNumber: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	) {
-		return this.lifecycle.enqueue((generation) =>
-			this.clearVirtualNow(generation, page, playbackNumber, revisionBasis),
-		);
-	}
-
-	stop() {
-		this.lifecycle.stop();
-	}
-
-	private createPageNow(
-		generation: number,
-		page: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	) {
-		const revisions = readyPageRevisions(
-			this.options.store,
-			page,
-			revisionBasis,
-		);
-		if (!revisions)
-			return this.fail("Authoritative Playback Pages are loading", generation);
-		return this.apply({ type: "create_page", page, ...revisions }, generation);
-	}
-
-	private renamePageNow(
-		generation: number,
-		page: number,
+	private pageIntent(
+		type: "create_playback_page" | "rename_playback_page",
+		number: number,
 		name: string,
-		revisionBasis?: ExistingPlaybackPageRevisionBasis,
+		basis?: PlaybackPageRevisionBasis,
 	) {
-		const normalized = normalizePlaybackPageName(name);
-		if (!normalized)
-			return this.fail("Playback Page name is invalid", generation);
-		const revisions = existingPageRevisions(
-			this.options.store,
-			page,
-			revisionBasis,
-		);
-		if (!revisions)
-			return this.fail(
-				`Authoritative Playback Page ${page} is not available`,
-				generation,
-			);
-		return this.apply(
-			{ type: "rename_page", page, name: normalized, ...revisions },
-			generation,
-		);
+		return this.lifecycle.enqueue((generation) => {
+			const normalized = normalizePlaybackPageName(name);
+			if (!normalized)
+				return this.fail("Playback Page name is invalid", generation);
+			const revisions = readyPageRevisions(this.options.store, number, basis);
+			return revisions
+				? this.apply(
+						{ type, number, name: normalized, ...revisions },
+						generation,
+					)
+				: this.fail("Authoritative Playback Pages are loading", generation);
+		});
 	}
-
-	private saveCueListNow(
-		generation: number,
-		cueListId: string,
-		expectedRevision: number,
-		expectedObjectId: string | null,
-		body: CueList,
-	) {
-		const snapshot = this.options.store.getSnapshot();
-		if (!snapshot.readyCollections.has("cue_list"))
-			return this.fail("Authoritative Cuelists are loading", generation);
-		return this.apply(
-			{
-				type: "save_cue_list",
-				cueListId,
-				expectedRevision,
-				expectedObjectId,
-				body,
-			},
-			generation,
-		);
-	}
-
-	private configureSlotNow(
-		generation: number,
-		page: number,
-		slot: number,
-		playback: PlaybackDefinition,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	) {
-		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
-		if (!revisions)
-			return this.fail(
-				"Authoritative Playback topology is loading",
-				generation,
-			);
-		return this.apply(
-			{ type: "configure_slot", page, slot, ...revisions, playback },
-			generation,
-		);
-	}
-
-	private assignGroupMasterNow(
-		generation: number,
-		groupObjectId: string,
-		expectedGroupRevision: number,
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	) {
-		const snapshot = this.options.store.getSnapshot();
-		if (!snapshot.readyCollections.has("group"))
-			return this.fail("Authoritative Groups are loading", generation);
-		const group = snapshot.groups.find(
-			(candidate) => candidate.id === groupObjectId,
-		);
-		if (!group || group.revision !== expectedGroupRevision)
-			return this.fail(
-				`Authoritative Group ${groupObjectId} is stale or unavailable`,
-				generation,
-			);
-		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
-		if (!revisions)
-			return this.fail(
-				"Authoritative Playback topology is loading",
-				generation,
-			);
-		return this.apply(
-			{
-				type: "assign_group_master",
-				groupObjectId,
-				expectedGroupRevision,
-				address: { kind: "physical", page, slot, ...revisions },
-			},
-			generation,
-		);
-	}
-
-	private assignVirtualGroupMasterNow(
-		generation: number,
-		groupObjectId: string,
-		expectedGroupRevision: number,
-		page: number,
-		playbackNumber: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	) {
-		const snapshot = this.options.store.getSnapshot();
-		if (!snapshot.readyCollections.has("group"))
-			return this.fail("Authoritative Groups are loading", generation);
-		const group = snapshot.groups.find(
-			(candidate) => candidate.id === groupObjectId,
-		);
-		if (!group || group.revision !== expectedGroupRevision)
-			return this.fail(
-				`Authoritative Group ${groupObjectId} is stale or unavailable`,
-				generation,
-			);
-		const revisions = this.readyPageRevisions(page, revisionBasis);
-		if (!revisions)
-			return this.fail(
-				"Authoritative Playback topology is loading",
-				generation,
-			);
-		return this.apply(
-			{
-				type: "assign_group_master",
-				groupObjectId,
-				expectedGroupRevision,
-				address: { kind: "virtual", page, playbackNumber, ...revisions },
-			},
-			generation,
-		);
-	}
-
-	private configureVirtualNow(
-		generation: number,
-		page: number,
-		playbackNumber: number,
-		playback: PlaybackDefinition,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	) {
-		const revisions = this.readyPageRevisions(page, revisionBasis);
-		if (!revisions)
-			return this.fail(
-				"Authoritative Playback topology is loading",
-				generation,
-			);
-		return this.apply(
-			{
-				type: "configure_virtual",
-				page,
-				playbackNumber,
-				...revisions,
-				playback,
-			},
-			generation,
-		);
-	}
-
-	private clearMappedPlaybackNow(
-		generation: number,
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	) {
-		const revisions = this.readySlotRevisions(page, slot, revisionBasis);
-		if (!revisions)
-			return this.fail(
-				"Authoritative Playback topology is loading",
-				generation,
-			);
-		return this.apply(
-			{ type: "clear_mapped_playback", page, slot, ...revisions },
-			generation,
-		);
-	}
-
-	private clearVirtualNow(
-		generation: number,
-		page: number,
-		playbackNumber: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	) {
-		const revisions = this.readyPageRevisions(page, revisionBasis);
-		if (!revisions)
-			return this.fail(
-				"Authoritative Playback topology is loading",
-				generation,
-			);
-		return this.apply(
-			{ type: "clear_virtual", page, playbackNumber, ...revisions },
-			generation,
-		);
-	}
-
-	private mapExistingPlaybackNow(
-		generation: number,
-		page: number,
-		slot: number,
-		playbackNumber: number,
-		revisionBasis?: ExistingPlaybackRevisionBasis,
-	) {
-		const revisions = this.existingPlaybackRevisions(
-			page,
-			playbackNumber,
-			revisionBasis,
-		);
-		if (!revisions)
-			return this.fail(
-				`Authoritative Playback ${playbackNumber} is not available`,
-				generation,
-			);
-		return this.apply(
-			{
-				type: "map_existing_playback",
-				page,
-				slot,
-				playbackNumber,
-				...revisions,
-			},
-			generation,
-		);
-	}
-
-	private slotRevisions(page: number, slot: number) {
-		const snapshot = this.options.store.getSnapshot();
-		if (
-			!snapshot.readyCollections.has("playback") ||
-			!snapshot.readyCollections.has("playback_page")
-		)
-			return null;
-		const pageObject = snapshot.playbackPages.find(
-			(object) => object.body.number === page,
-		);
-		const playbackNumber = pageObject?.body.slots[String(slot)];
-		const playback = snapshot.playbacks.find(
-			(object) => object.body.number === playbackNumber,
-		);
-		return {
-			expectedPageRevision: pageObject?.revision ?? 0,
-			expectedPageObjectId: pageObject?.id ?? null,
-			expectedPlaybackRevision: playback?.revision ?? 0,
-			expectedPlaybackObjectId: playback?.id ?? null,
-		};
-	}
-
-	private readySlotRevisions(
-		page: number,
-		slot: number,
-		revisionBasis?: PlaybackTopologyRevisionBasis,
-	) {
-		const current = this.slotRevisions(page, slot);
-		return current ? (revisionBasis ?? current) : null;
-	}
-
-	private readyPageRevisions(
-		page: number,
-		revisionBasis?: PlaybackPageRevisionBasis,
-	): PlaybackPageRevisionBasis | null {
-		const snapshot = this.options.store.getSnapshot();
-		if (!snapshot.readyCollections.has("playback_page")) return null;
-		if (revisionBasis) return revisionBasis;
-		const pageObject = snapshot.playbackPages.find(
-			(object) => object.body.number === page,
-		);
-		return {
-			expectedPageRevision: pageObject?.revision ?? 0,
-			expectedPageObjectId: pageObject?.id ?? null,
-		};
-	}
-
-	private existingPlaybackRevisions(
-		page: number,
-		playbackNumber: number,
-		revisionBasis?: ExistingPlaybackRevisionBasis,
-	): ExistingPlaybackRevisionBasis | null {
-		const snapshot = this.options.store.getSnapshot();
-		if (
-			!snapshot.readyCollections.has("playback") ||
-			!snapshot.readyCollections.has("playback_page")
-		)
-			return null;
-		if (revisionBasis) return revisionBasis;
-		const pageObject = snapshot.playbackPages.find(
-			(object) => object.body.number === page,
-		);
-		const source = snapshot.playbacks.find(
-			(object) => object.body.number === playbackNumber,
-		);
-		if (!source || source.body.target.type !== "cue_list") return null;
-		return {
-			expectedPageRevision: pageObject?.revision ?? 0,
-			expectedPageObjectId: pageObject?.id ?? null,
-			expectedPlaybackRevision: source.revision,
-			expectedPlaybackObjectId: source.id,
-		};
-	}
-
 	private async apply(
 		action: PlaybackTopologyAction,
 		generation: number,
@@ -586,11 +273,7 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 
 	private expectationsStillCurrent(action: PlaybackTopologyAction) {
 		const snapshot = this.options.store.getSnapshot();
-		if (
-			action.type === "save_cue_list" ||
-			action.type === "undo_cue_list" ||
-			action.type === "redo_cue_list"
-		) {
+		if ("cueListId" in action) {
 			const current = snapshot.cueLists.find(
 				(object) => object.body.id === action.cueListId,
 			);
@@ -605,43 +288,16 @@ export class PlaybackTopologyWriter implements PlaybackTopologyActions {
 			);
 			if (!group || group.revision !== action.expectedGroupRevision)
 				return false;
-			const page = snapshot.playbackPages.find(
-				(object) => object.body.number === action.address.page,
-			);
-			const pageCurrent =
-				(page?.id ?? null) === action.address.expectedPageObjectId &&
-				(page?.revision ?? 0) === action.address.expectedPageRevision;
-			if (action.address.kind === "virtual") return pageCurrent;
-			const address = action.address;
-			const playback = snapshot.playbacks.find(
-				(object) => object.id === address.expectedPlaybackObjectId,
-			);
-			return (
-				pageCurrent &&
-				(playback?.id ?? null) === address.expectedPlaybackObjectId &&
-				(playback?.revision ?? 0) === address.expectedPlaybackRevision
-			);
 		}
+		const number = "address" in action ? action.address.page : action.number;
 		const page = snapshot.playbackPages.find(
-			(object) => object.body.number === action.page,
-		);
-		const pageCurrent =
-			(page?.id ?? null) === action.expectedPageObjectId &&
-			(page?.revision ?? 0) === action.expectedPageRevision;
-		if (action.type === "create_page" || action.type === "rename_page")
-			return pageCurrent;
-		if (action.type === "configure_virtual" || action.type === "clear_virtual")
-			return pageCurrent;
-		const playback = snapshot.playbacks.find(
-			(object) => object.id === action.expectedPlaybackObjectId,
+			(object) => object.body.number === number,
 		);
 		return (
-			pageCurrent &&
-			(playback?.id ?? null) === action.expectedPlaybackObjectId &&
-			(playback?.revision ?? 0) === action.expectedPlaybackRevision
+			(page?.id ?? null) === action.expectedPageObjectId &&
+			(page?.revision ?? 0) === action.expectedPageRevision
 		);
 	}
-
 	private install(outcome: PlaybackTopologyOutcome) {
 		const installs = outcome.objects.map((object) => ({
 			kind: object.kind,
@@ -679,66 +335,25 @@ function assertOutcome(
 ) {
 	if (request.requestId !== outcome.requestId)
 		throw new Error("Playback topology response request ID does not match");
-	const action = request.action;
-	const resolution = outcome.resolution;
-	if (
-		action.type === "save_cue_list" ||
-		action.type === "undo_cue_list" ||
-		action.type === "redo_cue_list"
-	) {
+	const { action } = request;
+	const { resolution } = outcome;
+	if ("cueListId" in action) {
 		if (
 			resolution.kind !== "cue_list" ||
 			resolution.cueListId !== action.cueListId
 		)
 			throw new Error("Playback topology response Cuelist does not match");
-		return;
-	}
-	if (action.type === "create_page" || action.type === "rename_page") {
-		if (resolution.kind !== "page" || resolution.page !== action.page)
-			throw new Error("Playback topology response Page does not match");
-		return;
-	}
-	if (action.type === "configure_virtual" || action.type === "clear_virtual") {
+	} else if ("address" in action) {
 		if (
-			resolution.kind !== "virtual" ||
-			resolution.page !== action.page ||
-			resolution.playbackNumber !== action.playbackNumber
-		)
-			throw new Error(
-				"Playback topology response Virtual Playback does not match",
-			);
-		return;
-	}
-	if (action.type === "assign_group_master") {
-		if (action.address.kind === "virtual") {
-			if (
-				resolution.kind !== "virtual" ||
-				resolution.page !== action.address.page ||
-				resolution.playbackNumber !== action.address.playbackNumber
-			)
-				throw new Error(
-					"Playback topology response Virtual Group Master does not match",
-				);
-			return;
-		}
-		if (
-			resolution.kind !== "page_slot" ||
+			resolution.kind !== "playback" ||
 			resolution.page !== action.address.page ||
-			resolution.slot !== action.address.slot
+			resolution.position !== action.address.position
 		)
-			throw new Error(
-				"Playback topology response physical Group Master does not match",
-			);
-		return;
+			throw new Error("Playback topology response address does not match");
+	} else if (resolution.kind !== "page" || resolution.page !== action.number) {
+		throw new Error("Playback topology response Page does not match");
 	}
-	if (
-		resolution.kind !== "page_slot" ||
-		resolution.page !== action.page ||
-		resolution.slot !== action.slot
-	)
-		throw new Error("Playback topology response slot does not match");
 }
-
 function asError(reason: unknown) {
 	return reason instanceof Error ? reason : new Error(String(reason));
 }

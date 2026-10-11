@@ -22,7 +22,7 @@ pub(super) fn parse(command: &str) -> Result<Option<CueNavigationCommand>, Strin
     let (target, rest) = playback_address_command::parse(body)?;
     if rest.first().is_none_or(|token| token != "CUE") {
         return Err(format!(
-            "{} requires PBK or VPBK followed by CUE and a Cue number",
+            "{} requires PBK followed by CUE and a Cue number",
             if load { "LOAD" } else { "GO TO" }
         ));
     }
@@ -37,7 +37,6 @@ pub(super) fn parse(command: &str) -> Result<Option<CueNavigationCommand>, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use light_playback::VirtualPlaybackAddress;
 
     #[test]
     fn parses_manual_go_to_and_load_grammar() {
@@ -45,7 +44,7 @@ mod tests {
             parse("GO TO PBK 6 CUE 2.1").unwrap().unwrap(),
             CueNavigationCommand {
                 load: false,
-                target: CommandPlaybackTarget::CurrentPage { slot: 6 },
+                target: CommandPlaybackTarget::CurrentPage { position: 6 },
                 cue_number: "2.1".parse().unwrap(),
             }
         );
@@ -53,14 +52,14 @@ mod tests {
             parse("LOAD PBK 2.6 CUE 2.1.0").unwrap().unwrap(),
             CueNavigationCommand {
                 load: true,
-                target: CommandPlaybackTarget::ExplicitPage { page: 2, slot: 6 },
+                target: CommandPlaybackTarget::ExplicitPage {
+                    page: 2,
+                    position: 6
+                },
                 cue_number: "2.1.0".parse().unwrap(),
             }
         );
-        assert_eq!(
-            parse("LOAD VPBK 1001 CUE 2").unwrap().unwrap().target,
-            CommandPlaybackTarget::Virtual(VirtualPlaybackAddress::from_number(1001).unwrap())
-        );
+        assert!(parse("LOAD VPBK 1001 CUE 2").is_err());
     }
 
     #[test]

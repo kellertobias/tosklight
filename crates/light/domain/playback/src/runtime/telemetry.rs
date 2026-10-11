@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 /// the values a running fade or button press changes between revisions.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PlaybackTelemetrySample {
-    pub playback_number: u16,
+    pub address: PlaybackAddress,
     pub enabled: bool,
     pub master: f32,
     pub current_cue_id: Option<Uuid>,
@@ -24,11 +24,13 @@ impl PlaybackEngine {
     /// Derived read-only from already-published runtime state; the render loop is not touched.
     pub fn telemetry_samples_at(&self, at: DateTime<Utc>) -> Vec<PlaybackTelemetrySample> {
         let mut samples: Vec<PlaybackTelemetrySample> = self
-            .runtime_status()
-            .into_iter()
+            .definitions
+            .keys()
+            .copied()
+            .filter_map(|address| self.runtime_status_for_playback(address))
             .filter_map(|status| self.telemetry_sample_at(status, at))
             .collect();
-        samples.sort_by_key(|sample| sample.playback_number);
+        samples.sort_by_key(|sample| sample.address);
         samples
     }
 
@@ -38,13 +40,13 @@ impl PlaybackEngine {
         at: DateTime<Utc>,
     ) -> Option<PlaybackTelemetrySample> {
         let playback = status.playback;
-        let number = playback.playback_number?;
+        let number = playback.playback_address?;
         let fade_progress = self
             .cue_lists
             .get(&playback.cue_list_id)
             .map(|cue_list| self.fade_progress_at(&playback, cue_list, at));
         Some(PlaybackTelemetrySample {
-            playback_number: number,
+            address: number,
             enabled: playback.enabled,
             master: playback.master,
             current_cue_id: playback.current_cue_id,

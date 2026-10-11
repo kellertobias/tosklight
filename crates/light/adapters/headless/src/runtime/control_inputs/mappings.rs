@@ -3,24 +3,24 @@ use super::super::*;
 pub(super) struct MappedControlOrigin {
     context: light_application::ActionContext,
     desk: Option<ControlDesk>,
-    surface: light_application::PlaybackSurface,
+    control_source: light_playback::PlaybackControlSource,
 }
 
 pub(super) fn mapped_control_origin(state: &AppState, event: &ControlEvent) -> MappedControlOrigin {
-    let (source, desk, surface) = match event {
+    let (source, desk, surface_id) = match event {
         ControlEvent::Osc { address, .. } => {
             let path = address.trim_matches('/').split('/').nth(1);
             let desk = path.and_then(|_| osc_control_desk(state));
             (
                 light_application::ActionSource::Osc,
                 desk,
-                light_application::PlaybackSurface::Osc,
+                format!("mapping:osc:{address}"),
             )
         }
         ControlEvent::Timecode(_) => (
             light_application::ActionSource::Timecode,
             None,
-            light_application::PlaybackSurface::Physical,
+            "mapping:timecode".to_string(),
         ),
     };
     let context = light_application::ActionContext::system(
@@ -30,7 +30,10 @@ pub(super) fn mapped_control_origin(state: &AppState, event: &ControlEvent) -> M
     MappedControlOrigin {
         context,
         desk,
-        surface,
+        control_source: light_playback::PlaybackControlSource {
+            surface_id,
+            control_id: 1,
+        },
     }
 }
 
@@ -99,7 +102,7 @@ fn apply_cue(
         light_application::PlaybackCommand {
             address: PlaybackAddress::CueList(cue_list_id),
             action,
-            surface: origin.surface,
+            control_source: origin.control_source.clone(),
         },
     )?;
     Ok(())

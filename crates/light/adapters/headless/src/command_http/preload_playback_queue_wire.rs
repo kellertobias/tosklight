@@ -25,7 +25,7 @@ pub(super) fn projection(
 ) -> wire::ProgrammingPreloadPlaybackQueueProjection {
     wire::ProgrammingPreloadPlaybackQueueProjection {
         revision: projection.revision,
-        actions: projection.actions.iter().copied().map(queue_item).collect(),
+        actions: projection.actions.iter().cloned().map(queue_item).collect(),
     }
 }
 
@@ -33,8 +33,14 @@ pub(super) fn queue_item(
     item: application::ProgrammingPreloadPlaybackQueueItem,
 ) -> wire::ProgrammingPreloadPlaybackQueueItem {
     wire::ProgrammingPreloadPlaybackQueueItem {
-        playback_number: item.playback_number,
-        page: item.page,
+        address: light_wire::v2::playback::PlaybackAddressValue {
+            page: item.address.page(),
+            position: item.address.position(),
+        },
+        control_source: light_wire::v2::playback::PlaybackControlSource {
+            surface_id: item.control_source.surface_id,
+            control_id: item.control_source.control_id,
+        },
         action: match item.action {
             application::ProgrammingPreloadPlaybackAction::Toggle => {
                 wire::ProgrammingPreloadPlaybackAction::Toggle
@@ -71,23 +77,6 @@ pub(super) fn queue_item(
             }
             application::ProgrammingPreloadPlaybackAction::DynamicLearnSpeed => {
                 wire::ProgrammingPreloadPlaybackAction::DynamicLearnSpeed
-            }
-            application::ProgrammingPreloadPlaybackAction::Fader { value_permyriad } => {
-                wire::ProgrammingPreloadPlaybackAction::Fader { value_permyriad }
-            }
-        },
-        surface: match item.surface {
-            application::ProgrammingPreloadPlaybackSurface::Physical => {
-                wire::ProgrammingPreloadPlaybackSurface::Physical
-            }
-            application::ProgrammingPreloadPlaybackSurface::Virtual => {
-                wire::ProgrammingPreloadPlaybackSurface::Virtual
-            }
-            application::ProgrammingPreloadPlaybackSurface::Osc => {
-                wire::ProgrammingPreloadPlaybackSurface::Osc
-            }
-            application::ProgrammingPreloadPlaybackSurface::Matter => {
-                wire::ProgrammingPreloadPlaybackSurface::Matter
             }
         },
     }

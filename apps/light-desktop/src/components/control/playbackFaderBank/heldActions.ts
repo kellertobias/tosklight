@@ -1,80 +1,46 @@
+import type { PlaybackAddressValue } from "../../../api/playbackAddress";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
+import { HeldPlaybackControls } from "../../../features/playbackRuntime/heldPlaybackControls";
 
-interface HeldPlaybackButton {
-	slot: number;
-	playbackNumber: number;
-	button: number;
-	action: "flash" | "swap";
-}
-
-/** Owns physical momentary-button lifetimes beyond any individual DOM node. */
+/** Momentary controls retain the exact address/source until every release completes. */
 export class HeldPlaybackActions {
-	private readonly held = new Map<string, HeldPlaybackButton>();
-	private tail: Promise<void> = Promise.resolve();
-
-	constructor(private readonly actions: PlaybackRuntimeActions | null) {}
-
+	private readonly held = new HeldPlaybackControls();
+	private readonly keys = new Map<number, Set<string>>();
+	constructor(
+		private readonly actions: PlaybackRuntimeActions | null,
+		private readonly surfaceId: string,
+	) {}
 	press(
-		slot: number,
-		playbackNumber: number,
+		position: number,
+		address: PlaybackAddressValue,
 		button: number,
-		action: HeldPlaybackButton["action"],
+		action: "flash" | "swap",
 	) {
-		const id = buttonId(slot, button);
-		const current = this.held.get(id);
-		if (
-			current?.playbackNumber === playbackNumber &&
-			current.button === button &&
-			current.action === action
-		)
-			return;
-		if (current) this.release(id, current);
-		const next = { slot, playbackNumber, button, action };
-		this.held.set(id, next);
-		this.enqueue(next, true);
-	}
-
-	releaseButton(slot: number, button: number) {
-		const id = buttonId(slot, button);
-		const current = this.held.get(id);
-		if (current) this.release(id, current);
-	}
-
-	releaseSlot(slot: number) {
-		for (const [id, current] of this.held)
-			if (current.slot === slot) this.release(id, current);
-	}
-
-	releaseAll() {
-		for (const [id, current] of this.held) this.release(id, current);
-	}
-
-	private release(id: string, current: HeldPlaybackButton) {
-		this.held.delete(id);
-		this.enqueue(current, false);
-	}
-
-	private enqueue(current: HeldPlaybackButton, pressed: boolean) {
-		const send = () => this.send(current, pressed);
-		const result = this.tail.then(send, send);
-		this.tail = result.then(
-			() => undefined,
-			() => undefined,
-		);
-	}
-
-	private async send(current: HeldPlaybackButton, pressed: boolean) {
-		await this.actions?.poolPlaybackAction(
-			current.playbackNumber,
-			current.action,
-			{
-			pressed,
-			surface: "physical",
+		const key = `${position}:${button}`;
+		const keys = this.keys.get(position) ?? new Set<string>();
+		keys.add(key);
+		this.keys.set(position, keys);
+		this.held.press(
+			key,
+			address,
+			{ surface_id: this.surfaceId, control_id: position * 10 + button },
+			async (hold, pressed) => {
+				await this.actions?.playbackAction(hold.address, action, {
+					pressed,
+					control_source: hold.controlSource,
+				});
 			},
 		);
 	}
-}
-
-function buttonId(slot: number, button: number) {
-	return `${slot}:${button}`;
+	releaseButton(position: number, button: number) {
+		this.held.release(`${position}:${button}`);
+	}
+	releaseSlot(position: number) {
+		for (const key of this.keys.get(position) ?? []) this.held.release(key);
+		this.keys.delete(position);
+	}
+	releaseAll() {
+		this.held.releaseAll();
+		this.keys.clear();
+	}
 }

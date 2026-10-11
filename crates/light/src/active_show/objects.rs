@@ -8,7 +8,7 @@ use crate::{
 };
 use light_core::Revision;
 use light_dynamics::{DynamicDefinition, validate_definition};
-use light_playback::{CueList, PlaybackDefinition, PlaybackPage};
+use light_playback::{CueList, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset};
 use light_show::{LosslessBody, PortableShowDocument, PortableShowObject, PortableShowTransaction};
 use std::collections::{HashMap, HashSet};
@@ -334,12 +334,6 @@ fn normalize_body(
             request,
         )
         .map(ActiveShowObjectBody::PatchLayer),
-        ActiveShowObjectBody::Playback(request) => normalize_playback(
-            existing.and_then(ActiveShowObjectBody::playback),
-            mutation,
-            request,
-        )
-        .map(ActiveShowObjectBody::Playback),
         ActiveShowObjectBody::PlaybackPage(request) => normalize_playback_page(
             existing.and_then(ActiveShowObjectBody::playback_page),
             mutation,
@@ -506,18 +500,6 @@ fn normalize_schedule(
         uuid::Uuid::parse_str(&mutation.object_id)
             .map_err(|error| invalid(format!("invalid Schedule storage id: {error}")))?,
     );
-    normalized.validate().map_err(invalid)?;
-    LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
-}
-
-fn normalize_playback(
-    existing: Option<&LosslessBody<PlaybackDefinition>>,
-    mutation: &ActiveShowObjectMutation,
-    request: &LosslessBody<PlaybackDefinition>,
-) -> Result<LosslessBody<PlaybackDefinition>, ActionError> {
-    let requested = request.typed();
-    let mut normalized = requested.clone();
-    normalized.number = parse_storage_number(&mutation.object_id, "playback")?;
     normalized.validate().map_err(invalid)?;
     LosslessBody::merge_normalized_body(existing, request, normalized).map_err(invalid)
 }

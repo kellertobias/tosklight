@@ -55,6 +55,27 @@
     }
   ],
   "$defs": {
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
     "ProgrammingUpdateCueIdentity": {
       "type": "object",
       "properties": {
@@ -255,14 +276,15 @@
           "maxLength": 256,
           "minLength": 1
         },
-        "playback_number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint16",
-          "maximum": 65535,
-          "minimum": 0
+        "playback_address": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,

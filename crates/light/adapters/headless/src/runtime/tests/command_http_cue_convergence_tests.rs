@@ -34,7 +34,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             .state
             .output.playback_runtime()
             .iter()
-            .all(|runtime| runtime.playback_number != Some(31)),
+            .all(|runtime| runtime.cue_list_id != recorded.id),
         "command grammar uses Hold activation policy"
     );
 
@@ -274,11 +274,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
     scenario
         .state
         .installation
-        .set_desk_page(
-            scenario.session.desk.id,
-            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
-            4,
-        )
+        .set_playback_surface_page(scenario.session.desk.id,"main",4)
         .unwrap();
     let source: SocketAddr = "127.0.0.1:9028".parse().unwrap();
     scenario.state.integrations.register_osc_subscriber(
@@ -303,7 +299,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         .programming
         .set_command_line(scenario.session.id, "ASSIGN CUELIST 41 AT".into());
     let current_address = format!(
-        "/light/{}/page-playback/7/button/1",
+        "/light/{}/playback/4/7/button/1",
         "desk"
     );
     assert!(handle_playback_osc(
@@ -333,7 +329,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         });
     assert_eq!(
         current.payload["target"],
-        serde_json::json!({"addressing":"current_page","slot":7})
+        serde_json::json!({"kind":"playback","page":4,"position":7})
     );
     assert_eq!(
         scenario
@@ -375,7 +371,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         .unwrap();
     assert_eq!(
         explicit.payload["target"],
-        serde_json::json!({"addressing":"explicit_page","page":4,"slot":7})
+        serde_json::json!({"kind":"playback","page":4,"position":7})
     );
     assert!(!has_runtime_for_playback(&scenario, 41));
     let after_explicit_sample = scenario.state.events.latest_sequence();
@@ -406,19 +402,8 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         Some("127.0.0.1:9028"),
     );
     let snapshot = scenario.state.output.snapshot();
-    let group_master_number = snapshot
-        .playback_pages
-        .iter()
-        .find(|page| page.number == 4)
-        .unwrap()
-        .slots[&7];
-    assert!(snapshot.playbacks.iter().any(|playback| {
-        playback.number == group_master_number
-            && matches!(
-                &playback.target,
-                light_playback::PlaybackTarget::Group { group_id, .. } if group_id.as_str() == "4"
-            )
-    }));
+    let group_master=&snapshot.playback_pages.iter().find(|page|page.number==4).unwrap().assignments[&7];
+    assert!(matches!(&group_master.target,light_playback::PlaybackTarget::Group {group_id,..} if group_id.as_str()=="4"));
 
     assert_eq!(
         scenario
@@ -438,19 +423,8 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
         Some("127.0.0.1:9028"),
     );
     let snapshot = scenario.state.output.snapshot();
-    let assigned_playback = snapshot
-        .playback_pages
-        .iter()
-        .find(|page| page.number == 4)
-        .unwrap()
-        .slots[&8];
-    assert!(snapshot.playbacks.iter().any(|playback| {
-        playback.number == assigned_playback
-            && matches!(
-                playback.target,
-                light_playback::PlaybackTarget::CueList { .. }
-            )
-    }));
+    let assigned_playback=&snapshot.playback_pages.iter().find(|page|page.number==4).unwrap().assignments[&8];
+    assert!(matches!(assigned_playback.target,light_playback::PlaybackTarget::CueList {..}));
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
@@ -487,17 +461,15 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         assert!(mapped.ok, "{:?}", mapped.error);
     }
     let snapshot = scenario.state.output.snapshot();
-    let first_playback = snapshot.playback_pages.iter().find(|page| page.number == 4).unwrap().slots[&7];
-    let second_playback = snapshot.playback_pages.iter().find(|page| page.number == 5).unwrap().slots[&7];
+    let first_playback = cue_programming_test_address(4,7);
+    assert!(snapshot.playback_pages.iter().find(|page|page.number==4).unwrap().assignments.contains_key(&7));
+    let second_playback = cue_programming_test_address(5,7);
+    assert!(snapshot.playback_pages.iter().find(|page|page.number==5).unwrap().assignments.contains_key(&7));
     assert_ne!(first_playback, second_playback);
     scenario
         .state
         .installation
-        .set_desk_page(
-            scenario.session.desk.id,
-            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
-            4,
-        )
+        .set_playback_surface_page(scenario.session.desk.id,"main",4)
         .unwrap();
     let source: SocketAddr = "127.0.0.1:9030".parse().unwrap();
     scenario.state.integrations.register_osc_subscriber(
@@ -523,10 +495,10 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
                     &scenario.token,
                     scenario.session.desk.id,
                     serde_json::json!({
-                        "request_id":format!("off-target-go-{playback}"),
-                        "address":{"kind":"playback","playback_number":playback},
+
+                        "address":{"kind":"playback","page":playback.page(),"position":playback.position()},
                         "action":{"type":"go","pressed":true},
-                        "surface":"physical",
+                        "control_source":{"surface_id":"main","control_id":1},
                     }),
                 )
                 .await
@@ -542,7 +514,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         .programming
         .set_command_line(scenario.session.id, "OFF".into());
     let current_address = format!(
-        "/light/{}/page-playback/7/button/1",
+        "/light/{}/playback/4/7/button/1",
         "desk"
     );
     assert!(handle_playback_osc(
@@ -572,7 +544,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         .unwrap();
     assert_eq!(
         current.payload["target"],
-        serde_json::json!({"addressing":"current_page","slot":7})
+        serde_json::json!({"kind":"playback","page":4,"position":7})
     );
 
     assert_eq!(
@@ -581,10 +553,10 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
                 &scenario.token,
                 scenario.session.desk.id,
                 serde_json::json!({
-                    "request_id":"off-target-go-again",
-                    "address":{"kind":"playback","playback_number":first_playback},
+
+                    "address":{"kind":"playback","page":first_playback.page(),"position":first_playback.position()},
                     "action":{"type":"go","pressed":true},
-                    "surface":"physical",
+                    "control_source":{"surface_id":"main","control_id":1},
                 }),
             )
             .await
@@ -595,11 +567,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
     scenario
         .state
         .installation
-        .set_desk_page(
-            scenario.session.desk.id,
-            light_core::ShowId(Uuid::parse_str(&show_id).unwrap()),
-            5,
-        )
+        .set_playback_surface_page(scenario.session.desk.id,"main",5)
         .unwrap();
     scenario
         .state
@@ -623,7 +591,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
         .unwrap();
     assert_eq!(
         explicit.payload["target"],
-        serde_json::json!({"addressing":"explicit_page","page":4,"slot":7})
+        serde_json::json!({"kind":"playback","page":4,"position":7})
     );
     let after_off = scenario.state.events.latest_sequence();
     handle_playback_osc(
@@ -641,7 +609,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
     assert!(handle_playback_osc(
         &scenario.state,
         &format!(
-            "/light/{}/page-playback/7/label",
+            "/light/{}/playback/5/7/label",
             "desk"
         ),
         &[OscArgument::Bool(true)],
@@ -656,7 +624,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
     assert!(handle_playback_osc(
         &scenario.state,
         &format!(
-            "/light/{}/page-playback/7/label",
+            "/light/{}/playback/5/7/label",
             "desk"
         ),
         &[OscArgument::Bool(true)],
@@ -754,7 +722,7 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
 
 fn assert_osc_surface_records(
     scenario: &CommandHttpScenario,
-    slot: u8,
+    slot: u16,
     control: &str,
     press: OscArgument,
     release: Option<OscArgument>,
@@ -807,44 +775,15 @@ fn assert_osc_surface_records(
     }
 }
 
-fn runtime_for_page_slot(
-    scenario: &CommandHttpScenario,
-    slot: u8,
-) -> light_playback::ActivePlayback {
-    let playback = scenario
-        .state
-        .output.snapshot()
-        .playback_pages
-        .iter()
-        .find(|page| page.number == 4)
-        .unwrap()
-        .slots[&slot];
-    scenario
-        .state
-        .output.playback_runtime_status()
-        .into_iter()
-        .find(|runtime| runtime.playback.playback_number == Some(playback))
-        .unwrap()
-        .playback
+fn runtime_for_page_slot(scenario:&CommandHttpScenario,position:u16)->light_playback::ActivePlayback {
+    scenario.state.output.playback_runtime_status_at(cue_programming_test_address(4,position)).unwrap().playback
 }
-
-fn has_runtime_for_playback(scenario: &CommandHttpScenario, playback: u16) -> bool {
-    scenario
-        .state
-        .output
-        .playback_runtime_status()
-        .iter()
-        .any(|runtime| runtime.playback.playback_number == Some(playback))
+fn has_runtime_for_playback(scenario:&CommandHttpScenario,number:u16)->bool {
+    let (_,_,list)=stored_cue_list(scenario,number);
+    scenario.state.output.playback_runtime_status_for_cue_list(list.id).is_some()
 }
-
-fn playback_is_enabled(scenario: &CommandHttpScenario, playback: u16) -> bool {
-    scenario
-        .state
-        .output
-        .playback_runtime_status()
-        .iter()
-        .find(|runtime| runtime.playback.playback_number == Some(playback))
-        .is_some_and(|runtime| runtime.playback.enabled)
+fn playback_is_enabled(scenario:&CommandHttpScenario,address:light_playback::PlaybackAddress)->bool {
+    scenario.state.output.playback_runtime_status_at(address).is_some_and(|runtime|runtime.playback.enabled)
 }
 
 fn stored_cue_list(

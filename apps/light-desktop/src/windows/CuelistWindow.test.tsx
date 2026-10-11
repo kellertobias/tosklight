@@ -9,11 +9,7 @@ import {
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-	CueList,
-	PlaybackDefinition,
-	PlaybackSnapshot,
-} from "../api/types";
+import type { CueList, PlaybackDefinition } from "../api/types";
 import { PaneSettingsModal } from "../components/modals/PaneSettingsModal";
 import { createCommandLineTestAuthority } from "../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CuelistWindow } from "./CuelistWindow";
@@ -63,8 +59,17 @@ const mocks = vi.hoisted(() => ({
 		],
 	},
 	playbacks: {
-		pool: [] as PlaybackDefinition[],
-		active: [] as PlaybackSnapshot["active"],
+		pool: [] as import("../components/control/playbackFaderBank/types").AssignedPlayback[],
+		active: [] as Array<{
+			playback_number: number;
+			cue_list_id: string;
+			cue_index: number;
+			master: number;
+			enabled?: boolean;
+			running?: boolean;
+			paused?: boolean;
+			flash?: boolean;
+		}>,
 		pages: [],
 		cue_lists: [] as CueList[],
 		active_page: 1,
@@ -129,23 +134,35 @@ vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	useCueLists: () =>
 		mocks.cueObjects.length
 			? mocks.cueObjects
-			: mocks.playbacks.cue_lists.map((body) => ({
-					kind: "cue_list",
-					id: body.id,
-					revision: 1,
-					updated_at: "",
-					body,
-				})),
-	usePlaybackDefinitions: () =>
-		mocks.playbacks.pool.map((body) => ({
-			kind: "playback",
-			id: String(body.number),
-			revision: 1,
-			updated_at: "",
-			body,
-		})),
+			: mocks.playbacks.cue_lists.map((body) => {
+					body.pool_number ??= mocks.playbacks.pool.find(
+						(p) =>
+							p.target.type === "cue_list" && p.target.cue_list_id === body.id,
+					)?.address.position;
+					return {
+						kind: "cue_list",
+						id: body.id,
+						revision: 1,
+						updated_at: "",
+						body,
+					};
+				}),
 	usePlaybackPages: () =>
-		mocks.playbacks.pages.map((body: Record<string, unknown>) => ({
+		(mocks.playbacks.pages.length
+			? mocks.playbacks.pages
+			: [
+					{
+						number: 1,
+						name: "Main",
+						assignments: Object.fromEntries(
+							mocks.playbacks.pool.map((p) => {
+								const { address, ...definition } = p;
+								return [address.position, definition];
+							}),
+						),
+					},
+				]
+		).map((body: Record<string, unknown>) => ({
 			kind: "playback_page",
 			id: String(body.number),
 			revision: 1,
@@ -232,7 +249,7 @@ function showEditableCueList(cueList = editableCueList()) {
 	mocks.state.storeArmed = false;
 	mocks.playbacks.pool = [
 		{
-			number: 1,
+			address: { page: 1, position: 1 },
 			name: "Main",
 			target: { type: "cue_list", cue_list_id: cueList.id },
 			buttons: ["go", "go_minus", "flash"],
@@ -276,7 +293,7 @@ describe("CuelistWindow Cue settings", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.pool = [
 			{
-				number: 1,
+				address: { page: 1, position: 1 },
 				name: "Main",
 				target: { type: "cue_list", cue_list_id: "main" },
 				buttons: ["go", "go_minus", "flash"],
@@ -601,7 +618,7 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.pool = [
 			{
-				number: 1,
+				address: { page: 1, position: 1 },
 				name: "Main",
 				target: { type: "cue_list", cue_list_id: "main" },
 				buttons: ["go", "go_minus", "flash"],
@@ -611,7 +628,7 @@ describe("CuelistWindow fixed and selected playback sources", () => {
 				xfade_millis: 0,
 			},
 			{
-				number: 2,
+				address: { page: 1, position: 2 },
 				name: "Encore",
 				target: { type: "cue_list", cue_list_id: "encore" },
 				buttons: ["go", "go_minus", "flash"],
@@ -716,7 +733,7 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		mocks.state.paneSettingsId = "cues-1";
 		mocks.playbacks.pool = [
 			{
-				number: 7,
+				address: { page: 1, position: 7 },
 				name: "Main",
 				target: { type: "cue_list", cue_list_id: "main" },
 				buttons: ["go", "go_minus", "flash"],
@@ -725,6 +742,9 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 				auto_off: true,
 				xfade_millis: 0,
 			},
+		];
+		mocks.playbacks.cue_lists = [
+			{ ...editableCueList(), id: "main", name: "Main", pool_number: 7 },
 		];
 		render(<PaneSettingsModal />);
 
@@ -840,7 +860,7 @@ describe("CuelistWindow pane and Cuelist settings", () => {
 		};
 		mocks.playbacks.pool = [
 			{
-				number: 1,
+				address: { page: 1, position: 1 },
 				name: "Main",
 				target: { type: "cue_list", cue_list_id: "main" },
 				buttons: ["go", "go_minus", "flash"],
@@ -1125,7 +1145,7 @@ describe("CuelistWindow pool recording", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.pool = [
 			{
-				number: 1,
+				address: { page: 1, position: 1 },
 				name: "No icon",
 				target: { type: "cue_list", cue_list_id: "main" },
 				buttons: ["go", "go_minus", "flash"],
@@ -1135,7 +1155,7 @@ describe("CuelistWindow pool recording", () => {
 				xfade_millis: 0,
 			},
 			{
-				number: 2,
+				address: { page: 1, position: 2 },
 				name: "Explicit icon",
 				target: { type: "cue_list", cue_list_id: "encore" },
 				buttons: ["go", "go_minus", "flash"],
@@ -1177,7 +1197,7 @@ describe("CuelistWindow pool recording", () => {
 	it("records independent Cuelist101 while preserving physical SpeedGroup101", async () => {
 		mocks.playbacks.pool = [
 			{
-				number: 101,
+				address: { page: 1, position: 101 },
 				name: "Speed A",
 				target: { type: "speed_group", group: "A" },
 				buttons: ["go", "go_minus", "flash"],
@@ -1263,7 +1283,7 @@ describe("CuelistWindow pool recording", () => {
 		mocks.state.cueListSetArmed = true;
 		mocks.playbacks.pool = [
 			{
-				number: 7,
+				address: { page: 1, position: 7 },
 				name: "Main sequence",
 				target: { type: "cue_list", cue_list_id: "main" },
 				buttons: ["go", "go_minus", "flash"],

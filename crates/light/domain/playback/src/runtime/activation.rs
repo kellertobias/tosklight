@@ -44,21 +44,14 @@ impl PlaybackEngine {
             .unwrap_or(0);
     }
 
-    pub fn record_activation(&mut self, number: u16, origin: PlaybackActivationOrigin) {
-        let Ok(identity) = PlaybackIdentity::physical(number) else {
-            return;
-        };
-        self.record_activation_at(identity, origin);
-    }
-
-    pub fn record_activation_at(
+    pub fn record_activation(
         &mut self,
-        identity: PlaybackIdentity,
+        identity: PlaybackAddress,
         origin: PlaybackActivationOrigin,
     ) {
         let ordinal = self.next_activation_ordinal;
         self.next_activation_ordinal = ordinal.saturating_add(1);
-        let Ok(key) = self.runtime_key_at(identity) else {
+        let Ok(key) = self.runtime_key(identity) else {
             return;
         };
         let Some(playback) = self

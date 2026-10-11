@@ -96,24 +96,11 @@ impl ProgrammingService {
 
 fn validate_request(request: &ProgrammingCueDeletionRequest) -> Result<(), ActionError> {
     match request.address {
-        ProgrammingCueDeletionAddress::Pool { playback_number }
-            if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
-        {
-            invalid("playback number must be within 1-1000")
-        }
         ProgrammingCueDeletionAddress::CurrentPage {
             expected_page,
-            slot,
-        } if !(1..=light_playback::MAX_PLAYBACK_PAGES).contains(&expected_page)
-            || !(1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            invalid("page and slot must be within 1-127")
-        }
-        ProgrammingCueDeletionAddress::PageSlot { page, slot }
-            if !(1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page)
-                || !(1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            invalid("page and slot must be within 1-127")
+            position,
+        } if light_playback::PlaybackAddress::new(expected_page, position).is_err() => {
+            invalid("Playback page must be1-99 and position1-1000")
         }
         _ => Ok(()),
     }
@@ -132,15 +119,10 @@ fn resolve_request<P: ProgrammingCueDeletionPorts>(
         ProgrammingCueDeletionAddress::CuelistPool { number } => {
             CueListAddress::CuelistPool { number }
         }
-        ProgrammingCueDeletionAddress::Pool { playback_number } => {
-            CueListAddress::Pool { playback_number }
-        }
-        ProgrammingCueDeletionAddress::PageSlot { page, slot } => {
-            CueListAddress::PageSlot { page, slot }
-        }
+        ProgrammingCueDeletionAddress::Playback { address } => CueListAddress::Playback { address },
         ProgrammingCueDeletionAddress::CurrentPage {
             expected_page,
-            slot,
+            position,
         } => {
             let current = ports.current_cue_deletion_page(context, request.show_id)?;
             if current != expected_page {
@@ -150,9 +132,10 @@ fn resolve_request<P: ProgrammingCueDeletionPorts>(
                 )
                 .at_related_revision(u64::from(current)));
             }
-            CueListAddress::PageSlot {
-                page: expected_page,
-                slot,
+            CueListAddress::Playback {
+                address: light_playback::PlaybackAddress::new(expected_page, position).map_err(
+                    |error| ActionError::new(ActionErrorKind::Invalid, error.to_string()),
+                )?,
             }
         }
     };

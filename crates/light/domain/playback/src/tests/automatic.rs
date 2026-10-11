@@ -508,12 +508,14 @@ fn go_activate_honors_restart_mode_when_playback_is_off() {
         let id = cue_list.id;
         let mut engine = PlaybackEngine::default();
         engine.register(cue_list).unwrap();
-        engine.register_definition(definition(1, id)).unwrap();
-        engine.go_playback(1).unwrap();
-        engine.go_playback(1).unwrap();
+        engine
+            .register_definition(address(1), definition(1, id))
+            .unwrap();
+        engine.go_playback(address(1)).unwrap();
+        engine.go_playback(address(1)).unwrap();
         assert_eq!(engine.active()[0].cue_index, 1);
-        engine.off(1).unwrap();
-        engine.go_playback(1).unwrap();
+        engine.off(address(1)).unwrap();
+        engine.go_playback(address(1)).unwrap();
         assert_eq!(engine.active()[0].cue_index, expected_index);
     }
 }
@@ -530,10 +532,12 @@ fn continue_restart_falls_back_to_first_if_remembered_cue_was_deleted_while_off(
     let started = Utc::now();
     let mut engine = PlaybackEngine::default();
     engine.register(original).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.go_playback(1).unwrap();
-    engine.off(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.go_playback(address(1)).unwrap();
+    engine.off(address(1)).unwrap();
 
     let mut replacement = list(vec![
         Cue::new(crate::CueNumber::try_from_legacy_f64(1.0).unwrap()),
@@ -547,9 +551,11 @@ fn continue_restart_falls_back_to_first_if_remembered_cue_was_deleted_while_off(
 
     let mut replaced = PlaybackEngine::default();
     replaced.register(replacement).unwrap();
-    replaced.register_definition(definition(1, id)).unwrap();
+    replaced
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
     replaced.restore_active(active);
-    replaced.on(1).unwrap();
+    replaced.on(address(1)).unwrap();
     assert_eq!(replaced.active()[0].cue_index, 0);
     assert_eq!(
         replaced.active()[0].current_cue_number,
@@ -619,9 +625,11 @@ fn restart_and_timing_settings_have_contract_precedence() {
             < 0.01
     );
     engine.go_at(id, started).unwrap();
-    engine.register_definition(definition(1, id)).unwrap();
-    engine.off(1).unwrap();
-    engine.on(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.off(address(1)).unwrap();
+    engine.on(address(1)).unwrap();
     assert_eq!(engine.active()[0].cue_index, 0);
 
     cue_list.disable_cue_timing = true;

@@ -12,7 +12,6 @@
       "maxItems": 256
     }
   },
-  "additionalProperties": false,
   "required": [
     "identities"
   ],
@@ -26,44 +25,23 @@
               "type": "string",
               "const": "playback"
             },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "playback_number"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
             "page": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 255,
-              "minimum": 0
+              "maximum": 99,
+              "minimum": 1
             },
-            "playback_number": {
+            "position": {
               "type": "integer",
               "format": "uint16",
-              "maximum": 65535,
-              "minimum": 0
+              "maximum": 1000,
+              "minimum": 1
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "page",
-            "playback_number"
+            "position"
           ]
         },
         {
@@ -78,7 +56,6 @@
               "const": "cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -96,7 +73,6 @@
               "const": "direct_cue_list"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "cue_list_id"
@@ -115,7 +91,6 @@
               "const": "group"
             }
           },
-          "additionalProperties": false,
           "required": [
             "kind",
             "group_id"

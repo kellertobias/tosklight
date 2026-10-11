@@ -12,6 +12,7 @@ export function createServerSnapshotValue(
 	| "session"
 	| "outputRoutes"
 	| "patchLayers"
+	| "surfaces"
 	| "screens"
 	| "shows"
 	| "matter"
@@ -75,6 +76,7 @@ export function createServerSnapshotValue(
 		outputRoutes,
 		patchLayers,
 		screens,
+		surfaces: screens?.surfaces ?? null,
 		shows,
 		matter,
 		fixtureLibrary,

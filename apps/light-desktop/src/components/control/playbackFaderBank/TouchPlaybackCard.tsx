@@ -86,6 +86,7 @@ export function TouchPlaybackCard({
 			`${className} ${rowUnits === 1 ? "playback-row-compact" : ""}`.trim(),
 		style: cardStyle,
 		color,
+		presentation: row?.presentation,
 		hasFader,
 		faderValue: value,
 		faderLabel: playbackFaderLabel(playback),
@@ -124,10 +125,10 @@ export function TouchPlaybackCard({
 				onClickCapture: interceptClick,
 				onFaderChange: (next) =>
 					playback &&
-					void controller.runtimeActions?.poolPlaybackAction(
-						playback.number,
+					void controller.runtimeActions?.playbackAction(
+						playback.address,
 						"master",
-						{ value: next / 100, surface: "virtual" },
+						{value: next / 100, control_source: {surface_id: controller.surfaceId, control_id: slot * 10}},
 					),
 			}}
 		/>

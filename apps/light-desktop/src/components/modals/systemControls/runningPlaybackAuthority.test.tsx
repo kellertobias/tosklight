@@ -73,7 +73,6 @@ function playback(
 	target: PlaybackDefinition["target"],
 ): PlaybackDefinition {
 	return {
-		number,
 		name,
 		target,
 		buttons: ["go", "go_minus", "flash"],
@@ -84,34 +83,18 @@ function playback(
 	};
 }
 
-function showObject<K extends "cue_list" | "playback">(
-	kind: K,
+function showObject(
+	kind: "cue_list",
 	id: string,
-	body: K extends "cue_list" ? CueList : PlaybackDefinition,
-): ShowObject<K> {
-	return { kind, id, revision: 1, updated_at: "", body } as ShowObject<K>;
+	body: CueList,
+): ShowObject<"cue_list"> {
+	return { kind, id, revision: 1, updated_at: "", body };
 }
-
 const OBJECTS = {
 	[SHOW_A]: {
 		cue_list: [
 			showObject("cue_list", "main", cueList("main", "Main Cuelist")),
 			showObject("cue_list", "virtual", cueList("virtual", "Virtual Cuelist")),
-		],
-		playback: [
-			showObject(
-				"playback",
-				"12",
-				playback(12, "Main playback", {
-					type: "cue_list",
-					cue_list_id: "main",
-				}),
-			),
-			showObject(
-				"playback",
-				"99",
-				playback(99, "Group master", { type: "group", group_id: "front" }),
-			),
 		],
 	},
 	[SHOW_B]: {
@@ -120,16 +103,6 @@ const OBJECTS = {
 				"cue_list",
 				"replacement",
 				cueList("replacement", "Replacement Cuelist"),
-			),
-		],
-		playback: [
-			showObject(
-				"playback",
-				"7",
-				playback(7, "Replacement playback", {
-					type: "cue_list",
-					cue_list_id: "replacement",
-				}),
 			),
 		],
 	},
@@ -233,44 +206,32 @@ function projection(
 	showId: string,
 	requested: PlaybackIdentity,
 ): PlaybackProjection {
-	const requestedPlaybackNumber =
-		requested.kind === "playback" || requested.kind === "virtual"
-			? requested.playback_number
-			: null;
 	const cueListId =
 		requested.kind === "cue_list" || requested.kind === "direct_cue_list"
 			? requested.cue_list_id
 			: requested.kind === "group"
 				? unexpectedGroupIdentity(requested.group_id)
-				: requested.kind === "virtual"
+				: requested.position === 904
 					? "virtual"
-					: requested.playback_number === 12
+					: showId === SHOW_A
 						? "main"
 						: "replacement";
-	const playbackNumber =
-		requestedPlaybackNumber != null
-			? requestedPlaybackNumber
-			: cueListId === "main"
-				? 12
-				: cueListId === "replacement"
-					? 7
-					: null;
-	const base = cueProjection(playbackNumber ?? 1);
+	const base = cueProjection(
+		requested.kind === "playback" ? requested.position : 1,
+	);
 	if (base.target !== "cue_list" || !base.runtime)
-		throw new Error("shared fixture must contain a running Cuelist");
+		throw new Error("Expected running fixture");
 	return {
 		...base,
 		scope: { show_id: showId, show_revision: 4 },
-		requested,
-		playback_number:
-			requested.kind === "direct_cue_list" ? null : playbackNumber,
+		identity: requested,
 		cue_list_id: cueListId,
 		runtime:
 			requested.kind === "direct_cue_list"
 				? null
 				: {
 						...base.runtime,
-						master: playbackNumber === 12 ? 0.75 : 1,
+						master: cueListId === "main" ? 0.75 : 1,
 						owner: requested,
 					},
 	};
@@ -305,7 +266,7 @@ function Probe({
 				type="button"
 				onClick={() =>
 					void authority.release({
-						identity: { kind: "playback", playback_number: 12 },
+						identity: { kind: "playback", page: 1, position: 12 },
 						cueListId: "main",
 					})
 				}
@@ -333,8 +294,8 @@ function harness(
 	const loadCollection = vi.fn(
 		async (showId: string, kind: ShowObjectKind) => ({
 			objects:
-				kind === "cue_list" || kind === "playback"
-					? OBJECTS[showId as keyof typeof OBJECTS][kind]
+				kind === "cue_list"
+					? OBJECTS[showId as keyof typeof OBJECTS].cue_list
 					: kind === "playback_page"
 						? [
 								{
@@ -345,16 +306,24 @@ function harness(
 									body: {
 										number: 1,
 										name: "Main",
-										slots: { 7: showId === SHOW_A ? 12 : 7 },
-										virtual_playbacks:
+										assignments:
 											showId === SHOW_A
 												? {
-														1001: playback(1001, "Virtual Cuelist", {
+														12: playback(12, "Main playback", {
+															type: "cue_list",
+															cue_list_id: "main",
+														}),
+														904: playback(904, "Virtual Cuelist", {
 															type: "cue_list",
 															cue_list_id: "virtual",
 														}),
 													}
-												: ({} as Record<string, PlaybackDefinition>),
+												: {
+														7: playback(7, "Replacement playback", {
+															type: "cue_list",
+															cue_list_id: "replacement",
+														}),
+													},
 									},
 								},
 							]
@@ -373,7 +342,9 @@ function harness(
 			authorityKey={authorityKey}
 			store={showStore}
 			transport={showTransport}
-			loadCollection={loadCollection}
+			loadCollection={
+				loadCollection as unknown as import("../../../features/showObjects/hydration").ShowObjectCollectionLoader
+			}
 			loadObject={vi.fn()}
 		>
 			<PlaybackRuntimeViewProvider
@@ -422,7 +393,7 @@ describe("System Controls running Playback authority", () => {
 		expect(screen.getByTestId("ready")).toHaveTextContent("false");
 	});
 
-	it("hydrates Cuelists, Playbacks and page locations, then selects exact running identities", async () => {
+	it("hydrates Cuelists and sparse page assignments, then selects exact running identities", async () => {
 		const model = harness();
 
 		await waitFor(() =>
@@ -431,9 +402,9 @@ describe("System Controls running Playback authority", () => {
 
 		expect(
 			model.loadCollection.mock.calls.map(([, kind]) => kind).sort(),
-		).toEqual(["cue_list", "playback", "playback_page"]);
+		).toEqual(["cue_list", "playback_page"]);
 		expect(model.showTransport.subscriptions.at(-1)).toEqual({
-			kinds: ["cue_list", "playback", "playback_page"],
+			kinds: ["cue_list", "playback_page"],
 			objects: [],
 		});
 		const requested = new Set(
@@ -443,8 +414,8 @@ describe("System Controls running Playback authority", () => {
 		);
 		expect(requested).toEqual(
 			new Set([
-				"playback:12",
-				"virtual:1.1001",
+				"playback:1.12",
+				"playback:1.904",
 				"direct-cuelist:main",
 				"direct-cuelist:virtual",
 			]),
@@ -463,13 +434,16 @@ describe("System Controls running Playback authority", () => {
 			"Main playback|Virtual Cuelist",
 		);
 		expect(screen.getByTestId("dynamics")).toHaveTextContent("0");
-		expect(latest?.mappedSources[0]).toMatchObject({
-			identity: { kind: "playback", playback_number: 12 },
-			locations: [{ page: 1, slot: 7 }],
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position !== 904,
+			)[0],
+		).toMatchObject({
+			identity: { kind: "playback", page: 1, position: 12 },
 		});
 	});
 
-	it("displays the canonical Cuelist address without changing physical release identity", async () => {
+	it("displays the canonical Cuelist address without changing assigned release identity", async () => {
 		const original = OBJECTS[SHOW_A].cue_list;
 		OBJECTS[SHOW_A].cue_list = original.map((object, index) => ({
 			...object,
@@ -482,10 +456,13 @@ describe("System Controls running Playback authority", () => {
 		try {
 			harness();
 			await waitFor(() => expect(latest?.ready).toBe(true));
-			expect(latest?.mappedSources[0]).toMatchObject({
+			expect(
+				latest?.assignedSources.filter(
+					(s) => s.identity.kind === "playback" && s.identity.position !== 904,
+				)[0],
+			).toMatchObject({
 				cueListNumber: 101,
-				identity: { kind: "playback", playback_number: 12 },
-				locations: [{ page: 1, slot: 7 }],
+				identity: { kind: "playback", page: 1, position: 12 },
 			});
 		} finally {
 			cleanup();
@@ -509,23 +486,22 @@ describe("System Controls running Playback authority", () => {
 		expect(applyAction).not.toHaveBeenCalled();
 		expect(
 			await latest?.release({
-				identity: { kind: "playback", playback_number: 12 },
+				identity: { kind: "playback", page: 1, position: 12 },
 				cueListId: "main",
 			}),
 		).toBeNull();
 		expect(model.runtimeTransport.subscriptions).toHaveLength(0);
 	});
 
-	it("turns off the exact virtual page and slot and installs its authoritative result", async () => {
+	it("turns off the exact page and position and installs its authoritative result", async () => {
 		const applyAction = vi.fn<PlaybackRuntimeActionApply>(
 			async (_showId, _deskId, request) => {
-				if (request.address.kind !== "virtual")
+				if (request.address.kind !== "playback")
 					throw new Error("Expected exact virtual address");
 				const stopped = projection(SHOW_A, request.address);
 				if (stopped.target !== "cue_list" || !stopped.runtime)
 					throw new Error("Expected cue runtime");
 				return {
-					request_id: request.request_id,
 					correlation_id: "test-correlation",
 					requested: request.address,
 					resolved: request.address,
@@ -539,13 +515,14 @@ describe("System Controls running Playback authority", () => {
 					desk: null,
 					event_sequence: 20,
 					desk_event_sequence: null,
-					replayed: false,
 				};
 			},
 		);
 		harness({ applyAction });
 		await waitFor(() => expect(latest?.ready).toBe(true));
-		const source = latest?.virtualSources[0];
+		const source = latest?.assignedSources.filter(
+			(s) => s.identity.kind === "playback" && s.identity.position === 904,
+		)[0];
 		if (!source) throw new Error("Expected virtual Running source");
 		await act(async () => {
 			await latest?.release(source);
@@ -554,25 +531,34 @@ describe("System Controls running Playback authority", () => {
 			SHOW_A,
 			DESK_ID,
 			expect.objectContaining({
-				address: { kind: "virtual", page: 1, playback_number: 1001 },
-				action: { type: "off", pressed: true },
+				address: { kind: "playback", page: 1, position: 904 },
+				action: { type: "release" },
 			}),
 		);
-		expect(latest?.virtualSources).toHaveLength(0);
-		expect(latest?.mappedSources).toHaveLength(1);
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position === 904,
+			),
+		).toHaveLength(0);
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position !== 904,
+			),
+		).toHaveLength(1);
 	});
 
-	it("does not count an assignment alias or an unknown legacy owner as a running source", async () => {
+	it("does not count an assignment alias or an absent owner as a running source", async () => {
 		const model = harness();
 		await waitFor(() => expect(latest?.ready).toBe(true));
 		const mapped = projection(SHOW_A, {
 			kind: "playback",
-			playback_number: 12,
+			page: 1,
+			position: 12,
 		});
 		if (mapped.target !== "cue_list" || !mapped.runtime)
 			throw new Error("Expected mapped cue runtime");
 		for (const [sequence, owner] of [
-			[20, { kind: "virtual" as const, page: 1, playback_number: 1001 }],
+			[20, { kind: "playback" as const, page: 1, position: 904 }],
 			[21, null],
 		] as const) {
 			act(() =>
@@ -585,12 +571,20 @@ describe("System Controls running Playback authority", () => {
 					},
 				}),
 			);
-			expect(latest?.mappedSources).toHaveLength(0);
-			expect(latest?.virtualSources).toHaveLength(1);
+			expect(
+				latest?.assignedSources.filter(
+					(s) => s.identity.kind === "playback" && s.identity.position !== 904,
+				),
+			).toHaveLength(0);
+			expect(
+				latest?.assignedSources.filter(
+					(s) => s.identity.kind === "playback" && s.identity.position === 904,
+				),
+			).toHaveLength(1);
 		}
 	});
 
-	it("retires disabled retained runtime from streamed events and tracks virtual owners independently", async () => {
+	it("retires disabled retained runtime from streamed events and tracks exact owners independently", async () => {
 		const model = harness();
 		await waitFor(() =>
 			expect(screen.getByTestId("ready")).toHaveTextContent("true"),
@@ -612,20 +606,30 @@ describe("System Controls running Playback authority", () => {
 				},
 			});
 		};
-		act(() => publish({ kind: "playback", playback_number: 12 }, false, 20));
-		expect(latest?.mappedSources).toHaveLength(0);
-		expect(latest?.virtualSources).toHaveLength(1);
+		act(() => publish({ kind: "playback", page: 1, position: 12 }, false, 20));
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position !== 904,
+			),
+		).toHaveLength(0);
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position === 904,
+			),
+		).toHaveLength(1);
 		expect(screen.getByTestId("sources")).not.toHaveTextContent(
 			"Main playback",
 		);
-		expect(latest?.virtualSources[0].identity).toEqual({
-			kind: "virtual",
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position === 904,
+			)[0].identity,
+		).toEqual({
+			kind: "playback",
 			page: 1,
-			playback_number: 1001,
+			position: 904,
 		});
-		act(() =>
-			publish({ kind: "virtual", page: 1, playback_number: 1001 }, false, 21),
-		);
+		act(() => publish({ kind: "playback", page: 1, position: 904 }, false, 21));
 		expect(latest?.sources).toHaveLength(0);
 		const directRuntime = cueProjection(1);
 		if (directRuntime.target !== "cue_list")
@@ -639,8 +643,7 @@ describe("System Controls running Playback authority", () => {
 					projection: {
 						...directRuntime,
 						scope: { show_id: SHOW_A, show_revision: 4 },
-						requested: { kind: "direct_cue_list", cue_list_id: "virtual" },
-						playback_number: null,
+						identity: { kind: "direct_cue_list", cue_list_id: "virtual" },
 						cue_list_id: "virtual",
 						runtime:
 							enabled && directRuntime.runtime
@@ -659,9 +662,17 @@ describe("System Controls running Playback authority", () => {
 			cue_list_id: "virtual",
 		});
 		act(() => publishDirect(false, 23));
-		act(() => publish({ kind: "playback", playback_number: 12 }, true, 22));
-		expect(latest?.mappedSources).toHaveLength(1);
-		expect(latest?.virtualSources).toHaveLength(0);
+		act(() => publish({ kind: "playback", page: 1, position: 12 }, true, 22));
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position !== 904,
+			),
+		).toHaveLength(1);
+		expect(
+			latest?.assignedSources.filter(
+				(s) => s.identity.kind === "playback" && s.identity.position === 904,
+			),
+		).toHaveLength(0);
 	});
 
 	it("drops prior Show rows until replacement authority is hydrated", async () => {
@@ -693,25 +704,14 @@ describe("System Controls running Playback authority", () => {
 			expect(model.runtimeStore.getSnapshot().status).toBe("ready"),
 		);
 		expect(model.showStore.getSnapshot().readyCollections).toEqual(
-			new Set(["cue_list", "playback", "playback_page"]),
-		);
-		expect(model.showStore.getSnapshot().playbacks.map(({ id }) => id)).toEqual(
-			["7"],
+			new Set(["cue_list", "playback_page"]),
 		);
 		expect(model.showStore.getSnapshot().cueLists.map(({ id }) => id)).toEqual([
 			"replacement",
 		]);
 		expect(
 			[...model.runtimeStore.getSnapshot().projections.keys()].sort(),
-		).toEqual([
-			"cuelist:replacement",
-			"direct-cuelist:replacement",
-			"playback:7",
-		]);
-		expect(
-			model.runtimeStore.getSnapshot().projections.get("cuelist:replacement")
-				?.length,
-		).toBeGreaterThan(0);
+		).toEqual(["direct-cuelist:replacement", "playback:1.7"]);
 		await waitFor(() =>
 			expect(screen.getByTestId("sources")).toHaveTextContent(
 				"Replacement playback",
@@ -734,8 +734,7 @@ describe("System Controls running Playback authority", () => {
 			model.runtimeStore.applyProjection(
 				{
 					scope: { show_id: SHOW_A, show_revision: 5 },
-					requested: { kind: "playback", playback_number: 88 },
-					playback_number: 88,
+					identity: { kind: "playback", page: 1, position: 88 },
 					target: "missing",
 				},
 				20,

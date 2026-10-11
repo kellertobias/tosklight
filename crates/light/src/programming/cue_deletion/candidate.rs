@@ -50,17 +50,6 @@ fn validate_request(request: &ResolvedCueDeletionRequest) -> Result<(), ActionEr
         CueListAddress::CuelistPool { number } if !(1..=1000).contains(&number) => {
             Err(invalid("Cuelist number must be within 1-1000"))
         }
-        CueListAddress::Pool { playback_number }
-            if !(1..=light_playback::MAX_PLAYBACKS).contains(&playback_number) =>
-        {
-            Err(invalid("playback number must be within 1-1000"))
-        }
-        CueListAddress::PageSlot { page, slot }
-            if !(1..=light_playback::MAX_PLAYBACK_PAGES).contains(&page)
-                || !(1..=light_playback::MAX_PAGE_SLOTS).contains(&slot) =>
-        {
-            Err(invalid("page and slot must be within 1-127"))
-        }
         _ => validate_exact_authority(&request.expectation),
     }
 }
@@ -164,7 +153,7 @@ fn exact_resolved_cue_list(
     let ProgrammingCueDeletionExpectation::Exact(expected) = expectation else {
         return Ok(resolved.stored);
     };
-    if resolved.playback_number != expected.playback_number
+    if resolved.playback_address != expected.playback_address
         || resolved.stored.typed.id != expected.cue_list_id
         || resolved.stored.object_id != expected.object_id
     {

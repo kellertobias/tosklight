@@ -1,7 +1,7 @@
 use crate::*;
 
 impl PlaybackEngine {
-    pub(crate) fn cue_list_for(&self, number: u16) -> Result<CueListId, String> {
+    pub(crate) fn cue_list_for(&self, number: PlaybackAddress) -> Result<CueListId, String> {
         match &self
             .definitions
             .get(&number)
@@ -27,7 +27,18 @@ impl PlaybackEngine {
     pub fn go(&mut self, id: CueListId) -> Result<&ActivePlayback, String> {
         self.go_at(id, self.clock.now())
     }
-
+    pub fn jump(&mut self, id: CueListId, number: CueNumber) -> Result<&ActivePlayback, String> {
+        self.jump_at(id, number, self.clock.now())
+    }
+    pub fn back(&mut self, id: CueListId) -> Result<&ActivePlayback, String> {
+        self.back_at(id, self.clock.now())
+    }
+    pub fn pause_mutation(&mut self, id: CueListId) -> Result<PlaybackMutation<()>, String> {
+        self.pause_at_mutation(id, self.clock.now())
+    }
+    pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
+        self.pause_at_mutation(id, now).map(|_| ())
+    }
     pub fn go_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
         self.timeline_controlled.remove(&id);
         let key = self.key_for_cue_list(id)?;
@@ -38,21 +49,21 @@ impl PlaybackEngine {
         &self,
         key: PlaybackKey,
         id: CueListId,
-        identity: Option<PlaybackIdentity>,
+        identity: Option<PlaybackAddress>,
     ) -> SequenceMasterSource {
         let mut source = self
             .active
             .get(&key)
             .map(ActivePlayback::sequence_master_source)
             .unwrap_or(SequenceMasterSource {
-                playback_number: None,
-                playback_identity: None,
+                playback_address: None,
+                control_source_id: None,
+
                 cue_list_id: id,
                 temporary: false,
             });
         if let Some(identity) = identity {
-            source.playback_number = Some(identity.number());
-            source.playback_identity = identity.virtual_address().map(PlaybackIdentity::Virtual);
+            source.playback_address = Some(identity);
         }
         source
     }
@@ -62,7 +73,7 @@ impl PlaybackEngine {
         key: PlaybackKey,
         id: CueListId,
         now: DateTime<Utc>,
-        identity: Option<PlaybackIdentity>,
+        identity: Option<PlaybackAddress>,
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
@@ -197,14 +208,6 @@ impl PlaybackEngine {
         })
     }
 
-    pub fn jump(
-        &mut self,
-        id: CueListId,
-        cue_number: CueNumber,
-    ) -> Result<&ActivePlayback, String> {
-        self.jump_at(id, cue_number, self.clock.now())
-    }
-
     pub fn jump_to_cue_id(
         &mut self,
         id: CueListId,
@@ -278,7 +281,7 @@ impl PlaybackEngine {
         id: CueListId,
         cue_number: CueNumber,
         now: DateTime<Utc>,
-        identity: Option<PlaybackIdentity>,
+        identity: Option<PlaybackAddress>,
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
@@ -292,8 +295,9 @@ impl PlaybackEngine {
             .ok_or("cue does not exist")?;
         let compiled = &self.compiled_cue_lists[&id];
         let playback = self.active.entry(key).or_insert(ActivePlayback {
-            playback_number: None,
-            playback_identity: None,
+            playback_address: None,
+            control_source_id: None,
+
             activation: None,
             transition_ordinal,
             cue_list_id: id,
@@ -356,9 +360,6 @@ impl PlaybackEngine {
         Ok(playback)
     }
 
-    pub fn back(&mut self, id: CueListId) -> Result<&ActivePlayback, String> {
-        self.back_at(id, self.clock.now())
-    }
     pub fn back_at(
         &mut self,
         id: CueListId,
@@ -373,7 +374,7 @@ impl PlaybackEngine {
         key: PlaybackKey,
         id: CueListId,
         now: DateTime<Utc>,
-        identity: Option<PlaybackIdentity>,
+        identity: Option<PlaybackAddress>,
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
@@ -424,32 +425,19 @@ impl PlaybackEngine {
     pub fn pause(&mut self, id: CueListId) -> Result<(), String> {
         self.pause_mutation(id).map(|_| ())
     }
-    pub fn pause_mutation(&mut self, id: CueListId) -> Result<PlaybackMutation<()>, String> {
-        self.pause_at_mutation(id, self.clock.now())
-    }
-    pub fn pause_playback(&mut self, number: u16) -> Result<(), String> {
+
+    pub fn pause_playback(&mut self, number: PlaybackAddress) -> Result<(), String> {
         self.pause_playback_mutation(number).map(|_| ())
     }
-    pub fn pause_playback_mutation(&mut self, number: u16) -> Result<PlaybackMutation<()>, String> {
+    pub fn pause_playback_mutation(
+        &mut self,
+        number: PlaybackAddress,
+    ) -> Result<PlaybackMutation<()>, String> {
         let now = self.clock.now();
         let key = self.runtime_key(number)?;
         self.pause_key_at_mutation(key, now, "playback is not active")
     }
-    pub fn pause_playback_at_mutation(
-        &mut self,
-        identity: PlaybackIdentity,
-    ) -> Result<PlaybackMutation<()>, String> {
-        match identity {
-            PlaybackIdentity::Physical(number) => self.pause_playback_mutation(number.get()),
-            PlaybackIdentity::Virtual(_) => {
-                let key = self.runtime_key_at(identity)?;
-                self.pause_key_at_mutation(key, self.clock.now(), "virtual playback is not active")
-            }
-        }
-    }
-    pub fn pause_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<(), String> {
-        self.pause_at_mutation(id, now).map(|_| ())
-    }
+
     pub fn pause_at_mutation(
         &mut self,
         id: CueListId,
@@ -500,29 +488,24 @@ impl PlaybackEngine {
     }
     pub fn runtime(&self) -> Vec<ActivePlayback> {
         let mut runtime = self.active.values().cloned().collect::<Vec<_>>();
-        runtime.sort_by_key(|playback| playback.playback_number.unwrap_or(u16::MAX));
+        runtime.sort_by_key(|playback| playback.playback_address);
         runtime
     }
-    pub fn playback_runtime(&self, number: u16) -> Option<&ActivePlayback> {
+    pub fn playback_runtime(&self, number: PlaybackAddress) -> Option<&ActivePlayback> {
         let key = self.runtime_key(number).ok()?;
         self.active.get(&key)
     }
 
-    pub fn playback_runtime_at(&self, identity: PlaybackIdentity) -> Option<&ActivePlayback> {
-        let key = self.runtime_key_at(identity).ok()?;
-        self.active.get(&key)
-    }
-
-    pub fn is_active_at(&self, identity: PlaybackIdentity) -> bool {
-        self.playback_runtime_at(identity)
+    pub fn is_active(&self, identity: PlaybackAddress) -> bool {
+        self.playback_runtime(identity)
             .is_some_and(|runtime| runtime.enabled)
             || self
-                .active_dynamic_playback_at(identity)
+                .active_dynamic_playback(identity)
                 .is_some_and(|runtime| runtime.enabled)
             || self
                 .temporary
                 .keys()
-                .any(|(candidate, _)| *candidate == identity)
+                .any(|(candidate, _)| candidate.address == identity)
     }
 
     /// Carry the current static Cue output of Solo peers into the incoming Cue's transition.
@@ -530,16 +513,16 @@ impl PlaybackEngine {
     /// This is separate from ordinary Off/Release, which continue to remove ownership at once.
     pub fn adopt_solo_handover(
         &mut self,
-        incoming: PlaybackIdentity,
-        peers: &[PlaybackIdentity],
+        incoming: PlaybackAddress,
+        peers: &[PlaybackAddress],
     ) -> Result<(), String> {
-        if self.dynamic_assignment_at(incoming).is_some() {
+        if self.dynamic_assignment(incoming).is_some() {
             return Ok(());
         }
-        let key = self.runtime_key_at(incoming)?;
+        let key = self.runtime_key(incoming)?;
         let peer_keys: HashSet<_> = peers
             .iter()
-            .filter_map(|peer| self.runtime_key_at(*peer).ok())
+            .filter_map(|peer| self.runtime_key(*peer).ok())
             .filter(|peer| *peer != key)
             .collect();
         if peer_keys.is_empty() {
@@ -597,13 +580,13 @@ impl PlaybackEngine {
     /// This is an activation source, not an additional producer or fabricated author evidence.
     pub fn adopt_published_color_start(
         &mut self,
-        incoming: PlaybackIdentity,
+        incoming: PlaybackAddress,
         value_at: &dyn Fn(FixtureId, &AttributeKey) -> Option<AttributeValue>,
     ) -> Result<(), String> {
-        if self.dynamic_assignment_at(incoming).is_some() {
+        if self.dynamic_assignment(incoming).is_some() {
             return Ok(());
         }
-        let key = self.runtime_key_at(incoming)?;
+        let key = self.runtime_key(incoming)?;
         let Some(active) = self.active.get(&key).filter(|active| active.enabled) else {
             return Ok(());
         };
@@ -667,29 +650,92 @@ impl PlaybackEngine {
         Ok(())
     }
 
-    pub fn release_at_mutation(
+    pub fn permanent_enabled(&self, address: PlaybackAddress) -> bool {
+        if let Some(assignment) = self.dynamic_assignment(address) {
+            self.active_dynamics
+                .get(&assignment.target_id())
+                .is_some_and(|active| active.enabled && !active.flash_restore_off)
+        } else {
+            self.playback_runtime(address)
+                .is_some_and(|active| active.enabled)
+        }
+    }
+    pub fn same_target(&self, a: PlaybackAddress, b: PlaybackAddress) -> bool {
+        match (self.definition(a), self.definition(b)) {
+            (Some(a), Some(b)) => match (&a.target, &b.target) {
+                (
+                    PlaybackTarget::CueList { cue_list_id: a },
+                    PlaybackTarget::CueList { cue_list_id: b },
+                ) => a == b,
+                (
+                    PlaybackTarget::Dynamic { assignment: a },
+                    PlaybackTarget::Dynamic { assignment: b },
+                ) => a.target_id() == b.target_id(),
+                (
+                    PlaybackTarget::Group { group_id: a, .. },
+                    PlaybackTarget::Group { group_id: b, .. },
+                ) => a == b,
+                (
+                    PlaybackTarget::Timecode { timecode_id: a },
+                    PlaybackTarget::Timecode { timecode_id: b },
+                ) => a == b,
+                (PlaybackTarget::Macro { macro_id: a }, PlaybackTarget::Macro { macro_id: b }) => {
+                    a == b
+                }
+                _ => a.target == b.target,
+            },
+            _ => false,
+        }
+    }
+    pub fn release_permanent_mutation(
         &mut self,
-        identity: PlaybackIdentity,
+        address: PlaybackAddress,
     ) -> Result<PlaybackMutation<()>, String> {
-        self.definition_at(identity)
-            .ok_or("playback does not exist")?;
-        let dynamic_flash_effect = if self.dynamic_flash_states.contains_key(&identity) {
-            self.set_dynamic_flash_at_mutation(identity, false)?.effect
+        if self.dynamic_assignment(address).is_some() {
+            self.off_dynamic_mutation(address)
+                .map(|effect| effect.map(|_| ()))
         } else {
-            PlaybackRuntimeEffect::None
-        };
-        let durable = if self.dynamic_assignment_at(identity).is_some() {
-            self.off_dynamic_at_mutation(identity)?.value
+            self.off_mutation(address).map(|effect| effect.map(|_| ()))
+        }
+    }
+    pub fn release_mutation(
+        &mut self,
+        identity: PlaybackAddress,
+    ) -> Result<PlaybackMutation<()>, String> {
+        self.definition(identity).ok_or("playback does not exist")?;
+        let held_dynamic = self
+            .dynamic_flash_states
+            .keys()
+            .filter(|held| held.address == identity)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut dynamic_flash_effect = PlaybackRuntimeEffect::None;
+        for held in held_dynamic {
+            dynamic_flash_effect = dynamic_flash_effect.combine(
+                self.set_dynamic_flash_mutation(identity, &held.source, false)?
+                    .effect,
+            );
+        }
+        let durable = if self.dynamic_assignment(identity).is_some() {
+            self.off_dynamic_mutation(identity)?.value
         } else {
-            self.off_at(identity)?
+            self.off(identity)?
         };
         let before = self.temporary.len();
         self.temporary
-            .retain(|(candidate, _), _| *candidate != identity);
+            .retain(|(held, _), _| held.address != identity);
+        let held_before =
+            self.swap_held.len() + self.cuelist_flash_states.len() + self.cuelist_swap_states.len();
+        self.swap_held.retain(|held| held.address != identity);
+        self.cuelist_flash_states
+            .retain(|held, _| held.address != identity);
+        self.cuelist_swap_states
+            .retain(|held, _| held.address != identity);
         let transient = before != self.temporary.len()
-            || self.swap_held.remove(&identity)
-            || self.cuelist_flash_states.remove(&identity).is_some()
-            || self.cuelist_swap_states.remove(&identity).is_some()
+            || held_before
+                != self.swap_held.len()
+                    + self.cuelist_flash_states.len()
+                    + self.cuelist_swap_states.len()
             || dynamic_flash_effect.changed();
         Ok(PlaybackMutation::new(
             (),
@@ -718,8 +764,9 @@ fn first_go_playback(
     source: SequenceMasterSource,
 ) -> ActivePlayback {
     ActivePlayback {
-        playback_number: None,
-        playback_identity: None,
+        playback_address: None,
+        control_source_id: None,
+
         activation: None,
         transition_ordinal,
         cue_list_id: id,

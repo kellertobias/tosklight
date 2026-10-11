@@ -2,23 +2,22 @@ use serde::{Deserialize, Serialize};
 
 /// Playback action retained while a Programmer is editing in Preload.
 ///
-/// The serialized names preserve the existing show-file representation. The scoped v2
-/// projection translates these to its intentionally cleaner public names.
+/// Only discrete Playback actions enter capture; continuous faders remain live.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum PreloadPlaybackQueueAction {
     #[serde(rename = "toggle")]
     Toggle,
     #[serde(rename = "go")]
     Go,
-    #[serde(rename = "go-minus", alias = "back")]
+    #[serde(rename = "go-minus")]
     Back,
     #[serde(rename = "off")]
     Off,
     #[serde(rename = "on")]
     On,
-    #[serde(rename = "temp-on", alias = "temporary_on")]
+    #[serde(rename = "temp-on")]
     TemporaryOn,
-    #[serde(rename = "temp-off", alias = "temporary_off")]
+    #[serde(rename = "temp-off")]
     TemporaryOff,
     #[serde(rename = "dynamic-pause")]
     DynamicPause,
@@ -30,8 +29,6 @@ pub enum PreloadPlaybackQueueAction {
     DynamicHalfSpeed,
     #[serde(rename = "dynamic-learn-speed")]
     DynamicLearnSpeed,
-    #[serde(rename = "fader")]
-    Fader { value_permyriad: u16 },
 }
 
 impl PreloadPlaybackQueueAction {
@@ -49,7 +46,6 @@ impl PreloadPlaybackQueueAction {
             Self::DynamicDoubleSpeed => "dynamic-double-speed",
             Self::DynamicHalfSpeed => "dynamic-half-speed",
             Self::DynamicLearnSpeed => "dynamic-learn-speed",
-            Self::Fader { .. } => "fader",
         }
     }
 }
@@ -72,40 +68,6 @@ impl TryFrom<&str> for PreloadPlaybackQueueAction {
             "dynamic-half-speed" => Ok(Self::DynamicHalfSpeed),
             "dynamic-learn-speed" => Ok(Self::DynamicLearnSpeed),
             value => Err(format!("unsupported queued Preload action {value}")),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PreloadPlaybackQueueSurface {
-    Physical,
-    Virtual,
-    Osc,
-    Matter,
-}
-
-impl PreloadPlaybackQueueSurface {
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Physical => "physical",
-            Self::Virtual => "virtual",
-            Self::Osc => "osc",
-            Self::Matter => "matter",
-        }
-    }
-}
-
-impl TryFrom<&str> for PreloadPlaybackQueueSurface {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "physical" => Ok(Self::Physical),
-            "virtual" => Ok(Self::Virtual),
-            "osc" => Ok(Self::Osc),
-            "matter" => Ok(Self::Matter),
-            value => Err(format!("unsupported queued Preload surface {value}")),
         }
     }
 }

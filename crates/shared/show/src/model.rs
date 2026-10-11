@@ -146,17 +146,40 @@ pub enum FixedScreenSide {
     Right,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackControlPresentation {
+    Fader,
+    Buttons,
+    PushEncoder,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlaybackSurfaceRow {
-    pub first_playback_slot: u8,
-    pub has_fader: bool,
+    pub first_position: u16,
+    pub count: u16,
+    pub presentation: PlaybackControlPresentation,
     pub button_count: u8,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PlaybackSurfaceLayout {
-    pub playbacks_per_row: u8,
     pub rows: Vec<PlaybackSurfaceRow>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PlaybackPageSource {
+    Pinned { page: u8 },
+    Own { page: u8 },
+    Follow { surface_id: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PlaybackSurfaceConfiguration {
+    pub name: String,
+    pub layout: PlaybackSurfaceLayout,
+    pub page_source: PlaybackPageSource,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -172,8 +195,7 @@ pub struct ControlDesk {
     pub columns: u8,
     pub rows: u8,
     pub buttons: u8,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_layout: Option<PlaybackSurfaceLayout>,
+    pub surface_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -190,10 +212,6 @@ pub struct ScreenConfiguration {
     pub layout: serde_json::Value,
     pub show_dock: bool,
     pub show_playbacks: bool,
-    pub playback_count: u8,
-    pub playback_rows: u8,
-    pub first_playback_slot: u8,
-    pub page_mode: String,
     pub show_page_controls: bool,
     /// Programmer command line above this optional screen's encoders.
     #[serde(default)]
@@ -202,8 +220,7 @@ pub struct ScreenConfiguration {
     pub display_id: Option<String>,
     pub bounds: Option<serde_json::Value>,
     pub fullscreen: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub playback_layout: Option<PlaybackSurfaceLayout>,
+    pub surface_id: String,
     #[serde(default)]
     pub content: ScreenContent,
     /// Whether this screen may change programming.
@@ -278,4 +295,10 @@ pub struct VersionedObject {
 
 fn default_hardware_illumination() -> u8 {
     100
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PlaybackSelection {
+    pub page: u8,
+    pub position: u16,
 }

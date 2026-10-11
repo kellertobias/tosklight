@@ -13,7 +13,7 @@ pub(in crate::runtime) use family_frame::{LiveFamilyAdapters, OutputRenderSource
 
 pub(in crate::runtime) struct CommittedDynamicOutput<T> {
     pub output: T,
-    pub auto_offs: Vec<PlaybackIdentity>,
+    pub auto_offs: Vec<PlaybackAddress>,
     pub start_changes: Vec<Uuid>,
     pub events: Vec<light_application::EventDraft>,
     pub runtime: light_dynamics::DynamicRuntimeSnapshot,
@@ -208,7 +208,7 @@ fn committed_dynamic_auto_offs(
     frame: &light_engine::PreparedOutputFrame,
     sampled: &CapturedDynamicSample,
     inputs: &CapturedDynamicInputs<'_>,
-) -> Vec<PlaybackIdentity> {
+) -> Vec<PlaybackAddress> {
     if sampled.idle {
         Vec::new()
     } else {
@@ -220,7 +220,7 @@ fn committed_dynamic_auto_offs(
             inputs.programmer_values,
             inputs.cue_values,
         );
-        engine.auto_off_fully_controlled_dynamic_playbacks_at(controlled)
+        engine.auto_off_fully_controlled_dynamic_playbacks(controlled)
     }
 }
 

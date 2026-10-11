@@ -148,9 +148,9 @@ function wireTarget(value: ProgrammingUpdateTarget): WireTarget {
 	return {
 		type: value.type,
 		cue_list_id: value.cue_list_id,
-		...(value.playback_number == null
+		...(value.playback_address == null
 			? {}
-			: { playback_number: value.playback_number }),
+			: { playback_address: value.playback_address }),
 		...(value.cue_id == null ? {} : { cue_id: value.cue_id }),
 		...(value.cue_number == null ? {} : { cue_number: value.cue_number }),
 		validate_active_context: value.validate_active_context,
@@ -162,9 +162,9 @@ function target(value: WireTarget): ProgrammingUpdateTarget {
 	return {
 		type: value.type,
 		cue_list_id: value.cue_list_id,
-		...(value.playback_number == null
+		...(value.playback_address == null
 			? {}
-			: { playback_number: value.playback_number }),
+			: { playback_address: value.playback_address }),
 		...(value.cue_id == null ? {} : { cue_id: value.cue_id }),
 		...(value.cue_number == null ? {} : { cue_number: value.cue_number }),
 		validate_active_context: value.validate_active_context,
@@ -198,9 +198,9 @@ function targetIdentity(value: WireTargetIdentity): UpdateTargetIdentity {
 		family: { ...value.family },
 		object_id: value.object_id,
 		name: value.name,
-		...(value.playback_number == null
+		...(value.playback_address == null
 			? {}
-			: { playback_number: value.playback_number }),
+			: { playback_address: value.playback_address }),
 		...(value.cue == null ? {} : { cue: { ...value.cue } }),
 	};
 }

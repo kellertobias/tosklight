@@ -29,9 +29,7 @@ export type ScheduleTarget =
 			type: "playback";
 			playbackId: string;
 			label: string;
-			page: number;
-			slot: number;
-			playback: number;
+			address: import("../../api/playbackAddress").PlaybackAddressValue;
 			action: ScheduledPlaybackAction;
 			masterPercent: number | null;
 			fadeMillis: number | null;
@@ -76,9 +74,7 @@ export interface ScheduleProjection {
 export interface PlaybackScheduleTarget {
 	id: string;
 	label: string;
-	page: number;
-	slot: number;
-	playback: number;
+	address: import("../../api/playbackAddress").PlaybackAddressValue;
 	supportedActions: readonly ScheduledPlaybackAction[];
 	supportsMaster: boolean;
 }

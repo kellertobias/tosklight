@@ -42,16 +42,15 @@ const GROUPS: Record<string, ShowObject<"group">[]> = {
 	[SHOW_C]: [group("a|b", [])],
 };
 
-const PLAYBACKS: Record<string, ShowObject<"playback">[]> = {
-	[SHOW_A]: [playback(1, "1")],
-	[SHOW_B]: [playback(9, "9")],
-	[SHOW_C]: [playback(1, "a|b")],
-};
-
 const PAGES: Record<string, ShowObject<"playback_page">[]> = {
-	[SHOW_A]: [playbackPage(1, playbackDefinition(1001, "2"))],
-	[SHOW_B]: [],
-	[SHOW_C]: [],
+	[SHOW_A]: [
+		playbackPage(1, {
+			1: playbackDefinition(1, "1"),
+			904: playbackDefinition(904, "2"),
+		}),
+	],
+	[SHOW_B]: [playbackPage(1, { 9: playbackDefinition(9, "9") })],
+	[SHOW_C]: [playbackPage(1, { 1: playbackDefinition(1, "a|b") })],
 };
 
 function group(id: string, fixtures: string[]): ShowObject<"group"> {
@@ -68,22 +67,11 @@ function group(id: string, fixtures: string[]): ShowObject<"group"> {
 	};
 }
 
-function playback(number: number, groupId: string): ShowObject<"playback"> {
-	return {
-		kind: "playback",
-		id: String(number),
-		revision: 1,
-		updated_at: "",
-		body: playbackDefinition(number, groupId),
-	};
-}
-
 function playbackDefinition(
 	number: number,
 	groupId: string,
-): ShowObject<"playback">["body"] {
+): import("../../api/types").PlaybackDefinition {
 	return {
-		number,
 		name: `Group ${groupId}`,
 		target: { type: "group" as const, group_id: groupId },
 		buttons: ["select", "flash", "none"],
@@ -98,7 +86,7 @@ function playbackDefinition(
 
 function playbackPage(
 	number: number,
-	virtualPlayback: ReturnType<typeof playbackDefinition>,
+	assignments: Record<string, ReturnType<typeof playbackDefinition>>,
 ): ShowObject<"playback_page"> {
 	return {
 		kind: "playback_page",
@@ -108,8 +96,7 @@ function playbackPage(
 		body: {
 			number,
 			name: `Page ${number}`,
-			slots: {},
-			virtual_playbacks: { [String(virtualPlayback.number)]: virtualPlayback },
+			assignments,
 		},
 	};
 }
@@ -121,13 +108,11 @@ function projection(
 ): PlaybackProjection {
 	if (identity.kind !== "group")
 		throw new Error(`Unexpected runtime request ${identityKey(identity)}`);
-	const mapped = identity.group_id === "2" ? 17 : null;
 	const master =
 		identity.group_id === "1" ? 0.25 : identity.group_id === "2" ? 0.6 : 0.4;
 	return {
 		scope: { show_id: showId, show_revision: 4 },
-		requested: identity,
-		playback_number: mapped,
+		identity,
 		target: "group",
 		group_id: identity.group_id,
 		master,
@@ -149,7 +134,9 @@ function snapshot(
 		desk: {
 			scope: { show_id: showId, show_revision: 4 },
 			desk_id: DESK_ID,
-			active_page: 1,
+			command_page: 1,
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
 			selected_playback: null,
 		},
 		projections: identities.map((identity) => projection(showId, identity)),
@@ -254,7 +241,7 @@ function Probe({
 					.map((group) => {
 						const runtime = group.runtime;
 						return runtime
-							? `${group.id}:${group.body.fixtures.join(",")}:${runtime.master}:${runtime.flashLevel}:${runtime.playbackNumber ?? "direct"}`
+							? `${group.id}:${group.body.fixtures.join(",")}:${runtime.master}:${runtime.flashLevel}:${runtime.playbackAddress?.position ?? "direct"}`
 							: `${group.id}:${group.body.fixtures.join(",")}:unassigned`;
 					})
 					.join("|")}
@@ -282,11 +269,9 @@ function harness(
 			objects:
 				kind === "group"
 					? GROUPS[showId]
-					: kind === "playback"
-						? PLAYBACKS[showId]
-						: kind === "playback_page"
-							? PAGES[showId]
-							: [],
+					: kind === "playback_page"
+						? PAGES[showId]
+						: [],
 			showRevision: 4,
 		}),
 	);
@@ -355,7 +340,7 @@ describe("Group runtime authority", () => {
 
 		expect(model.loadCollection).toHaveBeenCalledWith(SHOW_A, "group");
 		expect(model.showTransport.scopes.at(-1)).toEqual({
-			kinds: ["group", "playback", "playback_page"],
+			kinds: ["group", "playback_page"],
 			objects: [],
 		});
 		const requested = new Set(
@@ -372,7 +357,7 @@ describe("Group runtime authority", () => {
 			desk: false,
 		});
 		expect(screen.getByTestId("groups")).toHaveTextContent(
-			"1::0.25:0.1:direct|2:fixture-b,fixture-a:0.6:0:17|3:fixture-c:unassigned",
+			"1::0.25:0.1:direct|2:fixture-b,fixture-a:0.6:0:direct|3:fixture-c:unassigned",
 		);
 		expect(latestGroups[0].body.fixtures).toEqual([]);
 		expect(latestGroups[1].body.fixtures).toEqual(["fixture-b", "fixture-a"]);
@@ -523,8 +508,13 @@ describe("Group runtime authority", () => {
 			);
 			model.showStore.setCollection(
 				SHOW_C,
-				"playback",
-				[playback(1, "a"), playback(2, "b")],
+				"playback_page",
+				[
+					playbackPage(1, {
+						1: playbackDefinition(1, "a"),
+						2: playbackDefinition(2, "b"),
+					}),
+				],
 				5,
 			);
 		});

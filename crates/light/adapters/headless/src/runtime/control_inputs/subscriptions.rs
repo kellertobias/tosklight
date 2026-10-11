@@ -45,6 +45,7 @@ fn subscription_target(
 fn unsubscribe_osc_client(state: &AppState, client_id: &str) {
     let removed = state.integrations.unregister_osc_subscriber(client_id);
     if let Some(subscriber) = removed {
+        cancel_held_surface(state, client_id);
         state
             .integrations
             .remove_suppression_source(subscriber.session_id, subscriber.command_source);
@@ -180,8 +181,14 @@ fn replace_osc_subscriber(state: &AppState, client_id: String, subscriber: OscSu
     let session_id = subscriber.session_id;
     let replaced = state
         .integrations
-        .register_osc_subscriber(client_id, subscriber);
+        .register_osc_subscriber(client_id.clone(), subscriber.clone());
     if let Some(replaced) = replaced {
+        if replaced.command_source != subscriber.command_source
+            || replaced.path != subscriber.path
+            || replaced.session_id != subscriber.session_id
+        {
+            cancel_held_surface(state, &client_id);
+        }
         state
             .integrations
             .remove_suppression_source(replaced.session_id, replaced.command_source);
@@ -204,4 +211,12 @@ pub(in crate::runtime) fn disconnect_orphaned_osc_session(state: &AppState, sess
     state.programming.run_lifecycle_transition(&context, || {
         state.programming.disconnect(session_id);
     });
+}
+
+fn cancel_held_surface(state: &AppState, client_id: &str) {
+    if let Err(error) =
+        super::super::playback_control_disconnect::cancel(state, &format!("hardware:{client_id}"))
+    {
+        tracing::error!(error=%error.message,"Disconnected OSC held controls could not be fully released");
+    }
 }

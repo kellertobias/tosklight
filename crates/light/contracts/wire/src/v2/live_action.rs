@@ -51,6 +51,8 @@ pub enum LiveAction {
     ProgrammerPreloadValues(ProgrammingPreloadValuesActionRequest),
     PresetRecall(PresetRecallLiveActionRequest),
     Playback(PlaybackActionRequest),
+    PlaybackSurfaceSelect(super::playback_surfaces::PlaybackSurfaceSelectRequest),
+    PlaybackSurfacePage(super::playback_surfaces::PlaybackSurfacePageLiveActionRequest),
     Macro(MacroLiveAction),
     SpeedGroup(SpeedGroupActionRequest),
     OutputRuntime(OutputRuntimeActionRequest),
@@ -335,7 +337,9 @@ impl LiveAction {
             Self::ProgrammerPreloadLifecycle(request) => Some(&request.request_id),
             Self::ProgrammerPreloadValues(request) => Some(&request.request_id),
             Self::PresetRecall(request) => Some(&request.request_id),
-            Self::Playback(request) => Some(&request.request_id),
+            Self::Playback(_) | Self::PlaybackSurfaceSelect(_) | Self::PlaybackSurfacePage(_) => {
+                None
+            }
             Self::Macro(_) => None,
             Self::SpeedGroup(request) => Some(&request.request_id),
             Self::OutputRuntime(request) => Some(&request.request_id),

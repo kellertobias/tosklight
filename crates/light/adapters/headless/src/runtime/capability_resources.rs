@@ -554,6 +554,7 @@ pub(in crate::runtime) struct ReplayResource {
         Arc<tokio::sync::Mutex<show_object_intents_v2::ShowObjectIntentReplayCache>>,
     schedules: Arc<tokio::sync::Mutex<schedules_v2::ScheduleReplayCache>>,
     preset_generation: Arc<tokio::sync::Mutex<live_action_http::PresetGenerationReplayCache>>,
+    playback_surfaces: Arc<Mutex<playback_surfaces_http::SurfaceReplayCache>>,
     screen_configuration:
         Arc<tokio::sync::Mutex<screen_configuration_v2::ScreenConfigurationReplayCache>>,
     control_desk_configuration:
@@ -562,8 +563,8 @@ pub(in crate::runtime) struct ReplayResource {
     cue_thumbnails: Arc<Mutex<cue_thumbnails_http::CueThumbnailReplayCache>>,
     psn: Arc<Mutex<psn_http::PsnReplayCache>>,
     stage_layout: Arc<Mutex<stage_layout_http::StageLayoutReplayCache>>,
-    virtual_playback_zones:
-        Arc<Mutex<virtual_playback_zones_http::VirtualPlaybackZonesReplayCache>>,
+    pub(in crate::runtime) playback_preload: Arc<Mutex<playback_preload_http::PreloadReplayCache>>,
+    playback_solo: Arc<Mutex<playback_solo_http::PlaybackSoloReplayCache>>,
     visualizer_view: Arc<Mutex<visualizer_view_http::VisualizerViewReplayCache>>,
     change_lead: Arc<Mutex<change_lead_http::ChangeLeadReplayCache>>,
 }
@@ -578,13 +579,15 @@ impl Default for ReplayResource {
             show_object_intent: Arc::default(),
             schedules: Arc::default(),
             preset_generation: Arc::default(),
+            playback_surfaces: Arc::default(),
             screen_configuration: Arc::default(),
             control_desk_configuration: Arc::default(),
             desk_management: Arc::default(),
             cue_thumbnails: Arc::default(),
             psn: Arc::default(),
             stage_layout: Arc::default(),
-            virtual_playback_zones: Arc::default(),
+            playback_solo: Arc::default(),
+            playback_preload: Arc::default(),
             visualizer_view: Arc::default(),
             change_lead: Arc::default(),
         }
@@ -592,6 +595,21 @@ impl Default for ReplayResource {
 }
 
 impl ReplayResource {
+    pub(in crate::runtime) fn playback_surfaces_update(
+        &self,
+        key: (Uuid, String),
+        request: (
+            String,
+            light_wire::v2::playback_surfaces::PlaybackSurfacesUpdateRequest,
+        ),
+        apply: impl FnOnce() -> Result<
+            light_wire::v2::playback_surfaces::PlaybackSurfacesSnapshot,
+            ApiError,
+        >,
+    ) -> Result<light_wire::v2::playback_surfaces::PlaybackSurfacesSnapshot, ApiError> {
+        self.playback_surfaces.lock().apply(key, request, apply)
+    }
+
     /// TL-659: a resend of a change lead time update answers with the first outcome; anything
     /// else runs `apply` once, under the replay window, and remembers what it returned.
     pub(in crate::runtime) fn change_lead_update(

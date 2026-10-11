@@ -91,7 +91,7 @@ fn validate_runtime_cursor(
         .fold(EventFilter::default(), |filter, action| {
             let desk_id = action.origin_desk_id.unwrap_or(session.desk.id);
             filter
-                .with_object(EventObject::playback(action.playback_number))
+                .with_object(EventObject::playback(action.address))
                 .with_object(EventObject::playback_view(desk_id))
         });
     match state.events.replay(cursor, &filter) {

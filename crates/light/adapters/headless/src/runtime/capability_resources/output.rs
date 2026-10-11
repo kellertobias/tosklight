@@ -85,7 +85,7 @@ pub(in crate::runtime) struct OutputResource {
     programmer_reconciliation_cache: Arc<output_scheduler::ProgrammerReconciliationCache>,
     family_adapters: Arc<output_scheduler::LiveFamilyAdapters>,
     visualization_ordinary: Arc<Mutex<Option<CachedVisualizationOrdinary>>>,
-    dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
+    dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackAddress>>>,
     visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     sound_capture_active: Arc<Mutex<[bool; 5]>>,
     /// Injected accepted Pending Position source; empty until TL-548 installs one.
@@ -224,7 +224,7 @@ impl OutputResource {
         dynamics: Arc<Mutex<light_dynamics::DynamicRuntime>>,
         dynamic_snapshot: Arc<DynamicSnapshotPublication>,
         dynamic_source_origins: SharedDynamicSourceOrigins,
-        dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackIdentity>>>,
+        dynamic_auto_offs: Arc<Mutex<Vec<light_playback::PlaybackAddress>>>,
         visualization_frames: Arc<super::visualization_frame::VisualizationFrameHub>,
     ) -> Self {
         Self {
@@ -600,13 +600,13 @@ impl OutputResource {
 
     pub(in crate::runtime) fn take_dynamic_auto_offs(
         &self,
-    ) -> Vec<light_playback::PlaybackIdentity> {
+    ) -> Vec<light_playback::PlaybackAddress> {
         std::mem::take(&mut *self.dynamic_auto_offs.lock())
     }
 
     pub(in crate::runtime) fn restore_dynamic_auto_offs(
         &self,
-        identities: impl IntoIterator<Item = light_playback::PlaybackIdentity>,
+        identities: impl IntoIterator<Item = light_playback::PlaybackAddress>,
     ) {
         let mut pending = self.dynamic_auto_offs.lock();
         for identity in identities {
@@ -628,9 +628,9 @@ impl OutputResource {
 
     pub(in crate::runtime) fn playback_runtime_status_at(
         &self,
-        identity: light_playback::PlaybackIdentity,
+        address: light_playback::PlaybackAddress,
     ) -> Option<light_playback::PlaybackRuntimeStatus> {
-        self.engine.playback_runtime_status_at(identity)
+        self.engine.playback_runtime_status_at(address)
     }
 
     pub(in crate::runtime) fn playback_runtime_status_for_cue_list(
@@ -658,11 +658,11 @@ impl OutputResource {
             .set_cue_external_completion_millis(cue_list_id, duration_millis)
     }
 
-    pub(in crate::runtime) fn active_dynamic_playback_at(
+    pub(in crate::runtime) fn active_dynamic_playback(
         &self,
-        identity: light_playback::PlaybackIdentity,
+        address: light_playback::PlaybackAddress,
     ) -> Option<light_playback::ActiveDynamicPlayback> {
-        self.engine.active_dynamic_playback_at(identity)
+        self.engine.active_dynamic_playback(address)
     }
 
     pub(in crate::runtime) fn active_dynamic_playbacks_for_persistence(
@@ -697,7 +697,9 @@ impl OutputResource {
         self.engine.move_in_black_runtime()
     }
 
-    pub(in crate::runtime) fn enabled_auto_off_playbacks(&self) -> Vec<u16> {
+    pub(in crate::runtime) fn enabled_auto_off_playbacks(
+        &self,
+    ) -> Vec<light_playback::PlaybackAddress> {
         self.engine.enabled_auto_off_playbacks()
     }
 
@@ -842,6 +844,16 @@ impl OutputResource {
         self.engine.profile_visualization_values(values, options)
     }
 
+    pub(in crate::runtime) fn cancel_playback_control_surface(
+        &self,
+        surface_id: &str,
+    ) -> Result<light_engine::EnginePlaybackOutcome, String> {
+        self.engine.cancel_group_flash_surface(surface_id);
+        self.execute_playback(EnginePlaybackCommand::CancelControlSurface(
+            surface_id.into(),
+        ))
+    }
+
     pub(in crate::runtime) fn execute_playback(
         &self,
         command: EnginePlaybackCommand,
@@ -860,28 +872,19 @@ impl OutputResource {
         ))
     }
 
-    pub(in crate::runtime) fn playback_control_state_at(
+    pub(in crate::runtime) fn playback_control_state(
         &self,
-        identity: light_playback::PlaybackIdentity,
+        address: light_playback::PlaybackAddress,
+        control_source: &light_playback::PlaybackControlSource,
     ) -> light_playback::PlaybackControlState {
-        self.engine.playback_control_state_at(identity)
+        self.engine.playback_control_state(address, control_source)
     }
 
-    pub(in crate::runtime) fn execute_pool_playback_with_activation(
+    pub(in crate::runtime) fn playback_control_state_at(
         &self,
-        number: u16,
-        action: PoolPlaybackAction,
-        exclusion_zones: &[Vec<u16>],
-        activation_origin: Option<light_playback::PlaybackActivationOrigin>,
-    ) -> Result<light_engine::PoolPlaybackTransition, String> {
-        let start = self.published_playback_start();
-        self.engine.execute_pool_playback_with_published_activation(
-            number,
-            action,
-            exclusion_zones,
-            activation_origin,
-            start.as_ref(),
-        )
+        address: light_playback::PlaybackAddress,
+    ) -> light_playback::PlaybackControlState {
+        self.engine.playback_control_state_at(address)
     }
 
     pub(in crate::runtime) fn set_group_master(
@@ -900,6 +903,19 @@ impl OutputResource {
     ) -> Result<bool, EngineError> {
         self.engine
             .set_group_master_transition(group_id, value, duration_millis)
+    }
+
+    pub(in crate::runtime) fn set_group_master_flash_source(
+        &self,
+        group_id: String,
+        source: &light_playback::PlaybackControlSource,
+        pressed: bool,
+    ) {
+        self.engine.set_group_master_flash_source(
+            group_id,
+            source,
+            if pressed { 1.0 } else { 0.0 },
+        );
     }
 
     pub(in crate::runtime) fn set_group_master_flash(&self, group_id: String, value: f32) {

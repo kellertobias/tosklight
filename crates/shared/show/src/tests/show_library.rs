@@ -142,7 +142,7 @@ fn revision_copy_metadata_is_portable_with_the_show_file() {
 }
 
 #[test]
-fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
+fn desk_schema_six_refuses_existing_shows_without_copy_provenance() {
     let path = temporary("legacy-desk-revision-copy");
     let show_id = ShowId::new();
     {
@@ -161,20 +161,10 @@ fn desk_schema_six_migrates_existing_shows_without_copy_provenance() {
             )
             .unwrap();
     }
-    let desk = DeskStore::open(&path).unwrap();
-    let legacy = desk.show(show_id).unwrap().unwrap();
-    assert_eq!(legacy.name, "Legacy");
-    assert!(!legacy.is_base_show);
-    assert!(legacy.revision_copy.is_none());
-    assert_eq!(legacy.created_at, None);
-    assert_eq!(legacy.last_loaded_at, None);
-    let version: i64 = desk
-        .conn
-        .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(version, crate::desk::DESK_SCHEMA_VERSION);
-    drop(desk);
-    let _ = fs::remove_file(path);
+    let original = std::fs::read(&path).unwrap();
+    assert!(DeskStore::open(&path).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -229,7 +219,7 @@ fn base_show_designation_survives_reopen_rename_and_overwrite_without_marking_co
 }
 
 #[test]
-fn schema_fifteen_base_migration_preserves_library_identity_history_and_active_show() {
+fn schema_fifteen_base_break_preserves_library_identity_history_and_active_show() {
     let path = temporary("base-show-legacy-fifteen");
     let id = ShowId::new();
     {
@@ -250,37 +240,10 @@ fn schema_fifteen_base_migration_preserves_library_identity_history_and_active_s
         )
         .unwrap();
     }
-    let desk = DeskStore::open(&path).unwrap();
-    let entry = desk.show(id).unwrap().unwrap();
-    assert!(!entry.is_base_show);
-    assert_eq!(entry.revision, 7);
-    assert_eq!(entry.path, "legacy.show");
-    assert_eq!(entry.updated_at, "saved");
-    assert_eq!(entry.created_at.as_deref(), Some("created"));
-    assert_eq!(entry.last_loaded_at.as_deref(), Some("loaded"));
-    let active: String = desk
-        .conn
-        .query_row(
-            "SELECT value FROM settings WHERE key='active_show_id'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(active, id.0.to_string());
-    let revision = desk.show_revision(id, 3).unwrap().unwrap();
-    assert_eq!(revision.name, "Approved legacy");
-    assert_eq!(revision.path, "approved.show");
-    assert!(desk.set_show_base(id, true).unwrap().is_base_show);
-    drop(desk);
-    assert!(
-        DeskStore::open(&path)
-            .unwrap()
-            .show(id)
-            .unwrap()
-            .unwrap()
-            .is_base_show
-    );
-    let _ = fs::remove_file(path);
+    let original = std::fs::read(&path).unwrap();
+    assert!(DeskStore::open(&path).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    let _ = std::fs::remove_file(path);
 }
 
 #[test]

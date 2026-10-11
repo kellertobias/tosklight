@@ -25,7 +25,7 @@ import { useScopedPageOperation } from "./useScopedPageOperation";
 
 type PlaybackPageObject = ShowObject<"playback_page">;
 
-export const MAX_PLAYBACK_PAGES = 127;
+export const MAX_PLAYBACK_PAGES = 99;
 
 export function nextPlaybackPageNumber(
 	pages: readonly PlaybackPage[],
@@ -49,7 +49,7 @@ export function canAdvancePlaybackPage(
 	return Boolean(
 		lastPage &&
 			currentPage === lastPage.number &&
-			Object.keys(lastPage.slots ?? {}).length > 0 &&
+			Object.keys(lastPage.assignments ?? {}).length > 0 &&
 			lastPage.number < MAX_PLAYBACK_PAGES,
 	);
 }
@@ -180,7 +180,7 @@ export function PlaybackPageMenu({
 						<p role="status">Selecting Playback page…</p>
 					)}
 					<PlaybackPageRows
-						activePage={playbackDesk?.active_page ?? null}
+						activePage={playbackDesk?.command_page ?? null}
 						busy={operation.busy}
 						pageObjects={pageObjects}
 						ready={ready}

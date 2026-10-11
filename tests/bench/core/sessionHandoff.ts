@@ -231,6 +231,7 @@ function decodeSession(value: unknown): SessionResponse {
 		token: stringAt(session, "token"),
 		desk: {
 			id: stringAt(desk, "id"),
+			surface_id: stringAt(desk, "surface_id"),
 			name: stringAt(desk, "name"),
 			columns: numberAt(desk, "columns"),
 			rows: numberAt(desk, "rows"),

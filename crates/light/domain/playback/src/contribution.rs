@@ -57,7 +57,6 @@ impl PlaybackEngine {
     pub fn contributions(&self) -> Vec<TimedValue> {
         self.contributions_at(self.clock.now())
     }
-
     pub fn contributions_at(&self, now: DateTime<Utc>) -> Vec<TimedValue> {
         self.contributions_with_context(now, None)
             .into_iter()
@@ -113,13 +112,6 @@ impl PlaybackEngine {
 
     /// Resolve active Cue values while retaining the exact playback master which owns each
     /// contribution. The engine uses this metadata only after normal HTP/LTP arbitration.
-    pub fn contributions_with_context_at(
-        &self,
-        now: DateTime<Utc>,
-        is_snap: impl Fn(FixtureId, &AttributeKey) -> bool,
-    ) -> Vec<PlaybackContribution> {
-        self.contributions_with_context(now, Some(&is_snap))
-    }
 
     /// Build this frame's Cue contributions, letting the compiled cue answer whether an attribute
     /// snaps unless a caller overrides it.
@@ -156,16 +148,14 @@ impl PlaybackEngine {
 
     /// Ordinary and Dynamic Cue projections must agree about temporarily suppressed sources.
     pub(crate) fn playback_source_suppressed(&self, playback: &ActivePlayback) -> bool {
-        let Some(number) = playback.playback_number else {
+        let Some(number) = playback.playback_address else {
             return false;
         };
-        let identity = playback.playback_identity.unwrap_or_else(|| {
-            PlaybackIdentity::physical(number).expect("active physical playback number is valid")
-        });
+        let identity = number;
         self.swap_held.iter().any(|source| {
-            *source != identity
+            source.address != identity
                 && !self
-                    .definition_at(identity)
+                    .definition(identity)
                     .is_some_and(|definition| definition.protect_from_swap)
         })
     }

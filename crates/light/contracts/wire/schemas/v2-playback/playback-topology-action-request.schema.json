@@ -1690,6 +1690,27 @@
         "descending"
       ]
     },
+    "PlaybackAddressValue": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 99,
+          "minimum": 1
+        },
+        "position": {
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000,
+          "minimum": 1
+        }
+      },
+      "required": [
+        "page",
+        "position"
+      ]
+    },
     "PlaybackTopologyAction": {
       "oneOf": [
         {
@@ -1787,6 +1808,12 @@
         {
           "type": "object",
           "properties": {
+            "address": {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            "definition": {
+              "$ref": "#/$defs/PlaybackTopologyPlaybackDefinition"
+            },
             "expected_page_object_id": {
               "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
             },
@@ -1796,119 +1823,28 @@
               "maximum": 9007199254740991,
               "minimum": 0
             },
-            "expected_playback_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
-            },
-            "expected_playback_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "playback": {
-              "$ref": "#/$defs/PlaybackTopologyPlaybackDefinition"
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
             "type": {
               "type": "string",
-              "const": "configure_slot"
+              "const": "assign_playback"
             }
           },
           "required": [
             "type",
-            "page",
-            "slot",
+            "address",
             "expected_page_revision",
             "expected_page_object_id",
-            "expected_playback_revision",
-            "expected_playback_object_id",
-            "playback"
+            "definition"
           ]
         },
         {
           "type": "object",
           "properties": {
             "address": {
-              "$ref": "#/$defs/PlaybackTopologyGroupMasterAddress"
+              "$ref": "#/$defs/PlaybackAddressValue"
             },
-            "expected_group_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "group_object_id": {
-              "type": "string",
-              "maxLength": 128,
-              "minLength": 1
-            },
-            "type": {
-              "type": "string",
-              "const": "assign_group_master"
-            }
-          },
-          "required": [
-            "type",
-            "group_object_id",
-            "expected_group_revision",
-            "address"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "expected_page_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
-            },
-            "expected_page_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "playback": {
+            "definition": {
               "$ref": "#/$defs/PlaybackTopologyPlaybackDefinition"
             },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 39100,
-              "minimum": 1001
-            },
-            "type": {
-              "type": "string",
-              "const": "configure_virtual"
-            }
-          },
-          "required": [
-            "type",
-            "page",
-            "playback_number",
-            "expected_page_revision",
-            "expected_page_object_id",
-            "playback"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
             "expected_page_object_id": {
               "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
             },
@@ -1918,52 +1854,25 @@
               "maximum": 9007199254740991,
               "minimum": 0
             },
-            "expected_playback_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
-            },
-            "expected_playback_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 1000,
-              "minimum": 1
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
             "type": {
               "type": "string",
-              "const": "map_existing_playback"
+              "const": "update_playback"
             }
           },
           "required": [
             "type",
-            "page",
-            "slot",
-            "playback_number",
+            "address",
             "expected_page_revision",
             "expected_page_object_id",
-            "expected_playback_revision",
-            "expected_playback_object_id"
+            "definition"
           ]
         },
         {
           "type": "object",
           "properties": {
+            "address": {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
             "expected_page_object_id": {
               "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
             },
@@ -1973,20 +1882,14 @@
               "maximum": 9007199254740991,
               "minimum": 0
             },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
             "type": {
               "type": "string",
-              "const": "create_page"
+              "const": "clear_playback"
             }
           },
           "required": [
             "type",
-            "page",
+            "address",
             "expected_page_revision",
             "expected_page_object_id"
           ]
@@ -2008,20 +1911,20 @@
               "maxLength": 80,
               "minLength": 1
             },
-            "page": {
+            "number": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 127,
+              "maximum": 99,
               "minimum": 1
             },
             "type": {
               "type": "string",
-              "const": "rename_page"
+              "const": "create_playback_page"
             }
           },
           "required": [
             "type",
-            "page",
+            "number",
             "name",
             "expected_page_revision",
             "expected_page_object_id"
@@ -2039,40 +1942,28 @@
               "maximum": 9007199254740991,
               "minimum": 0
             },
-            "expected_playback_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            "name": {
+              "type": "string",
+              "maxLength": 80,
+              "minLength": 1
             },
-            "expected_playback_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "page": {
+            "number": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
+              "maximum": 99,
               "minimum": 1
             },
             "type": {
               "type": "string",
-              "const": "clear_mapped_playback"
+              "const": "rename_playback_page"
             }
           },
           "required": [
             "type",
-            "page",
-            "slot",
+            "number",
+            "name",
             "expected_page_revision",
-            "expected_page_object_id",
-            "expected_playback_revision",
-            "expected_playback_object_id"
+            "expected_page_object_id"
           ]
         },
         {
@@ -2087,27 +1978,60 @@
               "maximum": 9007199254740991,
               "minimum": 0
             },
-            "page": {
+            "number": {
               "type": "integer",
               "format": "uint8",
-              "maximum": 127,
+              "maximum": 99,
               "minimum": 1
-            },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 39100,
-              "minimum": 1001
             },
             "type": {
               "type": "string",
-              "const": "clear_virtual"
+              "const": "delete_playback_page"
             }
           },
           "required": [
             "type",
-            "page",
-            "playback_number",
+            "number",
+            "expected_page_revision",
+            "expected_page_object_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "address": {
+              "$ref": "#/$defs/PlaybackAddressValue"
+            },
+            "expected_group_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "expected_page_object_id": {
+              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
+            },
+            "expected_page_revision": {
+              "type": "integer",
+              "format": "uint64",
+              "maximum": 9007199254740991,
+              "minimum": 0
+            },
+            "group_object_id": {
+              "type": "string",
+              "maxLength": 128,
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "const": "assign_group_master"
+            }
+          },
+          "required": [
+            "type",
+            "group_object_id",
+            "expected_group_revision",
+            "address",
             "expected_page_revision",
             "expected_page_object_id"
           ]
@@ -2371,95 +2295,6 @@
         }
       ]
     },
-    "PlaybackTopologyGroupMasterAddress": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "expected_page_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
-            },
-            "expected_page_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "expected_playback_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
-            },
-            "expected_playback_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "kind": {
-              "type": "string",
-              "const": "physical"
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "slot": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            }
-          },
-          "required": [
-            "kind",
-            "page",
-            "slot",
-            "expected_page_revision",
-            "expected_page_object_id",
-            "expected_playback_revision",
-            "expected_playback_object_id"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "expected_page_object_id": {
-              "$ref": "#/$defs/PlaybackTopologyObjectIdentity"
-            },
-            "expected_page_revision": {
-              "type": "integer",
-              "format": "uint64",
-              "maximum": 9007199254740991,
-              "minimum": 0
-            },
-            "kind": {
-              "type": "string",
-              "const": "virtual"
-            },
-            "page": {
-              "type": "integer",
-              "format": "uint8",
-              "maximum": 127,
-              "minimum": 1
-            },
-            "playback_number": {
-              "type": "integer",
-              "format": "uint16",
-              "maximum": 39100,
-              "minimum": 1001
-            }
-          },
-          "required": [
-            "kind",
-            "page",
-            "playback_number",
-            "expected_page_revision",
-            "expected_page_object_id"
-          ]
-        }
-      ]
-    },
     "PlaybackTopologyObjectIdentity": {
       "anyOf": [
         {
@@ -2520,12 +2355,6 @@
           "maxLength": 80,
           "minLength": 1
         },
-        "number": {
-          "type": "integer",
-          "format": "uint16",
-          "maximum": 39100,
-          "minimum": 0
-        },
         "presentation_icon": {
           "type": [
             "string",
@@ -2551,7 +2380,6 @@
         }
       },
       "required": [
-        "number",
         "name",
         "target",
         "buttons",

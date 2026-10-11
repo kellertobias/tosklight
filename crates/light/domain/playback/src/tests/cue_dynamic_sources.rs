@@ -26,24 +26,26 @@ fn cue_dynamic_values_keep_the_actual_physical_and_virtual_temporary_sources() {
     let fixture = FixtureId::new();
     let list = list(vec![recorded_cue(fixture, 1.0)]);
     let list_id = list.id;
-    let first = VirtualPlaybackAddress::new(1, 1001).unwrap();
-    let second = VirtualPlaybackAddress::new(2, 1301).unwrap();
+    let first = PlaybackAddress::new(2, 1).unwrap();
+    let second = PlaybackAddress::new(3, 1).unwrap();
     let now = instant();
     let mut engine = PlaybackEngine::with_clock(Arc::new(light_core::ManualClock::new(now)));
     engine.register(list).unwrap();
-    engine.register_definition(definition(1, list_id)).unwrap();
     engine
-        .register_virtual_definition(first, definition(1001, list_id))
+        .register_definition(address(1), definition(1, list_id))
         .unwrap();
     engine
-        .register_virtual_definition(second, definition(1301, list_id))
-        .unwrap();
-    engine.on(1).unwrap();
-    engine
-        .set_temp_button_at_mutation(PlaybackIdentity::Virtual(first), true)
+        .register_definition(first, definition(1001, list_id))
         .unwrap();
     engine
-        .set_temp_button_at_mutation(PlaybackIdentity::Virtual(second), true)
+        .register_definition(second, definition(1301, list_id))
+        .unwrap();
+    engine.on(address(1)).unwrap();
+    engine
+        .set_temp_button_mutation(first, &test_source(first.position()), true)
+        .unwrap();
+    engine
+        .set_temp_button_mutation(second, &test_source(second.position()), true)
         .unwrap();
 
     let values = engine.active_cue_dynamic_values();
@@ -57,7 +59,7 @@ fn cue_dynamic_values_keep_the_actual_physical_and_virtual_temporary_sources() {
     for playback in engine.active.values().chain(engine.temporary.values()) {
         let source = playback.sequence_master_source();
         let projected = values.iter().find(|value| value.source == source).unwrap();
-        assert_eq!(projected.playback_number, playback.playback_number);
+        assert_eq!(projected.playback_address, playback.playback_address);
         assert_eq!(projected.source_key.source(), projected.source);
         assert!(projected.output_enabled);
         assert_eq!(projected.cue_list_id, playback.cue_list_id);
@@ -78,14 +80,16 @@ fn cue_dynamic_values_keep_the_actual_physical_and_virtual_temporary_sources() {
     assert!(
         values
             .iter()
-            .any(|value| value.source.playback_number == Some(1)
-                && value.source.playback_identity.is_none()
+            .any(|value| value.source.playback_address == Some(address(1))
                 && !value.source.temporary)
     );
     for address in [first, second] {
-        assert!(values.iter().any(|value| value.source.playback_identity
-            == Some(PlaybackIdentity::Virtual(address))
-            && value.source.temporary));
+        assert!(
+            values
+                .iter()
+                .any(|value| value.source.playback_address == Some(address)
+                    && value.source.temporary)
+        );
     }
     assert!(
         values
@@ -104,10 +108,12 @@ fn tracked_dynamic_source_is_stable_but_equal_timestamp_transitions_keep_their_o
     let following_cue = list.cues[1].id;
     let mut engine = PlaybackEngine::with_clock(Arc::new(light_core::ManualClock::new(instant())));
     engine.register(list).unwrap();
-    engine.register_definition(definition(1, list_id)).unwrap();
-    engine.on(1).unwrap();
+    engine
+        .register_definition(address(1), definition(1, list_id))
+        .unwrap();
+    engine.on(address(1)).unwrap();
     let first = engine.active_cue_dynamic_values().remove(0);
-    engine.go_playback(1).unwrap();
+    engine.go_playback(address(1)).unwrap();
     let second = engine.active_cue_dynamic_values().remove(0);
     assert_eq!(
         first.source, second.source,
@@ -193,13 +199,17 @@ fn cue_dynamic_swap_suppression_matches_ordinary_playback_contributions() {
     let mut engine = PlaybackEngine::with_clock(Arc::new(light_core::ManualClock::new(now)));
     engine.register(first).unwrap();
     engine.register(second).unwrap();
-    engine.register_definition(definition(1, first_id)).unwrap();
     engine
-        .register_definition(definition(2, second_id))
+        .register_definition(address(1), definition(1, first_id))
         .unwrap();
-    engine.on(1).unwrap();
-    let swap = PlaybackIdentity::physical(2).unwrap();
-    engine.set_swap_at_mutation(swap, true).unwrap();
+    engine
+        .register_definition(address(2), definition(2, second_id))
+        .unwrap();
+    engine.on(address(1)).unwrap();
+    let swap = address(2);
+    engine
+        .set_swap_mutation(swap, &test_source(swap.position()), true)
+        .unwrap();
     let values = engine.active_cue_dynamic_values();
     assert!(!values.is_empty());
     assert!(
@@ -227,7 +237,9 @@ fn cue_dynamic_swap_suppression_matches_ordinary_playback_contributions() {
                 .iter()
                 .any(|ordinary| ordinary.source == value.source))
     );
-    engine.set_swap_at_mutation(swap, false).unwrap();
+    engine
+        .set_swap_mutation(swap, &test_source(swap.position()), false)
+        .unwrap();
     assert!(
         engine
             .active_cue_dynamic_values()
@@ -248,8 +260,9 @@ fn directly_started_cuelist_preserves_its_absent_assignment_identity() {
     assert_eq!(
         value.source,
         SequenceMasterSource {
-            playback_number: None,
-            playback_identity: None,
+            control_source_id: None,
+            playback_address: None,
+
             cue_list_id: list_id,
             temporary: false
         }
@@ -262,15 +275,19 @@ fn overlapping_temporary_kinds_keep_distinct_keys_at_identical_source_stamps() {
     let fixture = FixtureId::new();
     let list = list(vec![recorded_cue(fixture, 1.0)]);
     let list_id = list.id;
-    let address = VirtualPlaybackAddress::new(2, 1301).unwrap();
-    let identity = PlaybackIdentity::Virtual(address);
+    let address = PlaybackAddress::new(2, 1).unwrap();
+    let identity = address;
     let mut engine = PlaybackEngine::with_clock(Arc::new(light_core::ManualClock::new(instant())));
     engine.register(list).unwrap();
     engine
-        .register_virtual_definition(address, definition(1301, list_id))
+        .register_definition(address, definition(1301, list_id))
         .unwrap();
-    engine.set_temp_button_at_mutation(identity, true).unwrap();
-    engine.set_temp_fader_at_mutation(identity, 0.6).unwrap();
+    engine
+        .set_temp_button_mutation(identity, &test_source(identity.position()), true)
+        .unwrap();
+    engine
+        .set_temp_fader_mutation(identity, &test_source(identity.position()), 0.6)
+        .unwrap();
     let values = engine.active_cue_dynamic_values();
     assert_eq!(values.len(), 2);
     assert_eq!(values[0].source, values[1].source);
@@ -306,7 +323,9 @@ fn overlapping_temporary_kinds_keep_distinct_keys_at_identical_source_stamps() {
                 kind
             }));
     }
-    engine.set_temp_button_at_mutation(identity, false).unwrap();
+    engine
+        .set_temp_button_mutation(identity, &test_source(identity.position()), false)
+        .unwrap();
     let remaining = engine.active_cue_dynamic_values();
     assert_eq!(remaining.len(), 1);
     assert!(matches!(
@@ -321,8 +340,9 @@ fn overlapping_temporary_kinds_keep_distinct_keys_at_identical_source_stamps() {
 #[test]
 fn cue_dynamic_controller_identity_is_canonical_stable_and_scoped() {
     let source = SequenceMasterSource {
-        playback_number: Some(7),
-        playback_identity: None,
+        control_source_id: None,
+        playback_address: Some(address(7)),
+
         cue_list_id: CueListId(Uuid::from_u128(500)),
         temporary: false,
     };
@@ -330,7 +350,7 @@ fn cue_dynamic_controller_identity_is_canonical_stable_and_scoped() {
     let key = CueDynamicSourceKey::Normal { source };
     let explicit = CueDynamicSourceKey::Normal {
         source: SequenceMasterSource {
-            playback_identity: Some(PlaybackIdentity::physical(7).unwrap()),
+            control_source_id: None,
             ..source
         },
     };
@@ -342,25 +362,30 @@ fn cue_dynamic_controller_identity_is_canonical_stable_and_scoped() {
     let mut identities = std::collections::HashSet::from([key.controller_id(link)]);
     for other in [
         SequenceMasterSource {
-            playback_number: None,
+            control_source_id: None,
+            playback_address: None,
             ..source
         },
         SequenceMasterSource {
-            playback_number: Some(8),
+            control_source_id: None,
+            playback_address: Some(address(8)),
             ..source
         },
         SequenceMasterSource {
+            control_source_id: None,
             cue_list_id: CueListId(Uuid::from_u128(501)),
             ..source
         },
         SequenceMasterSource {
-            playback_number: Some(1001),
-            playback_identity: Some(PlaybackIdentity::virtual_playback(1, 1001).unwrap()),
+            control_source_id: None,
+            playback_address: Some(PlaybackAddress::new(2, 1).unwrap()),
+
             ..source
         },
         SequenceMasterSource {
-            playback_number: Some(1301),
-            playback_identity: Some(PlaybackIdentity::virtual_playback(2, 1301).unwrap()),
+            control_source_id: None,
+            playback_address: Some(PlaybackAddress::new(3, 1).unwrap()),
+
             ..source
         },
     ] {
@@ -378,6 +403,7 @@ fn cue_dynamic_controller_identity_is_canonical_stable_and_scoped() {
             identities.insert(
                 CueDynamicSourceKey::Temporary {
                     source: SequenceMasterSource {
+                        control_source_id: None,
                         temporary: true,
                         ..source
                     },
@@ -398,10 +424,14 @@ fn cue_dynamic_master_capture_keeps_current_and_snap_values_without_live_rereads
     let clock = Arc::new(light_core::ManualClock::new(started));
     let mut engine = PlaybackEngine::with_clock(clock.clone());
     engine.register(list).unwrap();
-    engine.register_definition(definition(1, list_id)).unwrap();
-    engine.set_master(1, 0.2).unwrap();
     engine
-        .set_master_transition_mutation(1, 0.8, 1_000)
+        .register_definition(address(1), definition(1, list_id))
+        .unwrap();
+    engine
+        .set_master(address(1), &test_source(address(1).position()), 0.2)
+        .unwrap();
+    engine
+        .set_master_transition_mutation(address(1), 0.8, 1_000)
         .unwrap();
     clock.advance_millis(500);
     engine.tick(started + ChronoDuration::milliseconds(500), None);

@@ -5,7 +5,7 @@ pub(super) struct OscPlaybackFeedback<'a> {
     pub(super) subscriber: &'a OscSubscriber,
     pub(super) desk: &'a ControlDesk,
     pub(super) page: u8,
-    pub(super) selected_playback: Option<u16>,
+    pub(super) selected_playback: Option<light_playback::PlaybackAddress>,
     pub(super) snapshot: &'a EngineSnapshot,
     pub(super) runtime: &'a [light_playback::PlaybackRuntimeStatus],
     pub(super) speed_groups: &'a [SpeedSnapshot; 5],
@@ -13,6 +13,7 @@ pub(super) struct OscPlaybackFeedback<'a> {
 
 fn playback_level(
     state: &AppState,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     running: Option<&light_playback::PlaybackRuntimeStatus>,
     speed_groups: &[SpeedSnapshot; 5],
@@ -23,10 +24,7 @@ fn playback_level(
             .unwrap_or(0.0),
         light_playback::PlaybackTarget::Dynamic { .. } => state
             .output
-            .active_dynamic_playback_at(
-                light_playback::PlaybackIdentity::physical(definition.number)
-                    .expect("snapshot physical Playback number"),
-            )
+            .active_dynamic_playback(address)
             .map(|playback| playback.fader_value)
             .unwrap_or(0.0),
         // Macros are one-shot actions and intentionally have no latched fader level.
@@ -132,21 +130,17 @@ fn legacy_cue_number(number: Option<&light_playback::CueNumber>) -> f32 {
 fn send_button_feedback(
     state: &AppState,
     subscriber: &OscSubscriber,
-    desk: &ControlDesk,
-    slot: u8,
+    prefix: &str,
     definition: Option<&light_playback::PlaybackDefinition>,
     running: Option<&light_playback::PlaybackRuntimeStatus>,
 ) {
     let active = running
         .is_some_and(|item| item.playback.enabled || item.temporary_active || item.swap_active);
-    for button in 1..=desk.buttons {
+    for button in 1..=definition.map_or(3, |definition| definition.button_count) {
         let (r, g, b) = definition
             .map(|definition| playback_color_rgb(&definition.color, active))
             .unwrap_or((0.18, 0.20, 0.23));
-        let prefix = format!(
-            "/light/{}/feedback/page-playback/{slot}/button/{button}",
-            subscriber.path
-        );
+        let prefix = format!("{prefix}/button/{button}");
         send_osc(
             state,
             subscriber.target,
@@ -209,29 +203,23 @@ fn send_runtime_feedback(
     }
 }
 
-fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_number: Option<u16>) {
-    let binding = direct_number
-        .is_none()
-        .then(|| expanded_osc_binding(feedback.snapshot, feedback.page, feedback.desk, slot))
-        .flatten();
-    let number = direct_number.or_else(|| {
-        let anchor = binding?.anchor_slot;
-        feedback
-            .snapshot
-            .playback_pages
-            .iter()
-            .find(|page| page.number == feedback.page)?
-            .slots
-            .get(&anchor)
-            .copied()
-    });
-    let source_definition = number.and_then(|number| {
-        feedback
-            .snapshot
-            .playbacks
-            .iter()
-            .find(|definition| definition.number == number)
-    });
+fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u16) {
+    let binding = expanded_osc_binding(
+        feedback.state,
+        feedback.snapshot,
+        feedback.page,
+        feedback.desk,
+        slot,
+    );
+    let position = binding.map_or(slot, |binding| binding.anchor_slot);
+    let address = light_playback::PlaybackAddress::new(feedback.page, position)
+        .expect("validated Playback layout");
+    let source_definition = feedback
+        .snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == feedback.page)
+        .and_then(|page| page.assignments.get(&position));
     let mut projected_definition = source_definition.cloned();
     if let (Some(binding), Some(definition)) = (binding, projected_definition.as_mut()) {
         match (binding.position, definition.footprint) {
@@ -265,15 +253,13 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
     } else {
         source_definition
     };
-    let running = number.and_then(|number| {
-        feedback
-            .runtime
-            .iter()
-            .find(|status| status.playback.playback_number == Some(number))
-    });
+    let running = feedback
+        .runtime
+        .iter()
+        .find(|status| status.playback.playback_address == Some(address));
     let prefix = format!(
-        "/light/{}/feedback/page-playback/{slot}",
-        feedback.subscriber.path
+        "/light/{}/feedback/playback/{}/{slot}",
+        feedback.subscriber.path, feedback.page
     );
     send_osc(
         feedback.state,
@@ -300,7 +286,13 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
     }
     let level = definition
         .map(|definition| {
-            playback_level(feedback.state, definition, running, feedback.speed_groups)
+            playback_level(
+                feedback.state,
+                address,
+                definition,
+                running,
+                feedback.speed_groups,
+            )
         })
         .unwrap_or(0.0);
     send_osc(
@@ -313,14 +305,13 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
         feedback.state,
         feedback.subscriber,
         &prefix,
-        number.is_some() && number == feedback.selected_playback,
+        source_definition.is_some() && Some(address) == feedback.selected_playback,
         running,
     );
     send_button_feedback(
         feedback.state,
         feedback.subscriber,
-        feedback.desk,
-        slot,
+        &prefix,
         definition,
         running,
     );
@@ -334,49 +325,32 @@ fn send_slot_feedback(feedback: &OscPlaybackFeedback<'_>, slot: u8, direct_numbe
 }
 
 pub(super) fn send_playback_osc_feedback(feedback: OscPlaybackFeedback<'_>) {
-    let page = feedback
-        .snapshot
-        .playback_pages
-        .iter()
-        .find(|definition| definition.number == feedback.page);
-    let mut slots = feedback.desk.playback_layout.as_ref().map_or_else(
-        || {
-            (1..=feedback
-                .desk
-                .columns
-                .saturating_mul(feedback.desk.rows)
-                .clamp(1, 96))
-                .collect::<Vec<_>>()
-        },
-        |layout| {
-            layout
+    let mut positions = feedback
+        .state
+        .installation
+        .playback_surfaces(feedback.desk.id)
+        .ok()
+        .and_then(|surfaces| surfaces.get(&feedback.desk.surface_id).cloned())
+        .map(|surface| {
+            surface
+                .layout
                 .rows
-                .iter()
-                .flat_map(|row| {
-                    (0..layout.playbacks_per_row)
-                        .map(|column| row.first_playback_slot.saturating_add(column))
-                })
-                .collect()
-        },
-    );
-    // Physical surfaces can address assigned slots beyond the visible UI layout.
-    // Include assignments on other pages too so a page switch sends explicit off
-    // feedback for those positions on an empty destination page.
-    slots.extend(
+                .into_iter()
+                .flat_map(|row| (0..row.count).map(move |column| row.first_position + column))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    positions.extend(
         feedback
             .snapshot
             .playback_pages
             .iter()
-            .flat_map(|page| page.slots.keys().copied()),
+            .flat_map(|page| page.assignments.keys().copied()),
     );
-    slots.sort_unstable();
-    slots.dedup();
-    for slot in slots {
-        send_slot_feedback(
-            &feedback,
-            slot,
-            page.and_then(|page| page.slots.get(&slot)).copied(),
-        );
+    positions.sort_unstable();
+    positions.dedup();
+    for position in positions {
+        send_slot_feedback(&feedback, position);
     }
     for (index, speed_group) in feedback.speed_groups.iter().copied().enumerate() {
         send_osc(

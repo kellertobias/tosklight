@@ -1,10 +1,7 @@
 use super::invalid_candidate;
 use crate::ActionError;
 use light_core::FixtureId;
-use light_playback::{
-    CueList, FlashReleaseMode, PlaybackButtonAction, PlaybackDefinition, PlaybackFaderMode,
-    PlaybackPage, PlaybackTarget,
-};
+use light_playback::{CueList, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset, resolve_group};
 use light_show::PortableShowCandidate;
 use serde::de::DeserializeOwned;
@@ -315,61 +312,55 @@ pub(super) fn decode_dynamic_stage_positions(
     Ok(positions)
 }
 
-pub(super) fn supply_playback_defaults(
-    cue_lists: &[CueList],
-    playbacks: &mut Vec<PlaybackDefinition>,
-    pages: &mut Vec<PlaybackPage>,
-) {
-    // Only a genuinely legacy document with no Playback topology receives seeded controls.
-    // A persisted page with no definitions is an intentional empty topology (for example after
-    // clearing the final assignment) and must not recreate the detached target.
-    if playbacks.is_empty()
-        && pages.is_empty()
-        && !cue_lists
-            .iter()
-            .any(|list| list.pool_number.is_some() || !list.legacy_pool_aliases.is_empty())
-    {
-        playbacks.extend(
-            cue_lists
-                .iter()
-                .take(1_000)
-                .enumerate()
-                .map(default_playback),
-        );
-    }
+pub(super) fn supply_playback_defaults(pages: &mut Vec<PlaybackPage>) {
     if pages.is_empty() {
         pages.push(PlaybackPage {
             number: 1,
             name: "Main".into(),
-            slots: HashMap::new(),
-            virtual_playbacks: HashMap::new(),
+            assignments: HashMap::new(),
         });
     }
 }
 
-fn default_playback((index, cue_list): (usize, &CueList)) -> PlaybackDefinition {
-    PlaybackDefinition {
-        number: index as u16 + 1,
-        name: cue_list.name.clone(),
-        target: PlaybackTarget::CueList {
-            cue_list_id: cue_list.id,
-        },
-        buttons: [
-            PlaybackButtonAction::GoMinus,
-            PlaybackButtonAction::Go,
-            PlaybackButtonAction::Flash,
-        ],
-        button_count: 3,
-        fader: PlaybackFaderMode::Master,
-        has_fader: true,
-        footprint: light_playback::PlaybackFootprint::Normal,
-        go_activates: true,
-        auto_off: true,
-        xfade_millis: 0,
-        color: "#20c997".into(),
-        flash_release: FlashReleaseMode::default(),
-        protect_from_swap: false,
-        presentation_icon: None,
-        presentation_image: None,
+pub(super) fn decode_solo_regions(
+    candidate: PortableShowCandidate<'_>,
+) -> Result<Vec<light_playback::PlaybackSoloRegion>, ActionError> {
+    #[derive(serde::Deserialize)]
+    struct Stored {
+        regions: Vec<light_playback::PlaybackSoloRegion>,
+    }
+    let objects = candidate
+        .objects_of_kind("playback_solo_regions")
+        .collect::<Vec<_>>();
+    match objects.as_slice() {
+        [] => Ok(Vec::new()),
+        [object] if object.key().id() == "global" => {
+            serde_json::from_value::<Stored>(object.body().clone())
+                .map(|stored| stored.regions)
+                .map_err(|error| invalid_candidate(error.to_string()))
+        }
+        _ => Err(invalid_candidate("Solo regions require one global object")),
+    }
+}
+pub(super) fn decode_preload_scope(
+    candidate: PortableShowCandidate<'_>,
+) -> Result<light_playback::PlaybackPreloadScope, ActionError> {
+    #[derive(serde::Deserialize)]
+    struct Stored {
+        scope: light_playback::PlaybackPreloadScope,
+    }
+    let objects = candidate
+        .objects_of_kind("playback_preload_scope")
+        .collect::<Vec<_>>();
+    match objects.as_slice() {
+        [] => Ok(Default::default()),
+        [object] if object.key().id() == "global" => {
+            serde_json::from_value::<Stored>(object.body().clone())
+                .map(|stored| stored.scope)
+                .map_err(|error| invalid_candidate(error.to_string()))
+        }
+        _ => Err(invalid_candidate(
+            "Preload scope requires one global object",
+        )),
     }
 }

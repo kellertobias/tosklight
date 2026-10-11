@@ -3,7 +3,7 @@
 use light_application::{ActionError, ActionErrorKind, PlaybackAction};
 use light_playback::{PlaybackButtonAction, PlaybackDefinition, PlaybackFootprint};
 
-/// Returns a cloned definition narrowed to the addressed control and the legacy-compatible action
+/// Returns a cloned definition narrowed to the addressed control and the resolved action
 /// which dispatches through that clone. Keeping the definition and action together makes semantic
 /// transition detection, automatic-off discovery, preload capture, and execution agree.
 pub(super) fn configured_control_definition(
@@ -205,7 +205,6 @@ mod tests {
 
     fn definition() -> PlaybackDefinition {
         PlaybackDefinition {
-            number: 1,
             name: "Expanded".into(),
             target: PlaybackTarget::CueList {
                 cue_list_id: light_core::CueListId::new(),

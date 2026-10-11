@@ -1,45 +1,29 @@
 # Virtual Playbacks
 
-Virtual Playbacks place playback actions in a configurable on-screen grid.
+A Virtual Playbacks pane is a configurable control surface for the same show-owned Playbacks used by screens and attached hardware. Each page has positions 1–1000, on pages 1–99. Address a Playback as `page.position`; there is no separate virtual numbering bank. Two surfaces displaying the same address operate the same assignment and authoritative runtime.
 
-Add a Virtual Playbacks pane and choose its row and column count, up to 20×15 or 300
-cells. Virtual Playback page 1 contains numbers 1001–1300, page 2 contains 1301–1600,
-and page 3 contains 1601–1900. Every later page advances by another 300 numbers. These
-are normal show-owned Playbacks: two desks displaying Virtual Playback 1301 operate the
-same assignment and runtime, even when their pane layouts differ.
+Configure each row's first position, number of positions and presentation: buttons, faders or push encoders. Preserve gaps between rows when useful. For example, a 20-column, 14-row pane starting at 401 covers positions 401–680 on its displayed page. Pane controls use the same configured Playback actions, fader modes, icons and images as screen controls.
 
-Choose **Follow Main** to display the control desk's current main page, or **Pinned** to keep the pane on one fixed page. Changing the effective page changes only the addresses shown; it never operates a Playback. Right-click a cell, or press `[SET]` and then press the cell, to open the same Playback Configuration modal used by physical controls. A virtual cell is a one-button, faderless playback target with an additional icon or image-background choice.
+Choose **Pinned** for a fixed page, **Own** for this surface's page selection, or **Follow** another named surface. Following chains cannot contain cycles. Different panes may operate different pages concurrently. The shared command line uses the visibly selected surface's effective page for an undotted Playback number; use an explicit `page.position` to address another page.
 
-When a Virtual Playback runs a Cuelist with exactly one Cue and no icon or image has been chosen, the cell shows that Cue's preview as its default image. For a media-only Cue, this is the Media Server's Program or layer picture described in [Cues - Cuelist](../30-Windows/03-cues-and-playbacks.md#cues---cuelist). A grid of such cells therefore shows what each media Cue will put on screen. Layer pictures keep their transparency over a checkerboard. While a media picture is loading, empty, missing, or offline, the cell names that state instead of showing an image.
+Pressing a held control captures its original Playback address and control source. Changing page while Flash, Swap or another held control is pressed keeps that contribution until release. Release addresses the original Playback even after its cell is no longer displayed. Simultaneous holds remain independent. Page changes themselves never operate Playbacks.
 
-An icon or image chosen in Playback Configuration always wins over the automatic preview. Removing that choice brings the automatic preview back. The automatic image follows the Cuelist: editing its Cue changes the image, and adding a second Cue or removing the Cue returns the cell to its plain label.
+**Take from Screen** copies a selected screen's saved position arrangement into a draft. Review the draft before Apply. The screen may be closed or its hardware disconnected. The saved copy does not silently follow later screen edits and does not copy Playback assignments.
 
-Virtual actions have their own Preload capture switch. This allows physical controls to remain live while virtual actions are queued, or the reverse. Test the chosen capture combination before operation.
+Right-click a cell, or press **SET** and then its control, to open Playback Configuration. A Playback with an actual runtime failure has a red outline. Ordinary command mistakes use the brief red command-line pulse and a short toast above the bar; entered text remains grey after the pulse.
 
-Use Virtual Playbacks for task-specific buttons, not as a substitute for assigning and documenting the underlying playback. The target, action, page, and release behavior must remain understandable from playback configuration.
+When a Playback runs a Cuelist containing exactly one Cue and no configured icon or image, it shows that Cue's preview. A media-only Cue uses the Media Server's Program or layer picture described in [Cues - Cuelist](../30-Windows/03-cues-and-playbacks.md#cues---cuelist). Layer images retain transparency over a checkerboard. Loading, missing and offline media states are named explicitly. A configured icon or image takes priority; removing it restores the automatic preview. Editing the Cue updates the image, while adding or removing Cues returns the cell to a plain label when it no longer has exactly one Cue.
 
 ## Solo Regions
 
-A Solo Region is a named set of Virtual Playback numbers where at most one assigned
-playback may be On. Choose **Create Solo Region** in the window title, or hold Shift, then
-select at least two displayed cells. **Create Solo Region** stays disabled until two cells are
-selected; choose it again and enter the region's name. **Cancel Region Selection** leaves
-selection without saving. ToskLight resolves those cells to their stable
-playback numbers before saving. Shift-selection and region creation are configuration
-gestures: they do not press, start, or stop the selected Playbacks.
+A Solo Region is a show-owned named set of explicit Playback addresses. Permanent activation of a member releases permanent peers using Solo handover fades. Regions may span pages and overlap; shared targets and overlapping peers are deduplicated. Turning the winner Off starts no replacement.
 
-Saved region members have an amber fence. Directly neighboring members share one continuous outer fence that runs across the gap between their cells, with no internal fence edge. Disconnected members are outlined as separate islands, so the grid shows each connected part of the region without relying on color alone.
+**Flash bypasses Solo.** Flashing a member preserves permanent peers. Starting a permanent peer preserves existing Flash holds. Releasing Flash removes its temporary contribution without restarting a previously released permanent Playback or stopping the current winner.
 
-When one member turns On, it wins and every other active member turns Off. Turning the winning member Off does not start another member. Touch, mouse, OSC, and restored playback state all use this server-owned rule. Virtual Playbacks do not use the physical F1–F8 Playback shortcuts. Automatic full-override release remains a separate playback option.
+Use the grid's selection gesture and **Create Solo Region** to choose members and name the region. Selection and region editing are configuration gestures and do not press or operate Playbacks. Adjacent selected members share an amber outer fence; disconnected members form separate islands. General Playback membership management allows editing addresses across pages. Membership belongs to the show and survives page changes, layout changes, closing or removing a pane, and hardware disconnection. Only explicitly changing or deleting a region changes its membership.
 
-Open the pane's **Settings → Solo Regions** tab to rename or delete a region. Choose
-**Edit Region** to close Settings and select its visible playback numbers on the live
-grid. The window title then offers **Update Solo Region** and **Cancel Edit**. A
-Virtual Playback may belong to several regions; activating it releases the deduplicated
-union of the other numbered members.
+## Preload
 
-Solo Region configuration is stored once for the active show and is shared by every desk,
-pane, OSC controller, and other control path. Moving, duplicating, resizing, or
-removing a pane and removing a historical desk do not copy, retarget, or delete regions.
-Only the explicit region-delete action removes a region. Desk layouts and current pages may
-differ without changing the underlying playback numbers or region membership.
+Preload eligibility is configured by Playback position ranges, independent of the surface used. For example, `1 THRU 15 + 101 THRU 115` captures eligible permanent actions in those positions. Range union applies to every page by default, with optional page restrictions. Overlaps do not duplicate an action and unmatched positions remain Live.
+
+The existing permanent-action set and Temp toggle behavior remain unchanged. Flash and fader movement stay Live. Programmer capture is a separate option. Captured actions retain their exact address, order and source through page changes and are committed together by Preload GO. See [Preload](12-preload.md) for inspection, removal, timing and release behavior.

@@ -195,9 +195,7 @@ fn dispatch_schedule_target(
     definition: &light_application::ScheduleDefinition,
 ) -> Result<(), ApiError> {
     let light_application::ScheduleTarget::Playback {
-        page,
-        slot,
-        playback_number,
+        address,
         action,
         master_transition,
     } = &definition.target
@@ -206,34 +204,7 @@ fn dispatch_schedule_target(
             "Macro runtime is unavailable until refactoring item 30",
         ));
     };
-    let (page, slot) = (
-        u8::try_from(*page).map_err(|_| ApiError::bad_request("Schedule page is out of range"))?,
-        u8::try_from(*slot).map_err(|_| ApiError::bad_request("Schedule slot is out of range"))?,
-    );
-    let store = ActiveShowRepository::open(&show.path).map_err(ApiError::store)?;
-    let (_, page_object) = store
-        .object_with_portable_revision("playback_page", &page.to_string())
-        .map_err(ApiError::store)?;
-    let page_definition: light_playback::PlaybackPage = decode(
-        page_object
-            .ok_or_else(|| ApiError::conflict("scheduled Playback page no longer exists"))?
-            .body,
-        "Playback page",
-    )?;
-    if page_definition.slots.get(&slot) != Some(playback_number) {
-        return Err(ApiError::conflict(
-            "scheduled Playback moved, was replaced, or no longer occupies its saved page slot",
-        ));
-    }
-    let (_, playback_object) = store
-        .object_with_portable_revision("playback", &playback_number.to_string())
-        .map_err(ApiError::store)?;
-    let playback: light_playback::PlaybackDefinition = decode(
-        playback_object
-            .ok_or_else(|| ApiError::conflict("scheduled Playback no longer exists"))?
-            .body,
-        "Playback",
-    )?;
+    let playback = read_scheduled_playback(state, show.id, *address)?;
     validate_action_matrix(&playback.target, *action)?;
     let context = light_application::ActionContext::system(
         Uuid::nil(),
@@ -245,9 +216,12 @@ fn dispatch_schedule_target(
         None,
         context.clone(),
         light_application::PlaybackCommand {
-            address: light_application::PlaybackAddress::Pool(*playback_number),
+            address: light_application::PlaybackAddress::Playback(*address),
             action: scheduled_action(state, &playback.target, *action)?,
-            surface: light_application::PlaybackSurface::Virtual,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: format!("schedule:{}", definition.id.0),
+                control_id: 1,
+            },
         },
     )?;
     if let Some(transition) = master_transition {
@@ -257,12 +231,15 @@ fn dispatch_schedule_target(
             None,
             context,
             light_application::PlaybackCommand {
-                address: light_application::PlaybackAddress::Pool(*playback_number),
+                address: light_application::PlaybackAddress::Playback(*address),
                 action: light_application::PlaybackAction::MasterTransition {
                     level: light_application::PlaybackLevel::new(transition.level),
                     duration_millis: transition.fade_millis,
                 },
-                surface: light_application::PlaybackSurface::Virtual,
+                control_source: light_playback::PlaybackControlSource {
+                    surface_id: format!("schedule:{}", definition.id.0),
+                    control_id: 1,
+                },
             },
         )?;
     }
@@ -905,47 +882,37 @@ fn validate_persisted_target(
     target: &light_application::ScheduleTarget,
 ) -> Result<(), ApiError> {
     let light_application::ScheduleTarget::Playback {
-        page,
-        slot,
-        playback_number,
-        action,
-        ..
+        address, action, ..
     } = target
     else {
         return Err(ApiError::conflict(
             "Macro runtime is unavailable until refactoring item 30",
         ));
     };
+    let playback = read_scheduled_playback(state, show_id, *address)?;
+    validate_action_matrix(&playback.target, *action)
+}
+
+fn read_scheduled_playback(
+    state: &AppState,
+    show_id: light_core::ShowId,
+    address: light_playback::PlaybackAddress,
+) -> Result<light_playback::PlaybackDefinition, ApiError> {
     let entry = active_entry(state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
-    let page =
-        u8::try_from(*page).map_err(|_| ApiError::bad_request("Schedule page is out of range"))?;
-    let slot =
-        u8::try_from(*slot).map_err(|_| ApiError::bad_request("Schedule slot is out of range"))?;
-    let (_, page_object) = store
-        .object_with_portable_revision("playback_page", &page.to_string())
+    let (_, object) = store
+        .object_with_portable_revision("playback_page", &address.page().to_string())
         .map_err(ApiError::store)?;
-    let page_definition: light_playback::PlaybackPage = decode(
-        page_object
-            .ok_or_else(|| ApiError::conflict("scheduled Playback page does not exist"))?
+    let page: light_playback::PlaybackPage = decode(
+        object
+            .ok_or_else(|| ApiError::conflict("Scheduled Playback page no longer exists"))?
             .body,
         "Playback page",
     )?;
-    if page_definition.slots.get(&slot) != Some(playback_number) {
-        return Err(ApiError::conflict(
-            "scheduled Playback does not occupy its selected page slot",
-        ));
-    }
-    let (_, playback_object) = store
-        .object_with_portable_revision("playback", &playback_number.to_string())
-        .map_err(ApiError::store)?;
-    let playback: light_playback::PlaybackDefinition = decode(
-        playback_object
-            .ok_or_else(|| ApiError::conflict("scheduled Playback does not exist"))?
-            .body,
-        "Playback",
-    )?;
-    validate_action_matrix(&playback.target, *action)
+    page.assignments
+        .get(&address.position())
+        .cloned()
+        .ok_or_else(|| ApiError::conflict("Scheduled Playback assignment no longer exists"))
 }
 
 fn recurrence() -> Result<light_application::ScheduleRecurrence, ApiError> {
@@ -969,9 +936,7 @@ fn normalize_new_anchor(
 
 fn preview_target() -> light_application::ScheduleTarget {
     light_application::ScheduleTarget::Playback {
-        page: 1,
-        slot: 1,
-        playback_number: 1,
+        address: light_playback::PlaybackAddress::new(1, 1).expect("valid preview address"),
         action: light_application::ScheduledPlaybackAction::Go,
         master_transition: None,
     }

@@ -63,17 +63,23 @@ const DEMO_PAGE: ShowObject<"playback_page"> = {
 	body: {
 		number: 1,
 		name: "Page 1",
-		slots: {
-			"11": 1,
-			"16": 2,
-			"17": 3,
-			"4": 4,
-			"12": 21,
-			"13": 22,
-			"14": 23,
-			"15": 24,
-		},
-		virtual_playbacks: {},
+		assignments: Object.fromEntries(
+			["11", "16", "17", "4", "12", "13", "14", "15"].map((position) => [
+				position,
+				{
+					name: "Demo",
+					target: {
+						type: "cue_list",
+						cue_list_id: "33333333-3333-4333-8333-333333333333",
+					},
+					buttons: ["go", "pause", "flash"],
+					fader: "master",
+					go_activates: true,
+					auto_off: true,
+					xfade_millis: 0,
+				},
+			]),
+		),
 	},
 };
 
@@ -129,7 +135,7 @@ function projectionsFor(identities: PlaybackIdentity[]) {
 	return identities.map((identity) => {
 		if (identity.kind !== "playback")
 			throw new Error("The demo requests only Playback identities");
-		return cueProjection(identity.playback_number);
+		return cueProjection(identity.position);
 	});
 }
 
@@ -203,7 +209,10 @@ describe("DemoPlaybackControls runtime readiness", () => {
 	it("accepts an explicit missing projection as hydrated authority", async () => {
 		const loadSnapshot: SnapshotLoaderMock = vi.fn(async (identities) => {
 			const projections = projectionsFor(identities).map((projection) =>
-				projection.playback_number === 24 ? missingProjection(24) : projection,
+				projection.identity.kind === "playback" &&
+				projection.identity.position === 15
+					? missingProjection(15)
+					: projection,
 			);
 			return playbackSnapshot(identities, 10, projections);
 		});
@@ -254,8 +263,7 @@ describe("DemoPlaybackControls runtime readiness", () => {
 function missingProjection(playbackNumber: number): PlaybackProjection {
 	return {
 		scope: { show_id: SHOW_ID, show_revision: 4 },
-		requested: { kind: "playback", playback_number: playbackNumber },
-		playback_number: playbackNumber,
+		identity: { kind: "playback", page: 1, position: playbackNumber },
 		target: "missing",
 	};
 }

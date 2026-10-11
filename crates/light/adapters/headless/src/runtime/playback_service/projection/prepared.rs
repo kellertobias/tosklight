@@ -20,7 +20,7 @@ pub(in crate::runtime) fn prepared_runtime_projections(
     before
         .iter()
         .map(|(identity, projection)| {
-            if projection.requested != *identity
+            if projection.identity != *identity
                 || Some(projection.scope) != scope
                 || projection.scope.show_revision != snapshot.revision
             {
@@ -40,14 +40,11 @@ pub(in crate::runtime) fn prepared_runtime_projections(
 
 fn addressed_playback(
     identity: &PlaybackRuntimeIdentity,
-) -> Result<Option<PlaybackIdentity>, String> {
-    match identity {
-        PlaybackRuntimeIdentity::Playback(number) => PlaybackIdentity::physical(*number).map(Some),
-        PlaybackRuntimeIdentity::Virtual(address) => Ok(Some(PlaybackIdentity::Virtual(*address))),
-        PlaybackRuntimeIdentity::CueList(_)
-        | PlaybackRuntimeIdentity::DirectCueList(_)
-        | PlaybackRuntimeIdentity::Group(_) => Ok(None),
-    }
+) -> Result<Option<light_playback::PlaybackAddress>, String> {
+    Ok(match identity {
+        PlaybackRuntimeIdentity::Playback(address) => Some(*address),
+        _ => None,
+    })
 }
 
 fn project_after(
@@ -60,17 +57,17 @@ fn project_after(
     let mut after = before.clone();
     match &mut after.target {
         PlaybackTargetProjection::CueList { cue_list_id, .. } => {
-            let status = match addressed_playback(&before.requested)? {
-                Some(identity) => playback.runtime_status_at(identity),
-                None if matches!(before.requested, PlaybackRuntimeIdentity::DirectCueList(_)) => {
+            let status = match addressed_playback(&before.identity)? {
+                Some(identity) => playback.runtime_status_for_playback(identity),
+                None if matches!(before.identity, PlaybackRuntimeIdentity::DirectCueList(_)) => {
                     playback.runtime_status_for_direct_cue_list(*cue_list_id)
                 }
                 None => playback.runtime_status_for_cue_list(*cue_list_id),
             };
             return Ok(cue_list_projection(
                 before.scope,
-                before.requested.clone(),
-                before.playback_number,
+                before.identity.clone(),
+                None,
                 *cue_list_id,
                 status.as_ref(),
             ));
@@ -78,12 +75,12 @@ fn project_after(
         PlaybackTargetProjection::Dynamic {
             runtime: projected, ..
         } => {
-            let identity = addressed_playback(&before.requested)?
+            let identity = addressed_playback(&before.identity)?
                 .ok_or("prepared Dynamic projection has no Playback address")?;
             let assignment = playback
-                .dynamic_assignment_at(identity)
+                .dynamic_assignment(identity)
                 .ok_or("prepared Dynamic Playback assignment is missing")?;
-            *projected = playback.active_dynamic_playback_at(identity).map(|active| {
+            *projected = playback.active_dynamic_playback(identity).map(|active| {
                 Box::new(dynamic_runtime_projection_from_snapshot(
                     snapshot,
                     assignment,
@@ -101,18 +98,7 @@ fn project_after(
         } => {
             // Match the ordinary projector: Group identities can resolve a physical fader;
             // virtual Group tiles have no assignment-local fader projection.
-            let identity = match &before.requested {
-                PlaybackRuntimeIdentity::Playback(number) => {
-                    Some(PlaybackIdentity::physical(*number)?)
-                }
-                PlaybackRuntimeIdentity::Group(_) => before
-                    .playback_number
-                    .map(PlaybackIdentity::physical)
-                    .transpose()?,
-                PlaybackRuntimeIdentity::Virtual(_)
-                | PlaybackRuntimeIdentity::CueList(_)
-                | PlaybackRuntimeIdentity::DirectCueList(_) => None,
-            };
+            let identity = addressed_playback(&before.identity)?;
             let control = identity
                 .map(|identity| playback.control_state_at(identity))
                 .unwrap_or_default();
@@ -137,7 +123,11 @@ fn project_after(
 mod tests {
     use super::*;
     use light_core::CueListId;
-    use light_playback::{Cue, CueList, PlaybackDefinition, VirtualPlaybackAddress};
+    use light_playback::{Cue, CueList, PlaybackAddress, PlaybackDefinition};
+
+    fn address(position: u16) -> PlaybackAddress {
+        PlaybackAddress::new(1, position).unwrap()
+    }
 
     fn scope() -> PlaybackShowScope {
         PlaybackShowScope {
@@ -150,17 +140,11 @@ mod tests {
         identity: PlaybackRuntimeIdentity,
         target: PlaybackTargetProjection,
     ) -> (PlaybackRuntimeIdentity, PlaybackRuntimeProjection) {
-        let playback_number = match &identity {
-            PlaybackRuntimeIdentity::Playback(number) => Some(*number),
-            PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
-            _ => None,
-        };
         (
             identity.clone(),
             PlaybackRuntimeProjection {
                 scope: scope(),
-                requested: identity,
-                playback_number,
+                identity,
                 target,
             },
         )
@@ -173,32 +157,33 @@ mod tests {
         })).unwrap()
     }
 
-    fn assignment(number: u16, cue_list_id: CueListId) -> PlaybackDefinition {
+    fn assignment(_number: u16, cue_list_id: CueListId) -> PlaybackDefinition {
         serde_json::from_value(serde_json::json!({
-            "number": number, "name": "Prepared assignment",
+            "name": "Prepared assignment",
             "target": {"type": "cue_list", "cue_list_id": cue_list_id}
         }))
         .unwrap()
     }
 
     #[test]
-    fn cue_feedback_uses_prepared_physical_and_page_qualified_virtual_owners() {
+    fn cue_feedback_uses_prepared_page_qualified_alias_owners() {
         let first = CueListId::new();
         let second = CueListId::new();
-        let one = VirtualPlaybackAddress::new(1, 1001).unwrap();
-        let two = VirtualPlaybackAddress::new(2, 1301).unwrap();
+        let one = PlaybackAddress::new(2, 1).unwrap();
+        let two = PlaybackAddress::new(3, 1).unwrap();
         let mut live = PlaybackEngine::default();
         live.register(cue_list(first)).unwrap();
         live.register(cue_list(second)).unwrap();
-        live.register_definition(assignment(1, first)).unwrap();
-        live.register_virtual_definition(one, assignment(1001, first))
+        live.register_definition(address(1), assignment(1, first))
             .unwrap();
-        live.register_virtual_definition(two, assignment(1301, second))
+        live.register_definition(one, assignment(1001, first))
+            .unwrap();
+        live.register_definition(two, assignment(1301, second))
             .unwrap();
         let identities = [
-            (PlaybackRuntimeIdentity::Playback(1), first),
-            (PlaybackRuntimeIdentity::Virtual(one), first),
-            (PlaybackRuntimeIdentity::Virtual(two), second),
+            (PlaybackRuntimeIdentity::Playback(address(1)), first),
+            (PlaybackRuntimeIdentity::Playback(one), first),
+            (PlaybackRuntimeIdentity::Playback(two), second),
             (PlaybackRuntimeIdentity::CueList(first), first),
         ];
         let before = identities
@@ -214,11 +199,9 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let mut prepared = live.clone();
-        prepared.go_playback(1).unwrap();
-        prepared.go_playback(1).unwrap();
-        prepared
-            .go_playback_at(PlaybackIdentity::Virtual(two))
-            .unwrap();
+        prepared.go_playback(address(1)).unwrap();
+        prepared.go_playback(address(1)).unwrap();
+        prepared.go_playback(two).unwrap();
         let after = prepared_runtime_projections(
             &EngineSnapshot::default(),
             &before,
@@ -233,12 +216,9 @@ mod tests {
                 projection.current_cue().unwrap().number.to_string(),
                 expected
             );
-            assert_eq!(projection.requested, before[index].0);
+            assert_eq!(projection.identity, before[index].0);
         }
-        assert!(
-            live.runtime_status_at(PlaybackIdentity::physical(1).unwrap())
-                .is_none()
-        );
+        assert!(live.runtime_status_for_playback(address(1)).is_none());
         assert!(
             before
                 .iter()
@@ -250,7 +230,7 @@ mod tests {
     fn ancillary_values_are_captured_while_playback_owned_feedback_is_refreshed() {
         let before = vec![
             before(
-                PlaybackRuntimeIdentity::Playback(1),
+                PlaybackRuntimeIdentity::Playback(address(1)),
                 PlaybackTargetProjection::Group {
                     group_id: "front".into(),
                     master: 0.4,
@@ -261,7 +241,7 @@ mod tests {
                 },
             ),
             before(
-                PlaybackRuntimeIdentity::Playback(2),
+                PlaybackRuntimeIdentity::Playback(address(2)),
                 PlaybackTargetProjection::GrandMaster(
                     light_application::GrandMasterRuntimeProjection {
                         level: 0.3,
@@ -273,7 +253,7 @@ mod tests {
                 ),
             ),
             before(
-                PlaybackRuntimeIdentity::Playback(3),
+                PlaybackRuntimeIdentity::Playback(address(3)),
                 PlaybackTargetProjection::ProgrammerFade { millis: 432 },
             ),
         ];
@@ -299,7 +279,7 @@ mod tests {
             panic!("Group projection")
         };
         assert_eq!((master, flash_level), (0.4, 0.8));
-        let control = prepared.control_state_at(PlaybackIdentity::physical(1).unwrap());
+        let control = prepared.control_state_at(address(1));
         assert_eq!(
             (fader_position, fader_pickup_required, fader_pickup_target),
             (
@@ -322,7 +302,7 @@ mod tests {
     #[test]
     fn missing_prepared_dynamic_assignment_and_mismatched_authority_are_precommit_errors() {
         let before = vec![before(
-            PlaybackRuntimeIdentity::Playback(1),
+            PlaybackRuntimeIdentity::Playback(address(1)),
             PlaybackTargetProjection::Dynamic {
                 dynamic_id: Some(uuid::Uuid::new_v4()),
                 last_known_pool_number: 1,
@@ -342,7 +322,7 @@ mod tests {
             .contains("assignment is missing")
         );
         let mut wrong_identity = before.clone();
-        wrong_identity[0].1.requested = PlaybackRuntimeIdentity::Playback(2);
+        wrong_identity[0].1.identity = PlaybackRuntimeIdentity::Playback(address(2));
         assert!(
             prepared_runtime_projections(
                 &EngineSnapshot::default(),

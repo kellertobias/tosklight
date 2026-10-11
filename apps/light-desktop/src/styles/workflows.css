@@ -1775,3 +1775,7 @@
 	font-size: 0.72rem;
 	letter-spacing: 0;
 }
+
+.playback-fader-bank.command-surface {
+	box-shadow: inset 0 0 0 1px var(--accent, #20c997);
+}

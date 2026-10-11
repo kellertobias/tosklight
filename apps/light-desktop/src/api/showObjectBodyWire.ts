@@ -20,11 +20,9 @@ import {
 } from "./playbackWirePrimitives";
 import { decodeCueListBody } from "./showObjectCueWire";
 import {
-	decodePlaybackBody,
 	decodePlaybackPageBody,
 } from "./showObjectPlaybackWire";
 import type { PatchLayer, StoredPreset } from "./types";
-import { VIRTUAL_PLAYBACKS_PER_PAGE } from "./virtualPlaybackAddress";
 import { WireValidationError } from "./wireValidation";
 
 export function decodeShowObjectBody<K extends ShowObjectKind>(
@@ -50,8 +48,6 @@ export function decodeShowObjectBody(
 			return decodeCueListBody(value, path, objectId);
 		case "patch_layer":
 			return decodePatchLayer(value, path, objectId);
-		case "playback":
-			return decodePlaybackBody(value, path, objectId);
 		case "playback_page":
 			return decodePlaybackPageBody(value, path, objectId);
 		case "stage_layout":
@@ -356,7 +352,7 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 					const kind = builtInWindowAt(pane.kind, `${panePath}.kind`);
 					const virtualFields =
 						kind === "virtual_playbacks"
-							? decodeVirtualPlaybackPane(pane, panePath)
+							? { surface_id: stringAt(pane.surface_id, `${panePath}.surface_id`) }
 							: {};
 					const layoutGroupId =
 						pane.layoutGroupId == null
@@ -399,51 +395,6 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 	};
 }
 
-function decodeVirtualPlaybackPane(
-	pane: Record<string, unknown>,
-	path: string,
-): Pick<
-	PaneModel,
-	| "virtualPlaybackRows"
-	| "virtualPlaybackColumns"
-	| "virtualPlaybackPageMode"
-	| "virtualPlaybackPinnedPage"
-> {
-	const rows = boundedPositiveIntegerAt(
-		pane.virtualPlaybackRows,
-		`${path}.virtualPlaybackRows`,
-		VIRTUAL_PLAYBACKS_PER_PAGE,
-	);
-	const columns = boundedPositiveIntegerAt(
-		pane.virtualPlaybackColumns,
-		`${path}.virtualPlaybackColumns`,
-		VIRTUAL_PLAYBACKS_PER_PAGE,
-	);
-	if (rows * columns > VIRTUAL_PLAYBACKS_PER_PAGE)
-		throw new WireValidationError(
-			path,
-			"a Virtual Playback grid with at most 300 cells",
-			pane,
-		);
-	const mode = pane.virtualPlaybackPageMode;
-	if (mode !== "follow_main" && mode !== "pinned")
-		throw new WireValidationError(
-			`${path}.virtualPlaybackPageMode`,
-			"follow_main or pinned",
-			mode,
-		);
-	const pinnedPage = boundedPositiveIntegerAt(
-		pane.virtualPlaybackPinnedPage,
-		`${path}.virtualPlaybackPinnedPage`,
-		127,
-	);
-	return {
-		virtualPlaybackRows: rows,
-		virtualPlaybackColumns: columns,
-		virtualPlaybackPageMode: mode,
-		virtualPlaybackPinnedPage: pinnedPage,
-	};
-}
 
 const BUILT_IN_WINDOWS: readonly BuiltInWindow[] = [
 	"stage",

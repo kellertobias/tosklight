@@ -183,22 +183,7 @@ fn reconcile_playback_row(
         );
         return;
     };
-    let identity = match active
-        .playback_identity
-        .map(Ok)
-        .unwrap_or_else(|| PlaybackIdentity::physical(active.playback_number))
-    {
-        Ok(identity) => identity,
-        Err(error) if observer.is_cold() => {
-            observer.fail(
-                &context,
-                Operation::PlaybackRow,
-                ColdDynamicReconciliationCause::InvalidPlaybackNumber(error),
-            );
-            return;
-        }
-        Err(error) => panic!("active physical Dynamic Playback number is validated: {error:?}"),
-    };
+    let identity = active.playback_address;
     controls.insert(
         controller_id,
         DynamicPlaybackControl {

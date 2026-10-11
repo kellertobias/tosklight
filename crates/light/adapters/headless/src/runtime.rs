@@ -40,6 +40,8 @@ pub use output_scheduler::{
     StartPathPhases,
 };
 mod playback_service;
+mod playback_solo;
+mod playback_surfaces_http;
 mod playback_telemetry;
 mod playback_v2;
 mod position_readout;
@@ -91,7 +93,7 @@ use light_control::{
 use light_core::{ApplicationClock, ManualClock, SessionId};
 use light_engine::{
     Engine, EngineError, EnginePlaybackCommand, EnginePlaybackOutcome, EngineSnapshot,
-    PoolPlaybackAction, PreparedEngineSnapshot, RenderOptions,
+    PreparedEngineSnapshot, RenderOptions,
 };
 use light_media::{CitpClient, LibraryId, MediaCache, PreviewKey, ThumbnailKey, discover_servers};
 use light_output::{NetworkOutput, OutputHealth};
@@ -193,7 +195,6 @@ mod pending_preload_readers;
 mod persistence_events;
 mod playback_api;
 mod playback_dispatch;
-mod playback_exclusion_normalization;
 mod playback_inputs;
 mod playback_layout;
 mod playback_layout_mutations;
@@ -271,8 +272,11 @@ mod update_api;
 
 pub(crate) use capabilities::active_show::repository::ActiveShowRepository;
 mod change_lead_http;
+mod playback_control_disconnect;
+mod playback_policy;
+mod playback_preload_http;
+mod playback_solo_http;
 mod update_plans;
-mod virtual_playback_zones_http;
 mod visualizer_view_http;
 mod ws_dispatch;
 mod ws_output_handlers;
@@ -321,7 +325,6 @@ use output_api::*;
 use persistence_events::*;
 use playback_api::*;
 use playback_dispatch::*;
-use playback_exclusion_normalization::normalize_restored_virtual_playback_exclusions;
 use playback_inputs::*;
 use playback_layout::*;
 use playback_speed_groups::*;

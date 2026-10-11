@@ -67,7 +67,6 @@ import type { StageRenderQuality } from "@tosklight/patch/stage-geometry";
 export type DmxDotSize = "small" | "large";
 export type ChannelDisplayMode = "intensity" | "all";
 export type TextEditorMode = "plain" | "markdown" | "split";
-export type VirtualPlaybackPageMode = "follow_main" | "pinned";
 
 export type VisualizationWidgetSource =
 	| { kind: "raw_dmx"; universe: number; address: number }
@@ -116,19 +115,6 @@ export interface GridRect {
 	height: number;
 }
 
-export interface VirtualPlaybackExclusionZone {
-	id: string;
-	name: string;
-	/** Stable show-owned Virtual Playback numbers. */
-	playbackNumbers: number[];
-}
-
-export interface VirtualPlaybackZoneEdit {
-	zoneId: string;
-	name: string;
-	playbackNumbers: number[];
-}
-
 export interface PaneModel extends GridRect {
 	id: string;
 	kind: BuiltInWindow;
@@ -174,15 +160,7 @@ export interface PaneModel extends GridRect {
 	mediaMainSectionId?: string;
 	mediaRightPaneVisible?: boolean;
 	runningFilter?: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
-	virtualPlaybackRows?: number;
-	virtualPlaybackColumns?: number;
-	virtualPlaybackPageMode?: VirtualPlaybackPageMode;
-	virtualPlaybackPinnedPage?: number;
-	virtualPlaybackCells?: Array<{
-		playbackNumber: number | null;
-		action: "go" | "toggle";
-	}>;
-	virtualPlaybackExclusionZones?: VirtualPlaybackExclusionZone[];
+	surface_id?: string;
 	fileManagerShowHidden?: boolean;
 	textFileRoot?: string;
 	textFilePath?: string;
@@ -252,7 +230,6 @@ export interface AppState {
 	} | null;
 	controlMode: ControlMode;
 	paneSettingsId: string | null;
-	virtualPlaybackZoneEdit: VirtualPlaybackZoneEdit | null;
 	maximizedPaneId: string | null;
 	windowPicker: GridRect | null;
 	savingDesk: boolean;

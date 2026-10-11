@@ -478,26 +478,21 @@ impl ReplayResource {
         self.visualizer_view.lock().insert(key, action, outcome);
     }
 
-    pub(in crate::runtime) async fn lookup_virtual_playback_zones(
+    pub(in crate::runtime) async fn lookup_playback_solo(
         &self,
-        key: &virtual_playback_zones_http::ReplayKey,
-        action: &virtual_playback_zones_http::ReplayAction,
-    ) -> Result<
-        Option<light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionUpdateOutcome>,
-        ApiError,
-    > {
-        self.virtual_playback_zones.lock().get(key, action)
+        key: &playback_solo_http::ReplayKey,
+        action: &playback_solo_http::ReplayAction,
+    ) -> Result<Option<light_wire::v2::playback_solo::PlaybackSoloUpdateOutcome>, ApiError> {
+        self.playback_solo.lock().get(key, action)
     }
 
-    pub(in crate::runtime) async fn insert_virtual_playback_zones(
+    pub(in crate::runtime) async fn insert_playback_solo(
         &self,
-        key: virtual_playback_zones_http::ReplayKey,
-        action: virtual_playback_zones_http::ReplayAction,
-        outcome: light_wire::v2::virtual_playback_zones::VirtualPlaybackExclusionUpdateOutcome,
+        key: playback_solo_http::ReplayKey,
+        action: playback_solo_http::ReplayAction,
+        outcome: light_wire::v2::playback_solo::PlaybackSoloUpdateOutcome,
     ) {
-        self.virtual_playback_zones
-            .lock()
-            .insert(key, action, outcome);
+        self.playback_solo.lock().insert(key, action, outcome);
     }
 
     #[cfg(test)]

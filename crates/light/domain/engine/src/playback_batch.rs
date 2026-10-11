@@ -1,11 +1,8 @@
-use crate::{
-    Engine, RuntimeGeneration,
-    playback::{EnginePlaybackEffect, addressed_effect},
-    playback_exclusion::apply_with_exclusions,
-};
+use crate::{Engine, RuntimeGeneration, playback_exclusion::apply_with_solo};
 use chrono::{DateTime, Utc};
 use light_playback::{
-    PlaybackEngine, PlaybackIdentity, PlaybackRuntimeEffect, VirtualPlaybackAddress,
+    PlaybackAddress, PlaybackControlSource, PlaybackEngine, PlaybackRuntimeEffect,
+    PlaybackSoloRegion,
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -22,23 +19,20 @@ pub enum PlaybackBatchAction {
     DynamicDoubleSpeed,
     DynamicHalfSpeed,
     DynamicLearnSpeed,
-    SetFader { value_permyriad: u16 },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackBatchCommand {
-    pub number: u16,
-    pub page: Option<u8>,
+    pub address: PlaybackAddress,
     pub action: PlaybackBatchAction,
-    pub exclusion_zones: Arc<[Vec<u16>]>,
+    pub control_source: PlaybackControlSource,
     pub activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackBatchOutcome {
-    pub number: u16,
-    pub page: Option<u8>,
-    pub released_playbacks: Vec<u16>,
+    pub address: PlaybackAddress,
+    pub released_playbacks: Vec<PlaybackAddress>,
     pub addressed_effect: PlaybackRuntimeEffect,
     pub effect: PlaybackRuntimeEffect,
 }
@@ -50,7 +44,7 @@ pub struct PreparedPlaybackBatch {
     playback: PlaybackEngine,
     outcomes: Vec<PlaybackBatchOutcome>,
     effect: PlaybackRuntimeEffect,
-    numbered_effects: BTreeMap<u16, PlaybackRuntimeEffect>,
+    numbered_effects: BTreeMap<PlaybackAddress, PlaybackRuntimeEffect>,
 }
 
 impl PreparedPlaybackBatch {
@@ -62,11 +56,11 @@ impl PreparedPlaybackBatch {
         self.effect
     }
 
-    pub fn changed_playback_numbers(&self) -> impl Iterator<Item = u16> + '_ {
+    pub fn changed_playback_addresses(&self) -> impl Iterator<Item = PlaybackAddress> + '_ {
         self.numbered_effects.keys().copied()
     }
 
-    pub fn effect_for(&self, number: u16) -> PlaybackRuntimeEffect {
+    pub fn effect_for(&self, number: PlaybackAddress) -> PlaybackRuntimeEffect {
         self.numbered_effects
             .get(&number)
             .copied()
@@ -125,6 +119,7 @@ impl Engine {
                     &command,
                     started_at,
                     frame.programmer_fade_millis,
+                    &frame.snapshot().playback_solo_regions,
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -158,9 +153,7 @@ impl Engine {
         let outcomes: Vec<PlaybackBatchOutcome> = commands
             .iter()
             .map(|command| {
-                let identity = (command.number < light_playback::MIN_VIRTUAL_PLAYBACK)
-                    .then(|| PlaybackIdentity::physical(command.number))
-                    .transpose()?;
+                let identity = command.address;
                 let seed = start
                     .filter(|_| {
                         matches!(
@@ -170,11 +163,15 @@ impl Engine {
                                 | PlaybackBatchAction::Toggle
                         )
                     })
-                    .filter(|_| {
-                        identity.is_some_and(|id| !crate::playback_start::enabled(&playback, id))
-                    });
-                let outcome = apply_command(&mut playback, command, started_at, fallback_millis)?;
-                if let (Some(start), Some(identity)) = (seed, identity) {
+                    .filter(|_| !crate::playback_start::enabled(&playback, identity));
+                let outcome = apply_command(
+                    &mut playback,
+                    command,
+                    started_at,
+                    fallback_millis,
+                    &generation.snapshot().playback_solo_regions,
+                )?;
+                if let Some(start) = seed {
                     start.adopt(&mut playback, identity)?;
                 }
                 Ok::<_, String>(outcome)
@@ -230,28 +227,35 @@ fn apply_command(
     command: &PlaybackBatchCommand,
     started_at: DateTime<Utc>,
     fallback_millis: u64,
+    regions: &[PlaybackSoloRegion],
 ) -> Result<PlaybackBatchOutcome, String> {
-    if command.number >= light_playback::MIN_VIRTUAL_PLAYBACK {
-        return apply_virtual_command(playback, command, started_at, fallback_millis);
-    }
-    let previous = playback.preload_timing_state(command.number);
-    let (effects, released_playbacks) = apply_with_exclusions(
+    let previous = playback.preload_timing_state(command.address);
+    let before: Vec<_> =
+        crate::playback_exclusion::target_solo_members(playback, command.address, regions)
+            .into_iter()
+            .filter(|address| playback.permanent_enabled(*address))
+            .collect();
+    let outcome = apply_with_solo(
         playback,
-        command.number,
-        &command.exclusion_zones,
+        command.address,
+        &action(command.action),
+        regions,
         command.activation_origin,
-        |playback| apply_action(playback, command),
+        &command.control_source,
     )?;
+    let crate::EnginePlaybackOutcome::Changed(effects) = outcome else {
+        return Err("unexpected Preload Playback action outcome".into());
+    };
     let timing_effect = if effects.addressed.changed()
         && matches!(
             playback
-                .definition_at(PlaybackIdentity::physical(command.number)?)
+                .definition(command.address)
                 .map(|definition| &definition.target),
             Some(light_playback::PlaybackTarget::CueList { .. })
         ) {
         playback
             .apply_preload_timing_mutation(
-                command.number,
+                command.address,
                 action_name(command.action),
                 started_at,
                 fallback_millis,
@@ -261,172 +265,33 @@ fn apply_command(
     } else {
         PlaybackRuntimeEffect::None
     };
-    let addressed_effect = effects.addressed.combine(timing_effect);
-    let effect = effects
-        .aggregate
-        .combine(release_effect(&released_playbacks))
-        .combine(timing_effect);
-    Ok(PlaybackBatchOutcome {
-        number: command.number,
-        page: command.page,
-        released_playbacks,
-        addressed_effect,
-        effect,
-    })
-}
-
-fn apply_virtual_command(
-    playback: &mut PlaybackEngine,
-    command: &PlaybackBatchCommand,
-    started_at: DateTime<Utc>,
-    fallback_millis: u64,
-) -> Result<PlaybackBatchOutcome, String> {
-    let page = command
-        .page
-        .ok_or("virtual Preload Playback action requires a page")?;
-    let address = VirtualPlaybackAddress::new(page, command.number)?;
-    let identity = PlaybackIdentity::Virtual(address);
-    let previous = playback.preload_timing_state_at(identity);
-    let zones = command
-        .exclusion_zones
-        .iter()
-        .map(|zone| {
-            zone.iter()
-                .copied()
-                .map(VirtualPlaybackAddress::from_number)
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let peers = zones
-        .iter()
-        .filter(|zone| zone.contains(&address))
-        .flatten()
-        .copied()
-        .filter(|peer| *peer != address)
-        .filter(|peer| playback.is_active_at(PlaybackIdentity::Virtual(*peer)))
-        .collect::<std::collections::BTreeSet<_>>();
-    let outcome = crate::playback::execute_virtual(
-        playback,
-        address,
-        virtual_action(command.action)?,
-        &zones,
-        command.activation_origin,
-    )?;
-    let effects = match outcome {
-        crate::EnginePlaybackOutcome::Changed(effect) => effect,
-        _ => EnginePlaybackEffect::default(),
-    };
-    let timing_effect = if effects.addressed.changed()
-        && matches!(
-            playback
-                .definition_at(identity)
-                .map(|definition| &definition.target),
-            Some(light_playback::PlaybackTarget::CueList { .. })
-        ) {
-        playback
-            .apply_preload_timing_at_mutation(
-                identity,
-                action_name(command.action),
-                started_at,
-                fallback_millis,
-                previous,
-            )?
-            .effect
-    } else {
-        PlaybackRuntimeEffect::None
-    };
-    let released_playbacks = peers
+    let released_playbacks = before
         .into_iter()
-        .filter(|peer| !playback.is_active_at(PlaybackIdentity::Virtual(*peer)))
-        .map(|peer| peer.number().get())
-        .collect::<Vec<_>>();
+        .filter(|address| !playback.permanent_enabled(*address))
+        .collect();
     Ok(PlaybackBatchOutcome {
-        number: command.number,
-        page: command.page,
+        address: command.address,
         released_playbacks,
         addressed_effect: effects.addressed.combine(timing_effect),
         effect: effects.aggregate.combine(timing_effect),
     })
 }
-
-fn virtual_action(action: PlaybackBatchAction) -> Result<crate::VirtualPlaybackAction, String> {
-    use crate::VirtualPlaybackAction as Virtual;
-    Ok(match action {
-        PlaybackBatchAction::Toggle => Virtual::Toggle,
-        PlaybackBatchAction::Go => Virtual::Go,
-        PlaybackBatchAction::Back => Virtual::Back,
-        PlaybackBatchAction::Off => Virtual::Off,
-        PlaybackBatchAction::On => Virtual::On,
-        PlaybackBatchAction::SetTempButton(active) => Virtual::SetTempButton(active),
-        PlaybackBatchAction::TogglePause => Virtual::Pause,
-        PlaybackBatchAction::DynamicRestart => Virtual::DynamicRestart,
-        PlaybackBatchAction::DynamicDoubleSpeed => Virtual::DynamicDoubleSpeed,
-        PlaybackBatchAction::DynamicHalfSpeed => Virtual::DynamicHalfSpeed,
-        PlaybackBatchAction::DynamicLearnSpeed => Virtual::DynamicLearnSpeed,
-        PlaybackBatchAction::SetFader { value_permyriad } if value_permyriad <= 10_000 => {
-            Virtual::SetMaster(f32::from(value_permyriad) / 10_000.0)
-        }
-        PlaybackBatchAction::SetFader { .. } => {
-            return Err("Preload Playback fader value must be within 0-10000".into());
-        }
-    })
-}
-
-fn apply_action(
-    playback: &mut PlaybackEngine,
-    command: &PlaybackBatchCommand,
-) -> Result<EnginePlaybackEffect, String> {
-    match command.action {
-        PlaybackBatchAction::Toggle => playback
-            .toggle_mutation(command.number)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::Go => playback
-            .go_playback(command.number)
-            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable)),
-        PlaybackBatchAction::Back => playback
-            .back_playback(command.number)
-            .map(|_| addressed_effect(PlaybackRuntimeEffect::Durable)),
-        PlaybackBatchAction::Off => playback
-            .off_mutation(command.number)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::On => playback
-            .on_mutation(command.number)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::SetTempButton(active) => playback
-            .set_temp_button_mutation(command.number, active)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::TogglePause => playback
-            .toggle_dynamic_pause_mutation(command.number)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::DynamicRestart => playback
-            .restart_dynamic_mutation(command.number)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::DynamicDoubleSpeed => playback
-            .scale_dynamic_speed_mutation(command.number, true)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::DynamicHalfSpeed => playback
-            .scale_dynamic_speed_mutation(command.number, false)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::DynamicLearnSpeed => playback
-            .tap_dynamic_speed_mutation(command.number)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::SetFader { value_permyriad } if value_permyriad <= 10_000 => playback
-            .set_master_mutation(command.number, f32::from(value_permyriad) / 10_000.0)
-            .map(EnginePlaybackEffect::from),
-        PlaybackBatchAction::SetFader { .. } => {
-            Err("Preload Playback fader value must be within 0-10000".into())
-        }
+fn action(action: PlaybackBatchAction) -> crate::PlaybackAction {
+    use crate::PlaybackAction;
+    match action {
+        PlaybackBatchAction::Toggle => PlaybackAction::Toggle,
+        PlaybackBatchAction::Go => PlaybackAction::Go,
+        PlaybackBatchAction::Back => PlaybackAction::Back,
+        PlaybackBatchAction::Off => PlaybackAction::Off,
+        PlaybackBatchAction::On => PlaybackAction::On,
+        PlaybackBatchAction::SetTempButton(value) => PlaybackAction::SetTempButton(value),
+        PlaybackBatchAction::TogglePause => PlaybackAction::TogglePause,
+        PlaybackBatchAction::DynamicRestart => PlaybackAction::DynamicRestart,
+        PlaybackBatchAction::DynamicDoubleSpeed => PlaybackAction::DynamicDoubleSpeed,
+        PlaybackBatchAction::DynamicHalfSpeed => PlaybackAction::DynamicHalfSpeed,
+        PlaybackBatchAction::DynamicLearnSpeed => PlaybackAction::DynamicLearnSpeed,
     }
 }
-
-const fn release_effect(released: &[u16]) -> PlaybackRuntimeEffect {
-    if released.is_empty() {
-        PlaybackRuntimeEffect::None
-    } else {
-        PlaybackRuntimeEffect::Durable
-    }
-}
-
 const fn action_name(action: PlaybackBatchAction) -> &'static str {
     match action {
         PlaybackBatchAction::Toggle => "toggle",
@@ -441,6 +306,5 @@ const fn action_name(action: PlaybackBatchAction) -> &'static str {
         PlaybackBatchAction::DynamicDoubleSpeed => "dynamic-double-speed",
         PlaybackBatchAction::DynamicHalfSpeed => "dynamic-half-speed",
         PlaybackBatchAction::DynamicLearnSpeed => "dynamic-learn-speed",
-        PlaybackBatchAction::SetFader { .. } => "fader",
     }
 }

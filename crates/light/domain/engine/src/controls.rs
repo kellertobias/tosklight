@@ -90,14 +90,57 @@ impl Engine {
         }
     }
 
-    /// Sets a transient group flash level without changing the group's fader value.
+    /// Sets a transient Group Flash without changing the permanent Group Master.
     pub fn set_group_master_flash(&self, group_id: String, value: f32) {
-        let mut flashes = self.group_master_flashes.write();
-        if value <= 0.0 {
-            flashes.remove(&group_id);
+        self.set_group_master_flash_source(
+            group_id,
+            &light_playback::PlaybackControlSource {
+                surface_id: "system:group-flash".into(),
+                control_id: 0,
+            },
+            value,
+        );
+    }
+    /// Independently held sources contribute their maximum until their own release/cancellation.
+    pub fn set_group_master_flash_source(
+        &self,
+        group_id: String,
+        source: &light_playback::PlaybackControlSource,
+        value: f32,
+    ) {
+        let mut sources = self.group_master_flash_sources.lock();
+        let holds = sources.entry(group_id.clone()).or_default();
+        if value.is_finite() && value > 0.0 {
+            holds.insert(source.clone(), value.clamp(0.0, 1.0));
         } else {
-            flashes.insert(group_id, value.clamp(0.0, 1.0));
+            holds.remove(source);
         }
+        let effective = holds.values().copied().fold(0.0_f32, f32::max);
+        if holds.is_empty() {
+            sources.remove(&group_id);
+        }
+        let mut flashes = self.group_master_flashes.write();
+        if effective > 0.0 {
+            flashes.insert(group_id, effective);
+        } else {
+            flashes.remove(&group_id);
+        }
+    }
+    pub fn cancel_group_flash_surface(&self, surface_id: &str) {
+        let mut sources = self.group_master_flash_sources.lock();
+        for holds in sources.values_mut() {
+            holds.retain(|source, _| source.surface_id != surface_id);
+        }
+        sources.retain(|_, holds| !holds.is_empty());
+        *self.group_master_flashes.write() = sources
+            .iter()
+            .map(|(group, holds)| {
+                (
+                    group.clone(),
+                    holds.values().copied().fold(0.0_f32, f32::max),
+                )
+            })
+            .collect();
     }
 
     pub fn group_master_flash(&self, group_id: &str) -> f32 {

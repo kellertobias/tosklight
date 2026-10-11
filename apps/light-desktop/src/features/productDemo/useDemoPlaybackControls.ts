@@ -1,3 +1,4 @@
+import { playbackAddressKey, type PlaybackAddressValue } from "../../api/playbackAddress";
 import { useEffect, useMemo } from "react";
 import {
 	usePlaybackDeskView,
@@ -17,7 +18,7 @@ export interface DemoPlaybackControlsValue {
 	/** True only once every portable, desk, runtime, and action authority resolved. */
 	ready: boolean;
 	status: DemoPlaybackControlsStatus;
-	playbackNumber(slot: number): number | null;
+	playbackNumber(slot: number): PlaybackAddressValue | null;
 	faderLevel(slot: number): number | null;
 	press(slot: number, button: number): void;
 	release(slot: number, button: number): void;
@@ -39,7 +40,7 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 	const playbackDesk = usePlaybackDeskView();
 	const runtimeActions = usePlaybackRuntimeActions();
 	const runtimeStatus = usePlaybackRuntimeStatus();
-	const activePage = pagesView.ready ? playbackDesk?.active_page ?? null : null;
+	const activePage = pagesView.ready ? playbackDesk?.command_page ?? null : null;
 	const mapped = useMemo(
 		() => demoSlotPlaybackNumbers(pagesView.pages, activePage),
 		[activePage, pagesView.pages],
@@ -47,7 +48,7 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 	const numbers = useMemo(() => demoMappedPlaybackNumbers(mapped), [mapped]);
 	const projections = usePlaybackProjectionMap(numbers);
 	const projectionsReady = numbers.every(
-		(playbackNumber) => projections.get(playbackNumber) !== undefined,
+		(playbackNumber) => projections.get(playbackAddressKey(playbackNumber)) !== undefined,
 	);
 	const status = demoPlaybackControlsStatus({
 		pagesReady: pagesView.ready,
@@ -66,6 +67,7 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 		if (!ready) held.releaseAll();
 	}, [held, ready]);
 	useEffect(() => () => held.releaseAll(), [held]);
+	useEffect(() => { held.releaseAll(); }, [held, activePage]);
 	return useMemo(() => {
 		const resolve = (slot: number) =>
 			ready ? (mapped.get(slot) ?? null) : null;
@@ -77,7 +79,7 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 				const playbackNumber = resolve(slot);
 				return playbackNumber == null
 					? null
-					: demoFaderLevel(projections.get(playbackNumber));
+					: demoFaderLevel(projections.get(playbackAddressKey(playbackNumber)));
 			},
 			press(slot, button) {
 				const playbackNumber = resolve(slot);
@@ -90,9 +92,9 @@ export function useDemoPlaybackControls(): DemoPlaybackControlsValue {
 			setMaster(slot, value) {
 				const playbackNumber = resolve(slot);
 				if (playbackNumber == null) return;
-				void runtimeActions?.poolPlaybackAction(playbackNumber, "master", {
+				void runtimeActions?.playbackAction(playbackNumber, "master", {
 					value,
-					surface: "physical",
+					control_source: {surface_id:"demo",control_id:slot*10},
 				});
 			},
 		};

@@ -26,10 +26,7 @@ const configuredScreen: ScreenConfiguration = {
 	content: { type: "desktop" },
 	show_dock: true,
 	show_playbacks: true,
-	playback_count: 8,
-	playback_rows: 1,
-	first_playback_slot: 1,
-	page_mode: "follow_main",
+	surface_id: "screen:screen-1",
 	show_page_controls: true,
 	show_programmer: false,
 	not_editable: false,
@@ -39,6 +36,41 @@ const configuredScreen: ScreenConfiguration = {
 	fullscreen: false,
 };
 
+const surfaceSnapshot = {
+	selected_surface_id: "main",
+	command_page: 1,
+	resolved_pages: { main: 1, "screen:screen-1": 1 },
+	playback_surfaces: {
+		main: {
+			name: "Main",
+			page_source: { type: "own" as const, page: 1 },
+			layout: {
+				rows: [
+					{
+						first_position: 1,
+						count: 15,
+						presentation: "fader" as const,
+						button_count: 3,
+					},
+				],
+			},
+		},
+		"screen:screen-1": {
+			name: "Screen 1",
+			page_source: { type: "follow" as const, surface_id: "main" },
+			layout: {
+				rows: [
+					{
+						first_position: 201,
+						count: 10,
+						presentation: "buttons" as const,
+						button_count: 1,
+					},
+				],
+			},
+		},
+	},
+};
 afterEach(cleanup);
 
 describe("programmer control surface settings", () => {
@@ -47,7 +79,7 @@ describe("programmer control surface settings", () => {
 		const source: ScreensContextValue = {
 			screens: {
 				screens: [configuredScreen],
-				active_pages: {},
+				surfaces: surfaceSnapshot,
 				programmer_control_surface: {
 					owner_screen_id: null,
 					visible_encoders: 6,
@@ -70,7 +102,10 @@ describe("programmer control surface settings", () => {
 			session: null,
 			saveScreen: vi.fn(),
 			deleteScreen: vi.fn(),
-			setScreenPage: vi.fn(),
+			surfaces: surfaceSnapshot,
+			setSurfacePage: vi.fn(),
+			selectSurface: vi.fn(),
+			updatePlaybackSurface: vi.fn(),
 			updateProgrammerControlSurface,
 			updateControlDesk: vi.fn(),
 			selectControlDesk: vi.fn(),
@@ -111,7 +146,7 @@ describe("programmer control surface settings", () => {
 		const source: ScreensContextValue = {
 			screens: {
 				screens: [{ ...configuredScreen, desired_open: false }],
-				active_pages: {},
+				surfaces: surfaceSnapshot,
 				programmer_control_surface: {
 					owner_screen_id: configuredScreen.id,
 					visible_encoders: 4,
@@ -121,7 +156,10 @@ describe("programmer control surface settings", () => {
 			session: null,
 			saveScreen: vi.fn(),
 			deleteScreen: vi.fn(),
-			setScreenPage: vi.fn(),
+			surfaces: surfaceSnapshot,
+			setSurfacePage: vi.fn(),
+			selectSurface: vi.fn(),
+			updatePlaybackSurface: vi.fn(),
 			updateProgrammerControlSurface,
 			updateControlDesk: vi.fn(),
 			selectControlDesk: vi.fn(),
@@ -263,114 +301,6 @@ describe("additional screen settings", () => {
 		expect(form).toHaveAttribute("data-tab", "settings");
 		expect(form?.firstElementChild).toHaveClass("screen-settings-note");
 		expect(dialog.querySelector("section section, h3")).toBeNull();
-	});
-
-	it("edits playback rows and page mode inside Configure Screen", async () => {
-		const saved: ScreenConfiguration[] = [];
-		const save = vi.fn(async (value: ScreenConfiguration) => {
-			saved.push(value);
-		});
-		render(
-			<ScreenSettingsCard
-				screen={configuredScreen}
-				displays={[]}
-				save={save}
-				remove={vi.fn()}
-			/>,
-		);
-
-		openScreenConfiguration("Playbacks");
-		expect(screen.getAllByRole("dialog")).toHaveLength(1);
-		expect(
-			screen.queryByRole("button", { name: "Configure Playbacks" }),
-		).toBeNull();
-		expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
-		const addRow = screen.getByRole("button", { name: "Add Row" });
-		expect(addRow.closest(".ui-title-chrome-group")).not.toBeNull();
-		fireEvent.click(addRow);
-		expect(
-			screen.getByRole("button", { name: "Remove row 2" }),
-		).toBeInTheDocument();
-		await waitFor(() => expect(save).toHaveBeenCalledOnce());
-		const secondRowHandle = screen.getByRole("button", {
-			name: "Reorder playback row 2",
-		});
-		const firstRow = screen
-			.getByRole("button", { name: "Reorder playback row 1" })
-			.closest(".playback-row-configuration");
-		expect(firstRow).not.toBeNull();
-		expect(secondRowHandle).toHaveTextContent("⠿");
-		const elementFromPoint = document.elementFromPoint;
-		Object.defineProperty(secondRowHandle, "setPointerCapture", {
-			configurable: true,
-			value: vi.fn(),
-		});
-		Object.defineProperty(document, "elementFromPoint", {
-			configurable: true,
-			value: vi.fn(() => firstRow),
-		});
-		fireEvent.pointerDown(secondRowHandle, {
-			pointerId: 1,
-			pointerType: "mouse",
-			clientX: 20,
-			clientY: 120,
-		});
-		fireEvent.pointerMove(secondRowHandle, {
-			pointerId: 1,
-			pointerType: "mouse",
-			clientX: 20,
-			clientY: 60,
-		});
-		Object.defineProperty(document, "elementFromPoint", {
-			configurable: true,
-			value: elementFromPoint,
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Follow Main" }));
-		fireEvent.click(screen.getByRole("option", { name: "Dedicated Page" }));
-
-		await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
-		expect(saved[2]).toMatchObject({
-			page_mode: "independent",
-			playback_count: 16,
-			playback_rows: 2,
-			playback_layout: {
-				playbacks_per_row: 8,
-				rows: [{ first_playback_slot: 9 }, { first_playback_slot: 1 }],
-			},
-		});
-	});
-
-	it("keeps an unsavable playback value visible across tabs without saving it", async () => {
-		const save = vi.fn(async () => {});
-		render(
-			<ScreenSettingsCard
-				screen={configuredScreen}
-				displays={[]}
-				save={save}
-				remove={vi.fn()}
-			/>,
-		);
-
-		openScreenConfiguration("Playbacks");
-		fireEvent.change(screen.getByLabelText("Playbacks per row"), {
-			target: { value: "40" },
-		});
-		expect(screen.getByRole("alert")).toHaveTextContent("Not saved yet");
-		fireEvent.click(screen.getByRole("tab", { name: "Placement" }));
-		fireEvent.click(screen.getByRole("tab", { name: "Playbacks" }));
-		expect(screen.getByLabelText("Playbacks per row")).toHaveValue("40");
-		expect(save).not.toHaveBeenCalled();
-		fireEvent.change(screen.getByLabelText("Playbacks per row"), {
-			target: { value: "4" },
-		});
-		expect(screen.queryByRole("alert")).toBeNull();
-		await waitFor(() => expect(save).toHaveBeenCalledOnce());
-		expect(save).toHaveBeenCalledWith(
-			expect.objectContaining({
-				playback_count: 4,
-				playback_layout: expect.objectContaining({ playbacks_per_row: 4 }),
-			}),
-		);
 	});
 
 	it("reports a rejected save and keeps saving later changes", async () => {
@@ -720,6 +650,7 @@ describe("known windows", () => {
 		can_remove: canRemove,
 		desk: {
 			id: "the-one-desk",
+			surface_id: "main",
 			name: "Front of house",
 			columns: 8,
 			rows: 2,

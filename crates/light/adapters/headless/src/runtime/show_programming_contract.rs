@@ -12,6 +12,10 @@ use light_show::PortableShowTransaction;
 /// the inspection cannot read (missing, not SQLite, malformed JSON) is left to the ordinary
 /// loader, which reports it through the existing "corrupted or incompatible" recovery path.
 pub(super) fn check_show_file(path: &std::path::Path, supported: u16) -> Result<(), String> {
+    match light_show::validate_show_playback_contract(path) {
+        Err(light_show::StoreError::Invalid(message)) => return Err(message),
+        Ok(()) | Err(_) => {}
+    }
     match light_show::validate_show_programming_contract(path, supported) {
         Err(light_show::StoreError::Invalid(message)) => Err(message),
         Ok(()) | Err(_) => Ok(()),
@@ -35,6 +39,7 @@ pub(super) fn require_for_path(state: &AppState, path: &std::path::Path) -> Resu
 /// stored Programmer (Normal, Preload, Undo/Redo history) are rejected at contract ≥ 1; startup
 /// then preserves the original JSON through `runtime_recovery`.
 pub(super) fn check_programmer(value: &serde_json::Value, supported: u16) -> anyhow::Result<()> {
+    light_show::validate_playback_runtime(value)?;
     if supported == 0 {
         return Ok(());
     }
@@ -56,6 +61,12 @@ pub(super) fn check_transaction(
     transaction: &PortableShowTransaction,
     supported: u16,
 ) -> Result<(), light_application::ActionError> {
+    transaction.check_playback_contract().map_err(|error| {
+        light_application::ActionError::new(
+            light_application::ActionErrorKind::Invalid,
+            error.to_string(),
+        )
+    })?;
     transaction
         .check_programming_contract(supported)
         .map_err(|rejection| {
@@ -68,6 +79,7 @@ pub(super) fn check_transaction(
 
 /// Writer marker: a contract ≥ 1 commit that writes authored programming stamps the show.
 pub(super) fn stamp(transaction: &mut PortableShowTransaction, supported: u16) {
+    transaction.stamp_playback_contract();
     transaction.stamp_programming_contract(supported);
 }
 
@@ -81,12 +93,13 @@ pub(super) fn check_runtime_payload(
     serialized: &str,
     supported: u16,
 ) -> anyhow::Result<()> {
-    if supported == 0 {
-        return Ok(());
-    }
     let Ok(value) = serde_json::from_str::<serde_json::Value>(serialized) else {
         return Ok(());
     };
+    light_show::validate_playback_runtime(&value)?;
+    if supported == 0 {
+        return Ok(());
+    }
     let legacy = light_show::legacy_programming_attributes(&value);
     anyhow::ensure!(
         legacy.is_empty(),
@@ -108,6 +121,8 @@ pub(super) fn check_history_body(
     object_id: &str,
     body: &serde_json::Value,
 ) -> Result<(), String> {
+    light_show::validate_playback_object(kind, object_id, body)
+        .map_err(|error| format!("{direction} refused: {error}"))?;
     if supported == 0 || !light_show::PROGRAMMING_OBJECT_KINDS.contains(&kind) {
         return Ok(());
     }

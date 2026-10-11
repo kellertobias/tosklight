@@ -4,8 +4,8 @@ use light_dynamics::{DynamicDefinition, validate_definition};
 use light_fixture::{PatchedFixture, validate_patch};
 use light_output::{DmxFrame, OutputRoute};
 use light_playback::{
-    AutomaticPlaybackTransition, CueList, CueNumber, PlaybackDefinition, PlaybackPage,
-    PlaybackTarget,
+    AutomaticPlaybackTransition, CueList, CueNumber, PlaybackPage, PlaybackPreloadScope,
+    PlaybackSoloRegion, PlaybackTarget,
 };
 use light_programmer::{GroupDefinition, GroupFixtureSource, resolve_group};
 use serde::{Deserialize, Serialize};
@@ -31,9 +31,11 @@ pub struct EngineSnapshot {
     #[serde(default)]
     pub dynamic_stage_positions: Arc<HashMap<FixtureId, light_dynamics::SpatialPosition>>,
     #[serde(default)]
-    pub playbacks: Arc<Vec<PlaybackDefinition>>,
-    #[serde(default)]
     pub playback_pages: Arc<Vec<PlaybackPage>>,
+    #[serde(default)]
+    pub playback_solo_regions: Arc<Vec<PlaybackSoloRegion>>,
+    #[serde(default)]
+    pub playback_preload_scope: PlaybackPreloadScope,
     pub routes: Arc<Vec<OutputRoute>>,
     pub control_mappings: Arc<Vec<light_control::ControlMapping>>,
     #[serde(default)]
@@ -95,8 +97,6 @@ impl EngineSnapshot {
             previous.is_none_or(|previous| !Arc::ptr_eq(&self.cue_lists, &previous.cue_lists));
         let dynamics_changed =
             previous.is_none_or(|previous| !Arc::ptr_eq(&self.dynamics, &previous.dynamics));
-        let playbacks_changed =
-            previous.is_none_or(|previous| !Arc::ptr_eq(&self.playbacks, &previous.playbacks));
         let pages_changed = previous
             .is_none_or(|previous| !Arc::ptr_eq(&self.playback_pages, &previous.playback_pages));
         let routes_changed =
@@ -152,70 +152,48 @@ impl EngineSnapshot {
                 }
             }
         }
-        let mut playback_numbers = std::collections::HashSet::new();
-        let validate_playbacks = playbacks_changed || cue_lists_changed || groups_changed;
-        for playback in self.playbacks.iter() {
-            let unique_number = playback_numbers.insert(playback.number);
-            if !validate_playbacks {
+        let mut page_numbers = std::collections::HashSet::new();
+        for page in self.playback_pages.iter() {
+            if !page_numbers.insert(page.number) {
+                return Err(EngineError::Invalid("duplicate Playback page".into()));
+            }
+            if !(pages_changed || cue_lists_changed || groups_changed) {
                 continue;
             }
-            playback.validate().map_err(EngineError::Invalid)?;
-            if !unique_number {
-                return Err(EngineError::Invalid("duplicate playback number".into()));
-            }
-            match &playback.target {
-                PlaybackTarget::CueList { cue_list_id }
-                    if !self.cue_lists.iter().any(|cue| cue.id == *cue_list_id) =>
-                {
-                    return Err(EngineError::Invalid(
-                        "playback references a missing cue list".into(),
-                    ));
-                }
-                PlaybackTarget::Group { group_id, .. }
-                    if !self.groups.iter().any(|group| group.id == *group_id) =>
-                {
-                    return Err(EngineError::Invalid(
-                        "playback references a missing group".into(),
-                    ));
-                }
-                _ => {}
-            }
-        }
-        for page in self
-            .playback_pages
-            .iter()
-            .filter(|_| pages_changed || playbacks_changed)
-        {
             page.validate().map_err(EngineError::Invalid)?;
-            if page
-                .slots
-                .values()
-                .any(|number| !playback_numbers.contains(number))
-            {
-                return Err(EngineError::Invalid(
-                    "page references a missing playback".into(),
-                ));
-            }
-            for playback in page.virtual_playbacks.values() {
+            for playback in page.assignments.values() {
+                playback.validate().map_err(EngineError::Invalid)?;
                 match &playback.target {
                     PlaybackTarget::CueList { cue_list_id }
                         if !self.cue_lists.iter().any(|cue| cue.id == *cue_list_id) =>
                     {
                         return Err(EngineError::Invalid(
-                            "virtual playback references a missing cue list".into(),
+                            "Playback references a missing Cuelist".into(),
                         ));
                     }
                     PlaybackTarget::Group { group_id, .. }
                         if !self.groups.iter().any(|group| group.id == *group_id) =>
                     {
                         return Err(EngineError::Invalid(
-                            "virtual playback references a missing group".into(),
+                            "Playback references a missing Group".into(),
                         ));
                     }
                     _ => {}
                 }
             }
         }
+        let mut region_ids = std::collections::HashSet::new();
+        for region in self.playback_solo_regions.iter() {
+            region.validate().map_err(EngineError::Invalid)?;
+            if !region_ids.insert(region.id) {
+                return Err(EngineError::Invalid(
+                    "duplicate Solo region identity".into(),
+                ));
+            }
+        }
+        self.playback_preload_scope
+            .validate()
+            .map_err(EngineError::Invalid)?;
         for route in self.routes.iter().filter(|_| routes_changed) {
             if route.destination_universe == 0 || route.logical_universe == 0 {
                 return Err(EngineError::Invalid(
@@ -316,7 +294,7 @@ pub struct MoveInBlackPosition {
 #[derive(Clone, Debug, Serialize)]
 pub struct MoveInBlackDiagnostic {
     pub fixture_id: FixtureId,
-    pub playback_number: Option<u16>,
+    pub playback_address: Option<light_playback::PlaybackAddress>,
     pub cue_list_id: light_core::CueListId,
     pub current_cue_id: uuid::Uuid,
     pub current_cue_number: CueNumber,

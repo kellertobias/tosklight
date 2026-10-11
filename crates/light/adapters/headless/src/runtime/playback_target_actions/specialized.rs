@@ -4,26 +4,25 @@ pub(super) fn apply_specialized_master(
     state: &AppState,
     context: &light_application::ActionContext,
     session: Option<&Session>,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     value: f32,
-    physical: bool,
+    control_source: &light_playback::PlaybackControlSource,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
         PlaybackTarget::Group { group_id, .. } => {
-            if !physical {
-                return set_group_playback_master(state, group_id, value)
-                    .map(PlaybackTargetOutcome::output_runtime);
-            }
             let authoritative = state
                 .output
                 .group_master(group_id)
                 .ok_or_else(|| ApiError::conflict("group has no assigned Group Master"))?;
             let outcome = state
                 .output
-                .execute_playback(EnginePlaybackCommand::Pool {
-                    number: definition.number,
-                    action: PoolPlaybackAction::SetGroupMasterFader {
+                .execute_playback(EnginePlaybackCommand::Playback {
+                    address,
+                    activation_origin: None,
+                    control_source: control_source.clone(),
+                    action: light_engine::PlaybackAction::SetGroupMasterFader {
                         value,
                         authoritative,
                     },
@@ -32,9 +31,7 @@ pub(super) fn apply_specialized_master(
             let EnginePlaybackOutcome::Changed(effect) = outcome else {
                 return Err(ApiError::internal("unexpected Group Master fader outcome"));
             };
-            let identity = light_playback::PlaybackIdentity::physical(definition.number)
-                .map_err(ApiError::bad_request)?;
-            let control = state.output.playback_control_state_at(identity);
+            let control = state.output.playback_control_state(address, control_source);
             let mut pickup = PlaybackTargetOutcome::changed(effect.changed());
             pickup.addressed_event_required = effect.addressed.changed();
             if control.fader_pickup_required {
@@ -67,14 +64,16 @@ pub(super) fn apply_specialized_target_action(
     state: &AppState,
     context: &light_application::ActionContext,
     session: Option<&Session>,
+    address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     action: Action,
     input: &PoolPlaybackInput,
     pressed: bool,
+    control_source: &light_playback::PlaybackControlSource,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
         PlaybackTarget::Group { group_id, .. } => {
-            apply_group_action(state, session, group_id, action, pressed)
+            apply_group_action(state, session, group_id, action, pressed, control_source)
         }
         PlaybackTarget::SpeedGroup { group } => {
             apply_speed_action(state, group, action, input, definition.fader)
@@ -87,7 +86,7 @@ pub(super) fn apply_specialized_target_action(
             apply_time_master_action(state, definition, action).map(PlaybackTargetOutcome::changed)
         }
         PlaybackTarget::Macro { macro_id } => {
-            apply_macro_action(state, session, definition.number, *macro_id, action)
+            apply_macro_action(state, session, address, *macro_id, action)
         }
         PlaybackTarget::Timecode { timecode_id } => {
             apply_timecode_action(state, *timecode_id, action)
@@ -114,14 +113,14 @@ fn apply_timecode_action(
             ));
         }
     };
-    let outcome = timecode_v2::apply_transport_action(state, timecode_id, action)?;
+    let outcome = super::super::playback_solo::timecode_action(state, timecode_id, action)?;
     Ok(PlaybackTargetOutcome::changed(outcome.changed))
 }
 
 fn apply_macro_action(
     state: &AppState,
     session: Option<&Session>,
-    playback_number: u16,
+    address: light_playback::PlaybackAddress,
     macro_id: uuid::Uuid,
     action: Action,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
@@ -130,7 +129,7 @@ fn apply_macro_action(
             let session = session.ok_or_else(|| {
                 ApiError::bad_request("Macro playback activation requires an operator session")
             })?;
-            macros_v2::start_macro_from_playback(state, session, macro_id, playback_number)?;
+            macros_v2::start_macro_from_playback(state, session, macro_id, address)?;
             Ok(PlaybackTargetOutcome::changed(true))
         }
         false => Ok(PlaybackTargetOutcome::changed(false)),
@@ -153,6 +152,7 @@ fn apply_group_action(
     group_id: &str,
     action: Action,
     pressed: bool,
+    control_source: &light_playback::PlaybackControlSource,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match action {
         Action::Select | Action::SelectDereferenced => {
@@ -162,7 +162,10 @@ fn apply_group_action(
             Ok(PlaybackTargetOutcome::changed(true))
         }
         Action::Flash => Ok(PlaybackTargetOutcome::changed(set_group_flash(
-            state, group_id, pressed,
+            state,
+            group_id,
+            pressed,
+            control_source,
         ))),
         Action::None => Ok(PlaybackTargetOutcome::changed(false)),
         _ => Err(ApiError::bad_request(
@@ -171,15 +174,17 @@ fn apply_group_action(
     }
 }
 
-fn set_group_flash(state: &AppState, group_id: &str, pressed: bool) -> bool {
-    let value = if pressed { 1.0 } else { 0.0 };
-    if state.output.group_master_flash(group_id) == value {
-        return false;
-    }
+fn set_group_flash(
+    state: &AppState,
+    group_id: &str,
+    pressed: bool,
+    control_source: &light_playback::PlaybackControlSource,
+) -> bool {
+    let before = state.output.group_master_flash(group_id);
     state
         .output
-        .set_group_master_flash(group_id.to_owned(), value);
-    true
+        .set_group_master_flash_source(group_id.to_owned(), control_source, pressed);
+    state.output.group_master_flash(group_id) != before
 }
 
 fn apply_speed_action(

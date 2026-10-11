@@ -1,5 +1,5 @@
 import type {
-	ControlDesk,
+	PlaybackSurfaceConfiguration,
 	FixedScreenPane,
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
@@ -52,45 +52,40 @@ export function updateScreenConfiguration(
 	return next;
 }
 
+/** Presentation defaults for a newly authored secondary surface. */
+export function defaultScreenSurface(
+	name = "Screen",
+): PlaybackSurfaceConfiguration {
+	return {
+		name,
+		page_source: { type: "follow", surface_id: "main" },
+		layout: {
+			rows: [
+				...Array.from({ length: 5 }, (_, index) => ({
+					first_position: 201 + index * 10,
+					count: 10,
+					presentation: "buttons" as const,
+					button_count: 1,
+				})),
+				{
+					first_position: 301,
+					count: 5,
+					presentation: "push_encoder",
+					button_count: 1,
+				},
+			],
+		},
+	};
+}
 export function defaultDeskPlaybackLayout(
-	desk: ControlDesk,
-): PlaybackSurfaceLayout {
-	return (
-		desk.playback_layout ?? {
-			playbacks_per_row: desk.columns,
-			rows: Array.from({ length: desk.rows }, (_, index) => ({
-				first_playback_slot: 1 + index * desk.columns,
-				has_fader: true,
-				button_count: desk.buttons,
-			})),
-		}
-	);
+	surface: PlaybackSurfaceConfiguration | undefined,
+): PlaybackSurfaceLayout | null {
+	return surface?.layout ?? null;
 }
-
 export function screenPlaybackLayout(
-	screen: ScreenConfiguration,
-): PlaybackSurfaceLayout {
-	if (screen.playback_layout) return screen.playback_layout;
-	const perRow = Math.ceil(screen.playback_count / screen.playback_rows);
-	return {
-		playbacks_per_row: perRow,
-		rows: Array.from({ length: screen.playback_rows }, (_, index) => ({
-			first_playback_slot: screen.first_playback_slot + index * perRow,
-			has_fader: true,
-			button_count: 3,
-		})),
-	};
-}
-
-export function playbackLayoutLegacyFields(layout: PlaybackSurfaceLayout) {
-	return {
-		columns: layout.playbacks_per_row,
-		rows: layout.rows.length,
-		buttons: Math.max(0, ...layout.rows.map((row) => row.button_count)),
-		playback_count: layout.playbacks_per_row * layout.rows.length,
-		playback_rows: layout.rows.length,
-		first_playback_slot: layout.rows[0]?.first_playback_slot ?? 1,
-	};
+	surface: PlaybackSurfaceConfiguration | undefined,
+): PlaybackSurfaceLayout | null {
+	return surface?.layout ?? null;
 }
 
 export function screenForAddAction(
@@ -110,17 +105,15 @@ export function createScreenConfiguration(
 	desiredOpen = false,
 	createId: () => string = () => crypto.randomUUID(),
 ): ScreenConfiguration {
+	const id = createId();
 	return {
-		id: createId(),
+		id,
+		surface_id: `screen:${id}`,
 		name: `Screen ${screens.length + 1}`,
 		layout,
 		content: { type: "desktop" },
 		show_dock: true,
 		show_playbacks: true,
-		playback_count: 40,
-		playback_rows: 4,
-		first_playback_slot: 41 + screens.length * 40,
-		page_mode: "follow_main",
 		show_page_controls: true,
 		show_programmer: false,
 		not_editable: false,
@@ -128,13 +121,5 @@ export function createScreenConfiguration(
 		display_id: null,
 		bounds: null,
 		fullscreen: false,
-		playback_layout: {
-			playbacks_per_row: 10,
-			rows: Array.from({ length: 4 }, (_, index) => ({
-				first_playback_slot: 41 + screens.length * 40 + index * 10,
-				has_fader: true,
-				button_count: 3,
-			})),
-		},
 	};
 }

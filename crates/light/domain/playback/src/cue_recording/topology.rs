@@ -48,9 +48,8 @@ impl CueList {
 }
 
 impl PlaybackDefinition {
-    pub fn new_cue_list(number: u16, name: impl Into<String>, cue_list_id: CueListId) -> Self {
+    pub fn new_cue_list(name: impl Into<String>, cue_list_id: CueListId) -> Self {
         Self {
-            number,
             name: name.into(),
             target: PlaybackTarget::CueList { cue_list_id },
             buttons: [
