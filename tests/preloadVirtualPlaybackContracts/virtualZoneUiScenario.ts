@@ -1,12 +1,13 @@
+import { configurePaneGrid, paneCard } from "./uiSupport";
 import { type BenchUiContext, expect, test } from "../bench/core/fixtures";
 import {
 	activeVirtualPane,
-	activeVirtualPlayback,
+	activeAssignedPlayback,
 	addVirtualPlaybackPane,
 	prepare,
-	virtualAction,
-	virtualZoneSnapshot,
-	writeVirtualPage,
+	paneAction,
+	soloRegionSnapshot,
+	copyPageAssignments,
 } from "./support";
 
 const virtualZoneUiSupplement = async ({
@@ -20,149 +21,107 @@ const virtualZoneUiSupplement = async ({
 		bench,
 		"vpb-007-ui",
 		[
-			{ number: 74, fixture: 3, levels: [0.25], name: "Touring A" },
-			{ number: 75, fixture: 4, levels: [0.5], name: "Touring B" },
-			{ number: 76, fixture: 5, levels: [0.75], name: "Touring C" },
+			{ position: 74, fixture: 3, levels: [0.25], name: "Touring A" },
+			{ position: 75, fixture: 4, levels: [0.5], name: "Touring B" },
+			{ position: 76, fixture: 5, levels: [0.75], name: "Touring C" },
 		],
 		{},
 	);
-	await writeVirtualPage(api, 1, { 1001: 74, 1002: 75, 1003: 76 });
+	await copyPageAssignments(api, 1, { 401: 74, 402: 75, 403: 76 });
 	await desk.open(bench.baseUrl);
 	let pane = await addVirtualPlaybackPane(page);
 	await desk.recordStep(
 		"SELECT EXCLUSION MEMBERS",
 		"Hold Shift and choose cells 1 and 2. Selection must not operate either playback.",
 	);
-	await page.keyboard.down("Shift");
-	await pane
-		.getByRole("button", {
-			name: /Virtual playback 1001 page 1 cell 1 Touring A/,
-		})
-		.click();
-	await pane
-		.getByRole("button", {
-			name: /Virtual playback 1002 page 1 cell 2 Touring B/,
-		})
-		.click();
-	await page.keyboard.up("Shift");
-	expect(await activeVirtualPlayback(api, 1, 1001)).toBeUndefined();
-	expect(await activeVirtualPlayback(api, 1, 1002)).toBeUndefined();
-	await pane.getByRole("button", { name: "Create Solo Region" }).click();
-	const create = page.getByRole("dialog", { name: "Create Solo Region" });
-	await create.getByLabel("Region name").fill("Touring pair");
-	await create.getByRole("button", { name: "Create region" }).click();
-	await expect(create).toBeHidden();
+	await pane.getByRole("button",{name:"Select Solo members"}).click();
+ await page.keyboard.down("Shift");
+ await paneCard(pane,{page:1,position:401}).click();
+ await paneCard(pane,{page:1,position:402}).click();
+ await page.keyboard.up("Shift");
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toBeUndefined();
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toBeUndefined();
+	await pane.getByLabel("Solo Region name").fill("Touring pair");
+ await pane.getByRole("button",{name:"Create Solo Region",exact:true}).click();
 	await expect
 		.poll(async () => {
-			const snapshot = await virtualZoneSnapshot(api);
-			return snapshot.zones.find((zone) => zone.name === "Touring pair");
+			const snapshot = await soloRegionSnapshot(api);
+			return snapshot.regions.find((zone) => zone.name === "Touring pair");
 		})
 		.toMatchObject({
-			playback_numbers: [1001, 1002],
+			members: [{page:1,position:401}, {page:1,position:402}],
 		});
 
 	await desk.recordStep(
 		"NEW ACTIVATION WINS",
 		"Turn on cell 1, then cell 2. Cell 2 remains On and cell 1 is released by the server.",
 	);
-	await pane
-		.getByRole("button", {
-			name: /Virtual playback 1001 page 1 cell 1 Touring A/,
-		})
+	await paneCard(pane, {page:1,position:401}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 		.click();
-	await pane
-		.getByRole("button", {
-			name: /Virtual playback 1002 page 1 cell 2 Touring B/,
-		})
+	await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 		.click();
 	await expect
-		.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
+		.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 401}))?.enabled)
 		.toBe(false);
 	await expect
-		.poll(async () => (await activeVirtualPlayback(api, 1, 1002))?.enabled)
+		.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 402}))?.enabled)
 		.toBe(true);
 
-	await pane.getByRole("button", { name: "Settings", exact: true }).click();
-	let settings = page.getByRole("dialog", { name: "Pane Settings" });
-	await settings
-		.getByRole("tab", { name: "Virtual Playbacks", exact: true })
-		.click();
-	await settings.getByRole("radio", { name: "Pinned", exact: true }).click();
-	await settings.getByLabel("Pinned page").fill("2");
+	await configurePaneGrid(page,pane,14,20,2);
+ await pane.getByRole("button",{name:"Settings",exact:true}).click();
+ let settings=page.getByRole("dialog",{name:"Pane Settings"});
 	await settings
 		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
-	await settings.getByLabel("Name for Touring pair").fill("Touring alternates");
-	await settings.getByRole("button", { name: "Save name" }).click();
-	await settings.getByRole("button", { name: "Edit Region" }).click();
-	await expect(settings).toBeHidden();
-	await pane
-		.getByRole("button", { name: /Virtual playback 1303 page 2 cell 3 empty/ })
-		.click();
-	await pane
-		.getByRole("button", { name: "Update Solo Region", exact: true })
-		.click();
-	await pane.getByRole("button", { name: "Settings", exact: true }).click();
-	settings = page.getByRole("dialog", { name: "Pane Settings" });
-	await settings
-		.getByRole("tab", { name: "Virtual Playbacks", exact: true })
-		.click();
-	await settings.getByLabel("Rows").fill("1");
-	await settings.getByLabel("Columns").fill("2");
-	await settings
-		.getByRole("tab", { name: "Solo Regions", exact: true })
-		.click();
-	await expect(
-		settings.getByText(/Virtual Playbacks 1001, 1002, 1303/),
-	).toBeVisible();
-	await settings.getByRole("button", { name: "Close settings" }).click();
+	await settings.getByRole("button",{name:"Edit Touring pair",exact:true}).click();
+ await settings.getByLabel("Region name",{exact:true}).fill("Touring alternates");
+ await settings.getByLabel("Members (page.position)",{exact:true}).fill("1.401, 1.402, 2.403");
+ await settings.getByRole("button",{name:"Save region",exact:true}).click();
+ await expect(settings.getByText("1.401, 1.402, 2.403",{exact:true})).toBeVisible();
+ await settings.getByRole("button",{name:"Close settings"}).click();
 	await expect
 		.poll(async () => {
-			const snapshot = await virtualZoneSnapshot(api);
-			return snapshot.zones.find((zone) => zone.name === "Touring alternates");
+			const snapshot = await soloRegionSnapshot(api);
+			return snapshot.regions.find((zone) => zone.name === "Touring alternates");
 		})
 		.toMatchObject({
-			playback_numbers: [1001, 1002, 1303],
+			members: [{page:1,position:401}, {page:1,position:402}, {page:2,position:403}],
 		});
 
+	await configurePaneGrid(page,pane,1,2,2);
 	await page.waitForTimeout(1_000);
 	await page.reload();
 	await expect(page.locator(".connection-cover")).toBeHidden({
 		timeout: 10_000,
 	});
 	pane = await activeVirtualPane(page);
-	await expect(pane.locator(".virtual-playback-box")).toHaveCount(2);
+	await expect(pane.locator("[data-playback-slot]")).toHaveCount(2);
 	await pane.getByRole("button", { name: "Settings", exact: true }).click();
 	settings = page.getByRole("dialog", { name: "Pane Settings" });
-	await settings
-		.getByRole("tab", { name: "Virtual Playbacks", exact: true })
-		.click();
-	await expect(
-		settings.getByRole("radio", { name: "Pinned", exact: true }),
-	).toBeChecked();
-	await expect(settings.getByLabel("Pinned page")).toHaveValue("2");
+	const surfaceSnapshot=await api.request<any>("GET","/api/v2/playback-surfaces",undefined,true,undefined,{deskId:api.session!.desk.id});
+ const pinned=Object.values(surfaceSnapshot.playback_surfaces).find((surface:any)=>surface.page_source.type==="pinned"&&surface.page_source.page===2&&surface.layout.rows.length===1) as any;
+ expect(pinned).toBeDefined();
+ expect(pinned.layout.rows[0].count).toBe(2);
 	await settings
 		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
-	await expect(settings.getByLabel("Name for Touring alternates")).toHaveValue(
-		"Touring alternates",
-	);
+	await expect(settings.getByRole("button",{name:"Edit Touring alternates",exact:true})).toBeVisible();
 	await expect(
-		settings.getByText(/Virtual Playbacks 1001, 1002, 1303/),
+		settings.getByText(/1\.401.*1\.402.*2\.403/),
 	).toBeVisible();
-	await settings.getByRole("button", { name: "Delete region" }).click();
+	await settings.getByRole("button", { name: "Delete Touring alternates", exact:true }).click();
 	await expect
-		.poll(async () => (await virtualZoneSnapshot(api)).zones)
+		.poll(async () => (await soloRegionSnapshot(api)).regions)
 		.toEqual([]);
 	await settings.getByRole("button", { name: "Close settings" }).click();
 
-	for (const number of [1001, 1002]) await virtualAction(api, 1, number, "off");
-	await virtualAction(api, 1, 1001, "on");
-	await virtualAction(api, 1, 1002, "on");
-	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+	for (const number of [401, 402]) await paneAction(api, {page: 1, position: number}, "off");
+	await paneAction(api, {page: 1, position: 401}, "on");
+	await paneAction(api, {page: 1, position: 402}, "on");
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 		enabled: true,
 	});
 
@@ -176,9 +135,8 @@ const virtualZoneUiSupplement = async ({
 	await settings
 		.getByRole("tab", { name: "Solo Regions", exact: true })
 		.click();
-	await expect(
-		settings.getByText("No Solo Regions are configured for this show."),
-	).toBeVisible();
+	await expect(settings.getByRole("button",{name:/^Edit Touring/})).toHaveCount(0);
+ await expect(settings.getByLabel("Region name",{exact:true})).toHaveValue("");
 };
 
 export function registerVirtualZoneUiScenario(): void {

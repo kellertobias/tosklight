@@ -6,16 +6,17 @@ import {
 } from "../bench/core/fixtures";
 import { object, putObject } from "../support/catalog";
 import {
-	activeVirtualPlayback,
+	activeAssignedPlayback,
 	audit,
 	configuration,
 	playbacks,
 	prepare,
-	saveVirtualZones,
-	virtualAction,
-	virtualZoneSnapshot,
+	pageObject,
+	saveSoloRegions,
+	paneAction,
+	soloRegionSnapshot,
 	visualizationLevel,
-	writeVirtualPage,
+	copyPageAssignments,
 } from "./support";
 
 type VirtualZoneApiContext = Pick<BenchContractContext, "api" | "bench">;
@@ -29,65 +30,59 @@ async function prepareAuthoritativeVirtualZone({
 		bench,
 		"vpb-007-authoritative",
 		[
-			{ number: 71, fixture: 3, levels: [0.2], name: "Zone A" },
-			{ number: 72, fixture: 4, levels: [0.4], name: "Zone B" },
-			{ number: 73, fixture: 5, levels: [0.6], name: "Zone C" },
+			{ position: 71, fixture: 3, levels: [0.2], name: "Zone A" },
+			{ position: 72, fixture: 4, levels: [0.4], name: "Zone B" },
+			{ position: 73, fixture: 5, levels: [0.6], name: "Zone C" },
 		],
 		{},
 	);
-	await writeVirtualPage(api, 1, { 1001: 71, 1002: 72, 1003: 73 });
-	await writeVirtualPage(api, 2, { 1301: 73, 1302: 71, 1303: 72 });
-	await api.request("PUT", "/api/v2/configuration", {
-		...(await configuration(api)),
-		sequence_master_fade_millis: 0,
-	});
-	const firstDefinition = await object<any>(api, "playback", "71");
-	await putObject(
-		api,
-		"playback",
-		"71",
-		{ ...firstDefinition.body, auto_off: false },
-		firstDefinition.revision,
-	);
+	await copyPageAssignments(api, 1, { 401: 71, 402: 72, 403: 73 });
+	await copyPageAssignments(api, 2, { 401: 73, 402: 71, 403: 72 });
+	await api.request("POST", "/api/v2/configuration/update", {request_id:crypto.randomUUID(),patch:{sequence_master_fade_millis: 0,
+	}});
+	const firstPage = await pageObject(api,1);
+ firstPage.body.assignments[71].auto_off=false;
+ firstPage.body.assignments[401].auto_off=false;
+ await putObject(api,"playback_page","1",firstPage.body,firstPage.revision);
 	const firstDesk = api.session!.desk;
 	const zones = [
 		{
-			id: "front-pair",
+			id: "22222222-2222-4222-8222-222222222222",
 			name: "Front pair",
-			playback_numbers: [1001, 1002],
+			members: [{page:1,position:401}, {page:1,position:402}],
 		},
 		{
-			id: "overlap",
+			id: "33333333-3333-4333-8333-333333333333",
 			name: "Overlap pair",
-			playback_numbers: [1002, 1003],
+			members: [{page:1,position:402}, {page:1,position:403}],
 		},
 	];
 
-	await virtualAction(api, 1, 1001, "go");
-	await virtualAction(api, 1, 1002, "go");
-	await virtualAction(api, 1, 1003, "go");
-	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+	await paneAction(api, {page: 1, position: 401}, "go");
+	await paneAction(api, {page: 1, position: 402}, "go");
+	await paneAction(api, {page: 1, position: 403}, "go");
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1003)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 403})).toMatchObject({
 		enabled: true,
 	});
 	const zoneRequestId = crypto.randomUUID();
-	const saved = await saveVirtualZones(api, zones, {
+	const saved = await saveSoloRegions(api, zones, {
 		requestId: zoneRequestId,
 	});
 	expect(saved).toMatchObject({
 		show_id: prepared.showId,
 		revision: 1,
-		zones,
+		regions: zones,
 		replayed: false,
 		changed: true,
 	});
 	expect(saved.request_id).toEqual(expect.any(String));
-	const replay = await saveVirtualZones(api, zones, {
+	const replay = await saveSoloRegions(api, zones, {
 		requestId: zoneRequestId,
 	});
 	expect(replay).toMatchObject({
@@ -97,13 +92,13 @@ async function prepareAuthoritativeVirtualZone({
 		revision: 1,
 	});
 	await expect(
-		saveVirtualZones(
+		saveSoloRegions(
 			api,
 			[
 				{
 					id: "stale",
 					name: "Stale",
-					playback_numbers: [1001, 1003],
+					members: [{page:1,position:401}, {page:1,position:403}],
 				},
 			],
 			{
@@ -111,19 +106,19 @@ async function prepareAuthoritativeVirtualZone({
 			},
 		),
 	).rejects.toThrow(/returned 409:.*expected 0, actual 1/);
-	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1003)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 403})).toMatchObject({
 		enabled: true,
 	});
-	expect(await virtualZoneSnapshot(api)).toMatchObject({
+	expect(await soloRegionSnapshot(api)).toMatchObject({
 		show_id: prepared.showId,
 		revision: 1,
-		zones,
+		regions: zones,
 	});
 	return { prepared, firstDesk, zones };
 }
@@ -144,41 +139,35 @@ async function verifyRestartedVirtualZone(
 		{ username: "Operator", desk_id: firstDesk.id },
 		false,
 	);
-	expect((await object<any>(api, "playback", "71")).body.auto_off).toBe(false);
-	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+	expect((await pageObject(api,1)).body.assignments[71].auto_off).toBe(false);
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 		enabled: false,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 		enabled: false,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1003)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 403})).toMatchObject({
 		enabled: true,
 	});
-	expect((await virtualZoneSnapshot(api)).zones).toEqual(zones);
+	expect((await soloRegionSnapshot(api)).regions).toEqual(zones);
 
-	for (const number of [1001, 1002, 1003])
-		await virtualAction(api, 1, number, "off");
+	for (const number of [401, 402, 403])
+		await paneAction(api, {page: 1, position: number}, "off");
 	await Promise.all([
-		virtualAction(api, 1, 1001, "go"),
-		virtualAction(api, 1, 1002, "go"),
+		paneAction(api, {page: 1, position: 401}, "go"),
+		paneAction(api, {page: 1, position: 402}, "go"),
 	]);
-	const concurrent = (await playbacks(api)).active.filter(
-		(entry: any) =>
-			entry.playback_identity?.kind === "virtual" &&
-			entry.playback_identity.page === 1 &&
-			[1001, 1002].includes(entry.playback_identity.number) &&
-			entry.enabled,
-	);
-	expect(concurrent).toHaveLength(1);
-	await virtualAction(api, 1, 1003, "go");
-	await virtualAction(api, 1, 1002, "go");
-	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+	const concurrent = await Promise.all([401,402].map(position=>activeAssignedPlayback(api,{page:1,position})));
+ expect(concurrent.filter(runtime=>runtime?.enabled)).toHaveLength(1);
+	await paneAction(api, {page: 1, position: 403}, "go");
+	await paneAction(api, {page: 1, position: 402}, "go");
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 		enabled: false,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1003)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 403})).toMatchObject({
 		enabled: false,
 	});
 	await bench.tick(0);
@@ -188,11 +177,11 @@ async function verifyRestartedVirtualZone(
 		5,
 	);
 	expect(await visualizationLevel(api, prepared.fixtures[5])).toBeCloseTo(0, 5);
-	await virtualAction(api, 1, 1002, "off");
-	expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+	await paneAction(api, {page: 1, position: 402}, "off");
+	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 		enabled: false,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1003)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 403})).toMatchObject({
 		enabled: false,
 	});
 }
@@ -202,56 +191,50 @@ async function verifyFirstDeskPageAndOsc({
 	bench,
 }: VirtualZoneApiContext) {
 	const desk = api.session!.desk;
-	await api.request("POST", `/api/v2/control-desk/actions`, {
-		request_id: crypto.randomUUID(),
-		action: { type: "set_page", page: 2, existing_only: false },
-	});
-	for (const number of [1001, 1002, 1003])
-		await virtualAction(api, 1, number, "off");
-	for (const number of [1301, 1302, 1303])
-		await virtualAction(api, 2, number, "off");
-	await virtualAction(api, 2, 1301, "go");
-	await virtualAction(api, 2, 1302, "go");
-	expect(await activeVirtualPlayback(api, 2, 1301)).toMatchObject({
+	await api.request("POST", "/api/v2/playback-surfaces/main/page", {page:2},true,undefined,{deskId:api.session!.desk.id});
+	for (const number of [401, 402, 403])
+		await paneAction(api, {page: 1, position: number}, "off");
+	for (const number of [401, 402, 403])
+		await paneAction(api, {page: 2, position: number}, "off");
+	await paneAction(api, {page: 2, position: 401}, "go");
+	await paneAction(api, {page: 2, position: 402}, "go");
+	expect(await activeAssignedPlayback(api, {page: 2, position: 401})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 2, 1302)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 2, position: 402})).toMatchObject({
 		enabled: true,
 	});
-	expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 		enabled: false,
 	});
-	await api.request("POST", `/api/v2/control-desk/actions`, {
-		request_id: crypto.randomUUID(),
-		action: { type: "set_page", page: 1, existing_only: false },
-	});
-	for (const number of [1001, 1002, 1003])
-		await virtualAction(api, 1, number, "off");
+	await api.request("POST", "/api/v2/playback-surfaces/main/page", {page:1},true,undefined,{deskId:api.session!.desk.id});
+	for (const number of [401, 402, 403])
+		await paneAction(api, {page: 1, position: number}, "off");
 
 	const firstHardware = await bench.osc();
 	try {
 		await firstHardware.subscribe("vpb-007-first", "desk");
 		await firstHardware.send(
-			`/light/desk/virtual-playback/1/1001/button/1`,
+			`/light/desk/playback/1/401/button/1`,
 			[true],
 		);
 		await firstHardware.send(
-			`/light/desk/virtual-playback/1/1002/button/1`,
+			`/light/desk/playback/1/402/button/1`,
 			[true],
 		);
 		await expect
-			.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
+			.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 401}))?.enabled)
 			.toBe(false);
 		await expect
-			.poll(async () => (await activeVirtualPlayback(api, 1, 1002))?.enabled)
+			.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 402}))?.enabled)
 			.toBe(true);
 		expect(
 			(await audit(api)).some(
 				(event) =>
 					event.kind === "playback_exclusion_applied" &&
 					event.payload?.source === "osc" &&
-					event.payload?.activated_page === 1 &&
-					event.payload?.activated_playback === 1002,
+					event.payload?.activated_playback?.page === 1 &&
+					event.payload?.activated_playback?.position === 402,
 			),
 		).toBe(true);
 	} finally {
@@ -270,42 +253,39 @@ async function verifySecondDeskSharesShowZones(
 		false,
 	);
 	api.session = second;
-	await api.request("POST", `/api/v2/control-desk/actions`, {
-		request_id: crypto.randomUUID(),
-		action: { type: "set_page", page: 2, existing_only: false },
-	});
-	expect(await virtualZoneSnapshot(api)).toMatchObject({
+	await api.request("POST", "/api/v2/playback-surfaces/main/page", {page:2},true,undefined,{deskId:api.session!.desk.id});
+	expect(await soloRegionSnapshot(api)).toMatchObject({
 		show_id: prepared.showId,
 		revision: 1,
-		zones,
+		regions: zones,
 	});
-	for (const number of [1001, 1002, 1003])
-		await virtualAction(api, 1, number, "off");
-	for (const number of [1301, 1302, 1303])
-		await virtualAction(api, 2, number, "off");
+	for (const number of [401, 402, 403])
+		await paneAction(api, {page: 1, position: number}, "off");
+	for (const number of [401, 402, 403])
+		await paneAction(api, {page: 2, position: number}, "off");
 	const secondHardware = await bench.osc();
 	try {
 		await secondHardware.subscribe("vpb-007-second", "desk");
 		await secondHardware.send(
-			`/light/desk/virtual-playback/1/1001/button/1`,
+			`/light/desk/playback/1/401/button/1`,
 			[true],
 		);
 		await secondHardware.send(
-			`/light/desk/virtual-playback/1/1002/button/1`,
+			`/light/desk/playback/1/402/button/1`,
 			[true],
 		);
 		await expect
-			.poll(async () => (await activeVirtualPlayback(api, 1, 1001))?.enabled)
+			.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 401}))?.enabled)
 			.toBe(false);
 		await expect
-			.poll(async () => (await activeVirtualPlayback(api, 1, 1002))?.enabled)
+			.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 402}))?.enabled)
 			.toBe(true);
-		await virtualAction(api, 2, 1301, "go");
-		await virtualAction(api, 2, 1302, "go");
-		expect(await activeVirtualPlayback(api, 2, 1301)).toMatchObject({
+		await paneAction(api, {page: 2, position: 401}, "go");
+		await paneAction(api, {page: 2, position: 402}, "go");
+		expect(await activeAssignedPlayback(api, {page: 2, position: 401})).toMatchObject({
 			enabled: true,
 		});
-		expect(await activeVirtualPlayback(api, 2, 1302)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 2, position: 402})).toMatchObject({
 			enabled: true,
 		});
 		await bench.tick(0);

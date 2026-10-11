@@ -1,15 +1,17 @@
+import type { PlaybackAddress } from "../../apps/light-desktop/src/features/playbackTopology/contracts";
+import type { PlaybackPreloadScope } from "../../apps/light-desktop/src/api/playbackConfigurationModels";
+export type PendingPlaybackAction = [PlaybackAddress, string, {surface_id:string;control_id:number}];
+export type CaptureMask = { programmer:boolean; playbackScope:PlaybackPreloadScope };
 import type { summarizePlaybackState } from "./showFixtures";
 
 export type Configuration = Record<string, any> & {
 	programmer_fade_millis: number;
 	sequence_master_fade_millis: number;
 	preload_programmer_changes: boolean;
-	preload_physical_playback_actions: boolean;
-	preload_virtual_playback_actions: boolean;
 };
 
 export type PlaybackSpec = {
-	number: number;
+	position: number;
 	fixture: number;
 	levels?: number[];
 	name?: string;
@@ -53,24 +55,24 @@ export type PreloadPlaybackPairState = Prepared & {
 };
 
 export type PreloadVirtualPairState = Prepared & {
-	pendingActions?: Array<[number, number, string, string]>;
+	pendingActions?: PendingPlaybackAction[];
 	applicationTimestamp?: string;
 };
 
 export type PreloadMaskPairState = {
-	savedMasks: Array<[boolean, boolean, boolean]>;
+	savedMasks: CaptureMask[];
 };
 
 export type PreloadCombinedPairState = Prepared & {
 	groupFixture: string;
 	pending?: {
 		groupIds: string[];
-		playbackActions: Array<[number, string, string]>;
+		playbackActions: PendingPlaybackAction[];
 	};
 	applicationTimestamp?: string;
 };
 
 export type VirtualZonePairState = Prepared & {
-	savedZones?: Array<{ name: string; playback_numbers: number[] }>;
+	savedZones?: Array<{ name: string; members: PlaybackAddress[] }>;
 	creationState?: [boolean, boolean];
 };

@@ -1,19 +1,20 @@
+import { paneCard } from "./uiSupport";
 import { expect } from "../bench/core/fixtures";
 import {
 	type PairedScenario,
 	pairedScenario,
 } from "../bench/core/pairedScenario";
 import {
-	activeVirtualPlayback,
+	activeAssignedPlayback,
 	addVirtualPlaybackPane,
 	configuration,
-	normalizedVirtualZones,
+	normalizedSoloRegions,
 	prepare,
-	saveVirtualZones,
+	saveSoloRegions,
 	type VirtualZonePairState,
-	virtualAction,
+	paneAction,
 	visualizationLevel,
-	writeVirtualPage,
+	copyPageAssignments,
 } from "./support";
 
 const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
@@ -28,7 +29,7 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 			`vpb-007-paired-${surface}`,
 			[
 				{
-					number: 74,
+					position: 74,
 					fixture: 3,
 					levels: [0.25],
 					name: "Touring A",
@@ -37,7 +38,7 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 					hasFader: false,
 				},
 				{
-					number: 75,
+					position: 75,
 					fixture: 4,
 					levels: [0.5],
 					name: "Touring B",
@@ -46,7 +47,7 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 					hasFader: false,
 				},
 				{
-					number: 76,
+					position: 76,
 					fixture: 5,
 					levels: [0.75],
 					name: "Touring C",
@@ -57,75 +58,60 @@ const virtualZoneScenario: PairedScenario<VirtualZonePairState> = {
 			],
 			{},
 		);
-		await writeVirtualPage(api, 1, {
-			1001: 74,
-			1002: 75,
-			1003: 76,
+		await copyPageAssignments(api, 1, {
+			401: 74,
+			402: 75,
+			403: 76,
 		});
-		await api.request("PUT", "/api/v2/configuration", {
-			...(await configuration(api)),
-			sequence_master_fade_millis: 0,
-		});
-		await virtualAction(api, 1, 1001, "on");
-		await virtualAction(api, 1, 1002, "on");
+		await api.request("POST", "/api/v2/configuration/update", {request_id:crypto.randomUUID(),patch:{sequence_master_fade_millis: 0,
+		}});
+		await paneAction(api, {page: 1, position: 401}, "on");
+		await paneAction(api, {page: 1, position: 402}, "on");
 		return prepared;
 	},
 	api: async ({ api }, state) => {
-		await saveVirtualZones(api, [
+		await saveSoloRegions(api, [
 			{
-				id: "touring-pair",
+				id: "11111111-1111-4111-8111-111111111111",
 				name: "Touring pair",
-				playback_numbers: [1001, 1002],
+				members: [{page:1,position:401}, {page:1,position:402}],
 			},
 		]);
-		state.savedZones = await normalizedVirtualZones(api);
+		state.savedZones = await normalizedSoloRegions(api);
 		state.creationState = [
-			Boolean((await activeVirtualPlayback(api, 1, 1001))?.enabled),
-			Boolean((await activeVirtualPlayback(api, 1, 1002))?.enabled),
+			Boolean((await activeAssignedPlayback(api, {page: 1, position: 401}))?.enabled),
+			Boolean((await activeAssignedPlayback(api, {page: 1, position: 402}))?.enabled),
 		];
-		for (const number of [1001, 1002, 1001, 1002])
-			await virtualAction(api, 1, number, "toggle");
+		for (const number of [401, 402, 401, 402])
+			await paneAction(api, {page: 1, position: number}, "toggle");
 	},
 	ui: async ({ api, bench, desk, page }, state) => {
 		await desk.open(bench.baseUrl);
 		const pane = await addVirtualPlaybackPane(page);
-		await page.keyboard.down("Shift");
-		await pane
-			.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1 Touring A/ })
-			.click();
-		await pane
-			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2 Touring B/ })
-			.click();
-		await page.keyboard.up("Shift");
-		await pane.getByRole("button", { name: "Create Solo Region" }).click();
-		const create = page.getByRole("dialog", { name: "Create Solo Region" });
-		await create.getByLabel("Region name").fill("Touring pair");
-		await create.getByRole("button", { name: "Create region" }).click();
-		await expect(create).toBeHidden();
-		state.savedZones = await normalizedVirtualZones(api);
+		await pane.getByRole("button",{name:"Select Solo members"}).click();
+ await paneCard(pane,{page:1,position:401}).click();
+ await paneCard(pane,{page:1,position:402}).click();
+ await pane.getByLabel("Solo Region name").fill("Touring pair");
+ await pane.getByRole("button",{name:"Create Solo Region",exact:true}).click();
+		state.savedZones = await normalizedSoloRegions(api);
 		state.creationState = [
-			Boolean((await activeVirtualPlayback(api, 1, 1001))?.enabled),
-			Boolean((await activeVirtualPlayback(api, 1, 1002))?.enabled),
+			Boolean((await activeAssignedPlayback(api, {page: 1, position: 401}))?.enabled),
+			Boolean((await activeAssignedPlayback(api, {page: 1, position: 402}))?.enabled),
 		];
-		for (const cell of [1, 2, 1, 2])
-			await pane
-				.getByRole("button", {
-					name: new RegExp(`Virtual playback ${1000 + cell} page 1 cell ${cell}`),
-				})
-				.click();
+		for (const cell of [1,2,1,2]) await paneCard(pane,{page:1,position:400+cell}).getByRole("button",{name:"TOGGLE",exact:true}).click();
 	},
 	assert: async ({ api, bench }, state) => {
 		expect(state.savedZones).toEqual([
-			{ name: "Touring pair", playback_numbers: [1001, 1002] },
+			{ name: "Touring pair", members: [{page:1,position:401}, {page:1,position:402}] },
 		]);
 		expect(state.creationState).toEqual([true, true]);
-		expect(await activeVirtualPlayback(api, 1, 1001)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
 			enabled: false,
 		});
-		expect(await activeVirtualPlayback(api, 1, 1002)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
 			enabled: true,
 		});
-		expect((await activeVirtualPlayback(api, 1, 1003))?.enabled ?? false).toBe(
+		expect((await activeAssignedPlayback(api, {page: 1, position: 403}))?.enabled ?? false).toBe(
 			false,
 		);
 		await bench.tick(0);

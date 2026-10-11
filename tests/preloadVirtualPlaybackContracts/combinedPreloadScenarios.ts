@@ -1,3 +1,4 @@
+import { paneCard } from "./uiSupport";
 import {
 	type BenchContractContext,
 	type BenchUiContext,
@@ -19,7 +20,7 @@ import {
 	programmer,
 } from "../support/catalog";
 import {
-	activePlayback,
+	activeAssignedPlayback,
 	addVirtualPlaybackPane,
 	audit,
 	firstGroupFixture,
@@ -33,7 +34,7 @@ import {
 	assignedPlaybackAction,
 	preloadCombinedObservation,
 	prepare,
-	setCaptureMask,
+	setCaptureScope,
 	timestampMillis,
 	visualizationLevel,
 } from "./support";
@@ -60,13 +61,13 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			fixtures,
 			[
 				{
-					number: 60,
+					position: 60,
 					fixture: groupFixtureNumber,
 					levels: [0.25],
 					name: "Underlying source",
 				},
 				{
-					number: 61,
+					position: 61,
 					fixture: 3,
 					levels: [0.6],
 					name: "Physical combined",
@@ -75,7 +76,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 					hasFader: false,
 				},
 				{
-					number: 62,
+					position: 62,
 					fixture: 4,
 					levels: [0.8],
 					name: "Virtual combined",
@@ -86,7 +87,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 			],
 			{ 1: 61, 2: 62 },
 		);
-		await setCaptureMask(api, true, true, true, 1_500, 8_000);
+		await setCaptureScope(api, true, {position_ranges: [{start:1,end:1000}], pages:null}, 1_500, 8_000);
 		await assignedPlaybackAction(api, { page: 1, position: 60 }, "go");
 		await bench.tick(8_000);
 		return { ...prepared, groupFixture };
@@ -100,12 +101,12 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		await assignedPlaybackAction(api, { page: 1, position: 61 }, "button", {
 			button: 1,
 			pressed: true,
-			surface: "physical",
+
 		});
 		await assignedPlaybackAction(api, { page: 1, position: 62 }, "button", {
 			button: 1,
 			pressed: true,
-			surface: "virtual",
+
 		});
 		state.pending = preloadCombinedObservation(await programmer(api));
 		state.applicationTimestamp = (
@@ -129,10 +130,7 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		await playbackCard(page, 1)
 			.getByRole("button", { name: "GO +", exact: true })
 			.click();
-		await pane
-			.getByRole("button", {
-				name: /Virtual playback 1002 page 1 cell 2 Virtual combined/,
-			})
+		await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 			.click();
 		state.pending = preloadCombinedObservation(await programmer(api));
 		await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
@@ -150,23 +148,23 @@ const preload006Scenario: PairedScenario<PreloadCombinedPairState> = {
 		expect(state.pending).toEqual({
 			groupIds: ["1"],
 			playbackActions: [
-				[61, "go", "physical"],
-				[62, "toggle", "virtual"],
+				[{page:1,position:61}, "go", {surface_id:expect.any(String),control_id:61}],
+				[{page:1,position:62}, "toggle", {surface_id:expect.any(String),control_id:62}],
 			],
 		});
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
-		expect(await activePlayback(api, 61)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 61})).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
-		expect(await activePlayback(api, 62)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 62})).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
-		expect(timestampMillis((await activePlayback(api, 61))?.activated_at)).toBe(
+		expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 61}))?.activated_at)).toBe(
 			timestampMillis(state.applicationTimestamp),
 		);
-		expect(timestampMillis((await activePlayback(api, 62))?.activated_at)).toBe(
+		expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 62}))?.activated_at)).toBe(
 			timestampMillis(state.applicationTimestamp),
 		);
 		expect((await programmer(api)).preload_group_active).toEqual({});
@@ -193,13 +191,13 @@ const preload006ApiSupplement = async ({
 	);
 	const specs: PlaybackSpec[] = [
 		{
-			number: 60,
+			position: 60,
 			fixture: groupFixtureNumber,
 			levels: [0.25],
 			name: "Underlying source",
 		},
 		{
-			number: 61,
+			position: 61,
 			fixture: 3,
 			levels: [0.6],
 			name: "Physical result",
@@ -208,7 +206,7 @@ const preload006ApiSupplement = async ({
 			hasFader: false,
 		},
 		{
-			number: 62,
+			position: 62,
 			fixture: 4,
 			levels: [0.8],
 			name: "Virtual result",
@@ -218,7 +216,7 @@ const preload006ApiSupplement = async ({
 		},
 	];
 	await installOnCurrentShow(api, show.id, fixtures, specs, { 1: 61, 2: 62 });
-	await setCaptureMask(api, true, true, true, 1_500, 8_000);
+	await setCaptureScope(api, true, {position_ranges: [{start:1,end:1000}], pages:null}, 1_500, 8_000);
 	await assignedPlaybackAction(api, { page: 1, position: 60 }, "go");
 	// This is an ordinary live GO, so its zero-time cue correctly uses the 8 s Cue Fade.
 	await bench.tick(8_000);
@@ -231,20 +229,20 @@ const preload006ApiSupplement = async ({
 	await assignedPlaybackAction(api, { page: 1, position: 61 }, "button", {
 		button: 1,
 		pressed: true,
-		surface: "physical",
+
 	});
 	await assignedPlaybackAction(api, { page: 1, position: 62 }, "button", {
 		button: 1,
 		pressed: true,
-		surface: "virtual",
+
 	});
 	const pending = await programmer(api);
 	expect(pending.preload_group_pending["1"]).toBeDefined();
 	expect(
-		pending.preload_playback_pending.map((entry: any) => entry.surface),
-	).toEqual(["physical", "virtual"]);
-	expect(await activePlayback(api, 61)).toBeUndefined();
-	expect(await activePlayback(api, 62)).toBeUndefined();
+		pending.preload_playback_pending.map((entry: any) => entry.address),
+	).toEqual([{page:1,position:61},{page:1,position:62}]);
+	expect(await activeAssignedPlayback(api, {page: 1, position: 61})).toBeUndefined();
+	expect(await activeAssignedPlayback(api, {page: 1, position: 62})).toBeUndefined();
 
 	await bench.tick(200);
 	const committed = (
@@ -259,10 +257,10 @@ const preload006ApiSupplement = async ({
 			committedProgrammer.preload_group_active["1"].intensity.changed_at,
 		),
 	).toBe(timestampMillis(committed.committedAt));
-	expect(timestampMillis((await activePlayback(api, 61))?.activated_at)).toBe(
+	expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 61}))?.activated_at)).toBe(
 		timestampMillis(committed.committedAt),
 	);
-	expect(timestampMillis((await activePlayback(api, 62))?.activated_at)).toBe(
+	expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 62}))?.activated_at)).toBe(
 		timestampMillis(committed.committedAt),
 	);
 	await bench.tick(0);
@@ -271,8 +269,8 @@ const preload006ApiSupplement = async ({
 	expect(await visualizationLevel(api, fixtures[4])).toBeCloseTo(0, 5);
 	await bench.tick(1_500);
 	expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.8, 2);
-	expect(await activePlayback(api, 61)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 62)).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 61})).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 62})).toMatchObject({ enabled: true });
 
 	expect(
 		await releaseProgrammerPreload(api, {
@@ -281,8 +279,8 @@ const preload006ApiSupplement = async ({
 		}),
 	).toMatchObject({ status: "changed", active: false });
 	expect(await visualizationLevel(api, groupFixture)).toBeCloseTo(0.25, 2);
-	expect(await activePlayback(api, 61)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 62)).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 61})).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 62})).toMatchObject({ enabled: true });
 	const eventsBefore = await audit(api);
 	const frameBefore = await bench.tick(0);
 	expect(
@@ -312,7 +310,7 @@ const preload006UiSupplement = async ({
 		"preload-006-ui",
 		[
 			{
-				number: 63,
+				position: 63,
 				fixture: 3,
 				levels: [0.6],
 				name: "Physical combined",
@@ -321,7 +319,7 @@ const preload006UiSupplement = async ({
 				hasFader: false,
 			},
 			{
-				number: 64,
+				position: 64,
 				fixture: 4,
 				levels: [0.8],
 				name: "Virtual combined",
@@ -332,7 +330,7 @@ const preload006UiSupplement = async ({
 		],
 		{ 1: 63, 2: 64 },
 	);
-	await setCaptureMask(api, true, true, true, 1_500, 8_000);
+	await setCaptureScope(api, true, {position_ranges: [{start:1,end:1000}], pages:null}, 1_500, 8_000);
 	await desk.open(bench.baseUrl);
 	const pane = await addVirtualPlaybackPane(page);
 	await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
@@ -341,10 +339,7 @@ const preload006UiSupplement = async ({
 	await playbackCard(page, 1)
 		.getByRole("button", { name: "GO +", exact: true })
 		.click();
-	await pane
-		.getByRole("button", {
-			name: /Virtual playback 1002 page 1 cell 2 Virtual combined/,
-		})
+	await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 		.click();
 	await expect(
 		page.getByTitle(/Pending Preload: PROG 1.*GO 63.*TOGGLE 64/),
@@ -355,16 +350,11 @@ const preload006UiSupplement = async ({
 	);
 	await page.getByRole("button", { name: /^PRELOAD GO\b/ }).click();
 	await expect
-		.poll(async () => (await activePlayback(api, 63))?.enabled)
+		.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 63}))?.enabled)
 		.toBe(true);
 	await bench.tick(1_500);
-	const state = await playbacks(api);
-	const physical = state.active.find(
-		(entry: any) => entry.playback_number === 63,
-	);
-	const virtual = state.active.find(
-		(entry: any) => entry.playback_number === 64,
-	);
+	const physical=await activeAssignedPlayback(api,{page:1,position:63});
+ const virtual=await activeAssignedPlayback(api,{page:1,position:64});
 	expect(physical.activated_at).toBe(virtual.activated_at);
 	await desk.recordStep(
 		"LONG-PRESS RELEASE",
@@ -372,8 +362,8 @@ const preload006UiSupplement = async ({
 	);
 	await longPressPreload(page);
 	expect((await programmer(api)).preload_group_active).toEqual({});
-	expect(await activePlayback(api, 63)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 64)).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 63})).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 64})).toMatchObject({ enabled: true });
 };
 
 export function registerCombinedPreloadScenarios(): void {

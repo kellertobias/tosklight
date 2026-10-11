@@ -1,3 +1,6 @@
+import { preloadScopeText } from "../../apps/light-desktop/src/features/playbackPreloadScope/scopeText";
+import type { PlaybackAddress } from "../../apps/light-desktop/src/features/playbackTopology/contracts";
+import type { CaptureMask, PendingPlaybackAction } from "./types";
 import type { Page } from "@playwright/test";
 import type { ApiDriver } from "../bench/core/api";
 import { expect } from "../bench/core/fixtures";
@@ -32,72 +35,37 @@ export async function preloadProgrammerObservation(
 	};
 }
 
-export function playbackPendingObservation(
-	state: any,
-): Array<[number, string, string]> {
-	return state.preload_playback_pending.map((entry: any) => [
-		entry.playback_number,
-		entry.action,
-		entry.surface,
-	]);
+export function playbackPendingObservation(state:any): PendingPlaybackAction[] {
+ return state.preload_playback_pending.map((entry:any) => [entry.address,entry.action,entry.control_source]);
 }
-
-export function virtualPlaybackPendingObservation(
-	state: any,
-): Array<[number, number, string, string]> {
-	return state.preload_playback_pending.map((entry: any) => [
-		entry.page,
-		entry.playback_number,
-		entry.action,
-		entry.surface,
-	]);
+export const panePendingObservation = playbackPendingObservation;
+export async function captureMask(api:ApiDriver): Promise<CaptureMask> {
+ const showId = await activeShowId(api);
+ const scope = await api.request<any>("GET","/api/v2/playback-preload-scope",undefined,true,undefined,{showId});
+ return {programmer:(await configuration(api)).preload_programmer_changes,playbackScope:scope.scope};
 }
-
-export function captureMask(
-	config: Configuration,
-): [boolean, boolean, boolean] {
-	return [
-		config.preload_programmer_changes,
-		config.preload_physical_playback_actions,
-		config.preload_virtual_playback_actions,
-	];
+export async function openPreloadInputSettings(page:Page) {
+ await page.getByRole("button",{name:/Open show menu/}).click();
+ await page.getByRole("button",{name:"Enter Setup",exact:true}).click();
+ await page.getByRole("button",{name:"Others",exact:true}).click();
 }
-
-export const preloadMaskLabels = [
-	"Preload programmer changes",
-	"Preload physical playback actions",
-	"Preload virtual playback actions",
-] as const;
-
-export async function openPreloadInputSettings(page: Page) {
-	await page.getByRole("button", { name: /Open show menu/ }).click();
-	await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-	await page.getByRole("button", { name: "Programmer", exact: true }).click();
+export async function setPreloadMaskThroughUi(api:ApiDriver,page:Page,mask:CaptureMask) {
+ const programmer=page.getByRole("switch",{name:"Preload programmer changes"});
+ if(await programmer.isChecked() !== mask.programmer) await programmer.locator("..").locator(".ui-switch-track").click();
+ const text=preloadScopeText(mask.playbackScope);
+ await page.getByLabel("Playback position ranges").fill(text.positions);
+ const all=page.getByRole("switch",{name:"All pages"});
+ if(await all.isChecked() !== text.allPages) await all.locator("..").locator(".ui-switch-track").click();
+ if(!text.allPages) await page.getByLabel("Eligible pages").fill(text.pages);
+ await page.getByRole("button",{name:"Save playback eligibility",exact:true}).click();
+ await expect.poll(() => captureMask(api)).toEqual(mask);
 }
-
-export async function setPreloadMaskThroughUi(
-	api: ApiDriver,
-	page: Page,
-	mask: number,
-) {
-	for (let index = 0; index < preloadMaskLabels.length; index++) {
-		const desired = Boolean(mask & (1 << index));
-		const control = page.getByRole("switch", {
-			name: preloadMaskLabels[index],
-		});
-		if ((await control.isChecked()) !== desired)
-			await control.locator("..").locator(".ui-switch-track").click();
-	}
-	await expect
-		.poll(async () => captureMask(await configuration(api)))
-		.toEqual([Boolean(mask & 1), Boolean(mask & 2), Boolean(mask & 4)]);
-}
-
-export async function expectPreloadMaskControls(page: Page, mask: number) {
-	for (let index = 0; index < preloadMaskLabels.length; index++)
-		await expect(page.getByLabel(preloadMaskLabels[index])).toBeChecked({
-			checked: Boolean(mask & (1 << index)),
-		});
+export async function expectPreloadMaskControls(page:Page,mask:CaptureMask) {
+ const text=preloadScopeText(mask.playbackScope);
+ await expect(page.getByRole("switch",{name:"Preload programmer changes"})).toBeChecked({checked:mask.programmer});
+ await expect(page.getByLabel("Playback position ranges")).toHaveValue(text.positions);
+ await expect(page.getByRole("switch",{name:"All pages"})).toBeChecked({checked:text.allPages});
+ if(!text.allPages) await expect(page.getByLabel("Eligible pages")).toHaveValue(text.pages);
 }
 
 export function preloadCombinedObservation(
@@ -116,34 +84,34 @@ export function timestampMillis(value: unknown): number {
 	return millis;
 }
 
-export interface VirtualZoneFixture {
+export interface SoloRegionFixture {
 	id: string;
 	name: string;
-	playback_numbers: number[];
+	members: PlaybackAddress[];
 }
 
-export interface VirtualZoneSnapshot {
+export interface SoloRegionSnapshot {
 	show_id: string;
 	revision: number;
-	zones: VirtualZoneFixture[];
+	regions: SoloRegionFixture[];
 }
 
-export interface VirtualZoneSaveOutcome {
+export interface SoloRegionSaveOutcome {
 	request_id: string;
 	show_id: string;
 	revision: number;
-	zones: VirtualZoneFixture[];
+	regions: SoloRegionFixture[];
 	replayed: boolean;
 	changed: boolean;
 }
 
-export async function virtualZoneSnapshot(
+export async function soloRegionSnapshot(
 	api: ApiDriver,
-): Promise<VirtualZoneSnapshot> {
+): Promise<SoloRegionSnapshot> {
 	const showId = await activeShowId(api);
-	return api.request<VirtualZoneSnapshot>(
+	return api.request<SoloRegionSnapshot>(
 		"GET",
-		"/api/v2/virtual-playback-exclusion-zones",
+		"/api/v2/playback-solo-regions",
 		undefined,
 		true,
 		undefined,
@@ -151,9 +119,9 @@ export async function virtualZoneSnapshot(
 	);
 }
 
-export async function saveVirtualZones(
+export async function saveSoloRegions(
 	api: ApiDriver,
-	zones: readonly VirtualZoneFixture[],
+	regions: readonly SoloRegionFixture[],
 	options: {
 		expectedRevision?: number;
 		requestId?: string;
@@ -161,13 +129,13 @@ export async function saveVirtualZones(
 ) {
 	const showId = await activeShowId(api);
 	const requestId = options.requestId ?? crypto.randomUUID();
-	return api.request<VirtualZoneSaveOutcome>(
+	return api.request<SoloRegionSaveOutcome>(
 		"POST",
-		"/api/v2/virtual-playback-exclusion-zones/update",
+		"/api/v2/playback-solo-regions/update",
 		{
 			request_id: requestId,
 			expected_revision: options.expectedRevision ?? 0,
-			zones,
+			regions,
 		},
 		true,
 		undefined,
@@ -175,14 +143,14 @@ export async function saveVirtualZones(
 	);
 }
 
-export async function normalizedVirtualZones(
+export async function normalizedSoloRegions(
 	api: ApiDriver,
-): Promise<Array<{ name: string; playback_numbers: number[] }>> {
-	const response = await virtualZoneSnapshot(api);
-	return response.zones
+): Promise<Array<{ name: string; members: PlaybackAddress[] }>> {
+	const response = await soloRegionSnapshot(api);
+	return response.regions
 		.map((zone) => ({
 			name: zone.name,
-			playback_numbers: [...zone.playback_numbers],
+			members: [...zone.members],
 		}))
 		.sort((left, right) => left.name.localeCompare(right.name));
 }

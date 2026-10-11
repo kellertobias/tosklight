@@ -16,7 +16,7 @@ import {
 import { clearProgrammerValues } from "../bench/programmer/programmerValues";
 import { programmer } from "../support/catalog";
 import {
-	activePlayback,
+	activeAssignedPlayback,
 	longPressPreload,
 	openPlaybackMode,
 	type PlaybackSpec,
@@ -25,7 +25,7 @@ import {
 	playbacks,
 	assignedPlaybackAction,
 	prepare,
-	setCaptureMask,
+	setCaptureScope,
 	summarizePlaybackState,
 	timestampMillis,
 	visualizationLevel,
@@ -45,7 +45,7 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		const actions = ["toggle", "go", "go_minus", "off", "on", "temp"] as const;
 		const specs = actions.map(
 			(action, index): PlaybackSpec => ({
-				number: index + 1,
+				position: index + 1,
 				fixture: index + 3,
 				levels: [0.3, 0.7],
 				name: `Paired ${action}`,
@@ -59,9 +59,9 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 			bench,
 			`preload-002-paired-${surface}`,
 			specs,
-			Object.fromEntries(specs.map((spec, index) => [index + 1, spec.number])),
+			Object.fromEntries(specs.map((spec, index) => [index + 1, spec.position])),
 		);
-		await setCaptureMask(api, false, true, false, 2_000, 7_000);
+		await setCaptureScope(api, false, {position_ranges: [{start:1,end:1000}], pages:[1]}, 2_000, 7_000);
 		await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
 		await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
 		await assignedPlaybackAction(api, { page: 1, position: 4 }, "go");
@@ -75,13 +75,13 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		for (const [number, action] of [
 			[1, "toggle"],
 			[2, "go"],
-			[3, "go-minus"],
+			[3, "back"],
 			[4, "off"],
 			[5, "on"],
 			[6, "temp-on"],
 			[6, "temp-off"],
 		] as const)
-			await assignedPlaybackAction(api, { page: 1, position: number }, action, { surface: "physical" });
+			await assignedPlaybackAction(api, { page: 1, position: number }, action, {});
 		state.pendingActions = (await programmer(api)).preload_playback_pending.map(
 			(entry: any) => entry.action,
 		);
@@ -128,7 +128,7 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		await expect
 			.poll(async () => {
 				state.applicationTimestamp =
-					(await activePlayback(api, 1))?.activated_at;
+					(await activeAssignedPlayback(api, {page: 1, position: 1}))?.activated_at;
 				return state.applicationTimestamp ?? "";
 			})
 			.not.toBe("");
@@ -147,34 +147,34 @@ const preload002Scenario: PairedScenario<PreloadPlaybackPairState> = {
 		expect(state.pendingActions).toEqual([
 			"toggle",
 			"go",
-			"go-minus",
+			"back",
 			"off",
 			"on",
-			"temp-on",
-			"temp-off",
+			"temporary_on",
+			"temporary_off",
 		]);
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
-		expect(await activePlayback(api, 1)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 1})).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
-		expect(await activePlayback(api, 2)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 2})).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
-		expect(timestampMillis((await activePlayback(api, 1))?.activated_at)).toBe(
+		expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 1}))?.activated_at)).toBe(
 			timestampMillis(state.applicationTimestamp),
 		);
-		expect(timestampMillis((await activePlayback(api, 2))?.activated_at)).toBe(
+		expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 2}))?.activated_at)).toBe(
 			timestampMillis(state.applicationTimestamp),
 		);
-		expect(await activePlayback(api, 3)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 3})).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
-		expect(await activePlayback(api, 4)).toMatchObject({ enabled: false });
-		expect(await activePlayback(api, 5)).toMatchObject({ enabled: true });
-		expect((await activePlayback(api, 6))?.temporary_active ?? false).toBe(
+		expect(await activeAssignedPlayback(api, {page: 1, position: 4})).toMatchObject({ enabled: false });
+		expect(await activeAssignedPlayback(api, {page: 1, position: 5})).toMatchObject({ enabled: true });
+		expect((await activeAssignedPlayback(api, {page: 1, position: 6}))?.temporary_active ?? false).toBe(
 			false,
 		);
 		expect(state.releasedState).toEqual(state.committedState);
@@ -186,7 +186,7 @@ const preload002ApiSupplement = async ({
 	bench,
 }: BenchContractContext) => {
 	const specs: PlaybackSpec[] = Array.from({ length: 9 }, (_, index) => ({
-		number: index + 1,
+		position: index + 1,
 		fixture: index + 3,
 		levels: [0.25, 0.5, 0.75, 1],
 		name: `Physical ${index + 1}`,
@@ -200,10 +200,10 @@ const preload002ApiSupplement = async ({
 		"preload-002-physical",
 		specs,
 		Object.fromEntries(
-			specs.slice(0, 8).map((spec, index) => [index + 1, spec.number]),
+			specs.slice(0, 8).map((spec, index) => [index + 1, spec.position]),
 		),
 	);
-	await setCaptureMask(api, false, true, false, 2_000, 7_000);
+	await setCaptureScope(api, false, {position_ranges: [{start:1,end:1000}], pages:[1]}, 2_000, 7_000);
 	await assignedPlaybackAction(api, { page: 1, position: 2 }, "go");
 	await assignedPlaybackAction(api, { page: 1, position: 2 }, "go");
 	await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
@@ -229,7 +229,7 @@ const preload002ApiSupplement = async ({
 	});
 	const verbs = [
 		[1, "go"],
-		[2, "go-minus"],
+		[2, "back"],
 		[3, "on"],
 		[4, "off"],
 		[5, "toggle"],
@@ -237,37 +237,37 @@ const preload002ApiSupplement = async ({
 		[7, "temp-off"],
 	] as const;
 	for (const [number, action] of verbs)
-		await assignedPlaybackAction(api, { page: 1, position: number }, action, { surface: "physical" });
+		await assignedPlaybackAction(api, { page: 1, position: number }, action, {});
 	expect(
 		(await programmer(api)).preload_playback_pending.map(
 			(entry: any) => entry.action,
 		),
-	).toEqual(verbs.map(([, action]) => action));
+	).toEqual(["go","back","on","off","toggle","temporary_on","temporary_off"]);
 
 	await assignedPlaybackAction(api, { page: 1, position: 8 }, "button", {
 		button: 3,
 		pressed: true,
-		surface: "physical",
+
 	});
-	expect((await activePlayback(api, 8))?.flash).toBe(true);
+	expect((await activeAssignedPlayback(api, {page: 1, position: 8}))?.flash).toBe(true);
 	await assignedPlaybackAction(api, { page: 1, position: 8 }, "button", {
 		button: 3,
 		pressed: false,
-		surface: "physical",
+
 	});
-	await assignedPlaybackAction(api, { page: 1, position: 8 }, "master", { value: 0.4, surface: "physical" });
-	expect(await activePlayback(api, 8)).toMatchObject({ enabled: true });
-	expect((await activePlayback(api, 8))?.fader_position).toBeCloseTo(0.4, 5);
+	await assignedPlaybackAction(api, { page: 1, position: 8 }, "master", { value: 0.4 });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 8})).toMatchObject({ enabled: true });
+	expect((await activeAssignedPlayback(api, {page: 1, position: 8}))?.fader_position).toBeCloseTo(0.4, 5);
 	expect(
 		(await programmer(api)).preload_playback_pending.map(
 			(entry: any) => entry.action,
 		),
-	).toEqual(verbs.map(([, action]) => action));
+	).toEqual(["go","back","on","off","toggle","temporary_on","temporary_off"]);
 
-	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", { surface: "physical" });
-	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", { surface: "physical" });
-	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", { surface: "virtual" });
-	expect((await activePlayback(api, 9))?.current_cue_number).toBe("2");
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", {});
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", {});
+	await assignedPlaybackAction(api, { page: 1, position: 9 }, "go", {});
+	expect((await activeAssignedPlayback(api, {page: 1, position: 9}))?.current_cue_number).toBe("2");
 	expect(
 		(await programmer(api)).preload_playback_pending
 			.slice(-2)
@@ -293,7 +293,7 @@ const preload002ApiSupplement = async ({
 		"go",
 		"go",
 	]);
-	expect(timestampMillis((await activePlayback(api, 1))?.activated_at)).toBe(
+	expect(timestampMillis((await activeAssignedPlayback(api, {page: 1, position: 1}))?.activated_at)).toBe(
 		timestampMillis(committed.committedAt),
 	);
 	await bench.tick(1_000);
@@ -302,23 +302,23 @@ const preload002ApiSupplement = async ({
 		2,
 	);
 	await bench.tick(1_000);
-	expect(await activePlayback(api, 1)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 1})).toMatchObject({
 		enabled: true,
 		current_cue_number: "1",
 	});
-	expect(await activePlayback(api, 2)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 2})).toMatchObject({
 		enabled: true,
 		current_cue_number: "1",
 	});
-	expect(await activePlayback(api, 3)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 4)).toMatchObject({ enabled: false });
-	expect(await activePlayback(api, 5)).toMatchObject({ enabled: true });
-	expect(await activePlayback(api, 6)).toMatchObject({
+	expect(await activeAssignedPlayback(api, {page: 1, position: 3})).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 4})).toMatchObject({ enabled: false });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 5})).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 6})).toMatchObject({
 		temporary_active: true,
 	});
 	// Temp off against an otherwise inactive playback removes the transient runtime entry.
-	expect(await activePlayback(api, 7)).toBeUndefined();
-	expect(await activePlayback(api, 9)).toMatchObject({ current_cue_number: "4" });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 7})).toBeUndefined();
+	expect(await activeAssignedPlayback(api, {page: 1, position: 9})).toMatchObject({ current_cue_number: "4" });
 
 	const playbackState = summarizePlaybackState(
 		await playbacks(api),
@@ -342,7 +342,7 @@ const preload002UiSupplement = async ({
 	const actions = ["toggle", "go", "go_minus", "off", "on", "temp"] as const;
 	const specs = actions.map(
 		(action, index): PlaybackSpec => ({
-			number: index + 1,
+			position: index + 1,
 			fixture: index + 3,
 			levels: [0.3, 0.7],
 			name: `UI ${action}`,
@@ -357,9 +357,9 @@ const preload002UiSupplement = async ({
 		bench,
 		"preload-002-ui",
 		specs,
-		Object.fromEntries(specs.map((spec, index) => [index + 1, spec.number])),
+		Object.fromEntries(specs.map((spec, index) => [index + 1, spec.position])),
 	);
-	await setCaptureMask(api, false, true, false, 2_000, 7_000);
+	await setCaptureScope(api, false, {position_ranges: [{start:1,end:1000}], pages:[1]}, 2_000, 7_000);
 	await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
 	await assignedPlaybackAction(api, { page: 1, position: 3 }, "go");
 	await assignedPlaybackAction(api, { page: 1, position: 4 }, "go");
@@ -392,12 +392,12 @@ const preload002UiSupplement = async ({
 			async () =>
 				(await programmer(api)).preload_playback_pending.at(-1)?.action,
 		)
-		.toBe("temp-on");
+		.toBe("temporary_on");
 	await temp.click();
 	const pending = await programmer(api);
 	expect(
 		pending.preload_playback_pending.map((entry: any) => entry.action),
-	).toEqual(["toggle", "go", "go-minus", "off", "on", "temp-on", "temp-off"]);
+	).toEqual(["toggle", "go", "back", "off", "on", "temporary_on", "temporary_off"]);
 	const flash = playbackCard(page, 1).getByRole("button", {
 		name: "FLASH",
 		exact: true,
@@ -421,8 +421,8 @@ const preload002UiSupplement = async ({
 		)
 		.toBe(0);
 	await bench.tick(2_000);
-	expect(await activePlayback(api, 4)).toMatchObject({ enabled: false });
-	expect(await activePlayback(api, 5)).toMatchObject({ enabled: true });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 4})).toMatchObject({ enabled: false });
+	expect(await activeAssignedPlayback(api, {page: 1, position: 5})).toMatchObject({ enabled: true });
 };
 
 export function registerPhysicalPlaybackPreloadScenarios(): void {

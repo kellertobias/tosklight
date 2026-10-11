@@ -1,3 +1,4 @@
+// Playback panes use exact page/position assignments; Preload eligibility is address based.
 import { test } from "./bench/core/fixtures";
 import { registerCaptureMaskScenarios } from "./preloadVirtualPlaybackContracts/captureMaskScenarios";
 import { registerCombinedPreloadScenarios } from "./preloadVirtualPlaybackContracts/combinedPreloadScenarios";

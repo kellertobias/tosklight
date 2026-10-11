@@ -15,7 +15,7 @@ import {
 } from "../bench/programmer/programmerPreloadLifecycle";
 import { programmer } from "../support/catalog";
 import {
-	activePlayback,
+	activeAssignedPlayback,
 	distinctGroupFixtures,
 	longPressPreload,
 	openPlaybackMode,
@@ -24,7 +24,7 @@ import {
 	assignedPlaybackAction,
 	preloadProgrammerObservation,
 	prepare,
-	setCaptureMask,
+	setCaptureScope,
 	timestampMillis,
 	visualizationLevel,
 } from "./support";
@@ -40,7 +40,7 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 			`preload-001-paired-${surface}`,
 			[
 				{
-					number: 31,
+					position: 31,
 					fixture: 12,
 					levels: [0.4],
 					name: "Live physical sequence",
@@ -51,7 +51,7 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 			],
 			{ 1: 31 },
 		);
-		await setCaptureMask(api, true, false, false, 3_000, 7_000);
+		await setCaptureScope(api, true, {position_ranges: [], pages: null}, 3_000, 7_000);
 		const groupFixtures = await distinctGroupFixtures(api, "1", "2");
 		return {
 			...prepared,
@@ -72,7 +72,7 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 		await assignedPlaybackAction(api, { page: 1, position: 31 }, "button", {
 			button: 1,
 			pressed: true,
-			surface: "physical",
+
 		});
 		state.pending = await preloadProgrammerObservation(
 			api,
@@ -125,7 +125,7 @@ const preload001Scenario: PairedScenario<PreloadProgrammerPairState> = {
 			liveLevels: state.beforeLevels,
 		});
 		expect(state.applicationTimestamp).toEqual(expect.any(String));
-		expect(await activePlayback(api, 31)).toMatchObject({
+		expect(await activeAssignedPlayback(api, {page: 1, position: 31})).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
@@ -153,7 +153,7 @@ const preload001ApiSupplement = async ({
 		"preload-001-programmer",
 		[
 			{
-				number: 30,
+				position: 30,
 				fixture: 12,
 				levels: [0.2, 0.8],
 				name: "Live physical sequence",
@@ -161,7 +161,7 @@ const preload001ApiSupplement = async ({
 		],
 		{ 1: 30 },
 	);
-	await setCaptureMask(api, true, false, false, 3_000, 7_000);
+	await setCaptureScope(api, true, {position_ranges: [], pages: null}, 3_000, 7_000);
 	const [group1Fixture, group2Fixture] = await distinctGroupFixtures(
 		api,
 		"1",
@@ -186,14 +186,14 @@ const preload001ApiSupplement = async ({
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 
-	await assignedPlaybackAction(api, { page: 1, position: 30 }, "go", { surface: "physical" });
-	expect((await activePlayback(api, 30))?.current_cue_number).toBe("1");
+	await assignedPlaybackAction(api, { page: 1, position: 30 }, "go", {});
+	expect((await activeAssignedPlayback(api, {page: 1, position: 30}))?.current_cue_number).toBe("1");
 	expect((await programmer(api)).preload_playback_pending).toEqual([]);
 	await bench.tick(2_000);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
 
-	await setCaptureMask(api, true, false, false, 4_000, 7_000);
+	await setCaptureScope(api, true, {position_ranges: [], pages: null}, 4_000, 7_000);
 	const committed = (
 		await goProgrammerPreload(api, {
 			surface: "api",
@@ -219,7 +219,7 @@ const preload001ApiSupplement = async ({
 	);
 	expect(committed.programmerFadeMillis).toBe(4_000);
 	expect(committed.executed).toEqual([]);
-	await setCaptureMask(api, true, false, false, 1_000, 7_000);
+	await setCaptureScope(api, true, {position_ranges: [], pages: null}, 1_000, 7_000);
 	await bench.tick(2_000);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(0.25, 2);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(0.35, 2);
@@ -237,7 +237,7 @@ const preload001ApiSupplement = async ({
 	await bench.tick(0);
 	expect(await visualizationLevel(api, group1Fixture)).toBeCloseTo(before1, 5);
 	expect(await visualizationLevel(api, group2Fixture)).toBeCloseTo(before2, 5);
-	expect((await activePlayback(api, 30))?.current_cue_number).toBe("1");
+	expect((await activeAssignedPlayback(api, {page: 1, position: 30}))?.current_cue_number).toBe("1");
 	expect(prepared.fixtures[12]).toBeTruthy();
 };
 
@@ -253,7 +253,7 @@ const preload001UiSupplement = async ({
 		"preload-001-ui",
 		[
 			{
-				number: 31,
+				position: 31,
 				fixture: 12,
 				levels: [0.4],
 				name: "Live GO",
@@ -264,7 +264,7 @@ const preload001UiSupplement = async ({
 		],
 		{ 1: 31 },
 	);
-	await setCaptureMask(api, true, false, false, 3_000, 7_000);
+	await setCaptureScope(api, true, {position_ranges: [], pages: null}, 3_000, 7_000);
 	await desk.open(bench.baseUrl);
 	await desk.recordStep(
 		"ARM PROGRAMMER PRELOAD",
@@ -279,7 +279,7 @@ const preload001UiSupplement = async ({
 		.getByRole("button", { name: "GO +", exact: true })
 		.click();
 	await expect
-		.poll(async () => (await activePlayback(api, 31))?.current_cue_number)
+		.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 31}))?.current_cue_number)
 		.toBe(1);
 	await desk.recordStep(
 		"COMMIT AT ONE MARK",

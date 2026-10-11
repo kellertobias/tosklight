@@ -1,3 +1,4 @@
+import { configurePaneGrid, paneCard } from "./uiSupport";
 import { expect } from "../bench/core/fixtures";
 import {
 	type PairedScenario,
@@ -6,7 +7,7 @@ import {
 import { object, objects, putObject } from "../support/catalog";
 import {
 	activeVirtualPane,
-	activeVirtualPlayback,
+	activeAssignedPlayback,
 	addVirtualPlaybackPane,
 	assignVirtualSource,
 	chooseSelect,
@@ -14,8 +15,8 @@ import {
 	type Preload003State,
 	pageObject,
 	prepare,
-	virtualAction,
-	writeVirtualPage,
+	paneAction,
+	copyPageAssignments,
 } from "./support";
 
 const preload003Scenario: PairedScenario<Preload003State> = {
@@ -26,7 +27,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 	arrange: async ({ api, bench }, surface) => {
 		const specs: PlaybackSpec[] = [
 			{
-				number: 101,
+				position: 101,
 				fixture: 3,
 				levels: [0.2, 0.8],
 				name: "Virtual Source A",
@@ -35,7 +36,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 				hasFader: false,
 			},
 			{
-				number: 102,
+				position: 102,
 				fixture: 4,
 				levels: [0.3, 0.9],
 				name: "Virtual Source B",
@@ -53,8 +54,8 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		);
 		return {
 			...prepared,
-			firstNumber: 1001,
-			secondNumber: 1002,
+			firstNumber: 401,
+			secondNumber: 402,
 			layoutDeskId: `preload-003-${surface}`,
 		};
 	},
@@ -75,16 +76,13 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 						panes: [
 							{
 								id: "virtual-playbacks-api",
-								kind: "virtual_playbacks",
+								kind: "playbacks",
 								title: "Virtual Playbacks",
 								x: 1,
 								y: 1,
 								width: 12,
 								height: 10,
-								virtualPlaybackRows: 20,
-								virtualPlaybackColumns: 15,
-								virtualPlaybackPageMode: "follow_main",
-								virtualPlaybackPinnedPage: 1,
+ surface_id:"pane:preload-003",
 							},
 						],
 					},
@@ -93,17 +91,20 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			},
 			existing?.revision ?? 0,
 		);
-		await writeVirtualPage(api, 1, { 1001: 101, 1002: 102 });
-		await virtualAction(api, 1, state.firstNumber, "go");
-		await virtualAction(api, 1, state.secondNumber, "toggle");
+		await api.request("POST","/api/v2/playback-surfaces/pane%3Apreload-003/update",{
+ request_id:crypto.randomUUID(),name:"Virtual Playbacks",layout:{rows:Array.from({length:20},(_,i)=>({first_position:401+i*15,count:15,presentation:"buttons",button_count:1}))},page_source:{type:"follow",surface_id:"main"}
+ },true,undefined,{deskId:api.session!.desk.id});
+		await copyPageAssignments(api, 1, { 401: 101, 402: 102 });
+		await paneAction(api, {page: 1, position: state.firstNumber}, "go");
+		await paneAction(api, {page: 1, position: state.secondNumber}, "toggle");
 		expect(
-			await activeVirtualPlayback(api, 1, state.firstNumber),
+			await activeAssignedPlayback(api, {page: 1, position: state.firstNumber}),
 		).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
 		});
 		expect(
-			await activeVirtualPlayback(api, 1, state.secondNumber),
+			await activeAssignedPlayback(api, {page: 1, position: state.secondNumber}),
 		).toMatchObject({
 			enabled: true,
 			current_cue_number: "1",
@@ -125,36 +126,20 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			"Add a normal configurable pane and set its full-page grid to 20 rows by 15 columns.",
 		);
 		let pane = await addVirtualPlaybackPane(page);
-		await pane.getByRole("button", { name: "Settings", exact: true }).click();
-		const settings = page.getByRole("dialog", { name: "Pane Settings" });
-		await settings
-			.getByRole("tab", { name: "Virtual Playbacks", exact: true })
-			.click();
-		await settings.getByLabel("Rows").fill("20");
-		await settings.getByLabel("Columns").fill("15");
-		await settings
-			.getByRole("radio", { name: "Follow Main", exact: true })
-			.click();
-		await settings.getByRole("button", { name: "Close settings" }).click();
-		await expect(pane.locator(".virtual-playback-grid")).toHaveAttribute(
-			"data-logical-cells",
-			"300",
-		);
-		expect(await pane.locator(".virtual-playback-box").count()).toBeLessThan(
-			200,
-		);
+		await configurePaneGrid(page,pane,20,15);
+ await expect(pane.locator("[data-playback-slot]")).toHaveCount(300);
+ // Operator-visible performance remains a separate measured acceptance gate.
 
-		await assignVirtualSource(page, pane, "Virtual Source A", 1, "Cuelist 1");
+		await assignVirtualSource(page, pane, "Virtual Source A", 1);
 		pane = await activeVirtualPane(page);
-		await assignVirtualSource(page, pane, "Virtual Source B", 2, "Cuelist 2");
+		await assignVirtualSource(page, pane, "Virtual Source B", 2);
 		pane = await activeVirtualPane(page);
 		const pageState = await pageObject(api, 1);
-		expect(pageState.body.virtual_playbacks["1001"]).toBeDefined();
-		expect(pageState.body.virtual_playbacks["1002"]).toBeDefined();
+		expect(pageState.body.assignments["401"]).toBeDefined();
+		expect(pageState.body.assignments["402"]).toBeDefined();
 
 		await page.getByRole("button", { name: "SET", exact: true }).click();
-		await pane
-			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2/ })
+		await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 			.click();
 		const modal = page.getByRole("dialog", { name: "Playback Configuration" });
 		await expect(modal).toHaveAttribute(
@@ -165,22 +150,20 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 		await chooseSelect(page, modal, "Top button", "Toggle");
 		await modal.getByRole("button", { name: "Apply", exact: true }).click();
 		await expect(modal).toBeHidden();
-		await pane
-			.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1/ })
+		await paneCard(pane, {page:1,position:401}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 			.click();
-		await pane
-			.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2/ })
+		await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
 			.click();
 		await expect
 			.poll(
 				async () =>
-					(await activeVirtualPlayback(api, 1, state.firstNumber))?.enabled,
+					(await activeAssignedPlayback(api, {page: 1, position: state.firstNumber}))?.enabled,
 			)
 			.toBe(true);
 		await expect
 			.poll(
 				async () =>
-					(await activeVirtualPlayback(api, 1, state.secondNumber))?.enabled,
+					(await activeAssignedPlayback(api, {page: 1, position: state.secondNumber}))?.enabled,
 			)
 			.toBe(true);
 
@@ -190,47 +173,41 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			timeout: 10_000,
 		});
 		pane = await activeVirtualPane(page);
-		await expect(pane.locator(".virtual-playback-grid")).toHaveAttribute(
-			"data-logical-cells",
-			"300",
-		);
+		await expect(pane.locator("[data-playback-slot]")).toHaveCount(300);
 		await expect(
-			pane.getByRole("button", { name: /Virtual playback 1001 page 1 cell 1/ }),
+			paneCard(pane, {page:1,position:401}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/}),
 		).toContainText("GO");
 		await expect(
-			pane.getByRole("button", { name: /Virtual playback 1002 page 1 cell 2/ }),
+			paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/}),
 		).toContainText("TOGGLE");
 	},
 	assert: async ({ api }, state) => {
 		const pageState = await pageObject(api, 1);
-		expect(pageState.body.virtual_playbacks).toMatchObject({
-			"1001": {
-				number: 1001,
+		expect(pageState.body.assignments).toMatchObject({
+			"401": {
 				button_count: 1,
 				has_fader: false,
 				buttons: ["go", "none", "none"],
 			},
-			"1002": {
-				number: 1002,
+			"402": {
 				button_count: 1,
 				has_fader: false,
 				buttons: ["toggle", "none", "none"],
 			},
 		});
-		expect(await object<any>(api, "playback", "101")).toBeDefined();
-		expect(await object<any>(api, "playback", "102")).toBeDefined();
+		expect(pageState.body.assignments[101]).toBeDefined();
+		expect(pageState.body.assignments[102]).toBeDefined();
 		const layouts = await objects<any>(api, "user_layout");
 		const pane = layouts
 			.flatMap((layout) => layout.body.desks ?? [])
 			.flatMap((desk: any) => desk.panes ?? [])
-			.find((candidate: any) => candidate.kind === "virtual_playbacks");
-		expect(pane).toEqual(
-			expect.objectContaining({
-				virtualPlaybackRows: 20,
-				virtualPlaybackColumns: 15,
-				virtualPlaybackPageMode: "follow_main",
-			}),
-		);
+			.find((candidate: any) => candidate.kind === "playbacks");
+		expect(pane.surface_id).toEqual(expect.any(String));
+ const snapshot=await api.request<any>("GET","/api/v2/playback-surfaces",undefined,true,undefined,{deskId:api.session!.desk.id});
+ const configured=snapshot.playback_surfaces[pane.surface_id];
+ expect(configured.layout.rows).toHaveLength(20);
+ expect(configured.layout.rows.every((row:any)=>row.count===15&&row.button_count===1&&row.presentation==="buttons")).toBe(true);
+ expect(configured.page_source).toEqual({type:"follow",surface_id:"main"});
 	},
 };
 

@@ -9,7 +9,7 @@ export async function openPlaybackMode(page: Page) {
 
 export function playbackCard(page: Page, slotNumber: number): Locator {
 	return page.locator(
-		`.playback-fader-bank article[data-playback-slot="${slotNumber}"]`,
+		`.playback-fader-bank article[data-page="1"][data-playback-slot="${slotNumber}"]`,
 	);
 }
 
@@ -50,7 +50,7 @@ export async function activeVirtualPane(page: Page): Promise<Locator> {
 			.click();
 	const pane = page
 		.locator(".desk-pane")
-		.filter({ hasText: "Virtual Playbacks" });
+		.filter({ has: page.locator(".playback-fader-bank") });
 	await expect(pane).toBeVisible();
 	return pane;
 }
@@ -60,28 +60,17 @@ export async function assignVirtualSource(
 	pane: Locator,
 	sourceName: string,
 	cell: number,
-	sourceOption: string,
 ) {
-	await pane
-		.getByRole("button", {
-			name: new RegExp(`Virtual playback ${1000 + cell} page 1 cell ${cell} empty`),
-		})
-		.click({ button: "right" });
+	await paneCard(pane,{page:1,position:400+cell}).click({button:"right"});
 	const modal = page.getByRole("dialog", { name: "Playback Configuration" });
 	await expect(modal).toBeVisible();
 	await modal.getByLabel("Playback name").fill(sourceName);
 	await modal
-		.getByRole("radio", { name: sourceOption, exact: true })
+		.getByRole("radio", { name: sourceName, exact: true })
 		.click();
 	await modal.getByRole("button", { name: "Apply", exact: true }).click();
 	await expect(modal).toBeHidden();
-	await expect(
-		pane.getByRole("button", {
-			name: new RegExp(
-				`Virtual playback ${1000 + cell} page 1 cell ${cell} ${escapeRegExp(sourceName)}`,
-			),
-		}),
-	).toBeVisible();
+	await expect(paneCard(pane,{page:1,position:400+cell})).toContainText(sourceName);
 }
 
 async function showDockMode(
@@ -133,4 +122,38 @@ export async function longPressPreload(page: Page) {
 
 function escapeRegExp(value: string) {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function paneCard(pane:Locator,address:{page:number;position:number}):Locator {
+ return pane.locator(`[data-page="${address.page}"][data-playback-slot="${address.position}"]`);
+}
+export async function activatePaneCard(pane:Locator,address:{page:number;position:number}) {
+ await paneCard(pane,address).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/}).click();
+}
+export async function configurePaneGrid(page:Page,pane:Locator,rows:number,columns:number,pinnedPage?:number) {
+ await pane.getByRole("button",{name:"Settings",exact:true}).click();
+ const settings=page.getByRole("dialog",{name:"Pane Settings"});
+ await settings.getByRole("tab",{name:"Virtual Playbacks",exact:true}).click();
+ await settings.getByRole("button",{name:"Configure layout and page source"}).click();
+ const layout=page.getByRole("dialog",{name:"Configure Playbacks"});
+ while(await layout.locator("[data-playback-row-index]").count()>rows) await layout.getByRole("button",{name:/^Remove row /}).last().click();
+ await layout.locator("[data-playback-row-index]").first().getByLabel("Playbacks in row").fill(String(columns));
+ while(await layout.locator("[data-playback-row-index]").count()<rows) await layout.getByRole("button",{name:"Add Row",exact:true}).click();
+ for(let index=0;index<rows;index++) {
+ const row=layout.locator("[data-playback-row-index]").nth(index);
+ await row.getByLabel("First Playback Number").fill(String(401+index*columns));
+ await row.getByLabel("Playbacks in row").fill(String(columns));
+ await row.getByLabel("Buttons",{exact:true}).fill("1");
+ await chooseLayoutOption(page,row,"Presentation","Buttons");
+ }
+ await chooseLayoutOption(page,layout,"Page source",pinnedPage===undefined?"Follow surface":"Pinned page");
+ if(pinnedPage!==undefined) await layout.getByLabel("Page",{exact:true}).fill(String(pinnedPage));
+ else await chooseLayoutOption(page,layout,"Follow surface","Main");
+ await layout.getByRole("button",{name:"Apply",exact:true}).click();
+ await expect(layout).toBeHidden();
+ await settings.getByRole("button",{name:"Close settings"}).click();
+}
+async function chooseLayoutOption(page:Page,container:Locator,label:string,option:string) {
+ await container.getByText(label,{exact:true}).locator("..").getByRole("button").click();
+ await page.getByRole("listbox").getByRole("option",{name:option,exact:true}).click();
 }
