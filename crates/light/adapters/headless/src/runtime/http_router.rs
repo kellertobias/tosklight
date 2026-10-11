@@ -224,6 +224,7 @@ fn cors_layer() -> CorsLayer {
             header::HeaderName::from_static("x-light-desk-token"),
             header::HeaderName::from_static("x-tosk-desk"),
             header::HeaderName::from_static("x-tosk-show"),
+            header::HeaderName::from_static(auth_backup::SCREEN_CONTEXT_HEADER),
         ])
         .expose_headers([
             header::ETAG,

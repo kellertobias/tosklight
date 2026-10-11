@@ -302,3 +302,30 @@ async fn the_programmer_answers_on_its_canonical_routes_and_the_named_user_ones_
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+/// Native screen webviews make cross-origin authenticated reads with their screen context.
+#[tokio::test]
+async fn native_screen_cors_preflight_allows_authenticated_screen_context() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    for origin in ["tauri://localhost", "http://tauri.localhost"] {
+        let response = app.clone().oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/v2/bootstrap")
+                .header("origin", origin)
+                .header("access-control-request-method", "GET")
+                .header("access-control-request-headers", "authorization,x-light-desk-token,x-tosk-desk,x-tosk-screen")
+                .body(Body::empty()).unwrap()
+        ).await.unwrap();
+        assert!(response.status().is_success());
+        let allowed = response.headers().get("access-control-allow-headers").unwrap().to_str().unwrap();
+        for required in ["authorization", "x-light-desk-token", "x-tosk-desk", "x-tosk-screen"] {
+            assert!(allowed.split(',').any(|header| header.trim().eq_ignore_ascii_case(required)),
+                "native screen preflight from {origin} must allow {required}; got {allowed}");
+        }
+    }
+    drop(app);
+    drop(state);
+    std::fs::remove_dir_all(data_dir).unwrap();
+}
