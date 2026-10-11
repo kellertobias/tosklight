@@ -10,15 +10,18 @@ import type { PlaybackBankController } from "./controller";
 
 export function PlaybackCommandTargetBadge({
 	command,
+	compact = false,
 }: {
 	command: "record" | "set" | "off";
+	compact?: boolean;
 }) {
 	return (
 		<div
 			className={`playback-command-target-badge ${command}`}
 			aria-hidden="true"
 		>
-			{command.toUpperCase()} TARGET
+			{command.toUpperCase()}
+			{compact ? "" : " TARGET"}
 		</div>
 	);
 }
@@ -58,7 +61,7 @@ export function PlaybackAssignmentTarget({
 			aria-label={`Assign Cuelist ${controller.state.cueListSetTarget} to page ${controller.activePageNumber} playback ${slot}`}
 			onClick={() => void assignPlayback(controller, slot)}
 		>
-			<PlaybackCommandTargetBadge command="set" />
+			<PlaybackCommandTargetBadge command="set" compact />
 			<b>Assign Cuelist {controller.state.cueListSetTarget}</b>
 			<small>
 				to playback {controller.activePageNumber}.{slot}
@@ -84,7 +87,7 @@ export function PlaybackConfigurationTarget({
 			title={`Configure Playback ${controller.activePageNumber}.${slot} · ${playback?.name ?? "Empty"}`}
 			aria-hidden="true"
 		>
-			<PlaybackCommandTargetBadge command="set" />
+			<PlaybackCommandTargetBadge command="set" compact />
 			<b title="Configure Playback">Configure</b>
 			<small>
 				{controller.activePageNumber}.{slot}

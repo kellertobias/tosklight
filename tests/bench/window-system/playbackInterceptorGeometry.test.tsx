@@ -50,6 +50,11 @@ createRoot(document.getElementById('app')).render(<section className="playback-f
 		for (const file of bundle.outputFiles.filter((f) => f.path.endsWith(".js")))
 			await page.addScriptTag({ content: file.text });
 		await page.locator(".playback-configuration-target").first().waitFor();
+		expect(
+			await page
+				.locator(".playback-configuration-target .playback-command-target-badge")
+				.allTextContents(),
+		).toEqual(["SET", "SET"]);
 		await page.screenshot({ path: resolve(evidence, "interceptors.png") });
 		const boxes = await page
 			.locator(".playback-configuration-target")

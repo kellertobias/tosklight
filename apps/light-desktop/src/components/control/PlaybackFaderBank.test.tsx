@@ -1135,7 +1135,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			"playback-command-target",
 			"command-target-set",
 		);
-		expect(screen.getByText("SET TARGET")).toBeInTheDocument();
+		expect(screen.getByText("SET", { exact: true })).toBeInTheDocument();
 		fireEvent.pointerDown(target(), { pointerId: 3 });
 		expect(
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
@@ -1250,7 +1250,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			"playback-command-target",
 			"command-target-set",
 		);
-		expect(screen.getByText("SET TARGET")).toBeInTheDocument();
+		expect(screen.getByText("SET", { exact: true })).toBeInTheDocument();
 		fireEvent.pointerDown(target(), { pointerId: 3 });
 		expect(
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
