@@ -27,7 +27,11 @@ ps() {
       "12 $TARGET_DIR/debug/light-headless --bind 127.0.0.1:5029 --data-dir /other/data" \
       "13 $TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-desktop" \
       "14 $TEST_SERVER_COMMAND" \
-      "15 /other/ToskLight.app/Contents/MacOS/light-desktop"
+      "15 /other/ToskLight.app/Contents/MacOS/light-desktop" \
+      "16 $TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless --data-dir $DATA_DIR --fixture-package-dir $FIXTURE_LIBRARY_DIR --bind $LIGHT_DESKTOP_TEST_BIND --osc-bind $LIGHT_DESKTOP_TEST_OSC_BIND" \
+      "17 $TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless --data-dir $DATA_DIR --bind 127.0.0.1:5029 --osc-bind $LIGHT_DESKTOP_TEST_OSC_BIND" \
+      "18 $TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless --data-dir $DATA_DIR --bind ${LIGHT_DESKTOP_TEST_BIND}0 --osc-bind $LIGHT_DESKTOP_TEST_OSC_BIND" \
+      "19 $TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/light-headless --data-dir ${DATA_DIR}-other --bind $LIGHT_DESKTOP_TEST_BIND --osc-bind $LIGHT_DESKTOP_TEST_OSC_BIND"
   else printf '%s\n' "$TEST_PROCESS_COMMAND"; fi
 }
 kill() {
@@ -43,8 +47,11 @@ light_configure_desktop_test_runtime
 [[ "$DATA_DIR" == "$LIGHT_DESKTOP_TEST_DATA_DIR" ]]
 [[ "$TEST_SERVER_LABEL" == de.tokenet.tosklight.test-server.* ]]
 light_stop_desktop_test_runtime
-[[ "${CALLS[*]}" == "launchctl remove $TEST_SERVER_LABEL kill 13 kill 14" ]]
-printf 'PASS exact own-path stopping preserves unrelated worktree and same-binary other bind\n'
+if [[ "${CALLS[*]}" != "launchctl remove $TEST_SERVER_LABEL kill 13 kill 14 kill 16" ]]; then
+  printf 'FAIL owned bundled helper stopping: %s\n' "${CALLS[*]}" >&2
+  exit 1
+fi
+printf 'PASS exact own-path stopping includes bundled helper with trailing OSC and preserves other bind, prefix-collision port and other data\n'
 
 CALLS=()
 EMPTY_OWN=1

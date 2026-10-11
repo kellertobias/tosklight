@@ -52,7 +52,9 @@ light_stop_desktop_test_runtime() {
         own_pids+=("$pid")
         kill "$pid" 2>/dev/null || true ;;
       "$app/light-headless --data-dir $DATA_DIR "*)
-        if [[ "$command" == *" --bind $LIGHT_DESKTOP_TEST_BIND" ]]; then
+        # Pad the command so bind must be a complete argument, wherever it appears.
+        # The native bundled helper appends --osc-bind after --bind.
+        if [[ " $command " == *" --bind $LIGHT_DESKTOP_TEST_BIND "* ]]; then
           own_pids+=("$pid")
           kill "$pid" 2>/dev/null || true
         fi ;;
