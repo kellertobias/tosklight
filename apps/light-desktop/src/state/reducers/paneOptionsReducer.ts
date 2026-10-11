@@ -28,6 +28,11 @@ export function reducePaneOptions(
 	action: Action,
 ): AppState | undefined {
 	switch (action.type) {
+		case "SET_FILE_MANAGER_SHOW_HIDDEN":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				fileManagerShowHidden: action.value,
+			}));
 		case "SET_PANE_FIXTURE_OPTIONS":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,
