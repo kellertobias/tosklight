@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tools/artifact-paths.sh"
 source "$ROOT/tools/artifact-maintenance.sh"
 source "$ROOT/tools/cargo-command-lock.sh"
+source "$ROOT/tools/build-test-runtime.sh"
 light_init_artifact_paths "$ROOT"
 UI_DIR="$ROOT/apps/light-desktop"
 HARDWARE_DIR="$ROOT/apps/light-hardware-controls"
@@ -65,6 +66,12 @@ tools/build.sh is invoked by the root package.json scripts:
 
 Direct subcommands: open | build-open | open-hardware-controls | build-hardware-controls-open | open-media [ARGS...] | build-media-open [ARGS...] | build-media | open-viz [ARGS...] | build-viz-open [ARGS...] | build-viz | open-viz-editor [ARGS...] | build-viz-editor-open [ARGS...] | build-viz-editor | demo-show | demo-capture | manual | icon-contact-sheets | models [verify|render|open] | safari | pages | pages-serve [PORT] | codesafari |
   archive [install] | migrate-artifacts | clean-root | clean-cargo-incremental | clean-artifacts [runtime PATH] | path NAME
+
+Isolated main-desk acceptance (open or build:open): set all three variables:
+  LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004
+  LIGHT_DESKTOP_TEST_OSC_BIND=127.0.0.1:19000
+  LIGHT_DESKTOP_TEST_DATA_DIR=/absolute/path/to/.artifacts/runtime/native-acceptance
+Only this worktree bundle and selected test service are stopped. Other previews stay running.
 EOF
 }
 
@@ -342,6 +349,11 @@ require_built_app() {
 }
 
 stop_running() {
+  if light_desktop_test_runtime_requested; then
+    light_configure_desktop_test_runtime
+    light_stop_desktop_test_runtime
+    return
+  fi
   echo "Stopping running Light instances..."
   launchctl remove "$DEV_SERVER_LABEL" 2>/dev/null || true
   pkill -x light-headless 2>/dev/null || true
@@ -425,6 +437,13 @@ open_debug_app() {
   local server="$TARGET_DIR/debug/light-headless"
   require_built_app "$app" "npm run build:open"
   require_built_file "$server" "npm run build:open"
+  if light_desktop_test_runtime_requested; then
+    light_configure_desktop_test_runtime
+    light_stop_desktop_test_runtime
+    light_start_desktop_test_runtime
+    light_open_desktop_test_app
+    return
+  fi
   light_check_runtime_migration
 
   if curl -fsS http://127.0.0.1:5000/api/v2/readiness >/dev/null 2>&1; then
@@ -446,6 +465,9 @@ build_debug_and_open() {
   require curl
   require open
 
+  if light_desktop_test_runtime_requested; then
+    light_configure_desktop_test_runtime
+  fi
   light_check_runtime_migration
   stop_running
   write_tauri_configs
@@ -459,6 +481,11 @@ build_debug_and_open() {
   cargo build --manifest-path "$ROOT/Cargo.toml" -p viz-renderer --bin viz-renderer
   cp "$TARGET_DIR/debug/viz-renderer" "$TARGET_DIR/debug/bundle/macos/ToskLight.app/Contents/MacOS/viz-renderer"
   bash "$ROOT/tools/seal-macos-app.sh" "$TARGET_DIR/debug/bundle/macos/ToskLight.app"
+  if light_desktop_test_runtime_requested; then
+    light_start_desktop_test_runtime
+    light_open_desktop_test_app
+    return
+  fi
   echo "Starting development Light headless service..."
   launchctl submit -l "$DEV_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- "$TARGET_DIR/debug/light-headless" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
   wait_for_launchd_server

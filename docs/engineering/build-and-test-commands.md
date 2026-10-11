@@ -79,6 +79,28 @@ Open `http://127.0.0.1:5000`. A new desk contains one enabled `Operator` user.
 | `npm run clean -- runtime PATH` | Removes runtime data. Deliberately separate and requires the exact absolute path, because it includes local shows and desk state. |
 | `npm run artifact-path -- NAME` | Prints a resolved path: `root, cargo, manual-pdf, manual-html, release, runtime, test-results, playwright-report, visual-inspection`. |
 
+For native acceptance alongside another worktree or preview, give `open` or `build:open` all
+three explicit test overrides. The normal launch path and its default ports stay unchanged.
+
+```sh
+test_data="$(npm run --silent artifact-path -- root)/runtime/native-acceptance"
+LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004 \
+LIGHT_DESKTOP_TEST_OSC_BIND=127.0.0.1:19000 \
+LIGHT_DESKTOP_TEST_DATA_DIR="$test_data" npm run build:open
+# Use the same three overrides with npm run open to relaunch without rebuilding.
+```
+
+Test binds must be loopback IPv4 addresses with ports 1–65535; the data directory must be absolute.
+An incomplete override fails before stopping anything. This mode stops only the exact worktree
+bundle and its matching test server, using a worktree/data/HTTP-scoped launchd label. It starts the
+server with explicit HTTP, OSC and data arguments, verifies its own PID command and both port
+owners, then polls the selected `/api/v2/readiness`. An occupied unrelated HTTP or OSC port is an
+error. Isolated `open` also restarts only this matching service and bundle without rebuilding.
+The freshly opened bundle receives the existing Tauri test HTTP/data environment through
+`open -n --env`; it attaches to that verified service. Unrelated previews and their services stay
+running. Server output is in the selected data directory's `light-headless.log`. Stop that isolated
+service before changing its OSC bind, or reuse the same three overrides consistently.
+
 Why can `npm run build:open` still take minutes after a small UI change? The production web bundle
 is embedded in both the headless server (`crates/light/adapters/headless`) and the Tauri app. A new
 bundle therefore invalidates both Rust consumers and requires two native links. On the measured
