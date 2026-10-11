@@ -98,6 +98,7 @@ fn may_change_unprojected_runtime(action: light_engine::PlaybackAction) -> bool 
             | light_engine::PlaybackAction::Load(_)
             | light_engine::PlaybackAction::SetMaster(_)
             | light_engine::PlaybackAction::SetConfiguredFader { .. }
+            | light_engine::PlaybackAction::SetConfiguredFaderAbsolute { .. }
             | light_engine::PlaybackAction::XFade(_)
     )
 }
@@ -109,7 +110,7 @@ pub(super) fn apply_playback_master(
     address: light_playback::PlaybackAddress,
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
-    source: &str,
+    absolute: bool,
     control_source: &light_playback::PlaybackControlSource,
     activation_origin: Option<light_playback::PlaybackActivationOrigin>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
@@ -129,9 +130,16 @@ pub(super) fn apply_playback_master(
         let mut outcome = execute_addressed(
             state,
             address,
-            light_engine::PlaybackAction::SetConfiguredFader {
-                mode: definition.fader,
-                value,
+            if absolute {
+                light_engine::PlaybackAction::SetConfiguredFaderAbsolute {
+                    mode: definition.fader,
+                    value,
+                }
+            } else {
+                light_engine::PlaybackAction::SetConfiguredFader {
+                    mode: definition.fader,
+                    value,
+                }
             },
             control_source,
             activation_origin,
@@ -151,6 +159,7 @@ pub(super) fn apply_playback_master(
         definition,
         input,
         value,
+        absolute,
         control_source,
     )
 }

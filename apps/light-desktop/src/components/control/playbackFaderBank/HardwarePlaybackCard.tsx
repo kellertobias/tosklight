@@ -155,7 +155,7 @@ export function HardwarePlaybackCard({
 					playback &&
 					void controller.runtimeActions?.playbackAction(
 						playback.address,
-						"master",
+						"master-absolute",
 						{
 							value: next / 100,
 							control_source: {

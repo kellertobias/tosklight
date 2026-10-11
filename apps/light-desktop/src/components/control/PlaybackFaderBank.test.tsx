@@ -767,7 +767,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		fireEvent.pointerUp(encoder, { pointerId: 73, clientY: 160 });
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
 			{ page: 1, position: 301 },
-			"master",
+			"master-absolute",
 			{
 				value: expect.any(Number),
 				control_source: {
@@ -778,6 +778,20 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		);
 		expect(mocks.poolPlaybackAction.mock.calls.at(-1)?.[2].value).toBeLessThan(
 			1,
+		);
+		mocks.poolPlaybackAction.mockClear();
+		fireEvent.wheel(encoder, { deltaY: 100 });
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 301 },
+			"master-absolute",
+			{
+				value: expect.any(Number),
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 7,
+				},
+			},
 		);
 		expect(
 			cards
@@ -946,6 +960,21 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			},
 		);
 		expect(screen.getAllByRole("slider")).toHaveLength(2);
+		fireEvent.change(screen.getByLabelText("Right fader · x fade"), {
+			target: { value: "25" },
+		});
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 },
+			"configured-fader-absolute",
+			{
+				fader: 2,
+				value: 0.25,
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 8,
+				},
+			},
+		);
 	});
 
 	it.each([
@@ -1508,7 +1537,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
 			{ page: 1, position: 1 },
-			"master",
+			"master-absolute",
 			{
 				value: 0.42,
 				control_source: {
@@ -1814,7 +1843,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			await waitFor(() =>
 				expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
 					{ page: 1, position: 1 },
-					"master",
+					"master-absolute",
 					{
 						value: 1,
 						control_source: {
@@ -1837,7 +1866,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		await waitFor(() =>
 			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
 				{ page: 1, position: 1 },
-				"master",
+				"master-absolute",
 				{
 					value: 0.13,
 					control_source: {
@@ -1852,7 +1881,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		await waitFor(() =>
 			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
 				{ page: 1, position: 1 },
-				"master",
+				"master-absolute",
 				{
 					value: 0.42,
 					control_source: {
@@ -1867,7 +1896,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				([address, action, options]) =>
 					address.page === 1 &&
 					address.position === 1 &&
-					action === "master" &&
+					action === "master-absolute" &&
 					options.control_source.surface_id ===
 						mocks.poolPlaybackAction.mock.calls[0][2].control_source.surface_id,
 			),

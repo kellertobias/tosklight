@@ -34,10 +34,21 @@ pub(super) fn configured_control_definition(
             resolved.has_fader = true;
             PlaybackAction::Master(level)
         }
+        PlaybackAction::ConfiguredFaderAbsolute { number: 1, level } => {
+            PlaybackAction::MasterAbsolute(level)
+        }
+        PlaybackAction::ConfiguredFaderAbsolute { number: 2, level } => {
+            let PlaybackFootprint::Wider { right_fader, .. } = &definition.footprint else {
+                return Err(invalid("fader is not present on this playback"));
+            };
+            resolved.fader = *right_fader;
+            resolved.has_fader = true;
+            PlaybackAction::MasterAbsolute(level)
+        }
         PlaybackAction::ConfiguredButton { .. } => {
             return Err(invalid("configured button number must be within 1-6"));
         }
-        PlaybackAction::ConfiguredFader { .. } => {
+        PlaybackAction::ConfiguredFader { .. } | PlaybackAction::ConfiguredFaderAbsolute { .. } => {
             return Err(invalid("configured fader number must be within 1-2"));
         }
         action => action,

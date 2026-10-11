@@ -127,7 +127,12 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
         Wire::Master { value } if value.is_finite() && (0.0..=1.0).contains(&value) => {
             App::Master(application::PlaybackLevel::new(value))
         }
-        Wire::Master { .. } => return Err("master value must be finite and within 0-1".into()),
+        Wire::MasterAbsolute { value } if value.is_finite() && (0.0..=1.0).contains(&value) => {
+            App::MasterAbsolute(application::PlaybackLevel::new(value))
+        }
+        Wire::MasterAbsolute { .. } | Wire::Master { .. } => {
+            return Err("master value must be finite and within 0-1".into());
+        }
         Wire::GoTo { cue_number } => App::GoTo(
             cue_number
                 .parse()
@@ -156,6 +161,20 @@ fn application_action(action: wire::PlaybackAction) -> Result<application::Playb
             return Err("fader number must be within 1-2".into());
         }
         Wire::ConfiguredFader { .. } => {
+            return Err("fader level must be finite and within 0-1".into());
+        }
+        Wire::ConfiguredFaderAbsolute { number, level }
+            if (1..=2).contains(&number) && level.is_finite() && (0.0..=1.0).contains(&level) =>
+        {
+            App::ConfiguredFaderAbsolute {
+                number,
+                level: application::PlaybackLevel::new(level),
+            }
+        }
+        Wire::ConfiguredFaderAbsolute { number, .. } if !(1..=2).contains(&number) => {
+            return Err("fader number must be within 1-2".into());
+        }
+        Wire::ConfiguredFaderAbsolute { .. } => {
             return Err("fader level must be finite and within 0-1".into());
         }
     })

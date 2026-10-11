@@ -157,3 +157,34 @@ fn expanded_configured_controls_are_validated_and_preserve_identity() {
         assert!(application_command(invalid).is_err(), "{label}");
     }
 }
+
+#[test]
+fn software_absolute_actions_are_distinct_and_validate_levels_and_configured_controls() {
+    for (body, expected) in [
+        (
+            serde_json::json!({"type":"master_absolute","value":0.999}),
+            application::PlaybackAction::MasterAbsolute(application::PlaybackLevel::new(0.999)),
+        ),
+        (
+            serde_json::json!({"type":"configured_fader_absolute","number":2,"level":0.25}),
+            application::PlaybackAction::ConfiguredFaderAbsolute {
+                number: 2,
+                level: application::PlaybackLevel::new(0.25),
+            },
+        ),
+    ] {
+        let mut request = request("software:encoder");
+        request.action = serde_json::from_value(body).unwrap();
+        assert_eq!(application_command(request).unwrap().action, expected);
+    }
+    for body in [
+        serde_json::json!({"type":"master_absolute","value":-0.1}),
+        serde_json::json!({"type":"master_absolute","value":1.1}),
+        serde_json::json!({"type":"configured_fader_absolute","number":3,"level":0.5}),
+        serde_json::json!({"type":"configured_fader_absolute","number":1,"level":1.1}),
+    ] {
+        let mut request = request("software:encoder");
+        request.action = serde_json::from_value(body).unwrap();
+        assert!(application_command(request).is_err());
+    }
+}

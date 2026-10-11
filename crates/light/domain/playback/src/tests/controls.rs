@@ -1458,3 +1458,49 @@ fn dynamic_playback_tap_learns_local_cycle_and_double_half_adjust_it() {
         None
     );
 }
+
+#[test]
+fn absolute_configured_dynamic_fader_retargets_physical_without_pickup_or_forced_activation() {
+    let definition = dynamic_playback_definition(18, DynamicPlaybackFaderMode::Master, false);
+    let mut engine = PlaybackEngine::default();
+    engine
+        .register_definition(address(18), definition.clone())
+        .unwrap();
+    engine.on(address(18)).unwrap();
+    let hardware = test_source(1);
+    let software = test_source(2);
+    engine
+        .set_configured_fader_mutation(address(18), &hardware, definition.fader, 0.2)
+        .unwrap();
+    assert!(
+        engine
+            .control_state(address(18), &hardware)
+            .fader_pickup_required
+    );
+    engine
+        .set_configured_fader_absolute_mutation(address(18), &software, definition.fader, 0.4)
+        .unwrap();
+    assert_eq!(engine.active_dynamic_playbacks()[0].master, 0.4);
+    assert_eq!(
+        engine
+            .control_state(address(18), &hardware)
+            .fader_pickup_target,
+        Some(0.4)
+    );
+    assert_eq!(
+        engine.control_state(address(18), &hardware).fader_position,
+        0.2
+    );
+    assert!(
+        !engine
+            .control_state(address(18), &software)
+            .fader_pickup_required
+    );
+    engine
+        .set_configured_fader_absolute_mutation(address(18), &software, definition.fader, 0.0)
+        .unwrap();
+    assert!(
+        !engine.active_dynamic_playbacks()[0].enabled,
+        "zero must honor authored Dynamic auto-off=true"
+    );
+}

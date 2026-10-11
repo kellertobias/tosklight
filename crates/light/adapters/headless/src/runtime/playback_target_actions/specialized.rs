@@ -8,10 +8,19 @@ pub(super) fn apply_specialized_master(
     definition: &light_playback::PlaybackDefinition,
     input: &PoolPlaybackInput,
     value: f32,
+    absolute: bool,
     control_source: &light_playback::PlaybackControlSource,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     match &definition.target {
         PlaybackTarget::Group { group_id, .. } => {
+            if absolute {
+                return set_group_playback_master(state, group_id, value).map(|changed| {
+                    PlaybackTargetOutcome {
+                        persistence: PlaybackPersistencePlan::output_runtime(),
+                        ..PlaybackTargetOutcome::changed(changed)
+                    }
+                });
+            }
             let authoritative = state
                 .output
                 .group_master(group_id)

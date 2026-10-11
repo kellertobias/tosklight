@@ -158,6 +158,9 @@ pub enum PlaybackAction {
     Master {
         value: f32,
     },
+    MasterAbsolute {
+        value: f32,
+    },
     GoTo {
         cue_number: String,
     },
@@ -176,6 +179,10 @@ pub enum PlaybackAction {
         pressed: bool,
     },
     ConfiguredFader {
+        number: u8,
+        level: f32,
+    },
+    ConfiguredFaderAbsolute {
         number: u8,
         level: f32,
     },

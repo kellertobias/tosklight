@@ -167,7 +167,7 @@ fn playback_action_timing(action: &light_wire::v2::playback::PlaybackAction) -> 
         PlaybackAction::Go { .. } => "playback_go",
         PlaybackAction::Flash { pressed: true } => "playback_flash_press",
         PlaybackAction::Flash { pressed: false } => "playback_flash_release",
-        PlaybackAction::Master { .. } => "playback_master",
+        PlaybackAction::Master { .. } | PlaybackAction::MasterAbsolute { .. } => "playback_master",
         PlaybackAction::Back { .. } => "playback_back",
         PlaybackAction::Pause { .. } => "playback_pause",
         PlaybackAction::Release => "playback_release",

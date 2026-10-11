@@ -403,6 +403,39 @@ impl PlaybackEngine {
         }
     }
 
+    pub fn set_configured_fader_absolute_mutation(
+        &mut self,
+        number: PlaybackAddress,
+        source: &PlaybackControlSource,
+        mode: PlaybackFaderMode,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
+        if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+            return Err("playback master must be within 0-1".into());
+        }
+        let definition = self
+            .definitions
+            .get(&number)
+            .ok_or("playback does not exist")?;
+        let available = (definition.has_fader && definition.fader == mode)
+            || matches!(&definition.footprint, PlaybackFootprint::Wider { right_fader, .. } if *right_fader == mode);
+        if !available {
+            return Err("fader is not present on this playback".into());
+        }
+        // A Dynamic Playback's fader is its master whatever the surface's configured mode.
+        if self.dynamic_assignment(number).is_some() {
+            return self.set_dynamic_fader_mutation_inner(number, source, value, false);
+        }
+        match mode {
+            PlaybackFaderMode::Temp => self.set_temp_fader_mutation(number, source, value),
+            PlaybackFaderMode::XFade => self.apply_configured_manual_xfade_mutation(number, value),
+            PlaybackFaderMode::Master => {
+                self.set_cuelist_master_mutation(number, source, value, false)
+            }
+            _ => Err("fader mode is not handled by the Cuelist engine".into()),
+        }
+    }
+
     fn validate_master(
         &self,
         number: PlaybackAddress,

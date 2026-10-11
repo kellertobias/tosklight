@@ -11,7 +11,9 @@ pub(super) fn execute(
     // A direct Group operand controls the shared target, irrespective of which
     // assignment currently displays it. Pickup belongs only to addressed faders.
     let changed = match action {
-        PlaybackAction::Master(level) => set_master(ports, context, group_id, level)?,
+        PlaybackAction::Master(level) | PlaybackAction::MasterAbsolute(level) => {
+            set_master(ports, context, group_id, level)?
+        }
         PlaybackAction::MasterTransition {
             level,
             duration_millis,

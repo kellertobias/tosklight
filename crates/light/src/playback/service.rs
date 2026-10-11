@@ -317,7 +317,10 @@ fn validate_address_action(
                 "configured button number must be within 1-6",
             ));
         }
-        super::PlaybackAction::ConfiguredFader { number, .. } if !(1..=2).contains(&number) => {
+        super::PlaybackAction::ConfiguredFader { number, .. }
+        | super::PlaybackAction::ConfiguredFaderAbsolute { number, .. }
+            if !(1..=2).contains(&number) =>
+        {
             return Err(ActionError::new(
                 ActionErrorKind::Invalid,
                 "configured fader number must be within 1-2",
@@ -329,6 +332,7 @@ fn validate_address_action(
         && !matches!(
             action,
             super::PlaybackAction::Master(_)
+                | super::PlaybackAction::MasterAbsolute(_)
                 | super::PlaybackAction::MasterTransition { .. }
                 | super::PlaybackAction::Flash { .. }
         )

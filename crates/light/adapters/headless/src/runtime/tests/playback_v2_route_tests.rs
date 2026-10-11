@@ -1598,6 +1598,74 @@ async fn physical_group_master_fader_holds_until_pickup_and_tracks_virtual_chang
 }
 
 #[tokio::test]
+async fn absolute_software_master_updates_group_and_retargets_physical_pickup() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+
+    let mut below = action_request(
+        "physical-group-master-below-pickup",
+        2,
+        serde_json::json!({"type":"master","value":0.2}),
+    );
+    below["control_source"] = serde_json::json!({"surface_id":"main","control_id":1});
+    let below = json(post_action(&app, Some(&token), desk_id, below).await).await;
+    assert_eq!(below["projection"]["master"], 0.75);
+    assert_eq!(below["projection"]["fader_position"], 0.2);
+    assert_eq!(below["projection"]["fader_pickup_required"], true);
+    assert_eq!(below["projection"]["fader_pickup_target"], 0.75);
+
+    let mut software_change = action_request(
+        "software-group-master-change",
+        2,
+        serde_json::json!({"type":"master_absolute","value":0.4}),
+    );
+    software_change["control_source"] =
+        serde_json::json!({"surface_id":"screen:push-encoder","control_id":301});
+    let virtual_change =
+        json(post_action(&app, Some(&token), desk_id, software_change).await).await;
+    assert_eq!(virtual_change["projection"]["master"], 0.4);
+    assert_eq!(virtual_change["projection"]["fader_pickup_required"], true);
+    assert_eq!(virtual_change["projection"]["fader_pickup_target"], 0.4);
+    let physical_source = light_playback::PlaybackControlSource {
+        surface_id: "main".into(),
+        control_id: 1,
+    }
+    .scoped_to_desk(desk_id)
+    .unwrap();
+    let address = light_playback::PlaybackAddress::new(1, 2).unwrap();
+    let physical = state
+        .output
+        .playback_control_state(address, &physical_source);
+    assert_eq!(physical.fader_position, 0.2);
+    assert!(physical.fader_pickup_required);
+    assert_eq!(physical.fader_pickup_target, Some(0.4));
+
+    let mut crossing = action_request(
+        "physical-group-master-crosses-pickup",
+        2,
+        serde_json::json!({"type":"master","value":0.5}),
+    );
+    crossing["control_source"] = serde_json::json!({"surface_id":"main","control_id":1});
+    let crossing = json(post_action(&app, Some(&token), desk_id, crossing).await).await;
+    assert_eq!(crossing["projection"]["master"], 0.5);
+    assert_eq!(crossing["projection"]["fader_position"], 0.5);
+    assert_eq!(crossing["projection"]["fader_pickup_required"], false);
+    assert!(crossing["projection"]["fader_pickup_target"].is_null());
+    let physical = state
+        .output
+        .playback_control_state(address, &physical_source);
+    assert_eq!(physical.fader_position, 0.5);
+    assert!(!physical.fader_pickup_required);
+    assert_eq!(physical.fader_pickup_target, None);
+
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn v2_group_runtime_is_the_desks_and_rejects_a_stale_show() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
@@ -3154,4 +3222,108 @@ fn playback_test_definition(
         presentation_image: None,
         target,
     }
+}
+
+#[tokio::test]
+async fn absolute_software_configured_right_xfade_preserves_mode_and_absent_fader_guard() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let mut snapshot = (*state.output.snapshot()).clone();
+    let pages = std::sync::Arc::make_mut(&mut snapshot.playback_pages);
+    let definition = pages[0].assignments.get_mut(&1).unwrap();
+    definition.has_fader = false;
+    definition.footprint = light_playback::PlaybackFootprint::Wider {
+        right_buttons: [light_playback::PlaybackButtonAction::None; 3],
+        right_fader: light_playback::PlaybackFaderMode::XFade,
+    };
+    state.output.replace_snapshot(snapshot).unwrap();
+    let response = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "software-right-xfade",
+            1,
+            serde_json::json!({"type":"configured_fader_absolute","number":2,"level":0.25}),
+        ),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let outcome = json(response).await;
+    assert_eq!(
+        outcome["projection"]["runtime"]["manual_xfade_progress"],
+        0.25
+    );
+    assert_eq!(outcome["projection"]["runtime"]["master"], 1.0);
+    let before = state.output.playback_runtime();
+    let absent = post_action(
+        &app,
+        Some(&token),
+        desk_id,
+        action_request(
+            "software-absent-left",
+            1,
+            serde_json::json!({"type":"configured_fader_absolute","number":1,"level":0.9}),
+        ),
+    )
+    .await;
+    assert_eq!(absent.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(state.output.playback_runtime(), before);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn absolute_software_specialized_masters_keep_speed_and_output_value_semantics() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let desk_id = session_desk_id(&state, &token);
+    open_playback_test_show(&app, &token).await;
+    install_playback_test_state(&state);
+    let mut snapshot = (*state.output.snapshot()).clone();
+    let pages = std::sync::Arc::make_mut(&mut snapshot.playback_pages);
+    for (position, target) in [
+        (
+            3,
+            light_playback::PlaybackTarget::SpeedGroup { group: "A".into() },
+        ),
+        (4, light_playback::PlaybackTarget::GrandMaster),
+        (5, light_playback::PlaybackTarget::ProgrammerFade),
+        (6, light_playback::PlaybackTarget::CueFade),
+    ] {
+        pages[0]
+            .assignments
+            .insert(position, playback_test_definition(position, target));
+    }
+    state.output.replace_snapshot(snapshot).unwrap();
+    for (position, path, expected) in [
+        (3, vec!["runtime", "speed_master_scale"], 0.5),
+        (4, vec!["runtime", "level"], 0.5),
+        (5, vec!["millis"], 10_000.0),
+        (6, vec!["millis"], 30_000.0),
+    ] {
+        let response = post_action(
+            &app,
+            Some(&token),
+            desk_id,
+            action_request(
+                "software-specialized-master",
+                position,
+                serde_json::json!({"type":"master_absolute","value":0.5}),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let outcome = json(response).await;
+        let mut value = &outcome["projection"];
+        for key in path {
+            value = &value[key];
+        }
+        assert!((value.as_f64().unwrap() - expected).abs() < 1e-6);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
 }

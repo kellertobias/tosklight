@@ -80,6 +80,10 @@ pub enum PlaybackAction {
         mode: light_playback::PlaybackFaderMode,
         value: f32,
     },
+    SetConfiguredFaderAbsolute {
+        mode: light_playback::PlaybackFaderMode,
+        value: f32,
+    },
     SetGroupMasterFader {
         value: f32,
         authoritative: f32,
@@ -606,6 +610,9 @@ pub(crate) fn execute_addressed(
             .into(),
         PlaybackAction::SetConfiguredFader { mode, value } => playback
             .set_configured_fader_mutation(number, source, mode, value)?
+            .into(),
+        PlaybackAction::SetConfiguredFaderAbsolute { mode, value } => playback
+            .set_configured_fader_absolute_mutation(number, source, mode, value)?
             .into(),
         PlaybackAction::SetGroupMasterFader {
             value,

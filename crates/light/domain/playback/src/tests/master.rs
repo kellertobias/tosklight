@@ -538,3 +538,119 @@ fn speed_group_legacy_fader_deserialization_is_refused_without_remapping() {
     .unwrap();
     assert_eq!(definition.fader, PlaybackFaderMode::LearnedPercentage);
 }
+
+#[test]
+fn absolute_configured_master_bypasses_pickup_and_preserves_authored_auto_off() {
+    let mut cue_list = list(vec![Cue::new("1".parse().unwrap())]);
+    cue_list.auto_off_at_zero = false;
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    engine
+        .register_definition(address(1), definition(1, id))
+        .unwrap();
+    engine.on(address(1)).unwrap();
+    let hardware = test_source(1);
+    engine
+        .set_configured_fader_mutation(address(1), &hardware, PlaybackFaderMode::Master, 0.2)
+        .unwrap();
+    assert!(
+        engine
+            .control_state(address(1), &hardware)
+            .fader_pickup_required
+    );
+    let software = test_source(2);
+    engine
+        .set_configured_fader_absolute_mutation(
+            address(1),
+            &software,
+            PlaybackFaderMode::Master,
+            0.4,
+        )
+        .unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.4);
+    assert!(engine.runtime()[0].enabled);
+    let physical = engine.control_state(address(1), &hardware);
+    assert_eq!(physical.fader_position, 0.2);
+    assert_eq!(physical.fader_pickup_target, Some(0.4));
+    engine
+        .set_configured_fader_mutation(address(1), &hardware, PlaybackFaderMode::Master, 0.3)
+        .unwrap();
+    assert_eq!(engine.runtime()[0].master, 0.4);
+    engine
+        .set_configured_fader_absolute_mutation(
+            address(1),
+            &software,
+            PlaybackFaderMode::Master,
+            0.0,
+        )
+        .unwrap();
+    assert!(
+        engine.runtime()[0].enabled,
+        "zero must retain authored auto-off=false"
+    );
+}
+
+#[test]
+fn absolute_configured_temp_and_xfade_preserve_their_control_semantics() {
+    let fixture = FixtureId::new();
+    let mut first = Cue::new("1".parse().unwrap());
+    first.changes.push(value(fixture, "intensity", 0.0));
+    let mut second = Cue::new("2".parse().unwrap());
+    second.changes.push(value(fixture, "intensity", 1.0));
+    let cue_list = list(vec![first, second]);
+    let id = cue_list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(cue_list).unwrap();
+    let mut configured = definition(1, id);
+    configured.footprint = PlaybackFootprint::Wider {
+        right_buttons: [PlaybackButtonAction::None; 3],
+        right_fader: PlaybackFaderMode::XFade,
+    };
+    engine.register_definition(address(1), configured).unwrap();
+    let source = test_source(1);
+    engine
+        .set_configured_fader_absolute_mutation(address(1), &source, PlaybackFaderMode::XFade, 0.25)
+        .unwrap();
+    assert_eq!(engine.runtime()[0].manual_xfade_progress, 0.25);
+    assert_eq!(
+        engine.contributions()[0].value,
+        AttributeValue::Normalized(0.25)
+    );
+    assert!(
+        engine.set_manual_xfade(address(1), 0.5).is_err(),
+        "direct XFade still requires its authored mode"
+    );
+    engine.off(address(1)).unwrap();
+    let mut temporary = definition(2, id);
+    temporary.fader = PlaybackFaderMode::Temp;
+    engine.register_definition(address(2), temporary).unwrap();
+    engine
+        .set_configured_fader_absolute_mutation(address(2), &source, PlaybackFaderMode::Temp, 0.6)
+        .unwrap();
+    assert!(!engine.runtime()[0].enabled);
+    assert!(
+        engine
+            .runtime_status()
+            .iter()
+            .any(|status| status.temporary_active)
+    );
+    assert_eq!(
+        engine
+            .runtime_status()
+            .iter()
+            .find(|status| status.temporary_active)
+            .unwrap()
+            .temporary_master,
+        0.6
+    );
+    engine
+        .set_configured_fader_absolute_mutation(address(2), &source, PlaybackFaderMode::Temp, 0.0)
+        .unwrap();
+    assert!(
+        !engine
+            .runtime_status()
+            .iter()
+            .any(|status| status.temporary_active)
+    );
+}

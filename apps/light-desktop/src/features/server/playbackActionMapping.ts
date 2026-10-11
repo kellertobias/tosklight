@@ -2,12 +2,12 @@ import type {
 	PlaybackAction,
 	PlaybackActionRequest,
 	PlaybackAddress,
-
 } from "../../api/types";
 
 export type PlaybackControlAction =
 	| "button"
 	| "configured-fader"
+	| "configured-fader-absolute"
 	| "on"
 	| "off"
 	| "toggle"
@@ -32,6 +32,7 @@ export type PlaybackControlAction =
 	| "pause-dynamics"
 	| "flash"
 	| "master"
+	| "master-absolute"
 	| "xfade-on"
 	| "xfade-off";
 
@@ -67,11 +68,19 @@ function structuredAction(
 			number: required(input.button, "button number"),
 			pressed,
 		};
+	if (action === "master-absolute")
+		return {
+			type: "master_absolute",
+			value: required(input.value, "master value"),
+		};
 	if (action === "master")
 		return { type: "master", value: required(input.value, "master value") };
-	if (action === "configured-fader")
+	if (action === "configured-fader" || action === "configured-fader-absolute")
 		return {
-			type: "configured_fader",
+			type:
+				action === "configured-fader-absolute"
+					? "configured_fader_absolute"
+					: "configured_fader",
 			number: required(input.fader, "fader number"),
 			level: required(input.value, "fader value"),
 		};

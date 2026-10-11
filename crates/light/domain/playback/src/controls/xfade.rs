@@ -31,6 +31,15 @@ impl PlaybackEngine {
         {
             return Err("playback is not configured for manual X-fade".into());
         }
+        self.apply_configured_manual_xfade_mutation(number, value)
+    }
+
+    /// The caller has validated the addressed configured fader (including wider right faders).
+    pub(crate) fn apply_configured_manual_xfade_mutation(
+        &mut self,
+        number: PlaybackAddress,
+        value: f32,
+    ) -> Result<PlaybackMutation<()>, String> {
         let cue_list_id = self.cue_list_for(number)?;
         let key = PlaybackKey::CueList(cue_list_id);
         let mut changed = false;

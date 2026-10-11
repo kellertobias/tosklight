@@ -161,7 +161,7 @@ pub(super) fn dispatch_playback_action_inner(
     context: &PlaybackDispatchContext<'_>,
 ) -> Result<PlaybackTargetOutcome, ApiError> {
     let pressed = input.pressed.unwrap_or(true);
-    if matches!(action_name, "master" | "fader") {
+    if matches!(action_name, "master" | "fader" | "master-absolute") {
         return apply_playback_master(
             state,
             context.action,
@@ -169,7 +169,7 @@ pub(super) fn dispatch_playback_action_inner(
             address,
             definition,
             input,
-            context.source,
+            action_name == "master-absolute",
             context.control_source,
             context.activation_origin,
         );

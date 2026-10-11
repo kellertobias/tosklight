@@ -14,11 +14,7 @@ import {
 	playbackActionError,
 } from "./actionWriterSupport";
 import type { PlaybackIdentity, PlaybackOutcome } from "./contracts";
-import {
-	groupIdentity,
-	identityKey,
-	playbackIdentity,
-} from "./contracts";
+import { groupIdentity, identityKey, playbackIdentity } from "./contracts";
 import type { PlaybackRuntimeStore } from "./store";
 
 export type PlaybackRuntimeActionApply = (
@@ -117,9 +113,17 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 	) {
 		try {
 			const request = playbackRequest(address, action, input);
-			if (isPlaybackSafetyRelease(action, input.pressed) && !this.matchesScope())
+			if (
+				isPlaybackSafetyRelease(action, input.pressed) &&
+				!this.matchesScope()
+			)
 				return this.sendSafetyRelease(request);
-			return await this.executeIdentity(playbackIdentity(address.page, address.position), action, input, request);
+			return await this.executeIdentity(
+				playbackIdentity(address.page, address.position),
+				action,
+				input,
+				request,
+			);
 		} catch (reason) {
 			return this.rejectSetup(reason);
 		}
@@ -162,7 +166,8 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 			throw new Error("Playback desk page actions are unavailable");
 		const scope = this.options.store.captureScope();
 		if (!this.isCurrent(scope)) return false;
-		const surfaceId = this.options.store.getSnapshot().desk?.selected_surface_id;
+		const surfaceId =
+			this.options.store.getSnapshot().desk?.selected_surface_id;
 		if (!surfaceId) throw new Error("Selected Playback surface is loading");
 		const token = this.options.store.beginOptimisticPage(page);
 		if (!token) throw new Error("Authoritative Playback desk is loading");
@@ -308,7 +313,8 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		action: PlaybackControlAction,
 		input: PlaybackControlInput,
 	) {
-		return action === "master" && input.value != null
+		return (action === "master" || action === "master-absolute") &&
+			input.value != null
 			? this.options.store.beginOptimisticMaster(identity, input.value)
 			: null;
 	}

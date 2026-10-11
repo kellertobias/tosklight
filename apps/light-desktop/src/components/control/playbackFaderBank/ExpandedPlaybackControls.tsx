@@ -52,7 +52,7 @@ export function ExpandedPlaybackControls({
 						onChange={(event) =>
 							void controller.runtimeActions?.playbackAction(
 								playback.address,
-								"configured-fader",
+								"configured-fader-absolute",
 								{
 									fader: 2,
 									value: Number(event.currentTarget.value) / 100,

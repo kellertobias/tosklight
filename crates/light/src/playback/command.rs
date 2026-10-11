@@ -126,6 +126,7 @@ pub enum PlaybackAction {
         pressed: bool,
     },
     Master(PlaybackLevel),
+    MasterAbsolute(PlaybackLevel),
     MasterTransition {
         level: PlaybackLevel,
         duration_millis: u32,
@@ -147,6 +148,10 @@ pub enum PlaybackAction {
         number: u8,
         level: PlaybackLevel,
     },
+    ConfiguredFaderAbsolute {
+        number: u8,
+        level: PlaybackLevel,
+    },
 }
 
 impl PlaybackAction {
@@ -155,10 +160,12 @@ impl PlaybackAction {
             Self::Release
             | Self::RuntimeStopDynamic { .. }
             | Self::Master(_)
+            | Self::MasterAbsolute(_)
             | Self::MasterTransition { .. }
             | Self::GoTo(_)
             | Self::Load(_)
-            | Self::ConfiguredFader { .. } => None,
+            | Self::ConfiguredFader { .. }
+            | Self::ConfiguredFaderAbsolute { .. } => None,
             Self::Crossfade { .. } => None,
             Self::Temporary { pressed, .. }
             | Self::ConfiguredButton { pressed, .. }

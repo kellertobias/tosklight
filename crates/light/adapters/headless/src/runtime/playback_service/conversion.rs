@@ -35,6 +35,12 @@ pub(super) fn parse_action(
         "dynamic-learn-speed" => PlaybackAction::DynamicLearnSpeed { pressed },
         "none" => PlaybackAction::None { pressed },
         "master" | "fader" => parse_master(input)?,
+        "master-absolute" => PlaybackAction::MasterAbsolute(
+            input
+                .value
+                .map(PlaybackLevel::new)
+                .ok_or_else(|| ApiError::bad_request("master value is required"))?,
+        ),
         "go-to" => parse_cue_number(input, true)?,
         "load" => parse_cue_number(input, false)?,
         "xfade-on" => PlaybackAction::Crossfade { enabled: true },
@@ -107,6 +113,9 @@ fn structured_action(
     action: PlaybackAction,
 ) -> (&'static str, Option<f32>, Option<String>, Option<u8>) {
     match action {
+        PlaybackAction::MasterAbsolute(value) => {
+            ("master-absolute", Some(value.value()), None, None)
+        }
         PlaybackAction::Master(value) => ("master", Some(value.value()), None, None),
         PlaybackAction::MasterTransition { .. } => {
             unreachable!("master transitions use the typed Playback boundary")
@@ -114,7 +123,7 @@ fn structured_action(
         PlaybackAction::GoTo(number) => ("go-to", None, Some(number.to_string()), None),
         PlaybackAction::Load(number) => ("load", None, Some(number.to_string()), None),
         PlaybackAction::ConfiguredButton { number, .. } => ("button", None, None, Some(number)),
-        PlaybackAction::ConfiguredFader { .. } => {
+        PlaybackAction::ConfiguredFader { .. } | PlaybackAction::ConfiguredFaderAbsolute { .. } => {
             unreachable!("configured faders are resolved before assignment dispatch")
         }
         _ => (simple_action_name(action), None, None, None),
@@ -156,11 +165,13 @@ fn simple_action_name(action: PlaybackAction) -> &'static str {
         PlaybackAction::Temporary { enabled: false, .. } => "temp-off",
         PlaybackAction::RuntimeStopDynamic { .. }
         | PlaybackAction::Master(_)
+        | PlaybackAction::MasterAbsolute(_)
         | PlaybackAction::MasterTransition { .. }
         | PlaybackAction::GoTo(_)
         | PlaybackAction::Load(_)
         | PlaybackAction::ConfiguredButton { .. }
-        | PlaybackAction::ConfiguredFader { .. } => unreachable!("structured action"),
+        | PlaybackAction::ConfiguredFader { .. }
+        | PlaybackAction::ConfiguredFaderAbsolute { .. } => unreachable!("structured action"),
     }
 }
 
@@ -198,8 +209,10 @@ pub(super) fn action_touched(action: PlaybackAction) -> bool {
     matches!(
         action,
         PlaybackAction::Master(_)
+            | PlaybackAction::MasterAbsolute(_)
             | PlaybackAction::MasterTransition { .. }
             | PlaybackAction::ConfiguredFader { .. }
+            | PlaybackAction::ConfiguredFaderAbsolute { .. }
     ) || action.pressed().unwrap_or(true)
 }
 
