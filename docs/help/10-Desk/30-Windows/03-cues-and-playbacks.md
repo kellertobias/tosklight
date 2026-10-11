@@ -144,29 +144,33 @@ for timing and trigger behavior.
 
 ## Virtual Playbacks
 
-Virtual Playbacks create a touch-button surface without consuming a physical playback
-fader position. Every page owns a stable bank of 300 show-wide Virtual Playback
-numbers: page 1 starts at 1001, page 2 at 1301, and page 3 at 1601. Cell position `n`
-on page `p` addresses `1000 + 300 × (p - 1) + n`. Every desk that displays the same
-number operates the same Playback.
+A Virtual Playbacks pane is a configurable surface for the same show-owned Playbacks
+used by screens and attached hardware. Pages 1–99 each contain sparse positions
+1–1000. A control addresses `page.position`; there is no separate virtual bank.
+Surfaces displaying the same address operate the same assignment and runtime.
 
-A cell displays its cell number, assigned playback name, and action. When that playback is active it also shows the current Cue and receives active styling. An unassigned cell is inert during normal operation but remains available for Playback Configuration.
+Configure explicit row starts, counts, and buttons, faders or push encoders. A
+20-column, 14-row pane beginning at 401 displays positions 401–680. Choose **Own**,
+**Pinned** or **Follow** another named surface for its page source. Follow chains
+cannot contain cycles. The visibly selected surface supplies the shared command
+line's current page; an explicit `page.position` addresses another page.
 
-**Pane configuration:**
+**Take from Screen** copies a screen's saved arrangement into a review draft, even
+when that screen is closed or its hardware disconnected. Review the rows and page
+source, then press **Apply**. Closing the draft leaves both surfaces unchanged.
+The copy contains no Playback assignments and does not follow later screen edits.
 
-- **Rows** and **Columns** are positive integers whose product may not exceed 300. A
-  20×15 surface displays one complete Virtual Playback page.
-- **Page mode** is **Follow Main** or **Pinned**. Follow Main uses the control desk's current main page. Pinned stores one fixed page from 1 through 127.
-- Resizing the pane does not change its logical row/column count.
+Right-click a control, or press `[SET]` and then the control, to open its standard
+Playback Configuration. Icons, images, colors, actions and fader modes belong to
+the assigned Playback. Pane Settings provides layout/page configuration and general
+**Solo Regions** membership editing with explicit addresses across pages.
 
-Configure a cell exactly like a regular Playback: right-click the Virtual Playback, or press `[SET]` and then press the cell. Both paths open the standard Playback Configuration modal for that one-button, faderless target. Virtual Playbacks additionally support an icon or image background.
-
-Pane Settings keeps grid and page configuration in **Virtual Playbacks** and Solo Region management in **Solo Regions**. Playback colors remain part of the assigned Playback rather than a separate pane-level color mode.
-
-Virtual actions carry their stable playback number and validated page qualifier. During
-Preload, **Preload virtual playback actions** in Desk Setup decides whether they
-execute immediately or are captured for Preload GO. This is independent from the
-switches for physical playback controls and programmer changes.
+Preload eligibility uses configured position ranges on all pages by default, with
+optional page restrictions. It is independent of which surface operates the
+Playback. Flash and fader movement remain Live; captured permanent actions retain
+their exact address, order and source through page changes. Programmer capture is
+a separate setting. See [Virtual Playbacks](../20-Programmer-and-Cues/14-virtual-playbacks.md)
+and [Preload](../20-Programmer-and-Cues/12-preload.md) for operation and release behavior.
 
 ![Virtual Playbacks pane](../../assets/screenshots/panes/virtual-playbacks.png)
 

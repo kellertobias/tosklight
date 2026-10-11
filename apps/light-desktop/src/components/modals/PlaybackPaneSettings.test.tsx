@@ -1,5 +1,3 @@
-import type { ComponentProps } from "react";
-import type { PlaybackLayoutModal } from "../setup/PlaybackLayoutModal";
 import {
 	cleanup,
 	fireEvent,
@@ -14,22 +12,6 @@ import type { PaneModel } from "../../types";
 import { PlaybackPaneSettings } from "./PlaybackPaneSettings";
 const dispatch = vi.fn();
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ dispatch }) }));
-vi.mock("../setup/PlaybackLayoutModal", () => ({
-	PlaybackLayoutModal: ({
-		initialLayout,
-		pageSource,
-		onSave,
-		onClose,
-	}: ComponentProps<typeof PlaybackLayoutModal>) => (
-		<section aria-label="Review layout">
-			<output>{JSON.stringify(initialLayout)}</output>
-			<button onClick={() => onSave(initialLayout, pageSource)}>
-				Apply layout
-			</button>
-			<button onClick={onClose}>Cancel layout</button>
-		</section>
-	),
-}));
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
@@ -97,12 +79,19 @@ describe("central pane playback configuration", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Review copied layout" }),
 		);
-		expect(screen.getByLabelText("Review layout").textContent).toContain(
-			JSON.stringify(layout),
+		expect(
+			screen.getByRole("dialog", { name: "Configure Playbacks" }),
+		).toBeInTheDocument();
+		expect(screen.getByLabelText("First Playback Number")).toHaveValue("201");
+		fireEvent.change(screen.getByLabelText("First Playback Number"), {
+			target: { value: "401" },
+		});
+		expect(updatePlaybackSurface).not.toHaveBeenCalled();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Close playback configuration" }),
 		);
 		expect(updatePlaybackSurface).not.toHaveBeenCalled();
-		fireEvent.click(screen.getByRole("button", { name: "Cancel layout" }));
-		expect(updatePlaybackSurface).not.toHaveBeenCalled();
+		expect(layout.rows[0].first_position).toBe(201);
 	});
 	it("saves only reviewed layout to the pane surface and preserves the source page context", async () => {
 		const { updatePlaybackSurface, registry, layout } = setup();
@@ -113,7 +102,7 @@ describe("central pane playback configuration", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: "Review copied layout" }),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Apply layout" }));
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() =>
 			expect(updatePlaybackSurface).toHaveBeenCalledWith("pane:one", {
 				name: "Playbacks",

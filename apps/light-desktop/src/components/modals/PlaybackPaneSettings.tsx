@@ -93,6 +93,7 @@ export function PlaybackPaneSettings({ pane }: { pane: PaneModel }) {
 			{error && <ErrorAlert role="alert">{error}</ErrorAlert>}
 			{editing && (
 				<PlaybackLayoutModal
+					acceptLabel="Apply"
 					initialLayout={draft.layout}
 					pageSource={draft.page_source}
 					surfaceOptions={Object.entries(registry)

@@ -468,6 +468,82 @@ function assignPlayback(overrides: Record<string, unknown> = {}) {
 
 describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it.each([
+		false,
+		true,
+	])("keeps five configured push encoders above the matrix with hardware=%s", (hardware) => {
+		mocks.hardwareConnected = hardware;
+		Object.assign(mocks.state, {
+			cueListSetTarget: null,
+			cueListSetArmed: false,
+		});
+		const positions = [
+			...Array.from({ length: 5 }, (_, index) => 301 + index),
+			...Array.from({ length: 50 }, (_, index) => 201 + index),
+		];
+		mocks.playbacks.pages[0].slots = Object.fromEntries(
+			positions.map((position) => [String(position), position]),
+		);
+		mocks.playbacks.pool = positions.map((position) =>
+			playbackDefinition(position, {
+				name: `Position ${position}`,
+				button_count: 1,
+				buttons: ["go", "none", "none"],
+			}),
+		);
+		const { container } = render(
+			<PlaybackFaderBank
+				playbackLayout={{
+					rows: [
+						{
+							first_position: 301,
+							count: 5,
+							presentation: "push_encoder",
+							button_count: 1,
+						},
+						...Array.from({ length: 5 }, (_, index) => ({
+							first_position: 201 + index * 10,
+							count: 10,
+							presentation: "buttons" as const,
+							button_count: 1,
+						})),
+					],
+				}}
+			/>,
+		);
+		const cards = [
+			...container.querySelectorAll<HTMLElement>("[data-playback-slot]"),
+		];
+		expect(cards.map((card) => Number(card.dataset.playbackSlot))).toEqual(
+			positions,
+		);
+		expect(container.querySelectorAll(".playback-push-encoder")).toHaveLength(
+			5,
+		);
+		const encoder = within(cards[0]).getByRole("group", { name: "Master" });
+		fireEvent.pointerDown(encoder, { pointerId: 73, button: 0, clientY: 100 });
+		fireEvent.pointerMove(encoder, { pointerId: 73, clientY: 160 });
+		fireEvent.pointerUp(encoder, { pointerId: 73, clientY: 160 });
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 301 },
+			"master",
+			{
+				value: expect.any(Number),
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 3010,
+				},
+			},
+		);
+		expect(mocks.poolPlaybackAction.mock.calls.at(-1)?.[2].value).toBeLessThan(
+			1,
+		);
+		expect(
+			cards
+				.slice(5)
+				.every((card) => card.querySelector(".touch-encoder") === null),
+		).toBe(true);
+	});
 
 	it("does not render stale topology while scoped authority is loading", () => {
 		assignPlayback();

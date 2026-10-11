@@ -182,7 +182,7 @@ export function PlaybackSlot({
 		slotData.footprint,
 		presentation?.style,
 	);
-	if (controller.hardware)
+	if (controller.hardware && row?.presentation !== "push_encoder")
 		return (
 			<HardwarePlaybackCard
 				controller={controller}

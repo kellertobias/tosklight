@@ -325,6 +325,7 @@ export function PlaybackLayoutModal({
 	pageSource,
 	pageSourceLocked = false,
 	surfaceOptions = [],
+	acceptLabel = "Save",
 	onSave,
 	onClose,
 }: {
@@ -332,6 +333,7 @@ export function PlaybackLayoutModal({
 	pageSource: PlaybackPageSource;
 	pageSourceLocked?: boolean;
 	surfaceOptions?: SurfaceOption[];
+	acceptLabel?: string;
 	onSave: (
 		layout: PlaybackSurfaceLayout,
 		pageSource: PlaybackPageSource,
@@ -378,7 +380,7 @@ export function PlaybackLayoutModal({
 						]}
 						accept={{
 							id: "save",
-							label: "Save",
+							label: acceptLabel,
 							className: "playback-layout-save",
 							variant: "primary",
 							disabled: invalid,
