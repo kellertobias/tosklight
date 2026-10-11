@@ -264,3 +264,12 @@ Exact implementation candidate `9e099eac44413e7965cc71a334dc154551705d98` passes
 DMX-010 adds an isolated actual Art-Net/sACN regression for retained-Off HIGH master1, live LOW, queued exact cross-page Solo GO, explicit Cue2s versus Programmer Fade3s. Bound receivers retain22 sample points and sequence/universe/receive timestamps; pending output remains64, then both protocols follow the fixed two-second scalar oracle64/128/191 at0/1/2s, with100ms samples within one byte and no blackout. Focused and related invocations each pass the one registered case; historical paired API cases are not registered by current fixtures and are not claimed executed. This uses manual application time, supplements the native wall-clock gate, and does not replace it.
 
 All implementation remains isolated and main unmerged. Specific native All Off approval and encoder-center operator decision remain pending, followed by native rebuilt timing, independently selected/pinned surface pages,99.1000 corner authoring, authorized integration and latest-main release testing. Human release acceptance remains separate.
+
+
+### Preload consumer migration and inventory correction
+
+CI38138644293 on test checkpointc88009bec reports Unit/architecture failure because the new default-catalog packet case was omitted from the generated migration inventory. Original failure log retained; inventory regenerated using its documented command, now418cases/128files. Fresh architecture gate passes. Production/UI candidate9e099eac4's completed successfulCI remains separate; no fresh overallcheckpointCI pass claimed.
+
+Fresh53/54/57 semantic Preload UI run1PASS/2FAIL identified two harness omissions before timing proof:54 supplied retired physical/virtualdomain flags, and BrowserPlaybacks.open mistook visible pane401/402 forMain and skippedactualmode-toggle.54 now explicitly capturespositions1–6/allpages; sevenorderedverbs/runtime/releaseassertions unchanged. The helper checks exactMain surface and opens it through actualmode-toggle;57scenario is unchanged. Fresh repaired54 and57 each1PASS; existing39Mainonlysmoke1PASS, helper2tests andbenchtypesPASS. Failures/screenshots/traces and correctedlogs retained; native5034 untouched.
+
+Fresh supportedOSC/sharedcommand UI run11PASS/2FAIL39.6sec has separate investigations underway: stale Groupcardcountwording and second-source fader1-versus0.5 at exact2.1. No product attribution or changed output oracle yet. All work remains isolated; nativeapproval/encoderchoice and native timing/page/corner gates remain before mainintegration.

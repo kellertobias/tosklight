@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **417 root cases across 127 files**.
+Default catalog: **418 root cases across 128 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ Default catalog: **417 root cases across 127 files**.
 | 02-cue-semantic-contracts.spec.ts | MERGE-003 @api › full normal overwrite auto-Offs while partial, disabled, Flash, and Temp restore | repository contract | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | CUE-015 @api › independent Intensity in/out timing reaches output and gates Follow | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 02-cue-semantic-contracts.spec.ts | MERGE-001 @api › every surface writes one Programmer and the most recent value wins | docs/testing/02-cues-tracking-and-arbitration.md | @api | cue-semantic-contracts | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 03-network-output-protocols.spec.ts | DMX-010 @api queued GO retains explicit Cue timing across cross-page Solo | docs/testing/03-network-output-protocols.md | @api | network-output-protocols | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 04-osc-api-and-cross-surface.spec.ts | API-003 @api › revisioned command-line HTTP is atomic and replay-safe | docs/testing/04-osc-api-and-cross-surface.md | @api | osc-api-and-cross-surface | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 04-osc-api-and-cross-surface.spec.ts | API-004 @api › typed WebSocket command-line actions preserve desk state | docs/testing/04-osc-api-and-cross-surface.md | @api | osc-api-and-cross-surface | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 04-osc-api-and-cross-surface.spec.ts | OSC-004 @api › invalid UDP input is isolated and client-ID reuse atomically replaces the old route | docs/testing/04-osc-api-and-cross-surface.md | @api | osc-api-and-cross-surface | standard failure evidence | parallel | reviewed-low-level-boundary |

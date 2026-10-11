@@ -306,9 +306,12 @@ export class BrowserPlaybacks {
 	}
 
 	async open() {
-		if (await this.page.locator(".playback-fader-bank").isVisible()) return;
+		const mainBank = this.page.locator(
+			'.playback-fader-bank[data-playback-surface="main"]',
+		);
+		if (await mainBank.isVisible()) return;
 		await this.desk.click(this.page.locator(".mode-toggle"));
-		await expect(this.page.locator(".playback-fader-bank")).toBeVisible();
+		await expect(mainBank).toBeVisible();
 	}
 
 	expect(address: PlaybackAddressValue) {

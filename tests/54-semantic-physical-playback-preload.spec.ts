@@ -17,7 +17,7 @@ scenario(
 		const recordPlayback = async (
 			slot: number,
 			fixture: number,
-			button: PlaybackButton,
+			button: Exclude<PlaybackButton, PlaybackButton.Release>,
 		) => {
 			await t.selection.clear();
 			await t.selection.fixtures.via.api.item(fixture);
@@ -47,8 +47,10 @@ scenario(
 		await t.playback.via.api.go(offPlayback);
 		await t.preload.configure({
 			programmer: false,
-			physicalPlaybacks: true,
-			virtualPlaybacks: false,
+			playbackScope: {
+				position_ranges: [{ start: 1, end: 6 }],
+				pages: null,
+			},
 			programmerFade: 2_000,
 			cueFade: 0,
 		});
