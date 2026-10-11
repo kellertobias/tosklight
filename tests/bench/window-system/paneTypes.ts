@@ -166,7 +166,7 @@ export const paneLabels: Readonly<Record<PaneType, string>> = {
 	[PaneType.Patch]: "Patch",
 	[PaneType.Setup]: "Setup",
 	[PaneType.Help]: "Help",
-	[PaneType.VirtualPlaybacks]: "Virtual Playbacks",
+	[PaneType.VirtualPlaybacks]: "Playbacks",
 	[PaneType.FileManager]: "File Manager",
 	[PaneType.TextEditor]: "Text Editor",
 };

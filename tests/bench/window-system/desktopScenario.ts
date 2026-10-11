@@ -671,7 +671,7 @@ async function applyPaneConfiguration<T extends PaneType>(
 		await dialog.getByLabel("Columns").blur();
 	}
     if (type === "playbacks") {
-        await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
+        await dialog.getByRole("tab", { name: "Playbacks", exact: true }).click();
         await dialog.getByRole("button", { name: "Configure layout and page source" }).click();
         const layout = page.getByRole("dialog", { name: "Configure Playbacks" });
         const rows = typeof options.rows === "number" ? options.rows : 14;
