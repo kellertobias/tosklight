@@ -676,6 +676,10 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
 
     let first = dispatch_live_action(&scenario.state, &scenario.session, command());
     assert!(first.ok, "{:?}", first.error);
+    assert!(
+        scenario.state.output.snapshot().groups.iter().any(|group| group.id == "15"),
+        "accepted Group recording must be installed before retrying its intent"
+    );
     let sequence = scenario.state.events.latest_sequence();
     let history = scenario.history_len();
     let replay = dispatch_live_action(&scenario.state, &scenario.session, command());

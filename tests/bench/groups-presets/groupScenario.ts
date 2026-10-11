@@ -327,7 +327,9 @@ export class BrowserGroups {
 			});
 		} else if (route === "pool") {
 			const card = this.groupCard(number);
-			await expect(card).toContainText(`${group.body.fixtures.length} fx`);
+			await expect(card.locator(".group-fixture-count")).toHaveText(
+				new RegExp(`^(?:[1-9]\\d*/)?${group.body.fixtures.length}$`),
+			);
 			await longPress(card);
 			const dialog = this.page.getByRole("dialog", {
 				name: `Group ${number} settings`,

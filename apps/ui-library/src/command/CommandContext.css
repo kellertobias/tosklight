@@ -40,3 +40,35 @@
 .command-context[aria-label="Programmer assignment"] > span {
 	flex-shrink: 1;
 }
+
+/* Solo drafting uses the same fixed-height row as the ordinary command field. */
+.command-solo-editor {
+	height: 100%;
+	min-height: 0;
+}
+.command-solo-editor > .ui-form-field {
+	height: 100%;
+	margin: 0;
+	gap: 0;
+	align-content: stretch;
+}
+.command-solo-editor > .ui-form-field > label {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+.command-solo-editor .ui-form-control,
+.command-solo-editor .ui-text-control {
+	height: 100%;
+	min-height: 0;
+}
+.command-solo-editor .ui-text-control > .ui-input,
+.command-solo-editor .ui-text-control > .ui-button,
+.command-solo-editor > .ui-button {
+	height: 100%;
+	min-height: 0;
+}

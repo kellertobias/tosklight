@@ -83,7 +83,7 @@ take over that link. Shows containing these links require a runtime that support
 references; an older runtime refuses the show rather than silently changing its behavior.
 
 The lower-left corner of every stored Group and Preset tile shows how many fixtures it holds. A Group
-tile reads its member count, for example `8 fx`. A Preset tile reads `active/defined`, for example
+tile reads its member count, for example `8`, or the selected/total count, for example `3/8`. A Preset tile reads `active/defined`, for example
 `3/8 fx`. The
 second number counts every fixture the Preset defines, including the members of any Group it
 stores and fixtures that are currently unpatched. The first number counts the fixtures whose
