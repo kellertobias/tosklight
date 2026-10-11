@@ -5,6 +5,7 @@ import {
 	type SyntheticEvent,
 	type PointerEvent,
 	type KeyboardEvent,
+	type MouseEvent,
 } from "react";
 import {
 	playbackAddressKey,
@@ -63,6 +64,10 @@ export function usePlaybackGridSolo(
 	const pointerDown = (event: PointerEvent) => {
 		if (block(event) && event.button === 0) toggle(event.target);
 	};
+	const click = (event: MouseEvent) => {
+		// Pointer presses already selected the cell. AX activation emits click alone.
+		if (block(event) && event.detail === 0) toggle(event.target);
+	};
 	const keyDown = (event: KeyboardEvent) => {
 		if (event.key === "Tab") return;
 		if (
@@ -119,6 +124,7 @@ export function usePlaybackGridSolo(
 		classes,
 		block,
 		pointerDown,
+		click,
 		keyDown,
 		begin: () => beginEdit(),
 		beginEdit,

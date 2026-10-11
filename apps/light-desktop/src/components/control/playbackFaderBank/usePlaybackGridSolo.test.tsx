@@ -38,7 +38,8 @@ function Grid({ page, surfaceId }: { page: number; surfaceId: string }) {
 			row: null, rowIndex: 0, columnIndex: slot - 1, footprint: null })),
 	});
 	return <section aria-label={surfaceId} onPointerDownCapture={solo.pointerDown}
-		onClickCapture={solo.block} onKeyDownCapture={solo.keyDown}>
+		onClickCapture={solo.click} onKeyDownCapture={solo.keyDown} onKeyUpCapture={solo.block}
+		onPointerUpCapture={solo.block}>
 		{[1, 2].map((slot) => <button key={slot} data-playback-slot={slot}
 			onPointerDown={mocks.operate} onClick={mocks.operate}>
 			{surfaceId} {page}.{slot}
@@ -46,12 +47,40 @@ function Grid({ page, surfaceId }: { page: number; surfaceId: string }) {
 	</section>;
 }
 describe("surface-scoped Solo selection", () => {
+	it("selects two cells from accessibility click-only activation without live actions", async () => {
+		const view = render(<PlaybackSoloEditorProvider><Harness /></PlaybackSoloEditorProvider>);
+		await waitFor(() => expect(view.getByLabelText("Other surface").textContent).toBe("false"));
+		fireEvent.click(view.getByText("Create"));
+		fireEvent.click(view.getByText("main 2.1"), { detail: 0 });
+		fireEvent.click(view.getByText("main 2.2"), { detail: 0 });
+		expect(view.getByLabelText("Selected").textContent).toBe(JSON.stringify([
+			{ page: 2, position: 1 }, { page: 2, position: 2 },
+		]));
+		expect(mocks.operate).not.toHaveBeenCalled();
+	});
+	it("toggles physical pointer and keyboard activations exactly once", async () => {
+		const view = render(<PlaybackSoloEditorProvider><Harness /></PlaybackSoloEditorProvider>);
+		await waitFor(() => expect(view.getByLabelText("Other surface").textContent).toBe("false"));
+		fireEvent.click(view.getByText("Create"));
+		const first = view.getByText("main 2.1");
+		fireEvent.pointerDown(first, { button: 0 });
+		fireEvent.pointerUp(first, { button: 0 });
+		fireEvent.click(first, { detail: 1 });
+		expect(view.getByLabelText("Selected").textContent).toBe(JSON.stringify([{ page: 2, position: 1 }]));
+		const second = view.getByText("main 2.2");
+		fireEvent.keyDown(second, { key: "Enter" });
+		fireEvent.keyUp(second, { key: "Enter" });
+		expect(view.getByLabelText("Selected").textContent).toBe(JSON.stringify([
+			{ page: 2, position: 1 }, { page: 2, position: 2 },
+		]));
+		expect(mocks.operate).not.toHaveBeenCalled();
+	});
 	it("selects cells across page changes, blocks live pointer actions, and cancels without writes", async () => {
 		const view = render(<PlaybackSoloEditorProvider><Harness /></PlaybackSoloEditorProvider>);
 		await waitFor(() => expect(view.getByLabelText("Other surface").textContent).toBe("false"));
 		fireEvent.click(view.getByText("Create"));
 		fireEvent.pointerDown(view.getByText("main 2.1"), { button: 0 });
-		fireEvent.click(view.getByText("main 2.1"));
+		fireEvent.click(view.getByText("main 2.1"), { detail: 1 });
 		fireEvent.click(view.getByText("Page 4"));
 		fireEvent.pointerDown(view.getByText("main 4.2"), { button: 0 });
 		expect(view.getByLabelText("Selected").textContent).toBe(JSON.stringify([

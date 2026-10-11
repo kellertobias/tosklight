@@ -2754,7 +2754,7 @@ describe("shared Playback grid Solo configuration", () => {
 			fireEvent.pointerDown(target, { pointerId: position, button: 0 });
 			fireEvent.pointerMove(target, { pointerId: position, clientY: 50 });
 			fireEvent.pointerUp(target, { pointerId: position });
-			fireEvent.click(target);
+			fireEvent.click(target, { detail: 1 });
 		}
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
@@ -2846,6 +2846,7 @@ describe("shared Playback grid Solo configuration", () => {
 		fireEvent.keyUp(encoder, { key: "ArrowUp" });
 		fireEvent.click(
 			within(card).getByRole("button", { name: "Set Master value" }),
+			{ detail: 1 },
 		);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
