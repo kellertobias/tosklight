@@ -10,6 +10,7 @@ TL-714 deliberately breaks pre-release persisted and transport compatibility. Ne
 
 - Preload range union applies to all pages by default; optional explicit page restrictions narrow it. Unmatched positions remain Live. The permanent-action set and Temp toggle semantics stay as before; Flash and fader movement remain Live. Programmer capture remains independent.
 - Typed, keyboard and shared OSC commands use the visibly selected surface's effective page for an unqualified position. Explicit addresses remain fixed.
+- Solo membership belongs to the exact Playback address permanently started. A Timecode starts Cues directly and those Cue starts do not arbitrate Solo. A Timecode assigned to a member Playback stops when another member actually starts permanently. Another alias of the same target does not inherit membership.
 - Flash bypasses Solo. Activating a permanent peer preserves held Flash contributions. Flash release removes only its temporary contribution, without reviving an old permanent winner or stopping the current winner.
 - A page change preserves each held control's captured address and source until release. Simultaneous sources remain independent; cancellation/disconnection removes only the relevant temporary controls.
 
@@ -78,3 +79,41 @@ Canonical selective import now traverses page assignment CueList, Group, Macro, 
 Canonical wire, control mapping, Timecode convergence, event transport and output transaction fixtures retain exact addresses/sources and meaningful provenance/retirement/frame-rejection assertions. Headless test compiler check09 remains failing with242 other errors, reduced from307 before this continuation. Runtime execution of that crate remains pending. Full frontend typecheck remains67 fixture/story diagnostics; source/native build and complete frontend verification remain unfinished.
 
 Remaining major implementation gates include per-software-instance held control ownership and literal held-page-change behavior; exact software action-socket disconnect cancellation; the accepted-frame/automatic Cue/Timecode authority bridge; remaining fixture conversions and obsolete-source cleanup. Complete isolated build/demo initialization and all requested downstream native, OSC and dual-protocol output acceptance before claiming the combined candidate ready. Human release acceptance remains separate.
+
+
+### Current backend verification checkpoint (2026-10-11 03:35 UTC)
+
+Frontend Solo grid selection, inert configuration gestures, joined amber fences and general cross-page membership management pass 4,371 tests in 583 files plus TypeScript checks; commit `a0e5546d3` is verified on origin. Native geometry/touch acceptance remains pending. The regenerated packaged demo uses schema 10 and 44 unified assignments, with canonical generation/import/reopen validation; ordinary embedded-default startup is included in the next runtime run.
+
+Runtime all03 reports 1,986 passed, 25 failed and five ignored. Corrective command-event, Solo partial-failure feedback, canonical fixtures and capture changes are being rerun in all04; no remaining failures have been waived. Complete restored Solo checkpoint engine tests pass three cases. A real Timecode-owned Cue reproduced stale same-frame DMX (255 despite stopped transport); the isolated test-only settle/reconcile/same-sample render proof passes with zero output. The capture callback now applies that verified ordering before render and retains accepted event claims. Private Dynamic persistence fail-first proves lost activation ordinal; its private serializer was repaired without exposing internal order in public runtime JSON. Combined cold startup restore still needs wiring and regression verification.
+
+Implementation remains isolated and unmerged. Required next gates retain source/contract cleanup, complete backend checks, authoritative native rebuild, actual gesture/OSC/Art-Net/sACN evidence and downstream release scenarios. The original candidate and live show data remain preserved.
+
+
+### Verified checkpoint 2026-10-11 04:00 UTC
+
+The complete engine gate passes 416 unit and 13 integration tests; application passes 867 unit plus three integration tests, with two ignored; programmer passes 182. Headless all06 passes 2,017 tests with five ignored. All07 after command-key retirement passes 2,016 with one stale VPBK expectation now corrected, pending rerun. New demo held-page-change/source-isolation tests pass 23 cases; software keypad retirement passes 37; API-boundary tests pass 114 and TypeScript checks pass. Source-size and architecture gates pass after bounded cleanup and inventory regeneration.
+
+Same-frame Timecode-stop DMX, complete Cue/Dynamic cold Solo restoration, private Dynamic activation-order persistence and software socket cleanup now have passing backend regressions. Demo and compact-rig assets were regenerated and reopened canonically. Reachable obsolete Dynamic configuration and Speed fader normalization are being removed before native acceptance. Commits 8f2ab1db5 and 904f2d5a1 preserve verified demo holds and isolated OSC fallback on origin.
+
+Implementation remains isolated and unmerged. Combined frontend verification, authoritative native rebuild, geometry/gesture/OSC/Art-Net/sACN evidence and downstream latest-main release acceptance remain pending. Restart owned test applications between runs and capture captioned internal-screen evidence. Original candidate and live data remain preserved; human release acceptance remains separate.
+
+
+### Verified backend and native startup checkpoint 2026-10-11 04:18 UTC
+
+Backend finalization is committed and pushed as `827f5fd807445f2e23f8636145caf5660316c5bf`. Engine: 416 unit plus 13 integration; application: 870 unit plus 3 integration (two ignored); headless: 2,018 passed (five ignored); Programmer: 182; Playback: 238 unit plus 25 integration; Show: 135 (one explicit generator ignored); Wire: 123 plus one integration; Control: 22. New candidate deletion protection refuses deleting assigned Cue/Group/Macro/Timecode targets before persistence, while atomic clear/retarget plus deletion and Dynamic embedded fallback remain valid.
+
+Desktop 4,381 tests and typecheck, additional workspaces 1,372 tests, bench 200 tests, source-size ratchet, and manual PDF/offline HTML verification pass. Remaining executable scenario helpers are being converted and are not yet accepted as current-contract coverage.
+
+Authoritative isolated `build:open` completed with exact worktree bundle and server 5034/OSC 19014 using isolated native-acceptance data. Readiness is healthy; bootstrap takes approximately 4 ms. The app was moved to Built-in Retina Display through the native Window menu. Its frontend is blank: packaged startup reproduces React undefined-component failure because default `playbacks` pane registration still used the retired kind. Fix and rebuilt native proof are required. Captioned failure evidence is saved under the primary `.artifacts/test/visual-inspection/release-acceptance/2026-10-08-fixes/TL714/native-startup-blank-captioned.png`. No UI, OSC, Art-Net/sACN acceptance or main merge is claimed.
+
+
+### Current acceptance checkpoint 2026-10-11 05:30 UTC
+
+The implementation remains isolated and unmerged. Reviewed commits through `b8d7f7f9b` are pushed; the exact upstream hash is recorded in the Working Log. Desktop passes 4,451 tests in 586 files, hardware controls 42, bench 250, and the other TypeScript workspaces passed their type/unit gates. Application now passes 872 unit plus three integration tests (two ignored); engine passes 416 unit plus 13 integration tests. The complete architecture gate passes after canonical narration and full discovery fixes; Playwright lists 440 cases without discovery errors. These are source and browser gates, not native release acceptance.
+
+Actual old-frontend MEDIACUE-002 fail-first reproduces missing Playback preview after the canonical fixture reaches the UI. The committed artwork provider batches only visible eligible single-Cue targets once per bank. Actual VPB-007 passes through policy revision rejection, cold restart, cross-page numerical output, two desks and OSC Solo release audit. UI-driven DMX-001/002/003 pass against real isolated Art-Net and sACN datagrams, exact level conversion and wire headers. Final native dual-protocol trajectory acceptance remains required.
+
+Explicit Timecode Cue Start and State Start now reactivate retained Off Cues, proven by service-level exact-Cue, resolved-output and timing regressions. Ordinary GO activation settings, manual Off between starts, discrete reconstruction suppression and direct Cue Solo bypass remain preserved. Canonical compact current-page OSC receipt capture and lifecycle cleanup are still being completed alongside explicit-page routes; no retired aliases are restored.
+
+Visual review rejected the first Main scrolling implementation as final acceptance: eventual access did not prove initial fader identity/action visibility. A bounded software-Main compact layout and combined toolbar are being verified before native rebuild. Expanded Solo partial joins and sparse pane geometry have browser proofs, but native screenshots, simultaneous holds, page sources, offline layout copying, final media pixels and output trajectories remain open. Rebuild and restart owned applications, use only the internal screen, preserve captioned original pixels, then integrate and rerun affected release scenarios from the latest main. Human release acceptance remains separate.
