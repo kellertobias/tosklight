@@ -218,7 +218,8 @@ describe("GroupsWindow action routing", () => {
 			const full = buttonForText("Stored Populated");
 			expect(partial).toHaveAttribute("data-group-selection", "partial");
 			expect(partial).not.toHaveClass("selected");
-			expect(screen.getByRole("img", { name: "Some group fixtures selected; group not selected" })).toBeInTheDocument();
+			expect(partial.querySelector(".group-fixture-count")).toHaveTextContent("1/2");
+			expect(partial.querySelector(".group-fixture-count-selected")).toHaveTextContent("1");
 			expect(full).not.toHaveClass("selected");
 			expect(full).toHaveAttribute("aria-pressed", "false");
 			expect(full).toHaveAttribute("data-group-selection", "full");
@@ -226,7 +227,8 @@ describe("GroupsWindow action routing", () => {
 			view.rerender(<GroupsWindow compact />);
 			expect(partial).not.toHaveClass("selected");
 			expect(full).not.toHaveClass("selected");
-			expect(screen.queryByRole("img", { name: "Some group fixtures selected; group not selected" })).toBeNull();
+			expect(partial.querySelector(".group-fixture-count")).toHaveTextContent("2");
+			expect(partial.querySelector(".group-fixture-count-selected")).toHaveTextContent("2");
 			mocks.selectedGroupIds = ["4", "5"];
 			view.rerender(<GroupsWindow compact />);
 			expect(partial).toHaveClass("selected");

@@ -1597,7 +1597,8 @@
 	border: 1px solid
 		color-mix(in srgb, var(--pool-card-resolved-color) 68%, var(--line2));
 	border-radius: var(--pool-card-radius);
-	background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
+	--pool-card-background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
+	background: var(--pool-card-background);
 	text-align: left;
 }
 
@@ -1612,7 +1613,8 @@
 }
 
 .pool-filled-outline .pool-card {
-	background: var(--panel2);
+	--pool-card-background: var(--panel2);
+	background: var(--pool-card-background);
 }
 
 .pool-presentation {
@@ -1625,7 +1627,8 @@
 		var(--pool-card-resolved-color) 68%,
 		var(--line2)
 	);
-	background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
+	--pool-card-background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
+	background: var(--pool-card-background);
 }
 
 .pool-presentation:focus-visible,
@@ -1641,11 +1644,12 @@
 	--pool-card-border-width: 2px;
 	border-width: 2px;
 	border-color: var(--pool-card-resolved-color);
-	background: color-mix(
+	--pool-card-background: color-mix(
 		in srgb,
 		var(--pool-card-resolved-color) 48%,
 		var(--panel2)
 	);
+	background: var(--pool-card-background);
 }
 
 .pool-presentation.disabled,
@@ -1667,8 +1671,8 @@
 	font-size: clamp(8px, 12cqw, 10px);
 	font-variant-numeric: tabular-nums;
 	line-height: 1.2;
-	background: #10161d;
-	box-shadow: -2px 1px 4px #10161d;
+	background: var(--pool-card-background);
+	box-shadow: -2px 1px 4px var(--pool-card-background);
 	border-radius: 2px;
 }
 
@@ -1706,8 +1710,8 @@
 	min-height: 0;
 	align-self: end;
 	justify-self: start;
-	background: #10161d;
-	box-shadow: 2px -1px 4px #10161d;
+	background: var(--pool-card-background);
+	box-shadow: 2px -1px 4px var(--pool-card-background);
 	pointer-events: none;
 }
 
@@ -1738,7 +1742,8 @@
 		var(--pool-card-resolved-color) 34%,
 		var(--line2)
 	);
-	background: color-mix(in srgb, var(--pool-card-resolved-color) 3%, var(--bg));
+	--pool-card-background: color-mix(in srgb, var(--pool-card-resolved-color) 3%, var(--bg));
+	background: var(--pool-card-background);
 	opacity: 1;
 }
 
@@ -1761,7 +1766,8 @@
 .pool-presentation.store-target {
 	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-record-color, #ff4e55);
-	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: none;
 }
 
@@ -1769,7 +1775,8 @@
 .pool-presentation.update-target {
 	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-update-color, #f4b942);
-	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: none;
 }
 
@@ -1777,7 +1784,8 @@
 .pool-presentation.set-target {
 	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-set-color, #1bd6ec);
-	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: none;
 }
 
@@ -1785,7 +1793,8 @@
 .pool-presentation.copy-target {
 	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-copy-color, #57a8ff);
-	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: none;
 }
 
@@ -1793,7 +1802,8 @@
 .pool-presentation.move-target {
 	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-move-color, #b988ff);
-	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: none;
 }
 
@@ -1801,7 +1811,8 @@
 .pool-presentation.delete-target {
 	--pool-card-border-width: 3px;
 	border: 3px solid var(--pool-delete-color, #ff4e55);
-	background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	--pool-card-background: color-mix(in srgb, #68737c 14%, var(--panel2));
+	background: var(--pool-card-background);
 	box-shadow: none;
 }
 
@@ -1869,7 +1880,7 @@
 	grid-area: media;
 	position: relative;
 	z-index: 3;
-	box-shadow: -2px -2px 4px #10161d;
+	box-shadow: -2px -2px 4px var(--pool-card-background);
 	min-width: 0;
 	min-height: 0;
 	width: var(--pool-card-media-width);
@@ -1917,13 +1928,18 @@
 		--pool-card-icon-color,
 		var(--pool-card-color, var(--pool-set-color, #1bd6ec))
 	);
-	font-size: clamp(20px, 25%, 30px);
+	display: grid;
+	place-items: center;
+	width: 100%;
+	height: 100%;
+	font-size: min(20cqw, 30px);
 	line-height: 1;
 }
 
 .pool-card-icon-image {
-	width: 82%;
-	height: 82%;
+	display: block;
+	width: 72%;
+	height: 72%;
 	object-fit: contain;
 	filter: brightness(0) invert(1);
 	opacity: 0.9;

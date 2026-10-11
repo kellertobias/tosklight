@@ -155,12 +155,19 @@ export function GroupCard({
 			className={`group-card ${presentation.className}`}
 			style={presentation.style}
 			aria-pressed={selected}
-			cornerIndicator={groupMembershipDot(partiallySelected, fullySelected, selected)}
 			model={{
 				number: index + 1,
 				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
 				secondary: group
-					? groupFixtureCountLabel(group.body.fixtures.length, selectedFixtureCount)
+					? <span className="group-fixture-count">
+						<span className={selectedFixtureCount > 0 ? "group-fixture-count-selected" : undefined}>
+							{selectedFixtureCount > 0 && selectedFixtureCount < group.body.fixtures.length
+								? selectedFixtureCount
+								: groupFixtureCountLabel(group.body.fixtures.length, selectedFixtureCount)}
+						</span>
+						{selectedFixtureCount > 0 && selectedFixtureCount < group.body.fixtures.length
+							? `/${group.body.fixtures.length}` : null}
+					</span>
 					: undefined,
 				details: group ? details : [...details, emptyGroupHint(storeArmed, updateArmed)],
 				icon: group?.body.icon,
@@ -199,13 +206,6 @@ export function GroupCard({
 			onDoubleClick={selectFrozen}
 			onClick={scheduleLiveSelection}
 		/>
-	);
-}
-
-function groupMembershipDot(partiallySelected: boolean, fullySelected: boolean, selected: boolean) {
-	if (selected || (!partiallySelected && !fullySelected)) return null;
-	return (
-		<span className={`group-membership-selection-dot ${fullySelected ? "full" : "partial"}`} role="img" aria-label={fullySelected ? "All group fixtures selected; group not selected" : "Some group fixtures selected; group not selected"} />
 	);
 }
 
