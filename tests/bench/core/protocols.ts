@@ -181,11 +181,24 @@ export class OscHardware {
   resetTrace(): void { this.trace.length = 0; }
 
   async subscribe(clientId: string, deskAlias = "main"): Promise<void> {
+    const mark = this.mark();
+    const deadline = Date.now() + 2_000;
+    const acknowledged = () => this.messages.slice(mark).some(
+      (message) => message.address === `/light/${deskAlias}/feedback/page`,
+    );
+    // Keep the existing bounded UDP retransmissions, then allow the same
+    // acknowledgement deadline used by expectAfter. Do not accept old feedback.
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await this.send("/light/subscribe", [clientId, deskAlias, this.feedbackPort]);
-      if (this.messages.some((message) => message.address === `/light/${deskAlias}/feedback/page`)) return;
+      if (acknowledged()) return;
       await new Promise<void>((resolve) => setTimeout(resolve, 25));
+      if (acknowledged()) return;
     }
+    while (Date.now() < deadline) {
+      if (acknowledged()) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    }
+    if (acknowledged()) return;
     throw new Error(`Timed out subscribing OSC hardware ${clientId} to desk ${deskAlias}`);
   }
 
