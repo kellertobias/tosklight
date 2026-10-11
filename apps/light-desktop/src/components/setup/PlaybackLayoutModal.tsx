@@ -262,6 +262,7 @@ export function PlaybackLayoutFields({
 			<FormLayout columns={2} minColumnWidth={190}>
 				<SelectField
 					label="Page source"
+					ariaLabel="Page source"
 					value={pageSource.type}
 					disabled={pageSourceLocked}
 					options={[
@@ -286,6 +287,7 @@ export function PlaybackLayoutFields({
 				{pageSource.type === "follow" ? (
 					<SelectField
 						label="Follow surface"
+						ariaLabel="Follow surface"
 						value={pageSource.surface_id}
 						disabled={pageSourceLocked}
 						options={surfaceOptions.map((surface) => ({

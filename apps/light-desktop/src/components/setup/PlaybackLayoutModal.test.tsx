@@ -93,3 +93,26 @@ it("reorders through pointer dragging while preserving each row address and pres
 		{ type: "pinned", page: 5 },
 	);
 });
+
+it("labels page source and follow controls and saves the operator's Own page choice", () => {
+	const save = vi.fn();
+	render(
+		<PlaybackLayoutModal
+			initialLayout={layout}
+			pageSource={{ type: "follow", surface_id: "main" }}
+			surfaceOptions={[{ id: "main", name: "Main" }]}
+			onSave={save}
+			onClose={() => {}}
+		/>,
+	);
+	expect(
+		screen.getByLabelText("Follow surface", { exact: true }),
+	).toHaveTextContent("Main");
+	fireEvent.click(screen.getByLabelText("Page source", { exact: true }));
+	fireEvent.click(
+		screen.getByRole("option", { name: "Own page" }),
+	);
+	expect(screen.getByLabelText("Page", { exact: true })).toHaveValue("1");
+	fireEvent.click(screen.getByRole("button", { name: "Save" }));
+	expect(save).toHaveBeenCalledWith(layout, { type: "own", page: 1 });
+});
