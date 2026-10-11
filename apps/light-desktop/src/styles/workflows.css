@@ -1796,8 +1796,9 @@
 	pointer-events: none;
 	fill: none;
 	stroke: var(--amber);
-	stroke-width: 3px;
-	stroke-linecap: square;
+	stroke-width: 2px;
+	stroke-linecap: round;
+	stroke-linejoin: round;
 }
 .playback-fader-bank article.playback-solo-selected {
 	background-image: linear-gradient(

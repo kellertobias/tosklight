@@ -58,7 +58,7 @@ describe("actual browser expanded Solo fence geometry", () => {
 				`<style>${css}\n:root{--amber:#ffb347}body{background:#112022;color:white;font:16px sans-serif;padding:20px}article{background:#20343f;padding:8px;box-sizing:border-box}</style><div id="app"></div>`,
 			);
 			await page.addScriptTag({ content: bundle.outputFiles[0].text });
-			await page.waitForSelector(".playback-solo-fence-overlay line", {
+			await page.waitForSelector(".playback-solo-fence-overlay path", {
 				state: "attached",
 				timeout: 5_000,
 			});
@@ -72,11 +72,16 @@ describe("actual browser expanded Solo fence geometry", () => {
 						(card) => card.getBoundingClientRect(),
 					);
 					const svg = grid.querySelector<SVGSVGElement>("svg")!;
-					const lines = [...svg.querySelectorAll("line")].map((line) =>
-						["x1", "y1", "x2", "y2"].map((key) =>
-							Number(line.getAttribute(key)),
-						),
-					);
+					const lines = [
+						...svg.querySelectorAll<SVGPathElement>("path"),
+					].flatMap((path) => {
+						const total = path.getTotalLength();
+						return Array.from({ length: Math.ceil(total) }, (_, index) => {
+							const a = path.getPointAtLength(index),
+								b = path.getPointAtLength(Math.min(index + 1, total));
+							return [a.x, a.y, b.x, b.y];
+						});
+					});
 					return {
 						width: bounds.width,
 						halfJoin: cards[1].right - bounds.left + 2.5,
@@ -97,19 +102,25 @@ describe("actual browser expanded Solo fence geometry", () => {
 			const before = await inspect();
 			expect(before.pointerEvents).toBe("none");
 			expect(before.svgWidth).toBe(640);
-			expect(before.strokeWidth).toBe("3px");
-			expect(before.lines).toContainEqual([
-				before.halfJoin,
-				before.sharedY,
-				before.expandedRight,
-				before.sharedY,
-			]);
-			expect(before.lines).not.toContainEqual([
-				1.5,
-				before.sharedY,
-				before.expandedRight,
-				before.sharedY,
-			]);
+			expect(before.strokeWidth).toBe("2px");
+			const exposedPartialEdge = (value: typeof before) =>
+				value.lines.some(
+					([x1, y1, x2, y2]) =>
+						Math.abs(y1 - value.sharedY) < 0.02 &&
+						Math.abs(y2 - value.sharedY) < 0.02 &&
+						x1 > value.halfJoin + 6 &&
+						x2 < value.expandedRight - 6,
+				);
+			expect(exposedPartialEdge(before)).toBe(true);
+			expect(
+				before.lines.some(
+					([x1, y1, x2, y2]) =>
+						Math.abs(y1 - before.sharedY) < 0.02 &&
+						Math.abs(y2 - before.sharedY) < 0.02 &&
+						x1 > 8 &&
+						x2 < before.halfJoin - 6,
+				),
+			).toBe(false);
 			await page.screenshot({
 				path: resolve(evidence, "before-scroll.png"),
 			});
@@ -142,12 +153,7 @@ describe("actual browser expanded Solo fence geometry", () => {
 					?.startsWith("0 0 800 "),
 			);
 			const resized = await inspect();
-			expect(resized.lines).toContainEqual([
-				resized.halfJoin,
-				resized.sharedY,
-				resized.expandedRight,
-				resized.sharedY,
-			]);
+			expect(exposedPartialEdge(resized)).toBe(true);
 			expect(resized.expandedRight).toBeGreaterThan(before.expandedRight);
 		} finally {
 			await browser.close();

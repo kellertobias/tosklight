@@ -91,31 +91,24 @@ function harness() {
 	};
 }
 const coordinates = (container: HTMLElement) =>
-	[...container.querySelectorAll("line")].map((line) =>
-		["x1", "y1", "x2", "y2"].map((name) => Number(line.getAttribute(name))),
+	[...container.querySelectorAll("path")].map(
+		(path) => path.getAttribute("d")!,
 	);
 describe("measured Solo perimeter overlay", () => {
 	it("draws only the exposed partial edge using actual unequal card heights, and never receives input", async () => {
 		const view = harness();
 		await waitFor(() =>
-			expect(view.container.querySelectorAll("line").length).toBeGreaterThan(0),
+			expect(view.container.querySelectorAll("path").length).toBeGreaterThan(0),
 		);
-		expect(coordinates(view.container)).toContainEqual([
-			102.5, 102.5, 207.5, 102.5,
-		]);
-		expect(coordinates(view.container)).not.toContainEqual([
-			1.5, 102.5, 207.5, 102.5,
-		]);
+		expect(coordinates(view.container)).toHaveLength(1);
+		expect(coordinates(view.container)[0]).toContain("Q 102.5 102.5");
+		expect(coordinates(view.container)[0]).toContain("Q 207.5 102.5");
 		const svg = view.container.querySelector("svg")!;
 		expect(svg.style.pointerEvents).toBe("none");
 		expect(svg).toHaveAttribute("aria-hidden", "true");
 		expect(view.observe).toHaveBeenCalledTimes(3);
 		view.widen();
-		expect(
-			coordinates(view.container).filter(
-				(line) => line[1] === 102.5 && line[3] === 102.5,
-			),
-		).toEqual([]);
+		expect(coordinates(view.container)[0]).not.toContain("102.5");
 	});
 	it("keeps content-relative fences through scrolling and recomputes/cleans observers on layout changes", () => {
 		const view = harness();

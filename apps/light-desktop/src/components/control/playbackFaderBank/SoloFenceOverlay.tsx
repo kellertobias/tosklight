@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState } from "react";
+import { soloFencePaths } from "./soloFencePaths";
 import type { PlaybackSoloRegion } from "../../../features/playbackSolo/contracts";
 import {
 	soloFenceSegments,
@@ -82,14 +83,8 @@ export function SoloFenceOverlay({
 			preserveAspectRatio="none"
 			style={{ pointerEvents: "none" }}
 		>
-			{drawing.segments.map((line, index) => (
-				<line
-					key={`${line.cellKey}:${line.edge}:${index}`}
-					x1={line.x1}
-					y1={line.y1}
-					x2={line.x2}
-					y2={line.y2}
-				/>
+			{soloFencePaths(drawing.segments).map((path, index) => (
+				<path key={index} d={path} />
 			))}
 		</svg>
 	);
