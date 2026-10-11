@@ -449,20 +449,6 @@ fn add_playback_assignment_references(
                 target,
                 descriptor,
             )?;
-            add_optional_direct_reference(
-                body,
-                &format!("{prefix}/target/assignment/target_scope/group_id"),
-                "group",
-                descriptor,
-            )?;
-            add_fixture_array_at(
-                body,
-                &format!("{prefix}/target/assignment/target_scope/targets"),
-                &format!("{prefix}/target/assignment/target_scope/targets"),
-                source,
-                target,
-                descriptor,
-            )?;
         }
         _ => {}
     }
