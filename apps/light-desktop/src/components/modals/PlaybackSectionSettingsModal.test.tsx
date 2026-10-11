@@ -17,6 +17,22 @@ vi.mock("./PlaybackSoloSettings", () => ({ PlaybackSoloSettings: (props: unknown
 afterEach(cleanup);
 beforeEach(() => { model.update.mockReset().mockResolvedValue(undefined); model.solo.mockClear(); });
 describe("Playback section settings", () => {
+	it("places both settings controls in the standard modal title bar without a body tab row", () => {
+		const showGrid = vi.fn();
+		render(<PlaybackSectionSettingsModal surfaceId="main" onClose={vi.fn()} onShowGrid={showGrid} />);
+		const page = screen.getByRole("tab", { name: "Page source" });
+		const solo = screen.getByRole("tab", { name: "Manage Solo Regions" });
+		expect(page.closest(".ui-modal-titlebar")).not.toBeNull();
+		expect(solo.closest(".ui-modal-titlebar")).toBe(page.closest(".ui-modal-titlebar"));
+		expect(page).toHaveAttribute("aria-selected", "true");
+		fireEvent.click(solo);
+		expect(solo).toHaveAttribute("aria-selected", "true");
+		expect(page).toHaveAttribute("aria-selected", "false");
+		expect(showGrid).toHaveBeenCalledOnce();
+		expect(screen.getAllByRole("tablist")).toHaveLength(1);
+		fireEvent.click(page);
+		expect(screen.getByLabelText("Page")).toBeInTheDocument();
+	});
 	it("updates only local page source through the existing sparse intent", async () => {
 		render(<PlaybackSectionSettingsModal surfaceId="main" onClose={vi.fn()} />);
 		fireEvent.change(screen.getByLabelText("Page"), { target: { value: "7" } });

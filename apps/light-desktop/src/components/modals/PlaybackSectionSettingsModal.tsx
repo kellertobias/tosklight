@@ -22,15 +22,28 @@ export function PlaybackSectionSettingsModal({ surfaceId, onClose, onShowGrid, p
 				if (event.target === event.currentTarget) onClose();
 			}}>
 			<section className="modal-card" role="dialog" aria-label="Playback section settings">
-				<ModalTitleBar title="Playback section settings" onClose={onClose} />
-				<div role="tablist" aria-label="Playback section settings">
-					<Button role="tab" aria-selected={tab === "page"} onClick={() => setTab("page")}>
-						Page source
-					</Button>
-					<Button role="tab" aria-selected={tab === "solo"} onClick={() => { setTab("solo"); onShowGrid?.(); }}>
-						Manage Solo Regions
-					</Button>
-				</div>
+				<ModalTitleBar
+					title="Playback section settings"
+					onClose={onClose}
+					groups={[{
+						id: "playback-section-settings",
+						kind: "tabs",
+						ariaLabel: "Playback section settings",
+						activeId: tab,
+						onActiveChange: (id) => {
+							if (id === "solo") {
+								setTab("solo");
+								onShowGrid?.();
+							} else {
+								setTab("page");
+							}
+						},
+						actions: [
+							{ id: "page", label: "Page source" },
+							{ id: "solo", label: "Manage Solo Regions" },
+						],
+					}]}
+				/>
 				{preparationError && <ErrorAlert role="alert">{preparationError}</ErrorAlert>}
 				{tab === "solo" ? <PlaybackSoloSettings surfaceId={surfaceId} onClose={onClose} />
 					: surface ? <PageSourceSettings key={surfaceId} surfaceId={surfaceId} initial={surface.page_source} />
