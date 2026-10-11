@@ -22,9 +22,11 @@ function Card({ count, selected = false, fixtures = ["a", "b"] }: {
 }
 
 describe("Group card fixture count", () => {
-	it.each([[0, "2"], [1, "1/2"], [2, "2/2"]])("shows the actual membership count %s", (count, label) => {
+	it.each([[0, "2"], [1, "1/2"], [2, "2"]])("shows the actual membership count %s", (count, label) => {
 		const { container } = render(<Card count={count} selected />);
 		expect(container.querySelector(".pool-card-information > small")).toHaveTextContent(label);
+		expect(container.querySelector(".group-fixture-count-selected")?.textContent ?? null).toBe(count > 0 ? String(count) : null);
+		expect(container.querySelector(".group-membership-selection-dot")).toBeNull();
 	});
 	it("shows zero for a stored empty group", () => {
 		const { container } = render(<Card count={0} fixtures={[]} selected />);

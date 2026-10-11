@@ -22,7 +22,7 @@ describe("Group tile fixture membership", () => {
 		const full = groupFixtureSelection(group(members), selected(...members), selected());
 		expect(full.fullySelected).toBe(true);
 		expect(full.selected).toBe(false);
-		expect(groupFixtureCountLabel(2, full.selectedFixtureCount)).toBe("2/2");
+		expect(groupFixtureCountLabel(2, full.selectedFixtureCount)).toBe("2");
 		expect(members).toEqual(["b", "unpatched-a"]);
 	});
 	it("keeps stored empty group selection distinct from an absent slot", () => {
