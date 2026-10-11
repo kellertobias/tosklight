@@ -1,6 +1,6 @@
-# Virtual Playbacks
+# Playbacks
 
-A Virtual Playbacks pane is a configurable control surface for the same show-owned Playbacks used by screens and attached hardware. Each page has positions 1–1000, on pages 1–99. Address a Playback as `page.position`; there is no separate virtual numbering bank. Two surfaces displaying the same address operate the same assignment and authoritative runtime.
+A Playbacks pane is a configurable control surface for the same show-owned Playbacks used by screens and attached hardware. Each page has positions 1–1000, on pages 1–99. Address a Playback as `page.position`; there is no separate virtual numbering bank. Two surfaces displaying the same address operate the same assignment and authoritative runtime.
 
 Configure each row's first position, number of positions and presentation: buttons, faders or push encoders. Preserve gaps between rows when useful. For example, a 20-column, 14-row pane starting at 401 covers positions 401–680 on its displayed page. Pane controls use the same configured Playback actions, fader modes, icons and images as screen controls.
 

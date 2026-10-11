@@ -1,3 +1,7 @@
+import type {
+	PlaybackSurfaceConfiguration,
+	PlaybackSurfacesSnapshot,
+} from "../apps/light-desktop/src/api/playbackConfigurationModels";
 import type { Locator, Page } from "@playwright/test";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
@@ -6,13 +10,25 @@ type Box = { x: number; y: number; width: number; height: number };
 
 type StoredScreen = {
 	id: string;
-	page_mode: string;
+	surface_id: string;
 	bounds?: { x: number } | null;
-	playback_layout?: {
-		playbacks_per_row: number;
-		rows: Array<{ first_playback_slot: number }>;
-	} | null;
 };
+
+async function playbackSurface(
+	api: ApiDriver,
+	screenId: string,
+): Promise<PlaybackSurfaceConfiguration> {
+	const screen = (await screens(api)).find((screen) => screen.id === screenId);
+	if (!screen) throw new Error("Configured screen is missing");
+	const snapshot = await api.request<PlaybackSurfacesSnapshot>(
+		"GET",
+		"/api/v2/playback-surfaces",
+	);
+	const surface = snapshot.playback_surfaces[screen.surface_id];
+	if (!surface)
+		throw new Error("Configured screen's Playback surface is missing");
+	return surface;
+}
 
 async function box(locator: Locator): Promise<Box> {
 	const result = await locator.boundingBox();
@@ -142,20 +158,14 @@ test("TL-472 @ui › Configure Screen shows its switches as a 2x2 grid and edits
 		await expect(rows).toHaveCount(rowCount + 1);
 		await expect
 			.poll(
-				async () =>
-					(await screens(api)).find((screen) => screen.id === screenId)
-						?.playback_layout?.rows.length,
+				async () => (await playbackSurface(api, screenId)).layout.rows.length,
 			)
 			.toBe(rowCount + 1);
-		await dialog.getByRole("button", { name: "Follow Main" }).click();
-		await page.getByRole("option", { name: "Dedicated Page" }).click();
+		await dialog.getByLabel("Page source", { exact: true }).click();
+		await page.getByRole("option", { name: "Own page", exact: true }).click();
 		await expect
-			.poll(
-				async () =>
-					(await screens(api)).find((screen) => screen.id === screenId)
-						?.page_mode,
-			)
-			.toBe("independent");
+			.poll(async () => (await playbackSurface(api, screenId)).page_source)
+			.toEqual({ type: "own", page: 1 });
 		// Touch-sized row controls inside the embedded form.
 		const remove = await box(
 			rows.last().getByRole("button", { name: /Remove row/ }),
@@ -166,6 +176,79 @@ test("TL-472 @ui › Configure Screen shows its switches as a 2x2 grid and edits
 		await deleteScreens(api, before);
 	}
 });
+
+async function editInvalidPlaybackRow(
+	api: ApiDriver,
+	screenId: string,
+	dialog: Locator,
+	form: Locator,
+	windowX: Locator,
+) {
+	await dialog.getByRole("tab", { name: "Playbacks", exact: true }).click();
+	const rows = dialog.locator("[data-playback-row-index]");
+	const perRow = rows.first().getByLabel("Playbacks in row", { exact: true });
+	const alert = dialog.getByRole("alert");
+	await perRow.fill("32");
+	await perRow.blur();
+	// Width belongs to each row; retain a valid first-row edit while the last row exceeds position1000.
+	await expect
+		.poll(
+			async () => (await playbackSurface(api, screenId)).layout.rows[0].count,
+		)
+		.toBe(32);
+	await rows.last().getByLabel("Playbacks in row", { exact: true }).fill("32");
+	await rows.last().getByLabel("Playbacks in row", { exact: true }).blur();
+	await expect
+		.poll(
+			async () =>
+				(await playbackSurface(api, screenId)).layout.rows.at(-1)?.count,
+		)
+		.toBe(32);
+	const savedBeforeInvalid = (await playbackSurface(api, screenId)).layout;
+	const invalidStart = rows
+		.last()
+		.getByLabel("First Playback Number", { exact: true });
+	await invalidStart.fill("990");
+	await invalidStart.blur();
+	await expect(alert).toContainText("Not saved yet");
+	const rowCount = await rows.count();
+	expect(
+		await form.evaluate((element) => element.scrollWidth - element.clientWidth),
+	).toBeLessThanOrEqual(0);
+
+	await dialog.getByRole("tab", { name: "Placement", exact: true }).click();
+	await expect(windowX).toHaveValue("140");
+	await dialog.getByRole("tab", { name: "Playbacks", exact: true }).click();
+	await expect(perRow).toHaveValue("32");
+	await expect(rows).toHaveCount(rowCount);
+	await expect(invalidStart).toHaveValue("990");
+	await expect(alert).toBeVisible();
+	expect((await playbackSurface(api, screenId)).layout).toEqual(
+		savedBeforeInvalid,
+	);
+	await rows
+		.last()
+		.getByRole("button", { name: /Remove row/ })
+		.click();
+	await expect(alert).not.toBeVisible();
+	const kept = await rows.count();
+	expect(kept).toBe(rowCount - 1);
+	expect(kept).toBeGreaterThan(0);
+	await expect
+		.poll(async () => {
+			const stored = (await screens(api)).find(
+				(screen) => screen.id === screenId,
+			);
+			const surface = await playbackSurface(api, screenId);
+			return {
+				perRow: surface.layout.rows[0].count,
+				rows: surface.layout.rows.length,
+				x: stored?.bounds?.x,
+			};
+		})
+		.toEqual({ perRow: 32, rows: kept, x: 140 });
+	return perRow;
+}
 
 test("TL-472 @ui › a constrained Configure Screen stacks, scrolls, and keeps typed values", async ({
 	api,
@@ -219,46 +302,13 @@ test("TL-472 @ui › a constrained Configure Screen stacks, scrolls, and keeps t
 		await windowX.fill("140");
 		await windowX.blur();
 
-		await dialog.getByRole("tab", { name: "Playbacks", exact: true }).click();
-		const perRow = dialog.getByLabel("Playbacks per row");
-		const rows = dialog.locator("[data-playback-row-index]");
-		const alert = dialog.getByRole("alert");
-		await perRow.fill("32");
-		await perRow.blur();
-		// A new screen's rows of 32 run past playback 127: kept on screen, not saved.
-		await expect(alert).toContainText("Not saved yet");
-		const rowCount = await rows.count();
-		expect(
-			await form.evaluate(
-				(element) => element.scrollWidth - element.clientWidth,
-			),
-		).toBeLessThanOrEqual(0);
-
-		await dialog.getByRole("tab", { name: "Placement", exact: true }).click();
-		await expect(windowX).toHaveValue("140");
-		await dialog.getByRole("tab", { name: "Playbacks", exact: true }).click();
-		await expect(perRow).toHaveValue("32");
-		await expect(rows).toHaveCount(rowCount);
-		await expect(alert).toBeVisible();
-		while (await alert.isVisible())
-			await rows
-				.last()
-				.getByRole("button", { name: /Remove row/ })
-				.click();
-		const kept = await rows.count();
-		expect(kept).toBeGreaterThan(0);
-		await expect
-			.poll(async () => {
-				const stored = (await screens(api)).find(
-					(screen) => screen.id === screenId,
-				);
-				return {
-					perRow: stored?.playback_layout?.playbacks_per_row,
-					rows: stored?.playback_layout?.rows.length,
-					x: stored?.bounds?.x,
-				};
-			})
-			.toEqual({ perRow: 32, rows: kept, x: 140 });
+		const perRow = await editInvalidPlaybackRow(
+			api,
+			screenId,
+			dialog,
+			form,
+			windowX,
+		);
 
 		// Back at desktop width the grid returns without losing anything.
 		await page.setViewportSize({ width: 1600, height: 900 });
