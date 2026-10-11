@@ -1,3 +1,4 @@
+import "./SlotControls.css";
 import { Button } from "@tosklight/ui";
 import type { AssignedPlayback } from "./types";
 import {
@@ -80,12 +81,13 @@ export function PlaybackConfigurationTarget({
 	return (
 		<div
 			className="playback-assignment-target playback-configuration-target"
+			title={`Configure Playback ${controller.activePageNumber}.${slot} · ${playback?.name ?? "Empty"}`}
 			aria-hidden="true"
 		>
 			<PlaybackCommandTargetBadge command="set" />
-			<b>Configure Playback</b>
+			<b title="Configure Playback">Configure</b>
 			<small>
-				{controller.activePageNumber}.{slot} · {playback?.name ?? "Empty"}
+				{controller.activePageNumber}.{slot}
 			</small>
 		</div>
 	);

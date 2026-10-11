@@ -1,0 +1,40 @@
+/* Interception must remain legible inside both narrow faders and 44px button rows. */
+.playback-fader-bank .playback-assignment-target.playback-configuration-target,
+.playback-fader-bank .playback-assignment-target.ui-button {
+	min-width: 0;
+	min-height: 44px;
+	box-sizing: border-box;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: 14px minmax(12px, auto) 11px;
+	place-content: center;
+	gap: 1px;
+	padding: 2px;
+	overflow: hidden;
+}
+
+.playback-fader-bank .playback-assignment-target > .playback-command-target-badge {
+	position: static;
+	justify-self: center;
+	max-width: 100%;
+	box-sizing: border-box;
+	transform: none;
+	padding: 1px 2px;
+	overflow: hidden;
+	font-size: 8px;
+	letter-spacing: 0;
+}
+
+.playback-fader-bank .playback-assignment-target > b,
+.playback-fader-bank .playback-assignment-target > small {
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	font-size: 10px;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.playback-fader-bank .playback-assignment-target > small {
+	font-size: 9px;
+}
