@@ -68,7 +68,9 @@ function png(width: number, height: number, colour: Rgba, inset = 0): Buffer {
 	]);
 }
 
-function output(overrides: Partial<DiscoveredMediaOutput>): DiscoveredMediaOutput {
+function output(
+	overrides: Partial<DiscoveredMediaOutput>,
+): DiscoveredMediaOutput {
 	return {
 		id: RACK_A_OUTPUT,
 		name: "Main",
@@ -155,7 +157,9 @@ async function patchServers(page: Page, api: ApiDriver): Promise<Servers> {
 		})
 		.toEqual(["192.0.2.61", "192.0.2.62"]);
 	const byHost = (host: string) => {
-		const found = fixtures.find((fixture) => fixture.endpoint?.ip_address === host);
+		const found = fixtures.find(
+			(fixture) => fixture.endpoint?.ip_address === host,
+		);
 		if (!found) throw new Error(`Media Server ${host} was not patched`);
 		found.layers.sort((left, right) => left.head_index - right.head_index);
 		return found;
@@ -175,7 +179,6 @@ function change(fixtureId: string, attribute: string, raw: number) {
 function cue(id: string, number: number, name: string, changes: unknown[]) {
 	return {
 		id,
-		number,
 		name,
 		fade_millis: 0,
 		delay_millis: 0,
@@ -218,16 +221,17 @@ async function putCueList(
 }
 
 function playback(
-	number: number,
 	name: string,
 	cueListId: string,
 	extra: Record<string, unknown> = {},
 ) {
 	return {
-		number,
 		name,
 		target: { type: "cue_list", cue_list_id: cueListId },
 		buttons: ["go", "none", "none"],
+		button_count: 1,
+		has_fader: false,
+		footprint: { type: "normal" },
 		fader: "master",
 		go_activates: true,
 		auto_off: false,
@@ -293,7 +297,9 @@ class FakePictures {
 	async install(page: Page) {
 		await page.route(MEDIA_PREVIEW, (route) => {
 			const url = new URL(route.request().url());
-			const cueId = decodeURIComponent(url.pathname.match(MEDIA_PREVIEW)?.[1] ?? "");
+			const cueId = decodeURIComponent(
+				url.pathname.match(MEDIA_PREVIEW)?.[1] ?? "",
+			);
 			const key = url.searchParams.get("key") ?? "";
 			this.requests.push({ cueId, key });
 			const behaviour = this.behaviours.get(cueId);
@@ -349,7 +355,12 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		desk,
 		page,
 	}) => {
-		const show = await loadCanonicalCopy(api, bench, "mediacue-001", "default-stage");
+		const show = await loadCanonicalCopy(
+			api,
+			bench,
+			"mediacue-001",
+			"default-stage",
+		);
 		const pictures = new FakePictures();
 		await pictures.install(page);
 		await desk.open(api.baseUrl);
@@ -390,7 +401,31 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 				change(servers.b.layers[1].fixture_id, "media.file", 9),
 			]),
 		]);
-		await putObject(api, "playback", "201", playback(201, "Media looks", listId));
+		const storedList = await revisionOf(api, "cue_list", listId);
+		await putObject(
+			api,
+			"cue_list",
+			listId,
+			{ ...storedList.body, pool_number: 201 },
+			storedList.revision,
+		);
+		const storedPage = (await objects(api, "playback_page")).find(
+			(entry) => entry.id === "1",
+		);
+		await putObject(
+			api,
+			"playback_page",
+			"1",
+			{
+				number: 1,
+				name: storedPage?.body.name ?? "Main",
+				assignments: {
+					...(storedPage?.body.assignments ?? {}),
+					"201": playback("Media looks", listId),
+				},
+			},
+			storedPage?.revision ?? 0,
+		);
 
 		// The desk itself decides which Cues are media Cues and which picture each one is.
 		const index = await mediaIndex(api, show.id);
@@ -441,7 +476,10 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		// Cue 1: the whole output's Program image of Rack A, opaque.
 		await expect(preview(0)).toHaveAttribute("data-media-state", "ready");
 		await expect(preview(0)).toHaveAttribute("data-media-scope", "program");
-		await expect(preview(0)).toHaveAttribute("data-media-server", servers.a.fixture_id);
+		await expect(preview(0)).toHaveAttribute(
+			"data-media-server",
+			servers.a.fixture_id,
+		);
 		expect((await pixels(preview(0).locator("img"))).centre).toEqual(RED);
 
 		// Cue 2: only layer 2 of Rack A, transparency kept, over the checkerboard.
@@ -451,19 +489,25 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		const layerPixels = await pixels(preview(1).locator("img"));
 		expect(layerPixels.centre).toEqual(GREEN);
 		expect(layerPixels.corner[3]).toBe(0);
-		await expect(preview(1).locator("img")).not.toHaveCSS("background-image", "none");
+		await expect(preview(1).locator("img")).not.toHaveCSS(
+			"background-image",
+			"none",
+		);
 
 		// Cue 3: Rack B's own picture, never Rack A's.
-		await expect(preview(2)).toHaveAttribute("data-media-server", servers.b.fixture_id);
+		await expect(preview(2)).toHaveAttribute(
+			"data-media-server",
+			servers.b.fixture_id,
+		);
 		expect((await pixels(preview(2).locator("img"))).centre).toEqual(BLUE);
 
 		// Cue 4 keeps its Stage preview path: no media picture is asked for or shown.
 		await expect(
 			rows.nth(3).locator("[data-preview-kind='media']"),
 		).toHaveCount(0);
-		expect(pictures.requests.some((request) => request.cueId === ids.lighting)).toBe(
-			false,
-		);
+		expect(
+			pictures.requests.some((request) => request.cueId === ids.lighting),
+		).toBe(false);
 
 		// Empty, offline, and missing are named; none shows a broken or another Cue's picture.
 		await expect(preview(4)).toHaveAttribute("data-media-state", "empty");
@@ -484,7 +528,9 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		// The picture opens larger on touch.
 		await preview(1).click();
 		const modal = page.getByRole("dialog", { name: "Cue 2 preview image" });
-		await expect(modal.locator(".cuelist-preview-modal-body")).toHaveClass(/scope-layer/);
+		await expect(modal.locator(".cuelist-preview-modal-body")).toHaveClass(
+			/scope-layer/,
+		);
 		await modal.getByRole("button", { name: "Close Cue preview" }).click();
 
 		// Editing Cue 2 changes its preview key; the new picture replaces the old one.
@@ -514,13 +560,18 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		);
 	});
 
-	test("MEDIACUE-002 @ui › single-Cue Virtual Playbacks show their Cue preview by default and keep an operator image", async ({
+	test("MEDIACUE-002 @ui › single-Cue Playbacks show their Cue preview by default and keep an operator image", async ({
 		api,
 		bench,
 		desk,
 		page,
 	}) => {
-		const show = await loadCanonicalCopy(api, bench, "mediacue-002", "default-stage");
+		const show = await loadCanonicalCopy(
+			api,
+			bench,
+			"mediacue-002",
+			"default-stage",
+		);
 		const pictures = new FakePictures();
 		await pictures.install(page);
 		await desk.open(api.baseUrl);
@@ -562,8 +613,8 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		pictures.failure(cues.offline, "offline");
 
 		const configuredImage = `data:image/png;base64,${png(8, 8, YELLOW).toString("base64")}`;
-		const singleCue = (number: number, name: string, list: string, extra = {}) => ({
-			...playback(number, name, list, extra),
+		const singleCue = (name: string, list: string, extra = {}) => ({
+			...playback(name, list, extra),
 			button_count: 1,
 			has_fader: false,
 		});
@@ -575,52 +626,58 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			"playback_page",
 			"1",
 			{
-				...(existingPage?.body ?? { number: 1, name: "Page 1", slots: {} }),
-				virtual_playbacks: {
-					...(existingPage?.body.virtual_playbacks ?? {}),
-					"1001": singleCue(1001, "Program A", lists.program),
-					"1002": singleCue(1002, "Layer B1", lists.layer),
-					"1003": singleCue(1003, "Configured", lists.configured, {
+				...(existingPage?.body ?? {
+					number: 1,
+					name: "Page 1",
+					assignments: {},
+				}),
+				assignments: {
+					...(existingPage?.body.assignments ?? {}),
+					"401": singleCue("Program A", lists.program),
+					"402": singleCue("Layer B1", lists.layer),
+					"403": singleCue("Configured", lists.configured, {
 						presentation_image: configuredImage,
 					}),
-					"1004": singleCue(1004, "Offline", lists.offline),
+					"404": singleCue("Offline", lists.offline),
 				},
 			},
 			existingPage?.revision ?? 0,
 		);
 
 		const desktops = new BrowserDesktops(page, async () => undefined);
-		const layout = desktops.configure("Media Virtual Playbacks");
+		const layout = desktops.configure("Media Playbacks");
 		const pane = layout.addPane(
 			PaneType.VirtualPlaybacks,
-			{ slug: "media-virtual", column: 1, row: 1, width: 12, height: 6 },
+			{ slug: "media-playbacks", column: 1, row: 1, width: 12, height: 6 },
 			{ rows: 1, columns: 4, pageMode: "pinned", pinnedPage: 1 },
 		);
 		await layout.apply();
 		const tile = (number: number) =>
-			pane.root().locator(`[data-virtual-playback-number="${number}"]`);
+			pane.root().locator(`[data-page="1"][data-playback-slot="${number}"]`);
 
 		// A grid of media-only single-Cue playbacks shows each Cue's own picture.
-		await expect(tile(1001)).toHaveAttribute("data-image-source", "cue-preview");
-		expect((await pixels(tile(1001).locator(".pool-card-image"))).centre).toEqual(RED);
-		await expect(tile(1002)).toHaveAttribute("data-image-source", "cue-preview");
-		await expect(tile(1002)).toHaveClass(/cue-preview-transparent/);
-		const layer = await pixels(tile(1002).locator(".pool-card-image"));
+		await expect(tile(401)).toHaveAttribute("data-image-source", "cue-preview");
+		expect(
+			(await pixels(tile(401).locator(".pool-card-image"))).centre,
+		).toEqual(RED);
+		await expect(tile(402)).toHaveAttribute("data-image-source", "cue-preview");
+		await expect(tile(402)).toHaveClass(/cue-preview-transparent/);
+		const layer = await pixels(tile(402).locator(".pool-card-image"));
 		expect(layer.centre).toEqual(GREEN);
 		expect(layer.corner[3]).toBe(0);
 
 		// The operator's image wins; the Cue preview is never even shown there.
-		await expect(tile(1003)).toHaveAttribute("data-image-source", "configured");
-		expect((await pixels(tile(1003).locator(".pool-card-image"))).centre).toEqual(
-			YELLOW,
-		);
+		await expect(tile(403)).toHaveAttribute("data-image-source", "configured");
+		expect(
+			(await pixels(tile(403).locator(".pool-card-image"))).centre,
+		).toEqual(YELLOW);
 
 		// Offline is a named state, not an image.
-		await expect(tile(1004)).toHaveAttribute(
+		await expect(tile(404)).toHaveAttribute(
 			"data-preview-notice",
 			"Media Server offline",
 		);
-		await expect(tile(1004).locator(".pool-card-image")).toHaveCount(0);
+		await expect(tile(404).locator(".pool-card-image")).toHaveCount(0);
 
 		// Adding a second Cue removes the automatic default; removing it brings it back.
 		const stored = await revisionOf(api, "cue_list", lists.program);
@@ -636,15 +693,21 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			],
 			stored.revision,
 		);
-		await expect(tile(1001).locator(".pool-card-image")).toHaveCount(0);
-		await expect(tile(1001)).not.toHaveAttribute("data-image-source", /.*/);
+		await expect(tile(401).locator(".pool-card-image")).toHaveCount(0);
+		await expect(tile(401)).not.toHaveAttribute("data-image-source", /.*/);
 		const twoCues = await revisionOf(api, "cue_list", lists.program);
-		await putCueList(api, lists.program, "Program A", [programCue], twoCues.revision);
-		await expect(tile(1001)).toHaveAttribute("data-image-source", "cue-preview");
+		await putCueList(
+			api,
+			lists.program,
+			"Program A",
+			[programCue],
+			twoCues.revision,
+		);
+		await expect(tile(401)).toHaveAttribute("data-image-source", "cue-preview");
 
 		// Choosing an icon replaces the automatic image; the icon is the operator's choice.
 		const current = await revisionOf(api, "playback_page", "1");
-		const playbacks = current.body.virtual_playbacks as Record<
+		const playbacks = current.body.assignments as Record<
 			string,
 			Record<string, unknown>
 		>;
@@ -654,21 +717,22 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			"1",
 			{
 				...current.body,
-				virtual_playbacks: {
+				assignments: {
 					...playbacks,
-					"1002": { ...playbacks["1002"], presentation_icon: "★" },
+					"402": { ...playbacks["402"], presentation_icon: "★" },
 				},
 			},
 			current.revision,
 		);
-		await expect(tile(1002).locator(".pool-card-image")).toHaveCount(0);
-		await expect(tile(1002).locator(".pool-card-icon")).toHaveText("★");
-		await expect(tile(1002)).not.toHaveClass(/cue-preview-transparent/);
+		await expect(tile(402).locator(".pool-card-image")).toHaveCount(0);
+		await expect(tile(402).locator(".pool-card-icon")).toHaveText("★");
+		await expect(tile(402)).not.toHaveClass(/cue-preview-transparent/);
 
 		// Editing the only Cue changes the automatic picture.
 		const index = await mediaIndex(api, show.id);
-		const before = index.entries.find((entry) => entry.cue_id === cues.program)
-			?.preview_key;
+		const before = index.entries.find(
+			(entry) => entry.cue_id === cues.program,
+		)?.preview_key;
 		pictures.picture(cues.program, BLUE);
 		const single = await revisionOf(api, "cue_list", lists.program);
 		await putCueList(
@@ -683,7 +747,10 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			single.revision,
 		);
 		await expect
-			.poll(async () => (await pixels(tile(1001).locator(".pool-card-image"))).centre)
+			.poll(
+				async () =>
+					(await pixels(tile(401).locator(".pool-card-image"))).centre,
+			)
 			.toEqual(BLUE);
 		const after = (await mediaIndex(api, show.id)).entries.find(
 			(entry) => entry.cue_id === cues.program,

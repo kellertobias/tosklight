@@ -88,7 +88,7 @@ test("captures help and README screenshots from the default show desk @ui @docs"
   const patch = await api.patch();
   const selectedDmx = patch.fixtures.find((fixture: any) => fixture.universe === 1 && fixture.address != null)
     ?? patch.fixtures.find((fixture: any) => fixture.universe != null && fixture.address != null);
-  if (!selectedDmx) throw new Error("The documentation show has no patched DMX channel");
+  if (!selectedDmx || selectedDmx.universe == null || selectedDmx.address == null) throw new Error("The documentation show has no patched DMX channel");
   await capturePaneReference(page, { universe: selectedDmx.universe, address: selectedDmx.address });
 
   await page.getByRole("button", { name: /Open show menu/ }).click();
@@ -169,7 +169,7 @@ const paneReference = [
   ["cuelist_pool", "Cuelists", "cuelist-pool", null],
   ["cues", "Cues", "cues", null],
   ["cuelists", "Cuelists", "cuelists", null],
-  ["virtual_playbacks", "Virtual Playbacks", "virtual-playbacks", "Virtual Playbacks"],
+  ["playbacks", "Playbacks", "virtual-playbacks", "Playbacks"],
   ["file_manager", "File Manager", "file-manager", null],
   ["text_editor", "Text Editor", "text-editor", "Text Editor"],
   ["channels", "Channels", "channels", null],
@@ -431,22 +431,14 @@ async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
       cue(6, "Final look", [["1", 0.85], ["2", 0.85], ["3", 0.75], ["4", 0.8], ["5", 0.7]]),
     ],
   });
-  await put(api, showId, "playback", "1", playback(1, "Opening Sequence", { type: "cue_list", cue_list_id: cueListId }));
-  for (const [id, name, , initialMaster] of groups.slice(0, 4)) {
-    await put(api, showId, "playback", String(Number(id) + 1), playback(Number(id) + 1, name, { type: "group", group_id: id, initial_master: initialMaster }, ["select", "flash", "select_dereferenced"]));
-  }
-  await put(api, showId, "playback_page", "1", {
-    number: 1,
-    name: "Main",
-    slots: { "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 },
-    virtual_playbacks: {
-      "1001": playback(1001, "Opening Sequence", { type: "cue_list", cue_list_id: cueListId }),
-      "1002": playback(1002, "Front Fresnels", { type: "group", group_id: "1", initial_master: 0.9 }, ["select", "flash", "select_dereferenced"]),
-      "1003": playback(1003, "Back Fresnels", { type: "group", group_id: "2", initial_master: 0.75 }, ["select", "flash", "select_dereferenced"]),
-      "1004": playback(1004, "LED Washes", { type: "group", group_id: "3", initial_master: 0.65 }, ["select", "flash", "select_dereferenced"]),
-      "1005": playback(1005, "Floor PARs", { type: "group", group_id: "4", initial_master: 0.8 }, ["select", "flash", "select_dereferenced"]),
-    },
-  });
+  const assignments: Record<string, unknown> = {
+    "1": playback("Opening Sequence", { type: "cue_list", cue_list_id: cueListId }),
+  };
+  for (const [id, name, , initialMaster] of groups.slice(0, 4))
+    assignments[String(Number(id) + 1)] = playback(name, { type: "group", group_id: id, initial_master: initialMaster }, ["select", "flash", "select_dereferenced"]);
+  for (const position of [1, 2, 3, 4, 5])
+    assignments[String(400 + position)] = assignments[String(position)];
+  await put(api, showId, "playback_page", "1", { number: 1, name: "Main", assignments });
   await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: SCREENSHOT_TEXT_FILE });
   const empty = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(SCREENSHOT_TEXT_FILE)}`);
   await api.request("PUT", "/api/v2/files/shows/text", {
@@ -473,8 +465,8 @@ function cue(number: number, name: string, groupLevels: Array<[string, number]>)
   };
 }
 
-function playback(number: number, name: string, target: Record<string, unknown>, buttons: [string, string, string] = ["go", "go_minus", "flash"]) {
-  return { number, name, target, buttons, fader: "master", go_activates: true, auto_off: true, xfade_millis: 0 };
+function playback(name: string, target: Record<string, unknown>, buttons: [string, string, string] = ["go", "go_minus", "flash"]) {
+  return { name, target, buttons, button_count: 3, has_fader: true, footprint: { type: "normal" }, fader: "master", go_activates: true, auto_off: true, xfade_millis: 0, color: "#20c997", flash_release: "release_all", protect_from_swap: false };
 }
 
 async function objects<T>(api: ApiDriver, showId: string, kind: string): Promise<Array<VersionedObject<T>>> {

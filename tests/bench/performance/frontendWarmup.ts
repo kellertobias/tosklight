@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import type { CDPSession, Page, TestInfo } from "@playwright/test";
 import type { BrowserScenarioWorld } from "../core/browserScenario";
+import { PaneType } from "../window-system/paneTypes";
 import type { DeskDriver } from "../core/desk";
 import { expect } from "../core/fixtures";
 
@@ -22,14 +23,14 @@ export interface FrontendWarmupEvidence {
 			peakActive: number;
 			retainedBytes: number;
 			retainedByteBudget: number;
-			tasks: Array<{
+			tasks: ReadonlyArray<{
 				startedAt: number | null;
 				finishedAt: number | null;
 			}>;
 		} | null;
-		longTasks: Array<{ startedAt: number; durationMs: number }>;
-		eventLags: Array<{ lagMs: number }>;
-		surfaceSwitches: Array<{ durationMs: number }>;
+		longTasks: ReadonlyArray<{ startedAt: number; durationMs: number }>;
+		eventLags: ReadonlyArray<{ lagMs: number }>;
+		surfaceSwitches: ReadonlyArray<{ durationMs: number }>;
 	};
 	browserMemoryBytes: number | null;
 	switchSampleCount: number;
@@ -116,12 +117,12 @@ export async function measureFrontendWarmup(
 	}
 	const loadingPlaceholders = new Set<string>();
 	const builtIns = [
-		"stage",
-		"fixtures",
-		"presets",
-		"cuelists",
-		"dynamics",
-		"channels",
+		PaneType.Stage,
+		PaneType.Fixtures,
+		PaneType.Presets,
+		PaneType.Cuelists,
+		PaneType.Dynamics,
+		PaneType.Channels,
 	] as const;
 	for (let index = 0; index < 42; index++) {
 		await world.builtIn.open(builtIns[index % builtIns.length]);
