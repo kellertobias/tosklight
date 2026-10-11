@@ -1,3 +1,17 @@
+import { writeFile } from "node:fs/promises";
+import {
+	enterProgrammerPreload,
+	goProgrammerPreload,
+} from "./bench/programmer/programmerPreloadLifecycle";
+import {
+	activeAssignedPlayback,
+	setCaptureScope,
+} from "./preloadVirtualPlaybackContracts/showFixtures";
+import {
+	saveSoloRegions,
+	soloRegionSnapshot,
+} from "./preloadVirtualPlaybackContracts/preloadSupport";
+import type { LightBench } from "./bench/core/lightBench";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
 import { pairedScenario } from "./bench/core/pairedScenario";
@@ -21,6 +35,20 @@ import {
 	setFixtureAddressThroughApi,
 } from "./support/operator";
 import { CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION } from "./support/fixtureSchema";
+
+interface QueuedSoloWireSample {
+	phase: string;
+	elapsed: number;
+	now: string;
+	artnet: number;
+	sacn: number;
+	packets: Array<{
+		protocol: string;
+		universe: number;
+		sequence: number;
+		receivedAt: number;
+	}>;
+}
 
 interface ConversionObservation {
 	percent: number;
@@ -88,6 +116,92 @@ const PROGRAMMER_TIMING = {
 } as const;
 
 test.describe("docs/testing/03-network-output-protocols.md", () => {
+	// Release acceptance PB-04/PRE-04 and Preload help: explicit Cue timing wins over
+	// GO-time Programmer Fade. Verify independently received UDP, not output/dmx.
+	test(
+		"DMX-010 @api queued GO retains explicit Cue timing across cross-page Solo",
+		async ({ api, bench }, testInfo) => {
+			const { showId, offset } = await prepareQueuedSoloWire(api, bench);
+			const low = { page: 2, position: 101 };
+			const high = { page: 4, position: 102 };
+			await api.playbackAction(high, "go");
+			await bench.tick(4_000);
+			await api.playbackAction(high, "off");
+			expect(await activeAssignedPlayback(api, high)).toMatchObject({
+				enabled: false,
+				master: 1,
+			});
+			await api.playbackAction(low, "go");
+			await bench.tick(4_000);
+			await setCaptureScope(
+				api, false,
+				{ position_ranges: [{ start: 1, end: 1000 }], pages: null },
+				3_000, 0,
+			);
+			await enterProgrammerPreload(api, { surface: "api", showId });
+			await api.playbackAction(high, "go");
+			expect(await activeAssignedPlayback(api, high)).toMatchObject({
+				enabled: false,
+				master: 1,
+			});
+			expect(await activeAssignedPlayback(api, low)).toMatchObject({ enabled: true });
+			const samples: QueuedSoloWireSample[] = [];
+			const capture = async (phase: string, elapsed: number, advance: number) => {
+				const artMark = bench.artnet.mark();
+				const sacnMark = bench.sacn.mark();
+				const frame = await bench.tick(advance);
+				const [art, sacn] = await Promise.all([
+					bench.artnet.nextAfter(artMark, "artnet", 1),
+					bench.sacn.nextAfter(sacnMark, "sacn", 101),
+				]);
+				const sample = {
+					phase, elapsed, now: frame.now,
+					artnet: art.slots[offset], sacn: sacn.slots[offset],
+					packets: [art, sacn].map(
+						({ protocol, universe, sequence, receivedAt }) => ({
+							protocol, universe, sequence, receivedAt,
+						}),
+					),
+				};
+				samples.push(sample);
+				return sample;
+			};
+			try {
+				const pending = await capture("queued", 0, 1_000);
+				expect([pending.artnet, pending.sacn]).toEqual([64, 64]);
+				const committed = await goProgrammerPreload(api, { surface: "api", showId });
+				expect(committed.commit).not.toBeNull();
+				expect(await activeAssignedPlayback(api, low)).toMatchObject({ enabled: false });
+				expect(await activeAssignedPlayback(api, high)).toMatchObject({ enabled: true, master: 1 });
+				for (let elapsed = 0; elapsed <= 2_000; elapsed += 100) {
+					const sample = await capture("committed", elapsed, elapsed === 0 ? 0 : 100);
+					const expected = Math.round(255 * (0.25 + 0.5 * elapsed / 2_000));
+					expect(
+						Date.parse(sample.now) - Date.parse(committed.commit!.committedAt),
+					).toBe(elapsed);
+					for (const value of [sample.artnet, sample.sacn]) {
+						expect(value).toBeGreaterThanOrEqual(64);
+						expect(value).toBeLessThanOrEqual(191);
+						expect(Math.abs(value - expected)).toBeLessThanOrEqual(1);
+					}
+					if (elapsed === 0 || elapsed === 1_000 || elapsed === 2_000)
+						expect([sample.artnet, sample.sacn]).toEqual([expected, expected]);
+				}
+			} finally {
+				const path = testInfo.outputPath("queued-solo-actual-udp-samples.json");
+				await writeFile(path, JSON.stringify({
+					clock: "manual application time", offset,
+					routes: [
+						{ protocol: "artnet", universe: 1, port: bench.artnet.port },
+						{ protocol: "sacn", universe: 101, port: bench.sacn.port },
+					],
+					samples,
+				}, null, 2));
+				await testInfo.attach("queued-solo-actual-udp-samples", { path, contentType: "application/json" });
+			}
+		},
+	);
+
 	pairedScenario<{
 		showId: string;
 		values: number[];
@@ -1278,4 +1392,62 @@ function unwrapNormalized(entry: any): number | null {
 	while (current && typeof current === "object" && "value" in current)
 		current = current.value;
 	return typeof current === "number" ? current : null;
+}
+
+async function prepareQueuedSoloWire(api: ApiDriver, bench: LightBench) {
+	const show = await loadCanonicalCopy(api, bench, "dmx-010-queued-solo");
+	const fixtureId = (await fixtureIdsByNumber(api))[1];
+	const patch = (await objects<any>(api, "patched_fixture")).find(
+		(entry) => entry.body.fixture_id === fixtureId,
+	)!;
+	expect(patch.body.universe).toBe(1);
+	expect(Number.isInteger(patch.body.address)).toBe(true);
+	expect(patch.body.address).toBeGreaterThanOrEqual(1);
+	expect(patch.body.address).toBeLessThanOrEqual(512);
+	const addresses = [{ page: 2, position: 101 }, { page: 4, position: 102 }];
+	for (const [index, level] of [0.25, 0.75].entries()) {
+		const id = crypto.randomUUID();
+		await putObject(api, "cue_list", id, {
+			id,
+			name: `Wire Solo ${level}`,
+			priority: 0,
+			mode: "sequence",
+			looped: false,
+			cues: [{
+				id: crypto.randomUUID(),
+				number: 1,
+				name: "Explicit two seconds",
+				fade_millis: 2_000,
+				out_fade_millis: 2_000,
+				delay_millis: 0,
+				out_delay_millis: 0,
+				trigger: { type: "manual" }, group_changes: [],
+				changes: [{
+					fixture_id: fixtureId,
+					attribute: "intensity",
+					value: { kind: "normalized", value: level },
+					automatic_restore: false,
+				}],
+			}],
+		});
+		const address = addresses[index];
+		const existing = (await objects<any>(api, "playback_page")).find(
+			(entry) => entry.id === String(address.page),
+		);
+		await putObject(api, "playback_page", String(address.page), {
+			number: address.page, name: existing?.body.name ?? `Page ${address.page}`,
+			assignments: { ...(existing?.body.assignments ?? {}), [address.position]: {
+				name: `Wire Solo ${level}`, target: { type: "cue_list", cue_list_id: id },
+				buttons: ["go", "none", "none"], button_count: 1, has_fader: true,
+				fader: "master", go_activates: true, auto_off: false, xfade_millis: 0,
+			} },
+		}, existing?.revision ?? 0);
+	}
+	const solo = await soloRegionSnapshot(api);
+	await saveSoloRegions(api, [{
+		id: crypto.randomUUID(),
+		name: "Wire two-second Solo",
+		members: addresses,
+	}], { expectedRevision: solo.revision });
+	return { showId: show.id, offset: patch.body.address - 1 };
 }
