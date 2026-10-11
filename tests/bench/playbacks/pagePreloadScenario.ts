@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { expect, type Page } from "@playwright/test";
 import { HttpPlaybackTopologyTransport } from "../../../apps/light-desktop/src/api/PlaybackTopologyTransport";
 import { HttpProgrammerCaptureModeTransport } from "../../../apps/light-desktop/src/api/ProgrammerCaptureModeTransport";
@@ -289,6 +290,10 @@ export class PreloadSettings {
 			await expect(
 				this.page.getByRole("switch", { name: "All pages" }),
 			).toBeChecked({ checked: text.allPages });
+			if (!text.allPages)
+				await expect(this.page.getByLabel("Eligible pages")).toHaveValue(
+					text.pages,
+				);
 		},
 	};
 	constructor(
@@ -298,24 +303,36 @@ export class PreloadSettings {
 		private readonly showId: () => string,
 	) {}
 	async configure(mask: PreloadCaptureMask): Promise<void> {
+		const before = await this.scopeTransport().loadSnapshot({
+			showId: this.showId(),
+		});
+		const eligibilityChanged =
+			!isDeepStrictEqual(before.scope, mask.playbackScope);
 		const control = this.page.getByRole("switch", {
 			name: "Preload programmer changes",
 		});
 		if ((await control.isChecked()) !== mask.programmer)
 			await this.desk.click(control.locator("..").locator(".ui-switch-track"));
-		const text = preloadScopeText(mask.playbackScope);
-		await this.page.getByLabel("Playback position ranges").fill(text.positions);
-		const pages = this.page.getByRole("switch", { name: "All pages" });
-		if ((await pages.isChecked()) !== text.allPages)
-			await this.desk.click(pages.locator("..").locator(".ui-switch-track"));
-		if (!text.allPages)
-			await this.page.getByLabel("Eligible pages").fill(text.pages);
-		await this.desk.click(
-			this.page.getByRole("button", {
-				name: "Save playback eligibility",
-				exact: true,
-			}),
-		);
+		const save = this.page.getByRole("button", {
+			name: "Save playback eligibility",
+			exact: true,
+		});
+		if (eligibilityChanged) {
+			const text = preloadScopeText(mask.playbackScope);
+			await this.page.getByLabel("Playback position ranges").fill(text.positions);
+			const pages = this.page.getByRole("switch", { name: "All pages" });
+			if ((await pages.isChecked()) !== text.allPages)
+				await this.desk.click(pages.locator("..").locator(".ui-switch-track"));
+			if (!text.allPages)
+				await this.page.getByLabel("Eligible pages").fill(text.pages);
+			await expect(save).toBeEnabled();
+			await this.desk.click(save);
+		} else {
+			await expect(save).toBeDisabled();
+			expect(
+				await this.scopeTransport().loadSnapshot({ showId: this.showId() }),
+			).toEqual(before);
+		}
 		await this.expect.mask(mask);
 		await this.desk.click(
 			this.page.getByRole("button", { name: "Outputs", exact: true }),
