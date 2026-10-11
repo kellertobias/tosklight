@@ -34,7 +34,15 @@ const selectContract: Omit<PairedScenario<Prepared>,"ui"> = {
 		expect((await playbackState(api)).selected_playback).toEqual({page:1,position:1});
 	},
 };
- test("PLAYBACK-SELECT-001 @api › exact Playback selection resolves its assigned target",async(context)=>{const state=await selectContract.arrange(context,"api"); await selectContract.api(context,state); await selectContract.assert(context,state,"api");});
+test(
+	"PLAYBACK-SELECT-001 @api › exact Playback selection resolves its assigned target",
+	async ({ api, bench, show, request, desk, page }) => {
+		const context = { api, bench, show, request, desk, page };
+		const state = await selectContract.arrange(context, "api");
+		await selectContract.api(context, state);
+		await selectContract.assert(context, state, "api");
+	},
+);
 
 test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection, and explicit pages retain separate ownership", async ({ api, bench, desk, page }) => {
   const prepared = await prepare(api, bench, "playback-select-001-boundaries");
