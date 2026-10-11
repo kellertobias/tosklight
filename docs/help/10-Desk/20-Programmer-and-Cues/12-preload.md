@@ -2,13 +2,15 @@
 
 Preload prepares a separate scene or queued playback actions without immediately disturbing normal live output.
 
-## Capture domains
+## Capture eligibility
 
-Desk Setup provides independent switches for programmer changes, physical playback actions, and virtual playback actions. A fresh desk captures Programmer changes and Virtual Playback actions while leaving physical Playback actions live. All eight on/off combinations remain meaningful. Disabled domains act live; enabled domains are captured in order for the pending Preload operation.
+Programmer capture is an independent desk option. Playback eligibility belongs to the show and uses position ranges on pages 1–99. Ranges apply to all pages by default; optional page restrictions narrow the eligible addresses. For example, `1 THRU 15 + 101 THRU 115` captures eligible actions in those positions regardless of the software screen, pane or attached hardware used. Unmatched positions or restricted-out pages act live. Overlapping ranges never duplicate a captured action.
 
-Physical capture retains only **Toggle**, **GO**, **GO minus**, **Off**, **On**, **Temp on**, and **Temp off**. Flash presses and releases, normal fader moves, and an On caused only by crossing zero remain live and are not captured. A configured **TEMP** button keeps its normal press-to-toggle gesture: one press queues Temp on and the next queues Temp off; it does not become a held button.
+A fresh show makes positions 1–1000 eligible on all pages, and a fresh Programmer enables Programmer capture. Turn off Programmer capture to keep Programmer changes live while eligible Playback actions are still captured.
 
-![Independent Preload capture-domain switches](../../assets/screenshots/workflows/desk-setup-inputs.png)
+Playback capture retains only **Toggle**, **GO**, **GO minus**, **Off**, **On**, **Temp on**, and **Temp off**. Flash presses and releases, normal fader moves, and an On caused only by crossing zero remain live and are not captured. A configured **TEMP** button keeps its normal press-to-toggle gesture: one press queues Temp on and the next queues Temp off; it does not become a held button.
+
+![Programmer capture and Playback eligibility settings](../../assets/screenshots/workflows/desk-setup-inputs.png)
 
 ## Operator flow
 
@@ -21,7 +23,7 @@ Physical capture retains only **Toggle**, **GO**, **GO minus**, **Off**, **On**,
 > [!danger] Missing graphic
 > Add a Preload sequence diagram showing live output, captured Programmer and playback changes, Preload GO, the temporary transition queue, and the emptied Programmer.
 
-The Preload programmer, physical action queue, and virtual action queue are distinct. A combined GO uses one commit point so the prepared change does not tear across frames. At that point the prepared values leave the programmer and enter a temporary transition queue, so the programmer is empty while the transition continues. **Preload GO** captures the current Programmer Fade once and applies that transition time to every pending programmer value, regardless of when or from which programming surface the value was prepared. Changing Programmer Fade after GO does not alter the running transition. Captured playback actions retain their own explicit Cue timing; when they have no explicit timing, the same GO-time Programmer Fade supplies their fallback. Cue Fade is not substituted. Preload changes are atomic: when Preload ends while you are still turning an encoder, dragging a fader or holding the Position joystick, the part of that gesture made before the switch stays in Preload, and the rest of the same motion continues on the normal Programmer as its own Undo step.
+The pending Programmer and one ordered Playback action queue are distinct. Each queued action retains its exact page.position address and original control source, including through page changes. A combined GO uses one commit point so the prepared change does not tear across frames. At that point the prepared values leave the programmer and enter a temporary transition queue, so the programmer is empty while the transition continues. **Preload GO** captures the current Programmer Fade once and applies that transition time to every pending programmer value, regardless of when or from which programming surface the value was prepared. Changing Programmer Fade after GO does not alter the running transition. Captured playback actions retain their own explicit Cue timing; when they have no explicit timing, the same GO-time Programmer Fade supplies their fallback. Cue Fade is not substituted. Preload changes are atomic: when Preload ends while you are still turning an encoder, dragging a fader or holding the Position joystick, the part of that gesture made before the switch stays in Preload, and the rest of the same motion continues on the normal Programmer as its own Undo step.
 
 Hold Preload to open a modal listing every pending programmer change and captured playback action. Individual entries can be removed before GO. Shift Preload clears all pending work. Neither operation rewinds playback actions that have already been committed by Preload GO.
 

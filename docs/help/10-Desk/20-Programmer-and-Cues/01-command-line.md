@@ -237,7 +237,7 @@ You can set more than just dimmer values. If you switch the encoder to the encod
 
 You can also access other encoder attribute groups by pressing and holding `[^0]` through `[^9]`. The fastest way however is still the touch buttons.
 
-A valid `AT`, `FixAT`, Release or Aim command, an encoder turn, a Color pick or a preset recall with no applicable fixture selected changes nothing and shows no message: it leaves the Programmer, Undo and the selection as they were. Invalid syntax and a preset or aim target that does not exist are still rejected.
+An `AT` or `FixAT` level entry with an empty fixture selection changes nothing and briefly shows **No Selection** above the command line. The bar pulses red, then returns to its regular state with the entered text greyed out. An explicit Release with nothing to release and an intentionally stored empty Group remain valid no-ops. A valid Aim command, encoder turn, Color pick or preset recall with no applicable fixture selected changes nothing and shows no message, leaving the Programmer, Undo and selection unchanged. Invalid syntax and a preset or aim target that does not exist are still rejected.
 
 Whenever you changed a value, the selection phase of the command is over and when you now select a group or fixture via either UI or command line, this starts a new selection.
 

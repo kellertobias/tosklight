@@ -107,15 +107,15 @@ With an approved control-surface extension package and its device attached to th
 3. Confirm running output is unchanged while locked.
 4. Unlock and confirm input resumes on every surface without a stuck held key.
 
-## Migration from an installation with several Programmers
+## Recovery from incompatible pre-release desk and Playback data
 
-1. Start against a desk database written before the collapse that holds more than one persisted
-   Programmer.
-2. Confirm the desk comes up operating the Programmer that was touched most recently.
-3. Confirm `backups/desk-collapse-*.json` exists under the data directory and contains every
-   superseded Programmer whole, with the policy stated.
-4. Confirm the log names what was kept and where the rest went.
-5. Confirm screen configurations survive: names, layouts, playback layouts, Follow Main/Dedicated
-   Page choices, encoder placement, display assignment and fixed panes are all as they were.
-6. Confirm a client, a saved hardware configuration or a stored URL naming an identity from before
-   the collapse still reaches the desk rather than being refused.
+TL-714 explicitly rejects the retired Playback and desk layout contracts. This is recovery, not an automatic conversion or identity alias.
+
+1. Start against an incompatible desk database, including one with pre-collapse Programmer or retired Playback layout data. Preserve the original database and WAL before the run.
+2. Confirm startup visibly explains the incompatible contract and opens a separate fresh recovery data subtree. It must not choose a legacy Programmer, merge old identities or rewrite the original database.
+3. Confirm the original desk, saved runtime and configuration remain unchanged and available for deliberate recovery inspection. Record original paths and before/after hashes.
+4. Try an affected legacy show, named revision, and Undo/Redo body. Confirm refusal happens before writable use and preserves the original content. A separate fresh canonical show can still be opened.
+5. Recreate canonical named Playback surfaces with explicit row starts/counts and Pinned, Own or Follow page sources. Confirm independent desk aliases remain isolated and attached surfaces of one desk share its command line and Programmer.
+6. Confirm old client identities, saved hardware routes and URLs are not silently redirected. Reattach supported clients explicitly using the current canonical contract.
+
+Repository-owned shows are explicitly regenerated through their documented writers and reopened under the new contract. That asset-generation workflow does not authorize migrating operator-owned legacy data.
