@@ -30,12 +30,19 @@ createRoot(document.getElementById('app')).render(<div style={{display:'flex',ga
 			const instructions=encoder.querySelector<HTMLElement>('.visually-hidden')!;
 			const card=encoder.closest('article')!.getBoundingClientRect();
 			const surface=encoder.querySelector('.touch-encoder-surface')!.getBoundingClientRect();
-			const ridges=encoder.querySelector('.touch-encoder-ridges')!.getBoundingClientRect();
+			const wheel = encoder.querySelector('.touch-encoder-surface')!;
+			const ring = getComputedStyle(wheel, '::before');
+			const center = encoder.querySelector('.touch-encoder-push')!;
+			const centerBox = center.getBoundingClientRect();
 			const buttons=[...encoder.querySelectorAll('button')].map(button=>button.getBoundingClientRect().toJSON());
 			return {instructionsPosition:getComputedStyle(instructions).position,
 				instructionsWidth:instructions.getBoundingClientRect().width,
 				description:encoder.getAttribute('aria-describedby'),instructionId:instructions.id,
-				text:instructions.textContent,card:card.toJSON(),surface:surface.toJSON(),ridges:ridges.toJSON(),buttons};
+				text:instructions.textContent,card:card.toJSON(),surface:surface.toJSON(),buttons,
+				ringWidth:parseFloat(ring.width),ringHeight:parseFloat(ring.height),
+				ringBackground:ring.backgroundImage,ringRadius:ring.borderRadius,
+				center: centerBox.toJSON(),centerText:center.textContent,
+				rotaryPosition:encoder.closest('.playback-rotary-control')!.getAttribute('data-position')};
 		}));
 		expect(measurements).toHaveLength(3);
 		for(const item of measurements){
@@ -44,7 +51,15 @@ createRoot(document.getElementById('app')).render(<div style={{display:'flex',ga
 			expect(item.description).toBe(item.instructionId);
 			expect(item.text).toContain('Press the center for the configured Playback action');
 			expect(item.surface.height).toBeGreaterThanOrEqual(88);
-			expect(item.ridges.height).toBeGreaterThan(30);
+			expect(item.ringBackground).toContain('conic-gradient');
+			expect(item.ringWidth).toBeGreaterThanOrEqual(52);
+			expect(item.ringHeight).toBeCloseTo(item.ringWidth, 1);
+			expect(item.ringRadius).toBe('50%');
+			expect(item.ringWidth).toBeLessThanOrEqual(item.surface.width);
+			expect(item.ringHeight).toBeLessThanOrEqual(item.surface.height);
+			expect(item.center.width).toBeGreaterThanOrEqual(44);
+			expect(item.centerText).toContain('100%');
+			expect(item.rotaryPosition).toBe('100');
 			for(const button of item.buttons){
 				expect(button.height).toBeGreaterThanOrEqual(44);
 				expect(button.top).toBeGreaterThanOrEqual(item.card.top-0.5);
