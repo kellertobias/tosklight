@@ -1,4 +1,5 @@
 import { configurePaneGrid, paneCard } from "./uiSupport";
+import type { Locator, Page } from "@playwright/test";
 import { type BenchUiContext, expect, test } from "../bench/core/fixtures";
 import {
 	activeVirtualPane,
@@ -34,7 +35,9 @@ const virtualZoneUiSupplement = async ({
 		"SELECT EXCLUSION MEMBERS",
 		"Hold Shift and choose cells 1 and 2. Selection must not operate either playback.",
 	);
-	await pane.getByRole("button",{name:"Select Solo members"}).click();
+	const manager = await openSoloManager(page, pane);
+	await manager.getByRole("button", { name: "Create New Solo Region", exact: true }).click();
+	await expect(manager).toBeHidden();
  await page.keyboard.down("Shift");
  await paneCard(pane,{page:1,position:401}).click();
  await paneCard(pane,{page:1,position:402}).click();
@@ -42,7 +45,7 @@ const virtualZoneUiSupplement = async ({
 	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toBeUndefined();
 	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toBeUndefined();
 	await pane.getByLabel("Solo Region name").fill("Touring pair");
- await pane.getByRole("button",{name:"Create Solo Region",exact:true}).click();
+ await pane.getByRole("button", { name: "Save Solo Region", exact: true }).click();
 	await expect
 		.poll(async () => {
 			const snapshot = await soloRegionSnapshot(api);
@@ -68,17 +71,16 @@ const virtualZoneUiSupplement = async ({
 		.toBe(true);
 
 	await configurePaneGrid(page,pane,14,20,2);
- await pane.getByRole("button",{name:"Settings",exact:true}).click();
- let settings=page.getByRole("dialog",{name:"Pane Settings"});
-	await settings
-		.getByRole("tab", { name: "Solo Regions", exact: true })
-		.click();
-	await settings.getByRole("button",{name:"Edit Touring pair",exact:true}).click();
- await settings.getByLabel("Region name",{exact:true}).fill("Touring alternates");
- await settings.getByLabel("Members (page.position)",{exact:true}).fill("1.401, 1.402, 2.403");
- await settings.getByRole("button",{name:"Save region",exact:true}).click();
- await expect(settings.getByText("1.401, 1.402, 2.403",{exact:true})).toBeVisible();
- await settings.getByRole("button",{name:"Close settings"}).click();
+
+	let settings = await openSoloManager(page, pane);
+	await settings.getByRole("button", { name: "Touring pair", exact: true }).click();
+	await settings.getByRole("button", { name: "Edit", exact: true }).click();
+	await expect(settings).toBeHidden();
+	await pane.getByLabel("Solo Region name").fill("Touring alternates");
+	await page.keyboard.down("Shift");
+	await paneCard(pane, { page: 2, position: 403 }).click();
+	await page.keyboard.up("Shift");
+	await pane.getByRole("button", { name: "Save Solo Region", exact: true }).click();
 	await expect
 		.poll(async () => {
 			const snapshot = await soloRegionSnapshot(api);
@@ -103,13 +105,14 @@ const virtualZoneUiSupplement = async ({
  expect(pinned).toBeDefined();
  expect(pinned.layout.rows[0].count).toBe(2);
 	await settings
-		.getByRole("tab", { name: "Solo Regions", exact: true })
+		.getByRole("tab", { name: "Manage Solo Regions", exact: true })
 		.click();
-	await expect(settings.getByRole("button",{name:"Edit Touring alternates",exact:true})).toBeVisible();
+	await settings.getByRole("button", { name: "Touring alternates", exact: true }).click();
+	await expect(settings.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
 	await expect(
 		settings.getByText(/1\.401.*1\.402.*2\.403/),
 	).toBeVisible();
-	await settings.getByRole("button", { name: "Delete Touring alternates", exact:true }).click();
+	await settings.getByRole("button", { name: "Delete", exact: true }).click();
 	await expect
 		.poll(async () => (await soloRegionSnapshot(api)).regions)
 		.toEqual([]);
@@ -133,15 +136,23 @@ const virtualZoneUiSupplement = async ({
 	await pane.getByRole("button", { name: "Settings", exact: true }).click();
 	settings = page.getByRole("dialog", { name: "Pane Settings" });
 	await settings
-		.getByRole("tab", { name: "Solo Regions", exact: true })
+		.getByRole("tab", { name: "Manage Solo Regions", exact: true })
 		.click();
-	await expect(settings.getByRole("button",{name:/^Edit Touring/})).toHaveCount(0);
- await expect(settings.getByLabel("Region name",{exact:true})).toHaveValue("");
+	await expect(settings.getByRole("button", { name: /^Touring/ })).toHaveCount(0);
+	await expect(settings.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+	await expect(settings.getByRole("button", { name: "Create New Solo Region", exact: true })).toBeEnabled();
 };
 
 export function registerVirtualZoneUiScenario(): void {
 	test(
-		"VPB-007 @ui › Settings preserve numbered cross-page members and explicitly delete zone authority",
+		"VPB-007 @ui › Settings preserve exact cross-page members and explicitly delete Solo Region authority",
 		virtualZoneUiSupplement,
 	);
+}
+
+async function openSoloManager(page: Page, pane: Locator): Promise<Locator> {
+	await pane.getByRole("button", { name: "Settings", exact: true }).click();
+	const settings = page.getByRole("dialog", { name: "Pane Settings" });
+	await settings.getByRole("tab", { name: "Manage Solo Regions", exact: true }).click();
+	return settings;
 }
