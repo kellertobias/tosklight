@@ -142,6 +142,14 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             (_, Some(definition)) => Some(definition.target.clone()),
             _ => None,
         };
+        let solo_targets = if semantics::may_activate_playback(action.clone()) {
+            target
+                .as_ref()
+                .map(|target| solo_related_targets(&snapshot, target))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         let mut related = Vec::new();
         if let Some(light_playback::PlaybackTarget::CueList { cue_list_id }) = &target {
             related.push(PlaybackRuntimeIdentity::DirectCueList(*cue_list_id));
@@ -153,12 +161,9 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                     .is_some_and(|target| same_target(target, &candidate.target));
                 let peer = light_playback::PlaybackAddress::new(page.number, *position)
                     .map_err(invalid)?;
-                let solo = semantics::may_activate_playback(action.clone())
-                    && address.playback_address().is_some_and(|address| {
-                        snapshot.playback_solo_regions.iter().any(|region| {
-                            region.members.contains(&address) && region.members.contains(&peer)
-                        })
-                    });
+                let solo = solo_targets
+                    .iter()
+                    .any(|target| same_target(target, &candidate.target));
                 if same || solo {
                     related.push(PlaybackRuntimeIdentity::Playback(peer));
                 }
@@ -215,5 +220,116 @@ fn same_target(
             light_playback::PlaybackTarget::Group { group_id: b, .. },
         ) => a == b,
         _ => left == right,
+    }
+}
+
+fn solo_related_targets(
+    snapshot: &light_engine::EngineSnapshot,
+    incoming: &light_playback::PlaybackTarget,
+) -> Vec<light_playback::PlaybackTarget> {
+    let definition = |address: light_playback::PlaybackAddress| {
+        snapshot
+            .playback_pages
+            .iter()
+            .find(|page| page.number == address.page())
+            .and_then(|page| page.assignments.get(&address.position()))
+    };
+    let mut targets = Vec::new();
+    for region in snapshot.playback_solo_regions.iter().filter(|region| {
+        region.members.iter().any(|address| {
+            definition(*address).is_some_and(|candidate| same_target(incoming, &candidate.target))
+        })
+    }) {
+        for target in region
+            .members
+            .iter()
+            .filter_map(|address| definition(*address).map(|candidate| &candidate.target))
+        {
+            if !targets.iter().any(|existing| same_target(existing, target)) {
+                targets.push(target.clone());
+            }
+        }
+    }
+    targets
+}
+
+#[cfg(test)]
+mod solo_projection_tests {
+    use super::*;
+    #[test]
+    fn related_solo_targets_follow_every_incoming_alias_and_deduplicate_peers() {
+        let incoming = light_core::CueListId::new();
+        let peer = light_core::CueListId::new();
+        let unrelated = light_core::CueListId::new();
+        let address =
+            |page, position| light_playback::PlaybackAddress::new(page, position).unwrap();
+        let assignment =
+            |id| light_playback::PlaybackDefinition::new_cue_list("Projection test", id);
+        let snapshot = light_engine::EngineSnapshot {
+            playback_pages: vec![
+                light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Outside region".into(),
+                    assignments: std::collections::HashMap::from([
+                        (1, assignment(incoming)),
+                        (2, assignment(unrelated)),
+                    ]),
+                },
+                light_playback::PlaybackPage {
+                    number: 2,
+                    name: "Solo aliases".into(),
+                    assignments: std::collections::HashMap::from([
+                        (1, assignment(incoming)),
+                        (2, assignment(peer)),
+                    ]),
+                },
+                light_playback::PlaybackPage {
+                    number: 3,
+                    name: "Peer alias".into(),
+                    assignments: std::collections::HashMap::from([(1, assignment(peer))]),
+                },
+            ]
+            .into(),
+            playback_solo_regions: vec![
+                light_playback::PlaybackSoloRegion {
+                    id: uuid::Uuid::new_v4(),
+                    name: "Solo".into(),
+                    members: vec![address(2, 1), address(2, 2)],
+                },
+                light_playback::PlaybackSoloRegion {
+                    id: uuid::Uuid::new_v4(),
+                    name: "Overlap".into(),
+                    members: vec![address(2, 1), address(2, 2)],
+                },
+            ]
+            .into(),
+            ..Default::default()
+        };
+        let incoming_target = light_playback::PlaybackTarget::CueList {
+            cue_list_id: incoming,
+        };
+        let peer_target = light_playback::PlaybackTarget::CueList { cue_list_id: peer };
+        let targets = solo_related_targets(&snapshot, &incoming_target);
+        assert_eq!(targets.len(), 2);
+        assert!(
+            targets
+                .iter()
+                .any(|target| same_target(target, &incoming_target))
+        );
+        assert!(
+            targets
+                .iter()
+                .any(|target| same_target(target, &peer_target))
+        );
+        assert!(!targets.iter().any(|target| same_target(
+            target,
+            &light_playback::PlaybackTarget::CueList {
+                cue_list_id: unrelated
+            }
+        )));
+        assert!(same_target(
+            &targets[1],
+            &snapshot.playback_pages[2].assignments[&1].target
+        ));
     }
 }
