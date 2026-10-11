@@ -1,4 +1,4 @@
-import type { PlaybackPreloadScope } from "../../api/generated/light-wire";
+import type { PlaybackPreloadScope } from "../../api/playbackConfigurationModels";
 function ranges(value: string, max: number) {
 	const items = value
 		.split(/[ ,;]+/)

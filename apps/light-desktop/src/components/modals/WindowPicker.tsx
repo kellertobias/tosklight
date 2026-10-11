@@ -73,7 +73,7 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 				description: "View Cues for a selected Cuelist.",
 			},
 			{
-				kind: "virtual_playbacks",
+				kind: "playbacks",
 				title: "Virtual Playbacks",
 				description: "Place playback actions on a configurable grid.",
 			},

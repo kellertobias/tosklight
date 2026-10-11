@@ -176,7 +176,7 @@ function activeSetTarget(state: AppState) {
 		return "cuelist" as const;
 	if (
 		kinds.some((kind) =>
-			["playback", "playback_pool", "virtual_playbacks"].includes(kind),
+			["playback", "playback_pool", "playbacks"].includes(kind),
 		)
 	)
 		return null;

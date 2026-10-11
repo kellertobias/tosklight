@@ -48,13 +48,15 @@ export function decodePlaybackBody(
 	_objectId?: string,
 ): PlaybackDefinition {
 	const playback = recordAt(value, path);
-	if ("number" in playback) invalid(`${path}.number`, "no redundant playback number", playback.number);
+	if ("number" in playback)
+		invalid(`${path}.number`, "no redundant playback number", playback.number);
 	const target = decodeTarget(playback.target, `${path}.target`);
 	const buttons = arrayAt(
 		playback.buttons ?? defaultButtons(target),
 		`${path}.buttons`,
 	);
-	if (buttons.length !== 3) invalid(`${path}.buttons`, "three actions", buttons);
+	if (buttons.length !== 3)
+		invalid(`${path}.buttons`, "three actions", buttons);
 	const fader = optionalEnum(
 		playback,
 		"fader",
@@ -70,6 +72,8 @@ export function decodePlaybackBody(
 		],
 		defaultFader(target),
 	);
+	if (target.type === "speed_group" && fader === "speed")
+		invalid(`${path}.fader`, "canonical Speed Group fader", fader);
 	const footprint = decodeFootprint(playback.footprint, `${path}.footprint`);
 	return {
 		...playback,
@@ -79,10 +83,7 @@ export function decodePlaybackBody(
 			enumAt(button, `${path}.buttons[${index}]`, BUTTON_ACTIONS),
 		) as PlaybackDefinition["buttons"],
 		button_count: optionalBoundedInteger(playback, "button_count", path, 3, 3),
-		fader:
-			target.type === "speed_group" && fader === "speed"
-				? "learned_percentage"
-				: fader,
+		fader,
 		has_fader: optionalBoolean(playback, "has_fader", path, true),
 		footprint,
 		go_activates: optionalBoolean(playback, "go_activates", path, true),
@@ -168,13 +169,28 @@ export function decodePlaybackPageBody(
 	const assignments = recordAt(page.assignments, `${path}.assignments`);
 	const decodedAssignments = Object.fromEntries(
 		Object.entries(assignments).map(([position, definition]) => {
-			const decodedPosition = positiveIntegerAt(Number(position), `${path}.assignments.${position}`, 1000);
+			const decodedPosition = positiveIntegerAt(
+				Number(position),
+				`${path}.assignments.${position}`,
+				1000,
+			);
 			if (String(decodedPosition) !== position)
-				invalid(`${path}.assignments.${position}`, "a canonical position key", position);
-			return [position, decodePlaybackBody(definition, `${path}.assignments.${position}`)];
+				invalid(
+					`${path}.assignments.${position}`,
+					"a canonical position key",
+					position,
+				);
+			return [
+				position,
+				decodePlaybackBody(definition, `${path}.assignments.${position}`),
+			];
 		}),
 	);
-	return { number: pageNumber, name: plainStringAt(page.name, `${path}.name`), assignments: decodedAssignments };
+	return {
+		number: pageNumber,
+		name: plainStringAt(page.name, `${path}.name`),
+		assignments: decodedAssignments,
+	};
 }
 
 function decodeTarget(value: unknown, path: string) {
@@ -202,10 +218,7 @@ function decodeTarget(value: unknown, path: string) {
 			initial_master:
 				target.initial_master == null
 					? target.initial_master
-					: boundedMasterAt(
-							target.initial_master,
-							`${path}.initial_master`,
-						),
+					: boundedMasterAt(target.initial_master, `${path}.initial_master`),
 		};
 	if (type === "speed_group")
 		return { ...target, type, group: stringAt(target.group, `${path}.group`) };
@@ -234,23 +247,21 @@ function decodeDynamicAssignment(
 		fallback.definition,
 		`${path}.dynamic.embedded_fallback.definition`,
 	);
-	const targetScope =
-		assignment.target_scope == null
-			? null
-			: recordAt(assignment.target_scope, `${path}.target_scope`);
-	if (targetScope) {
-		const scopeType = enumAt(targetScope.type, `${path}.target_scope.type`, [
-			"live_group",
-			"frozen_targets",
-		]);
-		if (scopeType === "live_group")
-			stringAt(targetScope.group_id, `${path}.target_scope.group_id`);
-		else
-			arrayAt(targetScope.targets, `${path}.target_scope.targets`).forEach(
-				(target, index) =>
-					stringAt(target, `${path}.target_scope.targets[${index}]`),
-			);
-	}
+	if (assignment.target_scope != null)
+		invalid(
+			`${path}.target_scope`,
+			"no assignment-owned target scope",
+			assignment.target_scope,
+		);
+	const binding = recordAt(
+		definition.target_binding,
+		`${path}.dynamic.embedded_fallback.definition.target_binding`,
+	);
+	enumAt(
+		binding.type,
+		`${path}.dynamic.embedded_fallback.definition.target_binding.type`,
+		["live_group", "frozen_targets"],
+	);
 	const multiplier = recordAt(
 		assignment.local_speed_multiplier,
 		`${path}.local_speed_multiplier`,
@@ -281,8 +292,12 @@ function decodeDynamicAssignment(
 							shape: { type: "inherit" },
 						},
 		},
-		revision: positiveIntegerAt(assignment.revision, `${path}.revision`, Number.MAX_SAFE_INTEGER),
-		target_scope: targetScope,
+		revision: positiveIntegerAt(
+			assignment.revision,
+			`${path}.revision`,
+			Number.MAX_SAFE_INTEGER,
+		),
+		target_scope: null,
 		fader_mode: enumAt(assignment.fader_mode, `${path}.fader_mode`, [
 			"none",
 			"master",
@@ -341,8 +356,7 @@ function defaultButtons(
 	if (target.type === "group")
 		return ["select", "select_dereferenced", "flash"];
 	if (target.type === "speed_group") return ["double", "half", "learn"];
-	if (target.type === "dynamic")
-		return ["off", "toggle", "dynamic_restart"];
+	if (target.type === "dynamic") return ["off", "toggle", "dynamic_restart"];
 	if (target.type === "programmer_fade" || target.type === "cue_fade")
 		return ["double", "half", "off"];
 	return ["blackout", "pause_dynamics", "flash"];
@@ -376,7 +390,9 @@ function optionalPlainString(
 	path: string,
 	fallback: string,
 ) {
-	return object[key] == null ? fallback : plainStringAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? fallback
+		: plainStringAt(object[key], `${path}.${key}`);
 }
 
 function optionalNullableString(
@@ -393,7 +409,9 @@ function optionalBoolean(
 	path: string,
 	fallback: boolean,
 ) {
-	return object[key] == null ? fallback : booleanAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? fallback
+		: booleanAt(object[key], `${path}.${key}`);
 }
 
 function optionalInteger(
@@ -402,7 +420,9 @@ function optionalInteger(
 	path: string,
 	fallback: number,
 ) {
-	return object[key] == null ? fallback : integerAt(object[key], `${path}.${key}`);
+	return object[key] == null
+		? fallback
+		: integerAt(object[key], `${path}.${key}`);
 }
 
 function optionalBoundedInteger(
@@ -413,7 +433,8 @@ function optionalBoundedInteger(
 	maximum: number,
 ) {
 	const integer = optionalInteger(object, key, path, fallback);
-	if (integer > maximum) invalid(`${path}.${key}`, `integer <= ${maximum}`, integer);
+	if (integer > maximum)
+		invalid(`${path}.${key}`, `integer <= ${maximum}`, integer);
 	return integer;
 }
 

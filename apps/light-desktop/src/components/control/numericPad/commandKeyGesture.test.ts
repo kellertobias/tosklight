@@ -7,7 +7,7 @@ import {
 describe("command-key gesture map", () => {
 	it.each([
 		["CUE", false, "CUELIST"],
-		["PLAYBACK", false, "VPBK"],
+		["PLAYBACK", false, "PBK"],
 		["GRP", false, "DEGROUP"],
 		["GRP", true, "DMX"],
 		["DIV", true, "LOAD"],
@@ -58,14 +58,31 @@ describe("command-key gesture map", () => {
 	});
 
 	it.each([
+		"PBK",
+		"RECORD PBK",
+		"GO TO PBK",
+	])("keeps repeated Playback canonical without losing the %s prefix", (current) => {
+		const intent = resolveCommandKeyGesture("PLAYBACK", {
+			kind: "double",
+			shifted: false,
+		});
+		if (!intent || intent.type !== "command") throw new Error("missing intent");
+		const repeated = applyGestureCommand(current, false, intent);
+		expect(repeated).toBe(current);
+		expect(applyGestureCommand(repeated, false, intent)).toBe(current);
+		expect(`${repeated} 4.190`).toBe(`${current} 4.190`);
+	});
+
+	it.each([
 		["GRP", false, "inspect-groups"],
 		["GRP", true, "inspect-fixtures"],
 		["REC", false, "record-options"],
 		["REC", true, "update-options"],
 		["PRE", false, "inspect-preload"],
 	] as const)("maps hold %s shifted=%s to %s", (key, shifted, action) => {
-		expect(
-			resolveCommandKeyGesture(key, { kind: "hold", shifted }),
-		).toEqual({ type: "action", action });
+		expect(resolveCommandKeyGesture(key, { kind: "hold", shifted })).toEqual({
+			type: "action",
+			action,
+		});
 	});
 });

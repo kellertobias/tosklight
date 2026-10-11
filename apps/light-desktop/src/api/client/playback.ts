@@ -1,4 +1,8 @@
 import type {
+	PlaybackSurfacesSnapshot,
+	PlaybackSurfaceConfiguration,
+} from "../playbackConfigurationModels";
+import type {
 	ControlDeskConfigurationAction,
 	ControlDeskConfigurationActionOutcome,
 	ControlDeskConfigurationActionRequest,
@@ -7,8 +11,6 @@ import type {
 	PlaybackActionRequest,
 	PlaybackRuntimeIdentity,
 	PlaybackRuntimeSnapshot,
-	PlaybackSurfacesSnapshot,
-	PlaybackSurfaceConfiguration,
 	ScreenConfigurationAction,
 	ScreenConfigurationActionOutcome,
 	ScreenConfigurationActionRequest,

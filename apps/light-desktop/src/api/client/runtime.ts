@@ -34,7 +34,7 @@ interface CommandResponse {
 interface PendingCommand {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
-	timer: number;
+	timer: ReturnType<typeof globalThis.setTimeout>;
 }
 
 const INVALID_SERVER_RESPONSE =

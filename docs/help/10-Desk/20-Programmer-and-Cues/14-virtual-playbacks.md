@@ -16,7 +16,7 @@ When a Playback runs a Cuelist containing exactly one Cue and no configured icon
 
 ## Solo Regions
 
-A Solo Region is a show-owned named set of explicit Playback addresses. Permanent activation of a member releases permanent peers using Solo handover fades. Regions may span pages and overlap; shared targets and overlapping peers are deduplicated. Turning the winner Off starts no replacement.
+A Solo Region is a show-owned named set of explicit Playback addresses. Permanent activation of a member releases permanent peers using Solo handover fades. Regions may span pages and overlap; shared targets and overlapping peers are deduplicated. Turning the winner Off starts no replacement. Membership belongs to the exact Playback address you start. A Timecode starts Cues directly; those Cue starts do not trigger Solo. When a Timecode is assigned to a Solo member Playback, starting another member permanently stops that Timecode.
 
 **Flash bypasses Solo.** Flashing a member preserves permanent peers. Starting a permanent peer preserves existing Flash holds. Releasing Flash removes its temporary contribution without restarting a previously released permanent Playback or stopping the current winner.
 

@@ -105,11 +105,12 @@ per-fixture values.
   before the desk collapse. On the desk's own WebSocket, the session already carries the
   desk — frames need no header. This is deliberately symmetric with the show guard header
   above.
-- Virtual-playback exclusion zones are **show-level** and contain stable Virtual
-  Playback numbers. They are never partitioned by desk, surface, layout, or selected
-  page. The route has no desk or surface operand; an authenticated write carries the
-  expected show-level revision and returns the complete authoritative zone snapshot.
-  Desk and surface remain action provenance only.
+- Playback Solo Regions are **show-level** and contain explicit stable `page.position`
+  members. Membership belongs to the addressed Playback, including when another address
+  uses the same target. Surface layout, page selection and desk never partition membership.
+  Permanent Playback activation arbitrates Solo; Flash and direct Cue execution do not.
+  An authenticated update carries the expected show-level revision and returns the complete
+  authoritative region snapshot. Desk and surface remain action provenance only.
 
 ## 7 — Undo and concurrency (maintainer, 2026-07-23)
 

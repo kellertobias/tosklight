@@ -1,4 +1,4 @@
-import type { PlaybackSurfaceConfiguration } from "../../api/generated/light-wire";
+import type { PlaybackSurfaceConfiguration } from "../../api/playbackConfigurationModels";
 /** Configuration intents touch only changed fields of one named surface. */
 export function playbackSurfacePatch(
 	current: PlaybackSurfaceConfiguration | undefined,

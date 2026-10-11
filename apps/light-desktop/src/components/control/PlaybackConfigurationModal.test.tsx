@@ -127,6 +127,11 @@ beforeEach(() => {
 		body,
 	}));
 	mocks.error = null;
+	mocks.dynamics.splice(1);
+	Object.assign(mocks.dynamics[0].body.target_binding, {
+		type: "live_group",
+		group_id: "group-1",
+	});
 	mocks.playbacks.cue_lists = [
 		{ id: "cue-1", name: "Main sequence" },
 		{ id: "cue-2", name: "Encore" },
@@ -615,8 +620,6 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 			),
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
-		choose("Target scope", "Live Group");
-		choose("Live Group", "group-1 · Front Wash");
 
 		const group = screen.getByRole("group", { name: "Auto-off" });
 		const atZero = within(group).getByRole("radiogroup", {
@@ -794,5 +797,49 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 			expect(
 				screen.queryByLabelText("Right middle button"),
 			).not.toBeInTheDocument();
+	});
+});
+
+describe("canonical Dynamic assignment choices", () => {
+	it("offers bound Dynamics and writes only their canonical binding", async () => {
+		mocks.dynamics.push({
+			id: "targetless",
+			body: {
+				pool_number: 2,
+				name: "Unbound template",
+				target_binding: { type: "targetless" },
+			},
+		});
+		show();
+		fireEvent.click(screen.getByRole("radio", { name: "Dynamic" }));
+		expect(screen.getByRole("radio", { name: "1 Pulse" })).toBeInTheDocument();
+		expect(screen.queryByText("Unbound template")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+		expect(screen.queryByLabelText("Target scope")).not.toBeInTheDocument();
+		expect(screen.getByText("Live Group group-1")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalledOnce());
+		expect(
+			mocks.savePlaybackSlot.mock.calls[0][2].target.assignment,
+		).toMatchObject({
+			dynamic_id: "dynamic-1",
+			target_scope: null,
+			embedded_fallback: {
+				target_binding: { type: "live_group", group_id: "group-1" },
+			},
+		});
+	});
+	it("does not offer targetless Dynamics and explains how to bind them", () => {
+		mocks.dynamics[0].body.target_binding.type = "targetless";
+		show();
+		expect(
+			screen.queryByRole("radio", { name: "Dynamic" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.getByText(
+				"Bind targets in a Dynamic before assigning it to a Playback.",
+			),
+		).toBeInTheDocument();
+		expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
 	});
 });

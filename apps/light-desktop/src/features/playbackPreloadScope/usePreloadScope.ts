@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
 	PlaybackPreloadScope,
 	PlaybackPreloadScopeSnapshot,
-} from "../../api/generated/light-wire";
+} from "../../api/playbackConfigurationModels";
 import { usePreloadScopeBoundary } from "./PreloadScopeContext";
 /** Reads only while settings are mounted; all response installs stay within one authority epoch. */
 export function usePreloadScope() {

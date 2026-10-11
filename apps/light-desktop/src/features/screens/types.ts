@@ -1,7 +1,7 @@
 import type {
 	PlaybackSurfaceConfiguration,
 	PlaybackSurfacesSnapshot,
-} from "../../api/generated/light-wire";
+} from "../../api/playbackConfigurationModels";
 import type { ScreenAttachment } from "../../api/client/screenAttachment";
 import type {
 	BootstrapSnapshot,

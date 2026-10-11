@@ -22,14 +22,14 @@ function addWindow(
 		title:
 			kind === "help"
 				? "Help"
-				: kind === "virtual_playbacks"
+				: kind === "playbacks"
 					? "Playbacks"
 					: kind === "file_manager"
 						? "File Manager"
 						: kind === "text_editor"
 							? "Text Editor"
 							: cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind),
-		...(kind === "virtual_playbacks" ? {surface_id: `pane:${kind}-${Date.now()}`} : {}),
+		...(kind === "playbacks" ? {surface_id: `pane:${kind}-${Date.now()}`} : {}),
 		...(kind === "file_manager" ? { fileManagerShowHidden: false } : {}),
 		...(kind === "text_editor"
 			? { textEditorReadOnly: false, textEditorMode: "plain" as const }

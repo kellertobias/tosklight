@@ -49,10 +49,12 @@ const shiftedRoots: Partial<Record<SoftwareKey, string>> = {
 	CLR: "FREEZE",
 };
 
-const doubleRoots: Partial<Record<SoftwareKey, { text: string; replace: readonly string[] }>> = {
+const doubleRoots: Partial<
+	Record<SoftwareKey, { text: string; replace: readonly string[] }>
+> = {
 	GRP: { text: "DEGROUP", replace: ["GROUP", "FIXTURE"] },
 	CUE: { text: "CUELIST", replace: ["CUE"] },
-	PLAYBACK: { text: "VPBK", replace: ["PBK"] },
+	PLAYBACK: { text: "PBK", replace: ["PBK"] },
 };
 
 export function resolveCommandKeyGesture(
@@ -102,13 +104,16 @@ export function resolveCommandKeyGesture(
 	if (key === "ESC") return { type: "action", action: "undo" };
 	if (key === "PRE") return { type: "action", action: "clear-preload" };
 	if (key === "ALIGN") return { type: "action", action: "align-off" };
-	if (key === "CLR")
-		return { type: "command", text: "FREEZE", replace: ["*"] };
+	if (key === "CLR") return { type: "command", text: "FREEZE", replace: ["*"] };
 	const root = shiftedRoots[key];
 	return root ? { type: "command", text: root, replace: [] } : null;
 }
 
-export function applyGestureCommand(current: string, pristine: boolean, intent: Extract<CommandKeyGestureIntent, { type: "command" }>) {
+export function applyGestureCommand(
+	current: string,
+	pristine: boolean,
+	intent: Extract<CommandKeyGestureIntent, { type: "command" }>,
+) {
 	const text = current.trim();
 	if (intent.replace.includes("*")) return intent.text;
 	for (const replace of intent.replace) {

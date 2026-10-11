@@ -351,7 +351,7 @@ function decodeUserLayout(value: unknown, path: string): StoredDeskLayout {
 					const pane = recordAt(rawPane, panePath);
 					const kind = builtInWindowAt(pane.kind, `${panePath}.kind`);
 					const virtualFields =
-						kind === "virtual_playbacks"
+						kind === "playbacks"
 							? { surface_id: stringAt(pane.surface_id, `${panePath}.surface_id`) }
 							: {};
 					const layoutGroupId =
@@ -422,7 +422,7 @@ const BUILT_IN_WINDOWS: readonly BuiltInWindow[] = [
 	"patch",
 	"setup",
 	"help",
-	"virtual_playbacks",
+	"playbacks",
 	"file_manager",
 	"text_editor",
 ];

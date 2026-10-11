@@ -11,8 +11,7 @@ export function sameKnownPlayback(
 	requested: PlaybackDefinition,
 ) {
 	return (
-		stableJson(knownPlayback(actual)) ===
-		stableJson(knownPlayback(requested))
+		stableJson(knownPlayback(actual)) === stableJson(knownPlayback(requested))
 	);
 }
 
@@ -85,16 +84,12 @@ function knownChangeFields(
 }
 
 function knownPlayback(playback: PlaybackDefinition) {
-	const fader =
-		playback.target.type === "speed_group" && playback.fader === "speed"
-			? "learned_percentage"
-			: playback.fader;
 	return {
 		name: playback.name,
 		target: knownTarget(playback.target),
 		buttons: playback.buttons,
 		button_count: playback.button_count ?? 3,
-		fader,
+		fader: playback.fader,
 		has_fader: playback.has_fader ?? true,
 		footprint: playback.footprint ?? { type: "normal" },
 		go_activates: playback.go_activates,

@@ -1,8 +1,9 @@
+import type * as Wire from "./generated/light-wire";
 import type {
 	PlaybackPageSource,
 	PlaybackSurfaceConfiguration,
 	PlaybackSurfacesSnapshot,
-} from "./generated/light-wire";
+} from "./playbackConfigurationModels";
 import {
 	arrayAt,
 	boundedPositiveIntegerAt,
@@ -59,7 +60,7 @@ export function decodePlaybackSurfaces(
 		resolved_pages,
 		selected_surface_id,
 		command_page,
-	};
+	} satisfies Wire.PlaybackSurfacesSnapshot;
 }
 function configuration(
 	value: unknown,

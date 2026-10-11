@@ -595,7 +595,7 @@ describe("NumericPad double presses", () => {
 		vi.useRealTimers();
 	});
 
-	it("shows the documented Off, Cuelist, and Virtual Playback double intents", () => {
+	it("shows the documented Off, Cuelist, and unified Playback double intents", () => {
 		const { container } = render(<NumericPad />);
 		const pressTwice = (key: string) => {
 			const button = container.querySelector(`[data-keypad-key="${key}"]`);
@@ -617,7 +617,7 @@ describe("NumericPad double presses", () => {
 		commandProjection.text = "FIXTURE";
 		commandProjection.pristine = true;
 		pressTwice("PLAYBACK");
-		expect(commandActions.replace).toHaveBeenLastCalledWith("VPBK");
+		expect(commandActions.replace).toHaveBeenLastCalledWith("PBK");
 	});
 
 	it("executes the selected Dot and At value shortcuts", () => {

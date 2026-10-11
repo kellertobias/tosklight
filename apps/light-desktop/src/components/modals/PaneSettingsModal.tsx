@@ -696,7 +696,7 @@ function paneSpecificTabs(
 			label: "Show Patch",
 			content: <PatchPaneSettings pane={pane} />,
 		});
-	if (pane.kind === "virtual_playbacks")
+	if (pane.kind === "playbacks")
 		tabs.push(
 			{
 				id: "virtual",

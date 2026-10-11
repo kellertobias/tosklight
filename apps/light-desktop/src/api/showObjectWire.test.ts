@@ -383,7 +383,7 @@ describe("show-object wire decoders", () => {
 					panes: [
 						{
 							id: "virtual-1",
-							kind: "virtual_playbacks",
+							kind: "playbacks",
 							title: "Virtual Playbacks",
 							x: 1,
 							y: 1,

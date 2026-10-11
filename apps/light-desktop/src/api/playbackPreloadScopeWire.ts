@@ -1,8 +1,9 @@
+import type * as Wire from "./generated/light-wire";
 import type {
 	PlaybackPreloadScope,
 	PlaybackPreloadScopeSnapshot,
 	PlaybackPreloadScopeUpdateOutcome,
-} from "../../api/generated/light-wire";
+} from "./playbackConfigurationModels";
 import {
 	arrayAt,
 	booleanAt,
@@ -11,9 +12,9 @@ import {
 	integerAt,
 	recordAt,
 	stringAt,
-} from "../../api/playbackWirePrimitives";
-import { WireValidationError } from "../../api/wireValidation";
-import { programmerValuesUuidAt } from "../../api/programmerValuesWireProjection";
+} from "./playbackWirePrimitives";
+import { WireValidationError } from "./wireValidation";
+import { programmerValuesUuidAt } from "./programmerValuesWireProjection";
 export function validatePreloadScopeScope(scope: { showId: string }) {
 	programmerValuesUuidAt(scope.showId, "$.scope.showId");
 }
@@ -59,7 +60,7 @@ export function decodePreloadScopeSnapshot(
 		show_id: expected.showId,
 		revision: integerAt(r.revision, "$.revision"),
 		scope: decodeScope(r.scope),
-	};
+	} satisfies Wire.PlaybackPreloadScopeSnapshot;
 }
 export function decodePreloadScopeSaveOutcome(
 	value: unknown,
@@ -80,7 +81,7 @@ export function decodePreloadScopeSaveOutcome(
 		scope: decodeScope(r.scope),
 		replayed: booleanAt(r.replayed, "$.replayed"),
 		changed: booleanAt(r.changed, "$.changed"),
-	};
+	} satisfies Wire.PlaybackPreloadScopeUpdateOutcome;
 }
 export function encodePreloadScopeSaveRequest(
 	requestId: string,
@@ -91,7 +92,7 @@ export function encodePreloadScopeSaveRequest(
 		request_id: stringAt(requestId, "$.request_id"),
 		expected_revision: integerAt(expectedRevision, "$.expected_revision"),
 		scope: decodeScope(scope),
-	};
+	} satisfies Wire.PlaybackPreloadScopeUpdateRequest;
 }
 export function decodePreloadScopeEvent(
 	value: unknown,

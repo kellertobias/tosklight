@@ -32,7 +32,7 @@ export type BuiltInWindow =
 	| "patch"
 	| "setup"
 	| "help"
-	| "virtual_playbacks"
+	| "playbacks"
 	| "file_manager"
 	| "text_editor";
 

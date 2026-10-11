@@ -75,7 +75,7 @@ Keyboard positions describe the position of the key on a German keyboard. The so
 | `[TIME]` | Time       | -                 | Give a value or recorded Cue an explicit fade time.  Press twice for `#> DELAY` |
 | `[GRP]`  | Group      | -                 | Select a group. Hold for showing the group built-in. Press twice for `#> DEGROUP`|
 | `[CUE]`  | Cue        | -                 | Select or Target a particular cue. Press twice for `#> CUELIST` |
-| `[PBK]`  | Playback   | -                 | Select or Target a particular playback. Press twice for `#> VPBK` (virtual playback) |
+| `[PBK]`  | Playback   | -                 | Select or target a unified Playback. Repeated presses keep `PBK`. |
 | `[REC]`  | Record     | `[KBD:END]`       | Store cues, presets, and groups. Press twice to choose how to record. Hold for record options. |
 | `[PRELD]`| Preload    | `[KBD:^]`         | Run Preload or Preload GO. Hold to inspect and edit the pending Preload. |
 | `[CLR]`  | Clear      | `[KBD:DELETE]`    | First Click: Clear Selection, Second Click: Clear Programmer |
@@ -373,7 +373,7 @@ For the next cue, you can omit the Cuelist number and press the Cue button only 
 
 To record onto a playback, use `[REC][PBK] <playback-number> [ENT]`. A playback number without a dot addresses that playback on the current page. To address an explicit page, enter `<page>.<playback-number>`, for example `[REC][PBK] 2.6 [ENT]` for playback 6 on page 2. If the playback is empty, the desk creates a new Cuelist, records its first Cue, and assigns it to that playback. If it already has a Cuelist, the desk adds the new Cue at the end.
 
-For a Virtual Playback, press the Playback button twice: `[REC][PBK][PBK] <virtual-playback-number> [ENT]`. This creates or extends its assigned Cuelist in the same way. The command line shows `#> RECORD vPBK <virtual-playback-number>`
+Every surface uses the same Playback address: pages 1–99 and positions 1–1000. Repeating `[PBK]` keeps the `PBK` token; it does not select a separate bank. An address without a page uses the authoritative page of the visibly selected Playback surface, shared with the keyboard and attached OSC hardware.
 
 ### Recording a Specific Cue
 
@@ -399,7 +399,7 @@ This allows more Cues to be inserted between existing Cues without first renumbe
 
 ### Selecting Playbacks and Cuelists
 
-There is no separate Select button. To select a playback on the current page, press `[PBK] <playback-number> [ENT]`. To select a playback on an explicit page, press `[PBK] <page> [.] <playback-number> [ENT]`. The part before the dot is always the playback page; the part after it is always the playback number. The selected playback's assigned Cuelist becomes the selected Cuelist. To select a Virtual Playback, press `[PBK][PBK] <virtual-playback-number> [ENT]`.
+There is no separate Select button. To select a playback on the current page, press `[PBK] <playback-number> [ENT]`. To select a playback on an explicit page, press `[PBK] <page> [.] <playback-number> [ENT]`. The part before the dot is always the Playback page; the part after it is always the position. The current page comes from the visibly selected Playback surface and is shared by software, keyboard and attached OSC input. The selected playback's assigned Cuelist becomes the selected Cuelist. Repeated `[PBK]` presses keep this same unified address syntax.
 
 To select a Cuelist directly, press `[CUE][CUE] <Cuelist-number> [ENT]`. A single `[CUE]` always addresses a Cue inside the selected Cuelist. For example, `[CUE] 2.1 [ENT]` addresses Cue `2.1` in the selected Cuelist, while `[CUE][CUE] 4 [CUE] 2.1 [ENT]` addresses Cue `2.1` in Cuelist 4.
 
@@ -409,7 +409,7 @@ Running a different playback does not silently change the selection.
 
 `[^DIV]` enters **GO TO**. A Go To command must address a playback and then a Cue: `[^DIV][PBK] <playback-number> [CUE] <Cue-number> [ENT]`. When `[ENT]` is pressed, that playback goes directly to the addressed Cue in its assigned Cuelist.
 
-For example, `[^DIV][PBK] 6 [CUE] 2.1 [ENT]` goes to Cue `2.1` on playback 6 of the current page. Use `[PBK] 2.6` to address playback 6 on page 2, or `[PBK][PBK] <virtual-playback-number>` to address a Virtual Playback.
+For example, `[^DIV][PBK] 6 [CUE] 2.1 [ENT]` goes to Cue `2.1` on playback 6 of the current page. Use `[PBK] 2.6` to address playback 6 on page 2.
 
 The Cuelist must be assigned to the addressed playback. A Cuelist pool address alone cannot execute Go To because it does not identify the playback that should run the Cue.
 
@@ -447,7 +447,6 @@ After arming Update, touch the Cuelist or playback that should receive the chang
 - `[^REC] [CUE] <Cue-number> [ENT]` updates that Cue in the selected Cuelist.
 - `[^REC] [CUE][CUE] <Cuelist-number> [CUE] <Cue-number> [ENT]` updates a Cue in an explicit Cuelist.
 - `[^REC] [PBK] <playback-number> [ENT]` updates the current Cue of that playback on the current page; use `<page>.<playback-number>` for an explicit page.
-- `[^REC] [PBK][PBK] <virtual-playback-number> [ENT]` updates the current Cue of that Virtual Playback.
 
 The four Cue Update modes decide where each programmer address is written:
 
@@ -499,11 +498,11 @@ In a complete command, `[AT]` separates source and destination: `<operation> <so
 
 `[^SET]` enters **ASSIGN**. A regular `[SET]` does not assign anything; it edits a value or opens the selected object's configuration.
 
-If no source object has been chosen, pressing `[^SET]` and then touching a playback button or the playback's touch area opens that playback's configuration modal. The command-line equivalent is `[^SET][PBK] <playback-number> [ENT]`. Use `<page>.<playback-number>` for an explicit playback page, or `[PBK][PBK] <virtual-playback-number>` for a Virtual Playback. Completing the playback address with `[ENT]` opens the same configuration modal.
+If no source object has been chosen, pressing `[^SET]` and then touching a playback button or the playback's touch area opens that playback's configuration modal. The command-line equivalent is `[^SET][PBK] <playback-number> [ENT]`. Use `<page>.<playback-number>` for an explicit playback page. Completing the playback address with `[ENT]` opens the same configuration modal.
 
 For touch assignment, press `[^SET]`, choose the source Cuelist, Group, Dynamic, Macro, Timecode, or other assignable object, and then touch the target playback. The same source-then-target order applies on an attached desk.
 
-The command-line form places `[AT]` between source and target. For example, `[^SET][CUE][CUE] 4 [AT][PBK] 6 [ENT]` assigns Cuelist 4 to playback 6 on the current page. `[^SET][CUE][CUE] 4 [AT][PBK] 2.6 [ENT]` assigns it to playback 6 on page 2. Use `[PBK][PBK]` for a Virtual Playback target. The command remains armed between source and target so touch and command-line input can be mixed.
+The command-line form places `[AT]` between source and target. For example, `[^SET][CUE][CUE] 4 [AT][PBK] 6 [ENT]` assigns Cuelist 4 to playback 6 on the current page. `[^SET][CUE][CUE] 4 [AT][PBK] 2.6 [ENT]` assigns it to playback 6 on page 2. The command remains armed between source and target so touch and command-line input can be mixed.
 
 ### Setting Values and Opening Editors
 
@@ -525,7 +524,7 @@ Hold `[PRELD+]` to open the Preload modal. It lists the currently preloaded prog
 
 Press `[^PRELD]` to clear the complete pending Preload without applying it. After Preload GO has committed the work, the values are no longer pending programmer values; clearing Preload does not cancel the temporary transition queue or playback actions already committed by Preload GO.
 
-Desk Setup independently decides whether programmer changes, physical playback actions, and Virtual Playback actions are captured by Preload or executed live. See [Preload and Preload GO](12-preload.md) for those capture domains and the complete live-output behavior.
+Programmer changes and eligible Playback actions are captured by Preload. Preload settings specify Playback position ranges, on all pages by default or on explicitly restricted pages. The same rules apply on every surface. See [Preload and Preload GO](12-preload.md) for eligible actions and the complete live-output behavior.
 
 ## Dynamics and FixAT
 

@@ -940,7 +940,7 @@ describe("appReducer legacy pane layout hydration", () => {
 				panes: [
 					{
 						id: "virtual",
-						kind: "virtual_playbacks" as const,
+						kind: "playbacks" as const,
 						title: "Virtual Playbacks",
 						x: 1,
 						y: 1,
@@ -993,7 +993,7 @@ describe("appReducer legacy pane layout hydration", () => {
 					panes: [
 						{
 							id: "playbacks",
-							kind: "virtual_playbacks",
+							kind: "playbacks",
 							title: "Playbacks",
 							x: 1,
 							y: 1,

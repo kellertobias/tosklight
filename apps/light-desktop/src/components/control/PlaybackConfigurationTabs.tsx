@@ -2,7 +2,6 @@ import type { PlaybackButtonAction, PlaybackDefinition } from "../../api/types";
 import {
 	Button,
 	ColorPickerField,
-	ErrorAlert,
 	FormLayout,
 	GroupedSelectionField,
 	MultiValueToggleField,
@@ -168,20 +167,21 @@ function playbackTargetColumn(
 	let onChange = (_value: string) => {};
 	if (family === "cue_list" && draft.target.type === "cue_list") {
 		value = draft.target.cue_list_id;
-		options = cueLists.map((cue) => numberedOption(cue.id, cue.number, cue.name));
+		options = cueLists.map((cue) =>
+			numberedOption(cue.id, cue.number, cue.name),
+		);
 		onChange = (cue_list_id) =>
 			onDraftChange({ ...draft, target: { type: "cue_list", cue_list_id } });
 	} else if (family === "dynamic" && draft.target.type === "dynamic") {
 		const assignment = draft.target.assignment;
 		label = "Dynamic options";
 		value = assignment.dynamic_id ?? undefined;
-		options = dynamics.map(({ id, body }) => {
-			const suffix = body.target_binding.type === "targetless" ? " · targetless" : "";
-			return numberedOption(id, body.pool_number, `${body.name}${suffix}`);
-		});
+		options = dynamics
+			.filter(({ body }) => body.target_binding.type !== "targetless")
+			.map(({ id, body }) => numberedOption(id, body.pool_number, body.name));
 		onChange = (dynamicId) => {
 			const dynamic = dynamics.find((candidate) => candidate.id === dynamicId);
-			if (!dynamic) return;
+			if (!dynamic || dynamic.body.target_binding.type === "targetless") return;
 			onDraftChange({
 				...draft,
 				target: {
@@ -191,10 +191,7 @@ function playbackTargetColumn(
 						dynamic_id: dynamic.id,
 						last_known_pool_number: dynamic.body.pool_number,
 						embedded_fallback: dynamic.body,
-						target_scope:
-							dynamic.body.target_binding.type === "targetless"
-								? assignment.target_scope
-								: null,
+						target_scope: null,
 						revision: assignment.revision + 1,
 					},
 				},
@@ -240,6 +237,19 @@ function playbackTargetColumn(
 	return { value, label, options, onChange };
 }
 
+function playbackFunctionOptions(
+	hasBoundDynamics: boolean,
+): SelectionListOption[] {
+	return [
+		{ value: "cue_list", label: "Cue List" },
+		...(hasBoundDynamics ? [{ value: "dynamic", label: "Dynamic" }] : []),
+		{ value: "group", label: "Group Master" },
+		{ value: "speed_group", label: "Speed Master" },
+		{ value: "special", label: "Special" },
+		{ value: "none", label: "None", tone: "danger" },
+	];
+}
+
 export function PlaybackFunctionTab({
 	family,
 	draft,
@@ -253,14 +263,7 @@ export function PlaybackFunctionTab({
 	onPresentationChange,
 	onDraftChange,
 }: FunctionTabProps) {
-	const functionOptions: SelectionListOption[] = [
-		{ value: "cue_list", label: "Cue List" },
-		...(dynamics.length > 0 ? [{ value: "dynamic", label: "Dynamic" }] : []),
-		{ value: "group", label: "Group Master" },
-		{ value: "speed_group", label: "Speed Master" },
-		{ value: "special", label: "Special" },
-		{ value: "none", label: "None", tone: "danger" },
-	];
+	const functionOptions = playbackFunctionOptions(dynamics.length > 0);
 	const targetColumn = playbackTargetColumn({
 		family,
 		draft,
@@ -343,6 +346,11 @@ export function PlaybackFunctionTab({
 		) : undefined;
 	return (
 		<div className="playback-function-screen">
+			{dynamics.length === 0 && (
+				<p className="playback-topology-note">
+					Bind targets in a Dynamic before assigning it to a Playback.
+				</p>
+			)}
 			<SelectionTree
 				className={`playback-function-tree ${family === "none" ? "has-inactive-detail" : ""}`}
 				columns={[
@@ -442,14 +450,12 @@ export function playbackImageDataUrl(file: File): Promise<string> {
 export function PlaybackBehaviorTab({
 	draft,
 	dynamics,
-	groups,
 	cueListBehavior,
 	onCueListBehaviorChange,
 	onDraftChange,
 }: {
 	draft: PlaybackDefinition;
 	dynamics: ReturnType<typeof useDynamics>;
-	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
 	cueListBehavior: {
 		auto_off_at_zero: boolean;
 		auto_off_flash_release: boolean;
@@ -468,7 +474,6 @@ export function PlaybackBehaviorTab({
 			<DynamicPlaybackBehavior
 				draft={draft as DynamicPlayback}
 				dynamics={dynamics}
-				groups={groups}
 				onDraftChange={onDraftChange}
 			/>
 		);
@@ -540,12 +545,10 @@ type DynamicUpdate = (patch: Partial<DynamicAssignment>) => void;
 function DynamicPlaybackBehavior({
 	draft,
 	dynamics,
-	groups,
 	onDraftChange,
 }: {
 	draft: DynamicPlayback;
 	dynamics: ReturnType<typeof useDynamics>;
-	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
 	onDraftChange: (playback: PlaybackDefinition) => void;
 }) {
 	const assignment = draft.target.assignment;
@@ -559,12 +562,7 @@ function DynamicPlaybackBehavior({
 		assignment.embedded_fallback;
 	return (
 		<FormLayout labelPlacement="side">
-			<DynamicTargetSettings
-				assignment={assignment}
-				definition={definition}
-				groups={groups}
-				update={update}
-			/>
+			<DynamicTargetSettings assignment={assignment} definition={definition} />
 			<DynamicPolicySettings assignment={assignment} update={update} />
 			<PlaybackAutoOffSettings
 				autoOffAtZero={assignment.auto_off_at_zero}
@@ -601,99 +599,26 @@ function DynamicPlaybackBehavior({
 function DynamicTargetSettings({
 	assignment,
 	definition,
-	groups,
-	update,
 }: {
 	assignment: DynamicAssignment;
 	definition: DynamicAssignment["embedded_fallback"];
-	groups: ReadonlyArray<{ id: string; body: { name?: string } }>;
-	update: DynamicUpdate;
 }) {
-	const scope = assignment.target_scope;
-	const targetless = definition.target_binding.type === "targetless";
-	const scopeSummary =
-		definition.target_binding.type === "live_group"
-			? `Live Group ${definition.target_binding.group_id}`
-			: definition.target_binding.type === "frozen_targets"
-				? `${definition.target_binding.targets.length} frozen target${definition.target_binding.targets.length === 1 ? "" : "s"}`
-				: scope?.type === "live_group"
-					? `Targetless · Live Group ${scope.group_id}`
-					: scope?.type === "frozen_targets"
-						? `Targetless · ${scope.targets.length} frozen target${scope.targets.length === 1 ? "" : "s"}`
-						: "Targetless · assignment scope required";
+	const binding = definition.target_binding;
+	const summary =
+		binding.type === "live_group"
+			? `Live Group ${binding.group_id}`
+			: binding.type === "frozen_targets"
+				? `${binding.targets.length} frozen targets`
+				: "Bind targets in a Dynamic before assigning it to a Playback.";
 	return (
-		<>
-			<div className="playback-topology-note">
-				<b>
-					{assignment.dynamic_id
-						? `Dynamic ${assignment.last_known_pool_number} · ${definition.name}`
-						: `Embedded Dynamic ${assignment.last_known_pool_number}`}
-				</b>
-				<span>{scopeSummary}</span>
-			</div>
-			{targetless && (
-				<>
-					<SelectField
-						label="Target scope"
-						value={scope?.type ?? "unassigned"}
-						onChange={(value) =>
-							update({
-								target_scope:
-									value === "live_group"
-										? { type: "live_group", group_id: "" }
-										: value === "frozen_targets"
-											? { type: "frozen_targets", targets: [] }
-											: null,
-							})
-						}
-						options={[
-							{ value: "unassigned", label: "Choose a target scope" },
-							{ value: "live_group", label: "Live Group" },
-							{ value: "frozen_targets", label: "Frozen ordered targets" },
-						]}
-					/>
-					{scope?.type === "live_group" && (
-						<SelectField
-							label="Live Group"
-							value={scope.group_id}
-							onChange={(group_id) =>
-								update({ target_scope: { type: "live_group", group_id } })
-							}
-							options={groups.map((group) => ({
-								value: group.id,
-								label: group.body.name
-									? `${group.id} · ${group.body.name}`
-									: group.id,
-							}))}
-						/>
-					)}
-					{scope?.type === "frozen_targets" && (
-						<TextField
-							label="Frozen target UUIDs"
-							value={scope.targets.join(", ")}
-							onChange={(event) =>
-								update({
-									target_scope: {
-										type: "frozen_targets",
-										targets: event.target.value
-											.split(",")
-											.map((target) => target.trim())
-											.filter(Boolean),
-									},
-								})
-							}
-							description="Ordered fixture/head UUIDs, separated by commas. The assignment will not fall back to all fixtures."
-						/>
-					)}
-					{!scope && (
-						<ErrorAlert as="p" role="alert" className="modal-error">
-							Choose a reviewable Live Group or frozen ordered target scope
-							before applying this targetless Dynamic.
-						</ErrorAlert>
-					)}
-				</>
-			)}
-		</>
+		<div className="playback-topology-note">
+			<b>
+				{assignment.dynamic_id
+					? `Dynamic ${assignment.last_known_pool_number} · ${definition.name}`
+					: `Embedded Dynamic ${assignment.last_known_pool_number}`}
+			</b>
+			<span>{summary}</span>
+		</div>
 	);
 }
 

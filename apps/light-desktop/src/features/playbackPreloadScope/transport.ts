@@ -1,4 +1,4 @@
-import type { PlaybackPreloadScope as PreloadScopeRegion } from "../../api/generated/light-wire";
+import type { PlaybackPreloadScope as PreloadScopeRegion } from "../../api/playbackConfigurationModels";
 import type {
 	PreloadScopeObserver as PreloadScopeEventObserver,
 	PreloadScopeTransport,
@@ -12,7 +12,7 @@ import {
 	decodePreloadScopeSnapshot,
 	encodePreloadScopeSaveRequest,
 	validatePreloadScopeScope,
-} from "./wire";
+} from "../../api/playbackPreloadScopeWire";
 
 export interface HttpPreloadScopeTransportOptions {
 	readonly baseUrl: string;

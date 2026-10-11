@@ -2,11 +2,7 @@ import { ErrorAlert } from "@tosklight/ui";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
 import type { PlaybackDefinition } from "../../api/types";
-import {
-	Button,
-	DEFAULT_COLORS,
-	ModalRegistration,
-} from "@tosklight/ui";
+import { Button, DEFAULT_COLORS, ModalRegistration } from "@tosklight/ui";
 import { ModalTitleBar } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
@@ -73,7 +69,8 @@ export function PlaybackConfigurationDialog({
 	useShowObjectView("group");
 	useShowObjectView("cue_list");
 	useShowObjectView("dynamic");
-	const { groups, dynamics, cueListObjects, cueLists } = usePlaybackConfigurationObjects();
+	const { groups, dynamics, cueListObjects, cueLists } =
+		usePlaybackConfigurationObjects();
 	const saveCueList = useCueListTopologyWriter();
 	const [initialDraft] = useState(() =>
 		normalizePlaybackTopology(playback, fallbackButtons, !virtual),
@@ -84,7 +81,8 @@ export function PlaybackConfigurationDialog({
 	const [tab, setTab] = useState<PlaybackTab>("function");
 	const [busy, setBusy] = useState(false);
 	const [failure, setFailure] = useState<string | null>(null);
-	const { selectedCueList, cueListBehavior, setCueListBehavior } = useCueListBehavior(draft, cueListObjects);
+	const { selectedCueList, cueListBehavior, setCueListBehavior } =
+		useCueListBehavior(draft, cueListObjects);
 	useEffect(() => {
 		if (failure && error && failure !== error) setFailure(error);
 	}, [error, failure]);
@@ -96,26 +94,7 @@ export function PlaybackConfigurationDialog({
 					? "icon"
 					: "label",
 	);
-	const selectedDynamicId =
-		draft.target.type === "dynamic"
-			? draft.target.assignment.dynamic_id
-			: undefined;
-	const selectedDynamic = selectedDynamicId
-		? dynamics.find((dynamic) => dynamic.id === selectedDynamicId)
-		: undefined;
-	const dynamicScopeValid =
-		draft.target.type !== "dynamic" ||
-		selectedDynamic?.body.target_binding.type !== "targetless" ||
-		(draft.target.assignment.target_scope?.type === "live_group"
-			? Boolean(draft.target.assignment.target_scope.group_id)
-			: (draft.target.assignment.target_scope?.targets.length ?? 0) > 0);
-	const targetValid =
-		family === "none" ||
-		((draft.target.type !== "cue_list" || Boolean(draft.target.cue_list_id)) &&
-			(draft.target.type !== "group" || Boolean(draft.target.group_id)) &&
-			(draft.target.type !== "dynamic" ||
-				Boolean(draft.target.assignment.dynamic_id)) &&
-			dynamicScopeValid);
+	const targetValid = playbackTargetValid(draft, family, dynamics);
 	const currentPayload = cleanPresentation(
 		normalizePlaybackTopology(
 			draft,
@@ -139,7 +118,10 @@ export function PlaybackConfigurationDialog({
 				!playbackDefinitionsEqual(currentPayload, initialPayload) ||
 				cueListBehaviorDirty;
 	const topology = `${draft.button_count ?? 3} button${draft.button_count === 1 ? "" : "s"} · ${draft.has_fader ? "fader" : "faderless"}`;
-	const options = useMemo(() => playbackLayoutOptions(draft), [draft.target.type]);
+	const options = useMemo(
+		() => playbackLayoutOptions(draft),
+		[draft.target.type],
+	);
 
 	const apply = async () => {
 		setBusy(true);
@@ -182,88 +164,218 @@ export function PlaybackConfigurationDialog({
 			);
 	};
 	const { chooseFamily, chooseSpecial } = playbackFamilyChoosers(
-		draft, cueLists, groups, dynamics, setFamily, setDraft,
+		draft,
+		cueLists,
+		groups,
+		dynamics,
+		setFamily,
+		setDraft,
 	);
 
-	return <PlaybackConfigurationDialogView
-		page={page} slot={slot} virtual={virtual} topology={topology}
-		busy={busy} isDirty={isDirty} targetValid={targetValid}
-		family={family} tab={tab} draft={draft} presentation={presentation}
-		cueLists={cueLists} dynamics={dynamics} groups={groups} options={options}
-		cueListBehavior={cueListBehavior} failure={failure}
-		onClose={onClose} onApply={() => void apply()} onTabChange={setTab}
-		onFamilyChange={chooseFamily} onSpecialChange={chooseSpecial}
-		onPresentationChange={setPresentation} onDraftChange={setDraft}
-		onCueListBehaviorChange={setCueListBehavior}
-	/>;
+	return (
+		<PlaybackConfigurationDialogView
+			page={page}
+			slot={slot}
+			virtual={virtual}
+			topology={topology}
+			busy={busy}
+			isDirty={isDirty}
+			targetValid={targetValid}
+			family={family}
+			tab={tab}
+			draft={draft}
+			presentation={presentation}
+			cueLists={cueLists}
+			dynamics={dynamics}
+			groups={groups}
+			options={options}
+			cueListBehavior={cueListBehavior}
+			failure={failure}
+			onClose={onClose}
+			onApply={() => void apply()}
+			onTabChange={setTab}
+			onFamilyChange={chooseFamily}
+			onSpecialChange={chooseSpecial}
+			onPresentationChange={setPresentation}
+			onDraftChange={setDraft}
+			onCueListBehaviorChange={setCueListBehavior}
+		/>
+	);
 }
 
-type CueListBehavior = { auto_off_at_zero: boolean; auto_off_flash_release: boolean } | null;
+type CueListBehavior = {
+	auto_off_at_zero: boolean;
+	auto_off_flash_release: boolean;
+} | null;
 type DialogViewProps = {
-	page: number; slot: number; virtual: boolean; topology: string; busy: boolean;
-	isDirty: boolean; targetValid: boolean; family: PlaybackFamily; tab: PlaybackTab;
-	draft: PlaybackDefinition; presentation: "label" | "icon" | "image";
+	page: number;
+	slot: number;
+	virtual: boolean;
+	topology: string;
+	busy: boolean;
+	isDirty: boolean;
+	targetValid: boolean;
+	family: PlaybackFamily;
+	tab: PlaybackTab;
+	draft: PlaybackDefinition;
+	presentation: "label" | "icon" | "image";
 	cueLists: Array<{ id: string; name: string; number: number }>;
-	dynamics: ReturnType<typeof useDynamics>; groups: ReturnType<typeof usePortableGroups>;
-	options: ReturnType<typeof playbackLayoutOptions>; cueListBehavior: CueListBehavior;
-	failure: string | null; onClose: () => void; onApply: () => void;
-	onTabChange: (tab: PlaybackTab) => void; onFamilyChange: (family: PlaybackFamily) => void;
-	onSpecialChange: (type: "programmer_fade" | "cue_fade" | "grand_master") => void;
+	dynamics: ReturnType<typeof useDynamics>;
+	groups: ReturnType<typeof usePortableGroups>;
+	options: ReturnType<typeof playbackLayoutOptions>;
+	cueListBehavior: CueListBehavior;
+	failure: string | null;
+	onClose: () => void;
+	onApply: () => void;
+	onTabChange: (tab: PlaybackTab) => void;
+	onFamilyChange: (family: PlaybackFamily) => void;
+	onSpecialChange: (
+		type: "programmer_fade" | "cue_fade" | "grand_master",
+	) => void;
 	onPresentationChange: (value: "label" | "icon" | "image") => void;
 	onDraftChange: (draft: PlaybackDefinition) => void;
 	onCueListBehaviorChange: (value: CueListBehavior) => void;
 };
 
 function PlaybackConfigurationDialogView(props: DialogViewProps) {
-	const { page, slot, virtual, topology, busy, isDirty, targetValid, family, tab,
-		draft, presentation, cueLists, dynamics, groups, options, cueListBehavior,
-		failure, onClose, onApply, onTabChange, onFamilyChange, onSpecialChange,
-		onPresentationChange, onDraftChange, onCueListBehaviorChange } = props;
+	const {
+		page,
+		slot,
+		virtual,
+		topology,
+		busy,
+		isDirty,
+		targetValid,
+		family,
+		tab,
+		draft,
+		presentation,
+		cueLists,
+		dynamics,
+		groups,
+		options,
+		cueListBehavior,
+		failure,
+		onClose,
+		onApply,
+		onTabChange,
+		onFamilyChange,
+		onSpecialChange,
+		onPresentationChange,
+		onDraftChange,
+		onCueListBehaviorChange,
+	} = props;
 	return createPortal(
 		<ModalRegistration onClose={onClose}>
-			<div className="stacked-modal-layer" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
-				<section className="nested-modal playback-configuration-modal" role="dialog" aria-modal="true"
-					aria-label="Playback Configuration" data-page={page} data-slot={slot} data-topology={topology}>
+			<div
+				className="stacked-modal-layer"
+				onPointerDown={(event) =>
+					event.target === event.currentTarget && onClose()
+				}
+			>
+				<section
+					className="nested-modal playback-configuration-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Playback Configuration"
+					data-page={page}
+					data-slot={slot}
+					data-topology={topology}
+				>
 					<ModalTitleBar
 						title={`Playback Configuration · ${page}.${slot}`}
 						accept={{
 							id: "apply",
-							label: busy ? family === "none" ? "Clearing…" : "Applying…" : "Apply",
+							label: busy
+								? family === "none"
+									? "Clearing…"
+									: "Applying…"
+								: "Apply",
 							variant: "primary",
-							disabled: busy || !isDirty || !targetValid || (family !== "none" && !draft.name.trim()),
+							disabled:
+								busy ||
+								!isDirty ||
+								!targetValid ||
+								(family !== "none" && !draft.name.trim()),
 							onPress: onApply,
 						}}
 						onClose={onClose}
 						closeLabel="Close playback configuration"
 					/>
 					<nav className="segmented-control playback-configuration-tabs">
-						<Button className={tab === "function" ? "active" : ""} onClick={() => onTabChange("function")}>Function</Button>
-						<Button className={tab === "behavior" ? "active" : ""} onClick={() => onTabChange("behavior")}>Behavior</Button>
-						<Button className={tab === "layout" ? "active" : ""} onClick={() => onTabChange("layout")}>Layout</Button>
+						<Button
+							className={tab === "function" ? "active" : ""}
+							onClick={() => onTabChange("function")}
+						>
+							Function
+						</Button>
+						<Button
+							className={tab === "behavior" ? "active" : ""}
+							onClick={() => onTabChange("behavior")}
+						>
+							Behavior
+						</Button>
+						<Button
+							className={tab === "layout" ? "active" : ""}
+							onClick={() => onTabChange("layout")}
+						>
+							Layout
+						</Button>
 					</nav>
 					<div className="playback-configuration-body">
-						{tab === "function" && <PlaybackFunctionTab
-							family={family} draft={draft} virtual={virtual} presentation={presentation}
-							cueLists={cueLists} dynamics={dynamics} groups={groups}
-							onFamilyChange={onFamilyChange} onSpecialChange={onSpecialChange}
-							onPresentationChange={onPresentationChange} onDraftChange={onDraftChange}
-						/>}
-						{tab === "behavior" && <WindowScrollArea className="playback-tab-scroll">
-							<div className="playback-tab-scroll-content">
-								{family === "none" ? <InactivePlaybackDetail /> : <PlaybackBehaviorTab
-									draft={draft} dynamics={dynamics} groups={groups} cueListBehavior={cueListBehavior}
-									onCueListBehaviorChange={onCueListBehaviorChange} onDraftChange={onDraftChange}
-								/>}
-							</div>
-						</WindowScrollArea>}
-						{tab === "layout" && <WindowScrollArea className="playback-tab-scroll">
-							<div className="playback-tab-scroll-content">
-								{family === "none" ? <InactivePlaybackDetail /> : <PlaybackLayoutTab
-									draft={draft} virtual={virtual} options={options} onDraftChange={onDraftChange}
-								/>}
-							</div>
-						</WindowScrollArea>}
-						{failure && <ErrorAlert as="p" role="alert" className="modal-error">{failure}</ErrorAlert>}
+						{tab === "function" && (
+							<PlaybackFunctionTab
+								family={family}
+								draft={draft}
+								virtual={virtual}
+								presentation={presentation}
+								cueLists={cueLists}
+								dynamics={dynamics}
+								groups={groups}
+								onFamilyChange={onFamilyChange}
+								onSpecialChange={onSpecialChange}
+								onPresentationChange={onPresentationChange}
+								onDraftChange={onDraftChange}
+							/>
+						)}
+						{tab === "behavior" && (
+							<WindowScrollArea className="playback-tab-scroll">
+								<div className="playback-tab-scroll-content">
+									{family === "none" ? (
+										<InactivePlaybackDetail />
+									) : (
+										<PlaybackBehaviorTab
+											draft={draft}
+											dynamics={dynamics}
+											cueListBehavior={cueListBehavior}
+											onCueListBehaviorChange={onCueListBehaviorChange}
+											onDraftChange={onDraftChange}
+										/>
+									)}
+								</div>
+							</WindowScrollArea>
+						)}
+						{tab === "layout" && (
+							<WindowScrollArea className="playback-tab-scroll">
+								<div className="playback-tab-scroll-content">
+									{family === "none" ? (
+										<InactivePlaybackDetail />
+									) : (
+										<PlaybackLayoutTab
+											draft={draft}
+											virtual={virtual}
+											options={options}
+											onDraftChange={onDraftChange}
+										/>
+									)}
+								</div>
+							</WindowScrollArea>
+						)}
+						{failure && (
+							<ErrorAlert as="p" role="alert" className="modal-error">
+								{failure}
+							</ErrorAlert>
+						)}
 					</div>
 				</section>
 			</div>
@@ -272,19 +384,55 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 	);
 }
 
+function playbackTargetValid(
+	draft: PlaybackDefinition,
+	family: PlaybackFamily,
+	dynamics: ReturnType<typeof useDynamics>,
+): boolean {
+	const selectedDynamicId =
+		draft.target.type === "dynamic"
+			? draft.target.assignment.dynamic_id
+			: undefined;
+	const selectedDynamic = selectedDynamicId
+		? dynamics.find((dynamic) => dynamic.id === selectedDynamicId)
+		: undefined;
+	const dynamicTargetValid =
+		family !== "dynamic" ||
+		(draft.target.type === "dynamic" &&
+			Boolean(draft.target.assignment.dynamic_id) &&
+			draft.target.assignment.target_scope == null &&
+			draft.target.assignment.embedded_fallback.target_binding.type !==
+				"targetless" &&
+			selectedDynamic?.body.target_binding.type !== "targetless");
+	return (
+		family === "none" ||
+		((draft.target.type !== "cue_list" || Boolean(draft.target.cue_list_id)) &&
+			(draft.target.type !== "group" || Boolean(draft.target.group_id)) &&
+			dynamicTargetValid)
+	);
+}
+
 function usePlaybackConfigurationObjects() {
 	const groups = usePortableGroups();
 	const storedDynamics = useDynamics();
-	// Pool order, so a new Dynamic assignment starts from the first Dynamic in the pool.
+	// Only target-bound pool entries can become Playback assignments.
 	const dynamics = useMemo(
 		() =>
-			[...storedDynamics].sort(
-				(left, right) => left.body.pool_number - right.body.pool_number,
-			),
+			storedDynamics
+				.filter(({ body }) => body.target_binding.type !== "targetless")
+				.sort((left, right) => left.body.pool_number - right.body.pool_number),
 		[storedDynamics],
 	);
 	const cueListObjects = useCueLists();
-	const cueLists = useMemo(() => cueListObjects.map(({body}) => ({id: body.id, name: body.name || body.id, number: body.pool_number ?? 0})), [cueListObjects]);
+	const cueLists = useMemo(
+		() =>
+			cueListObjects.map(({ body }) => ({
+				id: body.id,
+				name: body.name || body.id,
+				number: body.pool_number ?? 0,
+			})),
+		[cueListObjects],
+	);
 	return { groups, dynamics, cueListObjects, cueLists };
 }
 
@@ -297,30 +445,57 @@ function playbackFamilyChoosers(
 	setDraft: (draft: PlaybackDefinition) => void,
 ) {
 	const replaceTarget = (type: string) => {
-		if (type !== draft.target.type) setDraft(withFunctionDefaults(
-			draft, type, cueLists[0]?.id ?? "", groups[0]?.id ?? "", dynamics[0],
-		));
+		if (type !== draft.target.type)
+			setDraft(
+				withFunctionDefaults(
+					draft,
+					type,
+					cueLists[0]?.id ?? "",
+					groups[0]?.id ?? "",
+					dynamics[0],
+				),
+			);
 	};
 	const chooseFamily = (next: PlaybackFamily) => {
 		setFamily(next);
 		if (next === "none") return;
-		replaceTarget(next === "special"
-			? isSpecial(draft.target.type) ? draft.target.type : "programmer_fade"
-			: next);
+		replaceTarget(
+			next === "special"
+				? isSpecial(draft.target.type)
+					? draft.target.type
+					: "programmer_fade"
+				: next,
+		);
 	};
-	const chooseSpecial = (type: "programmer_fade" | "cue_fade" | "grand_master") => replaceTarget(type);
+	const chooseSpecial = (
+		type: "programmer_fade" | "cue_fade" | "grand_master",
+	) => replaceTarget(type);
 	return { chooseFamily, chooseSpecial };
 }
 
-function useCueListBehavior(draft: PlaybackDefinition, cueLists: ReturnType<typeof useCueLists>) {
-	const selectedId = draft.target.type === "cue_list" ? draft.target.cue_list_id : undefined;
-	const selectedCueList = selectedId ? cueLists.find(({ body }) => body.id === selectedId) : undefined;
-	const behavior = () => selectedCueList ? {
-		auto_off_at_zero: Boolean(selectedCueList.body.auto_off_at_zero),
-		auto_off_flash_release: Boolean(selectedCueList.body.auto_off_flash_release),
-	} : null;
+function useCueListBehavior(
+	draft: PlaybackDefinition,
+	cueLists: ReturnType<typeof useCueLists>,
+) {
+	const selectedId =
+		draft.target.type === "cue_list" ? draft.target.cue_list_id : undefined;
+	const selectedCueList = selectedId
+		? cueLists.find(({ body }) => body.id === selectedId)
+		: undefined;
+	const behavior = () =>
+		selectedCueList
+			? {
+					auto_off_at_zero: Boolean(selectedCueList.body.auto_off_at_zero),
+					auto_off_flash_release: Boolean(
+						selectedCueList.body.auto_off_flash_release,
+					),
+				}
+			: null;
 	const [cueListBehavior, setCueListBehavior] = useState(behavior);
-	useEffect(() => setCueListBehavior(behavior()), [selectedCueList?.id, selectedCueList?.revision]);
+	useEffect(
+		() => setCueListBehavior(behavior()),
+		[selectedCueList?.id, selectedCueList?.revision],
+	);
 	return { selectedCueList, cueListBehavior, setCueListBehavior };
 }
 
@@ -355,6 +530,11 @@ export function withFunctionDefaults(
 	groupId: string,
 	dynamic?: ReturnType<typeof useDynamics>[number],
 ): PlaybackDefinition {
+	if (
+		type === "dynamic" &&
+		(!dynamic || dynamic.body.target_binding.type === "targetless")
+	)
+		return playback;
 	let target: PlaybackDefinition["target"];
 	let buttons: PlaybackDefinition["buttons"];
 	let fader: PlaybackDefinition["fader"];
@@ -370,8 +550,7 @@ export function withFunctionDefaults(
 				last_known_pool_number: dynamic.body.pool_number,
 				embedded_fallback: dynamic.body,
 				revision: 1,
-				target_scope:
-					dynamic.body.target_binding.type === "targetless" ? null : undefined,
+				target_scope: null,
 				fader_mode: "size_and_master",
 				priority: 0,
 				activation_override: null,

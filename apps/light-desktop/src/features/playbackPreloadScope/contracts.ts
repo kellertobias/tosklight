@@ -2,7 +2,7 @@ import type {
 	PlaybackPreloadScope,
 	PlaybackPreloadScopeSnapshot,
 	PlaybackPreloadScopeUpdateOutcome,
-} from "../../api/generated/light-wire";
+} from "../../api/playbackConfigurationModels";
 export interface PreloadScopeAuthority {
 	authorityId: string;
 	scope: { showId: string };

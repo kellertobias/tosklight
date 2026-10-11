@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { PlaybackConfigurationNotification } from "../../../api/generated/light-wire";
+import type { PlaybackConfigurationNotification } from "../../../api/playbackConfigurationModels";
 import { useControlSurfaceTarget } from "../../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { openPlaybackConfiguration } from "./actions";
 import type { PlaybackBankController } from "./controller";

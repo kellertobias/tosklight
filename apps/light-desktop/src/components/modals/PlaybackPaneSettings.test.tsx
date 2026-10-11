@@ -18,7 +18,7 @@ afterEach(() => {
 });
 const pane = {
 	id: "one",
-	kind: "virtual_playbacks",
+	kind: "playbacks",
 	title: "Playbacks",
 	x: 0,
 	y: 0,

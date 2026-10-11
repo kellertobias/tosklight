@@ -51,7 +51,7 @@ function source(
 	type: "own" | "pinned" | "follow" = "own",
 	page: number | null = 2,
 ): ScreensContextValue {
-	const surfaces: import("../../api/generated/light-wire").PlaybackSurfacesSnapshot =
+	const surfaces: import("../../api/playbackConfigurationModels").PlaybackSurfacesSnapshot =
 		{
 			selected_surface_id: "main",
 			command_page: 1,

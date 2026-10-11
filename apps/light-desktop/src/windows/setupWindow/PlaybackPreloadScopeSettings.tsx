@@ -59,6 +59,8 @@ export function PlaybackPreloadScopeSettings() {
 				/>
 				<SwitchField
 					label="All pages"
+					offLabel="Restricted pages"
+					onLabel="All pages"
 					checked={allPages}
 					disabled={!model.snapshot || model.saving}
 					onChange={(e) => {

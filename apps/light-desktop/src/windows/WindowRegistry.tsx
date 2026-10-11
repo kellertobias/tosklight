@@ -27,7 +27,7 @@ export type RegisteredWindow = Exclude<BuiltInWindow, "layout">;
 export function isRegisteredWindow(
 	kind: BuiltInWindow,
 ): kind is RegisteredWindow {
-	return kind !== "layout";
+	return Object.prototype.hasOwnProperty.call(windowRegistry, kind);
 }
 
 export const windowRegistry: Record<
@@ -47,7 +47,7 @@ export const windowRegistry: Record<
 	playback: CuelistWindow,
 	playback_pool: (props) => <CuelistWindow {...props} cueListTab="pool" />,
 	cue_list: (props) => <CuelistWindow {...props} cueListTab="cues" />,
-	virtual_playbacks: VirtualPlaybacksWindow,
+	playbacks: VirtualPlaybacksWindow,
 	file_manager: FileManagerWindow,
 	text_editor: TextEditorWindow,
 	dynamics: DynamicsWindow,
