@@ -1,0 +1,33 @@
+.modal-card.playback-section-settings-modal {
+	width: min(840px, calc(100vw - 32px));
+}
+.playback-section-settings-modal > .ui-modal-titlebar {
+	display: grid;
+	grid-template-columns: max-content minmax(8px, 1fr) max-content;
+}
+.playback-section-settings-modal > .ui-modal-titlebar > .ui-modal-title-copy {
+	max-width: none;
+}
+.playback-section-settings-modal > .ui-modal-titlebar .ui-title-chrome-action {
+	flex: none;
+}
+.playback-section-settings-modal > .ui-modal-titlebar h2 {
+	margin-bottom: 0;
+	max-width: none;
+}
+@media (max-width: 760px) {
+	.playback-section-settings-modal > .ui-modal-titlebar {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.playback-section-settings-modal > .ui-modal-titlebar > .ui-modal-title-copy {
+		grid-row: 1;
+		min-height: 44px;
+	}
+	.playback-section-settings-modal > .ui-modal-titlebar > .ui-modal-title-spacer {
+		display: none;
+	}
+	.playback-section-settings-modal > .ui-modal-titlebar > .ui-title-chrome {
+		grid-row: 2;
+		justify-content: space-between;
+	}
+}

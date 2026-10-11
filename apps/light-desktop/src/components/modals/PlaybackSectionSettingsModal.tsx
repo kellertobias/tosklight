@@ -1,3 +1,4 @@
+import "./PlaybackSectionSettingsModal.css";
 import {
 	Button, ErrorAlert, FormLayout, ModalPortal, ModalTitleBar,
 	NumberField, SelectField,
@@ -21,7 +22,7 @@ export function PlaybackSectionSettingsModal({ surfaceId, onClose, onShowGrid, p
 			<div className="modal-backdrop" onPointerDown={(event) => {
 				if (event.target === event.currentTarget) onClose();
 			}}>
-			<section className="modal-card" role="dialog" aria-label="Playback section settings">
+			<section className="modal-card playback-section-settings-modal" role="dialog" aria-label="Playback section settings">
 				<ModalTitleBar
 					title="Playback section settings"
 					onClose={onClose}
