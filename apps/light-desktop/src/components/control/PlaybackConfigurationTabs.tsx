@@ -127,7 +127,6 @@ const faderDescriptions: Record<PlaybackDefinition["fader"], string> = {
 type FunctionTabProps = {
 	family: PlaybackFamily;
 	draft: PlaybackDefinition;
-	virtual: boolean;
 	presentation: "label" | "icon" | "image";
 	cueLists: Array<{ id: string; name: string; number: number }>;
 	dynamics: ReturnType<typeof useDynamics>;
@@ -253,7 +252,6 @@ function playbackFunctionOptions(
 export function PlaybackFunctionTab({
 	family,
 	draft,
-	virtual,
 	presentation,
 	cueLists,
 	dynamics,
@@ -274,7 +272,7 @@ export function PlaybackFunctionTab({
 		onDraftChange,
 	});
 	const presentationOptions =
-		virtual && family !== "none" ? (
+		family !== "none" ? (
 			<FormLayout className="playback-presentation-options">
 				<SelectField
 					label="Presentation"
@@ -771,12 +769,10 @@ function PlaybackAutoOffSettings({
 
 export function PlaybackLayoutTab({
 	draft,
-	virtual,
 	options,
 	onDraftChange,
 }: {
 	draft: PlaybackDefinition;
-	virtual: boolean;
 	options: Array<{
 		value: PlaybackButtonAction;
 		label: string;
@@ -787,11 +783,7 @@ export function PlaybackLayoutTab({
 	const footprint = draft.footprint ?? { type: "normal" as const };
 	return (
 		<FormLayout labelPlacement="side">
-			<PlaybackFootprintField
-				draft={draft}
-				virtual={virtual}
-				onDraftChange={onDraftChange}
-			/>
+			<PlaybackFootprintField draft={draft} onDraftChange={onDraftChange} />
 			{Array.from({ length: draft.button_count ?? 3 }, (_, index) => (
 				<LayoutChoiceField
 					kind="button"
@@ -907,11 +899,9 @@ export function PlaybackLayoutTab({
 
 function PlaybackFootprintField({
 	draft,
-	virtual,
 	onDraftChange,
 }: {
 	draft: PlaybackDefinition;
-	virtual: boolean;
 	onDraftChange: (playback: PlaybackDefinition) => void;
 }) {
 	const footprint = draft.footprint ?? { type: "normal" as const };
@@ -932,22 +922,14 @@ function PlaybackFootprintField({
 	return (
 		<MultiValueToggleField
 			label="Footprint"
-			value={virtual ? "normal" : footprint.type}
+			value={footprint.type}
 			onChange={(value) => choose(value as "normal" | "taller" | "wider")}
-			options={
-				virtual
-					? [{ value: "normal", label: "Normal" }]
-					: [
-							{ value: "normal", label: "Normal" },
-							{ value: "taller", label: "Taller" },
-							{ value: "wider", label: "Wider" },
-						]
-			}
-			description={
-				virtual
-					? "Virtual Playbacks use one grid position."
-					: "Expanded controls remain saved when this surface cannot expose them."
-			}
+			options={[
+				{ value: "normal", label: "Normal" },
+				{ value: "taller", label: "Taller" },
+				{ value: "wider", label: "Wider" },
+			]}
+			description="Expanded controls remain saved when this surface cannot expose them."
 		/>
 	);
 }

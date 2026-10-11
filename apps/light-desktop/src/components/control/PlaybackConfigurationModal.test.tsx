@@ -144,7 +144,7 @@ beforeEach(() => {
 
 function show(
 	playback: PlaybackDefinition = base,
-	props: { empty?: boolean; virtual?: boolean } = {},
+	props: { empty?: boolean } = {},
 ) {
 	const close = vi.fn();
 	render(
@@ -152,7 +152,7 @@ function show(
 			playback={playback}
 			page={2}
 			slot={4}
-			fallbackButtons={props.virtual ? 1 : 3}
+			fallbackButtons={playback.button_count ?? 3}
 			save={mocks.savePlaybackSlot}
 			clear={mocks.clearPlaybackSlot}
 			error={mocks.error}
@@ -203,21 +203,19 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 			auto_off_flash_release: false,
 		});
 	});
-	it("preserves a zero Group Master seed while editing physical or virtual presentation", async () => {
-		for (const virtual of [false, true]) {
-			show(
-				{
-					...base,
-					target: {
-						type: "group",
-						group_id: "group-1",
-						initial_master: 0,
-					},
+	it("preserves a zero Group Master seed for fader and button-only presentation", async () => {
+		for (const has_fader of [false, true]) {
+			show({
+				...base,
+				has_fader,
+				target: {
+					type: "group",
+					group_id: "group-1",
+					initial_master: 0,
 				},
-				{ virtual },
-			);
+			});
 			fireEvent.change(screen.getByLabelText("Playback name"), {
-				target: { value: virtual ? "Virtual zero" : "Physical zero" },
+				target: { value: has_fader ? "Fader zero" : "Buttons zero" },
 			});
 			fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 			await waitFor(() => expect(mocks.savePlaybackSlot).toHaveBeenCalled());
@@ -554,16 +552,46 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 		expect(screen.queryByRole("radio", { name: "Legacy" })).toBeNull();
 	});
 
-	it("renders exactly one control and no fader for a virtual topology", () => {
-		show(
-			{
-				...base,
-				buttons: ["toggle", "none", "none"],
-				button_count: 1,
-				has_fader: false,
-			},
-			{ virtual: true },
+	it.each([
+		true,
+		false,
+	])("persists presentation and expanded footprint for canonical fader=%s", async (has_fader) => {
+		show({ ...base, button_count: 1, has_fader });
+		choose("Presentation", "Icon");
+		fireEvent.change(screen.getByLabelText("Icon"), { target: { value: "★" } });
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		fireEvent.click(screen.getByRole("radio", { name: "Taller" }));
+		fireEvent.click(selectTrigger("Additional upper button"));
+		fireEvent.click(
+			within(
+				screen.getByRole("dialog", {
+					name: "Choose Additional upper button function",
+				}),
+			).getByRole("button", { name: /^PausePauses/ }),
 		);
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() =>
+			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+				2,
+				4,
+				expect.objectContaining({
+					button_count: 1,
+					has_fader,
+					presentation_icon: "★",
+					presentation_image: undefined,
+					footprint: { type: "taller", upper_button: "pause" },
+				}),
+			),
+		);
+	});
+
+	it("renders exactly one control and no fader for a canonical button-only topology", () => {
+		show({
+			...base,
+			buttons: ["toggle", "none", "none"],
+			button_count: 1,
+			has_fader: false,
+		});
 		expect(
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
 		).toHaveAttribute("data-topology", "1 button · faderless");
@@ -588,7 +616,7 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 			onClose: vi.fn(),
 		};
 		const rendered = render(
-			<PlaybackConfigurationDialog {...props} error={null} virtual />,
+			<PlaybackConfigurationDialog {...props} error={null} />,
 		);
 		fireEvent.change(screen.getByLabelText("Playback name"), {
 			target: { value: "Changed" },
@@ -600,7 +628,6 @@ describe("PlaybackConfigurationModal layout and persistence", () => {
 			<PlaybackConfigurationDialog
 				{...props}
 				error="stale Playback revision"
-				virtual
 			/>,
 		);
 
@@ -709,8 +736,8 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 		expect(selectTrigger("Bottom button")).toHaveTextContent("Flash");
 	});
 
-	it("persists mutually exclusive virtual presentation", async () => {
-		show({ ...base, button_count: 1, has_fader: false }, { virtual: true });
+	it("persists mutually exclusive Playback presentation", async () => {
+		show({ ...base, button_count: 1, has_fader: false });
 		choose("Presentation", "Image background");
 		fireEvent.click(screen.getByRole("button", { name: "Choose image" }));
 		await screen.findByAltText("Selected playback background");
@@ -736,7 +763,7 @@ describe("PlaybackConfigurationModal topology defaults", () => {
 		);
 	});
 
-	it("migrates legacy topology deterministically and clears hidden actions", () => {
+	it("applies explicit topology defaults and clears hidden actions", () => {
 		expect(
 			normalizePlaybackTopology(
 				{ ...base, button_count: undefined, has_fader: undefined },

@@ -37,7 +37,6 @@ export interface PlaybackConfigurationModalProps {
 	page: number;
 	slot: number;
 	empty?: boolean;
-	virtual?: boolean;
 	onClose: () => void;
 }
 
@@ -53,13 +52,12 @@ export interface PlaybackConfigurationDialogProps
 	error?: string | null;
 }
 
-/** Shared modal body; callers choose the physical or scoped topology mutation boundary. */
+/** Shared modal body for every canonical Playback assignment. */
 export function PlaybackConfigurationDialog({
 	playback,
 	page,
 	slot,
 	empty = false,
-	virtual = false,
 	fallbackButtons,
 	save,
 	clear,
@@ -73,7 +71,11 @@ export function PlaybackConfigurationDialog({
 		usePlaybackConfigurationObjects();
 	const saveCueList = useCueListTopologyWriter();
 	const [initialDraft] = useState(() =>
-		normalizePlaybackTopology(playback, fallbackButtons, !virtual),
+		normalizePlaybackTopology(
+			playback,
+			fallbackButtons,
+			Boolean(playback.has_fader),
+		),
 	);
 	const [draft, setDraft] = useState(initialDraft);
 	const initialFamily = familyFromTarget(initialDraft.target.type);
@@ -176,7 +178,6 @@ export function PlaybackConfigurationDialog({
 		<PlaybackConfigurationDialogView
 			page={page}
 			slot={slot}
-			virtual={virtual}
 			topology={topology}
 			busy={busy}
 			isDirty={isDirty}
@@ -210,7 +211,6 @@ type CueListBehavior = {
 type DialogViewProps = {
 	page: number;
 	slot: number;
-	virtual: boolean;
 	topology: string;
 	busy: boolean;
 	isDirty: boolean;
@@ -241,7 +241,6 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 	const {
 		page,
 		slot,
-		virtual,
 		topology,
 		busy,
 		isDirty,
@@ -327,7 +326,6 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 							<PlaybackFunctionTab
 								family={family}
 								draft={draft}
-								virtual={virtual}
 								presentation={presentation}
 								cueLists={cueLists}
 								dynamics={dynamics}
@@ -363,7 +361,6 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 									) : (
 										<PlaybackLayoutTab
 											draft={draft}
-											virtual={virtual}
 											options={options}
 											onDraftChange={onDraftChange}
 										/>
