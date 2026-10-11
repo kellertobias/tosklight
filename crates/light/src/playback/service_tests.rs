@@ -90,15 +90,13 @@ impl PlaybackPorts for FakePorts {
         &self,
         context: &crate::ActionContext,
     ) -> Result<Option<PlaybackDeskProjection>, ActionError> {
+        let page = *self.current_page.lock();
         Ok(Some(PlaybackDeskProjection {
             scope: test_scope(),
             desk_id: context.desk_id,
-            command_page: *self.current_page.lock(),
+            command_page: page,
             selected_surface_id: "main".into(),
-            resolved_pages: std::collections::BTreeMap::from([(
-                "main".into(),
-                *self.current_page.lock(),
-            )]),
+            resolved_pages: std::collections::BTreeMap::from([("main".into(), page)]),
             selected_playback: None,
             selected_cue_list: None,
         }))
@@ -792,7 +790,7 @@ fn desk_only_snapshot_accepts_an_empty_runtime_identity_list() {
 }
 
 #[test]
-fn request_id_cannot_be_reused_for_a_different_action() {
+fn live_actions_do_not_deduplicate_shared_context_request_metadata() {
     let service = PlaybackService::default();
     let ports = FakePorts::default();
     let first = envelope(
@@ -804,9 +802,10 @@ fn request_id_cannot_be_reused_for_a_different_action() {
     let mut conflicting = first;
     conflicting.command.action = PlaybackAction::Back { pressed: true };
 
-    let error = service.handle(conflicting, &ports).unwrap_err();
-    assert_eq!(error.kind, ActionErrorKind::Conflict);
-    assert_eq!(ports.actions().len(), 1);
+    service.handle(conflicting, &ports).unwrap();
+    let actions = ports.actions();
+    assert_eq!(actions.len(), 2);
+    assert_eq!(actions[1].action, PlaybackAction::Back { pressed: true });
 }
 
 #[test]

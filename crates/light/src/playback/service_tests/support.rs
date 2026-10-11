@@ -20,7 +20,7 @@ pub(super) fn cue_projection(number: u16, cue_number: f64) -> PlaybackRuntimePro
                 effective_next_is_loaded: false,
                 deleted_cue_hold: None,
                 paused: false,
-                activated_at: chrono::Utc::now(),
+                activated_at: chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
                 paused_at: None,
                 cue_timing: None,
                 transition_ordinal: 0,

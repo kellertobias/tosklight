@@ -561,7 +561,13 @@ fn recorded_semantic_cue_reopens_with_exact_fixture_group_and_direct_payloads() 
         .body();
     assert_named_semantic_facts(&body["cues"][0]);
     assert_eq!(rig.service.events().latest_sequence(), 1);
-    assert_eq!(document.objects_of_kind("playback").count(), 1);
+    assert_eq!(document.objects_of_kind("playback_page").count(), 1);
+    let page = document.object("playback_page", "1").unwrap().body();
+    assert_eq!(
+        page["assignments"]["6"]["target"]["cue_list_id"],
+        cue_list_id.0.to_string()
+    );
+    assert_eq!(document.objects_of_kind("playback").count(), 0);
 }
 
 #[test]

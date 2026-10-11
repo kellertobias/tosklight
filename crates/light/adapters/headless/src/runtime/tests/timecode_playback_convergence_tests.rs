@@ -76,7 +76,7 @@ async fn test_bench_clock_advances_timecode_on_step_and_scheduler_ticks() {
 }
 
 #[tokio::test]
-async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime() {
+async fn http_and_ws_page_aliases_control_one_timecode_runtime() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;
@@ -227,10 +227,9 @@ async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime(
             serde_json::from_value(serde_json::json!({
                 "type": "playback",
                 "request": {
-                    "request_id": ws_id,
-                    "address": {"kind": "virtual", "page": 1, "playback_number": 1001},
+                    "address": {"kind": "playback", "page": 2, "position": 1},
                     "action": {"type": "pause", "pressed": true},
-                    "surface": "virtual"
+                    "control_source": {"surface_id": "pane:timecode", "control_id": 1}
                 }
             }))
             .unwrap(),
@@ -287,9 +286,14 @@ async fn physical_http_and_virtual_ui_ws_playbacks_control_one_timecode_runtime(
     );
     state
         .output
-        .execute_playback(EnginePlaybackCommand::Pool {
-            number: 8,
-            action: PoolPlaybackAction::Go,
+        .execute_playback(EnginePlaybackCommand::Playback {
+            address: light_playback::PlaybackAddress::new(1, 8).unwrap(),
+            action: light_engine::PlaybackAction::Go,
+            activation_origin: None,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 8,
+            },
         })
         .unwrap();
     let _ = output_scheduler::render_test_tick(state.clone()).await;
@@ -334,16 +338,11 @@ fn command_line_object_request(
 
 fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::TimecodeId) {
     let target = light_playback::PlaybackTarget::Timecode { timecode_id };
-    let definition = |number| light_playback::PlaybackDefinition {
-        number,
+    let definition = |button_count| light_playback::PlaybackDefinition {
         name: "Timecode 70".into(),
         target: target.clone(),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
-        button_count: if number > light_playback::MAX_PLAYBACKS {
-            1
-        } else {
-            3
-        },
+        button_count,
         fader: light_playback::PlaybackDefinition::default_fader(&target),
         has_fader: false,
         footprint: light_playback::PlaybackFootprint::Normal,
@@ -356,9 +355,9 @@ fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::Tim
         presentation_icon: None,
         presentation_image: None,
     };
-    let mut virtual_definition = definition(1001);
-    virtual_definition.buttons[1] = light_playback::PlaybackButtonAction::None;
-    virtual_definition.buttons[2] = light_playback::PlaybackButtonAction::None;
+    let mut pane_definition = definition(1);
+    pane_definition.buttons[1] = light_playback::PlaybackButtonAction::None;
+    pane_definition.buttons[2] = light_playback::PlaybackButtonAction::None;
     let mut first = light_playback::Cue::new(cue("1"));
     first.name = "Before Timecode".into();
     let mut second = light_playback::Cue::new(cue("2"));
@@ -397,7 +396,6 @@ fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::Tim
     };
     let cue_target = light_playback::PlaybackTarget::CueList { cue_list_id };
     let cue_playback = light_playback::PlaybackDefinition {
-        number: 8,
         name: "Automatic Timecode".into(),
         target: cue_target.clone(),
         buttons: light_playback::PlaybackDefinition::default_buttons(&cue_target),
@@ -418,13 +416,21 @@ fn install_timecode_playbacks(state: &AppState, timecode_id: light_playback::Tim
         .output
         .replace_snapshot(EngineSnapshot {
             cue_lists: vec![cue_list].into(),
-            playbacks: vec![definition(7), cue_playback].into(),
-            playback_pages: vec![light_playback::PlaybackPage {
-                number: 1,
-                name: "Virtual".into(),
-                slots: std::collections::HashMap::new(),
-                virtual_playbacks: std::collections::HashMap::from([(1001, virtual_definition)]),
-            }]
+            playback_pages: vec![
+                light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Main".into(),
+                    assignments: std::collections::HashMap::from([
+                        (7, definition(3)),
+                        (8, cue_playback),
+                    ]),
+                },
+                light_playback::PlaybackPage {
+                    number: 2,
+                    name: "Timecode pane".into(),
+                    assignments: std::collections::HashMap::from([(1, pane_definition)]),
+                },
+            ]
             .into(),
             ..EngineSnapshot::default()
         })
@@ -435,7 +441,7 @@ fn playback_action_request(
     token: &str,
     show_id: light_core::ShowId,
     desk_id: Uuid,
-    request_id: &str,
+    _request_label: &str,
 ) -> Request<Body> {
     Request::post("/api/v2/playback-actions")
         .header(header::AUTHORIZATION, format!("Bearer {token}"))
@@ -444,10 +450,9 @@ fn playback_action_request(
         .header("x-tosk-desk", desk_id.to_string())
         .body(Body::from(
             serde_json::json!({
-                "request_id": request_id,
-                "address": {"kind": "playback", "playback_number": 7},
+                "address": {"kind": "playback", "page": 1, "position": 7},
                 "action": {"type": "go", "pressed": true},
-                "surface": "physical"
+                "control_source": {"surface_id": "main", "control_id": 7}
             })
             .to_string(),
         ))

@@ -33,7 +33,7 @@ fn mapped_cue_action_publishes_one_osc_transition_per_exact_and_aggregate_identi
     ) else {
         panic!("mapped Cue event should be retained");
     };
-    // The pool aggregate and the exact direct owner are independent subscribers. One
+    // The Cuelist aggregate and the exact direct owner are independent subscribers. One
     // OSC action publishes each identity once; only its primary event owns the GO.
     assert_eq!(events.len(), 2);
     let mut changes = Vec::new();
@@ -59,7 +59,7 @@ fn mapped_cue_action_publishes_one_osc_transition_per_exact_and_aggregate_identi
         assert_eq!(
             changes
                 .iter()
-                .filter(|change| change.projection.requested == identity)
+                .filter(|change| change.projection.identity == identity)
                 .count(),
             1,
             "each subscriber identity receives exactly one projection"
@@ -68,14 +68,14 @@ fn mapped_cue_action_publishes_one_osc_transition_per_exact_and_aggregate_identi
     let aggregate = changes
         .iter()
         .find(|change| {
-            change.projection.requested
+            change.projection.identity
                 == light_application::PlaybackRuntimeIdentity::CueList(cue_list_id)
         })
         .unwrap();
     let direct = changes
         .iter()
         .find(|change| {
-            change.projection.requested
+            change.projection.identity
                 == light_application::PlaybackRuntimeIdentity::DirectCueList(cue_list_id)
         })
         .unwrap();
@@ -180,10 +180,14 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
     state
         .output
         .replace_snapshot(EngineSnapshot {
-            playbacks: vec![mapped_test_playback(
-                7,
-                light_playback::PlaybackTarget::GrandMaster,
-            )]
+            playback_pages: vec![light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: std::collections::HashMap::from([(
+                    7,
+                    mapped_test_playback(7, light_playback::PlaybackTarget::GrandMaster),
+                )]),
+            }]
             .into(),
             ..EngineSnapshot::default()
         })
@@ -196,19 +200,27 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
         None,
         context.clone(),
         light_application::PlaybackCommand {
-            address: light_application::PlaybackAddress::Pool(7),
+            address: light_application::PlaybackAddress::Playback(
+                light_playback::PlaybackAddress::new(1, 7).unwrap(),
+            ),
             action: light_application::PlaybackAction::Master(
                 light_application::PlaybackLevel::new(0.6),
             ),
-            surface: light_application::PlaybackSurface::Physical,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 7,
+            },
         },
     )
     .unwrap();
 
     let light_application::EventReplay::Events(events) = state.events.replay(
         0,
-        &light_application::EventFilter::default()
-            .with_object(light_application::EventObject::playback(7)),
+        &light_application::EventFilter::default().with_object(
+            light_application::EventObject::playback(
+                light_playback::PlaybackAddress::new(1, 7).unwrap(),
+            ),
+        ),
     ) else {
         panic!("Grand Master playback event should be retained");
     };
@@ -244,9 +256,14 @@ fn configured_grand_master_playback_keeps_playback_and_output_events() {
         None,
         context,
         light_application::PlaybackCommand {
-            address: light_application::PlaybackAddress::Pool(7),
+            address: light_application::PlaybackAddress::Playback(
+                light_playback::PlaybackAddress::new(1, 7).unwrap(),
+            ),
             action: light_application::PlaybackAction::Blackout { pressed: true },
-            surface: light_application::PlaybackSurface::Physical,
+            control_source: light_playback::PlaybackControlSource {
+                surface_id: "main".into(),
+                control_id: 7,
+            },
         },
     )
     .unwrap();
@@ -310,7 +327,6 @@ fn mapped_test_playback(
     target: light_playback::PlaybackTarget,
 ) -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
-        number,
         name: format!("Playback {number}"),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
         button_count: 3,

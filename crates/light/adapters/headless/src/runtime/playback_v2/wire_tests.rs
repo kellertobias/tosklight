@@ -17,33 +17,70 @@ fn direct_cue_list_selector_round_trips_without_changing_aggregate_identity() {
     );
 }
 
-fn request(request_id: &str) -> wire::PlaybackActionRequest {
+fn request(surface_id: &str) -> wire::PlaybackActionRequest {
     wire::PlaybackActionRequest {
-        request_id: request_id.into(),
-        address: wire::PlaybackAddress::Playback { playback_number: 1 },
+        address: wire::PlaybackAddress::Playback {
+            page: 1,
+            position: 1,
+        },
         action: wire::PlaybackAction::Go { pressed: true },
-        surface: wire::PlaybackSurface::Virtual,
+        control_source: wire::PlaybackControlSource {
+            surface_id: surface_id.into(),
+            control_id: 7,
+        },
     }
 }
 
 #[test]
-fn request_id_uses_the_shared_printable_byte_contract() {
-    assert!(application_command(request("safe-request-1")).is_ok());
-    for invalid in ["", "   ", "line\nbreak", &"x".repeat(129)] {
-        assert_eq!(
-            application_command(request(invalid)).unwrap_err(),
-            "request_id must contain 1-128 printable bytes"
+fn stable_control_source_is_validated_and_preserved_at_the_application_boundary() {
+    let command = application_command(request("pane:stable")).unwrap();
+    assert_eq!(command.control_source.surface_id, "pane:stable");
+    assert_eq!(command.control_source.control_id, 7);
+    assert!(application_command(request(&"x".repeat(256))).is_ok());
+    for invalid in [
+        "",
+        "   ",
+        " leading",
+        "trailing ",
+        "nul\0byte",
+        &"x".repeat(257),
+    ] {
+        assert!(
+            application_command(request(invalid)).is_err(),
+            "{invalid:?}"
         );
     }
 }
 
 #[test]
-fn playback_numbers_and_levels_are_validated_before_the_application_boundary() {
-    let mut invalid_number = request("invalid-number");
-    invalid_number.address = wire::PlaybackAddress::Playback { playback_number: 0 };
-    assert!(application_command(invalid_number).is_err());
-
-    let mut invalid_level = request("invalid-level");
+fn exact_addresses_current_positions_and_levels_are_validated_before_the_application_boundary() {
+    for (page, position) in [(1, 1), (99, 1000)] {
+        let mut valid = request("main");
+        valid.address = wire::PlaybackAddress::Playback { page, position };
+        assert_eq!(
+            application_command(valid).unwrap().address,
+            application::PlaybackAddress::Playback(
+                light_playback::PlaybackAddress::new(page, position).unwrap()
+            )
+        );
+    }
+    for (page, position) in [(0, 1), (100, 1), (1, 0), (1, 1001)] {
+        let mut invalid = request("main");
+        invalid.address = wire::PlaybackAddress::Playback { page, position };
+        assert!(application_command(invalid).is_err());
+    }
+    for position in [0, 1001] {
+        let mut invalid = request("main");
+        invalid.address = wire::PlaybackAddress::CurrentPage { position };
+        assert!(application_command(invalid).is_err());
+    }
+    let mut current = request("main");
+    current.address = wire::PlaybackAddress::CurrentPage { position: 1000 };
+    assert_eq!(
+        application_command(current).unwrap().address,
+        application::PlaybackAddress::CurrentPage { position: 1000 }
+    );
+    let mut invalid_level = request("main");
     invalid_level.action = wire::PlaybackAction::Master { value: f32::NAN };
     assert!(application_command(invalid_level).is_err());
 }
@@ -55,7 +92,7 @@ fn expanded_configured_controls_are_validated_and_preserve_identity() {
         number: 6,
         pressed: true,
     };
-    let (_, command) = application_command(expanded_button).unwrap();
+    let command = application_command(expanded_button).unwrap();
     assert_eq!(
         command.action,
         application::PlaybackAction::ConfiguredButton {
@@ -69,7 +106,7 @@ fn expanded_configured_controls_are_validated_and_preserve_identity() {
         number: 2,
         level: 0.625,
     };
-    let (_, command) = application_command(second_fader).unwrap();
+    let command = application_command(second_fader).unwrap();
     assert_eq!(
         command.action,
         application::PlaybackAction::ConfiguredFader {
@@ -78,7 +115,7 @@ fn expanded_configured_controls_are_validated_and_preserve_identity() {
         }
     );
 
-    for (request_id, action) in [
+    for (label, action) in [
         (
             "button-zero",
             wire::PlaybackAction::ConfiguredButton {
@@ -115,8 +152,8 @@ fn expanded_configured_controls_are_validated_and_preserve_identity() {
             },
         ),
     ] {
-        let mut invalid = request(request_id);
+        let mut invalid = request(label);
         invalid.action = action;
-        assert!(application_command(invalid).is_err(), "{request_id}");
+        assert!(application_command(invalid).is_err(), "{label}");
     }
 }

@@ -296,7 +296,7 @@ fn cue_dynamic_row(
         output_enabled: true,
         sequence_master: 1.0,
         snap_sequence_master: 1.0,
-        playback_number: source.playback_number,
+        playback_address: source.playback_address,
         cue_list_id: source.cue_list_id,
         current_cue_id: Uuid::new_v4(),
         authored_cue_id: Uuid::new_v4(),
@@ -333,8 +333,8 @@ fn normal_and_two_temporary_kinds_of_same_cue_dynamic_have_independent_controlle
     let fixture = FixtureId::new();
     let link = Uuid::new_v4();
     let source = SequenceMasterSource {
-        playback_number: Some(1),
-        playback_identity: Some(PlaybackIdentity::physical(1).unwrap()),
+        playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+        control_source_id: None,
         cue_list_id: light_core::CueListId::new(),
         temporary: false,
     };
@@ -399,8 +399,8 @@ fn swap_masks_cue_output_without_restarting_its_clock_and_master_is_captured() {
     let fixture = FixtureId::new();
     let link = Uuid::new_v4();
     let source = light_playback::SequenceMasterSource {
-        playback_number: Some(1),
-        playback_identity: Some(PlaybackIdentity::physical(1).unwrap()),
+        playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+        control_source_id: None,
         cue_list_id: light_core::CueListId::new(),
         temporary: false,
     };
@@ -478,8 +478,8 @@ fn cue_fat_arbitration_preserves_submillisecond_time_and_action_ordinal() {
     let definition = definition();
     let fixture = FixtureId::new();
     let source = light_playback::SequenceMasterSource {
-        playback_number: Some(1),
-        playback_identity: Some(PlaybackIdentity::physical(1).unwrap()),
+        playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+        control_source_id: None,
         cue_list_id: light_core::CueListId::new(),
         temporary: false,
     };

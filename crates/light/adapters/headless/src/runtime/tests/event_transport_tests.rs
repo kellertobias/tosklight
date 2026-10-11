@@ -14,9 +14,8 @@ use light_application::{
     ProgrammingLifecycleChange, ProgrammingLifecycleProgrammer, ProgrammingLifecycleSession,
     ProgrammingPreloadPlaybackAction, ProgrammingPreloadPlaybackQueueChange,
     ProgrammingPreloadPlaybackQueueItem, ProgrammingPreloadPlaybackQueueProjection,
-    ProgrammingPreloadPlaybackSurface, ProgrammingPreloadValuesChange,
-    ProgrammingPreloadValuesProjection, ProgrammingPriorityChange, ProgrammingPriorityProjection,
-    ProgrammingValuesChange, ProgrammingValuesProjection,
+    ProgrammingPreloadValuesChange, ProgrammingPreloadValuesProjection, ProgrammingPriorityChange,
+    ProgrammingPriorityProjection, ProgrammingValuesChange, ProgrammingValuesProjection,
 };
 use light_core::{CueListId, ManualClock, ShowId};
 use light_engine::EnginePlaybackCommand;
@@ -243,7 +242,7 @@ fn websocket_protocol_token_is_parsed_without_becoming_the_selected_protocol() {
 fn wire_rate_limits_map_only_replaceable_topics() {
     let object = wire::EventObject {
         capability: wire::EventCapability::Playback,
-        id: "playback:2".into(),
+        id: "playback:1.2".into(),
     };
     let options = subscription_options(
         Some(8),
@@ -573,7 +572,8 @@ async fn broad_subscription_delivers_the_desks_preload_playback_queue() {
         panic!("expected a Preload playback queue payload")
     };
     assert_eq!(change.projection.revision, 2);
-    assert_eq!(change.projection.actions[0].page, Some(3));
+    assert_eq!(change.projection.actions[0].address.page, 3);
+    assert_eq!(change.projection.actions[0].address.position, 7);
 }
 
 fn event_session(desk_id: Uuid) -> Session {
@@ -591,7 +591,7 @@ fn event_session(desk_id: Uuid) -> Session {
             columns: 1,
             rows: 1,
             buttons: 1,
-            playback_layout: None,
+            surface_id: "main".into(),
         },
     }
 }
@@ -756,10 +756,12 @@ fn programmer_preload_playback_queue_draft(_user_id: Uuid, revision: u64) -> Eve
             projection: ProgrammingPreloadPlaybackQueueProjection {
                 revision,
                 actions: vec![ProgrammingPreloadPlaybackQueueItem {
-                    playback_number: 7,
-                    page: Some(3),
+                    address: light_playback::PlaybackAddress::new(3, 7).unwrap(),
                     action: ProgrammingPreloadPlaybackAction::Go,
-                    surface: ProgrammingPreloadPlaybackSurface::Virtual,
+                    control_source: light_playback::PlaybackControlSource {
+                        surface_id: "pane:queue".into(),
+                        control_id: 1,
+                    },
                 }],
             }
             .into(),
@@ -768,23 +770,24 @@ fn programmer_preload_playback_queue_draft(_user_id: Uuid, revision: u64) -> Eve
 }
 
 fn transition_draft(playback_number: Option<u16>, cue_list_id: Uuid) -> EventDraft {
+    let address =
+        playback_number.map(|position| light_playback::PlaybackAddress::new(1, position).unwrap());
     EventDraft::playback_runtime_changed(
         None,
         PlaybackRuntimeChange {
             projection: PlaybackRuntimeProjection {
                 scope: test_playback_scope(),
-                requested: playback_number.map_or(
+                identity: address.map_or(
                     PlaybackRuntimeIdentity::CueList(CueListId(cue_list_id)),
                     PlaybackRuntimeIdentity::Playback,
                 ),
-                playback_number,
                 target: PlaybackTargetProjection::CueList {
                     cue_list_id: CueListId(cue_list_id),
                     runtime: None,
                 },
             },
             transition: Some(AppTransition {
-                playback_number,
+                playback_address: address,
                 cue_list_id,
                 previous: Some(AppCue {
                     id: Uuid::from_u128(1),

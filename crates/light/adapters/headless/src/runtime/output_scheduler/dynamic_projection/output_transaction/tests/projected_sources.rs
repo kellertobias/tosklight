@@ -102,8 +102,8 @@ fn occurrence(sample: &DynamicRuntimeSample) -> DynamicSourceOccurrenceId {
 fn normal_key() -> Key {
     Key::Normal {
         source: SequenceMasterSource {
-            playback_number: Some(1),
-            playback_identity: Some(PlaybackIdentity::physical(1).unwrap()),
+            playback_address: Some(light_playback::PlaybackAddress::new(1, 1).unwrap()),
+            control_source_id: None,
             cue_list_id: light_core::CueListId::new(),
             temporary: false,
         },
@@ -306,10 +306,9 @@ fn cue_on_during_release_preserves_the_running_instance_past_the_old_deadline() 
 fn playback(
     definition: &DynamicDefinition,
     fixture: FixtureId,
-    number: u16,
 ) -> light_playback::PlaybackDefinition {
     serde_json::from_value(serde_json::json!({
-        "number": number, "name": "Source playback", "target": {"type": "dynamic", "assignment": {
+        "name": "Source playback", "target": {"type": "dynamic", "assignment": {
             "dynamic": {"dynamic_id": definition.id, "last_known_pool_number": definition.pool_number,
                 "embedded_fallback": {"definition": definition}},
             "target_scope": {"type": "frozen_targets", "targets": [fixture]}
@@ -317,37 +316,49 @@ fn playback(
     })).unwrap()
 }
 
-fn active_playback(definition: &DynamicDefinition, number: u16) -> ActiveDynamicPlayback {
+fn active_playback(
+    definition: &DynamicDefinition,
+    address: light_playback::PlaybackAddress,
+) -> ActiveDynamicPlayback {
     serde_json::from_value(serde_json::json!({
-        "dynamic_id": definition.id, "playback_number": number, "enabled": true, "paused": false,
+        "dynamic_id": definition.id, "playback_address": address, "enabled": true, "paused": false,
         "activated_at": chrono::DateTime::from_timestamp_millis(1000).unwrap()
     }))
     .unwrap()
 }
 
 #[test]
-fn captured_playback_origins_keep_physical_and_virtual_identity_after_disabled_rows() {
+fn captured_playback_origins_keep_exact_page_addresses_after_disabled_rows() {
     let physical = definition();
     let mut virtual_definition = definition();
     virtual_definition.pool_number = 2;
     let fixture = FixtureId::new();
-    let virtual_identity =
-        PlaybackIdentity::Virtual(light_playback::VirtualPlaybackAddress::new(3, 1601).unwrap());
-    let mut disabled = active_playback(&physical, 9);
+    let pane_address = light_playback::PlaybackAddress::new(3, 401).unwrap();
+    let mut disabled = active_playback(
+        &physical,
+        light_playback::PlaybackAddress::new(1, 9).unwrap(),
+    );
     disabled.enabled = false;
-    let physical_row = active_playback(&physical, 1);
-    let mut virtual_row = active_playback(&virtual_definition, 1601);
-    virtual_row.playback_identity = Some(virtual_identity);
+    let physical_row = active_playback(
+        &physical,
+        light_playback::PlaybackAddress::new(1, 1).unwrap(),
+    );
+    let mut virtual_row = active_playback(&virtual_definition, pane_address);
     virtual_row.activated_at += chrono::Duration::microseconds(987);
     let mut harness = Harness::new(light_engine::EngineSnapshot {
         dynamics: vec![physical.clone(), virtual_definition.clone()].into(),
-        playbacks: vec![playback(&physical, fixture, 1)].into(),
-        playback_pages: vec![light_playback::PlaybackPage {
-            number: 3,
-            name: "Virtual".into(),
-            slots: Default::default(),
-            virtual_playbacks: [(1601, playback(&virtual_definition, fixture, 1601))].into(),
-        }]
+        playback_pages: vec![
+            light_playback::PlaybackPage {
+                number: 1,
+                name: "Main".into(),
+                assignments: [(1, playback(&physical, fixture))].into(),
+            },
+            light_playback::PlaybackPage {
+                number: 3,
+                name: "Pane".into(),
+                assignments: [(401, playback(&virtual_definition, fixture))].into(),
+            },
+        ]
         .into(),
         ..Default::default()
     });
@@ -366,9 +377,7 @@ fn captured_playback_origins_keep_physical_and_virtual_identity_after_disabled_r
         assert_eq!(
             harness.origins.get(id).unwrap().origin,
             DynamicSourceOrigin::Playback {
-                identity: expected
-                    .playback_identity
-                    .unwrap_or_else(|| PlaybackIdentity::physical(1).unwrap()),
+                identity: expected.playback_address,
                 activated_at: expected.activated_at,
             }
         );
@@ -376,22 +385,21 @@ fn captured_playback_origins_keep_physical_and_virtual_identity_after_disabled_r
 }
 
 #[test]
-fn virtual_playback_release_uses_its_fade_and_reenable_cancels_retirement() {
+fn page_qualified_playback_release_uses_its_fade_and_reenable_cancels_retirement() {
     let definition = definition();
     let fixture = FixtureId::new();
-    let mut assignment = playback(&definition, fixture, 1601);
+    let mut assignment = playback(&definition, fixture);
     assignment.xfade_millis = 1000;
-    let mut active = active_playback(&definition, 1601);
-    active.playback_identity = Some(PlaybackIdentity::Virtual(
-        light_playback::VirtualPlaybackAddress::new(3, 1601).unwrap(),
-    ));
+    let mut active = active_playback(
+        &definition,
+        light_playback::PlaybackAddress::new(3, 401).unwrap(),
+    );
     let mut harness = Harness::new(light_engine::EngineSnapshot {
         dynamics: vec![definition].into(),
         playback_pages: vec![light_playback::PlaybackPage {
             number: 3,
-            name: "Virtual".into(),
-            slots: Default::default(),
-            virtual_playbacks: [(1601, assignment)].into(),
+            name: "Pane".into(),
+            assignments: [(401, assignment)].into(),
         }]
         .into(),
         ..Default::default()
@@ -424,10 +432,18 @@ fn blind_definition_edit_keeps_effective_cue_and_playback_lane_origins() {
     let definition = definition();
     let fixture = FixtureId::new();
     let cue = cue_dynamic_row(&definition, fixture, Uuid::new_v4(), normal_key());
-    let active = active_playback(&definition, 1);
+    let active = active_playback(
+        &definition,
+        light_playback::PlaybackAddress::new(1, 1).unwrap(),
+    );
     let mut harness = Harness::new(light_engine::EngineSnapshot {
         dynamics: vec![definition.clone()].into(),
-        playbacks: vec![playback(&definition, fixture, 1)].into(),
+        playback_pages: vec![light_playback::PlaybackPage {
+            number: 1,
+            name: "Main".into(),
+            assignments: [(1, playback(&definition, fixture))].into(),
+        }]
+        .into(),
         ..Default::default()
     });
     let first = harness.sample(

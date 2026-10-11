@@ -293,7 +293,7 @@ fn concurrent_publication_is_strictly_monotonic() {
             for index in 0..100_u16 {
                 bus.publish(transition_draft(
                     desk,
-                    1_000 + worker * 100 + index,
+                    1 + worker * 100 + index,
                     DeliveryPolicy::Lossless,
                 ));
             }
