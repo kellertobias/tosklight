@@ -18,6 +18,8 @@ mod programmer;
 mod response;
 #[path = "preload/retained_history.rs"]
 pub(in crate::runtime) mod retained_history;
+#[path = "preload/solo.rs"]
+mod solo;
 #[path = "preload/transaction.rs"]
 mod transaction;
 

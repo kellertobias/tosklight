@@ -4,6 +4,7 @@ pub(super) type PlaybackIdentity = light_application::PlaybackRuntimeIdentity;
 pub(super) type PlaybackProjection = light_application::PlaybackRuntimeProjection;
 
 pub(super) struct PreparedPreloadCommit {
+    pub(super) solo_peers: Vec<light_playback::TimecodeId>,
     pub(super) pending: Vec<light_programmer::PreloadPlaybackAction>,
     pub(super) committed_at: chrono::DateTime<chrono::Utc>,
     pub(super) programmer_fade_millis: u64,
@@ -28,10 +29,12 @@ pub(super) fn prepare_preload_commit(
         state
             .output
             .prepare_playback_batch(&commands, committed_at, programmer_fade_millis)?;
+    let solo_peers = solo::prepare_timecode_releases(state, &prepared_playback)?;
     let identities = changed_identities(&prepared_playback);
     let before = read_projections(state, &context, &identities)?;
     let staged_actions = staged_preload_actions(&pending, &prepared_playback);
     Ok(PreparedPreloadCommit {
+        solo_peers,
         pending,
         committed_at,
         programmer_fade_millis,

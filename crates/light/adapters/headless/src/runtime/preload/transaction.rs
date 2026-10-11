@@ -6,6 +6,7 @@ pub(super) fn commit_preload_transaction(
     context: light_application::ActionContext,
 ) -> Result<CommittedPreload, String> {
     let preparation::PreparedPreloadCommit {
+        solo_peers,
         pending,
         committed_at,
         programmer_fade_millis,
@@ -52,12 +53,15 @@ pub(super) fn commit_preload_transaction(
     events::emit_exclusions(state, session, &changes);
     let executed_projection = executed_preload_projection(&staged_actions);
     let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
-    let warnings = persist_preload_commit(
+    // External transport authority can fail after accepted Live installation (e.g. audio).
+    // Report that accepted-partial tail explicitly; never roll back only the Programmer queue.
+    let mut warnings = solo::stop_timecode_releases(state, &solo_peers);
+    warnings.extend(persist_preload_commit(
         state,
         session,
         playback_runtime_changed,
         dynamic_runtime_changed,
-    );
+    ));
     Ok(CommittedPreload {
         committed_at,
         programmer_fade_millis,

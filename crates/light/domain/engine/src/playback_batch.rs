@@ -31,6 +31,8 @@ pub struct PlaybackBatchCommand {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlaybackBatchOutcome {
+    /// Internal ordered-batch fact: this step started a permanent owner, never a Flash hold.
+    pub permanent_started: bool,
     pub address: PlaybackAddress,
     pub released_playbacks: Vec<PlaybackAddress>,
     pub addressed_effect: PlaybackRuntimeEffect,
@@ -229,6 +231,7 @@ fn apply_command(
     fallback_millis: u64,
     regions: &[PlaybackSoloRegion],
 ) -> Result<PlaybackBatchOutcome, String> {
+    let was_enabled = playback.permanent_enabled(command.address);
     let previous = playback.preload_timing_state(command.address);
     let before: Vec<_> =
         crate::playback_exclusion::target_solo_members(playback, command.address, regions)
@@ -270,6 +273,7 @@ fn apply_command(
         .filter(|address| !playback.permanent_enabled(*address))
         .collect();
     Ok(PlaybackBatchOutcome {
+        permanent_started: !was_enabled && playback.permanent_enabled(command.address),
         address: command.address,
         released_playbacks,
         addressed_effect: effects.addressed.combine(timing_effect),

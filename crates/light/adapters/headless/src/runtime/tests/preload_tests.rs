@@ -812,3 +812,6 @@ fn real_go_rejects_invalid_pending_owner_after_activation_and_restores_programme
     assert!(after.preload_dynamic_active.is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[path = "preload_solo_timecode_tests.rs"]
+mod preload_solo_timecode_tests;
