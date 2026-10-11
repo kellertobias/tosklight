@@ -31,6 +31,9 @@ import { compatibleSpecialDialogActions } from "./SpecialDialogsModal";
 import { DeskStatePanel } from "./systemControls/DeskStatePanel";
 import { OutputControls } from "./systemControls/OutputControls";
 import { ProgrammerList } from "./systemControls/ProgrammerList";
+import { RunningPane } from "../../features/running/RunningPane";
+import { useRunningAutomationAuthority } from "./systemControls/runningAutomationAuthority";
+import { useStopAllOwners } from "./systemControls/useStopAllOwners";
 import { RunningSections } from "./systemControls/RunningSections";
 import { useRunningDynamicsAuthority } from "./systemControls/runningDynamicsAuthority";
 import { useRunningPlaybackAuthority } from "./systemControls/runningPlaybackAuthority";
@@ -97,8 +100,6 @@ function useSystemControlsModel() {
 	const programmerActions = useProgrammerActions();
 	const dynamicsActions = useDynamicsActions();
 	const session = useSessionSnapshot();
-	const [stoppingAll, setStoppingAll] = useState(false);
-	const [stopAllError, setStopAllError] = useState<string | null>(null);
 	const output = useOutputRuntimeView(state.systemControlsOpen);
 	const outputActions = useOutputRuntimeActions(state.systemControlsOpen);
 	const selection = useProgrammingSelectionView(state.systemControlsOpen);
@@ -112,6 +113,10 @@ function useSystemControlsModel() {
 		output.projection?.showId ?? null,
 		dynamicsActions?.dynamics ?? null,
 		dynamicsActions?.events ?? null,
+	);
+	const automationAuthority = useRunningAutomationAuthority(
+		state.systemControlsOpen,
+		output.projection?.showId ?? null,
 	);
 	const selectedFixtureIds = selection?.selected ?? EMPTY_FIXTURE_IDS;
 	const fixturesSelected = selectedFixtureIds.length > 0;
@@ -164,44 +169,19 @@ function useSystemControlsModel() {
 	);
 	const { result: fixtureActionResult, trigger: triggerFixtureAction } =
 		useFixtureActionTrigger(fixtureActions, programmerActions);
-	const stopAllRunning = async () => {
-		if (
-			!playbackAuthority.ready ||
-			!dynamicsAuthority.ready ||
-			!preload.ready ||
-			!preload.actions ||
-			(playbackAuthority.sources.length > 0 && !playbackAuthority.canRelease) ||
-			(dynamicsAuthority.rows.length > 0 && !dynamicsAuthority.canStop)
-		) {
-			setStopAllError(
-				"Running state changed before confirmation. Review the remaining items and try again.",
-			);
-			return false;
-		}
-		setStoppingAll(true);
-		setStopAllError(null);
-		try {
-			const outcomes = await Promise.allSettled([
-				...runningSources.map((source) => playbackAuthority.release(source)),
-				...dynamicsAuthority.rows.map((dynamic) =>
-					dynamicsAuthority.off(dynamic),
-				),
-				...(preload.active ? [preload.actions.release()] : []),
-			]);
-			const failed = outcomes.filter(
-				(outcome) => outcome.status === "rejected" || outcome.value === false,
-			);
-			if (failed.length) {
-				setStopAllError(
-					`${failed.length} running item${failed.length === 1 ? "" : "s"} could not be turned off. Review the remaining items and try again.`,
-				);
-				return false;
-			}
-			return true;
-		} finally {
-			setStoppingAll(false);
-		}
-	};
+	const canStopAll = Boolean(
+		playbackAuthority.ready &&
+		dynamicsAuthority.ready && preload.ready && preload.actions &&
+		automationAuthority.ready &&
+		(!playbackAuthority.sources.length || playbackAuthority.canRelease) &&
+		(!dynamicsAuthority.rows.length || dynamicsAuthority.canStop),
+	);
+	const stopAll = useStopAllOwners(canStopAll, [
+		...runningSources.map((source) => () => playbackAuthority.release(source)),
+		...dynamicsAuthority.rows.map((dynamic) => () => dynamicsAuthority.off(dynamic)),
+		...automationAuthority.rows.map((row) => row.off),
+		...(preload.active ? [async () => preload.actions ? preload.actions.release() : false] : []),
+	]);
 	return {
 		open: state.systemControlsOpen,
 		programmerActions,
@@ -210,8 +190,9 @@ function useSystemControlsModel() {
 		blackout,
 		outputReady,
 		fixtureActionResult,
-		stoppingAll,
-		stopAllError,
+		...stopAll,
+		canStopAll,
+		automationAuthority,
 		selectedFixtureIds,
 		fixturesSelected,
 		availableFixtureActions: new Set(
@@ -231,8 +212,6 @@ function useSystemControlsModel() {
 				modal: "systemControlsOpen",
 				value: false,
 			}),
-		stopAllRunning,
-		clearStopAllError: () => setStopAllError(null),
 		triggerFixtureAction,
 		setMaster: (value: number) => {
 			if (!outputReady || !outputActions) return;
@@ -256,17 +235,9 @@ function systemControlsTitleAction({
 	const nothingRunning =
 		!model.playbackAuthority.sources.length &&
 		!model.dynamicsAuthority.rows.length &&
-		!model.preload.active;
-	const cannotStop =
-		model.stoppingAll ||
-		!model.playbackAuthority.ready ||
-		!model.dynamicsAuthority.ready ||
-		!model.preload.ready ||
-		(model.playbackAuthority.sources.length > 0 &&
-			!model.playbackAuthority.canRelease) ||
-		(model.dynamicsAuthority.rows.length > 0 &&
-			!model.dynamicsAuthority.canStop) ||
-		nothingRunning;
+		!model.preload.active &&
+		!model.automationAuthority.rows.length;
+	const cannotStop = model.stoppingAll || !model.canStopAll || nothingRunning;
 	return {
 		id: "all-off",
 		label: model.stoppingAll ? "Turning off…" : "All Off",
@@ -400,6 +371,17 @@ function SystemControlsContent({
 					void model.dynamicsAuthority.off(dynamic)
 				}
 			/>
+			{(model.automationAuthority.rows.length > 0 || model.automationAuthority.loading || model.automationAuthority.error) && (
+				<section>
+					<h3>Timecodes and Macros <small>{model.automationAuthority.rows.length}</small></h3>
+					<RunningPane
+						compact
+						rows={model.automationAuthority.rows}
+						loading={model.automationAuthority.loading}
+						error={model.automationAuthority.error}
+					/>
+				</section>
+			)}
 		</div>
 	);
 }
@@ -425,6 +407,7 @@ export function SystemControlsModal() {
 		!visualizer.connected && tab === "visualizer" ? "running" : tab;
 	const activeItems =
 		model.runningSources.length +
+		model.automationAuthority.rows.length +
 		model.dynamicsAuthority.rows.length +
 		(model.preload.active ? 1 : 0);
 	const confirmAllOff = async () => {

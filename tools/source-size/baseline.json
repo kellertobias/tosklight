@@ -11,7 +11,6 @@
   "functions": {
     "apps/light-desktop/src/components/control/softwareKeypad.ts::javascript:function:editTargetedCommandWithSoftwareKey:9c7efa542284:1": 183,
     "apps/light-desktop/src/components/modals/specialDialogs/shapers.tsx::javascript:function:ShapersDialog:7b819b7b6a73:1": 175,
-    "apps/light-desktop/src/components/modals/SystemControlsModal.tsx::javascript:function:useSystemControlsModel:e0900c5a21a7:1": 153,
     "apps/light-desktop/src/components/modals/VisualizationPaneSettings.tsx::javascript:function:WidgetEditor:6778b594cf10:1": 271,
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 343,

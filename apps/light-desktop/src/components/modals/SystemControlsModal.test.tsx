@@ -1,3 +1,4 @@
+import type { MacroExecution, TimecodeRuntime } from "../../api/runtimeModels";
 import {
 	cleanup,
 	fireEvent,
@@ -88,6 +89,7 @@ const dynamicsRuntime = vi.hoisted(() => ({
 	},
 }));
 dynamicsRuntime.authority.off = dynamicsRuntime.off;
+const originalDynamicRow = dynamicsRuntime.authority.rows[0];
 
 interface ProgrammerProjection {
 	revision: number;
@@ -218,9 +220,34 @@ const preloadLifecycle = {
 	},
 };
 
+const automation = vi.hoisted(() => ({
+	timecodes: [] as TimecodeRuntime[],
+	macros: [] as MacroExecution[],
+	loading: false,
+	error: null as string | null,
+	stop: vi.fn().mockResolvedValue(true),
+	cancel: vi.fn().mockResolvedValue(true),
+}));
+const automationActions = {
+	timecodes: { runtime: vi.fn(), stop: automation.stop },
+	macros: { runtime: vi.fn(), cancel: automation.cancel },
+	showObjects: { objects: vi.fn() },
+};
+vi.mock("../../features/running/RunningRuntimeActionsContext", () => ({
+	useRunningRuntimeActions: () => automationActions,
+}));
+vi.mock("../../features/running/useRunningSupplementalAuthority", () => ({
+	useRunningSupplementalAuthority: () => ({
+		...automation,
+		timecodeDefinitions: [],
+		stopTimecode: automation.stop,
+		cancelMacro: automation.cancel,
+	}),
+}));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useSessionSnapshot: () => server.session,
+	useActiveShowId: () => "show-a",
 }));
 vi.mock("../../features/shellStatus/ShellStatusState", () => ({
 	useServerError: () => deskState.error,
@@ -274,6 +301,10 @@ vi.mock("./systemControls/useVisualizerViewControls", () => ({
 }));
 
 afterEach(() => {
+	automation.timecodes = [];
+	automation.macros = [];
+	automation.loading = false;
+	automation.error = null;
 	mapped.identity = { kind: "playback", page: 1, position: 12 };
 	cleanup();
 	vi.clearAllMocks();
@@ -299,7 +330,7 @@ afterEach(() => {
 	Object.assign(dynamicsRuntime.authority, {
 		ready: true,
 		loading: false,
-		rows: [dynamicsRuntime.authority.rows[0]],
+		rows: [originalDynamicRow],
 		canStop: true,
 	});
 	appState.systemControlsOpen = true;
@@ -638,4 +669,73 @@ describe("SystemControlsModal", () => {
 		expect(outputAuthority.actionCalls).toEqual([false]);
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
+});
+
+
+it.each(["timecode", "macro"] as const)(
+	"counts and stops a %s-only owner through confirmed All Off",
+	async (kind) => {
+		playbackAuthority.sources = [];
+		dynamicsRuntime.authority.rows = [];
+		if (kind === "timecode") automation.timecodes = [{
+			timecode_id: "transport-owner", revision: 1, state: "playing",
+			frame: 10, duration_frame: 2640, audio_linked: false,
+		}];
+		else automation.macros = [{
+			execution_id: "execution-owner", macro_id: "macro-1", macro_number: 4,
+			macro_name: "Scene setup", source_revision: 1, desk_id: "desk-a",
+			session_id: "session-a", state: "running", trigger: { type: "pool" },
+			started_at: "2026-10-11T00:00:00Z",
+		}];
+		render(<SystemControlsModal />);
+		expect(screen.getByText(/active items/)).toHaveTextContent("1 active items");
+		expect(document.querySelector(`[data-running-kind="${kind}"]`)).toBeTruthy();
+		const allOff = screen.getByRole("button", { name: "All Off" });
+		expect(allOff).not.toBeDisabled();
+		fireEvent.click(allOff);
+		expect(automation.stop).not.toHaveBeenCalled();
+		expect(automation.cancel).not.toHaveBeenCalled();
+		fireEvent.click(within(screen.getByRole("alertdialog", {
+			name: "Confirm All Off",
+		})).getByRole("button", { name: "Confirm All Off" }));
+		const action = kind === "timecode" ? automation.stop : automation.cancel;
+		await waitFor(() => expect(action).toHaveBeenCalledOnce());
+		expect(action).toHaveBeenCalledWith(kind === "timecode" ? "transport-owner" : "execution-owner");
+		expect(release).not.toHaveBeenCalled();
+		expect(dynamicsRuntime.off).not.toHaveBeenCalled();
+		expect(clearProgrammer).not.toHaveBeenCalled();
+	},
+);
+
+it("blocks All Off while supplemental owner authority is loading or failed", () => {
+	automation.loading = true;
+	const { rerender } = render(<SystemControlsModal />);
+	expect(screen.getByText("Main playback")).toBeInTheDocument();
+	expect(screen.getByText(/active items/)).toHaveTextContent("3 active items");
+	expect(screen.getByRole("button", { name: "All Off" })).toBeDisabled();
+	automation.loading = false;
+	automation.error = "Timecode authority unavailable";
+	rerender(<SystemControlsModal />);
+	expect(screen.getByRole("button", { name: "All Off" })).toBeDisabled();
+	expect(screen.getByRole("alert")).toHaveTextContent("Timecode authority unavailable");
+	expect(automation.stop).not.toHaveBeenCalled();
+	expect(automation.cancel).not.toHaveBeenCalled();
+});
+
+it("retains the confirmation and partial failure when an automation owner refuses All Off", async () => {
+	playbackAuthority.sources = [];
+	dynamicsRuntime.authority.rows = [];
+	automation.timecodes = [{
+		timecode_id: "transport-owner", revision: 1, state: "playing",
+		frame: 10, duration_frame: 2640, audio_linked: false,
+	}];
+	automation.stop.mockRejectedValueOnce(new Error("Stop failed"));
+	render(<SystemControlsModal />);
+	fireEvent.click(screen.getByRole("button", { name: "All Off" }));
+	const confirmation = screen.getByRole("alertdialog", { name: "Confirm All Off" });
+	fireEvent.click(within(confirmation).getByRole("button", { name: "Confirm All Off" }));
+	await waitFor(() => expect(within(confirmation).getByRole("alert"))
+		.toHaveTextContent("1 running item could not be turned off"));
+	expect(confirmation).toBeInTheDocument();
+	expect(automation.stop).toHaveBeenCalledWith("transport-owner");
 });
