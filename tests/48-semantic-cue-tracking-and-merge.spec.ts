@@ -250,6 +250,7 @@ scenario(
 		await t.playback.configure(underlying, { autoOff: true });
 		await t.clock.advanceBy("1ms");
 		await t.playback.via.ui.flash(replacing).hold(async () => {
+			await t.playback.expect(replacing).runtime({ enabled: false, flash: true });
 			await t.clock.advanceStep();
 			await t.playback.expect(underlying).runtime({ enabled: true });
 			await t.expectFixtureValue(fixture(21), {
@@ -258,6 +259,8 @@ scenario(
 				"color:blue": 0,
 			});
 		});
+		// Mouse-up queues the WS release; render only after the engine accepts it.
+		await t.playback.expect(replacing).runtime({ enabled: false, flash: false });
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			"color:red": 0,
@@ -266,6 +269,7 @@ scenario(
 		});
 
 		await t.playback.via.ui.temp(replacing);
+		await t.playback.expect(replacing).runtime({ temporary_active: true });
 		await t.clock.advanceStep();
 		await t.playback.expect(underlying).runtime({ enabled: true });
 		await t.expectFixtureValue(fixture(21), {
@@ -274,6 +278,7 @@ scenario(
 			"color:blue": 0,
 		});
 		await t.playback.via.ui.temp(replacing);
+		await t.playback.expect(replacing).runtime({ enabled: false, temporary_active: false });
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(21), {
 			"color:red": 0,
