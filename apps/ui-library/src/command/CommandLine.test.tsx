@@ -1,10 +1,19 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandLine, type CommandLineProps } from "./CommandLine";
 
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+	cleanup();
+	vi.useRealTimers();
+});
 
 function props(overrides: Partial<CommandLineProps> = {}): CommandLineProps {
 	return {
@@ -81,17 +90,34 @@ describe("CommandLine", () => {
 		expect(view.onAdvancePreload).toHaveBeenCalledOnce();
 	});
 
-	it.each([false, true])("preserves a full select-all paste after completion (hardware=%s)", async (hardware) => {
+	it.each([
+		false,
+		true,
+	])("preserves a full select-all paste after completion (hardware=%s)", async (hardware) => {
 		const execute = vi.fn();
 		function Surface() {
 			const [text, setText] = useState("FIXTURE 9001 AT 20");
 			const [completed, setCompleted] = useState(true);
-			return <CommandLine {...props({ hardware, commandLine: text, completed,
-				onReplace: (next) => { setText(next); setCompleted(false); }, onExecute: execute })} />;
+			return (
+				<CommandLine
+					{...props({
+						hardware,
+						commandLine: text,
+						completed,
+						onReplace: (next) => {
+							setText(next);
+							setCompleted(false);
+						},
+						onExecute: execute,
+					})}
+				/>
+			);
 		}
 		render(<Surface />);
 		const user = userEvent.setup();
-		const input = screen.getByRole("textbox", { name: "Command line" }) as HTMLInputElement;
+		const input = screen.getByRole("textbox", {
+			name: "Command line",
+		}) as HTMLInputElement;
 		await user.click(input);
 		input.setSelectionRange(0, input.value.length);
 		const command = "FIXTURE 9002 AT COLOR PRESET 100";
@@ -101,19 +127,34 @@ describe("CommandLine", () => {
 		expect(execute).toHaveBeenCalledExactlyOnceWith(command);
 	});
 
-	it.each(["insertFromDrop", "insertReplacementText", "insertFromPaste"])("keeps complete %s content instead of its final digit", (inputType) => {
+	it.each([
+		"insertFromDrop",
+		"insertReplacementText",
+		"insertFromPaste",
+	])("keeps complete %s content instead of its final digit", (inputType) => {
 		const view = props({ completed: true });
 		render(<CommandLine {...view} />);
 		const input = screen.getByRole("textbox", { name: "Command line" });
-		fireEvent.input(input, { target: { value: "FIXTURE 9002 AT 100" }, inputType, data: "FIXTURE 9002 AT 100" });
-		expect(view.onReplace).toHaveBeenCalledExactlyOnceWith("FIXTURE 9002 AT 100");
+		fireEvent.input(input, {
+			target: { value: "FIXTURE 9002 AT 100" },
+			inputType,
+			data: "FIXTURE 9002 AT 100",
+		});
+		expect(view.onReplace).toHaveBeenCalledExactlyOnceWith(
+			"FIXTURE 9002 AT 100",
+		);
 	});
 
-	it.each([false, true])("still starts a fresh command on an ordinary next digit (hardware=%s)", (hardware) => {
+	it.each([
+		false,
+		true,
+	])("still starts a fresh command on an ordinary next digit (hardware=%s)", (hardware) => {
 		const view = props({ completed: true, hardware });
 		render(<CommandLine {...view} />);
 		fireEvent.input(screen.getByRole("textbox", { name: "Command line" }), {
-			target: { value: `${view.commandLine}9` }, inputType: "insertText", data: "9",
+			target: { value: `${view.commandLine}9` },
+			inputType: "insertText",
+			data: "9",
 		});
 		expect(view.onReplace).toHaveBeenCalledExactlyOnceWith("FIXTURE 9");
 	});
@@ -135,9 +176,7 @@ describe("CommandLine", () => {
 		expect(preload).toHaveTextContent("PRELOADCLEAR PRELOAD");
 		expect(escapeButton.querySelector("small")).toHaveTextContent("UNDO");
 		expect(record.querySelector("small")).toHaveTextContent("UPDATE");
-		expect(preload.querySelector("small")).toHaveTextContent(
-			"CLEAR PRELOAD",
-		);
+		expect(preload.querySelector("small")).toHaveTextContent("CLEAR PRELOAD");
 	});
 
 	it("renders authoritative completion, blackout, errors, and hardware geometry", () => {
@@ -165,9 +204,10 @@ describe("CommandLine", () => {
 		);
 		expect(screen.getByText("BLACKOUT")).toBeVisible();
 		expect(screen.getByRole("alert")).toHaveTextContent("Command rejected");
-		expect(
-			screen.getByRole("alert").parentElement,
-		).toHaveClass("command-field", "command-history-open");
+		expect(screen.getByRole("alert").parentElement).toHaveClass(
+			"command-field",
+			"command-history-open",
+		);
 		expect(screen.getByRole("alertdialog")).toHaveTextContent(
 			"Output is unavailable",
 		);
@@ -360,24 +400,79 @@ describe("brief operator rejection feedback", () => {
 	});
 	it("restarts feedback for repeated rejection and clears it on edit", () => {
 		vi.useFakeTimers();
-		const view = props({ commandError: "Preset not Recorded", commandErrorRevision: 1 });
+		const view = props({
+			commandError: "Preset not Recorded",
+			commandErrorRevision: 1,
+		});
 		const { rerender } = render(<CommandLine {...view} />);
 		act(() => vi.advanceTimersByTime(2500));
 		rerender(<CommandLine {...view} commandErrorRevision={2} />);
-		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveClass("error");
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveClass(
+			"error",
+		);
 		expect(screen.getByRole("alert")).toHaveTextContent("Preset not Recorded");
-		rerender(<CommandLine {...view} commandError={null} commandLine="FIXTURE 2" />);
+		rerender(
+			<CommandLine {...view} commandError={null} commandLine="FIXTURE 2" />,
+		);
 		expect(screen.queryByRole("alert")).toBeNull();
-		expect(screen.getByRole("textbox", { name: "Command line" })).not.toHaveClass("rejected");
+		expect(
+			screen.getByRole("textbox", { name: "Command line" }),
+		).not.toHaveClass("rejected");
 		vi.useRealTimers();
 	});
 	it("keeps operator mistakes out of the larger current-error panel", () => {
-		render(<CommandLine {...props({ commandError: "Preset not Recorded", historyOpen: true })} />);
+		render(
+			<CommandLine
+				{...props({ commandError: "Preset not Recorded", historyOpen: true })}
+			/>,
+		);
 		expect(document.querySelector(".command-history-current-error")).toBeNull();
 		expect(screen.getByRole("alert")).toHaveTextContent("Preset not Recorded");
 	});
 	it("retains detailed unexpected failures for diagnosis", () => {
-		render(<CommandLine {...props({ commandError: "Unexpected response\nserver diagnostic", commandErrorKind: "unexpected", historyOpen: true })} />);
-		expect(document.querySelector(".command-history-current-error")).toHaveTextContent("server diagnostic");
+		render(
+			<CommandLine
+				{...props({
+					commandError: "Unexpected response\nserver diagnostic",
+					commandErrorKind: "unexpected",
+					historyOpen: true,
+				})}
+			/>,
+		);
+		expect(
+			document.querySelector(".command-history-current-error"),
+		).toHaveTextContent("server diagnostic");
+	});
+});
+
+describe("authoritative Playback command context", () => {
+	it.each([
+		false,
+		true,
+	])("keeps context inside the command field with hardware=%s", (hardware) => {
+		const view = props({ hardware });
+		const { rerender } = render(
+			<CommandLine
+				{...view}
+				{...{ commandContext: { name: "Main", page: 2 } }}
+			/>,
+		);
+		const field = screen
+			.getByRole("textbox", { name: "Command line" })
+			.closest(".command-field");
+		expect(field).toContainElement(screen.getByText("Main"));
+		expect(field).toContainElement(screen.getByText("Page 2"));
+		expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue(
+			"FIXTURE 1 AT 68",
+		);
+		rerender(
+			<CommandLine
+				{...view}
+				{...{ commandContext: { name: "Screen 1", page: 7 } }}
+			/>,
+		);
+		expect(field).toContainElement(screen.getByText("Screen 1"));
+		expect(field).toContainElement(screen.getByText("Page 7"));
+		expect(screen.queryByText("Page 2")).not.toBeInTheDocument();
 	});
 });

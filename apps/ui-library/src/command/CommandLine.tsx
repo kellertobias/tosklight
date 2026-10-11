@@ -6,6 +6,7 @@ import {
 	type CommandErrorKind,
 } from "./useCommandFeedback";
 import { ModalTitleBar } from "../common/ModalTitleBar";
+import "./CommandContext.css";
 
 export type CommandLineMode = "programmer" | "playbacks";
 export type CommandConnectionStatus =
@@ -39,6 +40,7 @@ export interface CommandStatus {
 }
 
 export interface CommandLineProps {
+	commandContext?: { name: string; page: number | null };
 	mode: CommandLineMode;
 	hardware: boolean;
 	ready: boolean;
@@ -131,11 +133,22 @@ function CommandInputSurface(
 				</Button>
 			)}
 			<div
-				className={`command-field ${props.historyOpen ? "command-history-open" : ""}`}
+				className={`command-field ${props.commandContext ? "has-command-context" : ""} ${props.historyOpen ? "command-history-open" : ""}`}
 			>
 				{feedback.toast && props.commandErrorKind !== "unexpected" && (
 					<div className="command-feedback-toast" role="alert">
 						{props.commandErrorSummary ?? props.commandError?.split("\n")[0]}
+					</div>
+				)}
+				{props.commandContext && (
+					<div
+						className="command-context"
+						aria-label="Playback command context"
+					>
+						<span title={props.commandContext.name}>
+							{props.commandContext.name}
+						</span>
+						<span>Page {props.commandContext.page ?? "—"}</span>
 					</div>
 				)}
 				<Input
@@ -149,14 +162,19 @@ function CommandInputSurface(
 						const input = event.nativeEvent as InputEvent;
 						// A next typed character starts a fresh command after completion.
 						// Paste, drop and replacement already carry the operator's full text.
-						const typedCharacter = input.inputType === "insertText" &&
-							input.data?.length === 1 && !input.isComposing;
-						const appendedCharacter = !input.inputType &&
+						const typedCharacter =
+							input.inputType === "insertText" &&
+							input.data?.length === 1 &&
+							!input.isComposing;
+						const appendedCharacter =
+							!input.inputType &&
 							value.startsWith(props.commandLine) &&
 							value.length === props.commandLine.length + 1;
-						props.onReplace(props.completed && (typedCharacter || appendedCharacter)
-							? `${props.commandTarget} ${input.data ?? value.slice(-1)}`
-							: value);
+						props.onReplace(
+							props.completed && (typedCharacter || appendedCharacter)
+								? `${props.commandTarget} ${input.data ?? value.slice(-1)}`
+								: value,
+						);
 					}}
 					onKeyDown={(event) => {
 						if (event.key !== "Enter") return;
@@ -188,7 +206,9 @@ function CommandInputSurface(
 					history={props.history}
 					open={props.historyOpen}
 					panel={props.historyPanel}
-					commandError={props.commandErrorKind === "unexpected" ? props.commandError : null}
+					commandError={
+						props.commandErrorKind === "unexpected" ? props.commandError : null
+					}
 					onAcknowledgeCommandError={props.onAcknowledgeCommandError}
 					onClose={() => props.onHistoryOpenChange(false)}
 					onReuse={props.onReuseHistory}
@@ -362,7 +382,7 @@ function CommandRecordPreload(props: CommandLineProps) {
 					props.preloadArmed && props.pendingSummary
 						? `Pending Preload: ${props.pendingSummary}`
 						: props.preloadActive
-						? "Hold to inspect and edit the pending Preload"
+							? "Hold to inspect and edit the pending Preload"
 							: undefined
 				}
 				onPointerDown={() => {
@@ -440,7 +460,12 @@ function CommandHistoryPanel({
 				onClose={onClose}
 			/>
 			{commandError && (
-				<ErrorAlert as="div" className="command-history-current-error" role="alert" copyText={commandError}>
+				<ErrorAlert
+					as="div"
+					className="command-history-current-error"
+					role="alert"
+					copyText={commandError}
+				>
 					<div>
 						<b>Command error</b>
 						<p>{commandError}</p>
@@ -479,7 +504,9 @@ function CommandHistoryPanel({
 								</small>
 							</div>
 							<p>{entry.feedback}</p>
-							{entry.status === "rejected" && <CopyErrorButton text={`${entry.command}\n${entry.feedback}`} />}
+							{entry.status === "rejected" && (
+								<CopyErrorButton text={`${entry.command}\n${entry.feedback}`} />
+							)}
 							{entry.source !== "window" && (
 								<Button onClick={() => onReuse(entry.command)}>Reuse</Button>
 							)}

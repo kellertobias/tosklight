@@ -38,6 +38,22 @@ const activity = vi.hoisted(() => ({
 }));
 
 const highlight = vi.hoisted(() => ({ active: false }));
+const playbackContext = vi.hoisted(() => ({
+  desk: { selected_surface_id: "main", command_page: 2 },
+  surfaces: { main: { name: "Main" }, "screen:closed": { name: "Screen 1" } },
+}));
+vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", async (original) => ({
+  ...(await original<object>()),
+  usePlaybackDeskView: () => playbackContext.desk,
+}));
+vi.mock("../../features/screens/ScreensContext", async (original) => ({
+  ...(await original<object>()),
+  useScreensOptional: () => ({
+    surfaces: { playback_surfaces: playbackContext.surfaces },
+    screens: { screens: [{ surface_id: "screen:closed", desired_open: false }] },
+  }),
+}));
+
 
 const playbackQueue = vi.hoisted(() => ({
 	current: null as null | {
@@ -201,6 +217,7 @@ vi.mock(
 );
 
 beforeEach(() => {
+	playbackContext.desk = { selected_surface_id: "main", command_page: 2 };
 	vi.useFakeTimers();
 	state.updateArmed = false;
 	state.storeArmed = false;
@@ -892,4 +909,19 @@ describe("shared command rejection presentation", () => {
 			screen.getByRole("dialog", { name: "Command line history" }),
 		).toHaveTextContent("diagnostic detail");
 	});
+});
+
+
+it("visibly names the authoritative closed Screen context and updates its effective page", () => {
+  const { rerender } = render(<CommandLineBar />);
+  expect(screen.getByLabelText("Playback command context")).toHaveTextContent("MainPage 2");
+  const entered = (screen.getByRole("textbox", { name: "Command line" }) as HTMLInputElement).value;
+  playbackContext.desk = { selected_surface_id: "screen:closed", command_page: 7 };
+  rerender(<CommandLineBar />);
+  expect(screen.getByLabelText("Playback command context")).toHaveTextContent("Screen 1Page 7");
+  expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue(entered);
+  playbackContext.desk.command_page = 8;
+  rerender(<CommandLineBar />);
+  expect(screen.getByLabelText("Playback command context")).toHaveTextContent("Screen 1Page 8");
+  expect(playbackContext.desk.selected_surface_id).toBe("screen:closed");
 });

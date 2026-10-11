@@ -1,0 +1,26 @@
+.command-field.has-command-context .command-context {
+	position: absolute;
+	top: 3px;
+	left: 12px;
+	right: 177px;
+	z-index: 1;
+	display: flex;
+	gap: 6px;
+	min-width: 0;
+	color: var(--muted, #a5b0bd);
+	font-size: 10px;
+	line-height: 12px;
+	pointer-events: none;
+}
+.command-context > span:first-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.command-context > span:last-child {
+	flex-shrink: 0;
+}
+.command-field.has-command-context .command-input {
+	padding-top: 14px;
+	padding-bottom: 1px;
+}

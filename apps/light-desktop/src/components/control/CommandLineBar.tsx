@@ -43,6 +43,7 @@ import {
 import { useRecordGesture } from "./commandLine/useRecordGesture";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
+import { usePlaybackCommandContext } from "./commandLine/playbackCommandContext";
 import { useDeskStateDiagnostics } from "../../features/deskState/DeskStateDiagnosticsState";
 import { requestSystemControlsTab } from "../../features/deskState/deskStateDiagnostics";
 import { useProgrammerPreloadLifecycleView } from "../../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
@@ -56,7 +57,10 @@ const queuedPlaybackLabels = {
 	temporary_off: "TEMP OFF",
 } as const;
 
-function queuedPlaybackLabel(action: string, address: import("../../api/playbackAddress").PlaybackAddressValue) {
+function queuedPlaybackLabel(
+	action: string,
+	address: import("../../api/playbackAddress").PlaybackAddressValue,
+) {
 	const label =
 		queuedPlaybackLabels[action as keyof typeof queuedPlaybackLabels] ??
 		action.replaceAll("_", " ").toUpperCase();
@@ -65,7 +69,10 @@ function queuedPlaybackLabel(action: string, address: import("../../api/playback
 
 function pendingCommandSummary(
 	pendingValueCount: number,
-	actions: readonly { action: string; address: import("../../api/playbackAddress").PlaybackAddressValue }[],
+	actions: readonly {
+		action: string;
+		address: import("../../api/playbackAddress").PlaybackAddressValue;
+	}[],
 ) {
 	return [
 		pendingValueCount ? `PROG ${pendingValueCount}` : "",
@@ -81,28 +88,34 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 	const shellStatus = useShellStatusActions();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const commandErrorRef = useRef<string | null>(null);
-	const [commandErrorKind, setCommandErrorKind] =
-		useState<"operator" | "unexpected">("operator");
+	const [commandErrorKind, setCommandErrorKind] = useState<
+		"operator" | "unexpected"
+	>("operator");
 	const [commandErrorRevision, setCommandErrorRevision] = useState(0);
-	const [commandErrorCommand, setCommandErrorCommand] =
-		useState<string | undefined>();
-	const updateCommandError = useCallback((
-		error: string | null,
-		kind: "operator" | "unexpected" = "operator",
-		command?: string,
-	) => {
-		setCommandErrorKind(kind);
-		setCommandErrorRevision((revision) => revision + 1);
-		setCommandErrorCommand(command);
-		commandErrorRef.current = error;
-		setCommandError(error);
-	}, []);
+	const [commandErrorCommand, setCommandErrorCommand] = useState<
+		string | undefined
+	>();
+	const updateCommandError = useCallback(
+		(
+			error: string | null,
+			kind: "operator" | "unexpected" = "operator",
+			command?: string,
+		) => {
+			setCommandErrorKind(kind);
+			setCommandErrorRevision((revision) => revision + 1);
+			setCommandErrorCommand(command);
+			commandErrorRef.current = error;
+			setCommandError(error);
+		},
+		[],
+	);
 	const [persistentError, setPersistentError] = useState<string | null>(null);
 	const [errorOpen, setErrorOpen] = useState(false);
 	useEffect(() => {
 		const showCommandError = (event: Event) => {
-			const detail = (event as CustomEvent<string | CommandErrorFeedback | null>)
-				.detail;
+			const detail = (
+				event as CustomEvent<string | CommandErrorFeedback | null>
+			).detail;
 			if (detail !== null) setCompleted(false);
 			if (detail === null) updateCommandError(null);
 			else {
@@ -197,6 +210,18 @@ function useProgrammerHardwareKeys(
 	});
 }
 
+function useCommandLineStatus(deskError: string | null): CommandStatus {
+	const frequency = useFrameRateHz();
+	return {
+		connection: useConnectionStatus(),
+		frequency: typeof frequency === "number" ? frequency : "—",
+		timecode: useActiveTimecode(),
+		blackout: useOutputRuntimeBlackout() === true,
+		highlight: useHighlightSnapshot()?.active === true,
+		deskError,
+	};
+}
+
 function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
@@ -206,11 +231,6 @@ function useCommandLineBarModel() {
 		() => mergeCommandHistory(authoritativeHistory, contentErrorHistory),
 		[authoritativeHistory, contentErrorHistory],
 	);
-	const connection = useConnectionStatus();
-	const frequency = useFrameRateHz();
-	const timecode = useActiveTimecode();
-	const blackout = useOutputRuntimeBlackout() === true;
-	const highlight = useHighlightSnapshot()?.active === true;
 	const serverError = useServerError();
 	const deskDiagnostics = useDeskStateDiagnostics();
 	const command = useCommandLineSurface({ selection: true });
@@ -223,9 +243,17 @@ function useCommandLineBarModel() {
 	const [completed, setCompleted] = useState(false);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
-	useOSCCommandRejections(authoritativeHistory, errors.setCommandError, setCompleted);
+	useOSCCommandRejections(
+		authoritativeHistory,
+		errors.setCommandError,
+		setCompleted,
+	);
 	const [historyOpen, setHistoryOpen] = useState(false);
-	useUnexpectedCommandHistory(errors.commandError, errors.commandErrorKind, setHistoryOpen);
+	useUnexpectedCommandHistory(
+		errors.commandError,
+		errors.commandErrorKind,
+		setHistoryOpen,
+	);
 	const hasRecordableContent =
 		command.selected.length > 0 ||
 		(programmerActivity.ready && programmerActivity.valueCount > 0) ||
@@ -314,14 +342,7 @@ function useCommandLineBarModel() {
 		undo: () => numericPad.press("UND"),
 		pressKey: (key) => numericPad.press(key, "keyboard"),
 	});
-	const status: CommandStatus = {
-		connection,
-		frequency: typeof frequency === "number" ? frequency : "—",
-		timecode,
-		blackout,
-		highlight,
-		deskError: deskDiagnostics[0]?.title ?? null,
-	};
+	const status = useCommandLineStatus(deskDiagnostics[0]?.title ?? null);
 	return {
 		state,
 		hardware,
@@ -349,8 +370,10 @@ function useCommandLineBarModel() {
 export function CommandLineBar() {
 	const model = useCommandLineBarModel();
 	const policy = useControlSurfacePolicy();
+	const commandContext = usePlaybackCommandContext(model.state.desks);
 	return (
 		<CommandLine
+			commandContext={commandContext}
 			mode={policy?.mode ?? model.state.controlMode}
 			hardware={model.hardware}
 			ready={model.command.ready}
