@@ -70,15 +70,15 @@ describe("Running Dynamic source-specific Stop affordance", () => {
 		).toHaveTextContent("Off in Programmer");
 		expect(screen.getByText(/follows its Preload capture mode/)).toBeVisible();
 	});
-	it("enables the exact typed virtual row without parsing its display label", () => {
+	it("enables the exact typed playback row without parsing its display label", () => {
 		const row = {
 			...base,
 			source: "Renamed label",
 			stopMode: "playback" as const,
 			stopOwner: {
-				kind: "virtual_playback" as const,
+				kind: "playback" as const,
 				page: 2,
-				playback_number: 1303,
+				position: 303,
 			},
 		};
 		const stop = view(row);

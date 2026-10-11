@@ -159,9 +159,11 @@ describe("LightClientRuntime", () => {
 	it("keeps a plain-text error body unchanged", async () => {
 		vi.stubGlobal(
 			"fetch",
-			vi.fn().mockResolvedValue(
-				new Response("the active show is changing", { status: 409 }),
-			),
+			vi
+				.fn()
+				.mockResolvedValue(
+					new Response("the active show is changing", { status: 409 }),
+				),
 		);
 
 		await expect(
@@ -382,10 +384,12 @@ describe("LightClientRuntime", () => {
 				{
 					type: "playback",
 					request: {
-						request_id: "playback-a",
-						address: { kind: "playback", playback_number: 1 },
+						address: { kind: "playback", page: 1, position: 1 },
 						action: { type: "go", pressed: true },
-						surface: "physical",
+						control_source: {
+							surface_id: "software:test-client",
+							control_id: 11,
+						},
 					},
 				},
 				"playback-a",
@@ -468,6 +472,7 @@ function session(): SessionResponse {
 		desk: {
 			id: "desk-a",
 			name: "Main",
+			surface_id: "main",
 			columns: 10,
 			rows: 4,
 			buttons: 40,

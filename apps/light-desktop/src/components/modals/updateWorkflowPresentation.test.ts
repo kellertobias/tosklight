@@ -7,7 +7,7 @@ it("describes a Cuelist cue without masquerading its internal assignment as a su
 			family: { type: "cue" },
 			object_id: "stable-cuelist-uuid",
 			name: "Cuelist 101",
-			playback_number: 21,
+			playback_address: { page: 1, position: 21 },
 			cue: { id: "stable-cue-uuid", number: "1" },
 		}),
 	).toBe("Cuelist · Current Cue 1");

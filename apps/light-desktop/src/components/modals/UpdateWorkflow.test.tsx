@@ -26,16 +26,20 @@ import {
 } from "./UpdateWorkflow";
 import { cueMenuEntryFor } from "./updateWorkflowTestFixtures";
 
-const request: UpdateTargetRequest = cueUpdateTarget("cue-list-a", 7, {
-	id: "cue-2",
-	number: "2",
-});
+const request: UpdateTargetRequest = cueUpdateTarget(
+	"cue-list-a",
+	{ page: 1, position: 7 },
+	{
+		id: "cue-2",
+		number: "2",
+	},
+);
 const existingOnly: UpdateMode = { target_type: "cue", mode: "existing_only" };
 const target = {
 	family: { type: "cue" as const },
 	object_id: "cue-list-a",
 	name: "Main Cuelist",
-	playback_number: 7,
+	playback_address: { page: 1, position: 7 },
 	cue: { id: "cue-2", number: "2" },
 };
 const preview: UpdatePreview = {
@@ -254,7 +258,7 @@ describe("Update workflow", () => {
 				...target,
 				object_id: "cue-list-b",
 				name: "No-op Cuelist",
-				playback_number: 8,
+				playback_address: { page: 1, position: 8 },
 			},
 			items: [
 				{

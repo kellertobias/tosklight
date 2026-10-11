@@ -15,10 +15,9 @@ function playback(
 		identity:
 			playbackNumber == null
 				? { kind: "cue_list", cue_list_id: cueListId }
-				: { kind: "playback", playback_number: playbackNumber },
+				: { kind: "playback", page: 1, position: playbackNumber },
 		cueListId,
 		cueListNumber,
-		playbackNumber,
 		label: "Wrong assignment label",
 		cueList: {
 			id: cueListId,

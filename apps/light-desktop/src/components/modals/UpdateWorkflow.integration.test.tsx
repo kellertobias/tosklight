@@ -208,7 +208,7 @@ describe("Update workflow integration", () => {
 		const request: UpdateTargetRequest = {
 			family: { type: "cue" },
 			object_id: "cue-list-a",
-			playback_number: 7,
+			playback_address: { page: 1, position: 7 },
 			validate_active_context: true,
 		};
 		workflow.state.updateArmed = true;
@@ -315,12 +315,16 @@ describe("UPDATE UPDATE option choice", () => {
 		routeControlSurfaceIntent({ type: "update_target_menu", source: "osc" });
 		const dialog = await screen.findByRole("dialog", { name: "Update" });
 		await waitFor(() =>
-			expect(within(dialog).getByText("Smart", { selector: "b" })).toBeInTheDocument(),
+			expect(
+				within(dialog).getByText("Smart", { selector: "b" }),
+			).toBeInTheDocument(),
 		);
 		expect(
 			within(dialog).getByRole("switch", { name: "Set as default" }),
 		).not.toBeChecked();
-		fireEvent.click(within(dialog).getByRole("radio", { name: "Add Existing" }));
+		fireEvent.click(
+			within(dialog).getByRole("radio", { name: "Add Existing" }),
+		);
 		fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
 
 		await waitFor(() =>
@@ -336,7 +340,9 @@ describe("UPDATE UPDATE option choice", () => {
 			...defaultUpdateSettings,
 			update_default: "merge",
 		});
-		workflow.update.saveSettings.mockImplementation(async (settings) => settings);
+		workflow.update.saveSettings.mockImplementation(
+			async (settings) => settings,
+		);
 		const authority = createCommandLineTestAuthority({ text: "UPDATE" });
 		render(authority.wrap(<UpdateWorkflow />));
 		await act(authority.settle);
@@ -344,13 +350,14 @@ describe("UPDATE UPDATE option choice", () => {
 		routeControlSurfaceIntent({ type: "update_target_menu", source: "touch" });
 		const dialog = await screen.findByRole("dialog", { name: "Update" });
 		await waitFor(() =>
-			expect(within(dialog).getByRole("radio", { name: "Merge" })).toHaveAttribute(
-				"aria-checked",
-				"true",
-			),
+			expect(
+				within(dialog).getByRole("radio", { name: "Merge" }),
+			).toHaveAttribute("aria-checked", "true"),
 		);
 		fireEvent.click(within(dialog).getByRole("radio", { name: "Smart" }));
-		fireEvent.click(within(dialog).getByRole("switch", { name: "Set as default" }));
+		fireEvent.click(
+			within(dialog).getByRole("switch", { name: "Set as default" }),
+		);
 		fireEvent.click(within(dialog).getByRole("button", { name: "Update" }));
 
 		await waitFor(() =>
@@ -370,7 +377,7 @@ describe("UPDATE UPDATE option choice", () => {
 		const request: UpdateTargetRequest = {
 			family: { type: "cue" },
 			object_id: "cue-list-a",
-			playback_number: 7,
+			playback_address: { page: 1, position: 7 },
 			validate_active_context: true,
 		};
 		workflow.state.updateArmed = true;
@@ -396,7 +403,7 @@ describe("UPDATE UPDATE option choice", () => {
 		const request: UpdateTargetRequest = {
 			family: { type: "cue" },
 			object_id: "cue-list-a",
-			playback_number: 7,
+			playback_address: { page: 1, position: 7 },
 			validate_active_context: true,
 		};
 		workflow.state.updateArmed = true;

@@ -14,14 +14,12 @@ import {
 
 function validOutcome() {
 	return {
-		request_id: "request-1",
 		correlation_id: "55555555-5555-4555-8555-555555555555",
-		requested: { kind: "playback", playback_number: 1 },
+		requested: { kind: "playback", page: 1, position: 1 },
 		resolved: {
 			kind: "playback",
-			playback_number: 1,
 			page: 1,
-			slot: 1,
+			position: 1,
 		},
 		outcome: { status: "applied" },
 		durability: "durable",
@@ -30,7 +28,6 @@ function validOutcome() {
 		desk: deskProjection(),
 		event_sequence: 12,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 
@@ -113,19 +110,19 @@ describe("Playback wire validation", () => {
 			],
 			[
 				{ kind: "group", group_id: GROUP_ID },
-				{ kind: "group", group_id: GROUP_ID, playback_number: null },
+				{ kind: "group", group_id: GROUP_ID },
 			],
 			[
-				{ kind: "playback", playback_number: 1 },
-				{ kind: "playback", playback_number: 1, page: null, slot: null },
+				{ kind: "playback", page: 1, position: 1 },
+				{ kind: "playback", page: 1, position: 1 },
 			],
 			[
-				{ kind: "current_page", slot: 2 },
-				{ kind: "playback", playback_number: 2, page: 3, slot: 2 },
+				{ kind: "current_page", position: 2 },
+				{ kind: "playback", page: 3, position: 2 },
 			],
 			[
-				{ kind: "explicit_page", page: 3, slot: 2 },
-				{ kind: "playback", playback_number: 2, page: 3, slot: 2 },
+				{ kind: "playback", page: 99, position: 1000 },
+				{ kind: "playback", page: 99, position: 1000 },
 			],
 		] as const) {
 			const decoded = decodePlaybackOutcome({
@@ -148,7 +145,6 @@ describe("Playback wire validation", () => {
 			resolved: {
 				kind: "group",
 				group_id: GROUP_ID,
-				playback_number: 12,
 			},
 			projection,
 		});
@@ -157,14 +153,13 @@ describe("Playback wire validation", () => {
 		expect(decoded.resolved).toEqual({
 			kind: "group",
 			group_id: GROUP_ID,
-			playback_number: 12,
 		});
 		expect(decoded.projection).toEqual(projection);
 	});
 
-	it("decodes a Dynamic playback projection used by Virtual Playbacks", () => {
+	it("decodes a Dynamic playback projection at an exact sparse address", () => {
 		const runtime = {
-			playback_number: 1001,
+			owner_address: { page: 99, position: 1000 },
 			enabled: true,
 			paused: false,
 			flash: false,
@@ -197,8 +192,7 @@ describe("Playback wire validation", () => {
 		const base = cueProjection();
 		const projection = {
 			scope: base.scope,
-			requested: base.requested,
-			playback_number: base.playback_number,
+			identity: base.identity,
 			target: "dynamic",
 			dynamic_id: "dynamic-1",
 			last_known_pool_number: 19,
@@ -214,8 +208,11 @@ describe("Playback wire validation", () => {
 		expect(decoded.projection).toEqual(projection);
 	});
 
-	it("requires both exact Group and mapped Playback routes for assigned events", () => {
-		const projection = groupProjection(GROUP_ID, 0.4, 12);
+	it("requires the exact assigned Playback route independently of its Group operand", () => {
+		const projection = {
+			...groupProjection(GROUP_ID, 0.4),
+			identity: { kind: "playback", page: 4, position: 12 },
+		};
 		const event = (
 			relatedObjects: Array<{ capability: string; id: string }>,
 		) => ({
@@ -233,11 +230,11 @@ describe("Playback wire validation", () => {
 
 		expect(
 			decodePlaybackEventMessage(
-				event([{ capability: "playback", id: "playback:12" }]),
+				event([{ capability: "playback", id: "playback:4.12" }]),
 			),
 		).toMatchObject({ type: "event", payload: { projection } });
 		expect(() => decodePlaybackEventMessage(event([]))).toThrow(
-			/Playback route playback:12/,
+			/Playback route playback:4\.12/,
 		);
 	});
 
@@ -247,14 +244,14 @@ describe("Playback wire validation", () => {
 			type: "event",
 			event: {
 				sequence: 14,
-				object: { capability: "playback", id: "playback:1" },
+				object: { capability: "playback", id: "playback:1.1" },
 				related_objects: [],
 				payload: {
 					type: "playback_runtime_changed",
 					change: {
 						projection,
 						transition: {
-							playback_number: 1,
+							playback_address: { page: 1, position: 1 },
 							cue_list_id: CUE_LIST_ID,
 							previous: { id: "cue-source", number: "1" },
 							current: { id: "cue-destination", number: "12" },
@@ -367,7 +364,7 @@ describe("Playback wire validation", () => {
 	it.each([
 		[
 			"requested address",
-			{ requested: { kind: "explicit_page", page: 1, slot: "2" } },
+			{ requested: { kind: "playback", page: 1, position: "2" } },
 		],
 		["resolved address", { resolved: { kind: "preview", playback_number: 1 } }],
 		["captured outcome", { outcome: { status: "captured", pending: "later" } }],
@@ -382,7 +379,14 @@ describe("Playback wire validation", () => {
 			{ related: [{ projection: cueProjection(2), event_sequence: -1 }] },
 		],
 		["event sequence", { event_sequence: -1 }],
-		["replayed flag", { replayed: "false" }],
+		[
+			"bounded position",
+			{ requested: { kind: "playback", page: 99, position: 1001 } },
+		],
+		[
+			"bounded page",
+			{ requested: { kind: "playback", page: 100, position: 1 } },
+		],
 	])("rejects a malformed %s variant", (_label, replacement) => {
 		expect(() =>
 			decodePlaybackOutcome({ ...validOutcome(), ...replacement }),

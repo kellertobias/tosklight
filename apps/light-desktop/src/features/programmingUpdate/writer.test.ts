@@ -180,7 +180,7 @@ function cuePreviewResponse(
 				family: { type: "cue" },
 				object_id: CUE_LIST_ID,
 				name: "Main",
-				playback_number: 7,
+				playback_address: { page: 1, position: 7 },
 				cue: { id: CUE_ID, number: "1" },
 			},
 			mode: { target_type: "cue", mode: "existing_only" },
@@ -289,10 +289,13 @@ describe("ProgrammingUpdateWriter", () => {
 		const { writer, transport } = setup({ apply: vi.fn() });
 		const late = deferred<{ settings: typeof defaultUpdateSettings }>();
 		transport.loadSettings = vi.fn(() => late.promise);
-		transport.saveSettings = vi.fn(async settings => ({ settings }));
+		transport.saveSettings = vi.fn(async (settings) => ({ settings }));
 		const view = programmingUpdateSettingsView(writer);
 		const read = writer.loadSettings();
-		const merged = { ...defaultUpdateSettings, record_default: "merge" as const };
+		const merged = {
+			...defaultUpdateSettings,
+			record_default: "merge" as const,
+		};
 		await expect(writer.saveSettings(merged)).resolves.toEqual(merged);
 		expect(view.getSnapshot()?.record_default).toBe("merge");
 		late.resolve({ settings: defaultUpdateSettings });
@@ -530,7 +533,7 @@ describe("ProgrammingUpdateWriter", () => {
 		const cueTarget: UpdateTargetRequest = {
 			family: { type: "cue" },
 			object_id: CUE_LIST_ID,
-			playback_number: 7,
+			playback_address: { page: 1, position: 7 },
 			cue_id: CUE_ID,
 			cue_number: "1",
 			validate_active_context: false,

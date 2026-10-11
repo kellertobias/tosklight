@@ -56,7 +56,9 @@ describe("Record and Update options on the command line", () => {
 		expect(
 			armedCommandLine("RECORD ADD CUE PBK 2", "RECORD", "smart", "merge"),
 		).toBe("RECORD SMART PBK 2");
-		expect(armedCommandLine("RECORD", "RECORD", "smart", "smart")).toBe("RECORD SMART ");
+		expect(armedCommandLine("RECORD", "RECORD", "smart", "smart")).toBe(
+			"RECORD SMART ",
+		);
 		expect(armedCommandLine("", "UPDATE", "add_existing", "smart")).toBe(
 			"UPDATE ADD EXISTING ",
 		);
@@ -113,17 +115,24 @@ describe("Touch Record with an option", () => {
 describe("target family record defaults", () => {
 	it("merges presets without changing cuelist defaults or explicit alternatives", async () => {
 		const defaults = capability(defaultUpdateSettings);
-		expect(await resolveRecordOption("RECORD", defaults, "preset")).toBe("merge");
+		expect(await resolveRecordOption("RECORD", defaults, "preset")).toBe(
+			"merge",
+		);
 		expect(await resolveRecordOption("RECORD", null, "preset")).toBe("merge");
-		expect(await resolveRecordOption("RECORD", defaults, "cuelist")).toBe("smart");
-		expect(await resolveRecordOption("RECORD SMART", defaults, "preset")).toBe("smart");
-		expect(await resolveRecordOption("RECORD ADD EXISTING", defaults, "preset")).toBe("add_existing");
+		expect(await resolveRecordOption("RECORD", defaults, "cuelist")).toBe(
+			"smart",
+		);
+		expect(await resolveRecordOption("RECORD SMART", defaults, "preset")).toBe(
+			"smart",
+		);
+		expect(
+			await resolveRecordOption("RECORD ADD EXISTING", defaults, "preset"),
+		).toBe("add_existing");
 	});
 });
 
-
 describe("Touch Update with an option", () => {
-	const cue = cueUpdateTarget("list", 1, null);
+	const cue = cueUpdateTarget("list", { page: 1, position: 1 }, null);
 	const preset = {
 		family: { type: "preset" as const },
 		object_id: "color:1",
@@ -133,9 +142,14 @@ describe("Touch Update with an option", () => {
 		cue_mode: "existing_only",
 	};
 	it("maps each option onto an Update mode or a new Cue", () => {
-		const mode = (option: Parameters<typeof updateModeForOption>[0], target = cue) =>
-			updateModeForOption(option, settings, target, configuredUpdateMode);
-		expect(mode("smart")).toEqual({ target_type: "cue", mode: "existing_only" });
+		const mode = (
+			option: Parameters<typeof updateModeForOption>[0],
+			target = cue,
+		) => updateModeForOption(option, settings, target, configuredUpdateMode);
+		expect(mode("smart")).toEqual({
+			target_type: "cue",
+			mode: "existing_only",
+		});
 		expect(mode("merge")).toEqual({ target_type: "cue", mode: "add_new" });
 		expect(mode("add_existing")).toEqual({
 			target_type: "cue",

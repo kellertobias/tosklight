@@ -57,8 +57,9 @@ function runtime(
 						? { programmer_id: "programmer-current" }
 						: {
 								stop_owner: {
-									kind: "physical_playback" as const,
-									playback_number: 12,
+									kind: "playback" as const,
+									page: 1,
+									position: 12,
 								},
 							}),
 					priority: 10 - index,
@@ -204,7 +205,9 @@ describe("useRunningDynamicsAuthority", () => {
 		});
 		await waitFor(() => expect(rendered.result.current.rows).toHaveLength(1));
 		expect(rendered.result.current.rows[0]).toMatchObject({
-			controllerId: "controller-a", source: "Programmer", winning: true,
+			controllerId: "controller-a",
+			source: "Programmer",
+			winning: true,
 		});
 		expect(backend.offLive).not.toHaveBeenCalled();
 		expect(backend.stopRuntimeLive).not.toHaveBeenCalled();
@@ -225,7 +228,7 @@ describe("useRunningDynamicsAuthority", () => {
 
 		expect(backend.offLive).not.toHaveBeenCalled();
 		expect(backend.stopRuntimeLive).toHaveBeenCalledWith(
-			{ kind: "physical_playback", playback_number: 12 },
+			{ kind: "playback", page: 1, position: 12 },
 			{
 				dynamicId: "dynamic-a",
 				instanceId: "instance-a",
@@ -258,13 +261,13 @@ describe("useRunningDynamicsAuthority", () => {
 	});
 });
 
-it("routes virtual source Stop with exact identity and guards while pending", async () => {
+it("routes explicit-page source Stop with exact identity and guards while pending", async () => {
 	const initial = runtime(["controller-virtual"]);
 	initial.instances[0].controllers[0] = {
 		...initial.instances[0].controllers[0],
 		programmer_id: undefined,
 		source: "renamed source label",
-		stop_owner: { kind: "virtual_playback", page: 2, playback_number: 1303 },
+		stop_owner: { kind: "playback", page: 2, position: 303 },
 	} as never;
 	const backend = api(initial);
 	const events = new Events();
@@ -276,7 +279,7 @@ it("routes virtual source Stop with exact identity and guards while pending", as
 	await act(() => rendered.result.current.off(row));
 	expect(backend.offLive).not.toHaveBeenCalled();
 	expect(backend.stopRuntimeLive).toHaveBeenCalledWith(
-		{ kind: "virtual_playback", page: 2, playback_number: 1303 },
+		{ kind: "playback", page: 2, position: 303 },
 		{
 			dynamicId: "dynamic-a",
 			instanceId: "instance-a",
