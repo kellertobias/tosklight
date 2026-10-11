@@ -517,11 +517,15 @@ test.describe("docs/testing/19-tracking-with-posistagenet.md", () => {
 			await header.getByRole("tab", { name, exact: true }).click();
 			expect(await places()).toBe(onTracking);
 		}
+		// Tracking fetches again on remount. Wait for the full calibration form
+		// before scrolling or measuring the final control.
+		await expect(page.locator(".psn-setup").getByLabel("Scale", { exact: true })).toBeAttached();
 		const scroller = page.locator(".patch-configuration-window .patch-configuration-scroll .ui-window-scroller");
 		await scroller.evaluate((node) => {
 			node.scrollTop = node.scrollHeight;
 		});
 		await expect(page.locator(".psn-setup > :last-child")).toBeInViewport();
+		expect(await places()).toBe(onTracking);
 		await expect(page.locator(".psn-setup").getByLabel("Multicast group")).toHaveCount(0);
 
 		// 2. ⚙ opens Settings on Tracking with the stored values.
