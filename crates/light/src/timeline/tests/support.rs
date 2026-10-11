@@ -14,7 +14,7 @@ use crate::{
     MacroHostBackend, MacroHttpRequest, MacroHttpTransportError, MacroHttpTransportErrorKind,
     MacroHttpTransportResponse, MacroLanguageId, MacroResume, MacroRuntime, MacroTask,
     MacroTaskRunner, MacroWaitRequest, ManagedAssetStore, PlaybackAction, PlaybackAddress,
-    PlaybackExecution, PlaybackSurface, ResolvedPlaybackAddress,
+    PlaybackExecution, ResolvedPlaybackAddress,
     managed_assets::test_support::{FakeAssetStore, VecSource, fake_digest},
 };
 
@@ -159,8 +159,11 @@ impl PlaybackPorts for FakeBackend {
         Ok(1)
     }
 
-    fn playback_at(&self, _page: u8, slot: u8) -> Result<Option<u16>, ActionError> {
-        Ok(Some(u16::from(slot)))
+    fn playback_exists(
+        &self,
+        _address: light_playback::PlaybackAddress,
+    ) -> Result<bool, ActionError> {
+        Ok(true)
     }
 
     fn execute(
@@ -168,15 +171,19 @@ impl PlaybackPorts for FakeBackend {
         context: &ActionContext,
         address: ResolvedPlaybackAddress,
         action: PlaybackAction,
-        surface: PlaybackSurface,
+        control_source: &light_playback::PlaybackControlSource,
     ) -> Result<PlaybackExecution, ActionError> {
         self.record("playback-execute", context);
         self.playbacks.lock().unwrap().push(PlaybackCommand {
-            address: PlaybackAddress::Pool(address.playback_number().unwrap_or_default()),
+            address: PlaybackAddress::Playback(
+                address
+                    .playback_address()
+                    .expect("fixture addresses an assigned Playback"),
+            ),
             action,
-            surface,
+            control_source: control_source.clone(),
         });
-        Ok(PlaybackExecution::Pool {
+        Ok(PlaybackExecution::Playback {
             changed: true,
             pending: None,
         })
@@ -192,14 +199,7 @@ impl PlaybackPorts for FakeBackend {
                 show_id: Uuid::nil(),
                 show_revision: 0,
             },
-            requested: identity.clone(),
-            playback_number: match identity {
-                PlaybackRuntimeIdentity::Playback(number) => Some(number),
-                PlaybackRuntimeIdentity::Virtual(address) => Some(address.number().get()),
-                PlaybackRuntimeIdentity::CueList(_)
-                | PlaybackRuntimeIdentity::DirectCueList(_)
-                | PlaybackRuntimeIdentity::Group(_) => None,
-            },
+            identity,
             target: PlaybackTargetProjection::Missing,
         })
     }
@@ -214,7 +214,9 @@ impl PlaybackPorts for FakeBackend {
                 show_revision: 0,
             },
             desk_id: context.desk_id,
-            active_page: 1,
+            command_page: 1,
+            selected_surface_id: "main".into(),
+            resolved_pages: [("main".into(), 1)].into_iter().collect(),
             selected_playback: None,
             selected_cue_list: None,
         }))

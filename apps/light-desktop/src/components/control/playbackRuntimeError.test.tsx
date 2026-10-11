@@ -5,18 +5,16 @@ import type {
 	PlaybackDefinition,
 	PlaybackRuntimeProjection,
 } from "../../api/types";
-import {
-	identityKey,
-	virtualPlaybackIdentity,
-} from "../../features/playbackRuntime/contracts";
 import type { PlaybackBankController } from "./playbackFaderBank/controller";
 import { playbackFaderDisplay } from "./playbackFaderBank/feedback";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
-import { VirtualPlaybackGrid } from "./virtualPlayback/VirtualPlaybackGrid";
 
-vi.mock("../../features/controlSurfaceInteraction/SetInteractionProvider", () => ({
-	useSetInteraction: () => null,
-}));
+vi.mock(
+	"../../features/controlSurfaceInteraction/SetInteractionProvider",
+	() => ({
+		useSetInteraction: () => null,
+	}),
+);
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
 	useActiveShowId: () => "show",
 }));
@@ -24,9 +22,6 @@ vi.mock("../../features/poolPresentation/poolPresentation", () => ({
 	poolSurfaceKey: () => "surface",
 	resolveConfiguredPoolPresentation: () => undefined,
 	usePoolPresentationConfiguration: () => null,
-}));
-vi.mock("./virtualPlayback/useSingleCuePreviews", () => ({
-	useSingleCuePreviews: () => new Map(),
 }));
 vi.mock("./playbackFaderBank/slotActions", () => ({
 	buildPlaybackActions: () => ({ actions: [], faderActions: [] }),
@@ -46,7 +41,9 @@ vi.mock("./playbackFaderBank/ExpandedPlaybackControls", () => ({
 }));
 
 const playback = {
-	number: 1001,
+	go_activates: true,
+	auto_off: true,
+	xfade_millis: 0,
 	name: "Dynamic",
 	target: {
 		type: "dynamic",
@@ -59,7 +56,7 @@ const playback = {
 } as PlaybackDefinition;
 
 function projection(
-	state: "failed" | "off" | "active" | "hidden" | "zero",
+	state: "failed" | "off" | "active" | "hidden" | "zero" | "pending",
 	missing = 0,
 ): PlaybackRuntimeProjection {
 	return {
@@ -68,7 +65,9 @@ function projection(
 			state,
 			enabled: state !== "off",
 			controller_status:
-				state === "off" || state === "failed" ? "missing" : "losing",
+				state === "off" || state === "failed" || state === "pending"
+					? "missing"
+					: "losing",
 			size: 1,
 			master: 1,
 			fader_value: 1,
@@ -85,7 +84,10 @@ function projection(
 	} as PlaybackRuntimeProjection;
 }
 
-const cuePlayback = { ...playback, target: { type: "cue_list", cue_list_id: "cue" } } as PlaybackDefinition;
+const cuePlayback = {
+	...playback,
+	target: { type: "cue_list", cue_list_id: "cue" },
+} as PlaybackDefinition;
 const cueList = { id: "cue", name: "Cue", cues: [] } as unknown as CueList;
 type CueBinding = "present" | "missing";
 
@@ -94,24 +96,30 @@ function physical(
 	value: PlaybackRuntimeProjection | undefined,
 	assigned = true,
 	cueBinding?: CueBinding,
+	position = 1,
 ) {
 	const controller = {
 		hardware,
 		state: {},
-		runtimeProjections: new Map([[1001, value]]),
+		runtimeProjections: new Map([[position, value]]),
 		heldActions: { releaseSlot: vi.fn() },
 		runtimeActions: null,
-		activePageNumber: 1,
+		activePageNumber: 4,
 		playbackDesk: null,
 	} as unknown as PlaybackBankController;
 	return render(
 		<PlaybackSlot
 			controller={controller}
 			slotData={{
-				playback: assigned ? (cueBinding ? cuePlayback : playback) : null,
+				playback: assigned
+					? {
+							...(cueBinding ? cuePlayback : playback),
+							address: { page: 4, position },
+						}
+					: null,
 				cue: cueBinding === "present" ? cueList : null,
 				group: null,
-				slot: 1,
+				slot: position,
 				row: null,
 				rowIndex: 0,
 				footprint: null,
@@ -120,68 +128,38 @@ function physical(
 	).container.querySelector("article")!;
 }
 
-function virtual(
-	value: PlaybackRuntimeProjection | undefined,
-	assigned = true,
-	cueBinding?: CueBinding,
-) {
-	return render(
-		<VirtualPlaybackGrid
-			pageNumber={1}
-			page={{
-				number: 1,
-				name: "Page",
-				slots: {},
-				virtual_playbacks: assigned ? { 1001: cueBinding ? cuePlayback : playback } : {},
-			}}
-			pageObjectId="page"
-			pageObjectRevision={1}
-			rows={1}
-			columns={1}
-			playbacks={new Map()}
-			cueLists={cueBinding === "present" ? new Map([["cue", cueList]]) : new Map()}
-			runtimes={
-				value
-					? new Map([[identityKey(virtualPlaybackIdentity(1, 1001)), value]])
-					: new Map()
-			}
-			runtimeActions={null}
-			zones={[]}
-			selectedSlots={[]}
-			configurationArmed={false}
-			updateArmed={false}
-			shiftArmed={false}
-			onConfigure={vi.fn()}
-			onToggleZone={vi.fn()}
-		/>,
-	).container.querySelector(".virtual-playback-box")!;
-}
-
 afterEach(cleanup);
 type Surface = readonly [
 	string,
-	(projection: PlaybackRuntimeProjection | undefined, assigned?: boolean, cueBinding?: CueBinding) => Element,
+	(
+		projection: PlaybackRuntimeProjection | undefined,
+		assigned?: boolean,
+		cueBinding?: CueBinding,
+	) => Element,
 ];
 const surfaces: readonly Surface[] = [
 	["software physical", (p, a = true, c) => physical(false, p, a, c)],
 	["hardware physical", (p, a = true, c) => physical(true, p, a, c)],
-	["virtual", virtual],
+	["pane positions", (p, a = true, c) => physical(false, p, a, c, 401)],
 ];
 for (const [surface, show] of surfaces) {
 	describe(`${surface} actual error outline`, () => {
 		it("outlines failed Dynamic and missing bound fixture targets", () => {
 			expect(show(projection("failed"))).toHaveClass("playback-runtime-error");
 			cleanup();
-			expect(show(projection("active", 1))).toHaveClass("playback-runtime-error");
-		});
-		it("outlines an assigned playback whose authoritative target is missing", () => {
-			expect(show({ target: "missing" } as PlaybackRuntimeProjection)).toHaveClass(
+			expect(show(projection("active", 1))).toHaveClass(
 				"playback-runtime-error",
 			);
+		});
+		it("outlines an assigned playback whose authoritative target is missing", () => {
+			expect(
+				show({ target: "missing" } as PlaybackRuntimeProjection),
+			).toHaveClass("playback-runtime-error");
 		});
 		it("keeps idle missing controller, inactive runtime, hidden and zero normal", () => {
 			for (const value of [
 				projection("off"),
+				projection("pending"),
 				projection("hidden"),
 				projection("zero"),
 				{ target: "dynamic", runtime: null } as PlaybackRuntimeProjection,
@@ -197,10 +175,16 @@ for (const [surface, show] of surfaces) {
 			).not.toHaveClass("playback-runtime-error");
 		});
 		it("distinguishes a missing Cuelist binding from an idle existing Cuelist", () => {
-			const idle = { target: "cue_list", cue_list_id: "cue", runtime: null } as PlaybackRuntimeProjection;
+			const idle = {
+				target: "cue_list",
+				cue_list_id: "cue",
+				runtime: null,
+			} as PlaybackRuntimeProjection;
 			expect(show(idle, true, "missing")).toHaveClass("playback-runtime-error");
 			cleanup();
-			expect(show(idle, true, "present")).not.toHaveClass("playback-runtime-error");
+			expect(show(idle, true, "present")).not.toHaveClass(
+				"playback-runtime-error",
+			);
 		});
 		it("keeps unpatched targets normal while the Dynamic runs", () => {
 			const value = projection("active");
@@ -211,13 +195,17 @@ for (const [surface, show] of surfaces) {
 	});
 }
 
-
 describe("Dynamic controller text", () => {
 	it("does not call the normal Off controller missing, but retains failed diagnostics", () => {
 		const off = playbackFaderDisplay(playback, undefined, 0, projection("off"));
 		expect(off).toMatch(/^OFF · Size/);
 		expect(off).not.toContain("MISSING");
-		const failed = playbackFaderDisplay(playback, undefined, 100, projection("failed"));
+		const failed = playbackFaderDisplay(
+			playback,
+			undefined,
+			100,
+			projection("failed"),
+		);
 		expect(failed).toMatch(/^FAILED · MISSING/);
 	});
 });

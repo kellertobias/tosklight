@@ -13,9 +13,21 @@ use crate::{
     SelectiveShowObjectChange, SpeedGroupChange, SpeedGroupId, SpeedGroupProjection,
 };
 
+fn address(page: u8, position: u16) -> light_playback::PlaybackAddress {
+    light_playback::PlaybackAddress::new(page, position).unwrap()
+}
+
 fn transition_draft(desk_id: Uuid, playback_number: u16, delivery: DeliveryPolicy) -> EventDraft {
+    transition_draft_at(desk_id, address(1, playback_number), delivery)
+}
+
+fn transition_draft_at(
+    desk_id: Uuid,
+    playback_address: light_playback::PlaybackAddress,
+    delivery: DeliveryPolicy,
+) -> EventDraft {
     let transition = PlaybackCueTransition {
-        playback_number: Some(playback_number),
+        playback_address: Some(playback_address),
         cue_list_id: Uuid::from_u128(20),
         previous: None,
         current: Some(PlaybackCueReference {
@@ -34,8 +46,7 @@ fn transition_draft(desk_id: Uuid, playback_number: u16, delivery: DeliveryPolic
                     show_id: Uuid::nil(),
                     show_revision: 0,
                 },
-                requested: PlaybackRuntimeIdentity::Playback(playback_number),
-                playback_number: Some(playback_number),
+                identity: PlaybackRuntimeIdentity::Playback(playback_address),
                 target: PlaybackTargetProjection::CueList {
                     cue_list_id: light_core::CueListId(transition.cue_list_id),
                     runtime: None,
@@ -81,7 +92,7 @@ fn typed_fixture_library_event_is_global_lossless_show_projection() {
 fn filters_by_desk_capability_class_and_object() {
     let bus = EventBus::new(16);
     let desk = Uuid::from_u128(1);
-    let object = EventObject::new(EventCapability::Playback, "playback:2");
+    let object = EventObject::new(EventCapability::Playback, "playback:1.2");
     let subscription = bus.subscribe(
         EventFilter::for_desk(desk)
             .with_capability(EventCapability::Playback)
@@ -111,7 +122,7 @@ fn mapped_group_change_routes_one_event_to_group_and_playback() {
         SubscriptionOptions::default(),
     );
     let by_playback = bus.subscribe(
-        EventFilter::default().with_object(EventObject::playback(2)),
+        EventFilter::default().with_object(EventObject::playback(address(1, 2))),
         SubscriptionOptions::default(),
     );
     let expected = bus.publish(EventDraft::playback_runtime_changed(
@@ -122,8 +133,7 @@ fn mapped_group_change_routes_one_event_to_group_and_playback() {
                     show_id: Uuid::nil(),
                     show_revision: 3,
                 },
-                requested: PlaybackRuntimeIdentity::Group(group_id.clone()),
-                playback_number: Some(2),
+                identity: PlaybackRuntimeIdentity::Playback(address(1, 2)),
                 target: PlaybackTargetProjection::Group {
                     group_id: group_id.as_str().to_owned(),
                     master: 0.5,
@@ -142,7 +152,7 @@ fn mapped_group_change_routes_one_event_to_group_and_playback() {
     assert_eq!(next_event(&by_group), expected);
     assert_eq!(next_event(&by_playback), expected);
     assert_eq!(bus.latest_sequence(), 1);
-    assert_eq!(expected.object, Some(EventObject::playback(2)));
+    assert_eq!(expected.object, Some(EventObject::playback(address(1, 2))));
     assert_eq!(expected.related_objects, vec![EventObject::group("front")]);
 }
 
@@ -170,7 +180,7 @@ fn speed_group_change_routes_only_to_the_exact_playback_object() {
         SubscriptionOptions::default(),
     );
     let unrelated = bus.subscribe(
-        EventFilter::default().with_object(EventObject::playback(1)),
+        EventFilter::default().with_object(EventObject::playback(address(1, 1))),
         SubscriptionOptions::default(),
     );
     let context = ActionContext::system(Uuid::from_u128(1), ActionSource::Http);
@@ -400,7 +410,7 @@ async fn async_delivery_wakes_without_polling() {
 async fn replaceable_topic_rate_limit_delivers_the_latest_update() {
     let bus = EventBus::new(8);
     let desk = Uuid::from_u128(1);
-    let object = EventObject::new(EventCapability::Playback, "playback:2");
+    let object = EventObject::new(EventCapability::Playback, "playback:1.2");
     let mut subscription = bus.subscribe(
         EventFilter::for_desk(desk),
         SubscriptionOptions {
@@ -469,7 +479,7 @@ async fn object_rate_limit_matches_a_related_event_route() {
 async fn unrelated_lossless_delivery_does_not_discard_a_deferred_projection() {
     let bus = EventBus::new(8);
     let desk = Uuid::from_u128(1);
-    let object = EventObject::new(EventCapability::Playback, "playback:2");
+    let object = EventObject::new(EventCapability::Playback, "playback:1.2");
     let mut subscription = bus.subscribe(
         EventFilter::for_desk(desk),
         SubscriptionOptions {
@@ -572,4 +582,30 @@ fn show_objects_draft(show_id: ShowId, kind: ActiveShowObjectKind, object_id: &s
             ],
         },
     )
+}
+
+#[test]
+fn playback_object_filter_keeps_equal_positions_on_distinct_pages_isolated() {
+    let bus = EventBus::new(4);
+    let desk = Uuid::from_u128(1);
+    let subscription = bus.subscribe(
+        EventFilter::for_desk(desk).with_object(EventObject::playback(address(2, 401))),
+        SubscriptionOptions::default(),
+    );
+    bus.publish(transition_draft_at(
+        desk,
+        address(1, 401),
+        DeliveryPolicy::Lossless,
+    ));
+    let expected = bus.publish(transition_draft_at(
+        desk,
+        address(2, 401),
+        DeliveryPolicy::Lossless,
+    ));
+    assert_eq!(next_event(&subscription), expected);
+    assert!(subscription.try_next().is_none());
+    assert_eq!(
+        expected.object,
+        Some(EventObject::playback(address(2, 401)))
+    );
 }

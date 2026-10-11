@@ -158,21 +158,20 @@ fn dynamic_update_forces_stable_storage_identity_validates_and_preserves_extensi
 }
 
 #[test]
-fn playback_update_forces_storage_number_and_preserves_target_extensions() {
-    let existing = playback(4);
-    let mut existing = serde_json::to_value(existing).unwrap();
-    existing["target"]["future_target"] = json!({"kept": true});
-    existing["future_surface"] = json!("wing");
-    let mut request = canonical_playback(&existing);
-    request["number"] = json!(99);
-    request["name"] = json!("Updated");
-
-    let normalized = normalize(&existing, ActiveShowObjectKind::Playback, "4", request);
-
-    assert_eq!(normalized["number"], 4);
-    assert_eq!(normalized["name"], "Updated");
-    assert_eq!(normalized["target"]["future_target"]["kept"], true);
-    assert_eq!(normalized["future_surface"], "wing");
+fn playback_assignment_update_preserves_target_extensions() {
+    let mut assignment = serde_json::to_value(playback(4)).unwrap();
+    assignment["target"]["future_target"] = json!({"kept": true});
+    assignment["future_surface"] = json!("wing");
+    let existing = json!({"number":2,"name":"Page 2","assignments":{"4":assignment}});
+    let mut request = canonical_playback_page(&existing);
+    request["assignments"]["4"]["name"] = json!("Updated");
+    let normalized = normalize(&existing, ActiveShowObjectKind::PlaybackPage, "2", request);
+    assert_eq!(normalized["assignments"]["4"]["name"], "Updated");
+    assert_eq!(
+        normalized["assignments"]["4"]["target"]["future_target"]["kept"],
+        true
+    );
+    assert_eq!(normalized["assignments"]["4"]["future_surface"], "wing");
 }
 
 #[test]
@@ -180,33 +179,27 @@ fn playback_page_update_forces_storage_number_and_preserves_extensions() {
     let existing = json!({
         "number": 2,
         "name": "Page 2",
-        "slots": {"1": 4},
-        "virtual_playbacks": {},
+        "assignments": {"1": playback(4)},
         "future_layout": {"columns": 10}
     });
     let mut request = canonical_playback_page(&existing);
     request["number"] = json!(7);
-    request["slots"]["2"] = json!(5);
+    request["assignments"]["2"] = serde_json::to_value(playback(5)).unwrap();
 
     let normalized = normalize(&existing, ActiveShowObjectKind::PlaybackPage, "2", request);
 
     assert_eq!(normalized["number"], 2);
-    assert_eq!(normalized["slots"], json!({"1": 4, "2": 5}));
+    assert_eq!(normalized["assignments"]["1"]["name"], "Playback 4");
+    assert_eq!(normalized["assignments"]["2"]["name"], "Playback 5");
     assert_eq!(normalized["future_layout"]["columns"], 10);
 }
 
 #[test]
 fn numbered_objects_reject_non_numeric_storage_identity() {
-    for (kind, body) in [
-        (
-            ActiveShowObjectKind::Playback,
-            serde_json::to_value(playback(1)).unwrap(),
-        ),
-        (
-            ActiveShowObjectKind::PlaybackPage,
-            json!({"number": 1, "name": "Main", "slots": {}, "virtual_playbacks": {}}),
-        ),
-    ] {
+    for (kind, body) in [(
+        ActiveShowObjectKind::PlaybackPage,
+        json!({"number": 1, "name": "Main", "assignments": {}}),
+    )] {
         let mutation = mutation(kind, "not-a-number", body.clone());
         let body = ActiveShowObjectBody::decode(kind, body).unwrap();
         assert!(normalize_body(None, &mutation, &body).is_err());
@@ -375,16 +368,11 @@ fn every_active_show_family_decodes_to_its_discriminant_and_retains_extensions()
             json!({"id":"main","name":"Main","order":0,"future_extension":{"kept":true}}),
         ),
         (
-            ActiveShowObjectKind::Playback,
-            serde_json::to_value(playback(1)).unwrap(),
-        ),
-        (
             ActiveShowObjectKind::PlaybackPage,
             json!({
                 "number":1,
                 "name":"Main",
-                "slots":{},
-                "virtual_playbacks":{},
+                "assignments":{},
                 "future_extension":{"kept":true}
             }),
         ),
@@ -532,13 +520,6 @@ fn canonical_cue_list(raw: &Value) -> Value {
         .unwrap()
 }
 
-fn canonical_playback(raw: &Value) -> Value {
-    serde_json::to_value(
-        serde_json::from_value::<light_playback::PlaybackDefinition>(raw.clone()).unwrap(),
-    )
-    .unwrap()
-}
-
 fn canonical_playback_page(raw: &Value) -> Value {
     serde_json::to_value(
         serde_json::from_value::<light_playback::PlaybackPage>(raw.clone()).unwrap(),
@@ -630,7 +611,6 @@ fn dynamic(id: &str) -> Value {
 
 fn playback(number: u16) -> light_playback::PlaybackDefinition {
     light_playback::PlaybackDefinition {
-        number,
         name: format!("Playback {number}"),
         target: light_playback::PlaybackTarget::CueList {
             cue_list_id: light_core::CueListId::new(),

@@ -93,9 +93,12 @@ pub(crate) fn request() -> MacroExecutionRequest {
 
 pub(crate) fn playback_command() -> PlaybackCommand {
     PlaybackCommand {
-        address: PlaybackAddress::Pool(1),
+        address: PlaybackAddress::Playback(light_playback::PlaybackAddress::new(1, 1).unwrap()),
         action: PlaybackAction::Go { pressed: true },
-        surface: PlaybackSurface::Virtual,
+        control_source: light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 0,
+        },
     }
 }
 

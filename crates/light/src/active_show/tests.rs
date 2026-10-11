@@ -400,7 +400,7 @@ fn cue_list_mutation_uses_one_prepared_boundary_and_keeps_action_context() {
 }
 
 #[test]
-fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
+fn playback_page_assignment_prepares_backs_up_commits_and_installs_once() {
     let rig = TestRig::new();
     let cue_list_id = light_core::CueListId(Uuid::from_u128(0x701));
     rig.seed_object(
@@ -410,7 +410,6 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
     );
     let target = light_playback::PlaybackTarget::CueList { cue_list_id };
     let mut playback = serde_json::to_value(light_playback::PlaybackDefinition {
-        number: 99,
         name: "Main".into(),
         buttons: light_playback::PlaybackDefinition::default_buttons(&target),
         target,
@@ -432,32 +431,21 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
     let page = json!({
         "number": 9,
         "name": "Main",
-        "slots": {"1": 1},
-        "virtual_playbacks": {},
+        "assignments": {"1": playback},
         "future_page": "kept"
     });
 
     let result = rig
         .service
         .mutate_objects(
-            rig.object_action(vec![
-                ActiveShowObjectMutation {
-                    kind: ActiveShowObjectKind::Playback,
-                    object_id: "1".into(),
-                    expected_object_revision: 0,
-                    mutation: ActiveShowObjectMutationKind::Put {
-                        body: Box::new(typed(ActiveShowObjectKind::Playback, playback)),
-                    },
+            rig.object_action(vec![ActiveShowObjectMutation {
+                kind: ActiveShowObjectKind::PlaybackPage,
+                object_id: "1".into(),
+                expected_object_revision: 0,
+                mutation: ActiveShowObjectMutationKind::Put {
+                    body: Box::new(typed(ActiveShowObjectKind::PlaybackPage, page)),
                 },
-                ActiveShowObjectMutation {
-                    kind: ActiveShowObjectKind::PlaybackPage,
-                    object_id: "1".into(),
-                    expected_object_revision: 0,
-                    mutation: ActiveShowObjectMutationKind::Put {
-                        body: Box::new(typed(ActiveShowObjectKind::PlaybackPage, page)),
-                    },
-                },
-            ]),
+            }]),
             &rig.ports,
         )
         .unwrap();
@@ -475,17 +463,16 @@ fn playback_and_page_batch_prepares_backs_up_commits_and_installs_once() {
     );
     assert_eq!(result.show_revision.value(), 2);
     assert_eq!(result.event_sequence, 1);
-    assert_eq!(result.changes.len(), 2);
-    assert_eq!(rig.object_body("playback", "1")["number"], 1);
+    assert_eq!(result.changes.len(), 1);
     assert_eq!(
-        rig.object_body("playback", "1")["future_playback"]["kept"],
+        rig.object_body("playback_page", "1")["assignments"]["1"]["future_playback"]["kept"],
         true
     );
     assert_eq!(rig.object_body("playback_page", "1")["number"], 1);
     assert_eq!(rig.object_body("playback_page", "1")["future_page"], "kept");
     let installed = rig.installed_snapshot().unwrap();
     assert_eq!(installed.revision, 2);
-    assert_eq!(installed.playbacks.len(), 1);
+    assert_eq!(installed.playback_pages[0].assignments.len(), 1);
     assert_eq!(installed.playback_pages.len(), 1);
 }
 
@@ -803,12 +790,12 @@ fn recording_undo_preserves_atomic_namespace_and_exact_historical_cue_contents()
     companion["pool_number"] = json!(202);
     rig.seed_object("cue_list", &b.0.to_string(), companion.clone());
     let physical = serde_json::to_value(light_playback::PlaybackDefinition::new_cue_list(
-        101,
         "Assignment",
         a,
     ))
     .unwrap();
-    rig.seed_object("playback", "101", physical.clone());
+    let assignment_page = json!({"number":1,"name":"Main","assignments":{"101":physical}});
+    rig.seed_object("playback_page", "1", assignment_page.clone());
     let mut recorded = cue_list_body(a, "Recorded");
     recorded["pool_number"] = json!(101);
     recorded["legacy_pool_aliases"] = json!([190]);
@@ -844,7 +831,7 @@ fn recording_undo_preserves_atomic_namespace_and_exact_historical_cue_contents()
     original["legacy_pool_aliases"] = json!([190]);
     assert_eq!(rig.object_body("cue_list", &key), original);
     assert_eq!(rig.object_body("cue_list", &b.0.to_string()), companion);
-    assert_eq!(rig.object_body("playback", "101"), physical);
+    assert_eq!(rig.object_body("playback_page", "1"), assignment_page);
     let store = ShowStore::open(&rig.ports.path).unwrap();
     let redo = store
         .prepare_object_redo("cue_list", &key, result.changes[0].object_revision)

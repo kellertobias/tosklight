@@ -11,7 +11,6 @@ import type { ScreenConfiguration } from "../types";
 import { PlaybackApiClient } from "./playback";
 import type { LiveClientTransport } from "./transport";
 
-const REQUEST_ID = "playback-request-1";
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const SCREEN_ID = "22222222-2222-4222-8222-222222222222";
 const CLIENT_ID = "33333333-3333-4333-8333-333333333333";
@@ -23,10 +22,7 @@ const screen: ScreenConfiguration = {
 	content: { type: "desktop" },
 	show_dock: true,
 	show_playbacks: true,
-	playback_count: 8,
-	playback_rows: 1,
-	first_playback_slot: 1,
-	page_mode: "follow_main",
+	surface_id: "screen-main",
 	show_page_controls: true,
 	show_programmer: false,
 	not_editable: false,
@@ -34,27 +30,19 @@ const screen: ScreenConfiguration = {
 	display_id: null,
 	bounds: null,
 	fullscreen: false,
-	playback_layout: null,
 };
 
 const actionRequest: PlaybackActionRequest = {
-	request_id: REQUEST_ID,
-	address: { kind: "playback", playback_number: 1 },
+	address: { kind: "playback", page: 1, position: 1 },
 	action: { type: "go", pressed: true },
-	surface: "physical",
+	control_source: { surface_id: "main", control_id: 11 },
 };
 
-function actionOutcome(requestId = REQUEST_ID) {
+function actionOutcome() {
 	return {
-		request_id: requestId,
 		correlation_id: "55555555-5555-4555-8555-555555555555",
 		requested: actionRequest.address,
-		resolved: {
-			kind: "playback",
-			playback_number: 1,
-			page: 1,
-			slot: 1,
-		},
+		resolved: { kind: "playback", page: 1, position: 1 },
 		outcome: { status: "applied" },
 		durability: "durable",
 		projection: cueProjection(),
@@ -62,7 +50,6 @@ function actionOutcome(requestId = REQUEST_ID) {
 		desk: deskProjection(),
 		event_sequence: 12,
 		desk_event_sequence: null,
-		replayed: false,
 	};
 }
 
@@ -94,9 +81,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		await expect(
 			client.playbackRuntimeSnapshot(DESK_ID, [identity]),
 		).resolves.toMatchObject({
-			projections: [
-				{ requested: identity, target: "group", group_id: GROUP_ID },
-			],
+			projections: [{ identity, target: "group", group_id: GROUP_ID }],
 		});
 		expect(request).toHaveBeenCalledWith(
 			"/api/v2/playback-runtime/snapshot",
@@ -113,7 +98,7 @@ describe("PlaybackApiClient v2 action boundary", () => {
 
 		await expect(
 			client.playbackRuntimeAction(SHOW_ID, DESK_ID, actionRequest),
-		).resolves.toMatchObject({ request_id: REQUEST_ID });
+		).resolves.toMatchObject({ resolved: actionRequest.address });
 		expect(request).toHaveBeenCalledWith(
 			"/api/v2/playback-actions",
 			expect.objectContaining({
@@ -127,15 +112,16 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		);
 	});
 
-	it("rejects a decoded outcome belonging to another request", async () => {
-		const { client } = clientReturning(actionOutcome("playback-request-2"));
-
+	it("rejects malformed resolved addresses before returning an HTTP outcome", async () => {
+		const { client } = clientReturning({
+			...actionOutcome(),
+			resolved: { kind: "playback", page: 1, position: 1001 },
+		});
 		await expect(
 			client.playbackRuntimeAction(SHOW_ID, DESK_ID, actionRequest),
 		).rejects.toMatchObject({
 			name: "WireValidationError",
-			path: "$.request_id",
-			message: expect.stringContaining(`request ID ${REQUEST_ID}`),
+			path: "$.resolved.position",
 		});
 	});
 
@@ -144,25 +130,28 @@ describe("PlaybackApiClient v2 action boundary", () => {
 
 		await expect(
 			client.playbackRuntimeLiveAction(actionRequest),
-		).resolves.toMatchObject({ request_id: REQUEST_ID });
+		).resolves.toMatchObject({ resolved: actionRequest.address });
 		expect(sendAction).toHaveBeenCalledOnce();
-		expect(sendAction).toHaveBeenCalledWith(
-			{ type: "playback", request: actionRequest },
-			REQUEST_ID,
-		);
+		expect(sendAction).toHaveBeenCalledWith({
+			type: "playback",
+			request: actionRequest,
+		});
 		expect(request).not.toHaveBeenCalled();
 	});
 
-	it("rejects a live outcome belonging to another request", async () => {
-		const { client } = clientReturning(actionOutcome("playback-request-2"));
-
+	it("rejects malformed live outcome addresses without retrying", async () => {
+		const { client, sendAction, request } = clientReturning({
+			...actionOutcome(),
+			resolved: { kind: "playback", page: 0, position: 1 },
+		});
 		await expect(
 			client.playbackRuntimeLiveAction(actionRequest),
 		).rejects.toMatchObject({
 			name: "WireValidationError",
-			path: "$.request_id",
-			message: expect.stringContaining(`request ID ${REQUEST_ID}`),
+			path: "$.resolved.page",
 		});
+		expect(sendAction).toHaveBeenCalledOnce();
+		expect(request).not.toHaveBeenCalled();
 	});
 
 	it("creates screens through the typed v2 intent boundary", async () => {
@@ -304,45 +293,46 @@ describe("PlaybackApiClient v2 action boundary", () => {
 		});
 	});
 
-	it("requires an existing Page for scoped desk selection", async () => {
-		const { client, request } = clientReturning({
-			request_id: "desk-page",
-			replayed: false,
-			desk: deskProjection(),
-			page: 2,
-			event_sequence: 14,
-			page_creation_event_sequence: null,
-		});
-
-		await client.setPlaybackPage(DESK_ID, 2, { existingOnly: true });
-
-		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desk/actions`,
-			expect.objectContaining({
-				method: "POST",
-				body: expect.stringContaining('"existing_only":true'),
-			}),
+	it("changes exactly the addressed surface page over the established live socket", async () => {
+		const snapshot = {
+			playback_surfaces: {
+				main: {
+					name: "Main",
+					layout: { rows: [] },
+					page_source: { type: "own", page: 1 },
+				},
+				"screen-main": {
+					name: "Screen",
+					layout: { rows: [] },
+					page_source: { type: "own", page: 99 },
+				},
+			},
+			selected_surface_id: "main",
+			resolved_pages: { main: 1, "screen-main": 99 },
+			command_page: 1,
+		};
+		const { client, request, sendAction } = clientReturning(snapshot);
+		await expect(client.setSurfacePage("screen-main", 99)).resolves.toEqual(
+			snapshot,
 		);
+		expect(sendAction).toHaveBeenCalledExactlyOnceWith({
+			type: "playback_surface_page",
+			request: { surface_id: "screen-main", page: 99 },
+		});
+		expect(request).not.toHaveBeenCalled();
 	});
-
-	it("allows page creation for non-strict callers", async () => {
-		const { client, request } = clientReturning({
-			request_id: "desk-page-create",
-			replayed: false,
-			desk: deskProjection(),
-			page: 2,
-			event_sequence: 14,
-			page_creation_event_sequence: 13,
+	it("rejects invalid authoritative surface page state without an HTTP fallback", async () => {
+		const { client, request, sendAction } = clientReturning({
+			playback_surfaces: {},
+			selected_surface_id: "main",
+			resolved_pages: { main: 100 },
+			command_page: 100,
 		});
-
-		await client.setPlaybackPage(DESK_ID, 2);
-
-		expect(request).toHaveBeenCalledWith(
-			`/api/v2/control-desk/actions`,
-			expect.objectContaining({
-				body: expect.stringContaining('"existing_only":false'),
-			}),
-		);
+		await expect(client.setSurfacePage("main", 99)).rejects.toMatchObject({
+			name: "WireValidationError",
+		});
+		expect(sendAction).toHaveBeenCalledOnce();
+		expect(request).not.toHaveBeenCalled();
 	});
 
 	it("removes a historical client through the typed replay-safe desk action", async () => {

@@ -160,27 +160,22 @@ describe("show-object wire decoders", () => {
 		expect(decoded.body.id).toBe(CUE_LIST_ID);
 	});
 
-	it("decodes current Playback defaults and dedicated Virtual page topology", () => {
-		const playback = decodeShowObject(
-			versioned("playback", "7", {
-				number: 7,
-				name: "Main",
-				target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
-				buttons: ["go_minus", "go", "flash"],
-			}),
-			"playback",
-		);
+	it("decodes page-owned Playback defaults without redundant identities", () => {
 		const page = decodeShowObject(
 			versioned("playback_page", "4", {
 				number: 4,
-				name: "Page 4",
-				slots: { 1: 7 },
-				virtual_playbacks: {},
+				name: "Page4",
+				assignments: {
+					"401": {
+						name: "Main",
+						target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
+						buttons: ["go_minus", "go", "flash"],
+					},
+				},
 			}),
 			"playback_page",
 		);
-
-		expect(playback.body).toMatchObject({
+		expect(page.body.assignments["401"]).toMatchObject({
 			buttons: ["go_minus", "go", "flash"],
 			button_count: 3,
 			fader: "master",
@@ -188,35 +183,87 @@ describe("show-object wire decoders", () => {
 			go_activates: true,
 			auto_off: true,
 		});
-		expect(page.body.slots).toEqual({ 1: 7 });
-		expect(page.body.virtual_playbacks).toEqual({});
+		expect(Object.keys(page.body.assignments)).toEqual(["401"]);
+		expect(page.body.assignments["401"]).not.toHaveProperty("number");
 	});
-
-	it("uses target-aware defaults and migrates a legacy Speed Group fader", () => {
-		const missing = decodeShowObject(
-			versioned("playback", "speed-a", {
-				number: 8,
-				name: "Speed A",
-				target: { type: "speed_group", group: "A" },
+	it("uses target-aware Speed Group defaults inside sparse assignments", () => {
+		const page = decodeShowObject(
+			versioned("playback_page", "99", {
+				number: 99,
+				name: "Speed",
+				assignments: {
+					"301": {
+						name: "SpeedA",
+						target: { type: "speed_group", group: "A" },
+					},
+					"1000": {
+						name: "SpeedB",
+						target: { type: "speed_group", group: "B" },
+						buttons: ["double", "half", "learn"],
+						fader: "learned_percentage",
+					},
+				},
 			}),
-			"playback",
+			"playback_page",
 		);
-		const legacy = decodeShowObject(
-			versioned("playback", "speed-b", {
-				number: 9,
-				name: "Speed B",
-				target: { type: "speed_group", group: "B" },
-				buttons: ["double", "half", "learn"],
-				fader: "speed",
-			}),
-			"playback",
-		);
-
-		expect(missing.body).toMatchObject({
+		expect(page.body.assignments["301"]).toMatchObject({
 			buttons: ["double", "half", "learn"],
 			fader: "learned_percentage",
 		});
-		expect(legacy.body.fader).toBe("learned_percentage");
+		expect(page.body.assignments["1000"].fader).toBe("learned_percentage");
+	});
+	it.each([0, 1000])("rejects page number %s outside 1..99", (number) =>
+		expect(() =>
+			decodeShowObject(
+				versioned("playback_page", String(number), {
+					number,
+					name: "Bad",
+					assignments: {},
+				}),
+				"playback_page",
+			),
+		).toThrow(WireValidationError));
+	it.each([
+		"0",
+		"1001",
+		"0401",
+	])("rejects noncanonical/out-of-range assignment %s", (position) =>
+		expect(() =>
+			decodeShowObject(
+				versioned("playback_page", "1", {
+					number: 1,
+					name: "Bad",
+					assignments: {
+						[position]: {
+							name: "Main",
+							target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
+						},
+					},
+				}),
+				"playback_page",
+			),
+		).toThrow(WireValidationError));
+	it("rejects retired split page topology and redundant assignment numbers", () => {
+		for (const body of [
+			{ number: 1, name: "Old", slots: { "1": 7 }, virtual_playbacks: {} },
+			{
+				number: 1,
+				name: "Bad",
+				assignments: {
+					"401": {
+						number: 401,
+						name: "Main",
+						target: { type: "cue_list", cue_list_id: CUE_LIST_ID },
+					},
+				},
+			},
+		])
+			expect(() =>
+				decodeShowObject(
+					versioned("playback_page", "1", body),
+					"playback_page",
+				),
+			).toThrow(WireValidationError);
 	});
 
 	it.each([
@@ -312,22 +359,22 @@ describe("show-object wire decoders", () => {
 		],
 		[
 			"invalid Playback target",
-			versioned("playback", "7", {
+			versioned("playback_page", "7", {
 				number: 7,
-				name: "Main",
-				target: { type: "unknown" },
+				name: "Bad",
+				assignments: { "401": { name: "Main", target: { type: "unknown" } } },
 			}),
 		],
 	] as const)("rejects %s", (_label, value) => {
 		expect(() =>
 			decodeShowObject(
 				value,
-				value.kind === "playback" ? "playback" : "cue_list",
+				value.kind === "playback_page" ? "playback_page" : "cue_list",
 			),
 		).toThrow(WireValidationError);
 	});
 
-	it("rejects a legacy Virtual Playbacks pane without the dedicated address schema", () => {
+	it("rejects a legacy Virtual Playbacks pane without a central surface reference", () => {
 		const body = {
 			desks: [
 				{
@@ -352,6 +399,6 @@ describe("show-object wire decoders", () => {
 		};
 		expect(() =>
 			decodeShowObject(versioned("user_layout", "user", body), "user_layout"),
-		).toThrow(/virtualPlaybackPageMode/u);
+		).toThrow(/surface_id/u);
 	});
 });

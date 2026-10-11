@@ -6,9 +6,7 @@ use std::sync::{
 use uuid::Uuid;
 
 use super::super::*;
-use crate::{
-    ActionSource, AssetId, AssetRevision, PlaybackAction, PlaybackAddress, PlaybackSurface,
-};
+use crate::{ActionSource, AssetId, AssetRevision, PlaybackAction, PlaybackAddress};
 
 pub(super) struct FakeTimelineRuntime;
 
@@ -107,9 +105,12 @@ pub(super) fn operation(asset: AssetReference) -> FakeOperation {
 
 pub(super) fn playback_command() -> PlaybackCommand {
     PlaybackCommand {
-        address: PlaybackAddress::Pool(7),
+        address: PlaybackAddress::Playback(light_playback::PlaybackAddress::new(1, 7).unwrap()),
         action: PlaybackAction::Go { pressed: true },
-        surface: PlaybackSurface::Virtual,
+        control_source: light_playback::PlaybackControlSource {
+            surface_id: "main".into(),
+            control_id: 0,
+        },
     }
 }
 

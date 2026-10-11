@@ -8,8 +8,10 @@ import {
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlaybackDefinition } from "../../api/types";
-import type { ShowObject, ShowObjectKind } from "../../features/showObjects/contracts";
+import type {
+	ShowObject,
+	ShowObjectKind,
+} from "../../features/showObjects/contracts";
 import { ShowObjectsStore } from "../../features/showObjects/store";
 import type {
 	ShowObjectsEventObserver,
@@ -19,7 +21,8 @@ import type {
 import { ShowObjectsViewProvider } from "../../features/showObjects/ShowObjectsView";
 import { PaneSettingsModal } from "./PaneSettingsModal";
 
-const render = (ui: Parameters<typeof rtlRender>[0]) => rtlRender(ui, { wrapper: ModalProvider });
+const render = (ui: Parameters<typeof rtlRender>[0]) =>
+	rtlRender(ui, { wrapper: ModalProvider });
 
 const SHOW_ID = "11111111-1111-4111-8111-111111111111";
 const REPLACEMENT_SHOW_ID = "22222222-2222-4222-8222-222222222222";
@@ -63,35 +66,31 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state: mocks.state, dispatch: mocks.dispatch }),
 }));
 
-function playbackObject(
-	number: number,
+function cueListObject(
+	number: number | undefined,
 	name: string,
-	target: PlaybackDefinition["target"],
-): ShowObject<"playback"> {
+): ShowObject<"cue_list"> {
 	return {
-		kind: "playback",
-		id: String(number),
+		kind: "cue_list",
+		id: name,
 		revision: 1,
 		updated_at: "",
 		body: {
-			number,
+			id: name,
 			name,
-			target,
-			buttons: ["go", "go_minus", "flash"],
-			fader: "master",
-			go_activates: true,
-			auto_off: true,
-			xfade_millis: 0,
+			pool_number: number,
+			cues: [],
+			mode: "sequence",
+			priority: 0,
+			looped: false,
 		},
 	};
 }
-
-/** Deliberately unsorted so the picker's own Playback-number ordering is proven. */
-const PLAYBACKS: ShowObject<"playback">[] = [
-	playbackObject(9, "Rear wash", { type: "cue_list", cue_list_id: "rear" }),
-	playbackObject(2, "Grand", { type: "grand_master" }),
-	playbackObject(3, "Front wash", { type: "cue_list", cue_list_id: "front" }),
-	playbackObject(5, "Movers", { type: "group", group_id: "movers" }),
+/** Deliberately unsorted; unnumbered lists are not Pool choices. */
+const CUELISTS: ShowObject<"cue_list">[] = [
+	cueListObject(9, "Rear wash"),
+	cueListObject(undefined, "Unnumbered"),
+	cueListObject(3, "Front wash"),
 ];
 
 class FakeTransport implements ShowObjectsEventTransport {
@@ -154,10 +153,13 @@ function harness() {
 				<PaneSettingsModal />
 			</ShowObjectsViewProvider>,
 		);
-	const settle = async (objects: ShowObject[] = PLAYBACKS) => {
+	const settle = async (objects: ShowObject[] = CUELISTS) => {
 		await waitFor(() => expect(pending.length).toBeGreaterThan(0));
 		for (const run of pending.splice(0))
-			run.resolve({ objects: run.kind === "playback" ? objects : [], showRevision: 1 });
+			run.resolve({
+				objects: run.kind === "cue_list" ? objects : [],
+				showRevision: 1,
+			});
 	};
 	return { loadCollection, pending, rerender, settle, transport, view };
 }
@@ -186,7 +188,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Cues Pane Settings Cuelist authority", () => {
-	it("requests no Playback snapshot or socket before Pane Settings mounts", async () => {
+	it("requests no Cuelist snapshot or socket before Pane Settings mounts", async () => {
 		const { loadCollection, transport } = harness();
 
 		await Promise.resolve();
@@ -199,26 +201,28 @@ describe("Cues Pane Settings Cuelist authority", () => {
 		mocks.state.paneSettingsId = "stage-1";
 		const { loadCollection, transport } = harness();
 
-		expect(await screen.findByRole("tab", { name: "Stage" })).toBeInTheDocument();
+		expect(
+			await screen.findByRole("tab", { name: "Stage" }),
+		).toBeInTheDocument();
 		expect(loadCollection).not.toHaveBeenCalled();
 		expect(transport.subscriptions).toHaveLength(0);
 	});
 
-	it("hydrates only Playback definitions while the modal is mounted for a Cues pane", async () => {
+	it("hydrates only Cuelist Pool objects while the modal is mounted for a Cues pane", async () => {
 		mocks.state.paneSettingsId = "cues-1";
 		const { loadCollection, settle, transport } = harness();
 
 		await settle();
 
 		expect(loadCollection.mock.calls.map(([, kind]) => kind)).toEqual([
-			"playback",
+			"cue_list",
 		]);
 		expect(transport.subscriptions).toEqual([
-			{ kinds: ["playback"], objects: [] },
+			{ kinds: ["cue_list"], objects: [] },
 		]);
 	});
 
-	it("offers only Cuelist Playbacks, ordered by Playback number, with exact labels", async () => {
+	it("offers only numbered Cuelists ordered by Pool number, with exact labels", async () => {
 		mocks.state.paneSettingsId = "cues-1";
 		const { settle } = harness();
 		await settle();
@@ -233,7 +237,7 @@ describe("Cues Pane Settings Cuelist authority", () => {
 		expect(cuelistOptionLabels()).toEqual(["3 · Front wash", "9 · Rear wash"]);
 	});
 
-	it("selects a Cuelist Playback by number without a broad Playback read", async () => {
+	it("selects a Cuelist Pool number without Playback reads", async () => {
 		mocks.state.paneSettingsId = "cues-1";
 		const { loadCollection, settle } = harness();
 		await settle();
@@ -253,11 +257,11 @@ describe("Cues Pane Settings Cuelist authority", () => {
 			number: 9,
 		});
 		expect(loadCollection.mock.calls.map(([, kind]) => kind)).toEqual([
-			"playback",
+			"cue_list",
 		]);
 	});
 
-	it("does not expose cached Playback definitions while a replacement show loads", async () => {
+	it("does not expose cached Cuelist Pool objects while a replacement show loads", async () => {
 		mocks.state.paneSettingsId = "cues-1";
 		const { rerender, settle } = harness();
 		await settle();
@@ -280,9 +284,7 @@ describe("Cues Pane Settings Cuelist authority", () => {
 		).not.toBeInTheDocument();
 		expect(mocks.dispatch).not.toHaveBeenCalled();
 
-		await settle([
-			playbackObject(4, "House", { type: "cue_list", cue_list_id: "house" }),
-		]);
+		await settle([cueListObject(4, "House")]);
 
 		await waitFor(() =>
 			expect(
@@ -291,7 +293,7 @@ describe("Cues Pane Settings Cuelist authority", () => {
 		);
 	});
 
-	it("closes its Playback subscription when Pane Settings closes", async () => {
+	it("closes its Cuelist subscription when Pane Settings closes", async () => {
 		mocks.state.paneSettingsId = "cues-1";
 		const { settle, transport, view } = harness();
 		await settle();

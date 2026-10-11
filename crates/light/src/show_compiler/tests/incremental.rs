@@ -108,7 +108,6 @@ fn preset_edit_reuses_every_runtime_projection() {
 
     assert!(Arc::ptr_eq(&next.fixtures, &previous.fixtures));
     assert!(Arc::ptr_eq(&next.cue_lists, &previous.cue_lists));
-    assert!(Arc::ptr_eq(&next.playbacks, &previous.playbacks));
     assert!(Arc::ptr_eq(&next.playback_pages, &previous.playback_pages));
     assert!(Arc::ptr_eq(&next.routes, &previous.routes));
     assert!(Arc::ptr_eq(
@@ -302,7 +301,6 @@ fn synchronized_architect_kinds_share_every_compiled_projection() {
     assert!(Arc::ptr_eq(&next.fixtures, &previous.fixtures));
     assert!(Arc::ptr_eq(&next.cue_lists, &previous.cue_lists));
     assert!(Arc::ptr_eq(&next.dynamics, &previous.dynamics));
-    assert!(Arc::ptr_eq(&next.playbacks, &previous.playbacks));
     assert!(Arc::ptr_eq(&next.playback_pages, &previous.playback_pages));
     assert!(Arc::ptr_eq(&next.routes, &previous.routes));
     assert!(Arc::ptr_eq(
