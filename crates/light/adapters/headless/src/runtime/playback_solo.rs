@@ -548,6 +548,122 @@ mod tests {
         );
         std::fs::remove_dir_all(path).unwrap();
     }
+    #[tokio::test]
+    async fn flash_preserves_running_timecode_peer_until_actual_permanent_start() {
+        let (state, path) = super::super::tests::test_state();
+        let timecode = TimecodeId(uuid::Uuid::new_v4());
+        install(&state, timecode, 1);
+        let fixture_id = light_core::FixtureId::new();
+        let mut profile = light_fixture::FixtureProfile::blank();
+        profile.manufacturer = "Test".into();
+        profile.name = "Solo dimmer".into();
+        let mode = &mut profile.modes[0];
+        mode.heads[0].master_shared = false;
+        let head = mode.heads[0].id;
+        mode.splits[0].footprint = 1;
+        mode.channels = vec![serde_json::from_value(serde_json::json!({
+            "id":uuid::Uuid::new_v4(), "head_id":head, "split":1,
+            "fixture_attribute":"intensity", "attribute":"intensity", "resolution":"u8",
+            "default_raw":0, "highlight_raw":255, "functions":[{
+                "id":uuid::Uuid::new_v4(), "name":"Dimmer", "attribute":"intensity",
+                "dmx_from":0, "dmx_to":255, "priority":0,
+                "behavior":{"type":"continuous", "physical_min":0.0,"physical_max":1.0,"unit":null}
+            }]
+        })).unwrap()];
+        let mode_id = mode.id;
+        let fixture = serde_json::from_value(serde_json::json!({
+            "fixture_id":uuid::Uuid::new_v4(),
+            "definition":profile.resolved_definition(mode_id).unwrap(), "universe":1, "address":1,
+            "logical_heads":[{"profile_head_id":head,"head_index":0,"fixture_id":fixture_id}],
+            "group_masters_enabled":true
+        }))
+        .unwrap();
+        let cue_list = CueListId::new();
+        let mut cue = Cue::new(CueNumber::from(1_u8));
+        cue.fade_millis = 0;
+        cue.changes = vec![CueChange::set(
+            fixture_id,
+            light_core::AttributeKey::intensity(),
+            light_core::AttributeValue::Normalized(0.6),
+        )];
+        let list = serde_json::from_value(serde_json::json!({
+            "id":cue_list,"name":"Flash member","priority":0,"mode":"sequence",
+            "looped":false,"cues":[cue]
+        }))
+        .unwrap();
+        let mut member = PlaybackDefinition::new_cue_list("Flash member", cue_list);
+        member.auto_off = false;
+        member.flash_release = FlashReleaseMode::ReleaseAll;
+        state
+            .output
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![fixture].into(),
+                cue_lists: vec![list].into(),
+                playback_pages: vec![PlaybackPage {
+                    number: 1,
+                    name: "Main".into(),
+                    assignments: [(1, member), (2, assigned(timecode))].into(),
+                }]
+                .into(),
+                playback_solo_regions: vec![PlaybackSoloRegion {
+                    id: uuid::Uuid::new_v4(),
+                    name: "Solo".into(),
+                    members: vec![address(1, 1), address(1, 2)],
+                }]
+                .into(),
+                ..Default::default()
+            })
+            .unwrap();
+        timecode_playback_action(&state, address(1, 2), TimecodeTransportAction::Go).unwrap();
+        let coordinator = SoloCoordinator {
+            engine: state.output.engine(),
+            timecodes: &state.timecodes,
+        };
+        let act = |action| {
+            coordinator
+                .execute(EnginePlaybackCommand::Playback {
+                    address: address(1, 1),
+                    action,
+                    activation_origin: None,
+                    control_source: PlaybackControlSource {
+                        surface_id: "flash-test".into(),
+                        control_id: 1,
+                    },
+                })
+                .unwrap()
+        };
+        let output = || state.output.render(Default::default()).unwrap().universes[&1][0];
+        assert_eq!(output(), 0);
+        for pressed in [true, false] {
+            let result = act(light_engine::PlaybackAction::SetFlash(pressed));
+            assert!(result.stopped_timecodes.is_empty());
+            assert_eq!(
+                state.timecodes.snapshot(timecode).unwrap().transport,
+                TimecodeTransportState::Playing
+            );
+            assert!(
+                !state
+                    .output
+                    .engine()
+                    .permanent_playback_enabled(address(1, 1))
+            );
+            assert_eq!(output(), if pressed { 153 } else { 0 });
+        }
+        let result = act(light_engine::PlaybackAction::On);
+        assert_eq!(result.stopped_timecodes, vec![timecode]);
+        assert_eq!(
+            state.timecodes.snapshot(timecode).unwrap().transport,
+            TimecodeTransportState::Stopped
+        );
+        assert!(
+            state
+                .output
+                .engine()
+                .permanent_playback_enabled(address(1, 1))
+        );
+        assert_eq!(output(), 153);
+        std::fs::remove_dir_all(path).unwrap();
+    }
     fn install_cue_aliases(state: &AppState) {
         let id = CueListId::new();
         let list = serde_json::from_value(serde_json::json!({
