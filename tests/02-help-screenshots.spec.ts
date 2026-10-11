@@ -245,7 +245,15 @@ async function captureWorkflowReference(page: Page) {
   await mvrPicker.getByRole("button", { name: "Spring Tour.mvr, file" }).click();
   await mvrPicker.getByRole("button", { name: "Select", exact: true }).click();
   const importMvr = page.getByRole("dialog", { name: "MVR import" });
-  await expect(importMvr.locator(".mvr-summary")).toBeVisible();
+  const importSummary = importMvr.getByRole("region", { name: "MVR source and destination" });
+  await expect(importSummary).toBeVisible();
+  await expect(importSummary).toContainText("Spring Tour.mvr → Spring Tour");
+  await expect(importSummary).toContainText(/\d+ fixtures · 0 scenery objects/);
+  await expect(importSummary.getByRole("status")).toContainText("0 required decisions remaining");
+  const fixtureCount = Number((await importSummary.textContent())?.match(/(\d+) fixtures/)?.[1]);
+  expect(fixtureCount).toBeGreaterThan(0);
+  await expect(importMvr.getByRole("region", { name: "Fixture address resolutions" })
+    .getByRole("article", { name: /^Import fixture / })).toHaveCount(fixtureCount);
   await importMvr.screenshot({ path: workflowShot("mvr-new-show.png") });
   await closeNested(".mvr-modal");
   await page.getByRole("button", { name: "Show Patch", exact: true }).click();
@@ -334,6 +342,27 @@ async function capturePaneReference(page: Page, selectedDmx: { universe: number;
       await picker.getByRole("button", { name: `${SCREENSHOT_TEXT_FILE}, file` }).click();
       await picker.getByRole("button", { name: "Select", exact: true }).click();
       await expect(pane.locator(".text-editor-header-state")).toContainText("Saved");
+    }
+    if (slug === "virtual-playbacks") {
+      await pane.getByRole("button", { name: "Create playback surface", exact: true }).click();
+      const bank = pane.locator(".playback-fader-bank[data-playback-surface]");
+      const cards = bank.locator("article[data-playback-slot][data-playback-row]");
+      await expect(cards).toHaveCount(280);
+      const rowSizes = await cards.evaluateAll((elements) => {
+        const rows = new Map<string, number>();
+        for (const element of elements) {
+          const row = element.getAttribute("data-playback-row") ?? "";
+          rows.set(row, (rows.get(row) ?? 0) + 1);
+        }
+        return [...rows.values()];
+      });
+      expect(rowSizes).toEqual(Array(14).fill(20));
+      const first = bank.locator('article[data-playback-slot="401"]');
+      await expect(first).toBeVisible();
+      await expect(first).toHaveAttribute("data-page", /^[1-9]\d?$/);
+      const effectivePage = await first.getAttribute("data-page");
+      await expect(bank.locator('article[data-playback-slot="680"]')).toHaveAttribute("data-page", effectivePage ?? "");
+      await expect(pane.getByRole("button", { name: "Create playback surface", exact: true })).toHaveCount(0);
     }
     if (slug === "dmx") {
       await pane.getByRole("button", { name: new RegExp(`^Universe ${selectedDmx.universe}, address ${selectedDmx.address}, value`) }).click();
