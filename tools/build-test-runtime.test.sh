@@ -69,7 +69,7 @@ printf 'PASS server submission carries explicit HTTP, OSC, data and fixture path
 
 CALLS=()
 light_open_desktop_test_app
-[[ "${CALLS[*]}" == *'open -n --env LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004 --env LIGHT_DESKTOP_TEST_DATA_DIR='* ]]
+[[ "${CALLS[*]}" == *'open -n --env LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004 --env LIGHT_DESKTOP_TEST_OSC_BIND=127.0.0.1:19000 --env LIGHT_DESKTOP_TEST_DATA_DIR='* ]]
 [[ "${CALLS[*]}" == *"$TARGET_DIR/debug/bundle/macos/ToskLight.app"* ]]
 printf 'PASS fresh exact bundle receives test endpoint and data override\n'
 

@@ -160,6 +160,9 @@ fn launch(app: &tauri::AppHandle) -> Result<Option<Child>, Box<dyn std::error::E
         .arg(address.to_string())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    if let Some(osc_bind) = std::env::var_os("LIGHT_DESKTOP_TEST_OSC_BIND") {
+        command.arg("--osc-bind").arg(osc_bind);
+    }
     #[cfg(target_os = "windows")]
     command.creation_flags(CREATE_NO_WINDOW);
     let mut child = command.spawn()?;

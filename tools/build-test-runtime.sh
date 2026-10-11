@@ -112,6 +112,7 @@ light_open_desktop_test_app() {
     return 1
   }
   open -n --env "LIGHT_DESKTOP_TEST_BIND=$LIGHT_DESKTOP_TEST_BIND" \
+    --env "LIGHT_DESKTOP_TEST_OSC_BIND=$LIGHT_DESKTOP_TEST_OSC_BIND" \
     --env "LIGHT_DESKTOP_TEST_DATA_DIR=$DATA_DIR" "$app"
   echo "Isolated ToskLight opened at http://$LIGHT_DESKTOP_TEST_BIND; OSC $LIGHT_DESKTOP_TEST_OSC_BIND. Server log: $DATA_DIR/light-headless.log"
 }
