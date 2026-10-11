@@ -14,7 +14,7 @@ describe("canonical page and Preload scenarios", () => {
 			async (method: string, path: string, body?: unknown) => {
 				if (method === "GET")
 					return {
-						desk: { command_page: page, selected_surface_id: "screen:test" },
+						command_page: page, selected_surface_id: "screen:test",
 					};
 				page = (body as { page: number }).page;
 				return {};

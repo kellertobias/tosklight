@@ -49,7 +49,7 @@ export class BrowserCrossSurface {
 			const artnetMark = this.bench.artnet.mark();
 			const sacnMark = this.bench.sacn.mark();
 			for (const action of [
-				"grp",
+				"group",
 				"digit-1",
 				"at",
 				"digit-5",
@@ -96,28 +96,14 @@ export class BrowserCrossSurface {
 			if (!Number.isSafeInteger(pageNumber))
 				throw new Error(`Page name "${pageName}" has no page number`);
 			const mark = hardware.mark();
-			await this.api.request(
-				"POST",
-				`/api/v2/control-desk/actions`,
-				{
-					request_id: crypto.randomUUID(),
-					action: {
-						type: "set_page",
-						page: pageNumber,
-						existing_only: true,
-					},
-				},
-				true,
-				undefined,
-				{ showId: this.showId(), deskId: session.desk.id },
-			);
+            await this.setDeskPage(session, pageNumber);
 			const requiredAddresses = [
 				"page",
 				"locked",
 				"command-line",
-				controlSurfaceOscPaths.pagePlaybackControl(1, "fader"),
-				controlSurfaceOscPaths.pagePlaybackControl(1, "button/1"),
-				controlSurfaceOscPaths.pagePlaybackControl(1, "current-cue"),
+				controlSurfaceOscPaths.explicitPlaybackControl(pageNumber, 1, "fader"),
+				controlSurfaceOscPaths.explicitPlaybackControl(pageNumber, 1, "button/1"),
+				`${controlSurfaceOscPaths.explicitPlayback(pageNumber, 1)}/current-cue`,
 				"speed-group/1",
 				"speed-group/5",
 				...[
@@ -469,9 +455,8 @@ export class BrowserCrossSurface {
 	async verifyCurrentAndExplicitPageOscAddressing(): Promise<void> {
 		const first = this.requiredSession();
 		const second = await this.createSession();
-		// The desk has one current playback page. A screen that wants its own follows the
-		// Dedicated Page mode in its screen configuration, which is screen-local and separate
-		// from this.
+		// The visibly selected surface supplies the shared command page. OSC Playback controls
+        // carry explicit addresses and retain their target across surface page changes.
 		await this.selectPlaybackPage("Page 1");
 		const firstHardware = await this.bench.osc();
 		const secondHardware = await this.bench.osc();
@@ -497,28 +482,28 @@ export class BrowserCrossSurface {
 				).arguments,
 			).toEqual([1]);
 
-			const firstAddress = `/light/desk/page-playback/1/button/1`;
+			const firstAddress = `/light/desk/playback/1/1/button/1`;
 			await firstHardware.send(firstAddress, [true]);
 			await expect
-				.poll(async () => (await this.activePlayback(1))?.current_cue_number)
+				.poll(async () => (await this.activePlayback({ page: 1, position: 1 }))?.current_cue_number)
 				.toBe("1");
 			await firstHardware.send(firstAddress, [false]);
 			await new Promise((resolve) => setTimeout(resolve, 50));
-			expect(await this.activePlayback(1)).toMatchObject({
+			expect(await this.activePlayback({ page: 1, position: 1 })).toMatchObject({
 				current_cue_number: "1",
 			});
 			// The second wing is on the same current page, so its slot-one press addresses the
 			// same playback the first one did.
 			await secondHardware.send(
-				`/light/desk/page-playback/1/button/1`,
+				`/light/desk/playback/1/1/button/1`,
 				[true],
 			);
 			await expect
-				.poll(async () => (await this.activePlayback(1))?.current_cue_number)
+				.poll(async () => (await this.activePlayback({ page: 1, position: 1 }))?.current_cue_number)
 				.toBe("1");
-            await this.api.playbackNumberAction(1, "off", {});
+            await this.api.playbackAction({ page: 1, position: 1 }, "off", {});
 			await expect
-				.poll(async () => (await this.activePlayback(1))?.enabled)
+				.poll(async () => (await this.activePlayback({ page: 1, position: 1 }))?.enabled)
 				.toBe(false);
 
 			const pageFeedbackMark = firstHardware.mark();
@@ -532,9 +517,12 @@ export class BrowserCrossSurface {
 					)
 				).arguments,
 			).toEqual([2]);
-			await firstHardware.send(firstAddress, [true]);
-			await expect
-				.poll(async () => (await this.activePlayback(2))?.enabled)
+            // OSC carries an exact address. Changing the selected command page cannot retarget it.
+            await firstHardware.send(firstAddress, [true]);
+            await expect.poll(async () => (await this.activePlayback({ page: 1, position: 1 }))?.enabled).toBe(true);
+            await firstHardware.send("/light/desk/playback/2/1/button/1", [true]);
+            await expect
+                .poll(async () => (await this.activePlayback({ page: 2, position: 1 }))?.enabled)
 				.toBe(true);
 			expect(await this.deskPage(second)).toBe(2);
 
@@ -543,28 +531,29 @@ export class BrowserCrossSurface {
 			for (const level of [0, 0.5, 1]) {
 				const feedbackMark = firstHardware.mark();
 				await firstHardware.sendFloat(
-					`/light/desk/page-playback/1/fader`,
+					`/light/desk/playback/1/1/fader`,
 					level,
 				);
 				await expect
-					.poll(async () => (await this.activePlayback(1))?.fader_position)
+					.poll(async () => (await this.activePlayback({ page: 1, position: 1 }))?.fader_position)
 					.toBeCloseTo(level, 4);
 				await this.bench.tick();
 				await firstHardware.expectAfter(
 					feedbackMark,
-					`/light/desk/feedback/page-playback/1/fader`,
+					`/light/desk/feedback/playback/1/1/fader`,
 				);
 			}
 			for (const level of [0, 0.5, 1]) {
-				await firstHardware.sendFloat("/light/playback/2/1/fader", level);
+				await firstHardware.sendFloat("/light/desk/playback/2/1/fader", level);
 				await expect
-					.poll(async () => (await this.activePlayback(2))?.fader_position)
+					.poll(async () => (await this.activePlayback({ page: 2, position: 1 }))?.fader_position)
 					.toBeCloseTo(level, 4);
 				expect(await this.deskPage(first)).toBe(1);
 			}
-			await secondHardware.sendFloat("/light/playback/2/1/fader", 0.5);
+			await secondHardware.sendFloat("/light/desk/playback/2/1/fader", 1);
+            await secondHardware.sendFloat("/light/desk/playback/2/1/fader", 0.5);
 			await expect
-				.poll(async () => (await this.activePlayback(2))?.fader_position)
+				.poll(async () => (await this.activePlayback({ page: 2, position: 1 }))?.fader_position)
 				.toBeCloseTo(0.5, 4);
 
 			const beforeNoOp = await this.playbackOperationalState();
@@ -572,7 +561,7 @@ export class BrowserCrossSurface {
 				`/light/desk/page-playback/2/button/1`,
 				[true],
 			);
-			await firstHardware.send("/light/playback/1/2/button/1", [true]);
+			await firstHardware.send("/light/desk/playback/1/2/button/1", [true]);
 			await new Promise((resolve) => setTimeout(resolve, 50));
 			expect(await this.playbackOperationalState()).toEqual(beforeNoOp);
 		} finally {
@@ -765,58 +754,47 @@ export class BrowserCrossSurface {
 		);
 	}
 
+    private playbackSurfaces(): Promise<{command_page:number;selected_surface_id:string}> {
+        return this.api.request("GET", "/api/v2/playback-surfaces", undefined, true, undefined, {deskId:this.requiredSession().desk.id});
+    }
+
 	private playbackOverview(): Promise<any> {
 		return this.api.request("GET", "/api/v2/playback-overview");
 	}
 
-	private async playbackOperationalState(): Promise<unknown> {
-		const overview = await this.playbackOverview();
-		return {
-			active_page: overview.active_page,
-			active: overview.active
-				.map((playback: any) => ({
-					playback_number: playback.playback_number,
-					enabled: playback.enabled,
-					current_cue_number: playback.current_cue_number,
-					fader_position: playback.fader_position,
-					master: playback.master,
-					flash: playback.flash,
-				}))
-				.sort(
-					(a: { playback_number: number }, b: { playback_number: number }) =>
-						a.playback_number - b.playback_number,
-				),
-		};
-	}
+    private async playbackOperationalState(): Promise<unknown> {
+        const overview = await this.playbackOverview();
+        return {
+            desk: overview.desk,
+            active: overview.active.map((playback: any) => ({
+                address: playback.playback_address,
+                enabled: playback.enabled, current_cue_number: playback.current_cue_number,
+                fader_position: playback.fader_position, master: playback.master, flash: playback.flash,
+            })).sort((a: any, b: any) => JSON.stringify(a.address).localeCompare(JSON.stringify(b.address))),
+        };
+    }
 
-	private async activePlayback(number: number): Promise<any | undefined> {
-		return (await this.playbackOverview()).active.find(
-			(playback: any) => playback.playback_number === number,
-		);
-	}
+    private async activePlayback(address: { page: number; position: number }): Promise<any> {
+        const session = this.requiredSession();
+        const snapshot = await this.api.request<any>("POST", "/api/v2/playback-runtime/snapshot",
+            { identities: [{ kind: "playback", ...address }] }, true, undefined,
+            { showId: this.showId(), deskId: session.desk.id });
+        const runtime = snapshot.projections[0]?.runtime;
+        return runtime ? { ...runtime, current_cue_number: runtime.current?.number ?? null } : undefined;
+    }
 
-	private async deskPage(session: Session): Promise<number> {
-		return this.withSession(
-			session,
-			async () => (await this.playbackOverview()).active_page,
-		);
-	}
+    private async deskPage(session: Session): Promise<number> {
+        return this.withSession(session, async () => (await this.playbackSurfaces()).command_page);
+    }
 
-	private async setDeskPage(session: Session, page: number): Promise<void> {
-		await this.withSession(session, () =>
-			this.api.request(
-				"POST",
-				`/api/v2/control-desk/actions`,
-				{
-					request_id: crypto.randomUUID(),
-					action: { type: "set_page", page, existing_only: true },
-				},
-				true,
-				undefined,
-				{ showId: this.showId(), deskId: session.desk.id },
-			),
-		);
-	}
+    private async setDeskPage(session: Session, page: number): Promise<void> {
+        if (!Number.isSafeInteger(page) || page < 1 || page > 99) throw new Error("Playback page must be within 1–99");
+        await this.withSession(session, async () => {
+            const surface = (await this.playbackSurfaces()).selected_surface_id;
+            await this.api.request("POST", `/api/v2/playback-surfaces/${encodeURIComponent(surface)}/page`, { page },
+                true, undefined, { showId: this.showId(), deskId: session.desk.id });
+        });
+    }
 
 	private async selectPlaybackPage(name: string): Promise<void> {
 		const software = this.page.locator(".playback-page-current");

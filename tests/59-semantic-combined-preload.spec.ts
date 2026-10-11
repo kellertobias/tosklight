@@ -1,5 +1,6 @@
 // @bench-semantic-world
 
+import { expect } from "@playwright/test";
 import { fixture } from "./bench/command-selection/selectionContract";
 import { scenario } from "./bench/core/scenario";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
@@ -21,7 +22,7 @@ scenario(
 			fixtureNumber: number,
 			intensity: number,
 			name: string,
-			button: PlaybackButton,
+			button: Exclude<PlaybackButton, PlaybackButton.Release>,
 		) => {
 			await t.selection.clear();
 			await t.selection.fixtures.via.api.item(fixtureNumber);
@@ -55,8 +56,7 @@ scenario(
 		await recordSource(6, 4, 80, "Virtual combined", PlaybackButton.Toggle);
 		await t.preload.configure({
 			programmer: true,
-			physicalPlaybacks: true,
-			virtualPlaybacks: true,
+			playbackScope: { position_ranges: [{ start: 1, end: 1000 }], pages: null },
 			programmerFade: 1_500,
 			cueFade: 8_000,
 		});
@@ -88,13 +88,10 @@ scenario(
 		await t.playback.open();
 		await t.playback.go(physicalPlayback);
 		await t.virtualPlayback.activate(pane, 2);
-		await t.preload.expect.pending({
-			groupIds: ["1"],
-			playbackActions: [
-				[physicalPlayback, "go", "physical"],
-				[virtualPlayback, "toggle", "virtual"],
-			],
-		});
+        await t.preload.expect.pendingMatching({ groupIds: ["1"], playbackActions: [
+            [physicalPlayback, "go", { surface_id: expect.any(String), control_id: expect.any(Number) }],
+            [virtualPlayback, "toggle", { surface_id: expect.any(String), control_id: expect.any(Number) }],
+        ] });
 
 		await t.preload.commit();
 		await t.preload.expect.atomicCommit("1", [

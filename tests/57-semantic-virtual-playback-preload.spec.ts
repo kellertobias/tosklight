@@ -1,5 +1,6 @@
 // @bench-semantic-world
 
+import { expect } from "@playwright/test";
 import { fixture } from "./bench/command-selection/selectionContract";
 import { scenario } from "./bench/core/scenario";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
@@ -88,8 +89,7 @@ scenario(
 
 		await t.preload.configure({
 			programmer: false,
-			physicalPlaybacks: false,
-			virtualPlaybacks: true,
+			playbackScope: { position_ranges: [{ start: 401, end: 402 }], pages: null },
 			programmerFade: 2_500,
 			cueFade: 8_000,
 		});
@@ -99,9 +99,12 @@ scenario(
 		await t.playback.go(physicalPlayback);
 		await t.virtualPlayback.activate(pane, 1);
 		await t.virtualPlayback.activate(pane, 2);
-		await t.preload.expect.pendingPlaybackActions(["go", "toggle"]);
-		await t.virtualPlayback.expect.physicalRuntimeAbsent(goSource);
-		await t.virtualPlayback.expect.physicalRuntimeAbsent(toggleSource);
+		await t.preload.expect.pendingMatching({ groupIds: [], playbackActions: [
+            [virtualGo, "go", { surface_id: expect.any(String), control_id: expect.any(Number) }],
+            [virtualToggle, "toggle", { surface_id: expect.any(String), control_id: expect.any(Number) }],
+        ] });
+		await t.playback.expect(goSource).runtime({ enabled: false });
+		await t.playback.expect(toggleSource).runtime({ enabled: false });
 		await t.playback.expect(physicalPlayback).runtime({
 			enabled: true,
 			current_cue_number: "1",
@@ -112,19 +115,19 @@ scenario(
 
 		await t.preload.commit();
 		await t.virtualPlayback.expect.runtime(virtualGo, {
-			requested: {
-				kind: "virtual",
+			identity: {
+				kind: "playback",
 				page: 1,
-				playback_number: 1001,
+				position: 401,
 			},
 			target: "cue_list",
 			runtime: { enabled: true, current: { number: "1" } },
 		});
 		await t.virtualPlayback.expect.runtime(virtualToggle, {
-			requested: {
-				kind: "virtual",
+			identity: {
+				kind: "playback",
 				page: 1,
-				playback_number: 1002,
+				position: 402,
 			},
 			target: "cue_list",
 			runtime: { enabled: true, current: { number: "1" } },

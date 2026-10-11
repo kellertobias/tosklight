@@ -199,13 +199,10 @@ export class BrowserPages {
 	private async currentSurface() {
 		return (await this.runtimeDesk()).selected_surface_id;
 	}
-	private async runtimeDesk() {
-		return (
-			await this.api.request<{
-				desk: { command_page: number; selected_surface_id: string };
-			}>("GET", "/api/v2/playback-overview")
-		).desk;
-	}
+    private async runtimeDesk() {
+        return this.api.request<{command_page:number;selected_surface_id:string}>(
+            "GET", "/api/v2/playback-surfaces", undefined, true, undefined, { deskId: this.session().desk.id });
+    }
 
 	object(number: number) {
 		return this.api.showObject<any>(
@@ -356,7 +353,7 @@ export class BrowserPreload {
 			expect(await this.pendingPlaybackActions()).toEqual(actions),
 		pending: async (expected: PendingPreloadExpectation) =>
 			expect.poll(() => this.pending()).toEqual(expected),
-		pendingMatching: async (expected: unknown) =>
+		pendingMatching: async (expected: Record<string, unknown>) =>
 			expect.poll(() => this.pending()).toMatchObject(expected),
 		atomicCommit: async (groupId: string, playbacks: PlaybackAddress[]) => {
 			if (playbacks.length < 1)

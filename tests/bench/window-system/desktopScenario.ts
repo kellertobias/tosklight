@@ -670,21 +670,33 @@ async function applyPaneConfiguration<T extends PaneType>(
 		await dialog.getByLabel("Columns").fill(String(options.columns));
 		await dialog.getByLabel("Columns").blur();
 	}
-	if (type === "virtual_playbacks") {
-		await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
-		if (options.rows !== undefined)
-			await dialog.getByLabel("Rows").fill(String(options.rows));
-		if (options.columns !== undefined)
-			await dialog.getByLabel("Columns").fill(String(options.columns));
-		if (options.pageMode !== undefined)
-			await dialog
-				.getByRole("radio", {
-					name: options.pageMode === "follow_main" ? "Follow Main" : "Pinned",
-				})
-				.click();
-		if (options.pageMode === "pinned" && options.pinnedPage !== undefined)
-			await dialog.getByLabel("Pinned page").fill(String(options.pinnedPage));
-	}
+    if (type === "playbacks") {
+        await dialog.getByRole("tab", { name: "Virtual Playbacks" }).click();
+        await dialog.getByRole("button", { name: "Configure layout and page source" }).click();
+        const layout = page.getByRole("dialog", { name: "Configure Playbacks" });
+        const rows = typeof options.rows === "number" ? options.rows : 14;
+        const columns = typeof options.columns === "number" ? options.columns : 20;
+        if (rows < 1 || columns < 1 || 400 + rows * columns > 1000) throw new Error("Pane rows must fit positions 401–1000");
+        while (await layout.locator("[data-playback-row-index]").count() > rows)
+            await layout.getByRole("button", { name: /^Remove row / }).last().click();
+        const first = layout.locator("[data-playback-row-index]").first();
+        await first.getByLabel("Playbacks in row").fill(String(columns));
+        while (await layout.locator("[data-playback-row-index]").count() < rows)
+            await layout.getByRole("button", { name: "Add Row", exact: true }).click();
+        for (let index = 0; index < rows; index++) {
+            const row = layout.locator("[data-playback-row-index]").nth(index);
+            await row.getByLabel("First Playback Number").fill(String(401 + index * columns));
+            await row.getByLabel("Playbacks in row").fill(String(columns));
+            await row.getByLabel("Buttons", { exact: true }).fill("1");
+            await chooseOption(page, row, "Presentation", "Buttons");
+        }
+        if (options.pageMode === "pinned") {
+            await chooseOption(page, layout, "Page source", "Pinned page");
+            await layout.getByLabel("Page", { exact: true }).fill(String(options.pinnedPage ?? 1));
+        }
+        await layout.getByRole("button", { name: "Apply", exact: true }).click();
+        await expect(layout).toBeHidden();
+    }
 	if (type === "fixtures" && options.activeOnly !== undefined) {
 		await dialog.getByRole("tab", { name: "Fixture Sheet" }).click();
 		await setSwitch(dialog, "Show active fixtures only", options.activeOnly);

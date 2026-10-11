@@ -1,7 +1,9 @@
+import { assignPlayback } from "./cueSemanticContracts/playbackFixtures";
+import type { PlaybackAddress } from "../apps/light-desktop/src/features/playbackTopology/contracts";
 import { replaceProgrammingSelection } from "./bench/command-selection/programmingSelection";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
-import { pairedScenario } from "./bench/core/pairedScenario";
+import type { PairedScenario } from "./bench/core/pairedScenario";
 import { setProgrammerFixtureValue } from "./bench/programmer/programmerValues";
 import type {
 	Locator,
@@ -18,7 +20,7 @@ import {
 
 type Prepared = { firstCuelist: string; secondCuelist: string; showId: string };
 
-pairedScenario<Prepared>({
+const selectContract: Omit<PairedScenario<Prepared>,"ui"> = {
 	id: "PLAYBACK-SELECT-001",
 	title:
 		"A hardware-connected playback card selects its concrete Cuelist playback",
@@ -26,12 +28,13 @@ pairedScenario<Prepared>({
 	arrange: async ({ api, bench }, surface) =>
 		prepare(api, bench, `playback-select-001-${surface}`),
 	api: async ({ api }) => {
-		await selectPlayback(api, 41);
+		await selectPlayback(api,{page:1,position:1});
 	},
 	assert: async ({ api }) => {
-		expect((await playbackState(api)).selected_playback).toBe(41);
+		expect((await playbackState(api)).selected_playback).toEqual({page:1,position:1});
 	},
-});
+};
+ test("PLAYBACK-SELECT-001 @api › exact Playback selection resolves its assigned target",async(context)=>{const state=await selectContract.arrange(context,"api"); await selectContract.api(context,state); await selectContract.assert(context,state,"api");});
 
 test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection, and explicit pages retain separate ownership", async ({ api, bench, desk, page }) => {
   const prepared = await prepare(api, bench, "playback-select-001-boundaries");
@@ -56,14 +59,14 @@ test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection
   try {
     const first = playbackCard(page, 1);
     await first.locator("header b").click();
-    await expect.poll(async () => (await playbackState(api)).selected_playback).toBe(41);
+    await expect.poll(async () => (await playbackState(api)).selected_playback).toEqual({page:1,position:1});
 
     await first.getByRole("button", { name: "GO +", exact: true }).click();
     await first.getByRole("slider").evaluate((element: HTMLInputElement) => {
       element.value = "37";
       element.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect((await playbackState(api)).selected_playback).toBe(41);
+    expect((await playbackState(api)).selected_playback).toEqual({page:1,position:1});
 
     const beforeFirst = (await object<any>(api, "cue_list", prepared.firstCuelist)).body.cues.length;
     const beforeSecond = (await object<any>(api, "cue_list", prepared.secondCuelist)).body.cues.length;
@@ -71,25 +74,25 @@ test("PLAYBACK-SELECT-001 @supplemental-ui › controls, Record, Group selection
     await first.getByRole("button", { name: "GO +", exact: true }).click();
     await expect.poll(async () => (await object<any>(api, "cue_list", prepared.firstCuelist)).body.cues.length).toBe(beforeFirst + 1);
     expect((await object<any>(api, "cue_list", prepared.secondCuelist)).body.cues).toHaveLength(beforeSecond);
-    expect((await playbackState(api)).selected_playback).toBe(41);
+    expect((await playbackState(api)).selected_playback).toEqual({page:1,position:1});
 
     await returnToPlaybackDesk(page);
     await selectHardwarePage(page, 1, 2, "Page 2");
     await playbackCard(page, 1).locator("header b").click();
-    await expect.poll(async () => (await playbackState(api)).selected_playback).toBe(42);
+    await expect.poll(async () => (await playbackState(api)).selected_playback).toEqual({page:2,position:1});
     await expect(page.locator(".ui-window-header")).toContainText("Cuelist View · Cuelist 42 · Rear Cuelist");
     await returnToPlaybackDesk(page);
     await selectHardwarePage(page, 2, 1, "Main");
-    expect((await playbackState(api)).selected_playback).toBe(42);
+    expect((await playbackState(api)).selected_playback).toEqual({page:2,position:1});
 
     await playbackCard(page, 2).locator(".hardware-cue-list").click();
-    await expect.poll(async () => (await playbackState(api)).selected_playback).toBe(43);
+    await expect.poll(async () => (await playbackState(api)).selected_playback).toEqual({page:1,position:2});
     await expect.poll(async () => (await programmer(api)).selected).toContain(fixtures[1]);
     await expect(page.locator(".playback-fader-bank")).toBeVisible();
 
-    await selectPlayback(api, 41);
-    await hardware.send(`/light/desk/page-playback/2/button/1`, [true]);
-    await expect.poll(async () => (await playbackState(api)).selected_playback).toBe(43);
+    await selectPlayback(api,{page:1,position:1});
+    await hardware.send(`/light/desk/playback/1/2/button/1`, [true]);
+    await expect.poll(async () => (await playbackState(api)).selected_playback).toEqual({page:1,position:2});
   } finally {
     await disconnectHardware(hardware);
   }
@@ -108,13 +111,13 @@ async function prepare(
 		api,
 		"cue_list",
 		firstCuelist,
-		cueList(firstCuelist, "Front Cuelist"),
+		cueList(firstCuelist, "Front Cuelist",41),
 	);
 	await putObject(
 		api,
 		"cue_list",
 		secondCuelist,
-		cueList(secondCuelist, "Rear Cuelist"),
+		cueList(secondCuelist, "Rear Cuelist",42),
 	);
 	const existingGroup = (await objects<any>(api, "group")).find(
 		(candidate) => candidate.id === "1",
@@ -133,53 +136,17 @@ async function prepare(
 		},
 		existingGroup?.revision ?? 0,
 	);
-	await putObject(
-		api,
-		"playback",
-		"41",
-		playback(41, "Front Cuelist", {
-			type: "cue_list",
-			cue_list_id: firstCuelist,
-		}),
-	);
-	await putObject(
-		api,
-		"playback",
-		"42",
-		playback(42, "Rear Cuelist", {
-			type: "cue_list",
-			cue_list_id: secondCuelist,
-		}),
-	);
-	await putObject(
-		api,
-		"playback",
-		"43",
-		playback(43, "Hardware Group", { type: "group", group_id: "1" }, [
-			"select",
-			"flash",
-			"select_dereferenced",
-		]),
-	);
-	await putObject(api, "playback_page", "1", {
-		number: 1,
-		name: "Main",
-		slots: { "1": 41, "2": 43 },
-		virtual_playbacks: {},
-	});
-	await putObject(api, "playback_page", "2", {
-		number: 2,
-		name: "Page 2",
-		slots: { "1": 42 },
-		virtual_playbacks: {},
-	});
+	await assignPlayback(api,{page:1,position:1},playback("Front Cuelist",{type:"cue_list",cue_list_id:firstCuelist}));
+ await assignPlayback(api,{page:2,position:1},playback("Rear Cuelist",{type:"cue_list",cue_list_id:secondCuelist}));
+ await assignPlayback(api,{page:1,position:2},playback("Hardware Group",{type:"group",group_id:"1"},["select","flash","select_dereferenced"]));
 	return { firstCuelist, secondCuelist, showId: show.id };
 }
 
-function cueList(id: string, name: string) {
+function cueList(id: string, name: string,poolNumber:number) {
 	return {
 		id,
 		name,
+		pool_number:poolNumber,
 		priority: 0,
 		mode: "sequence",
 		looped: false,
@@ -201,13 +168,11 @@ function cueList(id: string, name: string) {
 }
 
 function playback(
-	number: number,
 	name: string,
 	target: any,
 	buttons: [string, string, string] = ["go_minus", "go", "flash"],
 ) {
 	return {
-		number,
 		name,
 		target,
 		buttons,
@@ -223,8 +188,8 @@ function playback(
 	};
 }
 
-async function selectPlayback(api: ApiDriver, number: number) {
-	await api.playbackAction({ page: 1, position: number }, "select", {});
+async function selectPlayback(api: ApiDriver, address:PlaybackAddress) {
+	await api.playbackAction(address, "select", {});
 }
 
 async function playbackState(api: ApiDriver) {

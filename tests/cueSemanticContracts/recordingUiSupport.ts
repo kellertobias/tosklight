@@ -1,8 +1,9 @@
 import type { BenchUiContext } from "../bench/core/fixtures";
 import { expect } from "../bench/core/fixtures";
 import { clearProgrammerValues } from "../bench/programmer/programmerValues";
-import { object, objects, putObject } from "../support/catalog";
+import { object, objects } from "../support/catalog";
 import {
+	assignPlayback,
 	emptyPlaybackPage,
 	expectNewRecordedCuelist,
 	logicalSlots,
@@ -29,9 +30,9 @@ export const cue001Ui = async (
 		.click();
 
 	const stored = await expectNewRecordedCuelist(api, beforeCuelists, 1);
-	const playbackNumber = await playbackAtSlot(api, 1);
+	const playbackAddress = await playbackAtSlot(api, 1);
 	await expect
-		.poll(async () => runtime(api, playbackNumber))
+		.poll(async () => runtime(api, playbackAddress))
 		.toMatchObject({
 			current_cue_number: "1",
 			enabled: true,
@@ -72,27 +73,21 @@ export const cue001Ui = async (
 			)
 			.toBe(expectedCueCount);
 		await expect
-			.poll(async () => runtime(api, playbackNumber))
+			.poll(async () => runtime(api, playbackAddress))
 			.toMatchObject({
-				current_cue_number: expectedCueCount,
+				current_cue_number: String(expectedCueCount),
 				enabled: true,
 				flash: false,
 			});
 	}
 
-	const definition = await object<any>(api, "playback", String(playbackNumber));
-	await putObject(
-		api,
-		"playback",
-		String(playbackNumber),
-		{ ...definition.body, buttons: ["toggle", "on", "off"] },
-		definition.revision,
-	);
-	for (const [index, [button, group, level]] of [
+	const definition = await object<any>(api, "playback_page", String(playbackAddress.page));
+	await assignPlayback(api, playbackAddress, { ...definition.body.assignments[playbackAddress.position], buttons: ["toggle", "on", "off"] });
+	for (const [index, [button, group, level]] of ([
 		["TOGGLE", "2", 0.2],
 		["ON", "3", 0.3],
 		["OFF", "1", 0.4],
-	].entries()) {
+	] as const).entries()) {
 		await clearProgrammerValues(api, {
 			surface: "api",
 			showId: state.showId,
@@ -111,9 +106,9 @@ export const cue001Ui = async (
 			)
 			.toBe(expectedCueCount);
 		await expect
-			.poll(async () => runtime(api, playbackNumber))
+			.poll(async () => runtime(api, playbackAddress))
 			.toMatchObject({
-				current_cue_number: expectedCueCount,
+				current_cue_number: String(expectedCueCount),
 				enabled: true,
 				flash: false,
 			});

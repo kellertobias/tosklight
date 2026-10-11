@@ -1,3 +1,4 @@
+import type { PairedScenario } from "../bench/core/pairedScenario";
 import { expect, test } from "../bench/core/fixtures";
 import { deleteCue } from "../bench/playbacks/cueDeletion";
 import {
@@ -17,7 +18,6 @@ import {
 	installCompactGroups,
 	installPlaybackSequence,
 	logicalSlots,
-	registerPairedCueScenario,
 	rgbValues,
 	runtime,
 	setSequenceMasterFade,
@@ -30,7 +30,7 @@ const PROGRAMMER_TIMING = {
 	delayMillis: null,
 } as const;
 
-registerPairedCueScenario<{ completed: boolean; showId: string }>({
+const apiCUE010Contract: Omit<PairedScenario<{ completed: boolean; showId: string }>, "ui"> = {
 	id: "CUE-010",
 	title:
 		"tracking and LTP ownership stay per attribute and reveal the underlying programmer",
@@ -52,7 +52,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		const rgb = fixtures[21];
 		await installPlaybackSequence(
 			api,
-			1,
+			{ page: 1, position: 1 },
 			[
 				fixtureCue(1, [[rgb, "intensity", 1]]),
 				fixtureCue(2, [[rgb, "intensity", 0.5]]),
@@ -101,6 +101,13 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiCUE010Contract.id} @api › ${apiCUE010Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiCUE010Contract.arrange(context, "api");
+	await apiCUE010Contract.api(context, state);
+	await apiCUE010Contract.assert(context, state, "api");
 });
 
 test.describe(CUE_SEMANTIC_CONTRACTS, () => {
@@ -116,13 +123,13 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		);
 		await installCompactGroups(api);
 		await setSequenceMasterFade(api, 0);
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			groupCue(1, [["1", "intensity", 1]]),
 			groupCue(2, [["2", "intensity", 1]]),
 			groupCue(3, [["3", "intensity", 1]]),
 		]);
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
-		const beforeRuntime = await runtime(api, 1);
+		const beforeRuntime = await runtime(api, { page: 1, position: 1 });
 		const beforeSlots = logicalSlots(await bench.tick(0), 12);
 		const before = await object<any>(api, "cue_list", installed.id);
 		await putObject(
@@ -135,7 +142,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 			},
 			before.revision,
 		);
-		expect(await runtime(api, 1)).toMatchObject({
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({
 			current_cue_number: "1",
 			activated_at: beforeRuntime.activated_at,
 		});
@@ -143,22 +150,22 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 
 		await deleteCue(api, {
 			surface: "api",
-			address: { type: "pool", playbackNumber: 1 },
-			cueNumber: 1,
+			address: { type: "playback", page: 1, position: 1 },
+			cueNumber: "1",
 		});
 		expect(
 			(await object<any>(api, "cue_list", installed.id)).body.cues.map(
 				(cue: any) => cue.number,
 			),
 		).toEqual([2]);
-		expect(await runtime(api, 1)).toMatchObject({
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({
 			current_cue_number: "1",
 			deleted_cue_hold: { deleted_number: "1", next_number: "2" },
-			normal_next_cue_number: 2,
+			normal_next_cue_number: "2",
 		});
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual(beforeSlots);
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
-		expect(await runtime(api, 1)).toMatchObject({ current_cue_number: "2" });
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({ current_cue_number: "2" });
 		expect(logicalSlots(await bench.tick(0), 12)).toEqual([
 			...Array(4).fill(0),
 			...Array(4).fill(255),
@@ -166,15 +173,15 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		]);
 
 		const fixtures = await fixtureIdsByNumber(api);
-		const sole = await installPlaybackSequence(api, 2, [
+		const sole = await installPlaybackSequence(api, { page: 1, position: 2 }, [
 			fixtureCue(1, [[fixtures[1], "intensity", 0.2]]),
 		]);
 		const soleBefore = await object<any>(api, "cue_list", sole.id);
 		await expect(
 			deleteCue(api, {
 				surface: "api",
-				address: { type: "pool", playbackNumber: 2 },
-				cueNumber: 1,
+				address: { type: "playback", page: 1, position: 2 },
+				cueNumber: "1",
 			}),
 		).rejects.toThrow();
 		expect((await object<any>(api, "cue_list", sole.id)).body).toEqual(

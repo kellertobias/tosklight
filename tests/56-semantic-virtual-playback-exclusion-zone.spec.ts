@@ -77,30 +77,30 @@ scenario(
 		await t.virtualPlayback.activate(pane, 1);
 		await t.virtualPlayback.activate(pane, 2);
 
-		await t.virtualPlayback.createExclusionZoneWithAttachedShift(
+		await t.virtualPlayback.createSoloRegionWithAttachedShift(
 			pane,
 			"Touring pair",
 			[1, 2],
 		);
 		await t.virtualPlayback.expect.zones([
-			{ name: "Touring pair", playback_numbers: [1001, 1002] },
+			{ name: "Touring pair", members: [{ page: 1, position: 401 }, { page: 1, position: 402 }] },
 		]);
 		await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
 		await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
 		await t.virtualPlayback.expect.runtime(firstPlayback, {
-			requested: {
-				kind: "virtual",
+			identity: {
+				kind: "playback",
 				page: 1,
-				playback_number: 1001,
+				position: 401,
 			},
 			target: "cue_list",
 			runtime: { enabled: true },
 		});
 		await t.virtualPlayback.expect.runtime(secondPlayback, {
-			requested: {
-				kind: "virtual",
+			identity: {
+				kind: "playback",
 				page: 1,
-				playback_number: 1002,
+				position: 402,
 			},
 			target: "cue_list",
 			runtime: { enabled: true },
@@ -122,14 +122,15 @@ scenario(
 			target: "cue_list",
 			runtime: { enabled: false },
 		});
-		for (const source of [firstSource, secondSource, thirdSource])
-			await t.virtualPlayback.expect.physicalRuntimeAbsent(source);
+		await t.playback.expect(firstSource).runtime({ enabled: false });
+        await t.playback.expect(secondSource).runtime({ enabled: true });
+        await t.playback.expect(thirdSource).runtime({ enabled: false });
 		await t.clock.advanceStep();
 		await t.expectFixtureValue(fixture(3), { intensity: 0 });
 		await t.expectFixtureValue(fixture(4), { intensity: 0.5 });
 		await t.expectFixtureValue(fixture(5), { intensity: 0 });
 
-		await t.virtualPlayback.deleteExclusionZone(pane, "Touring pair");
+		await t.virtualPlayback.deleteSoloRegion(pane, "Touring pair");
 		await t.virtualPlayback.expect.zones([]);
 		await t.virtualPlayback.activate(pane, 2);
 		await t.virtualPlayback.activate(pane, 1);

@@ -1,14 +1,14 @@
-import { expect } from "../bench/core/fixtures";
+import type { PairedScenario } from "../bench/core/pairedScenario";
+import { expect, test } from "../bench/core/fixtures";
 import { fixtureIdsByNumber, loadCanonicalCopy } from "../support/catalog";
 import {
 	fixtureCue,
 	installPlaybackSequence,
-	registerPairedCueScenario,
 	runtime,
 	setSequenceMasterFade,
 } from "./support";
 
-registerPairedCueScenario<{ completed: boolean }>({
+const apiCUE005Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 	id: "CUE-005",
 	title:
 		"GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint",
@@ -19,7 +19,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			await loadCanonicalCopy(api, bench, name, "compact-rig");
 			await setSequenceMasterFade(api, 0);
 			const fixtures = await fixtureIdsByNumber(api);
-			await installPlaybackSequence(api, 1, [
+			await installPlaybackSequence(api, { page: 1, position: 1 }, [
 				fixtureCue(
 					1,
 					multiValue
@@ -44,25 +44,25 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		await bench.tick(2_000);
 		await bench.tick(604_800_000);
-		expect((await runtime(api, 1)).current_cue_number).toBe("1");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("1");
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 
 		await setup("cue-005-follow", { type: "follow", delay_millis: 0 });
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		await bench.tick(1_999);
-		expect((await runtime(api, 1)).current_cue_number).toBe("1");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("1");
 		await bench.tick(1);
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 
 		await setup("cue-005-time", { type: "wait", delay_millis: 4_000 });
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		await bench.tick(5_999);
-		expect((await runtime(api, 1)).current_cue_number).toBe("1");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("1");
 		await bench.tick(1);
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 		await bench.tick(604_800_000);
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 
 		await setup(
 			"cue-005-latest-value",
@@ -71,10 +71,17 @@ registerPairedCueScenario<{ completed: boolean }>({
 		);
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		await bench.tick(3_999);
-		expect((await runtime(api, 1)).current_cue_number).toBe("1");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("1");
 		await bench.tick(1);
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiCUE005Contract.id} @api › ${apiCUE005Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiCUE005Contract.arrange(context, "api");
+	await apiCUE005Contract.api(context, state);
+	await apiCUE005Contract.assert(context, state, "api");
 });

@@ -1,22 +1,22 @@
-import { expect } from "../bench/core/fixtures";
+import type { PairedScenario } from "../bench/core/pairedScenario";
+import { expect, test } from "../bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
 	object,
-	putObject,
 } from "../support/catalog";
 import {
+	assignPlayback,
 	type FixtureValue,
 	fixtureCue,
 	installPlaybackSequence,
-	registerPairedCueScenario,
 	rgbValues,
 	runtime,
 	setSequenceMasterFade,
 	visualizationLevel,
 } from "./support";
 
-registerPairedCueScenario<{ completed: boolean }>({
+const apiMERGE003Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 	id: "MERGE-003",
 	title:
 		"full normal overwrite auto-Offs while partial, disabled, Flash, and Temp restore",
@@ -29,7 +29,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			const fixture = (await fixtureIdsByNumber(api))[21];
 			const underlying = await installPlaybackSequence(
 				api,
-				1,
+				{ page: 1, position: 1 },
 				[
 					fixtureCue(1, [
 						...(includeIntensity
@@ -44,7 +44,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			);
 			await installPlaybackSequence(
 				api,
-				2,
+				{ page: 1, position: 2 },
 				[
 					fixtureCue(1, [
 						[fixture, "red", 1],
@@ -62,46 +62,34 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await bench.tick(1);
 		await api.playbackAction({ page: 1, position: 2 }, "on", {});
 		await bench.tick(0);
-		expect(await runtime(api, 1)).toMatchObject({ enabled: false });
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({ enabled: false });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
 
-		let definition = await object<any>(api, "playback", "1");
-		await putObject(
-			api,
-			"playback",
-			"1",
-			{ ...definition.body, auto_off: false },
-			definition.revision,
-		);
+		let definition = await object<any>(api, "playback_page", "1");
+		await assignPlayback(api, { page: 1, position: 1 }, { ...definition.body.assignments[1], auto_off: false });
 		await api.playbackAction({ page: 1, position: 2 }, "off", {});
 		await api.playbackAction({ page: 1, position: 1 }, "on", {});
 		await bench.tick(1);
 		await api.playbackAction({ page: 1, position: 2 }, "on", {});
 		await bench.tick(0);
-		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({ enabled: true });
 		await api.playbackAction({ page: 1, position: 2 }, "off", {});
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
 
-		definition = await object<any>(api, "playback", "1");
-		await putObject(
-			api,
-			"playback",
-			"1",
-			{ ...definition.body, auto_off: true },
-			definition.revision,
-		);
+		definition = await object<any>(api, "playback_page", "1");
+		await assignPlayback(api, { page: 1, position: 1 }, { ...definition.body.assignments[1], auto_off: true });
 		await api.playbackAction({ page: 1, position: 1 }, "on", {});
 		await api.playbackAction({ page: 1, position: 2 }, "flash", { pressed: true });
 		await bench.tick(0);
-		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({ enabled: true });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
 		await api.playbackAction({ page: 1, position: 2 }, "flash", { pressed: false });
 		await bench.tick(0);
 		expect(await rgbValues(api, prepared.fixture)).toEqual([0, 0, 1]);
 		await api.playbackAction({ page: 1, position: 2 }, "temp", {});
 		await bench.tick(0);
-		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({ enabled: true });
 		expect(await rgbValues(api, prepared.fixture)).toEqual([1, 0, 0]);
 		await api.playbackAction({ page: 1, position: 2 }, "temp", {});
 		await bench.tick(0);
@@ -112,7 +100,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await bench.tick(1);
 		await api.playbackAction({ page: 1, position: 2 }, "on", {});
 		await bench.tick(0);
-		expect(await runtime(api, 1)).toMatchObject({ enabled: true });
+		expect(await runtime(api, { page: 1, position: 1 })).toMatchObject({ enabled: true });
 		expect(await visualizationLevel(api, prepared.fixture, "intensity")).toBe(
 			1,
 		);
@@ -120,4 +108,11 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiMERGE003Contract.id} @api › ${apiMERGE003Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiMERGE003Contract.arrange(context, "api");
+	await apiMERGE003Contract.api(context, state);
+	await apiMERGE003Contract.assert(context, state, "api");
 });

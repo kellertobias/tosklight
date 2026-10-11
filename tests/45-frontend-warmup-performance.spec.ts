@@ -142,7 +142,7 @@ async function installProfile(api: ApiDriver, profile: "demo" | "large") {
 async function seedLargeShow(api: ApiDriver) {
 	const showId = await activeShowId(api);
 	const work: Array<() => Promise<void>> = [];
-	const playbackWork: Array<() => Promise<void>> = [];
+	const playbackDefinitions: Record<number,Record<string,unknown>> = {};
 	const pageWork: Array<() => Promise<void>> = [];
 	for (let number = 1; number <= 200; number++) {
 		const groupId = `perf-group-${number}`;
@@ -205,38 +205,24 @@ async function seedLargeShow(api: ApiDriver) {
 				],
 			}),
 		);
-		playbackWork.push(() =>
-			seedShowObject(api, showId, "playback", String(playbackNumber), {
-				number: playbackNumber,
-				name: `Performance Playback ${playbackNumber}`,
-				target: { type: "cue_list", cue_list_id: cueListId },
-				buttons: ["go_minus", "go", "flash"],
-				fader: "master",
-				go_activates: true,
-				auto_off: false,
-				xfade_millis: 0,
-				color: "#20c997",
-				flash_release: "release_all",
-				protect_from_swap: false,
-			}),
-		);
+		playbackDefinitions[playbackNumber]={
+ name:`Performance Playback ${playbackNumber}`,target:{type:"cue_list",cue_list_id:cueListId},buttons:["go_minus","go","flash"],button_count:3,has_fader:true,fader:"master",go_activates:true,auto_off:false,xfade_millis:0,color:"#20c997",flash_release:"release_all",protect_from_swap:false
+ };
 	}
 	for (let number = 1; number <= 16; number++)
 		pageWork.push(() =>
 			seedShowObject(api, showId, "playback_page", String(number + 50), {
 				number: number + 50,
 				name: `Performance Page ${number + 50}`,
-				slots: Object.fromEntries(
+				assignments: Object.fromEntries(
 					Array.from({ length: 64 }, (_, index) => [
 						String(index + 1),
-						(((number - 1) * 64 + index) % 100) + 501,
+						playbackDefinitions[(((number - 1) * 64 + index) % 100) + 501],
 					]),
 				),
-				virtual_playbacks: {},
 			}),
 		);
 	await runInBatches(work);
-	await runInBatches(playbackWork);
 	await runInBatches(pageWork);
 }
 

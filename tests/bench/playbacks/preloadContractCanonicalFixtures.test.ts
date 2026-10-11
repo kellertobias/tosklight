@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ApiDriver } from "../bench/core/api";
-vi.mock("../bench/core/fixtures", async () => ({expect:(await import("vitest")).expect}));
-import { captureMasks, scopeContains } from "./scopeCases";
-import { activeAssignedPlayback, copyPageAssignments, installOnCurrentShow, paneAction } from "./showFixtures";
-import { playbackPendingObservation } from "./preloadSupport";
+import type { ApiDriver } from "../core/api";
+vi.mock("../core/fixtures", async () => ({expect:(await import("vitest")).expect}));
+import { captureMasks, scopeContains } from "../../preloadVirtualPlaybackContracts/scopeCases";
+import { activeAssignedPlayback, copyPageAssignments, installOnCurrentShow, paneAction } from "../../preloadVirtualPlaybackContracts/showFixtures";
+import { playbackPendingObservation } from "../../preloadVirtualPlaybackContracts/preloadSupport";
 
 describe("Preload executable contracts use one sparse Playback model",()=>{
  it("covers all eight programmer/position eligibility combinations and restricts pages independently",()=>{

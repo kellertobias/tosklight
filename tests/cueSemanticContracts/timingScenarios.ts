@@ -1,3 +1,4 @@
+import type { PairedScenario } from "../bench/core/pairedScenario";
 import { expect, test } from "../bench/core/fixtures";
 import {
 	fixtureIdsByNumber,
@@ -27,7 +28,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await loadCanonicalCopy(api, bench, "cue-003-exact-timing", "compact-rig");
 		await setSequenceMasterFade(api, 0);
 		const fixture = (await fixtureIdsByNumber(api))[1];
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			fixtureCue(1, [[fixture, "intensity", 0]], { fade_millis: 0 }),
 			fixtureCue(2, [[fixture, "intensity", 1]], { fade_millis: 4_000 }),
 		]);
@@ -42,15 +43,15 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
 		expect(slot(await bench.tick(1_000), 1)).toBe(64);
 		await api.cueListPlaybackAction(installed.id, "pause", {});
-		const paused = await runtime(api, 1);
+		const paused = await runtime(api, { page: 1, position: 1 });
 		expect(paused.paused).toBe(true);
 		expect(slot(await bench.tick(10_000), 1)).toBe(64);
-		expect((await runtime(api, 1)).activated_at).toBe(paused.activated_at);
+		expect((await runtime(api, { page: 1, position: 1 })).activated_at).toBe(paused.activated_at);
 		await api.cueListPlaybackAction(installed.id, "go", {});
-		expect((await runtime(api, 1)).paused).toBe(false);
+		expect((await runtime(api, { page: 1, position: 1 })).paused).toBe(false);
 		expect(slot(await bench.tick(3_000), 1)).toBe(255);
 		await api.cueListPlaybackAction(installed.id, "back", {});
-		expect((await runtime(api, 1)).current_cue_number).toBe("1");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("1");
 		expect(slot(await bench.tick(0), 1)).toBe(0);
 		await api.cueListPlaybackAction(installed.id, "release", {});
 		expect((await playbackState(api)).active).toHaveLength(0);
@@ -60,7 +61,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await loadCanonicalCopy(api, bench, "cue-003-visible-pause", "compact-rig");
 		await setSequenceMasterFade(api, 0);
 		const fixture = (await fixtureIdsByNumber(api))[1];
-		await installPlaybackSequence(api, 1, [
+		await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			fixtureCue(1, [[fixture, "intensity", 0]]),
 			fixtureCue(2, [[fixture, "intensity", 1]], { fade_millis: 4_000 }),
 		]);
@@ -96,7 +97,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 			.click();
 		await expect(configuration).toBeHidden();
 		await expect
-			.poll(async () => (await object<any>(api, "playback", "1")).body.buttons)
+			.poll(async () => (await object<any>(api, "playback_page", "1")).body.assignments[1].buttons)
 			.toEqual(["go_minus", "go", "pause"]);
 
 		await card.getByRole("button", { name: "GO +", exact: true }).click();
@@ -104,7 +105,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect(slot(await bench.tick(1_000), 1)).toBe(64);
 		await card.getByRole("button", { name: "PAUSE", exact: true }).click();
 		await expect
-			.poll(async () => runtime(api, 1))
+			.poll(async () => runtime(api, { page: 1, position: 1 }))
 			.toMatchObject({ current_cue_number: "2", paused: true });
 		await expect(
 			card.getByRole("button", { name: "RESUME", exact: true }),
@@ -112,7 +113,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		expect(slot(await bench.tick(10_000), 1)).toBe(64);
 		await card.getByRole("button", { name: "RESUME", exact: true }).click();
 		await expect
-			.poll(async () => runtime(api, 1))
+			.poll(async () => runtime(api, { page: 1, position: 1 }))
 			.toMatchObject({ current_cue_number: "2", paused: false });
 		expect(slot(await bench.tick(3_000), 1)).toBe(255);
 		state.completed = true;
@@ -133,7 +134,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		);
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
-		await installPlaybackSequence(api, 1, [
+		await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			fixtureCue(
 				1,
 				[
@@ -170,7 +171,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		expect(slot(await bench.tick(0), 2)).toBe(128);
 		expect(slot(await bench.tick(0), 3)).toBe(0);
 		expect(slot(await bench.tick(0), 4)).toBe(0);
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 
 		expect(slot(await bench.tick(500), 4)).toBe(0);
 		expect(slot(await bench.tick(250), 4)).toBe(128);
@@ -178,13 +179,13 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 		// The final sub-slot level rounds to DMX zero one millisecond before completion; the
 		// authoritative Cue runtime still proves FOLLOW remains gated until the exact boundary.
 		expect(slot(await bench.tick(999), 1)).toBe(0);
-		expect((await runtime(api, 1)).current_cue_number).toBe("2");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");
 		expect(slot(await bench.tick(1), 1)).toBe(0);
-		expect((await runtime(api, 1)).current_cue_number).toBe("3");
+		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("3");
 	});
 });
 
-registerPairedCueScenario<{ completed: boolean }>({
+const apiCUE004Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 	id: "CUE-004",
 	title:
 		"per-value timing overrides Cue fallback and Force Cue Timing is reversible",
@@ -194,7 +195,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await loadCanonicalCopy(api, bench, "cue-004-value-timing", "compact-rig");
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			fixtureCue(
 				1,
 				[
@@ -293,4 +294,11 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiCUE004Contract.id} @api › ${apiCUE004Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiCUE004Contract.arrange(context, "api");
+	await apiCUE004Contract.api(context, state);
+	await apiCUE004Contract.assert(context, state, "api");
 });

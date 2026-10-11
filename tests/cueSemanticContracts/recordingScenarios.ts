@@ -67,7 +67,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			kind: "normalized",
 			value: 1,
 		});
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			groupCue(1, [["1", "intensity", 1]]),
 		]);
 		const stored = await object<any>(api, "cue_list", installed.id);
@@ -80,7 +80,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		]);
 		expect(
 			(await playbackState(api)).active.some(
-				(item: any) => item.playback_number === 1 && item.enabled,
+				(item: any) => item.playback_address?.page === 1 && item.playback_address?.position === 1 && item.enabled,
 			),
 		).toBe(false);
 		expect(logicalSlots(await bench.tick(0), 4)).toEqual(Array(4).fill(0));
@@ -115,7 +115,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			.click();
 
 		const stored = await expectNewRecordedCuelist(api, beforeCuelists, 1);
-		const playbackNumber = await playbackAtSlot(api, 1);
+		const playbackAddress = await playbackAtSlot(api, 1);
 		expect(stored.body.cues[0].group_changes).toMatchObject([
 			{
 				group_id: "1",
@@ -125,7 +125,8 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		]);
 		expect(
 			(await playbackState(api)).active.some(
-				(item: any) => item.playback_number === playbackNumber && item.enabled,
+				(item: any) => item.playback_address?.page === playbackAddress.page &&
+				item.playback_address?.position === playbackAddress.position && item.enabled,
 			),
 		).toBe(false);
 		expect(logicalSlots(await bench.tick(0), 4)).toEqual(Array(4).fill(0));
@@ -134,9 +135,9 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			surface: "api",
 			showId: state.showId,
 		});
-		await api.playbackAction({ page: 1, position: playbackNumber }, "go", {});
+		await api.playbackAction(playbackAddress, "go", {});
 		await expect
-			.poll(async () => runtime(api, playbackNumber))
+			.poll(async () => runtime(api, playbackAddress))
 			.toMatchObject({ current_cue_number: "1", enabled: true });
 		expect(logicalSlots(await bench.tick(3_000), 4)).toEqual(
 			Array(4).fill(255),
@@ -163,7 +164,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	},
 	api: async ({ api, bench }, state) => {
 		await setSequenceMasterFade(api, 0);
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			groupCue(1, [["1", "intensity", 1]]),
 			groupCue(2, [
 				["2", "intensity", 1],
@@ -189,7 +190,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			"2:red": 0.2,
 		});
 
-		const pageAddressed = await installPlaybackSequence(api, 2, [
+		const pageAddressed = await installPlaybackSequence(api, { page: 1, position: 2 }, [
 			groupCue(1, [["1", "intensity", 1]]),
 			groupCue(2, [
 				["2", "intensity", 1],
@@ -285,8 +286,8 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 			mark = stream.events.length;
 			await deleteCue(api, {
 				surface: "api",
-				address: { type: "pool", playbackNumber: 1 },
-				cueNumber: 2,
+				address: { type: "playback", page: 1, position: 1 },
+				cueNumber: "2",
 			});
 			const deleteEvent = await showObjectEventAfter(
 				stream.events,

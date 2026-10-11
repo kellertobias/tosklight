@@ -115,7 +115,7 @@ scenario(
 			{ rows: 1, columns: COLORS.length },
 		);
 		await desktop.apply();
-		const playbacks = [];
+		const playbacks: Array<{ page: number; position: number }> = [];
 		for (const [index, color] of COLORS.entries())
 			playbacks.push(
 				await t.virtualPlayback.assignSource(pane, color.name, index + 1),
@@ -123,9 +123,9 @@ scenario(
 		const cells = COLORS.map((_, index) => index + 1);
 		// The zone keeps the name the desk proposes for a show's first zone.
 		const zone = "Solo Region 1";
-		await t.virtualPlayback.createExclusionZoneWithAttachedShift(pane, zone, cells);
+		await t.virtualPlayback.createSoloRegionWithAttachedShift(pane, zone, cells);
 		await t.virtualPlayback.expect.zones([
-			{ name: zone, playback_numbers: cells.map((cell) => 1000 + cell) },
+			{ name: zone, members: cells.map((cell) => ({ page: 1, position: 400 + cell })) },
 		]);
 
 		const expectOnly = async (active: number | null) => {

@@ -44,7 +44,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	api: async ({ api, bench }, state) => {
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			fixtureCue(1, [[fixtures[1], "intensity", 0.3]]),
 			fixtureCue(2, [[fixtures[1], "intensity", 0.8]]),
 			fixtureCue(3, [
@@ -92,7 +92,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		await setSequenceMasterFade(api, 0);
 		const installed = await installPlaybackSequence(
 			api,
-			1,
+			{ page: 1, position: 1 },
 			[groupCue(1, [["1", "intensity", 0.3]])],
 			{ priority: 100 },
 		);

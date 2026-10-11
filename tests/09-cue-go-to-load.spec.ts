@@ -1,6 +1,8 @@
+import { assignPlayback, runtime as addressedRuntime } from "./cueSemanticContracts/playbackFixtures";
+import type { PlaybackAddress } from "../apps/light-desktop/src/features/playbackTopology/contracts";
 import { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
-import { pairedScenario } from "./bench/core/pairedScenario";
+import type { PairedScenario } from "./bench/core/pairedScenario";
 import {
 	fixtureIdsByNumber,
 	loadCanonicalCopy,
@@ -9,7 +11,7 @@ import {
 } from "./support/catalog";
 
 test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
-	pairedScenario<{ completed: boolean }>({
+	const cue014Contract: Omit<PairedScenario<{completed:boolean}>,"ui"> = {
 		id: "CUE-014",
 		title:
 			"Cue Go To and Load preserve desk-local selection and authoritative output controls",
@@ -26,12 +28,12 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			await api.playbackAction({ page: 1, position: 2 }, "select", {});
 			await api.executeCommandLine("GO TO PBK 1 CUE 3");
 			await api.executeCommandLine("LOAD PBK 1 . 2 CUE 2");
-			expect(await runtime(api, 1)).toMatchObject({
+			expect(await runtime(api,{page:1,position:1})).toMatchObject({
 				current_cue_number: "3",
 				master: 1,
 				enabled: true,
 			});
-			expect(await runtime(api, 2)).toMatchObject({
+			expect(await runtime(api,{page:1,position:2})).toMatchObject({
 				enabled: false,
 				loaded_cue_number: "2",
 				effective_next_is_loaded: true,
@@ -42,7 +44,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				/cue does not exist/i,
 			);
 			await expect(api.executeCommandLine("GO TO PBK 99 CUE 1")).rejects.toThrow(
-				/playback 99 does not exist/i,
+				/playback.*99.*does not exist/i,
 			);
 			await expect(
 				api.cueListPlaybackAction(cueListId, "go", {}),
@@ -56,8 +58,8 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			await otherDesk.login("Operator");
 			expect((await playbackState(otherDesk)).selected_playback).toBeNull();
 			await otherDesk.executeCommandLine("PBK 1");
-			expect((await playbackState(otherDesk)).selected_playback).toBe(1);
-			expect((await playbackState(api)).selected_playback).toBe(2);
+			expect((await playbackState(otherDesk)).selected_playback).toEqual({page:1,position:1});
+			expect((await playbackState(api)).selected_playback).toEqual({page:1,position:2});
 
 			const sameDesk = new ApiDriver(api.baseUrl);
 			sameDesk.session = await sameDesk.request(
@@ -66,7 +68,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				{ username: "Operator", desk_id: api.session!.desk.id },
 				false,
 			);
-			expect((await playbackState(sameDesk)).selected_playback).toBe(2);
+			expect((await playbackState(sameDesk)).selected_playback).toEqual({page:1,position:2});
 
 			await api.request(
 				"POST",
@@ -111,9 +113,9 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			);
 
 			await api.executeCommandLine("LOAD PBK 1 CUE 2");
-			expect((await runtime(api, 1)).loaded_cue_number).toBe("2");
+			expect((await runtime(api,{page:1,position:1})).loaded_cue_number).toBe("2");
 			await api.executeCommandLine("LOAD PBK 1 CUE 1");
-			expect(await runtime(api, 1)).toMatchObject({
+			expect(await runtime(api,{page:1,position:1})).toMatchObject({
 				loaded_cue_number: "1",
 				effective_next_is_loaded: true,
 			});
@@ -137,7 +139,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				beforeRenumber.revision,
 			);
 			await expect
-				.poll(async () => runtime(api, 1))
+				.poll(async () => runtime(api,{page:1,position:1}))
 				.toMatchObject({
 					loaded_cue_id: loadedCueId,
 					loaded_cue_number: "20",
@@ -159,19 +161,20 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				beforeDelete.revision,
 			);
 			await expect
-				.poll(async () => runtime(api, 1))
+				.poll(async () => runtime(api,{page:1,position:1}))
 				.toMatchObject({ effective_next_is_loaded: false });
-			expect((await runtime(api, 1)).loaded_cue_id).toBeUndefined();
-			expect((await runtime(api, 1)).loaded_cue_number).toBeUndefined();
+			expect((await runtime(api,{page:1,position:1})).loaded_cue_id).toBeNull();
+			expect((await runtime(api,{page:1,position:1})).loaded_cue_number).toBeNull();
 
 			await api.executeCommandLine("LOAD PBK 1 CUE 10");
-			expect((await runtime(api, 1)).effective_next_is_loaded).toBe(true);
+			expect((await runtime(api,{page:1,position:1})).effective_next_is_loaded).toBe(true);
 			await api.openShow(show.id, { transition: "hold_current" });
 			expect((await playbackState(api)).active).toHaveLength(0);
 			state.completed = true;
 		},
 		assert: async (_context, state) => expect(state.completed).toBe(true),
-	});
+	};
+ test("CUE-014 @api › Go To and Load preserve desk selection and output authority",async({api,bench,show,request,desk,page})=>{const context={api,bench,show,request,desk,page};const state=await cue014Contract.arrange(context,"api"); await cue014Contract.api(context,state); await cue014Contract.assert(context,state,"api");});
 
 	test("CUE-014 @osc › OSC selection, Cue keys, and loaded-next feedback use the same desk runtime", async ({
 		api,
@@ -179,21 +182,24 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 	}) => {
 		await loadCanonicalCopy(api, bench, "cue-go-to-load-osc", "compact-rig");
 		await installTwinPlaybacks(api);
+ const assignmentPage=await object<any>(api,"playback_page","1");
+ assignmentPage.body.assignments[2].buttons[2]="select";
+ await putObject(api,"playback_page","1",assignmentPage.body,assignmentPage.revision);
 		const hardware = await bench.osc();
 		const alias = "desk";
 		try {
 			await hardware.subscribe(`cue-load-${crypto.randomUUID()}`, alias);
-			await hardware.send(`/light/${alias}/page-playback/2/select`, [true]);
+			await hardware.send(`/light/${alias}/playback/1/2/button/3`, [true]);
 			await expect
 				.poll(async () => (await playbackState(api)).selected_playback)
-				.toBe(2);
+				.toEqual({page:1,position:2});
 			await hardware.send(`/light/${alias}/programmer/shift`, [true]);
 			await hardware.send(`/light/${alias}/programmer/div`, [true]);
 			await hardware.send(`/light/${alias}/programmer/shift`, [false]);
 			for (const key of ["playback", "digit-2", "cue", "digit-3", "enter"])
 				await hardware.send(`/light/${alias}/programmer/${key}`, [true]);
 			await expect
-				.poll(async () => runtime(api, 2))
+				.poll(async () => runtime(api,{page:1,position:2}))
 				.toMatchObject({ current_cue_number: "3", enabled: true });
 			await hardware.send(`/light/${alias}/programmer/shift`, [true]);
 			await hardware.send(`/light/${alias}/programmer/div`, [true]);
@@ -202,7 +208,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			for (const key of ["playback", "digit-2", "cue", "digit-2", "enter"])
 				await hardware.send(`/light/${alias}/programmer/${key}`, [true]);
 			await expect
-				.poll(async () => runtime(api, 2))
+				.poll(async () => runtime(api,{page:1,position:2}))
 				.toMatchObject({
 					current_cue_number: "3",
 					effective_next_cue_number: "2",
@@ -212,15 +218,15 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			await bench.tick(0);
 			await hardware.expectAfter(
 				mark,
-				`/light/${alias}/feedback/page-playback/2/effective-next-cue`,
+				`/light/${alias}/feedback/playback/1/2/effective-next-cue`,
 			);
 			await hardware.expectAfter(
 				mark,
-				`/light/${alias}/feedback/page-playback/2/loaded-next`,
+				`/light/${alias}/feedback/playback/1/2/loaded-next`,
 			);
 			await hardware.expectAfter(
 				mark,
-				`/light/${alias}/feedback/page-playback/2/selected`,
+				`/light/${alias}/feedback/playback/1/2/button/3ed`,
 			);
 		} finally {
 			await hardware.close();
@@ -250,8 +256,7 @@ async function installTwinPlaybacks(api: ApiDriver): Promise<string> {
 		[1, "Twin A"],
 		[2, "Twin B"],
 	] as const) {
-		await putObject(api, "playback", String(number), {
-			number,
+		await assignPlayback(api,{page:1,position:number}, {
 			name,
 			target: { type: "cue_list", cue_list_id: cueListId },
 			buttons: ["go_minus", "go", "flash"],
@@ -264,12 +269,7 @@ async function installTwinPlaybacks(api: ApiDriver): Promise<string> {
 			protect_from_swap: false,
 		});
 	}
-	await putObject(api, "playback_page", "1", {
-		number: 1,
-		name: "Main",
-		slots: { "1": 1, "2": 2 },
-		virtual_playbacks: {},
-	});
+
 	return cueListId;
 }
 
@@ -297,8 +297,4 @@ async function playbackState(api: ApiDriver): Promise<any> {
 	return api.request("GET", "/api/v2/playback-overview");
 }
 
-async function runtime(api: ApiDriver, playback: number): Promise<any> {
-	return (await playbackState(api)).active.find(
-		(item: any) => item.playback_number === playback,
-	);
-}
+async function runtime(api:ApiDriver,address:PlaybackAddress):Promise<any> { return addressedRuntime(api,address); }

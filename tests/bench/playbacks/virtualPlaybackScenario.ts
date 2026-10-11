@@ -9,58 +9,24 @@ import type {
 import type { PaneType } from "../window-system/paneTypes";
 import { optionRadio } from "./playback-configuration/ui";
 import { PlaybackButton } from "./playbackScenario";
+import type { PlaybackAddress } from "../../../apps/light-desktop/src/features/playbackTopology/contracts";
 
 type VirtualPlaybackPane = PaneHandle<PaneType.VirtualPlaybacks>;
 
-interface PlaybackPageBody {
-	slots?: Record<string, number>;
-	virtual_playbacks?: Record<string, Record<string, unknown>>;
-}
-
-export interface VirtualPlaybackIdentity {
-	page: number;
-	playbackNumber: number;
-}
-
-interface VirtualPlaybackZone {
-	id?: string;
-	name: string;
-	playback_numbers: number[];
-}
-
-interface VirtualPlaybackZoneSnapshot {
-	show_id: string;
-	revision: number;
-	zones: VirtualPlaybackZone[];
-}
+interface PlaybackPageBody { assignments: Record<string, Record<string, any>> }
+interface PlaybackSoloRegion { name: string; members: PlaybackAddress[] }
+interface PlaybackSoloSnapshot { show_id: string; revision: number; regions: PlaybackSoloRegion[] }
 
 export class BrowserVirtualPlaybacks {
 	readonly expect = {
-		logicalCells: async (pane: VirtualPlaybackPane, count: number) => {
-			const grid = this.pane(pane).locator(".virtual-playback-grid");
-			const logical = await grid.getAttribute("data-logical-cells");
-			if (logical === null)
-				await expect(grid.locator(".virtual-playback-box")).toHaveCount(count);
-			else expect(Number(logical)).toBe(count);
-		},
-		mountedCellsBelow: async (pane: VirtualPlaybackPane, maximum: number) =>
-			expect
-				.poll(() => this.pane(pane).locator(".virtual-playback-box").count())
-				.toBeLessThan(maximum),
-		button: async (
-			pane: VirtualPlaybackPane,
-			cell: number,
-			label: string,
-			page = 1,
-		) => expect(this.cell(pane, cell, undefined, page)).toContainText(label),
-		effectivePage: async (pane: VirtualPlaybackPane, page: number) =>
-			expect(
-				this.pane(pane).locator(".virtual-playback-box").first(),
-			).toHaveAccessibleName(
-				new RegExp(
-					`^Virtual playback ${virtualPlaybackNumber(1, page)} page ${validPage(page)} cell `,
-				),
-			),
+        logicalCells: async (pane: VirtualPlaybackPane, count: number) =>
+            expect(this.pane(pane).locator("[data-playback-slot]")).toHaveCount(count),
+        mountedCellsBelow: async (pane: VirtualPlaybackPane, maximum: number) =>
+            expect.poll(() => this.pane(pane).locator("[data-playback-slot]").count()).toBeLessThan(maximum),
+        button: async (pane: VirtualPlaybackPane, cell: number, label: string, page = 1) =>
+            expect(this.cell(pane, cell, undefined, page)).toContainText(label),
+        effectivePage: async (pane: VirtualPlaybackPane, page: number) =>
+            expect(this.pane(pane).locator("[data-playback-slot]").first()).toHaveAttribute("data-page", String(validPage(page))),
 		fence: async (
 			pane: VirtualPlaybackPane,
 			cell: number,
@@ -68,7 +34,11 @@ export class BrowserVirtualPlaybacks {
 			page = 1,
 		) => {
 			const target = this.cell(pane, cell, undefined, page);
-			await expect(target).toHaveAttribute("data-exclusion-fence", sides);
+			for (const side of ["top", "right", "bottom", "left"]) {
+                const pattern = new RegExp(`(?:^| )solo-fence-${side}(?: |$)`);
+                if (sides.split(" ").includes(side)) await expect(target).toHaveClass(pattern);
+                else await expect(target).not.toHaveClass(pattern);
+            }
 			const expected = new Set(sides.split(" "));
 			await expect
 				.poll(() =>
@@ -97,10 +67,10 @@ export class BrowserVirtualPlaybacks {
 				const gap = Number.parseFloat(
 					getComputedStyle(element.parentElement ?? element).columnGap,
 				);
-				const border = Number.parseFloat(getComputedStyle(element).borderTopWidth);
+
 				return {
 					inset: [style.top, style.right, style.bottom, style.left],
-					outside: `${-(gap / 2 + border)}px`,
+					outside: `${-(gap / 2)}px`,
 					gap,
 				};
 			});
@@ -108,28 +78,14 @@ export class BrowserVirtualPlaybacks {
 			expect(fence.inset).toEqual(Array(4).fill(fence.outside));
 		},
 		runtime: async (
-			identity: VirtualPlaybackIdentity,
+			identity: PlaybackAddress,
 			expected: Record<string, unknown>,
 		) =>
 			expect
 				.poll(async () => await this.runtime(identity))
 				.toMatchObject(expected),
-		physicalRuntimeAbsent: async (playbackNumber: number) =>
-			expect
-				.poll(async () => {
-					const overview = await this.api.request<any>(
-						"GET",
-						"/api/v2/playback-overview",
-					);
-					return overview.active.some(
-						(entry: any) =>
-							entry.playback_identity?.kind === "physical" &&
-							entry.playback_identity?.playback_number === playbackNumber,
-					);
-				})
-				.toBe(false),
 		assignment: async (
-			identity: VirtualPlaybackIdentity,
+			identity: PlaybackAddress,
 			expected: Record<string, unknown>,
 		) => {
 			const page = await this.api.showObject<PlaybackPageBody>(
@@ -138,12 +94,10 @@ export class BrowserVirtualPlaybacks {
 				String(validPage(identity.page)),
 			);
 			expect(
-				page?.body.virtual_playbacks?.[
-					String(validVirtualNumber(identity.playbackNumber))
-				],
+				page?.body.assignments[String(validPosition(identity.position))],
 			).toMatchObject(expected);
 		},
-		zones: async (zones: VirtualPlaybackZone[]) =>
+		zones: async (zones: PlaybackSoloRegion[]) =>
 			expect(await this.zones()).toEqual(zones),
 	};
 
@@ -161,18 +115,17 @@ export class BrowserVirtualPlaybacks {
 		sourceName: string,
 		cell: number,
 		page = 1,
-	): Promise<VirtualPlaybackIdentity> {
-		const sourcePlayback = (
-			await this.api.showObjects<any>(this.showId(), "playback")
-		).find((playback) => playback.body.name === sourceName);
-		if (!sourcePlayback || sourcePlayback.body.target?.type !== "cue_list")
+	): Promise<PlaybackAddress> {
+        const pages = await this.api.showObjects<PlaybackPageBody>(this.showId(), "playback_page");
+        const sourcePlayback = pages.flatMap(page => Object.values(page.body.assignments)).find(definition => definition.name === sourceName);
+		if (!sourcePlayback || sourcePlayback.target?.type !== "cue_list")
 			throw new Error(
 				`Playback source ${sourceName} does not target a Cuelist`,
 			);
 		const sourceCueList = await this.api.showObject<any>(
 			this.showId(),
 			"cue_list",
-			sourcePlayback.body.target.cue_list_id,
+			sourcePlayback.target.cue_list_id,
 		);
 		if (!sourceCueList)
 			throw new Error(`Cuelist for playback source ${sourceName} is absent`);
@@ -192,7 +145,7 @@ export class BrowserVirtualPlaybacks {
 			this.page,
 			modal,
 			"Top button",
-			playbackButtonLabel(sourcePlayback.body.buttons[0]),
+			playbackButtonLabel(sourcePlayback.buttons[0]),
 		);
 		await this.desk.click(
 			modal.getByRole("button", { name: "Apply", exact: true }),
@@ -206,14 +159,14 @@ export class BrowserVirtualPlaybacks {
 			"playback_page",
 			String(validPage(page)),
 		);
-		const playbackNumber = virtualPlaybackNumber(cell, page);
+		const position = panePlaybackAddress(cell, page).position;
 		const playback =
-			playbackPage?.body.virtual_playbacks?.[String(playbackNumber)];
+			playbackPage?.body.assignments[String(position)];
 		if (!playback)
 			throw new Error(
-				`Virtual Playback ${page}.${playbackNumber} did not persist a dedicated source`,
+				`Virtual Playback ${page}.${position} did not persist a dedicated source`,
 			);
-		return { page, playbackNumber };
+		return { page, position };
 	}
 
 	async configureTopButton(
@@ -253,93 +206,28 @@ export class BrowserVirtualPlaybacks {
 		);
 	}
 
-	async createExclusionZone(
-		pane: VirtualPlaybackPane,
-		name: string,
-		cells: number[],
-	): Promise<void> {
-		if (cells.length < 2)
-			throw new Error("A Virtual Playback exclusion zone needs two cells");
-		await this.page.keyboard.down("Shift");
-		try {
-			for (const cell of cells) await this.desk.click(this.cell(pane, cell));
-		} finally {
-			await this.page.keyboard.up("Shift");
-		}
-		await this.desk.click(
-			this.pane(pane).getByRole("button", {
-				name: "Create Solo Region",
-				exact: true,
-			}),
-		);
-		const dialog = this.page.getByRole("dialog", {
-			name: "Create Solo Region",
-		});
-		await expect(dialog).toBeVisible();
-		await this.page.waitForTimeout(100);
-		const nameInput = dialog.getByLabel("Region name");
-		await nameInput.fill(name);
-		await expect(nameInput).toHaveValue(name);
-		await nameInput.press("Tab");
-		await this.desk.click(
-			dialog.getByRole("button", { name: "Create region", exact: true }),
-		);
-		await expect(dialog).toBeHidden();
-	}
+    async createSoloRegion(pane: VirtualPlaybackPane, name: string, cells: number[]): Promise<void> {
+        if (cells.length < 2) throw new Error("A Solo Region needs two Playback members");
+        await this.desk.click(this.pane(pane).getByRole("button", { name: "Select Solo members", exact: true }));
+        for (const cell of cells) await this.desk.click(this.cell(pane, cell));
+        await this.pane(pane).getByLabel("Solo Region name").fill(name);
+        await this.desk.click(this.pane(pane).getByRole("button", { name: "Create Solo Region", exact: true }));
+        await expect.poll(async () => (await this.zones()).some(region => region.name === name)).toBe(true);
+    }
 
-	async createExclusionZoneWithAttachedShift(
-		pane: VirtualPlaybackPane,
-		name: string,
-		cells: number[],
-	): Promise<void> {
-		if (cells.length < 2)
-			throw new Error("A Virtual Playback exclusion zone needs two cells");
-		const alias = "desk";
-		if (!alias)
-			throw new Error("Attached Shift proof requires a desk OSC alias");
-		await this.hardware.connect();
-		try {
-			await this.hardware.send(`/light/${alias}/programmer/shift`, [true]);
-			for (const cell of cells) {
-				const target = this.cell(pane, cell);
-				await this.desk.click(target);
-				await expect(target).toHaveAttribute("aria-pressed", "true");
-			}
-			await expect(
-				this.pane(pane).getByRole("button", {
-					name: "Create Solo Region",
-					exact: true,
-				}),
-			).toBeVisible();
-			await this.hardware
-				.send(`/light/${alias}/programmer/shift`, [false])
-				.catch(() => undefined);
-			const createButton = this.pane(pane).getByRole("button", {
-				name: "Create Solo Region",
-				exact: true,
-			});
-			await this.desk.click(createButton);
-			const dialog = this.page.getByRole("dialog", {
-				name: "Create Solo Region",
-			});
-			await expect(dialog).toBeVisible();
-			const nameInput = dialog.getByLabel("Region name");
-			await nameInput.fill(name);
-			await expect(nameInput).toHaveValue(name);
-			await nameInput.press("Tab");
-			await this.desk.click(
-				dialog.getByRole("button", { name: "Create region", exact: true }),
-			);
-			await expect(dialog).toBeHidden();
-		} finally {
-			await this.hardware
-				.send(`/light/${alias}/programmer/shift`, [false])
-				.catch(() => undefined);
-			await this.hardware.disconnect();
-		}
-	}
+    async createSoloRegionWithAttachedShift(pane: VirtualPlaybackPane, name: string, cells: number[]): Promise<void> {
+        const alias = "desk";
+        await this.hardware.connect();
+        try {
+            await this.hardware.send(`/light/${alias}/programmer/shift`, [true]);
+            await this.createSoloRegion(pane, name, cells);
+        } finally {
+            await this.hardware.send(`/light/${alias}/programmer/shift`, [false]).catch(() => undefined);
+            await this.hardware.disconnect();
+        }
+    }
 
-	async deleteExclusionZone(
+	async deleteSoloRegion(
 		pane: VirtualPlaybackPane,
 		name: string,
 	): Promise<void> {
@@ -350,9 +238,9 @@ export class BrowserVirtualPlaybacks {
 		await this.desk.click(
 			settings.getByRole("tab", { name: "Solo Regions", exact: true }),
 		);
-		await expect(settings.getByLabel(`Name for ${name}`)).toBeVisible();
+		await expect(settings.getByRole("button", { name: `Delete ${name}`, exact: true })).toBeVisible();
 		await this.desk.click(
-			settings.getByRole("button", { name: "Delete region", exact: true }),
+			settings.getByRole("button", { name: `Delete ${name}`, exact: true }),
 		);
 		await expect
 			.poll(async () => (await this.zones()).some((zone) => zone.name === name))
@@ -367,25 +255,14 @@ export class BrowserVirtualPlaybacks {
 		cell: number,
 		page = 1,
 	): Promise<void> {
-		await this.desk.click(this.cell(pane, cell, undefined, page));
+		await this.desk.click(this.cell(pane, cell, undefined, page).getByRole("button", { name: /^(GO|TOGGLE|ON|Toggle|On)/ }).first());
 	}
 
-	async setMainPage(page: number): Promise<void> {
-		if (!this.api.session)
-			throw new Error("Virtual Playback page changes require an API session");
-		await this.api.request(
-			"POST",
-			`/api/v2/control-desk/actions`,
-			{
-				request_id: crypto.randomUUID(),
-				action: {
-					type: "set_page",
-					page: validPage(page),
-					existing_only: false,
-				},
-			},
-		);
-	}
+    async setMainPage(page: number): Promise<void> {
+        if (!this.api.session) throw new Error("Playback page changes require an API session");
+        await this.api.request("POST", "/api/v2/playback-surfaces/main/page", { page: validPage(page) }, true, undefined,
+            { showId: this.showId(), deskId: this.api.session.desk.id });
+    }
 
 	async reload(pane: VirtualPlaybackPane): Promise<void> {
 		await this.page.waitForTimeout(900);
@@ -400,33 +277,17 @@ export class BrowserVirtualPlaybacks {
 		return this.desktops.locatorFor(pane);
 	}
 
-	private cell(
-		pane: VirtualPlaybackPane,
-		cell: number,
-		sourceName?: string,
-		page = 1,
-	): Locator {
-		const suffix = sourceName ? ` ${escapeRegExp(sourceName)}` : "";
-		return this.pane(pane).getByRole("button", {
-			name: new RegExp(
-				`^Virtual playback ${virtualPlaybackNumber(cell, page)} page ${validPage(page)} cell ${validCell(cell)}${suffix}(?: |$)`,
-			),
-		});
-	}
+    private cell(pane: VirtualPlaybackPane, cell: number, sourceName?: string, page = 1): Locator {
+        const address = panePlaybackAddress(cell, page);
+        const target = this.pane(pane).locator(`[data-page="${address.page}"][data-playback-slot="${address.position}"]`);
+        return sourceName ? target.filter({ hasText: sourceName }) : target;
+    }
 
-	private emptyCell(
-		pane: VirtualPlaybackPane,
-		cell: number,
-		page = 1,
-	): Locator {
-		return this.pane(pane).getByRole("button", {
-			name: new RegExp(
-				`^Virtual playback ${virtualPlaybackNumber(cell, page)} page ${validPage(page)} cell ${validCell(cell)} empty$`,
-			),
-		});
-	}
+    private emptyCell(pane: VirtualPlaybackPane, cell: number, page = 1): Locator {
+        return this.cell(pane, cell, undefined, page);
+    }
 
-	private async runtime(identity: VirtualPlaybackIdentity): Promise<any> {
+	private async runtime(identity: PlaybackAddress): Promise<any> {
 		if (!this.api.session)
 			throw new Error("Virtual Playback runtime requires an API session");
 		const snapshot = await this.api.request<any>(
@@ -435,9 +296,9 @@ export class BrowserVirtualPlaybacks {
 			{
 				identities: [
 					{
-						kind: "virtual",
+						kind: "playback",
 						page: validPage(identity.page),
-						playback_number: validVirtualNumber(identity.playbackNumber),
+						position: validPosition(identity.position),
 					},
 				],
 			},
@@ -451,51 +312,38 @@ export class BrowserVirtualPlaybacks {
 			: projection;
 	}
 
-	private async zones(): Promise<VirtualPlaybackZone[]> {
+	private async zones(): Promise<PlaybackSoloRegion[]> {
 		if (!this.api.session)
 			throw new Error("Virtual Playback zones require an API session");
-		const response = await this.api.request<VirtualPlaybackZoneSnapshot>(
+		const response = await this.api.request<PlaybackSoloSnapshot>(
 			"GET",
-			"/api/v2/virtual-playback-exclusion-zones",
+			"/api/v2/playback-solo-regions",
 			undefined,
 			true,
 			undefined,
 			{ showId: this.showId() },
 		);
-		return response.zones
+		return response.regions
 			.map((zone) => ({
 				name: zone.name,
-				playback_numbers: [...zone.playback_numbers],
+				members: [...zone.members],
 			}))
 			.sort((left, right) => left.name.localeCompare(right.name));
 	}
 }
 
-function validCell(cell: number): number {
-	if (!Number.isSafeInteger(cell) || cell < 1 || cell > 300)
-		throw new Error("Virtual Playback cell must be within 1-300");
-	return cell;
-}
-
 function validPage(page: number): number {
-	if (!Number.isSafeInteger(page) || page < 1 || page > 127)
-		throw new Error("Virtual Playback page must be within 1-127");
-	return page;
+    if (!Number.isSafeInteger(page) || page < 1 || page > 99) throw new Error("Playback page must be within 1-99");
+    return page;
 }
-
-function validVirtualNumber(playbackNumber: number): number {
-	if (
-		!Number.isSafeInteger(playbackNumber) ||
-		playbackNumber < 1001 ||
-		playbackNumber > 39_100
-	)
-		throw new Error("Virtual Playback number must be within 1001-39100");
-	return playbackNumber;
+function validPosition(position: number): number {
+    if (!Number.isSafeInteger(position) || position < 1 || position > 1000) throw new Error("Playback position must be within 1-1000");
+    return position;
 }
-
-export function virtualPlaybackNumber(cell: number, page = 1): number {
-	const playbackNumber = 1000 + 300 * (validPage(page) - 1) + validCell(cell);
-	return validVirtualNumber(playbackNumber);
+export function panePlaybackAddress(cell: number, page = 1, firstPosition = 401): PlaybackAddress {
+    if (!Number.isSafeInteger(cell) || cell < 1) throw new Error("Playback cell must be a positive integer");
+    validPosition(firstPosition);
+    return { page: validPage(page), position: validPosition(firstPosition + cell - 1) };
 }
 
 function playbackButtonLabel(button: PlaybackButton): string {

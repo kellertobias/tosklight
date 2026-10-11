@@ -1,3 +1,4 @@
+import { assignPlayback } from "./cueSemanticContracts/playbackFixtures";
 import { expect, test } from "./bench/core/fixtures";
 import { loadCanonicalCopy, putObject } from "./support/catalog";
 
@@ -5,21 +6,20 @@ test("PLAYBACK-COLOR-001 @ui › runtime strengthens configured color while sele
   await loadCanonicalCopy(api, bench, "playback-color-001", "default-stage");
   const cueListId = crypto.randomUUID();
   await putObject(api, "cue_list", cueListId, { id: cueListId, name: "Color Test", priority: 0, mode: "sequence", looped: false, chaser_step_millis: 1000, speed_group: null, cues: [{ id: crypto.randomUUID(), number: 1, name: "On", changes: [], group_changes: [], fade_millis: 0, delay_millis: 0, trigger: { type: "manual" } }] });
-  await putObject(api, "playback", "41", { number: 41, name: "Color Test", target: { type: "cue_list", cue_list_id: cueListId }, buttons: ["go_minus", "go", "flash"], button_count: 3, fader: "master", has_fader: true, go_activates: true, auto_off: true, xfade_millis: 0, color: "#f6e58d", flash_release: "release_all", protect_from_swap: false });
-  await putObject(api, "playback_page", "1", { number: 1, name: "Main", slots: { "1": 41 }, virtual_playbacks: {} });
+  await assignPlayback(api,{page:1,position:1}, { name: "Color Test", target: { type: "cue_list", cue_list_id: cueListId }, buttons: ["go_minus", "go", "flash"], button_count: 3, fader: "master", has_fader: true, go_activates: true, auto_off: true, xfade_millis: 0, color: "#f6e58d", flash_release: "release_all", protect_from_swap: false });
+
   await desk.open(api.baseUrl);
   await page.locator(".mode-toggle").click();
   const card = page.locator(".playback-fader-bank article.playback-colored").first();
   await expect(card).toBeVisible();
   const slot = Number(await card.getAttribute("data-playback-slot"));
   const before = await background(card);
-  await api.playbackAction({ page: await api.playbackCommandPage(), position: slot }, "button", { button: 2, pressed: true, surface: "virtual" });
+  await api.playbackAction({ page: await api.playbackCommandPage(), position: slot }, "button", { button: 2, pressed: true,  });
   await expect(card).toHaveClass(/running/);
   await expect.poll(() => background(card)).not.toBe(before);
 
-  const state = await api.request<any>("GET", "/api/v2/playback-overview");
-  const number = state.pages.find((candidate: any) => candidate.number === state.active_page).slots[String(slot)];
-  await api.playbackAction({ page: 1, position: number }, "select", {});
+  const address={page:Number(await card.getAttribute("data-page")),position:slot};
+  await api.playbackAction(address,"select",{});
   await expect(card).toHaveClass(/selected/);
   await expect(card).toHaveClass(/running/);
   expect(await card.getAttribute("data-selected-playback")).toBe("true");

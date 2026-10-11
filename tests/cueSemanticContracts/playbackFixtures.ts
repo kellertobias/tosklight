@@ -1,3 +1,5 @@
+import type { PlaybackAddress } from "../../apps/light-desktop/src/features/playbackTopology/contracts";
+import { activeShowId } from "../support/catalog";
 import type { ApiDriver } from "../bench/core/api";
 import { type BenchContractContext, expect } from "../bench/core/fixtures";
 import {
@@ -19,9 +21,8 @@ export async function emptyPlaybackPage(api: ApiDriver) {
 			...(page?.body ?? {
 				number: 1,
 				name: "Main",
-				virtual_playbacks: {},
 			}),
-			slots: {},
+			assignments: {},
 		},
 		page?.revision ?? 0,
 	);
@@ -80,32 +81,19 @@ export async function expectNewRecordedCuelist(
 	return object<any>(api, "cue_list", recorded!.id);
 }
 
-export async function playbackAtSlot(
-	api: ApiDriver,
-	slot: number,
-): Promise<number> {
-	let playbackNumber: number | undefined;
-	await expect
-		.poll(async () => {
-			playbackNumber = (await object<any>(api, "playback_page", "1")).body
-				.slots[String(slot)];
-			return playbackNumber;
-		})
-		.toEqual(expect.any(Number));
-	return playbackNumber!;
+export async function playbackAtSlot(api:ApiDriver,position:number):Promise<PlaybackAddress> {
+ const address={page:1,position};
+ await expect.poll(async()=>Boolean((await object<any>(api,"playback_page","1")).body.assignments[position])).toBe(true);
+ return address;
 }
-
-export async function playbackState(api: ApiDriver): Promise<any> {
-	return api.request("GET", "/api/v2/playback-overview");
-}
-
-export async function runtime(
-	api: ApiDriver,
-	playbackNumber: number,
-): Promise<any> {
-	return (await playbackState(api)).active.find(
-		(item: any) => item.playback_number === playbackNumber,
-	);
+export async function playbackState(api:ApiDriver):Promise<any> {return api.request("GET","/api/v2/playback-overview");}
+export async function runtime(api:ApiDriver,address:PlaybackAddress):Promise<any> {
+ const showId=await activeShowId(api);
+ const snapshot=await api.request<any>("POST","/api/v2/playback-runtime/snapshot",{identities:[{kind:"playback",...address}]},true,undefined,{showId,deskId:api.session!.desk.id});
+ const projection=snapshot.projections[0];
+ const value=projection?.target === "cue_list" ? projection.runtime : null;
+ if(!value)return undefined;
+ return {...value,identity:projection.identity,current_cue_id:value.current?.id ?? null,current_cue_number:value.current?.number ?? null,loaded_cue_id:value.loaded?.id ?? null,loaded_cue_number:value.loaded?.number ?? null,effective_next_cue_number:value.effective_next?.number ?? null,normal_next_cue_number:value.normal_next?.number ?? null};
 }
 
 export function logicalSlots(frame: any, count: number): number[] {
@@ -208,7 +196,7 @@ export function groupCue(
 
 export async function installPlaybackSequence(
 	api: ApiDriver,
-	playbackNumber: number,
+	address: PlaybackAddress,
 	cues: any[],
 	options: {
 		name?: string;
@@ -220,7 +208,7 @@ export async function installPlaybackSequence(
 	const id = crypto.randomUUID();
 	await putObject(api, "cue_list", id, {
 		id,
-		name: options.name ?? `Cuelist ${playbackNumber}`,
+		name: options.name ?? `Cuelist ${address.page}.${address.position}`,
 		priority: options.priority ?? 0,
 		mode: "sequence",
 		looped: false,
@@ -235,48 +223,13 @@ export async function installPlaybackSequence(
 		speed_multiplier: 1,
 		cues,
 	});
-	const existingPlayback = (await objects<any>(api, "playback")).find(
-		(item) => item.id === String(playbackNumber),
-	);
-	await putObject(
-		api,
-		"playback",
-		String(playbackNumber),
-		{
-			number: playbackNumber,
-			name: options.name ?? `Playback ${playbackNumber}`,
-			target: { type: "cue_list", cue_list_id: id },
-			buttons: ["go_minus", "go", "flash"],
-			button_count: 3,
-			fader: "master",
-			has_fader: true,
-			go_activates: true,
-			auto_off: options.auto_off ?? false,
-			xfade_millis: 0,
-			color: "#20c997",
-			flash_release: "release_all",
-			protect_from_swap: false,
-			presentation_icon: null,
-			presentation_image: null,
-		},
-		existingPlayback?.revision ?? 0,
-	);
-	const page = (await objects<any>(api, "playback_page")).find(
-		(item) => item.body.number === 1,
-	);
-	await putObject(
-		api,
-		"playback_page",
-		page?.id ?? "1",
-		{
-			...(page?.body ?? {
-				number: 1,
-				name: "Main",
-				virtual_playbacks: {},
-			}),
-			slots: { ...(page?.body.slots ?? {}), [playbackNumber]: playbackNumber },
-		},
-		page?.revision ?? 0,
-	);
-	return { id, playbackNumber };
+	const page=(await objects<any>(api,"playback_page")).find(item=>item.body.number===address.page);
+ const definition={name:options.name ?? `Playback ${address.page}.${address.position}`,target:{type:"cue_list",cue_list_id:id},buttons:["go_minus","go","flash"],button_count:3,fader:"master",has_fader:true,go_activates:true,auto_off:options.auto_off ?? false,xfade_millis:0,color:"#20c997",flash_release:"release_all",protect_from_swap:false,presentation_icon:null,presentation_image:null};
+ await putObject(api,"playback_page",String(address.page),{number:address.page,name:page?.body.name ?? `Page ${address.page}`,assignments:{...(page?.body.assignments ?? {}),[address.position]:definition}},page?.revision ?? 0);
+	return { id, address };
+}
+
+export async function assignPlayback(api:ApiDriver,address:PlaybackAddress,definition:Record<string,unknown>) {
+ const page=(await objects<any>(api,"playback_page")).find(item=>item.body.number===address.page);
+ await putObject(api,"playback_page",String(address.page),{number:address.page,name:page?.body.name ?? (address.page===1?"Main":`Page ${address.page}`),assignments:{...(page?.body.assignments ?? {}),[address.position]:definition}},page?.revision ?? 0);
 }

@@ -16,7 +16,7 @@ export enum PaneType {
 	Patch = "patch",
 	Setup = "setup",
 	Help = "help",
-	VirtualPlaybacks = "virtual_playbacks",
+	VirtualPlaybacks = "playbacks",
 	FileManager = "file_manager",
 	TextEditor = "text_editor",
 }

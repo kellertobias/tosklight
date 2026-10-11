@@ -1,4 +1,5 @@
-import { expect } from "../bench/core/fixtures";
+import type { PairedScenario } from "../bench/core/pairedScenario";
+import { expect, test } from "../bench/core/fixtures";
 import {
 	clearProgrammerValues,
 	setProgrammerFixtureValue,
@@ -16,7 +17,6 @@ import {
 	installCompactGroups,
 	installPlaybackSequence,
 	playbackState,
-	registerPairedCueScenario,
 	setSequenceMasterFade,
 } from "./support";
 
@@ -26,7 +26,7 @@ const PROGRAMMER_TIMING = {
 	delayMillis: null,
 } as const;
 
-registerPairedCueScenario<{ completed: boolean; showId: string }>({
+const apiCUE006Contract: Omit<PairedScenario<{ completed: boolean; showId: string }>, "ui"> = {
 	id: "CUE-006",
 	title:
 		"explicit playback selection supplies the implicit Cuelist without following execution order",
@@ -45,16 +45,16 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 	api: async ({ api, bench }, state) => {
 		await setSequenceMasterFade(api, 0);
 		const fixtures = await fixtureIdsByNumber(api);
-		const first = await installPlaybackSequence(api, 1, [
+		const first = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			fixtureCue(1, [[fixtures[1], "intensity", 0.2]]),
 		]);
-		const second = await installPlaybackSequence(api, 2, [
+		const second = await installPlaybackSequence(api, { page: 1, position: 2 }, [
 			fixtureCue(1, [[fixtures[2], "intensity", 0.3]]),
 		]);
 		await api.playbackAction({ page: 1, position: 2 }, "select", {});
-		expect((await playbackState(api)).selected_playback).toBe(2);
+		expect((await playbackState(api)).selected_playback).toEqual({ page: 1, position: 2 });
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
-		expect((await playbackState(api)).selected_playback).toBe(2);
+		expect((await playbackState(api)).selected_playback).toEqual({ page: 1, position: 2 });
 
 		await setProgrammerFixtureValue(api, {
 			surface: "api",
@@ -94,13 +94,20 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 				(cue: any) => cue.number,
 			),
 		).toEqual([1, 8]);
-		expect((await playbackState(api)).selected_playback).toBe(2);
+		expect((await playbackState(api)).selected_playback).toEqual({ page: 1, position: 2 });
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiCUE006Contract.id} @api › ${apiCUE006Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiCUE006Contract.arrange(context, "api");
+	await apiCUE006Contract.api(context, state);
+	await apiCUE006Contract.assert(context, state, "api");
 });
 
-registerPairedCueScenario<{ completed: boolean }>({
+const apiCUE007Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 	id: "CUE-007",
 	title:
 		"explicit zeroes block a later inserted on Cue from tracking past Cue 4",
@@ -110,7 +117,7 @@ registerPairedCueScenario<{ completed: boolean }>({
 		await loadCanonicalCopy(api, bench, "cue-007-explicit-off", "compact-rig");
 		await installCompactGroups(api);
 		await setSequenceMasterFade(api, 0);
-		const installed = await installPlaybackSequence(api, 1, [
+		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			groupCue(1, [["1", "intensity", 1]]),
 			groupCue(2, [["1", "intensity", 0]]),
 			groupCue(3, [["2", "intensity", 1]]),
@@ -139,4 +146,11 @@ registerPairedCueScenario<{ completed: boolean }>({
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiCUE007Contract.id} @api › ${apiCUE007Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiCUE007Contract.arrange(context, "api");
+	await apiCUE007Contract.api(context, state);
+	await apiCUE007Contract.assert(context, state, "api");
 });

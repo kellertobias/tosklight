@@ -1,3 +1,4 @@
+import type { PairedScenario } from "../bench/core/pairedScenario";
 import { ApiDriver } from "../bench/core/api";
 import { expect, test } from "../bench/core/fixtures";
 import { setProgrammerPriority } from "../bench/programmer/programmerPriority";
@@ -11,7 +12,6 @@ import {
 	CUE_SEMANTIC_CONTRACTS,
 	fixtureCue,
 	installPlaybackSequence,
-	registerPairedCueScenario,
 	rgbValues,
 	setSequenceMasterFade,
 	slot,
@@ -91,7 +91,7 @@ test.describe(CUE_SEMANTIC_CONTRACTS, () => {
 	});
 });
 
-registerPairedCueScenario<{ completed: boolean; showId: string }>({
+const apiMERGE002Contract: Omit<PairedScenario<{ completed: boolean; showId: string }>, "ui"> = {
 	id: "MERGE-002",
 	title:
 		"independent Sequences coexist and retrigger only their stored addresses",
@@ -112,7 +112,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		const bFixture = fixtures[22];
 		await installPlaybackSequence(
 			api,
-			1,
+			{ page: 1, position: 1 },
 			[
 				fixtureCue(1, [
 					[aFixture, "intensity", 0.6],
@@ -125,7 +125,7 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		);
 		await installPlaybackSequence(
 			api,
-			2,
+			{ page: 1, position: 2 },
 			[
 				fixtureCue(1, [
 					[bFixture, "intensity", 0.4],
@@ -192,6 +192,13 @@ registerPairedCueScenario<{ completed: boolean; showId: string }>({
 		state.completed = true;
 	},
 	assert: async (_context, state) => expect(state.completed).toBe(true),
+};
+
+test(`${apiMERGE002Contract.id} @api › ${apiMERGE002Contract.title}`, async ({ api, bench, show, request }) => {
+	const context = { api, bench, show, request };
+	const state = await apiMERGE002Contract.arrange(context, "api");
+	await apiMERGE002Contract.api(context, state);
+	await apiMERGE002Contract.assert(context, state, "api");
 });
 
 function setFixtureValue(

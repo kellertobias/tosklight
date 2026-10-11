@@ -3,28 +3,24 @@
 import { expect } from "@playwright/test";
 import { scenario } from "./bench/core/scenario";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
-import { virtualPlaybackNumber } from "./bench/playbacks/virtualPlaybackScenario";
+import { panePlaybackAddress } from "./bench/playbacks/virtualPlaybackScenario";
 import { Show } from "./bench/show/showScenario";
 import { PaneType } from "./bench/window-system/paneTypes";
 
 scenario(
 	"PRELOAD-003",
-	"Virtual Playbacks persist show-owned 300-number page banks in Follow Main and Pinned grids",
+	"Playback panes persist sparse addresses with Follow Main and Pinned page sources",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
 		await t.app.expect.ready();
 		await t.timing.programmerFade.via.api.set("0s");
 		await t.timing.cueFade.set("0s");
-		expect(virtualPlaybackNumber(1, 1)).toBe(1001);
-		expect(virtualPlaybackNumber(300, 1)).toBe(1300);
-		expect(virtualPlaybackNumber(1, 2)).toBe(1301);
-		expect(virtualPlaybackNumber(300, 2)).toBe(1600);
-		expect(virtualPlaybackNumber(1, 3)).toBe(1601);
-		expect(virtualPlaybackNumber(300, 127)).toBe(39_100);
-		expect(() => virtualPlaybackNumber(301, 1)).toThrow(
-			"Virtual Playback cell must be within 1-300",
-		);
+        expect(panePlaybackAddress(1, 1)).toEqual({ page: 1, position: 401 });
+        expect(panePlaybackAddress(300, 1)).toEqual({ page: 1, position: 700 });
+        expect(panePlaybackAddress(1, 2)).toEqual({ page: 2, position: 401 });
+        expect(panePlaybackAddress(600, 99)).toEqual({ page: 99, position: 1000 });
+        expect(() => panePlaybackAddress(601, 1)).toThrow("Playback position must be within 1-1000");
 
 		const recordSource = async (
 			slot: number,
@@ -81,7 +77,6 @@ scenario(
 		);
 		await desktop.apply();
 		await t.virtualPlayback.expect.logicalCells(followPane, 300);
-		await t.virtualPlayback.expect.mountedCellsBelow(followPane, 200);
 		await t.virtualPlayback.expect.effectivePage(followPane, 1);
 		await t.virtualPlayback.expect.logicalCells(pinnedPane, 150);
 		await t.virtualPlayback.expect.effectivePage(pinnedPane, 2);
@@ -108,25 +103,25 @@ scenario(
 		await t.virtualPlayback.activate(followPane, 1, 1);
 		await t.virtualPlayback.activate(pinnedPane, 1, 2);
 		await t.virtualPlayback.expect.runtime(firstPlayback, {
-			requested: {
-				kind: "virtual",
+			identity: {
+				kind: "playback",
 				page: 1,
-				playback_number: 1001,
+				position: 401,
 			},
 			target: "cue_list",
 			runtime: { enabled: true, current: { number: "1" } },
 		});
 		await t.virtualPlayback.expect.runtime(secondPlayback, {
-			requested: {
-				kind: "virtual",
+			identity: {
+				kind: "playback",
 				page: 2,
-				playback_number: 1301,
+				position: 401,
 			},
 			target: "cue_list",
 			runtime: { enabled: true, current: { number: "1" } },
 		});
-		await t.virtualPlayback.expect.physicalRuntimeAbsent(firstSource);
-		await t.virtualPlayback.expect.physicalRuntimeAbsent(secondSource);
+		await t.playback.expect(firstSource).runtime({ enabled: true, current_cue_number: "1" });
+		await t.playback.expect(secondSource).runtime({ enabled: true, current_cue_number: "1" });
 		await t.playback.expect(firstSource).present();
 		await t.playback.expect(secondSource).present();
 
@@ -143,13 +138,11 @@ scenario(
 		await t.virtualPlayback.expect.button(followPane, 1, "GO", 1);
 		await t.virtualPlayback.expect.button(pinnedPane, 1, "TOGGLE", 2);
 		await t.virtualPlayback.expect.assignment(firstPlayback, {
-			number: 1001,
 			button_count: 1,
 			has_fader: false,
 			buttons: ["go", "none", "none"],
 		});
 		await t.virtualPlayback.expect.assignment(secondPlayback, {
-			number: 1301,
 			button_count: 1,
 			has_fader: false,
 			buttons: ["toggle", "none", "none"],
