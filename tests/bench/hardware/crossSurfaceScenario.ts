@@ -452,11 +452,11 @@ export class BrowserCrossSurface {
 		}
 	}
 
-	async verifyCurrentAndExplicitPageOscAddressing(): Promise<void> {
+	async verifyExplicitPageOscAddressingAndPickup(): Promise<void> {
 		const first = this.requiredSession();
 		const second = await this.createSession();
-		// The visibly selected surface supplies the shared command page. OSC Playback controls
-        // carry explicit addresses and retain their target across surface page changes.
+		// Both wings share page feedback. These exact OSC addresses remain fixed across
+		// selected-page changes; physical pickup remains independent for each wing.
 		await this.selectPlaybackPage("Page 1");
 		const firstHardware = await this.bench.osc();
 		const secondHardware = await this.bench.osc();
@@ -551,19 +551,42 @@ export class BrowserCrossSurface {
 				expect(await this.deskPage(first)).toBe(1);
 			}
 			await secondHardware.sendFloat("/light/desk/playback/2/1/fader", 1);
-            await secondHardware.sendFloat("/light/desk/playback/2/1/fader", 0.5);
+			await secondHardware.sendFloat("/light/desk/playback/2/1/fader", 0.5);
 			await expect
-				.poll(async () => (await this.activePlayback({ page: 2, position: 1 }))?.fader_position)
+				.poll(async () => (await this.activePlayback({ page: 2, position: 1 }))?.master)
 				.toBeCloseTo(0.5, 4);
+			// The second wing controls output; the first wing remains physically at1 and
+			// must pick up the new target rather than jump it. The snapshot exposes the
+			// required peer's control state, not one universal physical fader position.
+			expect(await this.activePlayback({ page: 2, position: 1 })).toMatchObject({
+				master: 0.5, fader_position: 1,
+				fader_pickup_required: true, fader_pickup_target: 0.5,
+			});
+			await firstHardware.sendFloat("/light/desk/playback/2/1/fader", 0.75);
+			await expect.poll(() => this.activePlayback({ page: 2, position: 1 })).toMatchObject({
+				master: 0.5, fader_position: 0.75,
+				fader_pickup_required: true, fader_pickup_target: 0.5,
+			});
+			await firstHardware.sendFloat("/light/desk/playback/2/1/fader", 0.5);
+			await expect.poll(() => this.activePlayback({ page: 2, position: 1 })).toMatchObject({
+				master: 0.5, fader_position: 0.5,
+				fader_pickup_required: false, fader_pickup_target: null,
+			});
 
-			const beforeNoOp = await this.playbackOperationalState();
-			await firstHardware.send(
-				`/light/desk/page-playback/2/button/1`,
-				[true],
-			);
-			await firstHardware.send("/light/desk/playback/1/2/button/1", [true]);
-			await new Promise((resolve) => setTimeout(resolve, 50));
-			expect(await this.playbackOperationalState()).toEqual(beforeNoOp);
+			const pageOne = (await this.api.showObjects<{ assignments: Record<string, unknown> }>(this.showId(), "playback_page"))
+				.find((entry) => entry.id === "1");
+			expect(pageOne).toBeDefined();
+			expect(pageOne!.body.assignments["1000"]).toBeUndefined();
+			for (const address of [
+				"/light/desk/page-playback/2/button/1", // Retired route must be refused.
+				"/light/desk/playback/1/1000/button/1", // Valid route, verified empty slot.
+			]) {
+				const beforeNoOp = await this.playbackOperationalState();
+				await firstHardware.send(address, [true]);
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				expect(await this.playbackOperationalState()).toEqual(beforeNoOp);
+			}
+
 		} finally {
 			await this.close(firstHardware, firstId);
 			await this.close(secondHardware, secondId);
@@ -603,7 +626,8 @@ export class BrowserCrossSurface {
 			status: "changed",
 			group: { state: "stored", id: "3", revision: group.revision + 1 },
 		});
-		await expect(groupCard).toContainText("5 fx");
+		await expect(groupCard.locator("small")).toHaveText("1/5");
+		await expect(groupCard).toHaveAttribute("data-group-membership", "partial");
 		await this.desk.click(
 			dialog.getByRole("button", { name: "Close settings" }),
 		);
@@ -616,6 +640,9 @@ export class BrowserCrossSurface {
 		);
 		await this.desk.click(groupCard);
 		await expect(groupCard).toHaveClass(/selected/);
+		await expect(groupCard).toHaveAttribute("data-group-selection", "group");
+		await expect(groupCard).toHaveAttribute("aria-pressed", "true");
+		await expect(groupCard.locator("small")).toHaveText("5/5");
 		await setProgrammerGroupValue(this.api, {
 			surface: "api",
 			showId: this.showId(),
@@ -641,8 +668,9 @@ export class BrowserCrossSurface {
 		await expect(
 			this.page
 				.locator(".group-pool-window .group-card")
-				.filter({ hasText: "Front Dimmers" }),
-		).toContainText("5 fx");
+				.filter({ hasText: "Front Dimmers" })
+				.locator("small"),
+		).toHaveText("5/5");
 		for (const number of [1, 5])
 			await expect(
 				this.fixtureRow(number).locator(".source-value").first(),

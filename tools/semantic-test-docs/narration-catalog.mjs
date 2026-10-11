@@ -99,7 +99,7 @@ const supportedCallPaths = new Set([
 	"crossSurface.applyGroupOneAtFiftyViaOsc",
 	"crossSurface.reconcileExternalGroupMutation",
 	"crossSurface.rejectInvalidGroupCommand",
-	"crossSurface.verifyCurrentAndExplicitPageOscAddressing",
+	"crossSurface.verifyExplicitPageOscAddressingAndPickup",
 	"cue.expect.metadata",
 	"cue.expect.absent",
 	"cue.expect.groupValue",

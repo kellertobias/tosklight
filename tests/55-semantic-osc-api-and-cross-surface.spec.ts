@@ -74,7 +74,7 @@ scenario(
 
 scenario(
 	"OSC-006",
-	"page two retargets the same current-page playback-one action",
+	"exact OSC addresses retain targets with shared page feedback and independent pickup",
 	async (t) => {
 		await t.show.use(Show.TwelveDimmers);
 		await t.app.open();
@@ -104,7 +104,7 @@ scenario(
 			targetAddress: { page: 2, position: 1 },
 		});
 
-		await t.crossSurface.verifyCurrentAndExplicitPageOscAddressing();
+		await t.crossSurface.verifyExplicitPageOscAddressingAndPickup();
 		await t.playback.expect({ page: 2, position: 1 }).runtime({ enabled: true });
 		// Both assignments refer to the same Cuelist and project its shared runtime.
 		await t.playback.expect(second).runtime({ enabled: true });
