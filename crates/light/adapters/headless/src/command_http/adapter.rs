@@ -252,6 +252,7 @@ enum ObjectCommand {
     DisarmTimecode(u32),
     EditTimecode(u32),
     EditCuelist(u16),
+    EditPlayback(super::playback_address_command::CommandPlaybackTarget),
 }
 
 fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
@@ -259,6 +260,14 @@ fn object_command(command: &str) -> Result<Option<ObjectCommand>, String> {
         .split_whitespace()
         .map(|token| token.to_ascii_uppercase())
         .collect::<Vec<_>>();
+    if matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && family == "PBK") {
+        let (tokens, _) = super::super::tokenize_programmer_command(command)?;
+        let (target, rest) = super::playback_address_command::parse(&tokens[1..])?;
+        if !rest.is_empty() {
+            return Err("unexpected tokens after playback selection".into());
+        }
+        return Ok(Some(ObjectCommand::EditPlayback(target)));
+    }
     if matches!(tokens.as_slice(), [set, family, ..] if set == "SET" && family == "CUELIST")
         && tokens.len() != 3
     {
@@ -332,6 +341,13 @@ fn execute_object_command(
                 1,
                 format!("Started Macro {number} as execution {execution_id}"),
             ))
+        }
+        ObjectCommand::EditPlayback(target) => {
+            crate::runtime::set_commands::emit_assignment_configuration_request(
+                state, session, target,
+            )
+            .map_err(ApiError::bad_request)?;
+            Ok((0, "Opened Playback configuration".into()))
         }
         ObjectCommand::EditMacro(number) => {
             crate::runtime::macros_v2::request_macro_editor_from_command_line(
@@ -876,6 +892,39 @@ mod object_command_tests {
         assert_eq!(object_command("SET 2.3").unwrap(), None);
         assert_eq!(
             object_command("ASSIGN CUELIST 15 AT PBK 2.3").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn set_playback_editor_uses_canonical_address_parser_only() {
+        use super::super::playback_address_command::CommandPlaybackTarget;
+        assert_eq!(
+            object_command("SET PBK 99.1000").unwrap(),
+            Some(ObjectCommand::EditPlayback(
+                CommandPlaybackTarget::ExplicitPage {
+                    page: 99,
+                    position: 1000,
+                }
+            ))
+        );
+        assert_eq!(
+            object_command("SET PBK 1000").unwrap(),
+            Some(ObjectCommand::EditPlayback(
+                CommandPlaybackTarget::CurrentPage { position: 1000 }
+            ))
+        );
+        for command in [
+            "SET PBK",
+            "SET PBK 99.1001",
+            "SET PBK 100.1",
+            "SET PBK 99.1000 EXTRA",
+        ] {
+            assert!(object_command(command).is_err(), "{command}");
+        }
+        assert_eq!(object_command("SET 99.1000").unwrap(), None);
+        assert_eq!(
+            object_command("ASSIGN CUELIST 1 AT PBK 99.1000").unwrap(),
             None
         );
     }

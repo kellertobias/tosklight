@@ -91,24 +91,11 @@ pub(super) fn execute_set_command(
     if tokens.is_empty() {
         return Err("SET requires an editable value or object".into());
     }
-    let snapshot = state.output.snapshot();
-    let (address, used) = parse_playback_address(
-        tokens,
-        false,
-        &snapshot,
-        state
-            .installation
-            .command_page(session.desk.id)
-            .map_err(|error| error.to_string())?,
-    )?;
-    if used != tokens.len() {
+    let (target, rest) = command_http::playback_address_command::parse(tokens)?;
+    if !rest.is_empty() {
         return Err("unexpected tokens after playback selection".into());
     }
-    emit(
-        state,
-        "playback_configuration_requested",
-        serde_json::json!({"desk_id":session.desk.id,"address":address.playback}),
-    );
+    emit_assignment_configuration_request(state, session, target)?;
     Ok(0)
 }
 
@@ -148,7 +135,7 @@ pub(super) fn execute_assign_command(
     Ok(1)
 }
 
-fn emit_assignment_configuration_request(
+pub(super) fn emit_assignment_configuration_request(
     state: &AppState,
     session: &Session,
     target: crate::runtime::command_http::playback_address_command::CommandPlaybackTarget,

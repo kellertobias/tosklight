@@ -67,20 +67,21 @@ async fn set_cuelist_editor_rejects_invalid_missing_or_assignment_syntax_without
 }
 
 #[tokio::test]
-async fn set_cuelist_editor_keeps_shifted_assign_and_existing_physical_set_addressing() {
+async fn set_cuelist_editor_keeps_shifted_assign_and_canonical_playback_configuration() {
     let scenario = CommandHttpScenario::new().await;
     scenario.create_and_open_show("SET editor and ASSIGN isolation").await;
     set_cue_record_value(&scenario);
     assert_eq!(scenario.execute("physical-editor-seed", Some("RECORD CUELIST 15 CUE 1")).await.status(), StatusCode::OK);
     assert_eq!(scenario.execute("explicit-assign", Some("ASSIGN CUELIST 15 AT PBK 2.3")).await.status(), StatusCode::OK);
     let expected = serde_json::json!({"page":2,"position":3});
-    let context = light_application::ActionContext::operator(scenario.session.desk.id, scenario.session.id.0, light_application::ActionSource::Http);
     // Explicit page configuration stays independent of the selected Cuelist editor.
-    assert_eq!(set_commands::execute_set_command(&scenario.state, &scenario.session, &["2".into(), ".".into(), "3".into()], &context).unwrap(), 0);
+    let response = json(scenario.execute("explicit-playback-config", Some("SET PBK 2.3")).await).await;
+    assert_eq!(response["outcome"], "accepted", "{response}");
     assert!(scenario.state.events.audit_events().iter().any(|event| event.kind == "playback_configuration_requested" && event.payload["address"] == expected));
     scenario.state.installation.set_playback_surface_page(scenario.session.desk.id, "main", 2).unwrap();
-    assert_eq!(set_commands::execute_set_command(&scenario.state, &scenario.session, &["3".into()], &context).unwrap(), 0);
-    assert!(cuelist_editor_events(&scenario).is_empty(), "physical SET still opens physical configuration");
+    let response = json(scenario.execute("current-playback-config", Some("SET PBK 3")).await).await;
+    assert_eq!(response["outcome"], "accepted", "{response}");
+    assert!(cuelist_editor_events(&scenario).is_empty(), "canonical SET still opens Playback configuration");
     let response = scenario.execute("independent-editor-after-assign", Some("SET CUELIST 15")).await;
     assert_eq!(response.status(), StatusCode::OK, "{}", json(response).await);
     assert_eq!(cuelist_editor_events(&scenario)[0]["value"], stored_cue_list(&scenario, 15).2.id.0.to_string());
@@ -130,5 +131,73 @@ async fn pure_osc_set_cue_cue_opens_editor_without_assignment_or_programmer_chan
     }
     assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().command_line.trim(), "ASSIGN");
     assert_eq!(cuelist_editor_events(&scenario).len(), 1);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn set_playback_configuration_opens_empty_high_address_without_authoring() {
+    let scenario = CommandHttpScenario::new().await;
+    scenario.create_and_open_show("Empty high Playback configuration").await;
+    let entry = scenario.state.active_show.current().unwrap();
+    let before = ShowStore::open(&entry.path).unwrap().portable_document().unwrap();
+    let before_pages = serde_json::to_value(&scenario.state.output.snapshot().playback_pages).unwrap();
+    assert!(!scenario.state.output.snapshot().playback_pages.iter().any(|page| page.number == 99 && page.assignments.contains_key(&1000)));
+    let response = json(scenario.execute("set-empty-high", Some("SET PBK 99.1000")).await).await;
+    assert_eq!(response["outcome"], "accepted", "{response}");
+    let events = scenario.state.events.audit_events();
+    let request = events.iter().find(|event| event.kind == "playback_configuration_requested").unwrap();
+    assert_eq!(request.payload["address"], serde_json::json!({"page":99,"position":1000}));
+    assert_eq!(request.payload["desk_id"], scenario.session.desk.id.to_string());
+    assert_eq!(ShowStore::open(&entry.path).unwrap().portable_document().unwrap(), before);
+    execute_programmer_command(&scenario.state, &scenario.session, "SET PBK 99.1000").unwrap();
+    let requests = scenario.state.events.audit_events().into_iter().filter(|event| event.kind == "playback_configuration_requested").collect::<Vec<_>>();
+    assert_eq!(requests.len(), 2, "HTTP and native command paths both request configuration");
+    assert_eq!(requests[1].payload["address"], serde_json::json!({"page":99,"position":1000}));
+    assert_eq!(serde_json::to_value(&scenario.state.output.snapshot().playback_pages).unwrap(), before_pages);
+    assert_eq!(ShowStore::open(&entry.path).unwrap().portable_document().unwrap(), before);
+    assert!(scenario.state.output.playback_runtime().is_empty());
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn set_playback_configuration_uses_selected_surface_for_unqualified_address() {
+    let scenario = CommandHttpScenario::new().await;
+    scenario.create_and_open_show("Selected surface configuration").await;
+    let before_pages = serde_json::to_value(&scenario.state.output.snapshot().playback_pages).unwrap();
+    let desk = scenario.session.desk.id;
+    let mut surfaces = scenario.state.installation.playback_surfaces(desk).unwrap();
+    let mut secondary = surfaces["main"].clone();
+    secondary.name = "Selected screen".into();
+    secondary.page_source = light_show::PlaybackPageSource::Own { page: 99 };
+    surfaces.insert("screen:selected".into(), secondary);
+    scenario.state.installation.put_playback_surfaces(desk, &surfaces).unwrap();
+    scenario.state.installation.select_playback_surface(desk, "screen:selected").unwrap();
+    let response = json(scenario.execute("set-selected-high", Some("SET PBK 1000")).await).await;
+    assert_eq!(response["outcome"], "accepted", "{response}");
+    let events = scenario.state.events.audit_events();
+    let request = events.iter().find(|event| event.kind == "playback_configuration_requested").unwrap();
+    assert_eq!(request.payload["address"], serde_json::json!({"page":99,"position":1000}));
+    assert_eq!(scenario.state.installation.command_page(desk).unwrap(), 99);
+    execute_programmer_command(&scenario.state, &scenario.session, "SET PBK 1000").unwrap();
+    let requests = scenario.state.events.audit_events().into_iter().filter(|event| event.kind == "playback_configuration_requested").collect::<Vec<_>>();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[1].payload["address"], serde_json::json!({"page":99,"position":1000}));
+    assert_eq!(serde_json::to_value(&scenario.state.output.snapshot().playback_pages).unwrap(), before_pages);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn set_playback_configuration_rejects_invalid_addresses_without_request_or_show_write() {
+    let scenario = CommandHttpScenario::new().await;
+    scenario.create_and_open_show("Invalid Playback configuration").await;
+    let entry = scenario.state.active_show.current().unwrap();
+    let before = ShowStore::open(&entry.path).unwrap().portable_document().unwrap();
+    for (index, command) in ["SET PBK 99.1001", "SET PBK 100.1", "SET PBK 0.1", "SET PBK 1.0", "SET PBK 99.", "SET PBK 99.1000 EXTRA"].into_iter().enumerate() {
+        let response = json(scenario.execute(&format!("set-invalid-{index}"), Some(command)).await).await;
+        assert_eq!(response["outcome"], "rejected", "{command}: {response}");
+    }
+    assert!(!scenario.state.events.audit_events().iter().any(|event| event.kind == "playback_configuration_requested"));
+    assert_eq!(ShowStore::open(&entry.path).unwrap().portable_document().unwrap(), before);
+    assert!(scenario.state.output.playback_runtime().is_empty());
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
