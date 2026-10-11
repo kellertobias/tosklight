@@ -1,4 +1,5 @@
-import dgram, { type AddressInfo } from "node:dgram";
+import dgram from "node:dgram";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { DmxReceiver, OscHardware, encodeOscMessage } from "./protocols";
 
