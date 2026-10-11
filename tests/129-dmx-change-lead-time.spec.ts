@@ -11,6 +11,7 @@ import {
 	objects,
 	putObject,
 } from "./support/catalog";
+import { configurePlaybackSlot } from "./support/playbackTopology";
 
 test.setTimeout(180_000);
 test.use({ viewport: { width: 1600, height: 1100 } });
@@ -71,32 +72,22 @@ async function installOneCuePlayback(api: ApiDriver, bench: any, name: string) {
 			trigger: { type: "manual" },
 		})),
 	});
-	const existingPlayback = (await objects<any>(api, "playback")).find(
-		(playback) => playback.id === "1",
-	);
-	await putObject(
-		api,
-		"playback",
-		"1",
-		{
-			number: 1,
-			name: "Lead Cuelist",
-			target: { type: "cue_list", cue_list_id: cueListId },
-			buttons: ["go", "go_minus", "flash"],
-			button_count: 3,
-			fader: "master",
-			has_fader: true,
-			go_activates: true,
-			auto_off: false,
-			xfade_millis: 0,
-			color: "#20c997",
-			flash_release: "release_all",
-			protect_from_swap: false,
-			presentation_icon: null,
-			presentation_image: null,
-		},
-		existingPlayback?.revision ?? 0,
-	);
+	await configurePlaybackSlot(api, 1, 1, {
+		name: "Lead Cuelist",
+		target: { type: "cue_list", cue_list_id: cueListId },
+		buttons: ["go", "go_minus", "flash"],
+		button_count: 3,
+		fader: "master",
+		has_fader: true,
+		go_activates: true,
+		auto_off: false,
+		xfade_millis: 0,
+		color: "#20c997",
+		flash_release: "release_all",
+		protect_from_swap: false,
+		presentation_icon: null,
+		presentation_image: null,
+	});
 	// Settle every start the setup itself caused, then measure from a clean slate.
 	await bench.tick(25);
 	await reset(api);

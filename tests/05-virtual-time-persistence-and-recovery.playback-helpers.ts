@@ -1,3 +1,9 @@
+import type {
+	DynamicDefinitionProjection,
+	DynamicPwmShapeProjection,
+	DynamicScalarSourceProjection,
+	PlaybackTopologyDynamicAssignment,
+} from "../apps/light-desktop/src/api/generated/light-wire";
 import type { ApiDriver } from "./bench/core/api";
 import { expect } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
@@ -114,8 +120,11 @@ export async function installTimeCuelists(
 		),
 	});
 	const dynamicId = crypto.randomUUID();
-	const value = (level: number) => ({ type: "value", value: level });
-	const pwm = {
+	const value = (level: number): DynamicScalarSourceProjection => ({
+		type: "value",
+		value: level,
+	});
+	const pwm: DynamicPwmShapeProjection = {
 		attack: 0,
 		on: 0.5,
 		decay: 0,
@@ -123,7 +132,7 @@ export async function installTimeCuelists(
 		attack_interpolation: "linear",
 		decay_interpolation: "linear",
 	};
-	const dynamic = {
+	const dynamic: DynamicDefinitionProjection = {
 		id: dynamicId,
 		pool_number: 1,
 		revision: 1,
@@ -159,10 +168,19 @@ export async function installTimeCuelists(
 				},
 				speed_multiplier: { numerator: 1, denominator: 1 },
 				width: 1,
+				phase: null,
 				random_group_id: null,
 			},
 		],
 		random_groups: [],
+		phase_mode: "uniform",
+		spatial_mapping: {
+			projection: { type: "inherit" },
+			shape: { type: "inherit" },
+		},
+		overall_speed_multiplier: { numerator: 1, denominator: 1 },
+		run_mode: "loop",
+		activation_boundary: "beat",
 		phase: {
 			ordering: { type: "selection" },
 			offset_degrees: 0,
@@ -186,11 +204,9 @@ export async function installTimeCuelists(
 			target: {
 				type: "dynamic",
 				assignment: {
-					dynamic: {
-						dynamic_id: dynamicId,
-						last_known_pool_number: 1,
-						embedded_fallback: { definition: dynamic },
-					},
+					dynamic_id: dynamicId,
+					last_known_pool_number: 1,
+					embedded_fallback: dynamic,
 					revision: 1,
 					target_scope: null,
 					fader_mode: "size_and_master",
@@ -203,7 +219,7 @@ export async function installTimeCuelists(
 					auto_off_at_zero: false,
 					auto_off_flash_release: false,
 					auto_off_full_control: true,
-				},
+				} satisfies PlaybackTopologyDynamicAssignment,
 			},
 			buttons: ["off", "pause", "flash"],
 			button_count: 3,
@@ -217,6 +233,7 @@ export async function installTimeCuelists(
 			protect_from_swap: false,
 		},
 	);
+
 	await configurePlaybackSlot(api, 1, 3, {
 		name: "Dynamics Control",
 		target: { type: "grand_master" },

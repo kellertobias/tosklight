@@ -11,7 +11,7 @@ import {
 const apiCUE005Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 	id: "CUE-005",
 	title:
-		"GO, FOLLOW, and TIME measure from the preceding Cue's latest value endpoint",
+		"GO waits for the operator, FOLLOW waits for completion, and TIME counts from Cue start",
 	surfaces: ["api"],
 	arrange: () => ({ completed: false }),
 	api: async ({ api, bench }, state) => {
@@ -57,7 +57,7 @@ const apiCUE005Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 
 		await setup("cue-005-time", { type: "wait", delay_millis: 4_000 });
 		await api.playbackAction({ page: 1, position: 1 }, "go", {});
-		await bench.tick(5_999);
+		await bench.tick(3_999);
 		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("1");
 		await bench.tick(1);
 		expect((await runtime(api, { page: 1, position: 1 })).current_cue_number).toBe("2");

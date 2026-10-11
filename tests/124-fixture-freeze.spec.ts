@@ -3,7 +3,6 @@ import { expect, test } from "./bench/core/fixtures";
 import type { LightBench } from "./bench/core/lightBench";
 import { loadCanonicalCopy } from "./support/catalog";
 import { simulatedHardware } from "./bench/hardware/hardwareScenario";
-import { poolAction } from "./bench/playbacks/playback-configuration/api";
 import { BrowserPatch } from "./bench/show-setup/patchScenario";
 import {
 	arrangeFreezeRig,
@@ -76,7 +75,7 @@ async function changeSourcesOnly(
 	await programColor(api, [...rig.washHeads, rig.par], 240);
 	await programAngles(api, rig.showId, rig.wash, -60, -20);
 	await setZoom(api, rig.showId, rig.wash, 40);
-	await poolAction(api, rig.cuePlayback, "go");
+	await api.playbackAction(rig.cuePlayback, "go");
 	await bench.tick(1_300);
 }
 

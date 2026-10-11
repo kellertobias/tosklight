@@ -14,7 +14,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 	const cue014Contract: Omit<PairedScenario<{completed:boolean}>,"ui"> = {
 		id: "CUE-014",
 		title:
-			"Cue Go To and Load preserve desk-local selection and authoritative output controls",
+			"Cue Go To and Load preserve shared desk selection and authoritative output controls",
 		surfaces: ["api"],
 		arrange: () => ({ completed: false }),
 		api: async ({ api, bench }, state) => {
@@ -26,7 +26,19 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 			);
 			const cueListId = await installTwinPlaybacks(api);
 			await api.playbackAction({ page: 1, position: 2 }, "select", {});
+			const inactiveFrame = await bench.tick(0);
+			expect(
+				inactiveFrame.universes.find((item: any) => item.universe === 1)?.slots[0],
+			).toBe(0);
+			await api.executeCommandLine("LOAD PBK 1 . 2 CUE 2");
+			expect(await runtime(api, { page: 1, position: 2 })).toMatchObject({
+				enabled: false,
+				loaded_cue_number: "2",
+				effective_next_is_loaded: true,
+			});
+			expect((await bench.tick(3_000)).universes).toEqual(inactiveFrame.universes);
 			await api.executeCommandLine("GO TO PBK 1 CUE 3");
+			const beforeLoad = await runtime(api, { page: 1, position: 2 });
 			await api.executeCommandLine("LOAD PBK 1 . 2 CUE 2");
 			expect(await runtime(api,{page:1,position:1})).toMatchObject({
 				current_cue_number: "3",
@@ -34,7 +46,10 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				enabled: true,
 			});
 			expect(await runtime(api,{page:1,position:2})).toMatchObject({
-				enabled: false,
+				enabled: beforeLoad.enabled,
+				current_cue_id: beforeLoad.current_cue_id,
+				current_cue_number: "3",
+				master: beforeLoad.master,
 				loaded_cue_number: "2",
 				effective_next_is_loaded: true,
 			});
@@ -44,31 +59,59 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				/cue does not exist/i,
 			);
 			await expect(api.executeCommandLine("GO TO PBK 99 CUE 1")).rejects.toThrow(
-				/playback.*99.*does not exist/i,
+				/playback is not assigned/i,
 			);
-			await expect(
-				api.cueListPlaybackAction(cueListId, "go", {}),
-			).rejects.toThrow(/multiple playbacks/i);
 			expect(await playbackState(api)).toMatchObject({
 				selected_playback: before.selected_playback,
 				active: before.active,
 			});
+			await api.cueListPlaybackAction(cueListId, "go", {});
+			for (const position of [1, 2]) {
+				expect(await runtime(api, { page: 1, position })).toMatchObject({
+					current_cue_number: "2",
+					loaded_cue_number: null,
+					effective_next_is_loaded: false,
+					enabled: true,
+				});
+			}
+			expect((await playbackState(api)).selected_playback).toEqual(
+				before.selected_playback,
+			);
 
-			const otherDesk = new ApiDriver(api.baseUrl);
-			await otherDesk.login("Operator");
-			expect((await playbackState(otherDesk)).selected_playback).toBeNull();
-			await otherDesk.executeCommandLine("PBK 1");
-			expect((await playbackState(otherDesk)).selected_playback).toEqual({page:1,position:1});
-			expect((await playbackState(api)).selected_playback).toEqual({page:1,position:2});
-
-			const sameDesk = new ApiDriver(api.baseUrl);
-			sameDesk.session = await sameDesk.request(
+			const otherWindow = new ApiDriver(api.baseUrl);
+			otherWindow.session = await otherWindow.request(
 				"POST",
 				"/api/v2/sessions",
-				{ username: "Operator", desk_id: api.session!.desk.id },
+				{ client_id: crypto.randomUUID() },
 				false,
 			);
-			expect((await playbackState(sameDesk)).selected_playback).toEqual({page:1,position:2});
+			expect(otherWindow.session!.desk.id).toBe(api.session!.desk.id);
+			expect((await playbackState(otherWindow)).selected_playback).toEqual({
+				page: 1,
+				position: 2,
+			});
+			await otherWindow.executeCommandLine("PBK 1");
+			expect((await playbackState(api)).selected_playback).toEqual({
+				page: 1,
+				position: 1,
+			});
+			expect(await runtime(otherWindow, { page: 1, position: 2 })).toMatchObject({
+				current_cue_number: "2",
+				enabled: true,
+			});
+			await api.playbackAction({ page: 1, position: 2 }, "select", {});
+
+			const sameWindow = new ApiDriver(api.baseUrl);
+			sameWindow.session = await sameWindow.request(
+				"POST",
+				"/api/v2/sessions",
+				{ client_id: api.session!.client_id },
+				false,
+			);
+			expect((await playbackState(sameWindow)).selected_playback).toEqual({
+				page: 1,
+				position: 2,
+			});
 
 			await api.request(
 				"POST",
@@ -85,13 +128,20 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 				grand_master: 0.5,
 				blackout: false,
 			});
-			expect(
-				visualization.values.some(
-					(item: any) =>
-						item.attribute === "intensity" &&
-						Math.abs(item.value?.value - 0.8) < 0.001,
-				),
-			).toBe(true);
+			const fixtureId = (await fixtureIdsByNumber(api))[1];
+			const storedCue = (await object<any>(api, "cue_list", cueListId)).body.cues.find(
+				(item: any) => item.number === "3",
+			);
+			const storedIntensity = storedCue.changes.find(
+				(item: any) => item.fixture_id === fixtureId,
+			).value;
+			expect(storedIntensity.kind).toBe("normalized");
+			expect(storedIntensity.value).toBeCloseTo(0.8, 6);
+			const visibleIntensity = visualization.values.find(
+				(item: any) => item.fixture_id === fixtureId && item.attribute === "intensity",
+			);
+			expect(visibleIntensity).toBeDefined();
+			expect(visibleIntensity.value.value).toBeCloseTo(0.4, 3);
 			expect(
 				masterFrame.universes.find((universe: any) => universe.universe === 1)
 					?.slots[0],
@@ -174,7 +224,7 @@ test.describe("docs/testing/02-cues-tracking-and-arbitration.md", () => {
 		},
 		assert: async (_context, state) => expect(state.completed).toBe(true),
 	};
- test("CUE-014 @api › Go To and Load preserve desk selection and output authority",async({api,bench,show,request,desk,page})=>{const context={api,bench,show,request,desk,page};const state=await cue014Contract.arrange(context,"api"); await cue014Contract.api(context,state); await cue014Contract.assert(context,state,"api");});
+ test("CUE-014 @api › Go To and Load preserve shared desk selection and output authority",async({api,bench,show,request,desk,page})=>{const context={api,bench,show,request,desk,page};const state=await cue014Contract.arrange(context,"api"); await cue014Contract.api(context,state); await cue014Contract.assert(context,state,"api");});
 
 	test("CUE-014 @osc › OSC selection, Cue keys, and loaded-next feedback use the same desk runtime", async ({
 		api,

@@ -69,12 +69,12 @@ const apiCUE006Contract: Omit<PairedScenario<{ completed: boolean; showId: strin
 			(await object<any>(api, "cue_list", second.id)).body.cues.map(
 				(cue: any) => cue.number,
 			),
-		).toEqual([1, 7]);
+		).toEqual(["1", "7"]);
 		expect(
 			(await object<any>(api, "cue_list", first.id)).body.cues.map(
 				(cue: any) => cue.number,
 			),
-		).toEqual([1]);
+		).toEqual(["1"]);
 
 		await clearProgrammerValues(api, {
 			surface: "api",
@@ -93,7 +93,7 @@ const apiCUE006Contract: Omit<PairedScenario<{ completed: boolean; showId: strin
 			(await object<any>(api, "cue_list", first.id)).body.cues.map(
 				(cue: any) => cue.number,
 			),
-		).toEqual([1, 8]);
+		).toEqual(["1", "8"]);
 		expect((await playbackState(api)).selected_playback).toEqual({ page: 1, position: 2 });
 		state.completed = true;
 	},
@@ -116,6 +116,16 @@ const apiCUE007Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 	api: async ({ api, bench }, state) => {
 		await loadCanonicalCopy(api, bench, "cue-007-explicit-off", "compact-rig");
 		await installCompactGroups(api);
+		const fixtures = await fixtureIdsByNumber(api);
+		for (const [id, numbers] of [
+			["1", [1, 2, 3, 4]],
+			["2", [5, 6, 7, 8]],
+			["3", [9, 10, 11, 12]],
+		] as const) {
+			expect((await object<any>(api, "group", id)).body.fixtures).toEqual(
+				numbers.map((number) => fixtures[number]),
+			);
+		}
 		await setSequenceMasterFade(api, 0);
 		const installed = await installPlaybackSequence(api, { page: 1, position: 1 }, [
 			groupCue(1, [["1", "intensity", 1]]),
@@ -126,12 +136,11 @@ const apiCUE007Contract: Omit<PairedScenario<{ completed: boolean }>, "ui"> = {
 			groupCue(5, [["3", "intensity", 1]]),
 		]);
 		const stored = await object<any>(api, "cue_list", installed.id);
-		expect(
-			groupValues(stored.body.cues.find((cue: any) => cue.number === 2)),
-		).toEqual({ "1:intensity": 0 });
-		expect(
-			groupValues(stored.body.cues.find((cue: any) => cue.number === 4)),
-		).toEqual({ "1:intensity": 0 });
+		for (const number of ["2", "4"]) {
+			const cue = stored.body.cues.find((item: any) => item.number === number);
+			expect(cue, `stored Cue ${number}`).toBeDefined();
+			expect(groupValues(cue)).toEqual({ "1:intensity": 0 });
+		}
 		const expected = [
 			[1, 0, 0],
 			[0, 0, 0],

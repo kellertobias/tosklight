@@ -46,6 +46,10 @@ export async function installCompactGroups(api: ApiDriver) {
 				id,
 				name: `Group ${id}`,
 				fixtures: numbers.map((number) => fixtures[number]),
+				source: {
+					type: "explicit",
+					fixture_ids: numbers.map((number) => fixtures[number]),
+				},
 				derived_from: null,
 				frozen_from: null,
 				programming: current?.body.programming ?? {},

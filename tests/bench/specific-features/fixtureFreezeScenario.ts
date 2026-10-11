@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import type { PlaybackAddressValue } from "../../../apps/light-desktop/src/api/generated/light-wire";
 import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { LightBench, TestShow } from "../core/lightBench";
@@ -7,8 +8,6 @@ import { BrowserDynamics } from "../dynamics/dynamicScenario";
 import {
 	createCueList,
 	definition,
-	playbackAt,
-	poolAction,
 	saveSlot,
 } from "../playbacks/playback-configuration/api";
 import {
@@ -64,8 +63,8 @@ export interface FreezeRig {
 	washHeads: string[];
 	par: string;
 	cueListId: string;
-	cuePlayback: number;
-	groupMasterPlayback: number;
+	cuePlayback: PlaybackAddressValue;
+	groupMasterPlayback: PlaybackAddressValue;
 }
 
 export interface FreezeFrame {
@@ -153,23 +152,23 @@ export async function arrangeFreezeRig(
 		api,
 		1,
 		1,
-		definition(1, "Freeze Cue", {
+		definition("Freeze Cue", {
 			type: "cue_list",
 			cue_list_id: cueListId,
-		} as never),
+		}),
 	);
 	await saveSlot(
 		api,
 		1,
 		2,
-		definition(2, "Freeze Group Master", {
+		definition("Freeze Group Master", {
 			type: "group",
 			group_id: FREEZE_GROUP,
 		}),
 	);
-	const cuePlayback = (await playbackAt(api, 1, 1)).body.number;
-	const groupMasterPlayback = (await playbackAt(api, 1, 2)).body.number;
-	await poolAction(api, cuePlayback, "go");
+	const cuePlayback = { page: 1, position: 1 };
+	const groupMasterPlayback = { page: 1, position: 2 };
+	await api.playbackAction(cuePlayback, "go");
 
 	// Dynamic contribution: Dimmer 3 from a running intensity Dynamic.
 	await api.executeCommandLine("3");
@@ -220,7 +219,7 @@ export async function changeEverySource(
 	await programColor(api, [...rig.washHeads, rig.par], 240);
 	await programAngles(api, rig.showId, rig.wash, -60, -20);
 	await setZoom(api, rig.showId, rig.wash, 40);
-	await poolAction(api, rig.cuePlayback, "go");
+	await api.playbackAction(rig.cuePlayback, "go");
 	await setGroupMaster(api, rig.groupMasterPlayback, 0.3);
 	await setGlobalMaster(api, { grand_master: 0.4, blackout: true });
 	// The Dynamic keeps running and the Cue fade completes.
@@ -358,11 +357,11 @@ async function valuesAction(api: ApiDriver, action: Record<string, unknown>) {
 /** Moves a Group Master fader; a fresh fader first picks up the master at Full. */
 export async function setGroupMaster(
 	api: ApiDriver,
-	playback: number,
+	playback: PlaybackAddressValue,
 	value: number,
 ) {
-	await poolAction(api, playback, "master", { value: 1 });
-	await poolAction(api, playback, "master", { value });
+	await api.playbackAction(playback, "master", { value: 1 });
+	await api.playbackAction(playback, "master", { value });
 }
 
 export async function setGlobalMaster(
