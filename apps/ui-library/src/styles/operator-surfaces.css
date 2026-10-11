@@ -2172,3 +2172,35 @@
 .playback-preview-notice {
 	z-index: 2;
 }
+
+/* Push encoders keep configured actions inside the same card as their wheel. */
+.touch-playback-card:has(> .playback-push-encoder) {
+	grid-template-rows: 20px 16px auto minmax(0, 1fr);
+}
+.playback-push-encoder {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+	min-height: 0;
+}
+.playback-push-encoder > .touch-encoder {
+	flex: 1;
+	height: auto;
+	min-height: 0;
+}
+.playback-push-encoder > .ui-button {
+	flex: 0 0 44px;
+	min-height: 44px;
+}
+.playback-push-encoder .touch-encoder-value {
+	padding: 4px;
+	font-size: clamp(12px, 10cqw, 18px);
+}
+
+/* A sole matrix action owns the complete compact card, including its identity text. */
+.playback-fader-bank.touch-layout
+	.touch-playback-card.playback-row-compact
+	> .single-button-playback-action {
+	grid-row: 1 / -1;
+}

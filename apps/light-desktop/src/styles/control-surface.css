@@ -2886,3 +2886,9 @@ textarea,
 	font-size: 0.8rem;
 	line-height: 1.45;
 }
+
+/* Controls-only native Screens have no upper workspace to clear the title strip. */
+.screen-shell.utility-content:has(> .native-drag-strip) {
+	box-sizing: border-box;
+	padding-top: 32px;
+}
