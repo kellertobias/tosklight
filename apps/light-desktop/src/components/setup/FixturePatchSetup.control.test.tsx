@@ -3313,8 +3313,13 @@ describe("CSV patch import", () => {
 				],
 			},
 		});
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Next: fixture types" }),
+			).toBeEnabled(),
+		);
 		fireEvent.click(
-			await screen.findByRole("button", { name: "Next: fixture types" }),
+			screen.getByRole("button", { name: "Next: fixture types" }),
 		);
 		const table = screen.getByRole("table", { name: "Fixtures to import" });
 		expect(within(table).getByText("Not imported")).toBeInTheDocument();
