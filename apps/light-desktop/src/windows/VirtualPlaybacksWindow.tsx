@@ -39,7 +39,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	return (
 		<section className="playback-pane" aria-label="Playbacks">
 			{registry?.[surfaceId] ? (
-				<PlaybackFaderBank surfaceId={surfaceId} />
+				<PlaybackFaderBank surfaceId={surfaceId} scrollable />
 			) : (
 				<>
 					<p>

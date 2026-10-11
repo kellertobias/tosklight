@@ -1948,7 +1948,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		const action = screen.getByRole("button", { name: "FLASH" });
 		expect(action).toHaveClass("single-button-playback-action");
-		expect(action).toHaveTextContent("1 · Front Wash");
+		expect(
+			action.querySelector(".single-button-playback-identity strong"),
+		).toHaveTextContent("1.1");
+		expect(action).toHaveTextContent("Front Wash");
 		expect(action).toHaveTextContent("FLASH");
 		expect(
 			container.querySelector(".faderless-playback-actions"),
@@ -2518,5 +2521,38 @@ describe("shared Playback grid Solo configuration", () => {
 			]),
 		);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
+});
+
+describe("scrollable software Playback panes", () => {
+	beforeEach(resetPlaybackFaderMocks);
+	it("keeps exact20×14 order with readable minimumgeometry", () => {
+		const rows = Array.from({ length: 14 }, (_, i) => ({
+			first_position: 401 + i * 20,
+			count: 20,
+			presentation: "buttons" as const,
+			button_count: 1,
+		}));
+		const { container } = render(
+			<PlaybackFaderBank scrollable playbackLayout={{ rows }} />,
+		);
+		expect(container.querySelector(".playback-bank-viewport")).not.toBeNull();
+		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
+			gridTemplateColumns: "repeat(20, minmax(112px, 1fr))",
+			minWidth: "2335px",
+			minHeight: "1353px",
+		});
+		expect(
+			[...container.querySelectorAll("[data-playback-slot]")].map((el) =>
+				Number(el.getAttribute("data-playback-slot")),
+			),
+		).toEqual(Array.from({ length: 280 }, (_, i) => 401 + i));
+	});
+	it("leaves the normal Main bank unscrolled", () => {
+		const { container } = render(<PlaybackFaderBank count={1} />);
+		expect(container.querySelector(".playback-bank-viewport")).toBeNull();
+		expect(container.querySelector(".playback-fader-bank")).not.toHaveStyle({
+			minWidth: "112px",
+		});
 	});
 });

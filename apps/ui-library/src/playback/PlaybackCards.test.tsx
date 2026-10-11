@@ -353,7 +353,10 @@ describe("playback card views", () => {
 		);
 		const flash = screen.getByRole("button", { name: "FLASH" });
 		expect(flash).toHaveClass("single-button-playback-action");
-		expect(flash).toHaveTextContent("3 · Bump");
+		expect(
+			flash.querySelector(".single-button-playback-identity strong"),
+		).toHaveTextContent("2.3");
+		expect(flash).toHaveTextContent("Bump");
 		expect(
 			screen.queryByRole("button", {
 				name: "Playback representation page 2 playback 3",

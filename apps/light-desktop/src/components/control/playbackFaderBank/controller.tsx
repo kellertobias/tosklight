@@ -38,6 +38,8 @@ import type { PlaybackConfigurationState } from "./types";
 
 export interface PlaybackFaderBankProps {
 	surfaceId?: string;
+	/** Preserve readable touch geometry by scrolling fixed pane rows. */
+	scrollable?: boolean;
 	pageNumber?: number;
 	firstSlot?: number;
 	count?: number;

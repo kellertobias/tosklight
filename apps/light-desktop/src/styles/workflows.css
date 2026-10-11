@@ -1874,11 +1874,47 @@
 	min-height: 0;
 	height: 100%;
 }
-.playback-surface-controls > .playback-fader-bank {
+.playback-surface-controls > .playback-bank-fixed,
+.playback-surface-controls > .playback-bank-viewport {
 	flex: 1;
 	min-height: 0;
 }
 .playback-solo-toolbar {
 	flex: 0 0 auto;
 	padding-bottom: 4px;
+}
+
+/* Pane rows retain their configured geometry rather than shrinking touch controls. */
+.playback-bank-viewport {
+	min-width: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.playback-bank-viewport > .playback-fader-bank,
+.playback-bank-fixed > .playback-fader-bank {
+	height: 100%;
+}
+.playback-bank-viewport .single-button-playback-action {
+	grid-row: 1 / -1;
+	min-height: 44px;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	padding: 6px;
+}
+.playback-bank-viewport .single-button-playback-identity {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	text-align: left;
+	font-size: 12px;
+}
+.playback-bank-viewport .single-button-playback-identity strong {
+	white-space: nowrap;
+}
+.playback-bank-viewport .single-button-playback-identity span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }

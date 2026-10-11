@@ -6,6 +6,7 @@ import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
 } from "./playbackFaderBank/controller";
+import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
 import { PlaybackGridSoloControls } from "./playbackFaderBank/PlaybackGridSoloControls";
 import { usePlaybackGridSolo } from "./playbackFaderBank/usePlaybackGridSolo";
@@ -18,6 +19,10 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		const interactionSurfaceId = useId();
 		usePlaybackBankConfiguration(controller, interactionSurfaceId);
 		const solo = usePlaybackGridSolo(controller);
+		const geometry =
+			props.scrollable && !controller.hardware
+				? scrollablePlaybackGeometry(controller.rowTracks, controller.columns)
+				: null;
 		// Once the grid has rendered for a ready topology, transient projection refetches
 		// (hardware connect, layout changes) must not tear the slot elements down — only a
 		// topology-scope reset returns the bank to its loading placeholder.
@@ -46,54 +51,65 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		return (
 			<section className="playback-surface-controls">
 				<PlaybackGridSoloControls solo={solo} />
-				{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 				<div
-					onPointerDownCapture={(event) => {
-						if (solo.selecting) solo.pointerDown(event);
-						else void controller.selectSurface();
-					}}
-					onPointerUpCapture={solo.block}
-					onPointerMoveCapture={solo.block}
-					onPointerCancelCapture={solo.block}
-					onWheelCapture={solo.block}
-					onDoubleClickCapture={solo.block}
-					onClickCapture={solo.block}
-					onKeyDownCapture={solo.keyDown}
-					onKeyUpCapture={solo.block}
-					data-playback-surface={controller.surfaceId}
-					data-command-surface={
-						controller.playbackDesk?.selected_surface_id ===
-						controller.surfaceId
+					className={
+						geometry ? "playback-bank-viewport" : "playback-bank-fixed"
 					}
-					className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"} ${controller.playbackDesk?.selected_surface_id === controller.surfaceId ? "command-surface" : ""}`}
-					onContextMenu={(event) => {
-						if (solo.block(event)) return;
-						event.preventDefault();
-						const card = (event.target as Element).closest<HTMLElement>(
-							"[data-playback-slot]",
-						);
-						const slot = Number(card?.dataset.playbackSlot);
-						if (!Number.isInteger(slot)) return;
-						routeControlSurfaceIntentWithFeedback({
-							type: "configure_playback",
-							source: "context_menu",
-							surfaceId: interactionSurfaceId,
-							slot,
-						});
-					}}
-					style={{
-						gridTemplateColumns: `repeat(${controller.columns}, minmax(0, 1fr))`,
-						gridTemplateRows: controller.rowTracks,
-					}}
 				>
-					{controller.slots.map((slotData) => (
-						<PlaybackSlot
-							controller={controller}
-							slotData={slotData}
-							soloClasses={solo.classes(slotData)}
-							key={`${slotData.slot}-${slotData.playback?.address.position ?? "empty"}`}
-						/>
-					))}
+					{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
+					<div
+						onPointerDownCapture={(event) => {
+							if (solo.selecting) solo.pointerDown(event);
+							else void controller.selectSurface();
+						}}
+						onPointerUpCapture={solo.block}
+						onPointerMoveCapture={solo.block}
+						onPointerCancelCapture={solo.block}
+						onWheelCapture={solo.block}
+						onDoubleClickCapture={solo.block}
+						onClickCapture={solo.block}
+						onKeyDownCapture={solo.keyDown}
+						onKeyUpCapture={solo.block}
+						data-playback-surface={controller.surfaceId}
+						data-command-surface={
+							controller.playbackDesk?.selected_surface_id ===
+							controller.surfaceId
+						}
+						className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"} ${controller.playbackDesk?.selected_surface_id === controller.surfaceId ? "command-surface" : ""}`}
+						onContextMenu={(event) => {
+							if (solo.block(event)) return;
+							event.preventDefault();
+							const card = (event.target as Element).closest<HTMLElement>(
+								"[data-playback-slot]",
+							);
+							const slot = Number(card?.dataset.playbackSlot);
+							if (!Number.isInteger(slot)) return;
+							routeControlSurfaceIntentWithFeedback({
+								type: "configure_playback",
+								source: "context_menu",
+								surfaceId: interactionSurfaceId,
+								slot,
+							});
+						}}
+						style={{
+							gridTemplateColumns:
+								geometry?.gridTemplateColumns ??
+								`repeat(${controller.columns}, minmax(0, 1fr))`,
+							gridTemplateRows:
+								geometry?.gridTemplateRows ?? controller.rowTracks,
+							minWidth: geometry?.minWidth,
+							minHeight: geometry?.minHeight,
+						}}
+					>
+						{controller.slots.map((slotData) => (
+							<PlaybackSlot
+								controller={controller}
+								slotData={slotData}
+								soloClasses={solo.classes(slotData)}
+								key={`${slotData.slot}-${slotData.playback?.address.position ?? "empty"}`}
+							/>
+						))}
+					</div>
 				</div>
 				{controller.configuration && (
 					<AssignedPlaybackConfigurationModal
@@ -114,6 +130,7 @@ function equalPlaybackFaderBankProps(
 ) {
 	return (
 		(left.surfaceId ?? "main") === (right.surfaceId ?? "main") &&
+		Boolean(left.scrollable) === Boolean(right.scrollable) &&
 		(left.pageNumber ?? null) === (right.pageNumber ?? null) &&
 		(left.firstSlot ?? 1) === (right.firstSlot ?? 1) &&
 		(left.count ?? null) === (right.count ?? null) &&

@@ -148,8 +148,11 @@ function SingleFaderlessPlaybackAction({
 			className={`${className ?? ""} single-button-playback-action`.trim()}
 			key={id}
 		>
-			<b>
-				{model.slot} · {model.name}
+			<b className="single-button-playback-identity">
+				<strong>
+					{model.page}.{model.slot}
+				</strong>
+				<span>{model.name}</span>
 			</b>
 			<span>{label}</span>
 		</Button>

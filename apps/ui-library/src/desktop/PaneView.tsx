@@ -76,7 +76,11 @@ export function PaneView({
 			data-grid-row={pane.y}
 			data-grid-width={pane.width}
 			data-grid-height={pane.height}
-			style={gridRectStyle(pane)}
+			style={
+				maximized
+					? { gridColumn: "1 / -1", gridRow: "1 / -1" }
+					: gridRectStyle(pane)
+			}
 			onPointerDown={(event) => event.currentTarget.focus()}
 		>
 			{showHeader && (
