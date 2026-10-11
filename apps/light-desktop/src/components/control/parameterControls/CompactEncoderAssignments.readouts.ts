@@ -80,13 +80,12 @@ export function compactEncoderValueText(text: string): string {
 	const points = text.split(" thru ");
 	if (points.length < 2) return text;
 	if (points.every((point) => point === points[0])) return points[0];
-	if (points.length <= 3 && text.length <= 28) return text;
 	const parsed = points.map((point) => point.match(/^(-?\d+(?:\.\d+)?)(.*)$/));
 	if (parsed.every((point) => point && point[2] === parsed[0]?.[2])) {
 		const numbers = parsed.map((point) => Number(point![1]));
 		const ascending = numbers.every((value, index) => index === 0 || value >= numbers[index - 1]);
 		const descending = numbers.every((value, index) => index === 0 || value <= numbers[index - 1]);
-		if (ascending || descending) return `${points[0]}…${points.at(-1)}`;
+		if (ascending || descending) return `${parsed[0]![1]}…${parsed.at(-1)![1]}${parsed[0]![2]}`;
 		return `${Math.min(...numbers)}…${Math.max(...numbers)}${parsed[0]![2]} · Mixed`;
 	}
 	return `Mixed · ${points[0]}…${points.at(-1)}`;
