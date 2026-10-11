@@ -204,6 +204,37 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PreloadStoreModal", () => {
+	it("shows one plain list with Remove actions and only the title close", () => {
+		render(<PreloadStoreModal />);
+		expect(screen.getAllByRole("list")).toHaveLength(1);
+		expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(4);
+		for (const button of screen.getAllByRole("button", { name: /^Remove / }))
+			expect(button).toHaveTextContent(/^Remove$/);
+		expect(screen.queryByText("Programmer changes")).not.toBeInTheDocument();
+		expect(screen.queryByText("Playback actions")).not.toBeInTheDocument();
+		expect(screen.queryByText(/Inspect or remove pending work/)).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Record pending…" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /^Close$/ })).not.toBeInTheDocument();
+	});
+	it("closes through the existing title close without changing pending authority", () => {
+		render(<PreloadStoreModal />);
+		fireEvent.click(screen.getByRole("button", { name: /^Close modal$/ }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "SET_MODAL", modal: "preloadStoreOpen", value: false,
+		});
+		expect(mocks.removePlayback).not.toHaveBeenCalled();
+		expect(mocks.releaseFixture).not.toHaveBeenCalled();
+		expect(mocks.releaseGroup).not.toHaveBeenCalled();
+	});
+	it("shows exactly No pending changes when both authorities are empty", () => {
+		mocks.values.fixtureValues = [];
+		mocks.values.groupValues = [];
+		mocks.queue.actions = [];
+		render(<PreloadStoreModal />);
+		expect(screen.getByText("No pending changes.")).toBeInTheDocument();
+		expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+	});
 	it("opens pending inspection without recording on the hold entry", () => {
 		render(<PreloadStoreModal />);
 		expect(screen.getByText("Pending Preload")).toBeInTheDocument();
@@ -352,73 +383,13 @@ describe("PreloadStoreModal", () => {
 		mocks.state.preloadStoreOpen = false;
 		render(<PreloadStoreModal />);
 
-		expect(mocks.views).toHaveBeenCalledWith("preset", false);
-		expect(mocks.views).toHaveBeenCalledWith("cue_list", false);
+		expect(screen.queryByText("Pending Preload")).not.toBeInTheDocument();
+		expect(mocks.views).not.toHaveBeenCalled();
 		expect(mocks.recordCue).not.toHaveBeenCalled();
 		expect(mocks.storePreload).not.toHaveBeenCalled();
 	});
 
-	it("records pending Preload to a Cue through one typed action", async () => {
-		render(<PreloadStoreModal />);
-		fireEvent.click(screen.getByRole("button", { name: "Record pending…" }));
-		fireEvent.click(screen.getByRole("button", { name: "Cue" }));
-		await screen.findByRole("button", { name: "Main" });
-		fireEvent.change(screen.getByLabelText("Cue number"), {
-			target: { value: "2.5" },
-		});
-		fireEvent.change(screen.getByLabelText("Name"), {
-			target: { value: "Look" },
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Record to Cue 2.5" }));
 
-		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
-		expect(mocks.recordCue).toHaveBeenCalledWith({
-			target: { kind: "cue_list", cueListId: CUE_LIST_ID },
-			operation: "overwrite",
-			cueNumber: "2.5",
-			timing: {},
-			cueOnly: false,
-			name: "Look",
-			capturePolicy: "pending_or_active_preload",
-			activationPolicy: "hold",
-		});
-		expect(mocks.storePreload).not.toHaveBeenCalled();
-		expect(mocks.dispatch).toHaveBeenCalledWith({
-			type: "SET_MODAL",
-			modal: "preloadStoreOpen",
-			value: false,
-		});
-	});
-
-	it("keeps the modal open when typed Cue recording fails", async () => {
-		mocks.recordCue.mockResolvedValue(null);
-		render(<PreloadStoreModal />);
-		fireEvent.click(screen.getByRole("button", { name: "Record pending…" }));
-		fireEvent.click(screen.getByRole("button", { name: "Cue" }));
-		await screen.findByRole("button", { name: "Main" });
-		fireEvent.click(screen.getByRole("button", { name: "Record to Cue 1" }));
-
-		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledOnce());
-		expect(mocks.dispatch).not.toHaveBeenCalled();
-	});
-
-	it("preserves the existing Preset Preload path and object revision", async () => {
-		render(<PreloadStoreModal />);
-		fireEvent.click(screen.getByRole("button", { name: "Record pending…" }));
-		fireEvent.click(screen.getByRole("button", { name: "Record to Preset 1" }));
-
-		await waitFor(() => expect(mocks.storePreload).toHaveBeenCalledOnce());
-		expect(mocks.storePreload).toHaveBeenCalledWith(
-			{
-				target: "preset",
-				target_id: "1",
-				name: undefined,
-				mode: "merge",
-			},
-			4,
-		);
-		expect(mocks.recordCue).not.toHaveBeenCalled();
-	});
 });
 
 it("shows Fixture and Group Release distinctly and removes original unsorted row index", async () => {

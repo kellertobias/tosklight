@@ -351,13 +351,12 @@ it.each([false, true])(
 				request: ProgrammerPreloadValuesActionRequest,
 			) => noChange(request.requestId),
 		);
-		const onRecord = vi.fn();
 		const capturedBefore = captureModeStore.getSnapshot().projection;
 		const rendered = render(
 			providers({
 				children: (
 					<>
-						<PendingPreloadInspection onClose={vi.fn()} onRecord={onRecord} />
+						<PendingPreloadInspection onClose={vi.fn()} />
 						<ProjectionProbe />
 						<ActionProbe />
 					</>
@@ -377,17 +376,13 @@ it.each([false, true])(
 		);
 		if (empty)
 			expect(
-				screen.getByText("No pending programmer changes."),
+				screen.getByText("No pending changes."),
 			).toBeInTheDocument();
 		else expect(screen.getByText(/intensity · 25%/)).toBeInTheDocument();
 		expect(screen.getByText("Inactive")).toBeInTheDocument();
 		expect(screen.getByText("No actions")).toBeInTheDocument();
 		expect(captureModeStore.getSnapshot().projection).toEqual(capturedBefore);
-		expect(
-			screen.getByRole("button", { name: "Record pending…" }),
-		).toBeEnabled();
-		fireEvent.click(screen.getByRole("button", { name: "Record pending…" }));
-		expect(onRecord).toHaveBeenCalledOnce();
+		expect(screen.queryByRole("button", { name: "Record pending…" })).not.toBeInTheDocument();
 		expect(applyAction).not.toHaveBeenCalled();
 		expect(transport.subscriptions).toHaveLength(1);
 		act(() =>
@@ -396,9 +391,8 @@ it.each([false, true])(
 		expect(
 			screen.getByText("Loading authoritative pending Preload…"),
 		).toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Record pending…" }),
-		).toBeDisabled();
+		for (const button of screen.queryAllByRole("button", { name: /^Remove / }))
+			expect(button).toBeDisabled();
 		act(() =>
 			preloadStore.installRepairSnapshot(
 				empty ? preloadSnapshot({ fixtureValues: [] }) : preloadSnapshot(),
@@ -407,9 +401,11 @@ it.each([false, true])(
 		expect(
 			screen.queryByText("Loading authoritative pending Preload…"),
 		).not.toBeInTheDocument();
-		expect(
-			screen.getByRole("button", { name: "Record pending…" }),
-		).toBeEnabled();
+		if (!empty) {
+			const buttons = screen.getAllByRole("button", { name: /^Remove / });
+			expect(buttons).toHaveLength(1);
+			expect(buttons[0]).toBeEnabled();
+		} else expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
 		expect(applyAction).not.toHaveBeenCalled();
 		rendered.unmount();
 		await waitFor(() =>
@@ -425,7 +421,7 @@ it("keeps inspection dormant when the provider composition is disabled", async (
 	render(
 		providers({
 			children: (
-				<PendingPreloadInspection onClose={vi.fn()} onRecord={vi.fn()} />
+				<PendingPreloadInspection onClose={vi.fn()} />
 			),
 			captureModeStore: readyCaptureStore(false),
 			preloadStore,
@@ -437,7 +433,6 @@ it("keeps inspection dormant when the provider composition is disabled", async (
 	await act(async () => Promise.resolve());
 	expect(loadSnapshot).not.toHaveBeenCalled();
 	expect(transport.subscriptions).toHaveLength(0);
-	expect(
-		screen.getByRole("button", { name: "Record pending…" }),
-	).toBeDisabled();
+	expect(screen.getByText("Loading authoritative pending Preload…")).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
 });

@@ -46,10 +46,8 @@ function pendingPlaybackLabel(
 
 export function PendingPreloadInspection({
 	onClose,
-	onRecord,
 }: {
 	onClose(): void;
-	onRecord(): void;
 }) {
 	const values = useProgrammerPreloadInspectionValuesView();
 	const queue = useProgrammerPreloadPlaybackQueueView();
@@ -102,38 +100,30 @@ export function PendingPreloadInspection({
 			>
 				<section className="modal-card preload-store-card">
 					<ModalTitleBar title="Pending Preload" onClose={onClose} />
-					<p>
-						Inspect or remove pending work. Live output stays unchanged until
-						Preload GO.
-					</p>
 					{!ready && (
 						<p role="status">Loading authoritative pending Preload…</p>
 					)}
 					<div style={{ maxHeight: "55vh", overflowY: "auto" }}>
-						<h3>Programmer changes</h3>
-						{ready && rows.length === 0 && (
-							<p>No pending programmer changes.</p>
-						)}
-						<ProgrammerRows
-							rows={rows}
-							disabled={!ready || busy || lifecycle.pending}
-							fixtureLabel={fixtureLabel}
-							groupLabel={groupLabel}
-							onRemove={(row) =>
-								void remove(() =>
-									removePendingRow(row, values!.revision, lifecycle.actions!),
-								)
-							}
-						/>
-						<h3>Playback actions</h3>
-						{ready && queue!.actions.length === 0 && (
-							<p>No pending playback actions.</p>
+						{ready && rows.length === 0 && queue!.actions.length === 0 && (
+							<p>No pending changes.</p>
 						)}
 						<ol>
+							<ProgrammerRows
+								rows={rows}
+								disabled={!ready || busy || lifecycle.pending}
+								fixtureLabel={fixtureLabel}
+								groupLabel={groupLabel}
+								onRemove={(row) =>
+									void remove(() =>
+										removePendingRow(row, values!.revision, lifecycle.actions!),
+									)
+								}
+							/>
 							{queue?.actions.map((entry, index) => (
 								<li key={`${queue.revision}:${index}`}>
 									<span>{pendingPlaybackLabel(entry, topology)}</span>{" "}
 									<Button
+										aria-label={`Remove playback action ${index + 1}`}
 										disabled={!ready || busy || lifecycle.pending}
 										onClick={() =>
 											void remove(() =>
@@ -144,7 +134,7 @@ export function PendingPreloadInspection({
 											)
 										}
 									>
-										Remove playback action {index + 1}
+										Remove
 									</Button>
 								</li>
 							))}
@@ -153,15 +143,6 @@ export function PendingPreloadInspection({
 					{(error || lifecycle.error) && (
 						<p role="alert">{error ?? lifecycle.error?.message}</p>
 					)}
-					<div className="modal-actions">
-						<Button onClick={onClose}>Close</Button>
-						<Button
-							disabled={!ready || busy || lifecycle.pending}
-							onClick={onRecord}
-						>
-							Record pending…
-						</Button>
-					</div>
 				</section>
 			</div>
 		</ModalPortal>
@@ -292,7 +273,7 @@ function ProgrammerRows({
 	onRemove(row: PendingRow): void;
 }) {
 	return (
-		<ol>
+		<>
 			{rows.map((row) => (
 				<li
 					key={`${row.kind}:${row.programmerOrder}:${"index" in row ? row.index : row.id}:${row.attribute}`}
@@ -309,12 +290,16 @@ function ProgrammerRows({
 								: pendingValueLabel(row.value)}
 						{"fade" in row ? timingLabel(row) : ""}
 					</span>{" "}
-					<Button disabled={disabled} onClick={() => onRemove(row)}>
-						Remove programmer change {row.programmerOrder}
+					<Button
+						aria-label={`Remove programmer change ${row.programmerOrder}`}
+						disabled={disabled}
+						onClick={() => onRemove(row)}
+					>
+						Remove
 					</Button>
 				</li>
 			))}
-		</ol>
+		</>
 	);
 }
 
