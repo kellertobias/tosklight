@@ -21,7 +21,110 @@ describe("command rejection classification", () => {
 			kind: "operator",
 		});
 		expect(commandErrorSummary(message)).toBe("No Selection");
-		expect(commandErrorFeedback(`invalid data: ${message}`).kind).toBe("operator");
+		expect(commandErrorFeedback(`invalid data: ${message}`).kind).toBe(
+			"operator",
+		);
+	});
+	it.each([
+		"level",
+		"selection",
+		"subset",
+		"playback address",
+		"playback selection",
+		"recording target",
+		"Cue transfer address",
+		"Cue deletion address",
+		"BPM value",
+		"Cue number",
+		"cue target",
+		"Link source",
+		"Link destination",
+	])("keeps the parser's trailing-token rejection brief: %s", (operand) => {
+		const message = `unexpected tokens after ${operand}`;
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const feedback of [message, `invalid data: ${message}`]) {
+			reportProgrammingCommandError(new Error(feedback));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail).toEqual({
+				message: feedback,
+				kind: "operator",
+			});
+			expect(commandErrorFeedback(feedback)).toEqual({
+				message: feedback,
+				kind: "operator",
+			});
+		}
+	});
+	it.each([
+		"expected a fixture number",
+		"AT requires a level",
+		"expected OFFSET or + before the subset offset",
+		"expected a fixture reference before +",
+		"expected + between fixture ranges",
+		"expected a fixture reference after +",
+		"expected SET DYNAMIC <pool number>",
+		"expected SET CUELIST <positive pool number>",
+		"expected SET GROUP <group-number>",
+		"SET requires an editable value or object",
+		"ASSIGN requires a source before AT",
+		"expected ASSIGN GROUP <number> AT PBK <address>",
+		"expected ASSIGN <CUELIST|DYNAMIC|MACRO|TIMECODE> <number> AT PBK <address>",
+		"DMX requires one universe.address",
+		"DIV requires a positive number",
+		"DYNAMIC requires a pool number",
+		"expected DYNAMIC <number>, OFF, SIZE/SPEED/PHASE AT, or PHASE helpers",
+		"DOT requires another cue part",
+		"LINK requires AT CUE <destination>",
+		"LINK requires CUE or SET playback CUE source",
+		"AT requires a BPM value",
+		"expected PBK playback address",
+		"expected SPD GRP <1-5> AT <BPM | +/- BPM | SPD GRP <1-5>>",
+		"expected CUE, CUELIST, or PBK recording target",
+		"expected [SET] MACRO|TIMECODE <positive pool number> [+|-], or SET CUELIST <positive pool number>",
+		"expected CUELIST <number> AT SPD GRP <1-5>",
+		"expected DYNAMIC <number> AT SPD GRP <1-5>",
+	])("classifies confirmed input grammar rejection: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const feedback of [message, `invalid data: ${message}`]) {
+			reportProgrammingCommandError(new Error(feedback));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail).toEqual({
+				message: feedback,
+				kind: "operator",
+			});
+			expect(commandErrorFeedback(feedback).kind).toBe("operator");
+		}
+		for (const status of [401, 403, 500]) {
+			reportProgrammingCommandError(new ApiRequestError(message, status));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
+	});
+	it("does not disguise unexpected faults as parser feedback", () => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const message of [
+			"unexpected runtime failure",
+			"expected a fixture number: database unavailable",
+			"AT requires a level: authentication failed",
+			"expected server response",
+			"expected a fixture number from runtime snapshot",
+			"unexpected tokens after server response",
+			"unexpected tokens after level: database unavailable",
+			"unexpected tokens after level\nnetwork failure",
+		]) {
+			expect(commandErrorFeedback(message).kind).toBe("unexpected");
+			reportProgrammingCommandError(new Error(message));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
+		for (const status of [401, 403, 500]) {
+			reportProgrammingCommandError(
+				new ApiRequestError("unexpected tokens after level", status),
+			);
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
 	});
 	it("classifies status-less websocket preset rejections without hiding unknown failures", () => {
 		const dispatch = vi.spyOn(window, "dispatchEvent");
@@ -47,7 +150,9 @@ describe("command rejection classification", () => {
 	});
 	it("keeps typed operator rejections brief and unexpected failures diagnostic", () => {
 		const dispatch = vi.spyOn(window, "dispatchEvent");
-		reportProgrammingCommandError(new ApiRequestError("Preset not Recorded", 404));
+		reportProgrammingCommandError(
+			new ApiRequestError("Preset not Recorded", 404),
+		);
 		expect((dispatch.mock.calls[0][0] as CustomEvent).detail).toEqual({
 			message: "Preset not Recorded",
 			kind: "operator",
@@ -72,19 +177,23 @@ describe("command rejection classification", () => {
 			"Invalid fixture number",
 			"Invalid command syntax",
 			"invalid data: Invalid fixture number",
-		]) expect(commandErrorFeedback(message).kind).toBe("operator");
+		])
+			expect(commandErrorFeedback(message).kind).toBe("operator");
 		for (const message of [
 			"Preset recording service task failed: database unavailable",
 			"unrecognised runtime failure",
 			"The command line could not be synchronized",
 			"Invalid fixture runtime snapshot",
-		]) expect(commandErrorFeedback(message).kind).toBe("unexpected");
+		])
+			expect(commandErrorFeedback(message).kind).toBe("unexpected");
 	});
 	it("uses concise known labels while preserving the full history message", () => {
-		expect(commandErrorSummary("invalid data: preset 99999 does not exist"))
-			.toBe("Preset not Recorded");
-		expect(commandErrorSummary("The command requires a non-empty selection"))
-			.toBe("No Selection");
+		expect(
+			commandErrorSummary("invalid data: preset 99999 does not exist"),
+		).toBe("Preset not Recorded");
+		expect(
+			commandErrorSummary("The command requires a non-empty selection"),
+		).toBe("No Selection");
 		const message = "preset 99999 does not exist";
 		expect(commandErrorFeedback(message).message).toBe(message);
 	});
