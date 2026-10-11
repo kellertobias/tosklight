@@ -166,7 +166,7 @@ export class BrowserGroups {
 		number: number,
 		operation: GroupRecordOperation,
 		expectedObjectRevision: number,
-		requestId = crypto.randomUUID(),
+		requestId: string = crypto.randomUUID(),
 	): Promise<GroupRecordingOutcome> {
 		const session = this.session();
 		return new HttpGroupRecordingTransport({

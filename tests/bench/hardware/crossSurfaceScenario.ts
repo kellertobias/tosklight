@@ -61,13 +61,16 @@ export class BrowserCrossSurface {
 					[true],
 				);
 			await this.bench.waitForGroupProgrammer("1", 0.5, session.token);
-			const completed = (
-				await this.api.request<Array<{ kind: string }>>(
-					"GET",
-					`/api/v2/audit?after=${auditBefore}`,
-				)
-			).filter((event) => event.kind === "command_applied");
-			expect(completed).toHaveLength(1);
+			// The value projection can arrive before its command audit publication.
+			await expect
+				.poll(async () => {
+					const events = await this.api.request<Array<{ kind: string }>>(
+						"GET",
+						`/api/v2/audit?after=${auditBefore}`,
+					);
+					return events.filter((event) => event.kind === "command_applied").length;
+				})
+				.toBe(1);
 			await this.expectGroupOneAtFiftyOutput(artnetMark, sacnMark);
 		} finally {
 			await hardware
@@ -642,7 +645,8 @@ export class BrowserCrossSurface {
 		await expect(groupCard).toHaveClass(/selected/);
 		await expect(groupCard).toHaveAttribute("data-group-selection", "group");
 		await expect(groupCard).toHaveAttribute("aria-pressed", "true");
-		await expect(groupCard.locator("small")).toHaveText("5/5");
+		await expect(groupCard.locator("small")).toHaveText("5");
+		await expect(groupCard).toHaveAttribute("data-group-membership", "full");
 		await setProgrammerGroupValue(this.api, {
 			surface: "api",
 			showId: this.showId(),
@@ -670,7 +674,8 @@ export class BrowserCrossSurface {
 				.locator(".group-pool-window .group-card")
 				.filter({ hasText: "Front Dimmers" })
 				.locator("small"),
-		).toHaveText("5/5");
+		).toHaveText("5");
+		await expect(groupCard).toHaveAttribute("data-group-membership", "full");
 		for (const number of [1, 5])
 			await expect(
 				this.fixtureRow(number).locator(".source-value").first(),

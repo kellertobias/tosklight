@@ -1,7 +1,7 @@
 // @bench-semantic-world
 
 import { expect } from "@playwright/test";
-import { fixtureRange } from "./bench/command-selection/selectionContract";
+import { fixtureRange } from "./bench/output/fixtureDmxContract";
 import { scenario } from "./bench/core/scenario";
 import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { fixture } from "./bench/output/fixtureDmx";
