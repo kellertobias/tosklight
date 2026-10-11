@@ -20,7 +20,7 @@ import { HardwareLightingSettings } from "./HardwareLightingSettings";
 import { PlaybackLayoutModal } from "./PlaybackLayoutModal";
 import {
 	createScreenConfiguration,
-	defaultScreenSurface,
+	saveAuthoredScreen,
 } from "./screenConfiguration";
 import { KnownClientsModal } from "./screens/DefaultScreenPicker";
 import {
@@ -196,12 +196,7 @@ function useAddScreenAction(
 			desks: state.desks,
 			activeDeskId: state.activeDeskId,
 		});
-		if (!server.surfaces) return;
-		await server.updatePlaybackSurface(
-			screen.surface_id,
-			defaultScreenSurface(screen.name),
-		);
-		await server.saveScreen(screen);
+		await saveAuthoredScreen(screen, server);
 	};
 	const createRef = useRef(create);
 	createRef.current = create;

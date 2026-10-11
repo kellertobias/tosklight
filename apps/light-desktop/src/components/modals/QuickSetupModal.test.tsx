@@ -8,6 +8,10 @@ vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
 
 const mocks = vi.hoisted(() => ({
   lifecycleAvailable: true,
+  desktopAvailable: false,
+  updatePlaybackSurface: vi.fn(),
+  screensSnapshot: null as any,
+  surfaces: { playback_surfaces: {} } as any,
   lockDesk: vi.fn(),
   dispatch: vi.fn(),
   fileContent: vi.fn(),
@@ -98,9 +102,15 @@ vi.mock("../../features/selectiveImport/SelectiveImportContext", () => ({
 		apply: mocks.server.applySelectiveImport,
 	}),
 }));
+vi.mock("../../platform/desktop", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useDesktopBridge: () => ({ available: mocks.desktopAvailable }),
+}));
 vi.mock("../../features/screens/ScreensContext", () => ({
 	useScreens: () => ({
-		screens: null,
+		screens: mocks.screensSnapshot,
+		surfaces: mocks.surfaces,
+		updatePlaybackSurface: mocks.updatePlaybackSurface,
 		saveScreen: mocks.server.saveScreen,
 	}),
 }));
@@ -119,6 +129,11 @@ vi.mock("../../state/AppContext", () => ({
 
 beforeEach(() => {
     mocks.lifecycleAvailable = true;
+    mocks.desktopAvailable = false;
+    mocks.screensSnapshot = null;
+    mocks.surfaces = { playback_surfaces: {} };
+    mocks.updatePlaybackSurface.mockReset().mockResolvedValue(undefined);
+    mocks.server.saveScreen.mockReset().mockResolvedValue(undefined);
     mocks.server.bootstrap.active_show.id = "copy";
     mocks.server.bootstrap.active_show.name = "Tour-rev-3-2026-07-17";
     mocks.server.bootstrap.active_show.revision_copy = {
@@ -154,6 +169,86 @@ afterEach(() => {
 });
 
 describe("QuickSetupModal show workflows", () => {
+	it("registers the new Show-menu Playback surface before opening its screen", async () => {
+		mocks.desktopAvailable = true;
+		let registered!: () => void;
+		mocks.updatePlaybackSurface.mockImplementation(
+			() =>
+				new Promise<void>((resolve) => {
+					registered = resolve;
+				}),
+		);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: "Add Screen" }));
+		expect(mocks.server.saveScreen).not.toHaveBeenCalled();
+		expect(screen.getByRole("button", { name: "Add Screen" })).toBeDisabled();
+		fireEvent.click(screen.getByRole("button", { name: "Add Screen" }));
+		await waitFor(() =>
+			expect(mocks.updatePlaybackSurface).toHaveBeenCalledOnce(),
+		);
+		const [surfaceId, config] = mocks.updatePlaybackSurface.mock.calls[0];
+		expect(surfaceId).toMatch(/^screen:/);
+		expect(config.page_source).toEqual({ type: "follow", surface_id: "main" });
+		expect(config.layout.rows).toHaveLength(6);
+		await act(async () => registered());
+		await waitFor(() =>
+			expect(mocks.server.saveScreen).toHaveBeenCalledWith(
+				expect.objectContaining({ surface_id: surfaceId, desired_open: true }),
+				{ throwOnError: true },
+			),
+		);
+		expect(mocks.dispatch).toHaveBeenCalledWith(
+			expect.objectContaining({
+				type: "SET_MODAL",
+				modal: "setupOpen",
+				value: false,
+			}),
+		);
+	});
+	it("keeps Show open and does not save a screen when surface registration fails", async () => {
+		mocks.desktopAvailable = true;
+		mocks.updatePlaybackSurface.mockRejectedValue(
+			new Error("Surface could not be saved"),
+		);
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: "Add Screen" }));
+		await waitFor(() =>
+			expect(screen.getByRole("alert")).toHaveTextContent(
+				"Surface could not be saved",
+			),
+		);
+		expect(mocks.server.saveScreen).not.toHaveBeenCalled();
+		expect(mocks.dispatch).not.toHaveBeenCalledWith(
+			expect.objectContaining({ modal: "setupOpen", value: false }),
+		);
+	});
+
+  it("retries a failed screen save with the same draft and registered surface", async () => {
+    mocks.desktopAvailable = true;
+    mocks.server.saveScreen.mockRejectedValueOnce(new Error("Screen save refused"));
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", { name: "Add Screen" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Screen save refused"));
+    const draft = mocks.server.saveScreen.mock.calls[0][0];
+    expect(mocks.updatePlaybackSurface).toHaveBeenCalledOnce();
+    expect(mocks.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ modal: "setupOpen", value: false }));
+    fireEvent.click(screen.getByRole("button", { name: "Add Screen" }));
+    await waitFor(() => expect(mocks.server.saveScreen).toHaveBeenCalledTimes(2));
+    expect(mocks.server.saveScreen.mock.calls[1][0]).toBe(draft);
+    expect(mocks.updatePlaybackSurface).toHaveBeenCalledOnce();
+    await waitFor(() => expect(mocks.dispatch).toHaveBeenCalledWith(expect.objectContaining({ modal: "setupOpen", value: false })));
+  });
+  it("reopens a configured screen without rewriting its saved surface", async () => {
+    mocks.desktopAvailable = true;
+    const configured = { id: "existing", name: "Stage manager", surface_id: "screen:existing", desired_open: false };
+    mocks.screensSnapshot = { screens: [configured] };
+    mocks.surfaces = { playback_surfaces: { "screen:existing": { name: "Custom", page_source: { type: "pinned", page: 9 }, layout: { rows: [] } } } };
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", { name: "Add Screen" }));
+    await waitFor(() => expect(mocks.server.saveScreen).toHaveBeenCalledWith({ ...configured, desired_open: true }, { throwOnError: true }));
+    expect(mocks.updatePlaybackSurface).not.toHaveBeenCalled();
+  });
+
   it("shows the current show, history, connection state, patch size, address, and build", () => {
     render(<QuickSetupModal />);
     const menu = screen.getByRole("dialog", { name: "Show" });

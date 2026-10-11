@@ -14,7 +14,10 @@ import type {
 
 export interface ScreenCapabilities {
 	screens: ScreenSnapshot | null;
-	saveScreen: (screen: ScreenConfiguration) => Promise<void>;
+	saveScreen: (
+		screen: ScreenConfiguration,
+		options?: { throwOnError?: boolean },
+	) => Promise<void>;
 	deleteScreen: (id: string) => Promise<void>;
 	surfaces: PlaybackSurfacesSnapshot | null;
 	setSurfacePage: (surfaceId: string, page: number) => Promise<void>;

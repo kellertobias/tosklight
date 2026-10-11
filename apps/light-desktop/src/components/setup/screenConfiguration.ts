@@ -4,6 +4,7 @@ import type {
 	PlaybackSurfaceLayout,
 	ScreenConfiguration,
 } from "../../api/types";
+import type { ScreenCapabilities } from "../../features/screens/types";
 import type { DeskModel } from "../../types";
 
 interface ScreenLayout {
@@ -122,4 +123,28 @@ export function createScreenConfiguration(
 		bounds: null,
 		fullscreen: false,
 	};
+}
+
+/** Register presentation before persisting a screen that references it. */
+export async function saveAuthoredScreen(
+	screen: ScreenConfiguration,
+	capabilities: Pick<
+		ScreenCapabilities,
+		"surfaces" | "updatePlaybackSurface" | "saveScreen"
+	>,
+	registeredSurfaces: Set<string> = new Set(),
+) {
+	if (!capabilities.surfaces)
+		throw new Error("Playback surfaces are not ready. Try Add Screen again.");
+	if (
+		!capabilities.surfaces.playback_surfaces[screen.surface_id] &&
+		!registeredSurfaces.has(screen.surface_id)
+	) {
+		await capabilities.updatePlaybackSurface(
+			screen.surface_id,
+			defaultScreenSurface(screen.name),
+		);
+		registeredSurfaces.add(screen.surface_id);
+	}
+	await capabilities.saveScreen(screen, { throwOnError: true });
 }

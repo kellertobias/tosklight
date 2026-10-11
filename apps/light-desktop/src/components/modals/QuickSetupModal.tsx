@@ -14,14 +14,15 @@ import {
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
 import { useScreens } from "../../features/screens/ScreensContext";
-import { Button, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { Button, ErrorAlert, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import type {
 	MvrImportPreview,
+	ScreenConfiguration,
 	ShowEntry,
 	ShowRevision,
 } from "../../api/types";
 import { useShowIndicator } from "../shell/showIndicator";
-import { screenForAddAction } from "../setup/screenConfiguration";
+import { saveAuthoredScreen, screenForAddAction } from "../setup/screenConfiguration";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useSelectiveImport } from "../../features/selectiveImport/SelectiveImportContext";
 import { QuickSetupDialogs } from "./QuickSetupDialogs";
@@ -486,49 +487,77 @@ function QuickSetupTitleBar({ model }: { model: QuickSetupModel }) {
 	const { dispatch, state } = model.app;
 	const { desktop } = model.authorities;
 	const screens = useScreens();
+	const draft = useRef<ScreenConfiguration | null>(null);
+	const registeredSurfaces = useRef(new Set<string>());
+	const inFlight = useRef(false);
+	const [adding, setAdding] = useState(false);
+	const [addError, setAddError] = useState<string | null>(null);
 	const addScreen = async () => {
-		await screens.saveScreen(
-			screenForAddAction(screens.screens?.screens ?? [], {
-				desks: state.desks,
-				activeDeskId: state.activeDeskId,
-			}),
-		);
-		close();
+		if (inFlight.current) return;
+		inFlight.current = true;
+		setAdding(true);
+		setAddError(null);
+		draft.current ??= screenForAddAction(screens.screens?.screens ?? [], {
+			desks: state.desks,
+			activeDeskId: state.activeDeskId,
+		});
+		try {
+			await saveAuthoredScreen(
+				draft.current,
+				screens,
+				registeredSurfaces.current,
+			);
+			draft.current = null;
+			close();
+		} catch (reason) {
+			setAddError(formatErrorDetails(reason));
+		} finally {
+			inFlight.current = false;
+			setAdding(false);
+		}
 	};
 	return (
-		<ModalTitleBar
-			title="Show"
-			closeLabel="Close Show"
-			onClose={close}
-			groups={[
-				{
-					id: "show",
-					actions: [
-						...(desktop.available
-							? [
-									{
-										id: "add-screen",
-										label: "Add Screen",
-										icon: <span aria-hidden="true">▣</span>,
-										onPress: () => void addScreen(),
-									},
-								]
-							: []),
-						{
-							id: "desk-status",
-							label: "Desk Status",
-							icon: <span aria-hidden="true">⌁</span>,
-							onPress: () =>
-								dispatch({
-									type: "SET_MODAL",
-									modal: "debugOpen",
-									value: true,
-								}),
-						},
-					],
-				},
-			]}
-		/>
+		<>
+			<ModalTitleBar
+				title="Show"
+				closeLabel="Close Show"
+				onClose={close}
+				groups={[
+					{
+						id: "show",
+						actions: [
+							...(desktop.available
+								? [
+										{
+											id: "add-screen",
+											disabled: adding,
+											label: "Add Screen",
+											icon: <span aria-hidden="true">▣</span>,
+											onPress: () => void addScreen(),
+										},
+									]
+								: []),
+							{
+								id: "desk-status",
+								label: "Desk Status",
+								icon: <span aria-hidden="true">⌁</span>,
+								onPress: () =>
+									dispatch({
+										type: "SET_MODAL",
+										modal: "debugOpen",
+										value: true,
+									}),
+							},
+						],
+					},
+				]}
+			/>
+			{addError && (
+				<ErrorAlert role="alert">
+					Could not add this screen: {addError}. Press Add Screen to retry.
+				</ErrorAlert>
+			)}
+		</>
 	);
 }
 

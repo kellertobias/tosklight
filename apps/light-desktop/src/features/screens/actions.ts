@@ -14,13 +14,14 @@ export function createScreenActions(
 ): Omit<ScreenCapabilities, "screens" | "surfaces"> {
 	const { api, setError, setScreens } = model;
 	return {
-		saveScreen: async (screen) => {
+		saveScreen: async (screen, options) => {
 			try {
 				await api.playback.putScreen(screen);
 				setScreens(await api.playback.screens());
 				setError(null);
 			} catch (reason) {
 				setError(formatErrorDetails(reason));
+				if (options?.throwOnError) throw reason;
 			}
 		},
 		deleteScreen: async (id) => {
