@@ -109,7 +109,8 @@ const publicComponentStoryCoverage: Record<string, string> = {
 	PoolWindow: "tables-and-grids-pools-generic-pool-window--sparse",
 };
 
-test.describe.configure({ mode: "serial" });
+// Each contract owns a fresh page; keep sequential execution while reporting independent failures.
+test.describe.configure({ mode: "default" });
 
 async function poolGeometry(
 	page: import("@playwright/test").Page,
@@ -2949,7 +2950,7 @@ test("production pool cards use dashed empty cards and semantic workflow colors"
 	await expect(page.getByRole("button", { name: /Disabled/u })).toHaveCount(0);
 });
 
-test("pool names wrap inside the top-left region and both filled treatments are available", async ({
+test("pool names wrap naturally inside the tile and both filled treatments are available", async ({
 	page,
 }) => {
 	await page.goto(
@@ -2959,21 +2960,43 @@ test("pool names wrap inside the top-left region and both filled treatments are 
 		"Front Wash With A Deliberately Long Operator Name",
 	);
 	await expect(longName).toBeVisible();
+	await expect(longName).toHaveText(
+		"Front Wash With A Deliberately Long Operator Name",
+	);
 	const wrapping = await longName.evaluate((element) => {
 		const style = getComputedStyle(element);
 		const card = element.closest(".pool-card")?.getBoundingClientRect();
 		const name = element.getBoundingClientRect();
+		const range = document.createRange();
+		range.selectNodeContents(element);
+		const textRects = Array.from(range.getClientRects()).filter(
+			(rect) => rect.width > 0 && rect.height > 0,
+		);
 		return {
 			hyphens: style.hyphens,
 			overflowWrap: style.overflowWrap,
+			lineCount: new Set(textRects.map((rect) => Math.round(rect.top))).size,
+			textInside:
+				Boolean(card) &&
+				textRects.every(
+					(rect) =>
+						rect.left >= (card?.left ?? 0) &&
+						rect.right <= (card?.right ?? 0) &&
+						rect.top >= (card?.top ?? 0) &&
+						rect.bottom <= (card?.bottom ?? 0),
+				),
 			inside:
 				Boolean(card) &&
 				name.left >= (card?.left ?? 0) &&
 				name.right <= (card?.right ?? 0),
 		};
 	});
-	expect(wrapping.hyphens).toBe("auto");
-	expect(wrapping.overflowWrap).toBe("break-word");
+	// Full-tile titles wrap at words, without hyphenation or an inner scrollbar.
+	// See Programming Windows help and the deliberate d1a4ae0ec/7bc6aa906 layout changes.
+	expect(wrapping.hyphens).toBe("none");
+	expect(wrapping.overflowWrap).toBe("normal");
+	expect(wrapping.lineCount).toBeGreaterThan(1);
+	expect(wrapping.textInside).toBe(true);
 	expect(wrapping.inside).toBe(true);
 
 	const tintedBackground = await page
