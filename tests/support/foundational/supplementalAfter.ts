@@ -1,3 +1,4 @@
+import { configurePlaybackSlot } from "../playbackTopology";
 import type { ApiDriver } from "../../bench/core/api";
 import { expect } from "../../bench/core/fixtures";
 import { goCueListPlayback } from "../../bench/playbacks/playbackRuntimeAction";
@@ -72,10 +73,12 @@ async function createCuePlayback(api: ApiDriver, number: number) {
 			},
 		],
 	});
-	await putObject(api, "playback", String(number), {
-		number,
+	await configurePlaybackSlot(api, 1, number, {
 		name: `Spread ${number}`,
 		target: { type: "cue_list", cue_list_id: cueListId },
+		buttons: ["go_minus", "go", "flash"],
+		button_count: 3, fader: "master", has_fader: true,
+		go_activates: true, auto_off: true, xfade_millis: 0,
 	});
 	return cueListId;
 }

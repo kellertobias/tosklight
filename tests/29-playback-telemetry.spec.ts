@@ -1,3 +1,4 @@
+import { configurePlaybackSlot } from "./support/playbackTopology";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
 import { fixtureIdsByNumber, loadCanonicalCopy, putObject } from "./support/catalog";
@@ -39,7 +40,7 @@ test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without p
       () =>
         page.evaluate(
           () =>
-            window.__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot().warmup?.status ??
+            (window as Window & { __TOSKLIGHT_FRONTEND_PERFORMANCE__?: { snapshot(): { warmup?: { status?: string } } } }).__TOSKLIGHT_FRONTEND_PERFORMANCE__?.snapshot().warmup?.status ??
             null,
         ),
       { timeout: 30_000 },
@@ -63,7 +64,7 @@ test("TELEMETRY-001 @ui › playback fades stream ~10 Hz delta samples without p
   const progressFor = (playback: number) =>
     telemetryTicks
       .flatMap((tick) => tick.samples)
-      .filter((sample) => sample.playback_number === playback)
+      .filter((sample) => sample.address?.page === 1 && sample.address.position === playback)
       .map((sample) => sample.fade_progress as number);
   for (const playback of [1, 2]) {
     const progress = progressFor(playback);
@@ -134,8 +135,8 @@ async function installFadingCuelist(
       },
     ],
   });
-  await putObject(api, "playback", String(playback), {
-    number: playback,
+  await configurePlaybackSlot(api, 1, playback, {
+    button_count: 3, has_fader: true,
     name: `${name} Playback`,
     target: { type: "cue_list", cue_list_id: id },
     buttons: ["go_minus", "go", "flash"],

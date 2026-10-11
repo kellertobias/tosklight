@@ -32,15 +32,12 @@ export function registerMatterRestartTest(): void {
 			matter_enabled: true,
 		});
 		const assignment = await assignMatterRestartPlayback(api);
-		const endpointId = 1 + (assignment.page - 1) * 127 + (assignment.slot - 1);
-		await expect
-			.poll(async () => {
-				const status = await api.request<any>("GET", "/api/v2/matter/status");
-				return status.lights.find(
-					(light: any) => light.endpoint_id === endpointId,
-				)?.playback_number;
-			})
-			.toBe(assignment.playbackNumber);
+		await expect.poll(async () => {
+			const status = await api.request<any>("GET", "/api/v2/matter/status");
+			return status.lights.some((light: any) => light.address?.page === assignment.page && light.address.position === assignment.position);
+		}).toBe(true);
+		const advertised = await api.request<any>("GET", "/api/v2/matter/status");
+		const endpointId = advertised.lights.find((light: any) => light.address?.page === assignment.page && light.address.position === assignment.position).endpoint_id;
 
 		const showB = await loadCanonicalCopy(api, bench, "matter-002-b");
 		expect(showB.id).not.toBe(showA.id);
@@ -65,9 +62,9 @@ export function registerMatterRestartTest(): void {
 				const status = await api.request<any>("GET", "/api/v2/matter/status");
 				return status.lights.find(
 					(light: any) => light.endpoint_id === endpointId,
-				)?.playback_number;
+				)?.address;
 			})
-			.toBe(assignment.playbackNumber);
+			.toEqual(assignment);
 
 		await bench.stopServerGracefully(api.session!.token);
 		await bench.startServer();
@@ -85,9 +82,9 @@ export function registerMatterRestartTest(): void {
 				const status = await api.request<any>("GET", "/api/v2/matter/status");
 				return status.lights.find(
 					(light: any) => light.endpoint_id === endpointId,
-				)?.playback_number;
+				)?.address;
 			})
-			.toBe(assignment.playbackNumber);
+			.toEqual(assignment);
 
 			const enabled = await api.request<any>(
 				"GET",

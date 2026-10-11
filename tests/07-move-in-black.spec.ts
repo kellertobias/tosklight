@@ -1,3 +1,5 @@
+import type { ApiDriver } from "./bench/core/api";
+import { configurePlaybackSlot } from "./support/playbackTopology";
 import { expect, test } from "./bench/core/fixtures";
 import { pairedScenario } from "./bench/core/pairedScenario";
 import { activeShowId, loadCanonicalCopy, object, objects, putObject } from "./support/catalog";
@@ -275,19 +277,12 @@ async function installMibCuelist(api: any, enabledFixture: string, disabledFixtu
       cue(3, fixtures.flatMap((fixture) => [set(fixture, "intensity", 1), set(fixture, "pan", 0.8, 3_000)])),
     ],
   });
-  await putObject(api, "playback", "1", {
-    number: 1, name: "MIB", target: { type: "cue_list", cue_list_id: cueListId },
+  await configurePlaybackSlot(api, 1, 1, {
+    button_count: 3, has_fader: true, name: "MIB", target: { type: "cue_list", cue_list_id: cueListId },
     buttons: ["go_minus", "go", "flash"], fader: "master", go_activates: true,
     auto_off: true, xfade_millis: 0, color: "#20c997", flash_release: "release_all",
     protect_from_swap: false,
   });
-  const page = (await objects<any>(api, "playback_page")).find((entry) => entry.id === "1");
-  await putObject(api, "playback_page", "1", {
-    ...(page?.body ?? {}),
-    number: 1,
-    name: page?.body.name ?? "Main",
-    slots: { ...(page?.body.slots ?? {}), "1": 1 },
-  }, page?.revision ?? 0);
   return cueListId;
 }
 
@@ -324,8 +319,8 @@ async function installIntensityBlocker(api: any, fixtureId: string): Promise<str
       trigger: { type: "manual" },
     }],
   });
-  await putObject(api, "playback", "2", {
-    number: 2,
+  await configurePlaybackSlot(api, 1, 2, {
+    button_count: 3, has_fader: true,
     name: "MIB blocker",
     target: { type: "cue_list", cue_list_id: cueListId },
     buttons: ["go_minus", "go", "flash"],
@@ -400,12 +395,12 @@ async function runExactTiming(
   expect(universe[7]).toBe(128);
 }
 
-async function activeCueNumber(api: any, cueListId: string): Promise<number | null> {
+async function activeCueNumber(api: ApiDriver, cueListId: string): Promise<number | null> {
   const snapshot = await api.request<any>("GET", "/api/v2/playback-overview");
   return snapshot.active.find((entry: any) => entry.cue_list_id === cueListId)?.current_cue_number ?? null;
 }
 
-async function mibDiagnostics(api: any): Promise<any[]> {
+async function mibDiagnostics(api: ApiDriver): Promise<any[]> {
   return (await api.request<any>("GET", "/api/v2/diagnostics")).move_in_black;
 }
 

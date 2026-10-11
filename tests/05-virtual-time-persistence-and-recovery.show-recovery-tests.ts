@@ -1,3 +1,5 @@
+import { assertLegacyPlaybackRefusalAndRecovery } from "./support/playbackCompatibility";
+import { configurePlaybackSlot } from "./support/playbackTopology";
 import fs from "node:fs/promises";
 import { expect, test } from "./bench/core/fixtures";
 import { pairedScenario } from "./bench/core/pairedScenario";
@@ -166,8 +168,7 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 				`show-003-${corruption}`,
 			);
 			if (corruption === "referentially-invalid") {
-				await putObject(api, "playback", "999", {
-					number: 999,
+				await configurePlaybackSlot(api, 1, 999, {
 					name: "Recovery reference",
 					target: { type: "group", group_id: "1" },
 					buttons: ["select", "select_dereferenced", "flash"],
@@ -198,7 +199,7 @@ export function registerCorruptActiveShowRecoveryTests(): void {
 			} else {
 				await runSql(
 					entry.path,
-					"UPDATE objects SET body_json=json_set(body_json, '$.target', json('{\"type\":\"group\",\"group_id\":\"missing-group\"}')) WHERE kind='playback' AND id='999'",
+					"UPDATE objects SET body_json=json_set(body_json, '$.assignments.999.target', json('{\"type\":\"group\",\"group_id\":\"missing-group\"}')) WHERE kind='playback_page' AND id='1'",
 				);
 			}
 			const corruptHash = await fileHash(entry.path);
@@ -254,13 +255,26 @@ export function registerLegacyMigrationTests(): void {
 	for (const migration of SHOW_004_CASES) {
 		// D3 (derive-only): the virtual-dimmer intensity parameter's metadata/capabilities are
 		// re-derived at load, never written back — this case must leave the show file
-		// byte-identical. Every other case normalizes the legacy fields with one write.
+		// byte-identical. Unaffected contracts normalize once; retired Playback shapes are refused.
 		const byteStable = migration === "virtual-dimmer-metadata";
-		test(`SHOW-004 @api @restart › ${migration} legacy fields ${byteStable ? "self-heal by re-derivation and stay byte-stable" : "normalize once and stay byte/revision stable"}`, async ({
+		test(`SHOW-004 @api @restart › ${migration} legacy fields ${migration === "playback-defaults" ? "are refused without changing originals and recover from a canonical copy" : byteStable ? "self-heal by re-derivation and stay byte-stable" : "normalize once and stay byte/revision stable"}`, async ({
 			api,
 			bench,
 		}) => {
 			const prepared = await prepareMigrationCase(api, bench, migration);
+			if (migration === "playback-defaults") {
+				const before = await object<any>(api, "playback_page", "1");
+				await assertLegacyPlaybackRefusalAndRecovery(
+					api,
+					bench,
+					prepared.entry.id,
+					(file) => stageLegacyMigration(file, migration, prepared.cueListId),
+				);
+				expect((await object<any>(api, "playback_page", "1")).body).toEqual(
+					before.body,
+				);
+				return;
+			}
 			await bench.stopServerGracefully(api.session!.token);
 			await stageLegacyMigration(
 				prepared.entry.path,

@@ -1,3 +1,7 @@
+import { decodePlaybackBody } from "../../apps/light-desktop/src/api/showObjectPlaybackWire";
+import type { LightBench } from "../bench/core/lightBench";
+import { assertLegacyPlaybackRefusalAndRecovery } from "../support/playbackCompatibility";
+import { runSql } from "../05-virtual-time-persistence-and-recovery.show-helpers";
 import type { ApiDriver } from "../bench/core/api";
 import {
 	type BenchUiContext,
@@ -100,7 +104,7 @@ async function installFunctionAssignments(
 			api,
 			1,
 			assignment.slot,
-			definition(0, `Function ${assignment.slot}`, assignment.target, {
+			definition(`Function ${assignment.slot}`, assignment.target, {
 				buttons: buttons as [string, string, string],
 				button_count: assignment.count,
 				fader: assignment.fader,
@@ -121,6 +125,7 @@ async function installFunctionAssignments(
 
 async function verifyAtomicRejections(api: ApiDriver): Promise<void> {
 	const first = await playbackAt(api, 1, 1);
+	const firstDefinition = decodePlaybackBody(first.body, "playback_page.1.assignments.1");
 	const firstPage = await pageObject(api, 1);
 	const authority = await playbackSlotAuthority(api, 1, 1);
 	const staleResponse = await postPlaybackTopologyAction(
@@ -128,12 +133,9 @@ async function verifyAtomicRejections(api: ApiDriver): Promise<void> {
 		authority.showId,
 		authority.showRevision,
 		{
-			type: "configure_slot",
-			page: 1,
-			slot: 1,
-			playback: { ...first.body, name: "Must not land" },
-			expectedPlaybackRevision: first.revision - 1,
-			expectedPlaybackObjectId: first.id,
+			type: "update_playback",
+			address: { page: 1, position: 1 },
+			definition: { ...firstDefinition, name: "Must not land" },
 			expectedPageRevision: firstPage.revision - 1,
 			expectedPageObjectId: firstPage.id,
 		},
@@ -147,16 +149,13 @@ async function verifyAtomicRejections(api: ApiDriver): Promise<void> {
 		authority.showId,
 		authority.showRevision,
 		{
-			type: "configure_slot",
-			page: 1,
-			slot: 1,
-			playback: {
-				...first.body,
+			type: "update_playback",
+			address: { page: 1, position: 1 },
+			definition: {
+				...firstDefinition,
 				target: { type: "group", group_id: "1" },
 				buttons: ["go", "go_minus", "flash"],
 			},
-			expectedPlaybackRevision: first.revision,
-			expectedPlaybackObjectId: first.id,
 			expectedPageRevision: firstPage.revision,
 			expectedPageObjectId: firstPage.id,
 		},
@@ -165,52 +164,28 @@ async function verifyAtomicRejections(api: ApiDriver): Promise<void> {
 	expect((await playbackAt(api, 1, 1)).body).toEqual(first.body);
 }
 
-async function verifyLegacyMigration(
+async function verifyLegacyRefusalAndRecovery(
 	api: ApiDriver,
+	bench: LightBench,
 	prepared: PreparedShow,
 	assignments: FunctionAssignment[],
 ): Promise<void> {
-	await putObject(api, "playback", "700", {
-		number: 700,
-		name: "Legacy Playback",
-		target: { type: "cue_list", cue_list_id: prepared.cueListId },
-		buttons: ["go_minus", "go", "flash"],
-		fader: "master",
-		go_activates: true,
-		auto_off: true,
-		xfade_millis: 0,
-	});
-	const pageWithLegacy = await pageObject(api, 1);
-	await putObject(
+	const pageBefore = await pageObject(api, 1);
+	const cueBefore = await object<any>(api, "cue_list", prepared.cueListId);
+	await assertLegacyPlaybackRefusalAndRecovery(
 		api,
-		"playback_page",
-		"1",
-		{
-			...pageWithLegacy.body,
-			slots: { ...pageWithLegacy.body.slots, "11": 700 },
-		},
-		pageWithLegacy.revision,
+		bench,
+		prepared.showId,
+		(file) =>
+			runSql(
+				file,
+				"UPDATE objects SET body_json=json_set(body_json, '$.slots', json('{\"11\":700}')) WHERE kind='playback_page' AND id='1'",
+			),
 	);
-	const migrated = (await playbackSnapshot(api)).pool.find(
-		(item: any) => item.number === 700,
+	expect((await pageObject(api, 1)).body).toEqual(pageBefore.body);
+	expect(await object<any>(api, "cue_list", prepared.cueListId)).toEqual(
+		cueBefore,
 	);
-	expect(migrated).toMatchObject({
-		button_count: 3,
-		has_fader: true,
-		color: "#20c997",
-		flash_release: "release_all",
-		protect_from_swap: false,
-	});
-	await saveSlot(api, 1, 11, migrated);
-	expect((await playbackAt(api, 1, 11)).body).toMatchObject({
-		button_count: 3,
-		has_fader: true,
-		color: "#20c997",
-	});
-
-	await api.openShow(prepared.showId, {
-		transition: "hold_current",
-	});
 	for (const assignment of assignments) {
 		expect((await playbackAt(api, 1, assignment.slot)).body).toMatchObject({
 			target: assignment.target,
@@ -224,20 +199,13 @@ async function verifyClearPreservesSource(
 	prepared: PreparedShow,
 ): Promise<void> {
 	const sourceBefore = await object<any>(api, "cue_list", prepared.cueListId);
-	const assigned = await playbackAt(api, 1, 1);
-	await poolAction(api, assigned.body.number, "on");
+	const before = await pageObject(api, 1);
+	await poolAction(api, 1, "on");
 	await clearSlot(api, 1, 1);
-	expect((await pageObject(api, 1)).body.slots["1"]).toBeUndefined();
-	expect(
-		(await objects(api, "playback")).some(
-			(item) => item.id === String(assigned.body.number),
-		),
-	).toBe(false);
-	expect(
-		(await playbackSnapshot(api)).active.some(
-			(item: any) => item.playback_number === assigned.body.number,
-		),
-	).toBe(false);
+	const remaining = { ...before.body.assignments };
+	delete remaining["1"];
+	expect((await pageObject(api, 1)).body.assignments).toEqual(remaining);
+	expect((await playbackSnapshot(api)).active.some((item: any) => item.playback_address?.page === 1 && item.playback_address.position === 1)).toBe(false);
 	expect(await object<any>(api, "cue_list", prepared.cueListId)).toEqual(
 		sourceBefore,
 	);
@@ -257,6 +225,6 @@ export async function runPbk002AtomicConfigurationScenario({
 	const assignments = functionAssignments(prepared.cueListId);
 	await installFunctionAssignments(api, assignments);
 	await verifyAtomicRejections(api);
-	await verifyLegacyMigration(api, prepared, assignments);
+	await verifyLegacyRefusalAndRecovery(api, bench, prepared, assignments);
 	await verifyClearPreservesSource(api, prepared);
 }

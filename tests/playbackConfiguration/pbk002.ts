@@ -48,7 +48,6 @@ export function registerPbk002PairedScenario(): void {
 				1,
 				1,
 				definition(
-					0,
 					"Playback 1.1",
 					{ type: "cue_list", cue_list_id: state.cueListId },
 					{ color: "#8b5cf6" },
@@ -110,7 +109,7 @@ export function registerPbk002PairedScenario(): void {
 				hasFader: true,
 				color: "#8b5cf6",
 			});
-			expect((await pageObject(api, 1)).body.slots["1"]).toBeUndefined();
+			expect((await pageObject(api, 1)).body.assignments["1"]).toBeUndefined();
 			expect(
 				(await objects(api, "cue_list")).some(
 					(item) => item.id === state.cueListId,
@@ -122,7 +121,7 @@ export function registerPbk002PairedScenario(): void {
 
 export function registerPbk002AtomicConfigurationScenario(): void {
 	test(
-		"PBK-002 @supplemental › every function, topology, migration, conflict, and reload path is atomic",
+		"PBK-002 @api › every function, topology, legacy refusal, conflict, and reload path is atomic",
 		runPbk002AtomicConfigurationScenario,
 	);
 }
@@ -258,7 +257,7 @@ export function registerPbk002LayoutUiScenario(): void {
 		await modal.getByRole("radio", { name: "None", exact: true }).click();
 		await modal.getByRole("button", { name: "Apply", exact: true }).click();
 		await expect(modal).toBeHidden();
-		expect((await pageObject(api, 1)).body.slots["1"]).toBeUndefined();
+		expect((await pageObject(api, 1)).body.assignments["1"]).toBeUndefined();
 		expect(
 			(await objects(api, "cue_list")).some(
 				(item) => item.id === prepared.cueListId,

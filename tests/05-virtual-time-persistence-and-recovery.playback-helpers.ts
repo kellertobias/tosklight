@@ -6,35 +6,33 @@ import { configurePlaybackSlot } from "./support/playbackTopology";
 
 export async function assignMatterRestartPlayback(api: ApiDriver): Promise<{
 	page: number;
-	slot: number;
-	playbackNumber: number;
+	position: number;
 }> {
 	const pages = await objects<any>(api, "playback_page");
 	const pagesByNumber = new Map<number, (typeof pages)[number]>(
 		pages.map((page) => [Number(page.body.number), page]),
 	);
-	const pageNumber = Array.from({ length: 127 }, (_, index) => index + 1).find(
+	const pageNumber = Array.from({ length: 99 }, (_, index) => index + 1).find(
 		(candidate) => {
 			const assigned = new Set(
-				Object.keys(pagesByNumber.get(candidate)?.body.slots ?? {}).map(Number),
+				Object.keys(pagesByNumber.get(candidate)?.body.assignments ?? {}).map(Number),
 			);
-			return Array.from({ length: 127 }, (_, index) => index + 1).some(
+			return Array.from({ length: 1000 }, (_, index) => index + 1).some(
 				(slot) => !assigned.has(slot),
 			);
 		},
 	);
 	expect(pageNumber).toBeDefined();
 	const page = pagesByNumber.get(pageNumber!);
-	const assigned = new Set(Object.keys(page?.body.slots ?? {}).map(Number));
-	const slot = Array.from({ length: 127 }, (_, index) => index + 1).find(
+	const assigned = new Set(Object.keys(page?.body.assignments ?? {}).map(Number));
+	const slot = Array.from({ length: 1000 }, (_, index) => index + 1).find(
 		(candidate) => !assigned.has(candidate),
 	);
 	expect(slot).toBeDefined();
 	const existingCueList = (await objects<any>(api, "cue_list"))[0];
 	const cueListId =
 		existingCueList?.id ?? (await createMatterRestartCueList(api));
-	const result = await configurePlaybackSlot(api, pageNumber!, slot!, {
-		number: 0,
+	await configurePlaybackSlot(api, pageNumber!, slot!, {
 		name: "Matter restart persistence",
 		target: { type: "cue_list", cue_list_id: cueListId },
 		buttons: ["toggle", "none", "none"],
@@ -50,8 +48,7 @@ export async function assignMatterRestartPlayback(api: ApiDriver): Promise<{
 	});
 	return {
 		page: pageNumber!,
-		slot: slot!,
-		playbackNumber: result.playback.number,
+		position: slot!,
 	};
 }
 
@@ -179,18 +176,12 @@ export async function installTimeCuelists(
 		default_activation: "start_now",
 	};
 	await putObject(api, "dynamic", dynamicId, dynamic);
-	await putObject(
+	await configurePlaybackSlot(api, 1, 1, playbackDefinition(chaserId, "Virtual Chaser"));
+	await configurePlaybackSlot(
 		api,
-		"playback",
-		"1",
-		playback(1, chaserId, "Virtual Chaser"),
-	);
-	await putObject(
-		api,
-		"playback",
-		"2",
+		1,
+		2,
 		{
-			number: 2,
 			name: "Virtual Dynamic",
 			target: {
 				type: "dynamic",
@@ -226,8 +217,7 @@ export async function installTimeCuelists(
 			protect_from_swap: false,
 		},
 	);
-	await putObject(api, "playback", "3", {
-		number: 3,
+	await configurePlaybackSlot(api, 1, 3, {
 		name: "Dynamics Control",
 		target: { type: "grand_master" },
 		buttons: ["blackout", "flash", "pause_dynamics"],
@@ -266,7 +256,7 @@ export async function playbackRuntime(
 ): Promise<any> {
 	const state = await api.request<any>("GET", "/api/v2/playback-overview");
 	const runtime = state.active.find(
-		(item: any) => item.playback_number === number,
+		(item: any) => item.playback_address?.page === 1 && item.playback_address.position === number,
 	);
 	expect(runtime).toBeDefined();
 	return runtime;
@@ -293,7 +283,7 @@ export async function installGroupCue(
 		id,
 		sequence(id, "SHOW-001 Cuelist", [first]),
 	);
-	await putObject(api, "playback", "1", playback(1, id, "SHOW-001 Playback"));
+	await configurePlaybackSlot(api, 1, 1, playbackDefinition(id, "SHOW-001 Playback"));
 	return id;
 }
 
@@ -354,9 +344,8 @@ export function cue(number: number, fixtureId: string, level: number): any {
 	};
 }
 
-export function playback(number: number, cueListId: string, name: string): any {
+export function playbackDefinition(cueListId: string, name: string): any {
 	return {
-		number,
 		name,
 		target: { type: "cue_list", cue_list_id: cueListId },
 		buttons: ["go_minus", "go", "flash"],

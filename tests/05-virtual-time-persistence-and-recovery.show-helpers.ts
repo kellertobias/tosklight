@@ -1,3 +1,4 @@
+import { configurePlaybackSlot } from "./support/playbackTopology";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
@@ -8,7 +9,7 @@ import type { LightBench } from "./bench/core/lightBench";
 import type { Page } from "@playwright/test";
 import {
 	installSequence,
-	playback,
+	playbackDefinition,
 } from "./05-virtual-time-persistence-and-recovery.playback-helpers";
 import {
 	fixtureRow,
@@ -75,9 +76,9 @@ export async function programShow001ThroughUi(
 	await cuelist.click();
 	await expect
 		.poll(async () =>
-			(await api.request<any>("GET", "/api/v2/playback-overview")).pool.some(
-				(playback: any) => playback.number === 1,
-			),
+			(await api.showObjects<any>(await activeShowId(api), "cue_list")).some(
+                (cueList) => cueList.body.pool_number === 1,
+            ),
 		)
 		.toBe(true);
 
@@ -87,13 +88,8 @@ export async function programShow001ThroughUi(
 	await page
 		.getByRole("button", { name: "Assign Cuelist 1 to page 1 playback 1" })
 		.click();
-	await expect
-		.poll(async () => {
-			const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
-			return playbacks.pages.find((candidate: any) => candidate.number === 1)
-				?.slots?.["1"];
-		})
-		.toBe(1);
+	const recordedCueList = (await api.showObjects<any>(await activeShowId(api), "cue_list")).find((candidate) => candidate.body.pool_number === 1)!;
+	await expect.poll(async () => (await object<any>(api, "playback_page", "1")).body.assignments["1"]?.target).toEqual({ type: "cue_list", cue_list_id: recordedCueList.body.id });
 	await page.locator(".mode-toggle").click();
 	await page.getByRole("button", { name: "CLR", exact: true }).click();
 	await page.getByRole("button", { name: "CLR", exact: true }).click();
@@ -138,13 +134,9 @@ export async function assertShow001State(
 		[1, 2, 3, 4, 5, 6].map((number) => state.fixtureIds[number]),
 	);
 	const playbacks = await api.request<any>("GET", "/api/v2/playback-overview");
-	const definition = playbacks.pool.find(
-		(playback: any) => playback.number === 1,
-	);
+	const definition = (await object<any>(api, "playback_page", "1")).body.assignments["1"];
 	expect(definition?.target.type).toBe("cue_list");
-	const cueList = playbacks.cue_lists.find(
-		(candidate: any) => candidate.id === definition.target.cue_list_id,
-	);
+	const cueList = (await api.showObjects<any>(state.copyId, "cue_list")).find((candidate) => candidate.body.id === definition.target.cue_list_id)?.body;
 	expect(cueList?.cues).toHaveLength(1);
 	const groupChange = cueList.cues[0].group_changes[0];
 	expect(groupChange).toMatchObject({
@@ -154,7 +146,7 @@ export async function assertShow001State(
 	});
 	expect(groupChange.value.value).toBeCloseTo(0.4, 6);
 	expect(
-		playbacks.active.find((runtime: any) => runtime.playback_number === 1),
+		playbacks.active.find((runtime: any) => runtime.playback_address?.page === 1 && runtime.playback_address.position === 1),
 	).toMatchObject({ current_cue_number: "1", enabled: true });
 	const durable = await programmer(api);
 	expect(
@@ -229,12 +221,7 @@ export async function prepareMigrationCase(
 		const fixtures = await fixtureIdsByNumber(api);
 		cueListId = await installSequence(api, fixtures[1]);
 		if (migration === "playback-defaults")
-			await putObject(
-				api,
-				"playback",
-				"1",
-				playback(1, cueListId, "Legacy playback"),
-			);
+			await configurePlaybackSlot(api, 1, 1, playbackDefinition(cueListId, "Refusal recovery playback"));
 	}
 	return { entry: await showEntry(api, copy.id), cueListId };
 }
@@ -257,7 +244,7 @@ export async function stageLegacyMigration(
 	} else if (migration === "playback-defaults") {
 		await runSql(
 			file,
-			"UPDATE objects SET body_json=json_remove(body_json, '$.buttons', '$.button_count', '$.fader', '$.has_fader', '$.go_activates', '$.auto_off', '$.xfade_millis', '$.color', '$.flash_release', '$.protect_from_swap', '$.presentation_icon', '$.presentation_image') WHERE kind='playback' AND id='1'",
+			"UPDATE objects SET body_json=json_set(body_json, '$.slots', json('{\"1\":700}')) WHERE kind='playback_page' AND id='1'",
 		);
 	} else if (migration === "route-defaults") {
 		await runSql(
@@ -299,7 +286,7 @@ export async function migrationSnapshot(
 	}
 	if (migration === "group-defaults") return object<any>(api, "group", "3");
 	if (migration === "playback-defaults")
-		return object<any>(api, "playback", "1");
+		return object<any>(api, "playback_page", "1");
 	if (migration === "route-defaults")
 		return object<any>(api, "route", "artnet");
 	if (migration === "virtual-dimmer-metadata") {
@@ -332,18 +319,7 @@ export function assertMigrationSnapshot(
 		expect(snapshot.body).not.toHaveProperty("master");
 		expect(snapshot.body).not.toHaveProperty("playback_fader");
 	} else if (migration === "playback-defaults") {
-		expect(snapshot.body).toMatchObject({
-			buttons: ["go_minus", "go", "flash"],
-			button_count: 3,
-			fader: "master",
-			has_fader: true,
-			go_activates: true,
-			auto_off: true,
-			xfade_millis: 0,
-			color: "#20c997",
-			flash_release: "release_all",
-			protect_from_swap: false,
-		});
+		throw new Error("Retired Playback shapes require refusal and canonical-copy recovery, not migration.");
 	} else if (migration === "route-defaults") {
 		expect(snapshot.body).toMatchObject({
 			protocol: "art_net",
