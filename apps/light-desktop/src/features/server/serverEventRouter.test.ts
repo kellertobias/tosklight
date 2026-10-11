@@ -74,7 +74,7 @@ function event(
 					target: {
 						...target,
 						family: target.family.type,
-						playback_number: null,
+						playback_address: null,
 						cue_id: null,
 						cue_number: null,
 						validate_active_context: null,
@@ -93,10 +93,10 @@ function event(
 			type: "show_library_changed",
 			change: { revision, kind: "show_renamed" },
 		};
-	if (kind === "playback_page_changed")
+	if (kind === "playback_surfaces_changed")
 		return {
 			type: "screens_changed",
-			change: { revision, kind: "playback_page" },
+			change: { revision, kind: "playback_surfaces" },
 		};
 	if (kind === "server_configuration_changed")
 		return {
@@ -627,10 +627,7 @@ describe("server event routing", () => {
 							revision: 1,
 							notification: {
 								desk_id: deskId,
-								addressing: "explicit_page",
-								page: 2,
-								slot: 6,
-								playback: null,
+								address: { page: 2, position: 6 },
 							},
 						},
 					},
@@ -640,10 +637,7 @@ describe("server event routing", () => {
 			expect(received).toEqual([
 				{
 					desk_id: session.desk.id,
-					addressing: "explicit_page",
-					page: 2,
-					slot: 6,
-					playback: null,
+					address: { page: 2, position: 6 },
 				},
 			]);
 		} finally {
@@ -707,9 +701,9 @@ describe("broad state hydration boundaries", () => {
 		expect(harness.loadShowObjects).not.toHaveBeenCalled();
 	});
 
-	it("refreshes only Screens for a Playback Page desk event", async () => {
+	it("refreshes only Screens for a Playback surface notification", async () => {
 		const harness = createHarness();
-		harness.route(event("playback_page_changed", { page: 2 }, 1));
+		harness.route(event("playback_surfaces_changed", { page: 2 }, 1));
 		await vi.waitFor(() =>
 			expect(harness.api.playback.screens).toHaveBeenCalledOnce(),
 		);

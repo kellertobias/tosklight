@@ -128,7 +128,13 @@ export function TouchPlaybackCard({
 					void controller.runtimeActions?.playbackAction(
 						playback.address,
 						"master",
-						{value: next / 100, control_source: {surface_id: controller.surfaceId, control_id: slot * 10}},
+						{
+							value: next / 100,
+							control_source: {
+								surface_id: controller.controlSourceId,
+								control_id: slot * 10,
+							},
+						},
 					),
 			}}
 		/>

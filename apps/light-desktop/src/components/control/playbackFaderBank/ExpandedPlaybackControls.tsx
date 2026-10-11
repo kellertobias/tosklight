@@ -2,6 +2,7 @@ import type { PlaybackAddressValue } from "../../../api/playbackAddress";
 import { Button, Input } from "@tosklight/ui";
 import type { PlaybackButtonAction } from "../../../api/types";
 import type { PlaybackBankController } from "./controller";
+import { isPlaybackSetClickArmed } from "./actions";
 import { isHeldAction, playbackButtonLabel } from "./feedback";
 import type { PlaybackSlotProjection } from "./types";
 
@@ -56,7 +57,7 @@ export function ExpandedPlaybackControls({
 									fader: 2,
 									value: Number(event.currentTarget.value) / 100,
 									control_source: {
-										surface_id: controller.surfaceId,
+										surface_id: controller.controlSourceId,
 										control_id: slotData.slot * 10 + 2,
 									},
 								},
@@ -85,7 +86,7 @@ function ExpandedButton({
 			button,
 			pressed,
 			control_source: {
-				surface_id: controller.surfaceId,
+				surface_id: controller.controlSourceId,
 				control_id: address.position * 10 + button,
 			},
 		});
@@ -98,19 +99,43 @@ function ExpandedButton({
 			onPointerDown={(event) => {
 				if (!isHeldAction(action)) return;
 				event.currentTarget.setPointerCapture?.(event.pointerId);
-				controller.heldActions.press(address.position, address, button, action);
+				controller.heldActions.press(
+					address.position,
+					address,
+					button,
+					action,
+					{ pointerId: event.pointerId },
+				);
 			}}
-			onPointerUp={() =>
-				isHeldAction(action) &&
-				controller.heldActions.releaseButton(address.position, button)
+			onPointerUp={(event) =>
+				controller.heldActions.releaseGesture({ pointerId: event.pointerId })
 			}
-			onPointerCancel={() =>
-				isHeldAction(action) &&
-				controller.heldActions.releaseButton(address.position, button)
+			onPointerCancel={(event) =>
+				controller.heldActions.releaseGesture({ pointerId: event.pointerId })
 			}
-			onLostPointerCapture={() =>
-				isHeldAction(action) &&
-				controller.heldActions.releaseButton(address.position, button)
+			onKeyDown={(event) => {
+				if (
+					controller.state.storeArmed ||
+					controller.state.updateArmed ||
+					controller.setInteractionArmed ||
+					controller.groupAssignmentPending ||
+					isPlaybackSetClickArmed(controller) ||
+					!isHeldAction(action) ||
+					![" ", "Enter"].includes(event.key)
+				)
+					return;
+				event.preventDefault();
+				if (!event.repeat)
+					controller.heldActions.press(
+						address.position,
+						address,
+						button,
+						action,
+						{ key: event.key },
+					);
+			}}
+			onKeyUp={(event) =>
+				controller.heldActions.releaseGesture({ key: event.key })
 			}
 		>
 			{playbackButtonLabel(action)}

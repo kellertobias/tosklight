@@ -143,17 +143,16 @@ export function usePlaybackBankController({
 		[],
 	);
 	useEffect(() => setConfiguration(null), [activePageNumber, topology.ready]);
+	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
 	const heldActions = useMemo(
-		() => new HeldPlaybackActions(runtimeActions, surfaceId),
-		[runtimeActions, surfaceId],
+		() => new HeldPlaybackActions(runtimeActions, controlSourceId),
+		[runtimeActions, controlSourceId],
 	);
-	useEffect(() => () => heldActions.releaseAll(), [heldActions]);
-	useEffect(() => {
-		heldActions.releaseAll();
-	}, [heldActions, activePageNumber]);
+	useEffect(() => heldActions.listen(window), [heldActions]);
 	const rowTracks = playbackRowTracks(playbackLayout, hardware, rowCount);
 	return {
 		surfaceId,
+		controlSourceId,
 		selectSurface: () => surfaces?.selectSurface(surfaceId),
 		topology,
 		topologyActions,

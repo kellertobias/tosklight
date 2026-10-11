@@ -69,7 +69,12 @@ export async function selectPlayback(
 	const outcome = await controller.runtimeActions?.playbackAction(
 		playback.address,
 		"select",
-		{control_source: {surface_id: controller.surfaceId, control_id: playback.address.position * 10}},
+		{
+			control_source: {
+				surface_id: controller.controlSourceId,
+				control_id: playback.address.position * 10,
+			},
+		},
 	);
 	if (!outcome) return false;
 	if (controller.selectionPending) void controller.commandLineActions?.reset();
@@ -84,7 +89,12 @@ export async function offPlayback(
 	const outcome = await controller.runtimeActions?.playbackAction(
 		playback.address,
 		"off",
-		{control_source: {surface_id: controller.surfaceId, control_id: playback.address.position * 10}},
+		{
+			control_source: {
+				surface_id: controller.controlSourceId,
+				control_id: playback.address.position * 10,
+			},
+		},
 	);
 	if (!outcome) return false;
 	await controller.commandLineActions?.reset();
@@ -139,11 +149,17 @@ export async function assignGroupPlayback(
 			"",
 			groupId,
 		);
-		const configure = existing ? controller.topologyActions?.updatePlayback : controller.topologyActions?.assignPlayback;
-		const outcome = await configure?.({page: controller.activePageNumber, position: slot}, {...draft, name: `Group ${groupId}`}, {
-			expectedPageRevision: controller.pageObject?.revision ?? 0,
-			expectedPageObjectId: controller.pageObject?.id ?? null,
-		});
+		const configure = existing
+			? controller.topologyActions?.updatePlayback
+			: controller.topologyActions?.assignPlayback;
+		const outcome = await configure?.(
+			{ page: controller.activePageNumber, position: slot },
+			{ ...draft, name: `Group ${groupId}` },
+			{
+				expectedPageRevision: controller.pageObject?.revision ?? 0,
+				expectedPageObjectId: controller.pageObject?.id ?? null,
+			},
+		);
 		if (!outcome) return false;
 		await controller.commandLineActions?.reset();
 		return true;
@@ -189,7 +205,7 @@ export async function recordPlayback(
 	);
 	if (!plan) return;
 	const outcome = await controller.cueRecording?.record({
-		target: {kind: "playback", page, position: slot},
+		target: { kind: "playback", page, position: slot },
 		operation: plan.operation,
 		...(plan.cueNumber ? { cueNumber: plan.cueNumber } : {}),
 		timing: {},
@@ -237,7 +253,14 @@ export async function activateHardwareCard(
 		controller.dispatch({ type: "OPEN_BUILTIN", kind: "cuelists" });
 		controller.dispatch({
 			type: "OPEN_BUILTIN_CUELIST",
-			number: controller.topology.cueLists.find(object => object.body.id === (playback.target.type === "cue_list" ? playback.target.cue_list_id : ""))?.body.pool_number ?? 1,
+			number:
+				controller.topology.cueLists.find(
+					(object) =>
+						object.body.id ===
+						(playback.target.type === "cue_list"
+							? playback.target.cue_list_id
+							: ""),
+				)?.body.pool_number ?? 1,
 		});
 	}
 }
@@ -248,13 +271,25 @@ export async function assignPlayback(
 ) {
 	const target = controller.state.cueListSetTarget;
 	if (target == null || controller.activePageNumber == null) return;
-	const source = controller.topology.cueLists.find(candidate => candidate.body.pool_number === target);
+	const source = controller.topology.cueLists.find(
+		(candidate) => candidate.body.pool_number === target,
+	);
 	if (!source) return;
-	const draft = emptyConfiguration(controller.activePageNumber, slot, controller.buttons ?? 3, true, source.body.id);
-	const outcome = await controller.topologyActions?.assignPlayback({page: controller.activePageNumber, position: slot}, draft, {
-		expectedPageRevision: controller.pageObject?.revision ?? 0,
-		expectedPageObjectId: controller.pageObject?.id ?? null,
-	});
+	const draft = emptyConfiguration(
+		controller.activePageNumber,
+		slot,
+		controller.buttons ?? 3,
+		true,
+		source.body.id,
+	);
+	const outcome = await controller.topologyActions?.assignPlayback(
+		{ page: controller.activePageNumber, position: slot },
+		draft,
+		{
+			expectedPageRevision: controller.pageObject?.revision ?? 0,
+			expectedPageObjectId: controller.pageObject?.id ?? null,
+		},
+	);
 	if (!outcome) return;
 	controller.dispatch({ type: "SET_CUELIST_SET_ARMED", value: false });
 }

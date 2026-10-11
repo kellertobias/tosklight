@@ -2,10 +2,16 @@ import type { PlaybackAddressValue } from "../../../api/playbackAddress";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
 import { HeldPlaybackControls } from "../../../features/playbackRuntime/heldPlaybackControls";
 
-/** Momentary controls retain the exact address/source until every release completes. */
+type HoldGesture = { pointerId: number } | { key: string };
+const gestureKey = (gesture: HoldGesture) =>
+	"pointerId" in gesture
+		? `pointer:${gesture.pointerId}`
+		: `key:${gesture.key}`;
+
+/** Holds belong to gestures, not rendered page cells; release always uses captured identity. */
 export class HeldPlaybackActions {
 	private readonly held = new HeldPlaybackControls();
-	private readonly keys = new Map<number, Set<string>>();
+	private readonly gestures = new Map<string, string>();
 	constructor(
 		private readonly actions: PlaybackRuntimeActions | null,
 		private readonly surfaceId: string,
@@ -15,13 +21,14 @@ export class HeldPlaybackActions {
 		address: PlaybackAddressValue,
 		button: number,
 		action: "flash" | "swap",
+		gesture: HoldGesture,
 	) {
-		const key = `${position}:${button}`;
-		const keys = this.keys.get(position) ?? new Set<string>();
-		keys.add(key);
-		this.keys.set(position, keys);
+		const control = `${position}:${button}`;
+		// One physical button owns one hold even if a second pointer hits it.
+		if (this.gestures.has(control)) return;
+		this.gestures.set(control, gestureKey(gesture));
 		this.held.press(
-			key,
+			control,
 			address,
 			{ surface_id: this.surfaceId, control_id: position * 10 + button },
 			async (hold, pressed) => {
@@ -32,15 +39,31 @@ export class HeldPlaybackActions {
 			},
 		);
 	}
-	releaseButton(position: number, button: number) {
-		this.held.release(`${position}:${button}`);
+	releaseGesture(gesture: HoldGesture) {
+		const identity = gestureKey(gesture);
+		for (const [control, captured] of this.gestures) {
+			if (captured !== identity) continue;
+			this.gestures.delete(control);
+			this.held.release(control);
+		}
 	}
-	releaseSlot(position: number) {
-		for (const key of this.keys.get(position) ?? []) this.held.release(key);
-		this.keys.delete(position);
+	listen(target: Window): () => void {
+		const pointerRelease = (event: PointerEvent) =>
+			this.releaseGesture({ pointerId: event.pointerId });
+		const keyRelease = (event: KeyboardEvent) =>
+			this.releaseGesture({ key: event.key });
+		target.addEventListener("pointerup", pointerRelease, true);
+		target.addEventListener("pointercancel", pointerRelease, true);
+		target.addEventListener("keyup", keyRelease, true);
+		return () => {
+			target.removeEventListener("pointerup", pointerRelease, true);
+			target.removeEventListener("pointercancel", pointerRelease, true);
+			target.removeEventListener("keyup", keyRelease, true);
+			this.releaseAll();
+		};
 	}
 	releaseAll() {
 		this.held.releaseAll();
-		this.keys.clear();
+		this.gestures.clear();
 	}
 }

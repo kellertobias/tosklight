@@ -49,7 +49,7 @@ function RuntimeProbe({
 	onRender: () => void;
 }) {
 	onRender();
-	const runtime = usePlaybackRuntime(visible ? 1 : null);
+	const runtime = usePlaybackRuntime(visible ? { page: 1, position: 1 } : null);
 	return <span>{runtime ? `Cue ${runtime.cue_index + 1}` : "Hidden"}</span>;
 }
 
@@ -99,14 +99,12 @@ describe("PlaybackRuntimeViewProvider", () => {
 			playbackSnapshot(identities),
 		);
 		const applyAction = vi.fn(async (_showId, _deskId, request) => ({
-			request_id: request.request_id,
 			correlation_id: "55555555-5555-4555-8555-555555555555",
 			requested: request.address,
 			resolved: {
 				kind: "playback" as const,
-				playback_number: 1,
 				page: 1,
-				slot: 1,
+				position: 1,
 			},
 			outcome: { status: "applied" as const },
 			durability: "durable" as const,
@@ -115,7 +113,6 @@ describe("PlaybackRuntimeViewProvider", () => {
 			desk: null,
 			event_sequence: 12,
 			desk_event_sequence: null,
-			replayed: false,
 		}));
 		let actions: ReturnType<typeof usePlaybackRuntimeActions> = null;
 		render(
@@ -141,11 +138,15 @@ describe("PlaybackRuntimeViewProvider", () => {
 
 		let outcome: unknown = null;
 		await act(async () => {
-			outcome = await actions?.poolPlaybackAction(1, "button", {
-				button: 1,
-				pressed: true,
-				surface: "virtual",
-			});
+			outcome = await actions?.playbackAction(
+				{ page: 1, position: 1 },
+				"button",
+				{
+					button: 1,
+					pressed: true,
+					control_source: { surface_id: "pane", control_id: 11 },
+				},
+			);
 		});
 		expect(outcome).not.toBeNull();
 		expect(applyAction).toHaveBeenCalledOnce();
@@ -180,10 +181,10 @@ describe("PlaybackRuntimeViewProvider", () => {
 		await waitFor(() => expect(loadSnapshot).toHaveBeenCalledOnce());
 
 		await act(async () => {
-			await actions?.poolPlaybackAction(1, "button", {
+			await actions?.playbackAction({ page: 1, position: 1 }, "button", {
 				button: 1,
 				pressed: true,
-				surface: "virtual",
+				control_source: { surface_id: "pane", control_id: 11 },
 			});
 		});
 
@@ -224,10 +225,10 @@ describe("PlaybackRuntimeViewProvider", () => {
 		rendered.rerender(view(true));
 		await waitFor(() => expect(transport.subscriptions).toHaveLength(1));
 		expect(loadSnapshot).toHaveBeenCalledWith([
-			{ kind: "playback", playback_number: 1 },
+			{ kind: "playback", page: 1, position: 1 },
 		]);
 		expect(transport.subscriptions[0].scope).toEqual({
-			identities: [{ kind: "playback", playback_number: 1 }],
+			identities: [{ kind: "playback", page: 1, position: 1 }],
 			desk: false,
 		});
 		await waitFor(() => expect(screen.getByText("Cue 1")).toBeInTheDocument());
@@ -245,6 +246,14 @@ describe("PlaybackRuntimeViewProvider", () => {
 			transport.subscriptions[0].observer.message({
 				type: "event",
 				sequence: 12,
+				payload: { type: "runtime", projection: cueProjection(1, 3, 2) },
+			}),
+		);
+		expect(onRender).toHaveBeenCalledTimes(beforeIrrelevant);
+		act(() =>
+			transport.subscriptions[0].observer.message({
+				type: "event",
+				sequence: 13,
 				payload: { type: "runtime", projection: cueProjection(1, 2) },
 			}),
 		);

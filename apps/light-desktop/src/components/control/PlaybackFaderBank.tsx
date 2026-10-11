@@ -1,5 +1,6 @@
 import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { memo, useEffect, useId, useState } from "react";
+import type { PlaybackConfigurationNotification } from "../../api/generated/light-wire";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { AssignedPlaybackConfigurationModal } from "./AssignedPlaybackConfigurationModal";
@@ -24,10 +25,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					intent.surfaceId === interactionSurfaceId
 				)
 					return true;
-				if (
-					intent.type !== "open_playback_settings"
-				)
-					return false;
+				if (intent.type !== "open_playback_settings") return false;
 				const playbackIdentity = intent.playback;
 				const slotData = controller.slots.find(
 					(candidate) => candidate.slot === playbackIdentity.slot,
@@ -62,26 +60,26 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		});
 		useEffect(() => {
 			const openRequested = (event: Event) => {
-				const detail = (event as CustomEvent<{
-					addressing: string;
-					page?: number | null;
-					slot?: number | null;
-				}>).detail;
-				if (detail.slot == null) return;
-				if (
-					detail.addressing === "explicit_page" &&
-					detail.page !== controller.activePageNumber
-				)
-					return;
+				const { address } = (
+					event as CustomEvent<PlaybackConfigurationNotification>
+				).detail;
+				if (address.page !== controller.activePageNumber) return;
 				const slotData = controller.slots.find(
-					(candidate) => candidate.slot === detail.slot,
+					(candidate) => candidate.slot === address.position,
 				);
 				if (slotData)
-					openPlaybackConfiguration(controller, slotData.playback, detail.slot);
+					openPlaybackConfiguration(
+						controller,
+						slotData.playback,
+						address.position,
+					);
 			};
 			window.addEventListener("light:playback-configuration", openRequested);
 			return () =>
-				window.removeEventListener("light:playback-configuration", openRequested);
+				window.removeEventListener(
+					"light:playback-configuration",
+					openRequested,
+				);
 		}, [controller]);
 		// Once the grid has rendered for a ready topology, transient projection refetches
 		// (hardware connect, layout changes) must not tear the slot elements down — only a
@@ -95,10 +93,15 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			controller.authorityReady || (rendered && controller.topology.ready);
 		if (!showGrid)
 			return (
-				<ErrorAlert as="div"
+				<ErrorAlert
+					as="div"
 					className="playback-fader-bank playback-authority-status"
 					role={controller.authorityError ? "alert" : "status"}
-					copyText={controller.authorityError ? formatErrorDetails(controller.authorityError) : undefined}
+					copyText={
+						controller.authorityError
+							? formatErrorDetails(controller.authorityError)
+							: undefined
+					}
 				>
 					{controller.authorityError?.message ?? "Loading Playbacks…"}
 				</ErrorAlert>
@@ -107,9 +110,14 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			<>
 				{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 				<div
-					onPointerDownCapture={() => { void controller.selectSurface(); }}
+					onPointerDownCapture={() => {
+						void controller.selectSurface();
+					}}
 					data-playback-surface={controller.surfaceId}
-					data-command-surface={controller.playbackDesk?.selected_surface_id === controller.surfaceId}
+					data-command-surface={
+						controller.playbackDesk?.selected_surface_id ===
+						controller.surfaceId
+					}
 					className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"} ${controller.playbackDesk?.selected_surface_id === controller.surfaceId ? "command-surface" : ""}`}
 					onContextMenu={(event) => {
 						event.preventDefault();
@@ -172,15 +180,15 @@ function equalPlaybackLayout(
 	right: PlaybackFaderBankProps["playbackLayout"],
 ) {
 	if (left === right) return true;
-	if (!left || !right)
-		return false;
+	if (!left || !right) return false;
 	return (
 		left.rows.length === right.rows.length &&
 		left.rows.every((row, index) => {
 			const candidate = right.rows[index];
 			if (!candidate) return false;
 			return (
-				row.first_position === candidate.first_position && row.count === candidate.count &&
+				row.first_position === candidate.first_position &&
+				row.count === candidate.count &&
 				row.presentation === candidate.presentation &&
 				row.button_count === candidate.button_count
 			);

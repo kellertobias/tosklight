@@ -22,13 +22,15 @@ afterEach(cleanup);
 
 const NEXT = "55555555-5555-4555-8555-555555555555";
 function Probe({ target }: { target: string }) {
-	const projection = usePlaybackProjectionMap([21]).get(21);
+	const projection = usePlaybackProjectionMap([{ page: 4, position: 21 }]).get(
+		"playback:4.21",
+	);
 	const matches = playbackTargetMatches(
 		{ type: "cue_list", cue_list_id: target },
 		projection,
 	);
 	const pending = usePlaybackTopologyRuntimeReconciliation(
-		`21:${target}`,
+		`playback:4.21:${target}`,
 		projection !== undefined,
 		matches,
 	);
@@ -77,7 +79,7 @@ function harness() {
 		wrap,
 		resolve: (target: string) => {
 			const snapshot = playbackSnapshot([
-				{ kind: "playback", playback_number: 21 },
+				{ kind: "playback", page: 4, position: 21 },
 			]);
 			snapshot.projections = snapshot.projections.map((projection) =>
 				projection.target === "cue_list"
@@ -89,7 +91,7 @@ function harness() {
 	};
 }
 describe("visible playback reassignment reconciliation", () => {
-	it("refreshes unchanged physical identity once, withholding GO until the new Cuelist matches", async () => {
+	it("refreshes unchanged exact address once, withholding GO until the new Cuelist matches", async () => {
 		const h = harness();
 		const view = render(h.wrap(CUE_LIST_ID));
 		await screen.findByText(`GO ${CUE_LIST_ID}`);
@@ -100,7 +102,7 @@ describe("visible playback reassignment reconciliation", () => {
 		await screen.findByText(`GO ${NEXT}`);
 		expect(h.load).toHaveBeenCalledTimes(2);
 		expect(h.load.mock.calls[1][0]).toEqual([
-			{ kind: "playback", playback_number: 21 },
+			{ kind: "playback", page: 4, position: 21 },
 		]);
 	});
 	it("completes reconciliation through StrictMode effect replay", async () => {

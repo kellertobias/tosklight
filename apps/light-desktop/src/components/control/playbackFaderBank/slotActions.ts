@@ -50,8 +50,8 @@ export function buildPlaybackActions({
 		(action, button) => {
 			const emptyRecordTarget =
 				controller.state.storeArmed && !playback && button === 0;
-			const releaseHeldAction = () =>
-				controller.heldActions.releaseButton(slot, button + 1);
+			const releaseHeldAction = (event: ReactPointerEvent<HTMLButtonElement>) =>
+				controller.heldActions.releaseGesture({ pointerId: event.pointerId });
 			return {
 				id: `${button}-${action}`,
 				label:
@@ -107,7 +107,10 @@ export function buildPlaybackActions({
 							{
 								button: button + 1,
 								pressed: true,
-								control_source: {surface_id: controller.surfaceId, control_id: slot * 10 + button + 1},
+								control_source: {
+									surface_id: controller.controlSourceId,
+									control_id: slot * 10 + button + 1,
+								},
 							},
 						);
 				},
@@ -132,11 +135,35 @@ export function buildPlaybackActions({
 						playback.address,
 						button + 1,
 						action,
+						{ pointerId: event.pointerId },
 					);
 				},
 				onPointerUp: releaseHeldAction,
 				onPointerCancel: releaseHeldAction,
-				onLostPointerCapture: releaseHeldAction,
+				onKeyDown: (event) => {
+					if (
+						!playback ||
+						controller.state.storeArmed ||
+						controller.state.updateArmed ||
+						controller.setInteractionArmed ||
+						controller.groupAssignmentPending ||
+						isPlaybackSetClickArmed(controller) ||
+						!isHeldAction(action) ||
+						![" ", "Enter"].includes(event.key)
+					)
+						return;
+					event.preventDefault();
+					if (!event.repeat)
+						controller.heldActions.press(
+							slot,
+							playback.address,
+							button + 1,
+							action,
+							{ key: event.key },
+						);
+				},
+				onKeyUp: (event) =>
+					controller.heldActions.releaseGesture({ key: event.key }),
 			};
 		},
 	);

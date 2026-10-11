@@ -4,7 +4,7 @@ import type {
 	PlaybackCardSummary,
 } from "@tosklight/ui/playback";
 import { PLAYBACK_CARD_DEFAULT_COLORS } from "@tosklight/ui/playback";
-import { type CSSProperties, useEffect } from "react";
+import { type CSSProperties } from "react";
 import type {
 	Cue,
 	PlaybackDefinition,
@@ -40,17 +40,6 @@ function playbackCommandTarget(controller: PlaybackBankController) {
 	return null;
 }
 
-function useReleasePlaybackSlot(
-	controller: PlaybackBankController,
-	playback: PlaybackDefinition | null | undefined,
-	slot: number,
-) {
-	useEffect(
-		() => () => controller.heldActions.releaseSlot(slot),
-		[controller.heldActions, playback, slot],
-	);
-}
-
 function playbackCardStyle(
 	hasPlayback: boolean,
 	color: string,
@@ -76,6 +65,20 @@ function playbackCardStyle(
 			: undefined;
 }
 
+function isSelectedPlayback(
+	controller: PlaybackBankController,
+	playback: PlaybackSlotProjection["playback"],
+) {
+	return Boolean(
+		playback &&
+			controller.playbackDesk?.selected_playback &&
+			samePlaybackAddress(
+				playback.address,
+				controller.playbackDesk.selected_playback,
+			),
+	);
+}
+
 export function PlaybackSlot({
 	controller,
 	slotData,
@@ -90,14 +93,14 @@ export function PlaybackSlot({
 		? controller.runtimeProjections.get(playback.address.position)
 		: undefined;
 	const active = playbackControlRuntime(runtimeProjection);
-	const selected =
-		Boolean(playback && controller.playbackDesk?.selected_playback && samePlaybackAddress(playback.address, controller.playbackDesk.selected_playback));
+	const selected = isSelectedPlayback(controller, playback);
 	const configuredButtons =
 		row?.button_count ?? (controller.hardware ? 3 : (controller.buttons ?? 3));
 	const buttonCount = playback
 		? Math.min(configuredButtons, playback.button_count ?? configuredButtons)
 		: configuredButtons;
-	const hasFader = (row?.presentation !== "buttons") && (playback?.has_fader ?? true);
+	const hasFader =
+		row?.presentation !== "buttons" && (playback?.has_fader ?? true);
 	const value = playbackFaderValue(
 		playback,
 		active,
@@ -106,7 +109,6 @@ export function PlaybackSlot({
 	);
 	const kind = playbackKind(playback?.target.type);
 	const playbackColor = resolvePlaybackColor(kind, playback?.color);
-	useReleasePlaybackSlot(controller, playback, slot);
 	const currentCue =
 		cue && active && active.cue_index >= 0 ? cue.cues[active.cue_index] : null;
 	const baseSummary: PlaybackCardSummary | undefined = playback

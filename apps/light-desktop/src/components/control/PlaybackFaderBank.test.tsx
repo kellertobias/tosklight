@@ -4,6 +4,7 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -297,10 +298,9 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 				: {}),
 		};
 	};
+	const runtimeActions = { playbackAction: mocks.poolPlaybackAction };
 	return {
-		usePlaybackRuntimeActions: () => ({
-			playbackAction: mocks.poolPlaybackAction,
-		}),
+		usePlaybackRuntimeActions: () => runtimeActions,
 		usePlaybackRuntimeAuthority: () => null,
 		usePlaybackRuntimeStatus: () => ({
 			status: mocks.runtimeReady ? "ready" : "loading",
@@ -622,7 +622,10 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 			{
 				button: 4,
 				pressed: true,
-				control_source: { surface_id: "main", control_id: 14 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 14,
+				},
 			},
 		);
 		expect(screen.getAllByRole("slider")).toHaveLength(2);
@@ -779,12 +782,33 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		fireEvent(
 			window,
 			new CustomEvent("light:playback-configuration", {
-				detail: { addressing: "current_page", slot: 1 },
+				detail: { desk_id: "desk-1", address: { page: 1, position: 1 } },
 			}),
 		);
 		expect(
 			screen.getByRole("dialog", { name: "Playback Configuration" }),
 		).toHaveAttribute("data-slot", "1");
+	});
+
+	it("ignores configuration requests for another page or an invisible position", () => {
+		assignPlayback();
+		render(<PlaybackFaderBank count={1} />);
+		for (const address of [
+			{ page: 2, position: 1 },
+			{ page: 1, position: 401 },
+		]) {
+			fireEvent(
+				window,
+				new CustomEvent("light:playback-configuration", {
+					detail: { desk_id: "desk-1", address },
+				}),
+			);
+		}
+		expect(
+			screen.queryByRole("dialog", { name: "Playback Configuration" }),
+		).not.toBeInTheDocument();
+		expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
+		expect(mocks.clearPlaybackSlot).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -835,7 +859,10 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				{ page: 1, position: 1 },
 				"off",
 				{
-					control_source: { surface_id: "main", control_id: 10 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 10,
+					},
 				},
 			),
 		);
@@ -864,7 +891,10 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				{ page: 1, position: 2 },
 				"off",
 				{
-					control_source: { surface_id: "main", control_id: 20 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 20,
+					},
 				},
 			),
 		);
@@ -1051,7 +1081,10 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 				{ page: 1, position: 1 },
 				"select",
 				{
-					control_source: { surface_id: "main", control_id: 10 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 10,
+					},
 				},
 			),
 		);
@@ -1085,7 +1118,10 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 				{ page: 1, position: 1 },
 				"select",
 				{
-					control_source: { surface_id: "main", control_id: 10 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 10,
+					},
 				},
 			),
 		);
@@ -1147,7 +1183,10 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			{
 				button: 1,
 				pressed: true,
-				control_source: { surface_id: "main", control_id: 11 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 11,
+				},
 			},
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
@@ -1155,14 +1194,20 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			"master",
 			{
 				value: 0.42,
-				control_source: { surface_id: "main", control_id: 10 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 10,
+				},
 			},
 		);
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalledWith(
 			{ page: 1, position: 1 },
 			"select",
 			{
-				control_source: { surface_id: "main", control_id: 10 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 10,
+				},
 			},
 		);
 	});
@@ -1455,7 +1500,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					"master",
 					{
 						value: 1,
-						control_source: { surface_id: "main", control_id: 10 },
+						control_source: {
+							surface_id: expect.stringMatching(/^software:/),
+							control_id: 10,
+						},
 					},
 				),
 			);
@@ -1475,7 +1523,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"master",
 				{
 					value: 0.13,
-					control_source: { surface_id: "main", control_id: 10 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 10,
+					},
 				},
 			),
 		);
@@ -1487,7 +1538,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"master",
 				{
 					value: 0.42,
-					control_source: { surface_id: "main", control_id: 10 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 10,
+					},
 				},
 			),
 		);
@@ -1497,7 +1551,8 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					address.page === 1 &&
 					address.position === 1 &&
 					action === "master" &&
-					options.control_source.surface_id === "main",
+					options.control_source.surface_id ===
+						mocks.poolPlaybackAction.mock.calls[0][2].control_source.surface_id,
 			),
 		).toBe(true);
 	});
@@ -1530,7 +1585,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			{
 				button: 1,
 				pressed: true,
-				control_source: { surface_id: "main", control_id: 11 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 11,
+				},
 			},
 		);
 		const flash = screen.getByRole("button", { name: "FLASH" });
@@ -1542,7 +1600,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"flash",
 				{
 					pressed: true,
-					control_source: { surface_id: "main", control_id: 13 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 13,
+					},
 				},
 			),
 		);
@@ -1552,7 +1613,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"flash",
 				{
 					pressed: false,
-					control_source: { surface_id: "main", control_id: 13 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 13,
+					},
 				},
 			),
 		);
@@ -1567,7 +1631,13 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		const flash = screen.getByRole("button", { name: "FLASH" });
 		fireEvent.pointerDown(flash, { pointerId: 4 });
 		if (release === "cancel") fireEvent.pointerCancel(flash, { pointerId: 4 });
-		else fireEvent.lostPointerCapture(flash, { pointerId: 4 });
+		else {
+			fireEvent.lostPointerCapture(flash, { pointerId: 4 });
+			await waitFor(() =>
+				expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1),
+			);
+			fireEvent.pointerUp(window, { pointerId: 4 });
+		}
 		fireEvent.lostPointerCapture(flash, { pointerId: 4 });
 
 		await waitFor(() =>
@@ -1578,9 +1648,106 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			"flash",
 			{
 				pressed: false,
-				control_source: { surface_id: "main", control_id: 13 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 13,
+				},
 			},
 		);
+	});
+
+	it("keeps two mounted controls of the same configured surface independently held", async () => {
+		assignPlayback();
+		const held = new Set<string>();
+		mocks.poolPlaybackAction.mockImplementation(
+			async (_address, action, input) => {
+				if (action === "flash") {
+					const key = JSON.stringify(input.control_source);
+					if (input.pressed) held.add(key);
+					else held.delete(key);
+				}
+				return { status: "changed" };
+			},
+		);
+		const first = render(<PlaybackFaderBank surfaceId="main" count={1} />);
+		const second = render(<PlaybackFaderBank surfaceId="main" count={1} />);
+		fireEvent(
+			within(first.container).getByRole("button", { name: "FLASH" }),
+			Object.assign(new Event("pointerdown", { bubbles: true }), {
+				pointerId: 4,
+			}),
+		);
+		fireEvent(
+			within(second.container).getByRole("button", { name: "FLASH" }),
+			Object.assign(new Event("pointerdown", { bubbles: true }), {
+				pointerId: 5,
+			}),
+		);
+		await waitFor(() => expect(held.size).toBe(2));
+		const presses = mocks.poolPlaybackAction.mock.calls.slice(0, 2);
+		expect(presses.map(([address]) => address)).toEqual([
+			{ page: 1, position: 1 },
+			{ page: 1, position: 1 },
+		]);
+		expect(presses[0][2].control_source).not.toEqual(
+			presses[1][2].control_source,
+		);
+		first.rerender(
+			<PlaybackFaderBank surfaceId="main" pageNumber={2} count={1} />,
+		);
+		await Promise.resolve();
+		expect(held.size).toBe(2);
+		expect(
+			within(first.container).queryByRole("button", { name: "FLASH" }),
+		).not.toBeInTheDocument();
+		fireEvent(window, Object.assign(new Event("pointerup"), { pointerId: 99 }));
+		await Promise.resolve();
+		expect(held.size).toBe(2);
+		fireEvent(window, Object.assign(new Event("pointerup"), { pointerId: 4 }));
+		await waitFor(() => expect(held.size).toBe(1));
+		first.unmount();
+		expect(mocks.poolPlaybackAction.mock.calls[2][0]).toEqual({
+			page: 1,
+			position: 1,
+		});
+		expect(mocks.poolPlaybackAction.mock.calls[2][2]).toEqual({
+			pressed: false,
+			control_source: presses[0][2].control_source,
+		});
+		second.unmount();
+		await waitFor(() => expect(held.size).toBe(0));
+		expect(mocks.poolPlaybackAction.mock.calls[3][2]).toEqual({
+			pressed: false,
+			control_source: presses[1][2].control_source,
+		});
+	});
+
+	it("retains a keyboard hold through an empty page until the actual key release", async () => {
+		assignPlayback();
+		const bank = render(<PlaybackFaderBank count={1} />);
+		fireEvent.keyDown(screen.getByRole("button", { name: "FLASH" }), {
+			key: " ",
+			repeat: false,
+		});
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1),
+		);
+		const press = mocks.poolPlaybackAction.mock.calls[0];
+		bank.rerender(<PlaybackFaderBank pageNumber={2} count={1} />);
+		await Promise.resolve();
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+		fireEvent.keyUp(window, { key: "Enter" });
+		await Promise.resolve();
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+		fireEvent.keyUp(window, { key: " " });
+		await waitFor(() =>
+			expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2),
+		);
+		expect(mocks.poolPlaybackAction.mock.calls[1]).toEqual([
+			press[0],
+			"flash",
+			{ pressed: false, control_source: press[2].control_source },
+		]);
 	});
 
 	it("releases a held Flash when the bank unmounts", async () => {
@@ -1599,7 +1766,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 			"flash",
 			{
 				pressed: false,
-				control_source: { surface_id: "main", control_id: 13 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 13,
+				},
 			},
 		);
 	});
@@ -1625,7 +1795,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"flash",
 				{
 					pressed: true,
-					control_source: { surface_id: "main", control_id: 13 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 13,
+					},
 				},
 			),
 		);
@@ -1636,6 +1809,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 		rerender(<PlaybackFaderBank count={1} />);
 
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(1);
+		fireEvent.pointerUp(window, { pointerId: 4 });
 		resolvePress({ status: "changed" });
 		await waitFor(() =>
 			expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
@@ -1643,7 +1817,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"flash",
 				{
 					pressed: false,
-					control_source: { surface_id: "main", control_id: 13 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 13,
+					},
 				},
 			),
 		);
@@ -1672,7 +1849,10 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				"flash",
 				{
 					pressed: true,
-					control_source: { surface_id: "main", control_id: 13 },
+					control_source: {
+						surface_id: expect.stringMatching(/^software:/),
+						control_id: 13,
+					},
 				},
 			),
 		);
@@ -1788,7 +1968,10 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 			{
 				button: 1,
 				pressed: true,
-				control_source: { surface_id: "main", control_id: 11 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 11,
+				},
 			},
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenNthCalledWith(
@@ -1798,7 +1981,10 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 			{
 				button: 1,
 				pressed: true,
-				control_source: { surface_id: "main", control_id: 11 },
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 11,
+				},
 			},
 		);
 		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(2);

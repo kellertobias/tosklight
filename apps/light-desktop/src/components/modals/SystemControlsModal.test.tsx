@@ -71,7 +71,7 @@ const dynamicsRuntime = vi.hoisted(() => ({
 				controllerId: "dynamic-controller",
 				source: "Playback 12",
 				stopMode: "playback",
-				stopOwner: { kind: "physical_playback", playback_number: 12 },
+				stopOwner: { kind: "playback", page: 1, position: 12 },
 				priority: 1,
 				size: 1,
 				speedMultiplier: 1,
@@ -109,15 +109,14 @@ function runningSource(
 	const identity =
 		playbackNumber == null
 			? ({ kind: "cue_list", cue_list_id: cueListId } as const)
-			: ({ kind: "playback", playback_number: playbackNumber } as const);
+			: ({ kind: "playback", page: 1, position: playbackNumber } as const);
 	return {
 		key:
 			identity.kind === "cue_list"
 				? `cuelist:${cueListId}`
-				: `playback:${playbackNumber}`,
+				: `playback:1.${playbackNumber}`,
 		identity,
 		cueListId,
-		playbackNumber,
 		label,
 		runtime: {
 			cue_index: 0,
@@ -130,7 +129,7 @@ function runningSource(
 		} as RunningCueListSource["runtime"],
 		cueList: {
 			id: cueListId,
-			name: playbackNumber == null ? "Virtual Cuelist" : "Main Cuelist",
+			name: playbackNumber == null ? "Direct sequence" : "Main Cuelist",
 			cues: [
 				{
 					id: `${cueListId}-cue-1`,
@@ -149,18 +148,17 @@ const mapped = runningSource(12, "cue-list-1", "Main playback", {
 	master: 0.75,
 	dynamic: true,
 });
-const direct = runningSource(null, "cue-list-2", "Virtual Cuelist", {
+const direct = runningSource(null, "cue-list-2", "Direct sequence", {
 	paused: true,
 });
-direct.identity = { kind: "virtual", page: 1, playback_number: 1001 };
-direct.key = "virtual:1.1001";
+direct.identity = { kind: "direct_cue_list", cue_list_id: direct.cueListId };
+direct.key = `direct-cuelist:${direct.cueListId}`;
 const playbackAuthority = {
 	ready: true,
 	loading: false,
 	canRelease: true,
 	sources: [mapped, direct] as readonly RunningCueListSource[],
-	mappedSources: [mapped] as readonly RunningCueListSource[],
-	virtualSources: [direct] as readonly RunningCueListSource[],
+	assignedSources: [mapped] as readonly RunningCueListSource[],
 	dynamics: [{ source: mapped, index: 0 }],
 	release,
 };
@@ -276,7 +274,7 @@ vi.mock("./systemControls/useVisualizerViewControls", () => ({
 }));
 
 afterEach(() => {
-	delete mapped.locations;
+	mapped.identity = { kind: "playback", page: 1, position: 12 };
 	cleanup();
 	vi.clearAllMocks();
 	legacyReads = 0;
@@ -313,8 +311,7 @@ afterEach(() => {
 		loading: false,
 		canRelease: true,
 		sources: [mapped, direct],
-		mappedSources: [mapped],
-		virtualSources: [direct],
+		assignedSources: [mapped],
 		dynamics: [{ source: mapped, index: 0 }],
 	});
 	lifecycle.projection = {
@@ -399,7 +396,7 @@ describe("SystemControlsModal", () => {
 			screen.queryByText("Shift + Clear / Shift + Delete"),
 		).not.toBeInTheDocument();
 		expect(screen.getByText("Main playback")).toBeInTheDocument();
-		expect(screen.getByText("Virtual Cuelist")).toBeInTheDocument();
+		expect(screen.getByText("Direct sequence")).toBeInTheDocument();
 		expect(screen.getByText("Circle · Dynamic 7")).toBeInTheDocument();
 		expect(screen.queryByText("Operator · This desk")).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("tab", { name: "Active Programmers" }));
@@ -421,7 +418,7 @@ describe("SystemControlsModal", () => {
 		);
 		fireEvent.click(
 			screen.getByRole("button", {
-				name: "Turn off Virtual playback Virtual Cuelist",
+				name: "Turn off Direct Cuelist Direct sequence",
 			}),
 		);
 		fireEvent.click(
@@ -442,20 +439,20 @@ describe("SystemControlsModal", () => {
 		expect(clearProgrammer).toHaveBeenCalledWith("session-1");
 	});
 
-	it("distinguishes page slot from pool owner when stopping a mapped Cuelist", () => {
-		mapped.locations = [
-			{ page: 1, slot: 7 },
-			{ page: 2, slot: 3 },
-		];
+	it("releases the exact sparse page address independently of Cuelist Pool number", () => {
+		mapped.identity = { kind: "playback", page: 99, position: 1000 };
+		mapped.cueListNumber = 12;
 		render(<SystemControlsModal />);
-		expect(
-			screen.getByText(/Page 1 · Playback 7, Page 2 · Playback 3/),
-		).toBeInTheDocument();
+		expect(screen.getByText(/Page 99 · Playback 1000/)).toBeInTheDocument();
 		fireEvent.click(
 			screen.getByRole("button", { name: "Turn off Playback Main playback" }),
 		);
 		expect(release).toHaveBeenCalledWith(mapped);
-		expect(mapped.identity).toEqual({ kind: "playback", playback_number: 12 });
+		expect(mapped.identity).toEqual({
+			kind: "playback",
+			page: 99,
+			position: 1000,
+		});
 	});
 
 	it("groups the desk's sessions and uses safe lifecycle counts", () => {
@@ -584,8 +581,7 @@ describe("SystemControlsModal", () => {
 			loading: true,
 			canRelease: false,
 			sources: [],
-			mappedSources: [],
-			virtualSources: [],
+			assignedSources: [],
 			dynamics: [],
 		});
 		render(<SystemControlsModal />);
