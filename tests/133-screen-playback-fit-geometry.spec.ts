@@ -57,12 +57,31 @@ test("TL714 Screen pane fits 15 faders with three actions and 15 buttons, recove
 	expect(geometry.scrollWidth).toBeLessThanOrEqual(Math.ceil(geometry.width));
 	expect(geometry.scrollHeight).toBeLessThanOrEqual(Math.ceil(geometry.height));
 	expect(geometry.inert).toBe(false);
+	const fence = bank.locator(".playback-solo-fence-overlay");
+	await expect(fence).toBeVisible();
+	await expect.poll(() => fence.locator("line").count()).toBeGreaterThan(0);
+	const fenceGeometry = await fence.evaluate((element) => {
+		const box = element.getBoundingClientRect();
+		const grid = element.parentElement!.getBoundingClientRect();
+		return { width: box.width, height: box.height, left: box.left - grid.left, top: box.top - grid.top };
+	});
+	expect(fenceGeometry.width).toBeCloseTo(geometry.width, 0);
+	expect(fenceGeometry.height).toBeCloseTo(geometry.height, 0);
+	expect(Math.abs(fenceGeometry.left)).toBeLessThanOrEqual(1);
+	expect(Math.abs(fenceGeometry.top)).toBeLessThanOrEqual(1);
 	await page.setViewportSize({ width: 500, height: 500 });
 	await expect(page.getByRole("status")).toContainText("more space for 44px touch controls");
 	await expect.poll(() => bank.evaluate((element) => element instanceof HTMLElement && element.inert)).toBe(true);
+	await expect(fence).toHaveCSS("visibility", "hidden");
 	await page.setViewportSize({ width: 900, height: 500 });
 	await expect(page.getByRole("status")).toHaveCount(0);
 	await expect.poll(() => bank.evaluate((element) => element instanceof HTMLElement && element.inert)).toBe(false);
+	await expect(fence).toHaveCSS("visibility", "visible");
+	await expect(fence).toBeVisible();
+	await expect.poll(() => fence.evaluate((element) => {
+		const box = element.getBoundingClientRect();
+		return { width: box.width, height: box.height };
+	})).toEqual({ width: fenceGeometry.width, height: fenceGeometry.height });
 	const geometryPath = testInfo.outputPath("screen-pane-actual-card-geometry.json");
 	await writeFile(geometryPath, JSON.stringify(geometry, null, 2));
 	await testInfo.attach("screen-pane-actual-card-geometry", {

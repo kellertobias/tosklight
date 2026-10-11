@@ -38,6 +38,9 @@
 	background: var(--panel);
 	color: var(--text);
 }
+.screen-playback-fit:has(> .screen-playback-fit-status) .playback-solo-fence-overlay {
+	visibility: hidden;
+}
 /* Narrow Main tracks retain every authored action rather than overprinting side by side. */
 .screen-bank-fit .playback-fader-bank.touch-layout .vertical-touch-fader-stack.has-actions {
 	grid-template-rows: minmax(44px, 1fr) auto;
