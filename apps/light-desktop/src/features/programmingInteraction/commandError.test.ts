@@ -9,6 +9,26 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 describe("command rejection classification", () => {
+	it("keeps exact timing grammar rejections brief without hiding unexpected faults", () => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const message of [
+			"TIME and DELAY require seconds",
+			"TIME and DELAY must be within 0-86400 seconds",
+			"time decimal requires digits after the dot",
+			"Timing ranges are not supported",
+		]) {
+			expect(commandErrorFeedback(message).kind).toBe("operator");
+			reportProgrammingCommandError(new Error(message));
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe("operator");
+		}
+		for (const message of [
+			"TIME and DELAY require seconds: database unavailable",
+			"TIME and DELAY require seconds\nnetwork failure",
+			"unexpected timing service failure",
+		]) {
+			expect(commandErrorFeedback(message).kind).toBe("unexpected");
+		}
+	});
 	it.each([
 		"Preset Move and Copy require <family> PRESET <number> on both sides",
 		"Preset Move and Copy require PRESET before the number",

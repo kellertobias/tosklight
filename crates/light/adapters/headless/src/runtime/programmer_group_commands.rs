@@ -3,16 +3,7 @@ use super::*;
 
 fn percent_level(tokens: &[String]) -> Result<f32, String> {
     let level = tokens.first().ok_or("AT requires a level")?;
-    let percent = if level == "FULL" {
-        100.0
-    } else {
-        level
-            .parse::<f32>()
-            .map_err(|_| "level must be a percentage or FULL")?
-    };
-    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
-        return Err("level must be within 0-100".into());
-    }
+    let percent = command_level_percent(level, true)?;
     if tokens.len() != 1 {
         return Err("unexpected tokens after level".into());
     }

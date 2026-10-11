@@ -110,8 +110,27 @@ pub(super) fn set_command_group_intensity(
     }
 }
 
+pub(super) fn command_level_percent(token: &str, allow_full: bool) -> Result<f32, String> {
+    let percent = if token == "FULL" && allow_full {
+        100.0
+    } else {
+        token
+            .strip_suffix('%')
+            .unwrap_or(token)
+            .parse::<f32>()
+            .map_err(|_| "level must be a percentage or FULL")?
+    };
+    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+        return Err("level must be within 0-100".into());
+    }
+    Ok(percent)
+}
+
 pub(super) fn command_time_millis(token: &str) -> Result<u64, String> {
     let seconds = token
+        .strip_suffix('S')
+        .or_else(|| token.strip_suffix('s'))
+        .unwrap_or(token)
         .parse::<f64>()
         .map_err(|_| "TIME and DELAY require seconds")?;
     if !seconds.is_finite() || !(0.0..=86_400.0).contains(&seconds) {
@@ -122,13 +141,22 @@ pub(super) fn command_time_millis(token: &str) -> Result<u64, String> {
 
 pub(super) fn command_time_at(tokens: &[String], index: usize) -> Result<(u64, usize), String> {
     let whole = tokens.get(index).ok_or("TIME and DELAY require seconds")?;
-    if tokens.get(index + 1).is_some_and(|token| token == ".") {
+    let (number, used) = if tokens.get(index + 1).is_some_and(|token| token == ".") {
         let fraction = tokens
             .get(index + 2)
             .ok_or("time decimal requires digits after the dot")?;
-        return Ok((command_time_millis(&format!("{whole}.{fraction}"))?, 3));
+        (format!("{whole}.{fraction}"), 3)
+    } else {
+        (whole.clone(), 1)
+    };
+    let value = command_time_millis(&number)?;
+    if tokens
+        .get(index + used)
+        .is_some_and(|token| token == "THRU")
+    {
+        return Err("Timing ranges are not supported".into());
     }
-    Ok((command_time_millis(whole)?, 1))
+    Ok((value, used))
 }
 
 pub(super) fn extract_command_timing(
@@ -144,7 +172,7 @@ pub(super) fn extract_command_timing(
                 timing.delay_millis = Some(value);
                 index += 2 + used;
             }
-            "TIME" => {
+            "TIME" | "FADE" => {
                 let (value, used) = command_time_at(tokens, index + 1)?;
                 timing.fade = true;
                 timing.fade_millis = Some(value);
@@ -167,11 +195,27 @@ pub(super) fn extract_command_timing(
 pub(super) fn tokenize_programmer_command(
     command_line: &str,
 ) -> Result<(Vec<String>, CommandTiming), String> {
-    let spaced = command_line
-        .replace(',', ".")
-        .replace('.', " . ")
-        .replace('+', " + ")
-        .replace('-', " - ");
+    let normalized = command_line.replace(',', ".");
+    let spaced = normalized
+        .split_whitespace()
+        .map(|token| {
+            let numeric_unit = token
+                .strip_suffix('%')
+                .or_else(|| token.strip_suffix('s'))
+                .or_else(|| token.strip_suffix('S'));
+            if numeric_unit.is_some_and(|number| {
+                number.starts_with(|ch: char| ch.is_ascii_digit()) && number.parse::<f64>().is_ok()
+            }) {
+                token.to_owned()
+            } else {
+                token
+                    .replace('.', " . ")
+                    .replace('+', " + ")
+                    .replace('-', " - ")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut raw_tokens = Vec::new();
     for token in spaced
         .split_whitespace()
@@ -194,4 +238,67 @@ pub(super) fn tokenize_programmer_command(
         raw_tokens.push(token);
     }
     extract_command_timing(&raw_tokens)
+}
+
+#[cfg(test)]
+mod documented_timing_tests {
+    use super::*;
+
+    #[test]
+    fn documented_simple_percentage_and_fade_timing_match_keypad_time() {
+        for command in [
+            "G91 AT 25 FADE 0 DELAY 0",
+            "G91 AT 25% FADE 0s DELAY 0s",
+            "GROUP 91 AT 25% TIME 0 DELAY 0",
+        ] {
+            let (tokens, timing) = tokenize_programmer_command(command).unwrap();
+            assert_eq!(
+                tokens,
+                [
+                    "GROUP",
+                    "91",
+                    "AT",
+                    if command.contains('%') { "25%" } else { "25" }
+                ]
+            );
+            assert!(timing.fade);
+            assert_eq!(timing.fade_millis, Some(0));
+            assert_eq!(timing.delay_millis, Some(0));
+        }
+        let (tokens, timing) =
+            tokenize_programmer_command("F1 AT 25.5% FADE 12.5s DELAY 0.25s").unwrap();
+        assert_eq!(tokens, ["FIXTURE", "1", "AT", "25.5%"]);
+        assert_eq!(timing.fade_millis, Some(12_500));
+        assert_eq!(timing.delay_millis, Some(250));
+    }
+
+    #[test]
+    fn timing_ranges_refuse_instead_of_becoming_intensity_spreads() {
+        for command in [
+            "G91 AT 25 FADE 0 THRU 5",
+            "F1 AT 25 TIME 0 THRU 5",
+            "G91 AT 25 DELAY 0 THRU 5",
+        ] {
+            assert_eq!(
+                tokenize_programmer_command(command).unwrap_err(),
+                "Timing ranges are not supported"
+            );
+        }
+        let (tokens, timing) = tokenize_programmer_command("G91 AT 0 THRU 100 TIME 0").unwrap();
+        assert_eq!(tokens, ["GROUP", "91", "AT", "0", "THRU", "100"]);
+        assert_eq!(timing.fade_millis, Some(0));
+    }
+
+    #[test]
+    fn keypad_bare_decimal_and_double_time_preserve_seconds_and_delay() {
+        let tokens = [
+            "GROUP", "91", "AT", "25", "TIME", "12", ".", "5", "TIME", "TIME", "0",
+        ]
+        .map(String::from);
+        let (body, timing) = extract_command_timing(&tokens).unwrap();
+        assert_eq!(body, ["GROUP", "91", "AT", "25"]);
+        assert!(timing.fade);
+        assert_eq!(timing.fade_millis, Some(12_500));
+        assert_eq!(timing.delay_millis, Some(0));
+    }
 }

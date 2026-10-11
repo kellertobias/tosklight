@@ -683,3 +683,133 @@ fn multi_point_spread_with_more_points_than_selection_is_rejected_without_mutati
     assert!(programmer.group_values.is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn documented_simple_timing_preserves_group_owner_fixture_values_and_atomic_refusal() {
+    let (state, data_dir) = test_state();
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(),
+        token: "test".into(),
+        connected: true,
+        desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    attach_session_command_context(&state, &session);
+    let path = data_dir.join("shows/simple-timing.show");
+    let show_id = default_show::initialise_legacy_test_show(&path).unwrap();
+    let entry = ShowEntry {
+        is_base_show: false,
+        id: show_id,
+        name: "Simple timing".into(),
+        path: path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
+        revision_copy: None,
+    };
+    let mut snapshot = load_engine_snapshot(&entry).unwrap();
+    let fixture = snapshot
+        .fixtures
+        .iter()
+        .find(|fixture| fixture.fixture_number == Some(1))
+        .unwrap()
+        .fixture_id;
+    snapshot.groups = vec![light_programmer::GroupDefinition {
+        id: "91".into(),
+        name: "Timed group".into(),
+        fixtures: vec![fixture],
+        ..Default::default()
+    }]
+    .into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    for command in [
+        "G91 AT 25 FADE 0 DELAY 0",
+        "G91 AT 25% FADE 0s DELAY 0s",
+        "G91 AT 25 TIME 0 TIME TIME 0",
+    ] {
+        execute_programmer_command(&state, &session, command).unwrap();
+        let programmer = state.programming.get(session.id).unwrap();
+        let value = &programmer.group_values["91"][&light_core::AttributeKey::intensity()];
+        assert_eq!(value.value.normalized(), Some(0.25));
+        assert_eq!(value.fade_millis, Some(0));
+        assert_eq!(value.delay_millis, Some(0));
+        assert!(
+            !programmer
+                .values
+                .iter()
+                .any(|value| value.fixture_id == fixture)
+        );
+        assert!(
+            programmer
+                .selection_expression
+                .unwrap()
+                .live_group_owners()
+                .contains(&"91".to_owned())
+        );
+    }
+    execute_programmer_command(&state, &session, "F1 AT 75% FADE 0 DELAY 0").unwrap();
+    let programmer = state.programming.get(session.id).unwrap();
+    let value = programmer
+        .values
+        .iter()
+        .find(|value| {
+            value.fixture_id == fixture && value.attribute == light_core::AttributeKey::intensity()
+        })
+        .unwrap();
+    assert_eq!(value.value.normalized(), Some(0.75));
+    assert_eq!(value.fade_millis, Some(0));
+    assert_eq!(value.delay_millis, Some(0));
+    execute_programmer_command(&state, &session, "AT 49.5% TIME 0 DELAY 0").unwrap();
+    let programmer = state.programming.get(session.id).unwrap();
+    assert_eq!(
+        programmer
+            .values
+            .iter()
+            .find(|value| value.fixture_id == fixture)
+            .unwrap()
+            .value
+            .normalized(),
+        Some(0.495)
+    );
+    execute_programmer_command(&state, &session, "G91").unwrap();
+    execute_programmer_command(&state, &session, "AT 12.5% FADE 0 DELAY 0").unwrap();
+    let programmer = state.programming.get(session.id).unwrap();
+    assert_eq!(
+        programmer.group_values["91"][&light_core::AttributeKey::intensity()]
+            .value
+            .normalized(),
+        Some(0.125)
+    );
+    assert_eq!(
+        programmer
+            .values
+            .iter()
+            .find(|value| value.fixture_id == fixture)
+            .unwrap()
+            .value
+            .normalized(),
+        Some(0.495)
+    );
+    for command in [
+        "G91 AT 50 FADE nope",
+        "F1 AT 50 TIME 86401",
+        "G91 AT 50 DELAY -1",
+        "G91 AT 50 FADE 0ms",
+        "G91 AT 50 TIME 0 THRU 5",
+        "F1 AT 50 DELAY 0 THRU 5",
+    ] {
+        let before = serde_json::to_value(state.programming.get(session.id).unwrap()).unwrap();
+        assert!(
+            execute_programmer_command(&state, &session, command).is_err(),
+            "{command}"
+        );
+        assert_eq!(
+            serde_json::to_value(state.programming.get(session.id).unwrap()).unwrap(),
+            before,
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}

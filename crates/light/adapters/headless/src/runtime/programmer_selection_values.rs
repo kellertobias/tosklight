@@ -67,16 +67,7 @@ pub(super) fn apply_current_selection_value(
     let level_token = value
         .get(usize::from(relative))
         .ok_or("AT requires a level")?;
-    let percent = if level_token == "FULL" && !relative {
-        100.0
-    } else {
-        level_token
-            .parse::<f32>()
-            .map_err(|_| "level must be a percentage or FULL")?
-    };
-    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
-        return Err("level must be within 0-100".into());
-    }
+    let percent = command_level_percent(level_token, !relative)?;
     if current.selected.is_empty() && live_groups.is_empty() {
         return Err("No Selection".into());
     }

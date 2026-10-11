@@ -108,16 +108,7 @@ fn fixture_level_values(
     let level = value
         .get(usize::from(relative))
         .ok_or("AT requires a level")?;
-    let percent = if level == "FULL" && !relative {
-        100.0
-    } else {
-        level
-            .parse::<f32>()
-            .map_err(|_| "level must be a percentage or FULL")?
-    };
-    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
-        return Err("level must be within 0-100".into());
-    }
+    let percent = command_level_percent(level, !relative)?;
     let resolved = relative.then(|| state.output.resolved_values());
     Ok(fixtures
         .iter()

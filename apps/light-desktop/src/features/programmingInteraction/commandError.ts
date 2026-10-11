@@ -29,6 +29,10 @@ const TRANSFER_GRAMMAR_REJECTIONS = new Set([
 
 // Explicit input grammar errors; never infer operator errors from arbitrary expected/required text.
 const INPUT_GRAMMAR_REJECTIONS = new Set([
+	"time and delay require seconds",
+	"time and delay must be within 0-86400 seconds",
+	"time decimal requires digits after the dot",
+	"timing ranges are not supported",
 	"expected a fixture number",
 	"at requires a level",
 	"expected offset or + before the subset offset",
