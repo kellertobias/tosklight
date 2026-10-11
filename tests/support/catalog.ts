@@ -1,15 +1,10 @@
 import fs from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { expect } from "../bench/core/fixtures";
-import type { ApiDriver } from "../bench/core/api";
+import type { ApiDriver, VersionedShowObject } from "../bench/core/api";
 import { executeProgrammerCommand } from "./operator";
 
-export interface VersionedObject<T = Record<string, any>> {
-  kind: string;
-  id: string;
-  revision: number;
-  body: T;
-}
+export type VersionedObject<T = Record<string, any>> = VersionedShowObject<T>;
 
 export interface ProgrammerState {
   session_id?: string;

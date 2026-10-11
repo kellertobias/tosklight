@@ -19,6 +19,15 @@ import { decodePlaybackOutcome } from "../../../apps/light-desktop/src/api/playb
 import { decodePatchSnapshot } from "../../../apps/light-desktop/src/api/patchWire";
 import { projectionToPatchedFixture } from "../../../apps/light-desktop/src/features/patch/model";
 
+/** Canonical portable object metadata returned by the object snapshot boundary. */
+export interface VersionedShowObject<T> {
+	kind: string;
+	id: string;
+	body: T;
+	revision: number;
+	updated_at: string;
+}
+
 export interface Session {
 	session_id: string;
 	client_id: string;
@@ -106,9 +115,9 @@ export class ApiDriver {
 	async showObjects<T = Record<string, unknown>>(
 		showId: string,
 		kind: string,
-	): Promise<Array<{ id: string; body: T; revision: number }>> {
+	): Promise<Array<VersionedShowObject<T>>> {
 		const snapshot = await this.request<{
-			objects: Array<{ id: string; body: T; revision: number }>;
+			objects: Array<VersionedShowObject<T>>;
 		}>(
 			"GET",
 			`/api/v2/objects/${encodeURIComponent(kind)}`,
@@ -124,9 +133,9 @@ export class ApiDriver {
 		showId: string,
 		kind: string,
 		id: string,
-	): Promise<{ id: string; body: T; revision: number } | null> {
+	): Promise<VersionedShowObject<T> | null> {
 		const snapshot = await this.request<{
-			object: { id: string; body: T; revision: number } | null;
+			object: VersionedShowObject<T> | null;
 		}>(
 			"GET",
 			`/api/v2/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`,

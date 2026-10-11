@@ -90,7 +90,11 @@ export class BrowserSpeedGroup {
 	) {}
 
 	async setBpm(bpm: number) {
-		await this.action({ type: "set_bpm", group: this.group, bpm: validBpm(bpm) });
+		await this.action({
+			type: "set_bpm",
+			group: this.group,
+			bpm: validBpm(bpm),
+		});
 	}
 
 	async addBpm(bpm: number) {
@@ -114,7 +118,12 @@ export class BrowserSpeedGroup {
 		if (!Number.isSafeInteger(taps) || taps < 2 || taps > 8)
 			throw new Error("Tap tempo requires 2 to 8 taps");
 		await this.openPlaybackTools();
-		const intervalsMillis = tapIntervals(this.seed, this.group, targetBpm, taps);
+		const intervalsMillis = tapIntervals(
+			this.seed,
+			this.group,
+			targetBpm,
+			taps,
+		);
 		const button = this.button();
 		for (let index = 0; index < taps; index += 1) {
 			if (index) {
@@ -192,7 +201,9 @@ export class BrowserSpeedGroup {
 		});
 	}
 
-	private action(action: Parameters<typeof applySpeedGroupRuntimeAction>[1]["action"]) {
+	private action(
+		action: Parameters<typeof applySpeedGroupRuntimeAction>[1]["action"],
+	) {
 		return applySpeedGroupRuntimeAction(this.api, { surface: "api", action });
 	}
 
@@ -230,8 +241,8 @@ export class BrowserSpeedGroups {
 		bench: LightBench,
 		seed: string,
 	) {
-		for (const group of Object.values(SpeedGroup))
-			this[group] = new BrowserSpeedGroup(
+		const create = (group: SpeedGroup) =>
+			new BrowserSpeedGroup(
 				api,
 				page,
 				desk,
@@ -240,6 +251,11 @@ export class BrowserSpeedGroups {
 				`${seed}:speed-group`,
 				this.reports,
 			);
+		this.A = create(SpeedGroup.A);
+		this.B = create(SpeedGroup.B);
+		this.C = create(SpeedGroup.C);
+		this.D = create(SpeedGroup.D);
+		this.E = create(SpeedGroup.E);
 	}
 }
 
@@ -251,7 +267,8 @@ function tapIntervals(
 ) {
 	const base = 60_000 / targetBpm;
 	return Array.from({ length: taps - 1 }, (_, index) => {
-		const jitter = stableUnit(`${seed}:${group}:${targetBpm}:${index}`) * 16 - 8;
+		const jitter =
+			stableUnit(`${seed}:${group}:${targetBpm}:${index}`) * 16 - 8;
 		return Math.max(80, Math.round(base + jitter));
 	});
 }

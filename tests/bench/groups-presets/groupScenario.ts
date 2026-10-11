@@ -303,13 +303,19 @@ export class BrowserGroups {
 		const group = await this.requiredObject(number);
 		if (route === "api") {
 			const session = this.session();
-			await new HttpGroupManagementTransport({
+			const showId = this.showId();
+			const transport = new HttpGroupManagementTransport({
 				baseUrl: this.api.baseUrl,
 				sessionToken: session.token,
-			}).manage(this.showId(), {
+			});
+			const authority = await transport.settings(showId, String(number));
+			if (this.api.session !== session || this.showId() !== showId)
+				throw new Error("Group edit authority changed before submission");
+			await transport.manage(showId, {
 				requestId: crypto.randomUUID(),
 				groupId: String(number),
-				expectedObjectRevision: group.revision,
+				expectedObjectRevision: authority.group.revision,
+				expectedShowRevision: authority.showRevision,
 				operation: {
 					type: "update_properties",
 					properties: {
@@ -436,11 +442,20 @@ export class BrowserGroups {
 	}
 
 	private async chooseOneOffSmart() {
-		const dialog = this.page.getByRole("dialog", { name: "Record", exact: true });
+		const dialog = this.page.getByRole("dialog", {
+			name: "Record",
+			exact: true,
+		});
 		await expect(dialog).toBeVisible();
-		await expect(dialog.getByRole("switch", { name: "Set as default" })).not.toBeChecked();
-		await this.desk.click(dialog.getByRole("radio", { name: "Smart", exact: true }));
-		await this.desk.click(dialog.getByRole("button", { name: "Record", exact: true }));
+		await expect(
+			dialog.getByRole("switch", { name: "Set as default" }),
+		).not.toBeChecked();
+		await this.desk.click(
+			dialog.getByRole("radio", { name: "Smart", exact: true }),
+		);
+		await this.desk.click(
+			dialog.getByRole("button", { name: "Record", exact: true }),
+		);
 		await expect(dialog).toBeHidden();
 	}
 

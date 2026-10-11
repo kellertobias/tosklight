@@ -6,10 +6,7 @@ import type {
 	PatchFixturesOutcome,
 	PatchSnapshot,
 } from "../../../apps/light-desktop/src/api/generated/light-wire";
-import type {
-	Locator,
-	Page,
-} from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { activeShowId } from "../catalog";
 
 export interface SoftwareFixtureAddressRequest {
@@ -35,7 +32,9 @@ export async function setFixtureAddressThroughSoftware(
 	await expect(dialog).toBeVisible();
 	if (request.address === null) await clearEveryVisibleSplit(dialog);
 	else await enterAddress(dialog, request.address);
-	await dialog.getByRole("button", { name: "Set Address", exact: true }).click();
+	await dialog
+		.getByRole("button", { name: "Set Address", exact: true })
+		.click();
 }
 
 /** Makes the complete fixture projection output-less in one authoritative Patch transaction. */
@@ -49,12 +48,9 @@ export async function unpatchFixture(
 		(candidate) => candidate.fixture_id === fixtureId,
 	);
 	if (!fixture) throw new Error(`Patch fixture ${fixtureId} does not exist`);
-	return applyPatchFixtures(
-		api,
-		showId,
-		snapshot.patch_revision,
-		[unpatchedFixtureInput(fixture)],
-	);
+	return applyPatchFixtures(api, showId, snapshot.patch_revision, [
+		unpatchedFixtureInput(fixture),
+	]);
 }
 
 /** Creates independently-addressable fixture copies in one Patch transaction. */
@@ -68,7 +64,8 @@ export async function duplicatePatchedFixtures(
 	const source = snapshot.fixtures.find(
 		(candidate) => candidate.fixture_id === sourceFixtureId,
 	);
-	if (!source) throw new Error(`Patch fixture ${sourceFixtureId} does not exist`);
+	if (!source)
+		throw new Error(`Patch fixture ${sourceFixtureId} does not exist`);
 	return applyPatchFixtures(
 		api,
 		showId,
@@ -89,12 +86,9 @@ export async function setFixtureAddressThroughApi(
 		(candidate) => candidate.fixture_id === fixtureId,
 	);
 	if (!fixture) throw new Error(`Patch fixture ${fixtureId} does not exist`);
-	return applyPatchFixtures(
-		api,
-		showId,
-		snapshot.patch_revision,
-		[fixtureInputAt(fixture, address)],
-	);
+	return applyPatchFixtures(api, showId, snapshot.patch_revision, [
+		fixtureInputAt(fixture, address),
+	]);
 }
 
 export async function expectFixtureUnpatched(
@@ -162,10 +156,13 @@ async function clearEveryVisibleSplit(dialog: Locator): Promise<void> {
 
 async function enterAddress(dialog: Locator, address: string): Promise<void> {
 	if (!/^\d+\.\d+$/.test(address))
-		throw new Error(`Fixture address must use universe.address, received ${address}`);
+		throw new Error(
+			`Fixture address must use universe.address, received ${address}`,
+		);
 	await clearAddress(dialog);
 	for (const character of address) {
-		const name = character === "." ? "Universe separator" : `Address ${character}`;
+		const name =
+			character === "." ? "Universe separator" : `Address ${character}`;
 		await dialog.getByRole("button", { name, exact: true }).click();
 	}
 }
@@ -182,7 +179,9 @@ async function clearAddress(dialog: Locator): Promise<void> {
 	).toHaveText("Unpatched");
 }
 
-function unpatchedFixtureInput(fixture: PatchFixtureProjection): PatchFixtureInput {
+function unpatchedFixtureInput(
+	fixture: PatchFixtureProjection,
+): PatchFixtureInput {
 	return {
 		...fixtureInput(fixture),
 		split_patches: clearAssignments(fixture.split_patches),
@@ -214,7 +213,9 @@ function fixtureInputAt(
 		...assignment,
 	}));
 	if (assignments.length === 0)
-		throw new Error(`Patch fixture ${fixture.fixture_id} has no addressable split`);
+		throw new Error(
+			`Patch fixture ${fixture.fixture_id} has no addressable split`,
+		);
 	const parsed = parseAddress(address);
 	assignments[0] = { ...assignments[0], ...parsed };
 	return { ...fixtureInput(fixture), split_patches: assignments };
@@ -229,7 +230,9 @@ function fixtureInput(fixture: PatchFixtureProjection): PatchFixtureInput {
 		profile_id: fixture.profile_id,
 		profile_revision: fixture.profile_revision,
 		mode_id: fixture.mode_id,
-		split_patches: fixture.split_patches.map((assignment) => ({ ...assignment })),
+		split_patches: fixture.split_patches.map((assignment) => ({
+			...assignment,
+		})),
 		layer_id: fixture.layer_id,
 		direct_control: fixture.direct_control,
 		location: fixture.location,
@@ -240,6 +243,21 @@ function fixtureInput(fixture: PatchFixtureProjection): PatchFixtureInput {
 				...assignment,
 			})),
 		})),
+		internal_bindings: fixture.internal_bindings,
+		scenery_size_metres: fixture.scenery_size_metres,
+		scenery_options: fixture.scenery_options,
+		model_scale: fixture.model_scale,
+		note: fixture.note,
+		position_master: fixture.position_master,
+		group_masters_enabled: fixture.group_masters_enabled,
+		grand_master_enabled: fixture.grand_master_enabled,
+		invert_pan: fixture.invert_pan,
+		invert_tilt: fixture.invert_tilt,
+		position_calibration: fixture.position_calibration,
+		color_calibration: fixture.color_calibration,
+		bracket_angle: fixture.bracket_angle,
+		shaper_angle: fixture.shaper_angle,
+		installed_appearance: fixture.installed_appearance,
 		move_in_black_enabled: fixture.move_in_black_enabled,
 		move_in_black_delay_millis: fixture.move_in_black_delay_millis,
 		highlight_overrides: fixture.highlight_overrides,
@@ -253,18 +271,30 @@ function parseAddress(address: string | null): {
 	if (address === null) return { universe: null, address: null };
 	const match = /^(\d+)\.(\d+)$/.exec(address);
 	if (!match)
-		throw new Error(`Fixture address must use universe.address, received ${address}`);
+		throw new Error(
+			`Fixture address must use universe.address, received ${address}`,
+		);
 	return { universe: Number(match[1]), address: Number(match[2]) };
 }
 
 function clearAssignments(
 	assignments: PatchFixtureProjection["split_patches"],
 ): PatchFixtureInput["split_patches"] {
-	return assignments.map(({ split }) => ({ split, universe: null, address: null }));
+	return assignments.map(({ split }) => ({
+		split,
+		universe: null,
+		address: null,
+	}));
 }
 
 function allAssignmentsAreClear(fixture: PatchFixtureProjection): boolean {
-	return [fixture.split_patches, ...fixture.multipatch.map((item) => item.split_patches)]
+	return [
+		fixture.split_patches,
+		...fixture.multipatch.map((item) => item.split_patches),
+	]
 		.flat()
-		.every((assignment) => assignment.universe === null && assignment.address === null);
+		.every(
+			(assignment) =>
+				assignment.universe === null && assignment.address === null,
+		);
 }

@@ -212,3 +212,26 @@ function session(): Session {
 		},
 	};
 }
+
+describe("ApiDriver canonical portable object metadata", () => {
+	it("retains kind, revision and timestamp in list and exact-object reads", async () => {
+		const object = {
+			kind: "group",
+			id: "310",
+			revision: 7,
+			updated_at: "2026-10-11T06:52:00Z",
+			body: { name: "Ordered" },
+		};
+		const driver = new ApiDriver("http://desk.local");
+		const request = vi.spyOn(driver, "request");
+		request
+			.mockResolvedValueOnce({ objects: [object] })
+			.mockResolvedValueOnce({ object });
+		expect(await driver.showObjects("show", "group")).toEqual([object]);
+		expect(await driver.showObject("show", "group", "310")).toEqual(object);
+		expect(request.mock.calls.map((call) => [call[1], call[5]])).toEqual([
+			["/api/v2/objects/group", { showId: "show" }],
+			["/api/v2/objects/group/310", { showId: "show" }],
+		]);
+	});
+});
