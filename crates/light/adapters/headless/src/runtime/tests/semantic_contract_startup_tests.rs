@@ -846,13 +846,21 @@ async fn record_first_live_cue_with_target(
     show.put("preset", "1.1", serde_json::to_value(preset).unwrap());
     if independent {
         let mut speed = light_playback::PlaybackDefinition::new_cue_list(
-            101,
             "Speed A",
             light_core::CueListId::new(),
         );
         speed.target = light_playback::PlaybackTarget::SpeedGroup { group: "A".into() };
         speed.reset_incompatible_layout();
-        show.put("playback", "101", serde_json::to_value(speed).unwrap());
+        show.put(
+            "playback_page",
+            "1",
+            serde_json::to_value(light_playback::PlaybackPage {
+                number: 1,
+                name: "Independent assignment".into(),
+                assignments: HashMap::from([(101, speed)]),
+            })
+            .unwrap(),
+        );
     }
     desk.activate(&show);
     let startup = match contract {
@@ -919,7 +927,7 @@ async fn record_first_live_cue_with_target(
             "/api/v2/cues/record",
             serde_json::json!({
                 "request_id":"first-linked-cue-from-production-startup",
-                "target": if independent { serde_json::json!({"kind":"cuelist_pool","number":101}) } else { serde_json::json!({"kind":"pool","playback_number":30}) },
+                "target": if independent { serde_json::json!({"kind":"cuelist_pool","number":101}) } else { serde_json::json!({"kind":"playback","page":1,"position":30}) },
                 "operation":"overwrite", "cue_number":null, "timing":{}, "cue_only":false,
                 "name":null, "capture_policy":"current_capture", "activation_policy":"hold",
             }),
@@ -945,7 +953,10 @@ async fn record_first_live_cue_with_target(
             before.programming_contract_marker()
         );
         assert_eq!(after.objects_of_kind("cue_list").count(), 0);
-        assert!(after.object("playback", "30").is_none());
+        assert_eq!(
+            after.object("playback_page", "1"),
+            before.object("playback_page", "1")
+        );
         assert_eq!(
             served.state.programming.get(session).unwrap().values,
             captured.values,
@@ -960,10 +971,10 @@ async fn record_first_live_cue_with_target(
         let list = after.objects_of_kind("cue_list").next().unwrap();
         if independent {
             assert_eq!(list.body()["pool_number"], 101);
-            assert_eq!(after.objects_of_kind("playback").count(), 1);
+            assert_eq!(after.objects_of_kind("playback_page").count(), 1);
             assert_eq!(
-                after.object("playback", "101").unwrap().body(),
-                before.object("playback", "101").unwrap().body()
+                after.object("playback_page", "1").unwrap().body(),
+                before.object("playback_page", "1").unwrap().body()
             );
             assert_eq!(
                 served
@@ -977,7 +988,7 @@ async fn record_first_live_cue_with_target(
                         .id
                 )
             );
-            assert!(result["projections"]["playback"].is_null());
+            assert!(result["projections"].get("playback").is_none());
             assert!(result["projections"]["page"].is_null());
             assert!(
                 served
@@ -1080,9 +1091,10 @@ async fn production_startup_records_independent_101_selects_uuid_and_preserves_s
         .find(|list| list.pool_number == Some(101))
         .unwrap();
     assert_eq!(list.cues.len(), 1);
-    assert_eq!(snapshot.playbacks.len(), 1);
+    assert_eq!(snapshot.playback_pages.len(), 1);
+    assert_eq!(snapshot.playback_pages[0].assignments.len(), 1);
     assert!(matches!(
-        snapshot.playbacks[0].target,
+        snapshot.playback_pages[0].assignments[&101].target,
         light_playback::PlaybackTarget::SpeedGroup { .. }
     ));
     assert_eq!(
