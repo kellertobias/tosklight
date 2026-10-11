@@ -398,8 +398,10 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			?.panes.map((pane: any) => pane.kind),
 	).toEqual(["fixtures", "stage", "dmx"]);
 
-	// TL-552: the packaged default show is the semantic demo, so a contract-1 desk opens it.
-	await api.openDefaultShow({ transition: "hold_current" });
+	// Ordinary validation opens the packaged default. Explicit regeneration replaces that
+	// asset, so it cannot depend on the previous packaged Playback contract.
+	if (process.env.LIGHT_UPDATE_DEMO_SHOW !== "1")
+		await api.openDefaultShow({ transition: "hold_current" });
 	await api.openShow(showId, { transition: "hold_current" });
 	expect(
 		PLANNED_DEMO_BENCHMARK_ASSIGNMENTS.map((assignment) => assignment.name),
@@ -456,7 +458,18 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 				route.revision,
 			);
 		}
+		const assignments = (await api.showObject<any>(showId, "playback_page", "1"))?.body.assignments;
 		const generated = await api.downloadShow(showId);
+		const reopened = await api.createShow<{ id: string }>({
+			name: `demo-reopen-${crypto.randomUUID()}`,
+			data_base64: generated.toString("base64"),
+			overwrite: false,
+		});
+		await api.openShow(reopened.id, { transition: "hold_current" });
+		expect((await api.showObjects(reopened.id, "patched_fixture")).length).toBe(312);
+		expect((await api.showObject<any>(reopened.id, "playback_page", "1"))?.body.assignments).toEqual(
+			assignments,
+		);
 		const temporary = `${DEMO_SHOW_ASSET}.${process.pid}.${crypto.randomUUID()}.tmp`;
 		await fs.mkdir(path.dirname(DEMO_SHOW_ASSET), { recursive: true });
 		await fs.writeFile(temporary, generated);

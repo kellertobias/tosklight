@@ -72,6 +72,14 @@ export class LightBench {
   async start(workerIndex: number): Promise<void> {
     await fs.mkdir(artifactPaths.tmp, { recursive: true });
     this.dataDir = await fs.mkdtemp(path.join(artifactPaths.tmp, `light-e2e-${workerIndex}-`));
+    if (process.env.LIGHT_DEMO_GENERATION_BOOTSTRAP === "1") {
+      // Generation must not depend on the packaged asset it replaces. This audited fixture
+      // contains no Playback objects or history; startup opens it through the canonical writer.
+      const shows = path.join(this.dataDir, "shows");
+      await fs.mkdir(shows, { recursive: true });
+      await fs.copyFile(path.join(ROOT, "tests/fixtures/default-stage.show"),
+        path.join(shows, "Default Stage Show.show"));
+    }
     const httpPort = await freeTcpPort();
     this.oscPort = await freeUdpPort();
     this.artnet = await DmxReceiver.bind();

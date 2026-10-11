@@ -156,7 +156,7 @@ demo(){
 }
 demo_show(){
   build_e2e
-  (cd "$UI" && LIGHT_UPDATE_DEMO_SHOW=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/demo-show-results" npm run test:e2e -- --workers=1 "$ROOT/tests/76-demo-show-generation.spec.ts" "$@")
+  (cd "$UI" && LIGHT_UPDATE_DEMO_SHOW=1 LIGHT_DEMO_GENERATION_BOOTSTRAP=1 LIGHT_TEST_RESULTS_DIR="$LIGHT_ARTIFACTS_DIR/test/demo-show-results" npm run test:e2e -- --workers=1 "$ROOT/tests/76-demo-show-generation.spec.ts" "$@")
 }
 run_help_screenshots(){
   (cd "$ROOT" && npx playwright test --config apps/ui-library/storybook/playwright.config.ts apps/ui-library/storybook/tests/help-screenshots.spec.ts "$@")
