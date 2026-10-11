@@ -7,7 +7,8 @@ import {
 describe("Storybook actual source", () => {
 	it("maps every included story module to actual source", () => {
 		// The retired split VirtualPlaybackGrid story is no longer included.
-		expect(actualSourceCoverage).toHaveLength(64);
+		expect(actualSourceCoverage).toHaveLength(63);
+		expect(actualSourceCoverage.some(({ storyPath }) => storyPath.endsWith("/VirtualPlaybackGrid.stories.tsx"))).toBe(false);
 		expect(
 			actualSourceCoverage.filter(
 				({ implementationPaths }) => implementationPaths.length === 0,

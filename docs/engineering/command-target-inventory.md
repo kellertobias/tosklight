@@ -163,13 +163,13 @@ These surfaces use command keys but are not evidence of a shared show-object tar
 - Preset targets: `apps/light-desktop/src/windows/PresetsWindow.tsx`
 - Cuelist targets: `apps/light-desktop/src/windows/cuelistWindow/CuelistPool.tsx`
 - Playback precedence: `apps/light-desktop/src/components/control/playbackFaderBank/slotActions.ts`
-- Virtual Playback targets: `apps/light-desktop/src/components/control/virtualPlayback/`
+- Playback pane targets use the same `playbackFaderBank/slotActions.ts` routing.
 - Patch nested SET targets: `apps/light-desktop/src/components/setup/fixturePatch/`
 - Compact Cue targets: `apps/light-desktop/src/windows/cuelistWindow/CueProperties.tsx`
 - OSC keypad and Playback interception: `crates/light/adapters/headless/src/runtime/osc_highlight.rs`,
   `crates/light/adapters/headless/src/runtime/osc_playback.rs`, and
   `crates/light/adapters/headless/src/command_http/cue_recording_osc.rs`
 - Focused tests: `SetInteractionProvider.test.tsx`, `PlaybackFaderBank.test.tsx`,
-  `VirtualPlaybackGrid.setRouting.test.tsx`, `FixturePatchSetup.control.test.tsx`,
+  `FixturePatchSetup.control.test.tsx`,
   `CuelistWindow.test.tsx`, `PresetsWindow.recording.test.tsx`, and
   `command_http_cue_convergence_tests.rs`

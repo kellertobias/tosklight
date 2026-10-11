@@ -103,8 +103,6 @@ const publicComponentStoryCoverage: Record<string, string> = {
 	HardwareCueRowsView: "controls-playbacks--eight-by-two-hardware-bank",
 	HardwarePlaybackFaderView: "controls-playbacks--eight-by-two-hardware-bank",
 	PlaybackBankView: "controls-playbacks--eight-by-two-touch-bank",
-	VirtualPlaybackGridView:
-		"tables-and-grids-virtual-playback-grid--sparse-grid",
 	PoolCard:
 		"tables-and-grids-pools-production-pool-cards--scaling-and-every-state",
 	PoolGrid: "tables-and-grids-pools-generic-pool-window--sparse",
@@ -2697,25 +2695,31 @@ test("generic and application-owned pool stories preserve their slot contracts",
 		"data-pool-slot-id",
 		"1",
 	);
-	// Both assignments point at the same Main Sequence object: canonical 1 and legacy alias 4.
-	// Search follows authored Cuelist names, not the Side Sequence playback label.
+	// Both Playback assignments reference one independently numbered Cuelist object.
+	// Search follows its authored name, not the Side Sequence assignment label.
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("Main");
 	const mainCards = page.locator(".cuelist-card");
-	await expect(mainCards).toHaveCount(2);
-	await expect(mainCards.nth(0)).toHaveAttribute("data-pool-slot-id", "1");
-	await expect(mainCards.nth(1)).toHaveAttribute("data-pool-slot-id", "4");
-	await expect(mainCards.nth(0)).toContainText("Main Sequence");
-	await expect(mainCards.nth(1)).toContainText("Main Sequence");
-	await expect(mainCards.nth(0)).not.toContainText("Alias of Cuelist");
-	await expect(mainCards.nth(1)).toContainText("Alias of Cuelist 1");
+	await expect(mainCards).toHaveCount(1);
+	await expect(mainCards.first()).toHaveAttribute("data-pool-slot-id", "1");
+	await expect(mainCards.first()).toContainText("Main Sequence");
+	await expect(mainCards.first()).not.toContainText("Alias of Cuelist");
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("Side");
 	await expect(page.locator(".cuelist-card")).toHaveCount(0);
-	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("4");
-	const filteredCuelist = page.locator('.cuelist-card[data-pool-slot-id="4"]');
+	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("1");
+	const filteredCuelist = page.locator('.cuelist-card[data-pool-slot-id="1"]');
 	await expect(filteredCuelist).toHaveCount(1);
-	await expect(filteredCuelist.locator(".number")).toHaveText("4");
-	await expect(filteredCuelist).toHaveAttribute("data-pool-slot-id", "4");
+	await expect(filteredCuelist.locator(".number")).toHaveText("1");
+	await expect(filteredCuelist).toContainText("Main Sequence");
+	await expect(filteredCuelist).toHaveAttribute("data-pool-slot-id", "1");
 	await expect(filteredCuelist).toHaveAttribute("data-pool-position", "0");
+	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("4");
+	const emptyCuelist = page.locator('.cuelist-card[data-pool-slot-id="4"]');
+	await expect(emptyCuelist).toHaveCount(1);
+	await expect(emptyCuelist.locator(".number")).toHaveText("4");
+	await expect(emptyCuelist.locator(".pool-card-name")).toHaveText("Empty");
+	await expect(emptyCuelist).not.toContainText("Main Sequence");
+	await expect(emptyCuelist).toHaveAttribute("data-pool-slot-id", "4");
+	await expect(emptyCuelist).toHaveAttribute("data-pool-position", "0");
 	await page.getByRole("textbox", { name: "Search Cuelists" }).fill("");
 	await expect(page.locator(".cuelist-card")).toHaveCount(1000);
 
@@ -2930,7 +2934,7 @@ test("production pool cards use dashed empty cards and semantic workflow colors"
 	await expect(empty).toHaveCSS("border-top-style", "dashed");
 	await expect(empty).toHaveCSS("opacity", "1");
 	await expect(recordTarget.locator(".pool-card-workflow")).toHaveText(
-		"Record",
+		"REC",
 	);
 	await expect(updateTarget.locator(".pool-card-workflow")).toHaveText(
 		"Update",
@@ -3012,219 +3016,6 @@ test("legacy application CSS cannot impose rectangular full-pool dimensions", ()
 	expect(css).toMatch(
 		/\.group-strip\s+\.group-card\s*\{[^}]*(?:width|height)\s*:\s*(?:124|142|94)px/u,
 	);
-});
-
-test("the application Virtual Playbacks adapter uses a stable faderless pool grid across pages", async ({
-	page,
-}) => {
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--sparse-grid&viewMode=story",
-	);
-	await expect(page.locator(".virtual-playback-box")).toHaveCount(12);
-	await expect(page.locator(".playback-fader-bank")).toHaveCount(0);
-	await expect(page.locator('input[type="range"]')).toHaveCount(0);
-	await expect(
-		page.getByRole("button", { name: /cell 2 empty/u }),
-	).toBeVisible();
-
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--page-switching&viewMode=story",
-	);
-	const first = page.locator('[data-grid-position="0"]');
-	await expect(first).toContainText("Main");
-	await expect(first).toHaveAttribute("data-page", "1");
-	await page.getByRole("button", { name: "Next page" }).click();
-	await expect(first).toContainText("House");
-	await expect(first).toHaveAttribute("data-page", "2");
-	await expect(first).toHaveAttribute("data-grid-position", "0");
-});
-
-test("Virtual Playback GO and held actions retain click versus press-release semantics", async ({
-	page,
-}) => {
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--sparse-grid&viewMode=story",
-	);
-	await page.getByRole("button", { name: /cell 1 Main/u }).click();
-	await expect(page.getByRole("status")).toHaveText("Action 1001");
-
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--held-flash-and-swap&viewMode=story",
-	);
-	const flash = page.getByRole("button", { name: /cell 1 Bump/u });
-	const bounds = await flash.boundingBox();
-	expect(bounds).not.toBeNull();
-	await page.mouse.move(
-		bounds!.x + bounds!.width / 2,
-		bounds!.y + bounds!.height / 2,
-	);
-	await page.mouse.down();
-	await expect(page.getByRole("status")).toHaveText("Pressed 1001");
-	await page.mouse.up();
-	await expect(page.getByRole("status")).toHaveText("Released 1001");
-});
-
-test("the application Virtual Playbacks stories cover adapter-owned targeting and availability states", async ({
-	page,
-}) => {
-	for (const [story, selector, className] of [
-		["configuration-state", '[data-grid-position="0"]', "configuration-armed"],
-		["update-state", '[data-grid-position="0"]', "update-target"],
-		["exclusion-zone-state", '[data-grid-position="3"]', "exclusion-selected"],
-	] as const) {
-		await page.goto(
-			`/iframe.html?id=tosklight-virtual-playbacks--${story}&viewMode=story`,
-		);
-		await expect(page.locator(selector)).toHaveClass(
-			new RegExp(className, "u"),
-		);
-	}
-
-	await expect(page.locator('[data-grid-position="3"]')).toHaveAttribute(
-		"data-exclusion-zones",
-		"Front alternates",
-	);
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--sparse-large-grid&viewMode=story",
-	);
-	const largeGrid = page.locator(".virtual-playback-grid");
-	await expect(largeGrid).toHaveAttribute("data-logical-cells", "300");
-	expect(await largeGrid.locator(".virtual-playback-box").count()).toBeLessThan(
-		200,
-	);
-	await expect(
-		page.getByRole("button", { name: /cell 1 Main/u }),
-	).toBeEnabled();
-
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--pinned-page&viewMode=story",
-	);
-	await expect(
-		page.getByRole("button", { name: /playback 1301 page 2 cell 1 House/u }),
-	).toBeVisible();
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--overlapping-zones&viewMode=story",
-	);
-	await expect(page.locator('[data-grid-position="3"]')).toHaveAttribute(
-		"data-exclusion-zones",
-		"Front alternates, Bump alternates",
-	);
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--hidden-membership&viewMode=story",
-	);
-	await expect(
-		page.getByText("Virtual Playback 1301 remains a saved member on page 2.", {
-			exact: true,
-		}),
-	).toHaveText("Virtual Playback 1301 remains a saved member on page 2.");
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--zone-error-state&viewMode=story",
-	);
-	await expect(page.getByRole("alert")).toHaveText(
-		"Zone revision changed on another screen",
-	);
-
-	await page.goto(
-		"/iframe.html?id=tables-and-grids-virtual-playback-grid--every-state&viewMode=story",
-	);
-	const empty = page.locator('[data-grid-position="1"]');
-	const unavailable = page.locator('[data-grid-position="2"]');
-	await expect(empty).toHaveAttribute("data-availability", "empty");
-	await expect(unavailable).toHaveAttribute("data-availability", "unavailable");
-	await expect(empty).toBeEnabled();
-	await expect(unavailable).toBeDisabled();
-	const vacantAppearance = async (
-		element: import("@playwright/test").Locator,
-	) =>
-		element.evaluate((node) => {
-			const style = getComputedStyle(node);
-			return {
-				background: style.backgroundColor,
-				borderStyle: style.borderStyle,
-				color: style.color,
-				filter: style.filter,
-				opacity: style.opacity,
-			};
-		});
-	expect(await vacantAppearance(unavailable)).toEqual(
-		await vacantAppearance(empty),
-	);
-});
-
-test("Virtual Playback cards use outline, full-fill, edge-status, and artwork hierarchy", async ({
-	page,
-}) => {
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--running-transition&viewMode=story",
-	);
-	const card = page.locator('[data-grid-position="0"]');
-	const inactive = await card.evaluate((element) => {
-		const style = getComputedStyle(element);
-		return {
-			background: style.backgroundColor,
-			left: style.borderLeftColor,
-			top: style.borderTopColor,
-		};
-	});
-	expect(inactive.left).toBe(inactive.top);
-	await page.getByRole("button", { name: "Toggle running" }).click();
-	await expect(card).toHaveClass(/running/u);
-	await expect(card.locator(".pool-card-status")).toHaveText("Running");
-	await expect
-		.poll(() =>
-			card.evaluate((element) => getComputedStyle(element).backgroundColor),
-		)
-		.not.toBe(inactive.background);
-	const running = await card.evaluate((element) => {
-		const style = getComputedStyle(element);
-		return {
-			background: style.backgroundColor,
-			border: style.borderTopColor,
-		};
-	});
-	expect(running.border).toBe(inactive.top);
-	await page.getByRole("button", { name: "Toggle running" }).click();
-	await expect(card).not.toHaveClass(/running/u);
-	// The card fades between the two fills, so the colour a moment after the class goes is still
-	// part way there. Settling on it is the same wait the other direction already makes.
-	await expect
-		.poll(() =>
-			card.evaluate((element) => getComputedStyle(element).backgroundColor),
-		)
-		.not.toBe(running.background);
-
-	await page.goto(
-		"/iframe.html?id=tosklight-virtual-playbacks--icon-and-image-artwork&viewMode=story",
-	);
-	const icon = page.locator('[data-grid-position="0"] .pool-card-icon');
-	const image = page.locator('[data-grid-position="1"] .pool-card-image');
-	await expect(icon).toBeVisible();
-	await expect(image).toBeVisible();
-	const imageCard = page.locator('[data-grid-position="1"]');
-	const [imageBounds, cardBounds] = await Promise.all([
-		image.boundingBox(),
-		imageCard.boundingBox(),
-	]);
-	expect(imageBounds).not.toBeNull();
-	expect(cardBounds).not.toBeNull();
-	expect((imageBounds?.x ?? 0) + (imageBounds?.width ?? 0)).toBeLessThanOrEqual(
-		(cardBounds?.x ?? 0) + (cardBounds?.width ?? 0),
-	);
-	expect(
-		(imageBounds?.y ?? 0) + (imageBounds?.height ?? 0),
-	).toBeLessThanOrEqual((cardBounds?.y ?? 0) + (cardBounds?.height ?? 0));
-
-	for (const [story, label] of [
-		// Arming configuration arms the Set target, which the card labels "Set" — the same label
-		// VirtualPlaybackGrid.test.tsx pins on the shared component.
-		["configuration-state", "Set"],
-		["update-state", "Update"],
-	] as const) {
-		await page.goto(
-			`/iframe.html?id=tosklight-virtual-playbacks--${story}&viewMode=story`,
-		);
-		await expect(page.locator(".pool-card-workflow").first()).toHaveText(label);
-	}
 });
 
 test("nested modal story keeps deterministic stack order and top-only Escape", async ({
@@ -3878,7 +3669,7 @@ for (const storyId of [
 	"tosklight-integration-input-modal-surfaces--number-pad",
 	"controls-faders-vertical-touch-fader--software",
 	"controls-encoders--individual-touch",
-	"tosklight-virtual-playbacks--narrow-touch",
+	"controls-playbacks--configurable-playback",
 	"tables-and-grids-pools-generic-pool-window--narrow",
 	"tosklight-window-system-modal-layer--close-policies",
 	"tosklight-window-system-modal-layer--title-bar-configuration",
