@@ -417,3 +417,17 @@ test("only the E2E semantic test server build enables the retained no-op semanti
 	for (const root of roots) visit(root);
 	assert.deepEqual(offenders, []);
 });
+
+
+test("unit geometry browser is installed for release and non-release suites", () => {
+    const workflow = fs.readFileSync(
+        path.join(repositoryRoot, ".github/workflows/release.yml"), "utf8",
+    );
+    const unit = /^ {2}unit:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/mu.exec(workflow)?.[1] ?? "";
+    const install = unit.indexOf("npx playwright install --with-deps --only-shell chromium");
+    assert.ok(install > unit.indexOf("run: npm ci"), "install matching bundled headless browser after workspace dependencies");
+    assert.ok(install < unit.indexOf("run: npm run test:typescript-unit"), "release unit suite requires browser too");
+    assert.ok(install < unit.indexOf("run: npm run test:unit"), "non-release unit suite requires browser too");
+    const step = unit.slice(unit.lastIndexOf("      - name:", install), unit.indexOf("\n      -", install));
+    assert.doesNotMatch(step, /\n\s+if:/u, "browser install must cover both branch suite variants");
+});

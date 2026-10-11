@@ -239,6 +239,11 @@ jobs:
           done
           exit 1
 
+      # Geometry unit tests launch Playwright's bundled headless Chromium, not the E2E Chrome channel.
+      - name: Install browser for unit geometry tests
+        timeout-minutes: 15
+        run: npx playwright install --with-deps --only-shell chromium
+
       - name: Run TypeScript unit tests on release branches
         if: github.ref == 'refs/heads/main'
         run: npm run test:typescript-unit

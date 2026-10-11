@@ -76,6 +76,7 @@ describe("personal Playback pane touch navigation", () => {
 			stdin: { contents: source, loader: "tsx", resolveDir: root },
 			bundle: true,
 			write: false,
+			outfile: resolve(evidence, "fixture.js"),
 			platform: "browser",
 			jsx: "automatic",
 			logLevel: "silent",
@@ -88,7 +89,14 @@ describe("personal Playback pane touch navigation", () => {
 			await page.setContent(
 				`<style>${styles(resolve(root, "apps/light-desktop/src/styles.css"))}body{margin:0}.desk-grid{width:1200px;height:700px}</style><div id="app"></div><p>Personal Playback pane: exact20×14, positions401–680. Four visible44px arrows reveal all cells without operating Playbacks.</p>`,
 			);
-			await page.addScriptTag({ content: bundle.outputFiles[0].text });
+			for (const file of bundle.outputFiles) {
+				if (file.path.endsWith(".css"))
+					await page.addStyleTag({ content: file.text });
+			}
+			for (const file of bundle.outputFiles) {
+				if (file.path.endsWith(".js"))
+					await page.addScriptTag({ content: file.text });
+			}
 			await page
 				.getByRole("navigation", { name: "Scroll Playbacks" })
 				.waitFor();

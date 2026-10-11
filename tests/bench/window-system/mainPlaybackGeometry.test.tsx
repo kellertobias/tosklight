@@ -44,6 +44,7 @@ describe("Main literal fifteen-column software geometry", () => {
 			stdin: { contents: source, loader: "tsx", resolveDir: root },
 			bundle: true,
 			write: false,
+			outfile: resolve(evidence, "fixture.js"),
 			platform: "browser",
 			jsx: "automatic",
 			logLevel: "silent",
@@ -57,7 +58,14 @@ describe("Main literal fifteen-column software geometry", () => {
 				`<style>${css}body{margin:0}#app{height:100vh}</style><div id="app"></div>`,
 			);
 
-			await page.addScriptTag({ content: bundle.outputFiles[0].text });
+			for (const file of bundle.outputFiles) {
+				if (file.path.endsWith(".css"))
+					await page.addStyleTag({ content: file.text });
+			}
+			for (const file of bundle.outputFiles) {
+				if (file.path.endsWith(".js"))
+					await page.addScriptTag({ content: file.text });
+			}
 			await page.waitForSelector(".touch-playback-card");
 			await page.screenshot({
 				path: resolve(evidence, `initial-${height}.png`),
