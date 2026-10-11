@@ -1,6 +1,14 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
+/** The canonical 15-column Main needs the supported internal-screen area. */
+export async function ensurePlaybackViewport(page: Page): Promise<void> {
+	const viewport = page.viewportSize();
+	if (viewport?.width === 1280 && viewport.height === 720)
+		await page.setViewportSize({ width: 1440, height: 900 });
+}
+
 export async function openPlaybackMode(page: Page): Promise<void> {
+	await ensurePlaybackViewport(page);
 	if (await page.locator(".playback-fader-bank").isVisible()) return;
 	await page.locator(".mode-toggle").click();
 	await expect(page.locator(".playback-fader-bank")).toBeVisible();
@@ -123,7 +131,7 @@ export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
 	const dialog = page.getByRole("dialog", { name: "Open Window" });
 	const card = dialog
 		.getByRole("button")
-		.filter({ has: page.getByText("Virtual Playbacks", { exact: true }) });
+		.filter({ has: page.getByText("Playbacks", { exact: true }) });
 	for (const tab of await dialog.getByRole("tab").all()) {
 		await tab.click();
 		if (await card.count()) break;
@@ -131,7 +139,7 @@ export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
 	await card.first().click();
 	const pane = page
 		.locator(".desk-pane")
-		.filter({ hasText: "Virtual Playbacks" });
+		.filter({ hasText: "Playbacks" });
 	await expect(pane).toBeVisible();
 	return pane;
 }

@@ -688,7 +688,7 @@ async function applyPaneConfiguration<T extends PaneType>(
             await row.getByLabel("First Playback Number").fill(String(401 + index * columns));
             await row.getByLabel("Playbacks in row").fill(String(columns));
             await row.getByLabel("Buttons", { exact: true }).fill("1");
-            await chooseOption(page, row, "Presentation", "Buttons");
+            await chooseOption(page, row, "Input type", "Buttons");
         }
         if (options.pageMode === "pinned") {
             await chooseOption(page, layout, "Page source", "Pinned page");

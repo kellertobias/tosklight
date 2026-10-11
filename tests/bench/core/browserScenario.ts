@@ -797,8 +797,8 @@ export class BrowserScreens {
 			await chooseOption(
 				this.page,
 				row,
-				"Presentation",
-				desired.fader ? "Faders" : "Buttons",
+				"Input type",
+				desired.fader ? "Fader" : "Buttons",
 			);
 			await row.getByLabel("Buttons").fill(String(desired.buttons));
 		}

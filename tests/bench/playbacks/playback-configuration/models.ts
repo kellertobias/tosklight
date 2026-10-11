@@ -1,3 +1,5 @@
+import type { PlaybackDefinition as CanonicalPlaybackDefinition } from "../../../../apps/light-desktop/src/api/types/playback";
+
 export type PlaybackTarget =
 	| { type: "cue_list"; cue_list_id: string }
 	| { type: "group"; group_id: string }
@@ -19,6 +21,7 @@ export interface PlaybackDefinition {
 	color: string;
 	flash_release: string;
 	protect_from_swap: boolean;
+	footprint?: CanonicalPlaybackDefinition["footprint"];
 	presentation_icon?: string;
 	presentation_image?: string;
 }

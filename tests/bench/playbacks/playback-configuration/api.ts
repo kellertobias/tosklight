@@ -286,13 +286,16 @@ export async function audit(api: ApiDriver): Promise<any[]> {
 export async function inertSnapshot(api: ApiDriver, number: number) {
 	const playback = await playbackAt(api, 1, number);
 	const state = await playbackSnapshot(api);
+	const surfaces = await api.request<any>("GET", "/api/v2/playback-surfaces");
 	return {
 		object: playback,
+		playback_surfaces: surfaces.playback_surfaces,
 
 		pages: state.pages,
 		active: state.active,
 		selected_playback: state.selected_playback,
-		audit: await audit(api),
+		// Surface focus is live context; authored registry changes remain checked above.
+		audit: (await audit(api)).filter((event) => event.kind !== "playback_surfaces_changed"),
 		dmx: await logicalDmx(api),
 	};
 }

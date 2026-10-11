@@ -9,6 +9,7 @@ import {
 	addVirtualPlaybackPane,
 	armSet,
 	chooseSelect,
+	createCueList,
 	definition,
 	expectConfigurationModal,
 	inertSnapshot,
@@ -21,6 +22,7 @@ import {
 	poolAction,
 	prepareShow,
 	selectTrigger,
+	writePage,
 } from "./helpers";
 
 type Pbk001State = PreparedShow & {
@@ -272,37 +274,31 @@ export function registerPbk001PhysicalControlsScenario(): void {
 		);
 		const wider = {
 			type: "wider" as const,
-			right_buttons: ["go_minus", "go", "flash"] as [string, string, string],
-			right_fader: "master",
+			right_buttons: ["go_minus", "go", "flash"] as ["go_minus", "go", "flash"],
+			right_fader: "master" as const,
 		};
-		await installPlaybacks(
-			api,
-			[
-				definition(
-					43,
-					"One button wider",
-					{ type: "cue_list", cue_list_id: prepared.cueListId },
-					{
-						buttons: ["go", "none", "none"],
-						button_count: 1,
-						has_fader: false,
-						footprint: wider,
-					},
-				),
-				definition(
-					44,
-					"Two buttons wider",
-					{ type: "cue_list", cue_list_id: prepared.cueListId },
-					{
-						buttons: ["go_minus", "go", "none"],
-						button_count: 2,
-						has_fader: false,
-						footprint: wider,
-					},
-				),
-			],
-			{ 1: 43, 4: 44 },
-		);
+		await writePage(api, 1, {
+			"1": definition(
+				"One button wider",
+				{ type: "cue_list", cue_list_id: prepared.cueListId },
+				{
+					buttons: ["go", "none", "none"],
+					button_count: 1,
+					has_fader: false,
+					footprint: { ...wider, right_buttons: ["go_minus", "none", "none"] },
+				},
+			),
+			"4": definition(
+				"Two buttons wider",
+				{ type: "cue_list", cue_list_id: prepared.cueListId },
+				{
+					buttons: ["go_minus", "go", "none"],
+					button_count: 2,
+					has_fader: false,
+					footprint: { ...wider, right_buttons: ["go_minus", "go", "none"] },
+				},
+			),
+		});
 
 		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
@@ -339,22 +335,27 @@ export function registerPbk001PhysicalControlsScenario(): void {
 			"pbk-001-off-target",
 			"compact-rig",
 		);
-		await installPlaybacks(
+		const neighborCueListId = await createCueList(
 			api,
-			[
-				definition(45, "OFF target", {
-					type: "cue_list",
-					cue_list_id: prepared.cueListId,
-				}),
-				definition(46, "Running neighbor", {
-					type: "cue_list",
-					cue_list_id: prepared.cueListId,
-				}),
-			],
-			{ 1: 45, 2: 46 },
+			prepared.fixtures,
+			"Running neighbor",
+			[0.2, 0.8, 0.4],
+			0,
+			0,
+			[1, 2],
 		);
-		await poolAction(api, 45, "go");
-		await poolAction(api, 46, "go");
+		await installPlaybacks(api, [
+			definition("OFF target", {
+				type: "cue_list",
+				cue_list_id: prepared.cueListId,
+			}),
+			definition("Running neighbor", {
+				type: "cue_list",
+				cue_list_id: neighborCueListId,
+			}),
+		]);
+		await poolAction(api, 1, "go");
+		await poolAction(api, 2, "go");
 
 		await desk.open(bench.baseUrl);
 		await openPlaybackMode(page);
@@ -373,10 +374,10 @@ export function registerPbk001PhysicalControlsScenario(): void {
 				const active = (await playbackSnapshot(api)).active;
 				return {
 					target: Boolean(
-						active.find((item: any) => item.playback_number === 45),
+						active.find((item: any) => item.playback_address?.page === 1 && item.playback_address.position === 1)?.enabled,
 					),
 					neighbor: Boolean(
-						active.find((item: any) => item.playback_number === 46),
+						active.find((item: any) => item.playback_address?.page === 1 && item.playback_address.position === 2)?.enabled,
 					),
 				};
 			})

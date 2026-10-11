@@ -30,12 +30,14 @@ export async function addVirtualPlaybackPane(page: Page): Promise<Locator> {
 	const dialog = page.getByRole("dialog", { name: "Open Window" });
 	const card = dialog
 		.getByRole("button")
-		.filter({ has: page.getByText("Virtual Playbacks", { exact: true }) });
+		.filter({ has: page.getByText("Playbacks", { exact: true }) });
 	for (const tab of await dialog.getByRole("tab").all()) {
 		await tab.click();
 		if (await card.count()) break;
 	}
 	await card.first().click();
+	const pane = page.locator(".desk-pane").filter({ hasText: "Playbacks" });
+	await pane.getByRole("button", { name: "Create playback surface", exact: true }).click();
 	return activeVirtualPane(page);
 }
 
@@ -133,7 +135,7 @@ export async function activatePaneCard(pane:Locator,address:{page:number;positio
 export async function configurePaneGrid(page:Page,pane:Locator,rows:number,columns:number,pinnedPage?:number) {
  await pane.getByRole("button",{name:"Settings",exact:true}).click();
  const settings=page.getByRole("dialog",{name:"Pane Settings"});
- await settings.getByRole("tab",{name:"Virtual Playbacks",exact:true}).click();
+ await settings.getByRole("tab",{name:"Playbacks",exact:true}).click();
  await settings.getByRole("button",{name:"Configure layout and page source"}).click();
  const layout=page.getByRole("dialog",{name:"Configure Playbacks"});
  while(await layout.locator("[data-playback-row-index]").count()>rows) await layout.getByRole("button",{name:/^Remove row /}).last().click();
@@ -144,7 +146,7 @@ export async function configurePaneGrid(page:Page,pane:Locator,rows:number,colum
  await row.getByLabel("First Playback Number").fill(String(401+index*columns));
  await row.getByLabel("Playbacks in row").fill(String(columns));
  await row.getByLabel("Buttons",{exact:true}).fill("1");
- await chooseLayoutOption(page,row,"Presentation","Buttons");
+ await chooseLayoutOption(page,row,"Input type","Buttons");
  }
  await chooseLayoutOption(page,layout,"Page source",pinnedPage===undefined?"Follow surface":"Pinned page");
  if(pinnedPage!==undefined) await layout.getByLabel("Page",{exact:true}).fill(String(pinnedPage));

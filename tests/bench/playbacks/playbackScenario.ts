@@ -14,6 +14,7 @@ import type { ApiDriver } from "../core/api";
 import type { DeskDriver } from "../core/desk";
 import type { SimulatedHardware } from "../hardware/hardwareScenario";
 import { validInteger } from "./cuePlaybackScenario";
+import { ensurePlaybackViewport } from "./playback-configuration/ui";
 
 export enum PlaybackButton {
 	Go = "go",
@@ -306,6 +307,7 @@ export class BrowserPlaybacks {
 	}
 
 	async open() {
+		await ensurePlaybackViewport(this.page);
 		const mainBank = this.page.locator(
 			'.playback-fader-bank[data-playback-surface="main"]',
 		);

@@ -341,6 +341,7 @@ export class BrowserPlaybackConfiguration {
 		await this.page
 			.getByRole("button", {
 				name: `Playback representation page 1 playback ${slot}`,
+				exact: true,
 			})
 			.click();
 	}
