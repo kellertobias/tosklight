@@ -1,6 +1,9 @@
 use super::playback_persistence::{PlaybackPersistenceDomain, PlaybackPersistencePlan};
 use super::*;
 
+#[path = "playback_dispatch/solo_releases.rs"]
+mod solo_releases;
+
 #[derive(Debug)]
 pub(super) struct PlaybackDispatchOutcome {
     pub(super) changed: bool,
@@ -37,8 +40,14 @@ pub(super) fn dispatch_playback_action(
         ..context
     };
     let before_cue = current_cue_id(state, definition);
-    let outcome =
+    let enabled_peers = solo_releases::enabled_peers(state, address);
+    let mut outcome =
         dispatch_playback_action_inner(state, address, definition, action_name, input, &context)?;
+    outcome
+        .released_playbacks
+        .extend(solo_releases::released_peers(state, enabled_peers));
+    outcome.released_playbacks.sort_unstable();
+    outcome.released_playbacks.dedup();
     if outcome.changed {
         dispatch_entered_cue_actions(state, definition, before_cue)?;
     }
@@ -203,3 +212,7 @@ pub(super) fn dispatch_playback_action_inner(
     )?;
     Ok(outcome.combine(PlaybackTargetOutcome::changed(selection_changed)))
 }
+
+#[cfg(test)]
+#[path = "playback_dispatch/solo_audit_tests.rs"]
+mod solo_audit_tests;

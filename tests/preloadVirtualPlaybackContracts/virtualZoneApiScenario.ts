@@ -91,12 +91,14 @@ async function prepareAuthoritativeVirtualZone({
 		changed: true,
 		revision: 1,
 	});
+	const acceptedRuntimes = await Promise.all([401, 402, 403].map(position => activeAssignedPlayback(api, { page: 1, position })));
+	expect(acceptedRuntimes.map(runtime => runtime?.enabled)).toEqual([false, false, true]);
 	await expect(
 		saveSoloRegions(
 			api,
 			[
 				{
-					id: "stale",
+					id: "44444444-4444-4444-8444-444444444444",
 					name: "Stale",
 					members: [{page:1,position:401}, {page:1,position:403}],
 				},
@@ -105,16 +107,8 @@ async function prepareAuthoritativeVirtualZone({
 				expectedRevision: 0,
 			},
 		),
-	).rejects.toThrow(/returned 409:.*expected 0, actual 1/);
-	expect(await activeAssignedPlayback(api, {page: 1, position: 401})).toMatchObject({
-		enabled: true,
-	});
-	expect(await activeAssignedPlayback(api, {page: 1, position: 402})).toMatchObject({
-		enabled: true,
-	});
-	expect(await activeAssignedPlayback(api, {page: 1, position: 403})).toMatchObject({
-		enabled: true,
-	});
+	).rejects.toThrow(/returned 409:.*Playback policy revision changed; reload before applying/);
+	expect(await Promise.all([401, 402, 403].map(position => activeAssignedPlayback(api, { page: 1, position })))).toEqual(acceptedRuntimes);
 	expect(await soloRegionSnapshot(api)).toMatchObject({
 		show_id: prepared.showId,
 		revision: 1,
