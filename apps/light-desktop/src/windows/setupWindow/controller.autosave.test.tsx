@@ -181,17 +181,38 @@ function configuration(): DeskConfiguration {
 	return {
 		frame_rate_hz: 44,
 		output_bind_ip: "0.0.0.0",
-		autosave_interval_seconds: 30,
+		osc_bind: "0.0.0.0:8000",
+		art_timecode_bind: null,
+		timecode_source: { type: "internal" },
+		timecode_frame_rate: null,
+		timecode_external_loss_policy: "continue_internal",
+		timecode_external_loss_timeout_millis: 500,
+		osc_timecode: null,
 		backup_retention: 20,
-		command_line_at_uses_programmer_fade: false,
+		autosave_interval_seconds: 30,
+		speed_groups_bpm: [120, 120, 120, 120, 120],
+		programmer_fade_millis: 500,
+		command_line_at_uses_programmer_fade: true,
+		sequence_master_fade_millis: 500,
+		release_fade_millis: 500,
 		cuelist_auto_off_at_zero_default: false,
 		cuelist_auto_off_flash_release_default: false,
 		start_after_first_recording: false,
 		preload_programmer_changes: true,
-		preload_physical_playback_actions: false,
-		preload_virtual_playback_actions: true,
 		patch_preview_highlight_dmx: false,
-	} as DeskConfiguration;
+		highlight_look: {
+			intensity: 1,
+			color: null,
+			iris: null,
+			zoom: null,
+			focus: null,
+			frost: null,
+			compatibility: "semantic",
+		},
+		matter_enabled: false,
+		file_manager_system_picker_fallback: false,
+		file_manager_roots: [],
+	};
 }
 
 function attributeSnapshot(): AttributeConfigurationSnapshot {

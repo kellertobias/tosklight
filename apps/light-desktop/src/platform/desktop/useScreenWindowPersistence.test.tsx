@@ -17,14 +17,10 @@ const screen: ScreenConfiguration = {
 	content: { type: "desktop" },
 	show_dock: true,
 	show_playbacks: true,
+	surface_id: "screen:test",
 	show_page_controls: true,
 	show_programmer: false,
 	not_editable: false,
-	page_mode: "follow_main",
-	first_playback_slot: 1,
-	playback_count: 10,
-	playback_rows: 1,
-	playback_layout: null,
 };
 
 function Harness({
@@ -106,7 +102,9 @@ describe("screen window persistence", () => {
 				return () => undefined;
 			},
 		};
-		const save = vi.fn().mockRejectedValue(new Error("desk refused the screen update"));
+		const save = vi
+			.fn()
+			.mockRejectedValue(new Error("desk refused the screen update"));
 		render(
 			<DesktopProvider bridge={bridge}>
 				<Harness save={save} />

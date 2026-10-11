@@ -24,7 +24,7 @@ function FirstPlaybackProbe({ onRender }: { onRender: () => void }) {
 	onRender();
 	const selectFirst = useCallback(
 		(state: ReturnType<ProgrammerPreloadPlaybackQueueStore["getSnapshot"]>) =>
-			state.projection?.actions[0]?.playbackNumber ?? null,
+			state.projection?.actions[0]?.address.position ?? null,
 		[],
 	);
 	const playbackNumber = useProgrammerPreloadPlaybackQueueSelector(selectFirst);
@@ -86,7 +86,10 @@ describe("ProgrammerPreloadPlaybackQueueViewProvider", () => {
 					revision: 3,
 					actions: [
 						queuedPlayback(),
-						queuedPlayback({ playbackNumber: 9, action: "toggle" }),
+						queuedPlayback({
+							address: { page: 1, position: 9 },
+							action: "toggle",
+						}),
 					],
 				}),
 			}),

@@ -45,7 +45,12 @@ function source(
 	return {
 		screens: {
 			screens: configuredScreens,
-			active_pages: {},
+			surfaces: {
+				playback_surfaces: {},
+				selected_surface_id: "main",
+				resolved_pages: { main: 1 },
+				command_page: 1,
+			},
 			programmer_control_surface: {
 				owner_screen_id: ownerScreenId,
 				visible_encoders: 4,
@@ -55,7 +60,10 @@ function source(
 		session: null,
 		saveScreen: vi.fn(),
 		deleteScreen: vi.fn(),
-		setScreenPage: vi.fn(),
+		setSurfacePage: vi.fn(),
+		surfaces: null,
+		selectSurface: vi.fn(),
+		updatePlaybackSurface: vi.fn(),
 		updateProgrammerControlSurface: vi.fn(),
 		updateControlDesk: vi.fn(),
 		selectControlDesk: vi.fn(),

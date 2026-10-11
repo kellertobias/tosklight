@@ -80,24 +80,13 @@ vi.mock("../files/RootConfinedFilePickerButton", () => ({
 vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => mocks.groups,
 	useDynamics: () => mocks.dynamics,
-	usePlaybackDefinitions: () =>
-		mocks.scopedCueLists.map((body, index) => ({
-			kind: "playback",
-			id: `playback-${index + 1}`,
-			revision: 1,
-			updated_at: "",
-			body: {
-				number: [12, 1000][index],
-				target: { type: "cue_list", cue_list_id: body.id },
-			},
-		})),
 	useCueLists: () =>
-		mocks.scopedCueLists.map((body) => ({
+		mocks.scopedCueLists.map((body, index) => ({
 			kind: "cue_list",
 			id: body.storageId ?? body.id,
 			revision: 1,
 			updated_at: "",
-			body,
+			body: { ...body, pool_number: [12, 1000][index] },
 		})),
 }));
 vi.mock("../../features/playbackTopology/useCueListTopologyWriter", () => ({
@@ -114,7 +103,6 @@ vi.mock("../../features/playbackTopology/useCueListTopologyWriter", () => ({
 }));
 
 const base: PlaybackDefinition = {
-	number: 7,
 	name: "Configured Playback",
 	target: { type: "cue_list", cue_list_id: "cue-1" },
 	buttons: ["go_minus", "go", "flash"],
@@ -215,7 +203,6 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 			show(
 				{
 					...base,
-					number: virtual ? 1301 : 7,
 					target: {
 						type: "group",
 						group_id: "group-1",

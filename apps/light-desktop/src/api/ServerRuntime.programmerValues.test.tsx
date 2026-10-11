@@ -223,7 +223,11 @@ function queueProjection(revision: number) {
 		sessionId: SESSION_ID,
 		revision,
 		actions: [
-			{ playbackNumber: 7, page: null, action: "go", surface: "virtual" },
+			{
+				address: { page: 1, position: 7 },
+				action: "go",
+				controlSource: { surface_id: "virtual:test", control_id: 7 },
+			},
 		],
 	};
 }

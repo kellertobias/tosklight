@@ -9,9 +9,7 @@ const targets: PlaybackScheduleTarget[] = [
 	{
 		id: "playback-main",
 		label: "Main",
-		page: 2,
-		slot: 8,
-		playback: 8,
+		address: { page: 2, position: 8 },
 		supportedActions: ["on", "off", "release"],
 		supportsMaster: true,
 	},

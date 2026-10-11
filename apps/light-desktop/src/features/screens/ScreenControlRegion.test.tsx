@@ -46,23 +46,29 @@ const screenTemplate = {
 	content: { type: "desktop" },
 	show_dock: false,
 	show_playbacks: true,
+	surface_id: "screen:test",
 	show_page_controls: false,
 	show_programmer: true,
-	playback_count: 8,
-	playback_rows: 1,
-	first_playback_slot: 1,
-	page_mode: "follow_main",
+
 	desired_open: true,
 	display_id: null,
 	bounds: null,
 	fullscreen: false,
 } as unknown as ScreenConfiguration;
 
-function mount(screenConfiguration: ScreenConfiguration, encoderScreenId: string | null) {
+function mount(
+	screenConfiguration: ScreenConfiguration,
+	encoderScreenId: string | null,
+) {
 	const source: ScreensContextValue = {
 		screens: {
 			screens: [screenConfiguration],
-			active_pages: {},
+			surfaces: {
+				playback_surfaces: {},
+				selected_surface_id: "main",
+				resolved_pages: { main: 1 },
+				command_page: 1,
+			},
 			programmer_control_surface: {
 				owner_screen_id: encoderScreenId,
 				visible_encoders: 6,
@@ -72,7 +78,10 @@ function mount(screenConfiguration: ScreenConfiguration, encoderScreenId: string
 		session: null,
 		saveScreen: vi.fn(),
 		deleteScreen: vi.fn(),
-		setScreenPage: vi.fn(),
+		setSurfacePage: vi.fn(),
+		surfaces: null,
+		selectSurface: vi.fn(),
+		updatePlaybackSurface: vi.fn(),
 		updateProgrammerControlSurface: vi.fn(),
 		updateControlDesk: vi.fn(),
 		selectControlDesk: vi.fn(),

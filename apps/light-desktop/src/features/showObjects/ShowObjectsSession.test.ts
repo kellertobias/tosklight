@@ -219,11 +219,11 @@ describe("ShowObjectsSession", () => {
 			loadObject: loadExactObject,
 		});
 
-		session.activateKinds(["cue_list", "playback", "playback_page"]);
+		session.activateKinds(["cue_list", "playback_page"]);
 
 		expect(transport.subscriptions).toHaveLength(1);
 		expect(transport.subscriptions[0].scope).toEqual({
-			kinds: ["cue_list", "playback", "playback_page"],
+			kinds: ["cue_list", "playback_page"],
 			objects: [],
 		});
 	});

@@ -17,8 +17,9 @@ afterEach(() => {
 describe("session handoff", () => {
 	it("stays inert when no controllable receiver was installed", () => {
 		const handoff = createSessionHandoff({} as Window);
-		expect(() => handoff.capture(1, session("one", "user-a", "desk-a")))
-			.not.toThrow();
+		expect(() =>
+			handoff.capture(1, session("one", "user-a", "desk-a")),
+		).not.toThrow();
 		expect(localStorage).toHaveLength(0);
 		expect(document.body.textContent).toBe("");
 	});
@@ -51,7 +52,9 @@ describe("session handoff", () => {
 
 	it("clears current authority and ignores a late older bootstrap", async () => {
 		const receiver = vi.fn();
-		const runtime = { [SESSION_HANDOFF_RECEIVER]: receiver } as unknown as Window;
+		const runtime = {
+			[SESSION_HANDOFF_RECEIVER]: receiver,
+		} as unknown as Window;
 		const handoff = createSessionHandoff(runtime);
 		handoff.capture(4, session("new", "user-a", "desk-b"));
 		handoff.release(5, "new");
@@ -78,6 +81,7 @@ function session(
 		desk: {
 			id: deskId,
 			name: deskId,
+			surface_id: "main",
 			columns: 10,
 			rows: 4,
 			buttons: 40,

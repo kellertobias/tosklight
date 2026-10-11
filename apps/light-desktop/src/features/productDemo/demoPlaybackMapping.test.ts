@@ -17,7 +17,24 @@ function page(
 		id: `page-${number}`,
 		revision: 1,
 		updated_at: "2026-07-19T10:00:00Z",
-		body: { number, name: `Page ${number}`, slots, virtual_playbacks: {} },
+		body: {
+			number,
+			name: `Page ${number}`,
+			assignments: Object.fromEntries(
+				Object.keys(slots).map((position) => [
+					position,
+					{
+						name: `Position ${position}`,
+						target: { type: "cue_list", cue_list_id: "demo" },
+						buttons: ["go", "none", "none"],
+						fader: "master",
+						go_activates: true,
+						auto_off: false,
+						xfade_millis: 0,
+					},
+				]),
+			),
+		},
 	};
 }
 
@@ -28,8 +45,8 @@ describe("demoSlotPlaybackNumbers", () => {
 			page(2, { "11": 21, "12": 221 }),
 		];
 		expect([...demoSlotPlaybackNumbers(pages, 2)]).toEqual([
-			[11, 21],
-			[12, 221],
+			[11, { page: 2, position: 11 }],
+			[12, { page: 2, position: 12 }],
 		]);
 	});
 
@@ -44,18 +61,20 @@ describe("demoSlotPlaybackNumbers", () => {
 
 	it("skips unassigned demo slots instead of inventing them", () => {
 		const mapped = demoSlotPlaybackNumbers([page(1, { "17": 33 })], 1);
-		expect(mapped.get(17)).toBe(33);
+		expect(mapped.get(17)).toEqual({ page: 1, position: 17 });
 		expect(mapped.has(11)).toBe(false);
 	});
 });
 
 describe("demoMappedPlaybackNumbers", () => {
-	it("returns each mapped Playback number once, in ascending order", () => {
+	it("returns exact addresses in visible surface order", () => {
 		const mapped = demoSlotPlaybackNumbers(
 			[page(1, { "11": 9, "16": 4, "17": 9, "12": 1 })],
 			1,
 		);
-		expect(demoMappedPlaybackNumbers(mapped)).toEqual([1, 4, 9]);
+		expect(demoMappedPlaybackNumbers(mapped)).toEqual(
+			[11, 16, 17, 12].map((position) => ({ page: 1, position })),
+		);
 	});
 });
 
@@ -82,8 +101,7 @@ describe("demoFaderLevel", () => {
 	it("reads zero for an absent, unmapped or non-cue-list Playback", () => {
 		const missing: PlaybackProjection = {
 			scope: { show_id: SHOW_ID, show_revision: 4 },
-			requested: { kind: "playback", playback_number: 3 },
-			playback_number: 3,
+			identity: { kind: "playback", page: 1, position: 3 },
 			target: "missing",
 		};
 		expect(demoFaderLevel(undefined)).toBe(0);

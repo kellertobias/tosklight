@@ -77,7 +77,8 @@ function fakePage() {
 		value,
 		navigate: (nextDocumentId: string) => {
 			documentId = nextDocumentId;
-			for (const handler of handlers.get("framenavigated") ?? []) handler(frame);
+			for (const handler of handlers.get("framenavigated") ?? [])
+				handler(frame);
 		},
 		close: () => {
 			for (const handler of handlers.get("close") ?? []) handler();
@@ -104,6 +105,7 @@ function capture(
 				desk: {
 					id: deskId,
 					name: deskId,
+					surface_id: "main",
 					columns: 10,
 					rows: 4,
 					buttons: 40,

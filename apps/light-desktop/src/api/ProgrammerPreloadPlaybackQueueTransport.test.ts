@@ -42,7 +42,13 @@ class FakeWebSocket {
 function projection() {
 	return {
 		revision: 2,
-		actions: [{ playback_number: 4, page: 5, action: "go", surface: "osc" }],
+		actions: [
+			{
+				address: { page: 5, position: 4 },
+				action: "go",
+				control_source: { surface_id: "osc:test", control_id: 4 },
+			},
+		],
 	};
 }
 
@@ -106,7 +112,7 @@ describe("HttpProgrammerPreloadPlaybackQueueTransport", () => {
 			cursor: 11,
 			projection: {
 				revision: 2,
-				actions: [{ playbackNumber: 4, page: 5 }],
+				actions: [{ address: { page: 5, position: 4 } }],
 			},
 		});
 		const [url, init] = fetch.mock.calls[0];

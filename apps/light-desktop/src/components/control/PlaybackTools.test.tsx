@@ -23,7 +23,7 @@ const state = {
 	playbackSetArmed: false,
 	shiftArmed: false,
 };
-let playbackDesk: { active_page: number } | null = { active_page: 1 };
+let playbackDesk: { command_page: number } | null = { command_page: 1 };
 let runtimeStatus: "ready" | "loading" | "error" = "ready";
 let speedRuntimeReady = true;
 let speedRuntimeBpms = [120, 90, 60, 30, 15];
@@ -34,7 +34,11 @@ let pageObjects = [
 		id: "legacy-page-one",
 		revision: 3,
 		updated_at: "",
-		body: { number: 1, name: "Main", slots: {} as Record<string, number> },
+		body: {
+			number: 1,
+			name: "Main",
+			assignments: {} as Record<string, { name: string }>,
+		},
 	},
 ];
 const topologyActions = {
@@ -74,8 +78,14 @@ const server = {
 		speed_groups_bpm: [120, 90, 60, 30, 15],
 	},
 	playbacks: {
-		active_page: 9,
-		pages: [{ number: 9, name: "Stale", slots: {} as Record<string, number> }],
+		command_page: 9,
+		pages: [
+			{
+				number: 9,
+				name: "Stale",
+				assignments: {} as Record<string, { name: string }>,
+			},
+		],
 	},
 	setControlTiming: vi.fn(),
 	speedGroup: vi.fn(),
@@ -188,7 +198,7 @@ afterEach(() => {
 	vi.useRealTimers();
 	cleanup();
 	server.session = null;
-	playbackDesk = { active_page: 1 };
+	playbackDesk = { command_page: 1 };
 	runtimeStatus = "ready";
 	speedRuntimeReady = true;
 	speedRuntimeBpms = [120, 90, 60, 30, 15];
@@ -199,7 +209,7 @@ afterEach(() => {
 			id: "legacy-page-one",
 			revision: 3,
 			updated_at: "",
-			body: { number: 1, name: "Main", slots: {} },
+			body: { number: 1, name: "Main", assignments: {} },
 		},
 	];
 	state.playbackPage = 0;
@@ -321,7 +331,7 @@ describe("PlaybackTools", () => {
 	});
 
 	it("creates and selects the next page when the last page has an assignment", async () => {
-		pageObjects[0].body.slots = { "1": 12 };
+		pageObjects[0].body.assignments = { "1": { name: "Assigned" } };
 		render(<PlaybackTools />);
 		fireEvent.click(screen.getByRole("button", { name: "Next playback page" }));
 		await waitFor(() =>
@@ -335,7 +345,7 @@ describe("PlaybackTools", () => {
 	});
 
 	it("shows a failed next-Page creation and does not change desk authority", async () => {
-		pageObjects[0].body.slots = { "1": 12 };
+		pageObjects[0].body.assignments = { "1": { name: "Assigned" } };
 		topologyActions.createPage.mockResolvedValueOnce(null);
 		render(<PlaybackTools />);
 
@@ -351,13 +361,13 @@ describe("PlaybackTools", () => {
 	});
 
 	it("does not let Previous materialize a missing Page through desk compatibility", () => {
-		playbackDesk = { active_page: 3 };
+		playbackDesk = { command_page: 3 };
 		pageObjects = [
 			pageObjects[0],
 			{
 				...pageObjects[0],
 				id: "page-three",
-				body: { number: 3, name: "Third", slots: {} },
+				body: { number: 3, name: "Third", assignments: {} },
 			},
 		];
 		render(<PlaybackTools />);
@@ -596,7 +606,7 @@ describe("PlaybackTools", () => {
 	});
 
 	it("does not continue old Page creation after authority replacement", async () => {
-		pageObjects[0].body.slots = { "1": 12 };
+		pageObjects[0].body.assignments = { "1": { name: "Assigned" } };
 		let resolveCreate: (value: object | null) => void = () => undefined;
 		const originalCreate = topologyActions.createPage;
 		topologyActions.createPage = vi.fn(
@@ -622,13 +632,13 @@ describe("PlaybackTools", () => {
 	});
 
 	it("ignores a failed old-scope selection completion", async () => {
-		playbackDesk = { active_page: 2 };
+		playbackDesk = { command_page: 2 };
 		pageObjects = [
 			pageObjects[0],
 			{
 				...pageObjects[0],
 				id: "page-two",
-				body: { number: 2, name: "Second", slots: {} },
+				body: { number: 2, name: "Second", assignments: {} },
 			},
 		];
 		let resolveSelection: (value: boolean) => void = () => undefined;
@@ -716,7 +726,7 @@ describe("PlaybackTools", () => {
 			{
 				...pageObjects[0],
 				id: "page-two",
-				body: { number: 2, name: "Sparse", slots: {} },
+				body: { number: 2, name: "Sparse", assignments: {} },
 			},
 		];
 		render(<PlaybackTools />);
@@ -776,7 +786,7 @@ describe("PlaybackTools", () => {
 
 	it("does not act on a retained desk while runtime authority repairs", () => {
 		runtimeStatus = "loading";
-		playbackDesk = { active_page: 1 };
+		playbackDesk = { command_page: 1 };
 
 		render(<PlaybackTools />);
 

@@ -24,8 +24,6 @@ const currentPlayback: PlaybackInteractionIdentity = {
 	slot: 2,
 	pageObjectId: "page-3",
 	pageObjectRevision: 8,
-	playbackObjectId: "playback-17",
-	playbackObjectRevision: 5,
 };
 const explicitPlayback: PlaybackInteractionIdentity = {
 	...currentPlayback,

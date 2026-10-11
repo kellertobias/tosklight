@@ -25,7 +25,6 @@ const cueList: CueList = {
 };
 
 const playback: PlaybackDefinition = {
-	number: 1,
 	name: "Main Sequence",
 	target: { type: "cue_list", cue_list_id: cueList.id },
 	buttons: ["go_minus", "go", "flash"],

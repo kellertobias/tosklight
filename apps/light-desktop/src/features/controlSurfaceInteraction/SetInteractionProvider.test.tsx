@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
 	reset: vi.fn(),
 	execute: vi.fn(),
 	assignGroupMaster: vi.fn(),
-	assignVirtualGroupMaster: vi.fn(),
 	command: { text: "" },
 	groups: [
 		{
@@ -37,7 +36,6 @@ vi.mock("../programmingInteraction/ProgrammingInteractionView", () => ({
 vi.mock("../playbackTopology/PlaybackTopologyProvider", () => ({
 	usePlaybackTopologyActions: () => ({
 		assignGroupMaster: mocks.assignGroupMaster,
-		assignVirtualGroupMaster: mocks.assignVirtualGroupMaster,
 	}),
 }));
 vi.mock("../showObjects/ShowObjectsState", () => ({
@@ -92,13 +90,10 @@ describe("desk ASSIGN interaction owner", () => {
 		mocks.assignGroupMaster
 			.mockReset()
 			.mockResolvedValue({ status: "changed" });
-		mocks.assignVirtualGroupMaster
-			.mockReset()
-			.mockResolvedValue({ status: "changed" });
 		mocks.command.text = "";
 	});
 
-	it("assigns the explicit Group to one revision-guarded Virtual Playback", async () => {
+	it("assigns the explicit Group to one revision-guarded explicit-page Playback", async () => {
 		render(<View />);
 		await act(async () => {
 			await controller?.arm("touch");
@@ -108,26 +103,24 @@ describe("desk ASSIGN interaction owner", () => {
 			);
 			await controller?.choosePlayback(
 				{
-					addressing: "virtual",
+					addressing: "explicit_page",
 					pageNumber: 2,
-					playbackNumber: 1301,
+					slot: 301,
 					pageObjectId: "page-two",
 					pageObjectRevision: 7,
 				},
 				"touch",
 			);
 		});
-		expect(mocks.assignVirtualGroupMaster).toHaveBeenCalledWith(
+		expect(mocks.assignGroupMaster).toHaveBeenCalledWith(
 			"4",
 			12,
-			2,
-			1301,
+			{ page: 2, position: 301 },
 			{
 				expectedPageRevision: 7,
 				expectedPageObjectId: "page-two",
 			},
 		);
-		expect(mocks.assignGroupMaster).not.toHaveBeenCalled();
 		expect(controller?.state?.phase).toBe("idle");
 	});
 
@@ -149,12 +142,15 @@ describe("desk ASSIGN interaction owner", () => {
 		await act(async () => {
 			await controller?.choosePlayback(playback, "hardware");
 		});
-		expect(mocks.assignGroupMaster).toHaveBeenCalledWith("4", 12, 2, 3, {
-			expectedPageRevision: 7,
-			expectedPageObjectId: "page-two",
-			expectedPlaybackRevision: 8,
-			expectedPlaybackObjectId: "playback-nine",
-		});
+		expect(mocks.assignGroupMaster).toHaveBeenCalledWith(
+			"4",
+			12,
+			{ page: 2, position: 3 },
+			{
+				expectedPageRevision: 7,
+				expectedPageObjectId: "page-two",
+			},
+		);
 		expect(controller?.state?.phase).toBe("idle");
 	});
 
@@ -184,7 +180,6 @@ describe("desk ASSIGN interaction owner", () => {
 			},
 			playback: { ...playback, addressing: "explicit_page" },
 		});
-		expect(mocks.assignGroupMaster).not.toHaveBeenCalled();
 		release();
 	});
 

@@ -10,13 +10,20 @@ const CORRELATION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 function actions() {
 	return [
-		{ playback_number: 4, page: 3, action: "go", surface: "physical" },
-		{ playback_number: 4, action: "go", surface: "osc" },
 		{
-			playback_number: 2,
-			page: null,
+			address: { page: 3, position: 4 },
+			action: "go",
+			control_source: { surface_id: "physical:test", control_id: 4 },
+		},
+		{
+			address: { page: 1, position: 4 },
+			action: "go",
+			control_source: { surface_id: "osc:test", control_id: 4 },
+		},
+		{
+			address: { page: 1, position: 2 },
 			action: "temporary_off",
-			surface: "matter",
+			control_source: { surface_id: "matter:test", control_id: 2 },
 		},
 	];
 }
@@ -52,20 +59,29 @@ function event() {
 describe("Preload playback queue wire decoding", () => {
 	it("preserves ordered duplicate actions from a strict snapshot", () => {
 		expect(
-			decodeProgrammerPreloadPlaybackQueueSnapshot(
-				{ cursor: { sequence: 11 }, projection: projection() }),
+			decodeProgrammerPreloadPlaybackQueueSnapshot({
+				cursor: { sequence: 11 },
+				projection: projection(),
+			}),
 		).toEqual({
 			cursor: 11,
 			projection: {
 				revision: 3,
 				actions: [
-					{ playbackNumber: 4, page: 3, action: "go", surface: "physical" },
-					{ playbackNumber: 4, page: null, action: "go", surface: "osc" },
 					{
-						playbackNumber: 2,
-						page: null,
+						address: { page: 3, position: 4 },
+						action: "go",
+						controlSource: { surface_id: "physical:test", control_id: 4 },
+					},
+					{
+						address: { page: 1, position: 4 },
+						action: "go",
+						controlSource: { surface_id: "osc:test", control_id: 4 },
+					},
+					{
+						address: { page: 1, position: 2 },
 						action: "temporary_off",
-						surface: "matter",
+						controlSource: { surface_id: "matter:test", control_id: 2 },
 					},
 				],
 			},
@@ -91,11 +107,10 @@ describe("Preload playback queue wire decoding", () => {
 			}),
 		).toThrow(/user_id/);
 		expect(() =>
-			decodeProgrammerPreloadPlaybackQueueSnapshot(
-				{
-					cursor: { sequence: 1 },
-					projection: { ...projection(), values: [] },
-				}),
+			decodeProgrammerPreloadPlaybackQueueSnapshot({
+				cursor: { sequence: 1 },
+				projection: { ...projection(), values: [] },
+			}),
 		).toThrow(/values/);
 	});
 
@@ -108,11 +123,10 @@ describe("Preload playback queue wire decoding", () => {
 		const malformed = actions();
 		malformed[0] = { ...malformed[0], [field]: invalid };
 		expect(() =>
-			decodeProgrammerPreloadPlaybackQueueSnapshot(
-				{
-					cursor: { sequence: 1 },
-					projection: { ...projection(), actions: malformed },
-				}),
+			decodeProgrammerPreloadPlaybackQueueSnapshot({
+				cursor: { sequence: 1 },
+				projection: { ...projection(), actions: malformed },
+			}),
 		).toThrow();
 	});
 
@@ -130,8 +144,7 @@ describe("Preload playback queue wire decoding", () => {
 		const missingCorrelation = event();
 		Reflect.deleteProperty(missingCorrelation.event, "correlation_id");
 		expect(() =>
-			decodeProgrammerPreloadPlaybackQueueEventMessage(
-				missingCorrelation),
+			decodeProgrammerPreloadPlaybackQueueEventMessage(missingCorrelation),
 		).toThrow(/correlation_id/);
 	});
 });

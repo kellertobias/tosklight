@@ -144,13 +144,21 @@ const storyLimitedGroup = {
 	revision: 1,
 	updated_at: "2026-08-02T10:00:00Z",
 	body: { name: "Front", fixtures: ["fixture-101"], programming: {} },
-	runtime: { master: 0.4, flashLevel: 0, playbackNumber: 17 },
+	runtime: {
+		master: 0.4,
+		flashLevel: 0,
+		playbackAddress: { page: 1, position: 17 },
+	},
 } as FixtureSheetRow["limitingGroups"][number];
 const storyFlashedGroup = {
 	...storyLimitedGroup,
 	id: "movers",
 	body: { ...storyLimitedGroup.body, name: "Movers" },
-	runtime: { master: 0.4, flashLevel: 0.8, playbackNumber: 18 },
+	runtime: {
+		master: 0.4,
+		flashLevel: 0.8,
+		playbackAddress: { page: 1, position: 18 },
+	},
 };
 
 const common = {

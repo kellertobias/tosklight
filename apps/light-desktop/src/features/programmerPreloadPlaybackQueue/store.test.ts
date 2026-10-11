@@ -19,9 +19,21 @@ function hydratedStore() {
 describe("ProgrammerPreloadPlaybackQueueStore", () => {
 	it("preserves ordered duplicate actions exactly", () => {
 		const actions = [
-			queuedPlayback({ playbackNumber: 9, action: "back", surface: "osc" }),
-			queuedPlayback({ playbackNumber: 7, action: "go", surface: "matter" }),
-			queuedPlayback({ playbackNumber: 9, action: "back", surface: "osc" }),
+			queuedPlayback({
+				address: { page: 1, position: 9 },
+				action: "back",
+				controlSource: { surface_id: "osc:test", control_id: 7 },
+			}),
+			queuedPlayback({
+				address: { page: 1, position: 7 },
+				action: "go",
+				controlSource: { surface_id: "matter:test", control_id: 7 },
+			}),
+			queuedPlayback({
+				address: { page: 1, position: 9 },
+				action: "back",
+				controlSource: { surface_id: "osc:test", control_id: 7 },
+			}),
 		];
 		const store = new ProgrammerPreloadPlaybackQueueStore();
 		store.reset(SHOW_ID, SESSION_ID, AUTHORITY_A);

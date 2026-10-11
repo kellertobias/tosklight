@@ -30,7 +30,12 @@ function createHarness() {
 	const initial = bootstrap();
 	const screens: ScreenSnapshot = {
 		screens: [],
-		active_pages: {},
+		surfaces: {
+			playback_surfaces: {},
+			selected_surface_id: "main",
+			resolved_pages: { main: 1 },
+			command_page: 1,
+		},
 		programmer_control_surface: {
 			owner_screen_id: null,
 			visible_encoders: 6,

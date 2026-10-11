@@ -80,9 +80,7 @@ describe("Desk Setup Defaults layout", () => {
 		);
 		expect(screen.queryByText("Record & Update defaults")).toBeNull();
 		expect(screen.queryByText("Cuelist playback defaults")).toBeNull();
-		expect(
-			screen.getByRole("heading", { name: "Pools" }),
-		).toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Pools" })).toBeInTheDocument();
 		fireEvent.change(
 			screen.getByRole("textbox", { name: "Minimum pool tile width (px)" }),
 			{ target: { value: "68" } },
@@ -338,14 +336,42 @@ describe("Desk Setup Cuelist playback defaults", () => {
 });
 
 describe("Desk Setup direct timing and Preload defaults", () => {
-	it("shows the fresh Immediate and Programmer plus Virtual capture contract", () => {
-		const draft = {
+	it("shows the Immediate and Programmer capture without retired surface switches", () => {
+		const draft: DeskConfiguration = {
 			frame_rate_hz: 44,
+			output_bind_ip: "0.0.0.0",
+			osc_bind: "0.0.0.0:8000",
+			art_timecode_bind: null,
+			timecode_source: { type: "internal" },
+			timecode_frame_rate: null,
+			timecode_external_loss_policy: "continue_internal",
+			timecode_external_loss_timeout_millis: 500,
+			osc_timecode: null,
+			backup_retention: 20,
+			autosave_interval_seconds: 30,
+			speed_groups_bpm: [120, 120, 120, 120, 120],
+			programmer_fade_millis: 500,
 			command_line_at_uses_programmer_fade: false,
+			sequence_master_fade_millis: 500,
+			release_fade_millis: 500,
+			cuelist_auto_off_at_zero_default: false,
+			cuelist_auto_off_flash_release_default: false,
+			start_after_first_recording: false,
 			preload_programmer_changes: true,
-			preload_physical_playback_actions: false,
-			preload_virtual_playback_actions: true,
-		} as DeskConfiguration;
+			patch_preview_highlight_dmx: false,
+			highlight_look: {
+				intensity: 1,
+				color: null,
+				iris: null,
+				zoom: null,
+				focus: null,
+				frost: null,
+				compatibility: "semantic",
+			},
+			matter_enabled: false,
+			file_manager_system_picker_fallback: false,
+			file_manager_roots: [],
+		};
 		render(
 			<OthersSection
 				controller={
@@ -364,13 +390,10 @@ describe("Desk Setup direct timing and Preload defaults", () => {
 		expect(screen.getByText("Immediate")).toBeInTheDocument();
 		expect(screen.getByLabelText("Preload programmer changes")).toBeChecked();
 		expect(
-			screen.getByLabelText("Preload physical playback actions"),
-		).not.toBeChecked();
+			screen.queryByLabelText("Preload physical playback actions"),
+		).not.toBeInTheDocument();
 		expect(
-			screen.getByLabelText("Preload virtual playback actions"),
-		).toBeChecked();
-		expect(
-			screen.getByText(/Physical Flash and hardware\/physical fader movements/),
-		).toBeInTheDocument();
+			screen.queryByLabelText("Preload virtual playback actions"),
+		).not.toBeInTheDocument();
 	});
 });

@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 		pages: [] as Array<{
 			body: {
 				number: number;
-				virtual_playbacks: Record<string, { number: number; name: string }>;
+				assignments: Record<string, { name: string }>;
 			};
 		}>,
 	},
@@ -68,16 +68,14 @@ const mocks = vi.hoisted(() => ({
 		revision: 12,
 		actions: [
 			{
-				playbackNumber: 4,
-				page: 2 as number | null,
+				address: { page: 1, position: 4 },
 				action: "go",
-				surface: "physical",
+				controlSource: { surface_id: "physical:test", control_id: 4 },
 			},
 			{
-				playbackNumber: 4,
-				page: 2 as number | null,
+				address: { page: 1, position: 4 },
 				action: "go",
-				surface: "physical",
+				controlSource: { surface_id: "physical:test", control_id: 4 },
 			},
 		],
 	},
@@ -178,8 +176,16 @@ beforeEach(() => {
 	];
 	mocks.topology = { ready: true, playbacks: [], pages: [] };
 	mocks.queue.actions = [
-		{ playbackNumber: 4, page: 2, action: "go", surface: "physical" },
-		{ playbackNumber: 4, page: 2, action: "go", surface: "physical" },
+		{
+			address: { page: 2, position: 4 },
+			action: "go",
+			controlSource: { surface_id: "physical:test", control_id: 4 },
+		},
+		{
+			address: { page: 2, position: 4 },
+			action: "go",
+			controlSource: { surface_id: "physical:test", control_id: 4 },
+		},
 	];
 	mocks.removeDynamic.mockClear();
 	mocks.removeGroupRelease.mockClear();
@@ -214,9 +220,7 @@ describe("PreloadStoreModal", () => {
 			.map((row) => row.textContent);
 		expect(labels[0]).toContain("Group 3 · Front · pan · 25%");
 		expect(labels[1]).toContain("Fixture 7 · Wash · intensity · 50%");
-		expect(labels[2]).toContain(
-			"Physical Playback pool 4 · captured page 2 · GO · physical",
-		);
+		expect(labels[2]).toContain("Page 2 Playback 4 · GO · physical:test");
 		fireEvent.click(
 			screen.getByRole("button", { name: "Remove playback action 2" }),
 		);
@@ -227,7 +231,7 @@ describe("PreloadStoreModal", () => {
 		expect(mocks.storePreload).not.toHaveBeenCalled();
 	});
 
-	it("labels the captured physical pool identity, not its cue target or current slot", () => {
+	it("labels the captured exact address without substituting its cue target", () => {
 		mocks.topology.playbacks = [
 			{
 				body: {
@@ -237,13 +241,20 @@ describe("PreloadStoreModal", () => {
 				},
 			},
 		];
+		mocks.topology.pages = [
+			{ body: { number: 1, assignments: { "11": { name: "White base" } } } },
+		];
 		mocks.queue.actions = [
-			{ playbackNumber: 11, page: null, action: "on", surface: "physical" },
+			{
+				address: { page: 1, position: 11 },
+				action: "on",
+				controlSource: { surface_id: "physical:test", control_id: 11 },
+			},
 		];
 		render(<PreloadStoreModal />);
 		expect(
 			screen.getByText(
-				"Physical Playback pool 11 · current name: White base · ON · physical",
+				"Page 1 Playback 11 · current name: White base · ON · physical:test",
 			),
 		).toBeInTheDocument();
 		expect(
@@ -251,7 +262,7 @@ describe("PreloadStoreModal", () => {
 		).not.toBeInTheDocument();
 	});
 
-	it("resolves virtual names only from the captured page and preserves number fallback", () => {
+	it("resolves names only from the captured page and preserves address fallback", () => {
 		mocks.topology.playbacks = [
 			{ body: { number: 1001, name: "Wrong pool name" } },
 		];
@@ -259,26 +270,38 @@ describe("PreloadStoreModal", () => {
 			{
 				body: {
 					number: 1,
-					virtual_playbacks: { "1001": { number: 1001, name: "Blue look" } },
+					assignments: { "401": { name: "Blue look" } },
 				},
 			},
 		];
 		mocks.queue.actions = [
-			{ playbackNumber: 1001, page: 1, action: "go", surface: "virtual" },
-			{ playbackNumber: 12, page: null, action: "on", surface: "physical" },
-			{ playbackNumber: 1002, page: null, action: "on", surface: "virtual" },
+			{
+				address: { page: 1, position: 401 },
+				action: "go",
+				controlSource: { surface_id: "virtual:test", control_id: 1001 },
+			},
+			{
+				address: { page: 1, position: 12 },
+				action: "on",
+				controlSource: { surface_id: "physical:test", control_id: 12 },
+			},
+			{
+				address: { page: 1, position: 402 },
+				action: "on",
+				controlSource: { surface_id: "virtual:test", control_id: 1002 },
+			},
 		];
 		render(<PreloadStoreModal />);
 		expect(
 			screen.getByText(
-				"Virtual Playback pool 1001 · captured page 1 · current name: Blue look · GO · virtual",
+				"Page 1 Playback 401 · current name: Blue look · GO · virtual:test",
 			),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText("Physical Playback pool 12 · ON · physical"),
+			screen.getByText("Page 1 Playback 12 · ON · physical:test"),
 		).toBeInTheDocument();
 		expect(
-			screen.getByText("Virtual Playback pool 1002 · ON · virtual"),
+			screen.getByText("Page 1 Playback 402 · ON · virtual:test"),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/Wrong pool name/)).not.toBeInTheDocument();
 	});
@@ -287,11 +310,15 @@ describe("PreloadStoreModal", () => {
 		mocks.topology.ready = false;
 		mocks.topology.playbacks = [{ body: { number: 11, name: "Stale name" } }];
 		mocks.queue.actions = [
-			{ playbackNumber: 11, page: null, action: "on", surface: "physical" },
+			{
+				address: { page: 1, position: 11 },
+				action: "on",
+				controlSource: { surface_id: "physical:test", control_id: 11 },
+			},
 		];
 		render(<PreloadStoreModal />);
 		expect(
-			screen.getByText("Physical Playback pool 11 · ON · physical"),
+			screen.getByText("Page 1 Playback 11 · ON · physical:test"),
 		).toBeInTheDocument();
 		expect(screen.queryByText(/Stale name/)).not.toBeInTheDocument();
 	});

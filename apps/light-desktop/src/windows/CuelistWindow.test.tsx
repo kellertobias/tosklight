@@ -65,6 +65,7 @@ const mocks = vi.hoisted(() => ({
 			cue_list_id: string;
 			cue_index: number;
 			master: number;
+			effective_next_cue_number?: string;
 			enabled?: boolean;
 			running?: boolean;
 			paused?: boolean;

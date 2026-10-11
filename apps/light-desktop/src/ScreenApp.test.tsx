@@ -94,10 +94,8 @@ function configuredScreen(
 		},
 		show_dock: false,
 		show_playbacks: true,
-		playback_count: 8,
-		playback_rows: 1,
-		first_playback_slot: 1,
-		page_mode: "follow_main",
+		surface_id: "screen:test",
+
 		show_page_controls: true,
 		show_programmer: false,
 		not_editable: false,
@@ -105,7 +103,7 @@ function configuredScreen(
 		display_id: null,
 		bounds: null,
 		fullscreen: false,
-		playback_layout: null,
+
 		...overrides,
 	};
 }

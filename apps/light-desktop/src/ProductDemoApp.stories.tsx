@@ -51,7 +51,8 @@ const playbackLevels = new Map([
 const playbackControls: DemoPlaybackControlsValue = {
 	ready: true,
 	status: { kind: "ready" },
-	playbackNumber: (slot) => (playbackLevels.has(slot) ? slot : null),
+	playbackNumber: (slot) =>
+		playbackLevels.has(slot) ? { page: 1, position: slot } : null,
 	faderLevel: (slot) => playbackLevels.get(slot) ?? null,
 	press: () => undefined,
 	release: () => undefined,
@@ -75,7 +76,10 @@ function MarketingShell() {
 							height: 18,
 						}}
 					>
-						<StageRendererView options={stageOptions} selection={stageSelection} />
+						<StageRendererView
+							options={stageOptions}
+							selection={stageSelection}
+						/>
 					</PaneView>
 					<PaneView
 						pane={{
@@ -131,7 +135,10 @@ export const CompleteProductDemo: Story = {
 					</DemoApplicationScreenView>
 				}
 				stage={
-					<StageRendererView options={{ ...stageOptions, view: "3d" }} selection={stageSelection} />
+					<StageRendererView
+						options={{ ...stageOptions, view: "3d" }}
+						selection={stageSelection}
+					/>
 				}
 				dmx={demoDmx}
 				playbackControls={

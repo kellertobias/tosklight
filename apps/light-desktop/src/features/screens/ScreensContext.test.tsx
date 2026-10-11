@@ -5,14 +5,17 @@ import { describe, expect, it, vi } from "vitest";
 import { ScreensProvider, useScreens } from "./ScreensContext";
 import type { ScreensContextValue } from "./types";
 
-function screensSource(setScreenPage = vi.fn()): ScreensContextValue {
+function screensSource(setSurfacePage = vi.fn()): ScreensContextValue {
 	return {
 		screens: null,
 		bootstrap: null,
 		session: null,
 		saveScreen: vi.fn(),
 		deleteScreen: vi.fn(),
-		setScreenPage,
+		setSurfacePage,
+		surfaces: null,
+		selectSurface: vi.fn(),
+		updatePlaybackSurface: vi.fn(),
 		updateProgrammerControlSurface: vi.fn(),
 		updateControlDesk: vi.fn(),
 		selectControlDesk: vi.fn(),
@@ -29,7 +32,7 @@ describe("ScreensProvider", () => {
 			renders += 1;
 			const screens = useScreens();
 			return (
-				<Button onClick={() => void screens.setScreenPage("screen-1", 2)}>
+				<Button onClick={() => void screens.setSurfacePage("screen-1", 2)}>
 					Save
 				</Button>
 			);
@@ -41,7 +44,7 @@ describe("ScreensProvider", () => {
 			</ScreensProvider>,
 		);
 		view.rerender(
-			<ScreensProvider source={{ ...source, setScreenPage: latest }}>
+			<ScreensProvider source={{ ...source, setSurfacePage: latest }}>
 				<Consumer />
 			</ScreensProvider>,
 		);

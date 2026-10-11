@@ -21,10 +21,9 @@ export function queuedPlayback(
 	overrides: Partial<ProgrammerPreloadPlaybackQueueEntry> = {},
 ): ProgrammerPreloadPlaybackQueueEntry {
 	return {
-		playbackNumber: 7,
-		page: null,
+		address: { page: 1, position: 7 },
 		action: "go",
-		surface: "physical",
+		controlSource: { surface_id: "physical:test", control_id: 7 },
 		...overrides,
 	};
 }

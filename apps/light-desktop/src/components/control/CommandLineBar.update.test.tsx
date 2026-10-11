@@ -44,10 +44,9 @@ const playbackQueue = vi.hoisted(() => ({
 		sessionId: string;
 		revision: number;
 		actions: Array<{
-			playbackNumber: number;
-			page: number | null;
+			address: { page: number; position: number };
+			controlSource: { surface_id: string; control_id: number };
 			action: "go" | "back" | "temporary_on" | "temporary_off";
-			surface: "virtual";
 		}>;
 	},
 }));
@@ -466,7 +465,9 @@ describe("scoped command-line integration", () => {
 
 		expect(input).toHaveValue(command);
 		expect(screen.getByText(feedback)).toBeInTheDocument();
-		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(
+			screen.queryByRole("dialog", { name: "Command line history" }),
+		).toBeNull();
 		expect(screen.getByRole("alert")).toHaveClass("command-feedback-toast");
 	});
 });
@@ -492,19 +493,25 @@ describe("Shift+Record Update gestures", () => {
 			sessionId: "user-a",
 			revision: 3,
 			actions: [
-				{ playbackNumber: 4, page: null, action: "go", surface: "virtual" },
-				{ playbackNumber: 7, page: null, action: "back", surface: "virtual" },
 				{
-					playbackNumber: 8,
-					page: null,
-					action: "temporary_on",
-					surface: "virtual",
+					address: { page: 1, position: 4 },
+					action: "go",
+					controlSource: { surface_id: "virtual:test", control_id: 4 },
 				},
 				{
-					playbackNumber: 9,
-					page: null,
+					address: { page: 1, position: 7 },
+					action: "back",
+					controlSource: { surface_id: "virtual:test", control_id: 7 },
+				},
+				{
+					address: { page: 1, position: 8 },
+					action: "temporary_on",
+					controlSource: { surface_id: "virtual:test", control_id: 8 },
+				},
+				{
+					address: { page: 1, position: 9 },
 					action: "temporary_off",
-					surface: "virtual",
+					controlSource: { surface_id: "virtual:test", control_id: 9 },
 				},
 			],
 		};
@@ -514,7 +521,7 @@ describe("Shift+Record Update gestures", () => {
 
 		expect(screen.getByRole("button", { name: "PRELOAD GO" })).toHaveAttribute(
 			"title",
-			"Pending Preload: PROG 2 · GO 4 · GO MINUS 7 · TEMP ON 8 · TEMP OFF 9",
+			"Pending Preload: PROG 2 · GO 1.4 · GO MINUS 1.7 · TEMP ON 1.8 · TEMP OFF 1.9",
 		);
 		expect(screen.queryByText(/PROG 6/)).not.toBeInTheDocument();
 
@@ -857,7 +864,9 @@ describe("shared command rejection presentation", () => {
 		expect(input).toHaveValue(entry.command);
 		expect(input).toHaveClass("error", "rejected");
 		expect(screen.getByRole("alert")).toHaveTextContent(entry.feedback);
-		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(
+			screen.queryByRole("dialog", { name: "Command line history" }),
+		).toBeNull();
 		act(() => vi.advanceTimersByTime(600));
 		expect(input).not.toHaveClass("error");
 		expect(input).toHaveClass("rejected");
@@ -870,9 +879,17 @@ describe("shared command rejection presentation", () => {
 	});
 	it("retains unexpected errors in the larger diagnostic history", () => {
 		render(<CommandLineBar />);
-		fireEvent(window, new CustomEvent("light:command-error", {
-			detail: { message: "Invalid server response\ndiagnostic detail", kind: "unexpected" },
-		}));
-		expect(screen.getByRole("dialog", { name: "Command line history" })).toHaveTextContent("diagnostic detail");
+		fireEvent(
+			window,
+			new CustomEvent("light:command-error", {
+				detail: {
+					message: "Invalid server response\ndiagnostic detail",
+					kind: "unexpected",
+				},
+			}),
+		);
+		expect(
+			screen.getByRole("dialog", { name: "Command line history" }),
+		).toHaveTextContent("diagnostic detail");
 	});
 });

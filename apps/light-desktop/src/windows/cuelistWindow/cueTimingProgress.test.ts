@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Cue, PlaybackSnapshot } from "../../api/types";
+import type { Cue, PlaybackControlState } from "../../api/types";
 import { deriveCueTimingProgress } from "./cueTimingProgress";
 
 const START = Date.parse("2026-08-08T12:00:00.000Z");
@@ -34,8 +34,8 @@ const cues: Cue[] = [
 ];
 
 function runtime(
-	overrides: Partial<PlaybackSnapshot["active"][number]> = {},
-): PlaybackSnapshot["active"][number] {
+	overrides: Partial<PlaybackControlState> = {},
+): PlaybackControlState {
 	return {
 		cue_list_id: "list",
 		cue_index: 1,
@@ -66,17 +66,26 @@ describe("Cuelist timing progress", () => {
 			inDelay: 0,
 			inFade: 0,
 		});
-		expect(deriveCueTimingProgress(cues, runtime(), START)[0]).toEqual({ outDelay: 0, outFade: 0 });
+		expect(deriveCueTimingProgress(cues, runtime(), START)[0]).toEqual({
+			outDelay: 0,
+			outFade: 0,
+		});
 		expect(deriveCueTimingProgress(cues, runtime(), START + 750)[1]).toEqual({
 			inDelay: 1,
 			inFade: 0.25,
 		});
-		expect(deriveCueTimingProgress(cues, runtime(), START + 750)[0]).toEqual({ outDelay: 1, outFade: 1 });
+		expect(deriveCueTimingProgress(cues, runtime(), START + 750)[0]).toEqual({
+			outDelay: 1,
+			outFade: 1,
+		});
 		expect(deriveCueTimingProgress(cues, runtime(), START + 2_000)[1]).toEqual({
 			inDelay: 1,
 			inFade: 1,
 		});
-		expect(deriveCueTimingProgress(cues, runtime(), START + 2_000)[0]).toEqual({ outDelay: 1, outFade: 1 });
+		expect(deriveCueTimingProgress(cues, runtime(), START + 2_000)[0]).toEqual({
+			outDelay: 1,
+			outFade: 1,
+		});
 	});
 
 	it("treats zero-duration phases as complete once activation starts", () => {
@@ -93,7 +102,10 @@ describe("Cuelist timing progress", () => {
 			inDelay: 1,
 			inFade: 1,
 		});
-		expect(deriveCueTimingProgress(cues, zero, START)[0]).toEqual({ outDelay: 1, outFade: 1 });
+		expect(deriveCueTimingProgress(cues, zero, START)[0]).toEqual({
+			outDelay: 1,
+			outFade: 1,
+		});
 	});
 
 	it("freezes every phase at paused_at instead of the advancing wall clock", () => {
@@ -101,7 +113,9 @@ describe("Cuelist timing progress", () => {
 			paused: true,
 			paused_at: new Date(START + 750).toISOString(),
 		});
-		expect(deriveCueTimingProgress(cues, paused, START + 10_000)[1]?.inFade).toBe(0.25);
+		expect(
+			deriveCueTimingProgress(cues, paused, START + 10_000)[1]?.inFade,
+		).toBe(0.25);
 	});
 
 	it("starts a looping TIME trigger for Cue 1 when Cue 2 receives GO", () => {
@@ -122,8 +136,13 @@ describe("Cuelist timing progress", () => {
 				},
 			},
 		});
-		expect(deriveCueTimingProgress(loopingCues, looping, START)[0]?.triggerTime).toBe(0);
-		expect(deriveCueTimingProgress(loopingCues, looping, START + 200)[0]?.triggerTime).toBe(0.5);
+		expect(
+			deriveCueTimingProgress(loopingCues, looping, START)[0]?.triggerTime,
+		).toBe(0);
+		expect(
+			deriveCueTimingProgress(loopingCues, looping, START + 200)[0]
+				?.triggerTime,
+		).toBe(0.5);
 	});
 
 	it("associates Link timing with its source row", () => {
@@ -138,7 +157,9 @@ describe("Cuelist timing progress", () => {
 				},
 			},
 		});
-		expect(deriveCueTimingProgress(cues, link, START + 100)[0]?.triggerTime).toBe(0.25);
+		expect(
+			deriveCueTimingProgress(cues, link, START + 100)[0]?.triggerTime,
+		).toBe(0.25);
 	});
 
 	it("latches completed trigger progress and resets on a new activation", () => {
@@ -148,7 +169,9 @@ describe("Cuelist timing progress", () => {
 				completed_trigger_cue_id: "target",
 			},
 		});
-		expect(deriveCueTimingProgress(cues, completed, START)[2]?.triggerTime).toBe(1);
+		expect(
+			deriveCueTimingProgress(cues, completed, START)[2]?.triggerTime,
+		).toBe(1);
 
 		const restarted = runtime({
 			activated_at: new Date(START + 5_000).toISOString(),
@@ -158,7 +181,11 @@ describe("Cuelist timing progress", () => {
 				completed_trigger_cue_id: null,
 			},
 		});
-		expect(deriveCueTimingProgress(cues, restarted, START + 5_000)[1]?.inFade).toBe(0);
-		expect(deriveCueTimingProgress(cues, restarted, START + 5_000)[2]?.triggerTime).toBeUndefined();
+		expect(
+			deriveCueTimingProgress(cues, restarted, START + 5_000)[1]?.inFade,
+		).toBe(0);
+		expect(
+			deriveCueTimingProgress(cues, restarted, START + 5_000)[2]?.triggerTime,
+		).toBeUndefined();
 	});
 });

@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => {
 	const runtime = {
 		master: 0.4,
 		flashLevel: 0,
-		playbackNumber: 17 as number | null,
+		playbackAddress: { page: 1, position: 17 } as {
+			page: number;
+			position: number;
+		} | null,
 	};
 	const group = {
 		kind: "group" as const,
@@ -119,7 +122,9 @@ vi.mock("../features/programmerValues/useProgrammerValueTargets", () => ({
 	useProgrammerValueTargets: () => [],
 }));
 
-function rows(highlight: Parameters<typeof useFixtureSheetRows>[0]["highlight"] = null) {
+function rows(
+	highlight: Parameters<typeof useFixtureSheetRows>[0]["highlight"] = null,
+) {
 	return useFixtureSheetRows({
 		visualization: {
 			revision: 1,
@@ -142,7 +147,7 @@ beforeEach(() => {
 	mocks.ready = true;
 	mocks.runtime.master = 0.4;
 	mocks.runtime.flashLevel = 0;
-	mocks.runtime.playbackNumber = 17;
+	mocks.runtime.playbackAddress = { page: 1, position: 17 };
 	mocks.server.patch.fixtures[0].group_masters_enabled = true;
 });
 
@@ -169,7 +174,7 @@ describe("Fixture Sheet scoped Group runtime", () => {
 			"Front: 40%",
 		);
 
-		mocks.runtime.playbackNumber = null;
+		mocks.runtime.playbackAddress = null;
 		view.rerender();
 		expect(view.result.current.rows[0].limitingGroups).toEqual([]);
 	});

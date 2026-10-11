@@ -51,9 +51,7 @@ describe("SchedulesApiClient", () => {
 			},
 			target: {
 				type: "playback",
-				page: 2,
-				slot: 4,
-				playback_number: 17,
+				address: { page: 2, position: 4 },
 				action: "go",
 				master_transition: null,
 			},
@@ -67,9 +65,7 @@ describe("SchedulesApiClient", () => {
 		);
 		expect(body.definition.target).toEqual({
 			type: "playback",
-			page: 2,
-			slot: 4,
-			playback_number: 17,
+			address: { page: 2, position: 4 },
 			action: "go",
 			master_transition: null,
 		});

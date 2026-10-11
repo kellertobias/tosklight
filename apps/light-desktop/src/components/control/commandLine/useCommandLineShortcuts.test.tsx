@@ -21,7 +21,7 @@ const deskViewCalls: boolean[] = [];
 
 /** Resolvers for every in-flight runtime action, so ordering stays observable. */
 let inFlight: (() => void)[] = [];
-const poolPlaybackAction = vi.fn(
+const playbackAction = vi.fn(
 	() =>
 		new Promise((resolve) => {
 			inFlight.push(() => resolve({}));
@@ -29,7 +29,7 @@ const poolPlaybackAction = vi.fn(
 );
 const setActivePage = vi.fn(async () => true);
 let runtimeActions: Record<string, unknown> | null = {
-	poolPlaybackAction,
+	playbackAction,
 	setActivePage,
 };
 
@@ -52,7 +52,9 @@ vi.mock("../../../features/playbackRuntime/PlaybackRuntimeView", () => ({
 	usePlaybackRuntimeStatus: () => ({ status: runtimeStatus, error: null }),
 	usePlaybackDeskView: (enabled: boolean) => {
 		deskViewCalls.push(enabled);
-		return enabled && deskPage != null ? { active_page: deskPage } : null;
+		return enabled && deskPage != null
+			? { command_page: deskPage, selected_surface_id: "main" }
+			: null;
 	},
 }));
 
@@ -92,7 +94,18 @@ function playback(
 }
 
 function page(number: number, slots: Record<string, number>): PlaybackPage {
-	return { number, name: `Page ${number}`, slots, virtual_playbacks: {} };
+	return {
+		number,
+		name: `Page ${number}`,
+		get assignments() {
+			return Object.fromEntries(
+				Object.entries(slots).map(([position, source]) => [
+					position,
+					playbacks.find((value) => value.name === `PB ${source}`)!,
+				]),
+			);
+		},
+	};
 }
 
 const callbacks = {
@@ -170,7 +183,7 @@ beforeEach(() => {
 	collectionsReady = true;
 	pages = [page(1, {}), page(2, { "1": 10, "8": 88 }), page(3, {})];
 	playbacks = [playback(10, "go"), playback(88, "flash")];
-	runtimeActions = { poolPlaybackAction, setActivePage };
+	runtimeActions = { playbackAction, setActivePage };
 	topologyActions.createPage = createPage;
 	inFlight = [];
 	kindsViewCalls.length = 0;
@@ -220,7 +233,7 @@ describe("useCommandLineShortcuts playback keys", () => {
 		mount();
 
 		expect(kindsViewCalls[0]).toEqual({
-			kinds: ["playback_page", "playback"],
+			kinds: ["playback_page"],
 			enabled: true,
 		});
 		expect(deskViewCalls).toContain(true);
@@ -231,9 +244,13 @@ describe("useCommandLineShortcuts playback keys", () => {
 
 		press("F1");
 
-		expect(poolPlaybackAction).toHaveBeenCalledWith(10, "go", {
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenCalledWith(
+			{ page: 2, position: 1 },
+			"go",
+			{
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
 	it("maps a configured underscore action to its wire action", () => {
@@ -242,9 +259,13 @@ describe("useCommandLineShortcuts playback keys", () => {
 
 		press("F1");
 
-		expect(poolPlaybackAction).toHaveBeenCalledWith(10, "go-minus", {
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenCalledWith(
+			{ page: 2, position: 1 },
+			"go-minus",
+			{
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
 	it("routes a claimed wider shortcut position to the anchor's right control", () => {
@@ -263,9 +284,13 @@ describe("useCommandLineShortcuts playback keys", () => {
 
 		press("F2");
 
-		expect(poolPlaybackAction).toHaveBeenCalledWith(10, "go-minus", {
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenCalledWith(
+			{ page: 2, position: 1 },
+			"go-minus",
+			{
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
 	it("does not repeat a one-shot Playback action while a key is held", () => {
@@ -274,7 +299,7 @@ describe("useCommandLineShortcuts playback keys", () => {
 		press("F1");
 		press("F1", { repeat: true });
 
-		expect(poolPlaybackAction).toHaveBeenCalledOnce();
+		expect(playbackAction).toHaveBeenCalledOnce();
 	});
 
 	it("ignores an unmapped slot and a configured action of none", () => {
@@ -284,7 +309,7 @@ describe("useCommandLineShortcuts playback keys", () => {
 		press("F1");
 		press("F5");
 
-		expect(poolPlaybackAction).not.toHaveBeenCalled();
+		expect(playbackAction).not.toHaveBeenCalled();
 	});
 
 	it("serializes a Flash release after its press and ignores repeats", async () => {
@@ -293,23 +318,32 @@ describe("useCommandLineShortcuts playback keys", () => {
 		press("F8");
 		press("F8", { repeat: true });
 		await tick();
-		expect(poolPlaybackAction).toHaveBeenCalledTimes(1);
-		expect(poolPlaybackAction).toHaveBeenCalledWith(88, "flash", {
-			pressed: true,
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenCalledTimes(1);
+		expect(playbackAction).toHaveBeenCalledWith(
+			{ page: 2, position: 8 },
+			"flash",
+			{
+				pressed: true,
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 
 		release("F8");
 		await tick();
 		// The release must not overtake the still-pending press.
-		expect(poolPlaybackAction).toHaveBeenCalledTimes(1);
+		expect(playbackAction).toHaveBeenCalledTimes(1);
 
 		await flush();
 
-		expect(poolPlaybackAction).toHaveBeenNthCalledWith(2, 88, "flash", {
-			pressed: false,
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenNthCalledWith(
+			2,
+			{ page: 2, position: 8 },
+			"flash",
+			{
+				pressed: false,
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
 	it("treats Swap as a held action and serializes its release", async () => {
@@ -318,23 +352,32 @@ describe("useCommandLineShortcuts playback keys", () => {
 
 		press("F1");
 		await tick();
-		expect(poolPlaybackAction).toHaveBeenCalledWith(10, "swap", {
-			pressed: true,
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenCalledWith(
+			{ page: 2, position: 1 },
+			"swap",
+			{
+				pressed: true,
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 
 		release("F1");
 		await tick();
-		expect(poolPlaybackAction).toHaveBeenCalledOnce();
+		expect(playbackAction).toHaveBeenCalledOnce();
 
 		await flush();
-		expect(poolPlaybackAction).toHaveBeenNthCalledWith(2, 10, "swap", {
-			pressed: false,
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenNthCalledWith(
+			2,
+			{ page: 2, position: 1 },
+			"swap",
+			{
+				pressed: false,
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
-	it("retains the original Playback number when topology moves while held", async () => {
+	it("retains original exact address and semantic when assignment changes while held", async () => {
 		const view = mount();
 
 		press("F8");
@@ -347,10 +390,15 @@ describe("useCommandLineShortcuts playback keys", () => {
 		release("F8");
 		await flush();
 
-		expect(poolPlaybackAction).toHaveBeenNthCalledWith(2, 88, "flash", {
-			pressed: false,
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenNthCalledWith(
+			2,
+			{ page: 2, position: 8 },
+			"flash",
+			{
+				pressed: false,
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
 	it("releases a held Flash when the runtime authority is replaced", async () => {
@@ -358,16 +406,21 @@ describe("useCommandLineShortcuts playback keys", () => {
 
 		press("F8");
 		await tick();
-		runtimeActions = { poolPlaybackAction, setActivePage };
+		runtimeActions = { playbackAction, setActivePage };
 		act(() => {
 			view.rerender({ hardware: false });
 		});
 		await flush();
 
-		expect(poolPlaybackAction).toHaveBeenNthCalledWith(2, 88, "flash", {
-			pressed: false,
-			surface: "physical",
-		});
+		expect(playbackAction).toHaveBeenNthCalledWith(
+			2,
+			{ page: 2, position: 8 },
+			"flash",
+			{
+				pressed: false,
+				control_source: { surface_id: "main", control_id: expect.any(Number) },
+			},
+		);
 	});
 
 	const teardowns: [string, (view: ReturnType<typeof mount>) => void][] = [
@@ -388,10 +441,18 @@ describe("useCommandLineShortcuts playback keys", () => {
 			act(() => teardown(view));
 			await flush();
 
-			expect(poolPlaybackAction).toHaveBeenNthCalledWith(2, 88, "flash", {
-				pressed: false,
-				surface: "physical",
-			});
+			expect(playbackAction).toHaveBeenNthCalledWith(
+				2,
+				{ page: 2, position: 8 },
+				"flash",
+				{
+					pressed: false,
+					control_source: {
+						surface_id: "main",
+						control_id: expect.any(Number),
+					},
+				},
+			);
 		});
 });
 
@@ -498,7 +559,7 @@ describe("useCommandLineShortcuts page keys", () => {
 
 		const replacementSetActivePage = vi.fn(async () => true);
 		runtimeActions = {
-			poolPlaybackAction,
+			playbackAction,
 			setActivePage: replacementSetActivePage,
 		};
 		act(() => view.rerender({ hardware: false }));
@@ -563,7 +624,7 @@ describe("useCommandLineShortcuts authority gating", () => {
 
 		expect(playbackKey.defaultPrevented).toBe(true);
 		expect(pageKey.defaultPrevented).toBe(true);
-		expect(poolPlaybackAction).not.toHaveBeenCalled();
+		expect(playbackAction).not.toHaveBeenCalled();
 		expect(setActivePage).not.toHaveBeenCalled();
 		expect(createPage).not.toHaveBeenCalled();
 	});
@@ -575,7 +636,7 @@ describe("useCommandLineShortcuts authority gating", () => {
 
 		expect(press("F1").defaultPrevented).toBe(true);
 		expect(press("PageUp").defaultPrevented).toBe(true);
-		expect(poolPlaybackAction).not.toHaveBeenCalled();
+		expect(playbackAction).not.toHaveBeenCalled();
 		expect(setActivePage).not.toHaveBeenCalled();
 		expect(createPage).not.toHaveBeenCalled();
 	});
@@ -586,7 +647,7 @@ describe("useCommandLineShortcuts authority gating", () => {
 
 		expect(press("F1").defaultPrevented).toBe(true);
 		expect(press("PageUp").defaultPrevented).toBe(true);
-		expect(poolPlaybackAction).not.toHaveBeenCalled();
+		expect(playbackAction).not.toHaveBeenCalled();
 		expect(setActivePage).not.toHaveBeenCalled();
 		expect(createPage).not.toHaveBeenCalled();
 	});
@@ -597,7 +658,7 @@ describe("useCommandLineShortcuts authority gating", () => {
 
 		expect(press("F1").defaultPrevented).toBe(true);
 		expect(press("PageUp").defaultPrevented).toBe(true);
-		expect(poolPlaybackAction).not.toHaveBeenCalled();
+		expect(playbackAction).not.toHaveBeenCalled();
 	});
 });
 
@@ -656,7 +717,7 @@ describe("useCommandLineShortcuts dormancy", () => {
 		expect(kindsViewCalls.every((call) => !call.enabled)).toBe(true);
 		expect(deskViewCalls.every((enabled) => !enabled)).toBe(true);
 		expect(press("F1").defaultPrevented).toBe(false);
-		expect(poolPlaybackAction).not.toHaveBeenCalled();
+		expect(playbackAction).not.toHaveBeenCalled();
 	});
 
 	it("disables only regular number-row digits", () => {

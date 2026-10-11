@@ -86,7 +86,7 @@ describe("Fixture Sheet programmer value projection", () => {
 						fixture_ids: ["fixture-1", "fixture-2", "fixture-3"],
 					},
 				},
-				runtime: { master: 1, flashLevel: 1, playbackNumber: null },
+				runtime: { master: 1, flashLevel: 1, playbackAddress: null },
 			},
 			{
 				id: "derived",
@@ -97,7 +97,7 @@ describe("Fixture Sheet programmer value projection", () => {
 						references: [{ group_id: "source", rule: { type: "odd" } }],
 					},
 				},
-				runtime: { master: 1, flashLevel: 1, playbackNumber: null },
+				runtime: { master: 1, flashLevel: 1, playbackAddress: null },
 			},
 		] as RuntimeGroup[];
 

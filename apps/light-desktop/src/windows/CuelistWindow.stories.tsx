@@ -97,7 +97,6 @@ const cueList: CueList = {
 };
 
 const playback: PlaybackDefinition = {
-	number: 1,
 	name: "Main Sequence",
 	target: { type: "cue_list", cue_list_id: cueList.id },
 	buttons: ["go", "go_minus", "flash"],
@@ -109,15 +108,13 @@ const playback: PlaybackDefinition = {
 
 const secondaryPlayback: PlaybackDefinition = {
 	...playback,
-	number: 4,
 	name: "Side Sequence",
 };
 
 const page: PlaybackPage = {
 	number: 1,
 	name: "Main",
-	slots: { "1": 1 },
-	virtual_playbacks: {},
+	assignments: { "1": playback, "4": secondaryPlayback },
 };
 
 function versioned<T>(kind: string, id: string, body: T): VersionedObject<T> {
@@ -136,10 +133,6 @@ function CuelistStoryState({ children }: PropsWithChildren) {
 		next.reset(SHOW_ID);
 		next.setCollection(SHOW_ID, "cue_list", [
 			versioned("cue_list", "main-object", cueList),
-		]);
-		next.setCollection(SHOW_ID, "playback", [
-			versioned("playback", "playback-1", playback),
-			versioned("playback", "playback-4", secondaryPlayback),
 		]);
 		next.setCollection(SHOW_ID, "playback_page", [
 			versioned("playback_page", "page-1", page),

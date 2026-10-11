@@ -42,8 +42,6 @@ describe("Desk Setup page-scoped configuration saves", () => {
 		expect(configurationFieldsForSection("preferences-others")).toEqual([
 			"command_line_at_uses_programmer_fade",
 			"preload_programmer_changes",
-			"preload_physical_playback_actions",
-			"preload_virtual_playback_actions",
 		]);
 	});
 
