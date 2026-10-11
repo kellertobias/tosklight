@@ -4,7 +4,7 @@ import type {
 	PlaybackCardSummary,
 } from "@tosklight/ui/playback";
 import { PLAYBACK_CARD_DEFAULT_COLORS } from "@tosklight/ui/playback";
-import { type CSSProperties } from "react";
+import { type CSSProperties, useState } from "react";
 import type {
 	Cue,
 	PlaybackDefinition,
@@ -44,13 +44,11 @@ function playbackCommandTarget(controller: PlaybackBankController) {
 function playbackCardStyle(
 	cell: PlaybackSlotProjection,
 	color: string,
-	columns: number,
-	firstSlot: number,
 	presentationStyle?: CSSProperties,
 ): CSSProperties {
 	const footprint = cell.footprint;
 	return {
-		...playbackCellGridStyle(cell, columns, firstSlot),
+		...playbackCellGridStyle(cell),
 		...(cell.playback ? { "--playback-color": color } : {}),
 		...(footprint
 			? {
@@ -77,7 +75,7 @@ function isSelectedPlayback(
 }
 
 export function PlaybackSlot({
-	controller,
+	controller: bankController,
 	slotData,
 	soloClasses = "",
 }: {
@@ -85,6 +83,8 @@ export function PlaybackSlot({
 	slotData: PlaybackSlotProjection;
 	soloClasses?: string;
 }) {
+	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
+	const controller = { ...bankController, controlSourceId };
 	const { playback, cue, group, slot, row } = slotData;
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
@@ -178,8 +178,6 @@ export function PlaybackSlot({
 	const cardStyle = playbackCardStyle(
 		slotData,
 		playbackColor,
-		controller.columns,
-		controller.firstSlot,
 		presentation?.style,
 	);
 	if (controller.hardware && row?.presentation !== "push_encoder")

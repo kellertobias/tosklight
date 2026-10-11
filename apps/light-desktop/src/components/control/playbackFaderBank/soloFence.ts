@@ -21,9 +21,7 @@ export function soloFenceClasses(
 			: candidate.rowIndex,
 		column: candidate.footprint
 			? candidate.footprint.columnStart - 1
-			: candidate.row
-				? candidate.slot - candidate.row.first_position
-				: cells.indexOf(candidate) % columns,
+			: candidate.columnIndex,
 	});
 	const origin = coordinate(cell);
 	const neighbour = (row: number, column: number) => {

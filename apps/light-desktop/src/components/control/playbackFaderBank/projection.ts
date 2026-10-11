@@ -36,12 +36,14 @@ export function projectPlaybackSlots({
 					slot: row.first_position + columnIndex,
 					row,
 					rowIndex,
+					columnIndex,
 				})),
 			)
 		: playbackSlotAssignments(page, firstSlot, pageSize).map((_, index) => ({
 				slot: firstSlot + index,
 				row: null,
 				rowIndex: Math.floor(index / columns),
+				columnIndex: index % columns,
 			}));
 	const footprints = projectPlaybackFootprints({
 		page,
@@ -50,11 +52,16 @@ export function projectPlaybackSlots({
 		firstSlot,
 		pageSize,
 	});
-	const footprintBySlot = new Map(
-		footprints.cells.map((footprint) => [footprint.slot, footprint]),
+	const footprintByCell = new Map(
+		footprints.cells.map((footprint) => [
+			playbackCellKey(footprint),
+			footprint,
+		]),
 	);
-	return cells.flatMap(({ slot, row, rowIndex }) => {
-		const footprint = footprintBySlot.get(slot);
+	return cells.flatMap(({ slot, row, rowIndex, columnIndex }) => {
+		const footprint = footprintByCell.get(
+			playbackCellKey({ rowIndex, columnIndex }),
+		);
 		if (footprint?.state === "claimed") return [];
 		const definition = page?.assignments[String(slot)];
 		const playback =
@@ -80,6 +87,7 @@ export function projectPlaybackSlots({
 				slot,
 				row,
 				rowIndex,
+				columnIndex,
 				footprint: footprint?.state === "anchor" ? footprint : null,
 			},
 		];
@@ -87,16 +95,17 @@ export function projectPlaybackSlots({
 }
 
 /** Every displayed cell owns a row/column, including holes in sparse show pages. */
-export function playbackCellGridStyle(
-	cell: PlaybackSlotProjection,
-	columns: number,
-	firstSlot: number,
-) {
-	const column = cell.row
-		? cell.slot - cell.row.first_position
-		: (cell.slot - firstSlot) % columns;
+export function playbackCellGridStyle(cell: PlaybackSlotProjection) {
+	const column = cell.columnIndex;
 	return {
 		gridRow: `${cell.rowIndex + 1} / span 1`,
 		gridColumn: `${column + 1} / span 1`,
 	};
+}
+
+export function playbackCellKey(cell: {
+	rowIndex: number;
+	columnIndex: number;
+}) {
+	return `${cell.rowIndex}:${cell.columnIndex}`;
 }

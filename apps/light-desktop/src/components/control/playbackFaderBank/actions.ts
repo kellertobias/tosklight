@@ -72,7 +72,7 @@ export async function selectPlayback(
 		{
 			control_source: {
 				surface_id: controller.controlSourceId,
-				control_id: playback.address.position * 10,
+				control_id: 7,
 			},
 		},
 	);
@@ -92,7 +92,7 @@ export async function offPlayback(
 		{
 			control_source: {
 				surface_id: controller.controlSourceId,
-				control_id: playback.address.position * 10,
+				control_id: 7,
 			},
 		},
 	);

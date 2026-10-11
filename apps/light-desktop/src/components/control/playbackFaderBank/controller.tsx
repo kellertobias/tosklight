@@ -147,8 +147,8 @@ export function usePlaybackBankController({
 	useEffect(() => setConfiguration(null), [activePageNumber, topology.ready]);
 	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
 	const heldActions = useMemo(
-		() => new HeldPlaybackActions(runtimeActions, controlSourceId),
-		[runtimeActions, controlSourceId],
+		() => new HeldPlaybackActions(runtimeActions),
+		[runtimeActions],
 	);
 	useEffect(() => heldActions.listen(window), [heldActions]);
 	const rowTracks = playbackRowTracks(playbackLayout, hardware, rowCount);

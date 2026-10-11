@@ -157,7 +157,7 @@ export function HardwarePlaybackCard({
 							value: next / 100,
 							control_source: {
 								surface_id: controller.controlSourceId,
-								control_id: slotData.slot * 10,
+								control_id: 7,
 							},
 						},
 					),

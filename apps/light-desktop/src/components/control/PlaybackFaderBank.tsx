@@ -6,6 +6,7 @@ import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
 } from "./playbackFaderBank/controller";
+import { playbackCellKey } from "./playbackFaderBank/projection";
 import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
 import { PlaybackGridSoloControls } from "./playbackFaderBank/PlaybackGridSoloControls";
@@ -109,7 +110,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 								controller={controller}
 								slotData={slotData}
 								soloClasses={solo.classes(slotData)}
-								key={`${slotData.slot}-${slotData.playback?.address.position ?? "empty"}`}
+								key={playbackCellKey(slotData)}
 							/>
 						))}
 					</div>

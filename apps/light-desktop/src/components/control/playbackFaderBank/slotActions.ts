@@ -109,7 +109,7 @@ export function buildPlaybackActions({
 								pressed: true,
 								control_source: {
 									surface_id: controller.controlSourceId,
-									control_id: slot * 10 + button + 1,
+									control_id: button + 1,
 								},
 							},
 						);
@@ -131,7 +131,7 @@ export function buildPlaybackActions({
 					if (!playback || !isHeldAction(action)) return;
 					event.currentTarget.setPointerCapture?.(event.pointerId);
 					controller.heldActions.press(
-						slot,
+						controller.controlSourceId,
 						playback.address,
 						button + 1,
 						action,
@@ -155,7 +155,7 @@ export function buildPlaybackActions({
 					event.preventDefault();
 					if (!event.repeat)
 						controller.heldActions.press(
-							slot,
+							controller.controlSourceId,
 							playback.address,
 							button + 1,
 							action,

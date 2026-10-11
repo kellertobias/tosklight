@@ -8,6 +8,7 @@ const cell = (
 ): PlaybackSlotProjection => ({
 	slot,
 	rowIndex,
+	columnIndex: slot - first,
 	row: {
 		first_position: first,
 		count: 2,

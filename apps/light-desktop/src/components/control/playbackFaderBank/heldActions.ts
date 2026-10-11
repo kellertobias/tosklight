@@ -12,25 +12,22 @@ const gestureKey = (gesture: HoldGesture) =>
 export class HeldPlaybackActions {
 	private readonly held = new HeldPlaybackControls();
 	private readonly gestures = new Map<string, string>();
-	constructor(
-		private readonly actions: PlaybackRuntimeActions | null,
-		private readonly surfaceId: string,
-	) {}
+	constructor(private readonly actions: PlaybackRuntimeActions | null) {}
 	press(
-		position: number,
+		controlSourceId: string,
 		address: PlaybackAddressValue,
 		button: number,
 		action: "flash" | "swap",
 		gesture: HoldGesture,
 	) {
-		const control = `${position}:${button}`;
+		const control = `${controlSourceId}:${button}`;
 		// One physical button owns one hold even if a second pointer hits it.
 		if (this.gestures.has(control)) return;
 		this.gestures.set(control, gestureKey(gesture));
 		this.held.press(
 			control,
 			address,
-			{ surface_id: this.surfaceId, control_id: position * 10 + button },
+			{ surface_id: controlSourceId, control_id: button },
 			async (hold, pressed) => {
 				await this.actions?.playbackAction(hold.address, action, {
 					pressed,

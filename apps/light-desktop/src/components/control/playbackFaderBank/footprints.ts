@@ -78,7 +78,7 @@ export interface PlaybackFootprintProjection {
 	anchors: Extract<PlaybackFootprintCellProjection, { state: "anchor" }>[];
 	claimed: Extract<PlaybackFootprintCellProjection, { state: "claimed" }>[];
 	unclaimed: Extract<PlaybackFootprintCellProjection, { state: "unclaimed" }>[];
-	bindings: Map<number, PlaybackPhysicalSlotBinding>;
+	bindings: Map<string, PlaybackPhysicalSlotBinding>;
 }
 
 export interface ProjectPlaybackFootprintsOptions {
@@ -125,23 +125,34 @@ export function projectPlaybackFootprints({
 	const cellByCoordinate = new Map(
 		cells.map((cell) => [coordinate(cell.rowIndex, cell.columnIndex), cell]),
 	);
-	const playbackAt = (cell: PlaybackFootprintGridCell): AssignedPlayback | null => {
+	const playbackAt = (
+		cell: PlaybackFootprintGridCell,
+	): AssignedPlayback | null => {
 		const definition = page?.assignments[String(cell.slot)];
-		return definition && page ? {...definition, address: {page: page.number, position: cell.slot}} : null;
+		return definition && page
+			? { ...definition, address: { page: page.number, position: cell.slot } }
+			: null;
 	};
-	const isOccupied = (cell: PlaybackFootprintGridCell) => page?.assignments[String(cell.slot)] != null;
+	const isOccupied = (cell: PlaybackFootprintGridCell) =>
+		page?.assignments[String(cell.slot)] != null;
 	const candidates = cells.flatMap((cell) => {
 		const playback = playbackAt(cell);
 		return playback
 			? [candidateFor(cell, playback, cellByCoordinate, isOccupied)]
 			: [];
 	});
-	const claimsByTarget = new Map<number, Candidate[]>();
+	const claimsByTarget = new Map<string, Candidate[]>();
 	for (const candidate of candidates) {
 		if (!candidate.target || candidate.fallbackReason) continue;
-		const claims = claimsByTarget.get(candidate.target.slot) ?? [];
+		const claims =
+			claimsByTarget.get(
+				coordinate(candidate.target.rowIndex, candidate.target.columnIndex),
+			) ?? [];
 		claims.push(candidate);
-		claimsByTarget.set(candidate.target.slot, claims);
+		claimsByTarget.set(
+			coordinate(candidate.target.rowIndex, candidate.target.columnIndex),
+			claims,
+		);
 	}
 	for (const claims of claimsByTarget.values()) {
 		if (claims.length < 2) continue;
@@ -149,35 +160,48 @@ export function projectPlaybackFootprints({
 			candidate.fallbackReason = "conflicting_claim";
 	}
 
-	const claimedBySlot = new Map<number, Candidate>();
+	const claimedByCell = new Map<string, Candidate>();
 	for (const candidate of candidates) {
 		if (candidate.target && !candidate.fallbackReason)
-			claimedBySlot.set(candidate.target.slot, candidate);
+			claimedByCell.set(
+				coordinate(candidate.target.rowIndex, candidate.target.columnIndex),
+				candidate,
+			);
 	}
 	const candidateByAnchor = new Map(
-		candidates.map((candidate) => [candidate.anchor.slot, candidate]),
+		candidates.map((candidate) => [
+			coordinate(candidate.anchor.rowIndex, candidate.anchor.columnIndex),
+			candidate,
+		]),
 	);
-	const bindings = new Map<number, PlaybackPhysicalSlotBinding>();
+	const bindings = new Map<string, PlaybackPhysicalSlotBinding>();
 	const projected = cells.map((cell): PlaybackFootprintCellProjection => {
-		const claim = claimedBySlot.get(cell.slot);
+		const claim = claimedByCell.get(
+			coordinate(cell.rowIndex, cell.columnIndex),
+		);
 		if (claim?.position) {
 			bindings.set(
-				cell.slot,
+				coordinate(cell.rowIndex, cell.columnIndex),
 				claimedBinding(cell, claim.anchor.slot, claim.playback, claim.position),
 			);
 			return {
 				...cell,
 				state: "claimed",
 				anchorSlot: claim.anchor.slot,
-				address: {...claim.playback.address},
+				address: { ...claim.playback.address },
 				position: claim.position,
 			};
 		}
-		const candidate = candidateByAnchor.get(cell.slot);
+		const candidate = candidateByAnchor.get(
+			coordinate(cell.rowIndex, cell.columnIndex),
+		);
 		if (!candidate) return { ...cell, state: "unclaimed" };
 		const effective = candidate.fallbackReason ? "normal" : candidate.requested;
 		const target = effective === "normal" ? null : candidate.target;
-		bindings.set(cell.slot, anchorBinding(cell, candidate.playback));
+		bindings.set(
+			coordinate(cell.rowIndex, cell.columnIndex),
+			anchorBinding(cell, candidate.playback),
+		);
 		return {
 			...cell,
 			state: "anchor",
@@ -225,15 +249,12 @@ export function footprintGridCells({
 }: Omit<ProjectPlaybackFootprintsOptions, "page">) {
 	if (playbackLayout) {
 		return playbackLayout.rows.flatMap((row, rowIndex) =>
-			Array.from(
-				{ length: row.count },
-				(_, columnIndex) => ({
-					slot: row.first_position + columnIndex,
-					row,
-					rowIndex,
-					columnIndex,
-				}),
-			),
+			Array.from({ length: row.count }, (_, columnIndex) => ({
+				slot: row.first_position + columnIndex,
+				row,
+				rowIndex,
+				columnIndex,
+			})),
 		);
 	}
 	const safeColumns = Math.max(1, columns);
@@ -244,7 +265,9 @@ export function footprintGridCells({
 			row: {
 				first_position: firstSlot + rowIndex * safeColumns,
 				count: safeColumns,
-				presentation: (fallbackHasFader ? "fader" : "buttons") as PlaybackSurfaceRow["presentation"],
+				presentation: (fallbackHasFader
+					? "fader"
+					: "buttons") as PlaybackSurfaceRow["presentation"],
 				button_count: fallbackButtons,
 			},
 			rowIndex,
@@ -338,12 +361,12 @@ function anchorBinding(
 			control: { type: "anchor_button", number: index + 1 },
 		}),
 	);
-	if ((cell.row.presentation !== "buttons") && (playback.has_fader ?? true))
+	if (cell.row.presentation !== "buttons" && (playback.has_fader ?? true))
 		controls.push({ control: { type: "anchor_fader" } });
 	return {
 		physicalSlot: cell.slot,
 		anchorSlot: cell.slot,
-		address: {...playback.address},
+		address: { ...playback.address },
 		position: "anchor",
 		controls,
 	};
@@ -367,12 +390,12 @@ function claimedBinding(
 						control: { type: "right_button" as const, number: index + 1 },
 					}),
 				);
-	if (position === "wider_right" && (cell.row.presentation !== "buttons"))
+	if (position === "wider_right" && cell.row.presentation !== "buttons")
 		controls.push({ control: { type: "right_fader" } });
 	return {
 		physicalSlot: cell.slot,
 		anchorSlot,
-		address: {...playback.address},
+		address: { ...playback.address },
 		position,
 		controls,
 	};

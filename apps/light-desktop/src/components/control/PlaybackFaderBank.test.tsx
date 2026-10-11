@@ -496,6 +496,102 @@ function assignPlayback(overrides: Record<string, unknown> = {}) {
 
 describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it.each([
+		false,
+		true,
+	])("keeps duplicate-address cells in their own rows with assigned=%s", (assigned) => {
+		if (assigned) assignPlayback();
+		const { container } = render(
+			<PlaybackFaderBank
+				playbackLayout={{
+					rows: [
+						{
+							first_position: 1,
+							count: 2,
+							presentation: "buttons",
+							button_count: 1,
+						},
+						{
+							first_position: 1,
+							count: 2,
+							presentation: "buttons",
+							button_count: 1,
+						},
+					],
+				}}
+			/>,
+		);
+		const cards = [
+			...container.querySelectorAll<HTMLElement>("[data-playback-slot]"),
+		];
+		expect(
+			cards.map((card) => [
+				card.dataset.playbackSlot,
+				card.style.gridRow,
+				card.style.gridColumn,
+			]),
+		).toEqual([
+			["1", "1 / span 1", "1 / span 1"],
+			["2", "1 / span 1", "2 / span 1"],
+			["1", "2 / span 1", "1 / span 1"],
+			["2", "2 / span 1", "2 / span 1"],
+		]);
+	});
+	it("keeps duplicate physical Flash controls independent through page change, cancel and unmount", async () => {
+		assignPlayback({ buttons: ["flash", "none", "none"], button_count: 1 });
+		const held = new Set<string>();
+		mocks.poolPlaybackAction.mockImplementation(
+			async (_address, action, input) => {
+				if (action === "flash") {
+					const source = JSON.stringify(input.control_source);
+					if (input.pressed) held.add(source);
+					else held.delete(source);
+				}
+				return { status: "changed" };
+			},
+		);
+		const layout = {
+			rows: [0, 1].map(() => ({
+				first_position: 1,
+				count: 1,
+				presentation: "buttons" as const,
+				button_count: 1,
+			})),
+		};
+		const bank = render(
+			<PlaybackFaderBank playbackLayout={layout} pageNumber={1} />,
+		);
+		const buttons = within(bank.container).getAllByRole("button", {
+			name: /FLASH/,
+		});
+		fireEvent.pointerDown(buttons[0], { pointerId: 41, button: 0 });
+		fireEvent.pointerDown(buttons[1], { pointerId: 42, button: 0 });
+		await waitFor(() => expect(held.size).toBe(2));
+		const presses = mocks.poolPlaybackAction.mock.calls.slice(0, 2);
+		expect(presses.map(([address]) => address)).toEqual([
+			{ page: 1, position: 1 },
+			{ page: 1, position: 1 },
+		]);
+		expect(presses[0][2].control_source).not.toEqual(
+			presses[1][2].control_source,
+		);
+		bank.rerender(<PlaybackFaderBank playbackLayout={layout} pageNumber={2} />);
+		expect(held.size).toBe(2);
+		fireEvent.pointerCancel(window, { pointerId: 41 });
+		await waitFor(() => expect(held.size).toBe(1));
+		expect(mocks.poolPlaybackAction.mock.calls[2]).toEqual([
+			{ page: 1, position: 1 },
+			"flash",
+			{ pressed: false, control_source: presses[0][2].control_source },
+		]);
+		bank.unmount();
+		await waitFor(() => expect(held.size).toBe(0));
+		expect(mocks.poolPlaybackAction.mock.calls[3]).toEqual([
+			{ page: 1, position: 1 },
+			"flash",
+			{ pressed: false, control_source: presses[1][2].control_source },
+		]);
+	});
 	it("selects the keyboard-focused surface and projects its authoritative command page", async () => {
 		assignPlayback();
 		mocks.surfacePages = { main: 1, second: 2 };
@@ -667,7 +763,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				value: expect.any(Number),
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 3010,
+					control_id: 7,
 				},
 			},
 		);
@@ -836,7 +932,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				pressed: true,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 14,
+					control_id: 4,
 				},
 			},
 		);
@@ -1073,7 +1169,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				{
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 10,
+						control_id: 7,
 					},
 				},
 			),
@@ -1105,7 +1201,7 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 				{
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 20,
+						control_id: 7,
 					},
 				},
 			),
@@ -1295,7 +1391,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 				{
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 10,
+						control_id: 7,
 					},
 				},
 			),
@@ -1332,7 +1428,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 				{
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 10,
+						control_id: 7,
 					},
 				},
 			),
@@ -1397,7 +1493,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 				pressed: true,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 11,
+					control_id: 1,
 				},
 			},
 		);
@@ -1408,7 +1504,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 				value: 0.42,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 10,
+					control_id: 7,
 				},
 			},
 		);
@@ -1418,7 +1514,7 @@ describe("PlaybackFaderBank selection and Record targets", () => {
 			{
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 10,
+					control_id: 7,
 				},
 			},
 		);
@@ -1714,7 +1810,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 						value: 1,
 						control_source: {
 							surface_id: expect.stringMatching(/^software:/),
-							control_id: 10,
+							control_id: 7,
 						},
 					},
 				),
@@ -1737,7 +1833,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					value: 0.13,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 10,
+						control_id: 7,
 					},
 				},
 			),
@@ -1752,7 +1848,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					value: 0.42,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 10,
+						control_id: 7,
 					},
 				},
 			),
@@ -1799,7 +1895,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				pressed: true,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 11,
+					control_id: 1,
 				},
 			},
 		);
@@ -1814,7 +1910,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					pressed: true,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 13,
+						control_id: 3,
 					},
 				},
 			),
@@ -1827,7 +1923,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					pressed: false,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 13,
+						control_id: 3,
 					},
 				},
 			),
@@ -1862,7 +1958,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				pressed: false,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 13,
+					control_id: 3,
 				},
 			},
 		);
@@ -1980,7 +2076,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 				pressed: false,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 13,
+					control_id: 3,
 				},
 			},
 		);
@@ -2009,7 +2105,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					pressed: true,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 13,
+						control_id: 3,
 					},
 				},
 			),
@@ -2031,7 +2127,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					pressed: false,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 13,
+						control_id: 3,
 					},
 				},
 			),
@@ -2063,7 +2159,7 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 					pressed: true,
 					control_source: {
 						surface_id: expect.stringMatching(/^software:/),
-						control_id: 13,
+						control_id: 3,
 					},
 				},
 			),
@@ -2185,7 +2281,7 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 				pressed: true,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 11,
+					control_id: 1,
 				},
 			},
 		);
@@ -2198,7 +2294,7 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 				pressed: true,
 				control_source: {
 					surface_id: expect.stringMatching(/^software:/),
-					control_id: 11,
+					control_id: 1,
 				},
 			},
 		);
@@ -2359,6 +2455,7 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 function soloBank(
 	initial: readonly PlaybackSoloRegion[] = [],
 	presentation: "buttons" | "push_encoder" = "buttons",
+	layout?: ComponentProps<typeof PhysicalPlaybackFaderBank>["playbackLayout"],
 ) {
 	let regions = initial;
 	let revision = 1;
@@ -2393,16 +2490,18 @@ function soloBank(
 			<PlaybackFaderBank
 				pageNumber={mocks.playbacks.active_page}
 				count={4}
-				playbackLayout={{
-					rows: [
-						{
-							first_position: 1,
-							count: 4,
-							presentation,
-							button_count: 1,
-						},
-					],
-				}}
+				playbackLayout={
+					layout ?? {
+						rows: [
+							{
+								first_position: 1,
+								count: 4,
+								presentation,
+								button_count: 1,
+							},
+						],
+					}
+				}
 			/>
 		</PlaybackSoloProvider>
 	);
@@ -2434,6 +2533,38 @@ describe("shared Playback grid Solo configuration", () => {
 			cueListSetTarget: null,
 			cueListSetArmed: false,
 		});
+	});
+
+	it("draws the outer Solo fence separately for repeated physical rows", async () => {
+		const row = {
+			first_position: 1,
+			count: 2,
+			presentation: "buttons" as const,
+			button_count: 1,
+		};
+		const bank = soloBank(
+			[
+				{
+					id: "both",
+					name: "Both",
+					members: [
+						{ page: 1, position: 1 },
+						{ page: 1, position: 2 },
+					],
+				},
+			],
+			"buttons",
+			{ rows: [row, { ...row }] },
+		);
+		const cards = [
+			...bank.container.querySelectorAll<HTMLElement>("[data-playback-slot]"),
+		];
+		await waitFor(() => expect(cards[0]).toHaveClass("solo-fence-top"));
+		expect(cards[0]).not.toHaveClass("solo-fence-bottom", "solo-fence-right");
+		expect(cards[1]).toHaveClass("solo-fence-top", "solo-fence-right");
+		expect(cards[2]).toHaveClass("solo-fence-bottom", "solo-fence-left");
+		expect(cards[2]).not.toHaveClass("solo-fence-top");
+		expect(cards[3]).toHaveClass("solo-fence-bottom", "solo-fence-right");
 	});
 
 	it.each([

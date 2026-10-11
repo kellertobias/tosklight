@@ -61,6 +61,41 @@ function project(
 }
 
 describe("playback footprint projection", () => {
+	it("resolves repeated wider addresses against separate physical neighbors", () => {
+		const row = {
+			first_position: 1,
+			count: 2,
+			presentation: "fader" as const,
+			button_count: 3,
+		};
+		const result = project(
+			[
+				definition(1, {
+					type: "wider",
+					right_buttons: ["flash", "none", "none"],
+					right_fader: "master",
+				}),
+			],
+			{ "1": 1 },
+			{ rows: [row, { ...row }] },
+		);
+		expect(
+			result.anchors.map((cell) => [
+				cell.rowStart,
+				cell.columnStart,
+				cell.effective,
+			]),
+		).toEqual([
+			[1, 1, "wider"],
+			[2, 1, "wider"],
+		]);
+		expect(
+			result.claimed.map((cell) => [cell.rowIndex, cell.columnIndex]),
+		).toEqual([
+			[0, 1],
+			[1, 1],
+		]);
+	});
 	it("keeps normal anchors and nonsequential empty cells independently available", () => {
 		const result = project([definition(1, { type: "normal" })], { "31": 1 });
 
@@ -83,7 +118,7 @@ describe("playback footprint projection", () => {
 		expect(result.unclaimed.map(({ slot }) => slot)).toEqual([
 			11, 12, 13, 32, 33,
 		]);
-		expect(result.bindings.get(31)).toMatchObject({
+		expect(result.bindings.get("1:0")).toMatchObject({
 			physicalSlot: 31,
 			anchorSlot: 31,
 			position: "anchor",
@@ -115,7 +150,7 @@ describe("playback footprint projection", () => {
 				position: "taller_upper",
 			},
 		]);
-		expect(result.bindings.get(12)).toEqual({
+		expect(result.bindings.get("0:1")).toEqual({
 			physicalSlot: 12,
 			anchorSlot: 32,
 			address: { page: 1, position: 32 },
@@ -143,7 +178,7 @@ describe("playback footprint projection", () => {
 			columnStart: 1,
 			columnSpan: 2,
 		});
-		expect(result.bindings.get(32)).toEqual({
+		expect(result.bindings.get("1:1")).toEqual({
 			physicalSlot: 32,
 			anchorSlot: 31,
 			address: { page: 1, position: 31 },
@@ -176,7 +211,7 @@ describe("playback footprint projection", () => {
 		});
 		playback.body.button_count = buttonCount;
 		const result = project([playback], { "31": 8 });
-		const controls = result.bindings.get(32)?.controls ?? [];
+		const controls = result.bindings.get("1:1")?.controls ?? [];
 
 		expect(
 			controls.filter(({ control }) => control.type === "right_button"),

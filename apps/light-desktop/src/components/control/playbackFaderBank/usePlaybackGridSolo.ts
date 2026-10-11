@@ -14,6 +14,7 @@ import {
 } from "../../../api/playbackAddress";
 import { usePlaybackSoloOptional } from "../../../features/playbackSolo/PlaybackSoloContext";
 import type { PlaybackBankController } from "./controller";
+import { playbackCellKey } from "./projection";
 import { soloFenceClasses } from "./soloFence";
 import type { PlaybackSlotProjection } from "./types";
 const noSubscribe = () => () => {};
@@ -108,7 +109,7 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 		() =>
 			new Map(
 				controller.slots.map((cell) => [
-					cell.slot,
+					playbackCellKey(cell),
 					controller.activePageNumber == null
 						? ""
 						: soloFenceClasses(
@@ -137,7 +138,7 @@ export function usePlaybackGridSolo(controller: PlaybackBankController) {
 				address.page === controller.activePageNumber &&
 				address.position === cell.slot,
 		);
-		return `${fences.get(cell.slot) ?? ""} ${chosen ? "playback-solo-selected" : ""}`.trim();
+		return `${fences.get(playbackCellKey(cell)) ?? ""} ${chosen ? "playback-solo-selected" : ""}`.trim();
 	};
 	return {
 		available: capability?.available ?? false,

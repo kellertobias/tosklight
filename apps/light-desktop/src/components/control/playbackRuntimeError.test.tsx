@@ -122,6 +122,7 @@ function physical(
 				slot: position,
 				row: null,
 				rowIndex: 0,
+				columnIndex: 0,
 				footprint: null,
 			}}
 		/>,

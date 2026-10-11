@@ -132,7 +132,7 @@ export function TouchPlaybackCard({
 							value: next / 100,
 							control_source: {
 								surface_id: controller.controlSourceId,
-								control_id: slot * 10,
+								control_id: 7,
 							},
 						},
 					),

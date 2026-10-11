@@ -8,7 +8,9 @@ import type { PlaybackControlRuntime } from "../../../features/playbackRuntime/c
 import type { ShowObject } from "../../../features/showObjects/contracts";
 import type { PlaybackFootprintCellProjection } from "./footprints";
 
-export type AssignedPlayback = PlaybackDefinition & { address: PlaybackAddressValue };
+export type AssignedPlayback = PlaybackDefinition & {
+	address: PlaybackAddressValue;
+};
 
 export type PlaybackSnapshotActive = PlaybackControlRuntime;
 export type PlaybackGroup = ShowObject<"group">;
@@ -20,6 +22,7 @@ export type PlaybackSlotProjection = {
 	slot: number;
 	row: PlaybackSurfaceRow | null;
 	rowIndex: number;
+	columnIndex: number;
 	footprint: Extract<
 		PlaybackFootprintCellProjection,
 		{ state: "anchor" }

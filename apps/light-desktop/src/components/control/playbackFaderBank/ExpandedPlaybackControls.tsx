@@ -58,7 +58,7 @@ export function ExpandedPlaybackControls({
 									value: Number(event.currentTarget.value) / 100,
 									control_source: {
 										surface_id: controller.controlSourceId,
-										control_id: slotData.slot * 10 + 2,
+										control_id: 8,
 									},
 								},
 							)
@@ -87,7 +87,7 @@ function ExpandedButton({
 			pressed,
 			control_source: {
 				surface_id: controller.controlSourceId,
-				control_id: address.position * 10 + button,
+				control_id: button,
 			},
 		});
 	return (
@@ -100,7 +100,7 @@ function ExpandedButton({
 				if (!isHeldAction(action)) return;
 				event.currentTarget.setPointerCapture?.(event.pointerId);
 				controller.heldActions.press(
-					address.position,
+					controller.controlSourceId,
 					address,
 					button,
 					action,
@@ -127,7 +127,7 @@ function ExpandedButton({
 				event.preventDefault();
 				if (!event.repeat)
 					controller.heldActions.press(
-						address.position,
+						controller.controlSourceId,
 						address,
 						button,
 						action,
