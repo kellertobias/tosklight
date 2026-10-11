@@ -1894,3 +1894,20 @@
 }
 .playback-bank-scroll-controls span { flex: 1; color: var(--muted); font-size: 12px; }
 .playback-bank-scroll-controls .ui-button { min-width: 44px; min-height: 44px; padding: 4px; }
+
+/* Software Main keeps its operating controls visible on entry; other surfaces retain their geometry. */
+.app-shell:has(> .control-section.touch-connected.playbacks .playback-fader-bank[data-playback-surface="main"]) { --control-height: 470px; }
+.playback-main-toolbar {
+ display: flex;
+ flex-wrap: wrap;
+ align-items: center;
+ flex: 0 0 auto;
+ gap: 4px 8px;
+}
+.playback-main-toolbar > .playback-bank-scroll-controls { flex: 1; }
+.playback-main-toolbar > .playback-bank-scroll-controls span { text-align: right; }
+.playback-main-toolbar .ui-button { min-height: 44px; height: 44px; }
+.playback-main-toolbar > .playback-solo-toolbar:has(.ui-field) { flex-basis: 100%; }
+.playback-fader-bank.touch-layout[data-playback-surface="main"] .vertical-touch-fader-stack.action-count-3.has-actions { grid-template-rows: minmax(0, 1fr) 90px; }
+.playback-fader-bank.touch-layout[data-playback-surface="main"] .action-count-3 > .vertical-touch-fader-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: 44px 44px; }
+.playback-fader-bank.touch-layout[data-playback-surface="main"] .action-count-3 > .vertical-touch-fader-actions > .ui-button:nth-child(3) { grid-column: 1 / -1; }

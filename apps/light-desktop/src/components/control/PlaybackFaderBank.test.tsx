@@ -2800,6 +2800,7 @@ describe("shared Playback grid Solo configuration", () => {
 describe("scrollable software Playback panes", () => {
 	beforeEach(resetPlaybackFaderMocks);
 	it("keeps exact20×14 order with readable minimumgeometry", () => {
+		mocks.surfacePages = { "pane:geometry": 1 };
 		const rows = Array.from({ length: 14 }, (_, i) => ({
 			first_position: 401 + i * 20,
 			count: 20,
@@ -2807,7 +2808,11 @@ describe("scrollable software Playback panes", () => {
 			button_count: 1,
 		}));
 		const { container } = render(
-			<PlaybackFaderBank scrollable playbackLayout={{ rows }} />,
+			<PlaybackFaderBank
+				surfaceId="pane:geometry"
+				scrollable
+				playbackLayout={{ rows }}
+			/>,
 		);
 		expect(container.querySelector(".playback-bank-viewport")).not.toBeNull();
 		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
@@ -2843,7 +2848,7 @@ describe("scrollable software Playback panes", () => {
 		);
 		expect(container.querySelector(".playback-fader-bank")).toHaveStyle({
 			minWidth: "1750px",
-			minHeight: "465px",
+			minHeight: "341px",
 		});
 		expect(
 			[...container.querySelectorAll("[data-playback-slot]")].map((el) =>
@@ -2895,7 +2900,7 @@ describe("scrollable software Playback panes", () => {
 			screen.queryByRole("navigation", { name: "Scroll Main Playbacks" }),
 		).toBeNull();
 	});
-	it("leaves the normal Main bank unscrolled", () => {
+	it("leaves a bank without scrollable opt-in fixed", () => {
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		expect(container.querySelector(".playback-bank-viewport")).toBeNull();
 		expect(container.querySelector(".playback-fader-bank")).not.toHaveStyle({

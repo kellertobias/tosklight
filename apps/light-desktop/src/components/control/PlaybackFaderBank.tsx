@@ -27,7 +27,11 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		const solo = usePlaybackGridSolo(controller);
 		const geometry =
 			props.scrollable && !controller.hardware
-				? scrollablePlaybackGeometry(controller.rowTracks, controller.columns)
+				? scrollablePlaybackGeometry(
+						controller.rowTracks,
+						controller.columns,
+						controller.surfaceId === "main",
+					)
 				: null;
 		// Once the grid has rendered for a ready topology, transient projection refetches
 		// (hardware connect, layout changes) must not tear the slot elements down — only a
@@ -56,10 +60,18 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			);
 		return (
 			<section className="playback-surface-controls">
-				<PlaybackGridSoloControls solo={solo} />
-				{geometry && controller.surfaceId === "main" ? (
-					<PlaybackBankScrollControls viewport={viewport} />
-				) : null}
+				<div
+					className={
+						geometry && controller.surfaceId === "main"
+							? "playback-main-toolbar"
+							: undefined
+					}
+				>
+					<PlaybackGridSoloControls solo={solo} />
+					{geometry && controller.surfaceId === "main" ? (
+						<PlaybackBankScrollControls viewport={viewport} />
+					) : null}
+				</div>
 				<div
 					ref={viewport}
 					className={

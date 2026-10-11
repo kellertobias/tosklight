@@ -1,6 +1,7 @@
 import { build } from "esbuild";
 import { chromium } from "playwright";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import artifactResolver from "../../../tools/artifact-paths.cjs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -31,6 +32,10 @@ createRoot(document.getElementById('app')).render(<App/>);`;
 
 describe("actual browser expanded Solo fence geometry", () => {
 	it("joins partial edges at rendered gap midpoints and stays aligned after resize and two-axis scroll", async () => {
+		const evidence = mkdtempSync(
+			resolve(artifactResolver.artifactPaths.tmp, "TL714-solo-fence-"),
+		);
+		process.stdout.write("Solo fence browser evidence: " + evidence + "\n");
 		const bundle = await build({
 			stdin: {
 				contents: source,
@@ -106,10 +111,7 @@ describe("actual browser expanded Solo fence geometry", () => {
 				before.sharedY,
 			]);
 			await page.screenshot({
-				path: resolve(
-					root,
-					".artifacts/test/visual-inspection/release-acceptance/TL714-verification/solo-partial-browser-before-scroll.png",
-				),
+				path: resolve(evidence, "before-scroll.png"),
 			});
 			await page.locator("#viewport").hover();
 			await page.mouse.wheel(300, 400);
@@ -126,10 +128,7 @@ describe("actual browser expanded Solo fence geometry", () => {
 			expect(scrolled.svgLeft).toBe(scrolled.gridLeft);
 			expect(scrolled.lastVisible).toBe(true);
 			await page.screenshot({
-				path: resolve(
-					root,
-					".artifacts/test/visual-inspection/release-acceptance/TL714-verification/solo-partial-browser.png",
-				),
+				path: resolve(evidence, "after-scroll.png"),
 			});
 			await page.evaluate(() => {
 				document.querySelector<HTMLElement>(
