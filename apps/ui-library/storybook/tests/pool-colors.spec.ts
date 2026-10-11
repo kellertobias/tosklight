@@ -85,7 +85,7 @@ test("gray pool cards keep active, resting, and empty states visually distinct",
 		name: /Empty Press Record to use this slot/u,
 	});
 	const recordTarget = page.getByRole("button", {
-		name: /Record here Record/u,
+		name: /Record here REC/u,
 	});
 
 	const [activeBackground, restingBackground, emptyBackground] =
@@ -110,6 +110,9 @@ test("gray pool cards keep active, resting, and empty states visually distinct",
 	);
 	expect(lightness(emptyBackground)).toBeLessThan(lightness(restingBackground));
 	await expect(empty.locator(".pool-card-name")).toHaveCSS("opacity", "0.45");
+	await expect(recordTarget.locator(".pool-card-workflow.record")).toHaveText(
+		"REC",
+	);
 	await expect(recordTarget.locator(".pool-card-name")).toHaveCSS(
 		"opacity",
 		"1",

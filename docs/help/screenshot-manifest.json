@@ -199,12 +199,13 @@
 		},
     {
       "file": "panes/virtual-playbacks.png",
-      "source": "storybook",
-      "storyId": "tosklight-virtual-playbacks--documentation-pane",
+      "source": "live-app",
+      "storyId": null,
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+      "interactions": [],
+      "reason": "The unified Playbacks pane requires live desk surface, sparse assignment and runtime authority; tests/02-help-screenshots.spec.ts captures its actual pane."
 		},
 
 		{
