@@ -175,6 +175,7 @@ async fn command_history_is_desk_scoped_bounded_newest_first_and_redacted() {
         token: "other-history-token".into(),
         connected: true,
         desk: ControlDesk {
+            show_compact_encoders: false,
             hardware_led_brightness: 100,
             hardware_gooseneck_brightness: 100,
             hardware_gooseneck_color: 100,

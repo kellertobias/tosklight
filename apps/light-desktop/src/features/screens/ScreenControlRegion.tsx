@@ -1,5 +1,13 @@
 import { useState } from "react";
 import type { ScreenConfiguration } from "../../api/types";
+import { useApp } from "../../state/AppContext";
+import { useHardwareConnected } from "../deskSnapshot/DeskSnapshotState";
+import { useProgrammerEncoderContext } from "../../components/control/ParameterControls";
+import { CompactEncoderAssignments } from "../../components/control/parameterControls/CompactEncoderAssignments";
+import { useParameterController } from "../../components/control/parameterControls/useParameterController";
+import { programmerEncoderOwnerContext } from "../../components/control/parameterControls/useEncoderNavigation";
+import { VisibleEncoderCountProvider } from "../../components/control/parameterControls/VisibleEncoderCount";
+import { useScreens } from "./ScreensContext";
 import { screenShowsPlaybacks, useEncoderPlacement } from "./encoderPlacement";
 import {
 	LowerSectionSwitch,
@@ -19,22 +27,40 @@ export function ScreenControlRegion({
 }: {
 	screen: ScreenConfiguration;
 }) {
+	const { screens } = useScreens();
+	return (
+		<VisibleEncoderCountProvider count={screens?.programmer_control_surface.visible_encoders ?? 6}>
+			<ScreenControlRegionContent screen={screen} />
+		</VisibleEncoderCountProvider>
+	);
+}
+
+function ScreenControlRegionContent({ screen }: { screen: ScreenConfiguration }) {
 	const placement = useEncoderPlacement(screen.id);
 	const holdsEncoders = Boolean(placement?.holdsEncoders);
 	const playbacks = screenShowsPlaybacks(screen);
 	const [view, setView] = useState<LowerSectionView>("encoders");
+	const { state } = useApp();
+	const hardware = Boolean(useHardwareConnected() || state.midiProfile);
+	const programmerContext = useProgrammerEncoderContext();
+	const playbackVisible = playbacks && (!holdsEncoders || view === "playbacks");
+	const compact = Boolean(screen.show_compact_encoders && hardware && playbackVisible);
+	// One controller survives the lower-section switch. A mirror screen shares navigation
+	// but never attaches another handler to the owner's hardware detents.
+	const controller = useParameterController(holdsEncoders ? programmerContext && (!playbackVisible || compact) : compact, { bindHardware: holdsEncoders, ownerContext: programmerEncoderOwnerContext(programmerContext, state.builtIn) });
+	const encoders = compact ? <CompactEncoderAssignments controller={controller} /> : undefined;
 	if (!holdsEncoders)
-		return playbacks ? <ScreenPlaybackSection screen={screen} /> : null;
+		return playbacks ? <ScreenPlaybackSection screen={screen} encoders={encoders} /> : null;
 	if (!playbacks)
-		return <ProgrammerControlSurfaceRegion screenId={screen.id} />;
+		return <ProgrammerControlSurfaceRegion screenId={screen.id} controller={controller} />;
 	return (
 		<LowerSectionSwitchProvider
 			switchNode={<LowerSectionSwitch view={view} onView={setView} />}
 		>
 			{view === "encoders" ? (
-				<ProgrammerControlSurfaceRegion screenId={screen.id} />
+				<ProgrammerControlSurfaceRegion screenId={screen.id} controller={controller} />
 			) : (
-				<ScreenPlaybackSection screen={screen} />
+				<ScreenPlaybackSection screen={screen} encoders={encoders} />
 			)}
 		</LowerSectionSwitchProvider>
 	);

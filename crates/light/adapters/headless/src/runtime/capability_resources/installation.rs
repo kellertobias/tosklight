@@ -264,8 +264,9 @@ impl InstallationResource {
         buttons: u8,
         playback_layout: Option<light_show::PlaybackSurfaceLayout>,
         illumination: Option<[u8; 3]>,
+        show_compact_encoders: Option<bool>,
     ) -> Result<ControlDesk, light_show::StoreError> {
-        self.desk.lock().update_desk_with_illumination(
+        self.desk.lock().update_desk_with_screen_settings(
             id,
             name,
             columns,
@@ -273,6 +274,7 @@ impl InstallationResource {
             buttons,
             playback_layout,
             illumination,
+            show_compact_encoders,
         )
     }
 

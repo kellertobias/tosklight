@@ -9,7 +9,10 @@ import { CommandLineBar } from "./CommandLineBar";
 import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { HardwareControlSummary } from "./HardwareControlSummary";
 import { NumericPad } from "./NumericPad";
-import { ParameterControls } from "./ParameterControls";
+import { ParameterControls, useProgrammerEncoderContext } from "./ParameterControls";
+import { CompactEncoderAssignments } from "./parameterControls/CompactEncoderAssignments";
+import { useParameterController } from "./parameterControls/useParameterController";
+import { programmerEncoderOwnerContext } from "./parameterControls/useEncoderNavigation";
 import { PatchParameterControls } from "./PatchParameterControls";
 import { PlaybackFaderBank } from "./PlaybackFaderBank";
 import { PlaybackTools } from "./PlaybackTools";
@@ -34,6 +37,15 @@ export function ControlSection() {
 		configuredEncoderCount,
 		hardware,
 	);
+	const programmerContext = useProgrammerEncoderContext();
+	const compactEnabled = hardware && Boolean(session?.desk.show_compact_encoders);
+	const controller = useParameterController(
+		encoderScreen ? compactEnabled : programmerContext && (mode === "programmer" || compactEnabled),
+		{ bindHardware: !encoderScreen, ownerContext: programmerEncoderOwnerContext(programmerContext, state.builtIn) },
+	);
+	const compact = compactEnabled &&
+		(mode === "playbacks" || Boolean(encoderScreen));
+	const compactEncoders = compact ? <CompactEncoderAssignments controller={controller} /> : undefined;
 	const playbacks = (
 		<PlaybackFaderBank
 			playbackLayout={session?.desk.playback_layout}
@@ -58,13 +70,13 @@ export function ControlSection() {
 					) : encoderScreen ? (
 						playbacks
 					) : (
-						<ParameterControls />
+						<ParameterControls controller={controller} />
 					)
 				}
 				playbacks={playbacks}
 				programmerTools={<NumericPad />}
 				playbackTools={<PlaybackTools />}
-				hardwareTools={<HardwareControlSummary />}
+				hardwareTools={<HardwareControlSummary encoders={compactEncoders} />}
 			/>
 		</VisibleEncoderCountProvider>
 	);

@@ -50,7 +50,7 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
         "action":{
             "type":"update",
             "future_action_field":"accepted",
-            "patch":{"name":"Front desk renamed","future_patch_field":42}
+            "patch":{"name":"Front desk renamed","show_compact_encoders":true,"future_patch_field":42}
         }
     });
     let event_before = scenario.state.events.audit_revision();
@@ -59,6 +59,7 @@ async fn control_desk_v2_is_sparse_replay_safe_authorized_and_retires_v1() {
     let changed = json(changed).await;
     assert_eq!(changed["replayed"], false);
     assert_eq!(changed["desk"]["name"], "Front desk renamed");
+    assert_eq!(changed["desk"]["show_compact_encoders"], true);
     assert_eq!(changed["desk"]["columns"], original.columns);
     assert_eq!(
         scenario
@@ -143,7 +144,7 @@ async fn post_desk_action(scenario: &TopologyScenario, body: serde_json::Value) 
         .app
         .clone()
         .oneshot(
-            Request::post("/api/v2/control-desk/actions")
+            Request::post("/api/v2/control-desk/update")
                 .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body.to_string()))

@@ -31,8 +31,8 @@ describe("visible encoder count", () => {
 		expect(screen.getByText("4")).toBeTruthy();
 	});
 
-	it("keeps attached hardware on its fixed six-encoder contract", () => {
-		expect(resolveVisibleEncoderCount(4, true)).toBe(6);
+	it("honors the configured count with hardware attached", () => {
+		for (const count of [4, 5, 6] as const) expect(resolveVisibleEncoderCount(count, true)).toBe(count);
 		expect(resolveVisibleEncoderCount(4, false)).toBe(4);
 	});
 });

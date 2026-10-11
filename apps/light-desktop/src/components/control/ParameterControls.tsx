@@ -2,15 +2,17 @@ import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotSt
 import { useTimecodeEncoderDeck } from "../../features/timecode/timecodeEncoderBridge";
 import { useApp } from "../../state/AppContext";
 import { ParameterControlView } from "./parameterControls/ParameterControlView";
-import { useParameterController } from "./parameterControls/useParameterController";
+import { type ParameterController, useParameterController } from "./parameterControls/useParameterController";
 import { StageCommandControls } from "./StageCommandControls";
 import { StageVizCameraControls } from "./StageVizCameraControls";
 import { TimecodeParameterControls } from "./TimecodeParameterControls";
 
 export function ParameterControls({
 	active = true,
+	controller,
 }: {
 	active?: boolean;
+	controller?: ParameterController;
 } = {}) {
 	const { state } = useApp();
 	const hardwareConnected = Boolean(
@@ -50,10 +52,22 @@ export function ParameterControls({
 			<StageCommandControls />
 		);
 	}
-	return <ProgrammerParameterControls active={active} />;
+	return controller ? <ParameterControlView controller={controller} /> : <ProgrammerParameterControls active={active} />;
 }
 
 function ProgrammerParameterControls({ active }: { active: boolean }) {
 	const controller = useParameterController(active);
 	return <ParameterControlView controller={controller} />;
+}
+
+/** Whether the hardware currently addresses ordinary programmer parameters. */
+export function useProgrammerEncoderContext() {
+	const { state } = useApp();
+	const deck = useTimecodeEncoderDeck();
+	const stageVisible = state.builtIn === "stage" || state.desks
+		.find((desk) => desk.id === state.activeDeskId)
+		?.panes.some((pane) => pane.kind === "stage");
+	return state.builtIn !== "patch" &&
+		!(state.builtIn === "timecode" && deck) &&
+		!(state.stageMode !== "select" && stageVisible);
 }

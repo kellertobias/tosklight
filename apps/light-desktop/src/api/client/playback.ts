@@ -164,11 +164,12 @@ export class PlaybackApiClient {
 			);
 		if (
 			configuration.visible_encoders !== 4 &&
+			configuration.visible_encoders !== 5 &&
 			configuration.visible_encoders !== 6
 		)
 			throw new WireValidationError(
 				"$.programmer_control_surface.visible_encoders",
-				"4 or 6",
+				"4, 5 or 6",
 				configuration.visible_encoders,
 			);
 		return configuration as ProgrammerControlSurfaceConfiguration;
@@ -258,7 +259,7 @@ export class PlaybackApiClient {
 			request_id: crypto.randomUUID(),
 			action,
 		};
-		return this.transport.request(`/api/v2/control-desk/actions`, {
+		return this.transport.request(`/api/v2/control-desk/update`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(request),
@@ -269,6 +270,7 @@ export class PlaybackApiClient {
 function wireScreen(screen: ScreenConfiguration): WireScreenConfiguration {
 	return {
 		...screen,
+		show_compact_encoders: screen.show_compact_encoders ?? false,
 		playback_layout: screen.playback_layout ?? null,
 	};
 }
@@ -297,6 +299,7 @@ function screenPatch(
 			next.show_page_controls,
 		),
 		show_programmer: changed(current.show_programmer, next.show_programmer),
+		show_compact_encoders: changed(current.show_compact_encoders ?? false, next.show_compact_encoders ?? false),
 		not_editable: changed(current.not_editable, next.not_editable),
 		desired_open: changed(current.desired_open, next.desired_open),
 		display_id:
@@ -327,6 +330,7 @@ function controlDeskPatch(
 		before === after ? null : after;
 	return {
 		name: changed(current?.name, next.name),
+		show_compact_encoders: changed(current?.show_compact_encoders ?? false, next.show_compact_encoders ?? false),
 		columns: changed(current?.columns, next.columns),
 		rows: changed(current?.rows, next.rows),
 		buttons: changed(current?.buttons, next.buttons),

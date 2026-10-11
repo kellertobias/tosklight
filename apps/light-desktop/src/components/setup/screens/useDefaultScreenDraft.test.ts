@@ -15,6 +15,18 @@ const desk: ControlDesk = {
 };
 
 describe("default screen mutation history", () => {
+	it("persists and undoes the compact encoder option without changing playback settings", async () => {
+		const persist = vi.fn(async () => undefined);
+		const undoRef: ScreenUndoHandle = { current: null };
+		const keyboard = vi.fn();
+		const playback = vi.fn();
+		const { result } = renderHook(() => useDefaultScreenDraft({ desk, regularNumberShortcuts: true, onKeyboardShortcuts: keyboard, onPlaybackLayout: playback, onPersistDesk: persist, undoRef }));
+		act(() => result.current.updateDesk({ show_compact_encoders: true }));
+		await waitFor(() => expect(persist).toHaveBeenCalledWith({ ...desk, show_compact_encoders: true }));
+		act(() => undoRef.current?.());
+		await waitFor(() => expect(persist).toHaveBeenLastCalledWith(desk));
+	});
+
 	it("persists immediately and undoes only a real editing gesture", async () => {
 		const undoRef: ScreenUndoHandle = { current: null };
 		const availability = vi.fn();

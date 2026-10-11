@@ -32,6 +32,7 @@ pub enum ControlDeskConfigurationAction {
 
 #[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ControlDeskConfigurationPatch {
+    pub show_compact_encoders: Option<bool>,
     #[schemars(range(min = 0, max = 100))]
     pub hardware_led_brightness: Option<u8>,
     #[schemars(range(min = 0, max = 100))]

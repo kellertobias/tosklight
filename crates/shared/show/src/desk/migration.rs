@@ -16,7 +16,7 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
       CREATE TABLE IF NOT EXISTS control_desk_selections(desk_id TEXT NOT NULL,show_id TEXT NOT NULL,playback INTEGER NOT NULL,PRIMARY KEY(desk_id,show_id),FOREIGN KEY(desk_id) REFERENCES control_desks(id) ON DELETE CASCADE);
       CREATE TABLE IF NOT EXISTS screens(id TEXT PRIMARY KEY,name TEXT NOT NULL,layout_json TEXT NOT NULL DEFAULT '{"desks":[],"activeDeskId":""}',show_dock INTEGER NOT NULL DEFAULT 1,show_playbacks INTEGER NOT NULL DEFAULT 1,playback_count INTEGER NOT NULL DEFAULT 8,playback_rows INTEGER NOT NULL DEFAULT 1,first_playback_slot INTEGER NOT NULL DEFAULT 1,page_mode TEXT NOT NULL DEFAULT 'follow_main',show_page_controls INTEGER NOT NULL DEFAULT 1,desired_open INTEGER NOT NULL DEFAULT 0,display_id TEXT,bounds_json TEXT,fullscreen INTEGER NOT NULL DEFAULT 0,playback_layout_json TEXT,content_json TEXT NOT NULL DEFAULT '{"type":"desktop"}',show_programmer INTEGER NOT NULL DEFAULT 0,not_editable INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS screen_pages(screen_id TEXT NOT NULL,show_id TEXT NOT NULL,page INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(screen_id,show_id),FOREIGN KEY(screen_id) REFERENCES screens(id) ON DELETE CASCADE);
-      CREATE TABLE IF NOT EXISTS programmer_control_surface(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner_screen_id TEXT,visible_encoders INTEGER NOT NULL DEFAULT 6 CHECK(visible_encoders IN(4,6)),FOREIGN KEY(owner_screen_id) REFERENCES screens(id) ON DELETE SET NULL);
+      CREATE TABLE IF NOT EXISTS programmer_control_surface(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner_screen_id TEXT,visible_encoders INTEGER NOT NULL DEFAULT 6 CHECK(visible_encoders IN(4,5,6)),FOREIGN KEY(owner_screen_id) REFERENCES screens(id) ON DELETE SET NULL);
       INSERT OR IGNORE INTO programmer_control_surface(singleton,owner_screen_id,visible_encoders) VALUES(1,NULL,6);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,token TEXT NOT NULL,programmer_json TEXT NOT NULL,connected INTEGER NOT NULL CHECK(connected IN(0,1)),updated_at TEXT NOT NULL);"#,
     )?;
@@ -69,6 +69,12 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "not_editable",
         "not_editable INTEGER NOT NULL DEFAULT 0",
     )?;
+    add_column_if_missing(
+        &tx,
+        "screens",
+        "show_compact_encoders",
+        "show_compact_encoders INTEGER NOT NULL DEFAULT 0",
+    )?;
     // A client is a window that connected, not a desk. It used to be recorded on the desk row,
     // which is why every window got a control desk of its own — and why two browser screens ended
     // up unable to see each other's command line. Carry the existing ones across so a client that
@@ -119,6 +125,14 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
     )?;
     seed_desk_identity(&tx)?;
     set_schema_version(&tx, DESK_SCHEMA_VERSION)?;
+    let encoder_schema: String = tx.query_row(
+        "SELECT sql FROM sqlite_master WHERE name='programmer_control_surface'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !encoder_schema.contains("4,5,6") {
+        tx.execute_batch("ALTER TABLE programmer_control_surface RENAME TO programmer_control_surface_legacy; CREATE TABLE programmer_control_surface(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner_screen_id TEXT,visible_encoders INTEGER NOT NULL DEFAULT 6 CHECK(visible_encoders IN(4,5,6)),FOREIGN KEY(owner_screen_id) REFERENCES screens(id) ON DELETE SET NULL); INSERT INTO programmer_control_surface SELECT * FROM programmer_control_surface_legacy; DROP TABLE programmer_control_surface_legacy;")?;
+    }
     tx.commit()?;
     drop_desk_osc_alias(conn)?;
     let illumination_tx = conn.transaction()?;
@@ -139,6 +153,12 @@ pub(super) fn migrate_desk(conn: &mut Connection) -> Result<(), StoreError> {
         "control_desks",
         "hardware_gooseneck_color",
         "hardware_gooseneck_color INTEGER NOT NULL DEFAULT 100 CHECK (hardware_gooseneck_color BETWEEN 0 AND 100)",
+    )?;
+    add_column_if_missing(
+        &illumination_tx,
+        "control_desks",
+        "show_compact_encoders",
+        "show_compact_encoders INTEGER NOT NULL DEFAULT 0",
     )?;
     illumination_tx.commit()?;
     // Before the desks: collapsing them deletes each superseded desk's own lock setting, and a

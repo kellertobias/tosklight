@@ -358,6 +358,7 @@ mod tests {
             page_mode: "independent".into(),
             show_page_controls: false,
             show_programmer: true,
+            show_compact_encoders: false,
             desired_open: true,
             display_id: Some("display-2".into()),
             bounds: Some(serde_json::json!({"x": 10, "y": 20, "width": 800, "height": 600})),

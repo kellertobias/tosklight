@@ -35,14 +35,16 @@ const speedGroups: readonly SpeedGroupViewModel[] = [120, 96, 72, 48, 24].map(
 		active: true,
 	}),
 );
-function ProgrammerSurface({
+export function ProgrammerSurface({
 	hardware,
 	initialFamily = "Intensity",
 	onValue,
+	render,
 }: {
 	hardware: boolean;
 	initialFamily?: ParameterFamily;
 	onValue?: (attribute: string, value: number) => void;
+	render?: (controller: ParameterController) => ReactNode;
 }) {
 	const { state, dispatch } = useApp();
 	const [family, setFamily] = useState<ParameterFamily>(initialFamily);
@@ -136,7 +138,8 @@ function ProgrammerSurface({
 		programmerValues: [],
 		groupProgrammerValues: [],
 		encoderSlots: attributes[family],
-		encoderPushTurnSlots: [],
+		encoderPushTurnSlots: attributes[family].map(() => null),
+		visibleEncoderCount: 6,
 		encoderPageCount: 1,
 		attributeLabels: new Map<string, string>(),
 		attributeUnits: new Map<string, string | null>(),
@@ -171,7 +174,7 @@ function ProgrammerSurface({
 			),
 		programmerActions: null,
 	} as unknown as ParameterController;
-	return <ParameterControlView controller={controller} />;
+	return render ? render(controller) : <ParameterControlView controller={controller} />;
 }
 
 const playbackKinds = [
@@ -439,7 +442,7 @@ function PlaybackToolsFixture() {
 	);
 }
 
-function HardwareToolsFixture() {
+export function HardwareToolsFixture() {
 	const [page, setPage] = useState(1);
 	return (
 		<HardwareControlSummaryView
@@ -465,6 +468,8 @@ export interface CommandSectionFixtureProps {
 	preloadArmed?: boolean;
 	/** Optional production surface used by full-application discussion stories. */
 	programmer?: ReactNode;
+	/** Story-only replacement for the hardware summary. */
+	hardwareTools?: ReactNode | ((mode: CommandLineMode) => ReactNode);
 	/** Reuse an enclosing application provider in full-application stories. */
 	inheritAppState?: boolean;
 	/** Initial regular Programmer family for full-application review stories. */
@@ -481,6 +486,7 @@ function CommandSectionFixtureContent({
 	nextEnabled = true,
 	preloadArmed = false,
 	programmer,
+	hardwareTools,
 	initialProgrammerFamily,
 	onProgrammerValue,
 }: CommandSectionFixtureProps) {
@@ -522,7 +528,7 @@ function CommandSectionFixtureContent({
 				/>
 			}
 			playbackTools={<PlaybackToolsFixture />}
-			hardwareTools={<HardwareToolsFixture />}
+			hardwareTools={typeof hardwareTools === "function" ? hardwareTools(mode) : hardwareTools ?? <HardwareToolsFixture />}
 		/>
 	);
 }

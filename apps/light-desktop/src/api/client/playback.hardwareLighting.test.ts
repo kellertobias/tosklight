@@ -11,7 +11,7 @@ describe("hardware lighting intent", () => {
 		const client = new PlaybackApiClient({ request } as unknown as LiveClientTransport);
 		expect(await client.updateControlDesk(next, { ...desk, name: "A remotely changed name" }, { hardware_led_brightness: 0, hardware_gooseneck_color: 40 })).toEqual(next);
 		const [path, init] = request.mock.calls[0];
-		expect(path).toBe("/api/v2/control-desk/actions");
+		expect(path).toBe("/api/v2/control-desk/update");
 		expect(init?.method).toBe("POST");
 		const body = JSON.parse(String(init?.body));
 		expect(body.request_id).toMatch(/^[0-9a-f-]{36}$/);
