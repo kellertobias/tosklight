@@ -35,8 +35,7 @@ interface ReportedError {
 	readonly message: string;
 }
 
-const PlaybackSoloContext =
-	createContext<PlaybackSoloCapability | null>(null);
+const PlaybackSoloContext = createContext<PlaybackSoloCapability | null>(null);
 
 /** Explicit action/query boundary; mounting it performs no reads. */
 export function PlaybackSoloProvider({
@@ -96,16 +95,18 @@ export function PlaybackSoloProvider({
 	);
 }
 
+export function usePlaybackSoloOptional() {
+	return useContext(PlaybackSoloContext);
+}
+
 export function usePlaybackSolo() {
 	const capability = useContext(PlaybackSoloContext);
-	if (!capability)
-		throw new Error("PlaybackSoloProvider is not mounted");
+	if (!capability) throw new Error("PlaybackSoloProvider is not mounted");
 	return capability;
 }
 
 export class PlaybackSoloController {
-	private pendingSnapshot: Promise<PlaybackSoloSnapshot | null> | null =
-		null;
+	private pendingSnapshot: Promise<PlaybackSoloSnapshot | null> | null = null;
 	private saveTail: Promise<void> = Promise.resolve();
 	private snapshot: PlaybackSoloSnapshot | null = null;
 	private readonly listeners = new Set<() => void>();
@@ -361,10 +362,7 @@ function initialEpoch(): AuthorityEpoch {
 	};
 }
 
-function sameSnapshot(
-	left: PlaybackSoloSnapshot,
-	right: PlaybackSoloSnapshot,
-) {
+function sameSnapshot(left: PlaybackSoloSnapshot, right: PlaybackSoloSnapshot) {
 	return (
 		left.revision === right.revision &&
 		left.regions.length === right.regions.length &&
@@ -376,8 +374,7 @@ function sameSnapshot(
 				zone.name === other.name &&
 				zone.members.length === other.members.length &&
 				zone.members.every(
-					(number, numberIndex) =>
-						number === other.members[numberIndex],
+					(number, numberIndex) => number === other.members[numberIndex],
 				)
 			);
 		})

@@ -1,86 +1,23 @@
 import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { memo, useEffect, useId, useState } from "react";
-import type { PlaybackConfigurationNotification } from "../../api/generated/light-wire";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
-import { useControlSurfaceTarget } from "../../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { AssignedPlaybackConfigurationModal } from "./AssignedPlaybackConfigurationModal";
-import { openPlaybackConfiguration } from "./playbackFaderBank/actions";
 import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
 } from "./playbackFaderBank/controller";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
+import { PlaybackGridSoloControls } from "./playbackFaderBank/PlaybackGridSoloControls";
+import { usePlaybackGridSolo } from "./playbackFaderBank/usePlaybackGridSolo";
+import { usePlaybackBankConfiguration } from "./playbackFaderBank/usePlaybackBankConfiguration";
 import { CueRecordChoiceModal } from "./playbackFaderBank/CueRecordChoiceModal";
 
 export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 	function PlaybackFaderBank(props: PlaybackFaderBankProps = {}) {
 		const controller = usePlaybackBankController(props);
 		const interactionSurfaceId = useId();
-		useControlSurfaceTarget({
-			id: `playback-bank:${interactionSurfaceId}`,
-			priority: 300,
-			accepts: (intent) => {
-				if (
-					intent.type === "configure_playback" &&
-					intent.surfaceId === interactionSurfaceId
-				)
-					return true;
-				if (intent.type !== "open_playback_settings") return false;
-				const playbackIdentity = intent.playback;
-				const slotData = controller.slots.find(
-					(candidate) => candidate.slot === playbackIdentity.slot,
-				);
-
-				return (
-					controller.activePageNumber === playbackIdentity.pageNumber &&
-					controller.playbackAddressing === playbackIdentity.addressing &&
-					(controller.pageObject?.id ?? null) ===
-						playbackIdentity.pageObjectId &&
-					(controller.pageObject?.revision ?? 0) ===
-						playbackIdentity.pageObjectRevision
-				);
-			},
-			handle: (intent) => {
-				if (
-					intent.type !== "configure_playback" &&
-					intent.type !== "open_playback_settings"
-				)
-					return;
-				const slot =
-					intent.type === "configure_playback"
-						? intent.slot
-						: intent.playback.slot;
-				if (slot == null) return;
-				const slotData = controller.slots.find(
-					(candidate) => candidate.slot === slot,
-				);
-				if (slotData)
-					openPlaybackConfiguration(controller, slotData.playback, slot);
-			},
-		});
-		useEffect(() => {
-			const openRequested = (event: Event) => {
-				const { address } = (
-					event as CustomEvent<PlaybackConfigurationNotification>
-				).detail;
-				if (address.page !== controller.activePageNumber) return;
-				const slotData = controller.slots.find(
-					(candidate) => candidate.slot === address.position,
-				);
-				if (slotData)
-					openPlaybackConfiguration(
-						controller,
-						slotData.playback,
-						address.position,
-					);
-			};
-			window.addEventListener("light:playback-configuration", openRequested);
-			return () =>
-				window.removeEventListener(
-					"light:playback-configuration",
-					openRequested,
-				);
-		}, [controller]);
+		usePlaybackBankConfiguration(controller, interactionSurfaceId);
+		const solo = usePlaybackGridSolo(controller);
 		// Once the grid has rendered for a ready topology, transient projection refetches
 		// (hardware connect, layout changes) must not tear the slot elements down — only a
 		// topology-scope reset returns the bank to its loading placeholder.
@@ -107,12 +44,22 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 				</ErrorAlert>
 			);
 		return (
-			<>
+			<section className="playback-surface-controls">
+				<PlaybackGridSoloControls solo={solo} />
 				{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 				<div
-					onPointerDownCapture={() => {
-						void controller.selectSurface();
+					onPointerDownCapture={(event) => {
+						if (solo.selecting) solo.pointerDown(event);
+						else void controller.selectSurface();
 					}}
+					onPointerUpCapture={solo.block}
+					onPointerMoveCapture={solo.block}
+					onPointerCancelCapture={solo.block}
+					onWheelCapture={solo.block}
+					onDoubleClickCapture={solo.block}
+					onClickCapture={solo.block}
+					onKeyDownCapture={solo.keyDown}
+					onKeyUpCapture={solo.block}
 					data-playback-surface={controller.surfaceId}
 					data-command-surface={
 						controller.playbackDesk?.selected_surface_id ===
@@ -120,6 +67,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					}
 					className={`playback-fader-bank ${controller.hardware ? "hardware-layout" : "touch-layout"} ${controller.playbackDesk?.selected_surface_id === controller.surfaceId ? "command-surface" : ""}`}
 					onContextMenu={(event) => {
+						if (solo.block(event)) return;
 						event.preventDefault();
 						const card = (event.target as Element).closest<HTMLElement>(
 							"[data-playback-slot]",
@@ -142,6 +90,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 						<PlaybackSlot
 							controller={controller}
 							slotData={slotData}
+							soloClasses={solo.classes(slotData)}
 							key={`${slotData.slot}-${slotData.playback?.address.position ?? "empty"}`}
 						/>
 					))}
@@ -153,7 +102,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 					/>
 				)}
 				<CueRecordChoiceModal controller={controller} />
-			</>
+			</section>
 		);
 	},
 	equalPlaybackFaderBankProps,

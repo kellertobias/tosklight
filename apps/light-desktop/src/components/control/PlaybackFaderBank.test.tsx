@@ -8,6 +8,11 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PlaybackSoloProvider } from "../../features/playbackSolo/PlaybackSoloContext";
+import type {
+	PlaybackSoloRegion,
+	PlaybackSoloTransport,
+} from "../../features/playbackSolo/contracts";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import {
 	PlaybackFaderBank as PhysicalPlaybackFaderBank,
@@ -2214,5 +2219,304 @@ describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 				screen.queryByRole("dialog", { name: "Playback Configuration" }),
 			).not.toBeInTheDocument(),
 		);
+	});
+});
+
+function soloBank(
+	initial: readonly PlaybackSoloRegion[] = [],
+	presentation: "buttons" | "push_encoder" = "buttons",
+) {
+	let regions = initial;
+	let revision = 1;
+	const save = vi.fn<PlaybackSoloTransport["save"]>(
+		async (_scope, expectedRevision, next, requestId) => {
+			expect(expectedRevision).toBe(revision);
+			regions = structuredClone(next);
+			revision += 1;
+			return {
+				showId: "show-1",
+				revision,
+				regions,
+				requestId,
+				changed: true,
+				replayed: false,
+			};
+		},
+	);
+	const transport: PlaybackSoloTransport = {
+		loadSnapshot: async () => ({ showId: "show-1", revision, regions }),
+		save,
+		subscribe: (_scope, observer) => {
+			queueMicrotask(() => observer.ready?.());
+			return { close: () => {} };
+		},
+	};
+	const view = () => (
+		<PlaybackSoloProvider
+			authority={{ authorityId: "desk-session", scope: { showId: "show-1" } }}
+			transport={transport}
+		>
+			<PlaybackFaderBank
+				pageNumber={mocks.playbacks.active_page}
+				count={4}
+				playbackLayout={{
+					rows: [
+						{
+							first_position: 1,
+							count: 4,
+							presentation,
+							button_count: 1,
+						},
+					],
+				}}
+			/>
+		</PlaybackSoloProvider>
+	);
+	const rendered = render(view());
+	return {
+		...rendered,
+		save,
+		regions: () => regions,
+		rerenderBank: () => rendered.rerender(view()),
+	};
+}
+
+describe("shared Playback grid Solo configuration", () => {
+	beforeEach(() => {
+		resetPlaybackFaderMocks();
+		mocks.playbacks.pages = [
+			{ number: 1, name: "Main", slots: { "1": 1, "2": 2, "3": 3, "4": 4 } },
+			{ number: 2, name: "Other", slots: { "1": 1 } },
+		];
+		mocks.playbacks.active_page = 1;
+		mocks.playbacks.pool = [1, 2, 3, 4].map((position) =>
+			playbackDefinition(position, {
+				buttons: ["flash", "none", "none"],
+				button_count: 1,
+				has_fader: false,
+			}),
+		);
+		Object.assign(mocks.state, {
+			cueListSetTarget: null,
+			cueListSetArmed: false,
+		});
+	});
+
+	it.each([
+		false,
+		true,
+	])("selects and creates a named region without operating controls with hardware=%s", async (hardware) => {
+		mocks.hardwareConnected = hardware;
+		const bank = soloBank();
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Select Solo members" }),
+			).toBeEnabled(),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Select Solo members" }),
+		);
+		for (const position of [1, 2]) {
+			const card = bank.container.querySelector<HTMLElement>(
+				`[data-playback-slot="${position}"]`,
+			)!;
+			const target =
+				within(card).queryByRole("button", { name: /FLASH/ }) ?? card;
+			fireEvent.pointerDown(target, { pointerId: position, button: 0 });
+			fireEvent.pointerMove(target, { pointerId: position, clientY: 50 });
+			fireEvent.pointerUp(target, { pointerId: position });
+			fireEvent.click(target);
+		}
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		expect(mocks.executeCommandLine).not.toHaveBeenCalled();
+		const draftFirst = bank.container.querySelector(
+			'[data-playback-slot="1"]',
+		)!;
+		const draftSecond = bank.container.querySelector(
+			'[data-playback-slot="2"]',
+		)!;
+		expect(draftFirst).toHaveClass(
+			"playback-solo-selected",
+			"playback-solo-member",
+			"solo-fence-top",
+		);
+		expect(draftFirst).not.toHaveClass("solo-fence-right");
+		expect(draftSecond).not.toHaveClass("solo-fence-left");
+		fireEvent.change(screen.getByLabelText("Solo Region name"), {
+			target: { value: "Grid pair" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Create Solo Region" }));
+		await waitFor(() => expect(bank.save).toHaveBeenCalledOnce());
+		expect(bank.regions()[0]).toMatchObject({
+			name: "Grid pair",
+			members: [
+				{ page: 1, position: 1 },
+				{ page: 1, position: 2 },
+			],
+		});
+		await waitFor(() =>
+			expect(
+				bank.container.querySelector('[data-playback-slot="1"]'),
+			).toHaveClass("playback-solo-member"),
+		);
+		const first = bank.container.querySelector<HTMLElement>(
+			'[data-playback-slot="1"]',
+		)!;
+		const second = bank.container.querySelector<HTMLElement>(
+			'[data-playback-slot="2"]',
+		)!;
+		expect(first).not.toHaveClass("solo-fence-right");
+		expect(second).not.toHaveClass("solo-fence-left");
+		expect(first).toHaveClass(
+			"solo-fence-top",
+			"solo-fence-bottom",
+			"solo-fence-left",
+		);
+		if (!hardware) {
+			const flash = within(first).getByRole("button", { name: /FLASH/ });
+			fireEvent.pointerDown(flash, { pointerId: 43, button: 0 });
+			fireEvent.pointerUp(flash, { pointerId: 43 });
+			await waitFor(() =>
+				expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+					{ page: 1, position: 1 },
+					"flash",
+					{ pressed: false, control_source: expect.any(Object) },
+				),
+			);
+		}
+	});
+
+	it("keeps encoder drag, wheel, absolute entry and keyboard gestures inert during configuration selection", async () => {
+		mocks.playbacks.pool = [1, 2, 3, 4].map((position) =>
+			playbackDefinition(position, {
+				buttons: ["go", "none", "none"],
+				button_count: 1,
+				has_fader: true,
+			}),
+		);
+		const bank = soloBank([], "push_encoder");
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Select Solo members" }),
+			).toBeEnabled(),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Select Solo members" }),
+		);
+		const card = bank.container.querySelector<HTMLElement>(
+			'[data-playback-slot="1"]',
+		)!;
+		const encoder = within(card).getByRole("group", { name: "Master" });
+		fireEvent.pointerDown(encoder, { pointerId: 81, button: 0, clientY: 100 });
+		fireEvent.pointerMove(encoder, { pointerId: 81, clientY: 160 });
+		fireEvent.pointerUp(encoder, { pointerId: 81 });
+		fireEvent.wheel(encoder, { deltaY: 100 });
+		fireEvent.keyDown(encoder, { key: "ArrowUp" });
+		fireEvent.keyUp(encoder, { key: "ArrowUp" });
+		fireEvent.click(
+			within(card).getByRole("button", { name: "Set Master value" }),
+		);
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		expect(card).toHaveClass("playback-solo-selected");
+		const second = bank.container.querySelector<HTMLElement>(
+			'[data-playback-slot="2"]',
+		)!;
+		const button = within(second).getByRole("button", { name: "GO +" });
+		fireEvent.keyDown(button, { key: " ", code: "Space" });
+		fireEvent.keyDown(button, { key: " ", code: "Space", repeat: true });
+		fireEvent.keyUp(button, { key: " ", code: "Space" });
+		expect(second).toHaveClass("playback-solo-selected");
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Cancel Solo selection" }),
+		);
+		expect(bank.save).not.toHaveBeenCalled();
+		expect(card).not.toHaveClass("playback-solo-selected");
+	});
+
+	it("creates one region from draft members selected on different pages", async () => {
+		const bank = soloBank();
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "Select Solo members" }),
+			).toBeEnabled(),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Select Solo members" }),
+		);
+		fireEvent.pointerDown(
+			bank.container.querySelector('[data-playback-slot="1"]')!,
+			{ pointerId: 91, button: 0 },
+		);
+		mocks.playbacks.active_page = 2;
+		bank.rerenderBank();
+		fireEvent.pointerDown(
+			bank.container.querySelector('[data-playback-slot="1"]')!,
+			{ pointerId: 92, button: 0 },
+		);
+		expect(screen.getByText(/2 selected across pages/)).toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText("Solo Region name"), {
+			target: { value: "Two pages" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Create Solo Region" }));
+		await waitFor(() => expect(bank.save).toHaveBeenCalledOnce());
+		expect(bank.regions()[0].members).toEqual([
+			{ page: 1, position: 1 },
+			{ page: 2, position: 1 },
+		]);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
+
+	it("retains disconnected islands and cross-page membership through page changes and general editing", async () => {
+		const bank = soloBank([
+			{
+				id: "region-a",
+				name: "Across pages",
+				members: [
+					{ page: 1, position: 1 },
+					{ page: 1, position: 2 },
+					{ page: 1, position: 4 },
+					{ page: 2, position: 1 },
+				],
+			},
+		]);
+		await waitFor(() =>
+			expect(
+				bank.container.querySelector('[data-playback-slot="4"]'),
+			).toHaveClass("playback-solo-member"),
+		);
+		expect(
+			bank.container.querySelector('[data-playback-slot="4"]'),
+		).toHaveClass(
+			"solo-fence-top",
+			"solo-fence-right",
+			"solo-fence-bottom",
+			"solo-fence-left",
+		);
+		mocks.playbacks.active_page = 2;
+		bank.rerenderBank();
+		await waitFor(() =>
+			expect(
+				bank.container.querySelector('[data-playback-slot="1"]'),
+			).toHaveClass("playback-solo-member"),
+		);
+		expect(bank.regions()[0].members).toHaveLength(4);
+		expect(bank.save).not.toHaveBeenCalled();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Manage Solo Regions" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Edit Across pages" }));
+		fireEvent.change(screen.getByLabelText("Members (page.position)"), {
+			target: { value: "1.1, 2.1" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Save region" }));
+		await waitFor(() =>
+			expect(bank.regions()[0].members).toEqual([
+				{ page: 1, position: 1 },
+				{ page: 2, position: 1 },
+			]),
+		);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 });

@@ -82,9 +82,11 @@ function isSelectedPlayback(
 export function PlaybackSlot({
 	controller,
 	slotData,
+	soloClasses = "",
 }: {
 	controller: PlaybackBankController;
 	slotData: PlaybackSlotProjection;
+	soloClasses?: string;
 }) {
 	const { playback, cue, group, slot, row } = slotData;
 	const poolPresentation = usePoolPresentationConfiguration();
@@ -175,7 +177,7 @@ export function PlaybackSlot({
 				],
 			})
 		: null;
-	const className = `${playbackHasRuntimeError(playback, runtimeProjection, cue !== null) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
+	const className = `${soloClasses} ${playbackHasRuntimeError(playback, runtimeProjection, cue !== null) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${active?.enabled !== false && active ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
 	const cardStyle = playbackCardStyle(
 		Boolean(playback),
 		playbackColor,
