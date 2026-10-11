@@ -226,6 +226,16 @@ function useCommandLineStatus(deskError: string | null): CommandStatus {
 	};
 }
 
+function useCompletedCommand(pristine: boolean) {
+	const [completed, setCompleted] = useState(false);
+	useEffect(() => {
+		// Keypad and attached desk edits arrive through the same authority, but
+		// do not call this bar's local replace callback.
+		if (!pristine) setCompleted(false);
+	}, [pristine, completed]);
+	return [completed && pristine, setCompleted] as const;
+}
+
 function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
@@ -244,7 +254,7 @@ function useCommandLineBarModel() {
 	const numericPad = useNumericPadController();
 	const setInteraction = useSetInteraction();
 	const hardware = hardwareAttached || Boolean(state.midiProfile);
-	const [completed, setCompleted] = useState(false);
+	const [completed, setCompleted] = useCompletedCommand(command.pristine);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
 	useOSCCommandRejections(

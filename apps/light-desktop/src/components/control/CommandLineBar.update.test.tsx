@@ -27,6 +27,7 @@ import {
 } from "../../features/programmingInteraction/testFixtures";
 import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
 import { CommandLineBar } from "./CommandLineBar";
+import { useNumericPadController } from "./numericPad/useNumericPadController";
 
 const activity = vi.hoisted(() => ({
 	current: {
@@ -464,6 +465,75 @@ describe("scoped command-line integration", () => {
 		);
 		expect(server.setCommandLine).not.toHaveBeenCalled();
 	});
+
+	it.each(["touch", "authoritative hardware", "no new edit"] as const)(
+		"preserves the command target after completion and %s input",
+		async (source) => {
+			let projection = commandLine(1, "FIXTURE 101");
+			const transport = new FakeProgrammingTransport();
+			const executeCommand = vi.fn(async () => {
+				projection = commandLine(projection.revision + 1, "FIXTURE");
+				return true;
+			});
+			function PlaybackKey() {
+				const numericPad = useNumericPadController();
+				return <Button onClick={() => numericPad.press("PLAYBACK")}>PBK</Button>;
+			}
+			render(
+				<ProgrammingInteractionViewProvider
+					showId={SHOW_ID}
+					deskId={DESK_ID}
+					store={new ProgrammingInteractionStore()}
+					transport={transport}
+					loadSnapshot={async () => programmingSnapshot({ command: projection })}
+					replaceCommandLine={async (_deskId, value, revision) => {
+						projection = commandLine(revision + 1, value);
+						return projection;
+					}}
+					executeCommand={executeCommand}
+				>
+					<PlaybackKey />
+					<CommandLineBar />
+				</ProgrammingInteractionViewProvider>,
+			);
+			await act(settleSession);
+			const input = screen.getByRole("textbox", { name: "Command line" });
+			fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
+			await act(settleSession);
+			expect(input).toHaveClass("completed");
+			if (source === "touch") {
+				fireEvent.click(screen.getByRole("button", { name: "PBK" }));
+				await act(settleSession);
+			} else if (source === "authoritative hardware") {
+				projection = commandLine(projection.revision + 1, "PBK");
+				act(() =>
+					transport.emit({
+						type: "event",
+						sequence: 12,
+						correlationId: null,
+						change: commandChange({ revision: projection.revision, text: "PBK" }),
+					}),
+				);
+			}
+			if (source !== "no new edit") {
+				expect(input).toHaveValue("PBK");
+				expect(input).not.toHaveClass("completed");
+			}
+			for (const digit of ["3", "0", "1"]) {
+				fireEvent.keyDown(window, { key: digit, code: `Digit${digit}` });
+				await act(settleSession);
+			}
+			const entered = source === "no new edit" ? "F301" : "PBK 301";
+			expect(input).toHaveValue(entered);
+			fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
+			await act(settleSession);
+			expect(executeCommand).toHaveBeenLastCalledWith({
+				command: entered,
+				target: "FIXTURE",
+				pristine: false,
+			});
+		},
+	);
 
 	it("keeps parser rejection out of history and retires feedback after the next successful execution", async () => {
 		const command = "FIXTUREPBK4.301";
