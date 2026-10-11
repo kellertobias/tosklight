@@ -4,11 +4,11 @@ Open **Show > Desk Setup > Screens & playback** to configure the primary desk su
 
 ## Configure a screen
 
-For the default screen, set its operator-facing name. Choose **Configure Playbacks** to set the playbacks per row and add playback rows. Each row has its own first playback number, fader availability, and number of buttons. The default screen owns the Main Page. **Enable software keyboard shortcuts** controls the complete software shortcut layer for this screen; attached hardware disables that layer automatically. These changes take effect and save immediately. Choose **Undo** in the Screens & playback title bar to reverse the most recent actual default-screen change. Opening a modal or moving between setup sections does not create an undo step.
+For the default screen, set its operator-facing name. Choose **Configure Playbacks** to add playback rows. Each row has its own **First Playback Number**, **Playbacks in row**, **Presentation** (**Faders**, **Buttons**, or **Push encoders**), and **Buttons** count. Choose its **Page source** and press **Save** to apply the layout. The default screen starts with its own page. **Enable software keyboard shortcuts** controls the complete software shortcut layer for this screen; attached hardware disables that layer automatically. The other default-screen controls take effect and save immediately. Choose **Undo** in the Screens & playback title bar to reverse the most recent actual default-screen change. Opening a modal or moving between setup sections does not create an undo step.
 
 Choose **Known windows** to see every window that has connected. Every window operates the one desk, so the list identifies windows rather than desk configurations to pick between. Connected windows appear first, followed by disconnected ones; each group is ordered by the most recent connection. Every entry shows its stable client identity, connection state, and last-connected time. Older migrated entries show **Last connected unknown** until that window connects again. The window you are looking at is marked **This window**.
 
-A disconnected window can be dropped with **Forget window** and a named confirmation, or every disconnected one at once with **Forget other windows**. This window and any connected window cannot be forgotten. Forgetting removes only the record that the window has connected before. The desk is untouched: its page, playback selection, desk lock, and Update defaults belong to the desk and outlive any single window, as do portable shows, users, optional screens, installation-wide configuration, Virtual Playback assignments, and show-owned Solo Regions. A forgotten window that connects again is simply known again, operating the same desk.
+A disconnected window can be dropped with **Forget window** and a named confirmation, or every disconnected one at once with **Forget other windows**. This window and any connected window cannot be forgotten. Forgetting removes only the record that the window has connected before. The desk is untouched: its page, playback selection, desk lock, and Update defaults belong to the desk and outlive any single window, as do portable shows, users, optional screens, installation-wide configuration, Playback assignments, and show-owned Solo Regions. A forgotten window that connects again is simply known again, operating the same desk.
 
 Choose **Configure desk lock** in the Screens & playback title bar to open its configuration modal. Set the lock message, unlock control, and optional wallpaper, then choose **Save Lock Configuration** in the modal title bar. The Show menu's **Lock Desk** action applies that saved configuration.
 
@@ -30,7 +30,7 @@ form; **Dock** and **Playbacks** sit side by side above **Command line** and **P
 **Page controls** follows below. In a narrow modal the four switches stack in one column and the
 form scrolls. **Playbacks** edits the screen's playback rows in place, without a second dialog:
 choose **Add Row** in the modal title bar, drag a row by its handle to reorder it, or remove it with
-its delete button. A row layout that would run past playback 127 stays on screen with a
+its delete button. A row layout that would run past position 1000 stays on screen with a
 **Not saved yet** note until you correct it; switching tabs keeps what you typed. If the desk
 rejects a change, the modal says **Could not save this screen** with the reason.
 
@@ -78,14 +78,15 @@ the main screen: the Dock reaches down to it and no further.
 Each optional screen can also select a physical display and enter native fullscreen. Native
 fullscreen controls the application window on the physical display; **Fixed full-screen pane**
 controls the content inside that window. Its **Playbacks** tab provides the same row controls as
-the default screen's **Configure Playbacks** dialog and also selects its page mode. Choose **Follow
-Main** when its page tracks the primary page. Choose **Dedicated Page** for an independent operator
-surface.
+the default screen's **Configure Playbacks** dialog and also selects its **Page source**.
+**Own page** keeps an independently changeable page, **Pinned page** stays on the chosen page, and
+**Follow surface** tracks another named surface. Follow chains cannot contain a cycle. All surfaces
+use the same show-owned Playback assignments at each page and position.
 Browser-only operation displays the default-screen controls but cannot create or claim support for
 native optional-screen windows.
 
 > [!danger] Missing graphic
-> Add a screen-ownership diagram showing the default screen, additional screens, connected clients, Desktop or fixed-pane content, encoder placement, playback placement, and Follow Main versus Dedicated Page.
+> Add a screen-ownership diagram showing the default screen, additional screens, connected clients, Desktop or fixed-pane content, encoder placement, playback placement, and Own page, Pinned page, and Follow surface.
 
 Pressing **X** in an optional screen window closes that window and marks the screen closed, so it
 stays closed until you open it again from **Setup → Screens** or with its **Open Screen** action.

@@ -61,9 +61,9 @@ Use the [Pane Reference](index.md) for a screenshot and settings explanation for
 ## Multiple screens
 
 Configure physical screens in **Desk Setup > Screens & playback**. Each optional screen has its own
-name, physical window placement, playback layout, page mode, and either a configurable Desktop or
-a view-only **Fixed full-screen pane**. **Follow Main** mirrors the main playback page;
-**Dedicated Page** keeps an independent page. Screen configuration belongs to the desk
+name, physical window placement, playback layout, page source, and either a configurable Desktop or
+a view-only **Fixed full-screen pane**. **Own page** keeps an independently changeable page;
+**Pinned page** stays on the chosen page; **Follow surface** tracks another named surface. Screen configuration belongs to the desk
 installation, while show programming remains in the portable show file.
 
 ## Where settings are stored
