@@ -361,3 +361,59 @@ async fn playback_action(
         .header(header::CONTENT_TYPE,"application/json")
         .body(Body::from(serde_json::json!({"address":address,"control_source":{"surface_id":surface,"control_id":0},"action":{"type":action,"pressed":true}}).to_string())).unwrap()).await.unwrap()
 }
+
+#[tokio::test]
+async fn release_current_selection_at_reports_no_selection_without_mutating_values() {
+    let scenario = CommandHttpScenario::new().await;
+    let before = json(scenario.values_snapshot().await).await["projection"].clone();
+    for (index, command) in ["AT 100", "AT FULL", "AT 0 THRU 100"]
+        .into_iter()
+        .enumerate()
+    {
+        let response = scenario
+            .execute(&format!("empty-at-{index}"), Some(command))
+            .await;
+        let body = json(response).await;
+        assert_eq!(body["outcome"], "rejected", "{command}: {body}");
+        assert_eq!(body["error"], "No Selection", "{command}: {body}");
+        assert_eq!(
+            json(scenario.values_snapshot().await).await["projection"],
+            before
+        );
+    }
+}
+
+#[tokio::test]
+async fn release_current_selection_at_keeps_stored_empty_group_programmable() {
+    let scenario = CommandHttpScenario::new().await;
+    let group = light_programmer::GroupDefinition {
+        id: "100".into(),
+        name: "Intentionally empty".into(),
+        fixtures: vec![],
+        ..Default::default()
+    };
+    seed(
+        &scenario,
+        "Stored empty Group",
+        &[("group", "100", serde_json::to_value(group).unwrap())],
+    )
+    .await;
+    let selected = json(
+        scenario
+            .execute("empty-group-select", Some("GROUP 100"))
+            .await,
+    )
+    .await;
+    assert_eq!(selected["outcome"], "accepted", "{selected}");
+    let applied = json(scenario.execute("empty-group-at", Some("AT 100")).await).await;
+    assert_eq!(applied["outcome"], "accepted", "{applied}");
+    let values = json(scenario.values_snapshot().await).await;
+    assert_eq!(
+        values["projection"]["group_values"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1,
+        "{values}"
+    );
+}

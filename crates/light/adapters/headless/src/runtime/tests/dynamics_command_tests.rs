@@ -1382,7 +1382,7 @@ fn command_test_dynamic(id: uuid::Uuid, pool_number: u16) -> light_dynamics::Dyn
 }
 
 #[test]
-fn empty_selection_commands_are_quiet_noops_but_malformed_commands_still_fail() {
+fn empty_selection_level_commands_require_selection_and_explicit_noops_stay_quiet() {
     let (state, data_dir) = test_state();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
@@ -1395,7 +1395,10 @@ fn empty_selection_commands_are_quiet_noops_but_malformed_commands_still_fail() 
     for blind in [false, true] {
         state.programming.set_modes(session.id, Some(blind), None, None, None);
         let before = state.programming.get(session.id).unwrap();
-        for command in ["AT 50", "AT + 10", "AT 0 THRU 50 THRU 100", "FixAT 50", "ATTRIBUTE pan FixAT 50", "RELEASE", "RELEASE COLOR"] {
+        for command in ["AT 50", "AT + 10", "AT 0 THRU 50 THRU 100"] {
+            assert_eq!(execute_programmer_command_from(&state, &session, command, &context), Err("No Selection".into()), "{command}");
+        }
+        for command in ["FixAT 50", "ATTRIBUTE pan FixAT 50", "RELEASE", "RELEASE COLOR"] {
             assert_eq!(execute_programmer_command_from(&state, &session, command, &context), Ok(0), "{command}");
         }
         for command in ["AT invalid", "AT 101", "AT 1 2", "AT 0 THRU 500", "FixAT nope", "FixAT 101", "RELEASE invalid"] {

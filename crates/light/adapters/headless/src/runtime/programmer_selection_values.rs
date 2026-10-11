@@ -31,7 +31,7 @@ pub(super) fn apply_current_selection_value(
     if value.iter().any(|token| token == "THRU") {
         let points = parse_spread_points(value)?;
         if current.selected.is_empty() && live_groups.is_empty() {
-            return Ok(0);
+            return Err("No Selection".into());
         }
         ensure_spread_fits(&points, current.selected.len())?;
         if !live_groups.is_empty() {
@@ -78,7 +78,7 @@ pub(super) fn apply_current_selection_value(
         return Err("level must be within 0-100".into());
     }
     if current.selected.is_empty() && live_groups.is_empty() {
-        return Ok(0);
+        return Err("No Selection".into());
     }
     if !live_groups.is_empty() {
         if relative {
