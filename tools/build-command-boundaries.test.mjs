@@ -799,10 +799,8 @@ test("non-main branch pushes run validation without release work", () => {
 	assert.match(workflow, /push:[\s\S]*?branches: \["\*\*"\]/u);
 	for (const job of [
 		"metadata",
-		"workspace",
 		"native-extension-draft",
 		"usb-dmx",
-		"e2e-build",
 	]) {
 		assert.match(
 			workflow,
@@ -832,6 +830,51 @@ test("non-main branch pushes run validation without release work", () => {
 	assert.match(
 		workflow,
 		/release:[\s\S]*?needs:[\s\S]*?- workspace[\s\S]*?- native-extension-draft[\s\S]*?- usb-dmx[\s\S]*?- e2e[\s\S]*?- build/u,
+	);
+});
+
+test("manual branch dispatch runs comprehensive validation without publishing", () => {
+	const workflow = read(".github/workflows/release.yml");
+	const jobCondition = (job) => {
+		const body = new RegExp(
+			`\\n  ${job}:\\n([\\s\\S]*?)(?=\\n  [\\w-]+:|$)`,
+			"u",
+		).exec(workflow)?.[1];
+		assert.ok(body, `${job} must exist`);
+		return /^    if: (.+)$/mu.exec(body)?.[1];
+	};
+	const enabled = (condition, ref, event) =>
+		condition.split(" || ").some((term) => {
+			const parsed = /^github\.(ref|event_name) == '([^']+)'$/u.exec(term);
+			assert.ok(parsed, `Unexpected condition: ${term}`);
+			return (parsed[1] === "ref" ? ref : event) === parsed[2];
+		});
+	for (const job of ["workspace", "e2e-build", "e2e"]) {
+		const condition = jobCondition(job);
+		assert.ok(condition);
+		for (const [ref, event, expected] of [
+			["refs/heads/main", "push", true],
+			["refs/heads/main", "workflow_dispatch", true],
+			["refs/heads/codex/acceptance", "workflow_dispatch", true],
+			["refs/heads/codex/acceptance", "push", false],
+			["refs/pull/42/merge", "pull_request", false],
+		])
+			assert.equal(
+				enabled(condition, ref, event),
+				expected,
+				`${job}: ${ref} ${event}`,
+			);
+	}
+	for (const job of ["build", "demo-show", "release"]) {
+		assert.equal(
+			jobCondition(job),
+			"github.event_name == 'push' && github.ref == 'refs/heads/main'",
+		);
+	}
+	assert.match(workflow, /workflow_dispatch:/u);
+	assert.match(
+		workflow,
+		/label: UI \(1\/4\)[\s\S]*label: UI \(2\/4\)[\s\S]*label: UI \(3\/4\)[\s\S]*label: UI \(4\/4\)/u,
 	);
 });
 

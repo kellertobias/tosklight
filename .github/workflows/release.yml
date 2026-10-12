@@ -256,7 +256,7 @@ jobs:
 
   workspace:
     name: Tests / Comprehensive Rust workspace
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: frontends
     runs-on: ubuntu-22.04
     env:
@@ -441,7 +441,7 @@ jobs:
 
   e2e-build:
     name: Tests / Build Playwright application
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: frontends
     runs-on: ubuntu-22.04
     env:
@@ -516,7 +516,7 @@ jobs:
 
   e2e:
     name: Tests / Playwright / ${{ matrix.label }}
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: e2e-build
     runs-on: ubuntu-22.04
     env:
