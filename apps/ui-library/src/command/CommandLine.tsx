@@ -81,7 +81,7 @@ export interface CommandLineProps {
 	onRecordEnd: () => void;
 	onRecordCancel: () => void;
 	onRecordComplete: (shifted: boolean) => void;
-	onAdvancePreload: () => void | Promise<void>;
+	onAdvancePreload: (shifted: boolean) => void | Promise<void>;
 	onInspectPreload: () => void | Promise<void>;
 	onEscape?: () => void;
 	onClearCommand?: () => void;
@@ -399,8 +399,9 @@ function CommandRecordPreload(props: CommandLineProps) {
 				onPointerUp={cancelPreloadHold}
 				onPointerCancel={cancelPreloadHold}
 				onContextMenu={(event) => event.preventDefault()}
-				onClick={() => {
-					if (!preloadHeld.current) void props.onAdvancePreload();
+				onClick={(event) => {
+					if (!preloadHeld.current)
+						void props.onAdvancePreload(props.recordShiftArmed || event.shiftKey);
 					preloadHeld.current = false;
 				}}
 			>

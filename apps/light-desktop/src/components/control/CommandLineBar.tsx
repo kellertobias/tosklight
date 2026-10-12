@@ -320,9 +320,9 @@ function useCommandLineBarModel() {
 		replaceCommand("UPDATE ");
 	};
 	const record = useRecordGesture({ armUpdateOrMenu, toggleRecord });
-	const advancePreload = async () => {
+	const advancePreload = async (shifted = false) => {
 		if (!preload.ready || !preload.actions) return;
-		if (state.shiftArmed) {
+		if (shifted || state.shiftArmed) {
 			await preload.actions.clearPending();
 			return;
 		}

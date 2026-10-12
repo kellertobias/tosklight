@@ -228,6 +228,7 @@ vi.mock(
 );
 
 beforeEach(() => {
+	server.bootstrap.hardware_connected = false;
 	playbackContext.desk = { selected_surface_id: "main", command_page: 2 };
 	vi.useFakeTimers();
 	state.updateArmed = false;
@@ -858,20 +859,73 @@ describe("Shift+Record Update gestures", () => {
 		expect(server.setCommandLine).not.toHaveBeenCalled();
 	});
 
-	it("holds the physical Preload button to inspect without executing GO", () => {
+	it.each([
+		false,
+		true,
+	])("clears pending Preload on unlatched physical Shift-click (hardware=%s)", async (hardware) => {
+		server.bootstrap.hardware_connected = hardware;
+		preloadLifecycle.armed = true;
+		preloadLifecycle.pending = true;
+		state.shiftArmed = false;
+		render(<CommandLineBar />);
+		const button = screen.getByRole("button", { name: "PRELOAD GO" });
+		await act(async () => {
+			fireEvent.pointerDown(button, { shiftKey: true });
+			fireEvent.pointerUp(button, { shiftKey: true });
+			fireEvent.click(button, { shiftKey: true });
+		});
+		expect(preloadLifecycle.actions.clearPending).toHaveBeenCalledOnce();
+		expect(preloadLifecycle.actions.go).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.enter).not.toHaveBeenCalled();
+		server.bootstrap.hardware_connected = false;
+	});
+
+	it.each([
+		false,
+		true,
+	])("preserves plain GO and latched Shift clear (hardware=%s)", async (hardware) => {
+		server.bootstrap.hardware_connected = hardware;
+		preloadLifecycle.armed = true;
+		preloadLifecycle.pending = true;
+		const mounted = render(<CommandLineBar />);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "PRELOAD GO" }));
+		});
+		expect(preloadLifecycle.actions.go).toHaveBeenCalledOnce();
+		expect(preloadLifecycle.actions.clearPending).not.toHaveBeenCalled();
+		state.shiftArmed = true;
+		mounted.rerender(<CommandLineBar />);
+		await act(async () => {
+			fireEvent.click(
+				screen.getByRole("button", {
+					name: "PRELOAD GO, Shift: CLEAR PRELOAD",
+				}),
+			);
+		});
+		expect(preloadLifecycle.actions.clearPending).toHaveBeenCalledOnce();
+		expect(preloadLifecycle.actions.go).toHaveBeenCalledOnce();
+		expect(preloadLifecycle.actions.enter).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		false,
+		true,
+	])("holds Preload to inspect without GO or clear (Shift=%s)", (shiftKey) => {
 		preloadLifecycle.armed = true;
 		render(<CommandLineBar />);
 		const button = screen.getByRole("button", { name: "PRELOAD GO" });
-		fireEvent.pointerDown(button);
+		fireEvent.pointerDown(button, { shiftKey });
 		act(() => vi.advanceTimersByTime(1200));
-		fireEvent.pointerUp(button);
-		fireEvent.click(button);
+		fireEvent.pointerUp(button, { shiftKey });
+		fireEvent.click(button, { shiftKey });
 		expect(dispatch).toHaveBeenCalledWith({
 			type: "SET_MODAL",
 			modal: "preloadStoreOpen",
 			value: true,
 		});
 		expect(preloadLifecycle.actions.go).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.clearPending).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.enter).not.toHaveBeenCalled();
 	});
 
 	it("keeps single, second-press, and long-press software gestures mutually exclusive", async () => {

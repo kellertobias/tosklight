@@ -173,6 +173,24 @@ describe("CommandLine", () => {
 		expect(view.onReplace).toHaveBeenCalledExactlyOnceWith("FIXTURE 9");
 	});
 
+	it.each([
+		false,
+		true,
+	])("forwards unlatched physical Shift-click to Preload (hardware=%s)", (hardware) => {
+		const view = props({
+			hardware,
+			preloadArmed: true,
+			preloadLabel: "PRELOAD GO",
+		});
+		render(<CommandLine {...view} />);
+		const button = screen.getByRole("button", { name: "PRELOAD GO" });
+		fireEvent.pointerDown(button, { shiftKey: true });
+		fireEvent.pointerUp(button, { shiftKey: true });
+		fireEvent.click(button, { shiftKey: true });
+		expect(view.onAdvancePreload).toHaveBeenCalledExactlyOnceWith(true);
+		expect(view.onInspectPreload).not.toHaveBeenCalled();
+	});
+
 	it("keeps primary captions visible beside the smaller Shift actions", () => {
 		render(<CommandLine {...props({ recordShiftArmed: true })} />);
 
