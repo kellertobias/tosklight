@@ -57,6 +57,7 @@ const INPUT_GRAMMAR_REJECTIONS = new Set([
 	"dmx requires one universe.address",
 	"div requires a positive number",
 	"offset must be smaller than div",
+	"targetless dynamics cannot be assigned directly to a playback",
 	"offset is invalid",
 	"+ requires an offset",
 	"dynamic requires a pool number",

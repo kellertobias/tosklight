@@ -81,10 +81,14 @@ afterEach(() => {
 
 describe("LightClientRuntime", () => {
 	it.each([
-		"OFFSET must be smaller than DIV",
-		"offset is invalid",
-		"+ requires an offset",
-	])("keeps subset input rejection local after its actual socket response: %s", async (message) => {
+		["OFFSET must be smaller than DIV", "GROUP 100 DIV 2 OFFSET 2"],
+		["offset is invalid", "GROUP 100 DIV 2 OFFSET INVALID"],
+		["+ requires an offset", "GROUP 100 DIV 2 +"],
+		[
+			"targetless Dynamics cannot be assigned directly to a Playback",
+			"ASSIGN DYNAMIC 31 AT PBK 3.8",
+		],
+	])("keeps operator rejection local after its actual socket response: %s", async (message, command) => {
 		const client = connectedClient();
 		const socket = await openEvents(client);
 		const dispatch = vi.spyOn(window, "dispatchEvent");
@@ -92,7 +96,7 @@ describe("LightClientRuntime", () => {
 			.capabilityTransport()
 			.sendAction({
 				type: "command_line_execute",
-				request: { value: "GROUP 100 DIV 2 OFFSET 2" },
+				request: { value: command },
 			})
 			.catch((error: Error) => reportProgrammingCommandError(error));
 		const frame = JSON.parse(socket.sent[1]);

@@ -160,6 +160,7 @@ describe("command rejection classification", () => {
 		"DMX requires one universe.address",
 		"DIV requires a positive number",
 		"OFFSET must be smaller than DIV",
+		"targetless Dynamics cannot be assigned directly to a Playback",
 		"offset is invalid",
 		"+ requires an offset",
 		"DYNAMIC requires a pool number",
@@ -204,6 +205,8 @@ describe("command rejection classification", () => {
 			"unexpected tokens after level\nnetwork failure",
 			"OFFSET must be smaller than DIV: database unavailable",
 			"OFFSET must be smaller than DIV\nnetwork failure",
+			"targetless Dynamics cannot be assigned directly to a Playback: database unavailable",
+			"targetless Dynamics cannot be assigned directly to a Playback\nnetwork failure",
 			"offset is invalid: authentication failed",
 			"+ requires an offset from runtime snapshot",
 		]) {
