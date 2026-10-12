@@ -1,7 +1,7 @@
 import {
 	createContext,
-	type RefObject,
 	type PropsWithChildren,
+	type RefObject,
 	useCallback,
 	useContext,
 	useEffect,
@@ -204,7 +204,23 @@ function useChoosePlayback({
 			});
 			if (intent?.type === "assign_object") {
 				const address = `PBK ${intent.playback.pageNumber} . ${intent.playback.slot}`;
-				await command?.execute(`${intent.sourceCommand} AT ${address}`);
+				const text = `${intent.sourceCommand} AT ${address}`;
+				// Enter the assembled touch command before execution, so a rejection keeps
+				// the same editable text and feedback as a typed command.
+				if (!command || !(await command.replace(text))) return intent;
+				if (
+					stateRef.current?.scope !== scope ||
+					stateRef.current.phase !== "idle"
+				)
+					return intent;
+				const outcome = await command.execute(text);
+				if (!outcome.executed || outcome.report !== "none") return intent;
+				// A later gesture or a replaced desk/show owns its own visible command.
+				if (
+					stateRef.current?.scope !== scope ||
+					stateRef.current.phase !== "idle"
+				)
+					return intent;
 			}
 			if (intent && stateRef.current) await writeVisibleState(stateRef.current);
 			if (intent?.type === "assign_group_master") {
@@ -212,8 +228,12 @@ function useChoosePlayback({
 					expectedPageRevision: intent.playback.pageObjectRevision,
 					expectedPageObjectId: intent.playback.pageObjectId,
 				};
-				await topology?.assignGroupMaster(intent.group.objectId, intent.group.objectRevision,
-					{page: intent.playback.pageNumber, position: intent.playback.slot}, options);
+				await topology?.assignGroupMaster(
+					intent.group.objectId,
+					intent.group.objectRevision,
+					{ page: intent.playback.pageNumber, position: intent.playback.slot },
+					options,
+				);
 			}
 			if (intent?.type === "open_playback_settings")
 				routeControlSurfaceIntentWithFeedback(intent);

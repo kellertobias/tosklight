@@ -1,6 +1,10 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	clearProgrammingCommandError,
+	reportProgrammingCommandError,
+} from "../programmingInteraction/commandError";
 import { registerControlSurfaceTarget } from "./registry";
 import {
 	type SetInteractionController,
@@ -84,9 +88,11 @@ describe("desk ASSIGN interaction owner", () => {
 	afterEach(() => cleanup());
 	beforeEach(() => {
 		controller = null;
-		mocks.replace.mockReset().mockResolvedValue(undefined);
+		mocks.replace.mockReset().mockResolvedValue(true);
 		mocks.reset.mockReset().mockResolvedValue(undefined);
-		mocks.execute.mockReset().mockResolvedValue({ executed: true });
+		mocks.execute
+			.mockReset()
+			.mockResolvedValue({ executed: true, report: "none" });
 		mocks.assignGroupMaster
 			.mockReset()
 			.mockResolvedValue({ status: "changed" });
@@ -202,8 +208,92 @@ describe("desk ASSIGN interaction owner", () => {
 		expect(mocks.execute).toHaveBeenCalledWith(
 			"ASSIGN TIMECODE 7 AT PBK 2 . 3",
 		);
+		expect(mocks.replace).toHaveBeenLastCalledWith(
+			"ASSIGN TIMECODE 7 AT PBK 2 . 3",
+		);
+		expect(mocks.reset).toHaveBeenCalledOnce();
+	});
+	it.each([
+		[
+			"targetless Dynamics cannot be assigned directly to a Playback",
+			"operator",
+		],
+		["Dynamic assignment task failed: database unavailable", "unexpected"],
+	])("retains rejected touch assignment text and feedback: %s", async (message, kind) => {
+		const view = render(<View />);
+		await act(async () => {
+			await controller?.arm("touch");
+		});
+		mocks.command.text = "ASSIGN DYNAMIC 31";
+		view.rerender(<View />);
+		await waitFor(() =>
+			expect(controller?.state?.phase).toBe("object_source_pending"),
+		);
+		mocks.replace.mockImplementation(async (value: string) => {
+			mocks.command.text = value;
+			clearProgrammingCommandError();
+			return true;
+		});
+		mocks.reset.mockImplementation(async () => {
+			mocks.command.text = "FIXTURE";
+			clearProgrammingCommandError();
+			return true;
+		});
+		mocks.execute.mockImplementation(async () => {
+			reportProgrammingCommandError(new Error(message));
+			return { executed: false, report: "none" };
+		});
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		await act(async () => {
+			await controller?.choosePlayback(playback, "touch");
+		});
+		expect(mocks.command.text).toBe("ASSIGN DYNAMIC 31 AT PBK 2 . 3");
+		expect(mocks.reset).not.toHaveBeenCalled();
+		expect(
+			(dispatch.mock.lastCall?.[0] as CustomEvent | undefined)?.detail,
+		).toMatchObject({ kind });
+		expect(
+			(dispatch.mock.lastCall?.[0] as CustomEvent | undefined)?.detail.message,
+		).toContain(message);
+		dispatch.mockRestore();
 	});
 
+	it("does not reset a newer Set gesture after an earlier assignment succeeds", async () => {
+		mocks.replace.mockImplementation(async (value: string) => {
+			mocks.command.text = value;
+			return true;
+		});
+		const view = render(<View />);
+		await act(async () => {
+			await controller?.arm("touch");
+		});
+		mocks.command.text = "ASSIGN DYNAMIC 32";
+		view.rerender(<View />);
+		await waitFor(() =>
+			expect(controller?.state?.phase).toBe("object_source_pending"),
+		);
+		let finish: (() => void) | undefined;
+		mocks.execute.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finish = () => resolve({ executed: true, report: "none" });
+				}),
+		);
+		let assignment: Promise<unknown> | undefined;
+		await act(async () => {
+			assignment = controller?.choosePlayback(playback, "touch");
+		});
+		expect(mocks.execute).toHaveBeenCalledOnce();
+		await act(async () => {
+			await controller?.arm("touch");
+		});
+		await act(async () => {
+			finish?.();
+			await assignment;
+		});
+		expect(controller?.state?.phase).toBe("set_armed");
+		expect(mocks.reset).not.toHaveBeenCalled();
+	});
 	it("promotes explicit command text to a pending Group and Clear cancels it", async () => {
 		const view = render(<View />);
 		await act(async () => {
