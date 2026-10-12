@@ -2,7 +2,13 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { requiredMainPlaybackHeight } from "./requiredMainPlaybackHeight";
 
 /** A screen fits its authored rows; only personal panes offer scrolling. */
-export function ScreenPlaybackFit({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function ScreenPlaybackFit({
+	children,
+	className = "",
+}: {
+	children: ReactNode;
+	className?: string;
+}) {
 	const element = useRef<HTMLDivElement>(null);
 	const [insufficient, setInsufficient] = useState(false);
 	useEffect(() => {
@@ -11,29 +17,40 @@ export function ScreenPlaybackFit({ children, className = "" }: { children: Reac
 		const shell = host.closest<HTMLElement>(".app-shell");
 		let frame = 0;
 		let ownsMainHeight = false;
+		let observedBank: HTMLElement | null = null;
 		const measure = () => {
 			cancelAnimationFrame(frame);
 			frame = requestAnimationFrame(() => {
 				const bank = host.querySelector<HTMLElement>(".playback-fader-bank");
+				if (bank !== observedBank) {
+					if (observedBank) resize?.unobserve(observedBank);
+					if (bank) resize?.observe(bank);
+					observedBank = bank;
+				}
 				if (!bank || !bank.classList.contains("touch-layout")) {
 					if (bank) bank.inert = false;
-					if (ownsMainHeight) shell?.style.removeProperty("--screen-playback-required-height");
+					if (ownsMainHeight)
+						shell?.style.removeProperty("--screen-playback-required-height");
 					setInsufficient(false);
 					return;
 				}
-				const bounds = bank.getBoundingClientRect();
-				if (!bounds.width || !bounds.height) return;
+				const initialBounds = bank.getBoundingClientRect();
+				if (!initialBounds.width || !initialBounds.height) return;
 				if (shell && bank.dataset.playbackSurface === "main") {
 					ownsMainHeight = true;
-					const base = getComputedStyle(document.documentElement).getPropertyValue(
-						"--control-height",
-					);
+					const base = getComputedStyle(
+						document.documentElement,
+					).getPropertyValue("--control-height");
 					shell.style.setProperty("--screen-playback-base-height", base);
 					shell.style.setProperty(
 						"--screen-playback-required-height",
 						`${requiredMainPlaybackHeight(bank)}px`,
 					);
 				}
+				// Allocating Main's required height can reflow the bank in this frame.
+				// Validate controls and position feedback against that resulting geometry.
+				const bounds = bank.getBoundingClientRect();
+				if (!bounds.width || !bounds.height) return;
 				const targets = bank.querySelectorAll<HTMLElement>(
 					"article, .single-button-playback-action, .vertical-touch-fader, .vertical-touch-fader-actions button, .faderless-playback-actions button, .touch-encoder-push, .touch-encoder-number-entry",
 				);
@@ -68,7 +85,9 @@ export function ScreenPlaybackFit({ children, className = "" }: { children: Reac
 			});
 		};
 		const resize =
-			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(measure);
 		resize?.observe(host);
 		window.addEventListener("resize", measure);
 		const changes = new MutationObserver(measure);
@@ -86,15 +105,15 @@ export function ScreenPlaybackFit({ children, className = "" }: { children: Reac
 			cancelAnimationFrame(frame);
 			const bank = host.querySelector<HTMLElement>(".playback-fader-bank");
 			if (bank) bank.inert = false;
-			if (ownsMainHeight) shell?.style.removeProperty("--screen-playback-required-height");
-			if (ownsMainHeight) shell?.style.removeProperty("--screen-playback-base-height");
+			if (ownsMainHeight)
+				shell?.style.removeProperty("--screen-playback-required-height");
+			if (ownsMainHeight)
+				shell?.style.removeProperty("--screen-playback-base-height");
 		};
 	}, []);
 	return (
 		<div ref={element} className={`screen-playback-fit ${className}`.trim()}>
-			<div className="screen-playback-fit-content">
-				{children}
-			</div>
+			<div className="screen-playback-fit-content">{children}</div>
 			{insufficient && (
 				<div className="screen-playback-fit-status" role="status">
 					This Playback layout needs more space for 44px touch controls.
