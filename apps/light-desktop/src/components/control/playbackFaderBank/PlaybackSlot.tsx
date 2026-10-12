@@ -120,15 +120,8 @@ export function PlaybackSlot({
 				value,
 			})
 		: undefined;
-	const {
-		summary,
-		running: transportRunning,
-		error: transportError,
-	} = timecodePlaybackSummary(
-		playback,
-		baseSummary,
-		controller.timecodeRuntime,
-		active?.loaded_cue_number,
+	const { summary, running: transportRunning, error: transportError } = timecodePlaybackSummary(
+		playback, baseSummary, controller.timecodeRuntime, active?.loaded_cue_number,
 	);
 	const { actions, faderActions } = buildPlaybackActions({
 		controller,
