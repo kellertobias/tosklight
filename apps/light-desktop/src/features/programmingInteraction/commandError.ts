@@ -22,6 +22,11 @@ const SELECTION_REQUIRED =
 const TRAILING_TOKEN_REJECTION =
 	/^unexpected tokens after (?:level|selection|subset|playback address|playback selection|recording target|Cue transfer address|Cue deletion address|BPM value|Cue number|cue target|Link source|Link destination)$/i;
 
+const RECORD_GRAMMAR_REJECTIONS = new Set([
+	"record + and record - currently require group or pbk ... cue targets",
+	"record + and record - require an explicit cue target",
+]);
+
 const TRANSFER_GRAMMAR_REJECTIONS = new Set([
 	"preset move and copy require <family> preset <number> on both sides",
 	"preset move and copy require preset before the number",
@@ -84,7 +89,8 @@ export function commandErrorFeedback(
 				SELECTION_REQUIRED.test(message) ||
 				TRAILING_TOKEN_REJECTION.test(message) ||
 				INPUT_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
-				TRANSFER_GRAMMAR_REJECTIONS.has(message.toLowerCase()))
+				TRANSFER_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
+				RECORD_GRAMMAR_REJECTIONS.has(message.toLowerCase()))
 				? "operator"
 				: "unexpected",
 	};
@@ -93,6 +99,9 @@ export function commandErrorFeedback(
 export function commandErrorSummary(message: string): string {
 	if (
 		TRANSFER_GRAMMAR_REJECTIONS.has(
+			message.replace(/^invalid data:\s*/i, "").toLowerCase(),
+		) ||
+		RECORD_GRAMMAR_REJECTIONS.has(
 			message.replace(/^invalid data:\s*/i, "").toLowerCase(),
 		)
 	)

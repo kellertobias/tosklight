@@ -30,10 +30,7 @@ fn atomic_family_filter_owns_typed_preset_group_and_cue_recording() {
         compatibility_only_family("RECORD SET 2.7 CUE 3").unwrap(),
         Some("RECORD")
     );
-    assert_eq!(
-        compatibility_only_family("RECORD + 2.7").unwrap(),
-        Some("RECORD")
-    );
+    assert_eq!(compatibility_only_family("RECORD + 2.7").unwrap(), None);
     assert_eq!(
         compatibility_only_family("RECORD 2.7 TIME 1").unwrap(),
         Some("RECORD")

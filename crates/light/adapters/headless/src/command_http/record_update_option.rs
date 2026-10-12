@@ -5,13 +5,13 @@ use light_application::programming_update::RecordUpdateOption;
 
 use super::super::AppState;
 
-/// Reads a leading `SMART`, `MERGE`, `ADD EXISTING`, or `ADD CUE` option.
+/// Reads a leading `SMART`, `MERGE`/`+`, `ADD EXISTING`, or `ADD CUE` option.
 pub(crate) fn parse_option(body: &[String]) -> (Option<RecordUpdateOption>, &[String]) {
     let first = body.first().map(String::as_str);
     let second = body.get(1).map(String::as_str);
     match (first, second) {
         (Some("SMART"), _) => (Some(RecordUpdateOption::Smart), &body[1..]),
-        (Some("MERGE"), _) => (Some(RecordUpdateOption::Merge), &body[1..]),
+        (Some("MERGE" | "+"), _) => (Some(RecordUpdateOption::Merge), &body[1..]),
         (Some("ADD"), Some("EXISTING")) => (Some(RecordUpdateOption::AddExisting), &body[2..]),
         (Some("ADD"), Some("CUE")) => (Some(RecordUpdateOption::AddCue), &body[2..]),
         _ => (None, body),
@@ -86,6 +86,11 @@ mod tests {
             parse_option(&body),
             (Some(RecordUpdateOption::AddCue), &body[2..])
         );
+        let body = tokens("+ 2 . 721");
+        assert_eq!(
+            parse_option(&body),
+            (Some(RecordUpdateOption::Merge), &body[1..])
+        );
         let body = tokens("MERGE CUE");
         assert_eq!(
             parse_option(&body),
@@ -110,6 +115,10 @@ mod tests {
         assert_eq!(
             armed_record_option("RECORD ADD CUE"),
             Some(Some(RecordUpdateOption::AddCue))
+        );
+        assert_eq!(
+            armed_record_option("RECORD +"),
+            Some(Some(RecordUpdateOption::Merge))
         );
         assert_eq!(armed_record_option("RECORD PBK 3"), None);
         assert_eq!(armed_record_option("UPDATE"), None);

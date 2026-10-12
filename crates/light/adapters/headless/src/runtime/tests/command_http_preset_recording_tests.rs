@@ -387,3 +387,67 @@ async fn an_intent_show_records_one_shared_colour_as_a_universal_preset() {
     );
     let _ = std::fs::remove_dir_all(&scenario.data_dir);
 }
+
+#[tokio::test]
+async fn websocket_explicit_plus_color_preset_merges_without_losing_unrelated_values() {
+    let (scenario, _show_id) = scenario_with_recordable_value().await;
+    let snapshot = scenario.state.output.snapshot();
+    let first = snapshot.fixtures[0].fixture_id;
+    let mut second_fixture = snapshot.fixtures[0].clone();
+    second_fixture.fixture_id = light_core::FixtureId::new();
+    second_fixture.fixture_number = Some(2);
+    second_fixture.address = Some(100);
+    let second = second_fixture.fixture_id;
+    scenario.state.output.replace_snapshot(EngineSnapshot {
+        fixtures: vec![snapshot.fixtures[0].clone(), second_fixture].into(),
+        ..(*snapshot).clone()
+    }).unwrap();
+    let color = |rgb: [f32; 3]| light_core::AttributeValue::ColorProgram(
+        light_core::programming::ColorProgram::Semantic {
+            intent: light_core::programming::ColorIntent {
+                base_xyz: light_fixture::srgb_to_xyz(rgb[0], rgb[1], rgb[2]),
+                recipe: light_core::programming::VirtualColorRecipe { rgb, ..Default::default() },
+                ..Default::default()
+            }
+        }.into()
+    );
+    let blue = color([0.0, 0.0, 1.0]);
+    let red = color([1.0, 0.0, 0.0]);
+    let green = color([0.0, 1.0, 0.0]);
+    let attribute = light_core::AttributeKey::color();
+    let instance = Uuid::new_v4();
+    let preset = light_programmer::Preset {
+        family: light_programmer::PresetFamily::Color,
+        number: 721,
+        instance_id: Some(instance),
+        values: HashMap::from([
+            (first, HashMap::from([(attribute.clone(), blue)])),
+            (second, HashMap::from([(attribute.clone(), red.clone())])),
+        ]),
+        ..Default::default()
+    };
+    let entry = scenario.state.active_show.current().clone().unwrap();
+    let store = ShowStore::open(&entry.path).unwrap();
+    let mut body = serde_json::to_value(preset).unwrap();
+    body["future_preset"] = serde_json::json!({"retained":true});
+    store.put_object("preset", "2.721", &body, 0).unwrap();
+    let mut config = scenario.state.installation.configuration().clone();
+    config.update_settings.record_default = light_application::programming_update::RecordUpdateOption::AddExisting;
+    scenario.state.installation.replace_configuration(config);
+    scenario.state.programming.set(scenario.session.id, first, attribute.clone(), green.clone());
+    assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().values.iter().find(|value| value.fixture_id == first && value.attribute == attribute).unwrap().value, green);
+    let command = live_action_frame(&scenario.session, "explicit-preset-plus",
+        light_wire::v2::live_action::LiveAction::CommandLineExecute(
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { value:"RECORD + 2.721".into() }
+        ));
+    let outcome = dispatch_live_action(&scenario.state, &scenario.session, command);
+    assert!(outcome.ok, "{:?}", outcome.error);
+    let stored = store.object("preset", "2.721").unwrap().unwrap();
+    let decoded: light_programmer::Preset = serde_json::from_value(stored.body.clone()).unwrap();
+    assert_eq!(decoded.instance_id, Some(instance));
+    assert_eq!(decoded.values[&first][&attribute], green);
+    assert_eq!(decoded.values[&second][&attribute], red);
+    assert!(decoded.values.values().all(|values| values.keys().all(|key| *key == attribute)));
+    assert_eq!(stored.body["future_preset"]["retained"], true);
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

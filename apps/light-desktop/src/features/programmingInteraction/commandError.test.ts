@@ -9,6 +9,23 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 describe("command rejection classification", () => {
+	it.each([
+		"RECORD + and RECORD - currently require GROUP or PBK ... CUE targets",
+		"RECORD + and RECORD - require an explicit CUE target",
+	])("keeps exact unsupported Record target grammar brief: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		reportProgrammingCommandError(new Error(message));
+		expect((dispatch.mock.lastCall![0] as CustomEvent).detail).toEqual({
+			message,
+			kind: "operator",
+		});
+		expect(commandErrorFeedback(message).kind).toBe("operator");
+		expect(commandErrorSummary(message)).toBe("Invalid Command");
+		for (const suffix of [": database unavailable", "\nnetwork failure"]) {
+			expect(commandErrorFeedback(message + suffix).kind).toBe("unexpected");
+		}
+	});
+
 	it("keeps exact timing grammar rejections brief without hiding unexpected faults", () => {
 		const dispatch = vi.spyOn(window, "dispatchEvent");
 		for (const message of [
