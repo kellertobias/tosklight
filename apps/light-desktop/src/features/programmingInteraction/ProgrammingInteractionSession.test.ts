@@ -430,3 +430,14 @@ describe("ProgrammingInteractionSession events", () => {
 		}
 	});
 });
+
+it("marks selection authority loading immediately when its stream closes", async () => {
+	const harness = createHarness();
+	harness.session.activate("selection");
+	await settleSession();
+	const transport = harness.transport as FakeProgrammingTransport;
+	expect(harness.store.getSnapshot().status).toBe("ready");
+	transport.subscriptions[0].observer.closed();
+	expect(harness.store.getSnapshot().status).toBe("loading");
+	harness.session.stop();
+});

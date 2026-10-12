@@ -29,10 +29,26 @@ type SelectionIntent =
 	  }
 	| { type: "apply_rule"; rule: SelectionRule };
 
+export interface StagedSelectionWrite {
+	result: Promise<SelectionActionOutcome | null>;
+	commit(): boolean;
+	cancel(): void;
+}
+interface SelectionStage {
+	ready: Promise<void>;
+	release(): void;
+	token: string | null;
+	cancelled: boolean;
+	sent: boolean;
+	committed: boolean;
+	unsubscribe?: () => void;
+}
+
 interface QueuedSelectionWrite {
 	requestId: string;
 	intent: SelectionIntent;
 	token: string;
+	stage?: SelectionStage;
 	resolve: (outcome: SelectionActionOutcome | null) => void;
 }
 
@@ -96,7 +112,8 @@ export class ProgrammingSelectionWriter {
 				!this.options.store.isScopeCurrent(this.expectedScope()))
 		)
 			return "scope-mismatch";
-		return this.options.store.authoritativeSelectionRevision() === null
+		return state.status !== "ready" ||
+			this.options.store.authoritativeSelectionRevision() === null
 			? "loading"
 			: "ready";
 	}
@@ -116,6 +133,59 @@ export class ProgrammingSelectionWriter {
 		return this.enqueue({ type: "gesture", source, remove }, () =>
 			gestureSelectionPrediction(source, resolvedFixtures, remove),
 		);
+	}
+
+	/** Reserve FIFO order and publish prediction before the double-press settles. */
+	stageGesture({
+		source,
+		resolvedFixtures,
+		operation = "add",
+	}: ProgrammingSelectionGestureIntent): StagedSelectionWrite {
+		let release = () => {};
+		const stage: SelectionStage = {
+			ready: new Promise<void>((resolve) => {
+				release = resolve;
+			}),
+			release: () => release(),
+			token: null,
+			cancelled: false,
+			sent: false,
+			committed: false,
+		};
+		const remove = operation === "remove";
+		const result = this.enqueue(
+			{ type: "gesture", source, remove },
+			() => gestureSelectionPrediction(source, resolvedFixtures, remove),
+			stage,
+		);
+		if (!stage.token) {
+			stage.release();
+			return { result, commit: () => false, cancel: () => {} };
+		}
+		const cancel = () => {
+			if (stage.sent || stage.cancelled) return;
+			stage.cancelled = true;
+			stage.unsubscribe?.();
+			this.options.store.commit(stage.token, this.expectedScope());
+			stage.release();
+		};
+		stage.unsubscribe = this.options.store.subscribe(() => {
+			if (this.status() !== "ready") cancel();
+		});
+		if (this.status() !== "ready") cancel();
+		return {
+			result,
+			commit: () => {
+				if (stage.cancelled || stage.committed || this.status() !== "ready") {
+					cancel();
+					return false;
+				}
+				stage.committed = true;
+				stage.release();
+				return true;
+			},
+			cancel,
+		};
 	}
 
 	selectGroup({
@@ -157,16 +227,22 @@ export class ProgrammingSelectionWriter {
 		if (this.stopped) return;
 		this.stopped = true;
 		if (this.active) {
+			this.active.stage?.unsubscribe?.();
+			this.active.stage?.release();
 			this.options.store.commit(this.active.token, this.expectedScope());
 			this.active.resolve(null);
 			this.active = null;
 		}
 		for (const write of this.queue) {
+			write.stage?.unsubscribe?.();
+			write.stage?.release();
 			this.options.store.commit(write.token, this.expectedScope());
 			write.resolve(null);
 		}
 		this.queue.length = 0;
 		for (const write of this.deferred) {
+			write.stage?.unsubscribe?.();
+			write.stage?.release();
 			this.options.store.commit(write.token, this.expectedScope());
 			write.resolve(null);
 		}
@@ -174,7 +250,11 @@ export class ProgrammingSelectionWriter {
 		this.resolveIdle(false);
 	}
 
-	private enqueue(intent: SelectionIntent, prediction: () => SelectionReducer) {
+	private enqueue(
+		intent: SelectionIntent,
+		prediction: () => SelectionReducer,
+		stage?: SelectionStage,
+	) {
 		if (this.stopped) {
 			this.options.onError?.(
 				new Error("Selection action rejected because its writer is stopped"),
@@ -206,12 +286,14 @@ export class ProgrammingSelectionWriter {
 			);
 			return Promise.resolve(null);
 		}
+		if (stage) stage.token = token;
 		return new Promise<SelectionActionOutcome | null>((resolve) => {
 			const queue = this.barrierRunning ? this.deferred : this.queue;
 			queue.push({
 				requestId: crypto.randomUUID(),
 				intent,
 				token,
+				stage,
 				resolve,
 			});
 			if (!this.barrierRunning) this.start();
@@ -230,6 +312,17 @@ export class ProgrammingSelectionWriter {
 			const write = this.queue.shift();
 			if (!write) break;
 			this.active = write;
+			if (write.stage) {
+				await write.stage.ready;
+				if (write.stage.cancelled) {
+					write.resolve(null);
+					this.active = null;
+					continue;
+				}
+				write.stage.unsubscribe?.();
+				write.stage.sent = true;
+			}
+			if (this.stopped) break;
 			const outcome = await this.send(write);
 			this.drainSucceeded &&= outcome !== null;
 			write.resolve(outcome);

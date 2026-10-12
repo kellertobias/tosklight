@@ -4,6 +4,7 @@ import {
 	type ProgrammingSelectionActions,
 	useProgrammingSelectionActions,
 } from "../programmingInteraction/ProgrammingInteractionView";
+import type { StagedSelectionWrite } from "../programmingInteraction/selectionWriter";
 import type { ShowObject } from "../showObjects/contracts";
 import { useShowObjectsStore } from "../showObjects/ShowObjectsState";
 import type { ShowObjectsStore } from "../showObjects/store";
@@ -18,6 +19,7 @@ export type GroupSelectionWrite = Promise<SelectionActionOutcome | null> | null;
 export interface GroupSelectionActions {
 	/** Live activation keeps the Group relationship; membership changes retarget it. */
 	selectLive(group: GroupObject): GroupSelectionWrite;
+	stageLive(group: GroupObject): StagedSelectionWrite | null;
 	/** Frozen activation captures the membership as it exists at this Show revision. */
 	selectFrozen(group: GroupObject): GroupSelectionWrite;
 }
@@ -36,7 +38,7 @@ function captureGroupAuthority(
 	actions: ProgrammingSelectionActions | null,
 	store: ShowObjectsStore,
 ): CapturedGroupAuthority | null {
-	if (!actions) return null;
+	if (!actions || actions.status() !== "ready") return null;
 	const snapshot = store.getSnapshot();
 	if (!snapshot.showId || !snapshot.readyCollections.has("group")) return null;
 	return { actions };
@@ -57,6 +59,18 @@ export function useGroupSelectionActions(active = true): GroupSelectionActions {
 		},
 		[actions, store],
 	);
+	const stageLive = useCallback(
+		(group: GroupObject) => {
+			const authority = captureGroupAuthority(actions, store);
+			return (
+				authority?.actions.stageGesture?.({
+					source: { type: "live_group", groupId: group.id },
+					resolvedFixtures: group.body.fixtures,
+				}) ?? null
+			);
+		},
+		[actions, store],
+	);
 	const selectFrozen = useCallback(
 		(group: GroupObject): GroupSelectionWrite => {
 			const authority = captureGroupAuthority(actions, store);
@@ -71,7 +85,7 @@ export function useGroupSelectionActions(active = true): GroupSelectionActions {
 		[actions, store],
 	);
 	return useMemo(
-		() => ({ selectLive, selectFrozen }),
-		[selectFrozen, selectLive],
+		() => ({ selectLive, selectFrozen, stageLive }),
+		[selectFrozen, selectLive, stageLive],
 	);
 }

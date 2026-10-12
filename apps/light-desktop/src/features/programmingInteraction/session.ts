@@ -288,6 +288,7 @@ export class ProgrammingInteractionSession {
 		if (!this.isCurrent(generation, key)) return;
 		this.invalidateConnection();
 		this.stream = null;
+		this.store.setLoading(this.expectedStoreScope());
 		this.scheduleReconnect();
 	}
 

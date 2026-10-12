@@ -3,9 +3,10 @@ import { useEffect, useRef } from "react";
 import type { PoolPresentationConfiguration } from "../../api/types";
 import type { PoolMutationOperation } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
+import type { StagedSelectionWrite } from "../../features/programmingInteraction/selectionWriter";
 import { canonicalGroupSource } from "../../features/showObjects/groupProjection";
-import type { Group } from "./model";
 import { groupFixtureCountLabel } from "./groupFixtureCount";
+import type { Group } from "./model";
 
 function missingFixtureCount(
 	group: Group | null,
@@ -76,6 +77,7 @@ export function GroupCard({
 	openSettings,
 	dereference,
 	select,
+	stageSelect,
 }: {
 	group: Group | null;
 	index: number;
@@ -100,28 +102,10 @@ export function GroupCard({
 	openSettings: () => void;
 	dereference: () => void;
 	select: () => void;
+	stageSelect?: () => StagedSelectionWrite | null;
 }) {
-	const clickTimer = useRef<number | null>(null);
-	useEffect(
-		() => () => {
-			if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
-		},
-		[],
-	);
-	const scheduleLiveSelection = () => {
-		if (consumeHold()) return;
-		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
-		clickTimer.current = window.setTimeout(() => {
-			clickTimer.current = null;
-			select();
-		}, 240);
-	};
-	const selectFrozen = () => {
-		if (consumeHold()) return;
-		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
-		clickTimer.current = null;
-		dereference();
-	};
+	const { scheduleLiveSelection, selectFrozen, cancelSelection } =
+		useGroupClickSelection({ stageSelect, consumeHold, select, dereference });
 	const missing = missingFixtureCount(group, knownFixtureIds);
 	const canonicalSource = group ? canonicalGroupSource(group.body) : null;
 	const canonicalReferences =
@@ -149,8 +133,18 @@ export function GroupCard({
 	return (
 		<PoolCard
 			data-pool-slot-id={poolSlotId}
-			data-group-selection={selected ? "group" : fullySelected ? "full" : partiallySelected ? "partial" : "none"}
-			data-group-membership={fullySelected ? "full" : partiallySelected ? "partial" : "none"}
+			data-group-selection={
+				selected
+					? "group"
+					: fullySelected
+						? "full"
+						: partiallySelected
+							? "partial"
+							: "none"
+			}
+			data-group-membership={
+				fullySelected ? "full" : partiallySelected ? "partial" : "none"
+			}
 			data-pool-position={index}
 			className={`group-card ${presentation.className}`}
 			style={presentation.style}
@@ -158,15 +152,22 @@ export function GroupCard({
 			model={{
 				number: index + 1,
 				primary: group?.body.name ?? (group ? `Group ${index + 1}` : "Empty"),
-				secondary: group
-					? <GroupFixtureCount total={group.body.fixtures.length} selected={selectedFixtureCount} />
-					: undefined,
-				details: group ? details : [...details, emptyGroupHint(storeArmed, updateArmed)],
+				secondary: group ? (
+					<GroupFixtureCount
+						total={group.body.fixtures.length}
+						selected={selectedFixtureCount}
+					/>
+				) : undefined,
+				details: group
+					? details
+					: [...details, emptyGroupHint(storeArmed, updateArmed)],
 				icon: group?.body.icon,
 				iconColor: group?.body.color,
 				color: group?.body.color,
 				kind: "group",
-				workflow: storeArmed ? recordLabel ?? (group?.body.fixtures.length ? "REC MRG" : "REC") : undefined,
+				workflow: storeArmed
+					? (recordLabel ?? (group?.body.fixtures.length ? "REC MRG" : "REC"))
+					: undefined,
 				states: presentation.states,
 				derived:
 					canonicalReferences.length > 0 || Boolean(group?.body.derived_from),
@@ -190,9 +191,7 @@ export function GroupCard({
 			onPointerCancel={cancelHold}
 			onContextMenu={(event) => {
 				event.preventDefault();
-				if (clickTimer.current !== null)
-					window.clearTimeout(clickTimer.current);
-				clickTimer.current = null;
+				cancelSelection();
 				openSettings();
 			}}
 			onDoubleClick={selectFrozen}
@@ -201,20 +200,85 @@ export function GroupCard({
 	);
 }
 
-function GroupFixtureCount({ total, selected }: { total: number; selected: number }) {
+function GroupFixtureCount({
+	total,
+	selected,
+}: {
+	total: number;
+	selected: number;
+}) {
 	const partial = selected > 0 && selected < total;
-	return <span className="group-fixture-count">
-		<span className={selected > 0 ? "group-fixture-count-selected" : undefined}>
-			{partial ? selected : groupFixtureCountLabel(total, selected)}
+	return (
+		<span className="group-fixture-count">
+			<span
+				className={selected > 0 ? "group-fixture-count-selected" : undefined}
+			>
+				{partial ? selected : groupFixtureCountLabel(total, selected)}
+			</span>
+			{partial ? `/${total}` : null}
 		</span>
-		{partial ? `/${total}` : null}
-	</span>;
+	);
 }
 
-function groupDetails(attributes: string[], missing: number, unsupported: number) {
+function groupDetails(
+	attributes: string[],
+	missing: number,
+	unsupported: number,
+) {
 	return [
 		missing > 0 ? `⚠ ${missing} missing` : null,
 		attributes.length > 0 ? `${attributes.length} portable attributes` : null,
 		unsupported > 0 ? `⚠ ${unsupported} unsupported values` : null,
 	].filter((detail): detail is string => Boolean(detail));
+}
+
+function useGroupClickSelection({
+	stageSelect,
+	consumeHold,
+	select,
+	dereference,
+}: {
+	stageSelect?: () => StagedSelectionWrite | null;
+	consumeHold(): boolean;
+	select(): void;
+	dereference(): void;
+}) {
+	const clickTimer = useRef<number | null>(null);
+	const staged = useRef<StagedSelectionWrite | null>(null);
+	useEffect(
+		() => () => {
+			if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+			staged.current?.cancel();
+		},
+		[],
+	);
+	const scheduleLiveSelection = () => {
+		if (consumeHold()) return;
+		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		staged.current?.cancel();
+		const pending = stageSelect?.() ?? null;
+		staged.current = pending;
+		clickTimer.current = window.setTimeout(() => {
+			clickTimer.current = null;
+			staged.current = null;
+			if (pending) pending.commit();
+			else select();
+		}, 240);
+	};
+	const selectFrozen = () => {
+		if (consumeHold()) return;
+		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		clickTimer.current = null;
+		staged.current?.cancel();
+		staged.current = null;
+		dereference();
+	};
+
+	const cancelSelection = () => {
+		if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+		clickTimer.current = null;
+		staged.current?.cancel();
+		staged.current = null;
+	};
+	return { scheduleLiveSelection, selectFrozen, cancelSelection };
 }

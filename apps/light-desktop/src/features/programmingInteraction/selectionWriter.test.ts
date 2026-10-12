@@ -414,3 +414,163 @@ describe("ProgrammingSelectionWriter", () => {
 		expect(onError).toHaveBeenLastCalledWith(rejection);
 	});
 });
+
+describe("staged Group selection", () => {
+	it("reserves FIFO order before submitting and preserves ordered multi-Group prediction", async () => {
+		const store = readyStore();
+		const first = deferred<SelectionActionOutcome>();
+		const second = deferred<SelectionActionOutcome>();
+		const apply = vi
+			.fn()
+			.mockReturnValueOnce(first.promise)
+			.mockReturnValueOnce(second.promise);
+		const writer = new ProgrammingSelectionWriter({
+			deskId: DESK_ID,
+			store,
+			apply,
+			loadSnapshot: vi.fn(),
+		});
+		const a = writer.stageGesture({
+			source: { type: "live_group", groupId: "1" },
+			resolvedFixtures: [FIXTURE_3, FIXTURE_2],
+		});
+		const b = writer.stageGesture({
+			source: { type: "live_group", groupId: "2" },
+			resolvedFixtures: [FIXTURE_2, FIXTURE_1],
+		});
+		expect(store.getSnapshot().selection?.selected).toEqual([
+			FIXTURE_3,
+			FIXTURE_2,
+			FIXTURE_1,
+		]);
+		b.commit();
+		await Promise.resolve();
+		expect(apply).not.toHaveBeenCalled();
+		a.commit();
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+		expect(requestAt(apply, 0).action).toMatchObject({
+			type: "gesture",
+			source: { type: "live_group", groupId: "1" },
+		});
+		first.resolve(
+			outcome(requestAt(apply, 0), {
+				...selection(2, [FIXTURE_3, FIXTURE_2]),
+				gestureOpen: true,
+				expression: {
+					type: "sources",
+					items: [{ type: "live_group", groupId: "1" }],
+				},
+			}),
+		);
+		await a.result;
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
+		expect(requestAt(apply, 1).action).toMatchObject({
+			type: "gesture",
+			source: { type: "live_group", groupId: "2" },
+		});
+		second.resolve(
+			outcome(
+				requestAt(apply, 1),
+				selection(3, [FIXTURE_3, FIXTURE_2, FIXTURE_1]),
+			),
+		);
+		await b.result;
+		expect(store.getSnapshot().selection?.selected).toEqual([
+			FIXTURE_3,
+			FIXTURE_2,
+			FIXTURE_1,
+		]);
+	});
+	it("blocks Record/Clear barriers until the stage settles and cancellation is not a failed write", async () => {
+		const store = readyStore();
+		const apply = vi.fn();
+		const writer = new ProgrammingSelectionWriter({
+			deskId: DESK_ID,
+			store,
+			apply,
+			loadSnapshot: vi.fn(),
+		});
+		const a = writer.stageGesture({
+			source: { type: "live_group", groupId: "1" },
+			resolvedFixtures: [FIXTURE_2],
+		});
+		const run = vi.fn().mockResolvedValue("executed");
+		const barrier = writer.runAfterPendingWrites(run, "failed");
+		expect(run).not.toHaveBeenCalled();
+		a.cancel();
+		await expect(a.result).resolves.toBeNull();
+		await expect(barrier).resolves.toBe("executed");
+		expect(run).toHaveBeenCalledOnce();
+		expect(apply).not.toHaveBeenCalled();
+		expect(store.getSnapshot().selection).toEqual(selection());
+	});
+	it("reconciles rejection against newer OSC authority without replaying the staged request", async () => {
+		const store = readyStore();
+		const response = deferred<SelectionActionOutcome>();
+		const apply = vi.fn().mockReturnValue(response.promise);
+		const writer = new ProgrammingSelectionWriter({
+			deskId: DESK_ID,
+			store,
+			apply,
+			loadSnapshot: vi.fn(),
+		});
+		const a = writer.stageGesture({
+			source: { type: "live_group", groupId: "1" },
+			resolvedFixtures: [FIXTURE_2],
+		});
+		a.commit();
+		await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+		const authority = selection(3, [FIXTURE_3]);
+		store.applyChange({ deskId: DESK_ID, selection: authority }, 30);
+		response.reject(Object.assign(new Error("forbidden"), { status: 403 }));
+		await expect(a.result).resolves.toBeNull();
+		expect(store.getSnapshot().selection).toEqual(authority);
+		expect(apply).toHaveBeenCalledOnce();
+		expect(store.getSnapshot().pendingCapabilities.size).toBe(0);
+	});
+	it("stopping an unsent stage removes its feedback and releases queued barriers", async () => {
+		const store = readyStore();
+		const apply = vi.fn();
+		const writer = new ProgrammingSelectionWriter({
+			deskId: DESK_ID,
+			store,
+			apply,
+			loadSnapshot: vi.fn(),
+		});
+		const a = writer.stageGesture({
+			source: { type: "live_group", groupId: "1" },
+			resolvedFixtures: [FIXTURE_2],
+		});
+		const run = vi.fn();
+		const barrier = writer.runAfterPendingWrites(run, "stopped");
+		writer.stop();
+		expect(a.commit()).toBe(false);
+		await expect(a.result).resolves.toBeNull();
+		await expect(barrier).resolves.toBe("stopped");
+		expect(store.getSnapshot().selection).toEqual(selection());
+		expect(apply).not.toHaveBeenCalled();
+		expect(run).not.toHaveBeenCalled();
+	});
+});
+
+it("rolls back an unsent Group preview on disconnect without sending after reconnect", async () => {
+	const store = readyStore();
+	const apply = vi.fn();
+	const writer = new ProgrammingSelectionWriter({
+		deskId: DESK_ID,
+		store,
+		apply,
+		loadSnapshot: vi.fn(),
+	});
+	const stage = writer.stageGesture({
+		source: { type: "live_group", groupId: "1" },
+		resolvedFixtures: [FIXTURE_2],
+	});
+	store.setLoading();
+	expect(store.getSnapshot().selection).toEqual(selection());
+	store.setReady();
+	stage.commit();
+	await expect(stage.result).resolves.toBeNull();
+	expect(apply).not.toHaveBeenCalled();
+	writer.stop();
+});

@@ -11,11 +11,11 @@ import {
 } from "react";
 import { measureFrontendSnapshot } from "../frontendWarmup/diagnostics";
 import { useStrictModeSafeStop } from "../shared/useStrictModeSafeStop";
-import type { ExecuteCommandLine } from "./commandExecution";
 import {
 	clearProgrammingCommandError,
 	reportProgrammingCommandError,
 } from "./commandError";
+import type { ExecuteCommandLine } from "./commandExecution";
 import {
 	type ProgrammingCommandLineActions,
 	useProgrammingCommandLineActionsValue,
@@ -35,6 +35,7 @@ import {
 	type ProgrammingSelectionReplacementIntent,
 	ProgrammingSelectionWriter,
 	type ProgrammingSelectionWriterOptions,
+	type StagedSelectionWrite,
 } from "./selectionWriter";
 import {
 	ProgrammingInteractionSession,
@@ -68,6 +69,9 @@ export interface ProgrammingSelectionActions {
 	gesture(
 		intent: ProgrammingSelectionGestureIntent,
 	): Promise<SelectionActionOutcome | null>;
+	stageGesture?(
+		intent: ProgrammingSelectionGestureIntent,
+	): StagedSelectionWrite;
 	selectGroup(
 		intent: ProgrammingGroupSelectionIntent,
 	): Promise<SelectionActionOutcome | null>;
@@ -194,6 +198,7 @@ export function ProgrammingInteractionViewProvider({
 						status: () => selectionWriter.status(),
 						replace: (intent) => selectionWriter.replace(intent),
 						gesture: (intent) => selectionWriter.gesture(intent),
+						stageGesture: (intent) => selectionWriter.stageGesture(intent),
 						selectGroup: (intent) => selectionWriter.selectGroup(intent),
 						applyRule: (rule) => selectionWriter.applyRule(rule),
 					}

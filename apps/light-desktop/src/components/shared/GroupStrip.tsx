@@ -26,6 +26,7 @@ import {
 	resolveConfiguredPoolPresentation,
 	usePoolPresentationConfiguration,
 } from "../../features/poolPresentation/poolPresentation";
+import type { StagedSelectionWrite } from "../../features/programmingInteraction/selectionWriter";
 import { usePortableGroups } from "../../features/showObjects/ShowObjectsState";
 import { useShowObjectView } from "../../features/showObjects/ShowObjectsView";
 import { useApp } from "../../state/AppContext";
@@ -84,6 +85,7 @@ function GroupShortcut({
 	setTarget,
 	mutationOperation,
 	onClick,
+	stageSelect,
 	onDoubleClick,
 	onContextMenu,
 	poolPresentation,
@@ -98,6 +100,7 @@ function GroupShortcut({
 	setTarget: boolean;
 	mutationOperation: PoolMutationOperation | null;
 	onClick: () => void;
+	stageSelect?: () => StagedSelectionWrite | null;
 	onDoubleClick: () => void;
 	onContextMenu: () => void;
 	poolPresentation: PoolPresentationConfiguration;
@@ -105,9 +108,11 @@ function GroupShortcut({
 	viewOnly: boolean;
 }) {
 	const clickTimer = useRef<number | null>(null);
+	const staged = useRef<StagedSelectionWrite | null>(null);
 	useEffect(
 		() => () => {
 			if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
+			staged.current?.cancel();
 		},
 		[],
 	);
@@ -139,9 +144,14 @@ function GroupShortcut({
 					: () => {
 							if (clickTimer.current !== null)
 								window.clearTimeout(clickTimer.current);
+							staged.current?.cancel();
+							const pending = stageSelect?.() ?? null;
+							staged.current = pending;
 							clickTimer.current = window.setTimeout(() => {
 								clickTimer.current = null;
-								onClick();
+								staged.current = null;
+								if (pending) pending.commit();
+								else onClick();
 							}, 240);
 						}
 			}
@@ -152,6 +162,8 @@ function GroupShortcut({
 							if (clickTimer.current !== null)
 								window.clearTimeout(clickTimer.current);
 							clickTimer.current = null;
+							staged.current?.cancel();
+							staged.current = null;
 							onDoubleClick();
 						}
 			}
@@ -160,6 +172,8 @@ function GroupShortcut({
 				if (clickTimer.current !== null)
 					window.clearTimeout(clickTimer.current);
 				clickTimer.current = null;
+				staged.current?.cancel();
+				staged.current = null;
 				onContextMenu();
 			}}
 		>
@@ -194,6 +208,7 @@ function GroupShortcutList({
 	setInteraction,
 	groupSelection,
 	activateShortcut,
+	stageGroup,
 	poolPresentation,
 	showId,
 	viewOnly,
@@ -206,6 +221,7 @@ function GroupShortcutList({
 	setInteraction: ReturnType<typeof useSetInteraction>;
 	groupSelection: ReturnType<typeof useGroupSelectionActions>;
 	activateShortcut(group: ShortcutGroup | null, index: number): void;
+	stageGroup(group: ShortcutGroup | null): StagedSelectionWrite | null;
 	poolPresentation: PoolPresentationConfiguration;
 	showId: string;
 	viewOnly: boolean;
@@ -234,6 +250,7 @@ function GroupShortcutList({
 							: null
 					}
 					onClick={() => activateShortcut(group, index)}
+					stageSelect={() => stageGroup(group)}
 					onDoubleClick={() => {
 						if (group && !state.updateArmed) {
 							const scope = setInteraction?.state?.scope;
@@ -324,27 +341,19 @@ export function GroupStrip({
 		if (outcome) await commandLine.reset();
 		return outcome;
 	};
-	const selectGroup = (group: ShortcutGroup) => {
-		if (setInteraction?.state?.phase === "set_armed") {
-			void setInteraction.chooseGroup(
-				{ objectId: group.id, objectRevision: group.revision },
-				"touch",
-			);
-			return;
-		}
-		const scope = setInteraction?.state?.scope;
-		if (scope)
-			void setInteraction.direct({
-				type: "select_group_live",
-				source: "touch",
-				scope,
-				group: { objectId: group.id, objectRevision: group.revision },
-			});
-		const write = groupSelection.selectLive(group);
-		if (!write) return;
-		void write;
-		void commandLine.replace(`GROUP ${group.id}`);
-	};
+	const selectGroup = (group: ShortcutGroup) =>
+		selectShortcutGroup(group, setInteraction, groupSelection, commandLine);
+	const stageGroup = (group: ShortcutGroup | null) =>
+		stageShortcutGroup({
+			group,
+			state,
+			setTargetArmed,
+			mutationTarget,
+			groupSelection,
+			setInteraction,
+			commandLine,
+		});
+
 	const activateShortcut = (group: ShortcutGroup | null, index: number) => {
 		const id = group?.id ?? String(index + 1);
 		if (state.updateArmed) {
@@ -403,6 +412,7 @@ export function GroupStrip({
 					setInteraction={setInteraction}
 					groupSelection={groupSelection}
 					activateShortcut={activateShortcut}
+					stageGroup={stageGroup}
 					poolPresentation={poolPresentation}
 					showId={showId}
 					viewOnly={viewOnly}
@@ -446,4 +456,76 @@ function fallbackGroups(
 			),
 		},
 	}));
+}
+
+function stageShortcutGroup({
+	group,
+	state,
+	setTargetArmed,
+	mutationTarget,
+	groupSelection,
+	setInteraction,
+	commandLine,
+}: {
+	group: ShortcutGroup | null;
+	state: ReturnType<typeof useApp>["state"];
+	setTargetArmed: boolean;
+	mutationTarget: ReturnType<typeof poolMutationTarget>;
+	groupSelection: ReturnType<typeof useGroupSelectionActions>;
+	setInteraction: ReturnType<typeof useSetInteraction>;
+	commandLine: ReturnType<typeof useCommandLineSurface>;
+}) {
+	if (
+		!group ||
+		state.storeArmed ||
+		state.updateArmed ||
+		setTargetArmed ||
+		poolObjectMutationCommand(mutationTarget, "GROUP", group.id, true)
+	)
+		return null;
+	const pending = groupSelection.stageLive?.(group);
+	if (!pending) return null;
+	const scope = setInteraction?.state?.scope;
+	return {
+		...pending,
+		commit: () => {
+			if (!pending.commit()) return false;
+			if (scope)
+				void setInteraction.direct({
+					type: "select_group_live",
+					source: "touch",
+					scope,
+					group: { objectId: group.id, objectRevision: group.revision },
+				});
+			void commandLine.replace(`GROUP ${group.id}`);
+			return true;
+		},
+	};
+}
+
+function selectShortcutGroup(
+	group: ShortcutGroup,
+	setInteraction: ReturnType<typeof useSetInteraction>,
+	groupSelection: ReturnType<typeof useGroupSelectionActions>,
+	commandLine: ReturnType<typeof useCommandLineSurface>,
+) {
+	if (setInteraction?.state?.phase === "set_armed") {
+		void setInteraction.chooseGroup(
+			{ objectId: group.id, objectRevision: group.revision },
+			"touch",
+		);
+		return;
+	}
+	const scope = setInteraction?.state?.scope;
+	if (scope)
+		void setInteraction.direct({
+			type: "select_group_live",
+			source: "touch",
+			scope,
+			group: { objectId: group.id, objectRevision: group.revision },
+		});
+	const write = groupSelection.selectLive(group);
+	if (!write) return;
+	void write;
+	void commandLine.replace(`GROUP ${group.id}`);
 }

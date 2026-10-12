@@ -1,8 +1,4 @@
-import {
-	PoolGrid,
-	type PoolSlotViewModel,
-} from "@tosklight/ui/pools";
-import { poolCardSizing } from "../../state/reducerHelpers";
+import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
 import { type RefObject, useRef } from "react";
 import type { CommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
@@ -14,6 +10,11 @@ import {
 } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { useSetInteraction } from "../../features/controlSurfaceInteraction/SetInteractionProvider";
 import { useActiveShowId } from "../../features/deskSnapshot/DeskSnapshotState";
+import type { GroupRecordOperation } from "../../features/groupRecording/contracts";
+import {
+	groupRecordLabel,
+	groupRecordOperation,
+} from "../../features/groupRecording/options";
 import {
 	captureGroupRecordingTarget,
 	emptyGroupRecordingTarget,
@@ -24,9 +25,9 @@ import {
 	poolSurfaceKey,
 	usePoolPresentationConfiguration,
 } from "../../features/poolPresentation/poolPresentation";
+import type { StagedSelectionWrite } from "../../features/programmingInteraction/selectionWriter";
 import { useApp } from "../../state/AppContext";
-import { groupRecordLabel, groupRecordOperation } from "../../features/groupRecording/options";
-import type { GroupRecordOperation } from "../../features/groupRecording/contracts";
+import { poolCardSizing } from "../../state/reducerHelpers";
 import { GroupCard } from "./GroupCard";
 import { groupFixtureSelection } from "./groupFixtureCount";
 import type { FixtureMetadata, Group } from "./model";
@@ -49,6 +50,7 @@ interface GroupPoolCardSlotProps
 	surfaceKey: string;
 	setInteraction: ReturnType<typeof useSetInteraction>;
 	select(): void;
+	stageSelect(): StagedSelectionWrite | null;
 	chooseSetSource(group: Group): void;
 	dereference(group: Group): void;
 	onOpenSettings(id: string): void;
@@ -73,6 +75,7 @@ function GroupPoolCardSlot({
 	surfaceKey,
 	setInteraction,
 	select,
+	stageSelect,
 	chooseSetSource,
 	dereference,
 	onOpenSettings,
@@ -133,6 +136,7 @@ function GroupPoolCardSlot({
 			openSettings={() => openSettings("context_menu")}
 			dereference={() => group && dereference(group)}
 			select={select}
+			stageSelect={stageSelect}
 		/>
 	);
 }
@@ -197,7 +201,10 @@ function recordTouchedGroup(
 	id: string,
 	operation: GroupRecordOperation | null,
 	onOpenRecord: (target: GroupRecordingTarget) => void,
-	recordGroup: (target: GroupRecordingTarget, mode?: GroupRecordOperation) => Promise<unknown>,
+	recordGroup: (
+		target: GroupRecordingTarget,
+		mode?: GroupRecordOperation,
+	) => Promise<unknown>,
 	dispatch: ReturnType<typeof useApp>["dispatch"],
 ) {
 	if (group?.body.fixtures.length && operation === null) {
@@ -206,7 +213,7 @@ function recordTouchedGroup(
 	}
 	void recordGroup(
 		group ? captureGroupRecordingTarget(group) : emptyGroupRecordingTarget(id),
-		!group && operation === "merge" ? "overwrite" : operation ?? "overwrite",
+		!group && operation === "merge" ? "overwrite" : (operation ?? "overwrite"),
 	).finally(() => dispatch({ type: "SET_STORE_ARMED", value: false }));
 }
 
@@ -227,7 +234,10 @@ export function GroupPoolGrid({
 	command: CommandLineSurface;
 	onOpenSettings: (id: string) => void;
 	onOpenRecord: (target: GroupRecordingTarget) => void;
-	recordGroup: (target: GroupRecordingTarget, mode?: GroupRecordOperation) => Promise<unknown>;
+	recordGroup: (
+		target: GroupRecordingTarget,
+		mode?: GroupRecordOperation,
+	) => Promise<unknown>;
 	paneId?: string;
 	columns?: number;
 }) {
@@ -249,6 +259,110 @@ export function GroupPoolGrid({
 	const setTargetArmed =
 		setInteraction?.state?.phase === "set_armed" ||
 		/^SET$/iu.test(command.text.trim());
+	const { selectCard, stageSelection } = groupCardActions({
+		state,
+		dispatch,
+		command,
+		setInteraction,
+		mutationTarget,
+		setTargetArmed,
+		groupSelection,
+		onOpenSettings,
+		onOpenRecord,
+		recordGroup,
+	});
+	const selectionFor = groupSelectionResolver(command);
+	return (
+		<WindowScrollArea>
+			<PoolGrid
+				columns={columns}
+				cardSizing={poolCardSizing(state)}
+				slots={groupPoolSlots(cards)}
+				slotCount={cards.length}
+				emptySlot={(index) => ({
+					id: String(index + 1),
+					position: index,
+					card: { number: index + 1, primary: "Empty", states: ["empty"] },
+				})}
+				renderSlot={(_, index) => {
+					const group = cards[index] ?? null;
+					return (
+						<GroupPoolCardSlot
+							group={group}
+							index={index}
+							{...selectionFor(group)}
+							storeArmed={state.storeArmed}
+							recordLabel={groupRecordLabel(
+								Boolean(group?.body.fixtures.length),
+								command.text,
+							)}
+							updateArmed={state.updateArmed}
+							setTarget={Boolean(group && setTargetArmed)}
+							mutationOperation={
+								poolObjectMutationCommand(
+									mutationTarget,
+									"GROUP",
+									group?.id ?? index + 1,
+									group !== null,
+								)
+									? (mutationTarget?.operation ?? null)
+									: null
+							}
+							poolPresentation={poolPresentation}
+							showId={showId}
+							surfaceKey={surfaceKey}
+							setInteraction={setInteraction}
+							select={() => selectCard(group, index)}
+							stageSelect={() => stageSelection(group)}
+							chooseSetSource={(target) => void chooseSetSource(target)}
+							dereference={dereference}
+							onOpenSettings={onOpenSettings}
+							knownFixtureIds={knownFixtureIds}
+							capabilities={capabilities}
+							hold={hold}
+							held={held}
+						/>
+					);
+				}}
+			/>
+		</WindowScrollArea>
+	);
+}
+
+function groupSelectionResolver(command: CommandLineSurface) {
+	const fixtures = new Set(command.selected);
+	const groups = new Set(command.selectedGroupIds);
+	return (group: Group | null) =>
+		groupFixtureSelection(group, fixtures, groups);
+}
+
+interface GroupCardActionContext {
+	state: ReturnType<typeof useApp>["state"];
+	dispatch: ReturnType<typeof useApp>["dispatch"];
+	command: CommandLineSurface;
+	setInteraction: ReturnType<typeof useSetInteraction>;
+	mutationTarget: ReturnType<typeof poolMutationTarget>;
+	setTargetArmed: boolean;
+	groupSelection: ReturnType<typeof useGroupSelectionActions>;
+	onOpenSettings(id: string): void;
+	onOpenRecord(target: GroupRecordingTarget): void;
+	recordGroup(
+		target: GroupRecordingTarget,
+		mode?: GroupRecordOperation,
+	): Promise<unknown>;
+}
+function groupCardActions({
+	state,
+	dispatch,
+	command,
+	setInteraction,
+	mutationTarget,
+	setTargetArmed,
+	groupSelection,
+	onOpenSettings,
+	onOpenRecord,
+	recordGroup,
+}: GroupCardActionContext) {
 	const selectCard = (group: Group | null, index: number) => {
 		const id = group?.id ?? String(index + 1);
 		if (state.updateArmed) {
@@ -303,65 +417,50 @@ export function GroupPoolGrid({
 			return;
 		}
 		if (!state.storeArmed) return;
-		recordTouchedGroup(group, id, groupRecordOperation(command.read().text),
-			onOpenRecord, recordGroup, dispatch);
+		recordTouchedGroup(
+			group,
+			id,
+			groupRecordOperation(command.read().text),
+			onOpenRecord,
+			recordGroup,
+			dispatch,
+		);
 	};
-	const selectionFor = groupSelectionResolver(command);
-	return (
-		<WindowScrollArea>
-			<PoolGrid
-				columns={columns}
-				cardSizing={poolCardSizing(state)}
-				slots={groupPoolSlots(cards)}
-				slotCount={cards.length}
-				emptySlot={(index) => ({
-					id: String(index + 1),
-					position: index,
-					card: { number: index + 1, primary: "Empty", states: ["empty"] },
-				})}
-				renderSlot={(_, index) => {
-					const group = cards[index] ?? null;
-					return (
-						<GroupPoolCardSlot
-							group={group}
-							index={index}
-							{...selectionFor(group)}
-							storeArmed={state.storeArmed}
-								recordLabel={groupRecordLabel(Boolean(group?.body.fixtures.length), command.text)}
-							updateArmed={state.updateArmed}
-							setTarget={Boolean(group && setTargetArmed)}
-							mutationOperation={
-								poolObjectMutationCommand(
-									mutationTarget,
-									"GROUP",
-									group?.id ?? index + 1,
-									group !== null,
-								)
-									? (mutationTarget?.operation ?? null)
-									: null
-							}
-							poolPresentation={poolPresentation}
-							showId={showId}
-							surfaceKey={surfaceKey}
-							setInteraction={setInteraction}
-							select={() => selectCard(group, index)}
-							chooseSetSource={(target) => void chooseSetSource(target)}
-							dereference={dereference}
-							onOpenSettings={onOpenSettings}
-							knownFixtureIds={knownFixtureIds}
-							capabilities={capabilities}
-							hold={hold}
-							held={held}
-						/>
-					);
-				}}
-			/>
-		</WindowScrollArea>
-	);
-}
+	const stageSelection = (group: Group | null) => {
+		if (
+			!group ||
+			state.storeArmed ||
+			state.updateArmed ||
+			setTargetArmed ||
+			poolObjectMutationCommand(mutationTarget, "GROUP", group.id, true)
+		)
+			return null;
+		const text = command.read().text.trim();
+		if (
+			!setInteraction &&
+			((state.controlMode === "playbacks" &&
+				(state.playbackSetArmed || /^ASSIGN$/i.test(text))) ||
+				/^SET\b/i.test(text))
+		)
+			return null;
+		const pending = groupSelection.stageLive?.(group);
+		if (!pending) return null;
+		const scope = setInteraction?.state?.scope;
+		return {
+			...pending,
+			commit: () => {
+				if (!pending.commit()) return false;
+				if (scope)
+					void setInteraction.direct({
+						type: "select_group_live",
+						source: "touch",
+						scope,
+						group: { objectId: group.id, objectRevision: group.revision },
+					});
+				return true;
+			},
+		};
+	};
 
-function groupSelectionResolver(command: CommandLineSurface) {
-	const fixtures = new Set(command.selected);
-	const groups = new Set(command.selectedGroupIds);
-	return (group: Group | null) => groupFixtureSelection(group, fixtures, groups);
+	return { selectCard, stageSelection };
 }

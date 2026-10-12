@@ -222,7 +222,10 @@ function requestOf(applySelection: Mock<ApplySelection>, index = 0) {
 }
 
 describe("scoped Group activation", () => {
-	afterEach(() => cleanup());
+	afterEach(() => {
+		cleanup();
+		vi.useRealTimers();
+	});
 
 	beforeEach(() => {
 		mocks.dispatch.mockReset();
@@ -235,6 +238,137 @@ describe("scoped Group activation", () => {
 		mocks.state.updateArmed = false;
 		mocks.state.controlMode = "programmer";
 		mocks.state.playbackSetArmed = false;
+	});
+
+	it.each([
+		"pool",
+		"strip",
+	] as const)("paints scoped %s selection before the double-press window or transport", async (surface) => {
+		const context = harness();
+		context.applySelection.mockReturnValue(
+			deferred<SelectionActionOutcome>().promise,
+		);
+		const stored = group("1", "Front Truss");
+		render(
+			view(
+				context,
+				surface === "pool" ? <GroupPool cards={[stored]} /> : <GroupStrip />,
+			),
+		);
+		installGroups(context, [stored]);
+		await settleAuthority(context);
+		vi.useFakeTimers();
+		const card = groupButton("Front Truss");
+		fireEvent.pointerDown(card);
+		fireEvent.pointerUp(card);
+		fireEvent.click(card, { detail: 1 });
+		expect(card).toHaveAttribute("aria-pressed", "true");
+		expect(context.programming.getSnapshot().selection?.selected).toEqual(
+			ORDERED_MEMBERS,
+		);
+		expect(context.applySelection).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		"pool",
+		"strip",
+	] as const)("cancels unsent %s live selection on a physical double press", async (surface) => {
+		const context = harness();
+		context.applySelection.mockReturnValue(
+			deferred<SelectionActionOutcome>().promise,
+		);
+		const stored = group("1", "Front Truss");
+		render(
+			view(
+				context,
+				surface === "pool" ? <GroupPool cards={[stored]} /> : <GroupStrip />,
+			),
+		);
+		installGroups(context, [stored]);
+		await settleAuthority(context);
+		vi.useFakeTimers();
+		const card = groupButton("Front Truss");
+		fireEvent.pointerDown(card);
+		fireEvent.pointerUp(card);
+		fireEvent.click(card, { detail: 1 });
+		expect(card).toHaveAttribute("aria-pressed", "true");
+		fireEvent.pointerDown(card);
+		fireEvent.pointerUp(card);
+		fireEvent.click(card, { detail: 2 });
+		fireEvent.doubleClick(card, { detail: 2 });
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(300);
+		});
+		expect(context.applySelection).toHaveBeenCalledOnce();
+		expect(requestOf(context.applySelection).action).toMatchObject({
+			type: "select_group",
+			frozen: true,
+			groupId: "1",
+		});
+		expect(context.programming.getSnapshot().selection?.selected).toEqual(
+			ORDERED_MEMBERS,
+		);
+	});
+
+	it.each([
+		"pool",
+		"strip",
+	] as const)("reconciles rejected %s preview with authority", async (surface) => {
+		const context = harness();
+		const answer = deferred<SelectionActionOutcome>();
+		context.applySelection.mockReturnValue(answer.promise);
+		const stored = group("1", "Front Truss");
+		render(
+			view(
+				context,
+				surface === "pool" ? <GroupPool cards={[stored]} /> : <GroupStrip />,
+			),
+		);
+		installGroups(context, [stored]);
+		await settleAuthority(context);
+		vi.useFakeTimers();
+		const card = groupButton("Front Truss");
+		fireEvent.click(card);
+		expect(card).toHaveAttribute("aria-pressed", "true");
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(240);
+		});
+		expect(context.applySelection).toHaveBeenCalledOnce();
+		await act(async () => {
+			answer.reject(Object.assign(new Error("forbidden"), { status: 403 }));
+			await vi.advanceTimersByTimeAsync(0);
+		});
+		expect(card).toHaveAttribute("aria-pressed", "false");
+		expect(
+			context.programming.getSnapshot().pendingCapabilities.has("selection"),
+		).toBe(false);
+	});
+	it.each([
+		"pool",
+		"strip",
+	] as const)("removes disconnected %s preview without later sending it", async (surface) => {
+		const context = harness();
+		const stored = group("1", "Front Truss");
+		render(
+			view(
+				context,
+				surface === "pool" ? <GroupPool cards={[stored]} /> : <GroupStrip />,
+			),
+		);
+		installGroups(context, [stored]);
+		await settleAuthority(context);
+		vi.useFakeTimers();
+		const card = groupButton("Front Truss");
+		fireEvent.click(card);
+		expect(card).toHaveAttribute("aria-pressed", "true");
+		const subscription = context.transport.subscriptions.at(-1);
+		if (!subscription) throw new Error("No live programming subscription");
+		act(() => subscription.observer.closed());
+		expect(card).toHaveAttribute("aria-pressed", "false");
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(240);
+		});
+		expect(context.applySelection).not.toHaveBeenCalled();
 	});
 
 	it("sends exactly one live gesture with the ordered resolved membership", async () => {
@@ -561,3 +695,9 @@ describe("scoped Group activation", () => {
 		expect(context.applySelection).not.toHaveBeenCalled();
 	});
 });
+
+function groupButton(name: string): HTMLButtonElement {
+	const button = screen.getByText(name).closest("button");
+	if (!button) throw new Error(`No Group button for ${name}`);
+	return button;
+}
