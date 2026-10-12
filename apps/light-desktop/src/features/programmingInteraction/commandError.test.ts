@@ -9,6 +9,24 @@ import {
 
 afterEach(() => vi.restoreAllMocks());
 describe("command rejection classification", () => {
+	it("keeps the actual empty Preset-family rejection brief without hiding faults", () => {
+		const message =
+			"the normal Programmer has no values in the requested Preset family";
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const feedback of [message, `invalid data: ${message}`]) {
+			reportProgrammingCommandError(new Error(feedback));
+			expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail).toEqual({
+				message: feedback,
+				kind: "operator",
+			});
+			expect(commandErrorFeedback(feedback).kind).toBe("operator");
+			expect(commandErrorSummary(feedback)).toBe("No Programmer Values");
+		}
+		for (const suffix of [": database unavailable", "\nnetwork failure"]) {
+			expect(commandErrorFeedback(message + suffix).kind).toBe("unexpected");
+		}
+	});
+
 	it.each([
 		"RECORD + and RECORD - currently require GROUP or PBK ... CUE targets",
 		"RECORD + and RECORD - require an explicit CUE target",
@@ -36,7 +54,9 @@ describe("command rejection classification", () => {
 		]) {
 			expect(commandErrorFeedback(message).kind).toBe("operator");
 			reportProgrammingCommandError(new Error(message));
-			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe("operator");
+			expect((dispatch.mock.lastCall![0] as CustomEvent).detail.kind).toBe(
+				"operator",
+			);
 		}
 		for (const message of [
 			"TIME and DELAY require seconds: database unavailable",

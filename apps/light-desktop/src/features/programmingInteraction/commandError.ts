@@ -22,6 +22,9 @@ const SELECTION_REQUIRED =
 const TRAILING_TOKEN_REJECTION =
 	/^unexpected tokens after (?:level|selection|subset|playback address|playback selection|recording target|Cue transfer address|Cue deletion address|BPM value|Cue number|cue target|Link source|Link destination)$/i;
 
+const EMPTY_PRESET_FAMILY_REJECTION =
+	"the normal programmer has no values in the requested preset family";
+
 const RECORD_GRAMMAR_REJECTIONS = new Set([
 	"record + and record - currently require group or pbk ... cue targets",
 	"record + and record - require an explicit cue target",
@@ -90,13 +93,19 @@ export function commandErrorFeedback(
 				TRAILING_TOKEN_REJECTION.test(message) ||
 				INPUT_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
 				TRANSFER_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
-				RECORD_GRAMMAR_REJECTIONS.has(message.toLowerCase()))
+				RECORD_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
+				message.toLowerCase() === EMPTY_PRESET_FAMILY_REJECTION)
 				? "operator"
 				: "unexpected",
 	};
 }
 
 export function commandErrorSummary(message: string): string {
+	if (
+		message.replace(/^invalid data:\s*/i, "").toLowerCase() ===
+		EMPTY_PRESET_FAMILY_REJECTION
+	)
+		return "No Programmer Values";
 	if (
 		TRANSFER_GRAMMAR_REJECTIONS.has(
 			message.replace(/^invalid data:\s*/i, "").toLowerCase(),
