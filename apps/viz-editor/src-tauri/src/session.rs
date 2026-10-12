@@ -37,6 +37,7 @@ pub struct Session {
     pending_mvr: Mutex<Option<mvr_preview::PendingMvrImport>>,
     library_path: Mutex<Option<PathBuf>>,
     recent: Mutex<Option<RecentShow>>,
+    startup_recovery: Mutex<Option<StartupRecovery>>,
     /// The desk show the open document is bound to, if it came from one.
     pub(crate) binding: Mutex<Option<crate::sync::SyncBinding>>,
     bindings: Mutex<Option<crate::sync::SyncBindingStore>>,
@@ -131,6 +132,9 @@ type Answer<T> = Result<T, String>;
 
 #[path = "session/mvr_preview.rs"]
 mod mvr_preview;
+#[path = "session/startup_recovery.rs"]
+pub(crate) mod startup_recovery;
+pub use startup_recovery::StartupRecovery;
 
 impl Session {
     pub fn set_library_path(&self, path: Option<PathBuf>) {
@@ -274,6 +278,7 @@ impl Session {
             && let Err(error) = self.open_path(&path, None)
         {
             eprintln!("reopen {}: {error}", path.display());
+            self.record_startup_refusal(&path, error);
         }
     }
 
@@ -1174,3 +1179,7 @@ pub fn recent_document_details(session: tauri::State<'_, Session>) -> Vec<Recent
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "session/startup_recovery_tests.rs"]
+mod startup_recovery_tests;

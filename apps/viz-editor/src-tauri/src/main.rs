@@ -278,10 +278,12 @@ fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
         });
         session.reopen_recent();
     }
-    if session.document_name().is_none()
-        && let Err(error) = demo::open_default_copy(app.handle(), &session)
-    {
-        eprintln!("open the default Demo Show: {error}");
+    if session.document_name().is_none() {
+        let fallback = demo::open_default_copy(app.handle(), &session);
+        session.complete_startup_fallback(&fallback);
+        if let Err(error) = fallback {
+            eprintln!("open the default Demo Show: {error}");
+        }
     }
     prepare_local_visualizer(app).map_err(std::io::Error::other)?;
     announce_on_the_network(app);
@@ -351,6 +353,7 @@ fn main() {
             demo::open_demo_show,
             verify::surface_ready,
             session::document_summary,
+            session::startup_recovery::startup_recovery,
             session::save_document_paperwork,
             session::live_dmx_inputs,
             session::save_live_dmx_inputs,

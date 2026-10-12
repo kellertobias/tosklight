@@ -1,3 +1,4 @@
+import { ArchitectStartupHeader } from "./StartupRecovery";
 import { formatErrorDetails } from "@tosklight/ui";
 import {
 	type FixtureDefinition,
@@ -50,7 +51,7 @@ import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { ErrorMessage } from "./ErrorMessage";
 import { ShowScreen } from "./ShowScreen";
-import { beginWindowDrag, WindowControls } from "./WindowChrome";
+import { beginWindowDrag } from "./WindowChrome";
 
 const DEFAULT_LAYER: PatchLayer = {
 	id: "default",
@@ -567,7 +568,7 @@ export function App() {
 
 	return (
 		<div className="viz-editor">
-			<WindowControls />
+			<ArchitectStartupHeader onError={report} onDocument={reloadDocument} />
 			<div className="viz-editor-shell">
 				<EditorSidebar
 					filename={filename}

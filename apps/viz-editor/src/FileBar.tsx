@@ -21,6 +21,16 @@ function displayOperatingSystem(value: string | null | undefined): string {
     return ({ macos: "macOS", windows: "Windows", linux: "Linux" } as Record<string, string>)[value ?? ""] ?? value ?? "Not announced";
 }
 
+/** Shared native file choices: recovery uses exactly the ordinary Open/New paths. */
+export async function chooseShowToOpen() {
+ const path = await open({filters: SHOW_FILTER, multiple: false});
+ return typeof path === "string" ? documentSession.open(path) : null;
+}
+export async function chooseNewShow() {
+ const path = await save({filters: SHOW_FILTER});
+ return path ? documentSession.create(path, fileStem(path)) : null;
+}
+
 export function FileBar({
 	document,
 	onDocument,
@@ -234,16 +244,15 @@ function useFileActions(
 	};
 	return {
 		createShow: async () => {
-			const path = await save({ filters: SHOW_FILTER });
-			if (!path) return null;
-			const name = fileStem(path);
-			accept(await documentSession.create(path, name));
-			return `Created ${name}`;
+            const summary = await chooseNewShow();
+            if (!summary) return null;
+            accept(summary);
+            return `Created ${summary.name}`;
 		},
 		openShow: async () => {
-			const path = await open({ filters: SHOW_FILTER, multiple: false });
-			if (typeof path !== "string") return null;
-			const summary = accept(await documentSession.open(path));
+            const opened = await chooseShowToOpen();
+            if (!opened) return null;
+            const summary = accept(opened);
 			return `Opened ${summary.name}`;
 		},
 		openDemoShow: async () => {

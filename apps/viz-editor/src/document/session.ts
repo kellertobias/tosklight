@@ -425,7 +425,15 @@ interface LibraryProfile {
 	profile: FixtureProfile;
 }
 
+export interface StartupRecovery {
+ path: string;
+ reason: string;
+ fallback: {name: string; path: string} | null;
+ fallbackError: string | null;
+}
+
 export const documentSession = {
+ startupRecovery: () => invoke<StartupRecovery | null>("startup_recovery"),
 	create: (path: string, name: string) =>
 		invoke<DocumentSummary>("create_document", { path, name }),
 	open: (path: string) => invoke<DocumentSummary>("open_document", { path }),

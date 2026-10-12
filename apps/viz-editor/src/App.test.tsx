@@ -204,6 +204,8 @@ beforeEach(() => {
 	for (const action of Object.values(nativeWindow)) action.mockClear();
 	invoke.mockImplementation((command: string) => {
 		switch (command) {
+			case "startup_recovery":
+                return Promise.resolve(null);
 			case "document_summary":
 				return Promise.resolve(document);
 			case "library_profiles":
@@ -2142,6 +2144,7 @@ describe("the Viz editor window", () => {
 
 	it("reports Media discovery failures as a bottom-right toast", async () => {
 		invoke.mockImplementation((command: string) => {
+			if (command === "startup_recovery") return Promise.resolve(null);
 			if (command === "document_summary") return Promise.resolve(document);
 			if (command === "patch_snapshot") return Promise.resolve(snapshot);
 			if (command === "live_dmx_inputs") return Promise.resolve(liveInputs);
@@ -2230,3 +2233,28 @@ describe("the Viz editor window", () => {
 function document_root() {
 	return globalThis.document.body;
 }
+
+
+describe("startup recovery visibility", () => {
+ it("shows a retained recent-show refusal after the frontend mounts and keeps safe file actions available", async () => {
+  const normal = invoke.getMockImplementation();
+  invoke.mockImplementation((command: string, args?: unknown) => command === "startup_recovery"
+   ? Promise.resolve({path: "/shows/Older rig.show", reason: "legacy semantic programming is unsupported", fallback: {name: "Demo Show", path: "/shows/Demo Show2.show"}, fallbackError: null})
+   : normal?.(command, args));
+  render(<ModalProvider><App /></ModalProvider>);
+  const notice = await screen.findByRole("alert", {name: "Recent show could not be opened"});
+  expect(notice.textContent).toContain("/shows/Older rig.show");
+  expect(notice.textContent).toContain("legacy semantic programming is unsupported");
+  expect(notice.textContent).toContain("Demo Show2.show");
+  expect(within(notice).getByRole("button", {name: "Open Show"})).toBeTruthy();
+  expect(within(notice).getByRole("button", {name: "New Show"})).toBeTruthy();
+  expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
+ });
+ it("does not show a recovery notice on a healthy or no-recent startup", async () => {
+  const normal = invoke.getMockImplementation();
+  invoke.mockImplementation((command: string, args?: unknown) => command === "startup_recovery" ? Promise.resolve(null) : normal?.(command, args));
+  render(<ModalProvider><App /></ModalProvider>);
+  await waitFor(() => expect(invoke).toHaveBeenCalledWith("startup_recovery"));
+  expect(screen.queryByRole("alert", {name: "Recent show could not be opened"})).toBeNull();
+ });
+});

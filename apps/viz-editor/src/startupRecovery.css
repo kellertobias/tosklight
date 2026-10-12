@@ -1,0 +1,12 @@
+.viz-startup-recovery {
+ flex: 0 0 auto;
+ max-height: 40vh;
+ overflow: auto;
+ padding: 12px 16px;
+ border-bottom: 1px solid var(--warning, #e7b64c);
+ background: var(--surface-raised, #18212b);
+ overflow-wrap: anywhere;
+ user-select: text;
+}
+.viz-startup-recovery p { margin: 4px 0; }
+.viz-startup-recovery > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
