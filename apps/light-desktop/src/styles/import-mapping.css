@@ -120,6 +120,12 @@
 	overflow-wrap: anywhere;
 }
 
+/* The shared mapping label grid reserves a control column; workflow fields put
+   their control below the label, so its text must use the complete column. */
+.fixture-package-attribute-mappings .import-mapping-row__target > label {
+	display: block;
+}
+
 .import-mapping-row__source small,
 .import-mapping-row__target small {
 	display: block;

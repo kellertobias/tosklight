@@ -631,6 +631,7 @@ function AttributeMappingFields({
 					)}
 					<SelectField
 						className={workflow ? "import-mapping-row__target" : undefined}
+						labelPlacement={workflow ? "top" : undefined}
 						disabled={workflow && busy}
 						label={
 							workflow ? (
