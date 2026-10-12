@@ -92,7 +92,11 @@ function CuelistDetailHeader({
 		<WindowHeader
 			title={`Cuelist View · Cuelist ${props.selectedCuelist}${selection.cueList?.name ? ` · ${selection.cueList.name}` : ""}`}
 			info={{
-				primary: selection.active ? "Running" : "Ready",
+				primary: selection.active?.enabled
+					? selection.active.paused
+						? "Paused"
+						: "Running"
+					: "Ready",
 				secondary: `Revision ${selection.selectedCueObject?.revision ?? 0}${selection.cueList ? ` · ${selection.cueList.mode} · priority ${selection.cueList.priority}` : ""}`,
 			}}
 			groups={[

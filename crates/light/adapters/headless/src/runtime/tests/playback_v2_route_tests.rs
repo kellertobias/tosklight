@@ -1,5 +1,11 @@
 use super::*;
 
+#[path = "../playback_service/cuelist_feedback_route_tests.rs"]
+pub(super) mod cuelist_feedback_route_tests;
+use cuelist_feedback_route_tests::{
+    assert_only_aggregate_related, exact_events_with_aggregates, exact_identities_with_aggregates,
+};
+
 #[path = "playback_release_routes.rs"]
 mod release_routes;
 
@@ -255,16 +261,16 @@ async fn v2_playback_action_is_desk_scoped_typed_and_each_go_executes() {
         active_show_id(&state).to_string()
     );
     assert_eq!(first["projection"]["scope"]["show_revision"], 0);
-    assert_eq!(first["event_sequence"], cursor + 1);
+    assert_eq!(first["event_sequence"], cursor + 2);
     assert!(first.get("replayed").is_none());
 
     let replay = post_action(&app, Some(&token), desk_id, request).await;
     assert_eq!(replay.status(), StatusCode::OK);
     let replay = json(replay).await;
-    assert_eq!(replay["event_sequence"], cursor + 2);
+    assert_eq!(replay["event_sequence"], cursor + 4);
     assert!(replay.get("replayed").is_none());
     assert_eq!(replay["projection"]["runtime"]["current"]["number"], "2");
-    assert_eq!(state.events.latest_sequence(), cursor + 2);
+    assert_eq!(state.events.latest_sequence(), cursor + 4);
 
     let light_application::EventReplay::Events(events) = state
         .events
@@ -272,7 +278,7 @@ async fn v2_playback_action_is_desk_scoped_typed_and_each_go_executes() {
     else {
         panic!("playback event should be retained");
     };
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 4);
     assert_eq!(
         events[0].source,
         light_application::EventSource::Action(light_application::ActionSource::Http)
@@ -337,8 +343,8 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
     let outcome = json(post_action(&app, Some(&token), desk_id, request.clone()).await).await;
 
     let primary_sequence = outcome["event_sequence"].as_u64().unwrap();
-    assert_eq!(primary_sequence, cursor + 2);
-    assert_eq!(outcome["related"].as_array().unwrap().len(), 1);
+    assert_eq!(primary_sequence, cursor + 4);
+    assert_eq!(outcome["related"].as_array().unwrap().len(), 3);
     assert_eq!(
         outcome["related"][0]["projection"]["identity"],
         serde_json::json!({"kind":"playback","page":1,"position":101})
@@ -349,7 +355,7 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
         false
     );
     assert_eq!(
-        playback_event_identities(&state, cursor),
+        exact_identities_with_aggregates(&state, cursor, 2),
         vec![
             light_application::PlaybackRuntimeIdentity::Playback(
                 light_playback::PlaybackAddress::new(1, 101).unwrap()
@@ -382,7 +388,7 @@ async fn v2_virtual_activation_returns_and_emits_one_transition_per_changed_play
     )
     .await;
     assert_eq!(toggle_off["outcome"]["status"], "applied");
-    assert_eq!(toggle_off["related"], serde_json::json!([]));
+    assert_only_aggregate_related(&toggle_off);
     assert!(enabled_playback_numbers(&state).is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
@@ -415,7 +421,7 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
         StatusCode::OK,
         "virtual exclusion activation failed: {response}"
     );
-    let events = playback_runtime_events(&state, cursor);
+    let events = exact_events_with_aggregates(&state, cursor, 2);
     assert_eq!(events.len(), 2);
     assert_eq!(playback_event_state(&events[0]), (102, false));
     assert_eq!(playback_event_state(&events[1]), (101, true));
@@ -425,7 +431,7 @@ async fn v2_virtual_exclusion_publishes_changed_peer_before_target_and_replays_n
             .iter()
             .all(|event| event.correlation_id == Some(correlation))
     );
-    assert_eq!(response["related"].as_array().unwrap().len(), 1);
+    assert_eq!(response["related"].as_array().unwrap().len(), 3);
     assert_eq!(
         response["related"][0]["projection"]["identity"]["position"],
         102
@@ -478,11 +484,11 @@ async fn v2_auto_off_publishes_related_release_before_primary_high_water() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    let events = playback_runtime_events(&state, cursor);
+    let events = exact_events_with_aggregates(&state, cursor, 2);
     assert_eq!(events.len(), 2);
     assert_eq!(playback_event_state(&events[0]), (1, false));
     assert_eq!(playback_event_state(&events[1]), (2, true));
-    assert_eq!(response["related"].as_array().unwrap().len(), 1);
+    assert_eq!(response["related"].as_array().unwrap().len(), 3);
     assert_eq!(
         response["related"][0]["projection"]["identity"]["position"],
         1
@@ -524,10 +530,10 @@ async fn v2_peer_only_auto_off_change_does_not_emit_an_equal_primary_event() {
     let response = json(post_action(&app, Some(&token), desk_id, request.clone()).await).await;
 
     assert_eq!(response["outcome"]["status"], "applied");
-    assert_eq!(response["related"].as_array().unwrap().len(), 1);
+    assert_eq!(response["related"].as_array().unwrap().len(), 2);
     assert_eq!(playback_event_objects(&state, cursor), vec![1]);
     assert_eq!(response["related"][0]["event_sequence"], cursor + 1);
-    assert_eq!(response["event_sequence"], cursor + 1);
+    assert_eq!(response["event_sequence"], cursor + 2);
     assert_eq!(enabled_playback_numbers(&state), vec![2]);
     let replay_cursor = state.events.latest_sequence();
     let replay = json(post_action(&app, Some(&token), desk_id, request).await).await;
@@ -611,7 +617,7 @@ async fn v2_crossfade_activation_uses_the_same_atomic_exclusion_transition_set()
 
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    let events = playback_runtime_events(&state, cursor);
+    let events = exact_events_with_aggregates(&state, cursor, 2);
     assert_eq!(events.len(), 2);
     assert_eq!(playback_event_state(&events[0]), (102, false));
     assert_eq!(playback_event_state(&events[1]), (101, true));
@@ -650,7 +656,7 @@ async fn v2_flash_bypasses_solo_without_publishing_an_unchanged_peer() {
         .await,
     )
     .await;
-    assert_eq!(press["related"], serde_json::json!([]));
+    assert_only_aggregate_related(&press);
     assert!(virtual_is_enabled(&state, 1, 101));
 
     let release = json(
@@ -669,9 +675,9 @@ async fn v2_flash_bypasses_solo_without_publishing_an_unchanged_peer() {
     )
     .await;
 
-    assert_eq!(release["related"], serde_json::json!([]));
+    assert_only_aggregate_related(&release);
     assert_eq!(
-        playback_event_identities(&state, cursor),
+        exact_identities_with_aggregates(&state, cursor, 2),
         vec![
             light_application::PlaybackRuntimeIdentity::Playback(
                 light_playback::PlaybackAddress::new(1, 102).unwrap()
@@ -717,7 +723,7 @@ async fn v2_manual_xfade_uses_shared_engine_semantics_and_solo() {
     assert_eq!(response_status, StatusCode::OK, "{response}");
     assert_eq!(response["outcome"]["status"], "applied");
     assert_eq!(
-        playback_event_identities(&state, cursor),
+        exact_identities_with_aggregates(&state, cursor, 2),
         vec![
             light_application::PlaybackRuntimeIdentity::Playback(
                 light_playback::PlaybackAddress::new(1, 101).unwrap()
@@ -758,9 +764,9 @@ async fn v2_page_two_virtual_does_not_match_page_one_numbered_zone() {
         StatusCode::OK,
         "page-two virtual activation failed: {response}"
     );
-    assert_eq!(response["related"], serde_json::json!([]));
+    assert_only_aggregate_related(&response);
     assert_eq!(enabled_playback_numbers(&state), vec![102, 301]);
-    let events = playback_runtime_events(&state, cursor);
+    let events = exact_events_with_aggregates(&state, cursor, 1);
     assert_eq!(events.len(), 1);
     assert_eq!(playback_event_state(&events[0]), (301, true));
     assert_eq!(response["event_sequence"], events[0].sequence);
@@ -882,9 +888,9 @@ async fn v2_shared_virtual_exclusion_configuration_applies_across_desks() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let response = json(response).await;
-    assert_eq!(response["related"].as_array().unwrap().len(), 1);
+    assert_eq!(response["related"].as_array().unwrap().len(), 3);
     assert!(!virtual_is_enabled(&state, 1, 102));
-    let events = playback_runtime_events(&state, cursor);
+    let events = exact_events_with_aggregates(&state, cursor, 2);
     assert_eq!(events.len(), 2);
     assert_eq!(playback_event_state(&events[0]), (102, false));
     assert_eq!(playback_event_state(&events[1]), (101, true));
@@ -2686,24 +2692,6 @@ fn install_virtual_playback_test_state(state: &AppState) {
     }]
     .into();
     state.output.replace_snapshot(snapshot).unwrap();
-}
-
-fn playback_event_identities(
-    state: &AppState,
-    after: u64,
-) -> Vec<light_application::PlaybackRuntimeIdentity> {
-    playback_runtime_events(state, after)
-        .into_iter()
-        .filter_map(|event| {
-            let light_application::ApplicationEvent::Playback(
-                light_application::PlaybackEvent::RuntimeChanged(change),
-            ) = &event.payload
-            else {
-                return None;
-            };
-            Some(change.projection.identity.clone())
-        })
-        .collect()
 }
 
 fn playback_event_objects(state: &AppState, after: u64) -> Vec<u16> {

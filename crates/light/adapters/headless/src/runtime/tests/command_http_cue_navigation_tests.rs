@@ -117,6 +117,9 @@ fn playback_events(scenario: &CommandHttpScenario, baseline: u64) -> usize {
     else {
         return usize::MAX;
     };
+    if events.iter().any(|event| matches!(event.payload, light_application::ApplicationEvent::Playback(light_application::PlaybackEvent::RuntimeChanged(_)))) {
+        crate::runtime::tests::playback_v2_route_tests::cuelist_feedback_route_tests::assert_aggregate_feedback_matches_aliases(&events, 2);
+    }
     events
         .iter()
         .filter(|event| {
@@ -219,7 +222,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     let body = json(response).await;
     assert_eq!(body["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
-    assert_eq!(playback_events(&scenario, baseline), 2);
+    assert_eq!(playback_events(&scenario, baseline), 3);
     // A successful action clears the shared command line exactly once.
     assert_eq!(body["command_line"]["text"], "FIXTURE");
     assert_command_line_reset(&scenario).await;
@@ -235,7 +238,7 @@ async fn selected_and_explicit_go_to_and_load_use_the_typed_playback_action() {
     assert_eq!(json(response).await["outcome"], "accepted");
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
     assert_eq!(loaded_cue(&scenario, 2), Some("2".into()));
-    assert_eq!(playback_events(&scenario, baseline), 2);
+    assert_eq!(playback_events(&scenario, baseline), 3);
 
     // Explicit pool Go To addresses the other Playback without changing the selection.
     let response = scenario
@@ -333,7 +336,7 @@ async fn replay_and_semantic_no_change_publish_no_second_transition() {
         .await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(json(response).await["outcome"], "accepted");
-    assert_eq!(playback_events(&scenario, baseline), 2);
+    assert_eq!(playback_events(&scenario, baseline), 3);
     let after_first = scenario.state.events.latest_sequence();
     let history_after_first = history_len(&scenario);
     assert_eq!(history_after_first, history + 1);
@@ -491,7 +494,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     let ws = dispatch_live_action(&scenario.state, &scenario.session, ws_command());
     assert!(ws.ok, "{:?}", ws.error);
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
-    assert_eq!(playback_events(&scenario, baseline), 2);
+    assert_eq!(playback_events(&scenario, baseline), 3);
     assert_eq!(playback_changed_notifications(&scenario), 1);
 
     // A delayed replay must not erase a newer command the operator has already started.
@@ -571,7 +574,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     }
     assert_eq!(loaded_cue(&scenario, 2), Some("2".into()));
     assert_eq!(current_cue(&scenario, 2), Some("3".into()));
-    assert_eq!(playback_events(&scenario, baseline), 2);
+    assert_eq!(playback_events(&scenario, baseline), 3);
     assert_command_line_reset(&scenario).await;
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }

@@ -169,6 +169,7 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
             ));
         }
         if let Some(light_playback::PlaybackTarget::CueList { cue_list_id }) = &target {
+            related.push(PlaybackRuntimeIdentity::CueList(*cue_list_id));
             related.push(PlaybackRuntimeIdentity::DirectCueList(*cue_list_id));
         }
         for page in snapshot.playback_pages.iter() {
@@ -198,6 +199,29 @@ impl PlaybackPorts for ServerPlaybackPorts<'_> {
                     .map(PlaybackRuntimeIdentity::Playback),
             );
         }
+        // Every affected assignment also changes the target-owned Cuelist projection.
+        // Include Solo and auto-off peers in this same before/after publication boundary.
+        let aggregate_cue_lists = related
+            .iter()
+            .filter_map(|identity| {
+                let PlaybackRuntimeIdentity::Playback(address) = identity else {
+                    return None;
+                };
+                let definition = snapshot
+                    .playback_pages
+                    .iter()
+                    .find(|page| page.number == address.page())?
+                    .assignments
+                    .get(&address.position())?;
+                match definition.target {
+                    light_playback::PlaybackTarget::CueList { cue_list_id } => {
+                        Some(PlaybackRuntimeIdentity::CueList(cue_list_id))
+                    }
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+        related.extend(aggregate_cue_lists);
         related.sort_by_key(|identity| format!("{identity:?}"));
         related.dedup();
         Ok(related)

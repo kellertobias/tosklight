@@ -29,7 +29,8 @@ impl RelatedTransitionSet {
         identities.retain(|identity| identity != &primary);
         identities.sort_by(compare_identity);
         identities.dedup();
-        super::projection::validate_snapshot_identities(&identities)?;
+        // These identities are server-derived and already unique. The public repair
+        // request limit must not cap atomic fanout across valid Solo members/aliases.
         let before = exact_projections(&envelope.context, &identities, scope, ports)?;
         Ok(Self {
             identities,

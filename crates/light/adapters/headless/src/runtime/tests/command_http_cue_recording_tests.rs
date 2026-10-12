@@ -382,7 +382,10 @@ async fn page_slot_recording_is_exact_activates_normal_and_holds_preload() {
     assert_eq!(projections.page.as_ref().unwrap().id, "4");
     assert!(projections.page.as_ref().unwrap().body["assignments"].get("7").is_some());
     assert_eq!(show_event_sequence, baseline + 1);
-    assert_eq!(runtime.event_sequence, baseline + 2);
+    assert_eq!(runtime.event_sequence, baseline + 3);
+    let light_application::EventReplay::Events(events) = scenario.state.events.replay(
+        baseline, &light_application::EventFilter::default()) else { panic!("record feedback retained"); };
+    crate::runtime::tests::playback_v2_route_tests::cuelist_feedback_route_tests::assert_aggregate_feedback_matches_aliases(&events, 1);
     assert_one_show_batch(&scenario.state, baseline, 2);
 
     assert!(scenario.state.programming.set_preload_group(

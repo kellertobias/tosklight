@@ -290,6 +290,42 @@ function savedCueListOutcome(
 describe("CuelistWindow Cue settings", () => {
 	beforeEach(resetCuelistWindowMocks);
 
+	it.each([
+		{ enabled: false, paused: false, status: "Ready" },
+		{ enabled: true, paused: false, status: "Running" },
+		{ enabled: true, paused: true, status: "Paused" },
+		{ enabled: false, paused: true, status: "Ready" },
+	])("shows $status for retained runtime enabled=$enabled paused=$paused", ({
+		enabled,
+		paused,
+		status,
+	}) => {
+		showEditableCueList();
+		mocks.playbacks.active = [
+			{
+				playback_number: 1,
+				cue_list_id: "main",
+				cue_index: 0,
+				master: enabled ? 1 : 0,
+				enabled,
+				paused,
+			},
+		];
+		const view = render(
+			<CuelistWindow cueListTab="cues" fixedCueListId="main" />,
+		);
+		expect(
+			within(view.container).getByText(status, { exact: true }),
+		).toBeInTheDocument();
+		for (const other of ["Ready", "Running", "Paused"].filter(
+			(value) => value !== status,
+		)) {
+			expect(
+				within(view.container).queryByText(other, { exact: true }),
+			).not.toBeInTheDocument();
+		}
+	});
+
 	it("opens exact Cue property modals from table cells without a sidebar", () => {
 		mocks.state.storeArmed = false;
 		mocks.playbacks.pool = [

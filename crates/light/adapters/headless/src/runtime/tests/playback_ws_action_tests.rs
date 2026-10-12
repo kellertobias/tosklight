@@ -63,7 +63,8 @@ async fn playback_action_ws_frame_uses_typed_service_and_ui_source_once() {
             )
         })
         .collect::<Vec<_>>();
-    assert_eq!(playback_events.len(), 1);
+    assert_eq!(playback_events.len(), 2);
+    crate::runtime::tests::playback_v2_route_tests::cuelist_feedback_route_tests::assert_aggregate_feedback_matches_aliases(&events, 1);
     assert_eq!(
         playback_events[0].source,
         light_application::EventSource::Action(light_application::ActionSource::UserInterface)

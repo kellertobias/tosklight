@@ -746,7 +746,7 @@ fn assert_osc_surface_records(
     else {
         panic!("the focused OSC recording action events must remain replayable")
     };
-    assert_eq!(action_events.len(), 3);
+    assert_eq!(action_events.len(), 4);
     let runtime = runtime_for_page_slot(scenario, slot);
     assert_eq!(runtime.current_cue_number, Some(cue("1")));
     assert_eq!(runtime.master, 1.0, "the fader action must be suppressed");
@@ -814,7 +814,8 @@ fn assert_osc_record_event_order(state: &AppState, baseline: u64) {
     else {
         panic!("OSC Cue record events must remain replayable")
     };
-    assert_eq!(events.len(), 3);
+    assert_eq!(events.len(), 4);
+    crate::runtime::tests::playback_v2_route_tests::cuelist_feedback_route_tests::assert_aggregate_feedback_matches_aliases(&events, 1);
     assert!(matches!(
         events[0].payload,
         light_application::ApplicationEvent::Show(_)
@@ -824,7 +825,7 @@ fn assert_osc_record_event_order(state: &AppState, baseline: u64) {
         light_application::ApplicationEvent::Playback(_)
     ));
     assert!(matches!(
-        events[2].payload,
+        events[3].payload,
         light_application::ApplicationEvent::Programming(
             light_application::ProgrammingEvent::InteractionChanged(_)
         )
