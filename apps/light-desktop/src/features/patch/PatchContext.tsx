@@ -94,6 +94,8 @@ export interface PatchContextValue extends PatchStoreSnapshot {
 		fixtureId: string,
 		multipatchInstanceId: string | null,
 		action: PatchFixtureUpdateAction,
+		/** This request's rejection; independent of later context renders. */
+		onRejected?: (error: Error) => void,
 	): Promise<boolean>;
 	deleteFixture(fixtureId: string): Promise<boolean>;
 }
@@ -200,7 +202,12 @@ export function PatchViewProvider({
 					return false;
 				}
 			},
-			updateFixtureIntent: async (fixtureId, multipatchInstanceId, action) => {
+			updateFixtureIntent: async (
+				fixtureId,
+				multipatchInstanceId,
+				action,
+				onRejected,
+			) => {
 				if (!session || snapshot.status !== "ready") return false;
 				try {
 					await session.updateFixtureIntent(
@@ -209,7 +216,10 @@ export function PatchViewProvider({
 						action,
 					);
 					return true;
-				} catch {
+				} catch (reason) {
+					onRejected?.(
+						reason instanceof Error ? reason : new Error(String(reason)),
+					);
 					return false;
 				}
 			},

@@ -3485,7 +3485,7 @@ it("requires explicit cross-family head correspondence and submits one sparse re
 	await waitFor(() => expect(patchFeature.updateFixtureIntent).toHaveBeenCalledWith("fixture-split", null,
 		{type:"replace_profile",profileId:"replacement-profile",profileRevision:replacement.revision,modeId:"replacement-mode",
 		 headMapping:[{fixtureId:"old-logical",targetProfileHeadId:replacement.modes[0].heads[0].id}],
-		 rootProgrammingMapping:[],expectedShowRevision:1,expectedPatchRevision:1}));
+		 rootProgrammingMapping:[],expectedShowRevision:1,expectedPatchRevision:1},expect.any(Function)));
 	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
 });

@@ -229,17 +229,31 @@ async function applyFixtureIntent(
 	const selected = controller.data.selected;
 	if (!selected) return;
 	controller.ui.setEditError("");
-	if (
-		await controller.patch.updateFixtureIntent(
-			selected.fixture_id,
-			null,
-			action,
-		)
-	)
-		completeEdit(controller);
-	else controller.ui.setEditError(controller.patch.error || (action.type === "replace_profile"
-		? "The replacement could not be applied. Reopen Product / mode to review the current fixture and its head mapping."
-		: "The fixture update could not be applied."));
+	let requestError = "";
+	const applied =
+		action.type === "replace_profile"
+			? await controller.patch.updateFixtureIntent(
+					selected.fixture_id,
+					null,
+					action,
+					(error) => {
+						requestError = error.message;
+					},
+				)
+			: await controller.patch.updateFixtureIntent(
+					selected.fixture_id,
+					null,
+					action,
+				);
+	if (applied) completeEdit(controller);
+	else
+		controller.ui.setEditError(
+			requestError ||
+				controller.patch.error ||
+				(action.type === "replace_profile"
+					? "The replacement could not be applied. Reopen Product / mode to review the current fixture and its head mapping."
+					: "The fixture update could not be applied."),
+		);
 }
 
 export async function saveVectorSpread(

@@ -64,6 +64,6 @@ describe("replacement Save control", () => {
     it.each([ ["head-new-0,head-new-1",["head-new-0","head-new-1"]], ["__unmapped",[]] ] as const)("sends the exact consent %s with captured revisions", (choice,targets) => {
         const {control,send} = controller(choice);
         saveEdit(control);
-        expect(send).toHaveBeenCalledWith("root",null,expect.objectContaining({type:"replace_profile",expectedShowRevision:3,expectedPatchRevision:2,rootProgrammingMapping:[{sourceProfileHeadId:"head-old-0",attribute:"intensity",targetProfileHeadIds:targets}]}));
+        expect(send).toHaveBeenCalledWith("root",null,expect.objectContaining({type:"replace_profile",expectedShowRevision:3,expectedPatchRevision:2,rootProgrammingMapping:[{sourceProfileHeadId:"head-old-0",attribute:"intensity",targetProfileHeadIds:targets}]}),expect.any(Function));
     });
 });
