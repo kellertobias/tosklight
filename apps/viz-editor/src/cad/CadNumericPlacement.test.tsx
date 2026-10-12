@@ -68,7 +68,15 @@ it("literal single Position Enter records CAD history instead of a generic patch
 		fixtures: [fixture()],
 		profileRevisions: [],
 	});
-	render(<CadInfoPanel entity={entity} selectionCount={1} sceneRevision={9} tab="placement" onError={vi.fn()} />);
+	render(
+		<CadInfoPanel
+			entity={entity}
+			selectionCount={1}
+			sceneRevision={9}
+			tab="placement"
+			onError={vi.fn()}
+		/>,
+	);
 	await waitFor(() => expect(screen.getByLabelText("Position X")).toHaveValue("-3"));
 	const input = commit("Position X", "-2.5");
 	await waitFor(() =>
@@ -130,7 +138,7 @@ it("multi-selection Enter spreads poses in selected order as one history step", 
 		/>,
 	);
 	await waitFor(() => expect(screen.getByLabelText("Position X")).toHaveValue("-3"));
-	commit("Position X", "1 THRU 2");
+	const input = commit("Position X", "1 THRU 2");
 	await waitFor(() =>
 		expect(mocks.numeric).toHaveBeenCalledWith(9, [
 			{
@@ -145,5 +153,7 @@ it("multi-selection Enter spreads poses in selected order as one history step", 
 			},
 		]),
 	);
+	fireEvent.blur(input);
+	expect(mocks.numeric).toHaveBeenCalledTimes(1);
 	expect(mocks.patch).not.toHaveBeenCalled();
 });

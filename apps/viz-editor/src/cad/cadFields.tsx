@@ -7,12 +7,15 @@
  * was there.
  */
 import { Input, TextArea } from "@tosklight/ui";
-import { type KeyboardEvent, useEffect, useState } from "react";
+import { type KeyboardEvent, useState } from "react";
 
 function useDraft(value: string) {
-	const [draft, setDraft] = useState(value);
-	useEffect(() => setDraft(value), [value]);
-	return [draft, setDraft] as const;
+	const [field, setField] = useState({ source: value, draft: value });
+	// Reconcile a changed source before committing the DOM, not in a passive reset
+	// that can arrive after the operator has already started typing.
+	if (field.source !== value) setField({ source: value, draft: value });
+	const setDraft = (draft: string) => setField((current) => ({ ...current, draft }));
+	return [field.draft, setDraft] as const;
 }
 
 export function CommitText({
@@ -97,23 +100,23 @@ export function CommitNumber({
 		<label className={`cad-field ${unit ? "has-unit" : ""}`.trim()}>
 			<span>{label}</span>
 			<span className="cad-field-control">
-			<Input
-				type="text"
-				inputMode="decimal"
-				aria-label={ariaLabel ?? label}
-				value={draft}
-				onChange={(event) => setDraft(event.currentTarget.value)}
-				onBlur={commit}
-				onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-					if (event.key === "Enter") commit();
-					if (event.key === "Escape") setDraft(shown);
-				}}
-			/>
-			{unit ? (
-				<span className="cad-field-unit" aria-hidden="true">
-					{unit}
-				</span>
-			) : null}
+				<Input
+					type="text"
+					inputMode="decimal"
+					aria-label={ariaLabel ?? label}
+					value={draft}
+					onChange={(event) => setDraft(event.currentTarget.value)}
+					onBlur={commit}
+					onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+						if (event.key === "Enter") commit();
+						if (event.key === "Escape") setDraft(shown);
+					}}
+				/>
+				{unit ? (
+					<span className="cad-field-unit" aria-hidden="true">
+						{unit}
+					</span>
+				) : null}
 			</span>
 		</label>
 	);
