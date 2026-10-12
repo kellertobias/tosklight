@@ -855,6 +855,12 @@ build_visualizer() {
       "$TARGET_DIR/release/light-headless" \
       "$LIGHT_ARTIFACTS_DIR/build/patch-mcp/tosklight-patch-mcp.mjs" \
       "$TARGET_DIR/release/bundle/macos"
+    # The hand assembler does not inherit Tauri resources. Stage the same canonical
+    # demo and fixture packages a release carries before signing this local app.
+    bash "$ROOT/tools/stage-architect-resources.sh" \
+      "$TARGET_DIR/release/bundle/macos/ToskLight Architect.app" \
+      "$LIGHT_DEMO_SHOW_DIR/demo-show.show" \
+      "$FIXTURE_LIBRARY_DIR"
     # The release seals this bundle too. Without it only the linker's ad-hoc executable signature
     # is present, which Gatekeeper reads as damaged rather than as an unsigned development build.
     bash "$ROOT/tools/seal-macos-app.sh" \
