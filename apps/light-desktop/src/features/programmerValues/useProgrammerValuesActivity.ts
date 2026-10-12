@@ -71,7 +71,10 @@ function selectReadyNormalCount(state: ProgrammerValuesState) {
 }
 
 function selectReadyPendingCount(state: ProgrammerPreloadValuesState) {
-	return readyValueCount(state);
+	const count = readyValueCount(state);
+	return count === null
+		? null
+		: count + (state.projection?.groupReleaseValues?.length ?? 0);
 }
 
 function readyValueCount(state: {
@@ -80,11 +83,14 @@ function readyValueCount(state: {
 	projection: {
 		fixtureValues: readonly unknown[];
 		groupValues: readonly unknown[];
+		dynamicValues?: readonly unknown[];
 	} | null;
 }) {
 	if (state.status !== "ready" || state.repairRequired || !state.projection)
 		return null;
 	return (
-		state.projection.fixtureValues.length + state.projection.groupValues.length
+		state.projection.fixtureValues.length +
+		state.projection.groupValues.length +
+		(state.projection.dynamicValues?.length ?? 0)
 	);
 }

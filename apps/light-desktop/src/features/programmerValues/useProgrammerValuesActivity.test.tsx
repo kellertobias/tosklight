@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDefaultDynamicDefinition } from "../../windows/dynamics/DynamicsEditor";
 import { ProgrammerCaptureModeViewProvider } from "../programmerCaptureMode/ProgrammerCaptureModeView";
 import { ProgrammerCaptureModeStore } from "../programmerCaptureMode/store";
 import {
@@ -21,6 +22,8 @@ import { ProgrammerValuesStore } from "./store";
 import {
 	FakeProgrammerValuesTransport,
 	FIXTURE_2,
+	DYNAMIC_INSTANCE_1,
+	dynamicValue,
 	fixtureValue,
 	groupValue,
 	SHOW_ID,
@@ -147,6 +150,128 @@ function expectActivity(
 afterEach(cleanup);
 
 describe("Programmer values activity", () => {
+	it("counts Dynamic-only normal activity and follows authoritative clear without pending hydration", async () => {
+		const definition = createDefaultDynamicDefinition(31, "intensity");
+		const dynamic = dynamicValue(DYNAMIC_INSTANCE_1, {
+			value: {
+				type: "dynamic_on",
+				instance_link: DYNAMIC_INSTANCE_1,
+				lane_id: definition.lanes[0].id,
+				dynamic: {
+					dynamic_id: definition.id,
+					last_known_pool_number: 31,
+					embedded_fallback_id: definition.id,
+					embedded_fallback_revision: definition.revision,
+					embedded_fallback: definition,
+				},
+				overrides: {
+					size: 1,
+					speed_multiplier: { numerator: 1, denominator: 1 },
+					phase_offset_degrees: 0,
+				},
+				timing: { fade_millis: null, delay_millis: null },
+			},
+		});
+		const activeValue = dynamic.value;
+		if (activeValue.type !== "dynamic_on")
+			throw new Error("Expected Dynamic-on fixture");
+		const harness = createHarness({
+			values: async () =>
+				valuesSnapshot({ fixtureValues: [], dynamicValues: [dynamic] }),
+		});
+		render(
+			providers(harness, (
+				<>
+					<ActivityProbe />
+					<NormalCountProbe onRender={() => {}} />
+				</>
+			)),
+		);
+		await waitFor(() => expectActivity("normal", true, 1, 0));
+		expect(screen.getByTestId("normal-count")).toHaveTextContent("1");
+		expect(harness.loadPreload).not.toHaveBeenCalled();
+		act(() =>
+			harness.valuesTransport.emit({
+				type: "event",
+				sequence: 11,
+				correlationId: "update-dynamic-only",
+				change: valuesChange(valuesProjection({
+					revision: 2,
+					fixtureValues: [],
+					dynamicValues: [{
+						...dynamic,
+						value: {
+							...activeValue,
+							overrides: { ...activeValue.overrides, size: 0.5 },
+						},
+					}],
+				})),
+			}),
+		);
+		expectActivity("normal", true, 1, 0);
+		act(() =>
+			harness.valuesTransport.emit({
+				type: "event",
+				sequence: 12,
+				correlationId: "clear-dynamic-only",
+				change: {
+					...valuesChange(valuesProjection({ revision: 3, fixtureValues: [] })),
+					removedDynamicValues: [{
+						fixtureId: dynamic.fixtureId,
+						attribute: dynamic.attribute,
+						instanceLink: DYNAMIC_INSTANCE_1,
+						laneId: definition.lanes[0].id,
+					}],
+				},
+			}),
+		);
+		await waitFor(() => expectActivity("normal", true, 0, 0));
+		expect(screen.getByTestId("normal-count")).toHaveTextContent("0");
+	});
+
+	it("keeps normal Dynamic authority when Preload excludes Programmer writes", async () => {
+		const harness = createHarness({
+			capture: async () =>
+				captureModeSnapshot({ blind: true, preloadCaptureProgrammer: false }),
+			values: async () =>
+				valuesSnapshot({ fixtureValues: [], dynamicValues: [dynamicValue()] }),
+		});
+		render(providers(harness, <ActivityProbe />));
+		await waitFor(() => expectActivity("normal", true, 1, 0));
+		expect(harness.loadPreload).not.toHaveBeenCalled();
+		expect(harness.preloadTransport.subscriptions).toHaveLength(0);
+	});
+
+	it.each(["dynamic", "group release"] as const)(
+		"counts pending %s-only activity and authoritative clear",
+		async (kind) => {
+			const projection = {
+				...preloadSnapshot({ fixtureValues: [] }).projection,
+				dynamicValues: kind === "dynamic" ? [dynamicValue()] : [],
+				groupReleaseValues: kind === "group release"
+					? [{ groupId: "front", attribute: "intensity", programmerOrder: 1, changedAtMillis: 100 }]
+					: [],
+			};
+			const harness = createHarness({
+				capture: async () =>
+					captureModeSnapshot({ blind: true, preloadCaptureProgrammer: true }),
+				preload: async () => ({ cursor: 10, projection }),
+			});
+			render(providers(harness, <ActivityProbe />));
+			await waitFor(() => expectActivity("preload", true, 1, 1));
+			expect(harness.loadValues).not.toHaveBeenCalled();
+			act(() =>
+				harness.preloadTransport.emit({
+					type: "event",
+					sequence: 11,
+					correlationId: "clear-pending",
+					projection: { ...projection, revision: 2, dynamicValues: [], groupReleaseValues: [] },
+				}),
+			);
+			await waitFor(() => expectActivity("preload", true, 0, 0));
+		},
+	);
+
 	it("stays dormant until enabled and resolves capture before normal authority", async () => {
 		const capture = deferred<CaptureSnapshot>();
 		const harness = createHarness({
