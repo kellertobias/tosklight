@@ -2,7 +2,8 @@
  flex: 0 0 auto;
  max-height: 40vh;
  overflow: auto;
- padding: 12px 16px;
+ /* Floating native controls occupy the first 32px of the window. */
+ padding: 40px 16px 12px;
  border-bottom: 1px solid var(--warning, #e7b64c);
  background: var(--surface-raised, #18212b);
  overflow-wrap: anywhere;
