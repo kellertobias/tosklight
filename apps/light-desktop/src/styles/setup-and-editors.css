@@ -462,8 +462,10 @@
 .default-screen-compact-row > .screen-settings-actions {
 	flex-wrap: wrap;
 	justify-content: flex-start;
-	/* Clears the field label line so the buttons start level with the field controls. */
-	padding-top: 18px;
+	/* Both actions use one full-width row rather than wrapping below a half-width field. */
+	grid-column: 1 / -1;
+	margin-left: 0;
+	padding-top: 0;
 }
 .screen-configuration-modal {
 	width: min(980px, 100%) !important;
