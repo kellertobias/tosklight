@@ -116,6 +116,14 @@ fn handle_control_event_admitted(
     if let ControlEvent::Timecode(timecode) = &event {
         ingest_timecode(state, timecode.clone());
     }
+    let playback_lease = match &event {
+        ControlEvent::Osc {
+            address, source, ..
+        } if osc_playback::is_playback_osc_route(address) => {
+            osc_playback::capture_playback_source(state, address, source.as_deref()).ok()
+        }
+        _ => None,
+    };
     let input_locked = if let ControlEvent::Osc { address, .. } = &event {
         let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
         parts
@@ -165,7 +173,10 @@ fn handle_control_event_admitted(
         let action_timing =
             begin_authenticated_osc_action_timing(state, address, arguments, source.as_deref());
         let mut measured_action_succeeded = false;
-        if !handle_subscription_osc(state, address, arguments, source.as_deref()) && !input_locked {
+        if !handle_subscription_osc(state, address, arguments, source.as_deref())
+            && !input_locked
+            && (!playback_route || playback_lease.is_some())
+        {
             // A guest operates playback and nothing else. It never reaches the Programmer, so
             // there is no Record to capture, no Update to arm and no encoder to move — which is
             // the whole point of it being able to work beside somebody who is programming.
@@ -175,6 +186,7 @@ fn handle_control_event_admitted(
                 arguments,
                 source.as_deref(),
                 admission,
+                playback_lease.as_ref(),
             );
             if !playback_route {
                 handle_timing_osc(state, address, arguments, source.as_deref());
@@ -218,13 +230,14 @@ fn handle_control_event_admitted(
     if input_locked {
         return;
     }
-    apply_admitted_control_mappings(state, event, admission);
+    apply_admitted_control_mappings(state, event, admission, playback_lease.as_ref());
 }
 
-fn apply_admitted_control_mappings(
+pub(super) fn apply_admitted_control_mappings(
     state: &AppState,
     event: ControlEvent,
     admission: &osc_playback::OscInputAdmission,
+    playback_lease: Option<&osc_playback::OscPlaybackLease>,
 ) {
     let playback_route = matches!(&event, ControlEvent::Osc { address, .. }
         if osc_playback::is_playback_osc_route(address));
@@ -237,7 +250,10 @@ fn apply_admitted_control_mappings(
             state.active_show.try_acquire().ok()
         };
         if let Some(_activation) = activation {
-            if playback_route && !admission.accepts(state, "mapped OSC Playback input") {
+            if playback_route
+                && (!admission.accepts(state, "mapped OSC Playback input")
+                    || playback_lease.is_none_or(|lease| !lease.accepts(state, None)))
+            {
                 return;
             }
             apply_control_mappings(

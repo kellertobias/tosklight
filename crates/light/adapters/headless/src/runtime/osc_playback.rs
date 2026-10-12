@@ -247,9 +247,15 @@ pub(super) fn osc_playback_session(
     action_alias: &str,
     action_desk: Option<&ControlDesk>,
 ) -> Result<Option<Session>, ()> {
-    let source = source.and_then(|source| source.parse::<SocketAddr>().ok());
-    let subscribed = source.and_then(|source| state.integrations.osc_subscriber_for_source(source));
-    if let Some(subscriber) = subscribed {
+    if let Some(source) = source {
+        let source = source.parse::<SocketAddr>().map_err(|_| ())?;
+        let subscriber = state
+            .integrations
+            .osc_subscriber_for_source(source)
+            .ok_or(())?;
+        if subscriber.last_seen.elapsed() >= Duration::from_secs(20) {
+            return Err(());
+        }
         // The alias no longer names which desk this is — there is one. It names the path the
         // surface connected on, and therefore what it may do. A message must still arrive on the
         // path its sender subscribed to, so a guest cannot reach the desk-button routes.
@@ -362,6 +368,7 @@ pub(super) fn handle_playback_osc(
         arguments,
         source,
         &OscInputAdmission::capture(state, None),
+        None,
     )
 }
 
@@ -371,6 +378,8 @@ fn admit_playback_route(
     parts: &[&str],
     arguments: &[OscArgument],
     admission: &OscInputAdmission,
+    lease: &OscPlaybackLease,
+    desk: Option<&ControlDesk>,
 ) -> Option<(
     PlaybackAddress,
     usize,
@@ -382,7 +391,7 @@ fn admit_playback_route(
         return None;
     }
     let activation = state.active_show.acquire_shared_blocking();
-    if !admission.accepts(state, address) {
+    if !admission.accepts(state, address) || !lease.accepts(state, desk) {
         return None;
     }
     if handle_osc_page(state, parts, arguments) {
@@ -397,28 +406,34 @@ pub(super) fn handle_playback_osc_admitted(
     arguments: &[OscArgument],
     source: Option<&str>,
     admission: &OscInputAdmission,
+    captured_lease: Option<&OscPlaybackLease>,
 ) -> bool {
     // Explicit address and stable source are retained across page changes and release.
     let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
-    let (pressed, value) = osc_playback_values(arguments);
-    let Some((mut playback_address, action_index, activation)) =
-        admit_playback_route(state, address, &parts, arguments, admission)
-    else {
+    if !is_playback_osc_route(address) {
         return false;
-    };
-    let button = (parts[action_index] == "button")
-        .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
-        .flatten();
-    let mut input = PoolPlaybackInput {
-        value: value.map(|value| value.clamp(0.0, 1.0)),
-        pressed: Some(pressed),
-        button,
-        ..PoolPlaybackInput::default()
-    };
+    }
     let Ok((source_socket, action_desk, session)) = osc_playback_context(state, &parts, source)
     else {
         return false;
     };
+    let may_program = osc_source_may_program(state, source_socket);
+    let current_lease = osc_source_lease(source, &parts, session.as_ref(), may_program);
+    let lease = captured_lease.unwrap_or(&current_lease);
+    let (pressed, value) = osc_playback_values(arguments);
+    let Some((mut playback_address, action_index, activation)) = admit_playback_route(
+        state,
+        address,
+        &parts,
+        arguments,
+        admission,
+        lease,
+        action_desk.as_ref(),
+    ) else {
+        return false;
+    };
+    let mut input = osc_pool_input(&parts, action_index, pressed, value);
+    let button = input.button;
     let Some(desk) = action_desk.as_ref() else {
         return false;
     };
@@ -438,9 +453,8 @@ pub(super) fn handle_playback_osc_admitted(
     let receipt = capture.receipt;
     if pressed && receipt.is_some() {
         let _activation = state.active_show.acquire_shared_blocking();
-        return admission.accepts(state, address);
+        return admission.accepts(state, address) && lease.accepts(state, action_desk.as_ref());
     }
-    let may_program = osc_source_may_program(state, source_socket);
     let record_target = may_program
         && is_physical_record_target(
             state,
@@ -500,6 +514,7 @@ pub(super) fn handle_playback_osc_admitted(
         record_target,
         may_program,
         captured_release: receipt.is_some(),
+        lease: Some(lease),
         admission,
     }) {
         OscDispatchResult::Consumed => return true,
@@ -531,6 +546,22 @@ pub(super) fn handle_playback_osc_admitted(
     }
     publish_osc_result(state, &result, action, session.as_ref());
     true
+}
+
+fn osc_pool_input(
+    parts: &[&str],
+    action_index: usize,
+    pressed: bool,
+    value: Option<f32>,
+) -> PoolPlaybackInput {
+    PoolPlaybackInput {
+        value: value.map(|value| value.clamp(0.0, 1.0)),
+        pressed: Some(pressed),
+        button: (parts[action_index] == "button")
+            .then(|| parts.get(action_index + 1)?.parse::<u8>().ok())
+            .flatten(),
+        ..PoolPlaybackInput::default()
+    }
 }
 
 fn apply_expanded_osc_binding(
@@ -622,9 +653,20 @@ fn osc_suppression_input<'a>(
 /// even while the operator has one armed on the desk's command line — that is what lets a guest
 /// work a playback beside somebody who is programming.
 fn osc_source_may_program(state: &AppState, source: Option<SocketAddr>) -> bool {
-    source
-        .and_then(|source| state.integrations.osc_subscriber_for_source(source))
-        .is_none_or(|subscriber| subscriber.capability.may_program())
+    match source {
+        None => true, // Private in-process helper dispatch has no UDP surface.
+        Some(source) => state
+            .integrations
+            .osc_subscriber_for_source(source)
+            .is_some_and(|subscriber| {
+                subscriber.last_seen.elapsed() < Duration::from_secs(20)
+                    && subscriber.capability.may_program()
+                    && state
+                        .sessions
+                        .session(subscriber.session_id)
+                        .is_some_and(|session| session.connected)
+            }),
+    }
 }
 
 fn is_physical_record_target(
@@ -815,6 +857,61 @@ pub(super) fn ingest_timecode(state: &AppState, timecode: SmpteTimecode) {
 #[path = "osc_playback/holds_tests.rs"]
 mod holds_tests;
 
+pub(super) struct OscPlaybackLease {
+    source: Option<String>,
+    alias: String,
+    session_id: Option<SessionId>,
+    may_program: bool,
+}
+fn osc_source_lease(
+    source: Option<&str>,
+    parts: &[&str],
+    session: Option<&Session>,
+    may_program: bool,
+) -> OscPlaybackLease {
+    OscPlaybackLease {
+        source: source.map(str::to_owned),
+        alias: parts.get(1).copied().unwrap_or("main").to_owned(),
+        session_id: session.map(|session| session.id),
+        may_program,
+    }
+}
+impl OscPlaybackLease {
+    pub(super) fn accepts(&self, state: &AppState, desk: Option<&ControlDesk>) -> bool {
+        let fallback_desk = desk.cloned().or_else(|| osc_control_desk(state));
+        osc_playback_session(
+            state,
+            self.source.as_deref(),
+            &self.alias,
+            fallback_desk.as_ref(),
+        )
+        .is_ok_and(|session| {
+            session.map(|session| session.id) == self.session_id
+                && osc_source_may_program(
+                    state,
+                    self.source
+                        .as_deref()
+                        .and_then(|source| source.parse().ok()),
+                ) == self.may_program
+        })
+    }
+}
+/// Capture the exact surface lease before any Playback or mapped-control admission wait.
+pub(super) fn capture_playback_source(
+    state: &AppState,
+    address: &str,
+    source: Option<&str>,
+) -> Result<OscPlaybackLease, ()> {
+    let parts = address.trim_matches('/').split('/').collect::<Vec<_>>();
+    let (socket, _, session) = osc_playback_context(state, &parts, source)?;
+    Ok(OscPlaybackLease {
+        source: source.map(str::to_owned),
+        alias: parts.get(1).copied().unwrap_or("main").to_owned(),
+        session_id: session.map(|session| session.id),
+        may_program: osc_source_may_program(state, socket),
+    })
+}
+
 struct OscDispatch<'a> {
     state: &'a AppState,
     session: Option<&'a Session>,
@@ -827,6 +924,7 @@ struct OscDispatch<'a> {
     record_target: bool,
     may_program: bool,
     captured_release: bool,
+    lease: Option<&'a OscPlaybackLease>,
     admission: &'a OscInputAdmission,
 }
 enum OscDispatchResult {
@@ -847,10 +945,13 @@ fn dispatch_osc_input(dispatch: OscDispatch<'_>) -> OscDispatchResult {
         record_target,
         may_program,
         captured_release,
+        lease,
         admission,
     } = dispatch;
     let _activation = state.active_show.acquire_shared_blocking();
-    if !admission.accepts(state, "captured Playback input") {
+    if !admission.accepts(state, "captured Playback input")
+        || lease.is_some_and(|lease| !lease.accepts(state, action_desk))
+    {
         return OscDispatchResult::Rejected;
     }
     let pressed = input.pressed.unwrap_or(true);
@@ -916,3 +1017,7 @@ fn publish_osc_result(
         );
     }
 }
+
+#[cfg(test)]
+#[path = "osc_playback/subscription_tests.rs"]
+mod subscription_tests;

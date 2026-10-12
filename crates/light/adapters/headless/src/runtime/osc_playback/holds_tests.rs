@@ -37,6 +37,21 @@ fn setup() -> (AppState, std::path::PathBuf, ControlDesk) {
         })
         .unwrap();
     let desk = state.installation.desk().unwrap();
+    for (client, source) in [
+        ("fixture-source-a", "127.0.0.1:19100"),
+        ("fixture-source-b", "127.0.0.1:19101"),
+    ] {
+        assert!(crate::runtime::handle_subscription_osc(
+            &state,
+            "/light/subscribe",
+            &[
+                OscArgument::String(client.into()),
+                OscArgument::String("main".into()),
+                OscArgument::Int(19150)
+            ],
+            Some(source)
+        ));
+    }
     (state, path, desk)
 }
 fn flash(state: &AppState, page: u8) -> bool {
@@ -148,7 +163,7 @@ async fn osc_cancel_surface_clears_receipts_without_releasing_other_surface() {
     crate::runtime::playback_control_disconnect::cancel_for_desk(
         &state,
         desk.id,
-        "osc:127.0.0.1:19100",
+        "hardware:fixture-source-a",
     )
     .unwrap();
     assert!(flash(&state, 1), "other surface hold remains authoritative");
@@ -204,7 +219,7 @@ async fn accepted_same_id_cold_install_invalidates_previous_osc_release() {
     assert!(!flash(&state, 1));
     // A fresh runtime can be held by the same source, independently of the old ingress receipt.
     let control = light_playback::PlaybackControlSource {
-        surface_id: "osc:127.0.0.1:19100".into(),
+        surface_id: "hardware:fixture-source-a".into(),
         control_id: 24,
     }
     .scoped_to_desk(desk.id)
@@ -242,6 +257,7 @@ async fn accepted_same_id_cold_install_invalidates_previous_osc_release() {
                 record_target: false,
                 may_program: false,
                 captured_release: true,
+                lease: None,
                 admission: &OscInputAdmission {
                     epoch: old_epoch,
                     cancel: None
@@ -267,6 +283,7 @@ async fn accepted_same_id_cold_install_invalidates_previous_osc_release() {
 #[tokio::test]
 async fn osc_subscription_replacement_and_unsubscribe_cancel_captured_controls() {
     let (state, path, _desk) = setup();
+    state.integrations.clear_osc_subscribers(); // This case owns its source registration lifecycle.
     let subscribe = |client: &str, source: &str| {
         crate::runtime::handle_subscription_osc(
             &state,
@@ -464,6 +481,17 @@ async fn real_udp_osc_writer_contention_keeps_press_release_order() {
         .await
         .unwrap();
     let sender = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    assert!(crate::runtime::handle_subscription_osc(
+        &state,
+        "/light/subscribe",
+        &[
+            OscArgument::String("real-udp-writer".into()),
+            OscArgument::String("main".into()),
+            OscArgument::Int(19150)
+        ],
+        Some(&sender.local_addr().unwrap().to_string())
+    ));
+
     let (next, mut calls) = tokio::sync::mpsc::unbounded_channel();
     let cancel = CancellationToken::new();
     let driver = tokio::spawn(super::super::control_inputs::drive_control_input(
@@ -526,6 +554,7 @@ async fn queued_osc_press_rejects_replaced_runtime_without_source_side_effects()
             &[OscArgument::Int(1), OscArgument::Int(71)],
             Some("127.0.0.1:19100"),
             &admission,
+            None,
         )
     });
     entered.await.unwrap();
@@ -577,6 +606,7 @@ async fn cancelled_final_osc_admission_cannot_activate() {
             record_target: false,
             may_program: false,
             captured_release: false,
+            lease: None,
             admission: &admission,
         })
     });
@@ -640,6 +670,7 @@ async fn stale_osc_dispatch_cannot_consume_armed_record_or_assign() {
             record_target: true,
             may_program: true,
             captured_release: false,
+            lease: None,
             admission: &admission,
         });
         assert!(matches!(result, OscDispatchResult::Rejected));
