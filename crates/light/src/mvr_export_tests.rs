@@ -568,6 +568,16 @@ fn three_hundred_fixtures_share_one_archive_and_restore_the_original_association
     let document = light_mvr::read(&light_mvr::write(&document).unwrap()).unwrap();
     let restored = tosklight_mvr_fixture_metadata(&document);
     assert_eq!(restored.len(), 300);
+    let profiles = restored
+        .values()
+        .map(|entry| entry.fixture.definition.profile_snapshot.as_ref().unwrap())
+        .collect::<Vec<_>>();
+    assert!(
+        profiles
+            .iter()
+            .all(|profile| std::sync::Arc::ptr_eq(profiles[0], profile)),
+        "verified retained source associations also share one complete profile"
+    );
     let attachments: Vec<_> = restored
         .values()
         .map(|entry| {

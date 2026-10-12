@@ -29,6 +29,28 @@ fn typed_identity(profile: &FixtureProfile) -> Result<String, ActionError> {
     mvr_profile_identity(serde_json::to_value(profile).map_err(|error| invalid(error.to_string()))?)
 }
 
+/// Profiles are immutable and retained by the staged definitions for this entire operation.
+/// Pointer identity only reuses work for the exact same Arc; distinct contents still normalize
+/// and compare independently, even when their profile ID and revision coincide.
+#[derive(Default)]
+struct ProfileIdentities {
+    identities: HashMap<*const FixtureProfile, String>,
+}
+impl ProfileIdentities {
+    fn identity(
+        &mut self,
+        profile: &std::sync::Arc<FixtureProfile>,
+    ) -> Result<String, ActionError> {
+        let key = std::sync::Arc::as_ptr(profile);
+        if let Some(identity) = self.identities.get(&key) {
+            return Ok(identity.clone());
+        }
+        let identity = typed_identity(profile)?;
+        self.identities.insert(key, identity.clone());
+        Ok(identity)
+    }
+}
+
 /// Read-only preview of native immutable collisions; embedded GDTF revisions use their existing
 /// reservation policy. Every affected fixture is listed even when modes share one profile.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +66,7 @@ pub fn mvr_profile_conflicts(
     slots: &MvrProfileSlots,
     resolutions: &HashMap<Uuid, super::MvrImportResolution>,
 ) -> Result<Vec<MvrProfileConflict>, ActionError> {
+    let mut identities = ProfileIdentities::default();
     let mut contents = slots.clone();
     let mut sources = BTreeMap::new();
     for (uuid, definition) in &staged.definitions {
@@ -55,12 +78,12 @@ pub fn mvr_profile_conflicts(
         {
             continue;
         }
-        if let Some(profile) = definition.profile_snapshot.as_deref() {
+        if let Some(profile) = definition.profile_snapshot.as_ref() {
             let key = (profile.id.0, u64::from(profile.revision));
             contents
                 .entry(key)
                 .or_default()
-                .insert(typed_identity(profile)?);
+                .insert(identities.identity(profile)?);
             let source = sources.entry(key).or_insert_with(|| MvrProfileConflict {
                 profile_id: profile.id.0,
                 revision: profile.revision,
@@ -113,6 +136,7 @@ pub fn reserve_mvr_profiles_with_identity_copies(
             .iter()
             .map(|c| (c.profile_id, c.revision))
             .collect::<BTreeSet<_>>();
+        let mut identities = ProfileIdentities::default();
         let mut copies = BTreeMap::new();
         let mut replacements = Vec::new();
         for (uuid, definition) in &staged.definitions {
@@ -124,17 +148,21 @@ pub fn reserve_mvr_profiles_with_identity_copies(
             {
                 continue;
             }
-            let Some(profile) = definition.profile_snapshot.as_deref() else {
+            let Some(profile) = definition.profile_snapshot.as_ref() else {
                 continue;
             };
             if !keys.contains(&(profile.id.0, profile.revision)) {
                 continue;
             }
-            let key = (profile.id.0, profile.revision, typed_identity(profile)?);
+            let key = (
+                profile.id.0,
+                profile.revision,
+                identities.identity(profile)?,
+            );
             let index = if let Some(index) = copies.get(&key) {
                 *index
             } else {
-                let mut copy = profile.clone();
+                let mut copy = (**profile).clone();
                 loop {
                     copy.id = light_core::FixtureId::new();
                     if !slots.keys().any(|(id, _)| *id == copy.id.0)
@@ -170,6 +198,7 @@ pub fn reserve_mvr_profiles(
     slots: &mut MvrProfileSlots,
     resolutions: &HashMap<Uuid, super::MvrImportResolution>,
 ) -> Result<(), ActionError> {
+    let mut identities = ProfileIdentities::default();
     // Native and installed snapshots have immutable revisions. Never reinterpret an existing
     // native calibration/source identity to make a conflicting profile appear compatible.
     for (uuid, definition) in &staged.definitions {
@@ -181,9 +210,9 @@ pub fn reserve_mvr_profiles(
         {
             continue;
         }
-        if let Some(profile) = definition.profile_snapshot.as_deref() {
+        if let Some(profile) = definition.profile_snapshot.as_ref() {
             let key = (profile.id.0, u64::from(profile.revision));
-            let digest = typed_identity(profile)?;
+            let digest = identities.identity(profile)?;
             let existing = slots.entry(key).or_default();
             if existing.iter().any(|value| value != &digest) {
                 return Err(conflict(format!(
@@ -603,5 +632,36 @@ mod tests {
         assert_eq!(slots, before);
         assert!(staged.new_profiles.is_empty());
         assert!(staged.warnings.is_empty());
+    }
+    #[test]
+    fn identity_work_is_per_shared_snapshot_not_per_fixture_or_revision_id() {
+        let profile: FixtureProfile = serde_json::from_value(legacy_profile_document()).unwrap();
+        let shared = std::sync::Arc::new(profile.clone());
+        let mut cache = ProfileIdentities::default();
+        let expected = typed_identity(&profile).unwrap();
+        for _ in 0..32 {
+            assert_eq!(
+                cache.identity(&std::sync::Arc::clone(&shared)).unwrap(),
+                expected
+            );
+        }
+        assert_eq!(
+            cache.identities.len(),
+            1,
+            "one normalization for32 fixtures sharing content"
+        );
+        let mut differing = profile.clone();
+        differing.notes = "Different measurement evidence".into();
+        let differing = std::sync::Arc::new(differing);
+        assert_ne!(cache.identity(&differing).unwrap(), expected);
+        assert_eq!(
+            (shared.id, shared.revision),
+            (differing.id, differing.revision)
+        );
+        assert_eq!(
+            cache.identities.len(),
+            2,
+            "same revision ID does not hide different content"
+        );
     }
 }

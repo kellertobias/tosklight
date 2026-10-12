@@ -5,6 +5,7 @@
 //! Optional LIGHT_MVR_PROFILE_LIBRARY_JSON is an array of actual immutable profile documents.
 //! Optional LIGHT_MVR_PROFILE_LIBRARY_DB is an existing consistent SQLite COPY under LIGHT_TMP_DIR.
 //! Opening that copy may migrate it; never pass a live installation database.
+//! LIGHT_MVR_PROFILE_COMPILE_CANDIDATE=1 also compiles/validates a detached supported candidate.
 use super::super::*;
 use crate::{ActionContext, ActionSource};
 use light_fixture::{FixtureDefinition, FixtureLibrary, FixtureProfile};
@@ -155,10 +156,23 @@ fn profile_real_native_mvr_archive() {
         .filter_map(|entry| entry.fixture.definition.profile_snapshot.as_ref())
         .map(|profile| (profile.id, profile.revision))
         .collect::<std::collections::HashSet<_>>();
+    let native_snapshot_allocations = native
+        .values()
+        .filter_map(|entry| entry.fixture.definition.profile_snapshot.as_ref())
+        .map(std::sync::Arc::as_ptr)
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     let native_count = native.len();
     drop(native);
     let catalog = actual_library_catalog(&mut phases);
     let mut bindings = bind_actual_catalog(&mut phases, &archive, &catalog);
+    let bound_snapshot_allocations = bindings
+        .definitions
+        .values()
+        .filter_map(|definition| definition.profile_snapshot.as_ref())
+        .map(std::sync::Arc::as_ptr)
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     let (mut slots, actual_library_supplied) = library_slots(&mut phases);
     let collisions = measure(&mut phases, "native_profile_collision_review", || {
         mvr_profile_conflicts(&bindings, &slots, &HashMap::new()).unwrap()
@@ -191,19 +205,41 @@ fn profile_real_native_mvr_archive() {
         format!("{:x}", Sha256::digest(std::fs::read(&input).unwrap())),
         input_hash
     );
+    let candidate_compile = if std::env::var("LIGHT_MVR_PROFILE_COMPILE_CANDIDATE").as_deref()
+        == Ok("1")
+    {
+        match measure(&mut phases, "detached_candidate_compile", || {
+            crate::prepare_show_candidate(&destination, planned.transaction)
+        }) {
+            Ok(prepared) => {
+                let (_, snapshot) = prepared.into_parts();
+                let validation = measure(&mut phases, "detached_snapshot_validate", || {
+                    snapshot.validate()
+                });
+                json!({"compiled_fixtures":snapshot.fixtures.len(),
+                    "validation_error":validation.err().map(|error|error.to_string()),
+                    "status":"compiled; no install/commit"})
+            }
+            Err(error) => json!({"status":"rejected; no install/commit", "error":error.message}),
+        }
+    } else {
+        json!({"status":"not requested"})
+    };
     let output = json!({
         "input":input,"sha256":input_hash,"archive_bytes":bytes.len(),
         "member_bytes":archive.files.values().map(Vec::len).sum::<usize>(),
         "fixtures":archive.fixtures.len(),"native_fixtures":native_count,
         "unique_native_profile_revisions":profile_keys.len(),"bound_fixtures":bindings.definitions.len(),
+        "native_snapshot_allocations":native_snapshot_allocations,
+        "bound_snapshot_allocations":bound_snapshot_allocations,
         "collision_profiles":collision_count,"library_slots_supplied":actual_library_supplied,
         "library_db_copy":catalog.path,"catalog_profiles":catalog.profiles.len(),
         "catalog_legacy_definitions":catalog.definitions.len(),
         "catalog_legacy_embedded_snapshots":catalog.definitions.iter().filter(|definition| definition.profile_snapshot.is_some()).count(),
         "collision_scope":if actual_library_supplied {"actual supplied immutable library documents"} else {"intra-archive only; installed collisions not measured"},
         "planned_fixtures":planned.imported_fixtures,"unresolved_fixtures":planned.unresolved_fixtures,
-        "warnings":planned.warnings.len(),"phases":phases,
-        "limits":"Detached plan only; no SQLite transaction commit, candidate runtime compilation, activation, event publication, network output or UI timing. Copied-library open and standalone metadata measurements are diagnostic startup/overhead, not extra production phases. Catalog reads mirror the actual MVR runtime path. Only the explicitly supplied temporary database copy may be migrated; no live database is opened."
+        "warnings":planned.warnings.len(),"phases":phases,"candidate_compile":candidate_compile,
+        "limits":"Detached plan and optionally requested candidate compilation only; no SQLite transaction commit, activation, event publication, network output or UI timing. Copied-library open and standalone metadata measurements are diagnostic startup/overhead, not extra production phases. Catalog reads mirror the actual MVR runtime path. Only the explicitly supplied temporary database copy may be migrated; no live database is opened."
     });
     std::fs::create_dir_all(report.parent().unwrap()).unwrap();
     std::fs::write(&report, serde_json::to_vec_pretty(&output).unwrap()).unwrap();

@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+#[path = "mvr_export_profiles.rs"]
+mod profiles;
 #[path = "mvr_export_sources.rs"]
 mod sources;
 use uuid::Uuid;
@@ -99,6 +101,7 @@ pub fn tosklight_mvr_fixture_metadata(
         return HashMap::new();
     }
     let sources = sources::read_sources(document, metadata.gdtf_sources);
+    let mut profiles = profiles::NativeProfiles::default();
     metadata
         .fixtures
         .into_iter()
@@ -114,6 +117,9 @@ pub fn tosklight_mvr_fixture_metadata(
                     .as_mut()
                     .map(std::sync::Arc::make_mut)?
                     .source_gdtf = Some(source);
+            }
+            if let Some(profile) = entry.fixture.definition.profile_snapshot.take() {
+                entry.fixture.definition.profile_snapshot = Some(profiles.intern(profile));
             }
             Some((
                 entry.mvr_uuid,
@@ -664,3 +670,7 @@ fn transform_matrix(fixture: &PatchedFixture, hinge: Option<[f32; 3]>) -> [f64; 
 #[cfg(test)]
 #[path = "mvr_export_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "mvr_export_metadata_tests.rs"]
+mod metadata_performance_tests;
