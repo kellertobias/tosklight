@@ -35,21 +35,59 @@ function projection(
 }
 
 describe("Dynamic fader feedback", () => {
-	it.each(["pending", "off"] as const)(
-		"shows %s without a misleading missing-controller diagnostic",
-		(state) => {
-			const text = playbackFaderDisplay(playback, undefined, 100, projection(state));
-			expect(text).toMatch(new RegExp(`^${state.toUpperCase()} · Size`));
-			expect(text).not.toContain(" · MISSING");
-		},
-	);
+	it("shows known dormant Dynamic authority as Off at zero without inventing running state", () => {
+		const dormant = {
+			target: "dynamic",
+			runtime: null,
+		} as PlaybackRuntimeProjection;
+		expect(playbackFaderDisplay(playback, undefined, 0, dormant)).toBe(
+			"OFF · 0%",
+		);
+		for (const unavailable of [
+			undefined,
+			{ target: "missing" },
+			{ target: "dynamic" },
+		]) {
+			expect(
+				playbackFaderDisplay(
+					playback,
+					undefined,
+					0,
+					unavailable as PlaybackRuntimeProjection | undefined,
+				),
+			).toBe("Unavailable");
+		}
+	});
+	it.each([
+		"pending",
+		"off",
+	] as const)("shows %s without a misleading missing-controller diagnostic", (state) => {
+		const text = playbackFaderDisplay(
+			playback,
+			undefined,
+			100,
+			projection(state),
+		);
+		expect(text).toMatch(new RegExp(`^${state.toUpperCase()} · Size`));
+		expect(text).not.toContain(" · MISSING");
+	});
 	it("retains Failed controller and actual missing-target diagnostics", () => {
-		const text = playbackFaderDisplay(playback, undefined, 100, projection("failed", 2));
+		const text = playbackFaderDisplay(
+			playback,
+			undefined,
+			100,
+			projection("failed", 2),
+		);
 		expect(text).toContain("FAILED · MISSING");
 		expect(text).toContain("2 missing");
 	});
 	it("retains missing-target counts while a controller is pending", () => {
-		const text = playbackFaderDisplay(playback, undefined, 100, projection("pending", 2));
+		const text = playbackFaderDisplay(
+			playback,
+			undefined,
+			100,
+			projection("pending", 2),
+		);
 		expect(text).toContain("2 missing");
 	});
 });

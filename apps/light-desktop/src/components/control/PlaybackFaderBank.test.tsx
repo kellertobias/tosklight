@@ -337,6 +337,7 @@ vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => {
 			target: playback.target.type,
 			...(playback.target.type === "macro" ? { macro_id: playback.target.macro_id } : {}),
 			...(playback.target.type === "timecode" ? { timecode_id: playback.target.timecode_id } : {}),
+			...(playback.target.type === "dynamic" ? { dynamic_id: playback.target.assignment.dynamic_id, runtime: null } : {}),
 			...(playback.target.type === "group"
 				? {
 						group_id: playback.target.group_id,
@@ -534,6 +535,26 @@ function assignPlayback(overrides: Record<string, unknown> = {}) {
 
 describe("PlaybackFaderBank layout and configuration surfaces", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it("keeps a newly assigned dormant Dynamic Off and operable without activating it on render", () => {
+		assignPlayback({
+			target: {
+				type: "dynamic",
+				assignment: {
+					dynamic_id: "dynamic-32",
+					last_known_pool_number: 32,
+					fader_mode: "size_and_master",
+				},
+			},
+			buttons: ["off", "pause", "flash"],
+		});
+		const { container } = render(<PlaybackFaderBank count={1} />);
+		const card = container.querySelector<HTMLElement>("[data-playback-slot]");
+		expect(card).toHaveTextContent("OFF");
+		expect(card).toHaveTextContent("OFF · 0%");
+		expect(screen.queryByText("Unavailable")).toBeNull();
+		expect(screen.getByRole("slider")).toBeEnabled();
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
 	it.each([
 		false,
 		true,

@@ -1,10 +1,10 @@
-import { samePlaybackAddress } from "../../../api/playbackAddress";
 import type {
 	PlaybackCardKind,
 	PlaybackCardSummary,
 } from "@tosklight/ui/playback";
 import { PLAYBACK_CARD_DEFAULT_COLORS } from "@tosklight/ui/playback";
 import { type CSSProperties, useState } from "react";
+import { samePlaybackAddress } from "../../../api/playbackAddress";
 import type {
 	Cue,
 	PlaybackDefinition,
@@ -21,12 +21,12 @@ import { playbackHasRuntimeError } from "../playbackRuntimeError";
 import { formatSpeedGroupBpm } from "../speedGroupFormatting";
 import { isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
-import { timecodePlaybackSummary } from "./timecodePlaybackSummary";
 import { playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
-import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
 import { playbackCellGridStyle } from "./projection";
+import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
 import { TouchPlaybackCard } from "./TouchPlaybackCard";
+import { timecodePlaybackSummary } from "./timecodePlaybackSummary";
 import type { PlaybackSlotProjection } from "./types";
 
 function playbackCommandTarget(controller: PlaybackBankController) {
@@ -120,8 +120,15 @@ export function PlaybackSlot({
 				value,
 			})
 		: undefined;
-	const { summary, running: transportRunning, error: transportError } = timecodePlaybackSummary(
-		playback, baseSummary, controller.timecodeRuntime, active?.loaded_cue_number,
+	const {
+		summary,
+		running: transportRunning,
+		error: transportError,
+	} = timecodePlaybackSummary(
+		playback,
+		baseSummary,
+		controller.timecodeRuntime,
+		active?.loaded_cue_number,
 	);
 	const { actions, faderActions } = buildPlaybackActions({
 		controller,
@@ -174,7 +181,7 @@ export function PlaybackSlot({
 				],
 			})
 		: null;
-	const className = `${soloClasses} ${(transportError || playbackHasRuntimeError(playback, runtimeProjection, cue !== null)) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${(active?.enabled !== false && active) || transportRunning ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
+	const className = `${soloClasses} ${transportError || playbackHasRuntimeError(playback, runtimeProjection, cue !== null) ? "playback-runtime-error" : ""} ${playback ? "playback-colored" : ""} ${presentation?.className ?? ""} ${(active?.enabled !== false && active) || transportRunning ? "running" : ""} ${active?.loaded_cue_number != null ? "loaded" : ""} ${active?.swap_active ? "swap-active" : ""} ${selected ? "selected" : ""} ${!playback ? "empty" : ""} ${controller.assignmentPending ? "assignment-pending" : ""} ${controller.state.storeArmed ? "store-target" : ""} ${controller.state.updateArmed ? "update-target" : ""} ${commandTarget ? `playback-command-target command-target-${commandTarget}` : ""}`;
 	const cardStyle = playbackCardStyle(
 		slotData,
 		playbackColor,
@@ -283,7 +290,11 @@ function playbackSummary({
 	if (target === "dynamic" && projection?.target === "dynamic") {
 		const runtime = projection.runtime;
 		return {
-			label: runtime ? runtime.state.toUpperCase() : "Unavailable",
+			label: runtime
+				? runtime.state.toUpperCase()
+				: runtime === null
+					? "OFF"
+					: "Unavailable",
 			detail: runtime
 				? `Size ${Math.round(runtime.size * 100)}% · ${runtime.effective_speed_multiplier.toFixed(2)}× · ${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} addr`
 				: undefined,

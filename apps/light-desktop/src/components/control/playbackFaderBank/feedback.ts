@@ -172,8 +172,10 @@ export function playbackFaderDisplay(
 		return `${formatSpeedGroupBpm(runtime.effective_bpm)} BPM · ${runtime.paused ? "PAUSED" : runtime.source.replaceAll("_", " ").toUpperCase()}`;
 	}
 	if (playback.target.type === "dynamic") {
-		if (projection?.target !== "dynamic" || !projection.runtime)
-			return "Unavailable";
+		if (projection?.target !== "dynamic") return "Unavailable";
+		// A valid assignment has no runtime until its first activation.
+		if (projection.runtime === null) return "OFF · 0%";
+		if (!projection.runtime) return "Unavailable";
 		const runtime = projection.runtime;
 		const learned = runtime.learned_duration_millis
 			? ` · Learned ${(runtime.learned_duration_millis / 1_000).toFixed(2)}s`
