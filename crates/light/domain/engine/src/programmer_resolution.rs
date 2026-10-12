@@ -209,6 +209,7 @@ struct ProgrammerValueResolver<'a, 'continuity> {
     addresser: &'a crate::FrameAddresser,
     now: DateTime<Utc>,
     underlay: Option<&'a ResolvedContributionIndex<'a>>,
+    preload_starts: HashMap<WinnerKey, crate::programmer_fade::ProgrammerFadeStart>,
     programmer_id: ProgrammerId,
     priority: i16,
     has_replacements: bool,
@@ -282,6 +283,7 @@ impl Engine {
                     generation,
                     now,
                     underlay,
+                    sampled,
                     has_replacements,
                     trace_sources,
                     continuity,
@@ -322,6 +324,7 @@ impl Engine {
         generation: &RuntimeGeneration,
         now: DateTime<Utc>,
         underlay: Option<&ResolvedContributionIndex<'_>>,
+        sampled: &[ContributionBatch],
         has_replacements: bool,
         trace_sources: bool,
         continuity: &mut OutputContinuityState,
@@ -347,6 +350,7 @@ impl Engine {
                     &addresser,
                     now,
                     underlay,
+                    sampled,
                     has_replacements,
                     trace_sources,
                     &mut continuity.programmer_transitions,
@@ -366,6 +370,7 @@ impl Engine {
         addresser: &crate::FrameAddresser,
         now: DateTime<Utc>,
         underlay: Option<&ResolvedContributionIndex<'_>>,
+        sampled: &[ContributionBatch],
         has_replacements: bool,
         trace_sources: bool,
         transitions: &mut crate::programmer_memo::ProgrammerTransitions,
@@ -391,6 +396,7 @@ impl Engine {
             addresser,
             now,
             underlay,
+            preload_starts: HashMap::new(),
             programmer_id: id,
             priority,
             has_replacements,
@@ -416,12 +422,25 @@ impl Engine {
                 ProgrammerValueSource::Transient(&action.source),
             ));
         }
+        let live_groups = resolver.group_values(&group_values, ValueLane::Live);
+        if preload_active.iter().any(|value| value.fade)
+            || preload_group_active
+                .values()
+                .flat_map(HashMap::values)
+                .any(|value| value.fade)
+        {
+            let mut live = contributions.clone();
+            live.extend(live_groups.iter().cloned());
+            resolver.preload_starts = preload_fade_starts(&live, sampled, addresser);
+        }
         contributions.extend(resolver.fixture_values(
             &preload_active,
             &preload_addresses,
             ProgrammerValueSource::Preload,
         ));
-        contributions.extend(resolver.group_values(&group_values, &preload_group_active));
+        // Keep the original final offer order, including legacy equal-order ties.
+        contributions.extend(live_groups);
+        contributions.extend(resolver.group_values(&preload_group_active, ValueLane::Preload));
         let active_transition_keys = resolver.active_transition_keys;
         resolver
             .transitions
@@ -446,14 +465,30 @@ impl ProgrammerValueResolver<'_, '_> {
             })
             .flatten()
             .map(|(value, _)| value);
-        let underlying = group_color_underlay.as_ref().or_else(|| {
-            self.underlay
-                .and_then(|values| values.value(value.fixture_id, &value.attribute))
-                .or_else(|| {
-                    self.generation
-                        .default_value(value.fixture_id, &value.attribute)
-                })
-        });
+        let preload_start = matches!(
+            &source,
+            ProgrammerTransitionSource::Preload | ProgrammerTransitionSource::PreloadGroup(_)
+        )
+        .then(|| {
+            let key = self
+                .addresser
+                .frame_address(value.fixture_id, &value.attribute)
+                .map(WinnerKey::Address)
+                .unwrap_or_else(|| WinnerKey::Name(value.fixture_id, value.attribute.clone()));
+            self.preload_starts.get(&key)
+        })
+        .flatten();
+        let underlying = preload_start
+            .map(|start| &start.value)
+            .or(group_color_underlay.as_ref())
+            .or_else(|| {
+                self.underlay
+                    .and_then(|values| values.value(value.fixture_id, &value.attribute))
+                    .or_else(|| {
+                        self.generation
+                            .default_value(value.fixture_id, &value.attribute)
+                    })
+            });
         // An indexed or control attribute names a state, not a level: play mode, media folder and
         // file, gobo and colour wheel slots. Interpolating one walks the operator's selection
         // through every slot in between and only arrives at the chosen one when the Programmer
@@ -468,13 +503,17 @@ impl ProgrammerValueResolver<'_, '_> {
         let attribute = value.attribute.clone();
         let underlay = self.underlay;
         let underlay_is_known = group_color_underlay.is_none();
-        let underlying_pending = underlay_is_known
-            .then(|| {
-                underlay?
-                    .pending_transition(fixture_id, &attribute)
-                    .cloned()
-            })
-            .flatten();
+        let underlying_pending = preload_start
+            .map(|start| start.pending.clone())
+            .unwrap_or_else(|| {
+                underlay_is_known
+                    .then(|| {
+                        underlay?
+                            .pending_transition(fixture_id, &attribute)
+                            .cloned()
+                    })
+                    .flatten()
+            });
         crate::programmer_fade::faded_programmer_value(
             self.transitions,
             self.default_fade_millis,
@@ -482,9 +521,13 @@ impl ProgrammerValueResolver<'_, '_> {
             self.now,
             underlying,
             || {
-                underlay_is_known
-                    .then(|| underlay?.family_evidence(fixture_id, &attribute))
-                    .flatten()
+                if let Some(start) = preload_start {
+                    start.evidence.clone()
+                } else {
+                    underlay_is_known
+                        .then(|| underlay?.family_evidence(fixture_id, &attribute))
+                        .flatten()
+                }
             },
             underlying_pending,
             self.programmer_id,
@@ -521,17 +564,14 @@ impl ProgrammerValueResolver<'_, '_> {
     fn group_values(
         &mut self,
         group_values: &Arc<GroupValues>,
-        preload_values: &Arc<GroupValues>,
+        lane: ValueLane,
     ) -> crate::programmer_memo::ResolvedProgrammerValues {
         let mut resolved = Vec::new();
-        for (lane, source) in [
-            (ValueLane::Live, group_values),
-            (ValueLane::Preload, preload_values),
-        ] {
+        {
             let entries = self.addresses.lock().group_entries(
                 self.programmer_id,
                 lane,
-                source,
+                group_values,
                 self.generation,
                 self.addresser,
             );
@@ -716,6 +756,36 @@ fn removed_by(
                 .is_some_and(|source| source.replaces(sampled, value))
         })
         .map(|(index, _)| index as u32)
+        .collect()
+}
+
+/// Seed only from this Programmer's resolved, eligible Normal winners. The same
+/// arbitration used by the output filters sampled replacements and ordered Group edits.
+fn preload_fade_starts(
+    live: &crate::programmer_memo::ResolvedProgrammerValues,
+    sampled: &[ContributionBatch],
+    addresser: &crate::FrameAddresser,
+) -> HashMap<WinnerKey, crate::programmer_fade::ProgrammerFadeStart> {
+    let winners = arbitrate(std::slice::from_ref(live), sampled);
+    let index = ResolvedContributionIndex::new(&winners);
+    winners
+        .iter()
+        .filter_map(|winner| {
+            let fixture = winner.fixture_id();
+            let attribute = winner.attribute();
+            let key = addresser
+                .frame_address(fixture, attribute)
+                .map(WinnerKey::Address)
+                .unwrap_or_else(|| WinnerKey::Name(fixture, attribute.clone()));
+            Some((
+                key,
+                crate::programmer_fade::ProgrammerFadeStart {
+                    value: index.value(fixture, attribute)?.clone(),
+                    evidence: index.family_evidence(fixture, attribute),
+                    pending: index.pending_transition(fixture, attribute).cloned(),
+                },
+            ))
+        })
         .collect()
 }
 

@@ -6,6 +6,14 @@ type Evidence = Option<Arc<crate::ContributionFamilyEvidence>>;
 pub(crate) type Pending = Option<Arc<light_core::programming::PendingFamilyTransition>>;
 pub(crate) type ProgrammerSample = (TimedValue, Evidence, Pending);
 
+/// A current-frame, eligible Normal winner retained as one fade endpoint.
+/// Keep its producer evidence and moving crossing with the value it describes.
+pub(crate) struct ProgrammerFadeStart {
+    pub(crate) value: AttributeValue,
+    pub(crate) evidence: Evidence,
+    pub(crate) pending: Pending,
+}
+
 #[derive(Clone)]
 pub(crate) struct ProgrammerTransition {
     changed_at: chrono::DateTime<chrono::Utc>,

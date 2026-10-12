@@ -160,6 +160,219 @@ fn immediate_programmer_value_bypasses_non_zero_master_fade_without_zero_overrid
 }
 
 #[test]
+fn preload_go_starts_from_rendered_normal_programmer_and_captures_fade() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let programmers = ProgrammerRegistry::with_clock(clock.clone());
+    let session = SessionId::new();
+    programmers.start(session);
+    let (fixture, logical) = fixture();
+    let engine = Engine::new(programmers.clone());
+    engine.set_control_timing([120.0; 5], 3_000, 0, 0);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.2),
+    );
+    let live = engine.render(RenderOptions::default()).unwrap();
+    assert!((normalized(&live.resolved_values, logical, "intensity") - 0.2).abs() < 0.001);
+    assert!(programmers.arm_preload(session, true));
+    assert!(programmers.apply_preload_values(
+        session,
+        &[
+            light_programmer::PreloadProgrammerValueMutation::SetFixture {
+                fixture_id: logical,
+                attribute: AttributeKey::intensity(),
+                value: AttributeValue::Normalized(0.7),
+                timing: light_programmer::PreloadProgrammerValueTiming::default(),
+            },
+        ]
+    ));
+    assert!(
+        (normalized(
+            &engine
+                .render(RenderOptions::default())
+                .unwrap()
+                .resolved_values,
+            logical,
+            "intensity"
+        ) - 0.2)
+            .abs()
+            < 0.001
+    );
+    assert!(programmers.activate_preload_at_with_fade(session, started, 3_000));
+    for (millis, expected) in [(0, 0.2), (1_000, 0.2 + 0.5 / 3.0), (3_000, 0.7)] {
+        clock.set(started + ChronoDuration::milliseconds(millis));
+        let frame = engine.render(RenderOptions::default()).unwrap();
+        assert!(
+            (normalized(&frame.resolved_values, logical, "intensity") - expected).abs() < 0.001,
+            "Preload must fade from rendered Normal at {millis}ms"
+        );
+        engine.set_control_timing([120.0; 5], 1_000, 0, 0);
+    }
+    assert_eq!(
+        programmers.get(session).unwrap().values[0].value,
+        AttributeValue::Normalized(0.2)
+    );
+}
+
+#[test]
+fn preload_group_fade_uses_ordered_normal_winner_and_leaves_other_desk_unchanged() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let programmers = ProgrammerRegistry::with_clock(clock.clone());
+    let session = SessionId::new();
+    let other = SessionId::new();
+    programmers.start(session);
+    programmers.start(other);
+    let (fixture, logical) = fixture();
+    let (mut peer, peer_id) = super::fixture();
+    peer.address = Some(10);
+    let engine = Engine::new(programmers.clone());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture, peer].into(),
+            groups: vec![
+                GroupDefinition {
+                    id: "1".into(),
+                    name: "Live Group".into(),
+                    fixtures: vec![logical],
+                    ..Default::default()
+                },
+                GroupDefinition {
+                    id: "2".into(),
+                    name: "Pending Group".into(),
+                    fixtures: vec![logical],
+                    ..Default::default()
+                },
+            ]
+            .into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(programmers.set_group(
+        session,
+        "1".into(),
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.6)
+    ));
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.2),
+    );
+    programmers.set(
+        other,
+        peer_id,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.8),
+    );
+    assert!(
+        (normalized(
+            &engine.render(Default::default()).unwrap().resolved_values,
+            logical,
+            "intensity"
+        ) - 0.2)
+            .abs()
+            < 0.001
+    );
+    let other_before = programmers.get(other).unwrap();
+    assert!(programmers.arm_preload(session, true));
+    assert!(programmers.apply_preload_values(
+        session,
+        &[light_programmer::PreloadProgrammerValueMutation::SetGroup {
+            group_id: "2".into(),
+            attribute: AttributeKey::intensity(),
+            value: AttributeValue::Normalized(0.7),
+            timing: light_programmer::PreloadProgrammerValueTiming::default(),
+        }]
+    ));
+    assert!(programmers.activate_preload_at_with_fade(session, started, 3_000));
+    for (millis, expected) in [(0, 0.2), (1_000, 0.2 + 0.5 / 3.0), (3_000, 0.7)] {
+        clock.set(started + ChronoDuration::milliseconds(millis));
+        let frame = engine.render(Default::default()).unwrap();
+        assert!(
+            (normalized(&frame.resolved_values, logical, "intensity") - expected).abs() < 0.001
+        );
+        assert!((normalized(&frame.resolved_values, peer_id, "intensity") - 0.8).abs() < 0.001);
+    }
+    assert_eq!(programmers.get(other).unwrap().values, other_before.values);
+    assert_eq!(
+        programmers.get(session).unwrap().group_values["1"][&AttributeKey::intensity()].value,
+        AttributeValue::Normalized(0.6)
+    );
+}
+
+#[test]
+fn preload_fade_ignores_replaced_normal_and_uses_sampled_underlay() {
+    let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+    let clock = Arc::new(ManualClock::new(started));
+    let programmers = ProgrammerRegistry::with_clock(clock.clone());
+    let session = SessionId::new();
+    programmers.start(session);
+    let (fixture, logical) = fixture();
+    let engine = Engine::new(programmers.clone());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    programmers.set(
+        session,
+        logical,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.9),
+    );
+    let state = programmers.get(session).unwrap();
+    let mut sampled = state.values[0].clone();
+    sampled.value = AttributeValue::Normalized(0.2);
+    sampled.merge_mode = MergeMode::Htp;
+    let batch = ContributionBatch::new([ContributionSample::replacing(
+        sampled,
+        ContributionSourceId::programmer(state.id),
+    )]);
+    let frame = engine
+        .render_with_contribution_batches(Default::default(), std::slice::from_ref(&batch))
+        .unwrap();
+    assert!((normalized(&frame.resolved_values, logical, "intensity") - 0.2).abs() < 0.001);
+    assert!(programmers.arm_preload(session, true));
+    assert!(programmers.apply_preload_values(
+        session,
+        &[
+            light_programmer::PreloadProgrammerValueMutation::SetFixture {
+                fixture_id: logical,
+                attribute: AttributeKey::intensity(),
+                value: AttributeValue::Normalized(0.7),
+                timing: light_programmer::PreloadProgrammerValueTiming::default(),
+            }
+        ]
+    ));
+    assert!(programmers.activate_preload_at_with_fade(session, started, 3_000));
+    for (millis, expected) in [(0, 0.2), (1_000, 0.2 + 0.5 / 3.0), (3_000, 0.7)] {
+        clock.set(started + ChronoDuration::milliseconds(millis));
+        let frame = engine
+            .render_with_contribution_batches(Default::default(), std::slice::from_ref(&batch))
+            .unwrap();
+        assert!(
+            (normalized(&frame.resolved_values, logical, "intensity") - expected).abs() < 0.001,
+            "replaced Normal .9 must never seed Preload at {millis}ms"
+        );
+    }
+}
+
+#[test]
 fn overlapping_preload_group_fades_keep_edit_order_at_one_commit_timestamp() {
     let started = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
     let clock = Arc::new(ManualClock::new(started));
