@@ -159,6 +159,9 @@ describe("command rejection classification", () => {
 		"expected ASSIGN <CUELIST|DYNAMIC|MACRO|TIMECODE> <number> AT PBK <address>",
 		"DMX requires one universe.address",
 		"DIV requires a positive number",
+		"OFFSET must be smaller than DIV",
+		"offset is invalid",
+		"+ requires an offset",
 		"DYNAMIC requires a pool number",
 		"expected DYNAMIC <number>, OFF, SIZE/SPEED/PHASE AT, or PHASE helpers",
 		"DOT requires another cue part",
@@ -199,6 +202,10 @@ describe("command rejection classification", () => {
 			"unexpected tokens after server response",
 			"unexpected tokens after level: database unavailable",
 			"unexpected tokens after level\nnetwork failure",
+			"OFFSET must be smaller than DIV: database unavailable",
+			"OFFSET must be smaller than DIV\nnetwork failure",
+			"offset is invalid: authentication failed",
+			"+ requires an offset from runtime snapshot",
 		]) {
 			expect(commandErrorFeedback(message).kind).toBe("unexpected");
 			reportProgrammingCommandError(new Error(message));

@@ -7,8 +7,12 @@ import {
 	it,
 	vi,
 } from "vitest";
-import type { EventPayload } from "../generated/light-wire";
+import {
+	commandErrorFeedback,
+	reportProgrammingCommandError,
+} from "../../features/programmingInteraction/commandError";
 import { ApiRequestError } from "../ApiRequestError";
+import type { EventPayload } from "../generated/light-wire";
 import type { BootstrapSnapshot, SessionResponse } from "../types";
 import { LightClientRuntime } from "./runtime";
 import type { LiveClientTransport } from "./transport";
@@ -76,6 +80,41 @@ afterEach(() => {
 });
 
 describe("LightClientRuntime", () => {
+	it.each([
+		"OFFSET must be smaller than DIV",
+		"offset is invalid",
+		"+ requires an offset",
+	])("keeps subset input rejection local after its actual socket response: %s", async (message) => {
+		const client = connectedClient();
+		const socket = await openEvents(client);
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		const outcome = client
+			.capabilityTransport()
+			.sendAction({
+				type: "command_line_execute",
+				request: { value: "GROUP 100 DIV 2 OFFSET 2" },
+			})
+			.catch((error: Error) => reportProgrammingCommandError(error));
+		const frame = JSON.parse(socket.sent[1]);
+		socket.emitMessage({
+			protocol_version: 2,
+			request_id: frame.request_id,
+			ok: false,
+			revision: 8,
+			error: message,
+		});
+		await outcome;
+		expect(
+			(dispatch.mock.lastCall?.[0] as CustomEvent | undefined)?.detail,
+		).toEqual({
+			message,
+			kind: "operator",
+		});
+		// OSC history uses the same plain server text, without an HTTP status.
+		expect(commandErrorFeedback(message).kind).toBe("operator");
+		client.disconnectEvents();
+		dispatch.mockRestore();
+	});
 	it("preserves the public runtime method contracts", () => {
 		expectTypeOf<ReturnType<LightClientRuntime["bootstrap"]>>().toEqualTypeOf<
 			Promise<BootstrapSnapshot>

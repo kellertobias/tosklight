@@ -6,8 +6,8 @@ import {
 	screen,
 } from "@testing-library/react";
 import { Button } from "@tosklight/ui";
-import type { CommandHistoryEntry } from "../../api/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CommandHistoryEntry } from "../../api/types";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import { DeskStateDiagnosticsProvider } from "../../features/deskState/DeskStateDiagnosticsState";
 import {
@@ -40,25 +40,38 @@ const activity = vi.hoisted(() => ({
 
 const highlight = vi.hoisted(() => ({ active: false }));
 const playbackContext = vi.hoisted(() => ({
-  desk: { selected_surface_id: "main", command_page: 2 },
-  surfaces: { main: { name: "Main", page_source: { type: "own", page: 2 } }, "screen:closed": { name: "Screen 1", page_source: { type: "own", page: 7 } } },
+	desk: { selected_surface_id: "main", command_page: 2 },
+	surfaces: {
+		main: { name: "Main", page_source: { type: "own", page: 2 } },
+		"screen:closed": {
+			name: "Screen 1",
+			page_source: { type: "own", page: 7 },
+		},
+	},
 }));
-vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", async (original) => ({
-  ...(await original<object>()),
-  usePlaybackDeskView: () => playbackContext.desk,
-}));
+vi.mock(
+	"../../features/playbackRuntime/PlaybackRuntimeView",
+	async (original) => ({
+		...(await original<object>()),
+		usePlaybackDeskView: () => playbackContext.desk,
+	}),
+);
 vi.mock("../../features/screens/ScreensContext", async (original) => ({
-  ...(await original<object>()),
-  useScreens: () => ({
-    surfaces: { playback_surfaces: playbackContext.surfaces, resolved_pages: { main: 2 } },
-    updatePlaybackSurface: vi.fn(),
-  }),
-  useScreensOptional: () => ({
-    surfaces: { playback_surfaces: playbackContext.surfaces },
-    screens: { screens: [{ surface_id: "screen:closed", desired_open: false }] },
-  }),
+	...(await original<object>()),
+	useScreens: () => ({
+		surfaces: {
+			playback_surfaces: playbackContext.surfaces,
+			resolved_pages: { main: 2 },
+		},
+		updatePlaybackSurface: vi.fn(),
+	}),
+	useScreensOptional: () => ({
+		surfaces: { playback_surfaces: playbackContext.surfaces },
+		screens: {
+			screens: [{ surface_id: "screen:closed", desired_open: false }],
+		},
+	}),
 }));
-
 
 const playbackQueue = vi.hoisted(() => ({
 	current: null as null | {
@@ -87,12 +100,22 @@ const preloadLifecycle = vi.hoisted(() => ({
 	},
 }));
 
-const soloBridge = vi.hoisted(() => ({ editor: null as null | {
-	selecting: boolean; name: string; selected: { page: number; position: number }[];
-	ready: boolean; saving: boolean; error: null;
-	setName: ReturnType<typeof vi.fn>; save: ReturnType<typeof vi.fn>; cancel: ReturnType<typeof vi.fn>;
-} }));
-vi.mock("../../features/playbackSolo/PlaybackSoloEditorContext", () => ({ usePlaybackSoloEditor: () => soloBridge.editor }));
+const soloBridge = vi.hoisted(() => ({
+	editor: null as null | {
+		selecting: boolean;
+		name: string;
+		selected: { page: number; position: number }[];
+		ready: boolean;
+		saving: boolean;
+		error: null;
+		setName: ReturnType<typeof vi.fn>;
+		save: ReturnType<typeof vi.fn>;
+		cancel: ReturnType<typeof vi.fn>;
+	},
+}));
+vi.mock("../../features/playbackSolo/PlaybackSoloEditorContext", () => ({
+	usePlaybackSoloEditor: () => soloBridge.editor,
+}));
 const state = {
 	midiProfile: false,
 	controlMode: "programmer",
@@ -280,12 +303,19 @@ function RequestedSystemControlsTab() {
 }
 
 describe("scoped command-line integration", () => {
-	it.each(["touch", "keyboard"])("leaves armed Record using ordinary Escape from %s", (source) => {
+	it.each([
+		"touch",
+		"keyboard",
+	])("leaves armed Record using ordinary Escape from %s", (source) => {
 		state.storeArmed = true;
 		render(<CommandLineBar />);
-		if (source === "touch") fireEvent.click(screen.getByRole("button", { name: "ESC" }));
+		if (source === "touch")
+			fireEvent.click(screen.getByRole("button", { name: "ESC" }));
 		else fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
-		expect(dispatch).toHaveBeenCalledWith({ type: "SET_STORE_ARMED", value: false });
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_STORE_ARMED",
+			value: false,
+		});
 		expect(state.storeArmed).toBe(false);
 	});
 	it("does not turn an unrelated failed request into programmer feedback", () => {
@@ -467,74 +497,75 @@ describe("scoped command-line integration", () => {
 		expect(server.setCommandLine).not.toHaveBeenCalled();
 	});
 
-	it.each(["touch", "authoritative hardware", "no new edit"] as const)(
-		"preserves the command target after completion and %s input",
-		async (source) => {
-			let projection = commandLine(1, "FIXTURE 101");
-			const transport = new FakeProgrammingTransport();
-			const executeCommand = vi.fn(async () => {
-				projection = commandLine(projection.revision + 1, "FIXTURE");
-				return true;
-			});
-			function PlaybackKey() {
-				const numericPad = useNumericPadController();
-				return <Button onClick={() => numericPad.press("PLAYBACK")}>PBK</Button>;
-			}
-			render(
-				<ProgrammingInteractionViewProvider
-					showId={SHOW_ID}
-					deskId={DESK_ID}
-					store={new ProgrammingInteractionStore()}
-					transport={transport}
-					loadSnapshot={async () => programmingSnapshot({ command: projection })}
-					replaceCommandLine={async (_deskId, value, revision) => {
-						projection = commandLine(revision + 1, value);
-						return projection;
-					}}
-					executeCommand={executeCommand}
-				>
-					<PlaybackKey />
-					<CommandLineBar />
-				</ProgrammingInteractionViewProvider>,
+	it.each([
+		"touch",
+		"authoritative hardware",
+		"no new edit",
+	] as const)("preserves the command target after completion and %s input", async (source) => {
+		let projection = commandLine(1, "FIXTURE 101");
+		const transport = new FakeProgrammingTransport();
+		const executeCommand = vi.fn(async () => {
+			projection = commandLine(projection.revision + 1, "FIXTURE");
+			return true;
+		});
+		function PlaybackKey() {
+			const numericPad = useNumericPadController();
+			return <Button onClick={() => numericPad.press("PLAYBACK")}>PBK</Button>;
+		}
+		render(
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={new ProgrammingInteractionStore()}
+				transport={transport}
+				loadSnapshot={async () => programmingSnapshot({ command: projection })}
+				replaceCommandLine={async (_deskId, value, revision) => {
+					projection = commandLine(revision + 1, value);
+					return projection;
+				}}
+				executeCommand={executeCommand}
+			>
+				<PlaybackKey />
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>,
+		);
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
+		await act(settleSession);
+		expect(input).toHaveClass("completed");
+		if (source === "touch") {
+			fireEvent.click(screen.getByRole("button", { name: "PBK" }));
+			await act(settleSession);
+		} else if (source === "authoritative hardware") {
+			projection = commandLine(projection.revision + 1, "PBK");
+			act(() =>
+				transport.emit({
+					type: "event",
+					sequence: 12,
+					correlationId: null,
+					change: commandChange({ revision: projection.revision, text: "PBK" }),
+				}),
 			);
+		}
+		if (source !== "no new edit") {
+			expect(input).toHaveValue("PBK");
+			expect(input).not.toHaveClass("completed");
+		}
+		for (const digit of ["3", "0", "1"]) {
+			fireEvent.keyDown(window, { key: digit, code: `Digit${digit}` });
 			await act(settleSession);
-			const input = screen.getByRole("textbox", { name: "Command line" });
-			fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
-			await act(settleSession);
-			expect(input).toHaveClass("completed");
-			if (source === "touch") {
-				fireEvent.click(screen.getByRole("button", { name: "PBK" }));
-				await act(settleSession);
-			} else if (source === "authoritative hardware") {
-				projection = commandLine(projection.revision + 1, "PBK");
-				act(() =>
-					transport.emit({
-						type: "event",
-						sequence: 12,
-						correlationId: null,
-						change: commandChange({ revision: projection.revision, text: "PBK" }),
-					}),
-				);
-			}
-			if (source !== "no new edit") {
-				expect(input).toHaveValue("PBK");
-				expect(input).not.toHaveClass("completed");
-			}
-			for (const digit of ["3", "0", "1"]) {
-				fireEvent.keyDown(window, { key: digit, code: `Digit${digit}` });
-				await act(settleSession);
-			}
-			const entered = source === "no new edit" ? "F301" : "PBK 301";
-			expect(input).toHaveValue(entered);
-			fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
-			await act(settleSession);
-			expect(executeCommand).toHaveBeenLastCalledWith({
-				command: entered,
-				target: "FIXTURE",
-				pristine: false,
-			});
-		},
-	);
+		}
+		const entered = source === "no new edit" ? "F301" : "PBK 301";
+		expect(input).toHaveValue(entered);
+		fireEvent.keyDown(window, { key: "Enter", code: "Enter" });
+		await act(settleSession);
+		expect(executeCommand).toHaveBeenLastCalledWith({
+			command: entered,
+			target: "FIXTURE",
+			pristine: false,
+		});
+	});
 
 	it("keeps parser rejection out of history and retires feedback after the next successful execution", async () => {
 		const command = "FIXTUREPBK4.301";
@@ -590,9 +621,10 @@ describe("scoped command-line integration", () => {
 		).toBeNull();
 	});
 
-	it("retains a rejected THRU/PLUS command with actionable inline feedback", async () => {
-		const command = "FIXTURE 2 THRU 3 + 1 AT NOPE";
-		const feedback = "level must be a percentage or FULL";
+	it.each([
+		["FIXTURE 2 THRU 3 + 1 AT NOPE", "level must be a percentage or FULL"],
+		["GROUP 100 DIV 2 OFFSET 2", "OFFSET must be smaller than DIV"],
+	])("retains rejected input with a local toast: %s", async (command, feedback) => {
 		const store = new ProgrammingInteractionStore();
 		const transport = new FakeProgrammingTransport();
 		render(
@@ -625,6 +657,7 @@ describe("scoped command-line integration", () => {
 
 		expect(input).toHaveValue(command);
 		expect(screen.getByText(feedback)).toBeInTheDocument();
+		expect(input).toHaveClass("rejected");
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
 		).toBeNull();
@@ -1107,37 +1140,67 @@ describe("shared command rejection presentation", () => {
 	});
 });
 
-
 it("visibly names the authoritative closed Screen context and updates its effective page", () => {
-  state.controlMode = "playbacks";
-  const { rerender } = render(<CommandLineBar />);
-  expect(screen.getByLabelText("Playback command context")).toHaveTextContent("MainPage 2");
-  const entered = (screen.getByRole("textbox", { name: "Command line" }) as HTMLInputElement).value;
-  playbackContext.desk = { selected_surface_id: "screen:closed", command_page: 7 };
-  rerender(<CommandLineBar />);
-  expect(screen.getByLabelText("Playback command context")).toHaveTextContent("Screen 1Page 7");
-  expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue(entered);
-  playbackContext.desk.command_page = 8;
-  rerender(<CommandLineBar />);
-  expect(screen.getByLabelText("Playback command context")).toHaveTextContent("Screen 1Page 8");
-  expect(playbackContext.desk.selected_surface_id).toBe("screen:closed");
-  state.controlMode = "programmer";
+	state.controlMode = "playbacks";
+	const { rerender } = render(<CommandLineBar />);
+	expect(screen.getByLabelText("Playback command context")).toHaveTextContent(
+		"MainPage 2",
+	);
+	const entered = (
+		screen.getByRole("textbox", { name: "Command line" }) as HTMLInputElement
+	).value;
+	playbackContext.desk = {
+		selected_surface_id: "screen:closed",
+		command_page: 7,
+	};
+	rerender(<CommandLineBar />);
+	expect(screen.getByLabelText("Playback command context")).toHaveTextContent(
+		"Screen 1Page 7",
+	);
+	expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue(
+		entered,
+	);
+	playbackContext.desk.command_page = 8;
+	rerender(<CommandLineBar />);
+	expect(screen.getByLabelText("Playback command context")).toHaveTextContent(
+		"Screen 1Page 8",
+	);
+	expect(playbackContext.desk.selected_surface_id).toBe("screen:closed");
+	state.controlMode = "programmer";
 });
 
 it("renders the local Solo draft actions in place of command entry and forwards actual edits/save/cancel", () => {
-	const editor = { selecting: true, name: "Evening", selected: [{ page: 2, position: 1 }, { page: 4, position: 102 }], ready: true, saving: false, error: null,
-		setName: vi.fn(), save: vi.fn().mockResolvedValue(undefined), cancel: vi.fn() };
+	const editor = {
+		selecting: true,
+		name: "Evening",
+		selected: [
+			{ page: 2, position: 1 },
+			{ page: 4, position: 102 },
+		],
+		ready: true,
+		saving: false,
+		error: null,
+		setName: vi.fn(),
+		save: vi.fn().mockResolvedValue(undefined),
+		cancel: vi.fn(),
+	};
 	soloBridge.editor = editor;
 	try {
 		render(<CommandLineBar />);
-		expect(screen.queryByRole("textbox", { name: "Command line" })).not.toBeInTheDocument();
-		fireEvent.change(screen.getByLabelText("Solo Region name"), { target: { value: "Warm looks" } });
+		expect(
+			screen.queryByRole("textbox", { name: "Command line" }),
+		).not.toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText("Solo Region name"), {
+			target: { value: "Warm looks" },
+		});
 		expect(editor.setName).toHaveBeenCalledWith("Warm looks");
 		fireEvent.click(screen.getByRole("button", { name: "Save Solo Region" }));
 		expect(editor.save).toHaveBeenCalledOnce();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 		expect(editor.cancel).toHaveBeenCalledOnce();
-	} finally { soloBridge.editor = null; }
+	} finally {
+		soloBridge.editor = null;
+	}
 });
 
 it("opens the real local Playback settings modal on a held mode button without toggling mode", () => {
@@ -1148,9 +1211,15 @@ it("opens the real local Playback settings modal on a held mode button without t
 	act(() => vi.advanceTimersByTime(650));
 	fireEvent.pointerUp(mode);
 	fireEvent.click(mode);
-	expect(screen.getByRole("dialog", { name: "Playback section settings" })).toBeInTheDocument();
+	expect(
+		screen.getByRole("dialog", { name: "Playback section settings" }),
+	).toBeInTheDocument();
 	expect(screen.getByRole("tab", { name: "Page source" })).toBeInTheDocument();
-	expect(screen.getByRole("tab", { name: "Manage Solo Regions" })).toBeInTheDocument();
+	expect(
+		screen.getByRole("tab", { name: "Manage Solo Regions" }),
+	).toBeInTheDocument();
 	expect(screen.getByLabelText("Page")).toHaveValue("2");
-	expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: "SET_CONTROL_MODE" }));
+	expect(dispatch).not.toHaveBeenCalledWith(
+		expect.objectContaining({ type: "SET_CONTROL_MODE" }),
+	);
 });
