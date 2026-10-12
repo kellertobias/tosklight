@@ -9,6 +9,9 @@ use cuelist_feedback_route_tests::{
 #[path = "playback_release_routes.rs"]
 mod release_routes;
 
+#[path = "preload_absolute_fader_route_tests.rs"]
+mod preload_absolute_fader_route_tests;
+
 #[path = "runtime_dynamic_stop_tests.rs"]
 mod runtime_dynamic_stop_tests;
 

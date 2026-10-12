@@ -226,18 +226,21 @@ fn preload_capture_resolves_real_buttons_canonicalizes_temp_and_excludes_live_co
         preload_capture_action(&playback, "temp-off", &button(1, false)).unwrap(),
         Some("temp-off")
     );
-    assert_eq!(
-        preload_capture_action(
-            &playback,
-            "master",
-            &PoolPlaybackInput {
-                value: Some(0.5),
-                ..PoolPlaybackInput::default()
-            }
-        )
-        .unwrap(),
-        None
-    );
+    for action in ["master", "master-absolute", "fader"] {
+        assert_eq!(
+            preload_capture_action(
+                &playback,
+                action,
+                &PoolPlaybackInput {
+                    value: Some(0.5),
+                    ..PoolPlaybackInput::default()
+                }
+            )
+            .unwrap(),
+            None,
+            "{action} must stay live",
+        );
+    }
     for (requested, retained) in [
         ("toggle", "toggle"),
         ("go", "go"),

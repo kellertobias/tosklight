@@ -72,7 +72,7 @@ pub(super) fn requested_playback_button_action(
         "dynamic-half-speed" => Action::DynamicHalfSpeed,
         "dynamic-learn-speed" => Action::DynamicLearnSpeed,
         "none" => Action::None,
-        "master" | "fader" | "go-to" | "load" | "xfade-on" | "xfade-off" => {
+        "master" | "master-absolute" | "fader" | "go-to" | "load" | "xfade-on" | "xfade-off" => {
             return Ok(None);
         }
         _ => return Err(ApiError::not_found("playback action")),
