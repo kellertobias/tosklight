@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "../../shared/api/client";
 import { anImportState, stubServer } from "../../testing/server";
 import { LibraryPage } from "./LibraryPage";
 
@@ -16,10 +17,90 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+function deferred() {
+	let resolve!: () => void;
+	const promise = new Promise<void>((done) => {
+		resolve = done;
+	});
+	return { promise, resolve };
+}
+
+function observeImportRead(gate = Promise.resolve()) {
+	const imports = api.imports;
+	const started = deferred();
+	const completed = deferred();
+	vi.spyOn(api, "imports").mockImplementation(async () => {
+		started.resolve();
+		const snapshot = await imports();
+		await gate;
+		completed.resolve();
+		return snapshot;
+	});
+	return { started: started.promise, completed: completed.promise };
+}
+
+async function renderHydratedLibrary(read = observeImportRead()) {
+	// Catalog hydration mounts the panel; its second snapshot must settle before
+	// role queries scan the full folder/file grids. This is not a timing budget.
+	let view!: ReturnType<typeof render>;
+	await act(async () => {
+		view = render(<LibraryPage />);
+	});
+	await act(async () => {
+		await read.completed;
+	});
+	return view;
+}
+
 describe("importing into the library", () => {
+	it("waits for the imports snapshot before asserting the full Library", async () => {
+		stubServer();
+		const gate = deferred();
+		const read = observeImportRead(gate.promise);
+		let finished = false;
+		const hydrated = renderHydratedLibrary(read).then(() => {
+			finished = true;
+		});
+		await read.started;
+		expect(finished).toBe(false);
+		gate.resolve();
+		await hydrated;
+
+		const panel = screen.getByRole("article", { name: "Import" });
+		expect(panel).toHaveTextContent("004-LoopTest.mp4");
+		expect(panel).toHaveTextContent("001/004");
+		expect(screen.getByLabelText("Search Library")).toBeInTheDocument();
+	});
+
+	it("cancels polling and ignores a snapshot completed after unmount", async () => {
+		stubServer();
+		const gate = deferred();
+		const read = observeImportRead(gate.promise);
+		const intervals = vi.spyOn(globalThis, "setInterval");
+		const clear = vi.spyOn(globalThis, "clearInterval");
+		let view!: ReturnType<typeof render>;
+		await act(async () => {
+			view = render(<LibraryPage />);
+		});
+		await read.started;
+		const pollIndex = intervals.mock.calls.findIndex(
+			(call) => call[1] === 5_000,
+		);
+		expect(pollIndex).toBeGreaterThanOrEqual(0);
+		const poll = intervals.mock.results[pollIndex].value;
+		view.unmount();
+		expect(clear).toHaveBeenCalledWith(poll);
+		await act(async () => {
+			gate.resolve();
+			await read.completed;
+		});
+		expect(view.container).toBeEmptyDOMElement();
+		expect(api.imports).toHaveBeenCalledTimes(1);
+	});
+
 	it("says what is waiting, and what it will become", async () => {
 		stubServer();
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
 		const panel = await screen.findByRole("article", { name: "Import" });
 		expect(panel).toHaveTextContent("004-LoopTest.mp4");
@@ -32,7 +113,7 @@ describe("importing into the library", () => {
 
 	it("converts everything waiting and shows the work happening", async () => {
 		const server = stubServer();
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Convert 1 file" }),
@@ -49,7 +130,7 @@ describe("importing into the library", () => {
 
 	it("stops an import that is still going", async () => {
 		const server = stubServer();
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 		await userEvent.click(
 			await screen.findByRole("button", { name: "Convert 1 file" }),
 		);
@@ -62,7 +143,7 @@ describe("importing into the library", () => {
 
 	it("says a machine that cannot transcode cannot, before anything is queued", async () => {
 		stubServer({ imports: anImportState({ canImport: false }) });
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
 		expect(await screen.findByRole("alert")).toHaveTextContent(
 			"FFmpeg is not installed",
@@ -92,7 +173,7 @@ describe("importing into the library", () => {
 				],
 			}),
 		});
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
 		const bar = await screen.findByRole("progressbar", { name: /Converting/u });
 		expect(bar).not.toHaveAttribute("aria-valuenow");
@@ -118,7 +199,7 @@ describe("importing into the library", () => {
 				],
 			}),
 		});
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
 		expect(
 			await screen.findByText("the file has no video stream"),
@@ -151,9 +232,11 @@ describe("importing into the library", () => {
 				],
 			}),
 		});
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
-		expect(await screen.findByText(/Loop\.mov · Retrying/u)).toBeInTheDocument();
+		expect(
+			await screen.findByText(/Loop\.mov · Retrying/u),
+		).toBeInTheDocument();
 		expect(screen.getByText("Conversion progress")).toBeInTheDocument();
 		expect(
 			screen.getByRole("progressbar", { name: "Overall conversion progress" }),
@@ -162,7 +245,7 @@ describe("importing into the library", () => {
 
 	it("stays out of the way when there is nothing to import", async () => {
 		stubServer({ imports: anImportState({ pending: [], jobs: [] }) });
-		render(<LibraryPage />);
+		await renderHydratedLibrary();
 
 		// The library itself still renders; only the panel is absent.
 		await screen.findByLabelText("Search Library");
