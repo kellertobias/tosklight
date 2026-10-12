@@ -38,19 +38,37 @@
 	background: var(--panel);
 	color: var(--text);
 }
-.screen-playback-fit:has(> .screen-playback-fit-status) .playback-solo-fence-overlay {
+.screen-playback-fit:has(> .screen-playback-fit-status)
+	.playback-solo-fence-overlay {
 	visibility: hidden;
 }
+/* Press feedback must retain the authored 44px touch target. Shrinking it also
+ * makes the fit guard mistake an active control for an undersized layout. */
+.screen-playback-fit .playback-fader-bank.touch-layout
+	button:not(:disabled):active {
+	transform: none;
+}
+
 /* Narrow Main tracks retain every authored action rather than overprinting side by side. */
-.screen-bank-fit .playback-fader-bank.touch-layout .vertical-touch-fader-stack.has-actions {
+.screen-bank-fit .playback-fader-bank.touch-layout
+	.vertical-touch-fader-stack.has-actions {
 	grid-template-rows: minmax(44px, 1fr) auto;
 }
-.screen-bank-fit .playback-fader-bank.touch-layout article > .vertical-touch-fader-stack.has-actions > .vertical-touch-fader-actions {
+.screen-bank-fit
+	.playback-fader-bank.touch-layout
+	article
+	> .vertical-touch-fader-stack.has-actions
+	> .vertical-touch-fader-actions {
 	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: none;
 	grid-auto-rows: 44px;
 }
-.screen-bank-fit .playback-fader-bank.touch-layout article > .vertical-touch-fader-stack.has-actions > .vertical-touch-fader-actions > .ui-button:nth-child(n) {
+.screen-bank-fit
+	.playback-fader-bank.touch-layout
+	article
+	> .vertical-touch-fader-stack.has-actions
+	> .vertical-touch-fader-actions
+	> .ui-button:nth-child(n) {
 	grid-column: 1;
 	min-height: 44px;
 	height: 44px;
@@ -87,8 +105,14 @@
 }
 
 /* Required height follows actual Main controls and authored proportions, not a fixed enlarged band. */
-.app-shell:has(> .screen-bank-fit.touch-connected .playback-fader-bank[data-playback-surface="main"].touch-layout) {
-	--control-height: max(var(--screen-playback-base-height, 348px), var(--screen-playback-required-height, 0px));
+.app-shell:has(
+		> .screen-bank-fit.touch-connected
+			.playback-fader-bank[data-playback-surface="main"].touch-layout
+	) {
+	--control-height: max(
+		var(--screen-playback-base-height, 348px),
+		var(--screen-playback-required-height, 0px)
+	);
 }
 
 /* The editor and bank share one explicit column, never implicit shell tracks. */
