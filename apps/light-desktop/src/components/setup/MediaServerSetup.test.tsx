@@ -259,13 +259,23 @@ describe("Media server Patch authority", () => {
 		expect(mocks.usePatchView).toHaveBeenCalledWith(true);
 	});
 	it("does not show a previous HTTP endpoint's connected status after its port changes", async () => {
-		fixture = { ...withEndpoint("127.0.0.1"), definition: toskMediaDefinition(),
-			direct_control: { protocol: "citp", ip_address: "127.0.0.1", port: 4809, http_port: 15008 } };
+		fixture = {
+			...withEndpoint("127.0.0.1"),
+			definition: toskMediaDefinition(),
+			direct_control: {
+				protocol: "citp",
+				ip_address: "127.0.0.1",
+				port: 4809,
+				http_port: 15008,
+			},
+		};
 		patchFixtures = [fixture];
 		server.mediaServers = [status("127.0.0.1", true, null)];
 		render(<MediaServerSetup />);
 		expect(within(rowFor("Media One")).queryByText("● Connected")).toBeNull();
-		await waitFor(() => expect(mocks.inspectMediaServer).toHaveBeenCalledWith("fixture-media"));
+		await waitFor(() =>
+			expect(mocks.inspectMediaServer).toHaveBeenCalledWith("fixture-media"),
+		);
 	});
 
 	it("lists every patched server as one table row with its type", () => {
@@ -860,6 +870,118 @@ describe("Coordinated Media Server patching", () => {
 		};
 	}
 
+	it("preserves the custom HTTP endpoint and binds only the selected same-host CITP peer", async () => {
+		const discovery = discoveredServer();
+		discovery.servers[0].citpPort = 14809;
+		const selected = boundFixture({
+			internal_bindings: { library: null, output: null },
+			direct_control: {
+				protocol: "citp",
+				ip_address: "192.168.1.40",
+				port: 14809,
+				http_port: 18080,
+			},
+		});
+		const peer = boundFixture({
+			fixture_id: "peer",
+			fixture_number: 2,
+			name: "Peer",
+			internal_bindings: { library: null, output: null },
+			direct_control: {
+				protocol: "citp",
+				ip_address: "192.168.1.40",
+				port: 14810,
+				http_port: 18081,
+			},
+		});
+		patchFixtures = [peer, selected];
+		const peerBefore = structuredClone(peer);
+		mocks.discoverMediaServers.mockResolvedValue(discovery);
+		render(<MediaServerSetup />);
+		await screen.findByText("Pixel Rack · Main");
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
+		expect(mocks.patchFixtures.mock.calls[0][0]).toHaveLength(1);
+		expect(mocks.patchFixtures.mock.calls[0][0][0].input).toMatchObject({
+			fixtureId: selected.fixture_id,
+			directControl: {
+				ipAddress: "192.168.1.40",
+				port: 14809,
+				httpPort: 18080,
+			},
+			internalBindings: { output: OUTPUT },
+		});
+		expect(peer).toEqual(peerBefore);
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		14809, 14811,
+	])("refuses copied output UUID ambiguity before any desk or remote write (CITP %s)", async (port) => {
+		const discovery = discoveredServer();
+		discovery.servers[0].citpPort = port;
+		patchFixtures = [
+			boundFixture({
+				direct_control: {
+					protocol: "citp",
+					ip_address: "192.168.1.40",
+					port: 14809,
+					http_port: 18080,
+				},
+			}),
+			boundFixture({
+				fixture_id: "peer",
+				fixture_number: 2,
+				name: "Peer",
+				direct_control: {
+					protocol: "citp",
+					ip_address: "192.168.1.40",
+					port: 14810,
+					http_port: 18081,
+				},
+			}),
+		];
+		mocks.discoverMediaServers.mockResolvedValue(discovery);
+		render(<MediaServerSetup />);
+		await screen.findByText("Pixel Rack · Main");
+		fireEvent.click(screen.getByRole("button", { name: "Patch suggested" }));
+		expect(
+			await screen.findByText(/ambiguous.*Nothing was changed/i),
+		).toBeInTheDocument();
+		expect(mocks.patchFixtures).not.toHaveBeenCalled();
+		expect(mocks.updateDiscoveredMediaAddress).not.toHaveBeenCalled();
+	});
+
+	it("restores the exact custom endpoint and binding after Patch address fails", async () => {
+		const discovery = discoveredServer();
+		discovery.servers[0].citpPort = 14809;
+		const selected = boundFixture({
+			direct_control: {
+				protocol: "citp",
+				ip_address: "192.168.1.40",
+				port: 14809,
+				http_port: 18080,
+			},
+		});
+		patchFixtures = [selected];
+		mocks.discoverMediaServers.mockResolvedValue(discovery);
+		mocks.updateDiscoveredMediaAddress.mockRejectedValue(
+			new Error("Endpoint unavailable"),
+		);
+		render(<MediaServerSetup />);
+		await screen.findByText("Pixel Rack · Main");
+		confirmAddress(7, 201);
+		await screen.findByText(/The desk patch was restored/);
+		expect(mocks.patchFixtures).toHaveBeenCalledTimes(2);
+		for (const call of mocks.patchFixtures.mock.calls)
+			expect(call[0][0].input).toMatchObject({
+				fixtureId: selected.fixture_id,
+				directControl: { port: 14809, httpPort: 18080 },
+				internalBindings: { output: OUTPUT },
+			});
+		expect(mocks.deleteFixture).not.toHaveBeenCalled();
+	});
+
 	function confirmAddress(universe: number, address: number) {
 		fireEvent.click(screen.getByRole("button", { name: "Patch address" }));
 		fireEvent.change(screen.getByLabelText("Universe"), {
@@ -1131,6 +1253,7 @@ describe("Coordinated Media Server patching", () => {
 					protocol: "citp",
 					ip_address: "192.168.1.99",
 					port: 4809,
+					http_port: 18080,
 				},
 			}),
 		];
@@ -1148,7 +1271,7 @@ describe("Coordinated Media Server patching", () => {
 		await waitFor(() => expect(mocks.patchFixtures).toHaveBeenCalledOnce());
 		expect(mocks.patchFixtures.mock.calls[0][0][0].input).toMatchObject({
 			fixtureId: "patched-media",
-			directControl: { ipAddress: "192.168.1.40", port: 4809 },
+			directControl: { ipAddress: "192.168.1.40", port: 4809, httpPort: null },
 		});
 	});
 

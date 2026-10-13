@@ -444,3 +444,6 @@ fn media_input_universes_are_checked_per_protocol() {
         unsupported.message
     );
 }
+
+#[path = "media_discovery_endpoint_tests.rs"]
+mod endpoints;

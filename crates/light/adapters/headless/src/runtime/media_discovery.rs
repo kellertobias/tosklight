@@ -131,28 +131,116 @@ pub(super) async fn discover_native_media_servers(
 ) -> Result<Json<MediaServerDiscovery>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     show.verify(&state)?;
-    let discovered = match discover_servers(Duration::from_millis(750)).await {
-        Ok(servers) => servers,
-        Err(error) => {
-            return Ok(Json(MediaServerDiscovery {
-                servers: Vec::new(),
-                discovery_error: Some(format!(
-                    "Media Server discovery failed: {error}. Manual patching still works; \
-                     check the desk's network interface and retry."
-                )),
-            }));
+    let snapshot = state.output.snapshot();
+    let discovered = discover_servers(Duration::from_millis(750))
+        .await
+        .map_err(|error| error.to_string());
+    inspect_media_discovery(&snapshot.fixtures, discovered)
+        .await
+        .map(Json)
+}
+
+/// Persisted native physical masters provide authority even when UDP discovery is unavailable.
+async fn inspect_media_discovery(
+    fixtures: &[light_fixture::PatchedFixture],
+    discovered: Result<Vec<light_media::DiscoveredCitpServer>, String>,
+) -> Result<MediaServerDiscovery, ApiError> {
+    let discovery_error = discovered.as_ref().err().map(|error| {
+        format!("Media Server discovery failed: {error}. Configured servers remain available; check the desk's network interface and retry.")
+    });
+    let mut targets = std::collections::BTreeMap::new();
+    for server in discovered.unwrap_or_default() {
+        let endpoint = unconfigured_native_endpoint(&server);
+        targets.insert((server.host.clone(), server.port), (server, endpoint, None));
+    }
+    let mut configured = std::collections::BTreeMap::new();
+    for fixture in fixtures
+        .iter()
+        .filter(|fixture| native_media_action(fixture).is_some())
+    {
+        let Some(citp) = fixture.direct_control.as_ref() else {
+            continue;
+        };
+        let key = (citp.ip_address.to_string(), citp.port);
+        let candidate = native_media_fixture_endpoint(fixture).ok();
+        let entry =
+            configured
+                .entry(key.clone())
+                .or_insert((fixture.name.clone(), candidate, false));
+        if entry.1 != candidate || candidate.is_none() {
+            entry.2 = true;
         }
-    };
+    }
+    for ((host, port), (name, endpoint, conflict)) in configured {
+        let server = light_media::DiscoveredCitpServer {
+            name,
+            host: host.clone(),
+            port,
+        };
+        let issue = conflict.then(|| "Configured native Media Server has conflicting or invalid HTTP endpoints. Repair the matching CITP endpoint before retrying.".to_owned());
+        targets.insert(
+            (host, port),
+            (server, endpoint.filter(|_| !conflict), issue),
+        );
+    }
     let client = native_media_client()?;
-    let servers = futures_util::future::join_all(discovered.into_iter().map(|server| {
-        let base = format!("http://{}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2", server.host);
-        inspect_discovered_native_media_server(client.clone(), server, base)
-    }))
-    .await;
-    Ok(Json(MediaServerDiscovery {
+    let inspections = targets.into_values().map(|(server, endpoint, issue)| {
+        inspect_discovery_target(client.clone(), server, endpoint, issue)
+    });
+    let servers = futures_util::future::join_all(inspections).await;
+    Ok(MediaServerDiscovery {
         servers,
-        discovery_error: None,
-    }))
+        discovery_error,
+    })
+}
+
+async fn inspect_discovery_target(
+    client: reqwest::Client,
+    server: light_media::DiscoveredCitpServer,
+    endpoint: Option<SocketAddr>,
+    issue: Option<String>,
+) -> DiscoveredMediaServer {
+    if let Some(endpoint) = endpoint {
+        return inspect_discovered_native_media_server(
+            client,
+            server,
+            format!("http://{endpoint}/api/v2"),
+        )
+        .await;
+    }
+    unavailable_discovery(
+        server,
+        issue.unwrap_or_else(|| {
+            "This CITP service is not a configured ToskLight native Media Server; \
+         its HTTP endpoint will not be guessed."
+                .to_owned()
+        }),
+    )
+}
+
+fn unconfigured_native_endpoint(server: &light_media::DiscoveredCitpServer) -> Option<SocketAddr> {
+    server
+        .name
+        .strip_prefix("ToskLight Pixel — ")
+        .filter(|instance| !instance.trim().is_empty())?;
+    let host = server.host.parse::<Ipv4Addr>().ok()?;
+    Some(SocketAddr::new(host.into(), TOSKLIGHT_MEDIA_HTTP_PORT))
+}
+
+fn unavailable_discovery(
+    server: light_media::DiscoveredCitpServer,
+    error: String,
+) -> DiscoveredMediaServer {
+    DiscoveredMediaServer {
+        key: format!("{}:{}", server.host, server.port),
+        name: server.name,
+        host: server.host,
+        citp_port: server.port,
+        status: "Unavailable".to_owned(),
+        instance: None,
+        outputs: Vec::new(),
+        error: Some(error),
+    }
 }
 
 pub(super) async fn inspect_discovered_native_media_server(
@@ -177,7 +265,7 @@ pub(super) async fn inspect_discovered_native_media_server(
             "Unavailable".to_owned(),
             None,
             "The discovered Media Server did not answer its configuration API. Check that it \
-             is running and reachable on port 8080, then refresh discovery.",
+             is running and reachable at its selected HTTP endpoint, then refresh discovery.",
         );
     };
     let operator_name = format!("ToskLight Pixel Media - {}", health.instance);
@@ -271,10 +359,53 @@ pub(super) async fn update_discovered_media_server_address(
         ));
     }
     validate_media_input_universe(input.protocol.as_deref(), input.universe)?;
-    let base = format!("http://{host}:{TOSKLIGHT_MEDIA_HTTP_PORT}/api/v2");
+    let snapshot = state.output.snapshot();
+    let endpoint = discovered_address_endpoint(&snapshot.fixtures, host, input.output_id)?;
+    let base = format!("http://{endpoint}/api/v2");
     update_media_output_address(&native_media_client()?, &base, &input)
         .await
         .map(Json)
+}
+
+/// A configured host may only write the exact committed output binding, never a guessed API.
+fn discovered_address_endpoint(
+    fixtures: &[light_fixture::PatchedFixture],
+    host: Ipv4Addr,
+    output: Uuid,
+) -> Result<SocketAddr, ApiError> {
+    let native = fixtures
+        .iter()
+        .filter(|fixture| {
+            native_media_action(fixture).is_some()
+                && fixture
+                    .direct_control
+                    .as_ref()
+                    .is_some_and(|endpoint| endpoint.ip_address == std::net::IpAddr::V4(host))
+        })
+        .collect::<Vec<_>>();
+    if native.is_empty() {
+        return Ok(SocketAddr::new(host.into(), TOSKLIGHT_MEDIA_HTTP_PORT));
+    }
+    let mut endpoints = std::collections::BTreeSet::new();
+    for fixture in native.into_iter().filter(|fixture| {
+        fixture
+            .internal_bindings
+            .output
+            .as_deref()
+            .and_then(|id| id.trim().parse::<Uuid>().ok())
+            == Some(output)
+    }) {
+        endpoints.insert(native_media_fixture_endpoint(fixture)?);
+    }
+    match endpoints.len() {
+        1 => Ok(*endpoints.first().expect("one committed endpoint")),
+        0 => Err(ApiError::bad_request(
+            "Media Server output has no committed native binding at this host; commit the exact output before changing its address",
+        )),
+        _ => Err(ApiError::bad_request(
+            "Media Server output binding is ambiguous across HTTP endpoints; repair the copied output binding before retrying",
+        )),
+    }
 }
 
 /// The universe ranges each Media Server DMX input protocol accepts. Art-Net numbers its 15-bit

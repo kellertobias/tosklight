@@ -22,6 +22,8 @@ After patching, open **Show Patch → Media Servers** and set the server's **IP 
 
 For a **ToskLight Media** row, also set **HTTP port** to the port on which that Media Server serves its native controls and configuration. HTTP defaults to `8080` when no explicit port is stored; a server running on another port needs that exact value. Both ports use the row's IP address. The HTTP port is independent of the CITP port: CITP discovery does not advertise it, and the desk does not calculate it from the CITP port. Generic CITP servers show only the CITP port. Architect's Rig Editor has a separate **Discover servers** action for CITP while configuring media surfaces.
 
+**Refresh Discovery** also inspects already configured ToskLight Media endpoints on their stored HTTP ports. Each output appears with its own **Patch suggested** and **Patch address** actions. These actions bind the selected output and preserve the HTTP port when its IP address and CITP port still match. Unconfigured network discovery uses the standard CITP port `4809` and HTTP port `8080`; it does not search custom ports. Conflicting output bindings or endpoint configurations require correction before patching.
+
 CITP discovery is not ToskLight show discovery. CITP describes Media outputs and libraries; ToskLight's local-network discovery offers read-only `.show` copies between Desk and the PreViz Rig Editor.
 
 ## Follow the desk's Speed Groups
@@ -65,7 +67,7 @@ When the Media fixture is patched but CITP is unavailable, the Media pane still 
 
 With CITP connected, the same numeric addresses gain names, thumbnails, and program/layer previews. Treat these as operator feedback. Art-Net or sACN remains authoritative for playback.
 
-Cue previews for media-only Cues come from the server's administration interface on port 8080, not from CITP. The desk sends the DMX state a Cue would leave, and the server draws it off-screen as a Program or layer picture while its output keeps playing (see [Media Server Cue Snapshots](../90-Protocols/04-media-cue-snapshots.md)). When port 8080 is unreachable, those Cues read **Media Server offline** in the Cue list.
+Cue previews for media-only Cues come from the server's administration interface on its configured HTTP port (default `8080`), not from CITP. The desk sends the DMX state a Cue would leave, and the server draws it off-screen as a Program or layer picture while its output keeps playing (see [Media Server Cue Snapshots](../90-Protocols/04-media-cue-snapshots.md)). When that HTTP endpoint is unreachable, those Cues read **Media Server offline** in the Cue list.
 
 > [!danger] Missing graphic
 > Add a four-state Desk Media pane comparison: no Media Server patched, patched without CITP, patched with CITP, and patched server offline.

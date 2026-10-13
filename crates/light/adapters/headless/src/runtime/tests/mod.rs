@@ -210,3 +210,5 @@ mod show_activation_cancellation_tests;
 include!("family_encoder_pages_tests.rs");
 
 mod media_endpoint_projection_tests;
+
+mod media_discovery_endpoint_route_tests;

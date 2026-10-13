@@ -18,8 +18,10 @@ import { mediaServerDefinition } from "./mediaDiscoveryModel";
 import {
 	deskDmxInputFor,
 	deskUniverseReaching,
+	discoveredFixtureAmbiguity,
 	dmxInputLabel,
 	type MediaDmxInput,
+	matchesDiscoveredEndpoint,
 } from "./mediaPatchCoordination";
 
 export type PatchChoice =
@@ -89,6 +91,9 @@ function patchCandidate(
 		protocol: "citp" as const,
 		ip_address: candidate.host,
 		port: candidate.citpPort,
+		...(patched && matchesDiscoveredEndpoint(patched, candidate)
+			? { http_port: patched.direct_control?.http_port ?? null }
+			: {}),
 	};
 	if (patched)
 		return changedPatchFixtureCandidate(patched, {
@@ -128,6 +133,13 @@ export async function patchDiscoveredServer(
 	input: DiscoveredPatchInput,
 ): Promise<void> {
 	const { output, report } = input;
+	const ambiguity = discoveredFixtureAmbiguity(
+		input.patch.fixtures,
+		input.candidate,
+		output,
+		input.routes,
+	);
+	if (ambiguity) return report(ambiguity);
 	const target = resolveTarget(input);
 	if (typeof target === "string") return report(target);
 	if (!output.mode)

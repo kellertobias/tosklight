@@ -78,31 +78,70 @@ export function deskUniverseReaching(
 	return route?.logical_universe ?? null;
 }
 
-/** The desk fixture already patched for this exact output (by bound output, then address). */
+/** Exact physical endpoint identity; a host may run several independent Pixels. */
+export function matchesDiscoveredEndpoint(
+	fixture: PatchedFixture,
+	server: DiscoveredMediaServer,
+): boolean {
+	return (
+		fixture.direct_control?.protocol === "citp" &&
+		fixture.direct_control.ip_address === server.host &&
+		fixture.direct_control.port === server.citpPort
+	);
+}
+
+function discoveredFixtureCandidates(
+	fixtures: readonly PatchedFixture[],
+	server: DiscoveredMediaServer,
+	output: DiscoveredMediaOutput,
+	routes: Routes,
+): PatchedFixture[] {
+	const bound = fixtures.filter(
+		(fixture) => fixture.internal_bindings?.output === output.id,
+	);
+	// Multiple bindings cannot prove which existing physical fixture should be changed.
+	if (bound.length > 1) return bound;
+	const exact = bound.filter((fixture) =>
+		matchesDiscoveredEndpoint(fixture, server),
+	);
+	if (exact.length) return exact;
+	const universe = deskUniverseReaching(routes, output) ?? output.universe;
+	const addressed = fixtures.filter(
+		(fixture) =>
+			!fixture.internal_bindings?.output &&
+			matchesDiscoveredEndpoint(fixture, server) &&
+			fixture.universe === universe &&
+			fixture.address === output.startAddress,
+	);
+	return addressed.length ? addressed : bound;
+}
+
+/** A unique bound fixture can move endpoints; copied identities require operator resolution. */
 export function matchingDiscoveredFixture(
 	fixtures: readonly PatchedFixture[],
 	server: DiscoveredMediaServer,
 	output: DiscoveredMediaOutput,
 	routes: Routes,
 ): PatchedFixture | undefined {
-	const universe = deskUniverseReaching(routes, output) ?? output.universe;
-	const bound = fixtures.filter(
-		(fixture) => fixture.internal_bindings?.output === output.id,
+	const candidates = discoveredFixtureCandidates(
+		fixtures,
+		server,
+		output,
+		routes,
 	);
-	return (
-		// A copied Media configuration can repeat an output id on another host.
-		bound.find(
-			(fixture) => fixture.direct_control?.ip_address === server.host,
-		) ??
-		bound[0] ??
-		fixtures.find(
-			(fixture) =>
-				!fixture.internal_bindings?.output &&
-				fixture.direct_control?.ip_address === server.host &&
-				fixture.universe === universe &&
-				fixture.address === output.startAddress,
-		)
-	);
+	return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+export function discoveredFixtureAmbiguity(
+	fixtures: readonly PatchedFixture[],
+	server: DiscoveredMediaServer,
+	output: DiscoveredMediaOutput,
+	routes: Routes,
+): string | null {
+	return discoveredFixtureCandidates(fixtures, server, output, routes).length >
+		1
+		? "The Media Server output matches ambiguous desk fixtures. Resolve the duplicate output bindings or endpoint addresses, then retry. Nothing was changed."
+		: null;
 }
 
 export type DiscoveredPatchKind =
