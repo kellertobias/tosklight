@@ -75,6 +75,9 @@ crossbeam-queue = { version = "0.3", optional = true }
 light-usb-dmx-core = { path = "../usb-dmx-core" }
 tokio = { workspace = true, features = ["test-util"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+light-output-thread-policy = { path = "../output-thread-policy" }
+
 [target.'cfg(unix)'.dependencies]
 xattr = "1.6"
 

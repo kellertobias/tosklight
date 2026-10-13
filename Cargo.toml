@@ -9,6 +9,7 @@ members = [
   "apps/viz-editor/src-tauri",
   "crates/light",
   "crates/light/adapters/headless",
+  "crates/light/adapters/output-thread-policy",
   "crates/light/adapters/extensions",
   "crates/light/adapters/media",
   "crates/light/adapters/patch-wire",

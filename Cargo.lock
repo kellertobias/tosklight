@@ -3666,6 +3666,7 @@ dependencies = [
  "light-media",
  "light-mvr",
  "light-output",
+ "light-output-thread-policy",
  "light-patch-wire",
  "light-playback",
  "light-programmer",
@@ -3732,6 +3733,10 @@ dependencies = [
  "tokio",
  "tokio-util",
 ]
+
+[[package]]
+name = "light-output-thread-policy"
+version = "0.1.0"
 
 [[package]]
 name = "light-patch-wire"

@@ -8,6 +8,9 @@ use anyhow::Context;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+#[path = "output_thread.rs"]
+mod output_thread;
+
 type TaskOutcome = anyhow::Result<()>;
 
 struct TaskGroup {
@@ -135,11 +138,13 @@ impl CapabilitySupervisors {
             output: OutputTaskGroup {
                 cancellation: output_cancellation,
                 task: tokio::task::spawn_blocking(move || {
-                    tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .context("failed to create isolated output runtime")?
-                        .block_on(scheduler.into_task())
+                    output_thread::run(move || {
+                        tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .context("failed to create isolated output runtime")?
+                            .block_on(scheduler.into_task())
+                    })
                 }),
             },
             control_inputs,
