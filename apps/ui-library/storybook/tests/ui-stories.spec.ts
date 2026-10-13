@@ -2754,7 +2754,7 @@ test("the narrow generic pool keeps touch-sized boxes in a scrollable window", a
 		.toBeGreaterThan(0);
 });
 
-test("pool cards stay square across width, height, resize, overflow, and application CSS", async ({
+test("generic pool cards stay square across width, height, resize, and overflow", async ({
 	page,
 }) => {
 	await page.setViewportSize({ width: 1496, height: 900 });
@@ -2816,7 +2816,12 @@ test("pool cards stay square across width, height, resize, overflow, and applica
 		.poll(async () => (await poolGeometry(page, ".pool-card"))[0]?.width)
 		.not.toBe(before.width);
 	await expectSquarePool(page);
+});
 
+test("application pool cards stay square with production CSS", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 1496, height: 900 });
 	for (const [storyId, selector] of [
 		["tosklight-windows-pools--groups-narrow-short", ".group-card"],
 		["tosklight-windows-pools--groups-wide-tall", ".group-card"],
