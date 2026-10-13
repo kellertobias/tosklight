@@ -184,6 +184,9 @@ function synchronizeArmed(
 	commandLine: ReturnType<typeof useCommandLineSurface>,
 ) {
 	dispatch({ type: "SET_UPDATE_ARMED", value: intent.armed });
+	// OSC has already changed the authoritative command line. Observe its workflow
+	// notification without echoing a write that can race the next hardware key.
+	if (intent.source === "osc") return;
 	if (intent.armed) void commandLine.replace("UPDATE ", false);
 	else if (/^UPDATE\b/i.test(commandLine.read().text.trim())) {
 		void commandLine.reset();
