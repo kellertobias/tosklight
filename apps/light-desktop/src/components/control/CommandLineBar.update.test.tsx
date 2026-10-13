@@ -5,9 +5,9 @@ import {
 	render,
 	screen,
 } from "@testing-library/react";
-import { Button } from "@tosklight/ui";
+import { Button, ModalFrame, ModalProvider } from "@tosklight/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommandHistoryEntry } from "../../api/types";
+import type { CommandHistoryEntry, SessionResponse } from "../../api/types";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import { DeskStateDiagnosticsProvider } from "../../features/deskState/DeskStateDiagnosticsState";
 import {
@@ -26,6 +26,8 @@ import {
 	settleSession,
 } from "../../features/programmingInteraction/testFixtures";
 import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
+import { routeOperatorEvent } from "../../features/server/operatorEventRouting";
+import type { ServerState } from "../../features/server/useServerState";
 import { CommandLineBar } from "./CommandLineBar";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 
@@ -303,6 +305,114 @@ function RequestedSystemControlsTab() {
 }
 
 describe("scoped command-line integration", () => {
+	function oscEscape(deskId: string, action = "escape") {
+		routeOperatorEvent(
+			{
+				type: "operator_notification",
+				notification: {
+					type: "desk_action",
+					revision: 1,
+					notification: {
+						action,
+						desk_id: deskId,
+						session_id: "attached-osc-session",
+						path: "desk",
+						request_id: null,
+						control: null,
+						value: null,
+					},
+				},
+			},
+			{ session_id: "session-a", desk: { id: DESK_ID } } as SessionResponse,
+			{} as ServerState,
+		);
+	}
+
+	it.each([
+		"storeArmed",
+		"updateArmed",
+	] as const)("OSC Escape leaves %s through the mounted shared command owner", async (armed) => {
+		server.bootstrap.hardware_connected = true;
+		state[armed] = true;
+		const authority = createCommandLineTestAuthority({
+			deskId: DESK_ID,
+			text: armed === "storeArmed" ? "RECORD " : "UPDATE PBK 3.5",
+		});
+		render(authority.wrap(<CommandLineBar />));
+		await act(authority.settle);
+		act(() => oscEscape("other-desk"));
+		await act(authority.settle);
+		expect(state[armed]).toBe(true);
+		expect(authority.writes).toHaveLength(0);
+		act(() => oscEscape(DESK_ID));
+		await act(authority.settle);
+		expect(state[armed]).toBe(false);
+		expect(authority.store.getSnapshot().commandLine?.text).toBe("FIXTURE");
+		expect(authority.writes).toHaveLength(1);
+		expect(authority.store.getSnapshot().selection?.selected).toEqual([]);
+	});
+
+	it("OSC Escape retains active FileManager ownership instead of clearing the programmer", async () => {
+		state.storeArmed = true;
+		const authority = createCommandLineTestAuthority({
+			deskId: DESK_ID,
+			text: "RECORD ",
+		});
+		const handle = vi.fn();
+		const unregister = registerControlSurfaceTarget({
+			id: "test-active-files",
+			priority: 100,
+			accepts: (intent) =>
+				intent.type === "file_operation_key" && intent.action === "escape",
+			handle,
+		});
+		try {
+			render(authority.wrap(<CommandLineBar />));
+			await act(authority.settle);
+			act(() => oscEscape(DESK_ID));
+			await act(authority.settle);
+			expect(handle).toHaveBeenCalledTimes(1);
+			expect(state.storeArmed).toBe(true);
+			expect(authority.writes).toHaveLength(0);
+		} finally {
+			unregister();
+		}
+	});
+
+	it.each([
+		true,
+		false,
+	])("OSC Escape respects an active modal's escape policy %s", async (canClose) => {
+		server.bootstrap.hardware_connected = true;
+		state.storeArmed = true;
+		const close = vi.fn();
+		const authority = createCommandLineTestAuthority({
+			deskId: DESK_ID,
+			text: "RECORD ",
+		});
+		render(
+			authority.wrap(
+				<ModalProvider>
+					<CommandLineBar />
+					<ModalFrame
+						title="Owned test modal"
+						ariaLabel="Owned test modal"
+						onClose={close}
+						policy={{ escape: canClose }}
+					>
+						<p>Owned modal content</p>
+					</ModalFrame>
+				</ModalProvider>,
+			),
+		);
+		await act(authority.settle);
+		act(() => oscEscape(DESK_ID));
+		await act(authority.settle);
+		expect(close).toHaveBeenCalledTimes(canClose ? 1 : 0);
+		expect(state.storeArmed).toBe(true);
+		expect(authority.writes).toHaveLength(0);
+	});
+
 	it.each([
 		"touch",
 		"keyboard",

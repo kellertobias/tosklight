@@ -6,7 +6,10 @@ import type {
 	UpdateWorkflowNotification,
 } from "../../api/types";
 import { publishObjectEditorRequest } from "../controlSurfaceInteraction/objectEditorRequest";
-import { routeControlSurfaceIntentWithFeedback } from "../controlSurfaceInteraction/registry";
+import {
+	routeControlSurfaceIntent,
+	routeControlSurfaceIntentWithFeedback,
+} from "../controlSurfaceInteraction/registry";
 import type { ServerState } from "./useServerState";
 
 const hardwarePageKeys = new Set<string>();
@@ -45,6 +48,37 @@ function routeHardwarePageKey(
 	);
 }
 
+function routeOrdinaryEscape() {
+	const intent = {
+		type: "file_operation_key",
+		source: "osc",
+		action: "escape",
+	} as const;
+	const owner = routeControlSurfaceIntent(intent);
+	if (owner.status === "ambiguous")
+		routeControlSurfaceIntentWithFeedback(intent);
+	if (owner.status !== "missing") return;
+	// A modal owns Escape even when its policy forbids closing. Its existing capture
+	// handler selects the top layer; the command beneath it must stay untouched.
+	if (
+		document.querySelector(
+			'[aria-modal="true"][role="dialog"], [aria-modal="true"][role="alertdialog"]',
+		)
+	) {
+		document.dispatchEvent(
+			new KeyboardEvent("keydown", {
+				key: "Escape",
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		return;
+	}
+	window.dispatchEvent(
+		new CustomEvent("light:programmer-key", { detail: "escape" }),
+	);
+}
+
 function routeDeskAction(
 	event: Extract<OperatorNotification, { type: "desk_action" }>,
 	session: SessionResponse,
@@ -68,9 +102,7 @@ function routeDeskAction(
 		if (payload.action === "align") {
 			// The desk executes hardware Align once and publishes its authoritative projection.
 			return;
-			return;
 		} else if (payload.action === "shift-align") {
-			return;
 			return;
 		} else if (payload.action === "prog-playback") {
 			window.dispatchEvent(new Event("light:control-mode-toggle"));
@@ -105,6 +137,9 @@ function routeDeskAction(
 				kind: payload.control,
 				objectId: payload.value,
 			});
+			return;
+		} else if (payload.action === "escape") {
+			routeOrdinaryEscape();
 			return;
 		} else if (
 			payload.action === "playback" ||
