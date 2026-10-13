@@ -14,38 +14,46 @@ import {
  * desk has confirmed every edit; pending, offline, conflicted and failed edits are said as such,
  * and every one of them is already saved on this computer.
  */
-export function SyncStatusChip({ documentKey }: { documentKey: string | null }) {
+export function SyncStatusChip({
+	documentKey,
+}: {
+	documentKey: string | null;
+}) {
 	const [status, setStatus] = useState<SyncStatus | null>(null);
 	const [open, setOpen] = useState(false);
 	useEffect(() => {
 		let active = true;
-		syncSession
-			.status()
-			.then((next) => {
-				if (active) setStatus(next ?? null);
-			})
-			.catch(() => {
-				if (active) setStatus(null);
-			});
-		return () => {
-			active = false;
-		};
-	}, [documentKey]);
-	useEffect(() => {
+		let revision = 0;
 		let unlisten: (() => void) | undefined;
-		let disposed = false;
+		setStatus(null);
+		setOpen(false);
 		syncSession
-			.onStatusChanged(setStatus)
-			.then((stop) => {
-				if (disposed) stop();
-				else unlisten = stop;
+			.onStatusChanged((next) => {
+				if (!active) return;
+				revision += 1;
+				setStatus(next);
+			})
+			.then(async (stop) => {
+				if (!active) {
+					stop();
+					return;
+				}
+				unlisten = stop;
+				// Listen first so a settled connection cannot fall between the snapshot and subscription.
+				const initialRevision = revision;
+				try {
+					const next = await syncSession.status();
+					if (active && revision === initialRevision) setStatus(next ?? null);
+				} catch {
+					if (active && revision === initialRevision) setStatus(null);
+				}
 			})
 			.catch(() => undefined);
 		return () => {
-			disposed = true;
+			active = false;
 			unlisten?.();
 		};
-	}, []);
+	}, [documentKey]);
 	if (!status) return null;
 	return (
 		<>
@@ -103,7 +111,8 @@ export function SyncPanel({
 	const resolve = (entry: number, resolution: SyncResolution) =>
 		act(() => syncSession.resolve(entry, resolution));
 	const entries = [...new Set(conflicts.map((conflict) => conflict.entry))];
-	const offline = status.state === "offline" && status.detail.startsWith("Working offline");
+	const offline =
+		status.state === "offline" && status.detail.startsWith("Working offline");
 	return (
 		<ModalFrame
 			title={`Sync with ${status.deskName}`}
@@ -127,26 +136,39 @@ export function SyncPanel({
 			</dl>
 			{entries.map((entry) => {
 				const items = conflicts.filter((conflict) => conflict.entry === entry);
-				const refused = items.every((conflict) => conflict.reason === "refused");
+				const refused = items.every(
+					(conflict) => conflict.reason === "refused",
+				);
 				return (
-					<section key={entry} className="viz-sync-conflict" aria-label="Sync conflict">
+					<section
+						key={entry}
+						className="viz-sync-conflict"
+						aria-label="Sync conflict"
+					>
 						<ul>
 							{items.map((conflict) => (
 								<li key={`${conflict.kind}/${conflict.id}${conflict.path}`}>
 									<strong>{conflict.label}</strong>
 									{!refused && (
 										<span>
-											Control: {describe(conflict.theirs)} · Yours: {describe(conflict.mine)}
+											Control: {describe(conflict.theirs)} · Yours:{" "}
+											{describe(conflict.mine)}
 										</span>
 									)}
 								</li>
 							))}
 						</ul>
 						<div className="viz-sync-conflict-actions">
-							<Button disabled={busy} onClick={() => void resolve(entry, "keep_control")}>
+							<Button
+								disabled={busy}
+								onClick={() => void resolve(entry, "keep_control")}
+							>
 								{refused ? "Discard my change" : "Keep Control's"}
 							</Button>
-							<Button disabled={busy} onClick={() => void resolve(entry, "use_mine")}>
+							<Button
+								disabled={busy}
+								onClick={() => void resolve(entry, "use_mine")}
+							>
 								{refused ? "Send again" : "Use mine"}
 							</Button>
 						</div>
@@ -156,7 +178,10 @@ export function SyncPanel({
 			{failure && <p role="alert">{failure}</p>}
 			<div className="viz-sync-panel-actions">
 				{status.state === "error" && conflicts.length === 0 && (
-					<Button disabled={busy} onClick={() => void act(syncSession.dismissError)}>
+					<Button
+						disabled={busy}
+						onClick={() => void act(syncSession.dismissError)}
+					>
 						Dismiss
 					</Button>
 				)}
