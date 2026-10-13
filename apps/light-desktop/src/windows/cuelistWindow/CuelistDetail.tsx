@@ -184,7 +184,9 @@ export function CuelistDetail(props: CuelistDetailProps) {
 						editor.setSelectedCue(index);
 						setPropertyEditor({ index, property });
 					}}
-					onOpenCuePreview={setPreviewCue}
+					onOpenCuePreview={(index) =>
+						previews.openPicture(index, setPreviewCue)
+					}
 					interactive={!props.viewOnly}
 					compactRows={props.compactRows}
 					timingProgressByRow={timingProgressByRow}

@@ -45,7 +45,7 @@ export interface CueMediaPreviews {
 	/** Every wanted Cue a Media Server pictures, known before any picture arrives. */
 	mediaCueIds: ReadonlySet<string>;
 	/** Asks the Media Server again for pictures that failed. */
-	retry(): void;
+	retry(cueId?: string): void;
 }
 
 const EMPTY: ReadonlyMap<string, CueMediaPreview> = new Map();
@@ -99,6 +99,7 @@ function loadPictures(
 	relevant: CueMediaPreviewEntry[],
 	urls: PictureCache,
 	setPictures: Dispatch<SetStateAction<ReadonlyMap<string, CueMediaPreview>>>,
+	offlineServers: ReadonlySet<string>,
 ): (() => void) | undefined {
 	if (!actions || !relevant.length) {
 		releaseExcept(urls, new Set());
@@ -107,7 +108,11 @@ function loadPictures(
 	}
 	let cancelled = false;
 	const timers: ReturnType<typeof setTimeout>[] = [];
-	const keep = new Set(relevant.map(identity));
+	const keep = new Set(
+		relevant
+			.filter((entry) => !offlineServers.has(entry.serverFixtureId))
+			.map(identity),
+	);
 	// A picture of a state the Cue no longer has is released before anything else happens, so
 	// it can never be shown again.
 	releaseExcept(urls, keep);
@@ -119,7 +124,8 @@ function loadPictures(
 				entry.cueId,
 				known &&
 					identity(known.entry) === identity(entry) &&
-					(known.state === "ready" || known.state === "empty")
+					(known.state === "ready" || known.state === "empty") &&
+					urls.get(identity(entry))?.src === known.src
 					? known
 					: { state: "loading", entry },
 			);
@@ -129,6 +135,7 @@ function loadPictures(
 	const settle = (entry: CueMediaPreview) => {
 		if (cancelled) return;
 		setPictures((current) => {
+			if (cancelled) return current;
 			const next = new Map(current);
 			next.set(entry.entry.cueId, entry);
 			return next;
@@ -162,7 +169,10 @@ function loadPictures(
 				}
 				settle({ state: "loading", entry });
 				timers.push(
-					setTimeout(() => void fetchOne(entry, tries + 1), LOADING_RETRY_MILLIS),
+					setTimeout(
+						() => void fetchOne(entry, tries + 1),
+						LOADING_RETRY_MILLIS,
+					),
 				);
 				return;
 			}
@@ -223,7 +233,8 @@ export function useCueMediaPreviews(
 	const wanted = useMemo(() => new Set(cueIds), [cueIds]);
 	const wantedKey = useMemo(() => [...wanted].sort().join(","), [wanted]);
 	const [entries, setEntries] = useState<CueMediaPreviewEntry[] | null>(null);
-	const [pictures, setPictures] = useState<ReadonlyMap<string, CueMediaPreview>>(EMPTY);
+	const [pictures, setPictures] =
+		useState<ReadonlyMap<string, CueMediaPreview>>(EMPTY);
 	const [attempt, setAttempt] = useState(0);
 	const urls = useRef<PictureCache>(new Map());
 
@@ -258,7 +269,18 @@ export function useCueMediaPreviews(
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: attempt and reachability ask failed pictures again.
 	useEffect(
-		() => loadPictures(actions, relevant, urls.current, setPictures),
+		() =>
+			loadPictures(
+				actions,
+				relevant,
+				urls.current,
+				setPictures,
+				new Set(
+					(media?.mediaServers ?? [])
+						.filter((server) => server.status?.online === false)
+						.map((server) => server.fixture_id),
+				),
+			),
 		[actions, relevant, attempt, reachability],
 	);
 
@@ -274,10 +296,27 @@ export function useCueMediaPreviews(
 	const relevantKey = relevant.map((entry) => entry.cueId).join(",");
 	// biome-ignore lint/correctness/useExhaustiveDependencies: relevantKey stands in for relevant.
 	const mediaCueIds = useMemo(
-		() => (relevant.length ? new Set(relevant.map((entry) => entry.cueId)) : NO_CUES),
+		() =>
+			relevant.length ? new Set(relevant.map((entry) => entry.cueId)) : NO_CUES,
 		[relevantKey],
 	);
-	const retry = useCallback(() => setAttempt((value) => value + 1), []);
+	const retry = useCallback((cueId?: string) => {
+		if (cueId) {
+			for (const [key, picture] of urls.current) {
+				if (!key.startsWith(`${cueId}\0`)) continue;
+				URL.revokeObjectURL(picture.src);
+				urls.current.delete(key);
+			}
+			setPictures((current) => {
+				const known = current.get(cueId);
+				if (!known) return current;
+				const next = new Map(current);
+				next.set(cueId, { state: "loading", entry: known.entry });
+				return next;
+			});
+		}
+		setAttempt((value) => value + 1);
+	}, []);
 	return {
 		ready: entries !== null,
 		previews: active ? pictures : EMPTY,

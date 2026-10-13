@@ -47,5 +47,16 @@ export function useCuelistPreviews(
 			? { src: mediaPreview.src, scope: mediaPreview.entry.scope }
 			: undefined;
 	};
-	return { thumbnails, mediaPreviews, retry: media.retry, pictureAt };
+	const openPicture = (index: number, onOpen: (index: number) => void) => {
+		const cueId = cues[index]?.id;
+		if (cueId && media.mediaCueIds.has(cueId)) media.retry(cueId);
+		onOpen(index);
+	};
+	return {
+		thumbnails,
+		mediaPreviews,
+		retry: media.retry,
+		pictureAt,
+		openPicture,
+	};
 }

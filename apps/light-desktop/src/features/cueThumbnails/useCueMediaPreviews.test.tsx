@@ -17,7 +17,10 @@ const mocks = vi.hoisted(() => ({
 		mediaImage: vi.fn(),
 	},
 	media: {
-		mediaServers: [] as Array<{ fixture_id: string; status: { online: boolean } }>,
+		mediaServers: [] as Array<{
+			fixture_id: string;
+			status: { online: boolean };
+		}>,
 	},
 }));
 
@@ -264,9 +267,7 @@ describe("Media Server Cue previews", () => {
 				useCueMediaPreviews(cueIds, true, "revision"),
 			);
 			await waitFor(() =>
-				expect(result.current.previews.get(PROGRAM_CUE)?.state).toBe(
-					"loading",
-				),
+				expect(result.current.previews.get(PROGRAM_CUE)?.state).toBe("loading"),
 			);
 			await act(async () => {
 				await vi.advanceTimersByTimeAsync(1_600);
@@ -289,5 +290,131 @@ describe("Media Server Cue previews", () => {
 		await waitFor(() => expect(result.current.ready).toBe(true));
 		expect(result.current.mediaCueIds.size).toBe(0);
 		expect(mocks.actions.mediaImage).not.toHaveBeenCalled();
+	});
+	it("invalidates only the ready server that goes offline and recovers the same key", async () => {
+		const ids = [PROGRAM_CUE, LAYER_CUE];
+		mocks.media.mediaServers = [
+			{ fixture_id: "server-a", status: { online: true } },
+			{ fixture_id: "server-b", status: { online: true } },
+		];
+		mocks.actions.mediaIndex.mockResolvedValue([
+			entry(PROGRAM_CUE),
+			entry(LAYER_CUE, { serverFixtureId: "server-b" }),
+		]);
+		let bOnline = true;
+		mocks.actions.mediaImage.mockImplementation(async (id: string) =>
+			id === LAYER_CUE && !bOnline
+				? {
+						kind: "failed",
+						state: "offline",
+						error: "connection refused",
+						retryable: true,
+					}
+				: picture(id),
+		);
+		const { result, rerender, unmount } = renderHook(() =>
+			useCueMediaPreviews(ids, true, 1),
+		);
+		await waitFor(() =>
+			expect(result.current.previews.get(LAYER_CUE)?.state).toBe("ready"),
+		);
+		const a = result.current.previews.get(PROGRAM_CUE);
+		const b = result.current.previews.get(LAYER_CUE);
+		bOnline = false;
+		mocks.media = {
+			mediaServers: [
+				{ fixture_id: "server-a", status: { online: true } },
+				{ fixture_id: "server-b", status: { online: false } },
+			],
+		};
+		rerender();
+		await waitFor(() =>
+			expect(result.current.previews.get(LAYER_CUE)?.state).toBe("offline"),
+		);
+		expect(result.current.previews.get(LAYER_CUE)).not.toHaveProperty("src");
+		expect(result.current.previews.get(PROGRAM_CUE)).toEqual(a);
+		expect(URL.revokeObjectURL).toHaveBeenCalledWith(
+			b && "src" in b ? b.src : "",
+		);
+		expect(
+			mocks.actions.mediaImage.mock.calls.filter(([id]) => id === PROGRAM_CUE),
+		).toHaveLength(1);
+		bOnline = true;
+		mocks.media = {
+			mediaServers: [
+				{ fixture_id: "server-a", status: { online: true } },
+				{ fixture_id: "server-b", status: { online: true } },
+			],
+		};
+		rerender();
+		await waitFor(() =>
+			expect(result.current.previews.get(LAYER_CUE)?.state).toBe("ready"),
+		);
+		expect(result.current.previews.get(LAYER_CUE)).not.toEqual(b);
+		unmount();
+		expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
+	});
+
+	it("revalidates a cached picture explicitly and discards a late cancelled Blob", async () => {
+		const ids = [PROGRAM_CUE];
+		mocks.actions.mediaIndex.mockResolvedValue([entry(PROGRAM_CUE)]);
+		mocks.actions.mediaImage.mockResolvedValueOnce(picture("original"));
+		const { result, unmount } = renderHook(() =>
+			useCueMediaPreviews(ids, true, 1),
+		);
+		await waitFor(() =>
+			expect(result.current.previews.get(PROGRAM_CUE)?.state).toBe("ready"),
+		);
+		let resolveLate!: (value: CueMediaPreviewImage) => void;
+		mocks.actions.mediaImage.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveLate = resolve;
+				}),
+		);
+		act(() => result.current.retry(PROGRAM_CUE));
+		await waitFor(() =>
+			expect(mocks.actions.mediaImage).toHaveBeenCalledTimes(2),
+		);
+		expect(result.current.previews.get(PROGRAM_CUE)?.state).toBe("loading");
+		expect(result.current.previews.get(PROGRAM_CUE)).not.toHaveProperty("src");
+		unmount();
+		await act(async () => {
+			resolveLate(picture("late"));
+		});
+		expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+		expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+	});
+
+	it("never lets an earlier same-key response replace a newer retry", async () => {
+		const ids = [PROGRAM_CUE];
+		mocks.actions.mediaIndex.mockResolvedValue([entry(PROGRAM_CUE)]);
+		let resolveOld!: (value: CueMediaPreviewImage) => void;
+		mocks.actions.mediaImage
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						resolveOld = resolve;
+					}),
+			)
+			.mockResolvedValue(picture("new"));
+		const { result, unmount } = renderHook(() =>
+			useCueMediaPreviews(ids, true, 1),
+		);
+		await waitFor(() =>
+			expect(mocks.actions.mediaImage).toHaveBeenCalledTimes(1),
+		);
+		act(() => result.current.retry(PROGRAM_CUE));
+		await waitFor(() =>
+			expect(result.current.previews.get(PROGRAM_CUE)?.state).toBe("ready"),
+		);
+		const current = result.current.previews.get(PROGRAM_CUE);
+		await act(async () => {
+			resolveOld(picture("old"));
+		});
+		expect(result.current.previews.get(PROGRAM_CUE)).toEqual(current);
+		expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+		unmount();
+		expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
 	});
 });
