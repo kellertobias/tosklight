@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import type { MediaServerInspection } from "../../api/client/mediaOutput";
 import type { MediaServerFixture } from "../../api/types";
 import type { MediaServersState } from "../../features/mediaServers/MediaServersContext";
+import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
 import {
 	type ProgrammerValuesMutationQueueController,
 	programmerValuesMutationKey,
@@ -14,6 +15,7 @@ import {
 	audioLibraryMutations,
 	mediaLibraryMutations,
 } from "../MediaPaneWindow.helpers";
+import { mediaColourMutation } from "./mediaColour";
 import {
 	mediaCmyFromRgb,
 	mediaControlNormalizedValue,
@@ -42,6 +44,7 @@ interface MediaPaneActionsInput {
 	applySelection: MediaServersState["applyMediaLibrarySelection"] | undefined;
 	selectionActions: ReturnType<typeof useProgrammingSelectionActions>;
 	valuesQueue: ProgrammerValuesMutationQueueController;
+	liveProgrammer?: readonly ProgrammerFixtureValue[];
 	setSelectedServerId: Dispatch<SetStateAction<string>>;
 	setSelectedLayerId: Dispatch<SetStateAction<string>>;
 	setBrowserMode: Dispatch<SetStateAction<MediaBrowserMode>>;
@@ -268,6 +271,7 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 		onChangeControl: (attribute: string, value: string | number) => {
 			if (!input.selectedFixtureId) return;
 			const fixtureId = input.selectedFixtureId;
+			if (changeColour(input, attribute, value)) return;
 			const tint = tintMutations(fixtureId, attribute, value);
 			if (tint !== undefined) {
 				if (tint)
@@ -307,13 +311,9 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 			if (!input.selectedFixtureId) return;
 			const fixtureId = input.selectedFixtureId;
 			if (attribute === "color.tint") {
-				void input.valuesQueue.submitBarrier(
-					["red", "green", "blue"].map((component) => ({
-						action: "release_fixture" as const,
-						fixtureId,
-						attribute: `color.${component}`,
-					})),
-				);
+				submitColour(input, [
+					{ action: "release_fixture", fixtureId, attribute: "color" },
+				]);
 				return;
 			}
 			if (attribute === "media.layer.tint") {
@@ -338,7 +338,7 @@ export function useMediaPaneActions(input: MediaPaneActionsInput) {
 }
 
 /**
- * The component writes behind a colour picker: RGB for `color.tint`, CMY for `media.layer.tint`.
+ * The component writes behind a colour picker: CMY for the separate `media.layer.tint` channels.
  * Undefined means the attribute is not a tint; null means the picked colour could not be parsed.
  */
 function tintMutations(
@@ -348,16 +348,11 @@ function tintMutations(
 ) {
 	if (typeof value !== "string") return undefined;
 	const tint =
-		attribute === "color.tint"
-			? { prefix: "color", components: ["red", "green", "blue"] }
-			: attribute === "media.layer.tint"
-				? { prefix: "media.layer", components: ["cyan", "magenta", "yellow"] }
-				: undefined;
+		attribute === "media.layer.tint"
+			? { prefix: "media.layer", components: ["cyan", "magenta", "yellow"] }
+			: undefined;
 	if (!tint) return undefined;
-	const values =
-		attribute === "color.tint"
-			? mediaRgbFromHex(value)
-			: mediaCmyFromRgb(value);
+	const values = mediaCmyFromRgb(value);
 	if (!values) return null;
 	return tint.components.map((component, index) => ({
 		action: "set_fixture" as const,
@@ -368,10 +363,48 @@ function tintMutations(
 	}));
 }
 
-function mediaRgbFromHex(value: string): [number, number, number] | null {
-	const match = /^#([0-9a-f]{6})$/iu.exec(value);
-	if (!match) return null;
-	return [0, 2, 4].map(
-		(offset) => Number.parseInt(match[1].slice(offset, offset + 2), 16) / 255,
-	) as [number, number, number];
+/** Discrete colour choices are barriers, so a refusal cannot be confused with a coalesced write. */
+function submitColour(
+	input: MediaPaneActionsInput,
+	mutations: Parameters<
+		ProgrammerValuesMutationQueueController["submitBarrier"]
+	>[0],
+) {
+	if (!input.valuesQueue.canWrite) {
+		input.setInspectionError(
+			`Colour: ${input.valuesQueue.unavailableReason ?? "Controls are unavailable"}`,
+		);
+		return;
+	}
+	void input.valuesQueue
+		.submitBarrier(mutations)
+		.then((outcome) => {
+			if (outcome == null)
+				input.setInspectionError("Colour: Could not be applied. Please retry.");
+			else
+				input.setInspectionError((current) =>
+					current?.startsWith("Colour: ") ? null : current,
+				);
+		})
+		.catch((cause) =>
+			input.setInspectionError(`Colour: ${formatErrorDetails(cause)}`),
+		);
+}
+
+function changeColour(
+	input: MediaPaneActionsInput,
+	attribute: string,
+	value: string | number,
+) {
+	if (attribute !== "color.tint") return false;
+	const mutation =
+		input.selectedFixtureId && typeof value === "string"
+			? mediaColourMutation(
+					input.selectedFixtureId,
+					value,
+					input.liveProgrammer,
+				)
+			: null;
+	if (mutation) submitColour(input, [mutation]);
+	return true;
 }

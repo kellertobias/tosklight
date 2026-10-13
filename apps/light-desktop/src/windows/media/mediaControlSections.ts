@@ -40,6 +40,7 @@ function ownedAttributes(
 }
 
 const COLOUR_COMPONENTS = [
+	"color",
 	"color.tint",
 	"color.red",
 	"color.green",

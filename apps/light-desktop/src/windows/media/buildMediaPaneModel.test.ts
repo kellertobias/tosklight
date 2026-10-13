@@ -1722,3 +1722,57 @@ describe("clearing the playback range on the desk", () => {
 		expect(clearAction(0, 0)?.disabled).toBe(true);
 	});
 });
+
+describe("Media semantic Colour readout", () => {
+	it("reads current semantic Colour without legacy RGB rows", () => {
+		const server = {
+			fixture_id: "server-1",
+			name: "Server",
+			endpoint: null,
+			layers: [{ fixture_id: "layer-1", head_index: 1, attributes: ["color"] }],
+			status: { online: false, last_success: null, last_error: null },
+		};
+		const model = buildMediaPaneModel(
+			input({
+				selectedServer: server,
+				servers: [server],
+				selectedLayerId: "layer-1",
+				liveProgrammer: [
+					{
+						fixtureId: "layer-1",
+						attribute: "color",
+						programmerOrder: 1,
+						fade: false,
+						fadeMillis: null,
+						delayMillis: null,
+						value: {
+							kind: "color_program",
+							value: {
+								kind: "semantic",
+								intent: {
+									base_xyz: { x: 0.4124564, y: 0.2126729, z: 0.0193339 },
+									recipe: {
+										version: 1,
+										rgb: [1, 0, 0],
+										amber: 0,
+										approximate: false,
+									},
+									white_blend: 0,
+									white_target: { kelvin: 6500, duv: 0 },
+									uv: { amount: 0 },
+									relative_output: 1,
+									allocation: "preserve_recipe",
+								},
+							},
+						},
+					},
+				],
+			}),
+		);
+		expect(
+			model.controlSections
+				.flatMap((section) => section.controls)
+				.find((control) => control.id === "color.tint"),
+		).toMatchObject({ value: "#ff0000", disabled: false });
+	});
+});

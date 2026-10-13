@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { MediaServerInspection } from "../api/client/mediaOutput";
 import type { MediaServerFixture } from "../api/types";
 import { useMediaServers } from "../features/mediaServers/MediaServersContext";
-import { useProgrammerValuesView } from "../features/programmerValues/ProgrammerValuesView";
 import { useProgrammerValuesMutationQueue } from "../features/programmerValues/useProgrammerValuesMutationQueue";
 import { useProgrammingSelectionActions } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { useApp } from "../state/AppContext";
@@ -16,6 +15,7 @@ import { useNativeMediaEffects } from "./media/NativeMediaControls";
 import { OPEN_MEDIA_PATCH_ACTION } from "./media/openMediaPatch";
 import { useMediaPaneActions } from "./media/useMediaPaneActions";
 import { useMediaPaneData } from "./media/useMediaPaneData";
+import { useMediaProgrammerValues } from "./media/useMediaProgrammerValues";
 
 export {
 	audioLibraryMutations,
@@ -81,7 +81,7 @@ export function MediaPaneWindow({
 	const loadMediaThumbnail = media?.mediaThumbnail;
 	const selectionActions = useProgrammingSelectionActions(active);
 	const valuesQueue = useProgrammerValuesMutationQueue(active);
-	const programmerValues = useProgrammerValuesView(active);
+	const programmerValues = useMediaProgrammerValues(active, valuesQueue.route);
 	const eligibleServers = media?.mediaServers ?? [];
 	const [selectedServerId, setSelectedServerId] = useState(
 		mediaPaneState?.serverId ?? eligibleServers[0]?.fixture_id ?? "",
@@ -185,7 +185,7 @@ export function MediaPaneWindow({
 		load: nativeMedia ?? unavailableNativeMedia,
 		update: updateNativeMediaEffect ?? unavailableNativeMediaEffect,
 	});
-	const liveProgrammer = programmerValues?.fixtureValues.filter(
+	const liveProgrammer = programmerValues?.filter(
 		(value) => value.fixtureId === selectedFixtureId,
 	);
 
@@ -206,6 +206,7 @@ export function MediaPaneWindow({
 		applySelection: applyMediaLibrarySelection,
 		selectionActions,
 		valuesQueue,
+		liveProgrammer,
 		setSelectedServerId,
 		setSelectedLayerId,
 		setBrowserMode,

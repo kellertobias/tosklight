@@ -1,3 +1,5 @@
+import type { AttributeValue } from "../../api/types/playback";
+import { colorValueColors } from "../../features/presetPreview/colorDisplay";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
 import type { BuildMediaPaneModelInput } from "./buildMediaPaneModel";
 import {
@@ -30,11 +32,7 @@ function colourControl({ input, attribute }: SpecializedControlContext) {
 		id: attribute,
 		label: "Colour",
 		kind: "color",
-		value: mediaRgbFromComponents(
-			normalizedValue(input.liveProgrammer, "color.red") ?? 1,
-			normalizedValue(input.liveProgrammer, "color.green") ?? 1,
-			normalizedValue(input.liveProgrammer, "color.blue") ?? 1,
-		),
+		value: mediaColourHex(input.liveProgrammer),
 	} satisfies MediaControl;
 }
 
@@ -309,4 +307,31 @@ function mediaRgbFromComponents(red: number, green: number, blue: number) {
 				.padStart(2, "0"),
 		)
 		.join("")}`;
+}
+
+/** Requested colour, not the achieved Pixel output; legacy RGB remains readable. */
+export function mediaColourHex(
+	values?: readonly ProgrammerFixtureValue[],
+): string {
+	const color: AttributeValue | undefined = values?.find(
+		(entry) => entry.attribute === "color",
+	)?.value;
+	if (color?.kind === "color_program" && color.value.kind === "semantic") {
+		const intent = color.value.intent;
+		if (
+			!intent.recipe.approximate &&
+			intent.recipe.amber === 0 &&
+			intent.white_blend === 0 &&
+			intent.relative_output === 1 &&
+			!intent.spreads?.length
+		)
+			return mediaRgbFromComponents(...intent.recipe.rgb);
+	}
+	if (color?.kind === "color_program" || color?.kind === "color_xyz")
+		return colorValueColors(color)[0]?.hex ?? "";
+	return mediaRgbFromComponents(
+		normalizedValue(values, "color.red") ?? 1,
+		normalizedValue(values, "color.green") ?? 1,
+		normalizedValue(values, "color.blue") ?? 1,
+	);
 }

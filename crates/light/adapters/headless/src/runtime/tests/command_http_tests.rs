@@ -36,6 +36,9 @@ mod semantic_aim;
 #[path = "tl560_direct_undo_tests.rs"]
 mod tl560_direct_undo;
 
+#[path = "tl740_media_color_batch_tests.rs"]
+mod tl740_media_color_batch;
+
 #[path = "position_intent_authoring_tests.rs"]
 mod position_intent_authoring;
 
