@@ -459,8 +459,8 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		pictures.picture(ids.layer, { "*": GREEN }, 4);
 		pictures.picture(ids.otherServer, { "*": BLUE }, 4);
 		pictures.empty(ids.empty);
-		pictures.failure(ids.offline, "offline");
-		pictures.failure(ids.missing, "missing");
+		pictures.picture(ids.offline, YELLOW);
+		pictures.picture(ids.missing, BLUE, 4);
 
 		const desktops = new BrowserDesktops(page, async () => undefined);
 		const layout = desktops.configure("Media Cue previews");
@@ -510,21 +510,56 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			pictures.requests.some((request) => request.cueId === ids.lighting),
 		).toBe(false);
 
-		// Empty, offline, and missing are named; none shows a broken or another Cue's picture.
+		// Empty is an output picture, not an unavailable server.
 		await expect(preview(4)).toHaveAttribute("data-media-state", "empty");
 		await expect(preview(4)).toContainText("Empty media");
-		await expect(preview(5)).toHaveAttribute("data-media-state", "offline");
-		await expect(preview(5)).toContainText("Media Server offline");
-		await expect(preview(5).locator("img")).toHaveCount(0);
-		await expect(preview(6)).toHaveAttribute("data-media-state", "missing");
-		await expect(preview(6)).toContainText("Media output missing");
-		await expect(preview(6).locator("img")).toHaveCount(0);
+		const aSource = await preview(0).locator("img").getAttribute("src");
+		const aRequests = pictures.requests.filter(
+			(request) => request.cueId === ids.program,
+		).length;
 
-		// Touching the offline placeholder asks again; the server now answers.
-		pictures.picture(ids.offline, { "*": YELLOW });
+		// A server cannot be healthy for B1 while simultaneously offline for its Master.
+		for (const id of [ids.otherServer, ids.offline, ids.missing])
+			pictures.failure(id, "offline");
 		await preview(5).click();
-		await expect(preview(5)).toHaveAttribute("data-media-state", "ready");
+		for (const row of [2, 5, 6]) {
+			await expect(preview(row)).toHaveAttribute("data-media-state", "offline");
+			await expect(preview(row)).toContainText("Media Server offline");
+			await expect(preview(row).locator("img")).toHaveCount(0);
+		}
+		await expect(preview(0).locator("img")).toHaveAttribute("src", aSource!);
+		await page
+			.getByRole("dialog", { name: "Cue 6 preview image" })
+			.getByRole("button", { name: "Close Cue preview" })
+			.click();
+
+		// Explicit Retry recovers the same output/key and all affected B consumers.
+		pictures.picture(ids.otherServer, BLUE, 4);
+		pictures.picture(ids.offline, YELLOW);
+		pictures.picture(ids.missing, BLUE, 4);
+		await preview(5).click();
+		for (const row of [2, 5, 6])
+			await expect(preview(row)).toHaveAttribute("data-media-state", "ready");
 		expect((await pixels(preview(5).locator("img"))).centre).toEqual(YELLOW);
+		expect((await pixels(preview(2).locator("img"))).centre).toEqual(BLUE);
+
+		// A later missing-output response applies to every Cue addressing that exact B output.
+		for (const id of [ids.otherServer, ids.offline, ids.missing])
+			pictures.failure(id, "missing");
+		await preview(6).click();
+		for (const row of [2, 5, 6]) {
+			await expect(preview(row)).toHaveAttribute("data-media-state", "missing");
+			await expect(preview(row)).toContainText("Media output missing");
+			await expect(preview(row).locator("img")).toHaveCount(0);
+		}
+		await expect(preview(0).locator("img")).toHaveAttribute("src", aSource!);
+		expect(
+			pictures.requests.filter((request) => request.cueId === ids.program),
+		).toHaveLength(aRequests);
+		await page
+			.getByRole("dialog", { name: "Cue 7 preview image" })
+			.getByRole("button", { name: "Close Cue preview" })
+			.click();
 
 		// The picture opens larger on touch.
 		await preview(1).click();
@@ -552,7 +587,9 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			stored.revision,
 		);
 		// Content edits retain the independently authored pool address and pane target.
-		expect((await revisionOf(api, "cue_list", listId)).body.pool_number).toBe(201);
+		expect((await revisionOf(api, "cue_list", listId)).body.pool_number).toBe(
+			201,
+		);
 		await expect
 			.poll(async () =>
 				pictures.requests
@@ -619,7 +656,16 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		pictures.picture(cues.program, RED);
 		pictures.picture(cues.layer, GREEN, 4);
 		pictures.picture(cues.configured, BLUE);
-		pictures.failure(cues.offline, "offline");
+		pictures.picture(cues.offline, YELLOW);
+
+		const offlineStored = await revisionOf(api, "cue_list", lists.offline);
+		await putObject(
+			api,
+			"cue_list",
+			lists.offline,
+			{ ...offlineStored.body, pool_number: 202 },
+			offlineStored.revision,
+		);
 
 		const configuredImage = `data:image/png;base64,${png(8, 8, YELLOW).toString("base64")}`;
 		const singleCue = (name: string, list: string, extra = {}) => ({
@@ -660,6 +706,11 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			{ slug: "media-playbacks", column: 1, row: 1, width: 12, height: 6 },
 			{ rows: 1, columns: 4, pageMode: "pinned", pinnedPage: 1 },
 		);
+		const recoveryPane = layout.addPane(
+			PaneType.Cues,
+			{ slug: "media-recovery", column: 1, row: 7, width: 12, height: 4 },
+			{ cueListSource: "fixed", fixedCueListNumber: 202 },
+		);
 		await layout.apply();
 		const tile = (number: number) =>
 			pane.root().locator(`[data-page="1"][data-playback-slot="${number}"]`);
@@ -681,12 +732,57 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			(await pixels(tile(403).locator(".pool-card-image"))).centre,
 		).toEqual(YELLOW);
 
-		// Offline is a named state, not an image.
-		await expect(tile(404)).toHaveAttribute(
-			"data-preview-notice",
-			"Media Server offline",
+		// The real paired Cue row requests B's failure; both B cards must retire their pictures.
+		const recovery = recoveryPane
+			.root()
+			.locator("[data-preview-kind='media']")
+			.first();
+		await expect(recovery).toHaveAttribute("data-media-state", "ready");
+		const aSource = await tile(401)
+			.locator(".pool-card-image")
+			.getAttribute("src");
+		const aRequests = pictures.requests.filter(
+			(request) => request.cueId === cues.program,
+		).length;
+		pictures.failure(cues.layer, "offline");
+		pictures.failure(cues.offline, "offline");
+		await recovery.click();
+		for (const slot of [402, 404]) {
+			await expect(tile(slot)).toHaveAttribute(
+				"data-preview-notice",
+				"Media Server offline",
+			);
+			await expect(tile(slot).locator(".pool-card-image")).toHaveCount(0);
+		}
+		await expect(tile(401).locator(".pool-card-image")).toHaveAttribute(
+			"src",
+			aSource!,
 		);
-		await expect(tile(404).locator(".pool-card-image")).toHaveCount(0);
+		await expect(tile(403)).toHaveAttribute("data-image-source", "configured");
+		expect(
+			(await pixels(tile(403).locator(".pool-card-image"))).centre,
+		).toEqual(YELLOW);
+		await page
+			.getByRole("dialog", { name: "Cue 1 preview image" })
+			.getByRole("button", { name: "Close Cue preview" })
+			.click();
+		pictures.picture(cues.layer, GREEN, 4);
+		pictures.picture(cues.offline, YELLOW);
+		await recovery.click();
+		for (const slot of [402, 404])
+			await expect(tile(slot)).toHaveAttribute(
+				"data-image-source",
+				"cue-preview",
+			);
+		expect(
+			(await pixels(tile(402).locator(".pool-card-image"))).centre,
+		).toEqual(GREEN);
+		expect(
+			(await pixels(tile(404).locator(".pool-card-image"))).centre,
+		).toEqual(YELLOW);
+		expect(
+			pictures.requests.filter((request) => request.cueId === cues.program),
+		).toHaveLength(aRequests);
 
 		// Adding a second Cue removes the automatic default; removing it brings it back.
 		const stored = await revisionOf(api, "cue_list", lists.program);
