@@ -106,6 +106,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			protocol: "citp",
 			ip_address: "127.0.0.1",
 			port: 4809,
+			http_port: null,
 		},
 		null,
 	]);
