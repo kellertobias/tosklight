@@ -195,6 +195,7 @@ async function putCueList(
 	name: string,
 	cues: unknown[],
 	revision = 0,
+	poolNumber?: number,
 ) {
 	await putObject(
 		api,
@@ -203,6 +204,7 @@ async function putCueList(
 		{
 			id,
 			name,
+			...(poolNumber === undefined ? {} : { pool_number: poolNumber }),
 			priority: 0,
 			mode: "sequence",
 			looped: false,
@@ -513,6 +515,8 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		// Empty is an output picture, not an unavailable server.
 		await expect(preview(4)).toHaveAttribute("data-media-state", "empty");
 		await expect(preview(4)).toContainText("Empty media");
+		for (const row of [0, 1, 2, 5, 6])
+			await expect(preview(row)).toHaveAttribute("data-media-state", "ready");
 		const aSource = await preview(0).locator("img").getAttribute("src");
 		const aRequests = pictures.requests.filter(
 			(request) => request.cueId === ids.program,
@@ -528,10 +532,9 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			await expect(preview(row).locator("img")).toHaveCount(0);
 		}
 		await expect(preview(0).locator("img")).toHaveAttribute("src", aSource!);
-		await page
-			.getByRole("dialog", { name: "Cue 6 preview image" })
-			.getByRole("button", { name: "Close Cue preview" })
-			.click();
+		await expect(
+			page.getByRole("dialog", { name: "Cue 6 preview image" }),
+		).toHaveCount(0);
 
 		// Explicit Retry recovers the same output/key and all affected B consumers.
 		pictures.picture(ids.otherServer, BLUE, 4);
@@ -542,6 +545,10 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			await expect(preview(row)).toHaveAttribute("data-media-state", "ready");
 		expect((await pixels(preview(5).locator("img"))).centre).toEqual(YELLOW);
 		expect((await pixels(preview(2).locator("img"))).centre).toEqual(BLUE);
+		await page
+			.getByRole("dialog", { name: "Cue 6 preview image" })
+			.getByRole("button", { name: "Close Cue preview" })
+			.click();
 
 		// A later missing-output response applies to every Cue addressing that exact B output.
 		for (const id of [ids.otherServer, ids.offline, ids.missing])
@@ -556,10 +563,9 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		expect(
 			pictures.requests.filter((request) => request.cueId === ids.program),
 		).toHaveLength(aRequests);
-		await page
-			.getByRole("dialog", { name: "Cue 7 preview image" })
-			.getByRole("button", { name: "Close Cue preview" })
-			.click();
+		await expect(
+			page.getByRole("dialog", { name: "Cue 7 preview image" }),
+		).toHaveCount(0);
 
 		// The picture opens larger on touch.
 		await preview(1).click();
@@ -641,31 +647,39 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		const programCue = cue(cues.program, 1, "Program A", [
 			change(servers.a.fixture_id, "intensity", 255),
 		]);
-		await putCueList(api, lists.program, "Program A", [programCue]);
-		await putCueList(api, lists.layer, "Layer B1", [
-			cue(cues.layer, 1, "Layer B1", [change(b1, "media.folder", 5)]),
-		]);
-		await putCueList(api, lists.configured, "Configured", [
-			cue(cues.configured, 1, "Layer A1", [change(a1, "media.folder", 6)]),
-		]);
-		await putCueList(api, lists.offline, "Offline", [
-			cue(cues.offline, 1, "Master B", [
-				change(servers.b.fixture_id, "intensity", 255),
-			]),
-		]);
+		await putCueList(api, lists.program, "Program A", [programCue], 0, 201);
+		await putCueList(
+			api,
+			lists.layer,
+			"Layer B1",
+			[cue(cues.layer, 1, "Layer B1", [change(b1, "media.folder", 5)])],
+			0,
+			202,
+		);
+		await putCueList(
+			api,
+			lists.configured,
+			"Configured",
+			[cue(cues.configured, 1, "Layer A1", [change(a1, "media.folder", 6)])],
+			0,
+			203,
+		);
+		await putCueList(
+			api,
+			lists.offline,
+			"Offline",
+			[
+				cue(cues.offline, 1, "Master B", [
+					change(servers.b.fixture_id, "intensity", 255),
+				]),
+			],
+			0,
+			204,
+		);
 		pictures.picture(cues.program, RED);
 		pictures.picture(cues.layer, GREEN, 4);
 		pictures.picture(cues.configured, BLUE);
 		pictures.picture(cues.offline, YELLOW);
-
-		const offlineStored = await revisionOf(api, "cue_list", lists.offline);
-		await putObject(
-			api,
-			"cue_list",
-			lists.offline,
-			{ ...offlineStored.body, pool_number: 202 },
-			offlineStored.revision,
-		);
 
 		const configuredImage = `data:image/png;base64,${png(8, 8, YELLOW).toString("base64")}`;
 		const singleCue = (name: string, list: string, extra = {}) => ({
@@ -709,7 +723,7 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		const recoveryPane = layout.addPane(
 			PaneType.Cues,
 			{ slug: "media-recovery", column: 1, row: 7, width: 12, height: 4 },
-			{ cueListSource: "fixed", fixedCueListNumber: 202 },
+			{ cueListSource: "fixed", fixedCueListNumber: 204 },
 		);
 		await layout.apply();
 		const tile = (number: number) =>
@@ -762,10 +776,9 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 		expect(
 			(await pixels(tile(403).locator(".pool-card-image"))).centre,
 		).toEqual(YELLOW);
-		await page
-			.getByRole("dialog", { name: "Cue 1 preview image" })
-			.getByRole("button", { name: "Close Cue preview" })
-			.click();
+		await expect(
+			page.getByRole("dialog", { name: "Cue 1 preview image" }),
+		).toHaveCount(0);
 		pictures.picture(cues.layer, GREEN, 4);
 		pictures.picture(cues.offline, YELLOW);
 		await recovery.click();
@@ -797,6 +810,7 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 				]),
 			],
 			stored.revision,
+			201,
 		);
 		await expect(tile(401).locator(".pool-card-image")).toHaveCount(0);
 		await expect(tile(401)).not.toHaveAttribute("data-image-source", /.*/);
@@ -807,6 +821,7 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 			"Program A",
 			[programCue],
 			twoCues.revision,
+			201,
 		);
 		await expect(tile(401)).toHaveAttribute("data-image-source", "cue-preview");
 
@@ -850,6 +865,7 @@ test.describe("docs/testing/25-media-cue-previews.md", () => {
 				]),
 			],
 			single.revision,
+			201,
 		);
 		await expect
 			.poll(

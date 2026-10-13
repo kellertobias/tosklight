@@ -296,7 +296,7 @@ export function useCueMediaPreviews(
 			(media?.mediaServers ?? [])
 				.map(
 					(server) =>
-						`${server.fixture_id}:${server.status?.online}:${JSON.stringify([server.endpoint, server.output_binding])}`,
+						`${server.fixture_id}:${server.status?.online}:${server.status?.last_error != null}:${JSON.stringify([server.endpoint, server.output_binding])}`,
 				)
 				.sort()
 				.join(","),
@@ -372,7 +372,13 @@ export function useCueMediaPreviews(
 				setPictures,
 				new Set(
 					(media?.mediaServers ?? [])
-						.filter((server) => server.status?.online === false)
+						// A freshly patched server starts with online=false and no observation.
+						// Only a recorded failure may retire a successfully fetched picture.
+						.filter(
+							(server) =>
+								server.status?.online === false &&
+								server.status.last_error != null,
+						)
 						.map((server) => server.fixture_id),
 				),
 				scopeFor,

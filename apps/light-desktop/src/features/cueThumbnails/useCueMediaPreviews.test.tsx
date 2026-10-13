@@ -19,7 +19,11 @@ const mocks = vi.hoisted(() => ({
 	media: {
 		mediaServers: [] as Array<{
 			fixture_id: string;
-			status: { online: boolean };
+			status: {
+				online: boolean;
+				last_success?: string | null;
+				last_error?: string | null;
+			};
 		}>,
 	},
 }));
@@ -220,9 +224,52 @@ describe("Media Server Cue previews", () => {
 		expect(result.current.previews.get(emptyCue)?.state).toBe("empty");
 	});
 
+	it("keeps healthy cached A pictures when retrying never-observed B in the same view", async () => {
+		mocks.media.mediaServers = ["server-a", "server-b"].map((fixture_id) => ({
+			fixture_id,
+			status: { online: false, last_success: null, last_error: null },
+		}));
+		mocks.actions.mediaIndex.mockResolvedValue([
+			entry(PROGRAM_CUE),
+			entry(LAYER_CUE, { serverFixtureId: "server-b", outputId: "output-b" }),
+		]);
+		let bOnline = true;
+		mocks.actions.mediaImage.mockImplementation(async (id: string) =>
+			id === LAYER_CUE && !bOnline
+				? {
+						kind: "failed",
+						state: "offline",
+						error: "connection refused",
+						retryable: true,
+					}
+				: picture(id),
+		);
+		const ids = [PROGRAM_CUE, LAYER_CUE];
+		const { result } = renderHook(() => useCueMediaPreviews(ids, true, 1));
+		await waitFor(() =>
+			expect(result.current.previews.get(LAYER_CUE)?.state).toBe("ready"),
+		);
+		const a = result.current.previews.get(PROGRAM_CUE);
+		bOnline = false;
+		act(() => result.current.retry(LAYER_CUE));
+		await waitFor(() =>
+			expect(result.current.previews.get(LAYER_CUE)?.state).toBe("offline"),
+		);
+		expect(result.current.previews.get(PROGRAM_CUE)).toEqual(a);
+		expect(
+			mocks.actions.mediaImage.mock.calls.filter(([id]) => id === PROGRAM_CUE),
+		).toHaveLength(1);
+		expect(URL.revokeObjectURL).not.toHaveBeenCalledWith(
+			a && "src" in a ? a.src : "",
+		);
+	});
+
 	it("asks again when a Media Server comes back online", async () => {
 		mocks.media.mediaServers = [
-			{ fixture_id: "server-a", status: { online: false } },
+			{
+				fixture_id: "server-a",
+				status: { online: false, last_error: "connection refused" },
+			},
 		];
 		mocks.actions.mediaIndex.mockResolvedValue([entry(PROGRAM_CUE)]);
 		mocks.actions.mediaImage.mockResolvedValue({
@@ -295,7 +342,10 @@ describe("Media Server Cue previews", () => {
 		const ids = [PROGRAM_CUE, LAYER_CUE];
 		mocks.media.mediaServers = [
 			{ fixture_id: "server-a", status: { online: true } },
-			{ fixture_id: "server-b", status: { online: true } },
+			{
+				fixture_id: "server-b",
+				status: { online: false, last_success: null, last_error: null },
+			},
 		];
 		mocks.actions.mediaIndex.mockResolvedValue([
 			entry(PROGRAM_CUE),
@@ -324,7 +374,10 @@ describe("Media Server Cue previews", () => {
 		mocks.media = {
 			mediaServers: [
 				{ fixture_id: "server-a", status: { online: true } },
-				{ fixture_id: "server-b", status: { online: false } },
+				{
+					fixture_id: "server-b",
+					status: { online: false, last_error: "connection refused" },
+				},
 			],
 		};
 		rerender();
