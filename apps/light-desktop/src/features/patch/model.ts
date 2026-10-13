@@ -5,7 +5,10 @@ import type {
 	PatchedFixture,
 	SplitPatch,
 } from "../../api/types";
-import { fixtureDefinitionFromProfileMode, modeGeometry } from "../../components/setup/fixtureProfileModel";
+import {
+	fixtureDefinitionFromProfileMode,
+	modeGeometry,
+} from "../../components/setup/fixtureProfileModel";
 import type {
 	PatchFixtureProjection,
 	PatchFixtureWrite,
@@ -142,6 +145,7 @@ export function patchedFixtureCandidate(
 						protocol: fixture.direct_control.protocol,
 						ipAddress: fixture.direct_control.ip_address,
 						port: fixture.direct_control.port,
+						httpPort: fixture.direct_control.http_port ?? null,
 					}
 				: null,
 			internalBindings: {
@@ -273,6 +277,7 @@ export function projectionToPatchedFixture(
 					protocol: projection.directControl.protocol,
 					ip_address: projection.directControl.ipAddress,
 					port: projection.directControl.port,
+					http_port: projection.directControl.httpPort ?? null,
 				}
 			: null,
 		internal_bindings: {

@@ -208,3 +208,5 @@ mod pending_preload_reader_tests;
 mod show_activation_caller_tests;
 mod show_activation_cancellation_tests;
 include!("family_encoder_pages_tests.rs");
+
+mod media_endpoint_projection_tests;

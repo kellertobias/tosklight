@@ -1,5 +1,9 @@
-import type { InstalledColorCalibration, NativeColorIdentity } from "@tosklight/patch";
-import type { InstalledPositionCalibration } from "@tosklight/patch";
+import type {
+	InstalledColorCalibration,
+	InstalledPositionCalibration,
+	NativeColorIdentity,
+} from "@tosklight/patch";
+
 export type { InstalledPositionCalibration } from "@tosklight/patch";
 export interface PatchedFixture {
 	fixture_id: string;
@@ -13,6 +17,7 @@ export interface PatchedFixture {
 		protocol: "citp";
 		ip_address: string;
 		port: number;
+		http_port?: number | null;
 	} | null;
 	internal_bindings?: {
 		library?: string | null;
@@ -111,6 +116,7 @@ export type {
 	InstalledFixtureAppearance,
 	InstalledLightSource,
 } from "@tosklight/patch/stage-geometry";
+
 import type { InstalledFixtureAppearance } from "@tosklight/patch/stage-geometry";
 
 export interface SplitPatch {
@@ -120,6 +126,7 @@ export interface SplitPatch {
 }
 
 export * from "@tosklight/patch/fixture-profile";
+
 import type {
 	FixtureProfile,
 	XyzValue,
@@ -195,11 +202,13 @@ export interface FixtureDefinition {
 }
 
 export interface MediaServerFixture {
+	/** Persisted output UUID binding; never inferred from library inspection. */
+	output_binding?: string | null;
 	fixture_id: string;
 	fixture_number?: number | null;
 	name: string;
 	kind?: "media_server" | "audio_player";
-	endpoint: { protocol: "citp"; ip_address: string; port: number } | null;
+	endpoint: { protocol: "citp"; ip_address: string; port: number; http_port?: number | null } | null;
 	native_action?: string | null;
 	layers: Array<{
 		fixture_id: string;

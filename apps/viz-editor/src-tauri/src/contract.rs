@@ -88,6 +88,8 @@ pub struct DirectControlDto {
     pub protocol: String,
     pub ip_address: String,
     pub port: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http_port: Option<u16>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -597,6 +599,7 @@ impl From<&DirectControlEndpoint> for DirectControlDto {
             protocol: "citp".to_owned(),
             ip_address: value.ip_address.to_string(),
             port: value.port,
+            http_port: value.http_port,
         }
     }
 }
@@ -721,6 +724,7 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                             protocol: light_fixture::DirectControlProtocol::Citp,
                             ip_address,
                             port: value.port,
+                            http_port: value.http_port,
                         })
                 }),
                 internal_bindings: Default::default(),

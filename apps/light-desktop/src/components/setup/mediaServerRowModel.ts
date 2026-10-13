@@ -20,15 +20,17 @@ const PROTOCOL_LABELS: Record<MediaServerProtocol, string> = {
 };
 
 export const DEFAULT_CITP_PORT = 4809;
+export const DEFAULT_MEDIA_HTTP_PORT = 8080;
 
 /** One row's editable endpoint, as typed. */
 export type MediaServerDraft = {
 	protocol: MediaServerProtocol;
 	ip: string;
 	port: number;
+	httpPort?: number;
 };
 
-export type DraftProblems = { ip?: string; port?: string };
+export type DraftProblems = { ip?: string; port?: string; httpPort?: string };
 
 export function isMediaFixture(fixture: PatchedFixture): boolean {
 	return (
@@ -76,6 +78,13 @@ export function fixtureDraft(fixture: PatchedFixture): MediaServerDraft {
 		protocol: fixture.direct_control ? "citp" : "off",
 		ip: fixture.direct_control?.ip_address ?? "",
 		port: fixture.direct_control?.port ?? DEFAULT_CITP_PORT,
+		...(mediaServerType(fixture) === "tosklight" ||
+		fixture.direct_control?.http_port != null
+			? {
+					httpPort:
+						fixture.direct_control?.http_port ?? DEFAULT_MEDIA_HTTP_PORT,
+				}
+			: {}),
 	};
 }
 
@@ -84,7 +93,8 @@ export function sameDraft(a: MediaServerDraft, b: MediaServerDraft): boolean {
 	return (
 		a.protocol === b.protocol &&
 		a.ip.trim() === b.ip.trim() &&
-		a.port === b.port
+		a.port === b.port &&
+		a.httpPort === b.httpPort
 	);
 }
 
@@ -118,6 +128,13 @@ export function draftProblems(draft: MediaServerDraft): DraftProblems {
 		problems.ip = "Enter an IPv4 or IPv6 address, for example 192.168.1.50.";
 	if (!Number.isInteger(draft.port) || draft.port < 1 || draft.port > 65535)
 		problems.port = "Choose a port from 1 to 65535.";
+	if (
+		draft.httpPort != null &&
+		(!Number.isInteger(draft.httpPort) ||
+			draft.httpPort < 1 ||
+			draft.httpPort > 65535)
+	)
+		problems.httpPort = "Choose an HTTP port from 1 to 65535.";
 	return problems;
 }
 
@@ -133,7 +150,9 @@ export function matchingStatus(
 			status.fixture_id === fixture.fixture_id &&
 			status.endpoint?.protocol === endpoint.protocol &&
 			status.endpoint.ip_address === endpoint.ip_address &&
-			status.endpoint.port === endpoint.port,
+			status.endpoint.port === endpoint.port &&
+			(status.endpoint.http_port ?? DEFAULT_MEDIA_HTTP_PORT) ===
+				(endpoint.http_port ?? DEFAULT_MEDIA_HTTP_PORT),
 	);
 }
 

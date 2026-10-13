@@ -11,7 +11,9 @@
 //! shows one server's image for another server's Cue. Pictures are not stored in the show: they
 //! depend on the server's own library, which does not travel with the show file.
 
-use super::media_api::{TOSKLIGHT_MEDIA_HTTP_PORT, native_media_action, native_media_bound_output};
+use super::media_api::{
+    native_media_action, native_media_bound_output, native_media_fixture_endpoint,
+};
 use super::*;
 use axum::body::Body;
 use light_wire::v2::cue_media_previews as wire;
@@ -110,7 +112,7 @@ fn layer_index(fixture: &light_fixture::PatchedFixture, head_index: u16) -> Opti
 pub(super) struct PreparedMediaPreview {
     pub(super) entry: wire::CueMediaPreviewEntry,
     pub(super) slots: Vec<u8>,
-    pub(super) endpoint: Option<std::net::IpAddr>,
+    pub(super) endpoint: Option<std::net::SocketAddr>,
 }
 
 pub(super) fn prepare_media_previews(
@@ -150,11 +152,7 @@ fn prepare_one(
         .map(str::trim)
         .filter(|output| !output.is_empty() && *output != "default")
         .map(str::to_owned);
-    let endpoint = server
-        .direct_control
-        .as_ref()
-        .filter(|endpoint| endpoint.protocol == light_fixture::DirectControlProtocol::Citp)
-        .map(|endpoint| endpoint.ip_address);
+    let endpoint = native_media_fixture_endpoint(server).ok();
     let mut digest = Sha256::new();
     digest.update(target.server.0.as_bytes());
     digest.update(format!("{endpoint:?}|{output_id:?}|{:?}|", target.layer).as_bytes());
@@ -258,7 +256,7 @@ async fn cue_media_preview(
         }));
     };
     let server = light_core::FixtureId(prepared.entry.server_fixture_id);
-    let Some(ip) = prepared.endpoint else {
+    let Some(endpoint) = prepared.endpoint else {
         return Ok(failure_response(wire::CueMediaPreviewFailure {
             state: wire::CueMediaPreviewFailureState::Missing,
             error:
@@ -267,10 +265,7 @@ async fn cue_media_preview(
             retryable: false,
         }));
     };
-    let base = format!(
-        "http://{}/api/v2",
-        std::net::SocketAddr::new(ip, TOSKLIGHT_MEDIA_HTTP_PORT)
-    );
+    let base = format!("http://{endpoint}/api/v2");
     let bound = native_media_bound_output(&state, server)?;
     let outcome = fetch_snapshot(
         &base,
@@ -485,4 +480,4 @@ pub(super) async fn fetch_snapshot(
 
 #[cfg(test)]
 #[path = "cue_media_previews_http_tests.rs"]
-pub(super) mod tests;
+pub(in crate::runtime) mod tests;

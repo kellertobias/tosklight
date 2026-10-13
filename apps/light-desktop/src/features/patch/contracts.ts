@@ -1,5 +1,8 @@
-import type { InstalledColorCalibration, NativeColorIdentity } from "@tosklight/patch";
-import type { InstalledPositionCalibration } from "@tosklight/patch";
+import type {
+	InstalledColorCalibration,
+	InstalledPositionCalibration,
+	NativeColorIdentity,
+} from "@tosklight/patch";
 /** Feature-owned Patch models. Serialized wire DTOs are mapped at the API boundary. */
 import type { FixtureProfile } from "../../api/types";
 
@@ -13,6 +16,7 @@ export interface PatchDirectControlEndpoint {
 	protocol: "citp";
 	ipAddress: string;
 	port: number;
+	httpPort?: number | null;
 }
 
 export interface PatchInternalFixtureBindings {

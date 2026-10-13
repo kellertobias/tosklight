@@ -473,6 +473,10 @@ pub struct PatchDirectControlEndpoint {
     /// Transport adapters validate this as an IP address before invoking the application service.
     pub ip_address: String,
     pub port: u16,
+    /// Native HTTP endpoint port, defaulting to 8080 for older patches.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub http_port: Option<u16>,
 }
 
 /// Portable names resolved to machine-local audio resources by each desk.

@@ -770,3 +770,28 @@ fn installed_color_calibration_roundtrips_root_and_copy_without_inheritance_or_r
         }
     }
 }
+
+#[test]
+fn tl738_portable_patch_retains_custom_http_endpoint_and_reads_legacy_without_one() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.direct_control.as_mut().unwrap().http_port = Some(18080);
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let stored = serde_json::to_value(&record).unwrap();
+    let reopened = PortablePatchedFixtureRecord::decode(stored.clone())
+        .unwrap()
+        .patch()
+        .unwrap();
+    assert_eq!(reopened.direct_control.unwrap().http_port, Some(18080));
+    let mut legacy = stored;
+    legacy["direct_control"]
+        .as_object_mut()
+        .unwrap()
+        .remove("http_port");
+    let record = PortablePatchedFixtureRecord::decode(legacy.clone()).unwrap();
+    assert_eq!(
+        record.patch().unwrap().direct_control.unwrap().http_port,
+        None
+    );
+    assert_eq!(serde_json::to_value(&record).unwrap(), legacy);
+}

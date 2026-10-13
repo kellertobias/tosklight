@@ -236,6 +236,17 @@
     "PatchDirectControlEndpoint": {
       "type": "object",
       "properties": {
+        "http_port": {
+          "description": "Native HTTP endpoint port, defaulting to 8080 for older patches.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "default": null,
+          "maximum": 65535,
+          "minimum": 0
+        },
         "ip_address": {
           "description": "Transport adapters validate this as an IP address before invoking the application service.",
           "type": "string"
@@ -253,7 +264,8 @@
       "required": [
         "protocol",
         "ip_address",
-        "port"
+        "port",
+        "http_port"
       ]
     },
     "PatchDirectControlProtocol": {

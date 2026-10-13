@@ -21,6 +21,53 @@ const blur = {
 };
 
 describe("native Media effect controls", () => {
+	it("reloads and retires old effects and frame rate when only endpoint identity changes", async () => {
+		let completeB:
+			| ((value: {
+					effectLayers: (typeof blur)[][];
+					frameRate: number;
+			  }) => void)
+			| undefined;
+		const load = vi
+			.fn()
+			.mockResolvedValueOnce({ effectLayers: [[blur]], frameRate: 25 })
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						completeB = resolve;
+					}),
+			);
+		const hook = renderHook(
+			({ endpointKey }) =>
+				useNativeMediaEffects({
+					active: true,
+					fixtureId: "fixture-1",
+					layer: 0,
+					sourceKey: "same-folder-file",
+					endpointKey,
+					load,
+					update: vi.fn(),
+				}),
+			{ initialProps: { endpointKey: "endpoint-a" } },
+		);
+		await waitFor(() => expect(hook.result.current.slots).toEqual([blur]));
+		hook.rerender({ endpointKey: "endpoint-b" });
+		expect(load).toHaveBeenCalledTimes(2);
+		expect(hook.result.current.slots).toEqual([]);
+		expect(hook.result.current.pointFrameRate).toEqual({ kind: "loading" });
+		await act(async () =>
+			completeB?.({
+				effectLayers: [[{ ...blur, label: "Server B Blur" }]],
+				frameRate: 60,
+			}),
+		);
+		expect(hook.result.current.slots[0].label).toBe("Server B Blur");
+		expect(hook.result.current.pointFrameRate).toEqual({
+			kind: "known",
+			framesPerSecond: 60,
+		});
+		hook.unmount();
+	});
 	it("loads only the selected layer and does not reload when callback identities change", async () => {
 		const load = vi.fn().mockResolvedValue({ effectLayers: [[blur], []] });
 		const update = vi.fn();

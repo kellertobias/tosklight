@@ -542,6 +542,9 @@ pub struct DirectControlEndpoint {
     pub ip_address: IpAddr,
     #[serde(default = "default_citp_port")]
     pub port: u16,
+    /// Native ToskLight Media HTTP port; absent in older shows means 8080.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http_port: Option<u16>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

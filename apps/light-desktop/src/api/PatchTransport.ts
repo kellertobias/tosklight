@@ -486,6 +486,7 @@ function toWireDirectControl(
 				protocol: endpoint.protocol,
 				ip_address: endpoint.ipAddress,
 				port: endpoint.port,
+				http_port: endpoint.httpPort ?? null,
 			}
 		: null;
 }

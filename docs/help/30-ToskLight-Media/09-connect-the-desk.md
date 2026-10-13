@@ -18,7 +18,9 @@ If no Media Server fixture is patched, the Desk's Media pane shows only **No med
 
 ## Configure CITP manually
 
-After patching, configure the Media endpoint's IP address and CITP port in the patched fixture's Media settings. Port `4809` is the standard default. ToskLight Control does not currently auto-discover this endpoint. Architect's Rig Editor has a separate **Discover servers** action for CITP while configuring media surfaces.
+After patching, open **Show Patch → Media Servers** and set the server's **IP address** and **CITP port**, then choose **Apply**. CITP defaults to `4809` and provides library names, thumbnails, and output previews.
+
+For a **ToskLight Media** row, also set **HTTP port** to the port on which that Media Server serves its native controls and configuration. HTTP defaults to `8080` when no explicit port is stored; a server running on another port needs that exact value. Both ports use the row's IP address. The HTTP port is independent of the CITP port: CITP discovery does not advertise it, and the desk does not calculate it from the CITP port. Generic CITP servers show only the CITP port. Architect's Rig Editor has a separate **Discover servers** action for CITP while configuring media surfaces.
 
 CITP discovery is not ToskLight show discovery. CITP describes Media outputs and libraries; ToskLight's local-network discovery offers read-only `.show` copies between Desk and the PreViz Rig Editor.
 

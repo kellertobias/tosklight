@@ -1,4 +1,7 @@
-import type { InstalledColorCalibration, NativeColorIdentity } from "./colorCalibration";
+import type {
+	InstalledColorCalibration,
+	NativeColorIdentity,
+} from "./colorCalibration";
 import type { InstalledPositionCalibration } from "./positionCalibration";
 /** Feature-owned Patch models. Serialized wire DTOs are mapped at the API boundary. */
 import type { FixtureProfile } from "./wire";
@@ -13,6 +16,7 @@ export interface PatchDirectControlEndpoint {
 	protocol: "citp";
 	ipAddress: string;
 	port: number;
+	httpPort?: number | null;
 }
 
 export interface PatchFixtureLocation {

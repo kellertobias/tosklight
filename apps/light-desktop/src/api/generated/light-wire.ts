@@ -1024,7 +1024,11 @@ export type PatchDirectControlEndpoint = { protocol: PatchDirectControlProtocol,
 /**
  * Transport adapters validate this as an IP address before invoking the application service.
  */
-ip_address: string, port: number, };
+ip_address: string, port: number,
+/**
+ * Native HTTP endpoint port, defaulting to 8080 for older patches.
+ */
+http_port?: number | null, };
 export type PatchInternalFixtureBindings = { library: string | null, output: string | null, };
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
 export type PatchFixtureRotation = { x: number, y: number, z: number, };

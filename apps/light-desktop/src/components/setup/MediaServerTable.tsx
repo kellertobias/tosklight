@@ -1,9 +1,15 @@
-import { ErrorAlert } from "@tosklight/ui";
-import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
+import {
+	Button,
+	ErrorAlert,
+	NumberField,
+	SelectField,
+	TextField,
+} from "@tosklight/ui";
 import type { MediaServerFixture, PatchedFixture } from "../../api/types";
 import {
 	CONNECTION_LABELS,
 	connectionState,
+	DEFAULT_MEDIA_HTTP_PORT,
 	draftProblems,
 	fixtureDraft,
 	MEDIA_SERVER_TYPE_LABELS,
@@ -83,7 +89,7 @@ function MediaServerRow({ row }: { row: MediaServerRowView }) {
 	const type = mediaServerType(fixture, row.status);
 	const editable = supportedProtocols(fixture).length > 0;
 	const problems = draftProblems(draft);
-	const valid = !problems.ip && !problems.port;
+	const valid = !problems.ip && !problems.port && !problems.httpPort;
 	const changed = !sameDraft(draft, fixtureDraft(fixture));
 	const endpointOff = draft.protocol === "off";
 	return (
@@ -115,7 +121,9 @@ function MediaServerRow({ row }: { row: MediaServerRowView }) {
 				</td>
 				<td>
 					<NumberField
-						aria-label={`${name} port`}
+						label="CITP port"
+						labelPlacement="top"
+						aria-label={`${name} CITP port`}
 						disabled={!editable || endpointOff}
 						min="1"
 						max="65535"
@@ -125,6 +133,24 @@ function MediaServerRow({ row }: { row: MediaServerRowView }) {
 							actions.setDraft({ ...draft, port: Number(event.target.value) })
 						}
 					/>
+					{type === "tosklight" && (
+						<NumberField
+							label="HTTP port"
+							labelPlacement="top"
+							aria-label={`${name} HTTP port`}
+							disabled={!editable || endpointOff || row.busy === "saving"}
+							step="1"
+							allowDecimal
+							value={draft.httpPort ?? DEFAULT_MEDIA_HTTP_PORT}
+							error={problems.httpPort}
+							onChange={(event) =>
+								actions.setDraft({
+									...draft,
+									httpPort: Number(event.target.value),
+								})
+							}
+						/>
+					)}
 				</td>
 				<td>
 					<MediaServerStatusCell row={row} />
@@ -191,7 +217,9 @@ function MediaServerStatusCell({ row }: { row: MediaServerRowView }) {
 			</b>
 			{row.network ? <small>{row.network}</small> : null}
 			{state === "offline" && error ? (
-				<ErrorAlert as="small" role="alert">{offlineHint(error)}</ErrorAlert>
+				<ErrorAlert as="small" role="alert">
+					{offlineHint(error)}
+				</ErrorAlert>
 			) : null}
 			{state === "connected" && lastSuccess ? (
 				<small>

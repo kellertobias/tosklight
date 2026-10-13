@@ -32,9 +32,7 @@ interface InspectionPollingInput {
 	endpointKey: string;
 	serverLayers: RefObject<MediaServerFixture["layers"]>;
 	layerId: string;
-	inspect: RefObject<
-		MediaServersState["inspectMediaServer"] | undefined
-	>;
+	inspect: RefObject<MediaServersState["inspectMediaServer"] | undefined>;
 	hasInspect: boolean;
 	reset(): void;
 	setInspection: Dispatch<SetStateAction<MediaServerInspection>>;
@@ -59,10 +57,16 @@ function useInspectionPolling({
 	setDraftFileId,
 	initializedDraftScope,
 }: InspectionPollingInput) {
+	const inspectedEndpoint = useRef<string | null>(null);
 	useEffect(() => {
 		if (!active || !hasInspect || !fixtureId || !endpointKey) {
+			inspectedEndpoint.current = null;
 			reset();
 			return;
+		}
+		if (inspectedEndpoint.current !== endpointKey) {
+			reset();
+			inspectedEndpoint.current = endpointKey;
 		}
 		let disposed = false;
 		let running = false;
@@ -75,7 +79,7 @@ function useInspectionPolling({
 				if (!disposed) {
 					setInspection(next);
 					setInspectionError(null);
-					const scope = `${fixtureId}:${layerId}`;
+					const scope = JSON.stringify([endpointKey, layerId]);
 					if (initializedDraftScope.current !== scope) {
 						const draft = mediaDraftForLayer(
 							next,
@@ -89,9 +93,7 @@ function useInspectionPolling({
 				}
 			} catch (cause) {
 				if (!disposed) {
-					setInspectionError(
-						formatErrorDetails(cause),
-					);
+					setInspectionError(formatErrorDetails(cause));
 					setInspection(EMPTY_MEDIA_INSPECTION);
 				}
 			} finally {
@@ -121,6 +123,19 @@ function useInspectionPolling({
 	]);
 }
 
+function mediaServerEndpointKey(server: MediaServerFixture | undefined) {
+	return server?.endpoint
+		? JSON.stringify([
+				server.fixture_id,
+				server.endpoint.protocol,
+				server.endpoint.ip_address,
+				server.endpoint.port,
+				server.endpoint.http_port ?? 8080,
+				server.output_binding ?? null,
+			])
+		: "";
+}
+
 export function useMediaPaneData({
 	active,
 	server,
@@ -131,9 +146,7 @@ export function useMediaPaneData({
 	loadThumbnail,
 }: MediaPaneDataInput) {
 	const fixtureId = server?.fixture_id;
-	const endpointKey = server?.endpoint
-		? `${server.endpoint.ip_address}:${server.endpoint.port}`
-		: "";
+	const endpointKey = mediaServerEndpointKey(server);
 	const serverLayers = useRef(server?.layers ?? []);
 	serverLayers.current = server?.layers ?? [];
 	const inspectRef = useRef(inspect);
@@ -172,7 +185,7 @@ export function useMediaPaneData({
 				setDraftFolderId("1");
 				setDraftFileId(null);
 				initializedDraftScope.current = fixtureId
-					? `${fixtureId}:${nextLayerId}`
+					? JSON.stringify([endpointKey, nextLayerId])
 					: null;
 				return;
 			}
@@ -184,10 +197,10 @@ export function useMediaPaneData({
 			setDraftFolderId(draft?.folderId ?? "");
 			setDraftFileId(draft?.fileId ?? null);
 			initializedDraftScope.current = draft
-				? `${fixtureId}:${nextLayerId}`
+				? JSON.stringify([endpointKey, nextLayerId])
 				: null;
 		},
-		[fixtureId, inspection],
+		[endpointKey, fixtureId, inspection],
 	);
 
 	useInspectionPolling({
@@ -253,7 +266,7 @@ export function useMediaPaneData({
 			for (const url of Object.values(current)) URL.revokeObjectURL(url);
 			return {};
 		});
-	}, [draftFolder, fixtureId]);
+	}, [draftFolder, endpointKey, fixtureId]);
 	useEffect(() => {
 		if (
 			!active ||
@@ -318,6 +331,7 @@ export function useMediaPaneData({
 	);
 
 	return {
+		endpointKey,
 		inspection,
 		inspectionError,
 		setInspectionError,

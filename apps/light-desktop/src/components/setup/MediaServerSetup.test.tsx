@@ -153,6 +153,102 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Media server Patch authority", () => {
+	it("saves a native HTTP port independently of CITP and reloads it from Patch authority", async () => {
+		fixture = {
+			...withEndpoint("127.0.0.1"),
+			definition: toskMediaDefinition(),
+		};
+		patchFixtures = [fixture];
+		const view = render(<MediaServerSetup />);
+		expect(screen.getByLabelText("Media One HTTP port")).toHaveValue("8080");
+		expect(screen.getByLabelText("Media One CITP port")).toHaveValue("4809");
+		fireEvent.change(screen.getByLabelText("Media One HTTP port"), {
+			target: { value: "15008" },
+		});
+		fireEvent.click(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		);
+		await waitFor(() =>
+			expect(mocks.updateFixture).toHaveBeenCalledWith("fixture-media", {
+				direct_control: {
+					protocol: "citp",
+					ip_address: "127.0.0.1",
+					port: 4809,
+					http_port: 15008,
+				},
+			}),
+		);
+		fixture = {
+			...fixture,
+			direct_control: {
+				protocol: "citp",
+				ip_address: "127.0.0.1",
+				port: 4809,
+				http_port: 15008,
+			},
+		};
+		patchFixtures = [fixture];
+		view.rerender(<MediaServerSetup />);
+		await waitFor(() =>
+			expect(screen.getByLabelText("Media One HTTP port")).toHaveValue("15008"),
+		);
+		expect(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		).toBeDisabled();
+	});
+	it.each([
+		"0",
+		"65536",
+		"12.5",
+	])("rejects invalid native HTTP port %s without changing CITP", (value) => {
+		fixture = {
+			...withEndpoint("127.0.0.1"),
+			definition: toskMediaDefinition(),
+		};
+		patchFixtures = [fixture];
+		render(<MediaServerSetup />);
+		fireEvent.change(screen.getByLabelText("Media One HTTP port"), {
+			target: { value },
+		});
+		fireEvent.blur(screen.getByLabelText("Media One HTTP port"));
+		expect(
+			screen.getByText("Choose an HTTP port from 1 to 65535."),
+		).toBeInTheDocument();
+		expect(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		).toBeDisabled();
+		expect(screen.getByLabelText("Media One CITP port")).toHaveValue("4809");
+		expect(mocks.updateFixture).not.toHaveBeenCalled();
+	});
+	it("commits a native HTTP port through the number editor keyboard without sending before Apply", async () => {
+		fixture = {
+			...withEndpoint("127.0.0.1"),
+			definition: toskMediaDefinition(),
+		};
+		patchFixtures = [fixture];
+		render(<MediaServerSetup />);
+		const field = screen.getByLabelText("Media One HTTP port");
+		const control = field.closest<HTMLElement>(".ui-number-control");
+		if (!control) throw new Error("Missing HTTP port number editor");
+		fireEvent.click(
+			within(control).getByRole("button", { name: "Open number pad" }),
+		);
+		const editor = screen.getByRole("dialog", { name: "HTTP port" });
+		const value = within(editor).getByRole("textbox", {
+			name: "HTTP port value",
+		});
+		for (const key of "15008") fireEvent.keyDown(value, { key });
+		fireEvent.keyDown(value, { key: "Enter" });
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "HTTP port" })).toBeNull(),
+		);
+		expect(field).toHaveValue("15008");
+		expect(mocks.updateFixture).not.toHaveBeenCalled();
+		fireEvent.click(
+			within(rowFor("Media One")).getByRole("button", { name: "Apply" }),
+		);
+		await waitFor(() => expect(mocks.updateFixture).toHaveBeenCalledOnce());
+	});
 	it("hides retained fixtures and refuses configuration while Patch loads", () => {
 		mocks.status = "loading";
 		render(<MediaServerSetup />);
@@ -161,6 +257,15 @@ describe("Media server Patch authority", () => {
 		expect(screen.queryByRole("table")).toBeNull();
 		expect(mocks.updateFixture).not.toHaveBeenCalled();
 		expect(mocks.usePatchView).toHaveBeenCalledWith(true);
+	});
+	it("does not show a previous HTTP endpoint's connected status after its port changes", async () => {
+		fixture = { ...withEndpoint("127.0.0.1"), definition: toskMediaDefinition(),
+			direct_control: { protocol: "citp", ip_address: "127.0.0.1", port: 4809, http_port: 15008 } };
+		patchFixtures = [fixture];
+		server.mediaServers = [status("127.0.0.1", true, null)];
+		render(<MediaServerSetup />);
+		expect(within(rowFor("Media One")).queryByText("● Connected")).toBeNull();
+		await waitFor(() => expect(mocks.inspectMediaServer).toHaveBeenCalledWith("fixture-media"));
 	});
 
 	it("lists every patched server as one table row with its type", () => {
@@ -194,6 +299,7 @@ describe("Media server Patch authority", () => {
 		const tosk = rowFor("Pixel Rack");
 		expect(generic).toHaveAttribute("data-server-type", "citp");
 		expect(within(generic).getByText("CITP media server")).toBeInTheDocument();
+		expect(within(generic).queryByLabelText("Media One HTTP port")).toBeNull();
 		expect(tosk).toHaveAttribute("data-server-type", "tosklight");
 		expect(within(tosk).getByText("ToskLight Media")).toBeInTheDocument();
 		expect(within(generic).getByText("● Off")).toBeInTheDocument();
@@ -251,14 +357,14 @@ describe("Media server Patch authority", () => {
 		fireEvent.change(screen.getByLabelText("Media One IP address"), {
 			target: { value: "fe80::1" },
 		});
-		fireEvent.change(screen.getByLabelText("Media One port"), {
+		fireEvent.change(screen.getByLabelText("Media One CITP port"), {
 			target: { value: "70000" },
 		});
 		expect(within(row).getByRole("alert")).toHaveTextContent(
 			"Choose a port from 1 to 65535.",
 		);
 		expect(apply).toBeDisabled();
-		fireEvent.change(screen.getByLabelText("Media One port"), {
+		fireEvent.change(screen.getByLabelText("Media One CITP port"), {
 			target: { value: "4811" },
 		});
 		expect(within(row).queryByRole("alert")).toBeNull();

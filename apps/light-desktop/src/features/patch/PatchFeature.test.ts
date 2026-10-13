@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { HttpPatchTransport } from "../../api/PatchTransport";
+import { HttpPatchTransport, toWireFixture } from "../../api/PatchTransport";
 import {
 	decodePatchEventServerMessage,
 	decodePatchFixturesOutcome,
@@ -22,6 +22,8 @@ import type {
 import {
 	createPatchDefinitionResolver,
 	newPatchFixtureCandidate,
+	patchedFixtureCandidate,
+	projectionToPatchedFixture,
 } from "./model";
 import { patchMutation } from "./mutationSupport";
 import { patchedFixtureResults } from "./PatchContext";
@@ -1452,4 +1454,46 @@ it("replacement consent retains reviewed revisions and never rebases a stale map
 	expect(transport.snapshot).toHaveBeenCalledTimes(2);
 	expect(session.store.getSnapshot().fixtures[0]).toEqual(before);
 	session.stop();
+});
+
+describe("TL738 native HTTP endpoint Patch round trip", () => {
+	it.each([
+		18080,
+		18081,
+		null,
+		undefined,
+	])("preserves explicit and legacy HTTP port %s", (httpPort) => {
+		const value = wireSnapshot(1, 1, 10, [wireFixtureProjection()]);
+		Object.assign(value.fixtures[0], {
+			direct_control: {
+				protocol: "citp",
+				ip_address: "127.0.0.1",
+				port: 14809,
+				...(httpPort === undefined ? {} : { http_port: httpPort }),
+			},
+		});
+		const decoded = decodePatchSnapshot(value).fixtures[0];
+		expect(decoded.directControl?.httpPort).toBe(httpPort ?? null);
+		const fixture = projectionToPatchedFixture(
+			decoded,
+			profileProjection(),
+			() => definition(),
+		);
+		expect(fixture.direct_control?.http_port).toBe(httpPort ?? null);
+		const wire = toWireFixture(patchedFixtureCandidate(fixture).input);
+		expect(wire.direct_control?.http_port).toBe(httpPort ?? null);
+		expect(wire.direct_control?.port).toBe(14809);
+	});
+	it.each([0, 65536, 12.5])("rejects malformed authoritative HTTP port %s", (httpPort) => {
+		const value = wireSnapshot(1, 1, 10, [wireFixtureProjection()]);
+		Object.assign(value.fixtures[0], {
+			direct_control: {
+				protocol: "citp",
+				ip_address: "127.0.0.1",
+				port: 14809,
+				http_port: httpPort,
+			},
+		});
+		expect(() => decodePatchSnapshot(value)).toThrow("http_port");
+	});
 });

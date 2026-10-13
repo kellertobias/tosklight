@@ -1,5 +1,11 @@
-import { colorCalibrationError, nativeColorIdentityError } from "@tosklight/patch/color-calibration";
-import { axisOverridesError, positionCalibrationIdentityError } from "@tosklight/patch/position-calibration";
+import {
+	colorCalibrationError,
+	nativeColorIdentityError,
+} from "@tosklight/patch/color-calibration";
+import {
+	axisOverridesError,
+	positionCalibrationIdentityError,
+} from "@tosklight/patch/position-calibration";
 import type {
 	EventServerMessage,
 	PatchDelta,
@@ -149,6 +155,11 @@ function directControlAt(value: unknown, path: string): void {
 		invalid(path + ".protocol", "citp", endpoint.protocol);
 	stringAt(endpoint.ip_address, path + ".ip_address");
 	positiveIntegerAt(endpoint.port, path + ".port");
+	if (endpoint.http_port !== undefined && endpoint.http_port !== null) {
+		positiveIntegerAt(endpoint.http_port, path + ".http_port");
+		if (endpoint.http_port > 65535)
+			invalid(path + ".http_port", "an integer between 1 and 65535", endpoint.http_port);
+	}
 }
 
 function internalBindingsAt(value: unknown, path: string): void {

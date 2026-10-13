@@ -96,6 +96,9 @@ fn application_split(split: wire::PatchSplitAssignment) -> fixture::SplitPatch {
 fn application_direct_control(
     endpoint: wire::PatchDirectControlEndpoint,
 ) -> Result<fixture::DirectControlEndpoint, String> {
+    if endpoint.http_port == Some(0) {
+        return Err("direct_control.http_port must be between 1 and 65535".into());
+    }
     Ok(fixture::DirectControlEndpoint {
         protocol: match endpoint.protocol {
             wire::PatchDirectControlProtocol::Citp => fixture::DirectControlProtocol::Citp,
@@ -105,6 +108,7 @@ fn application_direct_control(
             .parse()
             .map_err(|error| format!("direct-control IP address is invalid: {error}"))?,
         port: endpoint.port,
+        http_port: endpoint.http_port,
     })
 }
 
@@ -382,6 +386,7 @@ fn wire_direct_control(
         },
         ip_address: endpoint.ip_address.to_string(),
         port: endpoint.port,
+        http_port: endpoint.http_port,
     }
 }
 
@@ -603,4 +608,40 @@ pub fn stored_fixture_input(
         patch: record.patch().map_err(|e| e.to_string())?,
     };
     Ok(patch_input(wire_fixture(&projection)))
+}
+
+#[cfg(test)]
+mod http_endpoint_tests {
+    use super::*;
+
+    #[test]
+    fn tl738_patch_endpoint_defaults_preserves_and_rejects_invalid_http_port() {
+        let legacy: wire::PatchDirectControlEndpoint = serde_json::from_value(serde_json::json!({
+            "protocol":"citp", "ip_address":"127.0.0.1", "port":14809,
+            "future_property":"ignored"
+        }))
+        .unwrap();
+        assert_eq!(application_direct_control(legacy).unwrap().http_port, None);
+        for value in [18080, 18081, 65535] {
+            let input = wire::PatchDirectControlEndpoint {
+                protocol: wire::PatchDirectControlProtocol::Citp,
+                ip_address: "127.0.0.1".into(),
+                port: 14809,
+                http_port: Some(value),
+            };
+            let application = application_direct_control(input).unwrap();
+            assert_eq!(wire_direct_control(&application).http_port, Some(value));
+        }
+        let bad = wire::PatchDirectControlEndpoint {
+            protocol: wire::PatchDirectControlProtocol::Citp,
+            ip_address: "127.0.0.1".into(),
+            port: 14809,
+            http_port: Some(0),
+        };
+        assert!(
+            application_direct_control(bad)
+                .unwrap_err()
+                .contains("direct_control.http_port")
+        );
+    }
 }

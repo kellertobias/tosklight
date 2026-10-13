@@ -80,6 +80,7 @@ pub(super) fn fixture(profile: &FixtureProfile) -> PatchedFixture {
             protocol: DirectControlProtocol::Citp,
             ip_address: "192.0.2.25".parse().unwrap(),
             port: 4812,
+            http_port: None,
         }),
         internal_bindings: Default::default(),
         location: FixtureLocation {

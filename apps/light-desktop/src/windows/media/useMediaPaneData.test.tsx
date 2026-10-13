@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MediaServerFixture } from "../../api/types";
-import { useMediaPaneData } from "./useMediaPaneData";
+import { useNativeMediaEffects } from "./NativeMediaControls";
+import { EMPTY_MEDIA_INSPECTION, useMediaPaneData } from "./useMediaPaneData";
 
 const server: MediaServerFixture = {
 	fixture_id: "server-1",
@@ -12,6 +13,247 @@ const server: MediaServerFixture = {
 };
 
 describe("Media pane offline draft", () => {
+	it("keeps the same endpoint identity when an absent HTTP port becomes its explicit default", async () => {
+		const inspect = vi.fn().mockResolvedValue(EMPTY_MEDIA_INSPECTION);
+		const hook = renderHook(
+			({ selected }: { selected: MediaServerFixture }) =>
+				useMediaPaneData({
+					active: true,
+					server: selected,
+					layerId: "layer-1",
+					inspect,
+					refreshPreview: undefined,
+					refreshThumbnails: undefined,
+					loadThumbnail: undefined,
+				}),
+			{ initialProps: { selected: server } },
+		);
+		await waitFor(() => expect(inspect).toHaveBeenCalledTimes(1));
+		const identity = hook.result.current.endpointKey;
+		hook.rerender({
+			selected: {
+				...server,
+				endpoint: {
+					protocol: "citp",
+					ip_address: "127.0.0.1",
+					port: 4809,
+					http_port: 8080,
+				},
+			},
+		});
+		expect(hook.result.current.endpointKey).toBe(identity);
+		expect(inspect).toHaveBeenCalledTimes(1);
+		hook.unmount();
+	});
+	it("retires same-folder thumbnails while a different HTTP endpoint is loading", async () => {
+		const createObjectURL = vi.fn().mockReturnValue("blob:old-endpoint");
+		const revokeObjectURL = vi.fn();
+		vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+		const inspection = {
+			...EMPTY_MEDIA_INSPECTION,
+			files: [{ id: 1, folder_id: 1, name: "Media", width: 128, height: 72 }],
+			layers: [{ layer: 0, folder: 1, file: 1, flags: 0, name: "Layer 1" }],
+		};
+		const inspect = vi
+			.fn()
+			.mockResolvedValueOnce(inspection)
+			.mockImplementation(() => new Promise(() => {}));
+		const hook = renderHook(
+			({ selected }: { selected: MediaServerFixture }) =>
+				useMediaPaneData({
+					active: true,
+					server: selected,
+					layerId: "layer-1",
+					inspect,
+					refreshPreview: undefined,
+					refreshThumbnails: vi.fn().mockResolvedValue(undefined),
+					loadThumbnail: vi.fn().mockResolvedValue(new Blob(["old endpoint"])),
+				}),
+			{ initialProps: { selected: server } },
+		);
+		await waitFor(() =>
+			expect(hook.result.current.thumbnailUrls).toEqual({
+				"1:1": "blob:old-endpoint",
+			}),
+		);
+		hook.rerender({
+			selected: {
+				...server,
+				endpoint: {
+					protocol: "citp",
+					ip_address: "127.0.0.1",
+					port: 4809,
+					http_port: 15009,
+				},
+			},
+		});
+		expect(hook.result.current.thumbnailUrls).toEqual({});
+		expect(revokeObjectURL).toHaveBeenCalledWith("blob:old-endpoint");
+		hook.unmount();
+		vi.unstubAllGlobals();
+	});
+	it.each([
+		"HTTP port",
+		"output binding",
+	])("ignores old inspection, native read and effect write after a %s-only change", async (changed) => {
+		const initial = {
+			...server,
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+				http_port: 15008,
+			},
+			output_binding: "output-a",
+		};
+		let completeOldInspection:
+			| ((value: typeof EMPTY_MEDIA_INSPECTION) => void)
+			| undefined;
+		let completeOldRead:
+			| ((value: { effectLayers: []; frameRate: number }) => void)
+			| undefined;
+		let rejectOldWrite: ((reason: Error) => void) | undefined;
+		const inspectionB = {
+			...EMPTY_MEDIA_INSPECTION,
+			server: { name: "Server B", layer_count: 1 },
+		};
+		const inspect = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						completeOldInspection = resolve;
+					}),
+			)
+			.mockResolvedValue(inspectionB);
+		const load = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						completeOldRead = resolve;
+					}),
+			)
+			.mockResolvedValue({ effectLayers: [[]], frameRate: 60 });
+		const update = vi.fn().mockImplementation(
+			() =>
+				new Promise((_resolve, reject) => {
+					rejectOldWrite = reject;
+				}),
+		);
+		const hook = renderHook(
+			({ selected }) => {
+				const data = useMediaPaneData({
+					active: true,
+					server: selected,
+					layerId: "layer-1",
+					inspect,
+					refreshPreview: undefined,
+					refreshThumbnails: undefined,
+					loadThumbnail: undefined,
+				});
+				const native = useNativeMediaEffects({
+					active: true,
+					fixtureId: selected.fixture_id,
+					layer: 0,
+					sourceKey: "unchanged-folder-file",
+					endpointKey: data.endpointKey,
+					load,
+					update,
+				});
+				return { data, native };
+			},
+			{ initialProps: { selected: initial } },
+		);
+		act(() => hook.result.current.native.change("old-control", 1));
+		hook.rerender({
+			selected:
+				changed === "HTTP port"
+					? { ...initial, endpoint: { ...initial.endpoint, http_port: 15009 } }
+					: { ...initial, output_binding: "output-b" },
+		});
+		await waitFor(() =>
+			expect(hook.result.current.data.inspection.server.name).toBe("Server B"),
+		);
+		expect(load).toHaveBeenCalledTimes(2);
+		expect(hook.result.current.native.pointFrameRate).toEqual({
+			kind: "known",
+			framesPerSecond: 60,
+		});
+		await act(async () => {
+			completeOldInspection?.({
+				...EMPTY_MEDIA_INSPECTION,
+				server: { name: "Old A", layer_count: 1 },
+			});
+			completeOldRead?.({ effectLayers: [], frameRate: 25 });
+			rejectOldWrite?.(new Error("Old endpoint write failed"));
+		});
+		expect(hook.result.current.data.inspection.server.name).toBe("Server B");
+		expect(hook.result.current.native.pointFrameRate).toEqual({
+			kind: "known",
+			framesPerSecond: 60,
+		});
+		expect(hook.result.current.native.error).toBeNull();
+		hook.unmount();
+	});
+	it.each([
+		"HTTP port",
+		"output binding",
+	])("retires inspection on an authoritative %s-only change", async (changed) => {
+		const initial = {
+			...server,
+			endpoint: {
+				protocol: "citp" as const,
+				ip_address: "127.0.0.1",
+				port: 4809,
+				http_port: 15008,
+			},
+			output_binding: "output-a",
+		};
+		const a = {
+			...EMPTY_MEDIA_INSPECTION,
+			server: { name: "Server A", layer_count: 1 },
+		};
+		let completeB: ((value: typeof a) => void) | undefined;
+		const inspect = vi
+			.fn()
+			.mockResolvedValueOnce(a)
+			.mockImplementationOnce(
+				() =>
+					new Promise<typeof a>((resolve) => {
+						completeB = resolve;
+					}),
+			);
+		const hook = renderHook(
+			({ selected }) =>
+				useMediaPaneData({
+					active: true,
+					server: selected,
+					layerId: "layer-1",
+					inspect,
+					refreshPreview: undefined,
+					refreshThumbnails: undefined,
+					loadThumbnail: undefined,
+				}),
+			{ initialProps: { selected: initial } },
+		);
+		await waitFor(() =>
+			expect(hook.result.current.inspection.server.name).toBe("Server A"),
+		);
+		hook.rerender({
+			selected:
+				changed === "HTTP port"
+					? { ...initial, endpoint: { ...initial.endpoint, http_port: 15009 } }
+					: { ...initial, output_binding: "output-b" },
+		});
+		expect(inspect).toHaveBeenCalledTimes(2);
+		expect(hook.result.current.inspection.server.name).toBe("");
+		await act(async () =>
+			completeB?.({ ...a, server: { name: "Server B", layer_count: 1 } }),
+		);
+		expect(hook.result.current.inspection.server.name).toBe("Server B");
+		hook.unmount();
+	});
 	it("keeps the Master mask draft stable while the next inspection arrives", async () => {
 		const inspection = {
 			library_revision: "revision-1",
@@ -112,7 +354,8 @@ describe("Media pane offline draft", () => {
 
 	it("keeps locally configured slots across failed CITP polling", async () => {
 		const failure = new Error("CITP unavailable");
-		failure.stack = "Error: CITP unavailable\n    at inspectMedia (citp.ts:31:8)";
+		failure.stack =
+			"Error: CITP unavailable\n    at inspectMedia (citp.ts:31:8)";
 		const inspect = vi.fn().mockRejectedValue(failure);
 		const hook = renderHook(() =>
 			useMediaPaneData({
@@ -127,7 +370,9 @@ describe("Media pane offline draft", () => {
 		);
 
 		await waitFor(() =>
-			expect(hook.result.current.inspectionError).toBe(`${failure.message}\n${failure.stack}`),
+			expect(hook.result.current.inspectionError).toBe(
+				`${failure.message}\n${failure.stack}`,
+			),
 		);
 		act(() => {
 			hook.result.current.setDraftFolderId("17");

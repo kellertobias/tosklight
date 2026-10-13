@@ -406,6 +406,12 @@ fn validate_direct_control(fixture: &PatchedFixture) -> Result<(), FixtureError>
             fixture.fixture_id.0
         )));
     }
+    if endpoint.http_port == Some(0) {
+        return Err(invalid(format!(
+            "fixture {} direct_control.http_port must be between 1 and 65535",
+            fixture.fixture_id.0
+        )));
+    }
     if !fixture
         .definition
         .direct_control_protocols

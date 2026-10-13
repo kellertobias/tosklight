@@ -411,6 +411,7 @@ fn media_server_layers_inherit_parent_direct_control_endpoint() {
         protocol: DirectControlProtocol::Citp,
         ip_address: "192.0.2.20".parse().unwrap(),
         port: 4811,
+        http_port: Some(18080),
     };
     let mut media_definition = definition(1);
     media_definition.direct_control_protocols = vec![DirectControlProtocol::Citp];

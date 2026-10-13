@@ -22,6 +22,8 @@ interface NativeMediaEffectsInput {
 	 * them.
 	 */
 	sourceKey?: string;
+	/** Persisted endpoint and output binding, independent of the shown content. */
+	endpointKey?: string;
 	load(fixtureId: string): Promise<NativeMediaSnapshot>;
 	update(
 		fixtureId: string,
@@ -36,6 +38,7 @@ export function useNativeMediaEffects({
 	fixtureId,
 	layer,
 	sourceKey,
+	endpointKey,
 	load,
 	update,
 }: NativeMediaEffectsInput) {
@@ -52,10 +55,12 @@ export function useNativeMediaEffects({
 		useState<MediaPointFrameRate>(NO_MEDIA_API);
 	const [reloads, setReloads] = useState(0);
 	const changeVersion = useRef(0);
+	const loadedScope = useRef<string | null>(null);
 
 	useEffect(() => {
 		changeVersion.current += 1;
 		if (!active || !fixtureId || layer == null) {
+			loadedScope.current = null;
 			setSlots([]);
 			setVisualizerChannels([]);
 			setError(null);
@@ -64,9 +69,17 @@ export function useNativeMediaEffects({
 		}
 		let current = true;
 		setError(null);
-		setPointFrameRate((previous) =>
-			previous.kind === "known" ? previous : { kind: "loading" },
-		);
+		const scope = JSON.stringify([fixtureId, layer, endpointKey]);
+		if (loadedScope.current !== scope) {
+			loadedScope.current = scope;
+			setSlots([]);
+			setVisualizerChannels([]);
+			setPointFrameRate({ kind: "loading" });
+		} else {
+			setPointFrameRate((previous) =>
+				previous.kind === "known" ? previous : { kind: "loading" },
+			);
+		}
 		// A new source reloads the snapshot, whose visualizer channels follow what is shown; a
 		// retry asks for the frame rate again.
 		void sourceKey;
@@ -89,8 +102,7 @@ export function useNativeMediaEffects({
 			},
 			(reason) => {
 				if (!current) return;
-				const message =
-					formatErrorDetails(reason);
+				const message = formatErrorDetails(reason);
 				setError(message);
 				setPointFrameRate({
 					kind: "unknown",
@@ -101,8 +113,9 @@ export function useNativeMediaEffects({
 		);
 		return () => {
 			current = false;
+			changeVersion.current += 1;
 		};
-	}, [active, fixtureId, layer, sourceKey, reloads]);
+	}, [active, endpointKey, fixtureId, layer, sourceKey, reloads]);
 
 	const retryPointFrameRate = useCallback(
 		() => setReloads((count) => count + 1),

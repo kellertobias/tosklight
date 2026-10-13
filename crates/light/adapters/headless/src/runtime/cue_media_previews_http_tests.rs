@@ -30,6 +30,7 @@ pub(in crate::runtime) fn media_server(
         protocol: light_fixture::DirectControlProtocol::Citp,
         ip_address: std::net::IpAddr::from(ip),
         port: 4809,
+        http_port: None,
     });
     fixture.internal_bindings.output = Some(output.to_owned());
     light_fixture::reconcile_logical_heads(&mut fixture);
@@ -206,7 +207,7 @@ fn a_media_cue_carries_the_slots_it_would_transmit_with_tracking_and_group_value
     assert_eq!(first.entry.output_id.as_deref(), Some(OUTPUT_A));
     assert_eq!(
         first.endpoint,
-        Some(std::net::IpAddr::from([192, 0, 2, 10]))
+        Some(std::net::SocketAddr::from(([192, 0, 2, 10], 8080)))
     );
     // Layer 2 starts at slot 59: folder, file, then Dimmer at offset 14.
     assert_eq!(&first.slots[59..61], &[5, 7]);
@@ -408,4 +409,105 @@ async fn loading_missing_and_offline_servers_are_named_states() {
         .await,
         S::Offline,
     );
+}
+
+#[test]
+fn tl738_custom_http_port_is_persisted_and_part_of_the_cue_preview_identity() {
+    let mut fixture = media_server("2 layers", [127, 0, 0, 1], OUTPUT_A);
+    // Exercise the additive persisted reader before using any new Rust field.
+    fixture.direct_control = Some(
+        serde_json::from_value(serde_json::json!({
+            "protocol": "citp", "ip_address": "127.0.0.1", "port": 14809,
+            "http_port": 18080
+        }))
+        .unwrap(),
+    );
+    let stored = serde_json::to_value(&fixture).unwrap();
+    assert_eq!(
+        stored["direct_control"]["http_port"], 18080,
+        "explicit HTTP endpoint must survive portable fixture serialization"
+    );
+    let reopened: light_fixture::PatchedFixture = serde_json::from_value(stored).unwrap();
+    let list = cue_list(vec![cue(
+        1,
+        vec![set(layer(&reopened, 0), "intensity", 1.0)],
+    )]);
+    let snapshot = EngineSnapshot {
+        fixtures: vec![reopened].into(),
+        cue_lists: vec![list].into(),
+        ..Default::default()
+    };
+    let prepared = prepare_media_previews(&snapshot, None);
+    assert_eq!(prepared[0].endpoint.unwrap().to_string(), "127.0.0.1:18080");
+    let mut legacy = snapshot.clone();
+    legacy.fixtures = legacy
+        .fixtures
+        .iter()
+        .cloned()
+        .map(|mut f| {
+            f.direct_control = Some(
+                serde_json::from_value(serde_json::json!({
+                    "protocol":"citp", "ip_address":"127.0.0.1", "port":14809
+                }))
+                .unwrap(),
+            );
+            f
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let old = prepare_media_previews(&legacy, None);
+    assert_eq!(old[0].endpoint.unwrap().to_string(), "127.0.0.1:8080");
+    assert_ne!(
+        prepared[0].entry.preview_key, old[0].entry.preview_key,
+        "changing the native endpoint must invalidate the cached picture"
+    );
+}
+
+#[tokio::test]
+async fn tl738_cue_picture_requests_the_explicit_http_server_and_bound_output() {
+    let (base, seen, server) =
+        mock_media_server(png_response("content"), serde_json::json!([])).await;
+    let address: std::net::SocketAddr = base
+        .strip_prefix("http://")
+        .unwrap()
+        .strip_suffix("/api/v2")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let mut fixture = media_server("2 layers", [127, 0, 0, 1], OUTPUT_A);
+    fixture.direct_control.as_mut().unwrap().http_port = Some(address.port());
+    let list = cue_list(vec![cue(
+        1,
+        vec![set(layer(&fixture, 0), "intensity", 1.0)],
+    )]);
+    let state = EngineSnapshot {
+        fixtures: vec![fixture].into(),
+        cue_lists: vec![list].into(),
+        ..Default::default()
+    };
+    let prepared = prepare_media_previews(&state, None);
+    let target = &prepared[0];
+    assert_eq!(
+        target.endpoint,
+        Some(address),
+        "guard before HTTP: no default endpoint request"
+    );
+    let outcome = fetch_snapshot(
+        &format!("http://{}/api/v2", target.endpoint.unwrap()),
+        target.entry.output_id.as_deref(),
+        target.entry.layer,
+        &target.slots,
+        240,
+        135,
+    )
+    .await;
+    assert!(matches!(
+        outcome,
+        SnapshotOutcome::Picture { empty: false, .. }
+    ));
+    let requests = seen.lock();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].0, OUTPUT_A);
+    drop(requests);
+    server.abort();
 }

@@ -13,6 +13,7 @@ export interface PatchedFixture {
 		protocol: "citp";
 		ip_address: string;
 		port: number;
+		http_port?: number | null;
 	} | null;
 	definition: FixtureDefinition;
 	logical_heads: Array<{

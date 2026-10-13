@@ -226,6 +226,7 @@ function mapDirectControl(
 				protocol: endpoint.protocol,
 				ipAddress: endpoint.ip_address,
 				port: endpoint.port,
+				httpPort: endpoint.http_port ?? null,
 			}
 		: null;
 }

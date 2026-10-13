@@ -135,6 +135,7 @@ pub(super) async fn media_servers(
                 "name": name,
                 "kind": "media_server",
                 "endpoint": endpoint,
+                "output_binding": fixture.internal_bindings.output,
                 "native_action": native_media_action(fixture),
                 "layers": media_layers(fixture),
                 "master_attributes": master_head_attributes(fixture),
@@ -712,6 +713,13 @@ fn native_media_endpoint(
         .iter()
         .find(|fixture| fixture.fixture_id == fixture_id)
         .ok_or_else(|| ApiError::not_found("fixture"))?;
+    native_media_fixture_endpoint(fixture)
+}
+
+/// Resolve the persisted native endpoint once for controls and Cue pictures.
+pub(super) fn native_media_fixture_endpoint(
+    fixture: &light_fixture::PatchedFixture,
+) -> Result<SocketAddr, ApiError> {
     if native_media_action(fixture).is_none() {
         return Err(ApiError::bad_request(
             "fixture profile does not support ToskLight native Media controls",
@@ -722,7 +730,13 @@ fn native_media_endpoint(
         .as_ref()
         .filter(|endpoint| endpoint.protocol == light_fixture::DirectControlProtocol::Citp)
         .ok_or_else(|| ApiError::bad_request("fixture has no CITP endpoint"))?;
-    Ok(SocketAddr::new(citp.ip_address, TOSKLIGHT_MEDIA_HTTP_PORT))
+    let port = citp.http_port.unwrap_or(TOSKLIGHT_MEDIA_HTTP_PORT);
+    if port == 0 {
+        return Err(ApiError::bad_request(
+            "direct_control.http_port must be between 1 and 65535",
+        ));
+    }
+    Ok(SocketAddr::new(citp.ip_address, port))
 }
 
 pub(super) async fn apply_media_library_selection(
@@ -970,3 +984,7 @@ mod native_output_binding_tests {
 #[cfg(test)]
 #[path = "media_api_frame_rate_tests.rs"]
 mod frame_rate_tests;
+
+#[cfg(test)]
+#[path = "media_api_http_endpoint_tests.rs"]
+mod http_endpoint_tests;

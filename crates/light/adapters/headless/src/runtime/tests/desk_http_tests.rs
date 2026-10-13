@@ -197,6 +197,7 @@ async fn citp_thumbnail_api_uses_patched_parent_endpoint_and_cache() {
                     protocol: light_fixture::DirectControlProtocol::Citp,
                     ip_address: address.ip(),
                     port: address.port(),
+                    http_port: None,
                 }),
                 location: Default::default(),
                 rotation: Default::default(),

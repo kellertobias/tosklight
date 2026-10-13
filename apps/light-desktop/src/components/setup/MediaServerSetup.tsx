@@ -16,10 +16,12 @@ import {
 	type RowMessage,
 } from "./MediaServerTable";
 import {
+	DEFAULT_MEDIA_HTTP_PORT,
 	fixtureDraft,
 	isMediaFixture,
 	type MediaServerDraft,
 	matchingStatus,
+	mediaServerType,
 	needsFirstCheck,
 	networkState,
 } from "./mediaServerRowModel";
@@ -71,7 +73,9 @@ export function MediaServerSetup({
 				<b id="patched-media-servers">Patched Media Servers</b>
 				<p>
 					CITP endpoints belong to the physical master fixture. Every logical
-					media layer inherits the same endpoint.
+					media layer inherits the same endpoint. For ToskLight Media, set its
+					HTTP port separately from the CITP port. HTTP defaults to 8080; CITP
+					discovery does not advertise this port.
 				</p>
 				{patch.error && (
 					<ErrorAlert as="p" role="alert">
@@ -238,7 +242,15 @@ function useMediaServerRows(
 				setDraft: (next) =>
 					setDrafts((current) => ({ ...current, [id]: next })),
 				apply: () =>
-					void track(id, "saving", () => applyDraft(patch, fixture, draft)),
+					void track(id, "saving", () =>
+						applyDraft(
+							patch,
+							fixture,
+							draft,
+							mediaServerType(fixture, matchingStatus(statuses, fixture)) ===
+								"tosklight",
+						),
+					),
 				checkConnection: () =>
 					void track(id, "checking", () => checkConnection(server, id)),
 				refreshThumbnails: () =>
@@ -272,7 +284,7 @@ function useFirstChecks(
 		if (!active || !server) return;
 		for (const fixture of fixtures) {
 			const endpoint = fixture.direct_control;
-			const key = `${fixture.fixture_id}@${endpoint?.ip_address}:${endpoint?.port}`;
+			const key = `${fixture.fixture_id}@${endpoint?.ip_address}:${endpoint?.port}:http:${endpoint?.http_port ?? DEFAULT_MEDIA_HTTP_PORT}`;
 			// A row still applying its endpoint is checked once the desk has stored it.
 			if (checked.current.has(key) || busy[fixture.fixture_id]) continue;
 			if (!needsFirstCheck(fixture, matchingStatus(statuses ?? [], fixture)))
@@ -307,6 +319,7 @@ async function applyDraft(
 	patch: ReturnType<typeof usePatch>,
 	fixture: PatchedFixture,
 	draft: MediaServerDraft,
+	native: boolean,
 ): Promise<RowMessage> {
 	const endpoint =
 		draft.protocol === "off"
@@ -315,6 +328,9 @@ async function applyDraft(
 					protocol: draft.protocol,
 					ip_address: draft.ip.trim(),
 					port: draft.port,
+					...(native || draft.httpPort != null
+						? { http_port: draft.httpPort ?? DEFAULT_MEDIA_HTTP_PORT }
+						: {}),
 				};
 	const saved = await patch.updateFixture(fixture.fixture_id, {
 		direct_control: endpoint,
@@ -327,7 +343,9 @@ async function applyDraft(
 	return {
 		tone: "status",
 		text: endpoint
-			? `Now using ${endpoint.ip_address}:${endpoint.port}.`
+			? native
+				? `Now using CITP ${endpoint.ip_address}:${endpoint.port}; HTTP ${endpoint.ip_address}:${endpoint.http_port}.`
+				: `Now using ${endpoint.ip_address}:${endpoint.port}.`
 			: "Network control is off for this server.",
 	};
 }

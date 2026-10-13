@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MediaServerInspection } from "../api/client/mediaOutput";
+import type { MediaServerFixture } from "../api/types";
 import { useMediaServers } from "../features/mediaServers/MediaServersContext";
 import { useProgrammerValuesView } from "../features/programmerValues/ProgrammerValuesView";
 import { useProgrammerValuesMutationQueue } from "../features/programmerValues/useProgrammerValuesMutationQueue";
@@ -112,6 +113,7 @@ export function MediaPaneWindow({
 		mediaRightPaneIsVisible(mediaPaneState),
 	);
 	const {
+		endpointKey,
 		inspection,
 		inspectionError,
 		setInspectionError,
@@ -163,11 +165,9 @@ export function MediaPaneWindow({
 		selectedServerId,
 	]);
 
-	const selectedLayer = selectedServer?.layers.find(
-		(layer) => layer.fixture_id === selectedLayerId,
-	);
-	const nativeLayer = selectedServer?.layers.findIndex(
-		(layer) => layer.fixture_id === selectedLayerId,
+	const { selectedLayer, nativeLayer, selectedFixtureId } = mediaLayerSelection(
+		selectedServer,
+		selectedLayerId,
 	);
 	const nativeEffects = useNativeMediaEffects({
 		active: Boolean(
@@ -181,13 +181,10 @@ export function MediaPaneWindow({
 		fixtureId: selectedServer?.fixture_id,
 		layer: nativeLayer != null && nativeLayer >= 0 ? nativeLayer : undefined,
 		sourceKey: liveSourceKey(inspection, nativeLayer),
+		endpointKey,
 		load: nativeMedia ?? unavailableNativeMedia,
 		update: updateNativeMediaEffect ?? unavailableNativeMediaEffect,
 	});
-	const selectedFixtureId =
-		selectedLayerId === "master"
-			? selectedServer?.fixture_id
-			: selectedLayer?.fixture_id;
 	const liveProgrammer = programmerValues?.fixtureValues.filter(
 		(value) => value.fixtureId === selectedFixtureId,
 	);
@@ -280,6 +277,26 @@ export function MediaPaneWindow({
 			}}
 		/>
 	);
+}
+
+/** Resolve the pane's logical fixture and corresponding native layer together. */
+function mediaLayerSelection(
+	server: MediaServerFixture | undefined,
+	layerId: string,
+) {
+	const nativeLayer = server?.layers.findIndex(
+		(layer) => layer.fixture_id === layerId,
+	);
+	const selectedLayer =
+		nativeLayer != null && nativeLayer >= 0
+			? server?.layers[nativeLayer]
+			: undefined;
+	return {
+		selectedLayer,
+		nativeLayer,
+		selectedFixtureId:
+			layerId === "master" ? server?.fixture_id : selectedLayer?.fixture_id,
+	};
 }
 
 /** What a layer shows, as the polled server status reports it. */
