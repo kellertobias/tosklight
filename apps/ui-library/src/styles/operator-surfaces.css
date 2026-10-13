@@ -2176,7 +2176,7 @@
 	place-items: center;
 	width: 100%;
 	height: 100%;
-	font-size: clamp(20px, 9cqh, 54px);
+	font-size: clamp(20px, min(80cqw, 30cqh), 54px);
 }
 .playback-preview-notice {
 	position: absolute;
@@ -2189,6 +2189,36 @@
 .playback-card.has-playback-artwork .single-button-playback-action {
 	background: transparent;
 	text-shadow: 0 1px 3px #000;
+}
+/* Keep the picture visible through controls without changing their fitted geometry. */
+.playback-card.has-playback-artwork
+:is(
+	.vertical-touch-fader,
+	.vertical-touch-fader-actions > .ui-button,
+	.faderless-playback-actions > .ui-button,
+	.playback-push-encoder > .ui-button,
+	.hardware-playback-controls,
+	.playback-rotary-control .touch-encoder-number-entry,
+	.playback-rotary-control .touch-encoder-surface,
+	.playback-rotary-control .touch-encoder-push
+) {
+	background-color: #11181da6;
+	text-shadow: 0 1px 3px #000;
+}
+.playback-card.has-playback-artwork .playback-rotary-control .touch-encoder {
+	background: transparent;
+}
+.playback-card.has-playback-artwork
+	.playback-rotary-control
+	:is(.touch-encoder-surface, .touch-encoder-push) {
+	background-color: #11181d80;
+}
+.playback-card.has-playback-artwork .vertical-touch-fader::before,
+.playback-card.has-playback-artwork .hardware-fader-fill,
+.playback-card.has-playback-artwork
+	.playback-rotary-control
+	.touch-encoder-surface::before {
+	opacity: 0.55;
 }
 .playback-preview-notice {
 	z-index: 2;
