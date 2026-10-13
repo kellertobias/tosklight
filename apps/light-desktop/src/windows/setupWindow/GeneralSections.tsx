@@ -1,14 +1,12 @@
-import { formatErrorDetails } from "@tosklight/ui";
-import { ErrorAlert } from "@tosklight/ui";
-import { Button, NumberField, SelectField, TextField } from "@tosklight/ui";
+import { Button, ErrorAlert, formatErrorDetails, NumberField, SelectField, TextField } from "@tosklight/ui";
 import { useEffect, useState } from "react";
+import { requestShowLoad } from "../../components/modals/showLoadRequest";
 import { ShowRecoveryFileManager } from "../../components/setup/ShowRecoveryFileManager";
 import { useBootstrapSnapshot } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useConnectionStatus } from "../../features/shellStatus/ShellStatusState";
 import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
 import { useTimecodeActions } from "../../features/timecode/TimecodeActionsContext";
 import { useDesktopBridge } from "../../platform/desktop";
-import { useApp } from "../../state/AppContext";
 import type { SetupWindowController } from "./controller";
 
 export function ShowsRecoverySection({
@@ -19,7 +17,6 @@ export function ShowsRecoverySection({
 	const bootstrap = useBootstrapSnapshot();
 	const lifecycle = useShowLifecycle();
 	const connectionStatus = useConnectionStatus();
-	const { dispatch } = useApp();
 	const desktop = useDesktopBridge();
 	const timecodes = useTimecodeActions();
 	const [libraryError, setLibraryError] = useState<string | null>(null);
@@ -79,9 +76,7 @@ export function ShowsRecoverySection({
 					<b>Show library</b>
 					<span>{lifecycle?.shows.length ?? 0} library shows</span>
 					<Button
-						onClick={() =>
-							dispatch({ type: "OPEN_BUILTIN", kind: "file_manager" })
-						}
+						onClick={requestShowLoad}
 					>
 						Open show
 					</Button>

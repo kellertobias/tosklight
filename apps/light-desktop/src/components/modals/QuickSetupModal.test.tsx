@@ -1,5 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ServerController } from "../../features/server/model";
+import { createShowLifecycleActions } from "../../features/server/showLifecycle";
+import type { SetupWindowController } from "../../windows/setupWindow/controller";
+import { ShowsRecoverySection } from "../../windows/setupWindow/GeneralSections";
 import { QuickSetupModal } from "./QuickSetupModal";
 
 vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
@@ -8,6 +12,7 @@ vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
 
 const mocks = vi.hoisted(() => ({
   lifecycleAvailable: true,
+  setupOpen: true,
   desktopAvailable: false,
   updatePlaybackSurface: vi.fn(),
   screensSnapshot: null as any,
@@ -122,13 +127,14 @@ vi.mock("../../windows/FileManagerPickerHost", () => ({
 }));
 vi.mock("../../state/AppContext", () => ({
   useApp: () => ({
-    state: { setupOpen: true, desks: [], activeDeskId: "" },
+    state: { setupOpen: mocks.setupOpen, desks: [], activeDeskId: "" },
     dispatch: mocks.dispatch,
   }),
 }));
 
 beforeEach(() => {
     mocks.lifecycleAvailable = true;
+    mocks.setupOpen = true;
     mocks.desktopAvailable = false;
     mocks.screensSnapshot = null;
     mocks.surfaces = { playback_surfaces: {} };
@@ -824,5 +830,75 @@ describe("Show Load read and preparation recovery", () => {
 		await waitFor(() =>
 			expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull(),
 		);
+	});
+});
+
+
+describe("Setup show-load shortcut", () => {
+	beforeEach(() => {
+		mocks.setupOpen = false;
+		mocks.server.openShow.mockReset().mockResolvedValue(true);
+	});
+	it("opens the actual load browser and loads the selected library show", async () => {
+		const apiOpen = vi.fn().mockResolvedValue(undefined);
+		const refresh = vi.fn().mockResolvedValue(undefined);
+		const model = {
+			api: { shows: { openShow: apiOpen } },
+			shows: mocks.server.shows,
+			refresh,
+			setError: vi.fn(),
+			beginDeskLoading: vi.fn().mockReturnValue(1),
+			finishDeskLoading: vi.fn(),
+		} as unknown as ServerController;
+		mocks.server.openShow.mockImplementation(
+			createShowLifecycleActions(model).openShow,
+		);
+		render(
+			<>
+				<ShowsRecoverySection
+					controller={{ draft: null } as unknown as SetupWindowController}
+				/>
+				<QuickSetupModal />
+			</>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Open show" }));
+		const browser = await screen.findByRole("dialog", { name: "Load show" });
+		expect(screen.queryByRole("dialog", { name: "Show" })).toBeNull();
+		const row = await within(browser).findByRole("row", { name: /Festival/ });
+		fireEvent.click(within(row).getByRole("button", { name: "Load Latest" }));
+		await waitFor(() =>
+			expect(apiOpen).toHaveBeenCalledWith("other", "safe_blackout"),
+		);
+		await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull(),
+		);
+		expect(mocks.dispatch).not.toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "file_manager",
+		});
+	});
+	it("cancels without loading and leaves separate File Manager available", async () => {
+		render(
+			<>
+				<ShowsRecoverySection
+					controller={{ draft: null } as unknown as SetupWindowController}
+				/>
+				<QuickSetupModal />
+			</>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Open show" }));
+		const browser = await screen.findByRole("dialog", { name: "Load show" });
+		expect(screen.queryByRole("dialog", { name: "Show" })).toBeNull();
+		fireEvent.click(
+			within(browser).getByRole("button", { name: "Close Load Show" }),
+		);
+		expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull();
+		expect(mocks.server.openShow).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "Open File Manager" }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({
+			type: "OPEN_BUILTIN",
+			kind: "file_manager",
+		});
 	});
 });

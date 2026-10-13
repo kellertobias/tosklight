@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeskConfiguration } from "../../api/types";
+import { subscribeShowLoadRequest } from "../../components/modals/showLoadRequest";
 import type { SetupWindowController } from "./controller";
 import { ShowsRecoverySection } from "./GeneralSections";
 import { OutputsSection } from "./OutputsSection";
@@ -61,11 +62,12 @@ describe("autosave interval setup placement", () => {
 		expect(screen.getByText("Connected, autosave active")).toHaveClass(
 			"is-connected",
 		);
+		const openLoad = vi.fn();
+		const unsubscribe = subscribeShowLoadRequest(openLoad);
 		fireEvent.click(screen.getByRole("button", { name: "Open show" }));
-		expect(dispatch).toHaveBeenCalledWith({
-			type: "OPEN_BUILTIN",
-			kind: "file_manager",
-		});
+		unsubscribe();
+		expect(openLoad).toHaveBeenCalledOnce();
+		expect(dispatch).not.toHaveBeenCalled();
 		const interval = screen.getByLabelText("Autosave interval");
 		expect(interval).toHaveValue("30");
 		fireEvent.change(interval, { target: { value: "45" } });

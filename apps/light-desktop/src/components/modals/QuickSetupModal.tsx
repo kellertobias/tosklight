@@ -1,4 +1,4 @@
-import { formatErrorDetails } from "@tosklight/ui";
+import { Button, ErrorAlert, formatErrorDetails, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
 import {
 	type Dispatch,
 	type SetStateAction,
@@ -6,28 +6,28 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { useApp } from "../../state/AppContext";
-import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
-import {
-	useBootstrapSnapshot,
-	useSessionSnapshot,
-} from "../../features/deskSnapshot/DeskSnapshotState";
-import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
-import { useScreens } from "../../features/screens/ScreensContext";
-import { Button, ErrorAlert, ModalRegistration, ModalTitleBar } from "@tosklight/ui";
+import { configuredServerUrl } from "../../api/client/serverLocation";
 import type {
 	MvrImportPreview,
 	ScreenConfiguration,
 	ShowEntry,
 	ShowRevision,
 } from "../../api/types";
-import { useShowIndicator } from "../shell/showIndicator";
-import { saveAuthoredScreen, screenForAddAction } from "../setup/screenConfiguration";
-import { useDesktopBridge } from "../../platform/desktop";
-import { useSelectiveImport } from "../../features/selectiveImport/SelectiveImportContext";
-import { QuickSetupDialogs } from "./QuickSetupDialogs";
+import { useDeskLockActions } from "../../features/deskLock/DeskLockActionsProvider";
+import {
+	useBootstrapSnapshot,
+	useSessionSnapshot,
+} from "../../features/deskSnapshot/DeskSnapshotState";
 import { usePatchedFixturesView } from "../../features/patch/PatchState";
-import { configuredServerUrl } from "../../api/client/serverLocation";
+import { useScreens } from "../../features/screens/ScreensContext";
+import { useSelectiveImport } from "../../features/selectiveImport/SelectiveImportContext";
+import { useShowLifecycle } from "../../features/showLifecycle/ShowLifecycleContext";
+import { useDesktopBridge } from "../../platform/desktop";
+import { useApp } from "../../state/AppContext";
+import { saveAuthoredScreen, screenForAddAction } from "../setup/screenConfiguration";
+import { useShowIndicator } from "../shell/showIndicator";
+import { QuickSetupDialogs } from "./QuickSetupDialogs";
+import { subscribeShowLoadRequest } from "./showLoadRequest";
 import { showPatchSummary } from "./showSummary";
 
 function showDate(value?: string | null): string {
@@ -714,6 +714,20 @@ function QuickSetupModalView({ model }: { model: QuickSetupModel }) {
 
 export function QuickSetupModal() {
 	const model = useQuickSetupModel();
-	if (!model.app.state.setupOpen) return null;
+	const [standaloneLoad, setStandaloneLoad] = useState(false);
+	const { setLoadOpen } = model.dialogs;
+	useEffect(
+		() =>
+			subscribeShowLoadRequest(() => {
+				setStandaloneLoad(true);
+				setLoadOpen(true);
+			}),
+		[setLoadOpen],
+	);
+	useEffect(() => {
+		if (model.app.state.setupOpen) setStandaloneLoad(false);
+	}, [model.app.state.setupOpen]);
+	if (!model.app.state.setupOpen)
+		return standaloneLoad ? <QuickSetupDialogs model={model} /> : null;
 	return <QuickSetupModalView model={model} />;
 }
