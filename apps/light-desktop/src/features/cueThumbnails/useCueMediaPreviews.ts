@@ -11,6 +11,10 @@ import {
 import type { CueMediaPreviewEntry } from "../../api/client/cueMediaPreviews";
 import { useMediaServers } from "../mediaServers/MediaServersContext";
 import { useCueThumbnailActions } from "./CueThumbnailActions";
+import {
+	affectedPreview,
+	type MediaPreviewScope,
+} from "./MediaPreviewAuthority";
 
 type CueThumbnailActionsValue = ReturnType<typeof useCueThumbnailActions>;
 
@@ -88,7 +92,10 @@ function sameIndex(
 	return next;
 }
 
-type PictureCache = Map<string, { src: string; empty: boolean }>;
+type PictureCache = Map<
+	string,
+	{ src: string; empty: boolean; connection: string }
+>;
 
 /**
  * Fetches the pictures `relevant` names that are not cached yet, a few at a time, and reports
@@ -100,6 +107,7 @@ function loadPictures(
 	urls: PictureCache,
 	setPictures: Dispatch<SetStateAction<ReadonlyMap<string, CueMediaPreview>>>,
 	offlineServers: ReadonlySet<string>,
+	scopeFor: (entry: CueMediaPreviewEntry) => MediaPreviewScope,
 ): (() => void) | undefined {
 	if (!actions || !relevant.length) {
 		releaseExcept(urls, new Set());
@@ -110,7 +118,13 @@ function loadPictures(
 	const timers: ReturnType<typeof setTimeout>[] = [];
 	const keep = new Set(
 		relevant
-			.filter((entry) => !offlineServers.has(entry.serverFixtureId))
+			.filter(
+				(entry) =>
+					!offlineServers.has(entry.serverFixtureId) &&
+					(!urls.has(identity(entry)) ||
+						urls.get(identity(entry))?.connection ===
+							scopeFor(entry).connection),
+			)
 			.map(identity),
 	);
 	// A picture of a state the Cue no longer has is released before anything else happens, so
@@ -143,6 +157,12 @@ function loadPictures(
 	};
 	const fetchOne = async (entry: CueMediaPreviewEntry, tries = 0) => {
 		const key = identity(entry);
+		const scope = scopeFor(entry);
+		const authority = actions.mediaAuthority;
+		const token = authority?.token(scope);
+		const current = () =>
+			!cancelled &&
+			(!authority || (token !== undefined && authority.current(scope, token)));
 		const cached = urls.get(key);
 		if (cached) return;
 		try {
@@ -151,11 +171,16 @@ function loadPictures(
 				entry.previewKey,
 				MEDIA_PREVIEW_SIZE,
 			);
-			if (cancelled) return;
+			if (!current()) return;
 			if (result.kind === "picture") {
 				const src = URL.createObjectURL(result.blob);
-				urls.set(key, { src, empty: result.empty });
+				urls.set(key, {
+					src,
+					empty: result.empty,
+					connection: scope.connection,
+				});
 				settle({ state: result.empty ? "empty" : "ready", entry, src });
+				if (token !== undefined) authority?.success(scope, token);
 				return;
 			}
 			if (result.state === "loading") {
@@ -176,8 +201,13 @@ function loadPictures(
 				);
 				return;
 			}
+			if (token !== undefined)
+				authority?.failure(scope, result.state, result.error, token);
 			settle({ state: result.state, entry, error: result.error });
 		} catch (error) {
+			if (!current()) return;
+			if (token !== undefined)
+				authority?.failure(scope, "offline", formatErrorDetails(error), token);
 			settle({
 				state: "offline",
 				entry,
@@ -208,6 +238,45 @@ function loadPictures(
 	};
 }
 
+function observeAuthority(
+	actions: CueThumbnailActionsValue | null,
+	relevant: CueMediaPreviewEntry[],
+	scopeFor: (entry: CueMediaPreviewEntry) => MediaPreviewScope,
+	urls: PictureCache,
+	setPictures: Dispatch<SetStateAction<ReadonlyMap<string, CueMediaPreview>>>,
+	onRecovery: () => void,
+) {
+	return actions?.mediaAuthority?.subscribe((outcome) => {
+		const affected = relevant.filter((entry) =>
+			affectedPreview(scopeFor(entry), outcome),
+		);
+		if (!affected.length) return;
+		if (outcome.state === "recovered") {
+			onRecovery();
+			return;
+		}
+		for (const entry of affected) {
+			const key = identity(entry);
+			const cached = urls.get(key);
+			if (cached) {
+				URL.revokeObjectURL(cached.src);
+				urls.delete(key);
+			}
+		}
+		const state = outcome.state;
+		setPictures((current) => {
+			const next = new Map(current);
+			for (const entry of affected)
+				next.set(entry.cueId, {
+					entry,
+					state,
+					error: outcome.error ?? "Media preview unavailable",
+				});
+			return next;
+		});
+	});
+}
+
 /**
  * Media Server pictures for the given Cues.
  *
@@ -225,7 +294,10 @@ export function useCueMediaPreviews(
 	const reachability = useMemo(
 		() =>
 			(media?.mediaServers ?? [])
-				.map((server) => `${server.fixture_id}:${server.status?.online}`)
+				.map(
+					(server) =>
+						`${server.fixture_id}:${server.status?.online}:${JSON.stringify([server.endpoint, server.output_binding])}`,
+				)
 				.sort()
 				.join(","),
 		[media?.mediaServers],
@@ -267,6 +339,29 @@ export function useCueMediaPreviews(
 		[entries, wantedKey],
 	);
 
+	const scopeFor = (entry: CueMediaPreviewEntry): MediaPreviewScope => {
+		const server = media?.mediaServers.find(
+			(candidate) => candidate.fixture_id === entry.serverFixtureId,
+		);
+		return {
+			server: entry.serverFixtureId,
+			output: entry.outputId,
+			connection: JSON.stringify([server?.endpoint, server?.output_binding]),
+		};
+	};
+	useEffect(
+		() =>
+			observeAuthority(
+				actions,
+				relevant,
+				scopeFor,
+				urls.current,
+				setPictures,
+				() => setAttempt((value) => value + 1),
+			),
+		[actions, relevant, reachability],
+	);
+
 	// biome-ignore lint/correctness/useExhaustiveDependencies: attempt and reachability ask failed pictures again.
 	useEffect(
 		() =>
@@ -280,6 +375,7 @@ export function useCueMediaPreviews(
 						.filter((server) => server.status?.online === false)
 						.map((server) => server.fixture_id),
 				),
+				scopeFor,
 			),
 		[actions, relevant, attempt, reachability],
 	);

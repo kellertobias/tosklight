@@ -15,6 +15,8 @@ import type {
 	CueThumbnailUpload,
 } from "../../api/client/cueThumbnails";
 
+import { MediaPreviewAuthority } from "./MediaPreviewAuthority";
+
 /**
  * Access to the show's stored cue preview pictures.
  *
@@ -22,6 +24,7 @@ import type {
  * still reads and displays stored previews, it just never uploads a redraw.
  */
 interface CueThumbnailActions {
+	mediaAuthority?: MediaPreviewAuthority;
 	available: boolean;
 	canStore: boolean;
 	index(): Promise<CueThumbnailEntry[]>;
@@ -54,6 +57,7 @@ export function CueThumbnailActionsProvider({
 }>) {
 	const actions = useMemo<CueThumbnailActions>(
 		() => ({
+			mediaAuthority: new MediaPreviewAuthority(),
 			available: Boolean(showId),
 			canStore: canWrite && Boolean(showId),
 			index: () => (showId ? client.index(showId) : Promise.resolve([])),
@@ -66,9 +70,7 @@ export function CueThumbnailActionsProvider({
 				await client.store(showId, uploads);
 			},
 			mediaIndex: () =>
-				showId && mediaClient
-					? mediaClient.index(showId)
-					: Promise.resolve([]),
+				showId && mediaClient ? mediaClient.index(showId) : Promise.resolve([]),
 			mediaImage: (cueId, previewKey, size) =>
 				showId && mediaClient
 					? mediaClient.image(showId, cueId, previewKey, size)
