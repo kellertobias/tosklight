@@ -251,50 +251,63 @@ fn handle_record_osc(
     source: Option<SocketAddr>,
     pressed: bool,
 ) -> bool {
-    // Arm/Settings mutate the Programmer command line, so take its reentrant gate before the
-    // desk gate. Routing Record enters the Programming service and must run after both are
-    // released, rather than re-entering the non-reentrant desk gate.
+    // Capture adapter-owned Arm/Settings changes through the same authoritative interaction
+    // boundary as typed keys. It owns the Programmer/desk gates and publishes only changed
+    // components. Ordinary Record is routed after release, avoiding re-entering the desk gate.
     enum RecordOutcome {
         Handled(bool),
         RouteRecord,
     }
-    let outcome = state.programming.programmers().serialized(|| {
-        state.programming.run_desk_operation(session.desk.id, || {
-        if read_desk_lock(state).locked {
-            return RecordOutcome::Handled(true);
-        }
-        let gesture = source
-            .map(|source| state.integrations.record_gesture(source, pressed))
-            .unwrap_or(OscRecordGesture::None);
-        if matches!(gesture, OscRecordGesture::Record) {
-            if record_already_armed(state, session) {
-                // RECORD RECORD asks how this Record stores the programmer.
+    let context = programming_context(session, light_application::ActionSource::Osc, None);
+    let outcome = run_programming_interaction(
+        state,
+        session,
+        &context,
+        "osc",
+        ProgrammingLockPolicy::RequireUnlocked,
+        || {
+            if read_desk_lock(state).locked {
+                return RecordOutcome::Handled(true);
+            }
+            let gesture = source
+                .map(|source| state.integrations.record_gesture(source, pressed))
+                .unwrap_or(OscRecordGesture::None);
+            if matches!(gesture, OscRecordGesture::Record) {
+                if record_already_armed(state, session) {
+                    // RECORD RECORD asks how this Record stores the programmer.
+                    emit(
+                        state,
+                        "desk_action",
+                        serde_json::json!({"path":subscriber.path,"desk_id":session.desk.id,"session_id":session.id,"action":"record-choice","source":"osc"}),
+                    );
+                    return RecordOutcome::Handled(true);
+                }
+                return RecordOutcome::RouteRecord;
+            }
+            if matches!(gesture, OscRecordGesture::RecordSettings) {
                 emit(
                     state,
                     "desk_action",
-                    serde_json::json!({"path":subscriber.path,"desk_id":session.desk.id,"session_id":session.id,"action":"record-choice","source":"osc"}),
+                    serde_json::json!({"path":subscriber.path,"desk_id":session.desk.id,"session_id":session.id,"action":"record-settings","source":"osc"}),
                 );
                 return RecordOutcome::Handled(true);
             }
-            return RecordOutcome::RouteRecord;
+            apply_record_gesture(state, session, gesture);
+            RecordOutcome::Handled(
+                pressed
+                    || !matches!(gesture, OscRecordGesture::None)
+                    || subscriber.shifted
+                    || subscriber.shift_held,
+            )
+        },
+    );
+    let outcome = match outcome {
+        Ok(completed) => completed.output,
+        Err(error) => {
+            command_http::publish_osc_rejection(state, session, error.message);
+            return true;
         }
-        if matches!(gesture, OscRecordGesture::RecordSettings) {
-            emit(
-                state,
-                "desk_action",
-                serde_json::json!({"path":subscriber.path,"desk_id":session.desk.id,"session_id":session.id,"action":"record-settings","source":"osc"}),
-            );
-            return RecordOutcome::Handled(true);
-        }
-        apply_record_gesture(state, session, gesture);
-        RecordOutcome::Handled(
-            pressed
-                || !matches!(gesture, OscRecordGesture::None)
-                || subscriber.shifted
-                || subscriber.shift_held,
-        )
-        })
-    });
+    };
     match outcome {
         RecordOutcome::Handled(handled) => handled,
         RecordOutcome::RouteRecord => {
