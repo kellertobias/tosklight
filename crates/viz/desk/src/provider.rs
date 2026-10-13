@@ -656,6 +656,7 @@ impl SceneProvider for DeskProvider {
             }
             let mut diagnostics = self.diagnostics.clone();
             diagnostics.inputs = receivers.status();
+            diagnostics.newest_input_micros = newest;
             diagnostics.universes = receivers.universes();
             diagnostics.preview_universes = preview_universes.into_iter().collect();
             self.diagnostics = diagnostics.clone();
@@ -861,6 +862,7 @@ async fn read_scene(
             .map(|address| address.to_string())
             .unwrap_or_else(|| connection.listen_interfaces.describe()),
         inputs: Vec::new(),
+        newest_input_micros: 0,
         universes: Vec::new(),
         preview_universes: Vec::new(),
         warnings: plan.warnings.clone(),

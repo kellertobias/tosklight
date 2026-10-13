@@ -210,6 +210,11 @@ pub struct ProviderDiagnostics {
     pub scene_revision: u64,
     pub interface: String,
     pub inputs: Vec<InputMappingStatus>,
+    /// Newest winning network receipt, in microseconds since the provider/renderer shared epoch.
+    /// Independent of scene value revisions: an unchanged live look still receives packets.
+    /// Zero means no winning network packet has arrived. Older helper messages may omit it.
+    #[serde(default)]
+    pub newest_input_micros: u64,
     /// One row per logical universe the show reads, ordered by universe number.
     pub universes: Vec<UniverseHealth>,
     /// Universes a planning window is driving because no real source has ever delivered them.

@@ -29,6 +29,7 @@ pub struct Session {
     pub diagnostics: ProviderDiagnostics,
     pub epoch: Instant,
     latency: VecDeque<f32>,
+    last_presented_input_micros: u64,
     last_value_frame: u64,
     last_value_instant: Option<Instant>,
     dmx_intervals: VecDeque<f32>,
@@ -49,6 +50,7 @@ impl Session {
             diagnostics: ProviderDiagnostics::default(),
             epoch,
             latency: VecDeque::with_capacity(LATENCY_SAMPLES),
+            last_presented_input_micros: 0,
             last_value_frame: 0,
             last_value_instant: None,
             dmx_intervals: VecDeque::with_capacity(LATENCY_SAMPLES),
@@ -66,6 +68,7 @@ impl Session {
         self.values = SceneValues::default();
         self.diagnostics = ProviderDiagnostics::default();
         self.latency.clear();
+        self.last_presented_input_micros = 0;
         self.dmx_intervals.clear();
         self.last_value_frame = 0;
         self.last_value_instant = None;
@@ -106,6 +109,8 @@ impl Session {
                             let emitters = scene.emitters.len();
                             self.scene = scene;
                             self.values = SceneValues::default();
+                            self.latency.clear();
+                            self.last_presented_input_micros = 0;
                             self.values.resize(emitters);
                             if let Some(view) = view {
                                 self.source_view = view;
@@ -148,7 +153,15 @@ impl Session {
                 ProviderEvent::RendererSettings(settings) => {
                     self.pending_renderer_settings = Some(settings);
                 }
-                ProviderEvent::Diagnostics(diagnostics) => self.diagnostics = *diagnostics,
+                ProviderEvent::Diagnostics(diagnostics) => {
+                    if !self.awaiting_snapshot {
+                        self.values.newest_input_micros = self
+                            .values
+                            .newest_input_micros
+                            .max(diagnostics.newest_input_micros);
+                    }
+                    self.diagnostics = *diagnostics;
+                }
                 ProviderEvent::RendererSettings(_) => {}
                 ProviderEvent::ResyncRequired { reason } => {
                     self.awaiting_snapshot = true;
@@ -185,11 +198,14 @@ impl Session {
         self.values = values;
     }
 
-    /// Record the packet-to-visible latency for the frame just presented.
+    /// Record each new receipt's packet-to-visible latency once, on its first presentation.
+    /// Rendering a held look without another receipt is not another input latency sample.
     pub fn record_presented(&mut self, presented: Instant) {
-        if self.values.newest_input_micros == 0 {
+        let input_micros = self.values.newest_input_micros;
+        if input_micros == 0 || input_micros <= self.last_presented_input_micros {
             return;
         }
+        self.last_presented_input_micros = input_micros;
         let presented_micros = presented.duration_since(self.epoch).as_micros() as u64;
         let latency =
             presented_micros.saturating_sub(self.values.newest_input_micros) as f32 / 1000.0;
@@ -285,6 +301,7 @@ fn validate(scene: &Scene) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::demo::DemoProvider;
+    use std::time::Duration;
     use viz_scene::{EmitterInstance, EmitterKind, EmitterLayoutCells, MotionAxis};
 
     fn session() -> Session {
@@ -601,6 +618,82 @@ mod tests {
         session.scene = one_fixture_scene(&[1]);
         session.pump(Instant::now());
         assert_eq!(session.scene.emitters[0].fixture_index, 0);
+    }
+
+    #[test]
+    fn repeated_presentations_without_input_do_not_measure_held_look_age() {
+        let epoch = Instant::now();
+        let mut session = Session::new(
+            Box::new(ScriptedProvider { events: Vec::new() }),
+            ProviderKind::LightingDesk,
+            epoch,
+        );
+        session.record_presented(epoch + Duration::from_secs(1));
+        assert_eq!(session.latency_percentiles(), (0., 0., 0.));
+        session.values.newest_input_micros = 1_000;
+        session.record_presented(epoch + Duration::from_micros(2_000));
+        session.record_presented(epoch + Duration::from_secs(20));
+        assert_eq!(
+            session.latency_percentiles(),
+            (1., 1., 1.),
+            "no new packet arrived"
+        );
+    }
+
+    #[test]
+    fn held_input_freshness_updates_latency_without_changing_values() {
+        let epoch = Instant::now();
+        let mut session = Session::new(
+            Box::new(ScriptedProvider { events: Vec::new() }),
+            ProviderKind::LightingDesk,
+            epoch,
+        );
+        session.awaiting_snapshot = false;
+        session.values.frame = 7;
+        session.values.newest_input_micros = 1_000;
+        session.record_presented(epoch + Duration::from_micros(2_000));
+        assert_eq!(session.latency_percentiles(), (1., 1., 1.));
+        // Internal helper diagnostics are serialized; old producers may omit this additive field.
+        let diagnostics = serde_json::from_value(serde_json::json!({
+            "endpoint": "", "resolved_address": "", "authenticated": false,
+            "show_identity": "", "scene_revision": 0, "interface": "", "inputs": [],
+            "universes": [], "preview_universes": [], "warnings": [],
+            "newest_input_micros": 9_000,
+        }))
+        .unwrap();
+        session.provider = Box::new(ScriptedProvider {
+            events: vec![ProviderEvent::Diagnostics(Box::new(diagnostics))],
+        });
+        session.pump(epoch + Duration::from_micros(9_500));
+        assert_eq!(session.values.frame, 7);
+        assert_eq!(session.values.newest_input_micros, 9_000);
+        session.record_presented(epoch + Duration::from_micros(10_000));
+        assert_eq!(session.latency_percentiles(), (1., 1., 1.));
+        session.record_presented(epoch + Duration::from_secs(20));
+        assert_eq!(
+            session.latency_percentiles(),
+            (1., 1., 1.),
+            "no receipt means no new latency sample"
+        );
+        let changed = SceneValues {
+            frame: 8,
+            newest_input_micros: 20_000,
+            ..SceneValues::default()
+        };
+        session.provider = Box::new(ScriptedProvider {
+            events: vec![ProviderEvent::Values(Box::new(changed))],
+        });
+        session.pump(epoch + Duration::from_micros(20_500));
+        session.record_presented(epoch + Duration::from_micros(21_000));
+        assert_eq!(session.values.frame, 8);
+        assert_eq!(session.latency_percentiles(), (1., 1., 1.));
+        session.replace_provider(
+            Box::new(ScriptedProvider { events: Vec::new() }),
+            ProviderKind::LightingDesk,
+        );
+        assert_eq!(session.latency_percentiles(), (0., 0., 0.));
+        session.record_presented(epoch + Duration::from_secs(21));
+        assert_eq!(session.latency_percentiles(), (0., 0., 0.));
     }
 
     #[test]

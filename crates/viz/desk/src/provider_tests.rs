@@ -285,3 +285,6 @@ mod preview_precedence {
         assert!(driven.is_empty());
     }
 }
+
+#[path = "provider/input_freshness_tests.rs"]
+mod input_freshness_tests;

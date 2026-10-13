@@ -93,7 +93,7 @@ struct Shared {
     universes: Mutex<HashMap<u16, UniverseState>>,
     mappings: Vec<Arc<MappingState>>,
     running: AtomicBool,
-    /// Receive time of the newest accepted packet on any mapping, regardless of whether its
+    /// Receive time of the newest winning packet, after source arbitration, regardless of whether its
     /// content changed. A held look still arrives at full rate, so this is what
     /// packet-to-visible latency and the input-rate readout must be measured against.
     newest_accepted_micros: AtomicU64,
@@ -641,9 +641,6 @@ fn receive_loop(shared: Arc<Shared>, listener: Listener) {
         }
         state.sequence = Some(frame.sequence);
         let now = shared.micros();
-        shared
-            .newest_accepted_micros
-            .fetch_max(now, Ordering::Relaxed);
         shared.accepted_packets.fetch_add(1, Ordering::Relaxed);
         for index in targets {
             let mapping = &shared.mappings[*index];
@@ -762,6 +759,9 @@ fn apply(
 
     // Counted here, past every arbitration, so the mapping's accepted total means the same thing
     // as the universe's frame rate rather than counting deliveries the universe never took.
+    shared
+        .newest_accepted_micros
+        .fetch_max(now, Ordering::Relaxed);
     state.counters.accepted.fetch_add(1, Ordering::Relaxed);
     universe.statistics.accept(now);
     let changed = universe.frame[..slots] != frame.slots[..slots] || universe.stale;
@@ -804,6 +804,68 @@ mod tests {
         assert_eq!(status[0].health, InputHealth::Healthy);
         assert!(status[0].accepted_packets >= 1);
         assert_eq!(status[0].malformed_packets, 0);
+    }
+
+    #[test]
+    fn winning_input_freshness_ignores_other_senders_and_out_of_order_packets() {
+        let port = free_port();
+        let receiver = start(&[(Protocol::ArtNet, 5, port)]);
+        let winner = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let loser = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        deliver(&receiver, &winner, port, &artdmx(5, 1, &[40, 0]));
+        let first = receiver.newest_accepted_micros();
+        std::thread::sleep(Duration::from_millis(15));
+        winner
+            .send_to(&artdmx(5, 2, &[40, 0]), (Ipv4Addr::LOCALHOST, port))
+            .unwrap();
+        wait_for(|| receiver.status()[0].accepted_packets >= 2);
+        let held = receiver.newest_accepted_micros();
+        assert!(held > first);
+        assert!(
+            receiver.drain_changed().is_empty(),
+            "held receipt is metadata only"
+        );
+        loser
+            .send_to(&artdmx(5, 3, &[200, 0]), (Ipv4Addr::LOCALHOST, port))
+            .unwrap();
+        wait_for(|| receiver.status()[0].duplicate_packets > 0);
+        assert_eq!(
+            receiver.newest_accepted_micros(),
+            held,
+            "loser cannot freshen the winning look"
+        );
+        winner
+            .send_to(&artdmx(5, 1, &[200, 0]), (Ipv4Addr::LOCALHOST, port))
+            .unwrap();
+        wait_for(|| receiver.status()[0].out_of_order_packets > 0);
+        assert_eq!(receiver.newest_accepted_micros(), held);
+        assert!(receiver.drain_changed().is_empty());
+    }
+
+    #[test]
+    fn winning_input_freshness_ignores_a_superseded_mapping() {
+        let high_port = free_port();
+        let low_port = free_port();
+        let mut high = InputMapping::loopback(Protocol::ArtNet, 5, 5);
+        high.bind.set_port(high_port);
+        high.priority = 100;
+        let mut low = high.clone();
+        low.id = "low-priority".into();
+        low.bind.set_port(low_port);
+        low.priority = 1;
+        let receiver = DmxReceiver::start(vec![high, low], Instant::now());
+        let sender = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        deliver(&receiver, &sender, high_port, &artdmx(5, 1, &[40, 0]));
+        let stamp = receiver.newest_accepted_micros();
+        std::thread::sleep(Duration::from_millis(15));
+        sender
+            .send_to(&artdmx(5, 1, &[200, 0]), (Ipv4Addr::LOCALHOST, low_port))
+            .unwrap();
+        wait_for(|| receiver.status()[1].last_packet_micros.is_some());
+        assert_eq!(receiver.status()[1].health, InputHealth::Superseded);
+        assert_eq!(receiver.status()[1].accepted_packets, 0);
+        assert_eq!(receiver.newest_accepted_micros(), stamp);
+        assert!(receiver.drain_changed().is_empty());
     }
 
     /// A receiver narrowed to one interface hears that network's broadcast and nothing else.
