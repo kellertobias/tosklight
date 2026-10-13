@@ -22,6 +22,7 @@ type PatchedFixtureRecord = {
 		protocol: string;
 		ip_address: string;
 		port: number;
+		http_port?: number | null;
 	} | null;
 };
 
@@ -179,6 +180,7 @@ test.describe("docs/testing/14-media-and-running-panes.md", () => {
 		show,
 	}) => {
 		const refused = await closedPort();
+		const refusedHttp = await closedPort();
 		const generic = mediaFixture({
 			number: 701,
 			name: "Stage Media",
@@ -300,10 +302,19 @@ test.describe("docs/testing/14-media-and-running-panes.md", () => {
 		);
 		await expect(toskApply).toBeDisabled();
 		await toskRow.getByLabel("Pixel Rack IP address").fill("127.0.0.1");
-		await toskRow.getByLabel("Pixel Rack port").fill(String(refused));
+		await toskRow
+			.getByLabel("Pixel Rack CITP port", { exact: true })
+			.fill(String(refused));
+		const httpPort = toskRow.getByLabel("Pixel Rack HTTP port", {
+			exact: true,
+		});
+		await expect(httpPort).toHaveValue("8080");
+		await httpPort.fill(String(refusedHttp));
 		await expect(toskApply).toBeEnabled();
 		await toskApply.click();
-		await expect(toskRow).toContainText(`Now using 127.0.0.1:${refused}.`);
+		await expect(toskRow).toContainText(
+			`Now using CITP 127.0.0.1:${refused}; HTTP 127.0.0.1:${refusedHttp}.`,
+		);
 		await expect(toskRow).toContainText("● Offline", { timeout: 10_000 });
 		const applied = await api.request<MediaServersSnapshot>(
 			"GET",
@@ -312,7 +323,12 @@ test.describe("docs/testing/14-media-and-running-panes.md", () => {
 		expect(
 			applied.fixtures.find((entry) => entry.fixture_id === tosk.fixture_id)
 				?.endpoint,
-		).toEqual({ protocol: "citp", ip_address: "127.0.0.1", port: refused });
+		).toEqual({
+			protocol: "citp",
+			ip_address: "127.0.0.1",
+			port: refused,
+			http_port: refusedHttp,
+		});
 
 		// Clear Thumbnail Cache lives in the Media Servers page of Show Patch Settings.
 		await header.getByRole("button", { name: "Settings", exact: true }).click();
