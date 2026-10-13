@@ -5,11 +5,13 @@ import {
 	render,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Cue } from "../../api/types";
 import { CueMediaPreviewContent } from "../../features/cueThumbnails/CueMediaPreviewView";
+import { CuePreviewModal } from "./CuePreviewModal";
 import { useCuelistPreviews } from "./useCuelistPreviews";
 
 const mocks = vi.hoisted(() => ({
@@ -53,6 +55,13 @@ function Fixture() {
 				/>
 			)}
 			{picture && <img alt="Opened Cue" src={picture.src} />}
+			{picture && (
+				<CuePreviewModal
+					cue={cues[0]}
+					picture={picture}
+					onClose={() => setOpened(null)}
+				/>
+			)}
 		</>
 	);
 }
@@ -126,4 +135,34 @@ it("literal picture tap revalidates unchanged content; offline hides the modal a
 		"src",
 		"blob:sky-2",
 	);
+});
+
+it("actual picture tap carries Empty media into the enlarged production modal", async () => {
+	mocks.actions.mediaImage.mockResolvedValue({
+		kind: "picture",
+		blob: new Blob(["transparent"]),
+		empty: true,
+	});
+	render(<Fixture />);
+	fireEvent.click(
+		await screen.findByRole("button", { name: /Open Cue 1 Layer 1 preview/ }),
+	);
+	const dialog = await screen.findByRole("dialog", {
+		name: "Cue 1 preview image",
+	});
+	expect(within(dialog).getByRole("status")).toHaveTextContent("Empty media");
+	expect(within(dialog).getByAltText("Cue 1 preview")).toBeVisible();
+	expect(mocks.actions.mediaImage).toHaveBeenCalledTimes(2);
+});
+
+it("the empty picture cell names Empty media accessibly while a normal picture does not", async () => {
+	mocks.actions.mediaImage.mockResolvedValue({
+		kind: "picture",
+		blob: new Blob(["transparent"]),
+		empty: true,
+	});
+	render(<Fixture />);
+	await screen.findByRole("button", {
+		name: "Empty media · Open Cue 1 Layer 1 preview",
+	});
 });

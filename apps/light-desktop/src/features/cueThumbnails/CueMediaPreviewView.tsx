@@ -57,7 +57,7 @@ export function CueMediaPreviewContent({
 			<Button
 				type="button"
 				className={`cue-preview-image-button ${className}`}
-				aria-label={`Open Cue ${cueNumber} ${scopeLabel(preview)} preview`}
+				aria-label={`${notice ? `${notice} · ` : ""}Open Cue ${cueNumber} ${scopeLabel(preview)} preview`}
 				title={notice ?? undefined}
 				{...attributes}
 				onClick={(event) => {

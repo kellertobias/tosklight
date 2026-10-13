@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Cue } from "../../api/types";
+import { cueMediaPreviewNotice } from "../../features/cueThumbnails/CueMediaPreviewView";
 import {
 	type CueMediaPreview,
 	useCueMediaPreviews,
@@ -41,10 +42,14 @@ export function useCuelistPreviews(
 		const mediaPreview = mediaPreviews[index];
 		if (!mediaPreview) {
 			const src = thumbnails[index];
-			return src ? { src, scope: null } : undefined;
+			return src ? { src, scope: null, notice: null } : undefined;
 		}
 		return "src" in mediaPreview
-			? { src: mediaPreview.src, scope: mediaPreview.entry.scope }
+			? {
+					src: mediaPreview.src,
+					scope: mediaPreview.entry.scope,
+					notice: cueMediaPreviewNotice(mediaPreview),
+				}
 			: undefined;
 	};
 	const openPicture = (index: number, onOpen: (index: number) => void) => {

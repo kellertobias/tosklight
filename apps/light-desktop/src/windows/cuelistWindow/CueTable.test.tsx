@@ -320,7 +320,10 @@ describe("CueTable Media Server previews", () => {
 		expect(button).toHaveAttribute("data-media-scope", "layer");
 		expect(button).toHaveAttribute("data-media-server", "server-a");
 		expect(button).toHaveClass("scope-layer");
-		expect(button.querySelector("img")).toHaveAttribute("src", "blob:layer-picture");
+		expect(button.querySelector("img")).toHaveAttribute(
+			"src",
+			"blob:layer-picture",
+		);
 		expect(
 			view.container.querySelector('img[src="blob:stage-picture"]'),
 		).toBeNull();
@@ -352,7 +355,9 @@ describe("CueTable Media Server previews", () => {
 			/>,
 		);
 		expect(
-			screen.getByRole("button", { name: "Open Cue 1 Program preview" }),
+			screen.getByRole("button", {
+				name: "Empty media · Open Cue 1 Program preview",
+			}),
 		).toHaveTextContent("Empty media");
 
 		rerender(

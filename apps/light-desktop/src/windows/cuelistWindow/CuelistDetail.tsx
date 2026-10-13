@@ -1,11 +1,11 @@
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { ModalFrame } from "@tosklight/ui/modals";
 import { useState } from "react";
-import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type { Cue } from "../../api/types";
+import { useCommandLineSurface } from "../../components/control/commandLine/useCommandLineSurface";
 import type { WindowProps } from "../windowTypes";
-import { CuePropertyModal } from "./CueProperties";
 import { CuePresetWarnings } from "./CuePresetWarnings";
+import { CuePreviewModal } from "./CuePreviewModal";
+import { CuePropertyModal } from "./CueProperties";
 import {
 	type CueEditableProperty,
 	CueTable,
@@ -13,8 +13,8 @@ import {
 } from "./CueTable";
 import { useCueTimingProgress } from "./cueTimingProgress";
 import { useCueEditor } from "./useCueEditor";
-import { useSelectedCuelist } from "./useCuelistSelection";
 import { useCuelistPreviews } from "./useCuelistPreviews";
+import { useSelectedCuelist } from "./useCuelistSelection";
 
 const NO_CUES: Cue[] = [];
 
@@ -224,23 +224,11 @@ export function CuelistDetail(props: CuelistDetailProps) {
 					/>
 				)}
 				{previewCue !== null && cues[previewCue] && opened && (
-					<ModalFrame
-						id={`cue-preview-${cues[previewCue].id ?? cues[previewCue].number}`}
-						ariaLabel={`Cue ${cues[previewCue].number} preview image`}
-						title={`Cue ${cues[previewCue].number}${cues[previewCue].name ? ` · ${cues[previewCue].name}` : ""}`}
-						closeLabel="Close Cue preview"
-						dialogClassName="cuelist-preview-modal"
+					<CuePreviewModal
+						cue={cues[previewCue]}
+						picture={opened}
 						onClose={() => setPreviewCue(null)}
-					>
-						<div
-							className={`cuelist-preview-modal-body ${opened.scope ? `scope-${opened.scope}` : ""}`.trim()}
-						>
-							<img
-								src={opened.src}
-								alt={`Cue ${cues[previewCue].number} preview`}
-							/>
-						</div>
-					</ModalFrame>
+					/>
 				)}
 			</div>
 			{props.settings}
