@@ -163,6 +163,7 @@ include!("cue_transfer_support.rs");
 include!("cue_transfer_tests.rs");
 include!("update_command_tests.rs");
 mod osc_record_interaction_tests;
+mod osc_subscription_renewal_tests;
 mod osc_update_workflow_event_tests;
 include!("cue_selection_tests.rs");
 include!("osc_key_tests.rs");

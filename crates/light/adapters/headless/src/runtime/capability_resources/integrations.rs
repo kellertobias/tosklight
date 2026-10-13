@@ -145,12 +145,58 @@ impl IntegrationResource {
         Some(subscriber.session_id)
     }
 
+    #[cfg(test)]
     pub(in crate::runtime) fn register_osc_subscriber(
         &self,
         client_id: String,
         subscriber: OscSubscriber,
     ) -> Option<OscSubscriber> {
         self.osc_subscribers.lock().insert(client_id, subscriber)
+    }
+
+    /// Renew a live control identity atomically without overwriting held gesture state.
+    pub(in crate::runtime) fn renew_osc_subscriber(
+        &self,
+        client_id: &str,
+        renewal: &OscSubscriber,
+    ) -> bool {
+        let mut subscribers = self.osc_subscribers.lock();
+        let Some(current) = subscribers.get_mut(client_id) else {
+            return false;
+        };
+        if current.command_source != renewal.command_source
+            || !current.path.eq_ignore_ascii_case(&renewal.path)
+            || current.session_id != renewal.session_id
+            || current.capability != renewal.capability
+            || current.last_seen.elapsed() >= Duration::from_secs(20)
+        {
+            return false;
+        }
+        current.target = renewal.target;
+        current.last_seen = renewal.last_seen;
+        true
+    }
+
+    /// A command socket has one control identity; retire collisions in the insertion lock.
+    pub(in crate::runtime) fn replace_osc_subscription(
+        &self,
+        client_id: String,
+        subscriber: OscSubscriber,
+    ) -> Vec<(String, OscSubscriber)> {
+        let mut subscribers = self.osc_subscribers.lock();
+        let retired_ids = subscribers
+            .iter()
+            .filter(|(id, current)| {
+                **id == client_id || current.command_source == subscriber.command_source
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        let retired = retired_ids
+            .into_iter()
+            .filter_map(|id| subscribers.remove(&id).map(|old| (id, old)))
+            .collect();
+        subscribers.insert(client_id, subscriber);
+        retired
     }
 
     pub(in crate::runtime) fn unregister_osc_subscriber(

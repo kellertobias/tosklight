@@ -79,23 +79,35 @@ fn subscribe_osc_client(
     let reusable = reusable_osc_session(state, &client_id, &path, existing.as_ref());
     let session_id =
         resolve_osc_session(state, &desk, &path, existing.as_ref(), attached, reusable);
-    replace_osc_subscriber(
-        state,
-        client_id,
-        OscSubscriber {
-            capability: osc_surface_capability(requested_alias),
-            path,
-            target,
-            command_source,
-            session_id,
-            last_seen: Instant::now(),
-            shifted: false,
-            shift_held: false,
-            update_record_started: None,
-            update_first_release: None,
-            last_highlight_action: None,
-        },
-    );
+    let subscriber = OscSubscriber {
+        capability: osc_surface_capability(requested_alias),
+        path,
+        target,
+        command_source,
+        session_id,
+        last_seen: Instant::now(),
+        shifted: false,
+        shift_held: false,
+        update_record_started: None,
+        update_first_release: None,
+        last_highlight_action: None,
+    };
+    let live_session = state.sessions.session(session_id).is_some_and(|session| {
+        session.connected
+            && session.desk.id == desk.id
+            && state.programming.get(session_id).is_some()
+    });
+    if !live_session {
+        // Do not replace another live socket identity with an invalid operator session.
+        unsubscribe_osc_client(state, &client_id);
+        return;
+    }
+    if !state
+        .integrations
+        .renew_osc_subscriber(&client_id, &subscriber)
+    {
+        replace_osc_subscriber(state, client_id, subscriber);
+    }
     emit(
         state,
         "hardware_connection_changed",
@@ -143,6 +155,16 @@ fn resolve_osc_session(
 ) -> SessionId {
     existing
         .filter(|subscriber| subscriber.path.eq_ignore_ascii_case(path))
+        .filter(|subscriber| {
+            state
+                .sessions
+                .session(subscriber.session_id)
+                .is_some_and(|session| {
+                    session.connected
+                        && session.desk.id == desk.id
+                        && state.programming.get(session.id).is_some()
+                })
+        })
         .map(|subscriber| subscriber.session_id)
         .or_else(|| attached.map(|session| session.id))
         .or_else(|| reusable.map(|session| reuse_osc_session(state, desk, session)))
@@ -181,14 +203,11 @@ fn replace_osc_subscriber(state: &AppState, client_id: String, subscriber: OscSu
     let session_id = subscriber.session_id;
     let replaced = state
         .integrations
-        .register_osc_subscriber(client_id.clone(), subscriber.clone());
-    if let Some(replaced) = replaced {
-        if replaced.command_source != subscriber.command_source
-            || replaced.path != subscriber.path
-            || replaced.session_id != subscriber.session_id
-        {
-            cancel_held_surface(state, &client_id, replaced.session_id);
-        }
+        .replace_osc_subscription(client_id, subscriber);
+    for (retired_client, replaced) in replaced {
+        // Stable live renewals never replace. A replaced/expired identity cannot retain
+        // held controls or its suppression lease. Permanent activations remain intentional.
+        cancel_held_surface(state, &retired_client, replaced.session_id);
         state
             .integrations
             .remove_suppression_source(replaced.session_id, replaced.command_source);
