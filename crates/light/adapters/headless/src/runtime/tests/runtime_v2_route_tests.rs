@@ -423,3 +423,29 @@ async fn a_visualizer_session_is_read_only_and_claims_no_operator_state() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn native_cross_origin_cue_previews_expose_their_empty_and_identity_headers() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let response = app
+        .oneshot(
+            Request::get("/api/v2/readiness")
+                .header(header::ORIGIN, "http://tauri.localhost")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let exposed = response.headers()[header::ACCESS_CONTROL_EXPOSE_HEADERS]
+        .to_str()
+        .unwrap();
+    for required in ["x-light-media-preview", "x-light-media-preview-key"] {
+        assert!(
+            exposed.split(',').any(|name| name.trim() == required),
+            "native browser cannot read {required}: {exposed}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}

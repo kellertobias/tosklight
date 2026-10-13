@@ -231,6 +231,8 @@ fn cors_layer() -> CorsLayer {
             header::ACCEPT_RANGES,
             header::CONTENT_RANGE,
             header::CONTENT_LENGTH,
+            header::HeaderName::from_static("x-light-media-preview"),
+            header::HeaderName::from_static("x-light-media-preview-key"),
             header::HeaderName::from_static("x-tosk-action-id"),
             header::HeaderName::from_static("x-tosk-received-output-tick"),
             header::HeaderName::from_static("x-tosk-ack-output-tick"),

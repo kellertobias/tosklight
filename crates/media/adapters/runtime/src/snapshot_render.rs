@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use media_domain::geometry::Size;
 use media_domain::{
     AddressClass, Command, CommandKind, CommandSource, MediaAddress, MediaState, OutputState,
-    SourceStatus, Timestamp,
+    PlayMode, SourceStatus, Timestamp,
 };
 use media_http::{SnapshotFailure, SnapshotImage, SnapshotRequest};
 use media_playback::AsyncClipLoader;
@@ -183,6 +183,43 @@ pub(crate) fn fitted(output: Size, bounds: Size) -> Size {
     }
 }
 
+// A fresh paused library session has no previously held frame. Bootstrap only this private
+// snapshot's texture at the requested range start; once uploaded, Pause holds that frame.
+// Live pipelines and the supplied request/cache identity are never altered.
+fn initialize_cold_paused_sources(state: &mut OutputState) -> Vec<usize> {
+    let cold_paused: Vec<usize> = state
+        .layers
+        .iter()
+        .enumerate()
+        .filter_map(|(index, layer)| {
+            (layer.play_mode == PlayMode::Pause
+                && matches!(layer.address.classify(), AddressClass::Library))
+            .then_some(index)
+        })
+        .collect();
+    for index in &cold_paused {
+        state.layers[*index].play_mode = PlayMode::Stop;
+    }
+    cold_paused
+}
+
+fn restore_initialized_pauses(
+    state: &mut OutputState,
+    prepared: &crate::layer_pipeline::Prepared,
+    cold_paused: &mut Vec<usize>,
+) {
+    cold_paused.retain(|index| {
+        let uploaded = prepared
+            .layers
+            .iter()
+            .any(|layer| layer.index == *index && matches!(layer.source, Slot::Media(_)));
+        if uploaded {
+            state.layers[*index].play_mode = PlayMode::Pause;
+        }
+        !uploaded
+    });
+}
+
 fn render(
     gpu: &Gpu,
     shared: &Shared,
@@ -202,6 +239,7 @@ fn render(
     let state = snapshot_state(live_output, request, clock())?;
     let mut state = crate::effect_banks::resolve_output(&state, &configuration);
     let empty = nothing_draws(&state, request.layer);
+    let mut cold_paused = initialize_cold_paused_sources(&mut state);
 
     let size = Size::new(
         output_configuration.resolution.width,
@@ -249,6 +287,7 @@ fn render(
                 layer.source_status = *status;
             }
         }
+        restore_initialized_pauses(&mut state, &prepared, &mut cold_paused);
         if drawable(&state, request.layer, &prepared) {
             settled += 1;
             if settled > SETTLE_FRAMES {

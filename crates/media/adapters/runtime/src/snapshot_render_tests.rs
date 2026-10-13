@@ -242,3 +242,130 @@ fn a_program_and_a_layer_snapshot_render_the_supplied_state_with_the_layer_trans
     let live = shared.state.load();
     assert_eq!(live.outputs[0].layers[1].address, MediaAddress::new(0, 0));
 }
+
+#[test]
+fn cold_paused_library_still_and_video_snapshots_render_the_range_start_without_live_changes() {
+    use media_codec::container::{ClipHeader, ClipWriter};
+    use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind};
+    let gpu = media_render::Gpu::off_screen().expect("snapshot library tests need an adapter");
+    let root = std::env::var_os("LIGHT_TMP_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../.artifacts/tmp")
+        })
+        .join(format!("paused-snapshot-{}", media_domain::AssetId::new()));
+    let mut output = OutputConfiguration::new("Paused snapshot");
+    output.target = OutputTarget::OffScreen;
+    output.personality = LayerPersonality::TwoLayers;
+    output.resolution.width = 16;
+    output.resolution.height = 16;
+    let mut configuration = MediaConfiguration {
+        outputs: vec![output.clone()],
+        ..MediaConfiguration::default()
+    };
+    configuration.library.root = root.clone();
+    let storage = media_library::LibraryStorage::new(root.clone());
+    let mut catalog = CatalogSnapshot::default();
+    for (file, kind, colors) in [
+        (1, ItemKind::Image, vec![[255, 0, 0, 255]]),
+        (
+            2,
+            ItemKind::Video,
+            vec![[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]],
+        ),
+    ] {
+        let name = format!("Pause {file}");
+        catalog
+            .insert(
+                3,
+                CatalogItem {
+                    id: media_domain::AssetId::new(),
+                    file,
+                    name: name.clone(),
+                    kind,
+                    width: 16,
+                    height: 16,
+                    frames: Some(colors.len() as u32),
+                    duration_millis: None,
+                    intrinsic_bpm: None,
+                    note: None,
+                    enabled: true,
+                },
+            )
+            .unwrap();
+        let path = storage.item_path(MediaAddress::new(3, file), &name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut writer = ClipWriter::new(
+            std::fs::File::create(path).unwrap(),
+            ClipHeader {
+                width: 16,
+                height: 16,
+                frame_count: 0,
+                frame_rate: (30, 1),
+                intrinsic_bpm: None,
+            },
+        )
+        .unwrap();
+        for (index, color) in colors.iter().enumerate() {
+            let encoded = media_codec::encode(16, 16, &color.repeat(256)).unwrap();
+            writer.write_frame(&encoded, index as u64 * 33_333).unwrap();
+        }
+        writer.finish().unwrap();
+    }
+    let shared = shared(&output, configuration);
+    shared.catalog.store(Arc::new(catalog));
+    let before = shared.state.load_full();
+    for (file, in_point, expected_rgb) in [(1, 0, [255, 0, 0]), (2, 1, [0, 255, 0])] {
+        let mut supplied = slots();
+        select(&mut supplied, 0, 3, file, 255);
+        supplied[layer::PLAY_MODE] = 236;
+        supplied[layer::IN_POINT + 1] = in_point;
+        let decoded = snapshot_state(
+            &before.outputs[0],
+            &request(output.id, Some(0), supplied.clone()),
+            Timestamp::ZERO,
+        )
+        .unwrap();
+        assert_eq!(decoded.layers[0].play_mode, media_domain::PlayMode::Pause);
+        for scope in [None, Some(0)] {
+            let picture = render(
+                &gpu,
+                &shared,
+                &request(output.id, scope, supplied.clone()),
+                std::time::Instant::now(),
+            )
+            .expect(
+                "a cold paused real library source must initialize its first/range-start texture",
+            );
+            assert!(!picture.empty);
+            let (width, height, rgba) = pixels(&picture.png);
+            let center = ((height / 2 * width + width / 2) * 4) as usize;
+            assert!(
+                rgba[center..center + 3]
+                    .iter()
+                    .zip(expected_rgb)
+                    .all(|(actual, expected)| actual.abs_diff(expected) <= 2),
+                "wrong paused source/range-start pixel {:?}",
+                &rgba[center..center + 4]
+            );
+            assert_eq!(rgba[center + 3], 255);
+        }
+    }
+    assert_eq!(
+        *shared.state.load_full(),
+        *before,
+        "no live selection, transport or output mutation"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn folder_three_file_zero_is_an_empty_snapshot_scope() {
+    let live = live();
+    let mut supplied = slots();
+    select(&mut supplied, 0, 3, 0, 255);
+    let output =
+        snapshot_state(&live, &request(live.id, Some(0), supplied), Timestamp::ZERO).unwrap();
+    assert!(nothing_draws(&output, Some(0)));
+    assert!(nothing_draws(&output, None));
+}
