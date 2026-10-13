@@ -52,6 +52,13 @@ fn publish_osc_accepted(
     result: &ProgrammingResult,
     action: ProgrammingAction,
 ) {
+    super::super::emit_update_armed_transition(
+        state,
+        session,
+        super::super::command_line_arms_update(result.command_line_before.visible_text()),
+        super::super::command_line_arms_update(result.command_line.visible_text()),
+        "osc",
+    );
     if action == ProgrammingAction::Executed {
         publish_osc_applied(state, session, path, result);
     }
