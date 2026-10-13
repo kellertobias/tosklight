@@ -297,3 +297,44 @@ describe("command rejection classification", () => {
 		expect(commandErrorFeedback(message).message).toBe(message);
 	});
 });
+
+describe("expected Update domain refusals", () => {
+	it.each([
+		["Update would not change Group 1 1", "No Changes"],
+		["Update would not change Front wash front-wash", "No Changes"],
+		["Update would not change Preset 1 color-legacy_1", "No Changes"],
+		[
+			"Update would not change Cuelist 5 6b53ba0e-099c-4656-b309-1311c53484b6",
+			"No Changes",
+		],
+		[
+			"Playback 3.5 has no current Cue; identify an explicit Cue",
+			"No Current Cue",
+		],
+		[
+			"Cuelist 6b53ba0e-099c-4656-b309-1311c53484b6 has no current Cue; identify an explicit Cue",
+			"No Current Cue",
+		],
+	])("keeps exact known domain refusal local: %s", (message, summary) => {
+		for (const feedback of [message, `invalid data: ${message}`]) {
+			expect(commandErrorFeedback(feedback).kind).toBe("operator");
+			expect(commandErrorSummary(feedback)).toBe(summary);
+		}
+		for (const suffix of [
+			": network failure",
+			"\npanic in Update",
+			": revision conflict",
+		]) {
+			expect(commandErrorFeedback(message + suffix).kind).toBe("unexpected");
+		}
+	});
+	it.each([
+		"Update target is stale: expected revision 5, current revision is 6",
+		"Update revision conflict: expected revision 5, current revision is 6",
+		"Update would not change unexpectedly",
+		"Playback 3.5 has no current Cue; database failed",
+		"unknown Update service failure",
+	])("preserves unexpected Update diagnostics: %s", (message) => {
+		expect(commandErrorFeedback(message).kind).toBe("unexpected");
+	});
+});

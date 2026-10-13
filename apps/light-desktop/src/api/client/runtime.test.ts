@@ -81,6 +81,16 @@ afterEach(() => {
 
 describe("LightClientRuntime", () => {
 	it.each([
+		["Update would not change Group 1 1", "UPDATE GROUP 1"],
+		["Update would not change Front wash front-wash", "UPDATE GROUP 1"],
+		[
+			"Update would not change Cuelist 5 6b53ba0e-099c-4656-b309-1311c53484b6",
+			"UPDATE PBK 3.5",
+		],
+		[
+			"Playback 3.5 has no current Cue; identify an explicit Cue",
+			"UPDATE PBK 3.5",
+		],
 		["OFFSET must be smaller than DIV", "GROUP 100 DIV 2 OFFSET 2"],
 		["offset is invalid", "GROUP 100 DIV 2 OFFSET INVALID"],
 		["+ requires an offset", "GROUP 100 DIV 2 +"],

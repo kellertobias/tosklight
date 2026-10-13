@@ -9,7 +9,7 @@ export type CommandErrorFeedback = {
 };
 
 const UNEXPECTED =
-	/could not be synchronized|unexpected|invalid server response|internal (?:server|error)|network|failed to fetch|task failed|inconsistent authoritative|runtime snapshot|database|panic|unauthorized|forbidden|authentication|authorization|permission denied|access denied|session expired/i;
+	/could not be synchronized|unexpected|invalid server response|internal (?:server|error)|network|failed to fetch|task failed|inconsistent authoritative|runtime snapshot|revision conflict|database|panic|unauthorized|forbidden|authentication|authorization|permission denied|access denied|session expired/i;
 const OPERATOR_REJECTION =
 	/\b(?:fixture|group|preset|cue|cuelist|playback|target|level|percentage|selection|syntax|command|record|update|FixAT)\b.*(?:invalid|not recorded|not found|does not exist|not patched|must|requires|unsupported|cannot|not a|changed|empty|already|out of range)|\bno selection\b/i;
 
@@ -21,6 +21,13 @@ const SELECTION_REQUIRED =
 // These exact messages are emitted by the command parser, not the runtime.
 const TRAILING_TOKEN_REJECTION =
 	/^unexpected tokens after (?:level|selection|subset|playback address|playback selection|recording target|Cue transfer address|Cue deletion address|BPM value|Cue number|cue target|Link source|Link destination)$/i;
+
+// Exact UpdateError display contracts; Group/Preset IDs are opaque tokens, not UUID-only.
+// Unknown Update failures and appended authority/runtime faults retain diagnostics.
+const UPDATE_NO_CHANGES =
+	/^Update would not change [^\r\n]* \S+$/i;
+const UPDATE_NO_CURRENT_CUE =
+	/^(?:Playback [1-9]\d*\.[1-9]\d*|Cuelist [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) has no current Cue; identify an explicit Cue$/i;
 
 const EMPTY_PRESET_FAMILY_REJECTION =
 	"the normal programmer has no values in the requested preset family";
@@ -91,7 +98,9 @@ export function commandErrorFeedback(
 		message: detail,
 		kind:
 			!isUnexpectedFailure(detail) &&
-			(OPERATOR_REJECTION.test(message) ||
+			(UPDATE_NO_CHANGES.test(message) ||
+				UPDATE_NO_CURRENT_CUE.test(message) ||
+				OPERATOR_REJECTION.test(message) ||
 				REVERSED_OPERATOR_REJECTION.test(message) ||
 				SELECTION_REQUIRED.test(message) ||
 				TRAILING_TOKEN_REJECTION.test(message) ||
@@ -105,6 +114,12 @@ export function commandErrorFeedback(
 }
 
 export function commandErrorSummary(message: string): string {
+	const domainMessage = message.replace(/^invalid data:\s*/i, "");
+	if (!isUnexpectedFailure(message)) {
+		if (UPDATE_NO_CHANGES.test(domainMessage)) return "No Changes";
+		if (UPDATE_NO_CURRENT_CUE.test(domainMessage)) return "No Current Cue";
+	}
+
 	if (
 		message.replace(/^invalid data:\s*/i, "").toLowerCase() ===
 		EMPTY_PRESET_FAMILY_REJECTION

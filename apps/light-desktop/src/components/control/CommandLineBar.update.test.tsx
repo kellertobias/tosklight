@@ -1201,6 +1201,56 @@ describe("Shift+Record Update gestures", () => {
 });
 
 describe("shared command rejection presentation", () => {
+	it.each([
+		["Update would not change Group 1 1", "No Changes"],
+		["Update would not change Front wash front-wash", "No Changes"],
+		[
+			"Update would not change Cuelist 5 6b53ba0e-099c-4656-b309-1311c53484b6",
+			"No Changes",
+		],
+		[
+			"Playback 3.5 has no current Cue; identify an explicit Cue",
+			"No Current Cue",
+		],
+	])(
+		"keeps fresh OSC Update refusal brief and armed: %s",
+		(feedback, summary) => {
+			state.updateArmed = true;
+			const previousHistory = server.commandHistory;
+			const { rerender } = render(<CommandLineBar />);
+			const entry = {
+				id: "osc-update-refusal",
+				desk_id: "desk-a",
+				session_id: "session-a",
+				command: "UPDATE PBK 3.5",
+				feedback,
+				status: "rejected" as const,
+				source: "osc" as const,
+				at: new Date().toISOString(),
+			};
+			server.commandHistory = [entry, ...previousHistory];
+			rerender(<CommandLineBar />);
+			const input = screen.getByRole("textbox", { name: "Command line" });
+			expect(input).toHaveValue(entry.command);
+			expect(input).toHaveClass("error", "rejected");
+			expect(screen.getByRole("alert")).toHaveTextContent(summary);
+			expect(screen.getByRole("alert")).not.toHaveTextContent("6b53ba0e");
+			expect(
+				screen.queryByRole("dialog", { name: "Command line history" }),
+			).toBeNull();
+			act(() => vi.advanceTimersByTime(600));
+			expect(input).not.toHaveClass("error");
+			expect(input).toHaveClass("rejected");
+			act(() => vi.advanceTimersByTime(2000));
+			expect(screen.queryByRole("alert")).toBeNull();
+			expect(input).toHaveValue(entry.command);
+			expect(state.updateArmed).toBe(true);
+			expect(server.commandHistory[0]).toBe(entry);
+			expect(server.setCommandLine).not.toHaveBeenCalled();
+			server.commandHistory = previousHistory;
+		},
+	);
+
 	it("shows a fresh OSC rejection briefly without changing authoritative command or history", () => {
 		const { rerender } = render(<CommandLineBar />);
 		const previousHistory = server.commandHistory;
