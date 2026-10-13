@@ -1070,3 +1070,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "layer_pipeline_effect_continuity_tests.rs"]
+mod effect_continuity_tests;
