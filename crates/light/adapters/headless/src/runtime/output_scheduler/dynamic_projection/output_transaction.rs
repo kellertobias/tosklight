@@ -102,11 +102,17 @@ pub(in crate::runtime) fn dynamic_output_frame<T>(
     let (((output, sampled), origins), sample_boundary, change_lead_start) = {
         // All authoritative paths take these in the same order. The runtime stays locked
         // through rendering, so operator mutations cannot be erased by a failed rollback.
-        let mut dynamics = dynamics.lock();
+        let mut dynamics = super::super::slow_phase_trace::live_phases::measure(
+            super::super::slow_phase_trace::live_phases::Phase::DynamicsLockAcquire,
+            || dynamics.lock(),
+        );
         if !dynamic_snapshot.matches(&snapshot) {
             return Err(EngineError::StalePreparedFrame);
         }
-        let mut scratch = cache.transaction.lock();
+        let mut scratch = super::super::slow_phase_trace::live_phases::measure(
+            super::super::slow_phase_trace::live_phases::Phase::ScratchLockAcquire,
+            || cache.transaction.lock(),
+        );
         let previous_boundary = dynamics.committed_sample_boundary();
         inputs.force_source_reconciliation = cache.sources_changed(&origins.load_full());
         let result = with_dynamic_source_transaction(

@@ -420,7 +420,10 @@ pub(in crate::runtime) fn capture_dynamic_speed_transports(
     speed_groups: &Mutex<[light_control::speed::SpeedGroupController; 5]>,
     now_millis: u64,
 ) -> [light_dynamics::DynamicSpeedTransport; 5] {
-    let speed_groups = speed_groups.lock();
+    let speed_groups = super::slow_phase_trace::live_phases::measure(
+        super::slow_phase_trace::live_phases::Phase::SpeedLockAcquire,
+        || speed_groups.lock(),
+    );
     std::array::from_fn(|index| {
         let snapshot = speed_groups[index].snapshot(now_millis);
         light_dynamics::DynamicSpeedTransport {
@@ -555,6 +558,9 @@ fn sample_captured_dynamic_inputs_with_context<T>(
 
     // Reconciliation runs before sampling, so a bool transport request has no input-dependent
     // failure. A misplaced call after a provisional sample is still rejected transactionally.
+    let reconciliation_span = super::slow_phase_trace::live_phases::Span::begin(
+        super::slow_phase_trace::live_phases::Phase::Reconciliation,
+    );
     let reconciliation_started = std::time::Instant::now();
     dynamics.apply_recorded_control(light_dynamics::TimedDynamicControl {
         at_millis: now_millis,
@@ -595,6 +601,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
         );
     let cue_controls = cue_dynamic_output_controls(inputs.cue_values, inputs.snapshot);
     super::start_path_timing::reconciled_since(reconciliation_started);
+    drop(reconciliation_span);
     let (mut samples, context) = sample(
         dynamics,
         now_millis,

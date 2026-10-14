@@ -424,22 +424,17 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     result
 }
 
-/// The ordered part of one output tick: captures the prepared frame, projects Dynamics into it
-/// and renders it, returning the rendered frame with its Dynamic and engine phase durations.
-fn render_ordered_output_frame(
+fn settle_ordered_timecode_frame(
     runtime: &Runtime,
     options: RenderOptions,
-) -> PlaybackOperation<Result<(RenderedSemanticFrame, Duration, Duration), EngineError>> {
-    let dynamic_started = Instant::now();
+) -> Option<timecode_capture::SettledTimecodeCapture> {
     if update_timecode(runtime) {
         runtime.timecodes.tick();
     }
     runtime.timecodes.reconcile_cue_lists(&runtime.engine);
-    let Some(prepared) = runtime.engine.try_prepare_output_frame(options) else {
-        return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
-    };
+    let prepared = runtime.engine.try_prepare_output_frame(options)?;
     let show = runtime.active_show.current();
-    let settled = timecode_capture::settle(
+    Some(timecode_capture::settle(
         &runtime.engine,
         prepared,
         |action| match show.as_ref() {
@@ -455,7 +450,23 @@ fn render_ordered_output_frame(
             runtime.timecodes.reconcile_cue_lists(&runtime.engine);
             Ok(())
         },
+    ))
+}
+
+/// The ordered part of one output tick: captures the prepared frame, projects Dynamics into it
+/// and renders it, returning the rendered frame with its Dynamic and engine phase durations.
+fn render_ordered_output_frame(
+    runtime: &Runtime,
+    options: RenderOptions,
+) -> PlaybackOperation<Result<(RenderedSemanticFrame, Duration, Duration), EngineError>> {
+    let phase_scope = slow_phase_trace::live_phases::Scope::begin();
+    let capture_span = slow_phase_trace::live_phases::Span::begin(
+        slow_phase_trace::live_phases::Phase::CaptureSettle,
     );
+    let dynamic_started = Instant::now();
+    let Some(settled) = settle_ordered_timecode_frame(runtime, options) else {
+        return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
+    };
     let mut events = Vec::new();
     if let Some(accepted) = settled.accepted.as_ref() {
         change_lead::carry_uncommitted_capture(&runtime.change_lead, accepted);
@@ -487,6 +498,13 @@ fn render_ordered_output_frame(
     } else {
         vec![timecode_audio]
     };
+    if let Some(scope) = &phase_scope {
+        scope.capture(&prepared.frame_token());
+    }
+    drop(capture_span);
+    let projection_span = slow_phase_trace::live_phases::Span::begin(
+        slow_phase_trace::live_phases::Phase::ProjectionInclusive,
+    );
     let completed = dynamic_output_frame(
         &runtime.engine,
         &prepared,
@@ -517,6 +535,10 @@ fn render_ordered_output_frame(
                 .map(|rendered| (rendered, dynamic, engine_started.elapsed()))
         },
     );
+    drop(projection_span);
+    if let Some(scope) = &phase_scope {
+        scope.complete(completed.is_ok());
+    }
     if completed.is_err() {
         change_lead::carry_uncommitted_capture(&runtime.change_lead, &prepared);
         events.extend(captured_playback_events(
