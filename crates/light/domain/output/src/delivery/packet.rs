@@ -42,7 +42,7 @@ pub fn next_sequence(
 ) -> u8 {
     let sequence = sequences.entry(key).or_insert(0);
     *sequence = sequence.wrapping_add(1);
-    if *sequence == 0 {
+    if key.0 == Protocol::ArtNet && *sequence == 0 {
         *sequence = 1;
     }
     *sequence

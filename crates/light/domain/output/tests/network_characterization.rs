@@ -124,10 +124,10 @@ async fn shutdown_sends_three_sacn_termination_packets_and_no_artnet_black_frame
         .await
         .unwrap();
 
-    for _ in 0..3 {
+    for sequence in 1..=3 {
         let packet = receive_packet(&sacn).await;
+        assert_eq!(packet[111], sequence);
         assert_eq!(packet.len(), 126 + DMX_SLOTS);
-        assert_eq!(packet[111], 1);
         assert_eq!(packet[112], 0x40);
         assert!(packet[126..].iter().all(|slot| *slot == 0));
     }
@@ -136,7 +136,7 @@ async fn shutdown_sends_three_sacn_termination_packets_and_no_artnet_black_frame
             .await
             .is_err()
     );
-    assert_eq!(sequences.get(&(Protocol::Sacn, 20)), Some(&1));
+    assert_eq!(sequences.get(&(Protocol::Sacn, 20)), Some(&3));
     assert!(!sequences.contains_key(&(Protocol::ArtNet, 10)));
 }
 
@@ -249,4 +249,39 @@ async fn receive_packet(socket: &UdpSocket) -> Vec<u8> {
         .unwrap();
     packet.truncate(length);
     packet
+}
+
+#[tokio::test]
+async fn termination_sequence_rollover_advances_every_encoded_datagram() {
+    let output = NetworkOutput::bind(IpAddr::V4(Ipv4Addr::LOCALHOST), [9; 16], "Rollover")
+        .await
+        .unwrap();
+    let artnet = local_receiver().await;
+    let sacn = local_receiver().await;
+    let routes = [
+        unicast_route(Protocol::ArtNet, 10, artnet.local_addr().unwrap()),
+        unicast_route(Protocol::Sacn, 20, sacn.local_addr().unwrap()),
+    ];
+    let mut sequences = HashMap::from([((Protocol::Sacn, 20), 255), ((Protocol::ArtNet, 10), 255)]);
+    output
+        .terminate_routes(&routes, &mut sequences)
+        .await
+        .unwrap();
+    for sequence in [0, 1, 2] {
+        let packet = receive_packet(&sacn).await;
+        assert_eq!(
+            packet[111], sequence,
+            "every termination datagram increments modulo256"
+        );
+        assert_eq!(packet[112], 0x40);
+        assert_eq!(&packet[113..115], &20u16.to_be_bytes());
+        assert!(packet[126..].iter().all(|x| *x == 0));
+    }
+    assert_eq!(sequences[&(Protocol::Sacn, 20)], 2);
+    assert_eq!(sequences[&(Protocol::ArtNet, 10)], 255);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), artnet.recv_from(&mut [0; 128]))
+            .await
+            .is_err()
+    );
 }

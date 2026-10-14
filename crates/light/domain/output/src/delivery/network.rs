@@ -421,10 +421,10 @@ impl NetworkOutput {
         sequences: &mut HashMap<(Protocol, Universe), u8>,
     ) -> io::Result<()> {
         let key = (route.protocol, route.destination_universe);
-        let sequence = next_sequence(sequences, key);
         let destination = route.resolved_destination().map_err(io::Error::other)?;
-        let packet = self.termination_packet(route.destination_universe, sequence);
         for _ in 0..3 {
+            let sequence = next_sequence(sequences, key);
+            let packet = self.termination_packet(route.destination_universe, sequence);
             self.sacn.send_to(&packet, destination).await?;
         }
         Ok(())
