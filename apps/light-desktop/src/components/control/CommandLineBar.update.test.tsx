@@ -734,6 +734,7 @@ describe("scoped command-line integration", () => {
 	it.each([
 		["FIXTURE 2 THRU 3 + 1 AT NOPE", "level must be a percentage or FULL"],
 		["GROUP 100 DIV 2 OFFSET 2", "OFFSET must be smaller than DIV"],
+		["FIXTURE 1 AT POSITION X DIV 30", "Pan requires a number"],
 	])("retains rejected input with a local toast: %s", async (command, feedback) => {
 		const store = new ProgrammingInteractionStore();
 		const transport = new FakeProgrammingTransport();
@@ -772,6 +773,12 @@ describe("scoped command-line integration", () => {
 			screen.queryByRole("dialog", { name: "Command line history" }),
 		).toBeNull();
 		expect(screen.getByRole("alert")).toHaveClass("command-feedback-toast");
+		act(() => vi.advanceTimersByTime(600));
+		expect(input).not.toHaveClass("error");
+		expect(input).toHaveClass("rejected");
+		act(() => vi.advanceTimersByTime(2000));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(input).toHaveValue(command);
 	});
 });
 
@@ -1201,6 +1208,39 @@ describe("Shift+Record Update gestures", () => {
 });
 
 describe("shared command rejection presentation", () => {
+	it("retains fresh OSC family syntax rejection after blink without opening diagnostics or writing", () => {
+		const previousHistory = server.commandHistory;
+		const { rerender } = render(<CommandLineBar />);
+		const entry = {
+			id: "osc-family-syntax",
+			desk_id: "desk-a",
+			session_id: "session-a",
+			command: "FIXTURE 1 AT POSITION X DIV 30",
+			feedback: "Pan requires a number",
+			status: "rejected" as const,
+			source: "osc" as const,
+			at: new Date().toISOString(),
+		};
+		server.commandHistory = [entry, ...previousHistory];
+		rerender(<CommandLineBar />);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(input).toHaveValue(entry.command);
+		expect(input).toHaveClass("error", "rejected");
+		expect(screen.getByRole("alert")).toHaveTextContent(entry.feedback);
+		expect(
+			screen.queryByRole("dialog", { name: "Command line history" }),
+		).toBeNull();
+		act(() => vi.advanceTimersByTime(600));
+		expect(input).not.toHaveClass("error");
+		expect(input).toHaveClass("rejected");
+		act(() => vi.advanceTimersByTime(2000));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(input).toHaveValue(entry.command);
+		expect(server.commandHistory[0]).toBe(entry);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
+		server.commandHistory = previousHistory;
+	});
+
 	it.each([
 		["Update would not change Group 1 1", "No Changes"],
 		["Update would not change Front wash front-wash", "No Changes"],

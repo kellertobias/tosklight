@@ -338,3 +338,58 @@ describe("expected Update domain refusals", () => {
 		expect(commandErrorFeedback(message).kind).toBe("unexpected");
 	});
 });
+
+describe("family value parser feedback", () => {
+	it.each([
+		"Pan requires a number",
+		"Tilt requires a finite number",
+		"Red requires a number",
+		"Green requires a finite number",
+		"Blue must be within 0-100",
+		"White Blend must be within 0-100",
+		"Focus must be within 0-100",
+		"Zoom must be within 0-180",
+		"POSITION takes at most 2 values separated by DIV",
+		"COLOR takes at most 4 values separated by DIV",
+		"FOCUS takes at most 2 values separated by DIV",
+		"POSITION requires a value",
+		"COLOR requires a value",
+		"FOCUS requires a value",
+		"a Pan spread takes absolute values, not + or -",
+		"a White Blend spread needs a value at every THRU point",
+	])("keeps exact parser feedback brief on local and plain OSC paths: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const feedback of [message, `invalid data: ${message}`]) {
+			reportProgrammingCommandError(new Error(feedback));
+			expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail).toEqual({
+				message: feedback,
+				kind: "operator",
+			});
+			expect(commandErrorFeedback(feedback).kind).toBe("operator");
+			expect(commandErrorSummary(feedback)).toBe(message);
+		}
+		for (const status of [401, 403, 500]) {
+			reportProgrammingCommandError(new ApiRequestError(message, status));
+			expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
+	});
+	it.each([
+		"Pan requires a number: database unavailable",
+		"Pan requires a number\nadditional diagnostic",
+		"Pan requires a number from runtime snapshot",
+		"Motor requires a number",
+		"Zoom must be within 0-180: network unavailable",
+		"POSITION takes at most 2 values separated by DIV; internal error",
+		"COLOR takes at most 3 values separated by DIV",
+		"a Pan spread needs a value at every THRU point\nunknown fault",
+	])("does not absorb unrecognised or extended failures: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		expect(commandErrorFeedback(message).kind).toBe("unexpected");
+		reportProgrammingCommandError(new Error(message));
+		expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail.kind).toBe(
+			"unexpected",
+		);
+	});
+});

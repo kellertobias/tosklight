@@ -81,6 +81,35 @@ const INPUT_GRAMMAR_REJECTIONS = new Set([
 	"expected dynamic <number> at spd grp <1-5>",
 ]);
 
+// Exact programmer_family_values parser contracts; component names are not generic error prefixes.
+const FAMILY_VALUE_REJECTIONS = new Set([
+	...[
+		"red",
+		"green",
+		"blue",
+		"white blend",
+		"pan",
+		"tilt",
+		"focus",
+		"zoom",
+	].flatMap((label) => [
+		`${label} requires a number`,
+		`${label} requires a finite number`,
+		`a ${label} spread takes absolute values, not + or -`,
+		`a ${label} spread needs a value at every thru point`,
+	]),
+	...["red", "green", "blue", "white blend", "focus"].map(
+		(label) => `${label} must be within 0-100`,
+	),
+	"zoom must be within 0-180",
+	"color takes at most 4 values separated by div",
+	"position takes at most 2 values separated by div",
+	"focus takes at most 2 values separated by div",
+	"color requires a value",
+	"position requires a value",
+	"focus requires a value",
+]);
+
 function isUnexpectedFailure(message: string): boolean {
 	return (
 		UNEXPECTED.test(message) &&
@@ -105,6 +134,7 @@ export function commandErrorFeedback(
 				SELECTION_REQUIRED.test(message) ||
 				TRAILING_TOKEN_REJECTION.test(message) ||
 				INPUT_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
+				FAMILY_VALUE_REJECTIONS.has(message.toLowerCase()) ||
 				TRANSFER_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
 				RECORD_GRAMMAR_REJECTIONS.has(message.toLowerCase()) ||
 				message.toLowerCase() === EMPTY_PRESET_FAMILY_REJECTION)
