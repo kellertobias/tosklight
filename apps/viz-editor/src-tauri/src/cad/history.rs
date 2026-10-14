@@ -9,12 +9,15 @@ use super::{
     CadState, EntityTransform, RigAttachment, TransformOutcome, apply_transforms, attachments,
     emit_scene_delta, restore_attachments, selectable_ids, selected_transforms,
 };
-use crate::annotation::{CadAnnotation, announce, read_annotations, store, validate};
+use crate::annotation::{CadAnnotation, announce};
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::{Session, apply_patch_mutation};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use uuid::Uuid;
+
+mod annotations;
+pub(crate) use annotations::{erase_annotation, save_annotation};
 
 #[derive(Default)]
 pub(super) struct History {
@@ -35,8 +38,10 @@ enum Step {
 
 #[derive(Clone)]
 struct AnnotationChange {
-    before: CadAnnotation,
-    after: CadAnnotation,
+    show_id: Uuid,
+    id: String,
+    before: Option<serde_json::Value>,
+    after: Option<serde_json::Value>,
 }
 
 #[derive(Clone)]
@@ -323,21 +328,8 @@ pub fn cad_change_annotation(
     cad: tauri::State<'_, CadState>,
     annotation: CadAnnotation,
 ) -> Result<CadAnnotation, String> {
-    validate(&annotation)?;
-    let before = read_annotations(&session)?
-        .into_iter()
-        .find(|stored| stored.id == annotation.id)
-        .ok_or_else(|| "That drawn item is no longer in the show".to_owned())?;
-    store(&session, &annotation)?;
+    save_annotation(&session, &cad, &annotation, true)?;
     announce(&app, &session)?;
-    let mut history = cad.history.lock();
-    history
-        .undo
-        .push(Step::Annotation(Box::new(AnnotationChange {
-            before,
-            after: annotation.clone(),
-        })));
-    history.redo.clear();
     Ok(annotation)
 }
 
@@ -355,9 +347,17 @@ fn take(
     expected_scene_revision: u64,
     direction: Direction,
 ) -> Result<TransformOutcome, String> {
-    take_with(&cad.history, direction, |step| {
+    let mut annotation_changed = false;
+    let result = take_with(&cad.history, direction, |step| {
+        annotation_changed = matches!(step, Step::Annotation(_));
         apply_step(app, session, cad, expected_scene_revision, step, direction)
-    })
+    });
+    // Notifications follow the durable operation and history transfer; a failed notification
+    // must not leave an already-applied step on the wrong side of Undo/Redo.
+    if annotation_changed && result.is_ok() {
+        announce(app, session)?;
+    }
+    result
 }
 
 fn take_with<T>(
@@ -397,16 +397,13 @@ fn apply_step(
 ) -> Result<TransformOutcome, String> {
     match step {
         Step::Annotation(change) => {
-            let item = match direction {
-                Direction::Back => &change.before,
-                Direction::Forward => &change.after,
-            };
-            store(session, item)?;
-            announce(app, session)?;
+            let scene_revision = current_revision(session)?;
+            let attachments = attachments(session)?;
+            annotations::apply_annotation(session, expected_scene_revision, change, direction)?;
             Ok(TransformOutcome {
-                scene_revision: current_revision(session)?,
+                scene_revision,
                 transforms: Vec::new(),
-                attachments: attachments(session)?,
+                attachments,
             })
         }
         Step::NumericPose(record) => {
@@ -501,6 +498,52 @@ mod tests {
     use crate::cad::{EntityTransform, apply_transforms, tests::transform_session};
     use crate::contract::{FixtureDto, MutationDto};
     use crate::session::Session;
+
+    #[test]
+    fn annotation_create_and_erase_commands_each_record_one_history_step() {
+        use crate::annotation::{CadAnnotation, CadAnnotationKind, commit_delete, commit_save};
+        let (session, path, _) = transform_session();
+        let cad = crate::cad::CadState::default();
+        for kind in [
+            CadAnnotationKind::Text,
+            CadAnnotationKind::Measure,
+            CadAnnotationKind::Box,
+            CadAnnotationKind::Polyline,
+        ] {
+            let before = cad.history.lock().undo.len();
+            let annotation = commit_save(
+                &session,
+                &cad,
+                CadAnnotation {
+                    id: String::new(),
+                    view: "top_down".into(),
+                    kind,
+                    points: if kind == CadAnnotationKind::Text {
+                        vec![[0., 0.]]
+                    } else {
+                        vec![[0., 0.], [1000., 500.]]
+                    },
+                    closed: false,
+                    text: "FOH".into(),
+                    text_height_millimetres: 250.,
+                    font: "osifont".into(),
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                cad.history.lock().undo.len(),
+                before + 1,
+                "creation must be undoable"
+            );
+            commit_delete(&session, &cad, &annotation.id).unwrap();
+            assert_eq!(
+                cad.history.lock().undo.len(),
+                before + 2,
+                "erase must be undoable"
+            );
+        }
+        let _ = std::fs::remove_file(path);
+    }
 
     fn patched(session: &Session) -> Vec<serde_json::Value> {
         session

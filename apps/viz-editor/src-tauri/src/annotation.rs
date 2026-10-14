@@ -42,7 +42,7 @@ pub enum CadAnnotationKind {
 }
 
 /// One drawn item, as the show stores it and the CAD screen draws it.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CadAnnotation {
     /// Empty when the frontend asks for a new item; the store assigns one.
@@ -116,15 +116,6 @@ pub fn validate(annotation: &CadAnnotation) -> Answer<()> {
     }
 }
 
-pub(crate) fn store(session: &Session, annotation: &CadAnnotation) -> Answer<()> {
-    let body = serde_json::to_value(annotation).map_err(|error| error.to_string())?;
-    session.change(|document| {
-        document
-            .put_object(KIND, &annotation.id, &body)
-            .map_err(|error| error.to_string())
-    })
-}
-
 pub(crate) fn announce(app: &tauri::AppHandle, session: &Session) -> Answer<()> {
     let annotations = read_annotations(session)?;
     app.emit(ANNOTATION_DELTA_EVENT, annotations)
@@ -152,14 +143,25 @@ pub fn cad_annotations(session: tauri::State<'_, Session>) -> Answer<Vec<CadAnno
 pub fn save_cad_annotation(
     app: tauri::AppHandle,
     session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
+    annotation: CadAnnotation,
+) -> Answer<CadAnnotation> {
+    let annotation = commit_save(&session, &cad, annotation)?;
+    announce(&app, &session)?;
+    Ok(annotation)
+}
+
+pub(crate) fn commit_save(
+    session: &Session,
+    cad: &crate::cad::CadState,
     mut annotation: CadAnnotation,
 ) -> Answer<CadAnnotation> {
     validate(&annotation)?;
-    if annotation.id.trim().is_empty() {
+    let creating = annotation.id.trim().is_empty();
+    if creating {
         annotation.id = Uuid::new_v4().to_string();
     }
-    store(&session, &annotation)?;
-    announce(&app, &session)?;
+    crate::cad::history::save_annotation(session, cad, &annotation, !creating)?;
     Ok(annotation)
 }
 
@@ -168,15 +170,15 @@ pub fn save_cad_annotation(
 pub fn delete_cad_annotation(
     app: tauri::AppHandle,
     session: tauri::State<'_, Session>,
+    cad: tauri::State<'_, crate::cad::CadState>,
     id: String,
 ) -> Answer<()> {
-    session.change(|document| {
-        document
-            .delete_object(KIND, &id)
-            .map(|_| ())
-            .map_err(|error| error.to_string())
-    })?;
+    commit_delete(&session, &cad, &id)?;
     announce(&app, &session)
+}
+
+pub(crate) fn commit_delete(session: &Session, cad: &crate::cad::CadState, id: &str) -> Answer<()> {
+    crate::cad::history::erase_annotation(session, cad, id)
 }
 
 #[cfg(test)]
