@@ -8,7 +8,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import type { PatchedFixture } from "../../../api/types";
+import type { FixtureDefinition, PatchedFixture } from "../../../api/types";
 import type { PatchColumn } from "../../../types";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
 import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
@@ -19,6 +19,7 @@ import { parsePatchAddress } from "../../input/ConsoleFields";
 import { normalizeFixtureSearch } from "../fixtureLibrary/model";
 import {
 	fixtureDefinitionKey,
+	fixtureDefinitionsFromProfiles,
 	mergeFixtureDefinitions,
 } from "../fixtureProfileModel";
 import {
@@ -285,6 +286,64 @@ function usePatchUiState(csvImportRequest = 0) {
 	};
 }
 
+/** Mode edits use the immutable profile embedded with the selected fixture, never a library substitute. */
+export function fixtureModeEditDefinitions(
+	definition: FixtureDefinition,
+	available: readonly FixtureDefinition[] = [],
+): FixtureDefinition[] {
+	const profile = definition.profile_snapshot;
+	if (
+		!profile ||
+		profile.id !== (definition.profile_id ?? profile.id) ||
+		profile.revision !== definition.revision ||
+		!profile.modes.some((mode) => mode.id === definition.mode_id)
+	)
+		return [...available];
+	try {
+		const embedded = fixtureDefinitionsFromProfiles([profile]);
+		const keys = new Set(embedded.map(fixtureDefinitionKey));
+		return [
+			...embedded,
+			...available.filter((mode) => !keys.has(fixtureDefinitionKey(mode))),
+		];
+	} catch {
+		return [...available];
+	}
+}
+
+function useModeEditDefinitions(
+	server: ReturnType<typeof useFixtureLibrary>,
+	selected: PatchedFixture | null,
+	edit: EditKind,
+) {
+	const selectedDefinition = selected?.definition;
+	const embeddedModes = useMemo(
+		() =>
+			edit === "mode" && selectedDefinition
+				? fixtureModeEditDefinitions(selectedDefinition)
+				: [],
+		[edit, selectedDefinition],
+	);
+	const availableDefinitions = useMemo(() => {
+		const library = mergeFixtureDefinitions(
+			server?.fixtureProfiles ?? [],
+			server?.fixtureLibrary ?? [],
+		);
+		const embeddedKeys = new Set(embeddedModes.map(fixtureDefinitionKey));
+		return [
+			...embeddedModes,
+			...library.filter(
+				(mode) => !embeddedKeys.has(fixtureDefinitionKey(mode)),
+			),
+		];
+	}, [server?.fixtureProfiles, server?.fixtureLibrary, embeddedModes]);
+	const modeEditUnavailable =
+		edit === "mode" && !embeddedModes.length
+			? "Embedded fixture profile or current mode is unavailable. Reopen the show or restore its profile before setting a mode."
+			: null;
+	return { availableDefinitions, modeEditUnavailable };
+}
+
 function usePatchDerivedState(
 	server: ReturnType<typeof useFixtureLibrary>,
 	patch: ReturnType<typeof usePatch>,
@@ -304,25 +363,24 @@ function usePatchDerivedState(
 		ui.sort,
 		new Map(layers.map((layer) => [layer.id, layer.order])),
 	);
-	const availableDefinitions = useMemo(
-		() =>
-			mergeFixtureDefinitions(
-				server?.fixtureProfiles ?? [],
-				server?.fixtureLibrary ?? [],
-			),
-		[server?.fixtureProfiles, server?.fixtureLibrary],
-	);
 	const selected =
 		all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null;
+	const { availableDefinitions, modeEditUnavailable } = useModeEditDefinitions(
+		server,
+		selected,
+		ui.edit,
+	);
 	const groupedDefinitions = useMemo(
 		() => groupFixtureFamilies(availableDefinitions),
 		[availableDefinitions],
 	);
 	const selectedModeFamily = selected
-		? (groupedDefinitions.find(
-				(item) =>
-					item.manufacturer === selected.definition.manufacturer &&
-					item.name === (selected.definition.name || selected.definition.model),
+		? (groupedDefinitions.find((item) =>
+				item.modes.some(
+					(mode) =>
+						fixtureDefinitionKey(mode) ===
+						fixtureDefinitionKey(selected.definition),
+				),
 			) ?? null)
 		: null;
 	const types = useMemo(
@@ -348,12 +406,11 @@ function usePatchDerivedState(
 	);
 	const family =
 		families.find((item) => item.key === ui.familyKey) ?? families[0] ?? null;
-	const definition =
-		availableDefinitions.find(
-			(item) => fixtureDefinitionKey(item) === ui.definitionKey,
-		) ??
-		family?.modes[0] ??
-		null;
+	const definition = modeEditUnavailable
+		? null
+		: (availableDefinitions.find(
+				(item) => fixtureDefinitionKey(item) === ui.definitionKey,
+			) ?? (ui.edit === "mode" ? null : (family?.modes[0] ?? null)));
 	const multipatchAddressFixture =
 		ui.multipatchEdit?.kind === "address"
 			? (all.find((item) => item.fixture_id === ui.multipatchEdit?.fixtureId) ??
@@ -374,6 +431,7 @@ function usePatchDerivedState(
 		availableDefinitions,
 		selected,
 		selectedModeFamily,
+		modeEditUnavailable,
 		types,
 		filtered,
 		families,
@@ -417,14 +475,14 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	const ui = usePatchUiState(props.csvImportRequest);
 	const data = usePatchDerivedState(server, patch, ui);
 	useEffect(() => {
-		if (!data.family || ui.replacingFixture) return;
+		if (!data.family || ui.replacingFixture || ui.edit === "mode") return;
 		if (
 			!data.family.modes.some(
 				(item) => fixtureDefinitionKey(item) === ui.definitionKey,
 			)
 		)
 			ui.setDefinitionKey(fixtureDefinitionKey(data.family.modes[0]));
-	}, [data.family, ui.definitionKey, ui.replacingFixture]);
+	}, [data.family, ui.definitionKey, ui.replacingFixture, ui.edit]);
 	return {
 		server,
 		patch,

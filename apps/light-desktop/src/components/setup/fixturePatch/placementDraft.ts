@@ -225,7 +225,9 @@ export function updateBatchPatch(
 	ui.setPlacementOverrides((current) => ({ ...current, [index]: value }));
 	if (index === 0) {
 		ui.setDraft((current) => ({ ...current, patch: value }));
-		const firstSplit = definitionSplits(controller.data.definition)[0]?.number;
+		const firstSplit = controller.data.definition
+			? definitionSplits(controller.data.definition)[0]?.number
+			: undefined;
 		if (firstSplit != null)
 			ui.setSplitDrafts((current) => ({ ...current, [firstSplit]: value }));
 	}

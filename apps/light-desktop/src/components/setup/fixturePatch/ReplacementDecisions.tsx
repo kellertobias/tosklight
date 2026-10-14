@@ -23,7 +23,7 @@ export function replacementDecisionRows(
 	const choices = controller.ui.replacementHeads;
 	const shared = rootProgrammingCorrespondences(
 		selected?.definition,
-		definition,
+		definition ?? undefined,
 	).map((row) => {
 		const choice = choices[row.key] ?? "";
 		return {

@@ -9,7 +9,12 @@ import type { PatchedFixture } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureRanges, groupFixtureFamilies } from "../patchUtils";
 import { combinedPolicyChoice } from "./combinedPolicy";
-import type { EditKind, PatchController, VectorAxis } from "./controller";
+import {
+	type EditKind,
+	fixtureModeEditDefinitions,
+	type PatchController,
+	type VectorAxis,
+} from "./controller";
 import {
 	definitionSplits,
 	effectiveSplitPatches,
@@ -270,14 +275,17 @@ function selectFixtureFamily(
 	fixture: PatchedFixture,
 ) {
 	const family = groupFixtureFamilies(
-		controller.data.availableDefinitions,
-	).find(
-		(item) =>
-			item.manufacturer === fixture.definition.manufacturer &&
-			item.name === (fixture.definition.name || fixture.definition.model),
+		fixtureModeEditDefinitions(
+			fixture.definition,
+			controller.data.availableDefinitions,
+		),
+	).find((item) =>
+		item.modes.some(
+			(mode) =>
+				fixtureDefinitionKey(mode) === fixtureDefinitionKey(fixture.definition),
+		),
 	);
-	if (!family) return;
-	controller.ui.setFamilyKey(family.key);
+	controller.ui.setFamilyKey(family?.key ?? "");
 	controller.ui.setDefinitionKey(fixtureDefinitionKey(fixture.definition));
 }
 

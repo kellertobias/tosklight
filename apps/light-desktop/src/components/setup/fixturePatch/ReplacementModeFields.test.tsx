@@ -286,3 +286,22 @@ describe("Replacement mode profile collisions", () => {
 		expect(controller.ui.setReplacementHeads).toHaveBeenCalledWith({});
 	});
 });
+
+it("keeps unavailable embedded metadata visible and prevents both Set actions", () => {
+	setup();
+	controller.ui.replacingFixture = false;
+	controller.data.selectedModeFamily = null;
+	controller.data.definition = null;
+	controller.data.modeEditUnavailable =
+		"Embedded fixture profile or current mode is unavailable. Reopen the show or restore its profile before setting a mode.";
+	render(
+		<ModalProvider>
+			<ReplacementEditDialog pending={false} close={vi.fn()} />
+		</ModalProvider>,
+	);
+	expect(screen.getByRole("alert")).toHaveTextContent(
+		"Embedded fixture profile or current mode is unavailable",
+	);
+	for (const button of screen.getAllByRole("button", { name: "Set" }))
+		expect(button).toBeDisabled();
+});

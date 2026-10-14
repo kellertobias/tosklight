@@ -16,7 +16,10 @@ import {
 	UniverseMap,
 } from "./FixturePatchSetup";
 import { dmxGridColumnCount } from "./fixturePatch/UniverseMap";
-import { blankFixtureProfile } from "./fixtureProfileModel";
+import {
+	blankFixtureProfile,
+	fixtureDefinitionFromProfileMode,
+} from "./fixtureProfileModel";
 
 const state = { patchSetArmed: false };
 const dispatch = vi.fn();
@@ -1100,6 +1103,14 @@ describe("installed light-source appearance", () => {
 
 	it("retains independent installed appearances when changing to a newly embedded profile mode", async () => {
 		const fixture = appearanceFixture();
+		const sourceProfile = fixture.definition.profile_snapshot;
+		if (!sourceProfile) throw new Error("source profile is missing");
+		// This appearance-only fixture has no channels; the policy helper's partial channels are not portable profile records.
+		sourceProfile.modes[0].channels = [];
+		fixture.definition = fixtureDefinitionFromProfileMode(
+			sourceProfile,
+			sourceProfile.modes[0],
+		);
 		fixture.installed_appearance = {
 			light_source: { type: "profile_default" },
 			luminous_output_lumens: null,
@@ -1154,6 +1165,12 @@ describe("installed light-source appearance", () => {
 		const dialog = screen
 			.getByRole("heading", { name: "Set fixture mode" })
 			.closest("section") as HTMLElement;
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: `${fixture.definition.mode} · 4ch`,
+			}),
+		);
+		fireEvent.click(screen.getByRole("option", { name: "Touring · 4ch" }));
 		expect(
 			within(dialog).getByRole("button", { name: "Touring · 4ch" }),
 		).toBeInTheDocument();
@@ -3503,4 +3520,172 @@ it("cancels cross-family replacement without sending any patch mutation", () => 
 	expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
 	expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 	expect(patchFeature.patchFixtures).not.toHaveBeenCalled();
+});
+
+describe("immutable imported mode editor", () => {
+	function importedFixture() {
+		const fixture = splitFixture();
+		const profile = blankFixtureProfile();
+		profile.id = "imported-photon";
+		profile.revision = 2;
+		profile.manufacturer = "ACME";
+		profile.name = "Imported Photon";
+		profile.short_name = "Photon";
+		const base = profile.modes[0];
+		profile.modes = [
+			{
+				...structuredClone(base),
+				id: "mode-28",
+				name: "Mode 1 28CH",
+				splits: [{ number: 1, footprint: 28 }],
+			},
+			{
+				...structuredClone(base),
+				id: "mode-31",
+				name: "Mode 2 31CH",
+				splits: [{ number: 1, footprint: 31 }],
+			},
+		];
+		fixture.definition = fixtureDefinitionFromProfileMode(
+			profile,
+			profile.modes[1],
+		);
+		fixture.split_patches = [{ split: 1, universe: 1, address: 101 }];
+		return fixture;
+	}
+	function openMode() {
+		state.patchSetArmed = true;
+		render(<FixturePatchSetup />);
+		fireEvent.click(
+			screen.getByRole("button", { name: /Fixture and mode 17:/ }),
+		);
+		return screen
+			.getByRole("heading", { name: "Set fixture mode" })
+			.closest("section") as HTMLElement;
+	}
+	it("opens exact embedded modes absent from global library and cancels without authoring", () => {
+		const fixture = importedFixture();
+		server.patch.fixtures = [fixture];
+		server.fixtureProfiles = [];
+		const before = structuredClone(server.patch.fixtures);
+		const dialog = openMode();
+		expect(within(dialog).getByText("Choose fixture mode")).toBeInTheDocument();
+		const picker = within(dialog).getByRole("button", { name: /^Mode 2 31CH/ });
+		fireEvent.click(picker);
+		expect(
+			screen.getByRole("option", { name: /^Mode 1 28CH/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("option", { name: /^Mode 2 31CH/ }),
+		).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("option", { name: /^Mode 2 31CH/ }));
+		expect(
+			within(dialog).getByRole("button", {
+				name: "Replace fixture with another product",
+			}),
+		).toBeEnabled();
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Cancel fixture mode" }),
+		);
+		expect(server.patch.fixtures).toEqual(before);
+		expect(server.fixtureProfiles).toEqual([]);
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+	});
+	it("preserves old profile revision and current mode while offering explicit global replacement products", () => {
+		const fixture = importedFixture();
+		const profile = fixture.definition.profile_snapshot;
+		if (!profile) throw new Error("source snapshot missing");
+		const newer = structuredClone(profile);
+		newer.revision = 3;
+		newer.modes = [
+			{
+				...structuredClone(newer.modes[0]),
+				id: "new-mode",
+				name: "New global mode",
+			},
+		];
+		const other = blankFixtureProfile();
+		other.id = "other-product";
+		other.name = "Other product";
+		server.fixtureProfiles = [newer, other];
+		server.patch.fixtures = [fixture];
+		const before = structuredClone({
+			fixtures: server.patch.fixtures,
+			profiles: server.fixtureProfiles,
+		});
+		const dialog = openMode();
+		expect(
+			within(dialog).getByRole("button", { name: /^Mode 2 31CH/ }),
+		).toBeInTheDocument();
+		expect(
+			within(dialog)
+				.getByText(/Destination:/)
+				.closest("p")?.textContent,
+		).toContain("Mode 2 31CH");
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: "Replace fixture with another product",
+			}),
+		);
+		fireEvent.click(
+			within(dialog).getByRole("button", {
+				name: /Imported Photon.*Mode 2 31CH/,
+			}),
+		);
+		expect(
+			screen.getByRole("option", { name: /Imported Photon.*New global mode/ }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByRole("option", { name: /Other product/ }),
+		).toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("option", { name: /Imported Photon.*Mode 2 31CH/ }),
+		);
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Cancel fixture mode" }),
+		);
+		expect({
+			fixtures: server.patch.fixtures,
+			profiles: server.fixtureProfiles,
+		}).toEqual(before);
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+		state.patchSetArmed = true;
+		fireEvent.click(
+			screen.getByRole("button", { name: /Fixture and mode 17:/ }),
+		);
+		const reopened = screen
+			.getByRole("heading", { name: "Set fixture mode" })
+			.closest("section") as HTMLElement;
+		fireEvent.click(
+			within(reopened.querySelector("header") as HTMLElement).getByRole(
+				"button",
+				{ name: "Set" },
+			),
+		);
+		expect(patchFeature.updateFixture).toHaveBeenCalledOnce();
+		expect(
+			patchFeature.updateFixture.mock.calls[0]?.[1]?.definition,
+		).toMatchObject({
+			profile_id: profile.id,
+			revision: 2,
+			mode_id: "mode-31",
+			profile_snapshot: { id: profile.id, revision: 2 },
+		});
+	});
+	it("shows actionable unavailable metadata and disables both Set actions", () => {
+		const fixture = importedFixture();
+		delete fixture.definition.profile_snapshot;
+		server.patch.fixtures = [fixture];
+		server.fixtureProfiles = [];
+		const dialog = openMode();
+		expect(within(dialog).getByRole("alert")).toHaveTextContent(
+			/embedded.*profile.*mode.*unavailable/i,
+		);
+		for (const button of within(dialog).getAllByRole("button", { name: "Set" }))
+			expect(button).toBeDisabled();
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+		expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
+	});
 });

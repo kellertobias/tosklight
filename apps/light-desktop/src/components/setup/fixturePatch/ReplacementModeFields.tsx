@@ -31,14 +31,16 @@ export function ReplacementEditDialog({
 	const definition = controller.data.definition;
 	const unavailable = pending
 		? "Validating and applying the replacement. Wait for the authoritative result."
-		: unresolved
-			? `Resolve ${unresolved} correspondence${unresolved === 1 ? "" : "s"} before Set.`
-			: controller.ui.replacingFixture &&
-					(!controller.ui.replacementRevision ||
-						!definition?.profile_snapshot ||
-						!definition.mode_id)
-				? "Reopen the fixture editor to obtain a current product, mode and show revision."
-				: null;
+		: controller.data.modeEditUnavailable
+			? controller.data.modeEditUnavailable
+			: unresolved
+				? `Resolve ${unresolved} correspondence${unresolved === 1 ? "" : "s"} before Set.`
+				: controller.ui.replacingFixture &&
+						(!controller.ui.replacementRevision ||
+							!definition?.profile_snapshot ||
+							!definition.mode_id)
+					? "Reopen the fixture editor to obtain a current product, mode and show revision."
+					: null;
 	const error = controller.ui.editError;
 	return (
 		<ModalRegistration onClose={close}>
@@ -107,7 +109,13 @@ export function ReplacementModeFields() {
 	const controller = usePatchController();
 	const { ui, data } = controller;
 	const family = data.selectedModeFamily;
-	if (!family) return null;
+	if (data.modeEditUnavailable || !family)
+		return (
+			<ErrorAlert as="p" role="alert">
+				{data.modeEditUnavailable ??
+					"The fixture mode is unavailable. Reopen this editor after restoring its profile."}
+			</ErrorAlert>
+		);
 	const query = ui.replacementQuery.trim().toLowerCase();
 	const modes = ui.replacingFixture
 		? data.availableDefinitions.filter(
