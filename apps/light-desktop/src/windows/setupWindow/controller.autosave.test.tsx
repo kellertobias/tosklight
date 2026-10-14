@@ -109,6 +109,27 @@ describe("Desk Setup autosave", () => {
 		expect(reopened.result.current.draft?.autosave_interval_seconds).toBe(90);
 	});
 
+	it("sends an explicit null when restoring Timecode to the DMX rate", async () => {
+		setup.configuration = {
+			...configuration(),
+			timecode_frame_rate: { numerator: 25, denominator: 1, drop_frame: false },
+		};
+		const first = renderHook(useSetupWindowController);
+		const draft = first.result.current.draft;
+		if (!draft) throw new Error("Desk configuration draft is missing");
+		act(() =>
+			first.result.current.editDraft({ ...draft, timecode_frame_rate: null }),
+		);
+		await waitFor(() => expect(setup.saveConfiguration).toHaveBeenCalledOnce());
+		expect(setup.saveConfiguration.mock.calls[0][0]).toHaveProperty(
+			"timecode_frame_rate",
+			null,
+		);
+		first.unmount();
+		const reopened = renderHook(useSetupWindowController);
+		expect(reopened.result.current.draft?.timecode_frame_rate).toBeNull();
+	});
+
 	it("persists Record and Update defaults on change and reloads both", async () => {
 		const first = renderHook(useSetupWindowController);
 		act(() => first.result.current.setSection("preferences-defaults"));

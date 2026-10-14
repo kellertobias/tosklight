@@ -864,6 +864,44 @@ mod highlight_compatibility_tests {
     }
 
     #[test]
+    fn clearable_configuration_fields_preserve_omitted_and_clear_explicit_null() {
+        let seeded = patched_configuration(
+            DeskConfiguration::default(),
+            serde_json::from_value(serde_json::json!({
+                "osc_bind":"127.0.0.1:19014", "art_timecode_bind":"127.0.0.1:16454",
+                "timecode_frame_rate":{"numerator":25,"denominator":1,"drop_frame":false},
+                "osc_timecode":{"address":"/timecode","rate":"fps25"},
+                "timecode_audio_output_device":"Desk USB Out"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let original = serde_json::to_value(&seeded).unwrap();
+        for field in [
+            "osc_bind",
+            "art_timecode_bind",
+            "timecode_frame_rate",
+            "osc_timecode",
+            "timecode_audio_output_device",
+        ] {
+            let cleared = patched_configuration(
+                seeded.clone(),
+                serde_json::from_value(serde_json::json!({field:null})).unwrap(),
+            )
+            .unwrap();
+            let mut expected = original.clone();
+            expected[field] = serde_json::Value::Null;
+            assert_eq!(
+                serde_json::to_value(cleared).unwrap(),
+                expected,
+                "only {field} clears"
+            );
+        }
+        let omitted = patched_configuration(seeded, wire::ConfigurationPatch::default()).unwrap();
+        assert_eq!(serde_json::to_value(omitted).unwrap(), original);
+    }
+
+    #[test]
     fn timecode_rate_null_follows_the_dmx_rate() {
         let patch: wire::ConfigurationPatch = serde_json::from_value(serde_json::json!({
             "frame_rate_hz": 44,

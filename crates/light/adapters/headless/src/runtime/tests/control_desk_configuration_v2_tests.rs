@@ -170,3 +170,109 @@ async fn post_desk_action(scenario: &TopologyScenario, body: serde_json::Value) 
         .await
         .unwrap()
 }
+
+#[tokio::test]
+async fn nullable_configuration_http_clear_survives_persisted_reload() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let send = |body: serde_json::Value| {
+        Request::post("/api/v2/configuration/update")
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    let original = state.installation.configuration();
+    let set = serde_json::json!({"request_id":"nullable-set", "patch":{
+        "timecode_frame_rate":{"numerator":25,"denominator":1,"drop_frame":false},
+        "timecode_audio_output_device":"Desk USB Out",
+        "future_nullable_setting":true
+    }});
+    assert_eq!(
+        app.clone().oneshot(send(set)).await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert!(
+        state
+            .installation
+            .configuration()
+            .timecode_frame_rate
+            .is_some()
+    );
+    let clear =
+        serde_json::json!({"request_id":"nullable-clear", "patch":{"timecode_frame_rate":null}});
+    let result = app.clone().oneshot(send(clear.clone())).await.unwrap();
+    assert_eq!(result.status(), StatusCode::OK);
+    assert_eq!(json(result).await["replayed"], false);
+    let current = state.installation.configuration();
+    assert!(current.timecode_frame_rate.is_none());
+    assert_eq!(
+        current.timecode_audio_output_device.as_deref(),
+        Some("Desk USB Out")
+    );
+    assert_eq!(current.osc_bind, original.osc_bind);
+    assert_eq!(current.art_timecode_bind, original.art_timecode_bind);
+    assert_eq!(current.frame_rate_hz, original.frame_rate_hz);
+    let persisted = state
+        .installation
+        .setting("server_configuration")
+        .unwrap()
+        .unwrap();
+    let persisted_value: serde_json::Value = serde_json::from_str(&persisted).unwrap();
+    assert_eq!(
+        persisted_value["timecode_frame_rate"],
+        serde_json::Value::Null
+    );
+    let reloaded = startup_state::load_configuration(
+        &DeskStore::open(data_dir.join("desk.sqlite")).unwrap(),
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(reloaded.timecode_frame_rate.is_none());
+    state.installation.replace_configuration(reloaded);
+    let read = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v2/configuration")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(
+        json(read).await["configuration"]["timecode_frame_rate"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        json(app.clone().oneshot(send(clear)).await.unwrap()).await["replayed"],
+        true
+    );
+    let before_invalid = serde_json::to_value(state.installation.configuration()).unwrap();
+    for (index, invalid) in [
+        serde_json::json!("25"),
+        serde_json::json!({"numerator":25,"denominator":0,"drop_frame":false}),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let response = app.clone().oneshot(send(serde_json::json!({"request_id":format!("nullable-invalid-{index}"),"patch":{"timecode_frame_rate":invalid,"backup_retention":99}}))).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            serde_json::to_value(state.installation.configuration()).unwrap(),
+            before_invalid
+        );
+    }
+    let unauthorized = app.oneshot(Request::post("/api/v2/configuration/update")
+        .header(header::CONTENT_TYPE,"application/json")
+        .body(Body::from(serde_json::json!({"request_id":"nullable-unauthorized","patch":{"timecode_audio_output_device":null}}).to_string())).unwrap()).await.unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        serde_json::to_value(state.installation.configuration()).unwrap(),
+        before_invalid
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

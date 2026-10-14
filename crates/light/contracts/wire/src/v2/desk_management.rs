@@ -18,16 +18,28 @@ pub struct ConfigurationPatch {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub output_bind_ip: Option<String>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional = nullable)]
     pub osc_bind: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional = nullable)]
     pub art_timecode_bind: Option<Option<String>>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub timecode_source: Option<TimecodeSourceSelectionConfiguration>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional = nullable)]
     pub timecode_frame_rate: Option<Option<TimecodeFrameRateConfiguration>>,
     #[serde(default)]
@@ -37,10 +49,18 @@ pub struct ConfigurationPatch {
     #[ts(optional = nullable)]
     #[ts(type = "number")]
     pub timecode_external_loss_timeout_millis: Option<u64>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional = nullable)]
     pub osc_timecode: Option<Option<OscTimecodeConfiguration>>,
-    #[serde(default)]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional = nullable)]
     pub timecode_audio_output_device: Option<Option<String>>,
     #[serde(default)]
@@ -113,6 +133,15 @@ pub struct ConfigurationPatch {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub file_manager_roots: Option<Vec<FileManagerRoot>>,
+}
+
+// Missing fields use Default; a present JSON null is an explicit clear intent.
+fn deserialize_present_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -370,6 +399,48 @@ pub struct DeskUnlockRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clearable_configuration_fields_distinguish_omitted_null_and_value() {
+        for (field, value) in [
+            ("osc_bind", serde_json::json!("127.0.0.1:19014")),
+            ("art_timecode_bind", serde_json::json!("127.0.0.1:16454")),
+            (
+                "timecode_frame_rate",
+                serde_json::json!({"numerator":25,"denominator":1,"drop_frame":false}),
+            ),
+            (
+                "osc_timecode",
+                serde_json::json!({"address":"/timecode","rate":"25"}),
+            ),
+            (
+                "timecode_audio_output_device",
+                serde_json::json!("Desk USB Out"),
+            ),
+        ] {
+            let absent: ConfigurationPatch = serde_json::from_value(serde_json::json!({})).unwrap();
+            assert!(
+                serde_json::to_value(absent).unwrap().get(field).is_none(),
+                "{field} omitted"
+            );
+            for value in [serde_json::Value::Null, value] {
+                let patch: ConfigurationPatch =
+                    serde_json::from_value(serde_json::json!({field:value})).unwrap();
+                assert_eq!(
+                    serde_json::to_value(patch).unwrap().get(field),
+                    Some(&value),
+                    "{field}"
+                );
+            }
+            assert!(
+                serde_json::from_value::<ConfigurationPatch>(serde_json::json!({field:[]}))
+                    .is_err()
+            );
+        }
+        let explicit: ConfigurationPatch =
+            serde_json::from_value(serde_json::json!({"timecode_frame_rate":null})).unwrap();
+        assert_eq!(explicit.timecode_frame_rate, Some(None));
+    }
 
     #[test]
     fn configuration_patch_accepts_named_semantic_highlight_look() {
