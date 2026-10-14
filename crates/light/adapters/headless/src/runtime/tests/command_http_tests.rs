@@ -49,3 +49,5 @@ mod preload_layout_authority_tests;
 
 #[path = "command_http_named_preset_tests.rs"]
 mod named_presets;
+
+include!("tl784_preset_alias_tests.rs");

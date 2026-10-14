@@ -5,7 +5,7 @@ use super::{
 use crate::{ActionError, ActionErrorKind};
 use light_core::CueListId;
 use light_playback::CueList;
-use light_programmer::{GroupDefinition, Preset};
+use light_programmer::{GroupDefinition, Preset, PresetAddress, PresetFamily};
 use light_show::{PortableShowDocument, PortableShowObject, PortableShowRevision};
 use std::collections::HashMap;
 
@@ -32,6 +32,7 @@ pub(super) fn find_cue_list(
     found.ok_or_else(|| missing(format!("Cuelist {}", cue_list_id.0)))
 }
 
+// Explicit Update requests carry stored object identity, not a recall address.
 pub(super) fn find_preset<'a>(
     document: &'a PortableShowDocument,
     object_id: &str,
@@ -40,6 +41,54 @@ pub(super) fn find_preset<'a>(
         .object("preset", object_id)
         .ok_or_else(|| missing(format!("Preset {object_id}")))?;
     Ok((object, decode(object, "Preset")?))
+}
+
+// Recalled Programmer context carries a typed pool address, including legacy aliases.
+pub(super) fn find_recalled_preset<'a>(
+    document: &'a PortableShowDocument,
+    object_id: &str,
+) -> Result<(&'a PortableShowObject, Preset), ActionError> {
+    let exact = document.object("preset", object_id);
+    let exact_preset = exact
+        .map(|object| decode::<Preset>(object, "Preset"))
+        .transpose()?;
+    let family = exact_preset
+        .as_ref()
+        .map_or(PresetFamily::Mixed, |preset| preset.family);
+    let requested = match PresetAddress::from_storage_key(object_id, family) {
+        Ok(address) => address,
+        // Preserve exact opaque legacy keys; they do not acquire numeric aliases.
+        Err(_) => {
+            return exact
+                .zip(exact_preset)
+                .ok_or_else(|| missing(format!("Preset {object_id}")));
+        }
+    };
+    let mut found = None;
+    for object in document.objects_of_kind("preset") {
+        // Parse keys first: unrelated Presets need no body decode or value clone.
+        if PresetAddress::from_storage_key(object.key().id(), requested.family).ok()
+            != Some(requested)
+        {
+            continue;
+        }
+        let mut preset = decode::<Preset>(object, "Preset")?;
+        let stored_number = preset.number;
+        let address = preset
+            .reconcile_address(object.key().id())
+            .map_err(invalid)?;
+        // Resolution is observational, including legacy number=0 bodies.
+        preset.number = stored_number;
+        if address != requested {
+            continue;
+        }
+        if found.replace((object, preset)).is_some() {
+            return Err(invalid(
+                "multiple stored Presets share the requested address",
+            ));
+        }
+    }
+    found.ok_or_else(|| missing(format!("Preset {object_id}")))
 }
 
 pub(super) type StoredGroups<'a> = (
