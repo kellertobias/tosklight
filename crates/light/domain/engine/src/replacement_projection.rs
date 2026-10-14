@@ -16,6 +16,20 @@ pub struct ReplacementDestinationPlan {
 }
 
 impl ReplacementDestinationPlan {
+    pub(crate) fn semantic_group_color_destinations(
+        &self,
+        target: FixtureId,
+        attribute: &AttributeKey,
+        value: Option<&light_core::AttributeValue>,
+    ) -> Vec<FixtureId> {
+        crate::group_programming::semantic_color_destinations(
+            target,
+            attribute,
+            value,
+            &self.fixtures,
+            &self.profiles,
+        )
+    }
     pub fn compile(fixtures: &[PatchedFixture]) -> Result<Self, crate::EngineError> {
         let snapshot = crate::EngineSnapshot {
             fixtures: fixtures.to_vec().into(),

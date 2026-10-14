@@ -113,7 +113,11 @@ pub(super) fn decode_cue_lists(
                     && let Some(value) = super::cue_presets::resolve(reference, &presets, &native)
                 {
                     change.replacement_projections =
-                        super::cue_presets::replacement_projections(reference, &presets);
+                        super::cue_presets::group_replacement_projections(
+                            reference,
+                            &presets,
+                            &change.replacement_projections,
+                        );
                     change.value = Some(value);
                 }
             }

@@ -243,7 +243,7 @@ fn emitter(
 #[path = "native_raw.rs"]
 mod native_raw;
 #[path = "physical_forward.rs"]
-mod physical_forward;
+pub(super) mod physical_forward;
 
 #[path = "preload_families.rs"]
 mod preload_families;

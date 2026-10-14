@@ -616,7 +616,23 @@ impl ProgrammerValueResolver<'_, '_> {
                 self.generation
                     .replacement_destinations(projection, &authored.attribute)
             })
-            .unwrap_or_else(|| vec![authored.fixture_id]);
+            .unwrap_or_else(|| {
+                if matches!(
+                    &context.transition,
+                    ProgrammerTransitionSource::Group(_)
+                        | ProgrammerTransitionSource::PreloadGroup(_)
+                ) {
+                    crate::group_programming::semantic_color_destinations(
+                        authored.fixture_id,
+                        &authored.attribute,
+                        Some(&authored.value),
+                        &self.generation.snapshot().fixtures,
+                        &self.generation.profile_projections_arc(),
+                    )
+                } else {
+                    vec![authored.fixture_id]
+                }
+            });
         let mut resolved = Vec::new();
         for fixture_id in destinations {
             let mut effective = authored.clone();

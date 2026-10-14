@@ -589,10 +589,10 @@ impl Engine {
                 cue.changes
                     .iter()
                     .any(|change| change.replacement_projection.is_some())
-                    || cue
-                        .group_changes
-                        .iter()
-                        .any(|change| !change.replacement_projections.is_empty())
+                    || cue.group_changes.iter().any(|change| {
+                        !change.replacement_projections.is_empty()
+                            || needs_semantic_group_color_routing(change)
+                    })
             })
             .then(|| crate::ReplacementDestinationPlan::compile(&snapshot.fixtures))
             .transpose()?;
@@ -715,7 +715,9 @@ fn expand_group_references(
     let mut cue_list = source.clone();
     let mut fixture_context = HashMap::new();
     let mut group_context = HashMap::new();
+    let mut semantic_group_context = HashMap::new();
     for cue in &mut cue_list.cues {
+        let mut semantic_releases = HashMap::new();
         for change in cue
             .changes
             .iter_mut()
@@ -739,6 +741,9 @@ fn expand_group_references(
         {
             let address = (change.group_id.clone(), change.attribute.clone());
             if change.value.is_none() {
+                if let Some(previous) = semantic_group_context.remove(&address) {
+                    semantic_releases.insert(address.clone(), previous);
+                }
                 if change.replacement_projections.is_empty() {
                     change.replacement_projections =
                         group_context.remove(&address).unwrap_or_default();
@@ -746,19 +751,30 @@ fn expand_group_references(
                     group_context.remove(&address);
                 }
             } else {
+                if needs_semantic_group_color_routing(change) {
+                    semantic_group_context.insert(address.clone(), change.value.clone().unwrap());
+                } else {
+                    semantic_group_context.remove(&address);
+                }
                 group_context.insert(address, change.replacement_projections.clone());
             }
         }
-        expand_group_changes(cue, groups, stage_positions, replacements);
+        expand_group_changes(
+            cue,
+            groups,
+            stage_positions,
+            replacements,
+            &semantic_releases,
+        );
     }
     if source.cues.iter().any(|cue| {
         cue.changes
             .iter()
             .any(|change| change.replacement_projection.is_some())
-            || cue
-                .group_changes
-                .iter()
-                .any(|change| !change.replacement_projections.is_empty())
+            || cue.group_changes.iter().any(|change| {
+                !change.replacement_projections.is_empty()
+                    || needs_semantic_group_color_routing(change)
+            })
     }) {
         // Rebuild Cue-only baselines from effective addresses. A fresh root-master temporary
         // change and prior projected child values are distinct owners, even with one stored root.
@@ -772,6 +788,7 @@ fn expand_group_changes(
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
     replacements: Option<&crate::ReplacementDestinationPlan>,
+    semantic_releases: &HashMap<(String, light_core::AttributeKey), light_core::AttributeValue>,
 ) {
     // Register effective addresses before tracking/fades. The stored root address and envelope
     // remain unchanged; a future untagged root-master change is a different destination.
@@ -785,9 +802,15 @@ fn expand_group_changes(
         .map(|change| (change.fixture_id, change.attribute.clone()))
         .collect::<HashSet<_>>();
     for change in &cue.group_changes {
-        for expanded in resolved_group_changes(change, groups, stage_positions)
-            .into_iter()
-            .flat_map(|change| projected_cue_change(change, replacements))
+        for expanded in resolved_group_changes(
+            change,
+            groups,
+            stage_positions,
+            replacements,
+            semantic_releases.get(&(change.group_id.clone(), change.attribute.clone())),
+        )
+        .into_iter()
+        .flat_map(|change| projected_cue_change(change, replacements))
         {
             let address = (expanded.fixture_id, expanded.attribute.clone());
             if addresses.insert(address) {
@@ -817,10 +840,35 @@ fn projected_cue_change(
         .collect()
 }
 
+fn needs_semantic_group_color_routing(change: &GroupCueChange) -> bool {
+    change.attribute == light_core::AttributeKey::color()
+        && change.preset_reference.as_ref().is_none_or(|reference| {
+            matches!(
+                reference.source_owner,
+                light_core::PresetValueOwner::Universal
+            )
+        })
+        && change.value.as_ref().is_some_and(|value| match value {
+            light_core::AttributeValue::GroupFamily(group)
+                if group.owner == light_core::programming::ProgrammingOwner::Color =>
+            {
+                is_semantic_color(&group.template) || group.members.values().any(is_semantic_color)
+            }
+            value => is_semantic_color(value),
+        })
+}
+
+fn is_semantic_color(value: &light_core::AttributeValue) -> bool {
+    matches!(value, light_core::AttributeValue::ColorProgram(program)
+        if matches!(program.as_ref(), light_core::programming::ColorProgram::Semantic { .. }))
+}
+
 fn resolved_group_changes(
     change: &GroupCueChange,
     groups: &HashMap<String, GroupDefinition>,
     stage_positions: &HashMap<light_core::FixtureId, light_dynamics::Position3d>,
+    replacements: Option<&crate::ReplacementDestinationPlan>,
+    semantic_release: Option<&light_core::AttributeValue>,
 ) -> Vec<CueChange> {
     let Ok(resolved) = resolve_group_spatial(&change.group_id, groups, stage_positions) else {
         return Vec::new();
@@ -842,15 +890,51 @@ fn resolved_group_changes(
     };
     values
         .into_iter()
-        .map(|(fixture_id, value)| CueChange {
-            replacement_projection: change.replacement_projections.get(&fixture_id).cloned(),
-            preset_reference: change.preset_reference.clone(),
-            fixture_id,
-            attribute: change.attribute.clone(),
-            value,
-            automatic_restore: false,
-            fade_millis: change.fade_millis,
-            delay_millis: change.delay_millis,
+        .flat_map(|(fixture_id, value)| {
+            let release_was_semantic = semantic_release.is_some_and(|previous| {
+                let previous = match previous {
+                    light_core::AttributeValue::GroupFamily(group) => group.for_member(fixture_id),
+                    value => value,
+                };
+                is_semantic_color(previous)
+            });
+            let may_route_semantic = (change.value.is_some() || release_was_semantic)
+                && !change.replacement_projections.contains_key(&fixture_id)
+                && change.preset_reference.as_ref().is_none_or(|reference| {
+                    matches!(
+                        reference.source_owner,
+                        light_core::PresetValueOwner::Universal
+                    )
+                });
+            let destinations = if may_route_semantic {
+                replacements
+                    .map(|plan| {
+                        plan.semantic_group_color_destinations(
+                            fixture_id,
+                            &change.attribute,
+                            value.as_ref(),
+                        )
+                    })
+                    .unwrap_or_else(|| vec![fixture_id])
+            } else {
+                vec![fixture_id]
+            };
+            destinations
+                .into_iter()
+                .map(move |destination| CueChange {
+                    replacement_projection: change
+                        .replacement_projections
+                        .get(&fixture_id)
+                        .cloned(),
+                    preset_reference: change.preset_reference.clone(),
+                    fixture_id: destination,
+                    attribute: change.attribute.clone(),
+                    value: value.clone(),
+                    automatic_restore: false,
+                    fade_millis: change.fade_millis,
+                    delay_millis: change.delay_millis,
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }

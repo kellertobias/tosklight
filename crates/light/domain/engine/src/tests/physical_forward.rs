@@ -5,7 +5,7 @@ use light_fixture::{
     OpticalProvenance, OpticalSource, PhysicalDataQuality,
 };
 
-fn physical_fixture() -> PatchedFixture {
+pub(crate) fn physical_fixture() -> PatchedFixture {
     let mut fixture = calibrated_visual_fixture(FixtureId::new());
     let mut profile = fixture
         .definition

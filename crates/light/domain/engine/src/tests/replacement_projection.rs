@@ -1,6 +1,492 @@
 use super::*;
 use light_core::{ReplacementHeadTarget, ReplacementProfileContext, ReplacementProgramProjection};
 
+fn logical_color_fixture() -> (PatchedFixture, FixtureId, FixtureId) {
+    let mut fixture = super::profile_visualization::physical_forward::physical_fixture();
+    let mut profile = fixture
+        .definition
+        .profile_snapshot
+        .as_deref()
+        .unwrap()
+        .clone();
+    profile.modes[0].heads[0].master_shared = false;
+    let mode = profile.modes[0].id;
+    let head = profile.modes[0].heads[0].id;
+    let root = fixture.fixture_id;
+    let child = FixtureId::new();
+    fixture.definition = profile.resolved_definition(mode).unwrap();
+    fixture.logical_heads = vec![PatchedHead {
+        fixture_id: child,
+        head_index: 0,
+        profile_head_id: Some(head),
+    }];
+    (fixture, root, child)
+}
+
+fn semantic_color() -> AttributeValue {
+    AttributeValue::ColorProgram(std::sync::Arc::new(
+        light_core::programming::ColorProgram::Semantic {
+            intent: light_core::programming::ColorIntent::default(),
+        },
+    ))
+}
+
+fn assert_semantic_color_root_group_routes_owned_logical_head(source: &str) {
+    let (fixture, root, child) = logical_color_fixture();
+    let (mut peer, peer_id, peer_child) = logical_color_fixture();
+    peer.address = Some(20);
+    peer.fixture_number = None;
+    let value = semantic_color();
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session);
+    let mut group = GroupDefinition {
+        id: "roots".into(),
+        fixtures: vec![root],
+        ..Default::default()
+    };
+    if source == "static" {
+        group
+            .programming
+            .insert(AttributeKey::color(), value.clone());
+    }
+    if source == "programmer" {
+        programmers.set_group(
+            session,
+            "roots".into(),
+            AttributeKey::color(),
+            value.clone(),
+        );
+    }
+    let mut list = test_cue_list("Semantic root Group", vec![]);
+    if source == "cue" || source == "cue-family" {
+        list.cues[0]
+            .group_changes
+            .push(light_playback::GroupCueChange {
+                group_id: "roots".into(),
+                attribute: AttributeKey::color(),
+                value: Some(if source == "cue-family" {
+                    let mut template = light_core::programming::ColorIntent::default();
+                    template.relative_output = 0.2;
+                    AttributeValue::GroupFamily(Arc::new(
+                        light_core::programming::GroupFamilyAssignment {
+                            owner: light_core::programming::ProgrammingOwner::Color,
+                            template: AttributeValue::ColorProgram(Arc::new(
+                                light_core::programming::ColorProgram::Semantic {
+                                    intent: template,
+                                },
+                            )),
+                            members: std::collections::BTreeMap::from([(root.0, value.clone())]),
+                        },
+                    ))
+                } else {
+                    value.clone()
+                }),
+                replacement_projections: Default::default(),
+                preset_reference: None,
+                automatic_restore: false,
+                fade_millis: None,
+                delay_millis: None,
+            });
+    }
+    let id = list.id;
+    let engine = projection_engine(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 4,
+            fixtures: vec![fixture, peer].into(),
+            groups: vec![group].into(),
+            cue_lists: vec![list].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    if source == "cue" || source == "cue-family" {
+        execute_cue_list(
+            &engine,
+            id,
+            CueListPlaybackAction::GoAt(Utc::now() - ChronoDuration::milliseconds(1)),
+        );
+    }
+    let output = engine.render(Default::default()).unwrap();
+    assert_eq!(
+        output.resolved_values.get(&(child, AttributeKey::color())),
+        Some(&value),
+        "{source}"
+    );
+    assert!(
+        output
+            .resolved_values
+            .get(&(peer_child, AttributeKey::color()))
+            .is_none()
+    );
+    assert!(
+        output
+            .resolved_values
+            .get(&(peer_id, AttributeKey::color()))
+            .is_none()
+    );
+    assert_eq!(
+        engine.snapshot().groups[0].fixtures,
+        vec![root],
+        "no authored child insertion"
+    );
+}
+
+#[test]
+fn semantic_color_root_group_static_routes_owned_logical_head() {
+    assert_semantic_color_root_group_routes_owned_logical_head("static");
+}
+#[test]
+fn semantic_color_root_group_programmer_routes_owned_logical_head() {
+    assert_semantic_color_root_group_routes_owned_logical_head("programmer");
+}
+#[test]
+fn semantic_color_root_group_cue_routes_owned_logical_head() {
+    assert_semantic_color_root_group_routes_owned_logical_head("cue");
+}
+
+#[test]
+fn semantic_color_group_family_cue_routes_owned_logical_head() {
+    assert_semantic_color_root_group_routes_owned_logical_head("cue-family");
+}
+
+#[test]
+fn semantic_group_color_routing_retains_native_and_explicit_logical_addresses() {
+    let (fixture, root, child) = logical_color_fixture();
+    let snapshot = EngineSnapshot {
+        fixtures: vec![fixture].into(),
+        ..Default::default()
+    };
+    let profiles =
+        crate::profile_projection_plan::ProfileProjectionIndex::compile(&snapshot).unwrap();
+    let route = |target, attribute, value: &AttributeValue| {
+        crate::group_programming::semantic_color_destinations(
+            target,
+            &attribute,
+            Some(value),
+            &snapshot.fixtures,
+            &profiles,
+        )
+    };
+    assert_eq!(
+        route(root, AttributeKey::color(), &semantic_color()),
+        vec![child]
+    );
+    assert_eq!(
+        route(child, AttributeKey::color(), &semantic_color()),
+        vec![child]
+    );
+    assert_eq!(
+        route(
+            root,
+            AttributeKey::intensity(),
+            &AttributeValue::Normalized(0.5)
+        ),
+        vec![root]
+    );
+    assert_eq!(
+        route(
+            root,
+            AttributeKey::color(),
+            &AttributeValue::Normalized(0.5)
+        ),
+        vec![root]
+    );
+    let missing = FixtureId::new();
+    assert_eq!(
+        route(missing, AttributeKey::color(), &semantic_color()),
+        vec![missing]
+    );
+}
+
+#[test]
+fn semantic_group_cue_release_clears_only_previously_semantic_addresses() {
+    let (fixture, root, child) = logical_color_fixture();
+    let plan = crate::ReplacementDestinationPlan::compile(&[fixture]).unwrap();
+    let groups = std::collections::HashMap::from([(
+        "roots".into(),
+        GroupDefinition {
+            id: "roots".into(),
+            fixtures: vec![root],
+            ..Default::default()
+        },
+    )]);
+    for kind in ["semantic", "family", "native"] {
+        let semantic = kind != "native";
+        let mut list = test_cue_list("Group release", vec![]);
+        let change = light_playback::GroupCueChange {
+            group_id: "roots".into(),
+            attribute: AttributeKey::color(),
+            value: Some(if kind == "family" {
+                AttributeValue::GroupFamily(Arc::new(
+                    light_core::programming::GroupFamilyAssignment {
+                        owner: light_core::programming::ProgrammingOwner::Color,
+                        template: semantic_color(),
+                        members: Default::default(),
+                    },
+                ))
+            } else if semantic {
+                semantic_color()
+            } else {
+                AttributeValue::Normalized(0.5)
+            }),
+            replacement_projections: Default::default(),
+            preset_reference: None,
+            automatic_restore: false,
+            fade_millis: None,
+            delay_millis: None,
+        };
+        list.cues[0].group_changes.push(change.clone());
+        let mut release = light_playback::Cue::new(2_u16.into());
+        release.group_changes.push(light_playback::GroupCueChange {
+            value: None,
+            ..change
+        });
+        list.cues.push(release);
+        let expanded = crate::lifecycle::expand_group_references_for_preview(
+            &list,
+            &groups,
+            &Default::default(),
+            Some(&plan),
+        );
+        let released = expanded.cues[1]
+            .changes
+            .iter()
+            .filter(|change| !change.automatic_restore)
+            .map(|change| (change.fixture_id, change.value.clone()))
+            .collect::<Vec<_>>();
+        assert!(released.contains(&(root, None)));
+        assert_eq!(
+            released.contains(&(child, None)),
+            semantic,
+            "native root release must not clear an independent logical Color owner"
+        );
+        assert!(
+            list.cues[1].changes.is_empty(),
+            "stored source stays untouched"
+        );
+    }
+}
+
+#[test]
+fn semantic_group_cue_dormancy_and_specific_source_detachment_never_expand() {
+    let (fixture, root, child) = logical_color_fixture();
+    let profile = fixture.definition.profile_snapshot.as_deref().unwrap();
+    let mode = profile.mode(fixture.definition.mode_id.unwrap()).unwrap();
+    let context = ReplacementProfileContext {
+        profile_id: profile.id,
+        profile_revision: profile.revision.into(),
+        mode_id: mode.id,
+    };
+    let captured = ReplacementProgramProjection {
+        source_owner: root,
+        source_profile: context.clone(),
+        source_head_id: mode.heads[0].id,
+        target_profile: context,
+        targets: vec![],
+    };
+    let plan = crate::ReplacementDestinationPlan::compile(&[fixture]).unwrap();
+    let groups = std::collections::HashMap::from([(
+        "roots".into(),
+        GroupDefinition {
+            id: "roots".into(),
+            fixtures: vec![root],
+            ..Default::default()
+        },
+    )]);
+    for dormant in [true, false] {
+        let mut list = test_cue_list("Detached Color", vec![]);
+        list.cues[0]
+            .group_changes
+            .push(light_playback::GroupCueChange {
+                group_id: "roots".into(),
+                attribute: AttributeKey::color(),
+                value: Some(semantic_color()),
+                replacement_projections: if dormant {
+                    std::collections::HashMap::from([(root, captured.clone())])
+                } else {
+                    Default::default()
+                },
+                preset_reference: Some(light_core::PresetValueReference {
+                    preset_instance_id: uuid::Uuid::new_v4(),
+                    source_owner: if dormant {
+                        light_core::PresetValueOwner::Universal
+                    } else {
+                        light_core::PresetValueOwner::Fixture { fixture_id: root }
+                    },
+                    source_attribute: AttributeKey::color(),
+                    sample_rank: None,
+                    member_fixture: None,
+                }),
+                automatic_restore: false,
+                fade_millis: None,
+                delay_millis: None,
+            });
+        let expanded = crate::lifecycle::expand_group_references_for_preview(
+            &list,
+            &groups,
+            &Default::default(),
+            Some(&plan),
+        );
+        assert!(
+            !expanded.cues[0]
+                .changes
+                .iter()
+                .any(|change| change.fixture_id == child),
+            "captured empty and address-specific empty source must never fan out"
+        );
+        assert_eq!(expanded.cues[0].changes.is_empty(), dormant);
+    }
+}
+
+#[test]
+fn semantic_group_family_exception_routes_and_releases_without_expanding_direct_template() {
+    let (fixture, root, child) = logical_color_fixture();
+    let (mut peer, peer_root, peer_child) = logical_color_fixture();
+    peer.address = Some(20);
+    peer.fixture_number = None;
+    let profile = fixture.definition.profile_snapshot.as_deref().unwrap();
+    let mode = profile.mode(fixture.definition.mode_id.unwrap()).unwrap();
+    let catalog = crate::NativeColorSourceCatalog::from_revisions([
+        crate::NativeColorSourceCatalog::compile_revision(
+            crate::NativeColorSourceRevisionKey {
+                profile_id: profile.id,
+                revision: profile.revision.into(),
+                raw_store_digest: "ownership-test".into(),
+            },
+            None,
+            || Ok(profile.clone()),
+        ),
+    ])
+    .unwrap();
+    let path = &mode.color_physical.as_ref().unwrap().paths[0];
+    let direct = AttributeValue::ColorProgram(Arc::new(
+        catalog
+            .capture_direct(light_core::programming::NativeColorObservation {
+                source: profile
+                    .native_color_identity(mode.id, mode.heads[0].id)
+                    .unwrap(),
+                values: path
+                    .controls
+                    .iter()
+                    .map(|id| {
+                        let channel = mode
+                            .channels
+                            .iter()
+                            .find(|channel| channel.id == *id)
+                            .unwrap();
+                        light_core::NativeColorValue {
+                            channel_id: *id,
+                            function_id: channel.functions[0].id,
+                            raw: 0,
+                        }
+                    })
+                    .collect(),
+            })
+            .unwrap()
+            .program()
+            .clone(),
+    ));
+    let family = light_core::programming::GroupFamilyAssignment {
+        owner: light_core::programming::ProgrammingOwner::Color,
+        template: direct.clone(),
+        members: std::collections::BTreeMap::from([(root.0, semantic_color())]),
+    };
+    family.validate().unwrap();
+    let fixtures = vec![fixture, peer];
+    let plan = crate::ReplacementDestinationPlan::compile(&fixtures).unwrap();
+    let groups = std::collections::HashMap::from([(
+        "roots".into(),
+        GroupDefinition {
+            id: "roots".into(),
+            fixtures: vec![root, peer_root],
+            ..Default::default()
+        },
+    )]);
+    let mut list = test_cue_list("Mixed complete Color family", vec![]);
+    let change = light_playback::GroupCueChange {
+        group_id: "roots".into(),
+        attribute: AttributeKey::color(),
+        value: Some(AttributeValue::GroupFamily(Arc::new(family))),
+        replacement_projections: Default::default(),
+        preset_reference: None,
+        automatic_restore: false,
+        fade_millis: None,
+        delay_millis: None,
+    };
+    list.cues[0].group_changes.push(change.clone());
+    let mut release = light_playback::Cue::new(2_u16.into());
+    release.group_changes.push(light_playback::GroupCueChange {
+        value: None,
+        ..change
+    });
+    list.cues.push(release);
+    let expanded = crate::lifecycle::expand_group_references_for_preview(
+        &list,
+        &groups,
+        &Default::default(),
+        Some(&plan),
+    );
+    assert!(
+        expanded.cues[0]
+            .changes
+            .iter()
+            .any(|change| change.fixture_id == child && change.value == Some(semantic_color()))
+    );
+    assert!(
+        expanded.cues[0]
+            .changes
+            .iter()
+            .any(|change| change.fixture_id == peer_root && change.value == Some(direct.clone()))
+    );
+    assert!(
+        !expanded.cues[0]
+            .changes
+            .iter()
+            .any(|change| change.fixture_id == peer_child)
+    );
+    assert!(
+        expanded.cues[1]
+            .changes
+            .iter()
+            .any(|change| change.fixture_id == child && change.value.is_none())
+    );
+    assert!(
+        !expanded.cues[1]
+            .changes
+            .iter()
+            .any(|change| change.fixture_id == peer_child)
+    );
+    let engine = projection_engine(ProgrammerRegistry::default());
+    engine
+        .replace_snapshot(EngineSnapshot {
+            required_programming_contract: 4,
+            fixtures: fixtures.into(),
+            groups: groups.values().cloned().collect::<Vec<_>>().into(),
+            cue_lists: vec![list.clone()].into(),
+            native_color_sources: Arc::new(catalog),
+            ..Default::default()
+        })
+        .unwrap();
+    execute_cue_list(
+        &engine,
+        list.id,
+        CueListPlaybackAction::GoAt(Utc::now() - ChronoDuration::milliseconds(1)),
+    );
+    let output = engine.render(Default::default()).unwrap();
+    assert_eq!(
+        output.resolved_values.get(&(child, AttributeKey::color())),
+        Some(&semantic_color()),
+        "a Direct template must not hide a Semantic member from production plan eligibility"
+    );
+    assert!(
+        output
+            .resolved_values
+            .get(&(peer_child, AttributeKey::color()))
+            .is_none()
+    );
+}
+
 fn replacement_fixture() -> (PatchedFixture, ReplacementProgramProjection) {
     let (mut fixture, _) = fixture();
     let mut profile = fixture

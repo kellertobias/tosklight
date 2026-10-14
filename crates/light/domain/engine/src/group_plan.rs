@@ -71,7 +71,15 @@ impl GroupContributionPlan {
                                 fixtures, profiles, projection, key,
                             )
                         })
-                        .unwrap_or_else(|| vec![fixture_id]);
+                        .unwrap_or_else(|| {
+                            crate::group_programming::semantic_color_destinations(
+                                fixture_id,
+                                key,
+                                Some(&value),
+                                fixtures,
+                                profiles,
+                            )
+                        });
                     for destination in destinations {
                         let Some(slot) = slots.slot_of(destination, attribute) else {
                             continue;

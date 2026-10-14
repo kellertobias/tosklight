@@ -93,6 +93,10 @@ pub(super) fn replacement_projection(
     presets: &HashMap<uuid::Uuid, Preset>,
     captured: Option<&light_core::ReplacementProgramProjection>,
 ) -> Option<light_core::ReplacementProgramProjection> {
+    if matches!(reference.source_owner, PresetValueOwner::Universal) {
+        // A universal value has no address-owned envelope to replace the Cue's consent.
+        return captured.cloned();
+    }
     let map = replacement_projections(reference, presets);
     let owner = match &reference.source_owner {
         PresetValueOwner::Fixture { fixture_id } => Some(*fixture_id),
@@ -114,6 +118,29 @@ pub(super) fn replacement_projection(
             .retain(|target| selected.contains(&target.fixture_id));
     }
     Some(projection)
+}
+
+pub(super) fn group_replacement_projections(
+    reference: &PresetValueReference,
+    presets: &HashMap<uuid::Uuid, Preset>,
+    captured: &light_core::ReplacementProjectionMap,
+) -> light_core::ReplacementProjectionMap {
+    if matches!(reference.source_owner, PresetValueOwner::Universal) {
+        return captured.clone();
+    }
+    let mut current = replacement_projections(reference, presets);
+    for (owner, projection) in &mut current {
+        if let Some(previous) = captured
+            .get(owner)
+            .filter(|previous| previous.target_profile == projection.target_profile)
+        {
+            projection
+                .targets
+                .retain(|target| previous.targets.iter().any(|old| old == target));
+        }
+    }
+    // Empty address-owned metadata is an authoritative detachment, not universal absence.
+    current
 }
 
 #[cfg(test)]
