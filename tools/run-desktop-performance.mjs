@@ -2,9 +2,11 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
+import { createWriteStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
+import { finished } from "node:stream/promises";
 import {
 	processTreeResourceDelta,
 	readLinuxProcessTree,
@@ -148,6 +150,10 @@ async function runCase(performanceCase, executionMode) {
 		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});
+	const closed = new Promise((resolve) => child.once("close", resolve));
+	child.once("error", (error) => {
+		child.spawnError = error;
+	});
 	const state = {
 		phase: "backend-readiness",
 		startedAt: new Date().toISOString(),
@@ -156,8 +162,13 @@ async function runCase(performanceCase, executionMode) {
 		sheet: null,
 	};
 	const output = [];
+	const evidence = await createCaseEvidence(temporaryRoot);
+	evidence.closed = closed;
+	let failure;
+	let result;
 	for (const stream of [child.stdout, child.stderr])
 		stream.on("data", (chunk) => {
+			evidence.log.write(chunk);
 			output.push(chunk.toString());
 			if (output.length > 100) output.shift();
 		});
@@ -196,13 +207,19 @@ async function runCase(performanceCase, executionMode) {
 		);
 		state.phase = "measurement";
 		const measurementStartedAt = Date.now();
-		const measured = await measureWindow(api, child.pid, executionMode);
+		const measured = await measureWindow(
+			api,
+			child.pid,
+			executionMode,
+			evidence.samples,
+		);
 		state.phase = "fixture-sheet-liveness";
 		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode, {
 			startedAt: measurementStartedAt,
 			endedAt: Date.now(),
 		});
-		return {
+		state.phase = "complete";
+		result = {
 			case_id: performanceCase.caseId,
 			case_name: performanceCase.demo
 				? `Demo show — ${prepared.parameterCount.toLocaleString("en-US")} parameters / ${prepared.fixtureRecords.toLocaleString("en-US")} fixtures`
@@ -235,13 +252,134 @@ async function runCase(performanceCase, executionMode) {
 			(diagnosticError) =>
 				`unavailable (${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)})`,
 		);
-		throw new Error(
+		failure = new Error(
 			`${performanceCase.caseId}/${executionMode}: ${error instanceof Error ? error.message : String(error)}; diagnostics: ${diagnostics}${output.length ? `\n${output.join("")}` : ""}`,
 		);
-	} finally {
-		await terminateProcessTree(child.pid);
-		await rm(temporaryRoot, { recursive: true, force: true });
 	}
+	failure = await finalizeCaseEvidence(
+		child,
+		evidence,
+		reportPath,
+		preparedPath,
+		state,
+		temporaryRoot,
+		failure,
+	);
+	if (failure) throw failure;
+	return result;
+}
+
+async function finalizeCaseEvidence(
+	child,
+	evidence,
+	reportPath,
+	preparedPath,
+	state,
+	temporaryRoot,
+	failure,
+) {
+	try {
+		await terminateProcessTree(child.pid);
+	} catch (error) {
+		failure ??= error;
+	}
+	let drainError;
+	try {
+		await drainCaseLog(evidence);
+	} catch (error) {
+		drainError = error;
+		state.runtimeLogDrain = { complete: false, error: error.message };
+		child.stdout.destroy();
+		child.stderr.destroy();
+		child.unref();
+	}
+	try {
+		await finishCaseEvidence(evidence, reportPath, preparedPath, state);
+		if (drainError) throw drainError;
+		await rm(temporaryRoot, { recursive: true, force: true });
+	} catch (error) {
+		const message = `Runtime evidence unavailable at ${evidence.manifestPath}; scratch preserved at ${temporaryRoot}: ${error instanceof Error ? error.message : String(error)}`;
+		if (failure) console.error(message);
+		else failure = new Error(message);
+	}
+	return failure;
+}
+
+async function drainCaseLog(evidence) {
+	let timer;
+	try {
+		await Promise.race([
+			evidence.closed,
+			new Promise((_, reject) => {
+				timer = setTimeout(
+					() =>
+						reject(
+							new Error(
+								"Owned child output pipes did not close within 5000ms after termination; runtime log may be incomplete",
+							),
+						),
+					5000,
+				);
+			}),
+		]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function createCaseEvidence(temporaryRoot) {
+	const prefix = path.join(
+		path.resolve(options["output-dir"]),
+		path.basename(temporaryRoot),
+	);
+	const runtimeLog = `${prefix}-runtime.log`;
+	const log = createWriteStream(runtimeLog, { flags: "wx" });
+	// Observe errors immediately, even if setup fails before the finalizer awaits this stream.
+	const completion = finished(log).then(
+		() => null,
+		(error) => error,
+	);
+	return {
+		prefix,
+		runtimeLog,
+		log,
+		completion,
+		samples: [],
+		manifestPath: `${prefix}-evidence.json`,
+	};
+}
+
+async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
+	evidence.log.end();
+	const logError = await evidence.completion;
+	if (logError) throw logError;
+	const files = { runtimeLog: evidence.runtimeLog };
+	for (const [key, suffix, source] of [
+		["fixtureSheet", "fixture-sheet.jsonl", reportPath],
+		["prepared", "prepared.json", preparedPath],
+	]) {
+		let contents;
+		try {
+			contents = await readFile(source);
+		} catch (error) {
+			if (error.code !== "ENOENT") throw error;
+			files[key] = { unavailable: error.code };
+			continue;
+		}
+		files[key] = `${evidence.prefix}-${suffix}`;
+		await writeFile(files[key], contents, { flag: "wx" });
+	}
+	files.measurement = `${evidence.prefix}-measurement.json`;
+	await writeFile(
+		files.measurement,
+		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples }, null, 2)}\n`,
+		{ flag: "wx" },
+	);
+	await writeFile(
+		evidence.manifestPath,
+		`${JSON.stringify(files, null, 2)}\n`,
+		{ flag: "wx" },
+	);
 }
 
 async function retainCaseFailure({
@@ -453,21 +591,38 @@ async function configureScheduler(api) {
 	});
 }
 
-async function measureWindow(api, rootPid, executionMode) {
+async function measureWindow(api, rootPid, executionMode, samples) {
 	const rates = [];
 	const resources = [];
 	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
 	const openingBands = diagnostics.output.frame_rate_band_counts ?? [];
 	let processes = await readLinuxProcessTree(rootPid);
+	samples.push({
+		phase: "opening",
+		recordedAt: new Date().toISOString(),
+		diagnostics,
+		processes,
+	});
 	for (let second = 0; second < DURATION_SECONDS; second++) {
 		const started = performance.now();
 		await new Promise((resolve) => setTimeout(resolve, 1_000));
 		const elapsed = (performance.now() - started) / 1_000;
+		const diagnosticsStartedAt = new Date().toISOString();
 		const nextDiagnostics = await api.request(
 			"GET",
 			"/api/v2/diagnostics/performance",
 		);
+		const diagnosticsEndedAt = new Date().toISOString();
 		const nextProcesses = await readLinuxProcessTree(rootPid);
+		samples.push({
+			phase: "measurement",
+			second,
+			elapsed,
+			diagnosticsStartedAt,
+			diagnosticsEndedAt,
+			diagnostics: nextDiagnostics,
+			processes: nextProcesses,
+		});
 		rates.push(
 			(nextDiagnostics.output.frames_sent - diagnostics.output.frames_sent) /
 				elapsed,
@@ -751,6 +906,7 @@ async function requireFixtureSheetActive(
 }
 
 function assertRunning(child) {
+	if (child.spawnError) throw child.spawnError;
 	if (child.exitCode !== null || child.signalCode !== null)
 		throw new Error(
 			`released Desk exited early (${child.exitCode ?? child.signalCode})`,
