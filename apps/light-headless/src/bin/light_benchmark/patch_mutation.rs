@@ -1,3 +1,5 @@
+mod diagnostics;
+
 use crate::light_benchmark::statistics::{Distribution, distribution};
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ActionSource, ActiveShowPorts,
@@ -55,6 +57,8 @@ pub struct PatchScenarioReport {
     pub invariants: PatchInvariants,
     pub raw_total_microseconds: Vec<f64>,
     pub gate_met: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_diagnostics: Option<diagnostics::Report>,
 }
 
 #[derive(Debug, Serialize)]
@@ -330,6 +334,7 @@ fn run_scenario(
         counters: Arc::clone(&counters),
         phases: Arc::clone(&phases),
     };
+    let mut observations = diagnostics::Collector::from_environment(WARMUPS, SAMPLES);
     let mut revision = 0_u64;
     for index in 0..WARMUPS {
         revision = execute(
@@ -338,8 +343,11 @@ fn run_scenario(
             show_id,
             reference,
             fixture_count,
-            index,
             revision,
+            diagnostics::Invocation {
+                index,
+                collector: &mut observations,
+            },
         )?
         .0;
     }
@@ -356,8 +364,11 @@ fn run_scenario(
             show_id,
             reference,
             fixture_count,
-            WARMUPS + index,
             revision,
+            diagnostics::Invocation {
+                index: WARMUPS + index,
+                collector: &mut observations,
+            },
         )?;
         revision = next_revision;
         totals.push(total);
@@ -414,6 +425,7 @@ fn run_scenario(
             .map(|duration| duration.as_secs_f64() * 1_000_000.0)
             .collect(),
         gate_met,
+        request_diagnostics: observations.map(diagnostics::Collector::finish),
     })
 }
 
@@ -423,35 +435,69 @@ fn execute(
     show_id: ShowId,
     profile: PatchedFixtureProfileReference,
     fixture_count: usize,
-    index: usize,
     expected_revision: u64,
+    invocation: diagnostics::Invocation<'_>,
 ) -> Result<(u64, Duration, usize, usize), String> {
+    let diagnostics::Invocation {
+        index,
+        collector: observations,
+    } = invocation;
     let request_id = format!("patch-benchmark-{fixture_count}-{index}");
     let request = wire_request(request_id.clone(), profile, fixture_count, index);
     let request_bytes = serde_json::to_vec(&request).map_err(string_error)?.len();
     let encoded_request = serde_json::to_vec(&request).map_err(string_error)?;
-    let started = Instant::now();
-    let decoded_request = serde_json::from_slice::<wire::PatchFixturesRequest>(&encoded_request)
-        .map_err(string_error)?;
-    let command =
-        light_headless_runtime::benchmark_patch_application_command(show_id, decoded_request)?;
-    let envelope = ActionEnvelope {
-        context: ActionContext::operator(
-            Uuid::from_u128(1),
-            Uuid::from_u128(3),
-            ActionSource::Http,
+    // Diagnostic reads and phase cursors are outside the unchanged decode-to-response timer.
+    let mut observation = observations.as_ref().and_then(|collector| {
+        collector.begin(
+            &request_id,
+            fixture_count,
+            index,
+            expected_revision,
+            &ports.phases,
         )
-        .with_request_id(request_id)
-        .with_expected_revision(expected_revision),
-        command,
-    };
-    let result = service
-        .handle(envelope, ports)
-        .map_err(|error| error.message)?;
-    let revision = result.change.patch_revision.value();
-    let response = light_headless_runtime::benchmark_patch_wire_outcome(result);
-    let response_bytes = serde_json::to_vec(&response).map_err(string_error)?.len();
-    Ok((revision, started.elapsed(), request_bytes, response_bytes))
+    });
+    let started = Instant::now();
+    let result = (|| {
+        let decoded_request =
+            serde_json::from_slice::<wire::PatchFixturesRequest>(&encoded_request)
+                .map_err(string_error)?;
+        diagnostics::mark(&mut observation, "request_decode", started);
+        let command =
+            light_headless_runtime::benchmark_patch_application_command(show_id, decoded_request)?;
+        diagnostics::mark(&mut observation, "application_mapping", started);
+        let envelope = ActionEnvelope {
+            context: ActionContext::operator(
+                Uuid::from_u128(1),
+                Uuid::from_u128(3),
+                ActionSource::Http,
+            )
+            .with_request_id(request_id)
+            .with_expected_revision(expected_revision),
+            command,
+        };
+        diagnostics::mark(&mut observation, "envelope_setup", started);
+        let result = service
+            .handle(envelope, ports)
+            .map_err(|error| error.message)?;
+        diagnostics::mark(&mut observation, "service_handle_inclusive", started);
+        let revision = result.change.patch_revision.value();
+        let response = light_headless_runtime::benchmark_patch_wire_outcome(result);
+        diagnostics::mark(
+            &mut observation,
+            "revision_and_response_projection",
+            started,
+        );
+        let response_bytes = serde_json::to_vec(&response).map_err(string_error)?.len();
+        Ok((revision, response_bytes))
+    })();
+    let total = started.elapsed();
+    if let (Some(collector), Some(observation)) = (observations.as_mut(), observation) {
+        collector.record(observation, total, request_bytes, &result, &ports.phases);
+        if result.is_err() {
+            collector.emit_failure();
+        }
+    }
+    result.map(|(revision, response_bytes)| (revision, total, request_bytes, response_bytes))
 }
 
 fn wire_request(
