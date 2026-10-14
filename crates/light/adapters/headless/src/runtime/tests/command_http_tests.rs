@@ -43,3 +43,6 @@ mod tl740_media_color_batch;
 mod position_intent_authoring;
 
 mod release_command_regressions;
+
+#[path = "preload_layout_authority_tests.rs"]
+mod preload_layout_authority_tests;

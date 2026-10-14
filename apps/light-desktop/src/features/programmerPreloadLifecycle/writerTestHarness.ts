@@ -150,7 +150,11 @@ export function goOutcome(request: ProgrammerPreloadLifecycleRequest) {
 
 export function lifecycleWriterHarness(
 	applyAction?: ProgrammerPreloadLifecycleTransport["applyAction"],
-	options: { blind?: boolean; active?: boolean | null } = {},
+	options: {
+		blind?: boolean;
+		active?: boolean | null;
+		showRevision?: number | null;
+	} = {},
 ) {
 	const localStore = new ProgrammerPreloadLifecycleStore();
 	localStore.reset(SHOW_ID, SESSION_ID, DESK_ID, "session-a");
@@ -205,6 +209,8 @@ export function lifecycleWriterHarness(
 		});
 	const showStore = new ShowObjectsStore();
 	showStore.reset(SHOW_ID, "session-a");
+	if (options.showRevision !== null)
+		showStore.installShowRevision(SHOW_ID, options.showRevision ?? 4);
 	const runtimeStore = new PlaybackRuntimeStore();
 	runtimeStore.reset(SHOW_ID, DESK_ID, "session-a");
 	runtimeStore.installSnapshot(playbackSnapshot([], 30), []);

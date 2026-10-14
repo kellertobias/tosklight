@@ -130,7 +130,12 @@ export function captureLifecycleAuthority(
 			expectedValuesRevision: values.revision,
 			expectedQueueRevision: queue.revision,
 			expectedSelectionRevision: selectionRevision,
-			action: requestAction(action, options.scope.showId, runtime),
+			action: requestAction(
+				action,
+				options.scope.showId,
+				show.showRevision,
+				runtime,
+			),
 		},
 	};
 }
@@ -223,6 +228,7 @@ function readyRuntime(
 function requestAction(
 	action: ProgrammerPreloadLifecycleMutation,
 	showId: string,
+	showRevision: number | null,
 	runtime: { showRevision: number | null; eventSequence: number | null } | null,
 ): ProgrammerPreloadLifecycleAction {
 	if (typeof action === "object") {
@@ -241,12 +247,15 @@ function requestAction(
 		return { type: action.type, index: action.index };
 	}
 	if (action !== "go") return { type: action };
+	// A layout receipt can advance portable authority; a later compiled edit can advance runtime.
+	if (showRevision === null)
+		throw new Error("Authoritative portable Show revision is unavailable");
 	if (runtime?.showRevision == null || runtime.eventSequence == null)
 		throw new Error("Authoritative Playback runtime is unavailable");
 	return {
 		type: "go",
 		showId,
-		expectedShowRevision: runtime.showRevision,
+		expectedShowRevision: Math.max(showRevision, runtime.showRevision),
 		expectedPlaybackEventSequence: runtime.eventSequence,
 	};
 }
