@@ -40,6 +40,13 @@ function beginFixtureEdit(
 	axis?: VectorAxis,
 ) {
 	const { ui } = controller;
+	if (kind === "mode") {
+		beginReplacementReview(controller, fixture);
+		return;
+	}
+	ui.replacementReviewRequest.current++;
+	ui.setReplacementReviewLoading(false);
+	ui.setReplacementReviewSource(null);
 	ui.setEditError("");
 	ui.setReplacingFixture(false);
 	ui.setReplacementQuery("");
@@ -115,6 +122,53 @@ function beginFixtureEdit(
 		kind === "location" || kind === "rotation" ? (axis ?? null) : null,
 	);
 	ui.setEdit(kind);
+}
+
+function beginReplacementReview(
+	controller: PatchController,
+	requestedFixture: PatchedFixture,
+) {
+	const fixtureId = requestedFixture.fixture_id;
+	const { ui } = controller;
+	const request = ++ui.replacementReviewRequest.current;
+	ui.setEditError("");
+	ui.setReplacingFixture(false);
+	ui.setReplacementQuery("");
+	ui.setReplacementHeads({});
+	ui.setReplacementRevision(null);
+	// Keep only a hidden placeholder so removal during the read can display its error.
+	// No review controls or consent are exposed until the fresh snapshot succeeds.
+	ui.setReplacementReviewSource(requestedFixture);
+	ui.setReplacementReviewLoading(true);
+	ui.setSelectedFixture(fixtureId);
+	ui.setEditAxis(null);
+	ui.setEdit("mode");
+	void controller
+		.refreshReplacementReviewAuthority()
+		.then((snapshot) => {
+			if (request !== ui.replacementReviewRequest.current) return;
+			const fixture = snapshot.fixtures.find((f) => f.fixture_id === fixtureId);
+			if (!fixture)
+				throw new Error(
+					"This fixture is no longer in the show. Cancel and review the current Patch.",
+				);
+			ui.setReplacementReviewSource(fixture);
+			ui.setReplacementRevision({
+				show: snapshot.showRevision,
+				patch: snapshot.patchRevision,
+			});
+			selectFixtureFamily(controller, fixture);
+		})
+		.catch((reason: unknown) => {
+			if (request !== ui.replacementReviewRequest.current) return;
+			ui.setEditError(
+				`Could not load replacement review: ${reason instanceof Error ? reason.message : String(reason)}. Cancel and reopen the fixture editor.`,
+			);
+		})
+		.finally(() => {
+			if (request === ui.replacementReviewRequest.current)
+				ui.setReplacementReviewLoading(false);
+		});
 }
 
 function masterChoice(fixture: PatchedFixture) {
@@ -247,6 +301,10 @@ export async function applyEdit(
 }
 
 export function cancelEdit(controller: PatchController) {
+	controller.ui.replacementReviewRequest.current++;
+	controller.ui.setReplacementReviewLoading(false);
+	controller.ui.setReplacementReviewSource(null);
+	controller.ui.setReplacementRevision(null);
 	controller.ui.setEdit(null);
 	controller.ui.setEditingSplit(null);
 	controller.ui.setEditError("");

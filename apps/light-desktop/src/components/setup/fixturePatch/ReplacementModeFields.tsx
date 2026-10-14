@@ -29,18 +29,23 @@ export function ReplacementEditDialog({
 				.length
 		: 0;
 	const definition = controller.data.definition;
-	const unavailable = pending
-		? "Validating and applying the replacement. Wait for the authoritative result."
-		: controller.data.modeEditUnavailable
-			? controller.data.modeEditUnavailable
-			: unresolved
-				? `Resolve ${unresolved} correspondence${unresolved === 1 ? "" : "s"} before Set.`
-				: controller.ui.replacingFixture &&
-						(!controller.ui.replacementRevision ||
-							!definition?.profile_snapshot ||
-							!definition.mode_id)
-					? "Reopen the fixture editor to obtain a current product, mode and show revision."
-					: null;
+	const reviewing = controller.ui.replacementReviewLoading;
+	const unavailable = reviewing
+		? "Loading the current fixture and replacement review…"
+		: !controller.ui.replacementRevision
+			? "Replacement review is unavailable. Cancel and reopen the fixture editor."
+			: pending
+				? "Validating and applying the replacement. Wait for the authoritative result."
+				: controller.data.modeEditUnavailable
+					? controller.data.modeEditUnavailable
+					: unresolved
+						? `Resolve ${unresolved} correspondence${unresolved === 1 ? "" : "s"} before Set.`
+						: controller.ui.replacingFixture &&
+								(!controller.ui.replacementRevision ||
+									!definition?.profile_snapshot ||
+									!definition.mode_id)
+							? "Reopen the fixture editor to obtain a current product, mode and show revision."
+							: null;
 	const error = controller.ui.editError;
 	return (
 		<ModalRegistration onClose={close}>
@@ -63,7 +68,9 @@ export function ReplacementEditDialog({
 					</div>
 					<div className="import-workflow__body">
 						{error && <ReplacementError error={error} />}
-						<ReplacementModeFields />
+						{!reviewing && controller.ui.replacementRevision && (
+							<ReplacementModeFields />
+						)}
 					</div>
 					<div className="import-workflow__footer">
 						{unavailable && <p role="status">{unavailable}</p>}

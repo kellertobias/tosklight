@@ -1,6 +1,7 @@
 import {
 	createContext,
 	type PropsWithChildren,
+	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
@@ -240,6 +241,33 @@ export function PatchViewProvider({
 			<PatchContext.Provider value={value}>{children}</PatchContext.Provider>
 		</PatchSessionContext.Provider>
 	);
+}
+
+/** Refresh before operator consent, never after it or as a replay of a rejected mutation. */
+export function useReplacementReviewAuthority() {
+	const session = useContext(PatchSessionContext);
+	return useCallback(async (): Promise<
+		PatchStoreSnapshot & { showRevision: number; patchRevision: number }
+	> => {
+		if (!session) throw new Error("The active Patch authority is unavailable");
+		const showId = session.store.getSnapshot().showId;
+		await session.refreshReplacementReview();
+		const snapshot = session.store.getSnapshot();
+		if (
+			snapshot.status !== "ready" ||
+			snapshot.showId !== showId ||
+			snapshot.showRevision == null ||
+			snapshot.patchRevision == null
+		)
+			throw new Error(
+				"The active Patch authority changed. Reopen the fixture editor.",
+			);
+		return {
+			...snapshot,
+			showRevision: snapshot.showRevision,
+			patchRevision: snapshot.patchRevision,
+		};
+	}, [session]);
 }
 
 export function usePatch(): PatchContextValue {

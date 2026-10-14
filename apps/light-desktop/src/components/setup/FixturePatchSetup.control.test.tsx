@@ -110,6 +110,7 @@ vi.mock("../../features/patch/PatchContext", async (importOriginal) => {
 	return {
 		...actual,
 		PatchViewProvider: ({ children }: { children: ReactNode }) => children,
+        useReplacementReviewAuthority: () => async () => ({status: "ready", showId:"show", showRevision:1, patchRevision:1, cursor:1, fixtures:server.patch.fixtures, pendingFixtureIds:new Set<string>(),error:null}),
 		usePatch: () => ({
 			status: "ready",
 			showId: "show",
@@ -410,6 +411,10 @@ function expectContextEditWithoutSetArm(options?: {
 	expect(programming.actions.replace).not.toHaveBeenCalled();
 	if (!options?.allowPatchSelection)
 		expect(patchFeature.selectPatchInstance).not.toHaveBeenCalled();
+}
+
+async function readyModeReview() {
+ await waitFor(() => expect(screen.queryByText("Loading the current fixture and replacement review…")).not.toBeInTheDocument());
 }
 
 function rightClick(target: HTMLElement) {
@@ -1162,6 +1167,7 @@ describe("installed light-source appearance", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: /Fixture and mode 17:/ }),
 		);
+        await readyModeReview();
 		const dialog = screen
 			.getByRole("heading", { name: "Set fixture mode" })
 			.closest("section") as HTMLElement;
@@ -3482,6 +3488,7 @@ it("requires explicit cross-family head correspondence and submits one sparse re
 	render(<FixturePatchSetup />);
 	const row = screen.getByRole("row", {name:/17 Split Wash 17/}) as HTMLTableRowElement;
 	fireEvent.click(within(row.cells[3]).getByRole("button"));
+ await readyModeReview();
 	fireEvent.click(screen.getByRole("button", {name:"Replace fixture with another product"}));
 	const picker = screen.getByRole("button", {name:/Acme.*Split Wash.*Default.*4ch/});
 	fireEvent.click(picker);
@@ -3508,12 +3515,13 @@ it("requires explicit cross-family head correspondence and submits one sparse re
 });
 
 
-it("cancels cross-family replacement without sending any patch mutation", () => {
+it("cancels cross-family replacement without sending any patch mutation", async () => {
 	const fixture = splitFixture(); server.fixtureProfiles = [fixture.definition.profile_snapshot!];
 	server.patch.fixtures = [fixture]; state.patchSetArmed = true;
 	render(<FixturePatchSetup />);
 	const row = screen.getByRole("row", {name:/17 Split Wash 17/}) as HTMLTableRowElement;
 	fireEvent.click(within(row.cells[3]).getByRole("button"));
+ await readyModeReview();
 	fireEvent.click(screen.getByRole("button", {name:"Replace fixture with another product"}));
 	fireEvent.click(screen.getByRole("button", {name:"Cancel fixture mode"}));
 	expect(document.querySelector(".patch-edit-modal")).toBeNull();
@@ -3553,22 +3561,23 @@ describe("immutable imported mode editor", () => {
 		fixture.split_patches = [{ split: 1, universe: 1, address: 101 }];
 		return fixture;
 	}
-	function openMode() {
+	async function openMode() {
 		state.patchSetArmed = true;
 		render(<FixturePatchSetup />);
 		fireEvent.click(
 			screen.getByRole("button", { name: /Fixture and mode 17:/ }),
 		);
+        await readyModeReview();
 		return screen
 			.getByRole("heading", { name: "Set fixture mode" })
 			.closest("section") as HTMLElement;
 	}
-	it("opens exact embedded modes absent from global library and cancels without authoring", () => {
+	it("opens exact embedded modes absent from global library and cancels without authoring", async () => {
 		const fixture = importedFixture();
 		server.patch.fixtures = [fixture];
 		server.fixtureProfiles = [];
 		const before = structuredClone(server.patch.fixtures);
-		const dialog = openMode();
+		const dialog = await openMode();
 		expect(within(dialog).getByText("Choose fixture mode")).toBeInTheDocument();
 		const picker = within(dialog).getByRole("button", { name: /^Mode 2 31CH/ });
 		fireEvent.click(picker);
@@ -3592,7 +3601,7 @@ describe("immutable imported mode editor", () => {
 		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
 		expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
 	});
-	it("preserves old profile revision and current mode while offering explicit global replacement products", () => {
+	it("preserves old profile revision and current mode while offering explicit global replacement products", async () => {
 		const fixture = importedFixture();
 		const profile = fixture.definition.profile_snapshot;
 		if (!profile) throw new Error("source snapshot missing");
@@ -3614,7 +3623,7 @@ describe("immutable imported mode editor", () => {
 			fixtures: server.patch.fixtures,
 			profiles: server.fixtureProfiles,
 		});
-		const dialog = openMode();
+		const dialog = await openMode();
 		expect(
 			within(dialog).getByRole("button", { name: /^Mode 2 31CH/ }),
 		).toBeInTheDocument();
@@ -3655,6 +3664,7 @@ describe("immutable imported mode editor", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: /Fixture and mode 17:/ }),
 		);
+        await readyModeReview();
 		const reopened = screen
 			.getByRole("heading", { name: "Set fixture mode" })
 			.closest("section") as HTMLElement;
@@ -3674,12 +3684,12 @@ describe("immutable imported mode editor", () => {
 			profile_snapshot: { id: profile.id, revision: 2 },
 		});
 	});
-	it("shows actionable unavailable metadata and disables both Set actions", () => {
+	it("shows actionable unavailable metadata and disables both Set actions", async () => {
 		const fixture = importedFixture();
 		delete fixture.definition.profile_snapshot;
 		server.patch.fixtures = [fixture];
 		server.fixtureProfiles = [];
-		const dialog = openMode();
+		const dialog = await openMode();
 		expect(within(dialog).getByRole("alert")).toHaveTextContent(
 			/embedded.*profile.*mode.*unavailable/i,
 		);

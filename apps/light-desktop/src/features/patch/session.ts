@@ -113,6 +113,16 @@ export class PatchSession {
 		return this.repair();
 	}
 
+	/** A review may not inherit a read started before the operator asked to review it. */
+	async refreshReplacementReview(): Promise<void> {
+		const lifecycle = this.lifecycle;
+		const previous = this.repairPromise;
+		if (previous) await previous.catch(() => undefined);
+		this.requireActiveLifecycle(lifecycle);
+		await this.repair();
+		this.requireActiveLifecycle(lifecycle);
+	}
+
 	patchFixtures(
 		candidates: readonly PatchFixtureCandidate[],
 		removeFixtureIds: readonly string[] = [],

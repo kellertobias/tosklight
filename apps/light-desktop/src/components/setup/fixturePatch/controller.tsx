@@ -11,7 +11,11 @@ import {
 import type { FixtureDefinition, PatchedFixture } from "../../../api/types";
 import type { PatchColumn } from "../../../types";
 import { useFixtureLibrary } from "../../../features/fixtureLibrary/FixtureLibraryContext";
-import { usePatch, usePatchView } from "../../../features/patch/PatchContext";
+import {
+	usePatch,
+	usePatchView,
+	useReplacementReviewAuthority,
+} from "../../../features/patch/PatchContext";
 import { useStageLayoutActions } from "../../../features/stageLayout/StageLayoutActions";
 import { useStagePositions3d } from "../../../features/stageLayout/StageLayoutState";
 import { useApp } from "../../../state/AppContext";
@@ -202,6 +206,16 @@ function usePatchEditState() {
 	const [replacingFixture, setReplacingFixture] = useState(false);
 	const [replacementQuery, setReplacementQuery] = useState("");
 	const [replacementHeads, setReplacementHeads] = useState<Record<string, string>>({});
+	const replacementReviewRequest = useRef(0);
+	const [replacementReviewLoading, setReplacementReviewLoading] = useState(false);
+	const [replacementReviewSource, setReplacementReviewSource] =
+		useState<PatchedFixture | null>(null);
+	useEffect(
+		() => () => {
+			replacementReviewRequest.current++;
+		},
+		[],
+	);
 	const [replacementRevision, setReplacementRevision] = useState<{show: number; patch: number} | null>(null);
 	const [editSplitDrafts, setEditSplitDrafts] = useState<
 		Record<number, string>
@@ -241,6 +255,11 @@ function usePatchEditState() {
 		replacementQuery, setReplacementQuery,
 		replacementHeads, setReplacementHeads,
 		replacementRevision, setReplacementRevision,
+		replacementReviewRequest,
+		replacementReviewLoading,
+		setReplacementReviewLoading,
+		replacementReviewSource,
+		setReplacementReviewSource,
 		editSplitDrafts,
 		setEditSplitDrafts,
 		editError,
@@ -364,7 +383,9 @@ function usePatchDerivedState(
 		new Map(layers.map((layer) => [layer.id, layer.order])),
 	);
 	const selected =
-		all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null;
+		ui.edit === "mode" && ui.replacementReviewSource
+			? ui.replacementReviewSource
+			: (all.find((fixture) => fixture.fixture_id === ui.selectedFixture) ?? null);
 	const { availableDefinitions, modeEditUnavailable } = useModeEditDefinitions(
 		server,
 		selected,
@@ -467,6 +488,7 @@ function filterDefinitions(
 function useFixturePatchController(props: FixturePatchSetupProps) {
 	const server = useFixtureLibrary();
 	const patch = usePatch();
+	const refreshReplacementReviewAuthority = useReplacementReviewAuthority();
 	usePatchView(props.active ?? true);
 	const selection = usePatchSelection(props.active ?? true);
 	const stagePositions3d = useStagePositions3d();
@@ -486,6 +508,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 	return {
 		server,
 		patch,
+		refreshReplacementReviewAuthority,
 		selection,
 		stagePositions3d,
 		stageActions,
