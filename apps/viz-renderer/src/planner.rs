@@ -71,8 +71,26 @@ pub const EDITOR_PATH_ENV: &str = "TOSKLIGHT_VIZ_EDITOR";
 
 /// The editor that shipped beside this binary, or the one installed on this machine.
 fn editor_binary() -> Result<PathBuf, String> {
-    if let Some(named) = std::env::var_os(EDITOR_PATH_ENV).filter(|value| !value.is_empty()) {
-        let path = PathBuf::from(named);
+    resolve_editor(
+        std::env::var_os(EDITOR_PATH_ENV).map(PathBuf::from),
+        || {
+            std::env::current_exe()
+                .map_err(|error| format!("could not locate the visualizer binary: {error}"))
+        },
+        installed_editor,
+        cfg!(target_os = "macos"),
+        cfg!(windows),
+    )
+}
+
+fn resolve_editor(
+    named: Option<PathBuf>,
+    executable: impl FnOnce() -> Result<PathBuf, String>,
+    installed: impl FnOnce() -> Option<PathBuf>,
+    macos: bool,
+    windows: bool,
+) -> Result<PathBuf, String> {
+    if let Some(path) = named.filter(|path| !path.as_os_str().is_empty()) {
         if path.is_file() {
             return Ok(path);
         }
@@ -81,12 +99,17 @@ fn editor_binary() -> Result<PathBuf, String> {
             path.display()
         ));
     }
-    let executable = std::env::current_exe()
-        .map_err(|error| format!("could not locate the visualizer binary: {error}"))?;
+    let executable = executable()?;
     let directory = executable
         .parent()
         .ok_or_else(|| "the visualizer binary has no directory".to_owned())?;
-    let name = if cfg!(windows) {
+    if macos {
+        let branded = directory.join("ToskLight Architect");
+        if branded.is_file() {
+            return Ok(branded);
+        }
+    }
+    let name = if windows {
         "viz-editor.exe"
     } else {
         "viz-editor"
@@ -95,7 +118,7 @@ fn editor_binary() -> Result<PathBuf, String> {
     if beside.is_file() {
         return Ok(beside);
     }
-    if let Some(installed) = installed_editor() {
+    if let Some(installed) = installed() {
         return Ok(installed);
     }
     Err(format!(
@@ -144,6 +167,134 @@ fn free_port() -> Result<u16, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct EditorFiles(PathBuf);
+    impl EditorFiles {
+        fn new() -> Self {
+            let temporary = std::env::var_os("LIGHT_TMP_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    std::env::var_os("LIGHT_ARTIFACTS_DIR")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(|| {
+                            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../.artifacts")
+                        })
+                        .join("tmp")
+                });
+            let root = temporary.join(format!("tl783-editor-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            Self(root)
+        }
+        fn file(&self, name: &str) -> PathBuf {
+            let path = self.0.join(name);
+            std::fs::write(&path, b"fixture executable; never launched").unwrap();
+            path
+        }
+        fn resolve(
+            &self,
+            macos: bool,
+            windows: bool,
+            installed: Option<PathBuf>,
+        ) -> Result<PathBuf, String> {
+            resolve_editor(
+                None,
+                || Ok(self.0.join("viz-renderer")),
+                || installed,
+                macos,
+                windows,
+            )
+        }
+    }
+    impl Drop for EditorFiles {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn editor_resolution_branded_mac_sibling_precedes_old_installation() {
+        let files = EditorFiles::new();
+        let branded = files.file("ToskLight Architect");
+        let installed = files.file("old-installed-editor");
+        assert_eq!(
+            files.resolve(true, false, Some(installed)).unwrap(),
+            branded
+        );
+    }
+
+    #[test]
+    fn editor_resolution_current_brand_precedes_generic_mac_sibling() {
+        let files = EditorFiles::new();
+        let branded = files.file("ToskLight Architect");
+        files.file("viz-editor");
+        assert_eq!(files.resolve(true, false, None).unwrap(), branded);
+    }
+
+    #[test]
+    fn editor_resolution_generic_platforms_and_installed_fallback_remain() {
+        let files = EditorFiles::new();
+        let generic = files.file("viz-editor");
+        let windows = files.file("viz-editor.exe");
+        assert_eq!(files.resolve(true, false, None).unwrap(), generic);
+        assert_eq!(files.resolve(false, false, None).unwrap(), generic);
+        assert_eq!(files.resolve(false, true, None).unwrap(), windows);
+        std::fs::remove_file(generic).unwrap();
+        let old = files.file("old-installed-editor");
+        assert_eq!(files.resolve(true, false, Some(old.clone())).unwrap(), old);
+    }
+
+    #[test]
+    fn editor_resolution_missing_all_is_actionable() {
+        let files = EditorFiles::new();
+        assert!(
+            files
+                .resolve(true, false, None)
+                .unwrap_err()
+                .contains("npm run build:viz-editor")
+        );
+    }
+
+    #[test]
+    fn editor_resolution_non_mac_platform_ignores_mac_brand() {
+        let files = EditorFiles::new();
+        files.file("ToskLight Architect");
+        let generic = files.file("viz-editor");
+        let windows = files.file("viz-editor.exe");
+        assert_eq!(files.resolve(false, false, None).unwrap(), generic);
+        assert_eq!(files.resolve(false, true, None).unwrap(), windows);
+    }
+
+    #[test]
+    fn editor_resolution_explicit_override_is_authoritative() {
+        let files = EditorFiles::new();
+        let named = files.file("override");
+        let resolved = resolve_editor(
+            Some(named.clone()),
+            || panic!("override must bypass discovery"),
+            || panic!("override must bypass installed fallback"),
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(resolved, named);
+    }
+
+    #[test]
+    fn editor_resolution_invalid_override_refuses_without_fallback() {
+        let files = EditorFiles::new();
+        let missing = files.0.join("missing-override");
+        files.file("ToskLight Architect");
+        let error = resolve_editor(
+            Some(missing),
+            || panic!("invalid override cannot discover"),
+            || panic!("invalid override cannot fall back"),
+            true,
+            false,
+        )
+        .unwrap_err();
+        assert!(error.contains(EDITOR_PATH_ENV));
+        assert!(error.contains("not a file"));
+    }
 
     #[test]
     fn the_editor_is_looked_for_beside_the_visualizer() {
