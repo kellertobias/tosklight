@@ -110,7 +110,7 @@ pub(super) fn position_takeover_available(
                 }
         )
     });
-    if !angles {
+    if !angles || absolute_position_pair(edits).is_some() {
         return true;
     }
     position_members_available(intent, environment, active, groups, true)

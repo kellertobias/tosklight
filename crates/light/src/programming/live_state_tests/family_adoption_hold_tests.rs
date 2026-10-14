@@ -420,3 +420,76 @@ fn authored_angles_do_not_require_a_destination_pose() {
         assert_eq!(desk.value(fixture, false), angles(721., -90.));
     }
 }
+
+#[test]
+fn full_absolute_position_pair_alone_can_replace_an_ambiguous_target_in_both_lanes() {
+    for preload in [false, true] {
+        let mut desk = GestureDesk::new(preload);
+        let fixture = desk.setup.fixtures[0];
+        desk.setup.ports.environment.family_contexts.insert(
+            fixture,
+            crate::ProgrammingFamilyContext {
+                position_adoption_attempted: true,
+                ..Default::default()
+            },
+        );
+        let before = desk.setup.registry.get(desk.setup.session).unwrap();
+        for (request, operation) in [
+            ("partial", ScalarEdit::Set(ScalarIntent::Value(45.))),
+            ("relative", ScalarEdit::Relative(45.)),
+        ] {
+            let intent = desk.intent(false, operation, request);
+            desk.apply(request, intent).unwrap();
+            let after = desk.setup.registry.get(desk.setup.session).unwrap();
+            assert_eq!(after.values, before.values);
+            assert_eq!(after.preload_pending, before.preload_pending);
+        }
+        let mut activate = desk.intent(false, ScalarEdit::Relative(0.), "activate");
+        activate.operation =
+            ProgrammingValueOperation::ComponentEdits(vec![ComponentEdit::ActivateAngles]);
+        desk.apply("activate", activate).unwrap();
+        let after = desk.setup.registry.get(desk.setup.session).unwrap();
+        assert_eq!(after.values, before.values);
+        assert_eq!(after.preload_pending, before.preload_pending);
+        let mut absolute =
+            desk.intent(false, ScalarEdit::Set(ScalarIntent::Value(45.)), "absolute");
+        absolute.operation = ProgrammingValueOperation::ComponentEdits(vec![
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Pan,
+                operation: ScalarEdit::Set(ScalarIntent::Value(45.)),
+            },
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Tilt,
+                operation: ScalarEdit::Set(ScalarIntent::Value(30.)),
+            },
+        ]);
+        desk.apply("absolute", absolute).unwrap();
+        assert_eq!(desk.value(fixture, false), angles(45., 30.));
+    }
+}
+
+#[test]
+fn complete_same_pose_pair_detaches_target_in_normal_and_preload() {
+    for preload in [false, true] {
+        let mut desk = GestureDesk::new(preload);
+        let fixture = desk.setup.fixtures[0];
+        desk.pose(fixture, 45., 30.);
+        let mut intent = desk.intent(
+            false,
+            ScalarEdit::Set(ScalarIntent::Value(45.)),
+            "same-pose",
+        );
+        intent.operation = ProgrammingValueOperation::ComponentEdits(vec![
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Pan,
+                operation: ScalarEdit::Set(ScalarIntent::Value(45.)),
+            },
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Tilt,
+                operation: ScalarEdit::Set(ScalarIntent::Value(30.)),
+            },
+        ]);
+        desk.apply("same-pose", intent).unwrap();
+        assert_eq!(desk.value(fixture, false), angles(45., 30.));
+    }
+}

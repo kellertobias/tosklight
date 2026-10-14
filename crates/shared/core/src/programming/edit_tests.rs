@@ -581,3 +581,65 @@ fn a_native_set_into_another_function_adopts_the_complete_recipe() {
         );
     }
 }
+
+#[test]
+fn absolute_position_pair_replaces_target_without_a_common_previous_pose() {
+    let target = AttributeValue::Position(Arc::new(PositionIntent::target(
+        TargetReference::Origin,
+        [1., 2., 3.],
+    )));
+    for (pan, tilt) in [(45., 30.), (-270., -30.), (720., 30.)] {
+        let edits = [
+            scalar(ProgrammingComponent::Pan, pan),
+            scalar(ProgrammingComponent::Tilt, tilt),
+        ];
+        assert_eq!(
+            edit_family(&target, &edits, &Default::default()).unwrap(),
+            AttributeValue::Position(Arc::new(PositionIntent::angles(pan, tilt)))
+        );
+    }
+    for edits in [
+        vec![scalar(ProgrammingComponent::Pan, 45.)],
+        vec![ComponentEdit::ActivateAngles],
+        vec![
+            scalar(ProgrammingComponent::Pan, 45.),
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Tilt,
+                operation: ScalarEdit::Relative(30.),
+            },
+        ],
+    ] {
+        assert!(edit_family(&target, &edits, &Default::default()).is_err());
+    }
+}
+
+#[test]
+fn full_absolute_pair_detaches_target_even_when_it_matches_the_common_pose() {
+    let target = AttributeValue::Position(Arc::new(PositionIntent::target(
+        TargetReference::Origin,
+        [0.; 3],
+    )));
+    let context = FamilyEditContext {
+        solved_angles: Some(JointAngles {
+            pan_degrees: 45.,
+            tilt_degrees: 30.,
+        }),
+        ..Default::default()
+    };
+    assert_eq!(
+        edit_family(&target, &[scalar(ProgrammingComponent::Pan, 45.)], &context).unwrap(),
+        target
+    );
+    assert_eq!(
+        edit_family(
+            &target,
+            &[
+                scalar(ProgrammingComponent::Pan, 45.),
+                scalar(ProgrammingComponent::Tilt, 30.)
+            ],
+            &context
+        )
+        .unwrap(),
+        AttributeValue::Position(Arc::new(PositionIntent::angles(45., 30.)))
+    );
+}

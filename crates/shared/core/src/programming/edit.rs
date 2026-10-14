@@ -347,6 +347,32 @@ pub fn validate_component_edits(edits: &[ComponentEdit]) -> Result<(), IntentErr
         "coordinate replacement and component edits are exclusive",
     )
 }
+/// A complete literal angle replacement needs no previous pose, even when copies disagree.
+/// Partial, relative, mixed and reference edits still require ordinary captured adoption.
+pub fn absolute_position_pair(edits: &[ComponentEdit]) -> Option<JointAngles> {
+    if edits.len() != 2 {
+        return None;
+    }
+    let (mut pan, mut tilt) = (None, None);
+    for edit in edits {
+        match edit {
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Pan,
+                operation: ScalarEdit::Set(ScalarIntent::Value(value)),
+            } => pan = Some(*value),
+            ComponentEdit::Scalar {
+                component: ProgrammingComponent::Tilt,
+                operation: ScalarEdit::Set(ScalarIntent::Value(value)),
+            } => tilt = Some(*value),
+            _ => return None,
+        }
+    }
+    Some(JointAngles {
+        pan_degrees: pan?,
+        tilt_degrees: tilt?,
+    })
+}
+
 fn edit_position(
     base: &PositionIntent,
     edits: &[ComponentEdit],
@@ -364,9 +390,11 @@ fn edit_position(
         )
     }) && matches!(value, PositionIntent::Target { .. })
     {
-        let pose = context.solved_angles.ok_or_else(|| {
-            IntentError("Angle takeover requires the current solved unwrapped pose".into())
-        })?;
+        let pose = absolute_position_pair(edits)
+            .or(context.solved_angles)
+            .ok_or_else(|| {
+                IntentError("Angle takeover requires the current solved unwrapped pose".into())
+            })?;
         value = PositionIntent::angles(pose.pan_degrees, pose.tilt_degrees);
     }
     // An explicit reference activation seeds Target once; scalar offsets never invent a target.
@@ -414,6 +442,7 @@ fn edit_position(
     }
     value.validate()?;
     if matches!(base, PositionIntent::Target { .. })
+        && absolute_position_pair(edits).is_none()
         && !edits
             .iter()
             .any(|edit| matches!(edit, ComponentEdit::ActivateAngles))

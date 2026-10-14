@@ -318,3 +318,296 @@ async fn osc_family_writes_parse_like_the_command_line() {
     assert!(osc_family_values("red", &[]).is_err());
     assert!(osc_family_values("red", &[OscArgument::Float(140.)]).is_err());
 }
+
+#[tokio::test]
+async fn absolute_position_tuple_replaces_canonical_dls_target_with_distinct_copy_poses() {
+    use light_core::programming::TargetReference;
+    use light_fixture::{FixtureLocation, MultiPatchInstance};
+    for preload in [false, true] {
+        let clock = Arc::new(light_core::ManualClock::new(
+            chrono::DateTime::from_timestamp_millis(1_000_000).unwrap(),
+        ));
+        let scenario = CommandHttpScenario::from_state(super::test_state_with_family_adapters(
+            light_programmer::ProgrammerRegistry::with_clock(clock.clone()),
+            Some(clock.clone()),
+            light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT,
+        ))
+        .await;
+        let (point_id, mover, _) =
+            super::aim_point_tests::install_semantic_aim_rig(&scenario.state);
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../../assets/fixture-library/robe--robin-dls-profile.toskfixture");
+        let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
+        let mode = profile.modes.iter().find(|m| m.name == "Mode 3").unwrap();
+        let mut lamp = patched(&profile, mover, 1);
+        lamp.definition = profile.resolved_definition(mode.id).unwrap();
+        lamp.location = FixtureLocation {
+            x: -1000,
+            y: 0,
+            z: 3000,
+        };
+        lamp.multipatch = vec![MultiPatchInstance {
+            id: Uuid::new_v4(),
+            universe: Some(1),
+            address: Some(51),
+            location: FixtureLocation {
+                x: 1000,
+                y: 0,
+                z: 3000,
+            },
+            ..Default::default()
+        }];
+        let mut point = scenario
+            .state
+            .output
+            .snapshot()
+            .fixtures
+            .iter()
+            .find(|f| f.fixture_id == point_id)
+            .unwrap()
+            .clone();
+        point.location = FixtureLocation {
+            x: 0,
+            y: 1000,
+            z: 0,
+        };
+        scenario
+            .state
+            .output
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![point, lamp].into(),
+                revision: 2,
+                ..Default::default()
+            })
+            .unwrap();
+        let target = AttributeValue::Position(Arc::new(PositionIntent::target(
+            TargetReference::Point {
+                point_id: point_id.0,
+            },
+            [0.; 3],
+        )));
+        scenario.state.programming.set(
+            scenario.session.id,
+            mover,
+            ProgrammingOwner::Position.key(),
+            target.clone(),
+        );
+        let frame = scenario
+            .state
+            .output
+            .render_with_playback_events(
+                &scenario.state.active_show.output_projection(),
+                &scenario.state.playback.render_capability(),
+                Default::default(),
+            )
+            .unwrap();
+        scenario.state.output.render_frames_and_publish(
+            &frame,
+            light_wire::v2::visualization::VisualizationScope { show_id: None },
+        );
+        let source = scenario.state.output.latest_visualization_frame().unwrap();
+        let capture = super::super::position_readout::capture_position_readouts(
+            scenario.state.output.engine(),
+            &source,
+            &[mover],
+        );
+        // The real accepted Target commands both physical copies; no root-pose guess is valid.
+        let capture = capture.expect("accepted current-generation source");
+        assert_eq!(
+            capture.owners[0].readout.commands.as_ref().unwrap().len(),
+            2
+        );
+        assert!(
+            capture.owners[0].common_angles().is_none(),
+            "{:?}; programmer={:?}",
+            capture.owners[0],
+            fixture_value(&scenario, mover, ProgrammingOwner::Position)
+        );
+        if preload {
+            scenario
+                .state
+                .programming
+                .set_modes(scenario.session.id, Some(true), None, None, None);
+            scenario
+                .state
+                .programming
+                .arm_preload(scenario.session.id, true);
+        }
+        accepted(
+            &scenario,
+            "absolute-copy-angles",
+            "FIXTURE 1 AT POSITION 45 DIV 30",
+        )
+        .await;
+        let state = scenario.state.programming.get(scenario.session.id).unwrap();
+        let values = if preload {
+            &state.preload_pending
+        } else {
+            state.values.as_ref()
+        };
+        let position = values
+            .iter()
+            .find(|v| v.fixture_id == mover && v.attribute == ProgrammingOwner::Position.key())
+            .unwrap();
+        assert_eq!(
+            position.value,
+            AttributeValue::Position(Arc::new(PositionIntent::angles(45., 30.)))
+        );
+        if preload {
+            assert_eq!(
+                fixture_value(&scenario, mover, ProgrammingOwner::Position),
+                Some(target)
+            );
+        } else {
+            clock.advance_millis(3100);
+            let rendered = scenario
+                .state
+                .output
+                .render_with_playback_events(
+                    &scenario.state.active_show.output_projection(),
+                    &scenario.state.playback.render_capability(),
+                    Default::default(),
+                )
+                .unwrap();
+            let copies = rendered
+                .rendered
+                .physical
+                .instances
+                .iter()
+                .filter(|i| i.fixture_id == mover)
+                .collect::<Vec<_>>();
+            assert_eq!(copies.len(), 2);
+            for instance in copies {
+                assert_eq!(&instance.native_raw[..2], &[149, 155]);
+                let previous = frame
+                    .rendered
+                    .physical
+                    .instances
+                    .iter()
+                    .find(|i| i.instance_id == instance.instance_id)
+                    .unwrap();
+                assert_eq!(&instance.native_raw[2..], &previous.native_raw[2..]);
+            }
+            accepted(
+                &scenario,
+                "signed-copy-angles",
+                "FIXTURE 1 AT POSITION - - 270 DIV - - 30",
+            )
+            .await;
+            assert_eq!(
+                fixture_value(&scenario, mover, ProgrammingOwner::Position),
+                Some(AttributeValue::Position(Arc::new(PositionIntent::angles(
+                    -270., -30.
+                ))))
+            );
+        }
+        let _ = std::fs::remove_dir_all(&scenario.data_dir);
+    }
+}
+
+#[tokio::test]
+async fn complete_typed_pair_matching_captured_copy_pose_detaches_target() {
+    use light_core::programming::TargetReference;
+    use light_fixture::{FixtureLocation, MultiPatchInstance};
+    let clock = Arc::new(light_core::ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1_000_000).unwrap(),
+    ));
+    let scenario = CommandHttpScenario::from_state(super::test_state_with_family_adapters(
+        light_programmer::ProgrammerRegistry::with_clock(clock.clone()),
+        Some(clock.clone()),
+        light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT,
+    ))
+    .await;
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../../assets/fixture-library/robe--robin-dls-profile.toskfixture");
+    let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
+    let mode = profile.modes.iter().find(|m| m.name == "Mode 3").unwrap();
+    let mover = FixtureId::new();
+    let mut lamp = patched(&profile, mover, 1);
+    lamp.definition = profile.resolved_definition(mode.id).unwrap();
+    lamp.location = FixtureLocation {
+        x: 0,
+        y: 0,
+        z: 3000,
+    };
+    lamp.multipatch = vec![MultiPatchInstance {
+        id: Uuid::new_v4(),
+        universe: Some(1),
+        address: Some(51),
+        location: lamp.location,
+        ..Default::default()
+    }];
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![lamp].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let target = AttributeValue::Position(Arc::new(PositionIntent::target(
+        TargetReference::Origin,
+        [0.; 3],
+    )));
+    scenario.state.programming.set(
+        scenario.session.id,
+        mover,
+        ProgrammingOwner::Position.key(),
+        target.clone(),
+    );
+    let frame = scenario
+        .state
+        .output
+        .render_with_playback_events(
+            &scenario.state.active_show.output_projection(),
+            &scenario.state.playback.render_capability(),
+            Default::default(),
+        )
+        .unwrap();
+    scenario.state.output.render_frames_and_publish(
+        &frame,
+        light_wire::v2::visualization::VisualizationScope { show_id: None },
+    );
+    let source = scenario.state.output.latest_visualization_frame().unwrap();
+    let capture = super::super::position_readout::capture_position_readouts(
+        scenario.state.output.engine(),
+        &source,
+        &[mover],
+    )
+    .unwrap();
+    assert_eq!(
+        capture.owners[0].readout.commands.as_ref().unwrap().len(),
+        2
+    );
+    let pose = capture.owners[0]
+        .common_angles()
+        .expect("equal physical copies provide a common accepted pose");
+    let signed = |value: f32| {
+        if value < 0. {
+            format!("- - {}", -value)
+        } else {
+            value.to_string()
+        }
+    };
+    let partial = format!("FIXTURE 1 AT POSITION {}", signed(pose.pan_degrees));
+    accepted(&scenario, "same-captured-pan-only", &partial).await;
+    assert_eq!(
+        fixture_value(&scenario, mover, ProgrammingOwner::Position),
+        Some(target)
+    );
+    let command = format!(
+        "FIXTURE 1 AT POSITION {} DIV {}",
+        signed(pose.pan_degrees),
+        signed(pose.tilt_degrees)
+    );
+    accepted(&scenario, "same-captured-pair", &command).await;
+    assert_eq!(
+        fixture_value(&scenario, mover, ProgrammingOwner::Position),
+        Some(AttributeValue::Position(Arc::new(PositionIntent::angles(
+            pose.pan_degrees,
+            pose.tilt_degrees
+        ))))
+    );
+    let _ = std::fs::remove_dir_all(&scenario.data_dir);
+}
