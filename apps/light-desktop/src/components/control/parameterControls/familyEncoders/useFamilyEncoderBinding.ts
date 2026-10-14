@@ -253,6 +253,25 @@ function editTarget(
 	};
 }
 
+/** Only visible source-adopting encoders claim output; Zoom lives in the Focus family. */
+function sourceReadoutFixtures(
+	layout: FamilyLayout | null,
+	page: number,
+	position: readonly string[],
+): readonly string[] {
+	if (layout?.family === "position") return position;
+	if (layout?.family !== "focus") return EMPTY;
+	return [
+		...new Set(
+			(layout.pages[page - 1] ?? []).flatMap((slot) =>
+				slot?.kind === "component" && slot.slot.component.kind === "zoom"
+					? slot.slot.fixture_ids
+					: [],
+			),
+		),
+	];
+}
+
 export function useFamilyEncoderBinding(
 	projection: ParameterProjection,
 	family: ParameterFamily,
@@ -260,12 +279,15 @@ export function useFamilyEncoderBinding(
 	const { semantic, layouts, native } = useFamilyLayouts(projection);
 	const [pages, setPages] = useState<Partial<Record<ParameterFamily, number>>>({});
 	const layout = layouts.get(family) ?? null;
+	const page = layout
+		? Math.min(Math.max(pages[family] ?? 1, 1), layout.pages.length)
+		: 1;
 	const positionFixtures =
 		layouts.get("Position")?.group.fixture_ids ?? EMPTY;
 	const readouts = useFamilyReadouts(
 		projection.programmerValuesRoute ?? "normal",
-		positionFixtures,
-		{ enabled: layout?.family === "position", consumerId: "position-encoders" },
+		sourceReadoutFixtures(layout, page, positionFixtures),
+		{ enabled: layout?.family === "position" || layout?.family === "focus", consumerId: "family-source-encoders" },
 	);
 	// TL-657: the Color encoders read the displayed frame's Color (a running Cue or Playback).
 	const colorReadouts = useFamilyReadouts(
@@ -276,9 +298,6 @@ export function useFamilyEncoderBinding(
 	const patchFixtures = usePatchedFixtures(layout?.family === "position");
 	const points = useMemo(() => familyPointChoices(patchFixtures), [patchFixtures]);
 	const binding = useBindingInstance(projection, readouts, native, points);
-	const page = layout
-		? Math.min(Math.max(pages[family] ?? 1, 1), layout.pages.length)
-		: 1;
 	const slots = layout ? familyLayoutSlots(layout, page) : null;
 	const componentSlot = (index: number) =>
 		slots?.componentSlots[index]?.slot ?? null;

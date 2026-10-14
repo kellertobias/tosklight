@@ -7,8 +7,9 @@ import {
 	type FamilyEncodersContextValue,
 } from "../../../../features/familyEncoders/FamilyEncodersProvider";
 import { DisplayedSourceReadouts } from "../../../../features/programmerValues/displayedSource";
+import { inFlightLaneWriter, flush } from "../../../../features/programmerValues/realWriterTestSupport";
 import type { ParameterProjection } from "../useParameterProjection";
-import { FIXTURE_A, FIXTURE_B, fakeWriter, pagesSnapshot } from "./familyEncoderTestSupport";
+import { FIXTURE_A, FIXTURE_B, FOCUS, ZOOM, fakeWriter, pagesSnapshot } from "./familyEncoderTestSupport";
 import { useFamilyEncoderBinding } from "./useFamilyEncoderBinding";
 
 /**
@@ -82,7 +83,7 @@ describe("family encoders name the covering displayed-source lease", () => {
 			const writer = fakeWriter();
 			if (lane === "preload") writers.preload = writer;
 			else writers.normal = writer;
-			const readouts = new DisplayedSourceReadouts({ request: vi.fn() });
+			const readouts = new DisplayedSourceReadouts({ request: async () => leased(lane, 3, [FIXTURE_A, FIXTURE_B]) });
 			// The encoders were shown lease 3 for A and B; another consumer then read C (lease 4).
 			readouts.observe(leased(lane, 3, [FIXTURE_A, FIXTURE_B]));
 			readouts.observe(leased(lane, 4, [FIXTURE_C]));
@@ -103,4 +104,211 @@ describe("family encoders name the covering displayed-source lease", () => {
 			);
 		});
 	}
+});
+
+it("re-reads a held Zoom lease while Focus encoders remain visible, without retrying the refused edit", async () => {
+	const server = inFlightLaneWriter();
+	writers.normal = server.writer;
+	const request = vi.fn(async () =>
+		leased("normal", 3, [FIXTURE_A, FIXTURE_B]),
+	);
+	const readouts = new DisplayedSourceReadouts({ request });
+	readouts.observe(leased("normal", 3, [FIXTURE_A, FIXTURE_B]));
+	const value: FamilyEncodersContextValue = {
+		loadPages: async () => pagesSnapshot(true),
+		readouts,
+		session: null,
+	};
+	const wrapper = ({ children }: { children: ReactNode }) => (
+		<FamilyEncodersContextProvider value={value}>
+			{children}
+		</FamilyEncodersContextProvider>
+	);
+	const view = projection("normal");
+	const { result } = renderHook(() => useFamilyEncoderBinding(view, "Focus"), {
+		wrapper,
+	});
+	await waitFor(() =>
+		expect(result.current.componentSlot(1)?.component.kind).toBe("zoom"),
+	);
+	await flush();
+	const initialReads = request.mock.calls.length;
+	request.mockImplementation(async () =>
+		leased("normal", 5, [FIXTURE_A, FIXTURE_B]),
+	);
+	// An expired source refuses the edit. The current encoder family must explicitly refresh.
+	act(() => result.current.set(1, 40));
+	await flush();
+	const first = server.pending.shift();
+	if (!first) throw new Error("the Zoom request did not reach the writer");
+	expect(first.request.action).toMatchObject({
+		attribute: "zoom",
+		displayedSource: { lane: "normal", lease: 3 },
+	});
+	first.resolve({
+		requestId: first.request.requestId,
+		correlationId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+		status: "no_change",
+		revision: 1,
+		captureModeRevision: 1,
+		replayed: false,
+		warning: null,
+		hold: "displayed_source_unavailable",
+	});
+	await server.drain();
+	await waitFor(() => expect(request).toHaveBeenCalledTimes(initialReads + 1));
+	await waitFor(() =>
+		expect(readouts.displayedSource("normal", [FIXTURE_A, FIXTURE_B])).toEqual({
+			lane: "normal",
+			lease: 5,
+		}),
+	);
+	expect(server.sent().map((action) => action.action)).toEqual([
+		"apply_intent",
+		"finish_gesture",
+	]);
+	// Only a second, explicit operator confirmation sends the new lease. No retry is invented.
+	act(() => result.current.set(1, 40));
+	await server.drain();
+	expect(server.sent()[2]).toMatchObject({
+		attribute: "zoom",
+		displayedSource: { lane: "normal", lease: 5 },
+	});
+	server.writer.stop();
+});
+
+it("claims only visible Zoom fixtures, follows fresh stream leases, and releases on hide", async () => {
+	const writer = fakeWriter();
+	writers.normal = writer;
+	const request = vi.fn(async () =>
+		leased("normal", 3, [FIXTURE_A, FIXTURE_B]),
+	);
+	const readouts = new DisplayedSourceReadouts({ request });
+	const release = vi.fn();
+	let deliver: ((snapshot: OutputReadoutSnapshot) => void) | null = null;
+	const claimReadouts = vi.fn(
+		(
+			_ids: readonly string[],
+			onReadout: (snapshot: OutputReadoutSnapshot) => void,
+		) => {
+			deliver = onReadout;
+			return release;
+		},
+	);
+	const value: FamilyEncodersContextValue = {
+		loadPages: async () => pagesSnapshot(true),
+		readouts,
+		session: {
+			claimReadouts,
+		} as unknown as FamilyEncodersContextValue["session"],
+	};
+	const wrapper = ({ children }: { children: ReactNode }) => (
+		<FamilyEncodersContextProvider value={value}>
+			{children}
+		</FamilyEncodersContextProvider>
+	);
+	const view = projection("normal");
+	const { result, rerender } = renderHook(
+		({ active }) => useFamilyEncoderBinding({ ...view, active }, "Focus"),
+		{ wrapper, initialProps: { active: true } },
+	);
+	await waitFor(() => expect(claimReadouts).toHaveBeenCalledOnce());
+	expect(claimReadouts.mock.calls[0]?.[0]).toEqual([FIXTURE_A, FIXTURE_B]);
+	act(() => deliver?.(leased("normal", 5, [FIXTURE_A, FIXTURE_B])));
+	act(() => result.current.set(1, 40));
+	expect(writer.applyIntent).toHaveBeenCalledWith(
+		expect.objectContaining({
+			attribute: "zoom",
+			displayedSource: { lane: "normal", lease: 5 },
+		}),
+	);
+	rerender({ active: false });
+	expect(release).toHaveBeenCalledOnce();
+});
+
+it("does not claim output for a Focus-only layout without Zoom", async () => {
+	const snapshot = pagesSnapshot(true);
+	const focus = snapshot.families.find((family) => family.family === "focus");
+	if (!focus) throw new Error("the fixture has no Focus family");
+	for (const page of focus.pages)
+		page.slots = page.slots.map((slot) =>
+			slot?.kind === "component" && slot.component.kind === "zoom"
+				? null
+				: slot,
+		);
+	const request = vi.fn();
+	const claimReadouts = vi.fn();
+	const value: FamilyEncodersContextValue = {
+		loadPages: async () => snapshot,
+		readouts: new DisplayedSourceReadouts({ request }),
+		session: {
+			claimReadouts,
+		} as unknown as FamilyEncodersContextValue["session"],
+	};
+	const wrapper = ({ children }: { children: ReactNode }) => (
+		<FamilyEncodersContextProvider value={value}>
+			{children}
+		</FamilyEncodersContextProvider>
+	);
+	const { result } = renderHook(
+		() => useFamilyEncoderBinding(projection("normal"), "Focus"),
+		{ wrapper },
+	);
+	await waitFor(() =>
+		expect(result.current.componentSlot(0)?.component.kind).toBe("focus"),
+	);
+	expect(request).not.toHaveBeenCalled();
+	expect(claimReadouts).not.toHaveBeenCalled();
+});
+
+
+it.each([
+	"normal",
+	"preload",
+] as const)("%s: claims only the current encoder page and releases Zoom when switching to Focus-only", async (lane) => {
+	const snapshot = pagesSnapshot(true);
+	const focus = snapshot.families.find((family) => family.family === "focus");
+	if (!focus) throw new Error("the fixture has no Focus family");
+	focus.pages = [
+		{ number: 1, label: "Focus", slots: [{ kind: "component", ...FOCUS }] },
+		{ number: 2, label: "Zoom", slots: [{ kind: "component", ...ZOOM }] },
+	];
+	const request = vi.fn(async () => leased(lane, 3, [FIXTURE_A, FIXTURE_B]));
+	const release = vi.fn();
+	const claimReadouts = vi.fn(() => release);
+	const value: FamilyEncodersContextValue = {
+		loadPages: async () => snapshot,
+		readouts: new DisplayedSourceReadouts({ request }),
+		session: {
+			claimReadouts,
+		} as unknown as FamilyEncodersContextValue["session"],
+	};
+	const wrapper = ({ children }: { children: ReactNode }) => (
+		<FamilyEncodersContextProvider value={value}>
+			{children}
+		</FamilyEncodersContextProvider>
+	);
+	const view = projection(lane);
+	const { result } = renderHook(() => useFamilyEncoderBinding(view, "Focus"), {
+		wrapper,
+	});
+	await waitFor(() =>
+		expect(result.current.componentSlot(0)?.component.kind).toBe("focus"),
+	);
+	expect(result.current.pageCountFor("Focus")).toBe(2);
+	expect(request).not.toHaveBeenCalled();
+	expect(claimReadouts).not.toHaveBeenCalled();
+	act(() => result.current.selectPage("Focus", 2));
+	await waitFor(() =>
+		expect(result.current.componentSlot(0)?.component.kind).toBe("zoom"),
+	);
+	await waitFor(() => expect(request).toHaveBeenCalledOnce());
+	if (lane === "normal") expect(claimReadouts).toHaveBeenCalledOnce();
+	else expect(claimReadouts).not.toHaveBeenCalled();
+	act(() => result.current.selectPage("Focus", 1));
+	await waitFor(() =>
+		expect(result.current.componentSlot(0)?.component.kind).toBe("focus"),
+	);
+	if (lane === "normal") expect(release).toHaveBeenCalledOnce();
+	expect(request).toHaveBeenCalledOnce();
 });
