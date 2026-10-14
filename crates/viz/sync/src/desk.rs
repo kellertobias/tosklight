@@ -266,28 +266,49 @@ impl DeskClient {
         Err(unreachable("the desk refused every session"))
     }
 
+    /// Renew only a revoked session, once, before subscribing. No live or journal action is
+    /// replayed here: the rejected handshake never established an event stream.
+    async fn event_socket(&self) -> Result<Socket, DeskError> {
+        for attempt in 0..2 {
+            let token = self.token().await?;
+            let url = self
+                .base
+                .replacen("http://", "ws://", 1)
+                .replacen("https://", "wss://", 1);
+            let mut request = format!("{url}/api/v2/events")
+                .into_client_request()
+                .map_err(unreachable)?;
+            let protocols = format!("light.events.v2, light.v2, light.token.{token}");
+            request.headers_mut().insert(
+                "sec-websocket-protocol",
+                protocols.parse().map_err(unreachable)?,
+            );
+            let result = tokio::time::timeout(
+                Duration::from_secs(5),
+                tokio_tungstenite::connect_async(request),
+            )
+            .await
+            .map_err(|_| unreachable("the event socket did not open in time"))?;
+            match result {
+                Ok((socket, _)) => return Ok(socket),
+                Err(tokio_tungstenite::tungstenite::Error::Http(response))
+                    if response.status() == reqwest::StatusCode::UNAUTHORIZED && attempt == 0 =>
+                {
+                    // Another concurrent request may already have renewed the session.
+                    let mut session = self.session.lock().await;
+                    if session.as_ref().is_some_and(|(cached, _)| cached == &token) {
+                        *session = None;
+                    }
+                }
+                Err(error) => return Err(unreachable(error)),
+            }
+        }
+        Err(unreachable("the desk refused every event session"))
+    }
+
     /// Opens the event socket subscribed to the sync feed and waits for the desk's `ready`.
     pub async fn subscribe(&self) -> Result<FeedSocket, DeskError> {
-        let token = self.token().await?;
-        let url = self
-            .base
-            .replacen("http://", "ws://", 1)
-            .replacen("https://", "wss://", 1);
-        let mut request = format!("{url}/api/v2/events")
-            .into_client_request()
-            .map_err(unreachable)?;
-        let protocols = format!("light.events.v2, light.v2, light.token.{token}");
-        request.headers_mut().insert(
-            "sec-websocket-protocol",
-            protocols.parse().map_err(unreachable)?,
-        );
-        let (mut socket, _) = tokio::time::timeout(
-            Duration::from_secs(5),
-            tokio_tungstenite::connect_async(request),
-        )
-        .await
-        .map_err(|_| unreachable("the event socket did not open in time"))?
-        .map_err(unreachable)?;
+        let mut socket = self.event_socket().await?;
         let subscribe = serde_json::json!({
             "type": "subscribe",
             "filter": {"capabilities": ["show"], "classes": ["projection"], "topics": ["show_sync"]},
@@ -393,6 +414,144 @@ pub fn parse_feed(text: &str) -> FeedMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Clone)]
+    struct AuthServer {
+        sessions: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        handshakes: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        refusal: u16,
+        always_refuse: bool,
+    }
+
+    async fn auth_server(
+        refusal: u16,
+        always_refuse: bool,
+    ) -> (DeskClient, AuthServer, tokio::task::JoinHandle<()>) {
+        use axum::{
+            Router,
+            extract::{State, WebSocketUpgrade},
+            http::{HeaderMap, StatusCode},
+            response::{IntoResponse, Response},
+            routing::{get, post},
+        };
+        async fn session(
+            State(state): State<AuthServer>,
+            axum::Json(body): axum::Json<Value>,
+        ) -> axum::Json<Value> {
+            assert_eq!(body, serde_json::json!({"role": "operator"}));
+            let number = state
+                .sessions
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                + 1;
+            axum::Json(
+                serde_json::json!({"token": format!("test-session-{number}"), "session_id": format!("test-id-{number}")}),
+            )
+        }
+        async fn events(
+            State(state): State<AuthServer>,
+            headers: HeaderMap,
+            ws: WebSocketUpgrade,
+        ) -> Response {
+            state
+                .handshakes
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let offered = headers
+                .get("sec-websocket-protocol")
+                .unwrap()
+                .to_str()
+                .unwrap();
+            if state.always_refuse || offered.contains("light.token.test-session-1") {
+                return StatusCode::from_u16(state.refusal).unwrap().into_response();
+            }
+            assert!(offered.contains("light.token.test-session-2"));
+            ws.protocols(["light.events.v2"])
+                .on_upgrade(|mut socket| async move {
+                    let Some(Ok(axum::extract::ws::Message::Text(text))) = socket.recv().await
+                    else {
+                        return;
+                    };
+                    let subscribe: Value = serde_json::from_str(&text).unwrap();
+                    assert_eq!(
+                        subscribe["filter"]["topics"],
+                        serde_json::json!(["show_sync"])
+                    );
+                    socket
+                        .send(axum::extract::ws::Message::Text(
+                            r#"{"type":"ready"}"#.into(),
+                        ))
+                        .await
+                        .unwrap();
+                    let _ = socket.recv().await;
+                })
+        }
+        let state = AuthServer {
+            sessions: Default::default(),
+            handshakes: Default::default(),
+            refusal,
+            always_refuse,
+        };
+        let router = Router::new()
+            .route("/api/v2/sessions", post(session))
+            .route("/api/v2/events", get(events))
+            .with_state(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let client = DeskClient::new(format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        (client, state, server)
+    }
+
+    #[tokio::test]
+    async fn event_subscription_renews_a_revoked_cached_session_once() {
+        let (client, state, server) = auth_server(401, false).await;
+        client.token().await.unwrap(); // The still-open client has a session that Control later revokes.
+        let result = tokio::time::timeout(Duration::from_secs(2), client.subscribe())
+            .await
+            .unwrap();
+        server.abort();
+        assert!(
+            result.is_ok(),
+            "a healthy desk must admit a freshly authorized subscription"
+        );
+        assert_eq!(state.sessions.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(
+            state.handshakes.load(std::sync::atomic::Ordering::SeqCst),
+            2
+        );
+    }
+
+    #[tokio::test]
+    async fn event_subscription_does_not_renew_on_permission_refusal() {
+        let (client, state, server) = auth_server(403, true).await;
+        client.token().await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), client.subscribe())
+            .await
+            .unwrap();
+        server.abort();
+        assert!(result.is_err());
+        assert_eq!(state.sessions.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            state.handshakes.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn event_subscription_stops_after_a_second_authentication_refusal() {
+        let (client, state, server) = auth_server(401, true).await;
+        client.token().await.unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), client.subscribe())
+            .await
+            .unwrap();
+        server.abort();
+        assert!(result.is_err());
+        assert_eq!(state.sessions.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(
+            state.handshakes.load(std::sync::atomic::Ordering::SeqCst),
+            2
+        );
+    }
 
     #[test]
     fn the_feed_decodes_sync_payloads_and_ignores_everything_else() {
