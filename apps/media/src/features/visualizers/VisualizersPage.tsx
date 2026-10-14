@@ -22,8 +22,8 @@ import {
 	type LibrarySourceType,
 } from "../media-library/GeneratedLibraryBrowserView";
 import { useVisualizerEditing } from "./editing";
-import { BUILTIN_VISUALIZER_KINDS, visualizerPreviewUrl } from "./preview";
 import { LiveVisualizerPreview } from "./LiveVisualizerPreview";
+import { BUILTIN_VISUALIZER_KINDS, visualizerPreviewUrl } from "./preview";
 import { VisualizerEditor } from "./VisualizerEditor";
 
 export function VisualizersPage({
@@ -268,7 +268,11 @@ export function VisualizerDetail({
 						})
 					}
 				/>
-				<VisualizerName visualizer={visualizer} onChange={onChange} />
+				<VisualizerName
+					key={key(visualizer)}
+					visualizer={visualizer}
+					onChange={onChange}
+				/>
 			</div>
 			<hr className="media-source-editor-separator" />
 			<VisualizerEditor
@@ -337,13 +341,27 @@ function VisualizerName({
 	visualizer: VisualizerView;
 	onChange: (edit: UpdateVisualizer) => void;
 }) {
-	const [name, setName] = useState(visualizer.name);
+	const [draft, setDraft] = useState({
+		authority: visualizer.name,
+		value: visualizer.name,
+	});
+	if (draft.authority !== visualizer.name) {
+		// Names are trimmed by the server; an older receipt must not erase newer typing.
+		setDraft({
+			authority: visualizer.name,
+			value:
+				draft.value.trim() === draft.authority ||
+				draft.value.trim() === visualizer.name
+					? visualizer.name
+					: draft.value,
+		});
+	}
 	return (
 		<TextField
 			label="Name"
-			value={name}
+			value={draft.value}
 			onChange={(event) => {
-				setName(event.target.value);
+				setDraft({ authority: visualizer.name, value: event.target.value });
 				onChange({
 					requestId: requestId(),
 					name: event.target.value,

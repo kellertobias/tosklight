@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -11,7 +11,7 @@ import {
 	BUILTIN_VISUALIZER_KINDS,
 	hasRenderedVisualizerPreview,
 } from "./preview";
-import { VisualizersPage } from "./VisualizersPage";
+import { VisualizerDetail, VisualizersPage } from "./VisualizersPage";
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -267,7 +267,9 @@ describe("the visualizers page", () => {
 		});
 		const { unmount } = render(<VisualizersPage />);
 		await screen.findByLabelText("Name");
-		expect(screen.getByText("Spawn stars", { selector: "label" })).toBeVisible();
+		expect(
+			screen.getByText("Spawn stars", { selector: "label" }),
+		).toBeVisible();
 		unmount();
 
 		stubServer({
@@ -439,3 +441,183 @@ async function chooseOption(labelText: string, option: string) {
 	await userEvent.click(trigger as HTMLButtonElement);
 	await userEvent.click(screen.getByRole("option", { name: option }));
 }
+
+describe("visualizer Name identity", () => {
+	it("switches the actual existing slot editor and renames only that source", async () => {
+		const first = aVisualizer();
+		const second = aVisualizer({
+			address: { folder: 250, file: 12, class: "generated-visualizer" },
+			name: "Lightning Tendrils",
+			kind: "Lightning Tendrils",
+			typeId: 23,
+		});
+		const server = stubServer({ visualizers: [first, second] });
+		const originalFirst = structuredClone(first);
+		render(<VisualizersPage />);
+		expect(await screen.findByLabelText("Name")).toHaveValue(first.name);
+		await userEvent.click(
+			(await screen.findAllByRole("button", { name: /Lightning Tendrils/ }))[0],
+		);
+		expect(
+			screen.getByRole("figure", { name: "Lightning Tendrils preview" }),
+		).toBeInTheDocument();
+		expect(screen.getByLabelText("Name")).toHaveValue(second.name);
+		await userEvent.clear(screen.getByLabelText("Name"));
+		await userEvent.type(screen.getByLabelText("Name"), "House lightning");
+		await waitFor(() =>
+			expect(server.visualizers[1].name).toBe("House lightning"),
+		);
+		expect(server.visualizers[0]).toEqual(originalFirst);
+		expect(
+			server.writes.filter((path) => path.includes("/visualizers/")),
+		).not.toHaveLength(0);
+		expect(
+			server.writes
+				.filter((path) => path.includes("/visualizers/"))
+				.every((path) => path === "/visualizers/250/12/update"),
+		).toBe(true);
+		await userEvent.click(
+			(await screen.findAllByRole("button", { name: /Equalizer Bars/ }))[0],
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue(first.name);
+	});
+	it("adopts same-identity authoritative renames when the field is untouched", () => {
+		stubServer();
+		const visualizer = aVisualizer();
+		const onChange = vi.fn();
+		const props = {
+			visualizer,
+			aspectRatio: 16 / 9,
+			kinds: [],
+			busy: false,
+			onChange,
+		};
+		const { rerender } = render(<VisualizerDetail {...props} />);
+		expect(screen.getByLabelText("Name")).toHaveValue(visualizer.name);
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "Authoritative rename" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue("Authoritative rename");
+		expect(onChange).not.toHaveBeenCalled();
+	});
+	it("keeps typing through intermediate acknowledgements and adopts later clean renames", () => {
+		stubServer();
+		const visualizer = aVisualizer();
+		const onChange = vi.fn();
+		const props = {
+			visualizer,
+			aspectRatio: 16 / 9,
+			kinds: [],
+			busy: true,
+			onChange,
+		};
+		const { rerender } = render(<VisualizerDetail {...props} />);
+		fireEvent.change(screen.getByLabelText("Name"), {
+			target: { value: "House" },
+		});
+		fireEvent.change(screen.getByLabelText("Name"), {
+			target: { value: "House bars" },
+		});
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "House" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue("House bars");
+		expect(onChange).toHaveBeenLastCalledWith(
+			expect.objectContaining({ name: "House bars" }),
+		);
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "House bars" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue("House bars");
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "Later remote name" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue("Later remote name");
+		expect(onChange).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("visualizer canonical Name acknowledgement", () => {
+	it("accepts a trimmed acknowledgement without clobbering newer typing, then follows authority", () => {
+		stubServer();
+		const visualizer = aVisualizer();
+		const onChange = vi.fn();
+		const props = {
+			visualizer,
+			aspectRatio: 16 / 9,
+			kinds: [],
+			busy: true,
+			onChange,
+		};
+		const { rerender } = render(<VisualizerDetail {...props} />);
+		fireEvent.change(screen.getByLabelText("Name"), {
+			target: { value: "House " },
+		});
+		fireEvent.change(screen.getByLabelText("Name"), {
+			target: { value: "House bars " },
+		});
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "House" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue("House bars ");
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "House bars" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue("House bars");
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "Later authoritative rename" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue(
+			"Later authoritative rename",
+		);
+		expect(onChange).toHaveBeenCalledTimes(2);
+	});
+	it("keeps a whitespace-only edit logically clean when its acknowledgement does not change authority", () => {
+		stubServer();
+		const visualizer = aVisualizer();
+		const onChange = vi.fn();
+		const props = {
+			visualizer,
+			aspectRatio: 16 / 9,
+			kinds: [],
+			busy: true,
+			onChange,
+		};
+		const { rerender } = render(<VisualizerDetail {...props} />);
+		fireEvent.change(screen.getByLabelText("Name"), {
+			target: { value: `${visualizer.name} ` },
+		});
+		rerender(<VisualizerDetail {...props} visualizer={{ ...visualizer }} />);
+		rerender(
+			<VisualizerDetail
+				{...props}
+				visualizer={{ ...visualizer, name: "Later authoritative rename" }}
+			/>,
+		);
+		expect(screen.getByLabelText("Name")).toHaveValue(
+			"Later authoritative rename",
+		);
+		expect(onChange).toHaveBeenCalledTimes(1);
+	});
+});
