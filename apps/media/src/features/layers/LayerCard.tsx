@@ -2,13 +2,16 @@ import { ErrorAlert } from "@tosklight/ui";
 // One layer's controls.
 
 import { Button } from "@tosklight/ui/controls";
-import { addressLabel, resolveAddress } from "../../entities/catalog";
+import { addressLabel } from "../../entities/catalog";
 import { layerName, percent, sourceBadge } from "../../entities/output";
+import { sourceLabel } from "../../entities/sourceLabel";
 import type {
 	CatalogView,
 	LayerView,
 	OutputView,
+	TextSlotView,
 	UpdateLayer,
+	VisualizerView,
 } from "../../shared/api/generated/media-wire";
 import { MediaPicker } from "./MediaPicker";
 
@@ -16,6 +19,8 @@ export interface LayerCardProps {
 	output: OutputView;
 	layer: LayerView;
 	catalog: CatalogView | undefined;
+	text?: TextSlotView[];
+	visualizers?: VisualizerView[];
 	/** True while a desk owns the output; every write control is disabled, not hidden. */
 	readOnly: boolean;
 	onChange: (change: UpdateLayer) => void;
@@ -39,16 +44,14 @@ export function LayerCard({
 	output,
 	layer,
 	catalog,
+	text,
+	visualizers,
 	readOnly,
 	onChange,
 	onReset,
 }: LayerCardProps) {
 	const badge = sourceBadge(layer.sourceStatus);
-	const { item } = resolveAddress(
-		catalog,
-		layer.address.folder,
-		layer.address.file,
-	);
+	const label = sourceLabel(layer.address, catalog, text, visualizers);
 	const dimmerId = `${output.id}-layer-${layer.index}-dimmer`;
 
 	return (
@@ -59,7 +62,7 @@ export function LayerCard({
 			</header>
 
 			<p className="media-layer-source">
-				{item ? item.name : "Nothing selected"}
+				{label}
 				{layer.drawing ? "" : " · not drawing"}
 			</p>
 			{badge.detail && (

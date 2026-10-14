@@ -8,8 +8,8 @@ import {
 	type MediaSourceFilter,
 } from "../../../../light-desktop/src/windows/media/MediaPaneSurface";
 import { useFailureToast } from "../../app/ToastContext";
-import { resolveAddress } from "../../entities/catalog";
 import { sourceBadge } from "../../entities/output";
+import { sourceLabel } from "../../entities/sourceLabel";
 import {
 	PlaybackTakeoverBoundary,
 	usePlaybackTakeover,
@@ -224,11 +224,6 @@ function MediaPanePageContent() {
 					detail: "No configured program output is available.",
 				},
 		layers: layers.map(({ output, layer }) => {
-			const item = resolveAddress(
-				catalog.data,
-				layer.address.folder,
-				layer.address.file,
-			).item;
 			const badge = sourceBadge(layer.sourceStatus);
 			return {
 				id: layerId(output.id, layer.index),
@@ -251,7 +246,12 @@ function MediaPanePageContent() {
 							)
 						: undefined,
 				errorDetail: layer.sourceStatus.failure ?? undefined,
-				liveSourceLabel: item?.name ?? "Nothing selected",
+				liveSourceLabel: sourceLabel(
+					layer.address,
+					catalog.data,
+					text.data,
+					visualizers.data,
+				),
 				opacityPercent: Math.round(layer.dimmer * 100),
 				maskLabel:
 					layer.mask.address.class === "blank"
