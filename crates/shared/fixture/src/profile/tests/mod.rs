@@ -143,6 +143,7 @@ mod derived_position_physical;
 mod derived_zoom_physical;
 mod encoding_plan;
 mod inversion;
+mod native_color_source;
 mod optics_fitting;
 mod physical_mapping;
 mod physical_precision;

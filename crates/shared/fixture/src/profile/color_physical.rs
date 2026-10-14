@@ -498,6 +498,16 @@ impl FixtureProfile {
         if mode.color_physical.is_some() {
             return Some(Cow::Borrowed(self));
         }
+        // No source-associated optical repair can add a path here. Avoid projecting the whole
+        // multi-mode profile once per unavailable mode; genuine Color keeps its full identity.
+        if self.source_gdtf.is_none()
+            && matches!(
+                mode.derived_color_outcome(),
+                super::DerivedColorOutcome::NoColorControls
+            )
+        {
+            return None;
+        }
         let mut projection = self.clone();
         super::apply_runtime_profile_compatibility(&mut projection);
         projection.mode(mode_id)?.color_physical.as_ref()?;
