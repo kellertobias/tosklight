@@ -1,3 +1,5 @@
+mod object_commit;
+
 use super::{
     ActiveShowObjectsChange, ActiveShowPorts, ActiveShowUnitOfWork, BackupIdentity,
     CreateOutputRouteRangeCommand, CreateOutputRouteRangeResult, MutateActiveShowObjectsCommand,
@@ -260,41 +262,6 @@ impl ActiveShowService {
                 migrated_routes: committed.migrated_routes,
                 event_sequence: committed.event_sequence,
             })
-        })
-    }
-
-    fn commit_object_changes<P: ActiveShowPorts>(
-        &self,
-        context: &ActionContext,
-        show_id: ShowId,
-        mut unit: P::UnitOfWork,
-        ports: &P,
-        prepared: PreparedObjectChanges,
-        operation: &str,
-    ) -> Result<CommittedObjectChanges, ActionError> {
-        let runtime = ports.prepare_runtime(prepared.snapshot)?;
-        let commit = ports.finalize_runtime(context, runtime, || {
-            unit.backup(&backup_identity(context, show_id, operation))?;
-            unit.commit(prepared.transaction)
-        })?;
-        let show_revision = commit.revision();
-        let migration_changes = migration_changes(&commit, &prepared.changes);
-        let migrated_routes = migrated_route_changes(show_id, &commit, None);
-        ports.reconcile_object_changes(&prepared.changes);
-        let committed = self.publish_object_changes(
-            context,
-            show_id,
-            show_revision,
-            prepared.changes,
-            migration_changes,
-        );
-        for migrated in &migrated_routes {
-            self.events
-                .publish(EventDraft::output_route_changed(context, migrated.clone()));
-        }
-        Ok(CommittedObjectChanges {
-            migrated_routes,
-            ..committed
         })
     }
 

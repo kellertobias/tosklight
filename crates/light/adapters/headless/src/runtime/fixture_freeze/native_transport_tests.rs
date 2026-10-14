@@ -1080,3 +1080,103 @@ async fn osc_undo_key_without_freeze_history_is_ordinary_programmer_undo() {
     assert_eq!(programmer_values(&rig), empty, "then the earlier one");
     assert!(rig.fixture().freeze.is_empty());
 }
+
+#[tokio::test]
+async fn group_selection_before_full_freeze_preserves_the_accepted_wash_generation() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../..")
+        .join("assets/fixture-library/robe--robin-600x-ledwash.toskfixture");
+    let profile = read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    let rig = Rig::with_profile(false, false, false, profile, Some("Mode 6")).await;
+    let (status, value) = http_command(&rig, "tl753-group", "RECORD GROUP 10", None).await;
+    assert_command_applied(status, &value, 1, "record selected wash root");
+    let frame = rig.render(0.6, 0.55);
+    rig.publish(&frame, rig.show_id.0);
+    rig.state.programming.select(rig.session.id, []);
+    let snapshot = rig.state.output.snapshot();
+    let accepted = rig.state.output.latest_visualization_frame().unwrap();
+    crate::runtime::programmer_commands::execute_programmer_command_from(
+        &rig.state,
+        &rig.session,
+        "G10",
+        &rig.context(),
+    )
+    .unwrap();
+    assert!(Arc::ptr_eq(&snapshot, &rig.state.output.snapshot()));
+    assert!(Arc::ptr_eq(
+        &accepted.source_snapshot,
+        &rig.state.output.snapshot()
+    ));
+    let (status, value) = http_command(&rig, "tl753-freeze", "FREEZE G10", None).await;
+    assert_command_applied(status, &value, 3, "Freeze group after selection changes");
+    assert_eq!(rig.fixture().freeze.targets.len(), 4);
+    assert!(
+        rig.fixture().freeze.targets[&rig.root]
+            .position_native
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn user_layout_save_after_publication_keeps_group_full_freeze_available() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../..")
+        .join("assets/fixture-library/robe--robin-600x-ledwash.toskfixture");
+    let profile = read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    let rig = Rig::with_profile(false, false, false, profile, Some("Mode 6")).await;
+    let (status, value) = http_command(&rig, "tl753-layout-group", "RECORD GROUP 10", None).await;
+    assert_command_applied(status, &value, 1, "record selected wash root");
+    let frame = rig.render(0.6, 0.55);
+    rig.publish(&frame, rig.show_id.0);
+    let accepted = rig.state.output.latest_visualization_frame().unwrap();
+    let snapshot = rig.state.output.snapshot();
+    let programmer_before =
+        serde_json::to_value(rig.state.programming.get(rig.session.id)).unwrap();
+    let saved = rig
+        .post(
+            "/api/v2/user-layouts/desk/update",
+            json!({
+                "request_id": "tl753-layout-save", "action": {"type":"update",
+                "expected_revision":0,"patch":{"desks":[],"active_desk_id":"main",
+                "window_settings":{"fixtureSheet":{"showHeads":true}}}}
+            }),
+            None,
+        )
+        .await;
+    assert_eq!(saved["object"]["revision"], 1);
+    assert_eq!(
+        saved["object"]["body"]["windowSettings"]["fixtureSheet"]["showHeads"],
+        true
+    );
+    assert!(
+        Arc::ptr_eq(&snapshot, &rig.state.output.snapshot()),
+        "layout-only save must retain the accepted output generation"
+    );
+    let saved_again = rig.post("/api/v2/user-layouts/desk/update", json!({
+        "request_id": "tl753-layout-save-again", "action": {"type":"update",
+        "expected_revision":1,"patch":{"window_settings":{"fixtureSheet":{"showHeads":false}}}}
+    }), None).await;
+    assert_eq!(saved_again["object"]["revision"], 2);
+    assert!(
+        saved_again["show_revision"].as_u64().unwrap() > saved["show_revision"].as_u64().unwrap()
+    );
+    assert!(
+        Arc::ptr_eq(&snapshot, &rig.state.output.snapshot()),
+        "subsequent layout changes must retain output too"
+    );
+    assert_eq!(
+        serde_json::to_value(rig.state.programming.get(rig.session.id)).unwrap(),
+        programmer_before
+    );
+    rig.state.programming.select(rig.session.id, []);
+    let (status, value) = http_command(&rig, "tl753-layout-freeze", "FREEZE G10", None).await;
+    assert_command_applied(status, &value, 3, "Freeze after saving only window layout");
+    assert_eq!(rig.fixture().freeze.targets.len(), 4);
+    assert!(
+        rig.fixture().freeze.targets[&rig.root]
+            .position_native
+            .is_some()
+    );
+    assert!(Arc::ptr_eq(&snapshot, &accepted.source_snapshot));
+    assert_eq!(rig.persisted_freeze(), rig.fixture().freeze);
+}

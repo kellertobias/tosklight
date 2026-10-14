@@ -168,11 +168,24 @@ struct Rig {
 }
 impl Rig {
     async fn new(logical: bool, aliases: bool, copy: bool) -> Self {
+        Self::with_profile(logical, aliases, copy, profile(logical, aliases), None).await
+    }
+
+    async fn with_profile(
+        logical: bool,
+        aliases: bool,
+        copy: bool,
+        profile: FixtureProfile,
+        mode_name: Option<&str>,
+    ) -> Self {
         let (state, directory) = crate::runtime::tests::test_state();
-        let profile = state
-            .installation
-            .save_fixture_profile(profile(logical, aliases), 0)
-            .unwrap();
+        let profile = state.installation.save_fixture_profile(profile, 0).unwrap();
+        let mode_id = profile
+            .modes
+            .iter()
+            .find(|mode| mode_name.is_none_or(|name| mode.name == name))
+            .unwrap()
+            .id;
         let app = router(state.clone());
         let response = app
             .clone()
@@ -226,7 +239,7 @@ impl Rig {
         })]).unwrap_or_default();
         rig.post("/api/v2/patch/fixtures", json!({"request_id":Uuid::new_v4(),"fixtures":[{
             "fixture_id":root.0,"fixture_number":1,"virtual_fixture_number":null,"name":"Accepted Freeze mover",
-            "profile_id":profile.id.0,"profile_revision":profile.revision,"mode_id":profile.modes[0].id,
+            "profile_id":profile.id.0,"profile_revision":profile.revision,"mode_id":mode_id,
             "split_patches":[{"split":1,"universe":1,"address":1}],"layer_id":"default","direct_control":null,
             "location":{"x":0,"y":0,"z":3000},"rotation":{"x":0.,"y":0.,"z":0.},"multipatch":copies,
             "move_in_black_enabled":true,"move_in_black_delay_millis":0,"highlight_overrides":[]
@@ -623,3 +636,27 @@ async fn full_to_color_family_toggle_drops_native_position_and_unrelated_scalar_
 
 #[path = "native_transport_tests.rs"]
 mod native_transport_tests;
+
+#[tokio::test]
+async fn shipped_multi_head_wash_full_freeze_captures_accepted_master_and_all_heads() {
+    let package = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../..")
+        .join("assets/fixture-library/robe--robin-600x-ledwash.toskfixture");
+    let profile = read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    let rig = Rig::with_profile(false, false, false, profile, Some("Mode 6")).await;
+    assert_eq!(rig.fixture().logical_heads.len(), 3);
+    let frame = rig.render(0.6, 0.55);
+    rig.publish(&frame, rig.show_id.0);
+    let result = rig.freeze(FixtureFreezeOperation::Freeze, vec![]).await;
+    assert!(
+        result.changed,
+        "accepted multi-head frame must be freezable: {:#?}",
+        frame.rendered.physical
+    );
+    assert_eq!(result.affected_fixtures, 3);
+    let fixture = rig.fixture();
+    assert_eq!(fixture.freeze.targets.len(), 4);
+    assert!(fixture.freeze.targets[&rig.root].position_native.is_some());
+    assert!(fixture.freeze.targets.values().all(|target| target.full));
+    assert_eq!(rig.persisted_freeze(), fixture.freeze);
+}

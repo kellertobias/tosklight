@@ -59,6 +59,7 @@ struct FinalizationPorts<'a> {
     inner: &'a TestPorts,
     events: &'a EventBus,
     failure: Failure,
+    normalized: bool,
 }
 
 struct FinalizationUnit {
@@ -124,6 +125,10 @@ impl ActiveShowPorts for FinalizationPorts<'_> {
         self.inner.prepare_runtime(snapshot)
     }
 
+    fn normalized_active_snapshot(&self) -> Option<Arc<EngineSnapshot>> {
+        self.normalized.then(|| Arc::new(EngineSnapshot::default()))
+    }
+
     fn finalize_runtime<T>(
         &self,
         context: &ActionContext,
@@ -150,7 +155,14 @@ impl ActiveShowPorts for FinalizationPorts<'_> {
     }
 
     fn reconcile_object_changes(&self, changes: &[ActiveShowObjectChange]) {
-        assert_eq!(self.inner.steps.lock().last(), Some(&"release"));
+        let steps = self.inner.steps.lock();
+        let layout_only = self.normalized
+            && steps.as_slice() == ["begin", "backup", "commit"]
+            && changes
+                .iter()
+                .all(|change| change.kind == ActiveShowObjectKind::UserLayout);
+        assert!(layout_only || steps.last() == Some(&"release"));
+        drop(steps);
         self.inner.reconcile_object_changes(changes);
     }
 }
@@ -239,6 +251,7 @@ fn rejection_precedes_backup_commit_install_and_events_at_all_persistence_sites(
             inner: &rig.ports,
             events: rig.service.events(),
             failure: Failure::Finalization,
+            normalized: false,
         };
         let error = run_site(&rig, &ports, site).unwrap_err();
         assert_eq!(error.message, "injected Finalization", "{site:?}");
@@ -259,6 +272,7 @@ fn persistence_failures_release_finalizer_without_install_or_events() {
                 inner: &rig.ports,
                 events: rig.service.events(),
                 failure,
+                normalized: false,
             };
             let error = run_site(&rig, &ports, site).unwrap_err();
             assert_eq!(error.message, format!("injected {failure:?}"), "{site:?}");
@@ -287,6 +301,7 @@ fn success_installs_once_before_finalizer_returns_and_application_completion_run
             inner: &rig.ports,
             events: rig.service.events(),
             failure: Failure::None,
+            normalized: false,
         };
         run_site(&rig, &ports, site).unwrap();
         let mut expected = vec![
@@ -317,6 +332,7 @@ fn no_change_completes_without_preparation_finalization_or_persistence() {
         inner: &rig.ports,
         events: rig.service.events(),
         failure: Failure::Finalization,
+        normalized: false,
     };
     let result = rig
         .service
@@ -339,4 +355,110 @@ fn no_change_completes_without_preparation_finalization_or_persistence() {
     assert_eq!(rig.document(), before);
     assert!(rig.installed_snapshot().is_none());
     assert_eq!(rig.service.events().latest_sequence(), 0);
+}
+
+fn layout_action(rig: &TestRig) -> ActionEnvelope<MutateActiveShowObjectsCommand> {
+    rig.object_action(vec![ActiveShowObjectMutation {
+        kind: ActiveShowObjectKind::UserLayout,
+        object_id: "desk".into(),
+        expected_object_revision: 0,
+        mutation: ActiveShowObjectMutationKind::Put {
+            body: Box::new(typed(
+                ActiveShowObjectKind::UserLayout,
+                json!({"desks":[],"activeDeskId":"main","future_layout_field":{"kept":true}}),
+            )),
+        },
+    }])
+}
+
+#[test]
+fn layout_only_commit_keeps_backup_failure_atomicity_without_runtime_installation() {
+    for failure in [Failure::None, Failure::Backup, Failure::Commit] {
+        let rig = rig();
+        let before = rig.document();
+        let ports = FinalizationPorts {
+            inner: &rig.ports,
+            events: rig.service.events(),
+            failure,
+            normalized: true,
+        };
+        let result = rig.service.mutate_objects(layout_action(&rig), &ports);
+        assert!(
+            rig.installed_snapshot().is_none(),
+            "{failure:?}: layout never installs output"
+        );
+        if failure == Failure::None {
+            let result = result.unwrap();
+            assert_eq!(rig.steps(), ["begin", "backup", "commit", "reconcile"]);
+            assert_eq!(result.changes[0].kind, ActiveShowObjectKind::UserLayout);
+            assert!(result.show_revision.value() > before.revision().value());
+            assert_eq!(
+                rig.object_body("user_layout", "desk")["future_layout_field"]["kept"],
+                true
+            );
+            assert_eq!(rig.service.events().latest_sequence(), 1);
+        } else {
+            assert_eq!(result.unwrap_err().message, format!("injected {failure:?}"));
+            assert_eq!(
+                rig.document(),
+                before,
+                "{failure:?}: failed persistence changes nothing"
+            );
+            assert_eq!(rig.service.events().latest_sequence(), 0);
+            let mut steps = vec!["begin", "backup"];
+            if failure == Failure::Commit {
+                steps.push("commit");
+            }
+            assert_eq!(rig.steps(), steps);
+        }
+    }
+}
+
+#[test]
+fn layout_save_with_a_cue_migration_still_finalizes_and_installs_runtime() {
+    let rig = rig();
+    let cue_id = light_core::CueListId(Uuid::from_u128(0x753));
+    let mut legacy = cue_list_body(cue_id, "Legacy migration rider");
+    legacy
+        .as_object_mut()
+        .unwrap()
+        .insert("chaser_xfade_millis".into(), json!(0));
+    rig.seed_object("cue_list", &cue_id.0.to_string(), legacy);
+    let ports = FinalizationPorts {
+        inner: &rig.ports,
+        events: rig.service.events(),
+        failure: Failure::None,
+        normalized: true,
+    };
+    let result = rig
+        .service
+        .mutate_objects(layout_action(&rig), &ports)
+        .unwrap();
+    assert_eq!(
+        rig.steps(),
+        [
+            "begin",
+            "prepare",
+            "finalize",
+            "backup",
+            "commit",
+            "install",
+            "release",
+            "reconcile"
+        ]
+    );
+    assert!(
+        result
+            .migration_changes
+            .iter()
+            .any(|change| change.kind == ActiveShowObjectKind::CueList)
+    );
+    assert_eq!(rig.installed_snapshot().unwrap().cue_lists.len(), 1);
+    assert!(
+        !rig.object_body("cue_list", &cue_id.0.to_string())
+            .as_object()
+            .unwrap()
+            .contains_key("chaser_xfade_millis")
+    );
+    assert_eq!(rig.service.events().latest_sequence(), 1);
 }
