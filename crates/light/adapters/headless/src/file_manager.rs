@@ -30,7 +30,7 @@ pub(crate) use input_context::{
 };
 pub(crate) use paths::ConfiguredRoot;
 
-static FILE_MUTATION_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
+pub(crate) static FILE_MUTATION_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()

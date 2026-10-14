@@ -74,25 +74,6 @@ const ENCODER_GROUP_OPTIONS: Array<{
 	{ value: "media", label: "Media" },
 ];
 
-async function downloadFixturePackage(
-	server: ReturnType<typeof useFixtureLibrary>,
-	selectedMode: FixtureDefinition | null,
-) {
-	if (!selectedMode) return;
-	const id = selectedMode.profile_id ?? selectedMode.id;
-	const blob = await server?.exportFixturePackage(id, selectedMode.revision);
-	if (!blob) return;
-	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement("a");
-	anchor.href = url;
-	anchor.download =
-		`${selectedMode.manufacturer}-${selectedMode.name || selectedMode.model}.toskfixture`
-			.replace(/[^a-z0-9._-]+/gi, "-")
-			.toLowerCase();
-	anchor.click();
-	URL.revokeObjectURL(url);
-}
-
 function useFixtureTransferState() {
 	const [busy, setBusyState] = useState(false);
 	const busyRef = useRef(false);
@@ -398,12 +379,32 @@ function gdtfOperations(
 	return { importGdtfFile, confirmGdtfMappings };
 }
 
+function useFixtureExport(selectedMode: FixtureDefinition | null) {
+	const [exportMode, setExportMode] = useState<FixtureDefinition | null>(null);
+	const [exportStatus, setExportStatus] = useState("");
+	return {
+		exportMode,
+		exportStatus,
+		closeExport: (status: string) => {
+			setExportMode(null);
+			setExportStatus(status);
+		},
+		exportSelectedPackage: () => {
+			if (selectedMode) {
+				setExportStatus("");
+				setExportMode(selectedMode);
+			}
+		},
+	};
+}
+
 export function useFixtureLibraryTransfers({
 	selectedMode,
 	setSelectedFamilyKey,
 	setSelectedModeKey,
 }: FixtureLibraryTransfersOptions) {
 	const server = useFixtureLibrary();
+	const exportWorkflow = useFixtureExport(selectedMode);
 	const attributeActions = useAttributeConfigurationActions();
 	const attributeRegistry = useAttributeRegistry() ?? [];
 	const state = useFixtureTransferState();
@@ -523,7 +524,7 @@ export function useFixtureLibraryTransfers({
 		createCustomAttribute,
 		customAttributeDraft,
 		editCustomAttribute,
-		exportSelectedPackage: () => downloadFixturePackage(server, selectedMode),
+		...exportWorkflow,
 		confirmPackageMappings,
 		confirmGdtfMappings,
 		pendingGdtf: state.pendingGdtf,

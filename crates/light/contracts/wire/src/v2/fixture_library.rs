@@ -12,6 +12,25 @@ use uuid::Uuid;
 
 pub use super::attribute_configuration::AttributeValueType;
 
+/// Save one immutable package to an explicitly selected File Manager folder.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixturePackageExportRequest {
+    pub request_id: String,
+    pub root_id: String,
+    pub path: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixturePackageExportOutcome {
+    pub request_id: String,
+    pub replayed: bool,
+    pub profile_id: Uuid,
+    pub revision: u32,
+    pub root_id: String,
+    pub path: String,
+}
+
 /// Read-only canonical import, including every loss/unsupported-data diagnostic.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct FixtureGdtfPreviewRequest {

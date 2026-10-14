@@ -15,6 +15,7 @@ import {
 	FixtureImportDialogs,
 	useFixtureLibraryTransfers,
 } from "./fixtureLibrary/transfers";
+import { FixturePackageExportDialog } from "./fixtureLibrary/FixturePackageExportDialog";
 import { FixtureLibraryWarnings } from "./fixtureLibrary/warnings";
 
 export {
@@ -86,6 +87,15 @@ export function FixtureLibrarySetup({
 				setTypeFilter={setTypeFilter}
 			/>
 			<FixtureLibraryWarnings />
+			{transfers.exportStatus && !transfers.exportMode && (
+				<p role="status">{transfers.exportStatus}</p>
+			)}
+			{transfers.exportMode && (
+				<FixturePackageExportDialog
+					mode={transfers.exportMode}
+					onClose={transfers.closeExport}
+				/>
+			)}
 			<FixtureLibraryBrowser
 				libraryFamilies={model.libraryFamilies}
 				manufacturer={manufacturer}

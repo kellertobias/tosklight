@@ -3,7 +3,7 @@ use super::*;
 use light_wire::v2::show_library::MvrExportSummary;
 use std::{fs, io::Write, path::Path as FsPath};
 
-fn file_name(name: &str, extension: &str) -> Result<String, ApiError> {
+pub(super) fn file_name(name: &str, extension: &str) -> Result<String, ApiError> {
     let name = name.trim();
     let stem = name.strip_suffix(&format!(".{extension}")).unwrap_or(name);
     validate_show_name(stem)?;
@@ -13,7 +13,7 @@ fn file_name(name: &str, extension: &str) -> Result<String, ApiError> {
     Ok(format!("{stem}.{extension}"))
 }
 
-fn write_new(path: &FsPath, bytes: &[u8]) -> Result<(), ApiError> {
+pub(super) fn write_new(path: &FsPath, bytes: &[u8]) -> Result<(), ApiError> {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)

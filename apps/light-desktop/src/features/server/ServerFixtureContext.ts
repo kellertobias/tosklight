@@ -1,5 +1,7 @@
 import type {
 	FixtureAttributeMapping,
+	FixturePackageExportTarget,
+	FixturePackageExportOutcome,
 	FixtureGdtfImportPreview,
 	FixtureGdtfImportInput,
 	FixturePackageImportOutcome,
@@ -95,6 +97,11 @@ export interface ServerFixtureContext {
 		targetAttribute: string | null;
 	}) => Promise<FixtureSourceMapping | null>;
 	exportFixturePackage: (id: string, revision: number) => Promise<Blob>;
+	exportFixturePackageFile?: (
+		id: string,
+		revision: number,
+		target: FixturePackageExportTarget,
+	) => Promise<FixturePackageExportOutcome>;
 	gelCatalogs: (query?: string) => Promise<GelCatalog[]>;
 	previewGelCatalogCsvImport: (input: {
 		target: GelCatalogImportTarget;

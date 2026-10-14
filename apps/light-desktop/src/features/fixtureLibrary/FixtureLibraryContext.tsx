@@ -1,6 +1,8 @@
 import { createContext, type PropsWithChildren, useContext } from "react";
 import type {
 	FixtureAttributeMapping,
+	FixturePackageExportTarget,
+	FixturePackageExportOutcome,
 	FixtureGdtfImportPreview,
 	FixtureGdtfImportInput,
 	FixturePackageImportOutcome,
@@ -53,6 +55,11 @@ export interface FixtureLibraryState {
 		attributeMappings?: FixtureAttributeMapping[],
 	) => Promise<FixturePackageImportOutcome>;
 	exportFixturePackage: (id: string, revision: number) => Promise<Blob>;
+	exportFixturePackageFile?: (
+		id: string,
+		revision: number,
+		target: FixturePackageExportTarget,
+	) => Promise<FixturePackageExportOutcome>;
 	fixtureSourceMappings?: () => Promise<FixtureSourceMapping[]>;
 	rememberFixtureSourceMapping?: (input: {
 		sourceFormat: string;

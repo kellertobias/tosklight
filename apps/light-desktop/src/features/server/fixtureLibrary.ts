@@ -17,6 +17,7 @@ export function createFixtureLibraryActions(
 	| "importFixtureGdtf"
 	| "importFixturePackage"
 	| "exportFixturePackage"
+	| "exportFixturePackageFile"
 	| "fixtureSourceMappings"
 	| "rememberFixtureSourceMapping"
 	| "gelCatalogs"
@@ -121,6 +122,8 @@ export function createFixtureLibraryActions(
 		},
 		exportFixturePackage: (id, revision) =>
 			api.fixtures.exportFixturePackage(id, revision),
+		exportFixturePackageFile: (id, revision, target) =>
+			api.fixtures.exportFixturePackageFile(id, revision, target),
 		fixtureSourceMappings: () => api.fixtures.fixtureSourceMappings(),
 		rememberFixtureSourceMapping: (input) =>
 			api.fixtures.rememberFixtureSourceMapping(input),

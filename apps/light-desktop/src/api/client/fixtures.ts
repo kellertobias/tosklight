@@ -2,6 +2,8 @@ import type { PatchSnapshot } from "../../features/patch/contracts";
 import type { AttributeValueType } from "../attributeConfigurationModels";
 import type {
 	FixtureDefinitionsSnapshot,
+	FixturePackageExportRequest,
+	FixturePackageExportOutcome,
 	FixtureGdtfPreview,
 	FixtureGdtfImportRequest,
 	FixtureLibraryAction,
@@ -25,6 +27,12 @@ import type {
 } from "../types";
 import type { ClientTransport } from "./transport";
 import { jsonRequest } from "./transport";
+
+export type FixturePackageExportTarget = Omit<
+	FixturePackageExportRequest,
+	"request_id"
+>;
+export type { FixturePackageExportOutcome } from "../generated/light-wire";
 
 export interface FixtureAttributeMapping {
 	source_attribute: string;
@@ -287,6 +295,27 @@ export class FixtureApiClient {
 	exportFixturePackage(id: string, revision: number): Promise<Blob> {
 		const path = `/api/v2/fixture-library/profiles/${encodeURIComponent(id)}/revisions/${revision}/package`;
 		return this.transport.blob(path);
+	}
+
+	async exportFixturePackageFile(
+		id: string,
+		revision: number,
+		target: FixturePackageExportTarget,
+	): Promise<FixturePackageExportOutcome> {
+		const request_id = crypto.randomUUID();
+		const result = await this.transport.request<FixturePackageExportOutcome>(
+			`/api/v2/fixture-library/profiles/${encodeURIComponent(id)}/revisions/${revision}/export`,
+			jsonRequest("POST", { ...target, request_id }),
+		);
+		if (
+			result.request_id !== request_id ||
+			result.profile_id !== id ||
+			result.revision !== revision ||
+			result.root_id !== target.root_id ||
+			!result.path?.endsWith(".toskfixture")
+		)
+			throw new Error("The desk returned an invalid fixture export result.");
+		return result;
 	}
 
 	async putFixtureDefinition(

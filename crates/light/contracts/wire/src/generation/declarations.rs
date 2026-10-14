@@ -454,6 +454,8 @@ fn output_control(config: &Config) -> Vec<String> {
 
 fn fixture_library(config: &Config) -> Vec<String> {
     vec![
+        FixturePackageExportRequest::decl(config),
+        FixturePackageExportOutcome::decl(config),
         FixtureGdtfPreviewRequest::decl(config),
         FixtureGdtfDiagnostic::decl(config),
         FixtureGdtfPreview::decl(config),

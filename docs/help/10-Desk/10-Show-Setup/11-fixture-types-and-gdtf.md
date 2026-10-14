@@ -26,7 +26,7 @@ Prism slots choose **Radial** or **Linear**, the number of copies, and their spr
 from the beam axis. Slot zero stays open. An empty prism list retains the generic appearance.
 Export carries these settings and artwork with the fixture revision.
 
-Select a fixture and choose **Export fixture** to download its complete immutable revision. On another desk, choose **Import fixture** and select that file. A package keeps the stable fixture, mode, head, channel, function, split, and geometry IDs. Importing identical content is a no-op; importing changed content with the same fixture ID and manufacturer/name creates the next local revision. Reusing an existing ID for a different fixture family is rejected.
+Select a fixture and choose **Export fixture**, select a writable **Destination** and folder, enter the **File name**, then choose **Save fixture package**. The saved `.toskfixture` contains the complete immutable revision; the dialog reports the saved location or a local error. **Cancel** closes the destination dialog without writing, and an existing file is never overwritten. On another desk, choose **Import fixture** and select that file. A package keeps the stable fixture, mode, head, channel, function, split, and geometry IDs. Importing identical content is a no-op; importing changed content with the same fixture ID and manufacturer/name creates the next local revision. Reusing an existing ID for a different fixture family is rejected.
 
 The shipped package directory currently provides an operator-focused Generic family and these manufacturer profiles with complete ordered mode lists:
 

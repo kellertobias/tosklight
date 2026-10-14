@@ -1112,3 +1112,5 @@ async fn mapped_gdtf_virtual_intensity_defaults_follow_emitters_only_and_preserv
     }
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+include!("fixture_package_export_tests.rs");

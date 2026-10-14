@@ -5,6 +5,7 @@ use super::*;
 use crate::tolerant_json::TolerantJson;
 use light_wire::v2::fixture_library as wire;
 
+mod export;
 mod gdtf;
 
 pub(super) fn router() -> Router<AppState> {
@@ -42,6 +43,10 @@ pub(super) fn router() -> Router<AppState> {
         .route(
             "/api/v2/fixture-library/profiles/{id}/revisions/{revision}/package",
             get(export_fixture_package),
+        )
+        .route(
+            "/api/v2/fixture-library/profiles/{id}/revisions/{revision}/export",
+            post(export::save_package),
         )
         .route(
             "/api/v2/fixture-library/gel-catalogs",
