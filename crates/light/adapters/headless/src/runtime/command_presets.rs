@@ -354,6 +354,11 @@ fn apply_live_group_values(
     }
 }
 
+pub(super) fn explicit_command_preset_value(value: &[String]) -> bool {
+    (value.len() == 3 && matches!(value[1].as_str(), "." | "PRESET"))
+        || (value.len() == 2 && command_preset_address(value).is_ok())
+}
+
 pub(super) fn command_preset_address(
     tokens: &[String],
 ) -> Result<light_programmer::PresetAddress, String> {

@@ -19,13 +19,13 @@ pub(super) fn apply_current_selection_value(
     if let Some(n) = typed_family(state, session, value, &current.selected, None, timing) {
         return n;
     }
-    if value.len() == 3 && value[1] == "." {
-        apply_command_preset(
-            state,
-            session,
-            &format!("{}.{}", value[0], value[2]),
-            &current.selected,
-        )?;
+    if explicit_command_preset_value(value) {
+        let Some(address) =
+            applicable_command_preset_address(state, value, &current.selected, &live_groups)?
+        else {
+            return Ok(0);
+        };
+        apply_command_preset(state, session, &address.storage_key(), &current.selected)?;
         return Ok(current.selected.len());
     }
     if value.iter().any(|token| token == "THRU") {

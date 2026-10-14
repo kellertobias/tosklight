@@ -46,3 +46,6 @@ mod release_command_regressions;
 
 #[path = "preload_layout_authority_tests.rs"]
 mod preload_layout_authority_tests;
+
+#[path = "command_http_named_preset_tests.rs"]
+mod named_presets;

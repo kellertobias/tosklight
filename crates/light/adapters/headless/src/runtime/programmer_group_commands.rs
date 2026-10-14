@@ -32,6 +32,22 @@ fn execute_mixed_group_value(
     ) {
         return n;
     }
+    if explicit_command_preset_value(value) {
+        let Some(address) = applicable_command_preset_address(
+            state,
+            value,
+            &parsed.fixtures,
+            &sources.live_group_owners(),
+        )?
+        else {
+            return Ok(0);
+        };
+        state
+            .programming
+            .select_expression(session.id, parsed.fixtures.clone(), sources);
+        apply_command_preset(state, session, &address.storage_key(), &parsed.fixtures)?;
+        return Ok(parsed.fixtures.len());
+    }
     let percent = percent_level(value)?;
     state.programming.select_expression(
         session.id,
@@ -85,11 +101,11 @@ fn apply_group_value(
     value: &[String],
     timing: CommandTiming,
 ) -> Result<(), String> {
-    if value.len() == 3 && value[1] == "." {
+    if explicit_command_preset_value(value) {
         return apply_command_preset(
             state,
             session,
-            &format!("{}.{}", value[0], value[2]),
+            &command_preset_address(value)?.storage_key(),
             fixtures,
         );
     }
@@ -250,40 +266,17 @@ pub(super) fn execute_group_programmer_command(
     if let Some(n) = typed_family(state, session, value, &fixtures, Some(&expression), timing) {
         return n;
     }
-    if at_index < tokens.len() {
-        let value = &tokens[at_index + 1..];
-        if value.len() == 3 && value[1] == "." {
-            let preset = load_command_preset(state, command_preset_address(value)?)?;
-            let semantic_aim = preset.aim_at_fixture_number.is_some()
-                && state.output.supported_programming_contract()
-                    >= light_core::programming::PROGRAMMING_CONTRACT_VERSION;
-            let preset = if semantic_aim {
-                super::programmer_aim_command::resolve_aim_preset(state, &preset)?
-            } else {
-                preset
-            };
-            let applicable = if let Some(target) = preset.aim_at_fixture_number {
-                !super::programmer_aim_command::aim_selection(state, &fixtures, target)?.is_empty()
-            } else {
-                let groups = state
-                    .output
-                    .snapshot()
-                    .groups
-                    .iter()
-                    .map(|group| (group.id.clone(), group.clone()))
-                    .collect();
-                super::command_presets::command_preset_has_values(
-                    &preset,
-                    &fixtures,
-                    &expression.live_group_owners(),
-                    &groups,
-                    state.output.supported_programming_contract(),
-                )?
-            };
-            if !applicable {
-                return Ok(0);
-            }
-        }
+    if at_index < tokens.len()
+        && explicit_command_preset_value(value)
+        && applicable_command_preset_address(
+            state,
+            value,
+            &fixtures,
+            &expression.live_group_owners(),
+        )?
+        .is_none()
+    {
+        return Ok(0);
     }
     state
         .programming
@@ -300,4 +293,43 @@ pub(super) fn execute_group_programmer_command(
         )?;
     }
     Ok(fixtures.len())
+}
+
+/// Validate against the intended selection before publishing it; a valid but inapplicable
+/// Preset is a no-op. Keep semantic Aim and programming-contract checks identical to Fixture AT.
+pub(super) fn applicable_command_preset_address(
+    state: &AppState,
+    value: &[String],
+    fixtures: &[light_core::FixtureId],
+    live_groups: &[String],
+) -> Result<Option<light_programmer::PresetAddress>, String> {
+    let address = command_preset_address(value)?;
+    let preset = load_command_preset(state, address)?;
+    let semantic_aim = preset.aim_at_fixture_number.is_some()
+        && state.output.supported_programming_contract()
+            >= light_core::programming::PROGRAMMING_CONTRACT_VERSION;
+    let preset = if semantic_aim {
+        super::programmer_aim_command::resolve_aim_preset(state, &preset)?
+    } else {
+        preset
+    };
+    let applicable = if let Some(target) = preset.aim_at_fixture_number {
+        !super::programmer_aim_command::aim_selection(state, fixtures, target)?.is_empty()
+    } else {
+        let groups = state
+            .output
+            .snapshot()
+            .groups
+            .iter()
+            .map(|group| (group.id.clone(), group.clone()))
+            .collect();
+        super::command_presets::command_preset_has_values(
+            &preset,
+            fixtures,
+            live_groups,
+            &groups,
+            state.output.supported_programming_contract(),
+        )?
+    };
+    Ok(applicable.then_some(address))
 }
