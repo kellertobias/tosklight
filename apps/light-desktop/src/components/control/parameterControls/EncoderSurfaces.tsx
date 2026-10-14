@@ -14,6 +14,7 @@ import {
 	type IndexedPresetChoice,
 	indexedPresetChoices,
 } from "./indexedPresetChoices";
+import { indexedPresetState } from "./indexedPresetState";
 import { parameterLabels } from "./model";
 import { ProgrammerDynamicsSurface } from "./ProgrammerDynamicsSurface";
 import type { ParameterController } from "./useParameterController";
@@ -52,8 +53,12 @@ function UnassignedEncoder({
 	);
 }
 
-function indexedPresetConfiguration(indexedPresets: IndexedPresetChoice[]) {
+function indexedPresetConfiguration(
+	indexedPresets: IndexedPresetChoice[],
+	selectedValue?: string,
+) {
 	return {
+		selectedValue,
 		valueTabLabel: "Direct input",
 		presetsTabLabel: "Indexed Presets",
 		showWhenEmpty: true,
@@ -146,6 +151,56 @@ function applyIndexedPresetChoice(
 	);
 }
 
+function encoderAttributeState(
+	controller: ParameterController,
+	activeAttribute: string,
+) {
+	const indexedPresets = indexedPresetChoices(
+		controller.selectedFixtures,
+		controller.selectedFixtureIds,
+		activeAttribute,
+	);
+	const indexedState = indexedPresetState(
+		controller,
+		activeAttribute,
+		indexedPresets,
+	);
+	const value =
+		controller.programmerTarget(activeAttribute) ??
+		indexedState.normalized ??
+		controller.normalized.get(activeAttribute) ??
+		0;
+	const discrete = controller.encoderDiscreteDisplay(activeAttribute);
+	const scale = attributeScale(controller, activeAttribute, value);
+	const { domain, display, stepAttribute } = scale;
+	// Keep direct entry for a common native raw position; mixed profile positions have no
+	// common numeric value to prefill and remain semantic choices.
+	const withoutPlainValue =
+		Boolean(discrete) &&
+		(!scale.stepsBySlot || indexedState.normalized == null);
+	const hasScopedValue = controller.hasProgrammerValue(activeAttribute);
+	const label =
+		parameterLabels[activeAttribute] ??
+		controller.attributeLabels.get(activeAttribute) ??
+		activeAttribute.replaceAll(".", " ");
+	const presetConfig = indexedPresetConfiguration(
+		indexedPresets,
+		indexedState.selectedValue,
+	);
+	return {
+		indexedPresets,
+		value,
+		discrete,
+		domain,
+		display,
+		stepAttribute,
+		withoutPlainValue,
+		hasScopedValue,
+		label,
+		presetConfig,
+	};
+}
+
 function EncoderSurface({
 	controller,
 	attribute,
@@ -171,26 +226,18 @@ function EncoderSurface({
 		);
 	const activeAttribute =
 		pushTurnActive && pushTurnAttribute ? pushTurnAttribute : attribute;
-	const value =
-		controller.programmerTarget(activeAttribute) ??
-		controller.normalized.get(activeAttribute) ??
-		0;
-	const discrete = controller.encoderDiscreteDisplay(activeAttribute);
-	const scale = attributeScale(controller, activeAttribute, value);
-	const { domain, display, stepAttribute } = scale;
-	// A named slot still has a plain value behind it, so the number pad stays open for it.
-	const withoutPlainValue = Boolean(discrete) && !scale.stepsBySlot;
-	const hasScopedValue = controller.hasProgrammerValue(activeAttribute);
-	const label =
-		parameterLabels[activeAttribute] ??
-		controller.attributeLabels.get(activeAttribute) ??
-		activeAttribute.replaceAll(".", " ");
-	const indexedPresets = indexedPresetChoices(
-		controller.selectedFixtures,
-		controller.selectedFixtureIds,
-		activeAttribute,
-	);
-	const presetConfig = indexedPresetConfiguration(indexedPresets);
+	const {
+		indexedPresets,
+		value,
+		discrete,
+		domain,
+		display,
+		stepAttribute,
+		withoutPlainValue,
+		hasScopedValue,
+		label,
+		presetConfig,
+	} = encoderAttributeState(controller, activeAttribute);
 	const selectIndexedPreset = (id: string) => {
 		const choice = indexedPresets.find((candidate) => candidate.id === id);
 		if (choice) applyIndexedPresetChoice(controller, activeAttribute, choice);
@@ -198,6 +245,7 @@ function EncoderSurface({
 	const surface = controller.hardwareConnected ? (
 		<HardwareEncoderDisplay
 			slot={index + 1}
+			choices={withoutPlainValue && indexedPresets.length > 0}
 			activateOnHardwarePress
 			target={{ label, value: discrete ?? display }}
 			editValue={withoutPlainValue ? undefined : domainValue(domain, value)}
@@ -331,17 +379,17 @@ export function EncoderSurfaces({
 						index={index}
 					/>
 				) : (
-				<EncoderSurface
-					key={attribute ?? `empty-${index}`}
-					controller={controller}
-					attribute={attribute}
-					pushTurnAttribute={controller.encoderPushTurnSlots[index] ?? null}
-					index={index}
-					deleteArmed={deleteArmed}
-					resetCommandLine={() =>
-						commandLineActions?.reset() ?? Promise.resolve(false)
-					}
-				/>
+					<EncoderSurface
+						key={attribute ?? `empty-${index}`}
+						controller={controller}
+						attribute={attribute}
+						pushTurnAttribute={controller.encoderPushTurnSlots[index] ?? null}
+						index={index}
+						deleteArmed={deleteArmed}
+						resetCommandLine={() =>
+							commandLineActions?.reset() ?? Promise.resolve(false)
+						}
+					/>
 				),
 			)}
 		</>

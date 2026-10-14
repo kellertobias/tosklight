@@ -155,11 +155,10 @@ export function discreteParameterDisplay(
 		return discreteParameterTarget(projection, attribute);
 	return formatDiscreteValues(
 		projection.selectedFixtureIds.flatMap((fixtureId) => {
-			const target = discreteProgrammerTarget(
-				fixtureEntry(projection, fixtureId, attribute)?.value,
-			);
-			const value =
-				target ?? projection.discreteByFixture.get(fixtureId)?.get(attribute);
+			const entry = fixtureEntry(projection, fixtureId, attribute);
+			const value = entry
+				? discreteProgrammerTarget(entry.value)
+				: projection.discreteByFixture.get(fixtureId)?.get(attribute);
 			return value == null ? [] : [value];
 		}),
 	);
