@@ -9,6 +9,7 @@ import {
 import type { DeskConfiguration } from "../../api/types";
 import {
 	selectColorPresentation,
+	selectConfiguredFrameRateHz,
 	selectCuelistAutoOffAtZeroDefault,
 	selectCuelistAutoOffFlashReleaseDefault,
 	selectDeskConfiguration,
@@ -46,6 +47,11 @@ export function ConfigurationStateProvider({
 /** The desk's Easy/Advanced Color encoder presentation (Easy RGBW until one is chosen). */
 export function useColorPresentation() {
 	return useConfigurationSelector(selectColorPresentation, Object.is);
+}
+
+/** The live configured output rate, or null until configuration is available. */
+export function useConfiguredFrameRateHz(): number | null {
+	return useConfigurationSelector(selectConfiguredFrameRateHz, Object.is);
 }
 
 /** Programmer fade in milliseconds, or null while the desk configuration is unknown. */

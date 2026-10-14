@@ -12,16 +12,17 @@ import type {
 	SessionResponse,
 	ShowEntry,
 } from "../../api/types";
+import { useConfiguredFrameRateHz } from "../configuration/ConfigurationState";
 import {
 	equalActiveShow,
 	selectActiveShow,
+	selectActiveShowError,
 	selectActiveShowId,
 	selectActiveTimecode,
-	selectActiveShowError,
 	selectAttributeRegistry,
-	selectColorModel,
 	selectBootstrap,
 	selectBootstrapReady,
+	selectColorModel,
 	selectFrameRateHz,
 	selectHardwareConnected,
 	selectOutputHealth,
@@ -29,7 +30,7 @@ import {
 } from "./selectors";
 import {
 	type DeskSnapshot,
-	DeskSnapshotStore,
+	type DeskSnapshotStore,
 	EMPTY_DESK_SNAPSHOT,
 } from "./store";
 
@@ -61,9 +62,11 @@ export function useHardwareConnected(): boolean {
 	return useDeskSnapshotSelector(selectHardwareConnected, Object.is);
 }
 
-/** The configured output frame rate, or null while the bootstrap is unknown. */
+/** The live configured output rate, with bootstrap as an initial fallback. */
 export function useFrameRateHz(): number | null {
-	return useDeskSnapshotSelector(selectFrameRateHz, Object.is);
+	const configuredRate = useConfiguredFrameRateHz();
+	const bootstrapRate = useDeskSnapshotSelector(selectFrameRateHz, Object.is);
+	return configuredRate ?? bootstrapRate;
 }
 
 /** The active timecode display value, or null when no timecode source is active. */

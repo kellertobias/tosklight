@@ -1,6 +1,10 @@
 import type { DeskConfiguration } from "../../api/types";
 import type { ConfigurationSnapshot } from "./store";
 
+export function selectConfiguredFrameRateHz(snapshot: ConfigurationSnapshot) {
+	return snapshot.configuration?.frame_rate_hz ?? null;
+}
+
 export function selectProgrammerFadeMillis(snapshot: ConfigurationSnapshot) {
 	return snapshot.configuration?.programmer_fade_millis ?? null;
 }
