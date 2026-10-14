@@ -26,8 +26,14 @@ permissions:
   id-token: write
 
 concurrency:
-  group: nightly-documentation
-  cancel-in-progress: true
+  # Skipped CI completions must not displace an active or pending publisher.
+  group: >-
+    ${{ (github.event_name != 'workflow_run' ||
+    (github.event.workflow_run.conclusion == 'success' &&
+    github.event.workflow_run.event == 'push' &&
+    github.event.workflow_run.head_branch == 'main')) &&
+    'nightly-documentation' || format('documentation-ignored-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
