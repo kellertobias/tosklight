@@ -6,6 +6,7 @@
 //! same scene, which is why the deltas below are broadcast rather than sent to one window.
 
 mod aim;
+mod attachments;
 pub mod history;
 mod layer_visibility;
 pub mod numeric_placement;
@@ -17,6 +18,7 @@ mod transform;
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
 use aim::{CadAim, aim_lamps};
+use attachments::snap_attachments;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use history::{History, TransformRecord};
 use layer_visibility::{
@@ -638,77 +640,6 @@ fn attachments(session: &Session) -> Result<Vec<RigAttachment>, String> {
             .map(|object| serde_json::from_value(object.body).map_err(|error| error.to_string()))
             .collect()
     })
-}
-
-fn snap_attachments(
-    session: &Session,
-    moved: &[EntityTransform],
-) -> Result<Vec<RigAttachment>, String> {
-    let scene =
-        session.with(|document| document.patch_snapshot().map_err(|error| error.to_string()))?;
-    let entities = entities(&scene, &BTreeSet::new(), &fixture_notes(session)?);
-    let trusses = entities
-        .iter()
-        .filter(|entity| {
-            entity.kind == "venue"
-                && (entity.name.to_lowercase().contains("truss")
-                    || entity.name.to_lowercase().contains("pipe"))
-        })
-        .collect::<Vec<_>>();
-    let mut created = Vec::new();
-    for fixture in moved {
-        let Some(truss) = trusses.iter().min_by_key(|truss| {
-            let dy = fixture.position_millimetres[1] - truss.position_millimetres[1];
-            let dz = fixture.position_millimetres[2] - truss.position_millimetres[2];
-            i64::from(dy).pow(2) + i64::from(dz).pow(2)
-        }) else {
-            continue;
-        };
-        let dy = fixture.position_millimetres[1] - truss.position_millimetres[1];
-        let dz = fixture.position_millimetres[2] - truss.position_millimetres[2];
-        if i64::from(dy).pow(2) + i64::from(dz).pow(2) > 500_i64.pow(2) {
-            continue;
-        }
-        let offset = fixture.position_millimetres[0] - truss.position_millimetres[0];
-        if offset.abs() as f32 > truss.size_millimetres[0] / 2.0 + 250.0 {
-            continue;
-        }
-        let attachment = RigAttachment {
-            fixture_id: fixture.id,
-            truss_member_id: truss.id,
-            mounting_point_id: format!("{}:x:{}", truss.id, (offset / 100) * 100),
-            local_transform: EntityTransform {
-                id: fixture.id,
-                position_millimetres: [offset, dy, dz],
-                rotation_degrees: fixture.rotation_degrees,
-            },
-        };
-        session.change(|document| {
-            document
-                .put_object(
-                    "rig_attachment",
-                    &fixture.id.to_string(),
-                    &serde_json::to_value(&attachment).map_err(|error| error.to_string())?,
-                )
-                .map_err(|error| error.to_string())
-        })?;
-        created.push(attachment);
-    }
-    let attached = created
-        .iter()
-        .map(|attachment| attachment.fixture_id)
-        .collect::<BTreeSet<_>>();
-    for fixture in moved {
-        if !attached.contains(&fixture.id) {
-            session.change(|document| {
-                document
-                    .delete_object("rig_attachment", &fixture.id.to_string())
-                    .map(|_| ())
-                    .map_err(|error| error.to_string())
-            })?;
-        }
-    }
-    Ok(created)
 }
 
 fn clear_attachments(session: &Session, moved: &[EntityTransform]) -> Result<(), String> {

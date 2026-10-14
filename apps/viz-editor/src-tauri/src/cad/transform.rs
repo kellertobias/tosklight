@@ -8,6 +8,17 @@ pub(super) fn transform(
     cad: &CadState,
     intent: TransformIntent,
 ) -> Result<TransformOutcome, String> {
+    let outcome = commit(session, cad, intent)?;
+    emit_scene_delta(app, session, cad, outcome.scene_revision, Vec::new())?;
+    Ok(outcome)
+}
+
+/// The persisted gesture, shared by the desktop wrapper and real document regressions.
+pub(super) fn commit(
+    session: &Session,
+    cad: &CadState,
+    intent: TransformIntent,
+) -> Result<TransformOutcome, String> {
     if intent.entity_ids.is_empty() {
         return Err("Select at least one fixture or venue object to move".to_owned());
     }
@@ -64,7 +75,6 @@ pub(super) fn transform(
         before_attachments,
         after_attachments,
     });
-    emit_scene_delta(app, session, cad, revision, Vec::new())?;
     Ok(TransformOutcome {
         scene_revision: revision,
         transforms: after,

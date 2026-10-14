@@ -397,3 +397,247 @@ fn fixture_and_layer_visibility_remove_entities_from_2d_selection() {
     assert!(selectable_ids(&session).unwrap().is_empty());
     let _ = std::fs::remove_file(path);
 }
+
+fn attachment_test_session() -> (Session, PathBuf, [Uuid; 2]) {
+    attachment_test_session_with_mount(true)
+}
+
+fn attachment_test_session_with_mount(declared: bool) -> (Session, PathBuf, [Uuid; 2]) {
+    let (session, path, ids) = transform_session();
+    session
+        .change(|document| {
+            let snapshot = document
+                .patch_snapshot()
+                .map_err(|error| error.to_string())?;
+            let mut candidates = Vec::new();
+            for fixture in &snapshot.fixtures {
+                let index = usize::from(fixture.patch.fixture_id.0 != ids[0]);
+                let mut profile = snapshot.profile_revisions[0].profile_snapshot.clone();
+                let profile_id = Uuid::new_v4();
+                profile["id"] = serde_json::json!(profile_id);
+                if index == 0 {
+                    profile["patch_policy"] = serde_json::json!("visual_only");
+                    for mode in profile["modes"].as_array_mut().unwrap() {
+                        mode["channels"] = serde_json::json!([]);
+                        for split in mode["splits"].as_array_mut().unwrap() {
+                            split["footprint"] = serde_json::json!(0);
+                        }
+                    }
+                    profile["scenery"] = serde_json::json!({"kind":"truss","chords":1,
+                    "default_size_metres":{"x":2.0,"y":0.05,"z":0.05},
+                    "minimum_size_metres":{"x":2.0,"y":0.05,"z":0.05},
+                    "maximum_size_metres":{"x":2.0,"y":0.05,"z":0.05}});
+                } else if declared {
+                    profile["mounting"] = serde_json::json!({"hardware":"clamp",
+                    "centre_millimetres":{"x":0,"y":0,"z":0},
+                    "half_extent_millimetres":{"x":30,"y":30,"z":30},
+                    "pipe_millimetres":{"x":0,"y":0,"z":0}});
+                }
+                if index != 0 && !declared {
+                    profile.as_object_mut().unwrap().remove("mounting");
+                }
+                document
+                    .retain_fixture_profile(profile)
+                    .map_err(|error| error.to_string())?;
+                let mut profile_ref = fixture.profile;
+                profile_ref.profile_id = FixtureId(profile_id);
+                let mut patch = fixture.patch.clone();
+                patch.name = if index == 0 {
+                    "Attachment truss"
+                } else {
+                    "Attachment lamp"
+                }
+                .into();
+                patch.location = FixtureLocation { x: 0, y: 0, z: 0 };
+                patch.multipatch.clear();
+                if index == 0 {
+                    patch.scenery_size_metres = Some(FixtureVector {
+                        x: 2000.0,
+                        y: 50.0,
+                        z: 50.0,
+                    });
+                    patch.universe = None;
+                    patch.address = None;
+                    for split in &mut patch.split_patches {
+                        split.universe = None;
+                        split.address = None;
+                    }
+                }
+                candidates.push(PatchFixtureCandidate {
+                    profile: profile_ref,
+                    patch,
+                });
+            }
+            document
+                .patch_fixtures(PatchFixturesCommand {
+                    show_id: document.show_id(),
+                    fixtures: candidates,
+                    remove_fixture_ids: Vec::new(),
+                    placements: Vec::new(),
+                    vector_spreads: Vec::new(),
+                    fixture_updates: Vec::new(),
+                })
+                .map_err(|error| error.to_string())?;
+            Ok(())
+        })
+        .unwrap();
+    (session, path, ids)
+}
+
+fn attachment_gesture(
+    session: &Session,
+    cad: &super::CadState,
+    ids: Vec<Uuid>,
+) -> super::TransformOutcome {
+    let revision = session
+        .with(|document| document.patch_revision().map_err(|error| error.to_string()))
+        .unwrap();
+    super::transform::commit(
+        session,
+        cad,
+        super::TransformIntent {
+            expected_scene_revision: revision,
+            entity_ids: ids,
+            delta_millimetres: [10, 0, 0],
+            spread: false,
+            snap_to_mounts: true,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn snapped_truss_gesture_cannot_persist_self_attachment() {
+    let (session, path, ids) = attachment_test_session();
+    let result = attachment_gesture(&session, &super::CadState::default(), vec![ids[0]]);
+    assert!(
+        result.attachments.is_empty(),
+        "a connector snap is not a lamp mount"
+    );
+    assert!(super::attachments(&session).unwrap().is_empty());
+    drop(session);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn snapped_lamp_and_selected_truss_cannot_attach_to_moved_peer() {
+    let (session, path, ids) = attachment_test_session();
+    let result = attachment_gesture(&session, &super::CadState::default(), ids.to_vec());
+    assert!(
+        result.attachments.is_empty(),
+        "all moving logical roots are excluded"
+    );
+    drop(session);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn snapped_fixture_without_declared_mount_cannot_acquire_attachment() {
+    let (session, path, ids) = attachment_test_session_with_mount(false);
+    attachment_gesture(&session, &super::CadState::default(), vec![ids[1]]);
+    assert!(
+        super::attachments(&session).unwrap().is_empty(),
+        "legacy drawn clamp is not persisted mounting authority"
+    );
+    drop(session);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn snapped_declared_lamp_mounts_stationary_pipe_and_cleans_up_outside_reach() {
+    let (session, path, ids) = attachment_test_session();
+    let cad = super::CadState::default();
+    let result = attachment_gesture(&session, &cad, vec![ids[1]]);
+    assert_eq!(result.attachments.len(), 1);
+    assert_eq!(result.attachments[0].fixture_id, ids[1]);
+    assert_eq!(result.attachments[0].truss_member_id, ids[0]);
+    let stored = serde_json::to_value(super::attachments(&session).unwrap()).unwrap();
+    drop(session);
+    let session = Session::default();
+    session.open(&path).unwrap();
+    assert_eq!(
+        serde_json::to_value(super::attachments(&session).unwrap()).unwrap(),
+        stored
+    );
+    let revision = session
+        .with(|document| document.patch_revision().map_err(|error| error.to_string()))
+        .unwrap();
+    super::transform::commit(
+        &session,
+        &cad,
+        super::TransformIntent {
+            expected_scene_revision: revision,
+            entity_ids: vec![ids[1]],
+            delta_millimetres: [0, 100, 0],
+            spread: false,
+            snap_to_mounts: true,
+        },
+    )
+    .unwrap();
+    assert!(
+        super::attachments(&session).unwrap().is_empty(),
+        "declared30mm clip does not reach100mmawaypipe"
+    );
+    drop(session);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn snapped_attachment_gesture_history_restores_undo_and_redo_exactly() {
+    let (session, path, ids) = attachment_test_session();
+    let cad = super::CadState::default();
+    let moved = attachment_gesture(&session, &cad, vec![ids[1]]);
+    let record = super::history::last_move(&cad.history.lock());
+    assert!(record.before_attachments.is_empty());
+    assert_eq!(record.after_attachments.len(), 1);
+    let undo =
+        super::history::restore_move(&session, moved.scene_revision, &record, false).unwrap();
+    assert!(undo.attachments.is_empty());
+    assert_eq!(undo.transforms[0].position_millimetres, [0, 0, 0]);
+    let redo = super::history::restore_move(&session, undo.scene_revision, &record, true).unwrap();
+    assert_eq!(
+        serde_json::to_value(&redo.attachments).unwrap(),
+        serde_json::to_value(&moved.attachments).unwrap()
+    );
+    assert_eq!(redo.transforms[0].position_millimetres, [10, 0, 0]);
+    assert!(
+        super::history::restore_move(&session, undo.scene_revision, &record, false).is_err(),
+        "stale history cannot replay"
+    );
+    drop(session);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn snapped_declared_clamp_uses_rotated_stationary_pipe_geometry() {
+    let (session, path, ids) = attachment_test_session();
+    let revision = session
+        .with(|document| document.patch_revision().map_err(|error| error.to_string()))
+        .unwrap();
+    apply_transforms(
+        &session,
+        revision,
+        &[
+            EntityTransform {
+                id: ids[0],
+                position_millimetres: [0, 0, 0],
+                rotation_degrees: [0.0, 0.0, 90.0],
+            },
+            EntityTransform {
+                id: ids[1],
+                position_millimetres: [0, 600, 0],
+                rotation_degrees: [0.0; 3],
+            },
+        ],
+    )
+    .unwrap();
+    let result = attachment_gesture(&session, &super::CadState::default(), vec![ids[1]]);
+    assert_eq!(
+        result.attachments.len(),
+        1,
+        "lamp along rotated pipe is within declared clip reach"
+    );
+    assert_eq!(result.attachments[0].truss_member_id, ids[0]);
+    drop(session);
+    std::fs::remove_file(path).unwrap();
+}

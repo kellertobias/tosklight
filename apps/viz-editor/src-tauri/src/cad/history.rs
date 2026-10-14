@@ -420,18 +420,14 @@ fn apply_step(
             })
         }
         Step::Move(record) => {
-            let (transforms, stored) = match direction {
-                Direction::Back => (&record.before, &record.before_attachments),
-                Direction::Forward => (&record.after, &record.after_attachments),
-            };
-            let revision = apply_transforms(session, expected_scene_revision, transforms)?;
-            restore_attachments(session, transforms, stored)?;
-            emit_scene_delta(app, session, cad, revision, Vec::new())?;
-            Ok(TransformOutcome {
-                scene_revision: revision,
-                transforms: transforms.clone(),
-                attachments: attachments(session)?,
-            })
+            let outcome = restore_move(
+                session,
+                expected_scene_revision,
+                record,
+                matches!(direction, Direction::Forward),
+            )?;
+            emit_scene_delta(app, session, cad, outcome.scene_revision, Vec::new())?;
+            Ok(outcome)
         }
         Step::Delete(record) | Step::Add(record) => {
             check_revision(session, expected_scene_revision)?;
@@ -451,6 +447,35 @@ fn apply_step(
                 attachments: attachments(session)?,
             })
         }
+    }
+}
+
+/// Restore exactly the recorded pose and attachment set; shared by both history directions.
+pub(super) fn restore_move(
+    session: &Session,
+    expected_revision: u64,
+    record: &TransformRecord,
+    forward: bool,
+) -> Result<TransformOutcome, String> {
+    let (transforms, stored) = if forward {
+        (&record.after, &record.after_attachments)
+    } else {
+        (&record.before, &record.before_attachments)
+    };
+    let revision = apply_transforms(session, expected_revision, transforms)?;
+    restore_attachments(session, transforms, stored)?;
+    Ok(TransformOutcome {
+        scene_revision: revision,
+        transforms: transforms.clone(),
+        attachments: attachments(session)?,
+    })
+}
+
+#[cfg(test)]
+pub(super) fn last_move(history: &History) -> TransformRecord {
+    match history.undo.last().unwrap() {
+        Step::Move(record) => record.clone(),
+        _ => panic!("expected real move history"),
     }
 }
 
