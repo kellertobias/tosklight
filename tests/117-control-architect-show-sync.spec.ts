@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 import { ArchitectHarness } from "./bench/architect/architectHarness";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
@@ -389,24 +390,44 @@ test("ARCHITECT-SYNC-07 @api a thousand Architect edits a minute keep the desk o
 	api,
 	bench,
 	show,
-}) => {
+}, testInfo) => {
 	test.setTimeout(120_000);
 	const { architect } = await boundArchitect(bench, show.id);
+	const measurements: Record<string, unknown> = {
+		requested_free_run_millis: 20_000,
+		gesture_millis: [],
+	};
 	try {
 		const diagnostics = () =>
 			api.request<{ output: { frames_sent: number; deadline_misses: number } }>("GET", "/api/v2/diagnostics");
 		const startOutput = (await diagnostics()).output;
-		const running = api.request("POST", "/api/v2/test/clock/free-run", { millis: 20_000 }, false);
+		measurements.output_before = startOutput;
+		const running = api.request<{ wall_millis: number; now: string }>(
+			"POST", "/api/v2/test/clock/free-run", { millis: 20_000 }, false,
+		).then((response) => {
+			measurements.free_run_response = response;
+			return response;
+		});
 		const started = Date.now();
 		const reloads = await countShowReloads(bench.baseUrl, show.session.token, async () => {
 			for (let index = 0; index < 1_000; index += 1) {
+				const gestureStarted = performance.now();
 				await architect.gesture(annotation(`burst-${index % 50}`, `edit ${index}`));
+				(measurements.gesture_millis as number[]).push(performance.now() - gestureStarted);
 			}
+			measurements.gestures_elapsed_millis = Date.now() - started;
+			const flushStarted = performance.now();
 			await expect.poll(() => architect.phase(), { ...POLL, timeout: 60_000 }).toBe("synced");
+			measurements.flush_millis = performance.now() - flushStarted;
 		});
 		const elapsed = Date.now() - started;
+		measurements.edits_and_flush_elapsed_millis = elapsed;
+		measurements.show_reloads = reloads;
 		await running;
 		const endOutput = (await diagnostics()).output;
+		measurements.output_after = endOutput;
+		measurements.successful_output_cycles = endOutput.frames_sent - startOutput.frames_sent;
+		measurements.snapshot_reads = (await architect.status()).snapshot_reads;
 		expect(elapsed, "1,000 edits reach the desk within a minute").toBeLessThan(60_000);
 		expect(reloads, "no edit reloads the desk's show").toBe(0);
 		expect((await architect.status()).snapshot_reads, "the Architect never re-reads the whole show").toBe(0);
@@ -415,7 +436,35 @@ test("ARCHITECT-SYNC-07 @api a thousand Architect edits a minute keep the desk o
 		expect(annotations).toHaveLength(50);
 		expect(annotations.find((object) => object.id === "burst-49")?.body.text).toBe("edit 999");
 	} finally {
-		await architect.kill();
+		try {
+			measurements.server_stage_aggregates = stripVTControlCharacters(bench.recentLog())
+				.split("\n")
+				.filter((line) => line.includes("isolated sync transaction timings"))
+				.flatMap((line) => {
+					const numeric = /numeric_phases=(\{.*\})/.exec(line)?.[1];
+					try {
+						return numeric ? [JSON.parse(numeric)] : [];
+					} catch {
+						return [{ diagnostic_parse_failed: true }];
+					}
+				});
+			const gestureMillis = measurements.gesture_millis as number[];
+			const sorted = [...gestureMillis].sort((left, right) => left - right);
+			measurements.gesture_summary = {
+				count: gestureMillis.length,
+				maximum_millis: sorted.at(-1) ?? null,
+				p95_millis: sorted[Math.ceil(sorted.length * 0.95) - 1] ?? null,
+			};
+			const { gesture_millis: _samples, server_stage_aggregates: _stages, ...summary } = measurements;
+			summary.last_server_stage_aggregate = (measurements.server_stage_aggregates as unknown[]).at(-1);
+			console.log("ARCHITECT-SYNC-07 diagnostics", JSON.stringify(summary));
+			await testInfo.attach("architect-sync-burst-diagnostics", {
+				body: Buffer.from(JSON.stringify(measurements, null, 2)),
+				contentType: "application/json",
+			});
+		} finally {
+			await architect.kill();
+		}
 	}
 });
 

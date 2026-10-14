@@ -412,39 +412,76 @@ impl ActiveShowService {
         P: ActiveShowPorts,
     {
         ports.authorize_mutation(context)?;
-        ports.run_active_show_lifecycle(context, show_id, || {
-            let _ordered = self.operation.lock();
-            let mut unit = ports.begin_active_show(context, show_id)?;
-            match prepare(&unit)? {
-                PreparedActiveShowTransaction::NoChange(state) => Ok(complete(
-                    &self.events,
-                    ports,
-                    context,
-                    CompletedActiveShowTransaction {
-                        state,
-                        commit: None,
-                    },
-                )),
-                PreparedActiveShowTransaction::PreparedCommit { prepared, state } => {
-                    let (transaction, snapshot) = (*prepared).into_parts();
-                    let runtime = ports.prepare_runtime(snapshot)?;
-                    let commit = ports.finalize_runtime(context, runtime, || {
-                        unit.backup(&backup_identity(context, show_id, operation))?;
-                        unit.commit(transaction)
-                    })?;
-                    Ok(complete(
-                        &self.events,
-                        ports,
-                        context,
-                        CompletedActiveShowTransaction {
-                            state,
-                            commit: Some(commit),
-                        },
-                    ))
+        let timing = operation == "show-sync" && ports.transaction_timing_enabled();
+        measure_transaction(ports, timing, "total", || {
+            ports.run_active_show_lifecycle(context, show_id, || {
+                let _ordered =
+                    measure_transaction(ports, timing, "operation_wait", || self.operation.lock());
+                let mut unit = measure_transaction(ports, timing, "begin", || {
+                    ports.begin_active_show(context, show_id)
+                })?;
+                match measure_transaction(ports, timing, "prepare", || prepare(&unit))? {
+                    PreparedActiveShowTransaction::NoChange(state) => {
+                        Ok(measure_transaction(ports, timing, "complete", || {
+                            complete(
+                                &self.events,
+                                ports,
+                                context,
+                                CompletedActiveShowTransaction {
+                                    state,
+                                    commit: None,
+                                },
+                            )
+                        }))
+                    }
+                    PreparedActiveShowTransaction::PreparedCommit { prepared, state } => {
+                        let (transaction, snapshot) = (*prepared).into_parts();
+                        let runtime =
+                            measure_transaction(ports, timing, "prepare_runtime", || {
+                                ports.prepare_runtime(snapshot)
+                            })?;
+                        let commit =
+                            measure_transaction(ports, timing, "finalize_runtime", || {
+                                ports.finalize_runtime(context, runtime, || {
+                                    measure_transaction(ports, timing, "backup", || {
+                                        unit.backup(&backup_identity(context, show_id, operation))
+                                    })?;
+                                    measure_transaction(ports, timing, "commit", || {
+                                        unit.commit(transaction)
+                                    })
+                                })
+                            })?;
+                        Ok(measure_transaction(ports, timing, "complete", || {
+                            complete(
+                                &self.events,
+                                ports,
+                                context,
+                                CompletedActiveShowTransaction {
+                                    state,
+                                    commit: Some(commit),
+                                },
+                            )
+                        }))
+                    }
                 }
-            }
+            })
         })
     }
+}
+
+fn measure_transaction<P: ActiveShowPorts, T>(
+    ports: &P,
+    enabled: bool,
+    phase: &'static str,
+    operation: impl FnOnce() -> T,
+) -> T {
+    if !enabled {
+        return operation();
+    }
+    let started = std::time::Instant::now();
+    let result = operation();
+    ports.record_transaction_timing(phase, started.elapsed());
+    result
 }
 
 pub(crate) enum PreparedActiveShowTransaction<T> {

@@ -60,7 +60,7 @@ async fn transaction(
     let envelope = ActionEnvelope { context, command };
     let worker = state.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let ports = ServerShowPatchPorts::new(worker.clone());
+        let ports = ServerShowPatchPorts::sync_transaction(worker.clone());
         worker.active_show.synchronize(envelope, &ports)
     })
     .await

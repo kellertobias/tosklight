@@ -36,6 +36,13 @@ pub trait ActiveShowPorts: Send + Sync {
     type UnitOfWork: ActiveShowUnitOfWork;
     type PreparedRuntime;
 
+    /// Internal bench telemetry; normal adapters leave this disabled. No transport fields.
+    fn transaction_timing_enabled(&self) -> bool {
+        false
+    }
+
+    fn record_transaction_timing(&self, _phase: &'static str, _elapsed: std::time::Duration) {}
+
     fn authorize_mutation(&self, _context: &ActionContext) -> Result<(), ActionError> {
         Ok(())
     }

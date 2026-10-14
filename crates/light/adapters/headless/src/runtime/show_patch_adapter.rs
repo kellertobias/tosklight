@@ -1,3 +1,4 @@
+mod burst_timing;
 mod errors;
 mod programming_replacement;
 
@@ -29,6 +30,7 @@ pub(super) struct ServerShowPatchPorts {
     state: AppState,
     current_patch_revision: Arc<RwLock<Option<u64>>>,
     activation_held: bool,
+    sync_timing: bool,
     programming_replacement: Arc<RwLock<programming_replacement::PreparedProgrammingReplacement>>,
 }
 
@@ -38,8 +40,16 @@ impl ServerShowPatchPorts {
             state,
             current_patch_revision: Arc::new(RwLock::new(None)),
             activation_held: false,
+            sync_timing: false,
             programming_replacement: Arc::new(RwLock::new(Default::default())),
         }
+    }
+
+    pub(super) fn sync_transaction(state: AppState) -> Self {
+        let enabled = state.output.has_test_clock();
+        let mut ports = Self::new(state);
+        ports.sync_timing = enabled;
+        ports
     }
 
     pub(super) fn with_activation_held(state: AppState) -> Self {
@@ -47,6 +57,7 @@ impl ServerShowPatchPorts {
             state,
             current_patch_revision: Arc::new(RwLock::new(None)),
             activation_held: true,
+            sync_timing: false,
             programming_replacement: Arc::new(RwLock::new(Default::default())),
         }
     }
@@ -158,6 +169,16 @@ impl ActiveShowPorts for ServerShowPatchPorts {
     type UnitOfWork = ServerShowPatchUnitOfWork;
     type PreparedRuntime = PreparedOutputSnapshot;
 
+    fn transaction_timing_enabled(&self) -> bool {
+        self.sync_timing
+    }
+
+    fn record_transaction_timing(&self, phase: &'static str, elapsed: std::time::Duration) {
+        if self.sync_timing {
+            burst_timing::record(phase, elapsed);
+        }
+    }
+
     fn run_active_show_lifecycle<T>(
         &self,
         _context: &ActionContext,
@@ -169,8 +190,17 @@ impl ActiveShowPorts for ServerShowPatchPorts {
         if self.activation_held {
             return self.state.programming.run_active_show_boundary(operation);
         }
+        let started = self.sync_timing.then(std::time::Instant::now);
         let _activation = self.state.active_show.acquire_blocking();
-        self.state.programming.run_active_show_boundary(operation)
+        if let Some(started) = started {
+            self.record_transaction_timing("activation_wait", started.elapsed());
+        }
+        let held = self.sync_timing.then(std::time::Instant::now);
+        let result = self.state.programming.run_active_show_boundary(operation);
+        if let Some(held) = held {
+            self.record_transaction_timing("activation_held", held.elapsed());
+        }
+        result
     }
 
     fn begin_active_show(

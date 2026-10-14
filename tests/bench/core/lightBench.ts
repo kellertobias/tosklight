@@ -135,6 +135,9 @@ export class LightBench {
     const semantic = this.semanticProgrammingContract;
     // The opt-in is never inherited: only a semantic bench sets it, and only for its own server.
     const env = { ...process.env };
+    // Numeric-only manual-clock sync telemetry must survive an inherited warn/error filter.
+    // This directive belongs only to this isolated child, never the native desk or parent.
+    env.RUST_LOG = `${env.RUST_LOG ?? "warn"},light_headless_runtime::runtime::show_patch_adapter::burst_timing=info`;
     delete env[SEMANTIC_CONTRACT_ENV];
     if (semantic) env[SEMANTIC_CONTRACT_ENV] = "1";
     this.process = spawn(semantic ? SEMANTIC_SERVER : SERVER, [
