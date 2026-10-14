@@ -479,6 +479,236 @@ test("measured evidence reuses exact existing diagnostic reads without changing 
 	assert.equal(result.windows_below_target, 0);
 });
 
+test("matched counter and CPU intervals include slow diagnostics and process reads", async () => {
+	let clock = 0;
+	let reads = 0;
+	const samples = [];
+	const cpuIntervals = [];
+	const processes = [
+		"light-headless",
+		"viz-renderer",
+		"WebKitWebProces",
+		"light-desktop",
+	].map((command, index) => ({ command, pid: index + 1 }));
+	const measure = load("measureWindow", "\nfunction apiClient(", {
+		DURATION_SECONDS: 2,
+		performance: { now: () => clock },
+		setTimeout: (cb) => {
+			clock += 1000;
+			cb();
+		},
+		readLinuxProcessTree: async () => {
+			clock += 100;
+			return processes;
+		},
+		processTreeResourceDelta: (_before, after, elapsed) => {
+			cpuIntervals.push(elapsed);
+			return { cpuPercent: after.length, residentBytes: after.length };
+		},
+		LINUX_PROCESS_OPTIONS: {},
+		average: (a) => a.reduce((x, y) => x + y, 0) / a.length,
+		percentile: (a) => a[0],
+	});
+	const result = await measure(
+		{
+			request: async () => {
+				reads += 1;
+				const duration = reads === 3 ? 600 : 250;
+				const snapshot = clock + duration / 2;
+				clock += duration;
+				return {
+					output: {
+						frames_sent: (snapshot * 40) / 1000,
+						frame_rate_band_counts: [1],
+					},
+				};
+			},
+		},
+		999,
+		"unrestricted",
+		samples,
+	);
+	assert.equal(reads, 3);
+	assert.equal(result.average_completed_hz, 40);
+	assert.equal(result.minimum_one_second_completed_hz, 40);
+	assert.equal(result.windows_below_target, 0);
+	assert.equal(samples[1].elapsed, 1.35);
+	assert.equal(samples[2].elapsed, 1.525);
+	assert.equal(samples[1].processElapsed, 1.35);
+	assert.equal(samples[2].processElapsed, 1.7);
+	assert.equal(samples[0].diagnosticsMonotonicStartMillis, 0);
+	assert.equal(samples[0].diagnosticsMonotonicEndMillis, 250);
+	assert.equal(
+		samples[2].diagnosticsMonotonicEndMillis -
+			samples[2].diagnosticsMonotonicStartMillis,
+		600,
+	);
+	assert.ok(cpuIntervals.includes(1.7));
+	assert.equal(result.resources.application_cpu_average_percent, 4);
+	assert.equal(result.resources.server.cpu_average_percent, 1);
+	assert.equal(result.resources.desktop_webview.cpu_average_percent, 1);
+	assert.equal(result.resources.native_renderer.cpu_average_percent, 1);
+	assert.equal(result.resources.desktop_host.cpu_average_percent, 1);
+});
+
+test("owned sidecar phase log survives successful and failed-case evidence cleanup", async () => {
+	const create = load(
+		"createCaseEvidence",
+		"\nasync function finishCaseEvidence(",
+		{ createWriteStream, finished },
+	);
+	const finish = load(
+		"finishCaseEvidence",
+		"\nasync function retainCaseFailure(",
+	);
+	for (const phase of ["complete", "measurement"]) {
+		const temporary = await mkdtemp(path.join(scratch, "sidecar-"));
+		await mkdir(path.join(temporary, "data"));
+		const contents = "slow output tick phase sample engine_micros=42000\n";
+		await writeFile(path.join(temporary, "data/light-headless.log"), contents);
+		const evidence = await create(temporary);
+		await finish(
+			evidence,
+			path.join(temporary, "sheet"),
+			path.join(temporary, "prepared"),
+			{ phase },
+		);
+		await rm(temporary, { recursive: true });
+		const saved = JSON.parse(await readFile(evidence.manifestPath, "utf8"));
+		assert.equal(await readFile(saved.sidecarLog, "utf8"), contents);
+		assert.ok(!saved.sidecarLog.startsWith(`${temporary}/`));
+	}
+});
+
+test("native renderer CPU is separate from WebKit and host while total stays complete", async () => {
+	let clock = 0;
+	let reads = 0;
+	const processes = [
+		"light-headless",
+		"viz-renderer",
+		"WebKitWebProces",
+		"light-desktop",
+	].map((command, index) => ({ command, pid: index + 1 }));
+	const measure = load("measureWindow", "\nfunction apiClient(", {
+		DURATION_SECONDS: 1,
+		performance: { now: () => clock },
+		setTimeout: (cb) => {
+			clock += 1000;
+			cb();
+		},
+		readLinuxProcessTree: async () => processes,
+		processTreeResourceDelta: (_before, after) => ({
+			cpuPercent: after.length,
+			residentBytes: after.length,
+		}),
+		LINUX_PROCESS_OPTIONS: {},
+		average: (a) => a.reduce((x, y) => x + y, 0) / a.length,
+		percentile: (a) => a[0],
+	});
+	const result = await measure(
+		{
+			request: async () => ({
+				output: {
+					frames_sent: 40 * reads++,
+					frame_rate_band_counts: [1],
+				},
+			}),
+		},
+		999,
+		"unrestricted",
+		[],
+	);
+	assert.equal(result.resources.desktop_webview.cpu_average_percent, 1);
+	assert.equal(result.resources.native_renderer.cpu_average_percent, 1);
+	assert.equal(result.resources.desktop_host.cpu_average_percent, 1);
+	assert.equal(result.resources.server.cpu_average_percent, 1);
+	assert.equal(result.resources.application_cpu_average_percent, 4);
+});
+
+test("actual sidecar evidence write failure preserves original case failure and scratch", async () => {
+	const create = load(
+		"createCaseEvidence",
+		"\nasync function finishCaseEvidence(",
+		{ createWriteStream, finished },
+	);
+	const finish = load(
+		"finishCaseEvidence",
+		"\nasync function retainCaseFailure(",
+		{
+			writeFile: async (file, ...args) => {
+				if (file.endsWith("-light-headless.log"))
+					throw Object.assign(new Error("sidecar evidence disk full"), {
+						code: "ENOSPC",
+					});
+				return writeFile(file, ...args);
+			},
+		},
+	);
+	const messages = [];
+	let removed = false;
+	const finalize = load(
+		"finalizeCaseEvidence",
+		"\nasync function drainCaseLog(",
+		{
+			terminateProcessTree: async () => {},
+			drainCaseLog: async () => {},
+			finishCaseEvidence: finish,
+			rm: async () => {
+				removed = true;
+			},
+			console: { error: (message) => messages.push(message) },
+		},
+	);
+	const temporary = await mkdtemp(path.join(scratch, "sidecar-io-"));
+	await mkdir(path.join(temporary, "data"));
+	await writeFile(
+		path.join(temporary, "data/light-headless.log"),
+		"retained phase data\n",
+	);
+	const evidence = await create(temporary);
+	const original = new Error("original output failure");
+	assert.equal(
+		await finalize(
+			{ pid: 999 },
+			evidence,
+			path.join(temporary, "sheet"),
+			path.join(temporary, "prepared"),
+			{},
+			temporary,
+			original,
+		),
+		original,
+	);
+	assert.equal(removed, false);
+	assert.match(messages[0], /sidecar evidence disk full/);
+	assert.equal(
+		await readFile(path.join(temporary, "data/light-headless.log"), "utf8"),
+		"retained phase data\n",
+	);
+});
+
+test("missing owned sidecar log is explicitly unavailable", async () => {
+	const create = load(
+		"createCaseEvidence",
+		"\nasync function finishCaseEvidence(",
+		{ createWriteStream, finished },
+	);
+	const finish = load(
+		"finishCaseEvidence",
+		"\nasync function retainCaseFailure(",
+	);
+	const temporary = await mkdtemp(path.join(scratch, "sidecar-absent-"));
+	const evidence = await create(temporary);
+	await finish(
+		evidence,
+		path.join(temporary, "sheet"),
+		path.join(temporary, "prepared"),
+		{ phase: "backend-readiness" },
+	);
+	const saved = JSON.parse(await readFile(evidence.manifestPath, "utf8"));
+	assert.equal(saved.sidecarLog.unavailable, "ENOENT");
+});
+
 test("never-closing child drain is bounded, destroys inherited pipes and preserves original gate error", async () => {
 	const pending = new Set();
 	let cleared = 0;

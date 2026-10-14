@@ -342,6 +342,7 @@ async function createCaseEvidence(temporaryRoot) {
 	return {
 		prefix,
 		runtimeLog,
+		sidecarLogPath: path.join(temporaryRoot, "data", "light-headless.log"),
 		log,
 		completion,
 		samples: [],
@@ -357,7 +358,12 @@ async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
 	for (const [key, suffix, source] of [
 		["fixtureSheet", "fixture-sheet.jsonl", reportPath],
 		["prepared", "prepared.json", preparedPath],
+		["sidecarLog", "light-headless.log", evidence.sidecarLogPath],
 	]) {
+		if (!source) {
+			files[key] = { unavailable: "not_recorded" };
+			continue;
+		}
 		let contents;
 		try {
 			contents = await readFile(source);
@@ -594,30 +600,59 @@ async function configureScheduler(api) {
 async function measureWindow(api, rootPid, executionMode, samples) {
 	const rates = [];
 	const resources = [];
+	let diagnosticsMonotonicStartMillis = performance.now();
 	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
+	let diagnosticsMonotonicEndMillis = performance.now();
+	let counterObservationMillis =
+		(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
 	const openingBands = diagnostics.output.frame_rate_band_counts ?? [];
+	let processMonotonicStartMillis = performance.now();
 	let processes = await readLinuxProcessTree(rootPid);
+	let processMonotonicEndMillis = performance.now();
+	let processObservationMillis =
+		(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
 	samples.push({
 		phase: "opening",
 		recordedAt: new Date().toISOString(),
+		diagnosticsMonotonicStartMillis,
+		diagnosticsMonotonicEndMillis,
+		processMonotonicStartMillis,
+		processMonotonicEndMillis,
 		diagnostics,
 		processes,
 	});
 	for (let second = 0; second < DURATION_SECONDS; second++) {
-		const started = performance.now();
 		await new Promise((resolve) => setTimeout(resolve, 1_000));
-		const elapsed = (performance.now() - started) / 1_000;
 		const diagnosticsStartedAt = new Date().toISOString();
+		diagnosticsMonotonicStartMillis = performance.now();
 		const nextDiagnostics = await api.request(
 			"GET",
 			"/api/v2/diagnostics/performance",
 		);
+		diagnosticsMonotonicEndMillis = performance.now();
 		const diagnosticsEndedAt = new Date().toISOString();
+		// The counter is sampled inside the request. Retain both bounds and use their
+		// midpoint consistently, including intervening I/O rather than only the sleep.
+		const nextCounterObservationMillis =
+			(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
+		const elapsed =
+			(nextCounterObservationMillis - counterObservationMillis) / 1_000;
+		processMonotonicStartMillis = performance.now();
 		const nextProcesses = await readLinuxProcessTree(rootPid);
+		processMonotonicEndMillis = performance.now();
+		const nextProcessObservationMillis =
+			(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
+		const processElapsed =
+			(nextProcessObservationMillis - processObservationMillis) / 1_000;
 		samples.push({
 			phase: "measurement",
 			second,
 			elapsed,
+			processElapsed,
+			diagnosticsMonotonicStartMillis,
+			diagnosticsMonotonicEndMillis,
+			processMonotonicStartMillis,
+			processMonotonicEndMillis,
 			diagnosticsStartedAt,
 			diagnosticsEndedAt,
 			diagnostics: nextDiagnostics,
@@ -629,22 +664,35 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		);
 		const server = (entries) =>
 			entries.filter((entry) => entry.command.includes("light-headless"));
+		const native = (entries) =>
+			entries.filter((entry) => entry.command.includes("viz-renderer"));
 		const ui = (entries) =>
-			entries.filter((entry) => !entry.command.includes("light-headless"));
+			entries.filter((entry) => entry.command.startsWith("WebKit"));
+		const host = (entries) =>
+			entries.filter(
+				(entry) =>
+					!entry.command.includes("light-headless") &&
+					!entry.command.includes("viz-renderer") &&
+					!entry.command.startsWith("WebKit"),
+			);
 		const resourceDelta = (before, after) =>
-			processTreeResourceDelta(before, after, elapsed, LINUX_PROCESS_OPTIONS);
+			processTreeResourceDelta(
+				before,
+				after,
+				processElapsed,
+				LINUX_PROCESS_OPTIONS,
+			);
 		resources.push({
 			application: resourceDelta(processes, nextProcesses),
-			server: processTreeResourceDelta(
-				server(processes),
-				server(nextProcesses),
-				elapsed,
-				LINUX_PROCESS_OPTIONS,
-			),
+			server: resourceDelta(server(processes), server(nextProcesses)),
 			ui: resourceDelta(ui(processes), ui(nextProcesses)),
+			native: resourceDelta(native(processes), native(nextProcesses)),
+			host: resourceDelta(host(processes), host(nextProcesses)),
 		});
 		diagnostics = nextDiagnostics;
 		processes = nextProcesses;
+		counterObservationMillis = nextCounterObservationMillis;
+		processObservationMillis = nextProcessObservationMillis;
 	}
 	const sorted = [...rates].sort((left, right) => left - right);
 	// The band counts run from show start, so the window's histogram is the difference between
@@ -695,9 +743,11 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 			),
 			server: component("server"),
 			desktop_webview: component("ui"),
+			native_renderer: component("native"),
+			desktop_host: component("host"),
 			playwright: { launched: false },
 			measurement:
-				"Released Tauri Desk process tree: desktop host, WebKit Fixture Sheet, and bundled light-headless sidecar; excludes the Node coordinator and Xvfb",
+				"Released Tauri Desk process tree: desktop host, WebKit, native Stage renderers, and bundled light-headless sidecar; excludes the Node coordinator and Xvfb",
 		},
 	};
 }
