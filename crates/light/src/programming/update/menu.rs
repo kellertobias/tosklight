@@ -1,3 +1,4 @@
+use super::resolution::find_recalled_preset;
 use super::{
     ActiveCueContext, CueUpdateMode, ExistingContentMode, ProgrammingUpdateMenuEntry,
     ProgrammingUpdateMenuInput, ProgrammingUpdateObjectReference, ProgrammingUpdateTargetRequest,
@@ -48,9 +49,9 @@ impl<'a> UpdateMenuCatalog<'a> {
             cue_list_catalog(document)
         };
         let preset = input.active_preset_id.as_deref().and_then(|id| {
-            document
-                .object("preset", id)
-                .and_then(|object| decode_object(object).ok())
+            find_recalled_preset(document, id)
+                .ok()
+                .map(|(object, value)| StoredObject { object, value })
         });
         Self {
             cue_lists,
@@ -100,8 +101,8 @@ impl<'a> UpdateMenuCatalog<'a> {
         &self,
         input: &ProgrammingUpdateMenuInput,
     ) -> Option<ProgrammingUpdateMenuEntry> {
-        let id = input.active_preset_id.as_deref()?;
         let stored = self.preset.as_ref()?;
+        let id = stored.object.key().id();
         menu_entry(
             ProgrammingUpdateTargetRequest::Preset {
                 object_id: id.to_owned(),

@@ -136,3 +136,5 @@ pub(super) fn stored_value(cue: &Cue, fixture_id: FixtureId, name: &str) -> Opti
 }
 
 mod replacement_cases;
+
+mod preset_alias_cases;
