@@ -1,4 +1,5 @@
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, render, renderHook } from "@testing-library/react";
+import { ModalFrame } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition, PlaybackPage } from "../../../api/types";
 import type { PlaybackRuntimeActions } from "../../../features/playbackRuntime/actionWriter";
@@ -193,7 +194,10 @@ beforeEach(() => {
 });
 
 // A leaked listener would preventDefault ahead of the next test's mount.
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.useRealTimers();
+});
 
 describe("useCommandLineShortcuts playback keys", () => {
 	it("keeps two mounted shortcut owners independent on the same desk surface and address", async () => {
@@ -836,4 +840,64 @@ describe("useCommandLineShortcuts dormancy", () => {
 		expect(press("F1").defaultPrevented).toBe(true);
 		expect(setActivePage).not.toHaveBeenCalled();
 	});
+});
+
+function ModalKeyboardHarness({ open }: { open: boolean }) {
+	useCommandLineShortcuts(false, callbacks);
+	return open ? (
+		<ModalFrame
+			title="Keyboard owner"
+			ariaLabel="Keyboard owner"
+			onClose={() => undefined}
+		>
+			<button type="button">Dialog action</button>
+		</ModalFrame>
+	) : null;
+}
+
+it("defers all desk keydown shortcuts to registered dialogs and resumes after close", async () => {
+	vi.useFakeTimers();
+	const { rerender } = render(<ModalKeyboardHarness open />);
+	for (const [key, code] of [
+		["Enter", "Enter"],
+		["1", "Digit1"],
+		["Delete", "Delete"],
+		["F1", "F1"],
+		["PageUp", "PageUp"],
+		["End", "End"],
+		["`", "Backquote"],
+		["Shift", "ShiftLeft"],
+	]) {
+		const event = press(key, { code });
+		expect(event.defaultPrevented).toBe(false);
+	}
+	act(() => vi.advanceTimersByTime(700));
+	expect(callbacks.execute).not.toHaveBeenCalled();
+	expect(callbacks.replaceCommand).not.toHaveBeenCalled();
+	expect(callbacks.clear).not.toHaveBeenCalled();
+	expect(callbacks.toggleRecord).not.toHaveBeenCalled();
+	expect(callbacks.inspectPreload).not.toHaveBeenCalled();
+	expect(playbackAction).not.toHaveBeenCalled();
+	expect(setActivePage).not.toHaveBeenCalled();
+	expect(appDispatch).not.toHaveBeenCalled();
+	rerender(<ModalKeyboardHarness open={false} />);
+	press("Enter");
+	expect(callbacks.execute).toHaveBeenCalledOnce();
+	vi.useRealTimers();
+});
+
+it("releases Flash held before a registered dialog opens", async () => {
+	const { rerender } = render(<ModalKeyboardHarness open={false} />);
+	press("F8");
+	await tick();
+	await flush();
+	expect(playbackAction).toHaveBeenCalledOnce();
+	rerender(<ModalKeyboardHarness open />);
+	release("F8");
+	await tick();
+	expect(playbackAction).toHaveBeenLastCalledWith(
+		{ page: 2, position: 8 },
+		"flash",
+		expect.objectContaining({ pressed: false }),
+	);
 });

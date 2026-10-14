@@ -1,9 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerController } from "../../features/server/model";
 import { createShowLifecycleActions } from "../../features/server/showLifecycle";
 import type { SetupWindowController } from "../../windows/setupWindow/controller";
 import { ShowsRecoverySection } from "../../windows/setupWindow/GeneralSections";
+import { useCommandLineShortcuts } from "../control/commandLine/useCommandLineShortcuts";
 import { QuickSetupModal } from "./QuickSetupModal";
 
 vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
@@ -901,4 +903,78 @@ describe("Setup show-load shortcut", () => {
 			kind: "file_manager",
 		});
 	});
+});
+
+vi.mock("../control/commandLine/playbackShortcutAuthority", () => ({
+	usePlaybackShortcutAuthority: () => ({
+		ready: false,
+		activePage: null,
+		pages: [],
+		surfaceId: "main",
+		slotPlayback: () => null,
+		playbackIdentity: () => null,
+	}),
+}));
+
+it("keyboard-activates actual Load Latest without executing a retained desk command", async () => {
+	const execute = vi.fn(async () => undefined);
+	const replaceCommand = vi.fn();
+	function DeskKeyboard() {
+		useCommandLineShortcuts(false, {
+			completed: false,
+			commandLine: "F1 AT POSITION X DIV 30",
+			commandTargetMode: "FIXTURE",
+			commandLinePristine: false,
+			persistentError: null,
+			execute,
+			replaceCommand,
+			armUpdateOrMenu: vi.fn(),
+			dismissPersistentError: vi.fn(),
+			pressSet: vi.fn(),
+			toggleRecord: vi.fn(),
+			advancePreload: vi.fn(),
+			inspectPreload: vi.fn(),
+			clear: vi.fn(),
+			toggleFixtureFreeze: vi.fn(),
+			selectFixtureFreezeFamily: vi.fn(),
+			undo: vi.fn(),
+		});
+		return null;
+	}
+	const apiOpen = vi
+		.fn()
+		.mockRejectedValue(new Error("Unsupported Playback identity"));
+	const refresh = vi.fn();
+	const model = {
+		api: { shows: { openShow: apiOpen } },
+		shows: mocks.server.shows,
+		refresh,
+		setError: vi.fn(),
+		beginDeskLoading: vi.fn().mockReturnValue(1),
+		finishDeskLoading: vi.fn(),
+	} as unknown as ServerController;
+	mocks.server.openShow.mockImplementation(
+		createShowLifecycleActions(model).openShow,
+	);
+	render(
+		<>
+			<DeskKeyboard />
+			<ShowsRecoverySection
+				controller={{ draft: null } as unknown as SetupWindowController}
+			/>
+			<QuickSetupModal />
+		</>,
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Open show" }));
+	const browser = await screen.findByRole("dialog", { name: "Load show" });
+	const row = await within(browser).findByRole("row", { name: /Festival/ });
+	const button = within(row).getByRole("button", { name: "Load Latest" });
+	button.focus();
+	expect(button).toHaveFocus();
+	await userEvent.keyboard("{Enter}");
+	expect(execute).not.toHaveBeenCalled();
+	expect(replaceCommand).not.toHaveBeenCalled();
+	await waitFor(() => expect(apiOpen).toHaveBeenCalledOnce());
+	expect(apiOpen).toHaveBeenCalledWith("other", "safe_blackout");
+	expect(refresh).not.toHaveBeenCalled();
 });

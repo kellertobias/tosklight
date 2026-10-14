@@ -1,3 +1,4 @@
+import { useModalKeyboardOwnership } from "@tosklight/ui/modals";
 import { type Dispatch, useEffect, useLayoutEffect, useRef } from "react";
 import type { CommandTargetMode } from "../../../controlSurface/commandTarget";
 import { useSetInteraction } from "../../../features/controlSurfaceInteraction/SetInteractionProvider";
@@ -59,6 +60,7 @@ interface PreloadGesture {
 }
 
 interface ShortcutContext extends ShortcutCallbacks, PlaybackShortcutContext {
+	modalOwnsKeyboard: () => boolean;
 	state: AppState;
 	dispatch: Dispatch<Action>;
 	update: UpdateGesture;
@@ -293,7 +295,12 @@ function handleSoftwareKey(context: ShortcutContext, event: KeyboardEvent) {
 }
 
 function handleKeyDown(context: ShortcutContext, event: KeyboardEvent) {
-	if (event.defaultPrevented || isExternalEditor(event.target)) return;
+	if (
+		context.modalOwnsKeyboard() ||
+		event.defaultPrevented ||
+		isExternalEditor(event.target)
+	)
+		return;
 	if (event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "z") {
 		event.preventDefault();
 		context.undo();
@@ -379,6 +386,7 @@ export function useCommandLineShortcuts(
 	callbacks: ShortcutCallbacks,
 ) {
 	const { state, dispatch } = useApp();
+	const modalOwnsKeyboard = useModalKeyboardOwnership();
 	const active = !hardware;
 	const authority = usePlaybackShortcutAuthority(active);
 	const runtimeActions = usePlaybackRuntimeActions();
@@ -401,6 +409,7 @@ export function useCommandLineShortcuts(
 	const keyboardShiftDown = useRef(false);
 	const context = useRef<ShortcutContext | null>(null);
 	context.current = {
+		modalOwnsKeyboard,
 		state,
 		dispatch,
 		authority,

@@ -46,6 +46,7 @@ export interface ModalStackApi {
 }
 
 interface ModalStackContextValue extends ModalStackApi {
+	ownsKeyboard(): boolean;
 	register(registration: ModalRegistration): void;
 	reserve(id: string): number;
 	unregister(id: string, restoreFocus?: HTMLElement | null): void;
@@ -82,6 +83,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 
 	const value = useMemo<ModalStackContextValue>(
 		() => ({
+			ownsKeyboard: () => entriesRef.current.length > 0,
 			register(registration) {
 				updateEntries((current) =>
 					[
@@ -173,6 +175,13 @@ export function useModalStack(): ModalStackApi {
 	if (!context)
 		throw new Error("useModalStack must be used inside ModalProvider");
 	return context;
+}
+
+const noModalKeyboardOwner = () => false;
+
+/** A synchronous ownership check for global shortcuts; modal registration is authoritative. */
+export function useModalKeyboardOwnership(): () => boolean {
+	return useContext(ModalStackContext)?.ownsKeyboard ?? noModalKeyboardOwner;
 }
 
 export interface ModalLayerProps {
