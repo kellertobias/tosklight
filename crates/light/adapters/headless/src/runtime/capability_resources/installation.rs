@@ -612,6 +612,15 @@ impl InstallationResource {
         self.fixture_library.lock().delete_profile(id, revision)
     }
 
+    pub(in crate::runtime) fn matching_installed_fixture_profile(
+        &self,
+        profile: &light_fixture::FixtureProfile,
+    ) -> Result<Option<light_fixture::FixtureProfile>, light_fixture::FixtureError> {
+        self.fixture_library
+            .lock()
+            .matching_installed_fixture_profile(profile)
+    }
+
     pub(in crate::runtime) fn import_fixture_package(
         &self,
         package: &[u8],

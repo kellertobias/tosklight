@@ -96,6 +96,23 @@ impl FixtureLibrary {
         self.save_profile(profile, current.map_or(0, |profile| profile.revision))
     }
 
+    /// Read-only recognition of the latest installed content, using the same identity and
+    /// normalization contract as import. An older revision that differs from latest is not a match.
+    pub fn matching_installed_fixture_profile(
+        &self,
+        profile: &FixtureProfile,
+    ) -> Result<Option<FixtureProfile>, FixtureError> {
+        let Some(existing) = self.latest_profile_for_id(profile.id)? else {
+            return Ok(None);
+        };
+        ensure_same_fixture_family(&existing, profile)?;
+        if normalized_profile_json(&existing)? == normalized_profile_json(profile)? {
+            Ok(Some(existing))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn export_fixture_package(
         &self,
         id: FixtureId,

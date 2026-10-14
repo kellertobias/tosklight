@@ -692,6 +692,18 @@ fn import_package(
     let package = decode_archive(package_base64, "fixture package")?;
     let mut profile = light_fixture::read_fixture_package(&package)
         .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    if attribute_mappings.is_empty() {
+        if let Some(existing) = state
+            .installation
+            .matching_installed_fixture_profile(&profile)
+            .map_err(ApiError::fixture)?
+        {
+            return Ok(Result::Profile {
+                profile_id: existing.id.0,
+                revision: existing.revision,
+            });
+        }
+    }
     let unknown = unknown_canonical_attributes(state, &profile);
     if !unknown.is_empty() && attribute_mappings.is_empty() {
         return Ok(Result::ImportRequired {

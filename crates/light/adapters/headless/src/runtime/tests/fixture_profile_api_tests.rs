@@ -1114,3 +1114,5 @@ async fn mapped_gdtf_virtual_intensity_defaults_follow_emitters_only_and_preserv
 }
 
 include!("fixture_package_export_tests.rs");
+
+include!("fixture_package_reimport_tests.rs");
