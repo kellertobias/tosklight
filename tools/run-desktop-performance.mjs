@@ -53,7 +53,32 @@ for (const performanceCase of CASES)
 	for (const executionMode of performanceCase.demo
 		? ["unrestricted", "one_core"]
 		: ["unrestricted"])
-		results.push(await runCase(performanceCase, executionMode));
+		try {
+			results.push(await runCase(performanceCase, executionMode));
+		} catch (error) {
+			await writeFile(
+				path.resolve(options["output-dir"], "desktop-scenarios.partial.json"),
+				`${JSON.stringify(
+					{
+						schema_version: 1,
+						complete: false,
+						scenarios: results,
+						failed_case: {
+							case_id: performanceCase.caseId,
+							execution_mode: executionMode,
+							error: error instanceof Error ? error.message : String(error),
+						},
+					},
+					null,
+					2,
+				)}\n`,
+			).catch((diagnosticError) => {
+				console.error(
+					`Partial desktop report unavailable: ${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)}`,
+				);
+			});
+			throw error;
+		}
 await writeFile(
 	path.resolve(options["output-dir"], "desktop-scenarios.json"),
 	`${JSON.stringify({ schema_version: 1, scenarios: results }, null, 2)}\n`,
@@ -123,6 +148,13 @@ async function runCase(performanceCase, executionMode) {
 		},
 		stdio: ["ignore", "pipe", "pipe"],
 	});
+	const state = {
+		phase: "backend-readiness",
+		startedAt: new Date().toISOString(),
+		backendReady: false,
+		prepared: false,
+		sheet: null,
+	};
 	const output = [];
 	for (const stream of [child.stdout, child.stderr])
 		stream.on("data", (chunk) => {
@@ -131,6 +163,8 @@ async function runCase(performanceCase, executionMode) {
 		});
 	try {
 		await waitForReadiness(child, port);
+		state.backendReady = true;
+		state.phase = "show-preparation";
 		const api = apiClient(port);
 		// A v2 session is a client on a desk, not a named operator: the desk resolves which desk
 		// the client belongs to and the request carries no user at all.
@@ -144,11 +178,11 @@ async function runCase(performanceCase, executionMode) {
 			: await prepareMixed(api, performanceCase.fixtureRecords);
 		// The show exists now, so let the benchmark surface begin.
 		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
+		state.prepared = true;
+		state.phase = "fixture-sheet-readiness";
 		// The Sheet counts the fixtures it shows, and a show holds what it could actually be
 		// given: measure against the patch that exists rather than the size that was ordered.
-		const sheetRecords = performanceCase.demo
-			? null
-			: prepared.fixtureRecords;
+		const sheetRecords = performanceCase.demo ? null : prepared.fixtureRecords;
 		// One core draws a show at roughly a fixed rate, so the wait for it has to grow with
 		// the show rather than sit at a constant that only ever suited the smaller ones.
 		await waitForFixtureSheet(
@@ -156,9 +190,14 @@ async function runCase(performanceCase, executionMode) {
 			sheetRecords,
 			child,
 			drawBudgetMillis(performanceCase, executionMode),
+			(snapshot) => {
+				state.sheet = snapshot;
+			},
 		);
+		state.phase = "measurement";
 		const measurementStartedAt = Date.now();
 		const measured = await measureWindow(api, child.pid, executionMode);
+		state.phase = "fixture-sheet-liveness";
 		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode, {
 			startedAt: measurementStartedAt,
 			endedAt: Date.now(),
@@ -183,13 +222,97 @@ async function runCase(performanceCase, executionMode) {
 			...measured,
 		};
 	} catch (error) {
+		const diagnostics = await retainCaseFailure({
+			performanceCase,
+			executionMode,
+			state,
+			reportPath,
+			preparedPath,
+			child,
+			output,
+			error: error instanceof Error ? error.message : String(error),
+		}).catch(
+			(diagnosticError) =>
+				`unavailable (${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)})`,
+		);
 		throw new Error(
-			`${performanceCase.caseId}/${executionMode}: ${error instanceof Error ? error.message : String(error)}${output.length ? `\n${output.join("")}` : ""}`,
+			`${performanceCase.caseId}/${executionMode}: ${error instanceof Error ? error.message : String(error)}; diagnostics: ${diagnostics}${output.length ? `\n${output.join("")}` : ""}`,
 		);
 	} finally {
 		await terminateProcessTree(child.pid);
 		await rm(temporaryRoot, { recursive: true, force: true });
 	}
+}
+
+async function retainCaseFailure({
+	performanceCase,
+	executionMode,
+	state,
+	reportPath,
+	preparedPath,
+	child,
+	output,
+	error,
+}) {
+	const directory = await mkdtemp(
+		path.join(
+			path.resolve(options["output-dir"]),
+			`${performanceCase.caseId}-${executionMode}-failure-`,
+		),
+	);
+	const files = {};
+	for (const [name, source] of [
+		["fixture-sheet.jsonl", reportPath],
+		["prepared.json", preparedPath],
+	]) {
+		try {
+			await writeFile(path.join(directory, name), await readFile(source));
+			files[name] = path.join(directory, name);
+		} catch (error) {
+			files[name] = { unavailable: error.code ?? "read_failed" };
+		}
+	}
+	const log = path.join(directory, "process.log");
+	await writeFile(log, output.join(""));
+	files.processLog = log;
+	// Best effort: screenshot availability never determines whether a readiness gate passes.
+	const screenshotPath = path.join(directory, "desktop.png");
+	const screenshot = spawnSync("import", ["-window", "root", screenshotPath], {
+		timeout: 5000,
+		encoding: "utf8",
+	});
+	files.screenshot =
+		screenshot.status === 0
+			? screenshotPath
+			: {
+					unavailable: screenshot.error?.code ?? "capture_failed",
+					status: screenshot.status,
+				};
+	const report = path.join(directory, "failure.json");
+	await writeFile(
+		report,
+		`${JSON.stringify(
+			{
+				schema_version: 1,
+				complete: false,
+				case_id: performanceCase.caseId,
+				execution_mode: executionMode,
+				failedAt: new Date().toISOString(),
+				error,
+				state,
+				process: {
+					pid: child.pid,
+					exitCode: child.exitCode,
+					signalCode: child.signalCode,
+				},
+				files,
+				thresholdsUnchanged: true,
+			},
+			null,
+			2,
+		)}\n`,
+	);
+	return report;
 }
 
 function applicationInvocation(application, executionMode) {
@@ -372,7 +495,10 @@ async function measureWindow(api, rootPid, executionMode) {
 	// The band counts run from show start, so the window's histogram is the difference between
 	// the reading taken before the first second and the reading taken after the last.
 	const bandCounts = (openingBands ?? []).map((count, index) =>
-		Math.max(0, (diagnostics.output.frame_rate_band_counts?.[index] ?? 0) - count),
+		Math.max(
+			0,
+			(diagnostics.output.frame_rate_band_counts?.[index] ?? 0) - count,
+		),
 	);
 	const cpu = resources.map((sample) =>
 		executionMode === "one_core"
@@ -400,7 +526,8 @@ async function measureWindow(api, rootPid, executionMode) {
 		// Taking the fast end instead would let a show that averages 60 Hz claim a p95 of 80.
 		p95_one_second_completed_hz: percentile(sorted, 5),
 		maximum_one_second_completed_hz: sorted.at(-1),
-		frame_rate_band_bounds_hz: diagnostics.output.frame_rate_band_bounds_hz ?? [],
+		frame_rate_band_bounds_hz:
+			diagnostics.output.frame_rate_band_bounds_hz ?? [],
 		frame_rate_band_counts: bandCounts,
 		windows_below_target: rates.filter((rate) => rate < 38).length,
 		resources: {
@@ -465,7 +592,13 @@ async function waitForReadiness(child, port) {
 	throw new Error("released Desk did not reach readiness");
 }
 
-async function waitForFixtureSheet(reportPath, expected, child, budgetMs) {
+async function waitForFixtureSheet(
+	reportPath,
+	expected,
+	child,
+	budgetMs,
+	observe = () => {},
+) {
 	const deadline = Date.now() + budgetMs;
 	while (Date.now() < deadline) {
 		assertRunning(child);
@@ -486,6 +619,39 @@ async function waitForFixtureSheet(reportPath, expected, child, budgetMs) {
 					record.kind === "fixture-sheet-ready" &&
 					(expected === null || record.fixtureRecords === expected),
 			);
+		observe({
+			observedAt: new Date().toISOString(),
+			expectedFixtureRecords: expected,
+			reportPresent: records.length > 0,
+			ready: Boolean(ready),
+			lastRecords: records
+				.trim()
+				.split("\n")
+				.filter(Boolean)
+				.slice(-12)
+				.flatMap((line) => {
+					try {
+						const record = JSON.parse(line);
+						return [
+							{
+								kind: record.kind,
+								fixtureRecords: record.fixtureRecords,
+								rowCount: record.rowCount,
+								recordedAt: record.recordedAt,
+							},
+						];
+					} catch {
+						return [];
+					}
+				}),
+			unobservedPredicates: [
+				"frontend active",
+				"nonempty rows",
+				"active-values loading",
+				"group-runtime loading",
+				"Tauri append failure",
+			],
+		});
 		if (ready) return;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
