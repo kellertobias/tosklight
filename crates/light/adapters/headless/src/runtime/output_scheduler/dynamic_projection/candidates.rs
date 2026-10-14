@@ -13,6 +13,7 @@ pub(super) struct DynamicCandidate {
     pub(super) stable_order: u128,
     pub(super) activation_mix: f32,
     pub(super) dynamic: bool,
+    pub(super) cue_context: Option<cue_scalar_context::CueScalarContext>,
 }
 
 pub(super) fn resolve_dynamic_stack(
@@ -186,7 +187,7 @@ fn consider_runtime_samples(
                                 value * control.master
                             } else if control.crossfade_non_intensity {
                                 sources
-                                    .current(sample.target, &attribute)
+                                    .current(sample.target, attribute)
                                     .map_or(value, |base| base + (value - base) * control.master)
                             } else {
                                 value
@@ -202,24 +203,47 @@ fn consider_runtime_samples(
                 {
                     return;
                 }
-                consider(
-                    sample.target,
-                    &attribute,
-                    if influence == 1.0 {
-                        sample.address
-                    } else {
-                        None
-                    },
-                    DynamicCandidate {
-                        value: AttributeValue::Normalized(dynamic_value),
-                        priority: sample.priority,
-                        changed_at_millis: sample.activated_at_millis,
-                        exact_changed_at: None,
-                        stable_order: sample.controller_id.as_u128(),
-                        activation_mix: sample.activation_mix * influence,
-                        dynamic: true,
-                    },
-                );
+                let context = cue_controls.get(&sample.controller_id).and_then(|control| {
+                    control
+                        .scalar_contexts
+                        .get(&(sample.target, attribute.clone()))
+                });
+                let destinations = context
+                    .and_then(|context| context.projection.as_ref())
+                    .map_or_else(
+                        || vec![sample.target],
+                        |projection| {
+                            if projection.source_owner == sample.target {
+                                sources.replacement_destinations(projection, attribute)
+                            } else {
+                                Vec::new()
+                            }
+                        },
+                    );
+                for target in destinations {
+                    consider(
+                        target,
+                        attribute,
+                        if target == sample.target && influence == 1.0 {
+                            sample.address
+                        } else {
+                            None
+                        },
+                        DynamicCandidate {
+                            value: AttributeValue::Normalized(dynamic_value),
+                            priority: sample.priority,
+                            changed_at_millis: sample.activated_at_millis,
+                            exact_changed_at: context.map(|context| context.changed_at),
+                            stable_order: context
+                                .map_or(sample.controller_id.as_u128(), |context| {
+                                    u128::from(context.ordinal)
+                                }),
+                            activation_mix: sample.activation_mix * influence,
+                            dynamic: true,
+                            cue_context: context.cloned(),
+                        },
+                    );
+                }
             });
     }
 }
@@ -289,6 +313,7 @@ fn consider_programmer_rows(
                     now_millis,
                 ),
                 dynamic: false,
+                cue_context: None,
             },
         );
     }
@@ -350,6 +375,7 @@ fn consider_cue_rows(
                     now_millis,
                 ),
                 dynamic: false,
+                cue_context: None,
             },
         );
     }

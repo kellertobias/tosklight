@@ -121,6 +121,7 @@ pub struct ContributionSample {
     value: TimedValue,
     transition_ordinal: Option<u64>,
     replacement_source: Option<ContributionSourceId>,
+    authored_replacement_fixture: Option<FixtureId>,
     family_evidence: Option<Arc<ContributionFamilyEvidence>>,
     /// Where the producer already knows this pair lives. Read by number when it belongs to the
     /// frame's generation, otherwise looked up by name as before.
@@ -134,6 +135,7 @@ impl ContributionSample {
             value,
             transition_ordinal: None,
             replacement_source: None,
+            authored_replacement_fixture: None,
             family_evidence: None,
             address: None,
         }
@@ -166,6 +168,7 @@ impl ContributionSample {
             value,
             transition_ordinal: None,
             replacement_source: Some(source),
+            authored_replacement_fixture: None,
             family_evidence: None,
             address: None,
         }
@@ -185,9 +188,17 @@ impl ContributionSample {
             value,
             transition_ordinal: Some(transition_ordinal),
             replacement_source: Some(ContributionSourceId::playback(source)),
+            authored_replacement_fixture: None,
             family_evidence: None,
             address: None,
         }
+    }
+
+    /// Keep replacement arbitration at the authored owner when an explicitly consented
+    /// projection emits this same source at a different current physical owner.
+    pub fn replacing_authored_fixture(mut self, fixture: FixtureId) -> Self {
+        self.authored_replacement_fixture = Some(fixture);
+        self
     }
 
     pub fn value(&self) -> &TimedValue {
@@ -605,7 +616,11 @@ impl From<Vec<ContributionSample>> for ContributionBatch {
             replacements
                 .entry(source.clone())
                 .or_default()
-                .entry(sample.value.fixture_id)
+                .entry(
+                    sample
+                        .authored_replacement_fixture
+                        .unwrap_or(sample.value.fixture_id),
+                )
                 .or_default()
                 .entry(sample.value.attribute.clone())
                 .and_modify(|indices| indices.rest.push(index))
@@ -632,9 +647,18 @@ pub(crate) fn sampled_values(
         .filter(move |sample| {
             !has_exclusions
                 || !sample.replacement_source().is_some_and(|source| {
-                    batches
-                        .iter()
-                        .any(|batch| batch.excludes(source, sample.value()))
+                    batches.iter().any(|batch| {
+                        let value = sample.value();
+                        batch.excludes_origin(
+                            source,
+                            sample
+                                .authored_replacement_fixture
+                                .unwrap_or(value.fixture_id),
+                            &value.attribute,
+                            value.changed_at,
+                            value.programmer_order,
+                        )
+                    })
                 })
         })
 }
@@ -647,9 +671,18 @@ pub(crate) fn replaces_source(
     batches.iter().any(|batch| batch.excludes(source, value))
         || batches.iter().any(|batch| {
             batch.replacement_samples(source, value).any(|sample| {
-                !batches
-                    .iter()
-                    .any(|batch| batch.excludes(source, sample.value()))
+                !batches.iter().any(|batch| {
+                    let value = sample.value();
+                    batch.excludes_origin(
+                        source,
+                        sample
+                            .authored_replacement_fixture
+                            .unwrap_or(value.fixture_id),
+                        &value.attribute,
+                        value.changed_at,
+                        value.programmer_order,
+                    )
+                })
             })
         })
 }

@@ -212,6 +212,7 @@ mod tests {
             CueDynamicOutputControl {
                 enabled: false,
                 sequence_master: 0.5,
+                ..Default::default()
             },
         )]);
         assert_eq!(compose(&samples, &HashMap::new(), &cues), 1.0);

@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::sync::OnceLock;
 
 mod candidates;
+mod cue_scalar_context;
 mod endpoint_controls;
 mod family_inputs;
 mod fixed_masks;
@@ -199,6 +200,13 @@ impl light_dynamics::ScalarSourceResolver for TickSources<'_> {
 /// Complete values and scalar Current must come from the same lazily evaluated source lane.
 trait DynamicTickSource: light_dynamics::ScalarSourceResolver {
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue>;
+    fn replacement_destinations(
+        &self,
+        _: &light_core::ReplacementProgramProjection,
+        _: &AttributeKey,
+    ) -> Vec<FixtureId> {
+        Vec::new()
+    }
 
     /// Exact evidence from the same captured static frame as `value`. Legacy map-only sources
     /// are explicitly unknown; a bare winning origin does not establish family footprints.
@@ -212,6 +220,16 @@ trait DynamicTickSource: light_dynamics::ScalarSourceResolver {
 }
 
 impl DynamicTickSource for TickSources<'_> {
+    fn replacement_destinations(
+        &self,
+        projection: &light_core::ReplacementProgramProjection,
+        attribute: &AttributeKey,
+    ) -> Vec<FixtureId> {
+        self.prepared.map_or_else(Vec::new, |frame| {
+            frame.replacement_destinations(projection, attribute)
+        })
+    }
+
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
         TickSources::value(self, target, attribute)
     }
@@ -258,6 +276,16 @@ impl PreloadTickSources<'_, '_> {
 }
 
 impl DynamicTickSource for PreloadTickSources<'_, '_> {
+    fn replacement_destinations(
+        &self,
+        projection: &light_core::ReplacementProgramProjection,
+        attribute: &AttributeKey,
+    ) -> Vec<FixtureId> {
+        self.input
+            .frame()
+            .replacement_destinations(projection, attribute)
+    }
+
     /// The raw parameter, as for [`TickSources::value`].
     fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
         self.captured_values().raw_value(target, attribute)
@@ -354,33 +382,38 @@ struct CapturedDynamicOutputControls<'a> {
 
 /// Current-frame output controls are separate from authored expression provenance. In
 /// particular, a newer Cue must not relabel the older leaves retained by a paused Dynamic.
-#[derive(Clone, Copy)]
+#[derive(Clone, Default)]
 struct CueDynamicOutputControl {
     enabled: bool,
     sequence_master: f32,
+    scalar_contexts: HashMap<(FixtureId, AttributeKey), cue_scalar_context::CueScalarContext>,
 }
 
 fn cue_dynamic_output_controls(
     rows: &[light_playback::ActiveCueDynamicValue],
+    snapshot: &light_engine::EngineSnapshot,
 ) -> HashMap<Uuid, CueDynamicOutputControl> {
-    rows.iter()
-        .filter_map(|row| {
-            let link = match &row.value {
-                light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
-                | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
-                    *instance_link
-                }
-                _ => return None,
-            };
-            Some((
-                row.source_key.controller_id(link),
-                CueDynamicOutputControl {
-                    enabled: row.output_enabled,
-                    sequence_master: row.sequence_master,
-                },
-            ))
-        })
-        .collect()
+    let mut controls: HashMap<Uuid, CueDynamicOutputControl> = HashMap::new();
+    for row in rows {
+        let link = match &row.value {
+            light_dynamics::DynamicSemanticValue::DynamicOn { instance_link, .. }
+            | light_dynamics::DynamicSemanticValue::DynamicOff { instance_link, .. } => {
+                *instance_link
+            }
+            _ => continue,
+        };
+        let control = controls
+            .entry(row.source_key.controller_id(link))
+            .or_default();
+        control.enabled = row.output_enabled;
+        control.sequence_master = row.sequence_master;
+        if let Some(context) = cue_scalar_context::CueScalarContext::capture(row, snapshot) {
+            control
+                .scalar_contexts
+                .insert((row.fixture_id, row.attribute.clone()), context);
+        }
+    }
+    controls
 }
 
 pub(in crate::runtime) fn capture_dynamic_speed_transports(
@@ -560,7 +593,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
             &active_dynamic_playbacks,
             |assignment| playback_assignments.push(assignment),
         );
-    let cue_controls = cue_dynamic_output_controls(inputs.cue_values);
+    let cue_controls = cue_dynamic_output_controls(inputs.cue_values, inputs.snapshot);
     super::start_path_timing::reconciled_since(reconciliation_started);
     let (mut samples, context) = sample(
         dynamics,
@@ -985,12 +1018,14 @@ fn dynamic_contribution_batch(
         let candidate = stack
             .last()
             .expect("one Dynamic/FAT candidate exists for every stack");
-        let merge_mode = if attribute.is_intensity() && !has_dynamic {
+        let merge_mode = if let Some(context) = &candidate.cue_context {
+            context.merge_mode
+        } else if attribute.is_intensity() && !has_dynamic {
             MergeMode::Htp
         } else {
             MergeMode::Ltp
         };
-        ContributionSample::independent(TimedValue {
+        let value = TimedValue {
             fixture_id,
             attribute,
             value: resolved,
@@ -1008,8 +1043,15 @@ fn dynamic_contribution_batch(
             fade: false,
             fade_millis: None,
             delay_millis: None,
-        })
-        .at(address)
+        };
+        let sample = match &candidate.cue_context {
+            Some(context) => {
+                ContributionSample::replacing_playback(value, context.source, context.ordinal)
+                    .replacing_authored_fixture(context.authored_fixture)
+            }
+            None => ContributionSample::independent(value),
+        };
+        sample.at(address)
     }))
 }
 

@@ -7,6 +7,7 @@ mod playback_start_receipts;
 mod projected_sources;
 mod snapshot_publication;
 mod source_lifecycle;
+mod tl777;
 mod transition_notifications;
 
 #[test]

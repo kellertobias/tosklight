@@ -42,6 +42,7 @@ fn scalar_stage_applies_captured_cue_suppression_before_point_geometry() {
                 CueDynamicOutputControl {
                     enabled,
                     sequence_master: 0.5,
+                    ..Default::default()
                 },
             )]),
             &sources,
@@ -366,6 +367,7 @@ fn fully_active_first_candidate_does_not_resolve_the_underlay() {
         stable_order: 1,
         activation_mix: 1.0,
         dynamic: true,
+        cue_context: None,
     }];
 
     let resolved = resolve_dynamic_stack(&stack, || {
@@ -390,6 +392,7 @@ fn fading_first_candidate_blends_from_the_underlay() {
         stable_order: 1,
         activation_mix: 0.5,
         dynamic: true,
+        cue_context: None,
     }];
 
     let resolved = resolve_dynamic_stack(&stack, || Some(AttributeValue::Normalized(0.0)));

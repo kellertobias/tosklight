@@ -43,6 +43,17 @@ impl PreparedOutputFrame {
     pub fn snapshot(&self) -> Arc<EngineSnapshot> {
         self.generation.snapshot_arc()
     }
+    /// Validate an existing authored replacement envelope against this frame's immutable
+    /// compiled profile/physical ownership plan. An empty result stays authoritative.
+    pub fn replacement_destinations(
+        &self,
+        projection: &light_core::ReplacementProgramProjection,
+        attribute: &light_core::AttributeKey,
+    ) -> Vec<FixtureId> {
+        self.generation
+            .replacement_destinations(projection, attribute)
+    }
+
     /// No patched fixture holds a Freeze. Both `Engine::observe_prepared_values` and
     /// `Engine::prepare_static_family_frame` apply the Freeze overrides after the prepared
     /// resolution; with no Freeze both skip that step (TL-553).
