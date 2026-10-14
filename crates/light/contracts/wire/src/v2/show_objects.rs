@@ -95,7 +95,11 @@ pub struct OutputRoutePatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub delivery_mode: Option<OutputDeliveryMode>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_destination",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[ts(optional = nullable)]
     pub destination: Option<Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -104,6 +108,15 @@ pub struct OutputRoutePatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional = nullable)]
     pub minimum_slots: Option<u16>,
+}
+
+fn deserialize_optional_destination<'de, D>(
+    deserializer: D,
+) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
@@ -333,6 +346,34 @@ pub enum DynamicUpdateIntent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn output_route_destination_patch_preserves_missing_clear_and_set() {
+        let missing: OutputRoutePatch = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(missing.destination, None);
+        assert_eq!(
+            serde_json::to_value(missing).unwrap(),
+            serde_json::json!({})
+        );
+        let clear: OutputRoutePatch =
+            serde_json::from_value(serde_json::json!({"destination": null})).unwrap();
+        assert_eq!(clear.destination, Some(None));
+        assert_eq!(
+            serde_json::to_value(clear).unwrap(),
+            serde_json::json!({"destination": null})
+        );
+        let set: OutputRoutePatch = serde_json::from_value(serde_json::json!({
+            "destination": "127.0.0.1:15568"
+        }))
+        .unwrap();
+        assert_eq!(set.destination, Some(Some("127.0.0.1:15568".to_owned())));
+        assert!(
+            serde_json::from_value::<OutputRoutePatch>(serde_json::json!({
+                "destination": 50
+            }))
+            .is_err()
+        );
+    }
 
     #[test]
     fn output_route_update_is_partial_and_tolerant() {

@@ -361,3 +361,115 @@ async fn overlapping_output_route_replay_releases_cache_while_work_is_paused() {
 
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn output_route_v2_null_destination_switches_delivery_without_losing_patch_guards() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let show_id = open_show(&app, &token, "Route destination clear").await;
+    for (protocol, delivery) in [("sacn", "multicast"), ("art_net", "broadcast")] {
+        let id = format!("nullable-{protocol}");
+        let action = |request: &str, revision, patch: serde_json::Value| {
+            serde_json::json!({
+                "request_id": format!("{id}-{request}"), "action": {
+                    "type": "update", "route_id": id, "expected_revision": revision, "patch": patch
+                }
+            })
+        };
+        let (status, _) = post_route_action(
+            &app,
+            &token,
+            &show_id,
+            serde_json::json!({
+                "request_id": format!("{id}-create"), "action": {
+                    "type": "create", "route_id": id, "route": {
+                        "protocol": protocol, "logical_universe": 50, "destination_universe": 50,
+                        "delivery_mode": "unicast", "destination": "127.0.0.1:15568",
+                        "enabled": false, "minimum_slots": 128
+                    }
+                }
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let (status, preserved) = post_route_action(
+            &app,
+            &token,
+            &show_id,
+            action("omitted", 1, serde_json::json!({"minimum_slots": 256})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            preserved["changes"][0]["route"]["destination"],
+            "127.0.0.1:15568"
+        );
+        let events_before_refusal = state.events.latest_sequence();
+        let (status, _) = post_route_action(
+            &app,
+            &token,
+            &show_id,
+            action(
+                "invalid",
+                2,
+                serde_json::json!({"delivery_mode": delivery,
+                "destination": "127.0.0.1:15568"}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(state.events.latest_sequence(), events_before_refusal);
+        let clear = action(
+            "clear",
+            2,
+            serde_json::json!({
+                "delivery_mode": delivery, "destination": null
+            }),
+        );
+        let (status, cleared) = post_route_action(&app, &token, &show_id, clear.clone()).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "explicit null must clear the prior address: {cleared}"
+        );
+        assert_eq!(cleared["changes"][0]["object_revision"], 3);
+        assert_eq!(cleared["changes"][0]["route"]["delivery_mode"], delivery);
+        assert!(cleared["changes"][0]["route"]["destination"].is_null());
+        assert_eq!(cleared["changes"][0]["route"]["minimum_slots"], 256);
+        let events_after_clear = state.events.latest_sequence();
+        let (status, replay) = post_route_action(&app, &token, &show_id, clear).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(replay["replayed"], true);
+        assert_eq!(replay["changes"], cleared["changes"]);
+        assert_eq!(state.events.latest_sequence(), events_after_clear);
+        let (status, restored) = post_route_action(
+            &app,
+            &token,
+            &show_id,
+            action(
+                "restore",
+                3,
+                serde_json::json!({"delivery_mode": "unicast",
+                "destination": "127.0.0.1:16454"}),
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            restored["changes"][0]["route"]["destination"],
+            "127.0.0.1:16454"
+        );
+        let events_after_restore = state.events.latest_sequence();
+        let (status, _) = post_route_action(
+            &app,
+            &token,
+            &show_id,
+            action("stale", 1, serde_json::json!({"enabled": true})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(state.events.latest_sequence(), events_after_restore);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
