@@ -3,6 +3,7 @@ import type { FixtureDefinition } from "../../../api/types";
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { fixtureTypeIconAsset } from "../fixtureTypeIconAssets";
 import { isDmxPatchable, isInternal } from "../patchUtils";
+import { modeChoiceQualifiers } from "./modeChoiceLabels";
 
 export function FixtureTypeIcon({ type }: { type: string }) {
 	return (
@@ -55,10 +56,21 @@ export function FixtureModeSelect({
 	value: string;
 	onChange: (value: string) => void;
 }) {
+	const qualifiers = modeChoiceQualifiers(
+		modes,
+		(mode) =>
+			`${mode.mode} · ${isDmxPatchable(mode) ? `${mode.footprint}ch` : "No DMX"}`,
+	);
+	const selected = modes.find((mode) => fixtureDefinitionKey(mode) === value);
+	const selectedQualifier = qualifiers.get(value);
 	return (
 		<SelectField
 			label="Mode"
-			ariaLabel="Mode"
+			ariaLabel={
+				selectedQualifier && selected
+					? `Mode: ${selected.mode} · ${selectedQualifier}`
+					: "Mode"
+			}
 			value={value}
 			onChange={onChange}
 			options={modes.map((mode) => ({
@@ -70,6 +82,9 @@ export function FixtureModeSelect({
 							<span>{mode.footprint}ch</span>
 						) : (
 							<small className="fixture-mode-no-dmx">No DMX</small>
+						)}
+						{qualifiers.get(fixtureDefinitionKey(mode)) && (
+							<small>{qualifiers.get(fixtureDefinitionKey(mode))}</small>
 						)}
 					</span>
 				),

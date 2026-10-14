@@ -9,6 +9,7 @@ import {
 import { fixtureDefinitionKey } from "../fixtureProfileModel";
 import { usePatchController } from "./controller";
 import { saveEdit } from "./editSave";
+import { modeChoiceQualifiers } from "./modeChoiceLabels";
 import {
 	ReplacementDecisions,
 	replacementDecisionRows,
@@ -123,6 +124,9 @@ export function ReplacementModeFields() {
 			controller.patch.pendingFixtureIds.has(data.selected.fixture_id),
 	);
 	const target = data.definition;
+	const modeLabel = (mode: (typeof modes)[number]) =>
+		`${ui.replacingFixture ? `${mode.manufacturer} · ${mode.name || mode.model} · ` : ""}${mode.mode} · ${mode.footprint}ch`;
+	const qualifiers = modeChoiceQualifiers(modes, modeLabel);
 	return (
 		<>
 			<div className="import-workflow__summary">
@@ -139,7 +143,7 @@ export function ReplacementModeFields() {
 				<p>
 					<strong>Destination:</strong> {target?.manufacturer} ·{" "}
 					{target?.name || target?.model} · {target?.mode} · {target?.footprint}
-					ch
+					ch {qualifiers.get(ui.definitionKey)}
 				</p>
 			</div>
 			{ui.replacingFixture && (
@@ -161,7 +165,7 @@ export function ReplacementModeFields() {
 				}}
 				options={modes.map((mode) => ({
 					value: fixtureDefinitionKey(mode),
-					label: `${ui.replacingFixture ? `${mode.manufacturer} · ${mode.name || mode.model} · ` : ""}${mode.mode} · ${mode.footprint}ch`,
+					label: `${modeLabel(mode)}${qualifiers.has(fixtureDefinitionKey(mode)) ? ` · ${qualifiers.get(fixtureDefinitionKey(mode))}` : ""}`,
 				}))}
 			/>
 			{!ui.replacingFixture && (

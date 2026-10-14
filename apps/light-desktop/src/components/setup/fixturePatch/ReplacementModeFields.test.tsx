@@ -239,3 +239,50 @@ describe("replacement decision presentation and navigation", () => {
 		expect(screen.getByText(/New splits start unpatched/)).toBeVisible();
 	});
 });
+
+describe("Replacement mode profile collisions", () => {
+	it("uses the same installed profile qualifiers and exact replacement callbacks", () => {
+		setup();
+		const modes = [definition(true, ["Main"]), definition(false, ["Main"])];
+		for (const mode of modes) {
+			mode.name = "Same product";
+			mode.revision = 1;
+		}
+		controller.data.availableDefinitions = modes;
+		controller.data.selectedModeFamily = {
+			modes,
+		} as typeof controller.data.selectedModeFamily;
+		controller.ui.definitionKey = fixtureDefinitionKey(modes[0]);
+		render(<ReplacementModeFields />);
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: /Acme.*Same product.*Standard.*12ch/,
+			}),
+		);
+		for (const mode of modes)
+			expect(
+				screen.getByRole("option", {
+					name: new RegExp(
+						`Same product.*Rev 1.*${mode.profile_id?.slice(0, 8)}`,
+					),
+				}),
+			).toBeVisible();
+		for (const [index, mode] of modes.entries()) {
+			if (index)
+				fireEvent.click(
+					screen.getByRole("button", {
+						name: /Acme.*Same product.*Standard.*12ch/,
+					}),
+				);
+			fireEvent.click(
+				screen.getByRole("option", {
+					name: new RegExp(mode.profile_id?.slice(0, 8) ?? ""),
+				}),
+			);
+			expect(controller.ui.setDefinitionKey).toHaveBeenLastCalledWith(
+				fixtureDefinitionKey(mode),
+			);
+		}
+		expect(controller.ui.setReplacementHeads).toHaveBeenCalledWith({});
+	});
+});
