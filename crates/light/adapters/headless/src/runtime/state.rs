@@ -80,6 +80,7 @@ pub(super) struct MvrPreviewQuery {
 
 #[derive(Clone, Serialize)]
 pub(super) struct MvrImportPreview {
+    pub(super) address_conflict_fixture_ids: Vec<Uuid>,
     pub(super) token: Uuid,
     pub(super) fixtures: Vec<MvrPreviewFixture>,
     pub(super) scenery: usize,

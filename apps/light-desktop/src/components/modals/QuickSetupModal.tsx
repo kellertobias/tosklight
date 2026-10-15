@@ -194,20 +194,11 @@ export function useMvrController(lifecycle: ReturnType<typeof useShowLifecycle>)
 			acceptedPreview.current=preview;
 			setMvrPreview(preview);
 			setMvrName(file.name.replace(/\.mvr$/i, ""));
-			const conflicted = new Set(
-				preview.address_conflicts
-					.map(
-						(message) =>
-							preview.fixtures.find((fixture) =>
-								message.startsWith(fixture.name),
-							)?.uuid,
-					)
-					.filter(Boolean),
-			);
+			const conflicted = new Set(preview.address_conflict_fixture_ids ?? []);
 			setMvrResolutions(
 				Object.fromEntries(
 					[...conflicted].map((uuid) => [
-						uuid!,
+						uuid,
 						{ action: "import_unpatched" },
 					]),
 				),

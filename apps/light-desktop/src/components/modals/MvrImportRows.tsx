@@ -19,8 +19,8 @@ export function MvrFixtureRow({
 }) {
 	const { mvrPreview, mvrResolutions, setMvrResolutions } = model.mvr;
 	const resolution = mvrResolutions[fixture.uuid];
-	const conflicted = mvrPreview?.address_conflicts.some((warning) =>
-		warning.startsWith(fixture.name),
+	const conflicted = (mvrPreview?.address_conflict_fixture_ids ?? []).includes(
+		fixture.uuid,
 	);
 	const action = resolution?.action ?? "import_unpatched";
 	const update = (change: Record<string, string | number>) =>

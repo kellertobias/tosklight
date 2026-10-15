@@ -272,6 +272,8 @@ pub struct MvrApplyOutcome {
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct MvrImportPreview {
     #[serde(default)]
+    pub address_conflict_fixture_ids: Vec<Uuid>,
+    #[serde(default)]
     pub profile_conflicts: Vec<MvrProfileConflict>,
     pub token: Uuid,
     pub fixtures: Vec<MvrPreviewFixture>,

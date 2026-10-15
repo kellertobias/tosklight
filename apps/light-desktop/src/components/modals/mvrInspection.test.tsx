@@ -6,6 +6,7 @@ import {
 	renderHook,
 	screen,
 	waitFor,
+	within,
 } from "@testing-library/react";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -388,6 +389,7 @@ describe("MVR decision hierarchy", () => {
 				...preview,
 				fixtures: [fixture],
 				address_conflicts: ["Wash one overlaps a patched fixture"],
+				address_conflict_fixture_ids: ["lamp"],
 				missing_profiles: ["Wash.gdtf RGBW"],
 				warnings: ["Secondary break is unpatched"],
 			},
@@ -498,5 +500,77 @@ describe("MVR decision hierarchy", () => {
 		expect(model.mvr.applyMvr).toHaveBeenCalledOnce();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 		expect(model.mvr.setMvrMode).toHaveBeenCalledWith(null);
+	});
+});
+
+const conflictFixtures = (duplicateNames = false) => [
+	{ uuid: "source-first", name: "Wash", gdtf_spec: "First.gdtf", gdtf_mode: "Mode", universe: 1, address: 1, matched: true },
+	{ uuid: "source-conflict", name: duplicateNames ? "Wash" : "Wash 2", gdtf_spec: "Second.gdtf", gdtf_mode: "Mode", universe: 1, address: 1, matched: true },
+];
+
+describe("MVR source-UUID conflict authority", () => {
+	it.each([false, true])("initializes and applies only actual conflicted UUIDs with prefix/repeated names (%s)", async (duplicateNames) => {
+		const fixtures = conflictFixtures(duplicateNames);
+		const inspected = {
+			...preview, fixtures,
+			address_conflicts: [`${fixtures[1].name} conflicts at universe 1 address 1-4`],
+			address_conflict_fixture_ids: ["source-conflict", "source-conflict"],
+		};
+		const test = setup(Promise.resolve(inspected));
+		await act(async () => test.result.current.inspectMvr(new File(["rig"], "Rig.mvr")));
+		expect(test.result.current.mvrResolutions).toEqual({
+			"source-conflict": { action: "import_unpatched" },
+		});
+		await act(async () => test.result.current.applyMvr());
+		expect(test.lifecycle.applyMvr).toHaveBeenCalledWith("late", expect.objectContaining({
+			resolutions: { "source-conflict": { action: "import_unpatched" } },
+		}));
+	});
+
+	it.each([false, true])("renders the resolution only on its exact source UUID (%s)", (duplicateNames) => {
+		const fixtures = conflictFixtures(duplicateNames);
+		const model = presentationModel({ mvrPreview: {
+			...preview, fixtures,
+			address_conflicts: [`${fixtures[1].name} conflicts at universe 1 address 1-4`],
+			address_conflict_fixture_ids: ["source-conflict"],
+		} });
+		render(<MvrImportPreview model={model} />);
+		const rows = screen.getAllByRole("article");
+		expect(rows).toHaveLength(2);
+		expect(within(rows[0]).queryByRole("button", { name: "Import unpatched" })).toBeNull();
+		expect(within(rows[1]).getByRole("button", { name: "Import unpatched" })).toBeVisible();
+		expect(within(rows[0]).getByText("Address retained")).toBeVisible();
+	});
+
+	it.each([[], undefined])("never invents UUID choices from legacy warning text when IDs are %j", async (ids) => {
+		const fixtures = conflictFixtures();
+		const inspected = {
+			...preview, fixtures,
+			address_conflicts: ["Wash conflicts at universe 1 address 1-4"],
+			...(ids === undefined ? {} : { address_conflict_fixture_ids: ids }),
+		};
+		const test = setup(Promise.resolve(inspected));
+		await act(async () => test.result.current.inspectMvr(new File(["rig"], "Rig.mvr")));
+		expect(test.result.current.mvrResolutions).toEqual({});
+		render(<MvrImportPreview model={presentationModel({ mvrPreview: inspected })} />);
+		expect(screen.queryByRole("button", { name: "Import unpatched" })).toBeNull();
+		await act(async () => test.result.current.applyMvr());
+		expect(test.lifecycle.applyMvr).toHaveBeenCalledWith("late", expect.objectContaining({ resolutions: {} }));
+	});
+
+	it("keeps another conflicted source default when one source receives an explicit address", async () => {
+		const test = setup(Promise.resolve({ ...preview,
+			fixtures: conflictFixtures(), address_conflicts: ["Wash conflicts at universe 1 address 1-4"],
+			address_conflict_fixture_ids: ["source-first", "source-conflict"],
+		}));
+		await act(async () => test.result.current.inspectMvr(new File(["rig"], "Rig.mvr")));
+		act(() => test.result.current.setMvrResolutions((current) => ({ ...current,
+			"source-first": { action: "address", universe: 2, address: 1 },
+		})));
+		await act(async () => test.result.current.applyMvr());
+		expect(test.lifecycle.applyMvr).toHaveBeenCalledWith("late", expect.objectContaining({ resolutions: {
+			"source-first": { action: "address", universe: 2, address: 1 },
+			"source-conflict": { action: "import_unpatched" },
+		} }));
 	});
 });

@@ -766,6 +766,7 @@ async fn preview_mvr_import_v2(
 ) -> Result<Json<wire::MvrImportPreview>, ApiError> {
     let Json(preview) = preview_mvr_import(State(state), query, headers, body).await?;
     Ok(Json(wire::MvrImportPreview {
+        address_conflict_fixture_ids: preview.address_conflict_fixture_ids,
         profile_conflicts: preview.profile_conflicts,
         token: preview.token,
         fixtures: preview

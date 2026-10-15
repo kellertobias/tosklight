@@ -1,5 +1,8 @@
 //! Atomic application boundary for importing MVR fixtures into the active show.
 
+mod candidates;
+pub use candidates::{MvrAddressConflict, preview_mvr_address_conflicts};
+
 mod bindings;
 mod layers;
 mod model;

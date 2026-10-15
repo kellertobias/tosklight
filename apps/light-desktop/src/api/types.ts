@@ -323,6 +323,7 @@ export interface TextDocument {
 }
 
 export interface MvrImportPreview {
+	address_conflict_fixture_ids?: string[];
 	profile_conflicts?: Array<{
 		profile_id: string;
 		revision: number;

@@ -21,26 +21,22 @@ fn prepare_mvr_preview(
     let document =
         light_mvr::read(&body).map_err(|error| ApiError::bad_request(error.to_string()))?;
     let definitions = mvr_definitions(&state, &document)?;
-    let mut occupied = Vec::new();
-    let mut owners = HashMap::new();
     let mut destination_revision = None;
-    if let Some(id) = query.show_id
-        && let Some(show) = state
+    let destination = if let Some(id) = query.show_id {
+        state
             .installation
             .show(light_core::ShowId(id))
             .map_err(ApiError::store)?
-    {
-        let destination = ActiveShowRepository::open(show.path)
+            .map(|show| {
+                ActiveShowRepository::open(show.path).and_then(|store| store.portable_document())
+            })
+            .transpose()
             .map_err(ApiError::store)?
-            .portable_document()
-            .map_err(ApiError::store)?;
-        destination_revision = Some((destination.revision(), destination.patch_revision()));
-        owners = light_application::mvr_import::mvr_destination_fixture_ids(
-            &destination,
-            &light_application::mvr_export::tosklight_mvr_fixture_metadata(&document),
-        );
-        occupied = light_application::mvr_import::occupied_patches(&destination)
-            .map_err(|error| ApiError::bad_request(error.message))?;
+    } else {
+        None
+    };
+    if let Some(document) = &destination {
+        destination_revision = Some((document.revision(), document.patch_revision()));
     }
     let missing_profiles = document
         .fixtures
@@ -50,33 +46,20 @@ fn prepare_mvr_preview(
         .collect::<std::collections::BTreeSet<_>>()
         .into_iter()
         .collect::<Vec<_>>();
-    let mut address_conflicts = Vec::new();
-    for fixture in &document.fixtures {
-        if let (Some(u), Some(a), Some(definition)) = (
-            fixture.universe,
-            fixture.address,
-            definitions.definitions.get(&fixture.uuid),
-        ) {
-            let end = a.saturating_add(
-                light_application::mvr_import::primary_footprint(definition).saturating_sub(1),
-            );
-            let owner = owners.get(&fixture.uuid).map(|id| id.0.to_string());
-            if occupied
-                .iter()
-                .any(|(other_universe, start, footprint, id)| {
-                    owner.as_ref() != Some(id)
-                        && *other_universe == u
-                        && *start <= end
-                        && start.saturating_add(footprint.saturating_sub(1)) >= a
-                })
-            {
-                address_conflicts.push(format!(
-                    "{} conflicts at universe {} address {}-{}",
-                    fixture.name, u, a, end
-                ));
-            }
-        }
-    }
+    let conflicts = light_application::mvr_import::preview_mvr_address_conflicts(
+        destination.as_ref(),
+        &document,
+        &definitions.definitions,
+    )
+    .map_err(mvr_api_error)?;
+    let address_conflict_fixture_ids = conflicts
+        .iter()
+        .map(|conflict| conflict.fixture_uuid)
+        .collect();
+    let address_conflicts = conflicts
+        .into_iter()
+        .map(|conflict| conflict.message)
+        .collect::<Vec<_>>();
     let slots = profiles::mvr_profile_slots(state, &definitions, query.show_id)?;
     let profile_conflicts =
         light_application::mvr_import::mvr_profile_conflicts(&definitions, &slots, &HashMap::new())
@@ -93,6 +76,7 @@ fn prepare_mvr_preview(
             .collect();
     let token = Uuid::new_v4();
     let preview = MvrImportPreview {
+        address_conflict_fixture_ids,
         profile_conflicts,
         token,
         fixtures: document
