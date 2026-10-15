@@ -1,0 +1,150 @@
+name: Release CPU profile capability (synthetic only)
+
+# No application build, show workload, release publication or performance gate.
+on:
+  push:
+    branches: [codex/release-output-cohort-diagnostics]
+    paths:
+      - .github/workflows/release-cpu-profile-preflight.yml
+      - tools/desktop-performance-profile.py
+      - tools/desktop-performance-profile.test.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpu-profile-preflight-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-capability:
+    if: github.repository == 'kellertobias/tosklight'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      EXPECTED_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Freeze source and public artifact boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 -B - <<'PYTHON'
+          import hashlib, json, os, pathlib, sys
+          sys.path.insert(0, 'tools')
+          from artifact_paths import artifact_path
+          out = artifact_path('LIGHT_TEST_RESULTS_DIR', 'TEST_RESULTS') / f"tl775-cpu-preflight-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+          out.mkdir(parents=True, exist_ok=False)
+          temporary = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')
+          temporary.mkdir(parents=True, exist_ok=True)
+          paths = ['.github/workflows/release-cpu-profile-preflight.yml',
+                   'tools/desktop-performance-profile.py', 'tools/desktop-performance-profile.test.py',
+                   'tools/artifact_paths.py', 'tools/artifact-layout.conf']
+          manifest = {'source_sha': os.environ['EXPECTED_SHA'],
+                      'run_id': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+                      'purpose': 'PUBLIC synthetic CPU-stack capability only; not application/performance acceptance',
+                      'build_or_cohorts_requested': False, 'preflight_global_seconds': 50,
+                      'source_sha256': {p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in paths}}
+          (out / 'source-workflow.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write(f'PROFILE_PREFLIGHT_OUT={out}\n')
+              stream.write(f'TMPDIR={temporary}\n')
+          PYTHON
+
+      - name: Pure and mocked helper checks before tool setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B tools/desktop-performance-profile.test.py \
+            2>&1 | tee "$PROFILE_PREFLIGHT_OUT/pure-tests.log"
+
+      - name: Provide official Linux tools within five minutes
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No policy/sysctl/capability changes. Dependencies only, once, before any probe.
+          # A distro perf wrapper is not passed to the helper as an ELF executable.
+          if ! command -v cc >/dev/null || ! command -v readelf >/dev/null \
+            || ! dpkg-query -W -f='${db:Status-Abbrev}\n' 'linux-tools-[0-9]*' 2>/dev/null | grep -q '^ii'; then
+            sudo -n timeout --signal=TERM --kill-after=10s 260s \
+              env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a bash -c \
+              'set -e; apt-get update; apt-get install -y --no-install-recommends linux-tools-common linux-tools-generic binutils build-essential'
+          fi
+          python3 -B - <<'PYTHON'
+          import hashlib, json, os, pathlib, platform, shutil, subprocess
+          listing = subprocess.run(['dpkg-query', '-W', '-f=${binary:Package}\t${db:Status-Abbrev}\n',
+                                    'linux-tools-*'], text=True, capture_output=True, timeout=2)
+          candidates = []
+          for line in listing.stdout.splitlines():
+              package, status = line.split('\t', 1)
+              if not status.startswith('ii'):
+                  continue
+              files = subprocess.run(['dpkg-query', '-L', package], check=True, text=True, capture_output=True, timeout=2)
+              for raw in files.stdout.splitlines():
+                  path = pathlib.Path(raw)
+                  if path.name != 'perf' or not path.is_file() or path.is_symlink():
+                      continue
+                  with path.open('rb') as stream:
+                      elf = stream.read(4) == b'\x7fELF'
+                  if elf:
+                      candidates.append((package, path))
+          if not candidates or not shutil.which('cc') or not shutil.which('readelf'):
+              raise SystemExit('STOP: official direct perf ELF/compiler/binutils unavailable; no build or cohorts')
+          kernel = platform.release()
+          candidates.sort(key=lambda item: (kernel in str(item[1]), str(item[1])))
+          package, executable = candidates[-1]
+          manifest_path = pathlib.Path(os.environ['PROFILE_PREFLIGHT_OUT']) / 'source-workflow.json'
+          manifest = json.loads(manifest_path.read_text())
+          manifest['tool_selection'] = {'kernel': kernel, 'official_package': package,
+              'perf_elf_path': str(executable), 'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
+              'kernel_match': kernel in str(executable),
+              'selection': 'installed official package direct ELF; prefer exact kernel path, otherwise deterministic package path; actual capability unproved'}
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write(f'LIGHT_PERF_ELF={executable}\n')
+          PYTHON
+
+      - name: One bounded synthetic capability preflight
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          # External 60+8s containment leaves the helper's reviewed shared50s cleanup budget.
+          # The helper alone may use one permission-denied-only sudo-n attempt. STOP is failure.
+          timeout --signal=TERM --kill-after=8s 60s python3 -B \
+            tools/desktop-performance-profile.py preflight \
+            --output "$PROFILE_PREFLIGHT_OUT/preflight.json"
+
+      - name: Preserve an explicit STOP when capability did not complete
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${PROFILE_PREFLIGHT_OUT:-}" ]]; then
+            python3 -B - <<'PYTHON'
+          import json, os, pathlib
+          path = pathlib.Path(os.environ['PROFILE_PREFLIGHT_OUT']) / 'preflight.json'
+          if not path.exists():
+              path.write_text(json.dumps({'status': 'STOP', 'canonical_build_allowed': False,
+                  'code': 'preflight_or_prior_step_incomplete',
+                  'qualification': 'No completed capability receipt; no application build or cohort requested; actor cleanup not inferred'}) + '\n')
+          PYTHON
+          fi
+
+      - name: Retain public safe receipts only
+        if: always() && env.PROFILE_PREFLIGHT_OUT != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tl775-cpu-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.PROFILE_PREFLIGHT_OUT }}/preflight.json
+            ${{ env.PROFILE_PREFLIGHT_OUT }}/source-workflow.json
+            ${{ env.PROFILE_PREFLIGHT_OUT }}/pure-tests.log
+          if-no-files-found: error
