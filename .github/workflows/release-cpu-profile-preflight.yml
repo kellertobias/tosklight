@@ -84,9 +84,30 @@ jobs:
               if remaining <= 0:
                   raise TimeoutError('tool discovery deadline exceeded')
               return subprocess.run(args, text=True, capture_output=True, timeout=min(2, remaining))
+          def canonical_packages(canonical, owned, query, owner_checks):
+              if canonical in owned:
+                  return owned[canonical]
+              lookup = query(['dpkg-query', '-S', canonical])
+              check = {'canonical': canonical, 'owner_query_exit': lookup.returncode, 'owners': []}
+              owner_checks.append(check)
+              if lookup.returncode:
+                  return []
+              accepted = []
+              for line in lookup.stdout.splitlines():
+                  package, separator, path = line.partition(': ')
+                  if not separator or path != canonical:
+                      continue
+                  status = query(['dpkg-query', '-W', '-f=${db:Status-Abbrev}\n', package])
+                  files = query(['dpkg-query', '-L', package])
+                  installed = status.returncode == 0 and status.stdout.startswith('ii')
+                  exact_file = files.returncode == 0 and canonical in files.stdout.splitlines()
+                  check['owners'].append({'package': package, 'installed': installed, 'exact_file_list': exact_file})
+                  if installed and exact_file:
+                      accepted.append(package)
+              return accepted
           def discover():
               result = {'cc': shutil.which('cc'), 'readelf': shutil.which('readelf'),
-                        'packages': [], 'perf_paths': [], 'candidates': []}
+                        'packages': [], 'perf_paths': [], 'canonical_owner_checks': [], 'candidates': []}
               audit['attempts'].append(result)
               listing = query(['dpkg-query', '-W', '-f=${binary:Package}\t${db:Status-Abbrev}\n', 'linux-tools-*'])
               result['package_query_exit'] = listing.returncode
@@ -113,8 +134,9 @@ jobs:
                   try:
                       canonical = path.resolve(strict=True)
                       row['canonical'] = str(canonical)
-                      if str(canonical) not in owned:
-                          row['rejected'] = 'canonical target not listed by installed linux-tools package'
+                      owners = canonical_packages(str(canonical), owned, query, result['canonical_owner_checks'])
+                      if not owners:
+                          row['rejected'] = 'canonical target has no installed package owner with exact file-list membership'
                       elif not canonical.is_file() or not os.access(canonical, os.X_OK):
                           row['rejected'] = 'canonical target not an executable regular file'
                       else:
@@ -124,7 +146,7 @@ jobs:
                           if magic != b'\x7fELF':
                               row['rejected'] = 'not a direct ELF (wrapper or other format)'
                           else:
-                              result['candidates'].append({'path': str(canonical), 'packages': owned[str(canonical)],
+                              result['candidates'].append({'path': str(canonical), 'packages': owners,
                                   'via': raw, 'sha256': hashlib.sha256(canonical.read_bytes()).hexdigest()})
                   except (OSError, RuntimeError) as error:
                       row['rejected'] = type(error).__name__
@@ -152,10 +174,10 @@ jobs:
                   current = discover()
               if not current['candidates'] or not current['cc'] or not current['readelf']:
                   raise RuntimeError('official direct perf ELF/compiler/binutils unavailable')
-              current['candidates'].sort(key=lambda item: (audit['kernel'] in item['path'], item['path']))
+              current['candidates'].sort(key=lambda item: (audit['kernel'] in item['via'] or audit['kernel'] in item['path'], item['path']))
               selected = current['candidates'][-1]
               manifest['tool_selection'] = {**selected, 'kernel': audit['kernel'],
-                  'kernel_match': audit['kernel'] in selected['path'],
+                  'kernel_match': audit['kernel'] in selected['via'] or audit['kernel'] in selected['path'],
                   'selection': 'installed package-listed canonical ELF; exact kernel preferred; capability unproved'}
               audit['status'] = 'TOOLS_AVAILABLE_CAPABILITY_UNPROVED'
               save()

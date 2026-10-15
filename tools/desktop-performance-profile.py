@@ -57,6 +57,18 @@ class Refused(RuntimeError):
     """A fixed scope/capability code, safe to publish without tool output."""
 
 
+class CensusRefused(Refused):
+    """Numeric record-header diagnostics only; no event payload is published."""
+
+    def __init__(self, event, misc, length, counts, sample_type, flags):
+        super().__init__("unsupported_or_lost_perf_record")
+        self.diagnostic = {
+            "record_type": event, "record_misc": misc, "record_length": length,
+            "preceding_record_counts": dict(counts),
+            "attribute_sample_type": sample_type, "attribute_flags": flags,
+        }
+
+
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -316,7 +328,7 @@ def event_census(data):
         if length < 8 or offset + length > end:
             raise Refused("invalid_perf_record_length")
         if event not in names:
-            raise Refused("unsupported_or_lost_perf_record")
+            raise CensusRefused(event, misc, length, counts, sample_type, flags)
         if event in (1, 9, 10) and misc & 7 != 2:
             raise Refused("non_user_sample_or_mapping")
         counts[names[event]] += 1
@@ -529,6 +541,8 @@ def recorder(request):
         receipt = {"status": "CAPABLE", "recorder_uid": os.getuid(), **result}
     except (Refused, OSError, ValueError, subprocess.SubprocessError) as error:
         receipt = {"status": "STOP", "code": str(error) if isinstance(error, Refused) else "preflight_tool_or_scope_unavailable"}
+        if isinstance(error, CensusRefused):
+            receipt["record_header_diagnostic"] = error.diagnostic
     finally:
         if child is not None:
             stop_owned(child, recorder_fd, request["overall_deadline"] - 10)

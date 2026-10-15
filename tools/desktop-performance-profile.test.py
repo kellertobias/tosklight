@@ -1,4 +1,5 @@
 """Pure fixture/mocked lifecycle checks. These tests never invoke perf or sudo."""
+import ast
 import collections
 import importlib.util
 import io
@@ -9,6 +10,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch, Mock
 
@@ -79,11 +81,67 @@ class EventScopeTests(unittest.TestCase):
             PROFILE.event_census(perf_file([9], flags=(1 << 1) | (1 << 5) | (1 << 6)))
         self.assertEqual(PROFILE.event_census(perf_file([9], flags=1 | (1 << 5) | (1 << 6))), {"SAMPLE": 1})
 
+    def test_unknown_record_refusal_contains_only_safe_header_diagnostics(self):
+        for kind in (2, 82, 999):
+            with self.subTest(kind=kind), self.assertRaises(PROFILE.CensusRefused) as caught:
+                PROFILE.event_census(perf_file([3, 9, kind]))
+            error = caught.exception
+            self.assertEqual(str(error), "unsupported_or_lost_perf_record")
+            self.assertEqual(error.diagnostic, {
+                "record_type": kind, "record_misc": 2, "record_length": 8,
+                "preceding_record_counts": {"COMM": 1, "SAMPLE": 1},
+                "attribute_sample_type": 1 | 2 | 4 | 32 | 128 | 256,
+                "attribute_flags": (1 << 5) | (1 << 6),
+            })
+
     def test_insufficient_symbolized_callchains_cannot_allow_build(self):
         with self.assertRaises(PROFILE.Refused):
             PROFILE.validate_export(exported(9), collections.Counter(COMM=1, MMAP2=1, SAMPLE=9), TARGET, TIDS, INTERVAL)
         with self.assertRaises(PROFILE.Refused):
             PROFILE.validate_export(exported().replace("tl775_profile_probe_parent", "unknown"), collections.Counter(COMM=1, MMAP2=1, SAMPLE=10), TARGET, TIDS, INTERVAL)
+
+
+class PackagedPerfDiscoveryTests(unittest.TestCase):
+    def canonical_packages(self):
+        # Parse just the workflow's pure scoped owner function; never execute
+        # workflow steps, package installation, perf, sudo or any probe.
+        workflow = Path(__file__).resolve().parents[1] / ".github/workflows/release-cpu-profile-preflight.yml"
+        text = workflow.read_text()
+        start = text.index("          def canonical_packages(")
+        end = text.index("          def discover():", start)
+        module = ast.parse(textwrap.dedent(text[start:end]))
+        namespace = {}
+        exec(compile(module, str(workflow), "exec"), namespace)
+        return namespace["canonical_packages"]
+
+    def test_canonical_vendor_package_requires_installed_exact_file_ownership(self):
+        canonical = "/usr/lib/linux-azure-6.8-tools-6.8.0-1064/perf"
+        package = "linux-azure-6.8-tools-6.8.0-1064"
+        for installed, member in ((True, True), (False, True), (True, False)):
+            calls = []
+            def query(args):
+                calls.append(args)
+                if args[1] == "-S":
+                    return Mock(returncode=0, stdout=f"{package}: {canonical}\n")
+                if args[1] == "-W":
+                    return Mock(returncode=0, stdout="ii \n" if installed else "rc \n")
+                return Mock(returncode=0, stdout=canonical + "\n" if member else "/another/perf\n")
+            checks = []
+            actual = self.canonical_packages()(canonical, {}, query, checks)
+            self.assertEqual(actual, [package] if installed and member else [])
+            self.assertEqual(calls, [
+                ["dpkg-query", "-S", canonical],
+                ["dpkg-query", "-W", "-f=${db:Status-Abbrev}\n", package],
+                ["dpkg-query", "-L", package],
+            ])
+            self.assertEqual(checks[0]["owners"][0]["installed"], installed)
+            self.assertEqual(checks[0]["owners"][0]["exact_file_list"], member)
+
+    def test_unrelated_owner_line_and_missing_owner_are_not_accepted(self):
+        for result in (Mock(returncode=1, stdout=""), Mock(returncode=0, stdout="vendor: /different/perf\n")):
+            query = Mock(return_value=result)
+            self.assertEqual(self.canonical_packages()("/scoped/perf", {}, query, []), [])
+            query.assert_called_once_with(["dpkg-query", "-S", "/scoped/perf"])
 
 
 class OwnershipTests(unittest.TestCase):
