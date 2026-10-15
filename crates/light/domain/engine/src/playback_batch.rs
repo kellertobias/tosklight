@@ -50,6 +50,10 @@ pub struct PreparedPlaybackBatch {
 }
 
 impl PreparedPlaybackBatch {
+    pub fn matches_snapshot(&self, snapshot: &Arc<crate::EngineSnapshot>) -> bool {
+        Arc::ptr_eq(&self.generation.snapshot_arc(), snapshot)
+    }
+
     pub fn outcomes(&self) -> &[PlaybackBatchOutcome] {
         &self.outcomes
     }
@@ -149,6 +153,32 @@ impl Engine {
         fallback_millis: u64,
         start: Option<&crate::PlaybackStartFrame>,
     ) -> Result<PreparedPlaybackBatch, String> {
+        self.prepare_playback_batch_with_steps(
+            commands,
+            started_at,
+            fallback_millis,
+            start,
+            |playback, command, regions| {
+                apply_command(playback, command, started_at, fallback_millis, regions)
+            },
+        )
+    }
+
+    /// Extend one isolated, ordered batch with an authority owned outside Playback. The callback
+    /// may mutate only the supplied candidate and its own isolated participants.
+    pub fn prepare_playback_batch_with_steps(
+        &self,
+        commands: &[PlaybackBatchCommand],
+        started_at: DateTime<Utc>,
+        fallback_millis: u64,
+        start: Option<&crate::PlaybackStartFrame>,
+        mut step: impl FnMut(
+            &mut PlaybackEngine,
+            &PlaybackBatchCommand,
+            &[PlaybackSoloRegion],
+        ) -> Result<PlaybackBatchOutcome, String>,
+    ) -> Result<PreparedPlaybackBatch, String> {
+        let _ = fallback_millis;
         let generation = self.generation.load_full();
         let start = start.filter(|start| start.matches(&generation));
         let mut playback = generation.playback().read().clone();
@@ -165,26 +195,51 @@ impl Engine {
                                 | PlaybackBatchAction::Toggle
                         )
                     })
-                    .filter(|_| !crate::playback_start::enabled(&playback, identity));
-                let outcome = apply_command(
-                    &mut playback,
-                    command,
-                    started_at,
-                    fallback_millis,
-                    &generation.snapshot().playback_solo_regions,
-                )?;
-                if let Some(start) = seed {
-                    start.adopt(&mut playback, identity)?;
-                }
-                Ok::<_, String>(outcome)
+                    .filter(|_| !crate::playback_start::enabled(&playback, identity))
+                    .filter(|_| {
+                        !playback.definition(identity).is_some_and(|definition| {
+                            matches!(
+                                definition.target,
+                                light_playback::PlaybackTarget::Timecode { .. }
+                            )
+                        })
+                    });
+                playback.with_captured_time(started_at, |playback| {
+                    let outcome = step(
+                        playback,
+                        command,
+                        &generation.snapshot().playback_solo_regions,
+                    )?;
+                    if let Some(start) = seed {
+                        start.adopt(playback, identity)?;
+                    }
+                    Ok(outcome)
+                })
             })
             .collect::<Result<_, _>>()?;
         let before = generation.playback().read();
-        let effect = playback.retained_runtime_effect_since(&before);
-        let numbered_effects = playback
+        let mut effect = playback.retained_runtime_effect_since(&before);
+        let mut numbered_effects: BTreeMap<_, _> = playback
             .numbered_runtime_effects_since(&before)
             .into_iter()
             .collect();
+        for outcome in &outcomes {
+            if playback
+                .definition(outcome.address)
+                .is_some_and(|definition| {
+                    matches!(
+                        definition.target,
+                        light_playback::PlaybackTarget::Timecode { .. }
+                    )
+                })
+            {
+                effect = effect.combine(outcome.effect);
+                numbered_effects
+                    .entry(outcome.address)
+                    .and_modify(|effect| *effect = effect.combine(outcome.addressed_effect))
+                    .or_insert(outcome.addressed_effect);
+            }
+        }
         drop(before);
         Ok(PreparedPlaybackBatch {
             generation,
@@ -193,6 +248,34 @@ impl Engine {
             effect,
             numbered_effects,
         })
+    }
+
+    pub fn apply_prepared_playback_step(
+        playback: &mut PlaybackEngine,
+        command: &PlaybackBatchCommand,
+        started_at: DateTime<Utc>,
+        fallback_millis: u64,
+        regions: &[PlaybackSoloRegion],
+    ) -> Result<PlaybackBatchOutcome, String> {
+        apply_command(playback, command, started_at, fallback_millis, regions)
+    }
+
+    pub fn execute_prepared_cue_command(
+        playback: &mut PlaybackEngine,
+        command: crate::EnginePlaybackCommand,
+    ) -> Result<crate::EnginePlaybackOutcome, String> {
+        if !matches!(command, crate::EnginePlaybackCommand::CueList { .. }) {
+            return Err("prepared Timecode executor accepts only direct Cue commands".into());
+        }
+        crate::playback::execute(playback, command, &[])
+    }
+
+    pub fn enforce_prepared_target_solo(
+        playback: &mut PlaybackEngine,
+        address: PlaybackAddress,
+        regions: &[PlaybackSoloRegion],
+    ) -> Result<PlaybackRuntimeEffect, String> {
+        crate::playback_exclusion::enforce_target_solo(playback, address, regions)
     }
 
     pub fn install_prepared_playback_batch(

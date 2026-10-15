@@ -89,6 +89,19 @@ impl PlaybackEngine {
         preview
     }
 
+    /// Run mutations on an isolated candidate at the transaction's captured instant. Restore
+    /// its original clock on both Result success and error before the candidate can install.
+    pub fn with_captured_time<T>(
+        &mut self,
+        at: DateTime<Utc>,
+        operation: impl FnOnce(&mut Self) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let clock = std::mem::replace(&mut self.clock, Arc::new(light_core::ManualClock::new(at)));
+        let result = operation(self);
+        self.clock = clock;
+        result
+    }
+
     pub fn set_external_completion_millis(
         &mut self,
         cue_list_id: CueListId,
@@ -398,4 +411,33 @@ pub(crate) struct DynamicFlashState {
 pub(crate) struct CuelistFlashState {
     pub(crate) restore_off: bool,
     pub(crate) release_activation_inhibited: bool,
+}
+
+#[cfg(test)]
+mod captured_transaction_clock_tests {
+    use super::*;
+    use light_core::ApplicationClock;
+    #[test]
+    fn captured_time_restores_advancing_source_on_success_and_failure() {
+        let at = DateTime::from_timestamp(1_000, 0).unwrap();
+        let clock = Arc::new(light_core::ManualClock::new(at));
+        let mut playback = PlaybackEngine::with_clock(clock.clone());
+        for fails in [false, true] {
+            clock.advance_millis(1_000);
+            let result = playback.with_captured_time(at, |candidate| {
+                assert_eq!(candidate.clock().now(), at);
+                clock.advance_millis(2_000);
+                assert_eq!(candidate.clock().now(), at);
+                if fails {
+                    Err("later preparation rejected".into())
+                } else {
+                    Ok(())
+                }
+            });
+            assert_eq!(result.is_err(), fails);
+            assert_eq!(playback.clock().now(), clock.now());
+        }
+        clock.advance_millis(7_000);
+        assert_eq!(playback.clock().now(), at + chrono::Duration::seconds(13));
+    }
 }

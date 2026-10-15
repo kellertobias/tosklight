@@ -217,3 +217,6 @@ mod media_endpoint_projection_tests;
 mod media_discovery_endpoint_route_tests;
 
 mod timecode_show_scope_tests;
+
+#[path = "preload_timecode_tests.rs"]
+mod preload_transport_batch_tests;

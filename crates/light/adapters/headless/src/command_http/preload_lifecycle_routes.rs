@@ -36,6 +36,18 @@ async fn apply_action(
     let needs_show_lock = matches!(request.action, ProgrammingPreloadLifecycleAction::Go { .. });
     let context = http_context(&session, Some(&request.request_id));
     let command = super::preload_lifecycle_wire::command(&request);
+    let resources = if needs_show_lock {
+        let (planning_state, planning_session, planning_context) =
+            (state.clone(), session.clone(), context.clone());
+        tokio::task::spawn_blocking(move || {
+            super::preload_resources::prepare(&planning_state, &planning_session, &planning_context)
+        })
+        .await
+        .map_err(PreloadLifecycleHttpError::blocking)?
+        .map_err(PreloadLifecycleHttpError::application)?
+    } else {
+        None
+    };
     let activation = if needs_show_lock {
         Some(state.active_show.acquire().await)
     } else {
@@ -46,6 +58,7 @@ async fn apply_action(
         session,
         ActionEnvelope { context, command },
         activation,
+        resources,
     )
     .await?;
     Ok(Json(super::preload_lifecycle_wire::outcome(result)).into_response())
@@ -56,9 +69,11 @@ async fn run_action(
     session: Session,
     action: ActionEnvelope<light_application::ProgrammingPreloadLifecycleRequest>,
     activation: Option<ActiveShowPermit>,
+    resources: Option<crate::runtime::preload::PreloadResources>,
 ) -> Result<light_application::ProgrammingPreloadLifecycleResult, PreloadLifecycleHttpError> {
     tokio::task::spawn_blocking(move || {
-        let ports = ServerProgrammingPorts::new(&state, &session, "http_preload_lifecycle", true);
+        let ports = ServerProgrammingPorts::new(&state, &session, "http_preload_lifecycle", true)
+            .with_preload_resources(resources);
         let result = state.programming.handle_preload_lifecycle(action, &ports);
         drop(activation);
         result

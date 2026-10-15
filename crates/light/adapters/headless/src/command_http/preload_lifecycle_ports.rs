@@ -28,6 +28,7 @@ impl ProgrammingPreloadLifecyclePorts for ServerProgrammingPorts<'_> {
             self.session(),
             context,
             request,
+            self.take_preload_resources(),
         )
     }
 

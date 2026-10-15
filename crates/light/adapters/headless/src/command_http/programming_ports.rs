@@ -55,6 +55,7 @@ pub(crate) struct ServerProgrammingPorts<'a> {
     source: &'static str,
     require_unlocked: bool,
     persist: bool,
+    preload_resources: std::sync::Mutex<Option<crate::runtime::preload::PreloadResources>>,
 }
 
 impl<'a> ServerProgrammingPorts<'a> {
@@ -70,7 +71,24 @@ impl<'a> ServerProgrammingPorts<'a> {
             source,
             require_unlocked,
             persist: true,
+            preload_resources: std::sync::Mutex::new(None),
         }
+    }
+
+    pub(in crate::runtime) fn with_preload_resources(
+        mut self,
+        resources: Option<crate::runtime::preload::PreloadResources>,
+    ) -> Self {
+        self.preload_resources = std::sync::Mutex::new(resources);
+        self
+    }
+    pub(super) fn take_preload_resources(
+        &self,
+    ) -> Option<crate::runtime::preload::PreloadResources> {
+        self.preload_resources
+            .lock()
+            .expect("Preload resource token poisoned")
+            .take()
     }
 
     /// For a values action inside a staged command line: the command flow persists the
@@ -795,7 +813,11 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
     fn commit_preload(&self, _context: &ActionContext) -> Result<Option<String>, String> {
         // Every command-line/OSC Programming caller already owns the active-show gate before
         // entering the application boundary. Re-entering it would reject every valid Preload GO.
-        let committed = super::super::commit_preload_while_show_stable(self.state, self.session)?;
+        let committed = super::super::commit_preload_while_show_stable(
+            self.state,
+            self.session,
+            self.take_preload_resources(),
+        )?;
         Ok(committed
             .get("warnings")
             .and_then(serde_json::Value::as_array)

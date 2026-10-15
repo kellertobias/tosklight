@@ -3,6 +3,9 @@
 //! The HTTP and OSC surfaces share the same application service while keeping routing, domain
 //! adaptation, event publication, and wire conversion independently readable and testable.
 
+#[path = "command_http/preload_resources.rs"]
+pub(in crate::runtime) mod preload_resources;
+
 #[path = "command_http/adapter.rs"]
 mod adapter;
 #[path = "command_http/color_attributes.rs"]
@@ -157,7 +160,7 @@ mod wire;
 pub(super) use adapter::{
     ordered_ui_command_policy, prevalidate_external_command, prevalidate_typed_command,
     publish_osc_rejection, route_osc_command_gesture_outcome, route_osc_command_key_outcome,
-    run_service_with_source,
+    run_service_with_preload_resources, run_service_with_source,
 };
 pub(super) use color_attributes::{
     ColorAttributeIndex, ColorTarget, authored_color_attribute_index, color_attribute_index,

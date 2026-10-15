@@ -368,14 +368,46 @@ pub enum TimecodeAudioCommand {
     },
 }
 
+/// Immutable, decoded device resources prepared without changing the output. Consuming this
+/// token accepts only the final ordered commands against those exact resources.
+pub trait PreparedTimecodeAudioOutputBatch: Send {
+    fn apply(self: Box<Self>, commands: &[TimecodeAudioCommand]) -> Result<(), String>;
+}
+
 /// Server-owned output boundary. Implementations honor the supplied audible deadline rather than
 /// introducing a second transport clock.
 pub trait TimecodeAudioOutput: Send + Sync {
     fn output_latency_micros(&self) -> u64;
     fn apply(&self, command: TimecodeAudioCommand) -> Result<(), String>;
+
+    /// Optional resource preflight. Native adapters decode assets here, before the final
+    /// commit clock is captured and before any live Engine/Dynamic install guard is acquired.
+    fn prepare_batch(
+        &self,
+        commands: &[TimecodeAudioCommand],
+    ) -> Result<Option<Box<dyn PreparedTimecodeAudioOutputBatch>>, String> {
+        if commands
+            .iter()
+            .any(|command| matches!(command, TimecodeAudioCommand::Prepare { .. }))
+        {
+            Err("Timecode audio asset preflight is unsupported by this output".into())
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Validate and accept the complete ordered transport batch, or leave the device unchanged.
+    /// Sequential single-command fallback would violate Preload's all-or-nothing boundary.
+    fn apply_batch(&self, commands: &[TimecodeAudioCommand]) -> Result<(), String> {
+        if commands.is_empty() {
+            Ok(())
+        } else {
+            Err("atomic Timecode audio batches are unsupported by this output".into())
+        }
+    }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct PreparedAudio {
     asset: AssetReference,
     metadata: WavMetadata,
@@ -593,6 +625,145 @@ impl TimecodeAudioService {
             })?;
         }
         Ok(audio.state)
+    }
+}
+
+/// Isolated audio map and command buffer. The live map remains guarded until logical install.
+pub(crate) struct PreparedTimecodeAudioBatch<'a> {
+    live: Option<std::sync::MutexGuard<'a, BTreeMap<TimecodeId, PreparedAudio>>>,
+    before: BTreeMap<TimecodeId, PreparedAudio>,
+    source: &'a TimecodeAudioService,
+    candidate: Arc<TimecodeAudioService>,
+    buffered: Arc<BufferedTimecodeAudioOutput>,
+    device: Option<Box<dyn PreparedTimecodeAudioOutputBatch>>,
+}
+
+/// Immutable decoded resources for a later fresh transport candidate. No Live lock is retained.
+pub struct PreparedTimecodeAudioResources {
+    commands: Vec<TimecodeAudioCommand>,
+    device: Option<Box<dyn PreparedTimecodeAudioOutputBatch>>,
+}
+
+struct BufferedTimecodeAudioOutput {
+    latency: u64,
+    commands: Mutex<Vec<TimecodeAudioCommand>>,
+}
+
+impl TimecodeAudioOutput for BufferedTimecodeAudioOutput {
+    fn output_latency_micros(&self) -> u64 {
+        self.latency
+    }
+    fn apply(&self, command: TimecodeAudioCommand) -> Result<(), String> {
+        self.commands
+            .lock()
+            .expect("Timecode batch buffer poisoned")
+            .push(command);
+        Ok(())
+    }
+}
+
+impl TimecodeAudioService {
+    pub(crate) fn prepare_transport_batch(&self) -> PreparedTimecodeAudioBatch<'_> {
+        let live = self.prepared.lock().expect("Timecode audio lock poisoned");
+        let buffered = Arc::new(BufferedTimecodeAudioOutput {
+            latency: self.output.output_latency_micros(),
+            commands: Mutex::new(Vec::new()),
+        });
+        let candidate = Arc::new(Self {
+            output: buffered.clone(),
+            prepared: Mutex::new(live.clone()),
+        });
+        PreparedTimecodeAudioBatch {
+            before: live.clone(),
+            live: None,
+            source: self,
+            candidate,
+            buffered,
+            device: None,
+        }
+    }
+}
+
+impl PreparedTimecodeAudioBatch<'_> {
+    pub(crate) fn candidate(&self) -> Arc<TimecodeAudioService> {
+        self.candidate.clone()
+    }
+    pub(crate) fn preflight_output(&mut self) -> Result<(), String> {
+        let commands = self
+            .buffered
+            .commands
+            .lock()
+            .expect("Timecode batch buffer poisoned");
+        self.device = if commands.is_empty() {
+            None
+        } else {
+            self.source.output.prepare_batch(&commands)?
+        };
+        Ok(())
+    }
+    pub(crate) fn take_resources(&mut self) -> PreparedTimecodeAudioResources {
+        PreparedTimecodeAudioResources {
+            commands: self
+                .buffered
+                .commands
+                .lock()
+                .expect("Timecode buffer poisoned")
+                .iter()
+                .filter(|command| matches!(command, TimecodeAudioCommand::Prepare { .. }))
+                .copied()
+                .collect(),
+            device: self.device.take(),
+        }
+    }
+    pub(crate) fn use_resources(
+        &mut self,
+        resources: PreparedTimecodeAudioResources,
+    ) -> Result<(), String> {
+        let prepares: Vec<_> = self
+            .buffered
+            .commands
+            .lock()
+            .expect("Timecode buffer poisoned")
+            .iter()
+            .filter(|command| matches!(command, TimecodeAudioCommand::Prepare { .. }))
+            .copied()
+            .collect();
+        if prepares != resources.commands {
+            return Err("Timecode audio dependencies changed after resource preflight".into());
+        }
+        self.device = resources.device;
+        Ok(())
+    }
+    pub(crate) fn accept_output(&mut self) -> Result<(), String> {
+        let live = self
+            .source
+            .prepared
+            .lock()
+            .expect("Timecode audio lock poisoned");
+        if *live != self.before {
+            return Err("Timecode audio changed while Preload was being prepared".into());
+        }
+        self.live = Some(live);
+        let commands = self
+            .buffered
+            .commands
+            .lock()
+            .expect("Timecode batch buffer poisoned");
+        if commands.is_empty() {
+            return Ok(());
+        }
+        match self.device.take() {
+            Some(device) => device.apply(&commands),
+            None => self.source.output.apply_batch(&commands),
+        }
+    }
+    pub(crate) fn install(mut self) {
+        *self.live.take().expect("validated Timecode audio install") = self
+            .candidate
+            .prepared
+            .lock()
+            .expect("Timecode audio lock poisoned")
+            .clone();
     }
 }
 

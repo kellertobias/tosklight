@@ -685,17 +685,14 @@ impl ProgrammingResource {
         self.programmers.normal_values_revision()
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn preload_values_revision(&self) -> u64 {
         self.programmers.preload_values_revision()
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn preload_playback_queue_revision(&self) -> u64 {
         self.programmers.preload_playback_queue_revision()
     }
 
-    #[cfg(test)]
     pub(in crate::runtime) fn capture_mode_revision(&self) -> u64 {
         self.programmers.capture_mode_revision()
     }

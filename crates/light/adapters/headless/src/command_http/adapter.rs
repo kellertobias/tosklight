@@ -708,7 +708,19 @@ pub(crate) fn run_service_with_source(
     command: ProgrammingCommand,
     source: &'static str,
 ) -> Result<ProgrammingResult, ActionError> {
-    let ports = ServerProgrammingPorts::new(state, session, source, true);
+    run_service_with_preload_resources(state, session, context, command, source, None)
+}
+
+pub(in crate::runtime) fn run_service_with_preload_resources(
+    state: &AppState,
+    session: &Session,
+    context: ActionContext,
+    command: ProgrammingCommand,
+    source: &'static str,
+    resources: Option<crate::runtime::preload::PreloadResources>,
+) -> Result<ProgrammingResult, ActionError> {
+    let ports =
+        ServerProgrammingPorts::new(state, session, source, true).with_preload_resources(resources);
     state
         .programming
         .handle(ActionEnvelope { context, command }, &ports)
@@ -747,14 +759,6 @@ pub(crate) fn route_osc_command_gesture_outcome(
     let Some(key) = osc_command_key(action) else {
         return None;
     };
-    let Ok(_activation) = state.active_show.try_acquire() else {
-        publish_osc_rejection(
-            state,
-            session,
-            "the active show is changing; retry the Programmer action".into(),
-        );
-        return Some(false);
-    };
     let context = ActionContext::operator(session.desk.id, session.id.0, ActionSource::Osc);
     let context = request_id.map_or(context.clone(), |id| context.with_request_id(id));
     let command = ProgrammingCommand::ApplyKey {
@@ -763,8 +767,25 @@ pub(crate) fn route_osc_command_gesture_outcome(
         gesture,
         execute_policy: ExecutionPolicy::Compatibility,
     };
+    let resources = match super::preload_resources::for_command(state, session, &context, &command)
+    {
+        Ok(resources) => resources,
+        Err(error) => {
+            publish_osc_rejection(state, session, error.message);
+            return Some(false);
+        }
+    };
+    let Ok(_activation) = state.active_show.try_acquire() else {
+        publish_osc_rejection(
+            state,
+            session,
+            "the active show is changing; retry the Programmer action".into(),
+        );
+        return Some(false);
+    };
     Some(
-        match run_service_with_source(state, session, context, command, "osc") {
+        match run_service_with_preload_resources(state, session, context, command, "osc", resources)
+        {
             Ok(result) => {
                 publish_osc_result(state, session, path, &result);
                 true
@@ -867,7 +888,7 @@ mod tests {
     }
 }
 
-fn action_error(error: ActionError) -> ApiError {
+pub(super) fn action_error(error: ActionError) -> ApiError {
     match error.kind {
         ActionErrorKind::Invalid => ApiError::bad_request(error.message),
         ActionErrorKind::Unauthorized => ApiError::unauthorized(error.message),

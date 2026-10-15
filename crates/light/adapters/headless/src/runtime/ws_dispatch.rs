@@ -19,7 +19,7 @@ pub(super) fn dispatch_live_action(
     frame: LiveActionFrame,
 ) -> WsResponse {
     let timing = begin_live_action_timing(state, session, &frame);
-    let response = dispatch_live_action_inner(state, session, frame, false, None);
+    let response = dispatch_live_action_inner(state, session, frame, false, None, None);
     acknowledge_live_action(state, timing, response)
 }
 
@@ -40,9 +40,53 @@ pub(super) async fn dispatch_live_action_on_socket(
     socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
 ) -> WsResponse {
     let timing = begin_live_action_timing(state, session, &frame);
+    let resources = if matches!(&frame.action, LiveAction::ProgrammerPreloadLifecycle(request)
+        if matches!(request.action, ProgrammingPreloadLifecycleAction::Go { .. }))
+    {
+        let revision = state.output.snapshot().revision;
+        if let Err(error) = validate_frame(state, session, &frame) {
+            return acknowledge_live_action(
+                state,
+                timing,
+                failed_response(frame.request_id, revision, error),
+            );
+        }
+        let (planning_state, planning_session, context) = (
+            state.clone(),
+            session.clone(),
+            interaction_context(session, &frame.request_id),
+        );
+        match tokio::task::spawn_blocking(move || {
+            command_http::preload_resources::prepare(&planning_state, &planning_session, &context)
+        })
+        .await
+        {
+            Ok(Ok(resources)) => resources,
+            Ok(Err(error)) => {
+                return acknowledge_live_action(
+                    state,
+                    timing,
+                    failed_response(frame.request_id, revision, error.message),
+                );
+            }
+            Err(error) => {
+                return acknowledge_live_action(
+                    state,
+                    timing,
+                    failed_response(
+                        frame.request_id,
+                        revision,
+                        format!("Preload resource task failed: {error}"),
+                    ),
+                );
+            }
+        }
+    } else {
+        None
+    };
     let timecode_action = matches!(&frame.action, LiveAction::Timecode(_));
     if !is_dynamic_action(&frame.action) && !timecode_action {
-        let response = dispatch_live_action_inner(state, session, frame, false, socket);
+        let response = dispatch_live_action_inner(state, session, frame, false, socket, resources);
         return acknowledge_live_action(state, timing, response);
     }
     let revision = state.output.snapshot().revision;
@@ -77,7 +121,7 @@ pub(super) async fn dispatch_live_action_on_socket(
             ),
         );
     }
-    let response = dispatch_live_action_inner(state, session, frame, true, socket);
+    let response = dispatch_live_action_inner(state, session, frame, true, socket, resources);
     drop(activation);
     acknowledge_live_action(state, timing, response)
 }
@@ -190,6 +234,7 @@ fn dispatch_live_action_inner(
     frame: LiveActionFrame,
     dynamic_activation_held: bool,
     socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
+    resources: Option<preload::PreloadResources>,
 ) -> WsResponse {
     let revision = state.output.snapshot().revision;
     if let Err(error) = validate_frame(state, session, &frame) {
@@ -197,7 +242,8 @@ fn dispatch_live_action_inner(
     }
     let request_id = frame.request_id;
     let context = interaction_context(session, &request_id);
-    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true);
+    let ports = command_http::ServerProgrammingPorts::new(state, session, "software", true)
+        .with_preload_resources(resources);
     let result = dispatch_action(
         state,
         session,

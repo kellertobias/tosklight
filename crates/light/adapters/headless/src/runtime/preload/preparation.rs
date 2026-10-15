@@ -3,8 +3,8 @@ use super::*;
 pub(super) type PlaybackIdentity = light_application::PlaybackRuntimeIdentity;
 pub(super) type PlaybackProjection = light_application::PlaybackRuntimeProjection;
 
-pub(super) struct PreparedPreloadCommit {
-    pub(super) solo_peers: Vec<light_playback::TimecodeId>,
+pub(super) struct PreparedPreloadCommit<'a> {
+    pub(super) timecodes: Option<light_application::timeline::PreparedTimecodeBatch<'a>>,
     pub(super) pending: Vec<light_programmer::PreloadPlaybackAction>,
     pub(super) committed_at: chrono::DateTime<chrono::Utc>,
     pub(super) programmer_fade_millis: u64,
@@ -14,27 +14,33 @@ pub(super) struct PreparedPreloadCommit {
     pub(super) context: light_application::ActionContext,
 }
 
-pub(super) fn prepare_preload_commit(
-    state: &AppState,
+pub(super) fn prepare_preload_commit<'a>(
+    state: &'a AppState,
     session: &Session,
     context: light_application::ActionContext,
-) -> Result<PreparedPreloadCommit, String> {
+    resources: Option<PreloadResources>,
+) -> Result<PreparedPreloadCommit<'a>, String> {
     let pending = pending_actions(state, session)?;
     validate_playback_definitions(&pending, &state.output.snapshot())?;
     let committed_at = state.programming.clock().now();
+    let transport_micros = state.timecodes.capture_transport_micros();
     let programmer_fade_millis = state.installation.configuration().programmer_fade_millis;
     let playback_context = CapturedPreloadPlaybackContext::new(session.desk.id);
     let commands = playback_context.commands(&pending, committed_at)?;
-    let prepared_playback =
-        state
-            .output
-            .prepare_playback_batch(&commands, committed_at, programmer_fade_millis)?;
-    let solo_peers = solo::prepare_timecode_releases(state, &prepared_playback)?;
+    let (prepared_playback, timecodes, committed_at, programmer_fade_millis) = timecodes::prepare(
+        state,
+        session,
+        &commands,
+        committed_at,
+        transport_micros,
+        programmer_fade_millis,
+        resources,
+    )?;
     let identities = changed_identities(&prepared_playback);
     let before = read_projections(state, &context, &identities)?;
     let staged_actions = staged_preload_actions(&pending, &prepared_playback);
     Ok(PreparedPreloadCommit {
-        solo_peers,
+        timecodes,
         pending,
         committed_at,
         programmer_fade_millis,
@@ -69,7 +75,7 @@ fn pending_actions(
         .ok_or_else(|| "programmer does not exist".to_owned())
 }
 
-fn validate_playback_definitions(
+pub(super) fn validate_playback_definitions(
     pending: &[light_programmer::PreloadPlaybackAction],
     snapshot: &EngineSnapshot,
 ) -> Result<(), String> {

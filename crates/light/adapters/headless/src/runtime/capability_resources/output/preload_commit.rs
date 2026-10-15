@@ -3,6 +3,27 @@ use super::*;
 use crate::runtime::dynamic_source_origins::DynamicSourceBinding;
 
 impl OutputResource {
+    pub(in crate::runtime) fn prepare_preload_batch_with_steps(
+        &self,
+        commands: &[light_engine::PlaybackBatchCommand],
+        at: chrono::DateTime<chrono::Utc>,
+        fallback_millis: u64,
+        step: impl FnMut(
+            &mut light_playback::PlaybackEngine,
+            &light_engine::PlaybackBatchCommand,
+            &[light_playback::PlaybackSoloRegion],
+        ) -> Result<light_engine::PlaybackBatchOutcome, String>,
+    ) -> Result<light_engine::PreparedPlaybackBatch, String> {
+        let start = self.published_playback_start();
+        self.engine.prepare_playback_batch_with_steps(
+            commands,
+            at,
+            fallback_millis,
+            start.as_ref(),
+            step,
+        )
+    }
+
     /// Caller owns active-show, Programmer and ordered Playback serialization. Capture all
     /// Live inputs before the Engine takes its Playback write lock. The preparation callback
     /// may use only its supplied candidates and already captured ancillary data: calling a

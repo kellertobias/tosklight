@@ -115,20 +115,24 @@ async fn apply_command_key(
 ) -> Result<Response, ApiError> {
     validate_request_id(&input.request_id)?;
     let session = authenticate_desk_mutation(&state, &headers, &desk)?;
-    let _activation = state.active_show.acquire().await;
     show.verify(&state)?;
     let context = http_context(&session, Some(&input.request_id));
-    let result = run_service(
-        &state,
-        &session,
-        context,
-        ProgrammingCommand::ApplyKey {
-            key: command_key(input.key),
-            phase: command_key_phase(input.phase),
-            gesture: input.gesture.map(command_gesture),
-            execute_policy: ExecutionPolicy::AtomicProgrammer,
-        },
-    )?;
+    let command = ProgrammingCommand::ApplyKey {
+        key: command_key(input.key),
+        phase: command_key_phase(input.phase),
+        gesture: input.gesture.map(command_gesture),
+        execute_policy: ExecutionPolicy::AtomicProgrammer,
+    };
+    let resources =
+        super::preload_resources::for_command_async(&state, &session, &context, &command)
+            .await
+            .map_err(super::adapter::action_error)?;
+    let _activation = state.active_show.acquire().await;
+    show.verify(&state)?;
+    let result = super::adapter::run_service_with_preload_resources(
+        &state, &session, context, command, "http", resources,
+    )
+    .map_err(super::adapter::action_error)?;
     if let Some(warning) = publish_service_result(
         &state,
         &session,

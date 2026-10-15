@@ -145,6 +145,16 @@ fn rig() -> Rig {
             false,
         )
         .unwrap();
+    std::fs::create_dir_all(data_dir.join("shows")).unwrap();
+    let (store, _) = ShowStore::create(&show.path, "Preload Solo").unwrap();
+    for (id, number) in [(peer, 1), (unrelated, 2)] {
+        let definition = light_playback::TimecodeDefinition {
+            id, number, name: format!("Timecode {number}"), duration: Some(light_playback::TimecodeFrame(440)),
+            transport_offset: light_playback::TimecodeFrame::ZERO, auto_start: false,
+            audio: None, markers: Vec::new(), lanes: Vec::new(),
+        };
+        store.put_object("timecode", &id.0.to_string(), &serde_json::to_value(definition).unwrap(), 0).unwrap();
+    }
     state.active_show.replace_current(Some(show));
     state
         .timecodes

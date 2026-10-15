@@ -4,9 +4,10 @@ pub(super) fn commit_preload_transaction(
     state: &AppState,
     session: &Session,
     context: light_application::ActionContext,
+    resources: Option<PreloadResources>,
 ) -> Result<CommittedPreload, String> {
     let preparation::PreparedPreloadCommit {
-        solo_peers,
+        mut timecodes,
         pending,
         committed_at,
         programmer_fade_millis,
@@ -14,11 +15,11 @@ pub(super) fn commit_preload_transaction(
         staged_actions,
         before,
         context,
-    } = preparation::prepare_preload_commit(state, session, context)?;
+    } = preparation::prepare_preload_commit(state, session, context, resources)?;
     let playback_runtime_changed = prepared_playback.effect().durable();
     // The outer Programmer transaction restores activation/queue on any preparation error.
     // Final Dynamic owners and all fallible event projections are built before either Live swap.
-    let (changes, dynamic_runtime_changed) = install_preload_commit(
+    let ((changes, timecode_changes), dynamic_runtime_changed) = install_preload_commit(
         state,
         session,
         pending,
@@ -30,9 +31,18 @@ pub(super) fn commit_preload_transaction(
             let after = playback_service::prepared_runtime_projections(
                 snapshot, &before, playback, runtime, interval,
             )?;
-            events::preload_change_events(&context, before, after, &staged_actions)
+            let changes = events::preload_change_events(&context, before, after, &staged_actions)?;
+            let timecode_changes = if let Some(mut timecodes) = timecodes.take() {
+                timecodes.accept_audio()?;
+                // Everything after device acknowledgment is an infallible guarded installation.
+                timecodes.install()
+            } else {
+                Vec::new()
+            };
+            Ok((changes, timecode_changes))
         },
     )?;
+    state.timecodes.publish_prepared_changes(timecode_changes);
     if dynamic_runtime_changed {
         state
             .events
@@ -53,15 +63,12 @@ pub(super) fn commit_preload_transaction(
     events::emit_exclusions(state, session, &changes);
     let executed_projection = executed_preload_projection(&staged_actions);
     let executed = executed_preload_actions(staged_actions, committed_at, programmer_fade_millis);
-    // External transport authority can fail after accepted Live installation (e.g. audio).
-    // Report that accepted-partial tail explicitly; never roll back only the Programmer queue.
-    let mut warnings = solo::stop_timecode_releases(state, &solo_peers);
-    warnings.extend(persist_preload_commit(
+    let warnings = persist_preload_commit(
         state,
         session,
         playback_runtime_changed,
         dynamic_runtime_changed,
-    ));
+    );
     Ok(CommittedPreload {
         committed_at,
         programmer_fade_millis,

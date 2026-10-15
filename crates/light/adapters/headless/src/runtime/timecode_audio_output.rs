@@ -6,13 +6,16 @@
 use std::{
     collections::{BTreeMap, HashMap},
     process::{Command, Stdio},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU8, Ordering},
+    },
     time::{Duration, Instant},
 };
 
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 use crossbeam_queue::ArrayQueue;
-use light_application::timeline::TimecodeClock;
+use light_application::timeline::{PreparedTimecodeAudioOutputBatch, TimecodeClock};
 use light_application::{
     AssetChunkSink, AssetReference, ManagedAssetStore, TimecodeAudioCommand, TimecodeAudioOutput,
 };
@@ -130,6 +133,8 @@ fn output_devices_from_command(command: &mut Command) -> Result<Vec<String>, Str
 pub(super) struct NativeTimecodeAudioOutput {
     store: Arc<dyn ManagedAssetStore>,
     latency_micros: u64,
+    output_sample_rate: u32,
+    output_channels: usize,
     worker: Arc<super::TimecodeAudioWorkerResource>,
 }
 
@@ -139,7 +144,16 @@ pub(in crate::runtime) enum NativeCommand {
         decoded: DecodedWav,
         timeline_rate: TimecodeFrameRate,
     },
+    PreparedVoice {
+        timecode_id: TimecodeId,
+        voice: Voice,
+    },
     Transport(TimecodeAudioCommand),
+    PreparedBatch(Vec<NativeCommand>),
+    CorrelatedBatch {
+        commands: Vec<NativeCommand>,
+        receipt: Arc<AudioBatchReceipt>,
+    },
     PrepareInternal {
         fixture_id: FixtureId,
         decoded: DecodedWav,
@@ -223,6 +237,7 @@ impl NativeTimecodeAudioOutput {
         let baseline = buffer_latency_micros(supported.buffer_size(), output_sample_rate);
         let latency_micros = add_signed(baseline, configuration.latency_trim_micros);
         let config = supported.config();
+        let output_channels = usize::from(config.channels);
         let format = supported.sample_format();
         let (commands, receiver) = std::sync::mpsc::channel();
         let (started, startup) = std::sync::mpsc::channel();
@@ -244,6 +259,8 @@ impl NativeTimecodeAudioOutput {
         Ok(Self {
             store,
             latency_micros,
+            output_sample_rate,
+            output_channels,
             worker: Arc::new(super::TimecodeAudioWorkerResource::new(commands, worker)),
         })
     }
@@ -335,7 +352,63 @@ impl TimecodeAudioOutput for NativeTimecodeAudioOutput {
     }
 
     fn apply(&self, command: TimecodeAudioCommand) -> Result<(), String> {
-        let command = match command {
+        self.worker.request(self.prepare_batch_command(command)?)
+    }
+
+    fn prepare_batch(
+        &self,
+        commands: &[TimecodeAudioCommand],
+    ) -> Result<Option<Box<dyn PreparedTimecodeAudioOutputBatch>>, String> {
+        if self.output_sample_rate == 0 || self.output_channels == 0 {
+            return Err("Timecode audio output has an invalid device format".into());
+        }
+        let mut assets = Vec::new();
+        for command in commands {
+            if matches!(command, TimecodeAudioCommand::Prepare { .. }) {
+                let prepared = self.prepare_batch_command(*command)?;
+                let NativeCommand::Prepare {
+                    timecode_id,
+                    decoded,
+                    timeline_rate,
+                } = prepared
+                else {
+                    return Err("expected decoded Timecode audio preparation".into());
+                };
+                assets.push((
+                    *command,
+                    NativeCommand::PreparedVoice {
+                        timecode_id,
+                        voice: Voice::new(
+                            decoded,
+                            timeline_rate,
+                            self.output_sample_rate,
+                            self.output_channels,
+                        ),
+                    },
+                ));
+            }
+        }
+        Ok(Some(Box::new(NativePreparedAudioBatch {
+            worker: self.worker.clone(),
+            assets,
+        })))
+    }
+    fn apply_batch(&self, commands: &[TimecodeAudioCommand]) -> Result<(), String> {
+        if commands.is_empty() {
+            return Ok(());
+        }
+        self.prepare_batch(commands)?
+            .expect("native batch token")
+            .apply(commands)
+    }
+}
+
+impl NativeTimecodeAudioOutput {
+    fn prepare_batch_command(
+        &self,
+        command: TimecodeAudioCommand,
+    ) -> Result<NativeCommand, String> {
+        Ok(match command {
             TimecodeAudioCommand::Prepare {
                 timecode_id,
                 asset,
@@ -355,8 +428,43 @@ impl TimecodeAudioOutput for NativeTimecodeAudioOutput {
                 }
             }
             other => NativeCommand::Transport(other),
-        };
-        self.worker.request(command)
+        })
+    }
+}
+
+struct NativePreparedAudioBatch {
+    worker: Arc<super::TimecodeAudioWorkerResource>,
+    assets: Vec<(TimecodeAudioCommand, NativeCommand)>,
+}
+fn resolve_prepared_audio(
+    mut assets: Vec<(TimecodeAudioCommand, NativeCommand)>,
+    commands: &[TimecodeAudioCommand],
+) -> Result<Vec<NativeCommand>, String> {
+    let mut resolved = Vec::with_capacity(commands.len());
+    for command in commands {
+        if matches!(command, TimecodeAudioCommand::Prepare { .. }) {
+            let index = assets
+                .iter()
+                .position(|(expected, _)| expected == command)
+                .ok_or("Timecode audio resources changed after preflight")?;
+            resolved.push(assets.swap_remove(index).1);
+        } else {
+            resolved.push(NativeCommand::Transport(*command));
+        }
+    }
+    if !assets.is_empty() {
+        return Err("Timecode audio resources changed after preflight".into());
+    }
+    Ok(resolved)
+}
+impl PreparedTimecodeAudioOutputBatch for NativePreparedAudioBatch {
+    fn apply(self: Box<Self>, commands: &[TimecodeAudioCommand]) -> Result<(), String> {
+        let worker = self.worker.clone();
+        let commands = resolve_prepared_audio(self.assets, commands)?;
+        if commands.is_empty() {
+            return Ok(());
+        }
+        worker.request(NativeCommand::PreparedBatch(commands))
     }
 }
 
@@ -425,6 +533,21 @@ fn apply_native(
     output_channels: usize,
 ) -> Result<(), String> {
     match command {
+        NativeCommand::CorrelatedBatch { .. } => {
+            unreachable!("correlated command must be claimed by its queue")
+        }
+        NativeCommand::PreparedBatch(commands) => {
+            validate_prepared_batch(voices, &commands)?;
+            for command in commands {
+                apply_native(voices, command, output_sample_rate, output_channels)
+                    .expect("validated native audio batch");
+            }
+        }
+        NativeCommand::PreparedVoice { timecode_id, voice } => {
+            // The sample Arc and voice are prepared before the joint commit clock is captured.
+            // Inserting a new registry entry retains the existing BTreeMap allocation behavior.
+            voices.timecodes.insert(timecode_id, voice);
+        }
         NativeCommand::Prepare {
             timecode_id,
             decoded,
@@ -541,6 +664,63 @@ fn apply_native(
         NativeCommand::Shutdown => unreachable!(),
     }
     Ok(())
+}
+
+fn validate_prepared_batch(
+    voices: &DeviceVoices,
+    commands: &[NativeCommand],
+) -> Result<(), String> {
+    for (index, command) in commands.iter().enumerate() {
+        match command {
+            NativeCommand::Prepare { decoded, .. } => {
+                if decoded.sample_rate == 0 || decoded.channels == 0 || decoded.samples.is_empty() {
+                    return Err("invalid prepared Timecode audio".into());
+                }
+            }
+            NativeCommand::PreparedVoice { voice, .. } => {
+                if voice.source_rate == 0 || voice.source_channels == 0 || voice.samples.is_empty()
+                {
+                    return Err("invalid prepared Timecode audio".into());
+                }
+            }
+            NativeCommand::Transport(command) => {
+                let id = validated_transport_id(command)?;
+                // Validate against the exact earlier prefix without allocating in the callback.
+                let prepared_before = commands[..index].iter().any(|command| match command {
+                    NativeCommand::Prepare { timecode_id, .. }
+                    | NativeCommand::PreparedVoice { timecode_id, .. } => *timecode_id == id,
+                    _ => false,
+                });
+                if !voices.timecodes.contains_key(&id) && !prepared_before {
+                    return Err("Timecode audio is not prepared on the output device".into());
+                }
+            }
+            _ => return Err("unsupported native audio batch command".into()),
+        }
+    }
+    Ok(())
+}
+
+fn validated_transport_id(command: &TimecodeAudioCommand) -> Result<TimecodeId, String> {
+    Ok(match command {
+        TimecodeAudioCommand::Prepare { .. } => {
+            return Err("asset preparation is not a decoded transport action".into());
+        }
+        TimecodeAudioCommand::Play { timecode_id, .. }
+        | TimecodeAudioCommand::Pause { timecode_id }
+        | TimecodeAudioCommand::Stop { timecode_id }
+        | TimecodeAudioCommand::Seek { timecode_id, .. }
+        | TimecodeAudioCommand::SetLoop { timecode_id, .. } => *timecode_id,
+        TimecodeAudioCommand::SetVolume {
+            timecode_id,
+            linear,
+        } => {
+            if !linear.is_finite() || !(0.0..=1.0).contains(linear) {
+                return Err("Timecode batch volume must be finite and between zero and one".into());
+            }
+            *timecode_id
+        }
+    })
 }
 
 fn timecode_voice(voices: &mut DeviceVoices, id: TimecodeId) -> Result<&mut Voice, String> {
@@ -682,8 +862,48 @@ impl Default for AudioCommandQueue {
     }
 }
 
+const BATCH_PENDING: u8 = 0;
+const BATCH_RUNNING: u8 = 1;
+const BATCH_CANCELLED: u8 = 2;
+
+pub(in crate::runtime) struct AudioBatchReceipt {
+    state: AtomicU8,
+    completed: ArrayQueue<Result<(), String>>,
+}
+impl AudioBatchReceipt {
+    fn new() -> Self {
+        Self {
+            state: AtomicU8::new(BATCH_PENDING),
+            completed: ArrayQueue::new(1),
+        }
+    }
+    fn claim(&self) -> bool {
+        self.state
+            .compare_exchange(
+                BATCH_PENDING,
+                BATCH_RUNNING,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+    }
+    fn cancel_pending(&self) -> bool {
+        self.state
+            .compare_exchange(
+                BATCH_PENDING,
+                BATCH_CANCELLED,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+    }
+}
+
 impl AudioCommandQueue {
     fn submit(&self, command: NativeCommand) -> Result<(), String> {
+        if let NativeCommand::PreparedBatch(commands) = command {
+            return self.submit_batch(commands, Duration::from_secs(2));
+        }
         self.pending
             .push(command)
             .map_err(|_| "Timecode audio command queue is full".to_owned())?;
@@ -699,8 +919,44 @@ impl AudioCommandQueue {
         }
     }
 
+    fn submit_batch(&self, commands: Vec<NativeCommand>, timeout: Duration) -> Result<(), String> {
+        let receipt = Arc::new(AudioBatchReceipt::new());
+        self.pending
+            .push(NativeCommand::CorrelatedBatch {
+                commands,
+                receipt: receipt.clone(),
+            })
+            .map_err(|_| "Timecode audio command queue is full".to_owned())?;
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(result) = receipt.completed.pop() {
+                return result;
+            }
+            if Instant::now() >= deadline && receipt.cancel_pending() {
+                return Err("Timecode audio device stopped consuming playback commands".into());
+            }
+            // Once claimed, the callback's validated tail contains no IO or waiting. Registry
+            // insertion retains its existing allocation; completion is not wall-time bounded.
+            // The tail contains no fallible
+            // work. Await its own receipt: reporting refusal now could lie about applied audio.
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
     fn apply_pending(&self, voices: &mut DeviceVoices, rate: u32, channels: usize) {
         if let Some(command) = self.pending.pop() {
+            if let NativeCommand::CorrelatedBatch { commands, receipt } = command {
+                if receipt.claim() {
+                    let result = apply_native(
+                        voices,
+                        NativeCommand::PreparedBatch(commands),
+                        rate,
+                        channels,
+                    );
+                    let _ = receipt.completed.push(result);
+                }
+                return;
+            }
             let result = apply_native(voices, command, rate, channels);
             // The single worker waits for this acknowledgement before submitting another command.
             let _ = self.completed.push(result);
@@ -716,7 +972,7 @@ fn audio_gain(control: f32) -> f32 {
     control.clamp(0.0, 1.0)
 }
 
-struct Voice {
+pub(in crate::runtime) struct Voice {
     samples: Arc<Vec<f32>>,
     source_rate: u32,
     source_channels: usize,

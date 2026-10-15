@@ -805,27 +805,33 @@ fn apply_application_programmer_key(
     pressed: bool,
     gesture: Option<light_programmer::command_line::CommandGesture>,
 ) -> Result<(), PortError> {
+    let context = light_application::ActionContext::operator(
+        session.desk.id,
+        session.id.0,
+        light_application::ActionSource::Extension,
+    );
+    let command = light_application::ProgrammingCommand::ApplyKey {
+        key,
+        phase: if pressed {
+            light_programmer::command_line::CommandKeyPhase::Press
+        } else {
+            light_programmer::command_line::CommandKeyPhase::Release
+        },
+        gesture,
+        execute_policy: light_application::ExecutionPolicy::Compatibility,
+    };
+    let resources =
+        command_http::preload_resources::for_command(state, session, &context, &command)
+            .map_err(|error| PortError::new(error.message))?;
     let _activation = super::programming_interaction::try_programming_activation(state)
         .map_err(PortError::new)?;
-    let result = command_http::run_service_with_source(
+    let result = command_http::run_service_with_preload_resources(
         state,
         session,
-        light_application::ActionContext::operator(
-            session.desk.id,
-            session.id.0,
-            light_application::ActionSource::Extension,
-        ),
-        light_application::ProgrammingCommand::ApplyKey {
-            key,
-            phase: if pressed {
-                light_programmer::command_line::CommandKeyPhase::Press
-            } else {
-                light_programmer::command_line::CommandKeyPhase::Release
-            },
-            gesture,
-            execute_policy: light_application::ExecutionPolicy::Compatibility,
-        },
+        context,
+        command,
         "extension",
+        resources,
     )
     .map_err(|error| PortError::new(error.message))?;
     if let Some(warning) =

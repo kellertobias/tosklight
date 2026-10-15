@@ -356,6 +356,26 @@ impl TimecodeRuntimeService {
             Option<TimecodeId>,
         ) -> Result<light_engine::EnginePlaybackOutcome, String>,
     ) -> TimecodeCueListReconcileReport {
+        let cue_lists = engine.snapshot().cue_lists.as_ref().clone();
+        let timing = engine.cue_timing_masters();
+        self.reconcile_cue_lists_from(
+            &cue_lists,
+            timing,
+            |id| engine.playback_runtime_status_for_cue_list(id),
+            &mut execute,
+        )
+    }
+
+    fn reconcile_cue_lists_from(
+        &self,
+        cue_lists: &[light_playback::CueList],
+        (sequence_fade_millis, release_fade_millis): (u64, u64),
+        mut status: impl FnMut(light_core::CueListId) -> Option<light_playback::PlaybackRuntimeStatus>,
+        mut execute: impl FnMut(
+            EnginePlaybackCommand,
+            Option<TimecodeId>,
+        ) -> Result<light_engine::EnginePlaybackOutcome, String>,
+    ) -> TimecodeCueListReconcileReport {
         let mut report = TimecodeCueListReconcileReport::default();
         let installed = self
             .runtimes
@@ -371,8 +391,6 @@ impl TimecodeRuntimeService {
                 )
             })
             .collect::<Vec<_>>();
-        let cue_lists = engine.snapshot().cue_lists.as_ref().clone();
-        let (sequence_fade_millis, release_fade_millis) = engine.cue_timing_masters();
         let cue_timing = light_playback::TimecodeCueTimingDefaults {
             frame_rate: self.rate,
             sequence_fade_millis,
@@ -382,7 +400,7 @@ impl TimecodeRuntimeService {
         let mut desired = HashMap::new();
         for (definition, transport, frame, reconcile_mode) in installed {
             let resolved =
-                definition.cue_list_clip_execution(&cue_lists, frame, transport, cue_timing);
+                definition.cue_list_clip_execution(cue_lists, frame, transport, cue_timing);
             for clip in &resolved {
                 if matches!(
                     clip.kind,
@@ -426,8 +444,9 @@ impl TimecodeRuntimeService {
             let before = previous.get(&cue_list_id);
             let next = desired.get(&cue_list_id);
             let origin = next.or(before).map(|clip| clip.source.timecode_id);
-            let was_enabled = engine
-                .playback_runtime_status_for_cue_list(cue_list_id)
+            let actual = status(cue_list_id);
+            let was_enabled = actual
+                .as_ref()
                 .is_some_and(|status| status.playback.enabled);
             let result = match next {
                 None => execute(
@@ -438,13 +457,11 @@ impl TimecodeRuntimeService {
                     origin,
                 ),
                 Some(next) => {
-                    reconcile_desired_cue_list(engine, cue_list_id, before, next, &mut execute)
+                    reconcile_desired_cue_list(actual, cue_list_id, before, next, &mut execute)
                 }
             };
             if !was_enabled
-                && engine
-                    .playback_runtime_status_for_cue_list(cue_list_id)
-                    .is_some_and(|status| status.playback.enabled)
+                && status(cue_list_id).is_some_and(|status| status.playback.enabled)
                 && let Some(originating_timecode) = origin
             {
                 report.activations.push(TimecodeCueListActivation {
@@ -801,7 +818,7 @@ impl TimecodeRuntimeService {
 }
 
 fn reconcile_desired_cue_list(
-    engine: &Engine,
+    actual: Option<light_playback::PlaybackRuntimeStatus>,
     cue_list_id: light_core::CueListId,
     before: Option<&AppliedCueListClip>,
     next: &AppliedCueListClip,
@@ -810,7 +827,6 @@ fn reconcile_desired_cue_list(
         Option<TimecodeId>,
     ) -> Result<light_engine::EnginePlaybackOutcome, String>,
 ) -> Result<light_engine::EnginePlaybackOutcome, String> {
-    let actual = engine.playback_runtime_status_for_cue_list(cue_list_id);
     let desired_changed =
         before.is_none_or(|before| before.source != next.source || before.cue_id != next.cue_id);
     let actual_drifted = actual
@@ -949,7 +965,7 @@ enum CueListReconcileMode {
     Reconstruct,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct CueListRuntime {
     applied: HashMap<light_core::CueListId, AppliedCueListClip>,
 }
@@ -1074,3 +1090,6 @@ impl Runtime {
 
 #[cfg(test)]
 mod tests;
+
+mod prepared_batch;
+pub use prepared_batch::PreparedTimecodeBatch;

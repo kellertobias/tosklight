@@ -457,3 +457,291 @@ fn malformed_device_probe_output_is_actionable() {
 
     assert!(error.contains("returned invalid data"), "{error}");
 }
+
+#[test]
+fn transport_batch_rejects_a_late_missing_voice_or_invalid_value_without_earlier_mutation() {
+    let id = TimecodeId(uuid::Uuid::from_u128(796));
+    let missing = TimecodeId(uuid::Uuid::from_u128(797));
+    let mut voices = DeviceVoices::default();
+    apply_native(
+        &mut voices,
+        NativeCommand::Prepare {
+            timecode_id: id,
+            decoded: decoded(&[1.0; 16]),
+            timeline_rate: TimecodeFrameRate::whole_frames(1).unwrap(),
+        },
+        1,
+        1,
+    )
+    .unwrap();
+    for invalid in [
+        TimecodeAudioCommand::Stop {
+            timecode_id: missing,
+        },
+        TimecodeAudioCommand::SetVolume {
+            timecode_id: id,
+            linear: f64::NAN,
+        },
+    ] {
+        let error = apply_native(
+            &mut voices,
+            prepared_transport_commands(vec![
+                TimecodeAudioCommand::Play {
+                    timecode_id: id,
+                    source_frame: TimecodeFrame(3),
+                    audible_at_micros: 123,
+                },
+                invalid,
+            ]),
+            1,
+            1,
+        )
+        .unwrap_err();
+        assert!(!error.is_empty());
+        let voice = &voices.timecodes[&id];
+        assert!(!voice.playing);
+        assert_eq!(voice.position, 0.0);
+        assert_eq!(voice.play_at_micros, None);
+        assert_eq!(voice.target_volume, 1.0);
+    }
+    apply_native(
+        &mut voices,
+        prepared_transport_commands(vec![
+            TimecodeAudioCommand::SetLoop {
+                timecode_id: id,
+                enabled: true,
+                end_exclusive: TimecodeFrame(10),
+            },
+            TimecodeAudioCommand::SetVolume {
+                timecode_id: id,
+                linear: 0.4,
+            },
+            TimecodeAudioCommand::Play {
+                timecode_id: id,
+                source_frame: TimecodeFrame(3),
+                audible_at_micros: 123,
+            },
+            TimecodeAudioCommand::Pause { timecode_id: id },
+            TimecodeAudioCommand::Seek {
+                timecode_id: id,
+                source_frame: TimecodeFrame(5),
+                audible_at_micros: 456,
+            },
+        ]),
+        1,
+        1,
+    )
+    .unwrap();
+    let voice = &voices.timecodes[&id];
+    assert!(!voice.playing);
+    assert_eq!(voice.position, 5.0);
+    assert_eq!(voice.play_at_micros, None);
+    assert!(voice.looping);
+    assert_eq!(voice.loop_end, 10);
+    assert_eq!(voice.target_volume, 0.4);
+    apply_native(
+        &mut voices,
+        prepared_transport_commands(vec![TimecodeAudioCommand::Stop { timecode_id: id }]),
+        1,
+        1,
+    )
+    .unwrap();
+    assert_eq!(voices.timecodes[&id].position, 0.0);
+}
+
+#[test]
+fn cancelled_batch_cannot_apply_late_or_acknowledge_the_next_request() {
+    let queue = AudioCommandQueue::default();
+    let id = TimecodeId(uuid::Uuid::from_u128(798));
+    let mut voices = DeviceVoices::default();
+    let error = queue
+        .submit_batch(
+            vec![
+                NativeCommand::Prepare {
+                    timecode_id: id,
+                    decoded: decoded(&[1.0; 16]),
+                    timeline_rate: TimecodeFrameRate::whole_frames(1).unwrap(),
+                },
+                NativeCommand::Transport(TimecodeAudioCommand::Play {
+                    timecode_id: id,
+                    source_frame: TimecodeFrame::ZERO,
+                    audible_at_micros: 0,
+                }),
+            ],
+            Duration::ZERO,
+        )
+        .unwrap_err();
+    assert!(error.contains("stopped consuming"));
+    // Deliberately resume the callback after refusal. It must discard the cancelled request.
+    queue.apply_pending(&mut voices, 1, 1);
+    assert!(voices.timecodes.is_empty());
+    assert!(queue.completed.pop().is_none());
+    let receipt = Arc::new(AudioBatchReceipt::new());
+    queue
+        .pending
+        .push(NativeCommand::CorrelatedBatch {
+            receipt: receipt.clone(),
+            commands: vec![
+                NativeCommand::Prepare {
+                    timecode_id: id,
+                    decoded: decoded(&[1.0; 16]),
+                    timeline_rate: TimecodeFrameRate::whole_frames(1).unwrap(),
+                },
+                NativeCommand::Transport(TimecodeAudioCommand::Play {
+                    timecode_id: id,
+                    source_frame: TimecodeFrame(4),
+                    audible_at_micros: 9,
+                }),
+            ],
+        })
+        .ok()
+        .unwrap();
+    assert!(receipt.completed.pop().is_none());
+    queue.apply_pending(&mut voices, 1, 1);
+    assert_eq!(receipt.completed.pop(), Some(Ok(())));
+    assert!(voices.timecodes[&id].playing);
+    assert_eq!(voices.timecodes[&id].position, 4.0);
+    assert_eq!(voices.timecodes[&id].play_at_micros, Some(9));
+    assert!(queue.completed.pop().is_none());
+    assert!(
+        !receipt.cancel_pending(),
+        "an acknowledged batch can never become a refused request"
+    );
+}
+
+#[test]
+fn a_late_invalid_cold_voice_batch_cannot_install_the_earlier_prepared_voice() {
+    let id = TimecodeId(uuid::Uuid::from_u128(799));
+    let mut voices = DeviceVoices::default();
+    let result = apply_native(
+        &mut voices,
+        NativeCommand::PreparedBatch(vec![
+            NativeCommand::PreparedVoice {
+                timecode_id: id,
+                voice: Voice::new(
+                    decoded(&[1.0; 16]),
+                    TimecodeFrameRate::whole_frames(1).unwrap(),
+                    1,
+                    1,
+                ),
+            },
+            NativeCommand::Transport(TimecodeAudioCommand::Play {
+                timecode_id: TimecodeId(uuid::Uuid::from_u128(800)),
+                source_frame: TimecodeFrame::ZERO,
+                audible_at_micros: 0,
+            }),
+        ]),
+        1,
+        1,
+    );
+    assert!(result.is_err());
+    assert!(voices.timecodes.is_empty());
+}
+
+fn prepared_transport_commands(commands: Vec<TimecodeAudioCommand>) -> NativeCommand {
+    NativeCommand::PreparedBatch(commands.into_iter().map(NativeCommand::Transport).collect())
+}
+
+#[test]
+fn decoded_token_rejects_changed_or_unused_resources_before_any_voice_install() {
+    let id = TimecodeId(uuid::Uuid::from_u128(801));
+    let prepare = TimecodeAudioCommand::Prepare {
+        timecode_id: id,
+        asset: AssetReference {
+            id: light_application::AssetId(uuid::Uuid::from_u128(802)),
+            revision: light_application::AssetRevision(1),
+        },
+        sample_rate: 1,
+        channels: 1,
+        timeline_rate: TimecodeFrameRate::whole_frames(1).unwrap(),
+    };
+    let resource = || {
+        vec![(
+            prepare,
+            NativeCommand::PreparedVoice {
+                timecode_id: id,
+                voice: Voice::new(
+                    decoded(&[1.0; 16]),
+                    TimecodeFrameRate::whole_frames(1).unwrap(),
+                    1,
+                    1,
+                ),
+            },
+        )]
+    };
+    let mut changed = prepare;
+    if let TimecodeAudioCommand::Prepare { asset, .. } = &mut changed {
+        asset.revision = light_application::AssetRevision(2);
+    }
+    let mut voices = DeviceVoices::default();
+    for commands in [vec![changed], Vec::new()] {
+        let result = resolve_prepared_audio(resource(), &commands);
+        assert!(result.is_err());
+        assert!(voices.timecodes.is_empty());
+    }
+    let commands = resolve_prepared_audio(
+        resource(),
+        &[
+            prepare,
+            TimecodeAudioCommand::Play {
+                timecode_id: id,
+                source_frame: TimecodeFrame(2),
+                audible_at_micros: 123,
+            },
+        ],
+    )
+    .unwrap();
+    apply_native(&mut voices, NativeCommand::PreparedBatch(commands), 1, 1).unwrap();
+    assert!(voices.timecodes[&id].playing);
+    assert_eq!(voices.timecodes[&id].position, 2.0);
+    assert_eq!(voices.timecodes[&id].play_at_micros, Some(123));
+}
+
+#[test]
+fn prepared_voice_validation_rejects_forward_dependencies_and_nested_batches_atomically() {
+    let id = TimecodeId(uuid::Uuid::from_u128(803));
+    let voice = || NativeCommand::PreparedVoice {
+        timecode_id: id,
+        voice: Voice::new(
+            decoded(&[1.0; 16]),
+            TimecodeFrameRate::whole_frames(1).unwrap(),
+            1,
+            1,
+        ),
+    };
+    for commands in [
+        vec![
+            NativeCommand::Transport(TimecodeAudioCommand::Stop { timecode_id: id }),
+            voice(),
+        ],
+        vec![voice(), NativeCommand::PreparedBatch(Vec::new())],
+    ] {
+        let mut voices = DeviceVoices::default();
+        assert!(apply_native(&mut voices, NativeCommand::PreparedBatch(commands), 1, 1).is_err());
+        assert!(voices.timecodes.is_empty());
+    }
+    let mut voices = DeviceVoices::default();
+    let mut invalid = Voice::new(
+        decoded(&[1.0; 16]),
+        TimecodeFrameRate::whole_frames(1).unwrap(),
+        1,
+        1,
+    );
+    invalid.source_rate = 0;
+    assert!(
+        apply_native(
+            &mut voices,
+            NativeCommand::PreparedBatch(vec![
+                voice(),
+                NativeCommand::PreparedVoice {
+                    timecode_id: id,
+                    voice: invalid
+                }
+            ]),
+            1,
+            1
+        )
+        .is_err()
+    );
+    assert!(voices.timecodes.is_empty());
+}

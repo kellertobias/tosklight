@@ -18,8 +18,11 @@ mod programmer;
 mod response;
 #[path = "preload/retained_history.rs"]
 pub(in crate::runtime) mod retained_history;
-#[path = "preload/solo.rs"]
-mod solo;
+#[path = "preload/timecodes.rs"]
+mod timecodes;
+pub(in crate::runtime) use timecodes::{
+    PreloadResources, preflight as preflight_timecode_resources,
+};
 #[path = "preload/transaction.rs"]
 mod transaction;
 
@@ -133,23 +136,26 @@ pub(super) fn commit_preload(
     state: &AppState,
     session: &Session,
 ) -> Result<serde_json::Value, String> {
+    let resources = timecodes::preflight(state, session)?;
     // Match the normal action and render order from show identity through semantic publication.
     let _activation = state
         .active_show
         .try_acquire()
         .map_err(|_| "the active show is changing; retry Preload GO".to_owned())?;
-    commit_preload_while_show_stable(state, session)
+    commit_preload_while_show_stable(state, session, resources)
 }
 
 pub(super) fn commit_preload_while_show_stable(
     state: &AppState,
     session: &Session,
+    resources: Option<PreloadResources>,
 ) -> Result<serde_json::Value, String> {
     let context = compatibility_context(session);
     let completed = state.playback.run_unit_of_work(CommitPreload {
         state,
         session,
         context,
+        resources,
     });
     let committed = completed.output?;
     // TL-548 C4: GO starts a new Pending episode from the committed state.
@@ -170,12 +176,14 @@ pub(super) fn commit_preload_lifecycle_while_show_stable(
     session: &Session,
     context: &light_application::ActionContext,
     request: &light_application::ProgrammingPreloadLifecycleRequest,
+    resources: Option<PreloadResources>,
 ) -> Result<light_application::ProgrammingPreloadCommitResult, light_application::ActionError> {
     let completed = state.playback.run_unit_of_work(CommitTypedPreload {
         state,
         session,
         context: context.clone(),
         request,
+        resources,
     });
     let (committed, authority) = completed.output?;
     state
@@ -193,6 +201,7 @@ struct CommitPreload<'a> {
     state: &'a AppState,
     session: &'a Session,
     context: light_application::ActionContext,
+    resources: Option<PreloadResources>,
 }
 
 impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
@@ -203,7 +212,12 @@ impl light_application::PlaybackUnitOfWork for CommitPreload<'_> {
             .state
             .programming
             .with_transaction(self.session.id, || {
-                transaction::commit_preload_transaction(self.state, self.session, self.context)
+                transaction::commit_preload_transaction(
+                    self.state,
+                    self.session,
+                    self.context,
+                    self.resources,
+                )
             });
         match result {
             Ok(committed) => {
@@ -224,6 +238,7 @@ struct CommitTypedPreload<'a> {
     session: &'a Session,
     context: light_application::ActionContext,
     request: &'a light_application::ProgrammingPreloadLifecycleRequest,
+    resources: Option<PreloadResources>,
 }
 
 impl light_application::PlaybackUnitOfWork for CommitTypedPreload<'_> {
@@ -244,7 +259,12 @@ impl light_application::PlaybackUnitOfWork for CommitTypedPreload<'_> {
             .state
             .programming
             .with_transaction(self.session.id, || {
-                transaction::commit_preload_transaction(self.state, self.session, self.context)
+                transaction::commit_preload_transaction(
+                    self.state,
+                    self.session,
+                    self.context,
+                    self.resources,
+                )
             })
             .map_err(preload_commit_error);
         match result {
