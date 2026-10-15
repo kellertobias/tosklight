@@ -247,6 +247,43 @@ describe("command rejection classification", () => {
 			expect(event.detail.message).toContain(error.message);
 		}
 	});
+	it("keeps unknown preset-family tokens as operator feedback across dispatch and history", () => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		for (const token of [
+			"MIXED",
+			"HOCUS",
+			"PANIC",
+			"DATABASE",
+			"NETWORK",
+			"UNAUTHORIZED",
+		]) {
+			const message = `unknown Preset family ${token}`;
+			expect(commandErrorFeedback(message)).toEqual({
+				message,
+				kind: "operator",
+			});
+			expect(commandErrorSummary(message)).toBe("Unknown Preset Family");
+			reportProgrammingCommandError(new Error(message));
+			expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail).toEqual({
+				message,
+				kind: "operator",
+			});
+		}
+		for (const status of [401, 403, 500]) {
+			reportProgrammingCommandError(
+				new ApiRequestError("unknown Preset family PANIC", status),
+			);
+			expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail.kind).toBe(
+				"unexpected",
+			);
+		}
+		for (const message of [
+			"unknown Preset family MIXED: database unavailable",
+			"unknown Preset family MIXED\ninternal server error",
+			"unknown runtime family MIXED",
+		])
+			expect(commandErrorFeedback(message).kind).toBe("unexpected");
+	});
 	it("keeps typed operator rejections brief and unexpected failures diagnostic", () => {
 		const dispatch = vi.spyOn(window, "dispatchEvent");
 		reportProgrammingCommandError(

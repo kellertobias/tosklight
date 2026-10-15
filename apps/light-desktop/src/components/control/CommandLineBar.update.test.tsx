@@ -1208,15 +1208,31 @@ describe("Shift+Record Update gestures", () => {
 });
 
 describe("shared command rejection presentation", () => {
-	it("retains fresh OSC family syntax rejection after blink without opening diagnostics or writing", () => {
+	it.each([
+		[
+			"FIXTURE 1 AT POSITION X DIV 30",
+			"Pan requires a number",
+			"Pan requires a number",
+		],
+		[
+			"UPDATE MIXED PRESET 150",
+			"unknown Preset family MIXED",
+			"Unknown Preset Family",
+		],
+		[
+			"UPDATE PANIC PRESET 150",
+			"unknown Preset family PANIC",
+			"Unknown Preset Family",
+		],
+	])("retains fresh OSC family syntax rejection after blink without opening diagnostics or writing: %s", (command, feedback, summary) => {
 		const previousHistory = server.commandHistory;
 		const { rerender } = render(<CommandLineBar />);
 		const entry = {
 			id: "osc-family-syntax",
 			desk_id: "desk-a",
 			session_id: "session-a",
-			command: "FIXTURE 1 AT POSITION X DIV 30",
-			feedback: "Pan requires a number",
+			command,
+			feedback,
 			status: "rejected" as const,
 			source: "osc" as const,
 			at: new Date().toISOString(),
@@ -1226,7 +1242,7 @@ describe("shared command rejection presentation", () => {
 		const input = screen.getByRole("textbox", { name: "Command line" });
 		expect(input).toHaveValue(entry.command);
 		expect(input).toHaveClass("error", "rejected");
-		expect(screen.getByRole("alert")).toHaveTextContent(entry.feedback);
+		expect(screen.getByRole("alert")).toHaveTextContent(summary);
 		expect(
 			screen.queryByRole("dialog", { name: "Command line history" }),
 		).toBeNull();
@@ -1252,44 +1268,41 @@ describe("shared command rejection presentation", () => {
 			"Playback 3.5 has no current Cue; identify an explicit Cue",
 			"No Current Cue",
 		],
-	])(
-		"keeps fresh OSC Update refusal brief and armed: %s",
-		(feedback, summary) => {
-			state.updateArmed = true;
-			const previousHistory = server.commandHistory;
-			const { rerender } = render(<CommandLineBar />);
-			const entry = {
-				id: "osc-update-refusal",
-				desk_id: "desk-a",
-				session_id: "session-a",
-				command: "UPDATE PBK 3.5",
-				feedback,
-				status: "rejected" as const,
-				source: "osc" as const,
-				at: new Date().toISOString(),
-			};
-			server.commandHistory = [entry, ...previousHistory];
-			rerender(<CommandLineBar />);
-			const input = screen.getByRole("textbox", { name: "Command line" });
-			expect(input).toHaveValue(entry.command);
-			expect(input).toHaveClass("error", "rejected");
-			expect(screen.getByRole("alert")).toHaveTextContent(summary);
-			expect(screen.getByRole("alert")).not.toHaveTextContent("6b53ba0e");
-			expect(
-				screen.queryByRole("dialog", { name: "Command line history" }),
-			).toBeNull();
-			act(() => vi.advanceTimersByTime(600));
-			expect(input).not.toHaveClass("error");
-			expect(input).toHaveClass("rejected");
-			act(() => vi.advanceTimersByTime(2000));
-			expect(screen.queryByRole("alert")).toBeNull();
-			expect(input).toHaveValue(entry.command);
-			expect(state.updateArmed).toBe(true);
-			expect(server.commandHistory[0]).toBe(entry);
-			expect(server.setCommandLine).not.toHaveBeenCalled();
-			server.commandHistory = previousHistory;
-		},
-	);
+	])("keeps fresh OSC Update refusal brief and armed: %s", (feedback, summary) => {
+		state.updateArmed = true;
+		const previousHistory = server.commandHistory;
+		const { rerender } = render(<CommandLineBar />);
+		const entry = {
+			id: "osc-update-refusal",
+			desk_id: "desk-a",
+			session_id: "session-a",
+			command: "UPDATE PBK 3.5",
+			feedback,
+			status: "rejected" as const,
+			source: "osc" as const,
+			at: new Date().toISOString(),
+		};
+		server.commandHistory = [entry, ...previousHistory];
+		rerender(<CommandLineBar />);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(input).toHaveValue(entry.command);
+		expect(input).toHaveClass("error", "rejected");
+		expect(screen.getByRole("alert")).toHaveTextContent(summary);
+		expect(screen.getByRole("alert")).not.toHaveTextContent("6b53ba0e");
+		expect(
+			screen.queryByRole("dialog", { name: "Command line history" }),
+		).toBeNull();
+		act(() => vi.advanceTimersByTime(600));
+		expect(input).not.toHaveClass("error");
+		expect(input).toHaveClass("rejected");
+		act(() => vi.advanceTimersByTime(2000));
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(input).toHaveValue(entry.command);
+		expect(state.updateArmed).toBe(true);
+		expect(server.commandHistory[0]).toBe(entry);
+		expect(server.setCommandLine).not.toHaveBeenCalled();
+		server.commandHistory = previousHistory;
+	});
 
 	it("shows a fresh OSC rejection briefly without changing authoritative command or history", () => {
 		const { rerender } = render(<CommandLineBar />);
