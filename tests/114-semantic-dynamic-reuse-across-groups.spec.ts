@@ -51,6 +51,11 @@ scenario(
 				number,
 				name: `Mover ${number}`,
 				address: `1.${1 + (number - 1) * 15}`,
+				location: {
+					x: ((number - 1) % 4) * 1000,
+					y: number <= 4 ? 0 : 1000,
+					z: 0,
+				},
 				...MOVER,
 			});
 		await t.selection.fixtures.via.api.items(...GROUP_ONE);
@@ -129,9 +134,9 @@ scenario(
 		const second = await t.virtualPlayback.assignSource(pane, "Rise 2", 2);
 
 		/**
-		 * Each member of a Group a quarter-cycle apart in selection order (no stage plan, so the grid
-		 * spread falls back to it), `progress` of the way through its own cycle: the intensity lane
-		 * rising from off to on and pan and tilt moving from Down to Up.
+		 * Each Group's four physical X columns give four Grid ranks in selection order, a
+		 * quarter-cycle apart. At `progress` through its own cycle, the intensity lane rises
+		 * from off to on and pan and tilt move from Down to Up.
 		 */
 		const expectRising = async (members: number[], progress: number) => {
 			for (const [index, number] of members.entries()) {

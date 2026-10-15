@@ -31,6 +31,8 @@ export interface PatchLibraryFixtureIntent {
 	readonly profile: string;
 	readonly mode: string;
 	readonly address: string;
+	/** Physical Patch location in millimetres; omitted fixtures retain the origin. */
+	readonly location?: { x: number; y: number; z: number };
 }
 
 class PatchApiSurface {
@@ -135,6 +137,7 @@ export class BrowserPatch {
 				`${intent.manufacturer} ${intent.profile} has no mode ${intent.mode}`,
 			);
 		const [universe, address] = intent.address.split(".").map(Number);
+		const location = intent.location ?? { x: 0, y: 0, z: 0 };
 		await this.desk.recordStep(
 			"PATCH",
 			`Patch ${intent.manufacturer} ${intent.profile} (${intent.mode}) as Fixture ${number} at ${intent.address}.`,
@@ -152,7 +155,7 @@ export class BrowserPatch {
 					split_patches: [{ split: 1, universe, address }],
 					layer_id: "default",
 					direct_control: null,
-					location: { x: 0, y: 0, z: 0 },
+					location,
 					rotation: { x: 0, y: 0, z: 0 },
 					multipatch: [],
 					move_in_black_enabled: false,
@@ -164,11 +167,11 @@ export class BrowserPatch {
 		});
 		await expect
 			.poll(async () =>
-				(await this.api.patch()).fixtures.some(
+				(await this.api.patch()).fixtures.find(
 					(candidate) => candidate.fixture_number === number,
-				),
+				)?.location,
 			)
-			.toBe(true);
+			.toEqual(location);
 	}
 
 	/** Removes one fixture from the show, not merely its DMX address. */
