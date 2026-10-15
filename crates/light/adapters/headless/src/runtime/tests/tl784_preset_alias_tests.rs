@@ -248,3 +248,143 @@ async fn tl784_command_recall_offers_actual_recorded_mixed_object() {
 async fn tl784_tile_recall_offers_actual_recorded_mixed_object() {
     tl784_record_recall_targets(true).await;
 }
+
+async fn tl784_typed_update_alias(mode: &str, includes_new: bool) {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario
+        .create_and_open_show("TL784 trusted typed alias")
+        .await;
+    let mut fixtures = Vec::new();
+    for number in [1, 2] {
+        let mut fixture = super::template_dimmer("TL784 typed dimmer", number);
+        fixture.fixture_number = Some(u32::from(number));
+        assert_eq!(
+            scenario
+                .put_active_object(
+                    &show_id,
+                    "patched_fixture",
+                    &fixture.fixture_id.0.to_string(),
+                    0,
+                    serde_json::to_value(&fixture).unwrap()
+                )
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        fixtures.push(fixture);
+    }
+    assert_eq!(
+        scenario
+            .execute("typed-seed", Some("FIXTURE 1 AT 50"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        scenario
+            .execute("typed-record", Some("RECORD 0.150"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let show = scenario.state.active_show.current().clone().unwrap();
+    let store = ShowStore::open(&show.path).unwrap();
+    let before = store
+        .objects("preset")
+        .unwrap()
+        .into_iter()
+        .find(|o| o.id == "150")
+        .unwrap();
+    assert_eq!(
+        scenario
+            .execute("typed-edit", Some("FIXTURE 1 THRU 2 AT 80"))
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    let command = format!("UPDATE {mode} ALL PRESET 150");
+    let response = scenario.execute("typed-update", Some(&command)).await;
+    let status = response.status();
+    let body = json(response).await;
+    assert_eq!(status, StatusCode::OK, "actual command {command}: {body}");
+    let objects = store.objects("preset").unwrap();
+    assert!(objects.iter().all(|o| o.id != "0.150"));
+    let after = objects.iter().find(|o| o.id == "150").unwrap();
+    assert_eq!(
+        after.revision,
+        before.revision + 1,
+        "actual command {command}: {body}"
+    );
+    assert_eq!(after.body["instance_id"], before.body["instance_id"]);
+    assert_eq!(after.body["name"], before.body["name"]);
+    let value = after.body["values"][fixtures[0].fixture_id.0.to_string()]["intensity"]["value"]
+        .as_f64()
+        .unwrap();
+    assert!((value - 0.8).abs() < 1e-7);
+    assert_eq!(
+        after.body["values"]
+            .get(fixtures[1].fixture_id.0.to_string())
+            .is_some(),
+        includes_new
+    );
+    // Alias resolution freezes portable authority before the existing Update commit boundary.
+    let request = super::super::show_command_update::update_request(
+        &scenario.state,
+        &scenario.session,
+        &["ALL".into(), "PRESET".into(), "150".into()],
+        &scenario.state.output.snapshot(),
+    )
+    .unwrap();
+    assert_eq!(request.target.object_id.as_deref(), Some("150"));
+    assert_eq!(
+        request.expected_show_revision,
+        Some(store.portable_revision().unwrap().value())
+    );
+    store.put_object("preset", "0.150", &after.body, 0).unwrap();
+    let preset_state = || {
+        store
+            .objects("preset")
+            .unwrap()
+            .into_iter()
+            .map(|object| (object.id, object.revision, object.body))
+            .collect::<Vec<_>>()
+    };
+    let duplicated = preset_state();
+    let stale = perform_update(&scenario.state, &scenario.session, &request);
+    assert!(
+        stale.is_err(),
+        "frozen authority must reject intervening alias creation"
+    );
+    assert_eq!(preset_state(), duplicated);
+    let _ = scenario.execute("typed-ambiguous", Some(&command)).await;
+    assert_eq!(
+        preset_state(),
+        duplicated,
+        "ambiguous command must never choose a source"
+    );
+    let _ = scenario
+        .execute("typed-missing", Some("UPDATE ALL PRESET 151"))
+        .await;
+    assert_eq!(
+        preset_state(),
+        duplicated,
+        "missing address must not create an object"
+    );
+
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
+async fn tl784_trusted_typed_smart_resolves_bare_mixed_object() {
+    tl784_typed_update_alias("SMART", false).await;
+}
+
+#[tokio::test]
+async fn tl784_trusted_typed_merge_resolves_bare_mixed_object() {
+    tl784_typed_update_alias("MERGE", true).await;
+}
+
+#[tokio::test]
+async fn tl784_trusted_typed_plain_all_preset_resolves_bare_mixed_object() {
+    tl784_typed_update_alias("", false).await;
+}

@@ -151,3 +151,28 @@ fn tl784_explicit_preview_and_mutation_ids_remain_exact() {
         "150"
     );
 }
+
+#[test]
+fn tl784_trusted_address_uses_shared_alias_safety() {
+    let address = light_programmer::PresetAddress::new(PresetFamily::Mixed, 150).unwrap();
+    let single = tl784_document(&[("150", mixed())]);
+    assert_eq!(
+        super::super::resolve_preset_update_address(&single, address).unwrap(),
+        "150"
+    );
+    let duplicate = tl784_document(&[("150", mixed()), ("0.150", mixed())]);
+    assert!(super::super::resolve_preset_update_address(&duplicate, address).is_err());
+    let absent = light_programmer::PresetAddress::new(PresetFamily::Mixed, 151).unwrap();
+    assert!(super::super::resolve_preset_update_address(&single, absent).is_err());
+    assert!(super::super::resolution::find_preset(&single, "0.150").is_err());
+}
+
+#[test]
+fn tl784_trusted_address_rejects_zero_even_with_opaque_legacy_exact_key() {
+    let document = tl784_document(&[("0.0", mixed())]);
+    let invalid = light_programmer::PresetAddress {
+        family: PresetFamily::Mixed,
+        number: 0,
+    };
+    assert!(super::super::resolve_preset_update_address(&document, invalid).is_err());
+}

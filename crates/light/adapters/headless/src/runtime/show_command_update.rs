@@ -302,20 +302,30 @@ fn preset_address(tokens: &[String]) -> Result<light_programmer::PresetAddress, 
 }
 
 fn object_update_request(
+    state: &AppState,
     tokens: &[String],
     mode: CommandUpdateMode,
 ) -> Result<UpdateApiRequest, String> {
-    let (family, object_id) = if tokens.first().is_some_and(|token| token == "GROUP") {
-        if tokens.len() != 2 {
-            return Err("expected UPDATE GROUP <group-number>".into());
-        }
-        (UpdateApiTargetFamily::Group, tokens[1].clone())
-    } else {
-        (
-            UpdateApiTargetFamily::Preset,
-            preset_address(tokens)?.storage_key(),
-        )
-    };
+    let (family, object_id, expected_show_revision) =
+        if tokens.first().is_some_and(|token| token == "GROUP") {
+            if tokens.len() != 2 {
+                return Err("expected UPDATE GROUP <group-number>".into());
+            }
+            (UpdateApiTargetFamily::Group, tokens[1].clone(), None)
+        } else {
+            let (_, store) = active_show_store(state)?;
+            let document = store
+                .portable_document()
+                .map_err(|error| error.to_string())?;
+            let object_id =
+                update::resolve_preset_update_address(&document, preset_address(tokens)?)
+                    .map_err(|error| error.message)?;
+            (
+                UpdateApiTargetFamily::Preset,
+                object_id,
+                Some(document.revision().value()),
+            )
+        };
     Ok(UpdateApiRequest {
         target: UpdateApiTarget {
             family,
@@ -328,7 +338,7 @@ fn object_update_request(
         mode: update::UpdateMode::ExistingContent(mode.existing_content()?),
         expected_revision: None,
         expected_programmer_revision: None,
-        expected_show_revision: None,
+        expected_show_revision,
     })
 }
 
@@ -345,7 +355,7 @@ pub(super) fn update_request(
         Some("CUE") => selected_cue_request(state, session, snapshot, &target[1..], mode),
         Some("CUELIST") => cuelist_cue_request(snapshot, &target[1..], mode),
         Some("PBK") => playback_cue_request(state, session, snapshot, target, mode),
-        _ => object_update_request(target, mode),
+        _ => object_update_request(state, target, mode),
     }
 }
 

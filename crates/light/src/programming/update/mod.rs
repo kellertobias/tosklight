@@ -36,6 +36,7 @@ pub use model::{
 };
 pub use plan::{AtomicUpdatePlan, PlannedUpdateObject, UpdateResult};
 pub use preset::{plan_preset_update, preview_preset_update};
+pub use resolution::resolve_preset_update_address;
 pub use target::{ActiveCueContext, CueTargetRequest, ResolvedCueTarget, resolve_cue_target};
 
 #[cfg(test)]

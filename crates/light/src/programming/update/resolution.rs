@@ -43,6 +43,17 @@ pub(super) fn find_preset<'a>(
     Ok((object, decode(object, "Preset")?))
 }
 
+/// Resolve a trusted operator address to its unique persisted identity.
+/// External Update requests continue to require an exact object key.
+pub fn resolve_preset_update_address(
+    document: &PortableShowDocument,
+    address: PresetAddress,
+) -> Result<String, ActionError> {
+    let address = PresetAddress::new(address.family, address.number).map_err(invalid)?;
+    find_recalled_preset(document, &address.storage_key())
+        .map(|(object, _)| object.key().id().to_owned())
+}
+
 // Recalled Programmer context carries a typed pool address, including legacy aliases.
 pub(super) fn find_recalled_preset<'a>(
     document: &'a PortableShowDocument,
