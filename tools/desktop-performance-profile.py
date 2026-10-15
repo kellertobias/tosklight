@@ -57,6 +57,15 @@ class Refused(RuntimeError):
     """A fixed scope/capability code, safe to publish without tool output."""
 
 
+class CallchainRefused(Refused):
+    """Only aggregate counts for the two controlled probe functions."""
+
+    def __init__(self, sampled, leaf, parent, dual):
+        super().__init__("symbolized_probe_callchain_unavailable")
+        self.diagnostic = {"sampled": sampled, "leaf_present": leaf,
+                           "parent_present": parent, "dual_present": dual}
+
+
 class TypedRefused(Refused):
     """Fixed enum/boolean classifications only, never raw typed export content."""
 
@@ -122,6 +131,26 @@ def build_id(executable, deadline=None):
     if not match:
         raise Refused("elf_build_id_unavailable")
     return match[1].decode()
+
+
+def verify_probe_elf_symbols(executable, deadline):
+    result = subprocess.run(["readelf", "--symbols", "--wide", str(executable)],
+                            check=True, capture_output=True, text=True, env=isolated_env(),
+                            timeout=bounded_timeout(deadline, 2))
+    if len(result.stdout) > LIMIT:
+        raise Refused("expected_probe_elf_symbols_unverified")
+    found = set()
+    for line in result.stdout.splitlines():
+        columns = line.split()
+        if len(columns) != 8 or columns[7] not in PROBE_NAMES:
+            continue
+        if (columns[3:6] == ["FUNC", "GLOBAL", "DEFAULT"] and columns[6].isdigit()
+                and columns[2].isdigit() and int(columns[2]) > 0
+                and re.fullmatch(r"[0-9a-fA-F]+", columns[1]) and int(columns[1], 16) > 0):
+            found.add(columns[7])
+    if found != set(PROBE_NAMES):
+        raise Refused("expected_probe_elf_symbols_unverified")
+    return True
 
 
 def find_perf():
@@ -615,9 +644,12 @@ def validate_export(text, census, target, tids, interval):
     header_counts = {name: expected.pop(name) for name in header_names if name in expected}
     if counts != expected:
         raise Refused("typed_event_census_mismatch")
-    useful = sum(all(any(name in frame for frame in sample) for name in PROBE_NAMES) for sample in samples)
+    present = [[any(name in frame for frame in sample) for name in PROBE_NAMES] for sample in samples]
+    leaf = sum(row[1] for row in present)
+    parent = sum(row[0] for row in present)
+    useful = sum(all(row) for row in present)
     if len(samples) < 10 or useful < 10:
-        raise Refused("symbolized_probe_callchain_unavailable")
+        raise CallchainRefused(len(samples), leaf, parent, useful)
     return {"event_counts": dict(counts), "validated_header_records": header_counts,
             "samples": len(samples), "probe_chains": useful}
 
@@ -776,6 +808,8 @@ def recorder(request):
             receipt["record_header_diagnostic"] = error.diagnostic
         if isinstance(error, TypedRefused):
             receipt["typed_event_diagnostic"] = error.diagnostic
+        if isinstance(error, CallchainRefused):
+            receipt["callchain_diagnostic"] = error.diagnostic
     finally:
         if child is not None:
             stop_owned(child, recorder_fd, request["overall_deadline"] - 10)
@@ -861,6 +895,7 @@ def preflight(output):
             compiler, "-O1", "-g", "-fno-omit-frame-pointer", "-fno-optimize-sibling-calls",
             str(source), "-o", str(binary),
         ], check=True, capture_output=True, timeout=bounded_timeout(work_deadline, 5))
+        symbols_verified = verify_probe_elf_symbols(binary, work_deadline)
         probe = subprocess.Popen([str(binary)], stdout=subprocess.PIPE, text=True)
         if not select.select([probe.stdout], [], [], bounded_timeout(work_deadline, 2))[0] or probe.stdout.readline() != "READY\n":
             raise Refused("synthetic_probe_not_ready")
@@ -884,6 +919,7 @@ def preflight(output):
         report = {
             "schema": 1, "purpose": "synthetic_cpu_stack_capability_only_not_acceptance",
             "public_artifacts": True, "attempts": attempts,
+            "expected_probe_elf_symbols_verified": symbols_verified,
             "status": attempts[-1]["status"], "canonical_build_allowed": attempts[-1]["status"] == "CAPABLE",
             "helper_sha256": request["helper_sha256"], "probe_sha256": request["target"]["sha256"],
             "probe_build_id": request["target_build_id"], "perf_sha256": request["perf_sha256"],

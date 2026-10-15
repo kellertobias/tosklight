@@ -279,6 +279,17 @@ class EventScopeTests(unittest.TestCase):
         self.assertEqual(sample_error.exception.diagnostic, {"event_kind": "SAMPLE", "prefix_class": "zero_placeholder",
             "payload_owner_matches": None, "time_class": "within_verified_lifetime"})
 
+    def test_callchain_stop_exposes_only_known_probe_numeric_counts(self):
+        text = exported().replace("tl775_profile_probe_parent", "foreign-secret-symbol")
+        with self.assertRaises(PROFILE.Refused) as caught:
+            PROFILE.validate_export(text, collections.Counter(COMM=1, MMAP2=1, SAMPLE=10), TARGET, TIDS, INTERVAL)
+        self.assertEqual(getattr(caught.exception, "diagnostic", None), {
+            "sampled": 10, "leaf_present": 10, "parent_present": 0, "dual_present": 0})
+        self.assertNotIn("foreign-secret-symbol", str(getattr(caught.exception, "diagnostic", None)))
+        with self.assertRaises(PROFILE.Refused) as low:
+            PROFILE.validate_export(exported(9), collections.Counter(COMM=1, MMAP2=1, SAMPLE=9), TARGET, TIDS, INTERVAL)
+        self.assertEqual(low.exception.diagnostic, {"sampled": 9, "leaf_present": 9, "parent_present": 9, "dual_present": 9})
+
     def test_insufficient_symbolized_callchains_cannot_allow_build(self):
         with self.assertRaises(PROFILE.Refused):
             PROFILE.validate_export(exported(9), collections.Counter(COMM=1, MMAP2=1, SAMPLE=9), TARGET, TIDS, INTERVAL)
@@ -426,6 +437,17 @@ class OwnershipTests(unittest.TestCase):
         self.assertNotIn("HOME", PROFILE.isolated_env())
         self.assertEqual(PROFILE.isolated_env()["DEBUGINFOD_URLS"], "")
 
+    def test_expected_probe_symbols_require_actual_defined_global_functions(self):
+        lines = [f"17: 0000000000001234 48 FUNC GLOBAL DEFAULT 15 {name}" for name in PROFILE.PROBE_NAMES]
+        with patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout="\n".join(lines))) as run:
+            self.assertTrue(PROFILE.verify_probe_elf_symbols("/owned/cpu-probe", PROFILE.time.monotonic() + 2))
+        self.assertEqual(run.call_args.args[0], ["readelf", "--symbols", "--wide", "/owned/cpu-probe"])
+        self.assertNotIn("HOME", run.call_args.kwargs["env"])
+        for text in (lines[0], "\n".join(lines).replace("FUNC", "OBJECT"),
+                     "\n".join(lines).replace("DEFAULT 15", "DEFAULT UND")):
+            with patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout=text)), self.assertRaises(PROFILE.Refused):
+                PROFILE.verify_probe_elf_symbols("/owned/cpu-probe", PROFILE.time.monotonic() + 2)
+
     def test_perf_config_uses_supported_list_with_isolated_environment(self):
         result = Mock(returncode=0, stdout=b"")
         with patch.object(PROFILE.subprocess, "run", return_value=result) as run:
@@ -450,7 +472,7 @@ class PreflightPolicyTests(unittest.TestCase):
         probe.wait.return_value = 0
         coordinator = {**TARGET, "pid": 400, "sha256": "fixture-executable-hash"}
         root = Path(directory)
-        with patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "find_perf", return_value=str(perf)), patch.object(PROFILE.shutil, "which", return_value="/never/executed/cc"), patch.object(PROFILE, "artifact_path", return_value=root), patch.object(PROFILE, "process_identity", return_value=coordinator), patch.object(PROFILE, "build_id", return_value="abc123"), patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout="perf fixture version")), patch.object(PROFILE.subprocess, "Popen", return_value=probe), patch.object(PROFILE.select, "select", return_value=([probe.stdout], [], [])), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "collect_attempt", side_effect=outcomes) as attempts:
+        with patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "find_perf", return_value=str(perf)), patch.object(PROFILE.shutil, "which", return_value="/never/executed/cc"), patch.object(PROFILE, "artifact_path", return_value=root), patch.object(PROFILE, "process_identity", return_value=coordinator), patch.object(PROFILE, "build_id", return_value="abc123"), patch.object(PROFILE, "verify_probe_elf_symbols", return_value=True), patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout="perf fixture version")), patch.object(PROFILE.subprocess, "Popen", return_value=probe), patch.object(PROFILE.select, "select", return_value=([probe.stdout], [], [])), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "collect_attempt", side_effect=outcomes) as attempts:
             if expected_error is None:
                 status = PROFILE.preflight(root / "receipt.json")
             else:
@@ -483,6 +505,14 @@ class PreflightPolicyTests(unittest.TestCase):
             self.assertEqual((result, attempts), (2, [False]))
             import json
             self.assertFalse(json.loads((Path(directory) / "receipt.json").read_text())["canonical_build_allowed"])
+
+    def test_missing_expected_elf_symbols_stops_before_target_or_recorder(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "artifact_path", return_value=Path(directory)), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "find_perf", return_value="/owned/perf"), patch.object(PROFILE.shutil, "which", return_value="/never/executed/cc"), patch.object(PROFILE.subprocess, "run"), patch.object(PROFILE, "verify_probe_elf_symbols", side_effect=PROFILE.Refused("expected_probe_elf_symbols_unverified")), patch.object(PROFILE.subprocess, "Popen") as spawn, patch.object(PROFILE, "collect_attempt") as collect:
+            with self.assertRaisesRegex(PROFILE.Refused, "expected_probe_elf_symbols_unverified"):
+                PROFILE.preflight(Path(directory) / "receipt.json")
+            spawn.assert_not_called()
+            collect.assert_not_called()
+            self.assertFalse(list(Path(directory).glob("tl775-probe-source-*")))
 
     def test_missing_perf_stops_before_probe_compile_or_any_process(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "artifact_path", return_value=Path(directory)), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "find_perf", side_effect=PROFILE.Refused("perf_direct_elf_unavailable")), patch.object(PROFILE.subprocess, "run") as run, patch.object(PROFILE.subprocess, "Popen") as spawn:
