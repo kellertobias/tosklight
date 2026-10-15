@@ -60,8 +60,15 @@ async fn transaction(
     let envelope = ActionEnvelope { context, command };
     let worker = state.clone();
     let result = tokio::task::spawn_blocking(move || {
+        let mut diagnostic = super::show_patch_adapter::burst_timing::RequestScope::begin(
+            worker.output.has_test_clock(),
+        );
         let ports = ServerShowPatchPorts::sync_transaction(worker.clone());
-        worker.active_show.synchronize(envelope, &ports)
+        let result = worker.active_show.synchronize(envelope, &ports);
+        if let Some(diagnostic) = diagnostic.as_mut() {
+            diagnostic.complete(result.is_ok());
+        }
+        result
     })
     .await
     .map_err(|error| ShowSyncHttpError::internal(format!("sync task failed: {error}")))?

@@ -1,4 +1,4 @@
-mod burst_timing;
+pub(super) mod burst_timing;
 mod errors;
 mod programming_replacement;
 

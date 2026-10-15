@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { COMMIT_PARTS, SYNC_REQUEST_DIAGNOSTICS_ENV, syncRequestDiagnosticsEnabled } from "./bench/core/syncRequestDiagnostics";
 import { ArchitectHarness } from "./bench/architect/architectHarness";
 import type { ApiDriver } from "./bench/core/api";
 import { expect, test } from "./bench/core/fixtures";
@@ -435,8 +436,21 @@ test("ARCHITECT-SYNC-07 @api a thousand Architect edits a minute keep the desk o
 		const annotations = (await deskObjects<{ text: string }>(api, show.id, "cad_annotation")).objects;
 		expect(annotations).toHaveLength(50);
 		expect(annotations.find((object) => object.id === "burst-49")?.body.text).toBe("edit 999");
+		if (syncRequestDiagnosticsEnabled(process.env[SYNC_REQUEST_DIAGNOSTICS_ENV])) {
+			const diagnostics = bench.syncRequestDiagnostics();
+			expect(diagnostics.parse_errors).toBe(0);
+			expect(diagnostics.truncated_lines).toBe(0);
+			expect(diagnostics.dropped_rows).toBe(0);
+			expect(diagnostics.rows).toHaveLength(1000);
+			for (const row of diagnostics.rows) {
+				expect(row.success).toBe(true);
+				for (const part of COMMIT_PARTS) expect(row.parts[part]?.calls, part).toBe(1);
+			}
+		}
 	} finally {
 		try {
+			if (syncRequestDiagnosticsEnabled(process.env[SYNC_REQUEST_DIAGNOSTICS_ENV]))
+				measurements.correlated_request_diagnostics = bench.syncRequestDiagnostics();
 			measurements.server_stage_aggregates = stripVTControlCharacters(bench.recentLog())
 				.split("\n")
 				.filter((line) => line.includes("isolated sync transaction timings"))
@@ -455,7 +469,11 @@ test("ARCHITECT-SYNC-07 @api a thousand Architect edits a minute keep the desk o
 				maximum_millis: sorted.at(-1) ?? null,
 				p95_millis: sorted[Math.ceil(sorted.length * 0.95) - 1] ?? null,
 			};
-			const { gesture_millis: _samples, server_stage_aggregates: _stages, ...summary } = measurements;
+			const { gesture_millis: _samples, server_stage_aggregates: _stages, correlated_request_diagnostics: _requests, ...summary } = measurements;
+			if (_requests) {
+				const diagnostic = bench.syncRequestDiagnostics();
+				summary.correlated_request_summary = { rows: diagnostic.rows.length, parse_errors: diagnostic.parse_errors, dropped_rows: diagnostic.dropped_rows, truncated_lines: diagnostic.truncated_lines };
+			}
 			summary.last_server_stage_aggregate = (measurements.server_stage_aggregates as unknown[]).at(-1);
 			console.log("ARCHITECT-SYNC-07 diagnostics", JSON.stringify(summary));
 			await testInfo.attach("architect-sync-burst-diagnostics", {

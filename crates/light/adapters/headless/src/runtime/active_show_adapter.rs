@@ -1,5 +1,6 @@
 use super::PreparedOutputSnapshot;
 use super::capability_resources::ActiveShowDocumentCache;
+use super::show_patch_adapter::burst_timing::{CommitPart, CommitSpan};
 use super::{
     ActiveShowRepository, AppState, HighlightInstallPolicy, PlaybackInstallPolicy,
     ProgrammingInstallOwner, install_prepared_snapshot_with_selection_refresh,
@@ -356,22 +357,43 @@ impl ActiveShowUnitOfWork for ServerActiveShowUnitOfWork {
         // TL-552 follow-up: a contract ≥ 1 commit never stores legacy programming, so no accepted
         // write can make the show fail the load-time validator. Refused before anything is
         // written; dormant at contract 0.
-        super::show_programming_contract::check_transaction(&transaction, supported)?;
-        // TL-560: contract ≥ 1 writers of authored programming stamp the show's marker in the
-        // same atomic commit. Dormant at contract 0.
-        super::show_programming_contract::stamp(&mut transaction, supported);
-        match self.store.apply_portable_transaction(transaction) {
+        {
+            let _diagnostic = CommitSpan::begin(CommitPart::ContractValidation);
+            super::show_programming_contract::check_transaction(&transaction, supported)?;
+            // TL-560: stamp the marker in the same atomic commit. Dormant at contract 0.
+            super::show_programming_contract::stamp(&mut transaction, supported);
+        }
+        let applied = {
+            let _diagnostic = CommitSpan::begin(CommitPart::StoreApply);
+            self.store.apply_portable_transaction(transaction)
+        };
+        match applied {
             Ok(commit) => {
-                super::show_sync_feed::publish_commit(&self.state, show_id, previous, &commit);
+                {
+                    let _diagnostic = CommitSpan::begin(CommitPart::FeedPublish);
+                    super::show_sync_feed::publish_commit(&self.state, show_id, previous, &commit);
+                }
                 if let Some(document) = self.document.as_mut() {
-                    document.apply_commit(&commit);
-                    debug_assert_eq!(document.revision(), commit.revision());
-                    self.state.attributes.install_document(document);
-                    super::psn_http::install_document(&self.state, document);
-                    self.state
-                        .output
-                        .engine()
-                        .set_color_model(self.state.attributes.color_model());
+                    {
+                        let _diagnostic = CommitSpan::begin(CommitPart::DocumentApply);
+                        document.apply_commit(&commit);
+                        debug_assert_eq!(document.revision(), commit.revision());
+                    }
+                    {
+                        let _diagnostic = CommitSpan::begin(CommitPart::AttributesInstall);
+                        self.state.attributes.install_document(document);
+                    }
+                    {
+                        let _diagnostic = CommitSpan::begin(CommitPart::PsnInstall);
+                        super::psn_http::install_document(&self.state, document);
+                    }
+                    {
+                        let _diagnostic = CommitSpan::begin(CommitPart::ColorModelInstall);
+                        self.state
+                            .output
+                            .engine()
+                            .set_color_model(self.state.attributes.color_model());
+                    }
                 }
                 Ok(commit)
             }

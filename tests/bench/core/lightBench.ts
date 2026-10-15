@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { ApiDriver, type Session } from "./api";
 import { DmxReceiver, OscHardware } from "./protocols";
 import artifactResolver from "../../../tools/artifact-paths.cjs";
+import { SyncRequestDiagnostics, SYNC_REQUEST_DIAGNOSTICS_ENV, syncRequestDiagnosticsEnabled } from "./syncRequestDiagnostics";
 import { CURRENT_FIXTURE_PROFILE_SCHEMA_VERSION } from "../../support/fixtureSchema";
 
 const { artifactPaths } = artifactResolver;
@@ -55,6 +56,7 @@ export interface ClockFreeRunResult {
 export class LightBench {
   private process?: ChildProcess;
   private readonly log: string[] = [];
+  private readonly syncDiagnostics = new SyncRequestDiagnostics(syncRequestDiagnosticsEnabled(process.env[SYNC_REQUEST_DIAGNOSTICS_ENV]));
   private readonly oscHardware: OscHardware[] = [];
   private lastVirtualNow = "2020-01-01T00:00:00Z";
   dataDir = "";
@@ -152,8 +154,14 @@ export class LightBench {
       this.log.push(chunk.toString());
       if (this.log.length > 500) this.log.shift();
     };
-    this.process.stdout?.on("data", collect);
-    this.process.stderr?.on("data", collect);
+    this.process.stdout?.on("data", (chunk: Buffer) => {
+      collect(chunk);
+      this.syncDiagnostics.feed("stdout", chunk.toString());
+    });
+    this.process.stderr?.on("data", (chunk: Buffer) => {
+      collect(chunk);
+      this.syncDiagnostics.feed("stderr", chunk.toString());
+    });
     await this.waitUntilReady();
   }
 
@@ -266,6 +274,8 @@ export class LightBench {
   }
   applicationTime(): string { return this.lastVirtualNow; }
   recentLog(): string { return this.log.slice(-100).join(""); }
+
+  syncRequestDiagnostics() { return this.syncDiagnostics.snapshot(); }
 
   async failureArtifacts(token: string): Promise<Record<string, string>> {
     let audit: unknown = [];
