@@ -122,7 +122,7 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 if identity.slot == "object" {
                     destination.id().to_owned()
                 } else {
-                    match self.allocator.nested_uuid(source, &identity.slot) {
+                    match self.allocate_nested_identity(source, &identity.slot) {
                         Ok(value) => value,
                         Err(message) => {
                             self.blockers.push(ImportBlocker::InvalidResolution {
@@ -139,6 +139,23 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
             identities.insert(identity.slot.clone(), value);
         }
         identities
+    }
+
+    /// A preview is deterministic at one immutable target revision, while a later Copy
+    /// must not recreate an instance removed by Undo/Delete, even if only desk/history
+    /// references still name it. The descriptor slot stays `preset_instance`; only its
+    /// allocation seed changes. Other object/nested identity algorithms remain unchanged.
+    fn allocate_nested_identity(
+        &mut self,
+        source: &PortableShowObjectKey,
+        slot: &str,
+    ) -> Result<String, String> {
+        if source.kind() == "preset" && slot == "preset_instance" {
+            let seed = format!("{slot}/target_revision/{}", self.target.revision().value());
+            self.allocator.nested_uuid(source, &seed)
+        } else {
+            self.allocator.nested_uuid(source, slot)
+        }
     }
 
     fn destination_descriptor_identities(
@@ -204,8 +221,7 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                     .get(&identity.slot)
                     .cloned()
                     .unwrap_or_else(|| {
-                        self.allocator
-                            .nested_uuid(source, &identity.slot)
+                        self.allocate_nested_identity(source, &identity.slot)
                             .unwrap_or_else(|message| {
                                 self.blockers.push(ImportBlocker::InvalidResolution {
                                     key: source.clone(),

@@ -740,3 +740,128 @@ fn legacy_source_replacement_retains_modern_destination_instance_and_live_links(
         );
     }
 }
+
+#[test]
+fn repeated_copy_after_undo_does_not_reuse_a_dangling_live_preset_identity() {
+    let rig = TestRig::new();
+    let source_instance = Uuid::new_v4();
+    let fixture = portable_fixture_record(810_010, 1);
+    rig.source_object("preset", "1.1", preset(source_instance, 1));
+    rig.target_profile(&fixture.profile);
+    rig.target_object(
+        "patched_fixture",
+        &fixture.fixture_id.0.to_string(),
+        fixture.body,
+    );
+    rig.target_object("group", "front", group("front", fixture.fixture_id));
+    let request = rig
+        .request("preset", "1.1")
+        .with_mode(ImportLoadMode::AddToEnd);
+    let first = rig.preview(request.clone());
+    assert!(first.can_apply(), "{:?}", first.blockers);
+    let first_destination = first.objects[0].destination.id().to_owned();
+    let first_result = rig.apply(&first).unwrap();
+    let removed_identity = rig
+        .target_document()
+        .object("preset", &first_destination)
+        .unwrap()
+        .body()["instance_id"]
+        .clone();
+    rig.service
+        .undo(&context(), &first_result.undo.unwrap(), &rig.ports)
+        .unwrap();
+    assert!(
+        rig.target_document()
+            .object("preset", &first_destination)
+            .is_none()
+    );
+    let dangling = Uuid::parse_str(removed_identity.as_str().unwrap()).unwrap();
+    let list_id = Uuid::new_v4();
+    rig.target_object(
+        "cue_list",
+        &list_id.to_string(),
+        linked_list(list_id, fixture.fixture_id, "front", dangling),
+    );
+    let before = rig.target_document();
+    let second = rig.preview(request);
+    assert!(second.can_apply(), "{:?}", second.blockers);
+    let second_destination = second.objects[0].destination.id().to_owned();
+    rig.apply(&second).unwrap();
+    let after = rig.target_document();
+    assert_ne!(
+        after.object("preset", &second_destination).unwrap().body()["instance_id"],
+        removed_identity,
+        "copy must not recreate a deleted instance still named by an existing Cue"
+    );
+    assert_eq!(
+        after.object("cue_list", &list_id.to_string()).unwrap(),
+        before.object("cue_list", &list_id.to_string()).unwrap()
+    );
+    let installed = rig.ports.installed.lock();
+    let cue = &installed
+        .as_ref()
+        .unwrap()
+        .cue_lists
+        .iter()
+        .find(|list| list.id.0 == list_id)
+        .unwrap()
+        .cues[0];
+    assert_eq!(
+        cue.changes[0].value,
+        Some(light_core::AttributeValue::Normalized(0.2))
+    );
+    assert_eq!(
+        cue.group_changes[0].value,
+        Some(light_core::AttributeValue::Normalized(0.2))
+    );
+}
+
+#[test]
+fn fresh_preset_copy_after_undo_has_new_identity_even_without_portable_references() {
+    let rig = TestRig::new();
+    let source_instance = Uuid::new_v4();
+    rig.source_object("preset", "1.1", preset(source_instance, 1));
+    let request = rig
+        .request("preset", "1.1")
+        .with_mode(ImportLoadMode::AddToEnd);
+    let source = rig.source_document();
+    let target = rig.target_document();
+    let plan = || {
+        crate::selective_import::plan::build_plan(&request, &source, &source, &target, &rig.ports)
+    };
+    assert_eq!(
+        plan().writes[0].body["instance_id"],
+        plan().writes[0].body["instance_id"],
+        "same immutable target revision must produce the same nested identity"
+    );
+    let first = rig.preview(request.clone());
+    assert!(first.can_apply(), "{:?}", first.blockers);
+    let destination = first.objects[0].destination.id().to_owned();
+    let result = rig.apply(&first).unwrap();
+    let first_identity = rig
+        .target_document()
+        .object("preset", &destination)
+        .unwrap()
+        .body()["instance_id"]
+        .clone();
+    rig.service
+        .undo(&context(), &result.undo.unwrap(), &rig.ports)
+        .unwrap();
+    assert!(
+        rig.target_document()
+            .object("preset", &destination)
+            .is_none()
+    );
+    let second = rig.preview(request);
+    assert!(second.can_apply(), "{:?}", second.blockers);
+    let destination = second.objects[0].destination.id().to_owned();
+    rig.apply(&second).unwrap();
+    assert_ne!(
+        rig.target_document()
+            .object("preset", &destination)
+            .unwrap()
+            .body()["instance_id"],
+        first_identity,
+        "a later Copy operation cannot reuse the removed instance, even with no current portable links"
+    );
+}
