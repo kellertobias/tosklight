@@ -10,7 +10,10 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GroupSettingsDialog } from "./GroupSettingsDialog";
 import type { Group } from "./model";
-import { defaultSpatialMapping } from "./spatialMapping";
+import {
+	defaultSpatialMapping,
+	type SpatialSelectionShape,
+} from "./spatialMapping";
 
 const manage = vi.fn();
 const settings = vi.fn();
@@ -62,6 +65,27 @@ function settingsSnapshot(target = group()) {
 			warnings: [],
 		},
 	};
+}
+
+function phaseShape(type: SpatialSelectionShape["type"]): SpatialSelectionShape {
+	switch (type) {
+		case "grid":
+			return { type, angle_degrees: 45, direction: "ascending" };
+		case "radial":
+			return { type, center_u: -1, center_v: 2, direction: "inward" };
+		case "radar":
+			return {
+				type,
+				center_u: 3,
+				center_v: 4,
+				start_angle_degrees: 90,
+				sweep: "counter_clockwise",
+			};
+	}
+}
+
+function phaseLabel(type: SpatialSelectionShape["type"]) {
+	return { grid: "Grid", radial: "Radial", radar: "Radar" }[type];
 }
 
 describe("Group settings modal", () => {
@@ -120,6 +144,174 @@ describe("Group settings modal", () => {
 		expect(plotted[0]?.getAttribute("fill")).toBe("hsl(0 0% 0.0%)");
 		expect(screen.getByText(/1 rank/)).toBeInTheDocument();
 		expect(settings).toHaveBeenCalledWith("4");
+	});
+
+	it.each(["grid", "radial", "radar"] as const)(
+		"reopens the saved %s Phase shape without writing",
+		async (type) => {
+			const shape = phaseShape(type);
+			const target = group({ mapping: { ...defaultSpatialMapping(), shape } });
+			settings.mockResolvedValue(settingsSnapshot(target));
+			const mode = phaseLabel(type);
+			const first = renderDialog(target);
+			fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+			await waitFor(() =>
+				expect(screen.getByRole("radio", { name: mode })).toHaveAttribute(
+					"aria-checked",
+					"true",
+				),
+			);
+			expect(
+				screen.getByLabelText(type === "grid" ? "Grid angle" : "Centre U"),
+			).toHaveValue(type === "grid" ? "45" : type === "radial" ? "-1" : "3");
+			first.unmount();
+			renderDialog(target);
+			fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+			await waitFor(() =>
+				expect(screen.getByRole("radio", { name: mode })).toHaveAttribute(
+					"aria-checked",
+					"true",
+				),
+			);
+			expect(manage).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each(["grid", "radial", "radar"] as const)(
+		"shows an inherited %s Phase shape without taking ownership",
+		async (type) => {
+			const target = group();
+			const snapshot = settingsSnapshot(target);
+			const shape = phaseShape(type);
+			settings.mockResolvedValue({
+				...snapshot,
+				resolvedSpatial: {
+					...snapshot.resolvedSpatial,
+					effective_mapping: { ...defaultSpatialMapping(), shape },
+					mapping_provenance: { type: "inherited", source_group_ids: ["2"] },
+				},
+			});
+			renderDialog(target);
+			fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+			await waitFor(() =>
+				expect(screen.getByRole("radio", { name: phaseLabel(type) })).toHaveAttribute(
+					"aria-checked",
+					"true",
+				),
+			);
+			expect(manage).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each(["local", "inherited"] as const)(
+		"keeps the current %s shape parameters when its selected mode is pressed again",
+		async (origin) => {
+			const shape = phaseShape(origin === "local" ? "grid" : "radial");
+			const mapping = { ...defaultSpatialMapping(), shape };
+			const target = group(origin === "local" ? { mapping } : {});
+			const snapshot = settingsSnapshot(target);
+			settings.mockResolvedValue({
+				...snapshot,
+				resolvedSpatial: {
+					...snapshot.resolvedSpatial,
+					effective_mapping: mapping,
+					mapping_provenance: origin === "local"
+						? { type: "local", group_id: target.id }
+						: { type: "inherited", source_group_ids: ["2"] },
+				},
+			});
+			renderDialog(target);
+			fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+			const mode = screen.getByRole("radio", { name: phaseLabel(shape.type) });
+			await waitFor(() => expect(mode).toHaveAttribute("aria-checked", "true"));
+			const field = screen.getByLabelText(
+				origin === "local" ? "Grid angle" : "Centre U",
+			);
+			expect(field).toHaveValue(origin === "local" ? "45" : "-1");
+			fireEvent.click(mode);
+			await waitFor(() => expect(manage).not.toHaveBeenCalled());
+			expect(field).toHaveValue(origin === "local" ? "45" : "-1");
+		},
+	);
+
+	it("adopts a delayed authoritative Phase shape without an unintended mapping write", async () => {
+		const target = group();
+		let resolveSettings:
+			| ((value: ReturnType<typeof settingsSnapshot>) => void)
+			| undefined;
+		settings.mockReturnValue(
+			new Promise<ReturnType<typeof settingsSnapshot>>((resolve) => {
+				resolveSettings = resolve;
+			}),
+		);
+		renderDialog(target);
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+		expect(screen.getByText(/Group.s source order/)).toBeInTheDocument();
+		const mapped = group({
+			mapping: {
+				...defaultSpatialMapping(),
+				shape: { type: "radial", center_u: -3, center_v: 4, direction: "inward" },
+			},
+		});
+		resolveSettings?.(settingsSnapshot(mapped));
+		await waitFor(() =>
+			expect(screen.getByRole("radio", { name: "Radial" })).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
+		expect(screen.getByLabelText("Centre U")).toHaveValue("-3");
+		expect(manage).not.toHaveBeenCalled();
+	});
+
+	it("updates a visible field when delayed authority changes the current shape's parameters", async () => {
+		const target = group({ mapping: defaultSpatialMapping() });
+		let resolveSettings:
+			| ((value: ReturnType<typeof settingsSnapshot>) => void)
+			| undefined;
+		settings.mockReturnValue(
+			new Promise<ReturnType<typeof settingsSnapshot>>((resolve) => {
+				resolveSettings = resolve;
+			}),
+		);
+		renderDialog(target);
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+		expect(screen.getByLabelText("Grid angle")).toHaveValue("0");
+		const authoritative = group({
+			mapping: {
+				...defaultSpatialMapping(),
+				shape: phaseShape("grid"),
+			},
+		});
+		resolveSettings?.(settingsSnapshot(authoritative));
+		await waitFor(() =>
+			expect(screen.getByLabelText("Grid angle")).toHaveValue("45"),
+		);
+		expect(manage).not.toHaveBeenCalled();
+	});
+
+	it("repairs a visible same-shape numeric field from authoritative values after a rejected edit", async () => {
+		const target = group({ mapping: defaultSpatialMapping() });
+		const authoritative = group({
+			mapping: {
+				...defaultSpatialMapping(),
+				shape: phaseShape("grid"),
+			},
+		});
+		settings.mockResolvedValueOnce(settingsSnapshot(target))
+			.mockResolvedValue(settingsSnapshot(authoritative));
+		manage.mockResolvedValue(null);
+		renderDialog(target);
+		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+		await waitFor(() => expect(settings).toHaveBeenCalledOnce());
+		const angle = screen.getByLabelText("Grid angle");
+		fireEvent.change(angle, { target: { value: "90" } });
+		fireEvent.blur(angle);
+		await waitFor(() => expect(settings).toHaveBeenCalledTimes(2));
+		await waitFor(() =>
+			expect(screen.getByLabelText("Grid angle")).toHaveValue("45"),
+		);
+		expect(manage).toHaveBeenCalledOnce();
 	});
 
 	it("has only General, Projection, and Phase plus an X close control", () => {
@@ -342,15 +534,39 @@ describe("Group settings modal", () => {
 		);
 	});
 
-	it("uses the default Selection Order placeholder and aligned Phase rows", async () => {
-		renderDialog(group({ mapping: defaultSpatialMapping() }));
+	it("shows truthful source order without fake ordering actions, and aligns actual Phase rows", async () => {
+		const target = group();
+		settings.mockResolvedValue(settingsSnapshot(target));
+		renderDialog(target);
 		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
+		expect(screen.getByText("Selection Order")).toBeInTheDocument();
+		expect(screen.getByText(/Group.s source order/)).toBeInTheDocument();
 		expect(
-			screen.getByRole("radio", { name: "Selection Order" }),
-		).toHaveAttribute("aria-checked", "true");
+			screen.queryByRole("radio", { name: "Selection Order" }),
+		).not.toBeInTheDocument();
 		expect(
-			screen.getByText(/order in which the fixtures were selected/),
-		).toBeInTheDocument();
+			screen.queryByRole("radio", { name: "Fixture ID" }),
+		).not.toBeInTheDocument();
+		for (const label of ["Grid", "Radial", "Radar"])
+			expect(screen.getByRole("radio", { name: label })).toHaveAttribute(
+				"aria-checked",
+				"false",
+			);
+		expect(screen.queryByLabelText("Grid angle")).not.toBeInTheDocument();
+		expect(manage).not.toHaveBeenCalled();
+		await waitFor(() => expect(settings).toHaveBeenCalledOnce());
+		settings.mockResolvedValue(settingsSnapshot(group({
+			mapping: {
+				...defaultSpatialMapping(),
+				shape: {
+					type: "radar",
+					center_u: 0,
+					center_v: 0,
+					start_angle_degrees: 0,
+					sweep: "clockwise",
+				},
+			},
+		})));
 		fireEvent.click(screen.getByRole("radio", { name: "Radar" }));
 		await waitFor(() =>
 			expect(document.querySelectorAll(".group-phase-row")).toHaveLength(2),
@@ -360,8 +576,6 @@ describe("Group settings modal", () => {
 		expect(
 			screen.getByLabelText("Sweep").closest(".ui-form-field"),
 		).toHaveClass("labels-top");
-		fireEvent.click(screen.getByRole("radio", { name: "Fixture ID" }));
-		expect(screen.getByText(/lowest ID to the highest/)).toBeInTheDocument();
 	});
 
 	it("sends one complete revisioned mapping when a Phase shape changes", async () => {

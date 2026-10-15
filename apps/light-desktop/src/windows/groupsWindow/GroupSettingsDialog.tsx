@@ -422,7 +422,6 @@ function PhaseSettingsPanel({
 	hasManagement,
 	commitMapping,
 }: MappingPanelProps) {
-	const editable = displayedMapping ?? defaultSpatialMapping();
 	return (
 		<section className="group-settings-panel group-settings-split">
 			<div className="group-settings-visual" aria-label="Phase preview">
@@ -442,7 +441,7 @@ function PhaseSettingsPanel({
 			</div>
 			<div className="group-settings-controls">
 				<PhaseEditor
-					mapping={editable}
+					mapping={displayedMapping}
 					disabled={!hasManagement || saving}
 					onChange={(next) => void commitMapping(next)}
 				/>
@@ -547,31 +546,26 @@ function ProjectionEditor({
 	);
 }
 
+const PHASE_SHAPE_OPTIONS = [
+	{ value: "grid", label: "Grid" },
+	{ value: "radial", label: "Radial" },
+	{ value: "radar", label: "Radar" },
+];
+
 function PhaseEditor({
 	mapping,
 	disabled,
 	onChange,
 }: {
-	mapping: SpatialSelectionMapping;
+	mapping: SpatialSelectionMapping | null;
 	disabled: boolean;
 	onChange: (mapping: SpatialSelectionMapping) => void;
 }) {
 	const updateShape = (shape: SpatialSelectionShape) =>
-		onChange({ ...mapping, shape });
-	const shape = mapping.shape;
-	const [orderingMode, setOrderingMode] = useState<
-		"fixture-id" | "selection-order" | SpatialSelectionShape["type"]
-	>("selection-order");
-	const spatialMode =
-		orderingMode === "grid" ||
-		orderingMode === "radial" ||
-		orderingMode === "radar";
-	// A revisioned write may still be fetching authority when an operator changes modes. Render
-	// the chosen shape immediately rather than briefly showing the previous shape's controls.
-	const activeShape =
-		spatialMode && shape.type !== orderingMode
-			? defaultShape(orderingMode)
-			: shape;
+		onChange({ ...(mapping ?? defaultSpatialMapping()), shape });
+	// A Group has only these three persisted shapes. No mapping means source order;
+	// independent local toggle state would misrepresent both saved and refreshed authority.
+	const activeShape = mapping?.shape;
 	return (
 		<fieldset
 			disabled={disabled}
@@ -581,32 +575,20 @@ function PhaseEditor({
 			<MultiValueToggleField
 				className="group-shape-choices"
 				label="Ordering mode"
-				value={orderingMode}
-				options={[
-					{ value: "selection-order", label: "Selection Order" },
-					{ value: "fixture-id", label: "Fixture ID" },
-					{ value: "grid", label: "Grid" },
-					{ value: "radial", label: "Radial" },
-					{ value: "radar", label: "Radar" },
-				]}
+				value={activeShape?.type ?? ""}
+				options={PHASE_SHAPE_OPTIONS}
 				onChange={(type) => {
-					const next = type as typeof orderingMode;
-					setOrderingMode(next);
-					if (next === "grid" || next === "radial" || next === "radar")
-						updateShape(defaultShape(next));
+					if (type === activeShape?.type) return;
+					if (type === "grid" || type === "radial" || type === "radar")
+						updateShape(defaultShape(type));
 				}}
 			/>
-			{!spatialMode ? (
+			{!activeShape ? (
 				<div className="group-phase-no-settings">
-					<strong>
-						{orderingMode === "selection-order"
-							? "Selection Order"
-							: "Fixture ID"}
-					</strong>
+					<strong>Selection Order</strong>
 					<p>
-						{orderingMode === "selection-order"
-							? "Uses the order in which the fixtures were selected when the Group was stored."
-							: "Orders fixtures by Fixture ID, from the lowest ID to the highest."}
+						Uses the Group's source order. No spatial mapping is stored or
+						inherited.
 					</p>
 				</div>
 			) : (
@@ -738,6 +720,7 @@ function NumberField({
 }) {
 	return (
 		<UiNumberField
+			key={`${label}-${value}`}
 			className="group-number-input"
 			label={label}
 			labelPlacement={labelPlacement}
