@@ -123,26 +123,56 @@ pub fn validate_show_playback_contract(path: impl AsRef<Path>) -> Result<(), Sto
         })?;
         for object in objects {
             let (kind, id, serialized) = object?;
-            match serde_json::from_str(&serialized) {
-                Ok(body) => validate_playback_object(&kind, &id, &body)?,
-                Err(error)
-                    if matches!(
-                        kind.as_str(),
-                        "playback"
-                            | "playback_page"
-                            | "playback_solo_regions"
-                            | "virtual_playback_exclusion_zones"
-                    ) =>
-                {
-                    return Err(error.into());
-                }
-                // Compatibility inspection owns Playback identities. A malformed unrelated
-                // object is reported when requested, without blocking an exact sibling read.
-                Err(_) => {}
-            }
+            validate_serialized_playback_object(&kind, &id, &serialized, |raw| {
+                serde_json::from_str(raw)
+            })?;
         }
     }
     Ok(())
+}
+
+/// A negative lexical check only: candidate text always uses the existing JSON validator.
+/// All recursive retired identities require playback/virtual/physical, and retired Dynamic
+/// assignments require dynamic. Without JSON escapes, decoding cannot create an absent ASCII
+/// token. Keep this necessary-token set in sync when adding a compatibility rejection.
+/// Group and Playback kinds always parse because their structural rules need no such token.
+/// Malformed unrelated JSON already belongs to its own reader, not this compatibility guard.
+pub(crate) fn validate_serialized_playback_object(
+    kind: &str,
+    id: &str,
+    serialized: &str,
+    parse: impl FnOnce(&str) -> Result<Value, serde_json::Error>,
+) -> Result<(), StoreError> {
+    if !matches!(
+        kind,
+        "group"
+            | "playback"
+            | "playback_page"
+            | "playback_solo_regions"
+            | "virtual_playback_exclusion_zones"
+    ) && !serialized.contains('\\')
+        && !["playback", "virtual", "physical", "dynamic"]
+            .iter()
+            .any(|token| serialized.contains(*token))
+    {
+        return Ok(());
+    }
+    match parse(serialized) {
+        Ok(body) => validate_playback_object(kind, id, &body),
+        Err(error)
+            if matches!(
+                kind,
+                "playback"
+                    | "playback_page"
+                    | "playback_solo_regions"
+                    | "virtual_playback_exclusion_zones"
+            ) =>
+        {
+            Err(error.into())
+        }
+        // Preserve the original policy for malformed unrelated objects, including Groups.
+        Err(_) => Ok(()),
+    }
 }
 
 use rusqlite::OptionalExtension;

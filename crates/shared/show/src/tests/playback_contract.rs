@@ -238,3 +238,211 @@ fn speed_group_legacy_fader_is_refused_before_writable_open_including_history() 
         validate_playback_object("playback_page", "4", &canonical).unwrap();
     }
 }
+
+fn original_serialized_contract(kind: &str, raw: &str) -> Result<(), String> {
+    match serde_json::from_str(raw) {
+        Ok(body) => {
+            validate_playback_object(kind, "test", &body).map_err(|error| error.to_string())
+        }
+        Err(error)
+            if matches!(
+                kind,
+                "playback"
+                    | "playback_page"
+                    | "playback_solo_regions"
+                    | "virtual_playback_exclusion_zones"
+            ) =>
+        {
+            Err(error.to_string())
+        }
+        Err(_) => Ok(()),
+    }
+}
+
+#[test]
+fn lexical_contract_guard_matches_original_for_escaped_nested_duplicate_and_malformed_json() {
+    use crate::playback_contract::validate_serialized_playback_object;
+    let mut bodies = vec![
+        r#"{}"#.to_owned(), r#"[]"#.to_owned(), "null".to_owned(), "1e999".to_owned(),
+        r#"{"name":"Harmless Spot","position":{"x":1,"y":2}}"#.to_owned(),
+        r#"{"note":"physical virtual playback dynamic words only"}"#.to_owned(),
+        r#""playback_number""#.to_owned(),
+        r#"{"note":"quoted \"physical\" and \u0076irtual"}"#.to_owned(),
+        r#"{"deep":[{"play\u0062ack_number":7}]}"#.to_owned(),
+        r#"{"deep":{"\u006bind":"phys\u0069cal"}}"#.to_owned(),
+        r#"{"deep":{"t\u0079pe":"dyn\u0061mic","assignment":{"target_sc\u006fpe":{"type":"live_group","group_id":"1"}}}}"#.to_owned(),
+        r#"{"deep":{"type":"dynamic","assignment":{"dynamic":{"embedded_fallback":{"definition":{"target_binding":{"type":"targetless"}}}}}}}"#.to_owned(),
+        r#"{"kind":"physical","kind":"valid"}"#.to_owned(),
+        r#"{"kind":"valid","kind":"physical"}"#.to_owned(),
+        r#"{"x":{"kind":"physical"},"x":{}}"#.to_owned(),
+        r#"{"k\u0069nd":"physical","kind":"valid"}"#.to_owned(),
+        r#"{"deep":[{"kind":"virtual"}]}"#.to_owned(),
+        r#"{"master":1,"playback_fader":1}"#.to_owned(),
+        r#"{"number":1,"assignments":{"1":{"target":{"type":"speed_group"},"fader":"speed"}}}"#.to_owned(),
+        r#"{"kind":"physical""#.to_owned(), r#"{"ordinary": "#.to_owned(),
+        r#"{"number":1,"assignments":{}}"#.to_owned(),
+        r#"{"note":"\uD83D\uDE00"}"#.to_owned(),
+    ];
+    for key in [
+        "playback_number",
+        "playback_identity",
+        "virtual_playbacks",
+        "virtual_playback_number",
+        "virtualPlaybackRows",
+        "virtualPlaybackColumns",
+        "virtualPlaybackPageMode",
+        "virtualPlaybackPinnedPage",
+    ] {
+        bodies.push(json!({"nested":[{(key): 1}]}).to_string());
+        assert!(original_serialized_contract("future_extension", bodies.last().unwrap()).is_err());
+    }
+    for kind in [
+        "patched_fixture",
+        "future_extension",
+        "macro",
+        "group",
+        "playback",
+        "playback_page",
+        "playback_solo_regions",
+        "virtual_playback_exclusion_zones",
+    ] {
+        for raw in &bodies {
+            let actual = validate_serialized_playback_object(kind, "test", raw, |text| {
+                serde_json::from_str(text)
+            })
+            .map_err(|error| error.to_string());
+            assert_eq!(
+                actual,
+                original_serialized_contract(kind, raw),
+                "kind={kind} raw={raw}"
+            );
+        }
+    }
+}
+
+#[test]
+fn lexical_contract_guard_removes_unrelated_history_parsing_but_keeps_candidates_on_original_parser()
+ {
+    use crate::playback_contract::validate_serialized_playback_object;
+    use std::cell::Cell;
+    let calls = Cell::new(0);
+    let raw = r#"{"fixture_number":1,"name":"Spot","profile_revision":7,"location":{"x":0,"y":0,"z":3000}}"#;
+    for _ in 0..512 {
+        // The retained original implementation parses every row; the result must agree.
+        assert_eq!(original_serialized_contract("patched_fixture", raw), Ok(()));
+        validate_serialized_playback_object("patched_fixture", "test", raw, |text| {
+            calls.set(calls.get() + 1);
+            serde_json::from_str(text)
+        })
+        .unwrap();
+    }
+    assert_eq!(calls.get(), 0);
+    for (kind, raw) in [
+        ("patched_fixture", r#"{"note":"dynamic"}"#),
+        ("patched_fixture", r#"{"name":"Sp\u006ft"}"#),
+        ("group", "{}"),
+        ("playback", "{}"),
+        ("playback_page", "{}"),
+        ("playback_solo_regions", "{}"),
+        ("virtual_playback_exclusion_zones", "{}"),
+    ] {
+        let before = calls.get();
+        let actual = validate_serialized_playback_object(kind, "test", raw, |text| {
+            calls.set(calls.get() + 1);
+            serde_json::from_str(text)
+        })
+        .map_err(|error| error.to_string());
+        assert_eq!(calls.get(), before + 1);
+        assert_eq!(actual, original_serialized_contract(kind, raw));
+    }
+}
+
+#[test]
+fn lexical_guard_still_refuses_escaped_retired_content_in_every_table_before_schema_writes() {
+    let cases = [
+        (
+            "patched_fixture",
+            r#"{"deep":[{"play\u0062ack_number":7}]}"#,
+        ),
+        (
+            "future_extension",
+            r#"{"deep":{"\u006bind":"phys\u0069cal"}}"#,
+        ),
+        (
+            "macro",
+            r#"{"deep":{"t\u0079pe":"dyn\u0061mic","assignment":{"target_sc\u006fpe":{"type":"live_group","group_id":"1"}}}}"#,
+        ),
+        ("group", r#"{"master":1}"#),
+        ("playback_page", r#"{"number":1,"slots":{"1":7}}"#),
+        ("playback", r#"{"ordinary": "#),
+        ("playback_page", r#"{"ordinary": "#),
+        ("playback_solo_regions", r#"{"ordinary": "#),
+        ("virtual_playback_exclusion_zones", r#"{"ordinary": "#),
+    ];
+    for version in [9, 10] {
+        for table in ["objects", "object_history", "object_redo"] {
+            for (kind, raw) in cases {
+                let path = temporary(&format!("lexical-retired-{version}-{table}-{kind}"));
+                let (store, _) = ShowStore::create(&path, "Original").unwrap();
+                assert_eq!(
+                    store
+                        .metadata_value(crate::PLAYBACK_CONTRACT_METADATA_KEY)
+                        .unwrap()
+                        .as_deref(),
+                    Some("1")
+                );
+                let time_column = if table == "objects" {
+                    "updated_at"
+                } else {
+                    "created_at"
+                };
+                store.conn.execute(&format!("INSERT INTO {table}(kind,id,revision,body_json,{time_column}) VALUES(?1,'test',1,?2,'test')"), [kind, raw]).unwrap();
+                store
+                    .conn
+                    .execute("UPDATE schema_info SET version=?1", [version])
+                    .unwrap();
+                store
+                    .conn
+                    .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                    .unwrap();
+                drop(store);
+                let before = fs::read(&path).unwrap();
+                let expected = original_serialized_contract(kind, raw).unwrap_err();
+                let observed = ShowStore::open(&path).err().unwrap().to_string();
+                assert_eq!(observed, expected);
+                assert_eq!(fs::read(&path).unwrap(), before);
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+}
+
+#[test]
+fn lexical_guard_preserves_duplicate_last_wins_and_unrelated_malformed_history_policy() {
+    for table in ["objects", "object_history", "object_redo"] {
+        for raw in [
+            r#"{"kind":"physical","kind":"valid"}"#,
+            r#"{"x":{"kind":"physical"},"x":{}}"#,
+            r#"{"kind":"physical""#,
+            r#"{"ordinary": "#,
+        ] {
+            let path = temporary(&format!("lexical-accepted-{table}"));
+            let (store, _) = ShowStore::create(&path, "Unrelated reader").unwrap();
+            let time_column = if table == "objects" {
+                "updated_at"
+            } else {
+                "created_at"
+            };
+            store.conn.execute(&format!("INSERT INTO {table}(kind,id,revision,body_json,{time_column}) VALUES('future_extension','test',1,?1,'test')"), [raw]).unwrap();
+            store
+                .conn
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .unwrap();
+            drop(store);
+            assert!(original_serialized_contract("future_extension", raw).is_ok());
+            assert!(validate_show_playback_contract(&path).is_ok());
+            assert!(ShowStore::open(&path).is_ok());
+            let _ = fs::remove_file(path);
+        }
+    }
+}
