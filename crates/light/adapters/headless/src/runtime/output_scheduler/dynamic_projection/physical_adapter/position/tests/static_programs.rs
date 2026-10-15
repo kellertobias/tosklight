@@ -90,16 +90,37 @@ fn actual_live_static_target_with_no_dynamics_tracks_an_independent_moving_mount
         .is_err()
     );
     assert!(lane.continuity(root, ProgrammingOwner::Position).is_none());
-    let before = prepare_live(
-        &rig,
-        &capture,
-        &capture,
-        &lane,
-        &mut runtime,
-        &mut origins,
-        &mut scratch,
-    )
-    .unwrap();
+    use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
+    let (before, calls, counts) = diagnostics::observe_for_test(|| {
+        prepare_live(
+            &rig,
+            &capture,
+            &capture,
+            &lane,
+            &mut runtime,
+            &mut origins,
+            &mut scratch,
+        )
+        .unwrap()
+    });
+    for stage in [
+        diagnostics::Stage::PreparePrograms,
+        diagnostics::Stage::ProgramInput,
+        diagnostics::Stage::PositionCapture,
+        diagnostics::Stage::PositionTracking,
+    ] {
+        assert_eq!(calls[stage as usize], 1);
+    }
+    assert_eq!(counts[diagnostics::Count::PositionPrograms as usize], 1);
+    assert_eq!(counts[diagnostics::Count::PositionSamples as usize], 0);
+    assert_eq!(
+        counts[diagnostics::Count::PositionEmptyPrograms as usize],
+        1
+    );
+    assert_eq!(
+        counts[diagnostics::Count::PositionRequirementsOnly as usize],
+        0
+    );
     let row = assert_static_row(&before, root, &value);
     assert_eq!(row.writes.len(), 2);
     assert_eq!(row.achieved.outcomes.len(), 1);
@@ -370,4 +391,77 @@ fn static_position_registry_never_overwrites_an_active_legacy_pan_lane() {
             .value(rig.root, &ProgrammingOwner::Position.key()),
         Some(&base)
     );
+}
+
+#[test]
+fn actual_position_observer_counts_requirements_only_rows_and_error_boundaries() {
+    use crate::runtime::output_scheduler::dynamic_projection::programming_projection::hybrid::HybridFamilyProgram;
+    use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
+
+    // Real observer/captured engine inputs: duplicate capture fails before tracking; a
+    // missing lane.begin fails inside tracking. Neither failure publishes a result.
+    for (duplicate, begin_tracking) in [(false, true), (true, true), (false, false)] {
+        let rig = Rig::single();
+        let lane = PhysicalAdapterLane::live(PositionAdapter::default());
+        let capture = rig.capture();
+        let token = capture.frame_token();
+        let mut scalar = rig.engine.prepare_static_family_frame(&capture, &[]);
+        let geometry = rig
+            .engine
+            .observe_static_family_geometry(&capture, &mut scalar)
+            .unwrap();
+        let models = DynamicRuntime::default().captured_native_color_models();
+        let frame = HybridFrameContext {
+            capture: &capture,
+            token: &token,
+            scalar: &scalar,
+            geometry: &geometry,
+            native_models: models.as_ref(),
+        };
+        if begin_tracking {
+            lane.begin(&token).unwrap();
+        }
+        let mut observer = PositionFrameObserver::new(&lane);
+        observer.begin_frame(&token).unwrap();
+        let value = angles(30., 15.);
+        let program = || HybridFamilyProgram {
+            target: rig.root,
+            owner: ProgrammingOwner::Position,
+            base: &value,
+            samples: &[],
+            has_requirements: true,
+            frame,
+        };
+        let mut programs = vec![program()];
+        if duplicate {
+            programs.push(program());
+        }
+        let (result, calls, counts) =
+            diagnostics::observe_for_test(|| observer.prepare_programs(frame, &programs));
+        assert_eq!(result.is_ok(), !duplicate && begin_tracking);
+        assert_eq!(calls[diagnostics::Stage::PositionCapture as usize], 1);
+        assert_eq!(
+            calls[diagnostics::Stage::PositionTracking as usize],
+            u64::from(!duplicate)
+        );
+        assert_eq!(calls[diagnostics::Stage::ProgramInput as usize], 0);
+        let submitted = if duplicate { 2 } else { 1 };
+        assert_eq!(
+            counts[diagnostics::Count::PositionPrograms as usize],
+            submitted
+        );
+        assert_eq!(counts[diagnostics::Count::PositionSamples as usize], 0);
+        assert_eq!(
+            counts[diagnostics::Count::PositionEmptyPrograms as usize],
+            submitted
+        );
+        assert_eq!(
+            counts[diagnostics::Count::PositionRequirementsOnly as usize],
+            submitted
+        );
+        assert!(
+            lane.continuity(rig.root, ProgrammingOwner::Position)
+                .is_none()
+        );
+    }
 }

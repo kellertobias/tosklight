@@ -25,8 +25,12 @@ pub(in crate::runtime::output_scheduler) enum Stage {
     InputAssembly,
     PrepareCurrent,
     PreparePrograms,
+    // Schema 3 appends disjoint children inside the unchanged PreparePrograms parent.
+    ProgramInput,
+    PositionCapture,
+    PositionTracking,
 }
-const STAGES: usize = 18;
+const STAGES: usize = 21;
 
 #[derive(Clone, Copy)]
 pub(in crate::runtime::output_scheduler) enum Count {
@@ -52,8 +56,13 @@ pub(in crate::runtime::output_scheduler) enum Count {
     ForkChunks,
     ScalarReuseStatic,
     ScalarSeparateStatic,
+    // Submitted Position rows; empty includes requirements-only, not a partition.
+    PositionPrograms,
+    PositionSamples,
+    PositionEmptyPrograms,
+    PositionRequirementsOnly,
 }
-const COUNTS: usize = 22;
+const COUNTS: usize = 26;
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
 pub(super) struct Summary {
@@ -150,13 +159,24 @@ mod tests {
             Stage::InputAssembly,
             Stage::PrepareCurrent,
             Stage::PreparePrograms,
+            Stage::ProgramInput,
+            Stage::PositionCapture,
+            Stage::PositionTracking,
         ] {
             let span = Span::begin(stage);
             assert!(span.started.is_none());
             drop(span);
         }
         count(Count::Groups, usize::MAX);
-        count_with(Count::Groups, || panic!("inactive count evaluated"));
+        for kind in [
+            Count::Groups,
+            Count::PositionPrograms,
+            Count::PositionSamples,
+            Count::PositionEmptyPrograms,
+            Count::PositionRequirementsOnly,
+        ] {
+            count_with(kind, || panic!("inactive count evaluated"));
+        }
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
     }
     #[test]
@@ -233,6 +253,69 @@ mod tests {
     }
 
     #[test]
+    fn program_children_remain_disjoint_on_capture_and_tracking_errors() {
+        fn prepare(fail: Option<Stage>) -> Result<(), &'static str> {
+            let _parent = Span::begin(Stage::PreparePrograms);
+            {
+                let _input = Span::begin(Stage::ProgramInput);
+            }
+            {
+                let _capture = Span::begin(Stage::PositionCapture);
+                count(Count::PositionPrograms, 1);
+                count_with(Count::PositionEmptyPrograms, || 1);
+                if matches!(fail, Some(Stage::PositionCapture)) {
+                    return Err("capture rejected");
+                }
+            }
+            let _tracking = Span::begin(Stage::PositionTracking);
+            if matches!(fail, Some(Stage::PositionTracking)) {
+                return Err("tracking rejected");
+            }
+            Ok(())
+        }
+        for fail in [
+            None,
+            Some(Stage::PositionCapture),
+            Some(Stage::PositionTracking),
+        ] {
+            install();
+            let result = prepare(fail);
+            assert_eq!(result.is_err(), fail.is_some());
+            let frame = ACTIVE.with(|a| a.borrow_mut().take()).unwrap();
+            for stage in [
+                Stage::PreparePrograms,
+                Stage::ProgramInput,
+                Stage::PositionCapture,
+            ] {
+                assert_eq!(frame.family.calls[stage as usize], 1);
+            }
+            assert_eq!(
+                frame.family.calls[Stage::PositionTracking as usize],
+                u64::from(!matches!(fail, Some(Stage::PositionCapture)))
+            );
+            let children = [
+                Stage::ProgramInput,
+                Stage::PositionCapture,
+                Stage::PositionTracking,
+            ]
+            .into_iter()
+            .map(|stage| frame.family.durations[stage as usize])
+            .sum::<Duration>();
+            assert!(frame.family.durations[Stage::PreparePrograms as usize] >= children);
+            assert_eq!(frame.family.counts[Count::PositionPrograms as usize], 1);
+            assert_eq!(
+                frame.family.counts[Count::PositionEmptyPrograms as usize],
+                1
+            );
+            assert_eq!(frame.family.counts[Count::PositionSamples as usize], 0);
+            assert_eq!(
+                frame.family.counts[Count::PositionRequirementsOnly as usize],
+                0
+            );
+        }
+    }
+
+    #[test]
     fn counters_are_fixed_size_and_saturating() {
         install();
         ACTIVE.with(|active| {
@@ -250,7 +333,12 @@ mod tests {
     #[test]
     fn late_span_cannot_contaminate_replacement_frame() {
         install();
-        let old = Span::begin(Stage::StaticDiscovery);
+        let old = [
+            Span::begin(Stage::StaticDiscovery),
+            Span::begin(Stage::ProgramInput),
+            Span::begin(Stage::PositionCapture),
+            Span::begin(Stage::PositionTracking),
+        ];
         install();
         drop(old);
         let frame = ACTIVE.with(|a| a.borrow_mut().take()).unwrap();

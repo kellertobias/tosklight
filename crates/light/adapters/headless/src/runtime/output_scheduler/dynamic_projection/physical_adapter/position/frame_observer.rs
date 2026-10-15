@@ -2,6 +2,8 @@
 //! the frame's Position programs from it.
 
 use super::*;
+use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
+use diagnostics::{Count, Stage};
 
 pub(in crate::runtime) struct PendingPosition {
     pub(super) target: FixtureId,
@@ -180,6 +182,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         frame: HybridFrameContext<'_>,
         programs: &[super::super::super::programming_projection::hybrid::HybridFamilyProgram<'_>],
     ) -> Result<(), TransitionError> {
+        let capture_span = diagnostics::Span::begin(Stage::PositionCapture);
         self.programs.clear();
         self.program_index.clear();
         let mut active_programs = Vec::new();
@@ -187,6 +190,21 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             .iter()
             .filter(|p| p.owner == ProgrammingOwner::Position)
             .collect::<Vec<_>>();
+        // Submitted Position rows, including static and requirements-only rows. The two
+        // latter counts overlap deliberately; these are not successful-output counts.
+        diagnostics::count(Count::PositionPrograms, position.len());
+        diagnostics::count_with(Count::PositionSamples, || {
+            position.iter().map(|p| p.samples.len()).sum()
+        });
+        diagnostics::count_with(Count::PositionEmptyPrograms, || {
+            position.iter().filter(|p| p.samples.is_empty()).count()
+        });
+        diagnostics::count_with(Count::PositionRequirementsOnly, || {
+            position
+                .iter()
+                .filter(|p| p.samples.is_empty() && p.has_requirements)
+                .count()
+        });
         let captured = capture_programs(frame.token, &position, self.pool.as_deref());
         // TL-596: a set for the duplicate check; scanning every earlier program was quadratic.
         let mut seen = rustc_hash::FxHashSet::default();
@@ -211,6 +229,8 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             });
         }
         self.active_programs = active_programs.into();
+        drop(capture_span);
+        let _tracking_span = diagnostics::Span::begin(Stage::PositionTracking);
         let snapshot = frame.capture.snapshot();
         self.roots.clear();
         for (index, fixture) in snapshot.fixtures.iter().enumerate() {

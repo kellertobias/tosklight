@@ -580,6 +580,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         .map_err(invalid)?;
     drop(current_span);
     let programs_span = diagnostics::Span::begin(Stage::PreparePrograms);
+    let program_input_span = diagnostics::Span::begin(Stage::ProgramInput);
     let programs = groups
         .iter()
         .filter_map(|entry| {
@@ -596,10 +597,13 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
                 })
         })
         .collect::<Vec<_>>();
+    drop(program_input_span);
     observer
         .prepare_programs(view.frame, &programs)
         .map_err(invalid)?;
     drop(programs_span);
+    // PreparePrograms includes ProgramInput plus the Position observer's disjoint
+    // PositionCapture/PositionTracking spans. Any dispatch remainder stays in the parent.
     // These children are disjoint wall spans within CohortSetup. Eligibility discovery and
     // instrumentation overhead remain in that parent; never add child time to the parent.
     let eligible_position_groups = eligible_position_groups(view, groups, static_only);

@@ -158,9 +158,12 @@ impl Drop for Scope {
             family_input_assembly_micros = frame.family.micros(family_preparation::Stage::InputAssembly),
             family_prepare_current_micros = frame.family.micros(family_preparation::Stage::PrepareCurrent),
             family_prepare_programs_micros = frame.family.micros(family_preparation::Stage::PreparePrograms),
-            // Schema 2 appends four child calls after the original 14 stage indices.
-            // Counter indices and the sampler's opt-in, interval and limit are unchanged.
-            family_diagnostics_schema = 2u8,
+            family_program_input_micros = frame.family.micros(family_preparation::Stage::ProgramInput),
+            family_position_capture_micros = frame.family.micros(family_preparation::Stage::PositionCapture),
+            family_position_tracking_micros = frame.family.micros(family_preparation::Stage::PositionTracking),
+            // Schema 3 appends three children inside PreparePrograms and four submitted-row
+            // counters. Existing indices, opt-in, sample interval and 1024 limit are unchanged.
+            family_diagnostics_schema = 3u8,
             family_stage_calls = ?frame.family.calls,
             family_counts = ?frame.family.counts,
             "bounded live output nested phase sample"
