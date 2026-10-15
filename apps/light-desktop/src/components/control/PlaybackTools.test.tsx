@@ -132,7 +132,11 @@ vi.mock(
 	}),
 );
 vi.mock("../../features/playbackRuntime/PlaybackRuntimeView", () => ({
-	usePlaybackDeskView: () => playbackDesk,
+	usePlaybackDeskView: () =>
+		playbackDesk && {
+			...playbackDesk,
+			resolved_pages: { main: playbackDesk.command_page },
+		},
 	usePlaybackRuntimeActions: () => runtimeActions,
 	usePlaybackRuntimeStatus: () => ({ status: runtimeStatus, error: null }),
 }));
@@ -337,7 +341,7 @@ describe("PlaybackTools", () => {
 		await waitFor(() =>
 			expect(topologyActions.createPage).toHaveBeenCalledWith(2),
 		);
-		expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2);
+		expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2, "main");
 		expect(dispatch).not.toHaveBeenCalledWith({
 			type: "SET_PLAYBACK_PAGE",
 			page: 1,
@@ -397,7 +401,7 @@ describe("PlaybackTools", () => {
 		await waitFor(() =>
 			expect(topologyActions.createPage).toHaveBeenCalledWith(2),
 		);
-		expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2);
+		expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2, "main");
 	});
 
 	it("opens page rename with SET then Page and persists the trimmed name", async () => {
@@ -526,7 +530,7 @@ describe("PlaybackTools", () => {
 
 		await act(async () => resolveCreate({}));
 		await waitFor(() =>
-			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2),
+			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2, "main"),
 		);
 		await waitFor(() => expect(dialog).not.toBeInTheDocument());
 	});
@@ -716,7 +720,7 @@ describe("PlaybackTools", () => {
 			expect(topologyActions.createPage).toHaveBeenCalledWith(1),
 		);
 		await waitFor(() =>
-			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(1),
+			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(1, "main"),
 		);
 		expect(screen.queryByRole("dialog", { name: "Playback pages" })).toBeNull();
 	});
@@ -742,7 +746,7 @@ describe("PlaybackTools", () => {
 			),
 		);
 		await waitFor(() =>
-			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2),
+			expect(runtimeActions.setActivePage).toHaveBeenCalledWith(2, "main"),
 		);
 		expect(topologyActions.createPage).not.toHaveBeenCalled();
 	});

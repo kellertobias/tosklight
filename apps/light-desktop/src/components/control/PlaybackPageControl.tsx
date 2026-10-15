@@ -54,6 +54,7 @@ export function PlaybackPageControl() {
 				</Button>
 			</div>
 			<PlaybackPageMenu
+				surfaceId="main"
 				open={page.pagePickerOpen}
 				initialFailure={page.pageFailure}
 				onClose={page.closeMenu}

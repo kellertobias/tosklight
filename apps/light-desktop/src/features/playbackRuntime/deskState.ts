@@ -46,14 +46,19 @@ export class PlaybackDeskState {
 		return this.render();
 	}
 
-	begin(page: number) {
-		if (!this.authoritative) return null;
+	begin(page: number, surfaceId = this.authoritative?.selected_surface_id) {
+		if (
+			!this.authoritative ||
+			!surfaceId ||
+			!Object.hasOwn(this.authoritative.resolved_pages, surfaceId)
+		)
+			return null;
 		const operation = {
 			token: crypto.randomUUID(),
 			baseSequence: this.sequence,
 			order: ++this.order,
 			page,
-			surfaceId: this.authoritative.selected_surface_id,
+			surfaceId,
 		};
 		this.operations.set(operation.token, operation);
 		this.latestToken = operation.token;

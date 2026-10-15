@@ -47,7 +47,7 @@ export interface CueListRuntimeSource {
 }
 
 export interface PlaybackRuntimeActions {
-	setActivePage(page: number): Promise<boolean>;
+	setActivePage(page: number, surfaceId?: string): Promise<boolean>;
 	playbackAction(
 		address: { page: number; position: number },
 		action: PlaybackControlAction,
@@ -96,10 +96,10 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		this.stopped = true;
 	}
 
-	async setActivePage(page: number) {
+	async setActivePage(page: number, surfaceId?: string) {
 		try {
 			assertPlaybackPage(page);
-			return await this.setActivePageNow(page);
+			return await this.setActivePageNow(page, surfaceId);
 		} catch (reason) {
 			this.rejectSetup(reason);
 			return false;
@@ -161,15 +161,16 @@ export class PlaybackRuntimeActionWriter implements PlaybackRuntimeActions {
 		}
 	}
 
-	private async setActivePageNow(page: number) {
+	private async setActivePageNow(page: number, requestedSurface?: string) {
 		if (!this.options.applyDeskPage)
 			throw new Error("Playback desk page actions are unavailable");
 		const scope = this.options.store.captureScope();
 		if (!this.isCurrent(scope)) return false;
 		const surfaceId =
+			requestedSurface ??
 			this.options.store.getSnapshot().desk?.selected_surface_id;
 		if (!surfaceId) throw new Error("Selected Playback surface is loading");
-		const token = this.options.store.beginOptimisticPage(page);
+		const token = this.options.store.beginOptimisticPage(page, surfaceId);
 		if (!token) throw new Error("Authoritative Playback desk is loading");
 		try {
 			const outcome = await this.options.applyDeskPage(

@@ -23,7 +23,10 @@ export function usePlaybackPageControl() {
 	const [pagePickerOpen, setPagePickerOpen] = useState(false);
 	const [renamePage, setRenamePage] = useState<PlaybackPageObject | null>(null);
 	const runtimeReady = runtimeStatus.status === "ready";
-	const activePageNumber = runtimeReady ? (desk?.command_page ?? null) : null;
+	// These controls belong to Main; typed commands still use the selected surface.
+	const activePageNumber = runtimeReady
+		? (desk?.resolved_pages.main ?? null)
+		: null;
 	const activePage = topology.pages.find(
 		(page) => page.body.number === activePageNumber,
 	);
@@ -66,7 +69,7 @@ export function usePlaybackPageControl() {
 		const setActivePage = runtimeActions?.setActivePage;
 		const token = ready && setActivePage ? operation.begin("select") : null;
 		if (token == null || !setActivePage) return;
-		const selected = await setActivePage(target);
+		const selected = await setActivePage(target, "main");
 		if (!operation.complete(token, selected ? null : selectionFailure(target)))
 			return;
 		if (!selected) setPagePickerOpen(true);
@@ -88,7 +91,7 @@ export function usePlaybackPageControl() {
 			if (!created)
 				return finishFailedCreate(operation, token, target, setPagePickerOpen);
 		}
-		const selected = await setActivePage(target);
+		const selected = await setActivePage(target, "main");
 		if (!operation.complete(token, selected ? null : selectionFailure(target)))
 			return;
 		if (!selected) setPagePickerOpen(true);

@@ -264,8 +264,8 @@ export class PlaybackRuntimeStore {
 		if (nextError !== this.state.error) this.publish({ error: nextError });
 	}
 
-	beginOptimisticPage(page: number) {
-		const operation = this.deskState.begin(page);
+	beginOptimisticPage(page: number, surfaceId?: string) {
+		const operation = this.deskState.begin(page, surfaceId);
 		if (!operation) return null;
 		this.publish({ desk: operation.desk, error: this.actionError(null) });
 		return operation.token;

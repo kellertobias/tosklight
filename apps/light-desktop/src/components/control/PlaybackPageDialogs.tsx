@@ -54,15 +54,27 @@ export function canAdvancePlaybackPage(
 	);
 }
 
+function selectSurfacePage(
+	setActivePage: (page: number, surfaceId?: string) => Promise<boolean>,
+	page: number,
+	surfaceId?: string,
+) {
+	return surfaceId ? setActivePage(page, surfaceId) : setActivePage(page);
+}
+
+interface PlaybackPageMenuProps {
+	open: boolean;
+	onClose: () => void;
+	initialFailure?: string | null;
+	surfaceId?: string;
+}
+
 export function PlaybackPageMenu({
 	open,
 	onClose,
 	initialFailure = null,
-}: {
-	open: boolean;
-	onClose: () => void;
-	initialFailure?: string | null;
-}) {
+	surfaceId,
+}: PlaybackPageMenuProps) {
 	const topology = usePlaybackPagesView(open);
 	const topologyActions = usePlaybackTopologyActions();
 	const runtimeActions = usePlaybackRuntimeActions();
@@ -114,7 +126,7 @@ export function PlaybackPageMenu({
 		const setActivePage = runtimeActions?.setActivePage;
 		const token = ready && setActivePage ? operation.begin("select") : null;
 		if (token == null || !setActivePage) return;
-		const selected = await setActivePage(number);
+		const selected = await selectSurfacePage(setActivePage, number, surfaceId);
 		operation.complete(
 			token,
 			selected ? null : `Playback Page ${number} could not be selected.`,
@@ -132,13 +144,18 @@ export function PlaybackPageMenu({
 			return;
 		const outcome = await createPage(nextNumber);
 		if (!operation.isCurrent(token)) return;
-		const selected = outcome ? await setActivePage(nextNumber) : false;
+		const selected = outcome
+			? await selectSurfacePage(setActivePage, nextNumber, surfaceId)
+			: false;
 		const failure = outcome
 			? `Playback Page ${nextNumber} could not be selected.`
 			: `Playback Page ${nextNumber} could not be created.`;
 		operation.complete(token, selected ? null : failure);
 		if (selected) onClose();
 	};
+	const activePageNumber = surfaceId
+		? playbackDesk?.resolved_pages[surfaceId]
+		: playbackDesk?.command_page;
 	return createPortal(
 		<ModalRegistration onClose={requestClose}>
 			<div
@@ -180,7 +197,7 @@ export function PlaybackPageMenu({
 						<p role="status">Selecting Playback page…</p>
 					)}
 					<PlaybackPageRows
-						activePage={playbackDesk?.command_page ?? null}
+						activePage={activePageNumber ?? null}
 						busy={operation.busy}
 						pageObjects={pageObjects}
 						ready={ready}
