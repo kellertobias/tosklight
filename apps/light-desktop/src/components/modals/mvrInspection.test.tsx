@@ -574,3 +574,29 @@ describe("MVR source-UUID conflict authority", () => {
 		} }));
 	});
 });
+
+
+it("renders each address-conflict entry once without collapsing equal fixture warnings", () => {
+	const repeatedConflict = "Repeated name conflicts at universe 50 address 101-111";
+	const otherConflict = "Other source conflicts at universe 50 address 151-161";
+	const normalWarning = "Secondary break remains unpatched";
+	const model = presentationModel({ mvrPreview: {
+		...preview,
+		fixtures: ["fixture-a", "fixture-b", "fixture-c"].map((uuid, index) => ({
+			uuid, name: index < 2 ? "Repeated name" : "Other source",
+			gdtf_spec: "Rig.gdtf", gdtf_mode: "Mode", matched: true,
+			universe: 50, address: index < 2 ? 101 : 151,
+		})),
+		// These equal strings represent two different actual fixture conflicts.
+		address_conflict_fixture_ids: ["fixture-a", "fixture-b", "fixture-c"],
+		address_conflicts: [repeatedConflict, repeatedConflict, otherConflict],
+		warnings: [repeatedConflict, repeatedConflict, otherConflict, normalWarning, normalWarning],
+		missing_profiles: ["Missing profile.gdtf Mode 1"],
+	} });
+	render(<MvrImportPreview model={model} />);
+	fireEvent.click(screen.getByText("All import warnings and limitations (6)"));
+	expect(screen.getAllByText(repeatedConflict)).toHaveLength(2);
+	expect(screen.getAllByText(otherConflict)).toHaveLength(1);
+	expect(screen.getAllByText(normalWarning)).toHaveLength(2);
+	expect(screen.getByText("Missing profile: Missing profile.gdtf Mode 1")).toBeVisible();
+});

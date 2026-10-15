@@ -67,8 +67,12 @@ export function MvrRequiredDecisions({ model }: { model: QuickSetupModel }) {
 export function MvrImportLimitations({ model }: { model: QuickSetupModel }) {
 	const preview = model.mvr.mvrPreview;
 	if (!preview) return null;
+	// The legacy warnings list also contains address-conflict messages. Keep every
+	// structured conflict row, including equal text for distinct fixtures, only once.
+	const addressMessages = new Set(preview.address_conflicts);
+	const warnings = preview.warnings.filter((message) => !addressMessages.has(message));
 	const count =
-		preview.warnings.length +
+		warnings.length +
 		preview.address_conflicts.length +
 		preview.missing_profiles.length;
 	if (!count) return null;
@@ -90,7 +94,7 @@ export function MvrImportLimitations({ model }: { model: QuickSetupModel }) {
 					{preview.address_conflicts.map((message, index) => (
 						<li key={`address-${index}-${message}`}>{message}</li>
 					))}
-					{preview.warnings.map((message, index) => (
+					{warnings.map((message, index) => (
 						<li key={`warning-${index}-${message}`}>{message}</li>
 					))}
 				</ul>
