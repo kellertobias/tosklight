@@ -1,3 +1,4 @@
+import type { CommandPoolTapProjection } from "../../api/types";
 import { commandTargetAfterEnter } from "../../controlSurface/commandTarget";
 import type { CommandLineExecutionResult } from "./commandLineWriter";
 import type { CommandLinePatch, CommandTarget } from "./contracts";
@@ -12,6 +13,7 @@ export interface CommandExecutionRequest {
 	command: string;
 	target: CommandTarget;
 	pristine: boolean;
+	pool_tap?: CommandPoolTapProjection;
 }
 
 /** The one injected command-execution dependency of the command-line surface. */
@@ -55,7 +57,10 @@ export function createCommandLineExecution({
 	executeAfterPendingWrites: ExecuteAfterPendingWrites;
 	execute: ExecuteCommandLine | undefined;
 }) {
-	return async (value?: string): Promise<CommandExecutionOutcome> => {
+	return async (
+		value?: string,
+		poolTap?: CommandPoolTapProjection,
+	): Promise<CommandExecutionOutcome> => {
 		if (!execute) return REFUSED;
 		const scope = store.captureScope();
 		const current = store.getSnapshot().commandLine;
@@ -67,7 +72,12 @@ export function createCommandLineExecution({
 			commandTargetAfterEnter(command, current.target, pristine) ??
 			current.target;
 		const result = await executeAfterPendingWrites(
-			() => execute({ command, target: current.target, pristine }),
+			() => execute({
+				command,
+				target: current.target,
+				pristine,
+				...(poolTap ? { pool_tap: poolTap } : {}),
+			}),
 			{
 				text: resetTarget,
 				target: resetTarget,

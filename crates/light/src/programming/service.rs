@@ -546,7 +546,8 @@ impl ProgrammingService {
         // runs inside a scope where the desk drops command-line writes.
         let suppressed = (origin == CommandOrigin::Detached)
             .then(|| self.programmers.suppress_command_line_writes());
-        let outcome = ports.execute(&self.programmers, context, command, policy);
+        let outcome =
+            ports.execute_with_origin(&self.programmers, context, command, policy, origin);
         drop(suppressed);
         let replayed = matches!(
             &outcome,
@@ -564,7 +565,7 @@ impl ProgrammingService {
         // A detached command — a Macro line, whoever pressed the button that started it — reaches
         // the Programmer with the current selection but never writes the shared command line the
         // operator may be typing into.
-        if !replayed && origin == CommandOrigin::CommandLine {
+        if !replayed && origin != CommandOrigin::Detached {
             self.programmers
                 .complete_command_execution(session, final_text, pending_choice)
                 .ok_or_else(unknown_programmer)?;

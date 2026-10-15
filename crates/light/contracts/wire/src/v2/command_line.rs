@@ -45,9 +45,19 @@ pub enum CommandGestureKind {
     Hold,
 }
 
+/// Operator pool identity which completed an otherwise ordinary shared command.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CommandPoolTapProjection {
+    Dynamic { pool_number: u16 },
+}
+
 /// Executes either the desk's current command line or an explicitly supplied complete line.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct ExecuteCommandLineRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pool_tap: Option<CommandPoolTapProjection>,
     #[serde(default)]
     #[ts(optional = nullable)]
     pub command: Option<String>,

@@ -182,6 +182,7 @@ export function DynamicsWindow({
 						current.pristine,
 						dynamic.body.pool_number,
 					),
+					{ type: "dynamic", pool_number: dynamic.body.pool_number },
 				);
 			}}
 			onCreate={create}

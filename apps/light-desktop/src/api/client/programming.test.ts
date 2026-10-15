@@ -98,6 +98,19 @@ describe("ProgrammingApiClient v2 interaction boundary", () => {
 		);
 	});
 
+	it("forwards optional Dynamic pool provenance on the existing command action only", async () => {
+		const { client, sendAction } = clientReturning({ accepted: true });
+		await client.executeCommandLine("DYNAMIC 1", { type: "dynamic", pool_number: 1 });
+		expect(sendAction.mock.calls[0]?.[0]).toEqual({
+			type: "command_line_execute",
+			request: { value: "DYNAMIC 1", pool_tap: { type: "dynamic", pool_number: 1 } },
+		});
+		await client.executeCommandLine("DYNAMIC 1");
+		expect(sendAction.mock.calls[1]?.[0]).toEqual({
+			type: "command_line_execute", request: { value: "DYNAMIC 1" },
+		});
+	});
+
 	it("sends one correlated Programmer values command frame", async () => {
 		const response = {
 			request_id: "values-1",

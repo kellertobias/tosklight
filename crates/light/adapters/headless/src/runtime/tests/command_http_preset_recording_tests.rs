@@ -273,7 +273,7 @@ async fn websocket_preset_request_replay_skips_interaction_side_effects() {
             &scenario.session,
             "preset-ws-replay",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "RECORD 0.10".into(),
                 },
             ),
@@ -438,7 +438,7 @@ async fn websocket_explicit_plus_color_preset_merges_without_losing_unrelated_va
     assert_eq!(scenario.state.programming.get(scenario.session.id).unwrap().values.iter().find(|value| value.fixture_id == first && value.attribute == attribute).unwrap().value, green);
     let command = live_action_frame(&scenario.session, "explicit-preset-plus",
         light_wire::v2::live_action::LiveAction::CommandLineExecute(
-            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { value:"RECORD + 2.721".into() }
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None, value:"RECORD + 2.721".into() }
         ));
     let outcome = dispatch_live_action(&scenario.state, &scenario.session, command);
     assert!(outcome.ok, "{:?}", outcome.error);

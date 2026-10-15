@@ -1,10 +1,9 @@
 use super::*;
 
-pub(in crate::runtime) fn copy_dynamic_command(
-    state: &AppState,
+/// Parse before any show or Programmer mutation; pool-tap provenance shares this grammar.
+pub(in crate::runtime) fn parse_dynamic_copy_address(
     tokens: &[String],
-    context: &light_application::ActionContext,
-) -> Result<usize, String> {
+) -> Result<(u16, u16), String> {
     let [source_kind, source, at, destination_kind, destination] = tokens else {
         return Err("expected COPY DYNAMIC <source> AT DYNAMIC <destination>".into());
     };
@@ -20,6 +19,15 @@ pub(in crate::runtime) fn copy_dynamic_command(
     };
     let source = pool_number(source)?;
     let destination = pool_number(destination)?;
+    Ok((source, destination))
+}
+
+pub(in crate::runtime) fn copy_dynamic_command(
+    state: &AppState,
+    tokens: &[String],
+    context: &light_application::ActionContext,
+) -> Result<usize, String> {
+    let (source, destination) = parse_dynamic_copy_address(tokens)?;
     let entry = state.active_show.current().ok_or("no show is open")?;
     let (_, objects) = ActiveShowRepository::open(&entry.path)
         .map_err(|error| error.to_string())?

@@ -6,6 +6,7 @@ pub(super) fn execute_dynamic_command(
     tokens: &[String],
     timing: CommandTiming,
     context: &light_application::ActionContext,
+    pool_tap: Option<u16>,
 ) -> Result<super::ProgrammerCommandExecution, String> {
     let dynamic_index = tokens
         .iter()
@@ -63,7 +64,14 @@ pub(super) fn execute_dynamic_command(
             if explicit_controller.is_some() {
                 return Err("Dynamic INSTANCE requires OFF, SIZE, SPEED, or PHASE".into());
             }
-            if command_controller_candidates(state, session, definition.id, &targets)?.is_empty() {
+            if pool_tap == Some(number) {
+                state
+                    .dynamics
+                    .toggle(context, command, &ports)
+                    .map_err(|error| error.message)?;
+            } else if command_controller_candidates(state, session, definition.id, &targets)?
+                .is_empty()
+            {
                 state
                     .dynamics
                     .start(context, command, &ports)

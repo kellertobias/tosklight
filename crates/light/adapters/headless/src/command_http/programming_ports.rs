@@ -1,4 +1,4 @@
-use super::adapter::{ExistingCommandOutcome, ExistingCommandPolicy, execute_existing_command};
+use super::adapter::{ExistingCommandOutcome, ExistingCommandPolicy};
 use super::events::persist_with_warning;
 use light_application::{
     ActionContext, ActionEnvelope, ActionError, ActionErrorKind, ExecutionPolicy,
@@ -573,6 +573,32 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
         command: &str,
         policy: ExecutionPolicy,
     ) -> ProgrammingExecution {
+        self.execute_with_origin(
+            programmers,
+            context,
+            command,
+            policy,
+            light_application::CommandOrigin::CommandLine,
+        )
+    }
+
+    fn execute_with_origin(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        command: &str,
+        policy: ExecutionPolicy,
+        origin: light_application::CommandOrigin,
+    ) -> ProgrammingExecution {
+        let pool_tap = match origin {
+            light_application::CommandOrigin::DynamicPoolTap { pool_number } => Some(pool_number),
+            _ => None,
+        };
+        if let Err(error) =
+            super::super::programmer_commands::validate_dynamic_pool_tap(command, pool_tap)
+        {
+            return ProgrammingExecution::Rejected { error };
+        }
         if let Some(outcome) = self.record_typed_command(programmers, context, command, policy) {
             return outcome;
         }
@@ -585,13 +611,14 @@ impl ProgrammingPorts for ServerProgrammingPorts<'_> {
             }
             ExecutionPolicy::Compatibility => ExistingCommandPolicy::Compatibility,
         };
-        match execute_existing_command(
+        match super::adapter::execute_existing_command_with_pool_tap(
             self.state,
             self.session,
             command,
             self.source,
             context,
             policy,
+            pool_tap,
         ) {
             ExistingCommandOutcome::Accepted {
                 applied,

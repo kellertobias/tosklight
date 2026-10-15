@@ -75,7 +75,9 @@ export function createCommandLineActions(
 					await persistCommandLine(nextTarget);
 					return true;
 				}
-				const result = (await api.programming.executeCommandLine(value)) as
+				const result = (await (interaction?.pool_tap
+					? api.programming.executeCommandLine(value, interaction.pool_tap)
+					: api.programming.executeCommandLine(value))) as
 					| {
 							programmer?: {
 								selected?: string[];

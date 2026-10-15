@@ -151,7 +151,9 @@ async fn execute_command_line(
     show: ShowContext,
     desk: DeskContext,
     headers: HeaderMap,
-    Json(input): Json<ExecuteCommandLineRequest>,
+    crate::tolerant_json::TolerantJson(input): crate::tolerant_json::TolerantJson<
+        ExecuteCommandLineRequest,
+    >,
 ) -> Result<Response, ApiError> {
     validate_request_id(&input.request_id)?;
     if let Some(command) = &input.command {
@@ -167,8 +169,17 @@ async fn execute_command_line(
         context,
         ProgrammingCommand::Execute {
             command: input.command.clone(),
-            policy: ExecutionPolicy::AtomicProgrammer,
-            origin: CommandOrigin::CommandLine,
+            policy: if input.pool_tap.is_some() {
+                ExecutionPolicy::Compatibility
+            } else {
+                ExecutionPolicy::AtomicProgrammer
+            },
+            origin: match input.pool_tap {
+                Some(light_wire::v2::command_line::CommandPoolTapProjection::Dynamic {
+                    pool_number,
+                }) => CommandOrigin::DynamicPoolTap { pool_number },
+                None => CommandOrigin::CommandLine,
+            },
         },
     )?;
     if let Some(warning) = publish_service_result(

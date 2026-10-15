@@ -689,6 +689,7 @@ fn command_line(config: &Config) -> Vec<String> {
         ReplaceCommandLineRequest::decl(config),
         CommandKeyRequest::decl(config),
         ExecuteCommandLineRequest::decl(config),
+        CommandPoolTapProjection::decl(config),
         CommandLineResponse::decl(config),
         CommandOperationOutcome::decl(config),
         CommandOperationResponse::decl(config),

@@ -31,7 +31,7 @@ interface SurfaceHandle {
 	target: string;
 	replace(value: string): Promise<boolean>;
 	reset(): Promise<boolean>;
-	execute(value?: string): Promise<boolean>;
+	execute(value?: string, poolTap?: { type: "dynamic"; pool_number: number }): Promise<boolean>;
 	cancelChoice(): Promise<boolean>;
 }
 
@@ -202,7 +202,7 @@ describe("scoped command-line execution", () => {
 		expect(executeCommand).not.toHaveBeenCalled();
 	});
 
-	it("settles a pending edit before Enter executes", async () => {
+	it("settles a pending edit before executing a provenance-bearing Dynamic pool tap", async () => {
 		const { store, transport } = scope();
 		const order: string[] = [];
 		const write = deferred<CommandLineProjection>();
@@ -236,7 +236,7 @@ describe("scoped command-line execution", () => {
 		let executed!: Promise<boolean>;
 		act(() => {
 			void surface?.replace("FIXTURE 1");
-			executed = surface?.execute() as Promise<boolean>;
+			executed = surface?.execute("DYNAMIC 1", { type: "dynamic", pool_number: 1 }) as Promise<boolean>;
 		});
 		await waitFor(() => expect(replaceCommandLine).toHaveBeenCalledOnce());
 		expect(executeCommand).not.toHaveBeenCalled();
@@ -247,7 +247,8 @@ describe("scoped command-line execution", () => {
 		});
 		expect(order).toEqual(["replace", "execute"]);
 		expect(executeCommand).toHaveBeenCalledWith({
-			command: "FIXTURE 1",
+			command: "DYNAMIC 1",
+			pool_tap: { type: "dynamic", pool_number: 1 },
 			target: "FIXTURE",
 			pristine: false,
 		});
@@ -424,7 +425,7 @@ describe("scoped command-line execution", () => {
 		expect(store.getSnapshot().commandLine).toEqual(commandLine(3));
 	});
 
-	it("drops a late completion after the active show is replaced", async () => {
+	it.each([false, true])("drops a late completion after the active show is replaced (pool tap: %s)", async (poolTap) => {
 		const { store, transport } = scope();
 		const executed = deferred<boolean>();
 		const loadSnapshot = vi
@@ -451,7 +452,7 @@ describe("scoped command-line execution", () => {
 
 		let running!: Promise<boolean>;
 		act(() => {
-			running = surface?.execute("FIXTURE 1") as Promise<boolean>;
+			running = surface?.execute("FIXTURE 1", poolTap ? { type: "dynamic", pool_number: 1 } : undefined) as Promise<boolean>;
 		});
 
 		rendered.rerender(
@@ -477,6 +478,31 @@ describe("scoped command-line execution", () => {
 		expect(store.getSnapshot().commandLine).toEqual(
 			commandLine(9, "GROUP", "GROUP"),
 		);
+	});
+
+	it("suppresses a Dynamic pool action when scope changes while its write barrier is pending", async () => {
+		const { store, transport } = scope();
+		const write = deferred<CommandLineProjection>();
+		const replaceCommandLine = vi.fn(() => write.promise);
+		const executeCommand = vi.fn(async () => true);
+		const loadSnapshot = vi.fn(async () => programmingSnapshot());
+		const props = { store, transport, replaceCommandLine, executeCommand, loadSnapshot };
+		const rendered = render(view(props));
+		await waitFor(() => expect(surface?.ready).toBe(true));
+		let running!: Promise<boolean>;
+		act(() => {
+			void surface?.replace("GROUP 25");
+			running = surface?.execute("GROUP 25 DYNAMIC 1", {
+				type: "dynamic", pool_number: 1,
+			}) as Promise<boolean>;
+		});
+		await waitFor(() => expect(replaceCommandLine).toHaveBeenCalledOnce());
+		expect(executeCommand).not.toHaveBeenCalled();
+		rendered.rerender(view({ ...props, showId: OTHER_SHOW_ID }));
+		await waitFor(() => expect(store.getSnapshot().showId).toBe(OTHER_SHOW_ID));
+		await act(async () => write.resolve(commandLine(2, "GROUP 25")));
+		await act(async () => { await expect(running).resolves.toBe(false); });
+		expect(executeCommand).not.toHaveBeenCalled();
 	});
 
 	it("does not rerender the command surface for unrelated server updates", async () => {

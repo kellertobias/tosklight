@@ -260,6 +260,7 @@ async fn nested_record_group_refreshes_the_desk_once_without_relocking_it() {
                     "record-group-1",
                     light_wire::v2::live_action::LiveAction::CommandLineExecute(
                         light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                            pool_tap: None,
                             value: "RECORD GROUP 1".into(),
                         },
                     ),

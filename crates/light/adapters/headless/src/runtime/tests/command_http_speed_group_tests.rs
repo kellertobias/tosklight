@@ -196,7 +196,7 @@ async fn typed_programmer_execute_keeps_speed_group_audit_payload_shape() {
 		&scenario.session,
 		"speed-live-action",
 		light_wire::v2::live_action::LiveAction::CommandLineExecute(
-			light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+			light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
 				value: "SPD GRP 2 AT 99,5".into(),
 			},
 		),
@@ -341,7 +341,7 @@ async fn live_command_surface_uses_the_same_playback_speed_group_binding() {
 		&scenario.session,
 		"bind-live-playback",
 		light_wire::v2::live_action::LiveAction::CommandLineExecute(
-			light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+			light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
 				value: "PBK 1 AT SPD GRP 2".into(),
 			},
 		),

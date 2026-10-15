@@ -484,7 +484,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
             &scenario.session,
             "cue-ws-go-to",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "GO TO PBK 2 CUE 3".into(),
                 },
             ),
@@ -518,7 +518,7 @@ async fn command_line_websocket_and_osc_navigation_share_the_typed_action() {
     let collision = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
         &scenario.session, "cue-ws-go-to",
         light_wire::v2::live_action::LiveAction::CommandLineExecute(
-            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                 value: "GO TO PBK 2 CUE 1".into(),
             },
         ),

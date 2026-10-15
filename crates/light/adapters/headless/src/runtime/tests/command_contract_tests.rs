@@ -583,7 +583,7 @@ fn typed_speed_execution_resets_the_authoritative_command_line() {
             &scenario.session,
             "speed-reset",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "SPD GRP 1 AT 120".into(),
                 },
             ),
@@ -628,7 +628,7 @@ fn typed_link_command_stores_the_destination_cue_identity() {
             &scenario.session,
             "link-cue",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: command.clone().into(),
                 },
             ),
@@ -690,7 +690,7 @@ fn selected_link_uses_standalone_uuid_and_preserves_physical_set_target() {
     let linked = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
         &scenario.session, "standalone-link",
         light_wire::v2::live_action::LiveAction::CommandLineExecute(
-            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                 value: "LINK CUE 1 AT CUE 7 DELAY 0.25".into(),
             }),
     ));
@@ -705,7 +705,7 @@ fn selected_link_uses_standalone_uuid_and_preserves_physical_set_target() {
     let rejected = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
         &scenario.session, "physical-link-special",
         light_wire::v2::live_action::LiveAction::CommandLineExecute(
-            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                 value: "LINK SET 1 . 101 CUE 1 AT CUE 7".into(),
             }),
     ));

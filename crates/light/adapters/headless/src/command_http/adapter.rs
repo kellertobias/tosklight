@@ -200,6 +200,23 @@ pub(crate) fn execute_existing_command(
     context: &ActionContext,
     policy: ExistingCommandPolicy,
 ) -> ExistingCommandOutcome {
+    execute_existing_command_with_pool_tap(state, session, command, source, context, policy, None)
+}
+
+pub(crate) fn execute_existing_command_with_pool_tap(
+    state: &AppState,
+    session: &Session,
+    command: &str,
+    source: &str,
+    context: &ActionContext,
+    policy: ExistingCommandPolicy,
+    pool_tap: Option<u16>,
+) -> ExistingCommandOutcome {
+    if let Err(error) =
+        super::super::programmer_commands::validate_dynamic_pool_tap(command, pool_tap)
+    {
+        return ExistingCommandOutcome::Rejected { error };
+    }
     let request_id = context.request_id.as_deref();
     match object_command(command) {
         Ok(Some(object_command)) => {
@@ -244,7 +261,7 @@ pub(crate) fn execute_existing_command(
         );
         return ExistingCommandOutcome::Rejected { error };
     }
-    let result = execute_with_policy(state, session, command, context, policy);
+    let result = execute_with_policy(state, session, command, context, policy, pool_tap);
     finish_existing_command(state, session, command, source, request_id, result)
 }
 
@@ -531,6 +548,7 @@ fn execute_with_policy(
     command: &str,
     context: &ActionContext,
     policy: ExistingCommandPolicy,
+    pool_tap: Option<u16>,
 ) -> Result<super::super::ProgrammerCommandExecution, String> {
     let policy = if matches!(policy, ExistingCommandPolicy::AtomicProgrammer)
         && matches!(
@@ -547,9 +565,10 @@ fn execute_with_policy(
     match policy {
         ExistingCommandPolicy::Compatibility => {
             // Reconciliation must not run while the desk's mutation gate is held.
-            let outcome = super::super::execute_programmer_command_effect_from(
-                state, session, command, context,
-            )?;
+            let outcome =
+                super::super::programmer_commands::execute_programmer_command_with_pool_tap(
+                    state, session, command, context, pool_tap,
+                )?;
             if matches!(
                 &outcome,
                 super::super::ProgrammerCommandExecution::Applied(_)
@@ -562,7 +581,14 @@ fn execute_with_policy(
             state
                 .programming
                 .with_staged_command(session.id, |staged_programmers| {
-                    execute_staged(state, session, command, context, staged_programmers)
+                    execute_staged(
+                        state,
+                        session,
+                        command,
+                        context,
+                        staged_programmers,
+                        pool_tap,
+                    )
                 })
         }
     }
@@ -574,16 +600,18 @@ fn execute_staged(
     command: &str,
     context: &ActionContext,
     staged_programmers: &ProgrammingResource,
+    pool_tap: Option<u16>,
 ) -> Result<super::super::ProgrammerCommandExecution, String> {
     let mut staged_state = state.clone();
     staged_state.programming = staged_programmers.clone();
     staged_state.dynamics =
         light_application::DynamicsService::new(staged_programmers.programmers());
-    let outcome = super::super::execute_programmer_command_effect_from(
+    let outcome = super::super::programmer_commands::execute_programmer_command_with_pool_tap(
         &staged_state,
         session,
         command,
         context,
+        pool_tap,
     )?;
     if matches!(
         &outcome,

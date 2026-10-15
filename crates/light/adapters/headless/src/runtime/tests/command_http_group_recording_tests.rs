@@ -626,7 +626,7 @@ async fn command_keyboard_osc_and_websocket_group_recording_converge_on_typed_ca
             &scenario.session,
             "group-ws",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "RECORD GROUP 14".into(),
                 },
             ),
@@ -667,7 +667,7 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
             &scenario.session,
             "group-ws-replay",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "RECORD GROUP 15".into(),
                 },
             ),
@@ -692,7 +692,7 @@ async fn websocket_group_request_replay_skips_history_persistence_and_events() {
     let collision = dispatch_live_action(&scenario.state, &scenario.session, live_action_frame(
         &scenario.session, "group-ws-replay",
         light_wire::v2::live_action::LiveAction::CommandLineExecute(
-            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+            light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                 value: "RECORD GROUP 16".into(),
             },
         ),

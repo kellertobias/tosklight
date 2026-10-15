@@ -79,8 +79,12 @@ function PresetRecallBoundary({
 
 function useCommandExecution(value: ServerCapabilities) {
 	return useCallback(
-		({ command, target, pristine }: CommandExecutionRequest) =>
-			value.executeCommandLine(command, { target, pristine }),
+		({ command, target, pristine, pool_tap }: CommandExecutionRequest) =>
+			value.executeCommandLine(command, {
+				target,
+				pristine,
+				...(pool_tap ? { pool_tap } : {}),
+			}),
 		[value.executeCommandLine],
 	);
 }

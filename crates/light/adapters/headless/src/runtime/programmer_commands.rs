@@ -188,6 +188,44 @@ pub(super) fn execute_programmer_command_effect_from(
     command_line: &str,
     context: &light_application::ActionContext,
 ) -> Result<ProgrammerCommandExecution, String> {
+    execute_programmer_command_with_pool_tap(state, session, command_line, context, None)
+}
+
+/// Validate the appended pool address before any selection, object or runtime mutation.
+pub(super) fn validate_dynamic_pool_tap(
+    command: &str,
+    pool_tap: Option<u16>,
+) -> Result<(), String> {
+    let Some(expected) = pool_tap else {
+        return Ok(());
+    };
+    let (tokens, _) = tokenize_programmer_command(command)?;
+    let dynamic_addresses = tokens.iter().filter(|token| *token == "DYNAMIC").count();
+    let addressed = if dynamic_addresses > 1 {
+        if !matches!(tokens.first().map(String::as_str), Some("COPY" | "CPY")) {
+            return Err("ambiguous Dynamic pool tap command target".into());
+        }
+        Some(super::show_object_intents_v2::parse_dynamic_copy_address(&tokens[1..])?.1)
+    } else {
+        tokens
+            .windows(2)
+            .find(|pair| pair[0] == "DYNAMIC")
+            .and_then(|pair| pair[1].parse::<u16>().ok())
+    };
+    if expected == 0 || expected > 9999 || addressed != Some(expected) {
+        return Err("Dynamic pool tap does not match the command target".into());
+    }
+    Ok(())
+}
+
+pub(super) fn execute_programmer_command_with_pool_tap(
+    state: &AppState,
+    session: &Session,
+    command_line: &str,
+    context: &light_application::ActionContext,
+    pool_tap: Option<u16>,
+) -> Result<ProgrammerCommandExecution, String> {
+    validate_dynamic_pool_tap(command_line, pool_tap)?;
     let raw_tokens = command_line.split_whitespace().collect::<Vec<_>>();
     if raw_tokens
         .first()
@@ -272,6 +310,7 @@ pub(super) fn execute_programmer_command_effect_from(
             &tokens,
             programmer_value_timing(state, timing),
             context,
+            pool_tap,
         );
     }
     let applied = match first.as_str() {

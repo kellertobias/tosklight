@@ -373,7 +373,7 @@ async fn multiplexed_websocket_uses_typed_delete_and_emits_one_exact_facade_noti
             &scenario.session,
             "compatibility-cue-delete",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "DELETE PBK 1 . 2 CUE 2".into(),
                 },
             ),

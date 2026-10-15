@@ -122,11 +122,7 @@ pub(super) fn ws_programmer_execute(
     command: &WsActionRequest,
     context: Option<&light_application::ActionContext>,
 ) -> Result<serde_json::Value, String> {
-    #[derive(Deserialize)]
-    struct Input {
-        value: String,
-    }
-    let input: Input =
+    let input: light_wire::v2::live_action::CommandLineExecuteLiveActionRequest =
         serde_json::from_value(command.payload.clone()).map_err(|e| e.to_string())?;
     let context = context.cloned().unwrap_or_else(|| {
         light_application::ActionContext::operator(
@@ -146,7 +142,12 @@ pub(super) fn ws_programmer_execute(
         light_application::ProgrammingCommand::Execute {
             command: Some(input.value.clone()),
             policy,
-            origin: light_application::CommandOrigin::CommandLine,
+            origin: match input.pool_tap {
+                Some(light_wire::v2::command_line::CommandPoolTapProjection::Dynamic {
+                    pool_number,
+                }) => light_application::CommandOrigin::DynamicPoolTap { pool_number },
+                None => light_application::CommandOrigin::CommandLine,
+            },
         },
         "software",
     )

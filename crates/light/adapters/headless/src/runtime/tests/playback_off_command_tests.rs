@@ -183,7 +183,7 @@ async fn tl786_ws_command_and_selected_surface_page_match_explicit_off() {
             &scenario.session,
             "tl786-ws",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "OFF PBK 16".into(),
                 },
             ),

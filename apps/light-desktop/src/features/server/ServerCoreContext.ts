@@ -1,6 +1,7 @@
 import type {
 	BootstrapSnapshot,
 	CommandHistoryEntry,
+	CommandPoolTapProjection,
 	FixtureDefinition,
 	FixtureProfile,
 	HighlightAction,
@@ -69,6 +70,7 @@ export interface ServerCoreContext
 		interaction?: {
 			target: CommandTargetMode;
 			pristine: boolean;
+			pool_tap?: CommandPoolTapProjection;
 		},
 	) => Promise<boolean>;
 	updateControlDesk: (

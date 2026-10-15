@@ -53,6 +53,7 @@ mod cue_thumbnail_route_tests;
 #[path = "discovery_route_tests.rs"]
 mod discovery_route_tests;
 mod dynamic_pool_command_tests;
+mod dynamic_pool_tap_tests;
 #[path = "dynamics_controller_identity_tests.rs"]
 mod dynamics_controller_identity_tests;
 #[path = "engine_selection_refresh_tests.rs"]

@@ -11,11 +11,47 @@
       ],
       "default": null
     },
+    "pool_tap": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CommandPoolTapProjection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "request_id": {
       "type": "string"
     }
   },
   "required": [
     "request_id"
-  ]
+  ],
+  "$defs": {
+    "CommandPoolTapProjection": {
+      "description": "Operator pool identity which completed an otherwise ordinary shared command.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "pool_number": {
+              "type": "integer",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0
+            },
+            "type": {
+              "type": "string",
+              "const": "dynamic"
+            }
+          },
+          "required": [
+            "type",
+            "pool_number"
+          ]
+        }
+      ]
+    }
+  }
 }

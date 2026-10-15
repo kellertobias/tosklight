@@ -138,6 +138,9 @@ pub struct CommandTargetLiveActionRequest {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct CommandLineExecuteLiveActionRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pool_tap: Option<crate::v2::command_line::CommandPoolTapProjection>,
     pub value: String,
 }
 

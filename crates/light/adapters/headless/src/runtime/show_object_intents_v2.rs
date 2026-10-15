@@ -9,8 +9,8 @@ use std::collections::VecDeque;
 mod dynamic_pool_transfer;
 mod replay;
 mod spatial;
-pub(super) use dynamic_pool_transfer::copy_dynamic_command;
 pub(super) use dynamic_pool_transfer::prepare_dynamic_pool_mutation;
+pub(super) use dynamic_pool_transfer::{copy_dynamic_command, parse_dynamic_copy_address};
 
 pub(super) use replay::*;
 use spatial::{decode_spatial_mapping, dynamic_spatial_context, dynamic_spatial_preview};

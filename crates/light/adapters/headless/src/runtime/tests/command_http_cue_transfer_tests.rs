@@ -223,7 +223,7 @@ name: "Legacy color".into(),
                 &scenario.session,
                 request_id,
                 light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                         value: value.into(),
                     },
                 ),

@@ -28,7 +28,7 @@ fn typed_choice_selection_resets_the_authoritative_command_once() {
                 &scenario.session,
                 request_id,
                 light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                         value: value.into(),
                     },
                 ),
@@ -303,7 +303,7 @@ fn verify_pending_cue_transfer_choice(
             &scenario.session,
             "pending-copy",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "COPY CUELIST 1 CUE 2 AT CUELIST 2 CUE 2".into(),
                 },
             ),
@@ -469,7 +469,7 @@ fn dispatch_cue_transfer(
             &scenario.session,
             request_id,
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: value.into(),
                 },
             ),

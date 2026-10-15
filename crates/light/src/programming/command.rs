@@ -12,6 +12,8 @@ pub enum CommandOrigin {
     /// The operator's own command line. Execution clears or restores its visible text.
     #[default]
     CommandLine,
+    /// A physical/software pool target completed the shared command line.
+    DynamicPoolTap { pool_number: u16 },
     /// A Macro line or another automated source. The command reaches the Programmer with the
     /// current selection, but the shared command line the operator is typing into stays untouched.
     Detached,

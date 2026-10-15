@@ -1,3 +1,4 @@
+import type { CommandPoolTapProjection } from "../../../api/types";
 import { useCallback } from "react";
 import type { CommandTarget } from "../../../features/programmingInteraction/contracts";
 import { selectedGroupId, selectedGroupIds } from "../../../features/programmingInteraction/contracts";
@@ -71,9 +72,9 @@ export function useCommandLineSurface({
 		[actions, writable],
 	);
 	const execute = useCallback(
-		async (value?: string) => {
+		async (value?: string, poolTap?: CommandPoolTapProjection) => {
 			if (!writable() || !actions) return false;
-			const outcome = await actions.execute(value);
+			const outcome = await actions.execute(value, poolTap);
 			if (outcome.report === "concurrent_change")
 				reportConcurrentCommandChange();
 			if (outcome.report === "unreconciled") reportUnreconciledCommand();

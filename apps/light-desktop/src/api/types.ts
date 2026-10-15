@@ -9,6 +9,7 @@ import type { GroupSpatialSelectionMapping } from "./generated/light-wire";
 import type { ShowEntry } from "./types/desk";
 
 export type {
+	CommandPoolTapProjection,
 	DynamicActivationPolicyProjection,
 	DynamicDefinitionProjection,
 	DynamicDefinitionStatusProjection,

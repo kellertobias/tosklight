@@ -144,6 +144,23 @@ pub trait ProgrammingPorts: Send + Sync {
         policy: ExecutionPolicy,
     ) -> ProgrammingExecution;
 
+    /// Typed pool provenance remains in the replay envelope; adapters opt in explicitly.
+    fn execute_with_origin(
+        &self,
+        programmers: &ProgrammerRegistry,
+        context: &ActionContext,
+        command: &str,
+        policy: ExecutionPolicy,
+        origin: super::CommandOrigin,
+    ) -> ProgrammingExecution {
+        if matches!(origin, super::CommandOrigin::DynamicPoolTap { .. }) {
+            return ProgrammingExecution::Rejected {
+                error: "pool target execution is unavailable".into(),
+            };
+        }
+        self.execute(programmers, context, command, policy)
+    }
+
     fn selection_environment(
         &self,
         _context: &ActionContext,

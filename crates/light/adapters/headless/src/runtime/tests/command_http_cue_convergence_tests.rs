@@ -106,7 +106,7 @@ async fn command_keyboard_and_websocket_cue_recording_share_the_typed_action() {
             &scenario.session,
             "cue-ws-record",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "RECORD CUELIST 33 CUE 1".into(),
                 },
             ),
@@ -264,7 +264,7 @@ async fn real_osc_assign_touch_selects_current_or_explicit_page_target_and_suppr
             &scenario.session,
             "set-target-map",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "ASSIGN CUELIST 41 AT PBK 4 . 7".into(),
                 },
             ),
@@ -452,7 +452,7 @@ async fn real_osc_off_touch_uses_internal_off_for_current_and_explicit_page_targ
                 &scenario.session,
                 &format!("off-target-map-{playback}"),
                 light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                    light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                         value: format!("ASSIGN CUELIST {playback} AT PBK {page} . 7"),
                     },
                 ),
@@ -664,7 +664,7 @@ async fn osc_copy_move_and_delete_do_not_guess_a_whole_playback_mutation() {
             &scenario.session,
             "unsupported-target-map",
             light_wire::v2::live_action::LiveAction::CommandLineExecute(
-                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest {
+                light_wire::v2::live_action::CommandLineExecuteLiveActionRequest { pool_tap: None,
                     value: "ASSIGN CUELIST 42 AT PBK 4 . 8".into(),
                 },
             ),

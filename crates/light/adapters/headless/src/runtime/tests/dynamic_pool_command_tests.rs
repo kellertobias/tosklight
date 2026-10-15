@@ -1,7 +1,7 @@
 use super::show_object_intents_v2_route_tests::{create_seeded_show, dynamic_definition_json};
 use super::*;
 
-async fn dynamic_pool_command_desk() -> (AppState, Session, PathBuf, Uuid) {
+pub(super) async fn dynamic_pool_command_desk() -> (AppState, Session, PathBuf, Uuid) {
     let (state, data_dir) = test_state();
     let app = router(state.clone());
     let (token, _) = login(&app, "Operator").await;

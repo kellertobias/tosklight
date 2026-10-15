@@ -1,3 +1,4 @@
+import type { CommandPoolTapProjection } from "../../api/types";
 import { useMemo } from "react";
 import {
 	type CommandExecutionOutcome,
@@ -17,7 +18,7 @@ export interface ProgrammingCommandLineActions {
 	reset(): Promise<boolean>;
 	flush(): Promise<boolean>;
 	/** Settles pending edits, then runs the command against scoped authority. */
-	execute(value?: string): Promise<CommandExecutionOutcome>;
+	execute(value?: string, poolTap?: CommandPoolTapProjection): Promise<CommandExecutionOutcome>;
 	executeAfterPendingWrites(
 		execute: () => Promise<boolean>,
 		optimisticReset: CommandLinePatch,

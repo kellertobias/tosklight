@@ -379,7 +379,7 @@ describe("DynamicsWindow", () => {
 			),
 		);
 		fireEvent.click(screen.getByRole("button", { name: /Sunstrip Rain/i }));
-		expect(executeCommand).toHaveBeenCalledWith("DYNAMIC 29");
+		expect(executeCommand).toHaveBeenCalledWith("DYNAMIC 29", { type: "dynamic", pool_number: 29 });
 		expect(screen.getByRole("alert")).toHaveTextContent(
 			"Dynamic 29: 160 of 240 target/lane addresses run; 80 skipped",
 		);
@@ -401,6 +401,19 @@ describe("DynamicsWindow", () => {
 		);
 	});
 
+	it("routes repeated ordinary Dynamic tile taps through the command authority with pool provenance", () => {
+		dynamics = [dynamicObject()];
+		renderWindow();
+		const tile = screen.getByRole("button", { name: /Pulse/i });
+		fireEvent.click(tile);
+		fireEvent.click(tile);
+		expect(executeCommand.mock.calls).toEqual([
+			["DYNAMIC 1", { type: "dynamic", pool_number: 1 }],
+			["DYNAMIC 1", { type: "dynamic", pool_number: 1 }],
+		]);
+		expect(toggleDynamic).not.toHaveBeenCalled();
+	});
+
 	it("executes a Dynamic against the visible Group selection through the command authority", () => {
 		dynamics = [dynamicObject()];
 		commandText = "GROUP 18";
@@ -409,7 +422,7 @@ describe("DynamicsWindow", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }));
 
-		expect(executeCommand).toHaveBeenCalledWith("GROUP 18 DYNAMIC 1");
+		expect(executeCommand).toHaveBeenCalledWith("GROUP 18 DYNAMIC 1", { type: "dynamic", pool_number: 1 });
 		expect(toggleDynamic).not.toHaveBeenCalled();
 	});
 
@@ -421,7 +434,7 @@ describe("DynamicsWindow", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }));
 
-		expect(executeCommand).toHaveBeenCalledWith("DYNAMIC 1 OFF");
+		expect(executeCommand).toHaveBeenCalledWith("DYNAMIC 1 OFF", { type: "dynamic", pool_number: 1 });
 		expect(toggleDynamic).not.toHaveBeenCalled();
 	});
 

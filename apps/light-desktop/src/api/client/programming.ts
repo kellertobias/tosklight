@@ -1,3 +1,4 @@
+import type { CommandPoolTapProjection } from "../types";
 import type {
 	PresetRecallOutcome,
 	PresetRecallRequest,
@@ -295,10 +296,10 @@ export class ProgrammingApiClient {
 		});
 	}
 
-	executeCommandLine(value: string) {
+	executeCommandLine(value: string, poolTap?: CommandPoolTapProjection) {
 		return this.send({
 			type: "command_line_execute",
-			request: { value },
+			request: { value, ...(poolTap ? { pool_tap: poolTap } : {}) },
 		});
 	}
 
