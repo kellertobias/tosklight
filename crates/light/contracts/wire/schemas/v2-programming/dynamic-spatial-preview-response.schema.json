@@ -18,6 +18,16 @@
       "format": "uint64",
       "minimum": 0
     },
+    "fixture_positions": {
+      "description": "Physical root and logical-head positions for the projection's rig context. Older\nresponses may omit these; clients must not invent positions from legacy Stage maps.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/DynamicSpatialFixturePositionProjection"
+      }
+    },
     "inherited_mapping": {
       "anyOf": [
         {
@@ -79,7 +89,6 @@
       }
     }
   },
-  "additionalProperties": false,
   "required": [
     "show_id",
     "show_revision",
@@ -195,6 +204,28 @@
             "seed"
           ]
         }
+      ]
+    },
+    "DynamicSpatialFixturePositionProjection": {
+      "description": "Authoritative physical position, including logical-head aliases of one physical fixture.\nCoordinates are resolved by the same server projection used to rank Group/Dynamic targets.",
+      "type": "object",
+      "properties": {
+        "fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "physical_fixture_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "position": {
+          "$ref": "#/$defs/DynamicSpatialPosition3dProjection"
+        }
+      },
+      "required": [
+        "fixture_id",
+        "physical_fixture_id",
+        "position"
       ]
     },
     "DynamicSpatialMappingOverrideProjection": {

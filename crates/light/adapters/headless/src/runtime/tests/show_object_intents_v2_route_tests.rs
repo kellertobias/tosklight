@@ -1366,3 +1366,98 @@ fn test_cue_list() -> light_playback::CueList {
         cues: vec![light_playback::Cue::new(cue("1"))],
     }
 }
+
+#[tokio::test]
+async fn dynamic_spatial_preview_includes_canonical_root_and_logical_head_positions() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let dynamic_id = Uuid::new_v4();
+    let mut definition = dynamic_definition_json(149);
+    definition["id"] = serde_json::json!(dynamic_id);
+    let show_id = create_seeded_show(
+        &state,
+        &app,
+        &token,
+        "Physical spatial preview",
+        &[("dynamic", &dynamic_id.to_string(), definition)],
+    )
+    .await;
+    let root = light_core::FixtureId(Uuid::from_u128(804_000));
+    let head = light_core::FixtureId(Uuid::from_u128(804_001));
+    let mut fixture = operational_fixture(root);
+    // The operational dimmer normally has one shared root head. Select a real nonshared
+    // profile head before assigning its stable logical identity; validation stays enabled.
+    let mut profile = fixture
+        .definition
+        .profile_snapshot
+        .as_ref()
+        .unwrap()
+        .as_ref()
+        .clone();
+    let mode_id = fixture.definition.mode_id.unwrap();
+    let mode = profile
+        .modes
+        .iter_mut()
+        .find(|mode| mode.id == mode_id)
+        .unwrap();
+    mode.heads[0].master_shared = false;
+    let profile_head_id = mode.heads[0].id;
+    fixture.definition = profile.resolved_definition(mode_id).unwrap();
+    fixture.logical_heads = vec![light_fixture::PatchedHead {
+        profile_head_id: Some(profile_head_id),
+        head_index: 0,
+        fixture_id: head,
+    }];
+    let mut snapshot = state.output.snapshot().as_ref().clone();
+    snapshot.fixtures = vec![fixture].into();
+    snapshot.dynamic_stage_positions = std::collections::HashMap::from([
+        (
+            root,
+            light_dynamics::SpatialPosition {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0,
+            },
+        ),
+        (
+            head,
+            light_dynamics::SpatialPosition {
+                x: 1.5,
+                y: 2.0,
+                z: 3.5,
+            },
+        ),
+    ])
+    .into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    let entry = state
+        .installation
+        .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
+        .unwrap()
+        .unwrap();
+    let show_revision = ShowStore::open(&entry.path)
+        .unwrap()
+        .portable_document()
+        .unwrap()
+        .revision()
+        .value();
+    let (status, preview) = post_show_object_intent(
+        &app,
+        &token,
+        &show_id,
+        &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"),
+        serde_json::json!({"expected_dynamic_revision":1,"expected_show_revision":show_revision,
+            "spatial_mapping":{"projection":{"type":"inherit"},"shape":{"type":"inherit"}}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    assert_eq!(
+        preview["fixture_positions"],
+        serde_json::json!([
+            {"fixture_id":root.0,"physical_fixture_id":root.0,"position":{"x":1.0,"y":2.0,"z":3.0}},
+            {"fixture_id":head.0,"physical_fixture_id":root.0,"position":{"x":1.5,"y":2.0,"z":3.5}}
+        ])
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

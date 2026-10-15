@@ -30,7 +30,7 @@ import {
 	supportsPreset,
 	withProjectionKind,
 } from "../../features/spatialMapping/projectionKinds";
-import type { StageFixtureDot } from "../../features/spatialMapping/stageFixtureDots";
+import { stageFixtureDots } from "../../features/spatialMapping/stageFixtureDots";
 import { projectionForPreset } from "../groupsWindow/spatialMapping";
 
 /** Long enough that typing a multi-digit value is one save, short enough to feel immediate. */
@@ -42,8 +42,9 @@ export type DynamicSpatialApplyResult = "applied" | "conflict";
 interface DynamicProjectionViewProps {
 	dynamic: DynamicObject;
 	busy: boolean;
-	/** Lamp positions drawn under the shape, so it can be placed against the real rig. */
-	fixtures?: readonly StageFixtureDot[];
+	selection?: readonly string[];
+	/** Advances on physical Patch edits even when the Dynamic itself did not change. */
+	sourceRevision?: number | null;
 	loadPreview(
 		draft: DynamicSpatialMappingOverrideProjection,
 	): Promise<DynamicSpatialPreviewResponse>;
@@ -98,10 +99,21 @@ function DynamicProjectionSettings({
 	);
 }
 
+/** Draw the operator's override, or exactly the Group projection while inheriting. */
+function displayedProjection(
+	draft: ReturnType<typeof dynamicSpatialDraft>,
+	inherited: DynamicSpatialPreviewResponse["inherited_mapping"],
+) {
+	return draft.projection.type === "replace"
+		? draft.projection.value
+		: (inherited?.projection ?? null);
+}
+
 export function DynamicProjectionView({
 	dynamic,
 	busy,
-	fixtures,
+	selection = [],
+	sourceRevision,
 	loadPreview,
 	apply,
 }: DynamicProjectionViewProps) {
@@ -165,8 +177,12 @@ export function DynamicProjectionView({
 				setLoading(false);
 				setMessage(formatErrorDetails(error));
 			});
-	}, [draft, loadPreview, saved]);
+	}, [draft, loadPreview, saved, sourceRevision]);
 
+	const fixtures = useMemo(
+		() => stageFixtureDots(selection, preview?.fixture_positions ?? []),
+		[selection, preview],
+	);
 	const inherited = preview?.inherited_mapping ?? null;
 	const validation = validateDynamicSpatialDraft(draft);
 	const dirty = !sameDynamicSpatialDraft(draft, saved);
@@ -213,12 +229,7 @@ export function DynamicProjectionView({
 		};
 	}, [draft, dirty, validation, preview, busy, apply]);
 
-	// The projection being shown: the operator's override, or the Group's while inheriting,
-	// so the left column always depicts what this Dynamic actually ranks by.
-	const shown =
-		draft.projection.type === "replace"
-			? draft.projection.value
-			: (inherited?.projection ?? null);
+	const shown = displayedProjection(draft, inherited);
 
 	return (
 		<div className="dynamic-projection-view">

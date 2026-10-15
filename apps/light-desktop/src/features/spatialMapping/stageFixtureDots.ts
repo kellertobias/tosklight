@@ -21,41 +21,34 @@ export interface StageFixtureDot {
  */
 export const STAGE_FIXTURE_DOT_LIMIT = 200;
 
-interface StagePositions {
-	positions: Record<string, { x: number; y: number }>;
-	positions3d: Record<string, { x: number; y: number; z: number }>;
-}
-
-/** A patched fixture without a 3D position still has its 2D one, at floor level. */
-function positionOf(
-	id: string,
-	{ positions, positions3d }: StagePositions,
-): Position3d | null {
-	const placed = positions3d[id];
-	if (placed) return { x: placed.x, y: placed.y, z: placed.z };
-	const flat = positions[id];
-	return flat ? { x: flat.x, y: flat.y, z: 0 } : null;
+/** Server-resolved physical positions; the UI never reconstructs the fixture geometry. */
+interface PhysicalFixturePosition {
+	fixture_id: string;
+	physical_fixture_id: string;
+	position: Position3d;
 }
 
 export function stageFixtureDots(
 	selection: readonly string[],
-	layout: StagePositions,
+	positions: readonly PhysicalFixturePosition[],
 	limit = STAGE_FIXTURE_DOT_LIMIT,
 ): StageFixtureDot[] {
+	const byId = new Map(positions.map((row) => [row.fixture_id, row]));
 	const selected = selection.length > 0;
 	const ids = selected
-		? selection
-		: [
-				...new Set([
-					...Object.keys(layout.positions3d),
-					...Object.keys(layout.positions),
-				]),
-			].sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
+		? [...new Set(selection)]
+		: positions
+				.filter((row) => row.fixture_id === row.physical_fixture_id)
+				.map((row) => row.fixture_id)
+				.sort((left, right) =>
+					left.localeCompare(right, undefined, { numeric: true }),
+				);
 	const dots: StageFixtureDot[] = [];
 	for (const id of ids) {
 		if (dots.length >= limit) break;
-		const position = positionOf(id, layout);
-		if (position) dots.push({ id, position, selected });
+		const row = byId.get(id);
+		if (row && Object.values(row.position).every(Number.isFinite))
+			dots.push({ id, position: row.position, selected });
 	}
 	return dots;
 }

@@ -7,6 +7,8 @@ mod objects;
 mod patch;
 mod prepare;
 mod replacement_projection;
+mod spatial_positions;
+pub use spatial_positions::compile_show_spatial_positions;
 
 #[cfg(test)]
 mod tests;
@@ -48,7 +50,7 @@ pub(crate) fn compile_show_candidate(
     let cue_lists = objects::decode_cue_lists(candidate)?;
     let groups = objects::decode_groups(candidate)?;
     let (dynamics, required_programming_contract) = objects::decode_dynamics(candidate, &groups)?;
-    let dynamic_stage_positions = objects::decode_dynamic_stage_positions(candidate)?;
+    let dynamic_stage_positions = spatial_positions::derive_for_patch(candidate, &fixtures)?;
     let mut playback_pages = objects::decode(candidate, "playback_page")?;
     let routes = objects::decode(candidate, "route")?;
     let control_mappings = objects::decode(candidate, "control_mapping")?;
@@ -136,9 +138,12 @@ fn compile_show_candidate_incremental(
         snapshot.dynamics = dynamics.into();
         snapshot.required_programming_contract = required;
     }
-    if dirty.stage_layouts {
+    if dirty.fixtures {
+        snapshot.fixtures = patch::compile_patch(candidate)?.into();
+    }
+    if dirty.stage_layouts || dirty.fixtures {
         snapshot.dynamic_stage_positions =
-            objects::decode_dynamic_stage_positions(candidate)?.into();
+            spatial_positions::derive_for_patch(candidate, &snapshot.fixtures)?.into();
     }
     if dirty.groups {
         snapshot.groups = objects::decode_groups(candidate)?.into();
@@ -149,10 +154,6 @@ fn compile_show_candidate_incremental(
     if dirty.control_mappings {
         snapshot.control_mappings = objects::decode(candidate, "control_mapping")?.into();
     }
-    if dirty.fixtures {
-        snapshot.fixtures = patch::compile_patch(candidate)?.into();
-    }
-
     // Defaults couple these three small topology projections. Recompile them together whenever
     // any member changes, while leaving patch, geometry, routes, mappings, and groups shared.
     if dirty.cue_lists || dirty.playback_pages {

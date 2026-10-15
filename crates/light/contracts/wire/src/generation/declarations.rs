@@ -260,6 +260,7 @@ fn dynamics(config: &Config) -> Vec<String> {
         DynamicSpatialPreviewBaseProjection::decl(config),
         DynamicSpatialPreviewRequest::decl(config),
         DynamicSpatialPreviewResponse::decl(config),
+        DynamicSpatialFixturePositionProjection::decl(config),
         DynamicTargetBindingProjection::decl(config),
         DynamicLaneProjection::decl(config),
         DynamicLaneBodyProjection::decl(config),

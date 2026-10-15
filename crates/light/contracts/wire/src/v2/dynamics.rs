@@ -139,9 +139,22 @@ pub struct DynamicSpatialPreviewRequest {
     pub spatial_mapping: DynamicSpatialMappingOverrideProjection,
 }
 
+/// Authoritative physical position, including logical-head aliases of one physical fixture.
+/// Coordinates are resolved by the same server projection used to rank Group/Dynamic targets.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
+pub struct DynamicSpatialFixturePositionProjection {
+    pub fixture_id: Uuid,
+    pub physical_fixture_id: Uuid,
+    pub position: DynamicSpatialPosition3dProjection,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct DynamicSpatialPreviewResponse {
+    /// Physical root and logical-head positions for the projection's rig context. Older
+    /// responses may omit these; clients must not invent positions from legacy Stage maps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fixture_positions: Option<Vec<DynamicSpatialFixturePositionProjection>>,
     pub show_id: Uuid,
     #[ts(type = "number")]
     pub show_revision: u64,

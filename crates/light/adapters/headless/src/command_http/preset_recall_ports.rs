@@ -60,28 +60,30 @@ fn environment(
     // lock keeps it current through the mutation, while deriving Groups here prevents a stale or
     // independently replaced engine snapshot from changing recall membership.
     let groups = decode_groups(&document)?;
-    let mut stage_positions = HashMap::new();
-    for object in document.objects_of_kind("stage_layout") {
-        let layout: light_application::StageLayout = serde_json::from_value(object.body().clone())
-            .map_err(|error| {
-                conflict(format!(
-                    "stored Stage layout {} is invalid: {error}",
-                    object.key().id()
-                ))
+    // The activation lock protects this revision comparison. Reuse only the projection
+    // of this captured document; recovery/stale generations compile the captured data instead.
+    let snapshot = ports.state().output.snapshot();
+    let spatial_inputs =
+        spatial_inputs_for_revision(&snapshot, document.revision().value(), || {
+            let transaction = document.transaction();
+            let candidate = document.candidate(&transaction).map_err(|error| {
+                conflict(format!("stored Show spatial inputs are invalid: {error}"))
             })?;
-        stage_positions.extend(layout.fixture_spatial_positions().into_iter().map(
-            |(id, point)| {
-                (
-                    id,
-                    light_dynamics::Position3d {
-                        x: f64::from(point.x),
-                        y: f64::from(point.y),
-                        z: f64::from(point.z),
-                    },
-                )
-            },
-        ));
-    }
+            light_application::show_compiler::compile_show_spatial_positions(candidate)
+        })?;
+    let stage_positions = spatial_inputs
+        .iter()
+        .map(|(&id, point)| {
+            (
+                id,
+                light_dynamics::Position3d {
+                    x: f64::from(point.x),
+                    y: f64::from(point.y),
+                    z: f64::from(point.z),
+                },
+            )
+        })
+        .collect();
     let (selectable_targets, target_expansions) = selectable_targets(ports);
     // Resolve/validate an explicit Aim before the service's empty-selection branch. Both
     // HTTP and WebSocket consume this same captured application environment.
@@ -211,4 +213,98 @@ fn conflict(message: impl Into<String>) -> ActionError {
 
 fn internal(message: impl Into<String>) -> ActionError {
     ActionError::new(ActionErrorKind::Internal, message)
+}
+
+/// A matching document revision makes profile/geometry recompilation unnecessary on recall.
+fn spatial_inputs_for_revision(
+    snapshot: &light_engine::EngineSnapshot,
+    document_revision: u64,
+    fallback: impl FnOnce() -> Result<
+        HashMap<light_core::FixtureId, light_dynamics::SpatialPosition>,
+        ActionError,
+    >,
+) -> Result<Arc<HashMap<light_core::FixtureId, light_dynamics::SpatialPosition>>, ActionError> {
+    if snapshot.revision == document_revision {
+        Ok(Arc::clone(&snapshot.dynamic_stage_positions))
+    } else {
+        fallback().map(Arc::new)
+    }
+}
+
+#[cfg(test)]
+mod spatial_revision_tests {
+    use super::*;
+    use light_core::FixtureId;
+    use light_dynamics::SpatialPosition;
+
+    #[test]
+    fn matching_captured_revision_reuses_spatial_projection_without_compiling_profiles() {
+        let legacy = FixtureId(uuid::Uuid::from_u128(804));
+        let snapshot = light_engine::EngineSnapshot {
+            revision: 42,
+            dynamic_stage_positions: Arc::new(HashMap::from([(
+                legacy,
+                SpatialPosition {
+                    x: 1.,
+                    y: 2.,
+                    z: 3.,
+                },
+            )])),
+            ..Default::default()
+        };
+        let result = spatial_inputs_for_revision(&snapshot, 42, || {
+            panic!("matching recall must not compile Patch profiles")
+        })
+        .unwrap();
+        assert!(Arc::ptr_eq(&result, &snapshot.dynamic_stage_positions));
+        assert_eq!(
+            result[&legacy],
+            SpatialPosition {
+                x: 1.,
+                y: 2.,
+                z: 3.
+            }
+        );
+    }
+
+    #[test]
+    fn stale_snapshot_uses_only_captured_document_spatial_inputs_and_retains_errors() {
+        let id = FixtureId(uuid::Uuid::from_u128(804));
+        let snapshot = light_engine::EngineSnapshot {
+            revision: 41,
+            dynamic_stage_positions: Arc::new(HashMap::from([(
+                id,
+                SpatialPosition {
+                    x: 99.,
+                    y: 0.,
+                    z: 0.,
+                },
+            )])),
+            ..Default::default()
+        };
+        let result = spatial_inputs_for_revision(&snapshot, 42, || {
+            Ok(HashMap::from([(
+                id,
+                SpatialPosition {
+                    x: -1.,
+                    y: 0.,
+                    z: 3.,
+                },
+            )]))
+        })
+        .unwrap();
+        assert_eq!(
+            result[&id],
+            SpatialPosition {
+                x: -1.,
+                y: 0.,
+                z: 3.
+            }
+        );
+        let error = spatial_inputs_for_revision(&snapshot, 42, || {
+            Err(conflict("captured document invalid"))
+        })
+        .unwrap_err();
+        assert_eq!(error.message, "captured document invalid");
+    }
 }

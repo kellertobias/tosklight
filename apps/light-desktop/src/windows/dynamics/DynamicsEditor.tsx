@@ -9,6 +9,7 @@ import {
 	useEffect,
 	useMemo,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import type {
 	DynamicDefinitionProjection,
@@ -25,7 +26,10 @@ import type {
 } from "../../api/types";
 import { useDynamicEditorSession } from "../../features/dynamics/DynamicEditorSessionContext";
 import type { ShowObject } from "../../features/showObjects/contracts";
-import { stageFixtureDots } from "../../features/spatialMapping/stageFixtureDots";
+import {
+	usePatchStoreOrNull,
+	usePatchView,
+} from "../../features/patch/PatchContext";
 import { useApp } from "../../state/AppContext";
 import { useStageLayout } from "../stageWindow/useStageLayout";
 import { DynamicEditorSurface } from "./DynamicEditorSurface";
@@ -225,7 +229,6 @@ export function DynamicEditor({
 					dynamic={dynamic}
 					busy={busy}
 					selection={selection}
-					stageLayout={stageLayout}
 					loadPreview={onLoadSpatialPreview}
 					apply={onApplySpatialMapping}
 				/>
@@ -304,32 +307,35 @@ function useEditorSynchronization({
 	});
 }
 
+const noPatchSubscription = () => () => undefined;
+
 function DynamicProjectionContent({
 	dynamic,
 	busy,
 	selection,
-	stageLayout,
 	loadPreview,
 	apply,
 }: {
 	dynamic: DynamicObject;
 	busy: boolean;
 	selection: readonly string[];
-	stageLayout: ReturnType<typeof useStageLayout>;
 	loadPreview: DynamicEditorProps["onLoadSpatialPreview"];
 	apply: DynamicEditorProps["onApplySpatialMapping"];
 }) {
-	// A selection is what the operator is placing the shape around; with none, the whole rig
-	// shows where it could go.
-	const fixtures = useMemo(
-		() => stageFixtureDots(selection, stageLayout),
-		[selection, stageLayout],
+	// Patch has its own scoped event stream. A position edit need not change the Dynamic, so
+	// retain this subscription only while the projection is mounted and refresh its authority.
+	usePatchView();
+	const patch = usePatchStoreOrNull();
+	const sourceRevision = useSyncExternalStore(
+		patch?.subscribe ?? noPatchSubscription,
+		() => patch?.getSnapshot().patchRevision ?? null,
 	);
 	return loadPreview && apply ? (
 		<DynamicProjectionView
 			dynamic={dynamic}
 			busy={busy}
-			fixtures={fixtures}
+			selection={selection}
+			sourceRevision={sourceRevision}
 			loadPreview={loadPreview}
 			apply={apply}
 		/>

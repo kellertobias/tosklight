@@ -232,3 +232,57 @@ describe("DynamicProjectionView", () => {
 		});
 	});
 });
+
+it("refreshes authoritative rig dots after a Patch revision without changing the Dynamic", async () => {
+	const object = dynamic({ type: "frozen_targets", targets: ["head-1"] });
+	let position = { x: 1, y: 2, z: 3 };
+	const loadPreview = vi.fn(
+		async (draft: DynamicSpatialMappingOverrideProjection) => ({
+			...preview(object.body.target_binding, draft),
+			fixture_positions: [
+				{ fixture_id: "head-1", physical_fixture_id: "root-1", position },
+			],
+		}),
+	);
+	const apply = vi.fn(async () => "applied" as const);
+	const view = render(
+		<DynamicProjectionView
+			dynamic={object}
+			busy={false}
+			selection={["head-1"]}
+			sourceRevision={1}
+			loadPreview={loadPreview}
+			apply={apply}
+		/>,
+	);
+	await waitFor(() => expect(loadPreview).toHaveBeenCalledTimes(1));
+	fireEvent.click(kindOption("Planar"));
+	await waitFor(() =>
+		expect(
+			view.container.querySelectorAll(".projection-stage-fixture.selected"),
+		).toHaveLength(1),
+	);
+	const dot = view.container.querySelector(".projection-stage-fixture.selected");
+	const before = [dot?.getAttribute("cx"), dot?.getAttribute("cy")];
+	const priorCalls = loadPreview.mock.calls.length;
+	position = { x: -3, y: -2, z: 1 };
+	view.rerender(
+		<DynamicProjectionView
+			dynamic={object}
+			busy={false}
+			selection={["head-1"]}
+			sourceRevision={2}
+			loadPreview={loadPreview}
+			apply={apply}
+		/>,
+	);
+	await waitFor(() =>
+		expect(loadPreview.mock.calls.length).toBeGreaterThan(priorCalls),
+	);
+	await waitFor(() => {
+		const next = view.container.querySelector(
+			".projection-stage-fixture.selected",
+		);
+		expect([next?.getAttribute("cx"), next?.getAttribute("cy")]).not.toEqual(before);
+	});
+});

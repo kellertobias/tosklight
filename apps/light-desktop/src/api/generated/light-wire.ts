@@ -173,12 +173,18 @@ export type DynamicSpatialShapeStageProjection = { "type": "inherit", } | { "typ
 export type DynamicSpatialMappingOverrideProjection = { projection: DynamicSpatialProjectionStageProjection, shape: DynamicSpatialShapeStageProjection, };
 export type DynamicSpatialPreviewBaseProjection = { "type": "live_group", group_id: string, mapping_provenance: GroupMappingProvenanceProjection, } | { "type": "frozen_targets", } | { "type": "targetless", };
 export type DynamicSpatialPreviewRequest = { expected_dynamic_revision: number, expected_show_revision: number, spatial_mapping: DynamicSpatialMappingOverrideProjection, };
-export type DynamicSpatialPreviewResponse = { show_id: string, show_revision: number, dynamic_id: string, dynamic_revision: number, target_binding: DynamicTargetBindingProjection, base: DynamicSpatialPreviewBaseProjection, inherited_mapping?: GroupSpatialSelectionMapping | null, draft: DynamicSpatialMappingOverrideProjection, source_order: Array<string>, ordered_fixture_ids: Array<string>,
+export type DynamicSpatialPreviewResponse = {
+/**
+ * Physical root and logical-head positions for the projection's rig context. Older
+ * responses may omit these; clients must not invent positions from legacy Stage maps.
+ */
+fixture_positions?: Array<DynamicSpatialFixturePositionProjection>, show_id: string, show_revision: number, dynamic_id: string, dynamic_revision: number, target_binding: DynamicTargetBindingProjection, base: DynamicSpatialPreviewBaseProjection, inherited_mapping?: GroupSpatialSelectionMapping | null, draft: DynamicSpatialMappingOverrideProjection, source_order: Array<string>, ordered_fixture_ids: Array<string>,
 /**
  * Where the effective projection puts each target on the plane it ranks in. Empty when
  * nothing is projecting, which is the same case that ranks by source order.
  */
 projected_positions: Array<GroupProjectedPositionProjection>, ranks: Array<GroupSpatialRankProjection>, rank_count: number, warnings: Array<GroupSpatialWarningProjection>, };
+export type DynamicSpatialFixturePositionProjection = { fixture_id: string, physical_fixture_id: string, position: DynamicSpatialPosition3dProjection, };
 export type DynamicTargetBindingProjection = { "type": "live_group", group_id: string, } | { "type": "frozen_targets", targets: Array<string>, } | { "type": "targetless" };
 export type DynamicLaneProjection = { id: string, speed_multiplier: DynamicRationalProjection, width: number, random_group_id?: string | null, phase?: DynamicPhaseDistributionProjection | null, } & (DynamicLegacyScalarLaneProjection | { programming: DynamicProgrammingLaneProjection, });
 export type DynamicLaneBodyProjection = DynamicLegacyScalarLaneProjection | { programming: DynamicProgrammingLaneProjection, };

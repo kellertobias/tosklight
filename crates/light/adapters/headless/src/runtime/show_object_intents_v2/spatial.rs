@@ -76,6 +76,7 @@ pub(super) async fn dynamic_spatial_preview(
             .unwrap_or_default();
     Ok(Json(
         light_wire::v2::dynamics::DynamicSpatialPreviewResponse {
+            fixture_positions: Some(physical_fixture_positions(&snapshot)),
             show_id: show_id.0,
             show_revision: show_revision.value(),
             dynamic_id: id,
@@ -107,6 +108,37 @@ pub(super) async fn dynamic_spatial_preview(
                 .collect(),
         },
     ))
+}
+
+/// Reuse the compiled physical model; this route never recalculates transforms or point masters.
+fn physical_fixture_positions(
+    snapshot: &light_engine::EngineSnapshot,
+) -> Vec<light_wire::v2::dynamics::DynamicSpatialFixturePositionProjection> {
+    let mut positions = Vec::new();
+    for fixture in snapshot.fixtures.iter() {
+        for id in std::iter::once(fixture.fixture_id)
+            .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+        {
+            let Some(position) = snapshot.dynamic_stage_positions.get(&id) else {
+                continue;
+            };
+            if !position.x.is_finite() || !position.y.is_finite() || !position.z.is_finite() {
+                continue;
+            }
+            positions.push(
+                light_wire::v2::dynamics::DynamicSpatialFixturePositionProjection {
+                    fixture_id: id.0,
+                    physical_fixture_id: fixture.fixture_id.0,
+                    position: light_wire::v2::dynamics::DynamicSpatialPosition3dProjection {
+                        x: f64::from(position.x),
+                        y: f64::from(position.y),
+                        z: f64::from(position.z),
+                    },
+                },
+            );
+        }
+    }
+    positions
 }
 
 pub(super) struct DynamicSpatialContext {
