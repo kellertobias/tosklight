@@ -137,6 +137,8 @@ export function useTimelineDrag({
 	const drag = useRef<DragState | null>(null);
 	const latest = useRef(definition);
 	latest.current = definition;
+	const scaleCueTimings = useRef(onScaleCueTimings);
+	scaleCueTimings.current = onScaleCueTimings;
 	useEffect(() => {
 		const move = (event: PointerEvent) => {
 			const active = drag.current;
@@ -197,7 +199,7 @@ export function useTimelineDrag({
 						clip.end_frame,
 					);
 					if (ratio !== 1)
-						onScaleCueTimings?.(
+						scaleCueTimings.current?.(
 							active.selection as TimecodeEditorSelection & { kind: "clip" },
 							ratio,
 						);

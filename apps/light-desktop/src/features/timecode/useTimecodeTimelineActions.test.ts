@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { act, fireEvent, renderHook } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { Cue, CueList } from "../../api/types";
-import type { TimecodeCueListClip } from "../../api/types/timecode";
-import { cueClipPlacement } from "./useTimecodeTimelineActions";
+import type {
+	TimecodeCueListClip,
+	TimecodeDefinition,
+} from "../../api/types/timecode";
+import {
+	cueClipPlacement,
+	useTimelineDrag,
+} from "./useTimecodeTimelineActions";
 
 const timingDefaults = { sequenceFadeMillis: 3_000, releaseFadeMillis: 3_000 };
 
@@ -161,3 +169,81 @@ function cueList(cues: Cue[]): CueList {
 		cues,
 	};
 }
+
+it("uses the current Cue timing callback when a resize ends after a render", () => {
+	let current: TimecodeDefinition = {
+		id: "tc-current",
+		number: 1,
+		name: "Current",
+		duration_frame: 2640,
+		transport_offset_frame: 0,
+		auto_start: false,
+		markers: [],
+		lanes: [
+			{
+				id: "lane",
+				name: "Cue",
+				content: {
+					kind: "cue_list",
+					cue_list_id: "list",
+					clips: [
+						{
+							id: "clip",
+							start_frame: 0,
+							end_frame: 264,
+							start_cue_id: "cue-1",
+							end_cue_id: "cue-1",
+							start_behavior: "state",
+							end_behavior: "release",
+							cue_starts: [],
+							in_fade_frames: 0,
+							out_fade_frames: 0,
+						},
+					],
+				},
+			},
+		],
+	};
+	const original = vi.fn();
+	const latest = vi.fn();
+	const preview = vi.fn((next: TimecodeDefinition) => {
+		current = next;
+	});
+	const begin = vi.fn();
+	const end = vi.fn();
+	const select = vi.fn();
+	const hook = renderHook(
+		({ definition, callback }) =>
+			useTimelineDrag({
+				definition,
+				pixelsPerFrame: 1,
+				onPreview: preview,
+				onBeginGesture: begin,
+				onEndGesture: end,
+				setSelection: select,
+				onScaleCueTimings: callback,
+			}),
+		{ initialProps: { definition: current, callback: original } },
+	);
+	act(() => {
+		hook.result.current(
+			{
+				preventDefault: vi.fn(),
+				clientX: 0,
+				clientY: 0,
+				currentTarget: { setPointerCapture: vi.fn() },
+			} as never,
+			{ kind: "clip", laneId: "lane", itemId: "clip" },
+			0,
+			"start",
+		);
+	});
+	fireEvent.pointerMove(window, { clientX: 154 });
+	hook.rerender({ definition: current, callback: latest });
+	fireEvent.pointerUp(window);
+	expect(original).not.toHaveBeenCalled();
+	expect(latest).toHaveBeenCalledWith(
+		{ kind: "clip", laneId: "lane", itemId: "clip" },
+		110 / 264,
+	);
+});

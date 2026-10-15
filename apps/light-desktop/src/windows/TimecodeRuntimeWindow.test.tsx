@@ -476,3 +476,310 @@ function outcome(
 		},
 	};
 }
+
+async function compoundResizeRig() {
+	const first = "00000000-0000-4000-8000-000000000181";
+	const second = "00000000-0000-4000-8000-000000000182";
+	let cueRevision = 9;
+	let timecodeRevision = 4;
+	let storedCueList: CueList = {
+		id: "00000000-0000-4000-8000-000000000180",
+		name: "Opening",
+		mode: "sequence",
+		priority: 0,
+		looped: false,
+		cues: [
+			{
+				id: first,
+				number: "1",
+				name: "Keep this name",
+				delay_millis: 0,
+				fade_millis: 0,
+				out_delay_millis: 250,
+				out_fade_millis: 1000,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+			{
+				id: second,
+				number: "2",
+				name: "Second",
+				delay_millis: 500,
+				fade_millis: 2000,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+		],
+	};
+	const originalCueList = structuredClone(storedCueList);
+	let storedDefinition: TimecodeDefinition = {
+		...definition(),
+		duration_frame: 2640,
+		lanes: [
+			{
+				id: "lane-compound",
+				name: "Opening",
+				content: {
+					kind: "cue_list",
+					cue_list_id: storedCueList.id,
+					clips: [
+						{
+							id: "clip-compound",
+							start_frame: 0,
+							end_frame: 264,
+							start_cue_id: first,
+							end_cue_id: second,
+							start_behavior: "state",
+							end_behavior: "release",
+							cue_starts: [{ cue_id: second, offset_frame: 44 }],
+							in_fade_frames: 0,
+							out_fade_frames: 0,
+						},
+					],
+				},
+			},
+		],
+	};
+	const originalDefinition = structuredClone(storedDefinition);
+	let rejectCue = false;
+	let rejectDefinition = false;
+	let deferCue = false;
+	let releaseCue: (() => void) | undefined;
+	const saveCueList = vi.fn(
+		async (basis: { expectedRevision: number }, body: CueList) => {
+			expect(basis.expectedRevision).toBe(cueRevision);
+			if (deferCue) {
+				deferCue = false;
+				await new Promise<void>((resolve) => {
+					releaseCue = resolve;
+				});
+			}
+			if (rejectCue) {
+				rejectCue = false;
+				throw new Error("Cue write refused");
+			}
+			storedCueList = structuredClone(body);
+			return {
+				kind: "cue_list",
+				id: "cue-list-object",
+				revision: ++cueRevision,
+				updated_at: "",
+				body: storedCueList,
+			};
+		},
+	);
+	const update = vi.fn(
+		async (
+			_show: string,
+			_id: string,
+			revision: number,
+			patch: TimecodePatch,
+		) => {
+			expect(revision).toBe(timecodeRevision);
+			if (rejectDefinition) {
+				rejectDefinition = false;
+				throw new Error("Timecode write refused");
+			}
+			storedDefinition = { ...storedDefinition, ...structuredClone(patch) };
+			return outcome(++timecodeRevision, storedDefinition);
+		},
+	);
+	const view = render(
+		<TimecodeEditor
+			showId={SHOW_ID}
+			item={{ revision: 4, definition: originalDefinition }}
+			api={
+				{
+					create: vi.fn(),
+					update,
+					objects: vi.fn(),
+					delete: vi.fn(),
+					transportAction: vi.fn(),
+					importAudio: vi.fn(),
+					waveform: vi.fn(),
+				} as never
+			}
+			cueLists={[
+				{
+					id: storedCueList.id,
+					name: storedCueList.name,
+					cues: storedCueList.cues,
+					body: originalCueList,
+					objectId: "cue-list-object",
+					revision: 9,
+				},
+			]}
+			audioPlayers={[]}
+			saveCueList={saveCueList}
+			onClose={vi.fn()}
+		/>,
+	);
+
+	const ui = within(view.container);
+	await ui.findByText("Saved");
+	const attemptResize = (frame: number) => {
+		const pixelsPerFrame = Number(
+			view.container.querySelector<HTMLElement>(".timecode-timeline-canvas")
+				?.dataset.pixelsPerFrame,
+		);
+		const edge = view.container.querySelector<HTMLElement>(
+			".timecode-clip-edge.start",
+		);
+		fireEvent.pointerDown(edge as HTMLElement, { pointerId: 91, clientX: 0 });
+		fireEvent.pointerMove(window, {
+			pointerId: 91,
+			clientX: frame * pixelsPerFrame,
+		});
+		fireEvent.pointerUp(window, { pointerId: 91 });
+	};
+	return {
+		originalDefinition,
+		originalCueList,
+		saveCueList,
+		update,
+		ui,
+		attemptResize,
+		section: () => view.container.querySelector(".timecode-editor"),
+		deferCue: () => {
+			deferCue = true;
+		},
+		releaseCue: () => releaseCue?.(),
+		definition: () => storedDefinition,
+		cues: () => storedCueList,
+		rejectCue: () => {
+			rejectCue = true;
+		},
+		rejectDefinition: () => {
+			rejectDefinition = true;
+		},
+		async resize() {
+			const canvas = view.container.querySelector<HTMLElement>(
+				".timecode-timeline-canvas",
+			);
+			const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+			const edge = view.container.querySelector<HTMLElement>(
+				".timecode-clip-edge.start",
+			);
+			expect(edge).toBeTruthy();
+			fireEvent.pointerDown(edge as HTMLElement, { pointerId: 91, clientX: 0 });
+			fireEvent.pointerMove(window, {
+				pointerId: 91,
+				clientX: 154 * pixelsPerFrame,
+			});
+			fireEvent.pointerUp(window, { pointerId: 91 });
+			await waitFor(() =>
+				expect(storedCueList.cues[0].out_fade_millis).toBe(417),
+			);
+			await waitFor(() =>
+				expect(storedDefinition.lanes[0].content).toMatchObject({
+					clips: [expect.objectContaining({ start_frame: 154 })],
+				}),
+			);
+			await waitFor(() =>
+				expect(ui.getByRole("button", { name: "Undo" })).toBeEnabled(),
+			);
+		},
+	};
+}
+
+it("undoes and redoes a physical clip resize together with its persisted Cue timings", async () => {
+	const rig = await compoundResizeRig();
+	await rig.resize();
+	const resizedDefinition = structuredClone(rig.definition());
+	const resizedCueList = structuredClone(rig.cues());
+	fireEvent.click(rig.ui.getByRole("button", { name: "Undo" }));
+	await waitFor(() => expect(rig.definition()).toEqual(rig.originalDefinition));
+	await waitFor(() => expect(rig.cues()).toEqual(rig.originalCueList));
+	await waitFor(() =>
+		expect(rig.ui.getByRole("button", { name: "Redo" })).toBeEnabled(),
+	);
+	fireEvent.click(rig.ui.getByRole("button", { name: "Redo" }));
+	await waitFor(() => expect(rig.definition()).toEqual(resizedDefinition));
+	await waitFor(() => expect(rig.cues()).toEqual(resizedCueList));
+});
+
+for (const failure of ["Cue", "Timecode"] as const) {
+	it(`retains compound resize history after a refused ${failure} Undo and completes only on explicit retry`, async () => {
+		const rig = await compoundResizeRig();
+		await rig.resize();
+		const resizedDefinition = structuredClone(rig.definition());
+		const resizedCueList = structuredClone(rig.cues());
+		if (failure === "Cue") rig.rejectCue();
+		else rig.rejectDefinition();
+		fireEvent.click(rig.ui.getByRole("button", { name: "Undo" }));
+		await waitFor(() =>
+			expect(rig.ui.getByRole("alert")).toHaveTextContent(
+				`${failure} write refused`,
+			),
+		);
+		expect(rig.definition()).toEqual(resizedDefinition);
+		expect(rig.cues()).toEqual(
+			failure === "Cue" ? resizedCueList : rig.originalCueList,
+		);
+		expect(rig.ui.getByRole("button", { name: "Redo" })).toBeDisabled();
+		await waitFor(() =>
+			expect(rig.ui.getByRole("button", { name: "Undo" })).toBeEnabled(),
+		);
+		const writes = rig.saveCueList.mock.calls.length;
+		fireEvent.click(rig.ui.getByRole("button", { name: "Undo" }));
+		await waitFor(() =>
+			expect(rig.definition()).toEqual(rig.originalDefinition),
+		);
+		await waitFor(() =>
+			expect(rig.ui.getByRole("button", { name: "Redo" })).toBeEnabled(),
+		);
+		expect(rig.cues()).toEqual(rig.originalCueList);
+		expect(rig.saveCueList.mock.calls.length).toBe(
+			writes + (failure === "Cue" ? 1 : 0),
+		);
+		expect(rig.ui.queryByRole("alert")).not.toBeInTheDocument();
+		fireEvent.click(rig.ui.getByRole("button", { name: "Redo" }));
+		await waitFor(() => expect(rig.definition()).toEqual(resizedDefinition));
+		expect(rig.cues()).toEqual(resizedCueList);
+	});
+}
+
+it("blocks a new physical timeline edit while compound Undo awaits its Cue acknowledgment", async () => {
+	const rig = await compoundResizeRig();
+	await rig.resize();
+	const resized = structuredClone(rig.definition());
+	rig.deferCue();
+	fireEvent.click(rig.ui.getByRole("button", { name: "Undo" }));
+	await waitFor(() => expect(rig.section()).toHaveAttribute("inert"));
+	expect(rig.saveCueList).toHaveBeenCalledTimes(2);
+	rig.attemptResize(200);
+	expect(rig.definition()).toEqual(resized);
+	expect(rig.saveCueList).toHaveBeenCalledTimes(2);
+	rig.releaseCue();
+	await waitFor(() => expect(rig.definition()).toEqual(rig.originalDefinition));
+	await waitFor(() =>
+		expect(rig.ui.getByRole("button", { name: "Redo" })).toBeEnabled(),
+	);
+	expect(rig.cues()).toEqual(rig.originalCueList);
+	expect(rig.section()).not.toHaveAttribute("inert");
+});
+
+it("undoes geometry honestly after the initial linked Cue save refused, then redoes the complete intent", async () => {
+	const rig = await compoundResizeRig();
+	rig.rejectCue();
+	rig.attemptResize(154);
+	await waitFor(() =>
+		expect(rig.ui.getByRole("alert")).toHaveTextContent("Cue write refused"),
+	);
+	await waitFor(() =>
+		expect(rig.ui.getByRole("button", { name: "Undo" })).toBeEnabled(),
+	);
+	expect(rig.cues()).toEqual(rig.originalCueList);
+	fireEvent.click(rig.ui.getByRole("button", { name: "Undo" }));
+	await waitFor(() => expect(rig.definition()).toEqual(rig.originalDefinition));
+	await waitFor(() =>
+		expect(rig.ui.getByRole("button", { name: "Redo" })).toBeEnabled(),
+	);
+	expect(rig.saveCueList).toHaveBeenCalledTimes(1);
+	fireEvent.click(rig.ui.getByRole("button", { name: "Redo" }));
+	await waitFor(() => expect(rig.cues().cues[0].out_fade_millis).toBe(417));
+	await waitFor(() =>
+		expect(rig.ui.getByRole("button", { name: "Undo" })).toBeEnabled(),
+	);
+	expect(rig.saveCueList).toHaveBeenCalledTimes(2);
+});

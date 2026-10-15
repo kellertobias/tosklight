@@ -135,3 +135,77 @@ describe("Cue timing writer", () => {
 		expect(result.current.saving).toBe(false);
 	});
 });
+
+it("does not acknowledge coalesced timing saves before the actual final write and rejects all affected callers", async () => {
+	let answer: ((value: VersionedObject<CueList>) => void) | undefined;
+	let reject: ((reason: unknown) => void) | undefined;
+	const save = vi.fn(
+		() =>
+			new Promise<VersionedObject<CueList>>((resolve, fail) => {
+				answer = resolve;
+				reject = fail;
+			}),
+	);
+	const { result } = renderHook(() => useCueTimingWriter(options(), save));
+	let secondSettled = false;
+	let first: Promise<unknown> = Promise.resolve();
+	let second: Promise<unknown> = Promise.resolve();
+	act(() => {
+		first = result.current.save("list-1", cueList(100));
+		second = result.current
+			.save("list-1", cueList(200))
+			.finally(() => {
+				secondSettled = true;
+			})
+			.catch((error: unknown) => error);
+	});
+	await act(async () => {
+		await Promise.resolve();
+	});
+	expect(secondSettled).toBe(false);
+	await act(async () => {
+		answer?.(saved(cueList(100), 5));
+		await first;
+	});
+	expect(save).toHaveBeenCalledTimes(2);
+	expect(secondSettled).toBe(false);
+	await act(async () => {
+		reject?.(new Error("stale timing revision"));
+		await second;
+	});
+	expect(secondSettled).toBe(true);
+	expect(result.current.error).toBe("stale timing revision");
+});
+
+it("restores only changed timing fields while preserving a newer Cue name and unrelated values", async () => {
+	const before = cueList(500);
+	const after = cueList(200);
+	const current = structuredClone(after);
+	current.name = "Renamed list";
+	current.cues[0].name = "New authored Cue name";
+	current.cues[0].fade_millis = 4321;
+	const save = vi.fn(async (_basis: unknown, body: CueList) => saved(body, 6));
+	const { result } = renderHook(() =>
+		useCueTimingWriter(options(current), save),
+	);
+	await act(async () => {
+		await result.current.restore("list-1", after, before);
+	});
+	expect(save.mock.calls[0]?.[1]).toMatchObject({
+		name: "Renamed list",
+		cues: [
+			{ name: "New authored Cue name", fade_millis: 4321, delay_millis: 500 },
+		],
+	});
+});
+
+it("refuses an intervening edit to the same timing cell without calling the writer", async () => {
+	const save = vi.fn();
+	const { result } = renderHook(() =>
+		useCueTimingWriter(options(cueList(999)), save),
+	);
+	await expect(
+		result.current.restore("list-1", cueList(200), cueList(500)),
+	).rejects.toThrow("Cue timings changed");
+	expect(save).not.toHaveBeenCalled();
+});

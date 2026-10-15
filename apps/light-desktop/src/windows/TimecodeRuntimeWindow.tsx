@@ -469,7 +469,28 @@ export function TimecodeEditor({
 		redo,
 		canUndo,
 		canRedo,
-	} = useTimecodeEditorHistory(item.definition);
+		record,
+		saving,
+		saveError,
+		retry: retrySave,
+		flush,
+		effectiveCueLists,
+		saveCueTiming,
+		historySaving,
+		latestDraft,
+		waveformPeaks,
+		waveformError,
+		waveformLoading,
+		seedWaveform,
+		retryWaveform,
+	} = useTimecodeEditState({
+		showId,
+		item,
+		api,
+		cueLists,
+		saveCueList,
+		onError: (message) => setError(message),
+	});
 	const {
 		transport,
 		editorFrame,
@@ -477,8 +498,6 @@ export function TimecodeEditor({
 		acceptTransportResponse,
 		beginTransportAction,
 	} = useTimecodeEditorTransport(snapshot);
-	const latestDraft = useRef(draft);
-	latestDraft.current = draft;
 	const [error, setError] = useState<string | null>(null);
 	const [actionBusy, setActionBusy] = useState(false);
 	const [audioImporting, setAudioImporting] = useState(false);
@@ -488,39 +507,11 @@ export function TimecodeEditor({
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
-	const cueTiming = useCueTimingWriter(cueLists, saveCueList ?? null);
-	const effectiveCueLists = cueTiming.cueLists;
-	useEffect(() => {
-		const reconciled = reconcileAutomaticAudioLane(draft);
-		if (reconciled !== draft) setDraft(reconciled);
-	}, [draft, setDraft]);
-	const {
-		record,
-		saving,
-		saveError,
-		retry: retrySave,
-		flush,
-	} = useTimecodeAutosave({ showId, item, draft, api });
+
 	const isNew = !record;
-	const {
-		waveformPeaks,
-		waveformError,
-		waveformLoading,
-		seedWaveform,
-		retryWaveform,
-	} = useTimecodeWaveform({
-		showId,
-		timecodeId: draft.id,
-		audio: draft.audio,
-		savedAudio: record?.definition.audio,
-		api,
-	});
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
-	const busy = saving || actionBusy || audioImporting || cueTiming.saving;
-	useEffect(() => {
-		if (cueTiming.error) setError(cueTiming.error);
-	}, [cueTiming.error]);
+	const busy = saving || actionBusy || audioImporting;
 	const act = async (action: TimecodeTransportAction) => {
 		if (!showId || !record) return;
 		const interactionRevision = beginTransportAction();
@@ -613,7 +604,11 @@ export function TimecodeEditor({
 		onError: setError,
 	});
 	return (
-		<section className="timecode-window timecode-editor" aria-busy={busy}>
+		<section
+			className="timecode-window timecode-editor"
+			aria-busy={busy}
+			inert={historySaving}
+		>
 			<WindowHeader
 				title={`Timecode ${draft.number}`}
 				info={{
@@ -738,7 +733,7 @@ export function TimecodeEditor({
 				onBeginGesture={beginGesture}
 				onEndGesture={endGesture}
 				timingDefaults={timingDefaults}
-				onSaveCueList={cueTiming.save}
+				onSaveCueList={saveCueTiming}
 				onCueTimingError={setError}
 			/>
 		</section>
@@ -1040,4 +1035,101 @@ export function parseFrame(value: string): number | null {
 		(Number(hours) * 60 * 60 + Number(minutes) * 60 + Number(seconds)) * FPS +
 		framePart
 	);
+}
+
+/** One editor history entry owns the timeline and the Cue timing writes it caused. */
+function useTimecodeEditState({
+	showId,
+	item,
+	api,
+	cueLists,
+	saveCueList,
+	onError,
+}: {
+	showId: string | null;
+	item: TimecodeObjectRecord | NewTimecode;
+	api: TimecodesApiClient;
+	cueLists: TimecodeCueListOption[];
+	saveCueList?: SaveCueListTopology;
+	onError(message: string | null): void;
+}) {
+	const cueTiming = useCueTimingWriter(cueLists, saveCueList ?? null);
+	const history = useTimecodeEditorHistory(
+		item.definition,
+		async (next, timings, isUndo) => {
+			for (const edit of isUndo ? [...timings].reverse() : timings)
+				await cueTiming.restore(
+					edit.cueListId,
+					isUndo ? edit.after : edit.before,
+					isUndo ? edit.before : edit.after,
+				);
+			await autosave.persist(next);
+			onError(null);
+		},
+	);
+	useEffect(() => {
+		const reconciled = reconcileAutomaticAudioLane(history.draft);
+		if (reconciled !== history.draft) history.commit(reconciled);
+	}, [history.draft, history.commit]);
+	const autosave = useTimecodeAutosave({
+		showId,
+		item,
+		draft: history.draft,
+		api,
+	});
+	const {
+		waveformPeaks,
+		waveformError,
+		waveformLoading,
+		seedWaveform,
+		retryWaveform,
+	} = useTimecodeWaveform({
+		showId,
+		timecodeId: history.draft.id,
+		audio: history.draft.audio,
+		savedAudio: autosave.record?.definition.audio,
+		api,
+	});
+	const latestDraft = useRef(history.draft);
+	latestDraft.current = history.draft;
+	const reportError = useRef(onError);
+	reportError.current = onError;
+	useEffect(() => {
+		if (history.error || cueTiming.error)
+			reportError.current(history.error || cueTiming.error);
+	}, [history.error, cueTiming.error]);
+	return {
+		...history,
+		...autosave,
+		historySaving: history.saving,
+		latestDraft,
+		waveformPeaks,
+		waveformError,
+		waveformLoading,
+		seedWaveform,
+		retryWaveform,
+		saving: history.saving || autosave.saving || cueTiming.saving,
+		effectiveCueLists: cueTiming.cueLists,
+		undo: () => {
+			onError(null);
+			history.undo();
+		},
+		redo: () => {
+			onError(null);
+			history.redo();
+		},
+		saveCueTiming: (id: string, body: CueList) => {
+			if (!history.canEdit())
+				return Promise.reject(
+					new Error("Wait for the Timecode history edit to finish saving."),
+				);
+			const before = cueTiming.current(id);
+			if (!before)
+				return Promise.reject(
+					new Error("The authoritative Cue List is unavailable."),
+				);
+			history.recordCueTiming(id, before, body);
+			return cueTiming.save(id, body);
+		},
+	};
 }

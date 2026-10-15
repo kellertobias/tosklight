@@ -16,6 +16,8 @@ export interface CueTimingWriter {
 	error: string | null;
 	/** Records the edit for drawing at once, then writes it through Cuelist authority. */
 	save(cueListId: string, body: CueList): Promise<CueList>;
+	current(cueListId: string): CueList | undefined;
+	restore(cueListId: string, expected: CueList, target: CueList): Promise<void>;
 }
 
 function withBody(
@@ -45,7 +47,18 @@ export function useCueTimingWriter(
 	);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const waiting = useRef(new Map<string, CueList>());
+	const waiting = useRef(
+		new Map<
+			string,
+			{
+				body: CueList;
+				waiters: Array<{
+					resolve(body: CueList): void;
+					reject(cause: unknown): void;
+				}>;
+			}
+		>(),
+	);
 	const writing = useRef(new Set<string>());
 	const basis = useRef(new Map<string, CueListBasis>());
 	const sources = useRef(cueLists);
@@ -81,10 +94,14 @@ export function useCueTimingWriter(
 			if (writing.current.has(cueListId)) return;
 			writing.current.add(cueListId);
 			setSaving(true);
+			let active:
+				| NonNullable<ReturnType<typeof waiting.current.get>>
+				| undefined;
 			try {
 				for (;;) {
-					const body = waiting.current.get(cueListId);
-					if (!body) break;
+					active = waiting.current.get(cueListId);
+					if (!active) break;
+					const { body } = active;
 					waiting.current.delete(cueListId);
 					if (!saveCueList)
 						throw new Error("The authoritative Cue List writer is unavailable.");
@@ -109,8 +126,20 @@ export function useCueTimingWriter(
 							body: saved.body,
 						}),
 					);
+					for (const waiter of active.waiters) waiter.resolve(saved.body);
+					active = undefined;
 				}
 				setError(null);
+			} catch (cause) {
+				setError(
+					cause instanceof Error
+						? cause.message
+						: "The Cue timing did not save.",
+				);
+				for (const waiter of active?.waiters ?? []) waiter.reject(cause);
+				for (const waiter of waiting.current.get(cueListId)?.waiters ?? [])
+					waiter.reject(cause);
+				waiting.current.delete(cueListId);
 			} finally {
 				writing.current.delete(cueListId);
 				setSaving(writing.current.size > 0);
@@ -128,30 +157,95 @@ export function useCueTimingWriter(
 	);
 
 	const save = useCallback(
-		async (cueListId: string, body: CueList) => {
+		(cueListId: string, body: CueList): Promise<CueList> => {
 			setLive((current) => new Map(current).set(cueListId, body));
-			waiting.current.set(cueListId, body);
-			try {
-				await drain(cueListId);
-			} catch (cause) {
-				const message =
-					cause instanceof Error ? cause.message : "The Cue timing did not save.";
-				setError(message);
-				throw cause;
-			}
-			return body;
+			const result = new Promise<CueList>((resolve, reject) => {
+				const previous = waiting.current.get(cueListId);
+				waiting.current.set(cueListId, {
+					body,
+					waiters: [...(previous?.waiters ?? []), { resolve, reject }],
+				});
+			});
+			void drain(cueListId);
+			return result;
 		},
 		[drain],
 	);
-
+	const drawn = cueLists.map((cueList) => {
+		const option = settled.get(cueList.id) ?? cueList;
+		const body = live.get(cueList.id);
+		return body ? withBody(option, body) : option;
+	});
 	return {
-		cueLists: cueLists.map((cueList) => {
-			const option = settled.get(cueList.id) ?? cueList;
-			const drawn = live.get(cueList.id);
-			return drawn ? withBody(option, drawn) : option;
-		}),
+		cueLists: drawn,
 		saving,
 		error,
 		save,
+		...useCueTimingHistory(drawn, save),
 	};
+}
+
+function useCueTimingHistory(
+	drawn: TimecodeCueListOption[],
+	save: CueTimingWriter["save"],
+) {
+	const latest = useRef(drawn);
+	latest.current = drawn;
+	const current = useCallback(
+		(cueListId: string) =>
+			latest.current.find((item) => item.id === cueListId)?.body,
+		[],
+	);
+	const restore = useCallback(
+		async (cueListId: string, expected: CueList, target: CueList) => {
+			const body = current(cueListId);
+			if (!body) throw new Error("The authoritative Cue List is unavailable.");
+			const next = restoreTimingFields(body, expected, target);
+			if (next !== body) await save(cueListId, next);
+		},
+		[current, save],
+	);
+	return { current, restore };
+}
+
+/** Restore only this gesture's timing cells; unrelated Cue edits are never replaced. */
+function restoreTimingFields(
+	body: CueList,
+	expected: CueList,
+	target: CueList,
+): CueList {
+	const keys = [
+		"delay_millis",
+		"fade_millis",
+		"out_delay_millis",
+		"out_fade_millis",
+	] as const;
+	const cues = [...body.cues];
+	let changed = false;
+	for (const before of expected.cues) {
+		const after = target.cues.find((cue) => cue.id === before.id);
+		if (!after)
+			throw new Error("The Cue timing history no longer matches this Cuelist.");
+		const fields = keys.filter((key) => before[key] !== after[key]);
+		if (!fields.length) continue;
+		const index = cues.findIndex((cue) => cue.id === before.id);
+		const current = cues[index];
+		if (!current)
+			throw new Error("A Cue in this timing edit no longer exists.");
+		for (const key of fields) {
+			if (current[key] !== before[key] && current[key] !== after[key])
+				throw new Error(
+					"Cue timings changed since this edit. Undo/Redo was not applied.",
+				);
+		}
+		const next = { ...current };
+		for (const key of fields) {
+			if (next[key] === after[key]) continue;
+			changed = true;
+			if (after[key] === undefined) delete next[key];
+			else next[key] = after[key];
+		}
+		cues[index] = next;
+	}
+	return changed ? { ...body, cues } : body;
 }

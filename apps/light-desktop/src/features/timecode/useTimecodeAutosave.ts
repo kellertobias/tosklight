@@ -57,5 +57,15 @@ export function useTimecodeAutosave({
 	}, [draft, writer, saveAttempt]);
 	const retry = useCallback(() => setSaveAttempt((value) => value + 1), []);
 	const flush = useCallback(async () => writer?.flush(), [writer]);
-	return { record, saving, saveError, retry, flush };
+	const persist = useCallback(
+		async (next: TimecodeDefinition) => {
+			if (!writer) throw new Error("The Timecode writer is unavailable.");
+			const saved = await writer.enqueue(next);
+			setRecord(saved);
+			setSaveError(null);
+			return saved;
+		},
+		[writer],
+	);
+	return { record, saving, saveError, retry, flush, persist };
 }
