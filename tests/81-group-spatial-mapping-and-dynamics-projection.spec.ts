@@ -10,12 +10,6 @@ interface StoredGroupBody {
 	};
 }
 
-interface StoredStageLayoutBody {
-	version?: number;
-	positions?: Record<string, { x: number; y: number }>;
-	positions3d?: Record<string, { x: number; y: number; z: number }>;
-}
-
 type GroupSource =
 	| { type: "explicit"; fixture_ids: string[] }
 	| {
@@ -41,28 +35,26 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 	show,
 }) => {
 	test.setTimeout(90_000);
-	const stage = await api.showObject<StoredStageLayoutBody>(
-		show.id,
-		"stage_layout",
-		"main",
-	);
-	const positions3d = Object.fromEntries(
-		show.fixtureIds.map((fixtureId, index) => [
+	// Co-locate the first two physical fixtures so they genuinely share one radial rank.
+	// Legacy Stage coordinates no longer override the fixture positions saved in Patch.
+	for (const [index, fixtureId] of show.fixtureIds.entries()) {
+		const fixture = await api.showObject<Record<string, unknown>>(
+			show.id,
+			"patched_fixture",
 			fixtureId,
-			{ x: index <= 1 ? 500 : (index + 1) * 500, y: 0, z: 0 },
-		]),
-	);
-	await api.seedShowObject(
-		show.id,
-		"stage_layout",
-		"main",
-		{
-			version: stage?.body.version ?? 2,
-			positions: stage?.body.positions ?? {},
-			positions3d,
-		},
-		stage?.revision ?? 0,
-	);
+		);
+		if (!fixture) throw new Error(`Spatial fixture ${fixtureId} does not exist`);
+		await api.seedShowObject(
+			show.id,
+			"patched_fixture",
+			fixtureId,
+			{
+				...fixture.body,
+				location: { x: index <= 1 ? 500 : (index + 1) * 500, y: 0, z: 0 },
+			},
+			fixture.revision,
+		);
+	}
 
 	await desk.open(api.baseUrl);
 	await openGroups(page);

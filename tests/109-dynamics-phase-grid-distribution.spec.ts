@@ -1,11 +1,5 @@
 import { expect, test } from "./bench/core/fixtures";
 
-interface StoredStageLayoutBody {
-	version?: number;
-	positions?: Record<string, { x: number; y: number }>;
-	positions3d?: Record<string, { x: number; y: number; z: number }>;
-}
-
 interface GroupSettingsSnapshot {
 	resolved_spatial: {
 		ranks: Array<{ fixture_id: string; rank: number }>;
@@ -55,22 +49,23 @@ test.describe("docs/testing: Dynamics Phase Grid distribution", () => {
 		const members = show.fixtureIds.slice(0, side * side);
 		expect(members.length).toBe(side * side);
 
-		const stage = await api.showObject<StoredStageLayoutBody>(
-			show.id,
-			"stage_layout",
-			"main",
-		);
-		await api.seedShowObject(
-			show.id,
-			"stage_layout",
-			"main",
-			{
-				version: stage?.body.version ?? 2,
-				positions: stage?.body.positions ?? {},
-				positions3d: gridPositions(members, side),
-			},
-			stage?.revision ?? 0,
-		);
+		// Spatial ranking follows the physical Patch, exactly as Show Patch position edits do.
+		// Keep every fixture's stored profile, patch and programming identity intact.
+		for (const [fixtureId, location] of Object.entries(gridPositions(members, side))) {
+			const fixture = await api.showObject<Record<string, unknown>>(
+				show.id,
+				"patched_fixture",
+				fixtureId,
+			);
+			if (!fixture) throw new Error(`Grid fixture ${fixtureId} does not exist`);
+			await api.seedShowObject(
+				show.id,
+				"patched_fixture",
+				fixtureId,
+				{ ...fixture.body, location },
+				fixture.revision,
+			);
+		}
 
 		/** Seeds the Group at `angle` and returns each member's rank, by grid index. */
 		const ranksAt = async (angle: number) => {
