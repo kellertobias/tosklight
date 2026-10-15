@@ -467,6 +467,23 @@ fn configured_cue_subrange_starts_at_its_selected_cue_and_preserves_placed_trans
             Some(cue_list.cues[2].id)
         );
     }
+    assert!(
+        execution_at(&definition, &cue_list, 99)
+            .cue_history
+            .is_empty()
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 119).cue_history,
+        vec![(TimecodeFrame(100), cue_list.cues[1].id)]
+    );
+    assert_eq!(
+        execution_at(&definition, &cue_list, 200).cue_history,
+        vec![
+            (TimecodeFrame(100), cue_list.cues[1].id),
+            (TimecodeFrame(120), cue_list.cues[2].id)
+        ]
+    );
+
     assert_eq!(
         execution_at(&definition, &cue_list, 200).kind,
         TimecodeCueListClipExecutionKind::Held

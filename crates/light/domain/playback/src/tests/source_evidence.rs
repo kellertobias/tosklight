@@ -607,3 +607,34 @@ fn equal_native_trace_requirement_is_unknown_while_actual_conversion_hold_keeps_
         );
     }
 }
+
+#[test]
+fn retained_intensity_scale_is_additive_validated_and_round_trips() {
+    let fixture = FixtureId::new();
+    let mut cue = Cue::new(cue_number(1.0));
+    cue.changes.push(value(fixture, "intensity", 0.5));
+    let list = list(vec![cue]);
+    let id = list.id;
+    let mut engine = PlaybackEngine::default();
+    engine.register(list).unwrap();
+    engine.go(id).unwrap();
+    let row = PlaybackRetainedValue::from(sample(&engine, Utc::now()));
+    let legacy = serde_json::to_value(&row).unwrap();
+    assert!(legacy.get("captured_intensity_scale").is_none());
+    assert_eq!(
+        serde_json::from_value::<PlaybackRetainedValue>(legacy.clone())
+            .unwrap()
+            .captured_intensity_scale,
+        None
+    );
+    let mut current = legacy.clone();
+    current["captured_intensity_scale"] = serde_json::json!(1.0);
+    let decoded: PlaybackRetainedValue = serde_json::from_value(current.clone()).unwrap();
+    assert_eq!(decoded.captured_intensity_scale, Some(1.0));
+    assert_eq!(serde_json::to_value(decoded).unwrap(), current);
+    for invalid in [0.0, -1.0, 1.1] {
+        let mut body = legacy.clone();
+        body["captured_intensity_scale"] = serde_json::json!(invalid);
+        assert!(serde_json::from_value::<PlaybackRetainedValue>(body).is_err());
+    }
+}

@@ -207,7 +207,14 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
         PlaybackRetainedValue, PlaybackSourceOccurrence, SequenceMasterSource,
     };
 
-    for case in ["valid", "legacy", "bad_scope", "bad_cue_id"] {
+    for case in [
+        "valid",
+        "legacy",
+        "reconstructed_scale",
+        "bad_scale",
+        "bad_scope",
+        "bad_cue_id",
+    ] {
         let data_dir = std::env::temp_dir().join(format!(
             "light-playback-evidence-recovery-{}",
             Uuid::new_v4()
@@ -218,6 +225,7 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
         let show_id = initial.persistent.active_show.as_ref().unwrap().id;
         let list_id = light_core::CueListId::new();
         let row = PlaybackRetainedValue {
+            captured_intensity_scale: None,
             replacement_projection: None,
             timed: light_core::TimedValue {
                 fixture_id: light_core::FixtureId::new(),
@@ -254,6 +262,14 @@ fn retained_playback_evidence_reader_accepts_legacy_rows_and_preserves_invalid_r
         };
         let mut row = serde_json::to_value(row).unwrap();
         match case {
+            "reconstructed_scale" => {
+                row["captured_intensity_scale"] = serde_json::json!(1.0);
+                row["attribute"] = serde_json::json!("intensity");
+                row.as_object_mut().unwrap().remove("family_evidence");
+            }
+            "bad_scale" => {
+                row["captured_intensity_scale"] = serde_json::json!(0.0);
+            }
             "legacy" => {
                 row.as_object_mut().unwrap().remove("family_evidence");
             }

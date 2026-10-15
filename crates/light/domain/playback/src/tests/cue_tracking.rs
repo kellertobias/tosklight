@@ -502,3 +502,112 @@ fn pause_freezes_and_resume_continues_fade() {
             < 0.01
     );
 }
+
+fn timeline_asymmetric_list(fixtures: [FixtureId; 2], overlapping: bool) -> CueList {
+    let mut first = Cue::new(cue_number(1.0));
+    first.fade_millis = if overlapping { 2_000 } else { 0 };
+    first.out_delay_millis = Some(250);
+    first.out_fade_millis = Some(1_000);
+    let mut second = Cue::new(cue_number(2.0));
+    second.delay_millis = 500;
+    second.fade_millis = 2_000;
+    for (fixture, before, after) in [(fixtures[0], 0.2, 0.8), (fixtures[1], 0.8, 0.2)] {
+        let mut change = value(fixture, "intensity", before);
+        change.fade_millis = Some(if overlapping { 2_000 } else { 0 });
+        change.delay_millis = Some(0);
+        first.changes.push(change);
+        second.changes.push(value(fixture, "intensity", after));
+    }
+    let mut tracked = value(fixtures[0], "pan", 0.7);
+    tracked.fade_millis = Some(0);
+    tracked.delay_millis = Some(0);
+    first.changes.push(tracked);
+    list(vec![first, second])
+}
+
+#[test]
+fn timeline_reconstruction_replays_interrupted_sources_and_clip_entry_range() {
+    let fixtures = [FixtureId::new(), FixtureId::new()];
+    for (overlapping, expected) in [(false, [0.275, 0.5]), (true, [0.1875, 0.3])] {
+        let list = timeline_asymmetric_list(fixtures, overlapping);
+        let id = list.id;
+        let cues = [list.cues[0].id, list.cues[1].id];
+        let now = Utc::now();
+        let mut engine =
+            PlaybackEngine::with_clock(std::sync::Arc::new(light_core::ManualClock::new(now)));
+        engine.register(list).unwrap();
+        // Cue1 entered1.75s ago; Cue2 interrupted it1s later. Repeated/backwards
+        // reconstruction must not reuse whatever happened to be active beforehand.
+        for _ in 0..2 {
+            let active = engine
+                .reconstruct_timeline_cues(id, &[(cues[0], 1_750), (cues[1], 750)])
+                .unwrap();
+            assert!(active.discrete_cue_actions_suppressed);
+            for (fixture, expected) in fixtures.into_iter().zip(expected) {
+                assert!((contribution_level(&engine, now, fixture) - expected).abs() < 0.0001);
+            }
+            assert!(
+                engine
+                    .contributions_at(now)
+                    .iter()
+                    .any(|row| row.attribute == AttributeKey("pan".into())
+                        && row.value == AttributeValue::Normalized(0.7))
+            );
+            // A clip whose first selected Cue is Cue2 starts that Cue from the default,
+            // rather than inventing a prior execution of Cue1 outside the clip range.
+            engine
+                .reconstruct_timeline_cues(id, &[(cues[1], 750)])
+                .unwrap();
+            assert!((contribution_level(&engine, now, fixtures[0]) - 0.1).abs() < 0.0001);
+            assert!((contribution_level(&engine, now, fixtures[1]) - 0.025).abs() < 0.0001);
+        }
+        let before = serde_json::to_value(engine.active()).unwrap();
+        assert!(
+            engine
+                .reconstruct_timeline_cues(id, &[(cues[0], 100), (cues[1], 200)])
+                .is_err()
+        );
+        assert!(
+            engine
+                .reconstruct_timeline_cues(id, &[(cues[0], 200), (uuid::Uuid::new_v4(), 100)])
+                .is_err()
+        );
+        assert!(engine.reconstruct_timeline_cues(id, &[]).is_err());
+        assert_eq!(serde_json::to_value(engine.active()).unwrap(), before);
+    }
+}
+
+#[test]
+fn timeline_reconstruction_preserves_intent_across_zero_clip_master() {
+    let fixtures = [FixtureId::new(), FixtureId::new()];
+    let list = timeline_asymmetric_list(fixtures, false);
+    let id = list.id;
+    let path = [(list.cues[0].id, 1_750), (list.cues[1].id, 750)];
+    let now = Utc::now();
+    let mut engine =
+        PlaybackEngine::with_clock(std::sync::Arc::new(light_core::ManualClock::new(now)));
+    engine.register(list.clone()).unwrap();
+    engine.reconstruct_timeline_cues(id, &path).unwrap();
+    engine.set_cue_list_master_mutation(id, 0.0).unwrap();
+    assert_eq!(
+        engine.reconstruct_timeline_cues(id, &path).unwrap().master,
+        0.0
+    );
+    engine.set_cue_list_master_mutation(id, 0.5).unwrap();
+    assert!((contribution_level(&engine, now, fixtures[0]) - 0.1375).abs() < 0.0001);
+    assert!((contribution_level(&engine, now, fixtures[1]) - 0.25).abs() < 0.0001);
+    let stored = serde_json::to_vec(&engine.active()).unwrap();
+    let restored: Vec<ActivePlayback> = serde_json::from_slice(&stored).unwrap();
+    let mut reopened =
+        PlaybackEngine::with_clock(std::sync::Arc::new(light_core::ManualClock::new(now)));
+    reopened.register(list).unwrap();
+    reopened.restore_active(restored);
+    for fixture in fixtures {
+        assert!(
+            (contribution_level(&reopened, now, fixture)
+                - contribution_level(&engine, now, fixture))
+            .abs()
+                < 0.0001
+        );
+    }
+}

@@ -657,3 +657,206 @@ async fn assert_automatic_timecode_same_frame(isolated_proof: bool) {
     );
     std::fs::remove_dir_all(data_dir).unwrap();
 }
+
+fn asymmetric_timeline_cues(fixtures: [light_core::FixtureId; 2]) -> light_playback::CueList {
+    let mut list = operational_cue_list(light_core::CueListId::new(), fixtures[0]);
+    list.cues.clear();
+    for (index, levels) in [[0.2, 0.8], [0.8, 0.2]].into_iter().enumerate() {
+        let mut item = light_playback::Cue::new(cue(if index == 0 { "1" } else { "2" }));
+        item.fade_millis = if index == 0 { 0 } else { 2_000 };
+        item.delay_millis = if index == 0 { 0 } else { 500 };
+        if index == 0 {
+            item.out_fade_millis = Some(1_000);
+            item.out_delay_millis = Some(250);
+        }
+        for (fixture, level) in fixtures.into_iter().zip(levels) {
+            let mut change = light_playback::CueChange::set(
+                fixture,
+                light_core::AttributeKey::intensity(),
+                light_core::AttributeValue::Normalized(level),
+            );
+            if index == 0 {
+                change.fade_millis = Some(0);
+                change.delay_millis = Some(0);
+            }
+            item.changes.push(change);
+        }
+        list.cues.push(item);
+    }
+    list
+}
+
+fn asymmetric_timeline_definition(
+    list: &light_playback::CueList,
+) -> light_playback::TimecodeDefinition {
+    use light_playback::*;
+    TimecodeDefinition {
+        id: TimecodeId(Uuid::new_v4()),
+        number: 1,
+        name: "Asymmetric seek".into(),
+        duration: Some(TimecodeFrame(440)),
+        transport_offset: TimecodeFrame::ZERO,
+        auto_start: false,
+        audio: None,
+        markers: Vec::new(),
+        lanes: vec![TimecodeLane {
+            id: TimecodeLaneId(Uuid::new_v4()),
+            name: "Manual Cues".into(),
+            content: TimecodeLaneContent::CueList {
+                cue_list_id: list.id,
+                clips: vec![TimecodeCueListClip {
+                    id: TimecodeClipId(Uuid::new_v4()),
+                    start_frame: TimecodeFrame::ZERO,
+                    end_frame: TimecodeFrame(264),
+                    start_cue_id: list.cues[0].id,
+                    end_cue_id: list.cues[1].id,
+                    start_behavior: TimecodeClipStart::State,
+                    end_behavior: TimecodeClipEnd::Hold,
+                    cue_starts: vec![TimecodeCueStart {
+                        cue_id: list.cues[1].id,
+                        offset_frame: TimecodeFrame(44),
+                    }],
+                    in_fade_frames: 0,
+                    out_fade_frames: 0,
+                }],
+            },
+        }],
+    }
+}
+
+#[tokio::test]
+async fn timecode_paused_seek_reconstructs_asymmetric_predecessor_output() {
+    use light_playback::{TimecodeFrame, TimecodeTransportAction};
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock);
+    let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+    let list = asymmetric_timeline_cues(fixtures);
+    let definition = asymmetric_timeline_definition(&list);
+    let mut second = operational_fixture(fixtures[1]);
+    second.address = Some(2);
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(fixtures[0]), second].into(),
+            cue_lists: vec![list.clone()].into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    state.timecodes.install(definition.clone(), None).unwrap();
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Pause)
+        .unwrap();
+    // Frozen native oracle: Cue 2 enters at 1s, rising .2->.8 after .5s over2s;
+    // falling .8->.2 uses Cue 1 Out delay .25s/fade1s. No captured bytes define this.
+    for (frame, expected) in [
+        (77, [70u8, 128]),
+        (110, [128, 51]),
+        (154, [204, 51]),
+        (77, [70, 128]),
+    ] {
+        state
+            .timecodes
+            .handle(
+                definition.id,
+                TimecodeTransportAction::Seek {
+                    frame: TimecodeFrame(frame),
+                },
+            )
+            .unwrap();
+        state.timecodes.reconcile_cue_lists(state.output.engine());
+        let _ = output_scheduler::render_test_tick(state.clone()).await;
+        let snapshot = state.output.dmx_snapshot().0;
+        let actual = &snapshot.universes[0].slots[..2];
+        for (got, want) in actual.iter().zip(expected) {
+            assert!(
+                got.abs_diff(want) <= 1,
+                "frame {frame}: actual {actual:?}, expected {expected:?}"
+            );
+        }
+        let status = state
+            .output
+            .engine()
+            .playback_runtime_status_for_cue_list(list.id)
+            .unwrap();
+        assert!(status.playback.discrete_cue_actions_suppressed);
+    }
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn timecode_seek_resolves_overlap_and_nonfirst_clip_entry_from_actual_schedule() {
+    use light_playback::{TimecodeFrame, TimecodeLaneContent, TimecodeTransportAction};
+    for (overlapping, expected) in [(true, [48u8, 77]), (false, [26, 6])] {
+        let clock = Arc::new(ManualClock::new(fixed_test_time()));
+        let (state, data_dir) = test_state_with_clock(clock);
+        let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+        let mut list = asymmetric_timeline_cues(fixtures);
+        let mut definition = asymmetric_timeline_definition(&list);
+        if overlapping {
+            for change in &mut list.cues[0].changes {
+                change.fade_millis = Some(2_000);
+            }
+        } else {
+            let TimecodeLaneContent::CueList { clips, .. } = &mut definition.lanes[0].content
+            else {
+                unreachable!()
+            };
+            clips[0].start_cue_id = list.cues[1].id;
+            clips[0].start_frame = TimecodeFrame(44);
+            clips[0].cue_starts.clear();
+        }
+        let mut second = operational_fixture(fixtures[1]);
+        second.address = Some(2);
+        state
+            .output
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![operational_fixture(fixtures[0]), second].into(),
+                cue_lists: vec![list.clone()].into(),
+                ..EngineSnapshot::default()
+            })
+            .unwrap();
+        state.timecodes.install(definition.clone(), None).unwrap();
+        state
+            .timecodes
+            .handle(definition.id, TimecodeTransportAction::Go)
+            .unwrap();
+        state
+            .timecodes
+            .handle(definition.id, TimecodeTransportAction::Pause)
+            .unwrap();
+        state
+            .timecodes
+            .handle(
+                definition.id,
+                TimecodeTransportAction::Seek {
+                    frame: TimecodeFrame(77),
+                },
+            )
+            .unwrap();
+        state.timecodes.reconcile_cue_lists(state.output.engine());
+        let _ = output_scheduler::render_test_tick(state.clone()).await;
+        let snapshot = state.output.dmx_snapshot().0;
+        let actual = &snapshot.universes[0].slots[..2];
+        for (got, want) in actual.iter().zip(expected) {
+            assert!(
+                got.abs_diff(want) <= 1,
+                "overlapping={overlapping}: actual {actual:?}, expected {expected:?}"
+            );
+        }
+        assert!(
+            state
+                .output
+                .engine()
+                .playback_runtime_status_for_cue_list(list.id)
+                .unwrap()
+                .playback
+                .discrete_cue_actions_suppressed
+        );
+        let _ = std::fs::remove_dir_all(data_dir);
+    }
+}

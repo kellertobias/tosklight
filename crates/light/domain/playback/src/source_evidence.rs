@@ -115,6 +115,10 @@ impl<'de> Deserialize<'de> for PlaybackFamilyEvidence {
 /// Flattening preserves the old TimedValue row shape. Missing producer history is unknown.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PlaybackRetainedValue {
+    /// Scale used to capture reconstructed Intensity intent. Absent legacy rows retain
+    /// their original current-master normalization; new Timecode replay records unity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captured_intensity_scale: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replacement_projection: Option<light_core::ReplacementProgramProjection>,
     #[serde(flatten)]
@@ -132,6 +136,8 @@ impl<'de> Deserialize<'de> for PlaybackRetainedValue {
         #[derive(Deserialize)]
         struct Wire {
             #[serde(default)]
+            captured_intensity_scale: Option<f32>,
+            #[serde(default)]
             replacement_projection: Option<light_core::ReplacementProgramProjection>,
             #[serde(flatten)]
             timed: TimedValue,
@@ -139,6 +145,14 @@ impl<'de> Deserialize<'de> for PlaybackRetainedValue {
             family_evidence: Option<Arc<PlaybackFamilyEvidence>>,
         }
         let row = Wire::deserialize(deserializer)?;
+        if row
+            .captured_intensity_scale
+            .is_some_and(|scale| !scale.is_finite() || scale <= 0.0 || scale > 1.0)
+        {
+            return Err(serde::de::Error::custom(
+                "Captured Intensity scale must be within (0, 1]",
+            ));
+        }
         if let Some(evidence) = &row.family_evidence {
             let owner = family_owner(&row.timed.attribute, &row.timed.value).ok_or_else(|| {
                 serde::de::Error::custom("Playback evidence requires a complete owner")
@@ -161,6 +175,7 @@ impl<'de> Deserialize<'de> for PlaybackRetainedValue {
             projection.validate().map_err(serde::de::Error::custom)?;
         }
         Ok(Self {
+            captured_intensity_scale: row.captured_intensity_scale,
             replacement_projection: row.replacement_projection,
             timed: row.timed,
             family_evidence: row.family_evidence,
@@ -179,6 +194,7 @@ impl std::ops::Deref for PlaybackRetainedValue {
 impl From<PlaybackContribution> for PlaybackRetainedValue {
     fn from(value: PlaybackContribution) -> Self {
         Self {
+            captured_intensity_scale: None,
             replacement_projection: value.replacement_projection,
             timed: value.value,
             family_evidence: value.family_evidence,

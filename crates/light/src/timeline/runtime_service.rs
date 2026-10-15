@@ -348,7 +348,7 @@ impl TimecodeRuntimeService {
                             source: CueListClipSource::from(clip),
                             cue_id,
                             level: clip.level,
-                            cue_start_frame: clip.cue_start_frame.unwrap_or(frame),
+                            cue_history: clip.cue_history.clone(),
                             start_behavior: clip.start_behavior,
                             transport,
                             reconcile_mode,
@@ -760,13 +760,17 @@ fn reconcile_desired_cue_list(
         let action = if should_execute {
             CueListPlaybackAction::ExecuteCueId(next.cue_id)
         } else {
-            CueListPlaybackAction::ReconstructCueId {
-                cue_id: next.cue_id,
-                elapsed_millis: frames_to_millis(
-                    next.frame.0.saturating_sub(next.cue_start_frame.0),
-                    next.frame_rate,
-                ),
-            }
+            CueListPlaybackAction::ReconstructTimelineCues(
+                next.cue_history
+                    .iter()
+                    .map(|(start, cue_id)| {
+                        (
+                            *cue_id,
+                            frames_to_millis(next.frame.0.saturating_sub(start.0), next.frame_rate),
+                        )
+                    })
+                    .collect(),
+            )
         };
         execute(
             EnginePlaybackCommand::CueList {
@@ -856,7 +860,7 @@ struct AppliedCueListClip {
     cue_id: uuid::Uuid,
     /// The level the owning clip's in and out fade put the Cuelist at on this frame.
     level: f32,
-    cue_start_frame: TimecodeFrame,
+    cue_history: Vec<(TimecodeFrame, uuid::Uuid)>,
     start_behavior: light_playback::TimecodeClipStart,
     transport: TimecodeTransportState,
     reconcile_mode: CueListReconcileMode,

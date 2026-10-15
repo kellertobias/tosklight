@@ -277,7 +277,10 @@ fn normalized_deleted_source(
         .iter()
         .map(|retained| {
             let mut row = retained.clone();
-            row.timed.value = normalized_deleted_value(&retained.timed, intensity_scale);
+            row.timed.value = normalized_deleted_value(
+                &retained.timed,
+                retained.captured_intensity_scale.unwrap_or(intensity_scale),
+            );
             ((retained.fixture_id, retained.attribute.clone()), row)
         })
         .collect()

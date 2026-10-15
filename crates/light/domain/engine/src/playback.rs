@@ -51,6 +51,8 @@ pub enum CueListPlaybackAction {
         cue_id: uuid::Uuid,
         elapsed_millis: u64,
     },
+    /// In-process Timecode history; ages are relative to the requested frame.
+    ReconstructTimelineCues(Vec<(uuid::Uuid, u64)>),
     Pause,
     Resume,
     Release,
@@ -549,6 +551,11 @@ fn execute_cue_list(
             elapsed_millis,
         } => playback
             .reconstruct_to_cue_id(id, cue_id, elapsed_millis)
+            .cloned()
+            .map(Box::new)
+            .map(EnginePlaybackOutcome::Active),
+        CueListPlaybackAction::ReconstructTimelineCues(cues) => playback
+            .reconstruct_timeline_cues(id, &cues)
             .cloned()
             .map(Box::new)
             .map(EnginePlaybackOutcome::Active),

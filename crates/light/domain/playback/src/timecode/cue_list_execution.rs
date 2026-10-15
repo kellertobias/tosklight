@@ -26,6 +26,8 @@ pub struct TimecodeCueListClipExecution {
     pub kind: TimecodeCueListClipExecutionKind,
     pub cue_id: Option<Uuid>,
     pub cue_start_frame: Option<TimecodeFrame>,
+    /// Reached Cue starts within this clip, in execution order (not a persisted field).
+    pub cue_history: Vec<(TimecodeFrame, Uuid)>,
     pub start_behavior: TimecodeClipStart,
     /// The level the clip is contributing at this frame, from its own in and out fade.
     ///
@@ -71,6 +73,7 @@ impl TimecodeDefinition {
                     kind: TimecodeCueListClipExecutionKind::Armed,
                     cue_id: None,
                     cue_start_frame: None,
+                    cue_history: Vec::new(),
                     start_behavior: clip.start_behavior,
                     level: 0.0,
                     message: None,
@@ -133,6 +136,7 @@ impl TimecodeDefinition {
                             cue_id: schedule.last().map(|(_, cue_id)| *cue_id),
                             cue_start_frame: schedule.last().map(|(start, _)| *start),
                             level: clip.level_at(clip.end_frame),
+                            cue_history: schedule,
                             ..base
                         },
                     });
@@ -149,6 +153,10 @@ impl TimecodeDefinition {
                     cue_id: Some(cue_id),
                     cue_start_frame: Some(cue_start_frame),
                     level: clip.level_at(frame),
+                    cue_history: schedule
+                        .into_iter()
+                        .filter(|(start, _)| start.0 <= frame.0)
+                        .collect(),
                     ..base
                 });
             }

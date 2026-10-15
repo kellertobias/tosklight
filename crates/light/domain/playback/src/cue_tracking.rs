@@ -280,6 +280,65 @@ impl PlaybackEngine {
         Ok(playback)
     }
 
+    /// Rebuild a Timecode clip's reached Cue transitions at their original timestamps.
+    /// Entries are ordered by execution, with ages measured backwards from the current frame.
+    /// Replaying the owned transition source preserves interrupted fades without firing actions.
+    pub fn reconstruct_timeline_cues(
+        &mut self,
+        id: CueListId,
+        cues: &[(Uuid, u64)],
+    ) -> Result<&ActivePlayback, String> {
+        let list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
+        let Some(&(first, first_age)) = cues.first() else {
+            return Err("Timecode reconstruction requires a Cue".into());
+        };
+        if cues.windows(2).any(|pair| pair[0].1 < pair[1].1)
+            || cues
+                .iter()
+                .any(|(cue_id, _)| !list.cues.iter().any(|cue| cue.id == *cue_id))
+        {
+            return Err("Timecode reconstruction has an invalid Cue path".into());
+        }
+        let now = self.clock.now();
+        self.reconstruct_to_cue_id(id, first, first_age)?;
+        let key = self.key_for_cue_list(id)?;
+        let playback = self
+            .active
+            .get_mut(&key)
+            .expect("reconstruction installed playback");
+        // Clip gain is applied after the Cue transition. Reconstruct unscaled intent even
+        // when the previous clip level was zero, then restore that level atomically.
+        let master = playback.master;
+        playback.master = 1.0;
+        for &(cue_id, age) in &cues[1..] {
+            let number = self.cue_lists[&id]
+                .cues
+                .iter()
+                .find(|cue| cue.id == cue_id)
+                .expect("validated Cue path")
+                .number
+                .clone();
+            let elapsed = chrono::Duration::milliseconds(i64::try_from(age).unwrap_or(i64::MAX));
+            self.jump_at(id, number, now - elapsed)?;
+        }
+        let key = self.key_for_cue_list(id)?;
+        let playback = self
+            .active
+            .get_mut(&key)
+            .expect("reconstruction installed playback");
+        if let Some(source) = &mut playback.deleted_cue_transition_source {
+            for row in source
+                .iter_mut()
+                .filter(|row| row.timed.attribute.is_intensity())
+            {
+                row.captured_intensity_scale = Some(1.0);
+            }
+        }
+        playback.master = master;
+        playback.discrete_cue_actions_suppressed = true;
+        Ok(playback)
+    }
+
     pub fn jump_at(
         &mut self,
         id: CueListId,
@@ -631,6 +690,7 @@ impl PlaybackEngine {
                     _ => false,
                 };
                 compatible.then(|| PlaybackRetainedValue {
+                    captured_intensity_scale: None,
                     replacement_projection: None,
                     timed: TimedValue {
                         fixture_id: address.0,
