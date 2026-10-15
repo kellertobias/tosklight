@@ -69,46 +69,103 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # No policy/sysctl/capability changes. Dependencies only, once, before any probe.
-          # A distro perf wrapper is not passed to the helper as an ELF executable.
-          if ! command -v cc >/dev/null || ! command -v readelf >/dev/null \
-            || ! dpkg-query -W -f='${db:Status-Abbrev}\n' 'linux-tools-[0-9]*' 2>/dev/null | grep -q '^ii'; then
-            sudo -n timeout --signal=TERM --kill-after=10s 260s \
-              env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a bash -c \
-              'set -e; apt-get update; apt-get install -y --no-install-recommends linux-tools-common linux-tools-generic binutils build-essential'
-          fi
           python3 -B - <<'PYTHON'
-          import hashlib, json, os, pathlib, platform, shutil, subprocess
-          listing = subprocess.run(['dpkg-query', '-W', '-f=${binary:Package}\t${db:Status-Abbrev}\n',
-                                    'linux-tools-*'], text=True, capture_output=True, timeout=2)
-          candidates = []
-          for line in listing.stdout.splitlines():
-              package, status = line.split('\t', 1)
-              if not status.startswith('ii'):
-                  continue
-              files = subprocess.run(['dpkg-query', '-L', package], check=True, text=True, capture_output=True, timeout=2)
-              for raw in files.stdout.splitlines():
-                  path = pathlib.Path(raw)
-                  if path.name != 'perf' or not path.is_file() or path.is_symlink():
-                      continue
-                  with path.open('rb') as stream:
-                      elf = stream.read(4) == b'\x7fELF'
-                  if elf:
-                      candidates.append((package, path))
-          if not candidates or not shutil.which('cc') or not shutil.which('readelf'):
-              raise SystemExit('STOP: official direct perf ELF/compiler/binutils unavailable; no build or cohorts')
-          kernel = platform.release()
-          candidates.sort(key=lambda item: (kernel in str(item[1]), str(item[1])))
-          package, executable = candidates[-1]
+          import hashlib, json, os, pathlib, platform, shutil, subprocess, time
           manifest_path = pathlib.Path(os.environ['PROFILE_PREFLIGHT_OUT']) / 'source-workflow.json'
           manifest = json.loads(manifest_path.read_text())
-          manifest['tool_selection'] = {'kernel': kernel, 'official_package': package,
-              'perf_elf_path': str(executable), 'sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
-              'kernel_match': kernel in str(executable),
-              'selection': 'installed official package direct ELF; prefer exact kernel path, otherwise deterministic package path; actual capability unproved'}
-          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
-          with open(os.environ['GITHUB_ENV'], 'a') as stream:
-              stream.write(f'LIGHT_PERF_ELF={executable}\n')
+          deadline = time.monotonic() + 280
+          audit = {'kernel': platform.release(), 'architecture': platform.machine(),
+                   'attempts': [], 'setup_attempted': False, 'capability': 'NOT RUN'}
+          manifest['tool_availability'] = audit
+          def save():
+              manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          def query(args):
+              remaining = deadline - time.monotonic()
+              if remaining <= 0:
+                  raise TimeoutError('tool discovery deadline exceeded')
+              return subprocess.run(args, text=True, capture_output=True, timeout=min(2, remaining))
+          def discover():
+              result = {'cc': shutil.which('cc'), 'readelf': shutil.which('readelf'),
+                        'packages': [], 'perf_paths': [], 'candidates': []}
+              audit['attempts'].append(result)
+              listing = query(['dpkg-query', '-W', '-f=${binary:Package}\t${db:Status-Abbrev}\n', 'linux-tools-*'])
+              result['package_query_exit'] = listing.returncode
+              owned = {}
+              for line in listing.stdout.splitlines():
+                  package, status = line.split('\t', 1)
+                  row = {'package': package, 'status': status}
+                  result['packages'].append(row)
+                  if not status.startswith('ii'):
+                      continue
+                  files = query(['dpkg-query', '-L', package])
+                  row['files_query_exit'] = files.returncode
+                  if files.returncode:
+                      continue
+                  for raw in files.stdout.splitlines():
+                      if raw.startswith('/'):
+                          owned.setdefault(raw, []).append(package)
+              for raw, packages in sorted(owned.items()):
+                  path = pathlib.Path(raw)
+                  if path.name != 'perf':
+                      continue
+                  row = {'path': raw, 'packages': packages, 'symlink': path.is_symlink()}
+                  result['perf_paths'].append(row)
+                  try:
+                      canonical = path.resolve(strict=True)
+                      row['canonical'] = str(canonical)
+                      if str(canonical) not in owned:
+                          row['rejected'] = 'canonical target not listed by installed linux-tools package'
+                      elif not canonical.is_file() or not os.access(canonical, os.X_OK):
+                          row['rejected'] = 'canonical target not an executable regular file'
+                      else:
+                          with canonical.open('rb') as stream:
+                              magic = stream.read(4)
+                          row['magic_hex'] = magic.hex()
+                          if magic != b'\x7fELF':
+                              row['rejected'] = 'not a direct ELF (wrapper or other format)'
+                          else:
+                              result['candidates'].append({'path': str(canonical), 'packages': owned[str(canonical)],
+                                  'via': raw, 'sha256': hashlib.sha256(canonical.read_bytes()).hexdigest()})
+                  except (OSError, RuntimeError) as error:
+                      row['rejected'] = type(error).__name__
+              save()
+              return result
+          try:
+              release = pathlib.Path('/etc/os-release')
+              if release.exists():
+                  audit['os_release'] = {key: value.strip('"') for key, value in
+                      (line.split('=', 1) for line in release.read_text().splitlines() if '=' in line)
+                      if key in ('ID', 'VERSION_ID', 'NAME')}
+              current = discover()
+              if not current['candidates'] or not current['cc'] or not current['readelf']:
+                  # One official package setup, no policy/sysctl/capability changes.
+                  if deadline - time.monotonic() < 255:
+                      raise TimeoutError('insufficient bounded setup budget; no installer started')
+                  audit['setup_attempted'] = True
+                  save()
+                  setup = subprocess.run(['sudo', '-n', 'timeout', '--signal=TERM', '--kill-after=10s', '240s',
+                      'env', 'DEBIAN_FRONTEND=noninteractive', 'NEEDRESTART_MODE=a', 'bash', '-c',
+                      'set -e; apt-get update; apt-get install -y --no-install-recommends linux-tools-common linux-tools-generic binutils build-essential'],
+                      timeout=255)
+                  audit['setup_exit'] = setup.returncode
+                  save()
+                  current = discover()
+              if not current['candidates'] or not current['cc'] or not current['readelf']:
+                  raise RuntimeError('official direct perf ELF/compiler/binutils unavailable')
+              current['candidates'].sort(key=lambda item: (audit['kernel'] in item['path'], item['path']))
+              selected = current['candidates'][-1]
+              manifest['tool_selection'] = {**selected, 'kernel': audit['kernel'],
+                  'kernel_match': audit['kernel'] in selected['path'],
+                  'selection': 'installed package-listed canonical ELF; exact kernel preferred; capability unproved'}
+              audit['status'] = 'TOOLS_AVAILABLE_CAPABILITY_UNPROVED'
+              save()
+              with open(os.environ['GITHUB_ENV'], 'a') as stream:
+                  stream.write(f"LIGHT_PERF_ELF={selected['path']}\n")
+          except (OSError, ValueError, RuntimeError, TimeoutError, subprocess.SubprocessError) as error:
+              audit['status'] = 'STOP'
+              audit['error'] = str(error)
+              save()
+              raise SystemExit('STOP: tool availability failed; see source-workflow.json; no probe/build/cohorts')
           PYTHON
 
       - name: One bounded synthetic capability preflight
