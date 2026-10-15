@@ -38,17 +38,33 @@ pub struct ColorReportHead {
     pub head_name: String,
 }
 
-/// The reportable heads of one fixture, in profile order.
+/// The selected reportable heads of one fixture, in profile order.
+/// Selecting a root includes every head; a logical owner includes only its own head.
 fn fixture_heads(
     generation: &crate::RuntimeGeneration,
     fixture: &light_fixture::PatchedFixture,
+    wanted: Option<&HashSet<FixtureId>>,
 ) -> Option<Vec<ColorReportHead>> {
+    if wanted.is_some_and(|ids| {
+        !ids.contains(&fixture.fixture_id)
+            && !fixture
+                .logical_heads
+                .iter()
+                .any(|head| ids.contains(&head.fixture_id))
+    }) {
+        return None;
+    }
     let mode = crate::fixture::profile_mode(fixture)?;
     let projection = generation.profile_projection(fixture.fixture_id)?;
     Some(
         projection
             .heads()
             .iter()
+            .filter(|head| {
+                wanted.is_none_or(|ids| {
+                    ids.contains(&fixture.fixture_id) || ids.contains(&head.owner)
+                })
+            })
             .map(|head| ColorReportHead {
                 fixture_id: fixture.fixture_id,
                 owner: head.owner,
@@ -65,7 +81,7 @@ fn fixture_heads(
 }
 
 impl Engine {
-    /// Every colour-reportable head of the given fixtures (all fixtures when `None`), in patch
+    /// Every colour-reportable head of selected roots or logical owners (all when `None`), in patch
     /// and profile order, with the runtime generation they were enumerated under. Nothing is
     /// resolved: a caller that reports an accepted output frame pairs these heads with that
     /// frame's own published results and compares the generation with the frame's.
@@ -78,8 +94,7 @@ impl Engine {
             .snapshot()
             .fixtures
             .iter()
-            .filter(|fixture| fixtures.is_none_or(|wanted| wanted.contains(&fixture.fixture_id)))
-            .filter_map(|fixture| fixture_heads(&generation, fixture))
+            .filter_map(|fixture| fixture_heads(&generation, fixture, fixtures))
             .flatten()
             .collect();
         (generation.identity(), heads)
@@ -103,12 +118,9 @@ impl Engine {
         };
         let mut report = Vec::new();
         for fixture in snapshot.fixtures.iter() {
-            if fixtures.is_some_and(|wanted| !wanted.contains(&fixture.fixture_id)) {
-                continue;
-            }
             let (Some(mode), Some(heads)) = (
                 crate::fixture::profile_mode(fixture),
-                fixture_heads(&generation, fixture),
+                fixture_heads(&generation, fixture, fixtures),
             ) else {
                 continue;
             };
@@ -134,3 +146,6 @@ impl Engine {
         Ok(report)
     }
 }
+
+#[cfg(test)]
+mod tests;
