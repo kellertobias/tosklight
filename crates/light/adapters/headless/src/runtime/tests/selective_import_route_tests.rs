@@ -316,3 +316,6 @@ fn show_entry(state: &AppState, show_id: &str) -> ShowEntry {
         .unwrap()
         .unwrap()
 }
+
+#[path = "programmer_undo_show_history_tests.rs"]
+mod programmer_undo_show_history_tests;

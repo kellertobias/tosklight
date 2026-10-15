@@ -476,3 +476,50 @@ fn schedule_control_action_release(
     }
     Ok(())
 }
+
+/// Undo shares the authoritative Freeze, Show-history and Programmer ordering used by UND.
+/// Callers hold activation admission; the service owns the desk interaction gate.
+pub(super) fn run_programmer_undo(
+    state: &AppState,
+    session: &Session,
+    context: &light_application::ActionContext,
+    source: &'static str,
+) -> Result<bool, light_application::ActionError> {
+    let result = command_http::run_service_with_source(
+        state,
+        session,
+        context.clone(),
+        light_application::ProgrammingCommand::Undo,
+        source,
+    )?;
+    command_http::publish_service_result(
+        state,
+        session,
+        &result,
+        source,
+        context.request_id.as_deref(),
+        None,
+    );
+    match result.outcome {
+        light_application::ProgrammingOutcome::Accepted {
+            action, warning, ..
+        } => {
+            if let Some(warning) = warning {
+                return Err(light_application::ActionError::new(
+                    light_application::ActionErrorKind::Internal,
+                    warning,
+                ));
+            }
+            Ok(action == light_application::ProgrammingAction::Undone)
+        }
+        light_application::ProgrammingOutcome::Rejected { error } => Err(
+            light_application::ActionError::new(light_application::ActionErrorKind::Invalid, error),
+        ),
+        light_application::ProgrammingOutcome::ChoiceRequired { .. } => {
+            Err(light_application::ActionError::new(
+                light_application::ActionErrorKind::Internal,
+                "Undo unexpectedly requires a choice",
+            ))
+        }
+    }
+}

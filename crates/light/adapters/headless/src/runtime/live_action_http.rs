@@ -134,24 +134,26 @@ async fn programmer_undo(
     let session = session_for_desk(&state, &headers, &desk)?;
     show.verify(&state)?;
     let request_id = Uuid::new_v4().to_string();
-    let outcome_request_id = request_id.clone();
-    let outcome =
-        run_http_programming_action(state, session, request_id, move |state, session, _| {
-            let context = programming_context(
-                session,
-                light_application::ActionSource::Http,
-                Some(&outcome_request_id),
-            );
-            let changed = super::fixture_freeze::undo_latest(state, session, &context)
-                .map_err(|error| error.message)?
-                .unwrap_or_else(|| state.programming.undo(session.id));
-            persist_programmer(state, session).map_err(|error| error.message)?;
-            Ok(ProgrammerUndoHttpActionOutcome {
-                request_id: outcome_request_id,
-                changed,
-            })
+    let activation = state.active_show.acquire().await;
+    // Verify again under admission: a request waiting for a Show switch must not
+    // undo history in the newly opened Show.
+    show.verify(&state)?;
+    let outcome = tokio::task::spawn_blocking(move || {
+        let context = programming_context(
+            &session,
+            light_application::ActionSource::Http,
+            Some(&request_id),
+        );
+        let changed = run_programmer_undo(&state, &session, &context, "http")
+            .map_err(programming_action_error)?;
+        drop(activation);
+        Ok::<_, ApiError>(ProgrammerUndoHttpActionOutcome {
+            request_id,
+            changed,
         })
-        .await?;
+    })
+    .await
+    .map_err(|error| ApiError::internal(format!("Programming Undo task failed: {error}")))??;
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(outcome)))
 }
 

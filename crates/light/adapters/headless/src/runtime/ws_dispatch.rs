@@ -508,17 +508,15 @@ fn dispatch_programmer_undo(
     session: &Session,
     context: &light_application::ActionContext,
 ) -> ActionOutput {
-    run_interaction(state, session, context, || {
-        let response = super::fixture_freeze::undo_latest(state, session, context)
+    let _activation = match try_programming_activation(state) {
+        Ok(activation) => activation,
+        Err(error) => return ActionOutput::plain(Err(error)),
+    };
+    ActionOutput::plain(
+        run_programmer_undo(state, session, context, "software")
             .map_err(|error| error.message)
-            .and_then(|freeze_changed| {
-                let changed = freeze_changed.unwrap_or_else(|| state.programming.undo(session.id));
-                persist_programmer(state, session)
-                    .map(|()| serde_json::json!({"changed":changed}))
-                    .map_err(|error| error.message)
-            });
-        ActionOutput::plain(response)
-    })
+            .map(|changed| serde_json::json!({"changed":changed})),
+    )
 }
 
 fn dispatch_dynamic_action(
