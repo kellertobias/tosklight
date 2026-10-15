@@ -11,10 +11,31 @@ pub(in crate::runtime) struct IntegrationResource {
     osc_feedback: Option<Arc<std::net::UdpSocket>>,
     osc_feedback_pending: Arc<std::sync::atomic::AtomicBool>,
     #[cfg(test)]
+    highlight_action_clock: Option<Arc<dyn Fn() -> Instant + Send + Sync>>,
+    #[cfg(test)]
     osc_feedback_capture: Arc<Mutex<Vec<CapturedOscMessage>>>,
 }
 
 impl IntegrationResource {
+    pub(in crate::runtime) fn highlight_action_now(&self) -> Instant {
+        // Production remains the system monotonic clock. The controlled test clock is
+        // installed on this resource before the AppState is cloned by any adapter.
+        #[cfg(test)]
+        if let Some(clock) = &self.highlight_action_clock {
+            return clock();
+        }
+        Instant::now()
+    }
+
+    #[cfg(test)]
+    pub(in crate::runtime) fn with_highlight_action_clock(
+        mut self,
+        clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+    ) -> Self {
+        self.highlight_action_clock = Some(clock);
+        self
+    }
+
     pub(in crate::runtime) fn new(
         matter_bridge: Arc<matter::MatterBridgeAdapter>,
         matter_transport: Option<Arc<matter::MatterTransport>>,
@@ -29,6 +50,8 @@ impl IntegrationResource {
             osc_playback_epoch: Arc::default(),
             osc_feedback,
             osc_feedback_pending: Arc::default(),
+            #[cfg(test)]
+            highlight_action_clock: None,
             #[cfg(test)]
             osc_feedback_capture: Arc::default(),
         }

@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 #[test]
 fn authoritative_repeat_guard_prevents_cross_surface_double_steps() {
-    let registry = HighlightRegistry::default();
+    let now = Instant::now();
+    let registry = HighlightRegistry::with_action_clock(std::sync::Arc::new(move || now));
     let desk = Uuid::new_v4();
     let fixtures = vec![fixture(1), fixture(2), fixture(3)];
     let ids = fixtures
@@ -55,4 +56,88 @@ fn osc_repeat_guard_normalizes_aliases_and_has_an_exact_boundary() {
         HighlightAction::Previous,
         received_at,
     ));
+}
+
+#[test]
+fn owned_highlight_clocks_are_isolated_and_expire_at_exact_boundary() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    };
+    let base = Instant::now();
+    let elapsed_a = Arc::new(AtomicU64::new(0));
+    let elapsed_b = Arc::new(AtomicU64::new(0));
+    let make = |elapsed: Arc<AtomicU64>| {
+        HighlightRegistry::with_action_clock(Arc::new(move || {
+            base + Duration::from_millis(elapsed.load(Ordering::SeqCst))
+        }))
+    };
+    let a = make(Arc::clone(&elapsed_a));
+    let b = make(elapsed_b);
+    let desk = Uuid::new_v4();
+    let fixtures = vec![fixture(1), fixture(2), fixture(3)];
+    let complete = selection(
+        fixtures.iter().map(|f| f.fixture_id).collect(),
+        Some(SelectionExpression::Static),
+        1,
+    );
+    let groups = no_groups();
+    for registry in [&a, &b] {
+        registry.action(HighlightAction::On, &complete, &fixtures, &groups, false);
+        assert_eq!(
+            registry
+                .action_guarded(
+                    desk,
+                    HighlightAction::Next,
+                    &complete,
+                    &fixtures,
+                    &groups,
+                    false
+                )
+                .state
+                .active_index,
+            Some(0)
+        );
+    }
+    elapsed_a.store(149, Ordering::SeqCst);
+    assert_eq!(
+        a.action_guarded(
+            desk,
+            HighlightAction::Next,
+            &complete,
+            &fixtures,
+            &groups,
+            false
+        )
+        .state
+        .active_index,
+        Some(0)
+    );
+    elapsed_a.store(150, Ordering::SeqCst);
+    assert_eq!(
+        a.action_guarded(
+            desk,
+            HighlightAction::Next,
+            &complete,
+            &fixtures,
+            &groups,
+            false
+        )
+        .state
+        .active_index,
+        Some(1)
+    );
+    assert_eq!(
+        b.action_guarded(
+            desk,
+            HighlightAction::Next,
+            &complete,
+            &fixtures,
+            &groups,
+            false
+        )
+        .state
+        .active_index,
+        Some(0)
+    );
 }

@@ -44,11 +44,12 @@ pub(super) fn handle_highlight_osc(
     if !pressed {
         return;
     }
-    let Some(session_id) =
-        state
-            .integrations
-            .accept_highlight_action(source, parts[1], action, Instant::now())
-    else {
+    let Some(session_id) = state.integrations.accept_highlight_action(
+        source,
+        parts[1],
+        action,
+        state.integrations.highlight_action_now(),
+    ) else {
         return;
     };
     let Some(session) = state.sessions.session(session_id) else {

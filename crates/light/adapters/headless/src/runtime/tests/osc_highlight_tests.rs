@@ -206,7 +206,12 @@ fn verify_highlight_reconnect(
 
 #[tokio::test]
 async fn authenticated_osc_highlight_adapter_feedback_dedupe_and_reconnect_are_authoritative() {
-    let (state, data_dir) = test_state();
+    let now = Arc::new(parking_lot::Mutex::new(Instant::now()));
+    let clock = {
+        let now = Arc::clone(&now);
+        Arc::new(move || *now.lock())
+    };
+    let (state, data_dir) = test_state_with_highlight_action_clock(clock);
     let app = router(state.clone());
     let (_, session_id) = login(&app, "Operator").await;
     let session_id = SessionId(Uuid::parse_str(&session_id).unwrap());
@@ -238,4 +243,108 @@ async fn authenticated_osc_highlight_adapter_feedback_dedupe_and_reconnect_are_a
     verify_highlight_osc_feedback(&state);
     verify_highlight_reconnect(&state, &session, &fixture_ids);
     let _ = std::fs::remove_dir_all(data_dir);
+}
+
+/// Exercise both repeat guards through the authenticated OSC adapter using one owned clock.
+#[tokio::test]
+async fn authenticated_highlight_real_ingress_respects_149_and_150_millisecond_boundaries() {
+    let now = Arc::new(parking_lot::Mutex::new(Instant::now()));
+    let clock = {
+        let now = Arc::clone(&now);
+        Arc::new(move || *now.lock())
+    };
+    let (state, data_dir) = test_state_with_highlight_action_clock(clock);
+    let app = router(state.clone());
+    let (_, id) = login(&app, "Operator").await;
+    let session = state
+        .sessions
+        .session(SessionId(Uuid::parse_str(&id).unwrap()))
+        .unwrap();
+    let fixtures = highlight_test_fixtures();
+    let ids = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: fixtures.into(),
+            ..Default::default()
+        })
+        .unwrap();
+    state.programming.select(session.id, ids.clone());
+    // An unauthenticated source cannot step selection, even with a pressed event.
+    send_highlight_osc(&state, "next");
+    assert_eq!(
+        state.programming.selection(session.id).unwrap().selected,
+        ids
+    );
+    handle_control_event(&state, highlight_subscription());
+    send_highlight_osc(&state, "on");
+    let snapshot = state.output.snapshot();
+    let fixtures = highlight_fixture_summaries(&snapshot.fixtures);
+    let groups = highlight_groups(&snapshot);
+    let selection = state.programming.selection(session.id).unwrap();
+    let software = state.highlight.apply_action_guarded(
+        session.desk.id,
+        HighlightAction::Next,
+        &selection,
+        &fixtures,
+        &groups,
+        false,
+    );
+    apply_highlight_selection_write(&state, &session, software.working_selection.as_ref()).unwrap();
+    assert_eq!(software.state.active_index, Some(0));
+    send_highlight_osc(&state, "next");
+    *now.lock() += Duration::from_millis(149);
+    send_highlight_osc(&state, "next");
+    let current = || {
+        state.highlight.transition(
+            &state.programming.selection(session.id).unwrap(),
+            &fixtures,
+            &groups,
+            false,
+        )
+    };
+    assert_eq!(current().state.active_index, Some(0));
+    *now.lock() += Duration::from_millis(1);
+    send_highlight_osc(&state, "next");
+    assert_eq!(
+        current().state.active_index,
+        Some(1),
+        "150ms is a new legitimate press"
+    );
+    send_highlight_osc(&state, "previous");
+    assert_eq!(current().state.active_index, Some(0));
+    *now.lock() += Duration::from_millis(149);
+    send_highlight_osc(&state, "prev");
+    assert_eq!(
+        current().state.active_index,
+        Some(0),
+        "aliases share the same guard"
+    );
+    *now.lock() += Duration::from_millis(1);
+    send_highlight_osc(&state, "prev");
+    assert_eq!(
+        current().state.active_index,
+        Some(2),
+        "alias after150ms is legitimate"
+    );
+    handle_control_event(
+        &state,
+        ControlEvent::Osc {
+            address: "/light/unsubscribe".into(),
+            arguments: vec![OscArgument::String(HIGHLIGHT_OSC_CLIENT.into())],
+            source: Some(HIGHLIGHT_OSC_SOURCE.into()),
+        },
+    );
+    assert!(
+        state
+            .integrations
+            .osc_subscriber(HIGHLIGHT_OSC_CLIENT)
+            .is_none()
+    );
+    send_highlight_osc(&state, "next");
+    assert_eq!(current().state.active_index, Some(2));
+    std::fs::remove_dir_all(data_dir).unwrap();
 }

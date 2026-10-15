@@ -12,6 +12,7 @@ use crate::{GroupDefinition, ProgrammerSelection};
 use light_core::{AttributeKey, FixtureId};
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -19,9 +20,19 @@ use uuid::Uuid;
 pub struct HighlightRegistry {
     runtime: Mutex<HighlightRuntime>,
     recent_actions: Mutex<RecentHighlightActions>,
+    action_clock: Option<Arc<dyn Fn() -> Instant + Send + Sync>>,
 }
 
 impl HighlightRegistry {
+    /// A registry-owned monotonic clock for deterministic integration hosts.
+    /// Default registries retain the system Instant clock and allocate no clock object.
+    pub fn with_action_clock(clock: Arc<dyn Fn() -> Instant + Send + Sync>) -> Self {
+        Self {
+            action_clock: Some(clock),
+            ..Self::default()
+        }
+    }
+
     /// Apply an operator-facing action with one repeat guard shared by REST, software, OSC, and
     /// attached hardware. The guard belongs here so two adapters cannot advance the actual
     /// selection independently during a single physical press.
@@ -35,7 +46,10 @@ impl HighlightRegistry {
         groups: &HashMap<String, GroupDefinition>,
         capture_only: bool,
     ) -> HighlightTransition {
-        let received_at = Instant::now();
+        let received_at = self
+            .action_clock
+            .as_ref()
+            .map_or_else(Instant::now, |clock| clock());
         let key = desk_id;
         let mut recent_actions = self.recent_actions.lock();
         if is_duplicate_osc_action(

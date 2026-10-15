@@ -45,13 +45,22 @@ fn test_state_with_programming_contract(
     manual_clock: Option<Arc<ManualClock>>,
     supported_contract: u16,
 ) -> (AppState, PathBuf) {
+    test_state_with_highlight_registry(programmers, manual_clock, supported_contract, None)
+}
+
+fn test_state_with_highlight_registry(
+    programmers: ProgrammerRegistry,
+    manual_clock: Option<Arc<ManualClock>>,
+    supported_contract: u16,
+    highlight: Option<Arc<HighlightRegistry>>,
+) -> (AppState, PathBuf) {
     let data_dir = std::env::temp_dir().join(format!("light-headless-test-{}", Uuid::new_v4()));
     std::fs::create_dir_all(data_dir.join("shows")).unwrap();
     let engine = Arc::new(Engine::with_programming_contract_support(programmers.clone(), supported_contract));
     let dynamic_snapshot = Arc::new(DynamicSnapshotPublication::new(engine.snapshot()));
     let application_events = EventBus::default();
     let active_show_service = ActiveShowService::new(application_events.clone());
-    let highlight = Arc::new(HighlightRegistry::default());
+    let highlight = highlight.unwrap_or_else(|| Arc::new(HighlightRegistry::default()));
     let programming = ProgrammingService::new(
         programmers.clone(),
         application_events.clone(),
@@ -207,4 +216,18 @@ fn stored_cuelist_pool(
     let list = serde_json::from_value(object.body.clone()).map_err(|error| error.to_string())?;
     let assignment = snapshot.playback_pages.iter().flat_map(|page| page.assignments.values()).find(|playback| playback.target == light_playback::PlaybackTarget::CueList { cue_list_id: id }).cloned();
     Ok((assignment, object, list))
+}
+
+fn test_state_with_highlight_action_clock(
+    clock: Arc<dyn Fn() -> Instant + Send + Sync>,
+) -> (AppState, PathBuf) {
+    let registry = Arc::new(HighlightRegistry::with_action_clock(Arc::clone(&clock)));
+    let (mut state, data_dir) = test_state_with_highlight_registry(
+        ProgrammerRegistry::default(),
+        None,
+        light_core::programming::SUPPORTED_PROGRAMMING_CONTRACT,
+        Some(registry),
+    );
+    state.integrations = state.integrations.with_highlight_action_clock(clock);
+    (state, data_dir)
 }
