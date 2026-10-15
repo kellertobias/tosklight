@@ -219,7 +219,7 @@ impl ActiveShowPorts for BenchmarkPorts {
                 ));
             }
             diagnostics::mark_boundary(timing, "validation");
-            let show = ShowStore::open(&self.show_path).map_err(store_error)?;
+            let show = diagnostics::open_store(&self.show_path, timing).map_err(store_error)?;
             diagnostics::mark_boundary(timing, "open_store");
             let document = show.portable_document().map_err(store_error)?;
             diagnostics::mark_boundary(timing, "portable_document");

@@ -32,7 +32,9 @@ pub use schedule_occurrence::{
 pub use sync_requests::{SYNC_APPLIED_REQUEST_RETENTION, SyncAppliedRequest, SyncRequestRecord};
 pub use transaction::{PortableShowCommit, PortableShowTransaction};
 
-pub(crate) use migration::{SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection};
+pub(crate) use migration::{
+    SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection, validate_show_connection_observed,
+};
 pub(crate) use repository::{
     delete_legacy_object, mutate_legacy_objects, prepare_redo, prepare_undo, put_legacy_object,
     undo_legacy_object,

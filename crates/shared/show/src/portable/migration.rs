@@ -63,9 +63,20 @@ fn schema_version(conn: &Connection) -> Result<i64, StoreError> {
 }
 
 pub(crate) fn validate_show_connection(conn: &Connection) -> Result<(), StoreError> {
+    validate_show_connection_observed(conn, &mut |_| {})
+}
+
+pub(crate) fn validate_show_connection_observed(
+    conn: &Connection,
+    completed: &mut impl FnMut(crate::ShowStoreOpenPhase),
+) -> Result<(), StoreError> {
     validate_integrity(conn)?;
+    completed(crate::ShowStoreOpenPhase::Integrity);
     validate_schema_version(conn)?;
-    validate_identity(conn)
+    completed(crate::ShowStoreOpenPhase::SchemaValidation);
+    validate_identity(conn)?;
+    completed(crate::ShowStoreOpenPhase::Identity);
+    Ok(())
 }
 
 fn validate_integrity(conn: &Connection) -> Result<(), StoreError> {

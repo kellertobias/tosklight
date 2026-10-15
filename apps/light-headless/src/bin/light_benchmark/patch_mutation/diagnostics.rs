@@ -249,6 +249,7 @@ pub struct ActiveShowBoundary {
     pub segments_microseconds: BTreeMap<&'static str, f64>,
     pub failed_segment: Option<&'static str>,
     pub error: Option<String>,
+    pub store_open: Option<StoreOpen>,
 }
 
 pub(super) struct BoundaryTiming {
@@ -256,6 +257,7 @@ pub(super) struct BoundaryTiming {
     last: Duration,
     segments: BTreeMap<&'static str, f64>,
     next: &'static str,
+    store_open: Option<StoreOpen>,
 }
 impl BoundaryTiming {
     fn close(&mut self, elapsed: Duration, name: &'static str) {
@@ -288,6 +290,7 @@ pub(super) fn observe_boundary<T>(
         last: Duration::ZERO,
         segments: BTreeMap::new(),
         next: "validation",
+        store_open: None,
     });
     let result = operation(&mut timing);
     let mut timing = timing.expect("boundary timing remains present");
@@ -310,6 +313,7 @@ pub(super) fn observe_boundary<T>(
         segments_microseconds: timing.segments,
         failed_segment,
         error: result.as_ref().err().map(|error| error.message.clone()),
+        store_open: timing.store_open,
     };
     let mut log = log.lock();
     if log.rows.len() < log.limit {
@@ -328,6 +332,60 @@ pub(super) fn mark_boundary(timing: &mut Option<BoundaryTiming>, name: &'static 
             _ => "completion",
         };
     }
+}
+
+/// Nested within the existing open_store segment; never add to parent accounting.
+#[derive(Clone, Debug, Serialize)]
+pub struct StoreOpen {
+    pub total_microseconds: f64,
+    pub segments_microseconds: BTreeMap<&'static str, f64>,
+    pub failed_phase: Option<&'static str>,
+}
+
+pub(super) fn open_store(
+    path: &std::path::Path,
+    timing: &mut Option<BoundaryTiming>,
+) -> Result<super::ShowStore, super::StoreError> {
+    let Some(timing) = timing else {
+        return super::ShowStore::open(path);
+    };
+    use light_show::ShowStoreOpenPhase as Phase;
+    let started = Instant::now();
+    let mut last = Duration::ZERO;
+    let mut segments = BTreeMap::new();
+    let mut next = "playback_contract";
+    let result = super::ShowStore::open_observed(path, |phase| {
+        let (name, following) = match phase {
+            Phase::PlaybackContract => ("playback_contract", "connection_open"),
+            Phase::ConnectionOpen => ("connection_open", "connection_configure"),
+            Phase::ConnectionConfigure => ("connection_configure", "schema_version"),
+            Phase::SchemaVersion => ("schema_version", "migration_branch"),
+            Phase::Migration => ("migration_branch", "integrity"),
+            Phase::Integrity => ("integrity", "schema_validation"),
+            Phase::SchemaValidation => ("schema_validation", "identity"),
+            Phase::Identity => ("identity", "completion"),
+        };
+        let elapsed = started.elapsed();
+        segments.insert(name, micros(elapsed.saturating_sub(last)));
+        last = elapsed;
+        next = following;
+    });
+    let total = started.elapsed();
+    let failed_phase = result.as_ref().err().map(|_| next);
+    segments.insert(
+        if result.is_err() {
+            "failed_segment"
+        } else {
+            "completion"
+        },
+        micros(total.saturating_sub(last)),
+    );
+    timing.store_open = Some(StoreOpen {
+        total_microseconds: micros(total),
+        segments_microseconds: segments,
+        failed_phase,
+    });
+    result
 }
 
 pub(super) struct Observation {
@@ -748,6 +806,7 @@ mod tests {
                 segments_microseconds: BTreeMap::new(),
                 failed_segment: None,
                 error: None,
+                store_open: None,
             });
         }
         collector.record(
@@ -763,6 +822,73 @@ mod tests {
             accounting.service_unattributed_after_transaction_begin_microseconds,
             Some(30.0)
         );
+    }
+
+    #[test]
+    fn actual_store_open_stages_telescope_and_failed_guard_has_no_later_stages() {
+        let scratch = super::super::Scratch::new(0).unwrap();
+        let (created, _) = super::super::ShowStore::create(&scratch.show_path, "observed").unwrap();
+        drop(created);
+        let collector = Collector::new(0, 2);
+        let log = collector.boundary_log();
+        observe_boundary(
+            Some(&log),
+            &boundary_context("valid"),
+            ShowId(uuid::Uuid::from_u128(9)),
+            |timing| {
+                open_store(&scratch.show_path, timing)
+                    .map(|_| ())
+                    .map_err(super::super::store_error)
+            },
+        )
+        .unwrap();
+        let missing = scratch.root.join("missing.sqlite");
+        let expected = super::super::ShowStore::open(&missing)
+            .err()
+            .unwrap()
+            .to_string();
+        let actual = observe_boundary(
+            Some(&log),
+            &boundary_context("missing"),
+            ShowId(uuid::Uuid::from_u128(9)),
+            |timing| {
+                open_store(&missing, timing)
+                    .map(|_| ())
+                    .map_err(super::super::store_error)
+            },
+        )
+        .unwrap_err();
+        assert_eq!(actual.message, expected);
+        assert!(!missing.exists());
+        let rows = &log.lock().rows;
+        let success = rows[0].store_open.as_ref().unwrap();
+        assert_eq!(success.failed_phase, None);
+        assert_eq!(success.segments_microseconds.len(), 9);
+        for name in [
+            "playback_contract",
+            "connection_open",
+            "connection_configure",
+            "schema_version",
+            "migration_branch",
+            "integrity",
+            "schema_validation",
+            "identity",
+            "completion",
+        ] {
+            assert!(success.segments_microseconds.contains_key(name));
+        }
+        let failure = rows[1].store_open.as_ref().unwrap();
+        assert_eq!(failure.failed_phase, Some("playback_contract"));
+        assert_eq!(failure.segments_microseconds.len(), 1);
+        for value in [success, failure] {
+            assert!(
+                (value.segments_microseconds.values().sum::<f64>() - value.total_microseconds)
+                    .abs()
+                    < 0.000001
+            );
+        }
+        let plain = open_store(&scratch.show_path, &mut None).unwrap();
+        assert_eq!(plain.name().unwrap(), "observed");
     }
 
     #[test]

@@ -20,6 +20,21 @@ pub struct ObjectStamp {
     pub length: u64,
 }
 
+/// Completion boundaries of the ordinary ShowStore open path. Observation adds no checks,
+/// clocks or persistence. A Migration completion means the version-dependent branch completed;
+/// it is also emitted when the current schema needs no migration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShowStoreOpenPhase {
+    PlaybackContract,
+    ConnectionOpen,
+    ConnectionConfigure,
+    SchemaVersion,
+    Migration,
+    Integrity,
+    SchemaValidation,
+    Identity,
+}
+
 pub struct ShowStore {
     pub(crate) conn: Connection,
 }
@@ -39,18 +54,33 @@ pub struct AtomicObjectDelete<'a> {
 
 impl ShowStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        Self::open_observed(path, |_| {})
+    }
+
+    /// Runs the exact open path, notifying the caller after each successful phase. No callback
+    /// is emitted for a failed phase, and the original error is returned unchanged. The caller
+    /// owns any timing, retention and observer overhead; this store never measures time.
+    pub fn open_observed(
+        path: impl AsRef<Path>,
+        mut completed: impl FnMut(ShowStoreOpenPhase),
+    ) -> Result<Self, StoreError> {
         crate::validate_show_playback_contract(path.as_ref())?;
+        completed(ShowStoreOpenPhase::PlaybackContract);
         let mut conn = Connection::open(path)?;
+        completed(ShowStoreOpenPhase::ConnectionOpen);
         configure(&conn)?;
+        completed(ShowStoreOpenPhase::ConnectionConfigure);
         let version = conn
             .query_row("SELECT version FROM schema_info", [], |row| {
                 row.get::<_, i64>(0)
             })
             .ok();
+        completed(ShowStoreOpenPhase::SchemaVersion);
         if version.is_none_or(|version| version < portable::SHOW_SCHEMA_VERSION) {
             portable::migrate_show(&mut conn)?;
         }
-        portable::validate_show_connection(&conn)?;
+        completed(ShowStoreOpenPhase::Migration);
+        portable::validate_show_connection_observed(&conn, &mut completed)?;
         Ok(Self { conn })
     }
 

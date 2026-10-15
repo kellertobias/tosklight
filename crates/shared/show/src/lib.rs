@@ -49,8 +49,8 @@ pub use programming_contract::{
     writer_stamps_programming_contract,
 };
 pub use show_store::{
-    AtomicObjectDelete, AtomicObjectWrite, ObjectStamp, ShowStore, initialise_show,
-    validate_show_file,
+    AtomicObjectDelete, AtomicObjectWrite, ObjectStamp, ShowStore, ShowStoreOpenPhase,
+    initialise_show, validate_show_file,
 };
 
 pub(crate) use connection::set_schema_version;

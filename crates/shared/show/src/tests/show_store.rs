@@ -257,3 +257,159 @@ fn concurrent_readers_do_not_rerun_show_migrations() {
     }
     let _ = fs::remove_file(path);
 }
+
+#[test]
+fn observed_open_preserves_current_and_migrated_documents_and_reports_ordered_phases() {
+    use crate::ShowStoreOpenPhase::*;
+    for version in [9, 10] {
+        let path = temporary(&format!("observed-open-{version}"));
+        let ordinary_path = temporary(&format!("ordinary-open-{version}"));
+        let (show, original_id) = ShowStore::create(&path, "Observed").unwrap();
+        show.put_object("group", "front", &serde_json::json!({"fixtures": []}), 0)
+            .unwrap();
+        show.conn
+            .execute("UPDATE schema_info SET version=?1", [version])
+            .unwrap();
+        show.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .unwrap();
+        drop(show);
+        fs::copy(&path, &ordinary_path).unwrap();
+        let before = fs::read(&path).unwrap();
+        let mut phases = Vec::new();
+        let observed = ShowStore::open_observed(&path, |phase| phases.push(phase)).unwrap();
+        let ordinary = ShowStore::open(&ordinary_path).unwrap();
+        assert_eq!(
+            observed.portable_document().unwrap(),
+            ordinary.portable_document().unwrap()
+        );
+        assert_eq!(observed.id().unwrap(), original_id);
+        assert_eq!(observed.name().unwrap(), "Observed");
+        assert_eq!(
+            phases,
+            vec![
+                PlaybackContract,
+                ConnectionOpen,
+                ConnectionConfigure,
+                SchemaVersion,
+                Migration,
+                Integrity,
+                SchemaValidation,
+                Identity
+            ]
+        );
+        assert_eq!(
+            observed
+                .conn
+                .query_row("SELECT version FROM schema_info", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            10
+        );
+        drop((observed, ordinary));
+        if version == 10 {
+            assert_eq!(fs::read(&path).unwrap(), before);
+            assert_eq!(fs::read(&ordinary_path).unwrap(), before);
+        }
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(ordinary_path);
+    }
+}
+
+#[test]
+fn observed_open_retired_history_refuses_before_callbacks_or_writable_changes() {
+    for table in ["objects", "object_history", "object_redo"] {
+        let path = temporary(&format!("observed-retired-{table}"));
+        let (show, _) = ShowStore::create(&path, "Refusal").unwrap();
+        let time_column = if table == "objects" {
+            "updated_at"
+        } else {
+            "created_at"
+        };
+        show.conn.execute(&format!("INSERT INTO {table}(kind,id,revision,body_json,{time_column}) VALUES('playback_page','1',1,?1,'test')"),
+            [serde_json::json!({"number":1,"slots":{"1":7}}).to_string()]).unwrap();
+        show.conn
+            .execute("UPDATE schema_info SET version=9", [])
+            .unwrap();
+        show.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .unwrap();
+        drop(show);
+        let before = fs::read(&path).unwrap();
+        let ordinary_error = ShowStore::open(&path).err().unwrap().to_string();
+        let mut phases = Vec::new();
+        let observed_error = ShowStore::open_observed(&path, |phase| phases.push(phase))
+            .err()
+            .unwrap()
+            .to_string();
+        assert_eq!(observed_error, ordinary_error);
+        assert!(observed_error.contains("before TL-714"));
+        assert!(phases.is_empty());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let _ = fs::remove_file(path);
+    }
+}
+
+#[test]
+fn observed_open_malformed_file_preserves_error_and_emits_no_success() {
+    let path = temporary("observed-malformed");
+    fs::write(&path, b"not a SQLite show").unwrap();
+    let before = fs::read(&path).unwrap();
+    let ordinary_error = ShowStore::open(&path).err().unwrap().to_string();
+    let mut phases = Vec::new();
+    let observed_error = ShowStore::open_observed(&path, |phase| phases.push(phase))
+        .err()
+        .unwrap()
+        .to_string();
+    assert_eq!(observed_error, ordinary_error);
+    assert!(phases.is_empty());
+    assert_eq!(fs::read(&path).unwrap(), before);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn observed_open_stops_at_newer_schema_or_missing_identity_failure() {
+    use crate::ShowStoreOpenPhase::*;
+    for newer_schema in [false, true] {
+        let path = temporary(&format!("observed-stage-failure-{newer_schema}"));
+        let (show, _) = ShowStore::create(&path, "Stage boundary").unwrap();
+        if newer_schema {
+            show.conn
+                .execute("UPDATE schema_info SET version=999", [])
+                .unwrap();
+        } else {
+            show.conn
+                .execute("DELETE FROM metadata WHERE key='show_id'", [])
+                .unwrap();
+        }
+        show.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .unwrap();
+        drop(show);
+        let ordinary_error = ShowStore::open(&path).err().unwrap().to_string();
+        let mut phases = Vec::new();
+        let observed_error = ShowStore::open_observed(&path, |phase| phases.push(phase))
+            .err()
+            .unwrap()
+            .to_string();
+        assert_eq!(observed_error, ordinary_error);
+        let mut expected = vec![
+            PlaybackContract,
+            ConnectionOpen,
+            ConnectionConfigure,
+            SchemaVersion,
+            Migration,
+            Integrity,
+        ];
+        if !newer_schema {
+            expected.push(SchemaValidation);
+        }
+        assert_eq!(phases, expected);
+        assert!(observed_error.contains(if newer_schema {
+            "newer than supported"
+        } else {
+            "missing show_id"
+        }));
+        let _ = fs::remove_file(path);
+    }
+}
