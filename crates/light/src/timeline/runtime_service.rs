@@ -267,6 +267,39 @@ impl TimecodeRuntimeService {
         Ok(snapshot)
     }
 
+    /// Reads compare authored definitions without restarting transport or publishing a change.
+    pub fn installed_definition_matches(&self, definition: &TimecodeDefinition) -> bool {
+        self.runtimes
+            .lock()
+            .expect("Timecode runtime lock poisoned")
+            .get(&definition.id)
+            .is_some_and(|runtime| runtime.definition == *definition)
+    }
+
+    /// Called only after a successful show activation, while output and live actions are excluded.
+    /// Old clip ownership is forgotten without releasing the destination's restored playbacks.
+    pub fn reset_for_show_activation(&self) {
+        let previous = std::mem::take(
+            &mut *self
+                .runtimes
+                .lock()
+                .expect("Timecode runtime lock poisoned"),
+        );
+        self.cue_list_runtime
+            .lock()
+            .expect("Timecode Cuelist runtime lock poisoned")
+            .applied
+            .clear();
+        if let Some(audio) = &self.audio {
+            for id in previous.keys() {
+                if let Err(error) = audio.unprepare(*id) {
+                    tracing::warn!(timecode_id = %id.0, %error,
+                        "Unable to stop previous show's Timecode audio; check the audio output");
+                }
+            }
+        }
+    }
+
     pub fn snapshot(
         &self,
         id: TimecodeId,

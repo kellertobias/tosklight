@@ -23,8 +23,8 @@ pub(super) fn dispatch_live_action(
     acknowledge_live_action(state, timing, response)
 }
 
-/// Production Dynamic actions wait for the current active-show operation
-/// instead of reporting ordinary render-loop contention as a show change.
+/// Production Dynamic and Timecode actions wait for active-show admission before
+/// resolving their targets. A queued action never migrates into a newly opened show.
 pub(super) async fn dispatch_live_action_live(
     state: &AppState,
     session: &Session,
@@ -40,7 +40,8 @@ pub(super) async fn dispatch_live_action_on_socket(
     socket: Option<&software_playback_sources::SoftwarePlaybackSocket>,
 ) -> WsResponse {
     let timing = begin_live_action_timing(state, session, &frame);
-    if !is_dynamic_action(&frame.action) {
+    let timecode_action = matches!(&frame.action, LiveAction::Timecode(_));
+    if !is_dynamic_action(&frame.action) && !timecode_action {
         let response = dispatch_live_action_inner(state, session, frame, false, socket);
         return acknowledge_live_action(state, timing, response);
     }
@@ -53,7 +54,11 @@ pub(super) async fn dispatch_live_action_on_socket(
         );
     }
     let show_before = state.active_show.current().as_ref().map(|show| show.id);
-    let activation = state.active_show.acquire().await;
+    let activation = if timecode_action {
+        state.active_show.acquire_shared().await
+    } else {
+        state.active_show.acquire().await
+    };
     let show_after = state.active_show.current().as_ref().map(|show| show.id);
     if show_before != show_after {
         drop(activation);
@@ -63,8 +68,12 @@ pub(super) async fn dispatch_live_action_on_socket(
             failed_response(
                 frame.request_id,
                 revision,
-                "The active show changed before the Dynamic action could run. Tap the Dynamic again."
-                    .into(),
+                if timecode_action {
+                    "The active show changed before the Timecode action could run. Tap the Timecode again."
+                } else {
+                    "The active show changed before the Dynamic action could run. Tap the Dynamic again."
+                }
+                .into(),
             ),
         );
     }

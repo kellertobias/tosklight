@@ -215,3 +215,5 @@ include!("family_encoder_pages_tests.rs");
 mod media_endpoint_projection_tests;
 
 mod media_discovery_endpoint_route_tests;
+
+mod timecode_show_scope_tests;

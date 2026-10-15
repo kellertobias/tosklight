@@ -356,6 +356,7 @@ async fn run_activation_workflow(
                 // An Err above leaves gesture/Align, Highlight, media and health untouched.
                 // Finish Align after selection publication; finish_alignment publishes its own event.
                 state.programming.run_value_gesture_boundary(&context, || {
+                    state.timecodes.reset_for_show_activation();
                     state.highlight.clear_all();
                     state.output.clear_highlighted_fixtures();
                     state.output.reset_show_output_health();

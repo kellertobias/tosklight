@@ -677,17 +677,19 @@ async fn runtime_snapshots(
     headers: HeaderMap,
 ) -> Result<Json<Vec<wire::TimecodeTransportSnapshot>>, ApiError> {
     let _session = session_for_desk(&state, &headers, &desk)?;
+    let _activation = state.active_show.acquire_shared().await;
     let show_id = context.resolve(&state)?;
     // Show recovery runs none of the failed show's Timecodes.
     if state.active_show.in_recovery() {
         return Ok(Json(Vec::new()));
     }
-    install_show_timecodes(&state, show_id)?;
+    let current_ids = install_show_timecodes(&state, show_id)?;
     Ok(Json(
         state
             .timecodes
             .snapshots()
             .into_iter()
+            .filter(|snapshot| current_ids.contains(&snapshot.timecode_id))
             .map(wire_snapshot)
             .collect(),
     ))
@@ -701,6 +703,7 @@ async fn runtime_snapshot(
     headers: HeaderMap,
 ) -> Result<Json<wire::TimecodeTransportSnapshot>, ApiError> {
     let _session = session_for_desk(&state, &headers, &desk)?;
+    let _activation = state.active_show.acquire_shared().await;
     let show_id = context.resolve(&state)?;
     ensure_installed(&state, show_id, TimecodeId(timecode_id))?;
     state
@@ -831,6 +834,7 @@ async fn transport_action(
             "Timecode request identity does not match the route",
         ));
     }
+    let _activation = state.active_show.acquire_shared().await;
     context.resolve(&state)?;
     let snapshot = apply_transport_request(&state, session.desk.id, request)?;
     Ok(Json(snapshot))
@@ -969,24 +973,26 @@ pub(super) fn apply_installed_cue_action_with_handler(
     Ok(completion)
 }
 
-fn install_show_timecodes(state: &AppState, show_id: light_core::ShowId) -> Result<(), ApiError> {
+fn install_show_timecodes(
+    state: &AppState,
+    show_id: light_core::ShowId,
+) -> Result<std::collections::HashSet<TimecodeId>, ApiError> {
     let entry = super::show_objects_v2::active_entry(state, show_id)?;
     let store = ActiveShowRepository::open(&entry.path).map_err(ApiError::store)?;
     let (_, objects) = store
         .objects_with_portable_revision("timecode")
         .map_err(ApiError::store)?;
+    let mut current_ids = std::collections::HashSet::new();
     for object in objects {
         let id = Uuid::parse_str(&object.id)
             .map(TimecodeId)
             .map_err(|error| {
                 ApiError::internal(format!("stored Timecode id is invalid: {error}"))
             })?;
-        if state.timecodes.snapshot(id).is_ok() {
-            continue;
-        }
-        install_object(state, object)?;
+        ensure_object_installed(state, object)?;
+        current_ids.insert(id);
     }
-    Ok(())
+    Ok(current_ids)
 }
 
 fn ensure_installed(
@@ -994,9 +1000,7 @@ fn ensure_installed(
     show_id: light_core::ShowId,
     id: TimecodeId,
 ) -> Result<(), ApiError> {
-    if state.timecodes.snapshot(id).is_ok() {
-        return Ok(());
-    }
+    // A process cache hit is never proof that this object belongs to the active show.
     let entry = super::show_objects_v2::active_entry(state, show_id)?;
     let object = ActiveShowRepository::open(&entry.path)
         .map_err(ApiError::store)?
@@ -1004,7 +1008,24 @@ fn ensure_installed(
         .map_err(ApiError::store)?
         .1
         .ok_or_else(|| ApiError::not_found("Timecode does not exist"))?;
-    install_object(state, object)
+    ensure_object_installed(state, object)
+}
+
+fn ensure_object_installed(
+    state: &AppState,
+    object: light_show::VersionedObject,
+) -> Result<(), ApiError> {
+    let definition: light_playback::TimecodeDefinition = serde_json::from_value(object.body)
+        .map_err(|error| ApiError::internal(format!("stored Timecode is invalid: {error}")))?;
+    if state.timecodes.installed_definition_matches(&definition) {
+        return Ok(());
+    }
+    let audio_duration = prepare_audio_if_present(state, &definition)?;
+    state
+        .timecodes
+        .install(definition, audio_duration)
+        .map(|_| ())
+        .map_err(|error| ApiError::bad_request(error.message))
 }
 
 fn install_object(state: &AppState, object: light_show::VersionedObject) -> Result<(), ApiError> {
