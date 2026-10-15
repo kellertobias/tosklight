@@ -151,6 +151,16 @@ pub enum DeskEvent {
     VisualizerConnectionChanged(VisualizerConnectionNotification),
     ArchitectSyncChanged(ArchitectSyncNotification),
     MacroExecutionChanged(crate::CommandMacroExecutionSnapshot),
+    TimecodeClockChanged {
+        revision: u64,
+        selected_source: String,
+        active_source: Option<String>,
+        state: String,
+        current: Option<String>,
+        source_rate: Option<String>,
+        desk_rate: String,
+        rate_warning: Option<String>,
+    },
     TimecodeRuntimeChanged(crate::timeline::TimecodeRuntimeChange),
 }
 

@@ -2971,6 +2971,22 @@
           "type": "object",
           "properties": {
             "snapshot": {
+              "$ref": "#/$defs/RuntimeTimecodeClockSnapshot"
+            },
+            "type": {
+              "type": "string",
+              "const": "timecode_clock_changed"
+            }
+          },
+          "required": [
+            "type",
+            "snapshot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "snapshot": {
               "$ref": "#/$defs/TimecodeTransportSnapshot"
             },
             "type": {
@@ -9198,6 +9214,60 @@
         "can_previous",
         "can_next",
         "message"
+      ]
+    },
+    "RuntimeTimecodeClockSnapshot": {
+      "description": "Desk clock authority, independent of any authored Timecode timeline.",
+      "type": "object",
+      "properties": {
+        "active_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "desk_rate": {
+          "type": "string"
+        },
+        "rate_warning": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "selected_source": {
+          "type": "string"
+        },
+        "source_rate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "selected_source",
+        "active_source",
+        "state",
+        "current",
+        "source_rate",
+        "desk_rate",
+        "rate_warning"
       ]
     },
     "ScheduleOccurrenceProjection": {

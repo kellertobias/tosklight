@@ -54,7 +54,9 @@ export function selectFrameRateHz(snapshot: DeskSnapshot) {
 }
 
 export function selectActiveTimecode(snapshot: DeskSnapshot) {
-	return snapshot.bootstrap?.active_timecode ?? null;
+	return snapshot.clockReady
+		? snapshot.clock?.current ?? null
+		: snapshot.bootstrap?.active_timecode ?? null;
 }
 
 export function selectOutputHealth(snapshot: DeskSnapshot) {

@@ -18,6 +18,7 @@ import {
 	useActiveTimecode,
 	useFrameRateHz,
 	useHardwareConnected,
+	useTimecodeClockDetail,
 } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useHighlightSnapshot } from "../../features/highlight/HighlightState";
 import {
@@ -220,6 +221,7 @@ function useCommandLineStatus(deskError: string | null): CommandStatus {
 		connection: useConnectionStatus(),
 		frequency: typeof frequency === "number" ? frequency : "—",
 		timecode: useActiveTimecode(),
+		timecodeDetail: useTimecodeClockDetail(),
 		blackout: useOutputRuntimeBlackout() === true,
 		highlight: useHighlightSnapshot()?.active === true,
 		deskError,

@@ -27,6 +27,7 @@ pub(super) fn control_input_tasks(
                 tokio::select! {
                     _ = feedback_cancel.cancelled() => break,
                     _ = interval.tick() => {
+                        super::timecode_clock_status::publish(&feedback_state);
                         let heartbeat = last_heartbeat.elapsed() >= Duration::from_millis(500);
                         if flush_control_feedback(&feedback_state, heartbeat) {
                             last_heartbeat = Instant::now();

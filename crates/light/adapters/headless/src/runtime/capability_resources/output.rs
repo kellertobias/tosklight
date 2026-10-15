@@ -72,6 +72,7 @@ pub(in crate::runtime) struct OutputResource {
     rate: Arc<AtomicU16>,
     control: OutputControlCapability,
     timecode: Arc<Mutex<TimecodeRouter>>,
+    clock_publication: Arc<Mutex<crate::runtime::timecode_clock_status::ClockPublication>>,
     network: Option<Arc<NetworkOutput>>,
     usb: Arc<light_output::UsbOutputFanout>,
     usb_configuration_lock: Arc<tokio::sync::Mutex<()>>,
@@ -235,6 +236,7 @@ impl OutputResource {
             rate,
             control,
             timecode,
+            clock_publication: Arc::default(),
             network,
             usb,
             usb_configuration_lock: Arc::default(),
@@ -924,10 +926,6 @@ impl OutputResource {
 
     pub(in crate::runtime) fn set_speed_groups_paused(&self, paused: [bool; 5]) {
         self.engine.set_speed_groups_paused(paused);
-    }
-
-    pub(in crate::runtime) fn set_timecode_frame(&self, frame: Option<u64>) {
-        self.engine.set_timecode_frame(frame);
     }
 
     pub(in crate::runtime) fn render_with_playback_events(

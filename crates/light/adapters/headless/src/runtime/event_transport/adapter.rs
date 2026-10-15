@@ -230,6 +230,27 @@ fn wire_desk_payload(event: &application::DeskEvent) -> wire::EventPayload {
                 execution: super::super::macros_v2::execution_wire(change.clone()),
             }
         }
+        application::DeskEvent::TimecodeClockChanged {
+            revision,
+            selected_source,
+            active_source,
+            state,
+            current,
+            source_rate,
+            desk_rate,
+            rate_warning,
+        } => wire::EventPayload::TimecodeClockChanged {
+            snapshot: light_wire::v2::runtime::RuntimeTimecodeClockSnapshot {
+                revision: *revision,
+                selected_source: selected_source.clone(),
+                active_source: active_source.clone(),
+                state: state.clone(),
+                current: current.clone(),
+                source_rate: source_rate.clone(),
+                desk_rate: desk_rate.clone(),
+                rate_warning: rate_warning.clone(),
+            },
+        },
         application::DeskEvent::TimecodeRuntimeChanged(change) => {
             wire::EventPayload::TimecodeRuntimeChanged {
                 snapshot: super::super::timecode_v2::wire_snapshot(change.snapshot.clone()),

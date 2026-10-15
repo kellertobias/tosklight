@@ -586,6 +586,7 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeHighlightState::decl(config),
         RuntimeBootstrapHighlightState::decl(config),
         RuntimeBootstrapSnapshot::decl(config),
+        RuntimeTimecodeClockSnapshot::decl(config),
         RuntimeReadinessSnapshot::decl(config),
         RuntimeVisualizationDiagnostics::decl(config),
         RuntimeDiagnosticsSnapshot::decl(config),

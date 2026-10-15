@@ -34,6 +34,7 @@ export interface CommandStatus {
 	connection: CommandConnectionStatus;
 	frequency: number | "—";
 	timecode: string | null;
+	timecodeDetail?: string | null;
 	blackout: boolean;
 	highlight: boolean;
 	/** An actionable Desk State fault adds a warning beside the DMX opener. */
@@ -243,7 +244,7 @@ function CommandStatusButton({
 		: `DMX ${status.frequency}Hz`;
 	const accessibleLabel = status.deskError
 		? `${statusLabel}; Desk State needs attention: ${status.deskError}. Open Running & Output Desk State`
-		: `${statusLabel}; ${status.timecode ?? "No Timecode"}. Open Running & Output`;
+		: `${statusLabel}; ${status.timecodeDetail ?? status.timecode ?? "No Timecode"}. Open Running & Output`;
 	return (
 		<Button
 			aria-label={accessibleLabel}
@@ -287,6 +288,7 @@ function CommandStatusButton({
 			</span>
 			<span
 				className={`timecode-status ${status.timecode ? "timecode-active" : "timecode-idle"}`}
+				title={status.timecodeDetail ?? undefined}
 			>
 				{status.timecode ?? (
 					<>

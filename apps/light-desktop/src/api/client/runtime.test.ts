@@ -1,3 +1,6 @@
+import { DeskSnapshotStore } from "../../features/deskSnapshot/store";
+import { createServerEventRouter } from "../../features/server/serverEventRouter";
+import type { ServerState } from "../../features/server/useServerState";
 import {
 	afterEach,
 	beforeEach,
@@ -80,6 +83,57 @@ afterEach(() => {
 });
 
 describe("LightClientRuntime", () => {
+	it("contains malformed clock projections without stranding shared listeners or stale lock", async () => {
+		const client = connectedClient();
+		const store = new DeskSnapshotStore();
+		const session = client.currentSession;
+		if (!session) throw new Error("Connected client must have its session");
+		const state = {
+			session,
+			deskSnapshotStore: store,
+			mediaServers: [],
+		} as unknown as ServerState;
+		client.onEvent(createServerEventRouter(() => state, session, vi.fn()));
+		const later = vi.fn();
+		client.onEvent(later);
+		const socket = await openEvents(client);
+		const snapshot = {
+			revision: 5,
+			selected_source: "artnet:127.0.0.1:2",
+			active_source: "artnet:127.0.0.1:2",
+			state: "locked",
+			current: "00:00:02:22",
+			source_rate: "25",
+			desk_rate: "44",
+			rate_warning: null,
+		};
+		const event = (next: unknown) =>
+			typedEvent({
+				type: "timecode_clock_changed",
+				snapshot: next,
+			} as EventPayload);
+		socket.emitMessage(event(snapshot));
+		expect(store.getSnapshot().clock?.current).toBe(snapshot.current);
+		expect(() =>
+			socket.emitMessage(event({ ...snapshot, revision: 6, current: 123 })),
+		).not.toThrow();
+		expect(later).toHaveBeenCalledTimes(2);
+		expect(store.getSnapshot()).toMatchObject({
+			clock: null,
+			clockError: "Timecode status unavailable",
+		});
+		socket.emitMessage(
+			event({ ...snapshot, revision: 4, current: "00:00:01:00" }),
+		);
+		expect(store.getSnapshot().clock).toBeNull();
+		socket.emitMessage(
+			event({ ...snapshot, revision: 7, current: "00:00:03:00" }),
+		);
+		expect(store.getSnapshot().clock?.current).toBe("00:00:03:00");
+		expect(store.getSnapshot().clockError).toBeNull();
+		client.disconnectEvents();
+	});
+
 	it.each([
 		["Update would not change Group 1 1", "UPDATE GROUP 1"],
 		["Update would not change Front wash front-wash", "UPDATE GROUP 1"],

@@ -207,6 +207,9 @@ pub enum EventPayload {
     MacroExecutionChanged {
         execution: MacroExecutionSnapshot,
     },
+    TimecodeClockChanged {
+        snapshot: super::runtime::RuntimeTimecodeClockSnapshot,
+    },
     TimecodeRuntimeChanged {
         snapshot: TimecodeTransportSnapshot,
     },

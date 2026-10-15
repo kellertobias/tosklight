@@ -220,6 +220,16 @@ export function createStateEventRouter(
 ) {
 	return (event: RuntimeCapabilityEvent) => {
 		const state = getState();
+		if (
+			event.type === "timecode_clock_changed" &&
+			state.session?.session_id === session.session_id
+		) {
+			try {
+				state.deskSnapshotStore.installClock(event.snapshot);
+			} catch {
+				state.deskSnapshotStore.invalidateClock();
+			}
+		}
 		installHighlight(event, state);
 		refreshConfiguration(event, state);
 		installHardwareConnection(event, state);

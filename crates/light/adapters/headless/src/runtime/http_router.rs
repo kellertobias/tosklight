@@ -64,6 +64,10 @@ fn operator_routes() -> Router<AppState> {
             get(performance_diagnostics),
         )
         .route("/api/v2/bootstrap", get(bootstrap_v2))
+        .route(
+            "/api/v2/timecode-clock",
+            get(super::timecode_clock_status::snapshot),
+        )
 }
 
 fn media_and_output_routes() -> Router<AppState> {

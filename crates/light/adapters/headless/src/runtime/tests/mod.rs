@@ -220,3 +220,5 @@ mod timecode_show_scope_tests;
 
 #[path = "preload_timecode_tests.rs"]
 mod preload_transport_batch_tests;
+
+mod timecode_clock_status_tests;

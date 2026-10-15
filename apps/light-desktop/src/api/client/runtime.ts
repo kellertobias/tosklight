@@ -15,6 +15,7 @@ import type {
 	RuntimeDiagnostics,
 	SessionResponse,
 } from "../types";
+import { decodeTimecodeClock } from "../timecodeClockWire";
 import type { ScreenAttachment } from "./screenAttachment";
 import { readScreenAttachment } from "./screenAttachment";
 import { browserStorage, defaultServerUrl } from "./serverLocation";
@@ -100,6 +101,12 @@ export class LightClientRuntime {
 		const storage = browserStorage();
 		if (this.deskToken) storage?.setItem("light.desk-token", this.deskToken);
 		else storage?.removeItem("light.desk-token");
+	}
+
+	async timecodeClock() {
+		return decodeTimecodeClock(
+			await this.request<unknown>("/api/v2/timecode-clock"),
+		);
 	}
 
 	bootstrap(): Promise<BootstrapSnapshot> {

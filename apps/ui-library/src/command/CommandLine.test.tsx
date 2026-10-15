@@ -556,3 +556,41 @@ it("cancels a mode-settings hold when its pointer cancels or its component unmou
 	act(() => vi.advanceTimersByTime(1000));
 	expect(settings).not.toHaveBeenCalled();
 });
+
+it("announces authoritative clock detail and explicit unavailability on the existing status button", () => {
+	const base = props();
+	const detail =
+		"External Timecode locked · artnet:127.0.0.1:2 · 00:00:02:22 · Timecode converted from 25 to 44 fps";
+	const view = render(
+		<CommandLine
+			{...base}
+			status={{
+				...base.status,
+				timecode: "00:00:02:22",
+				timecodeDetail: detail,
+			}}
+		/>,
+	);
+	expect(
+		screen.getByRole("button", {
+			name: `DMX 44Hz; ${detail}. Open Running & Output`,
+		}),
+	).toBeInTheDocument();
+	expect(screen.getByTitle(detail)).toHaveTextContent("00:00:02:22");
+	view.rerender(
+		<CommandLine
+			{...base}
+			status={{
+				...base.status,
+				timecode: null,
+				timecodeDetail: "Timecode status unavailable",
+			}}
+		/>,
+	);
+	expect(
+		screen.getByRole("button", {
+			name: "DMX 44Hz; Timecode status unavailable. Open Running & Output",
+		}),
+	).toBeInTheDocument();
+	expect(screen.queryByText("00:00:02:22")).not.toBeInTheDocument();
+});

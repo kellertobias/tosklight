@@ -74,6 +74,27 @@ export function useActiveTimecode(): string | null {
 	return useDeskSnapshotSelector(selectActiveTimecode, Object.is);
 }
 
+/** Exact server clock authority and conversion warning; display-only, never extrapolated. */
+export function useTimecodeClockDetail(): string | null {
+	return useDeskSnapshotSelector(selectClockDetail, Object.is);
+}
+function selectClockDetail(snapshot: DeskSnapshot): string | null {
+	if (snapshot.clockError) return snapshot.clockError;
+	const clock = snapshot.clock;
+	if (!clock) return null;
+	const label =
+		clock.state === "lost"
+			? "External Timecode source lost"
+			: clock.state === "waiting"
+				? "Waiting for external Timecode"
+				: clock.state === "locked"
+					? "External Timecode locked"
+					: "Internal Timecode";
+	return [label, clock.selected_source, clock.current, clock.rate_warning]
+		.filter(Boolean)
+		.join(" · ");
+}
+
 /** Output health counters, or null while the bootstrap is unknown. */
 export function useOutputHealth(): OutputHealth | null {
 	return useDeskSnapshotSelector(selectOutputHealth, Object.is);

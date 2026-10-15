@@ -413,3 +413,17 @@ mod tests {
 fn default_hardware_illumination() -> u8 {
     100
 }
+
+/// Desk clock authority, independent of any authored Timecode timeline.
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeTimecodeClockSnapshot {
+    #[ts(type = "number")]
+    pub revision: u64,
+    pub selected_source: String,
+    pub active_source: Option<String>,
+    pub state: String,
+    pub current: Option<String>,
+    pub source_rate: Option<String>,
+    pub desk_rate: String,
+    pub rate_warning: Option<String>,
+}

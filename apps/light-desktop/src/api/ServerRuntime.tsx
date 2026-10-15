@@ -5,6 +5,7 @@ import { ConnectionRetryProvider } from "../features/deskConnection/ConnectionRe
 import { DeskConnectionProvider } from "../features/deskConnection/DeskConnectionContext";
 import { DeskLoadingStateProvider } from "../features/deskLoading/DeskLoadingState";
 import { DeskStateDiagnosticsProvider } from "../features/deskState/DeskStateDiagnosticsState";
+import { useTimecodeClockBoundary } from "../features/deskSnapshot/useTimecodeClockBoundary";
 import { DmxDiagnosticsProvider } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
 import { DynamicsActionsProvider } from "../features/dynamics/DynamicsActionsContext";
 import { FilesProvider } from "../features/files/FilesContext";
@@ -83,6 +84,7 @@ function ServerConnectionOwner({
 	loadShowObjects: ReturnType<typeof useShowObjects>;
 	sessionRole: SessionRole;
 }>) {
+	useTimecodeClockBoundary(state);
 	const sessionHandoff = useSessionHandoff();
 	const retry = useServerConnection(
 		state,

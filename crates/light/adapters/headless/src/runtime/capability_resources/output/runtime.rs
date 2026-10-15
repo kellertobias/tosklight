@@ -840,3 +840,25 @@ impl OutputResource {
             .store(fail, Ordering::SeqCst);
     }
 }
+
+impl OutputResource {
+    pub(in crate::runtime) fn set_timecode_frame(&self, frame: Option<u64>) {
+        self.engine.set_timecode_frame(frame);
+    }
+
+    pub(in crate::runtime) fn clock_status(
+        &self,
+    ) -> light_wire::v2::runtime::RuntimeTimecodeClockSnapshot {
+        // Always acquire router before publication; event delivery happens after both guards drop.
+        let router = self.timecode.lock();
+        self.clock_publication.lock().observe(&router)
+    }
+    pub(in crate::runtime) fn clock_status_event(
+        &self,
+    ) -> Option<light_wire::v2::runtime::RuntimeTimecodeClockSnapshot> {
+        let router = self.timecode.lock();
+        self.clock_publication
+            .lock()
+            .event(&router, std::time::Instant::now())
+    }
+}

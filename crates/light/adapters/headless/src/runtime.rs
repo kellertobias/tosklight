@@ -266,6 +266,7 @@ mod timecode_audio_output;
 #[path = "runtime/timecode_audio_output_disabled.rs"]
 mod timecode_audio_output;
 mod timecode_clock;
+mod timecode_clock_status;
 mod timecode_v2;
 mod timecode_v2_clips;
 mod timecode_waveform;
