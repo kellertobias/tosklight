@@ -38,11 +38,17 @@ static volatile sig_atomic_t done;
 static volatile uint64_t answer;
 static void stop(int sig) { (void)sig; done = 1; }
 __attribute__((noinline)) uint64_t tl775_profile_probe_leaf(uint64_t n) {
-    for (unsigned i = 0; i < 100000; ++i) n = n * 1664525 + 1013904223;
-    return n;
+    volatile uint64_t frame_state = n;
+    for (unsigned i = 0; i < 100000; ++i)
+        frame_state = frame_state * 1664525 + 1013904223;
+    return frame_state;
 }
 __attribute__((noinline)) void tl775_profile_probe_parent(void) {
-    while (!done) answer = tl775_profile_probe_leaf(answer);
+    volatile uint64_t frame_result = 0;
+    while (!done) {
+        frame_result = tl775_profile_probe_leaf(answer);
+        answer = frame_result;
+    }
 }
 int main(void) {
     signal(SIGTERM, stop); signal(SIGINT, stop);
