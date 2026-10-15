@@ -13,7 +13,7 @@ use serialport::{DataBits, FlowControl, Parity, SerialPort, SerialPortType, Stop
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -336,13 +336,31 @@ fn snapshot(
     wait_for_frame: bool,
     applied_generation: u64,
 ) -> (Option<UniverseFrame>, u64, bool) {
+    snapshot_with_wait(
+        shared,
+        wait_for_frame,
+        applied_generation,
+        |changed, state, timeout| {
+            changed
+                .wait_timeout(state, timeout)
+                .expect("USB worker mutex poisoned")
+                .0
+        },
+    )
+}
+
+// Keep wait admission testable independently of host thread scheduling. The production waiter
+// above still releases/reacquires the same mutex through the same bounded Condvar operation.
+fn snapshot_with_wait<'a>(
+    shared: &'a Arc<(Mutex<WorkerState>, Condvar)>,
+    wait_for_frame: bool,
+    applied_generation: u64,
+    wait: impl FnOnce(&'a Condvar, MutexGuard<'a, WorkerState>, Duration) -> MutexGuard<'a, WorkerState>,
+) -> (Option<UniverseFrame>, u64, bool) {
     let (state, changed) = &**shared;
     let mut state = state.lock().expect("USB worker mutex poisoned");
     if wait_for_frame && state.generation == applied_generation && !state.shutdown {
-        state = changed
-            .wait_timeout(state, RECONNECT_DELAY)
-            .expect("USB worker mutex poisoned")
-            .0;
+        state = wait(changed, state, RECONNECT_DELAY);
     }
     (state.latest.clone(), state.generation, state.shutdown)
 }
@@ -680,33 +698,99 @@ mod tests {
         );
     }
 
-    #[test]
-    fn worker_wait_is_edge_woken_and_open_dmx_can_repeat_without_a_quarter_second_delay() {
-        let shared = Arc::new((
+    fn worker_state(generation: u64, shutdown: bool) -> Arc<(Mutex<WorkerState>, Condvar)> {
+        Arc::new((
             Mutex::new(WorkerState {
                 latest: Some(UniverseFrame::new([1; 512])),
-                generation: 1,
-                shutdown: false,
+                generation,
+                shutdown,
             }),
             Condvar::new(),
-        ));
-        let started = Instant::now();
-        let (_, generation, _) = snapshot(&shared, false, 1);
-        assert_eq!(generation, 1);
-        assert!(started.elapsed() < Duration::from_millis(25));
+        ))
+    }
 
-        let changed = Arc::clone(&shared);
-        let writer = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(10));
-            let (state, wake) = &*changed;
-            let mut state = state.lock().unwrap();
-            state.generation = 2;
-            wake.notify_one();
-        });
-        let started = Instant::now();
-        let (_, generation, _) = snapshot(&shared, true, 1);
-        writer.join().unwrap();
+    #[test]
+    fn retained_open_dmx_frame_changed_generation_and_shutdown_never_wait() {
+        for (wait_for_frame, generation, shutdown) in
+            [(false, 1, false), (true, 2, false), (true, 1, true)]
+        {
+            let shared = worker_state(generation, shutdown);
+            let (frame, observed_generation, observed_shutdown) =
+                snapshot_with_wait(&shared, wait_for_frame, 1, |_, _, _| {
+                    panic!("a retained Open DMX frame, new generation or shutdown must not wait")
+                });
+            assert_eq!(frame, Some(UniverseFrame::new([1; 512])));
+            assert_eq!(observed_generation, generation);
+            assert_eq!(observed_shutdown, shutdown);
+        }
+    }
+
+    #[test]
+    fn unchanged_worker_generation_waits_once_with_exact_reconnect_duration_and_reads_returned_state()
+     {
+        let shared = worker_state(1, false);
+        let mut waits = 0;
+        let (frame, generation, shutdown) =
+            snapshot_with_wait(&shared, true, 1, |_, mut state, timeout| {
+                waits += 1;
+                assert_eq!(timeout, Duration::from_millis(250));
+                assert_eq!(timeout, RECONNECT_DELAY);
+                state.latest = Some(UniverseFrame::new([2; 512]));
+                state.generation = 2;
+                state
+            });
+        assert_eq!(waits, 1);
+        assert_eq!(frame, Some(UniverseFrame::new([2; 512])));
         assert_eq!(generation, 2);
-        assert!(started.elapsed() < RECONNECT_DELAY);
+        assert!(!shutdown);
+    }
+
+    #[test]
+    fn real_worker_notification_delivers_changed_state_with_bounded_liveness() {
+        // Five seconds bounds a broken handshake; it is not a USB pacing or wake-latency gate.
+        let watchdog = Duration::from_secs(5);
+        let shared = worker_state(1, false);
+        let reader_shared = Arc::clone(&shared);
+        let (waiting_tx, waiting_rx) = mpsc::channel();
+        let (result_tx, result_rx) = mpsc::channel();
+        let reader = thread::spawn(move || {
+            let mut waiting = Some(waiting_tx);
+            let deadline = Instant::now() + watchdog;
+            loop {
+                let current =
+                    snapshot_with_wait(&reader_shared, true, 1, |changed, state, timeout| {
+                        if let Some(ready) = waiting.take() {
+                            ready.send(()).unwrap();
+                        }
+                        changed.wait_timeout(state, timeout).unwrap().0
+                    });
+                if current.1 != 1 || current.2 {
+                    result_tx.send(current).unwrap();
+                    return;
+                }
+                // A Condvar may wake spuriously; the worker can recheck its predicate.
+                assert!(
+                    Instant::now() < deadline,
+                    "worker notification did not converge"
+                );
+            }
+        });
+        waiting_rx
+            .recv_timeout(watchdog)
+            .expect("reader never reached wait admission");
+        {
+            let (state, changed) = &*shared;
+            let mut state = state.lock().unwrap();
+            state.latest = Some(UniverseFrame::new([2; 512]));
+            state.generation = 2;
+            changed.notify_one();
+        }
+        let (frame, generation, shutdown) = result_rx
+            .recv_timeout(watchdog)
+            .expect("worker did not return after notification");
+        reader.join().unwrap();
+        assert_eq!(frame, Some(UniverseFrame::new([2; 512])));
+        assert_eq!(generation, 2);
+        assert!(!shutdown);
     }
 }
