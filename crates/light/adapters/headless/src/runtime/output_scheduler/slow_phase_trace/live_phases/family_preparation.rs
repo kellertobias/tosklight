@@ -20,8 +20,13 @@ pub(in crate::runtime::output_scheduler) enum Stage {
     OwnerCompose,
     OrderedFinish,
     NativeProjection,
+    // Append so schema 1's original stage indices keep their meaning in schema 2.
+    StaticDiscovery,
+    InputAssembly,
+    PrepareCurrent,
+    PreparePrograms,
 }
-const STAGES: usize = 14;
+const STAGES: usize = 18;
 
 #[derive(Clone, Copy)]
 pub(in crate::runtime::output_scheduler) enum Count {
@@ -139,11 +144,19 @@ mod tests {
     #[test]
     fn inactive_observations_create_no_clock_or_summary() {
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
-        let span = Span::begin(Stage::InitialStatic);
-        assert!(span.started.is_none());
+        for stage in [
+            Stage::InitialStatic,
+            Stage::StaticDiscovery,
+            Stage::InputAssembly,
+            Stage::PrepareCurrent,
+            Stage::PreparePrograms,
+        ] {
+            let span = Span::begin(stage);
+            assert!(span.started.is_none());
+            drop(span);
+        }
         count(Count::Groups, usize::MAX);
         count_with(Count::Groups, || panic!("inactive count evaluated"));
-        drop(span);
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
     }
     #[test]
@@ -168,6 +181,58 @@ mod tests {
         );
     }
     #[test]
+    fn failed_cohort_retains_only_entered_children_in_its_admitted_frame() {
+        fn failing_cohort(fail_current: bool) -> Result<(), &'static str> {
+            let _parent = Span::begin(Stage::CohortSetup);
+            {
+                let _discovery = Span::begin(Stage::StaticDiscovery);
+                count(Count::StaticTargets, 3);
+            }
+            {
+                let _assembly = Span::begin(Stage::InputAssembly);
+                count(Count::Groups, 2);
+            }
+            let _current = Span::begin(Stage::PrepareCurrent);
+            if fail_current {
+                return Err("Current preparation rejected the cohort");
+            }
+            drop(_current);
+            let _programs = Span::begin(Stage::PreparePrograms);
+            Ok(())
+        }
+        install();
+        assert!(failing_cohort(true).is_err());
+        let frame = ACTIVE.with(|a| a.borrow_mut().take()).unwrap();
+        for stage in [
+            Stage::CohortSetup,
+            Stage::StaticDiscovery,
+            Stage::InputAssembly,
+            Stage::PrepareCurrent,
+        ] {
+            assert_eq!(frame.family.calls[stage as usize], 1);
+        }
+        assert_eq!(frame.family.calls[Stage::PreparePrograms as usize], 0);
+        assert_eq!(frame.family.counts[Count::StaticTargets as usize], 3);
+        assert_eq!(frame.family.counts[Count::Groups as usize], 2);
+        let children = [
+            Stage::StaticDiscovery,
+            Stage::InputAssembly,
+            Stage::PrepareCurrent,
+        ]
+        .into_iter()
+        .map(|stage| frame.family.durations[stage as usize])
+        .sum::<Duration>();
+        assert!(frame.family.durations[Stage::CohortSetup as usize] >= children);
+        assert_eq!(frame.phases, [Duration::ZERO; super::super::COUNT]);
+        // The next admitted frame owns independent rows, even after an early return.
+        install();
+        let next = ACTIVE.with(|a| a.borrow_mut().take()).unwrap();
+        assert_eq!(next.family.calls, [0; STAGES]);
+        assert_eq!(next.family.durations, [Duration::ZERO; STAGES]);
+        assert_eq!(next.family.counts, [0; COUNTS]);
+    }
+
+    #[test]
     fn counters_are_fixed_size_and_saturating() {
         install();
         ACTIVE.with(|active| {
@@ -185,7 +250,7 @@ mod tests {
     #[test]
     fn late_span_cannot_contaminate_replacement_frame() {
         install();
-        let old = Span::begin(Stage::InitialStatic);
+        let old = Span::begin(Stage::StaticDiscovery);
         install();
         drop(old);
         let frame = ACTIVE.with(|a| a.borrow_mut().take()).unwrap();

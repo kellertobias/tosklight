@@ -552,9 +552,12 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     ),
 ) -> Result<(Vec<HybridFamilyRequirement>, Vec<OwnedHybridProjection<T>>), DynamicRuntimeError> {
     let setup_span = diagnostics::Span::begin(Stage::CohortSetup);
+    let discovery_span = diagnostics::Span::begin(Stage::StaticDiscovery);
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
+    drop(discovery_span);
+    let assembly_span = diagnostics::Span::begin(Stage::InputAssembly);
     assemble_captured_family_inputs(prepared, fixed, families, pool);
     if !view.frame.capture.freezes_nothing() {
         families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
@@ -570,9 +573,13 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     // list of thousands of rows by doubling allocated and copied it about a dozen times.
     let (mut requirements, mut projections) = (Vec::new(), Vec::with_capacity(groups.len()));
     let protected_current = protected_current_targets(view, groups);
+    drop(assembly_span);
+    let current_span = diagnostics::Span::begin(Stage::PrepareCurrent);
     observer
         .prepare_current(view.frame, view.static_token, &protected_current)
         .map_err(invalid)?;
+    drop(current_span);
+    let programs_span = diagnostics::Span::begin(Stage::PreparePrograms);
     let programs = groups
         .iter()
         .filter_map(|entry| {
@@ -592,6 +599,9 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     observer
         .prepare_programs(view.frame, &programs)
         .map_err(invalid)?;
+    drop(programs_span);
+    // These children are disjoint wall spans within CohortSetup. Eligibility discovery and
+    // instrumentation overhead remain in that parent; never add child time to the parent.
     let eligible_position_groups = eligible_position_groups(view, groups, static_only);
     diagnostics::count(Count::PositionGroups, eligible_position_groups.len());
     drop(setup_span);
