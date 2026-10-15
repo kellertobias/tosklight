@@ -219,7 +219,7 @@ impl ActiveShowPorts for BenchmarkPorts {
                 ));
             }
             diagnostics::mark_boundary(timing, "validation");
-            let show = diagnostics::open_store(&self.show_path, timing).map_err(store_error)?;
+            let show = open_benchmark_store(&self.show_path, timing).map_err(store_error)?;
             diagnostics::mark_boundary(timing, "open_store");
             let document = show.portable_document().map_err(store_error)?;
             diagnostics::mark_boundary(timing, "portable_document");
@@ -673,6 +673,16 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.root);
     }
+}
+
+fn open_benchmark_store(
+    path: &std::path::Path,
+    timing: &mut Option<diagnostics::BoundaryTiming>,
+) -> Result<ShowStore, StoreError> {
+    diagnostics::observe_store_open(timing, |completed| match completed {
+        Some(completed) => ShowStore::open_observed(path, completed),
+        None => ShowStore::open(path),
+    })
 }
 
 fn store_error(error: StoreError) -> ActionError {

@@ -342,19 +342,19 @@ pub struct StoreOpen {
     pub failed_phase: Option<&'static str>,
 }
 
-pub(super) fn open_store(
-    path: &std::path::Path,
+pub(super) fn observe_store_open<T, E>(
     timing: &mut Option<BoundaryTiming>,
-) -> Result<super::ShowStore, super::StoreError> {
+    operation: impl FnOnce(Option<&mut dyn FnMut(light_show::ShowStoreOpenPhase)>) -> Result<T, E>,
+) -> Result<T, E> {
     let Some(timing) = timing else {
-        return super::ShowStore::open(path);
+        return operation(None);
     };
     use light_show::ShowStoreOpenPhase as Phase;
     let started = Instant::now();
     let mut last = Duration::ZERO;
     let mut segments = BTreeMap::new();
     let mut next = "playback_contract";
-    let result = super::ShowStore::open_observed(path, |phase| {
+    let result = operation(Some(&mut |phase| {
         let (name, following) = match phase {
             Phase::PlaybackContract => ("playback_contract", "connection_open"),
             Phase::ConnectionOpen => ("connection_open", "connection_configure"),
@@ -369,7 +369,7 @@ pub(super) fn open_store(
         segments.insert(name, micros(elapsed.saturating_sub(last)));
         last = elapsed;
         next = following;
-    });
+    }));
     let total = started.elapsed();
     let failed_phase = result.as_ref().err().map(|_| next);
     segments.insert(
@@ -836,7 +836,7 @@ mod tests {
             &boundary_context("valid"),
             ShowId(uuid::Uuid::from_u128(9)),
             |timing| {
-                open_store(&scratch.show_path, timing)
+                super::super::open_benchmark_store(&scratch.show_path, timing)
                     .map(|_| ())
                     .map_err(super::super::store_error)
             },
@@ -852,7 +852,7 @@ mod tests {
             &boundary_context("missing"),
             ShowId(uuid::Uuid::from_u128(9)),
             |timing| {
-                open_store(&missing, timing)
+                super::super::open_benchmark_store(&missing, timing)
                     .map(|_| ())
                     .map_err(super::super::store_error)
             },
@@ -887,7 +887,7 @@ mod tests {
                     < 0.000001
             );
         }
-        let plain = open_store(&scratch.show_path, &mut None).unwrap();
+        let plain = super::super::open_benchmark_store(&scratch.show_path, &mut None).unwrap();
         assert_eq!(plain.name().unwrap(), "observed");
     }
 
