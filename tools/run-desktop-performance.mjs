@@ -43,6 +43,10 @@ const CASES = [
 ];
 
 const options = parseArguments(process.argv.slice(2));
+if (options["owned-cpu-profile-binaries"])
+	options.ownedCpuProfile = await readOwnedCpuProfileDescriptor(
+		options["owned-cpu-profile-binaries"],
+	);
 if (process.platform !== "linux")
 	throw new Error(
 		"The released Desk performance harness requires Linux /proc and Xvfb",
@@ -51,7 +55,9 @@ await mkdir(path.resolve(options["output-dir"]), { recursive: true });
 const results = [];
 // Every show is measured unrestricted. The demo show is measured a second time locked to one
 // core, which is the case that says whether a modest machine can still run a real show.
-for (const performanceCase of CASES)
+for (const performanceCase of CASES.filter(
+	(entry) => !options.case || entry.caseId === options.case,
+))
 	for (const executionMode of performanceCase.demo
 		? ["unrestricted", "one_core"]
 		: ["unrestricted"])
@@ -97,7 +103,132 @@ function parseArguments(arguments_) {
 	}
 	for (const required of ["application", "output-dir", "demo-show"])
 		if (!values[required]) throw new Error(`--${required} is required`);
+	if (values.case && values.case !== "sixteen_universe")
+		throw new Error("--case supports only sixteen_universe");
+	if (
+		values["owned-cpu-profile-binaries"] &&
+		(values.case !== "sixteen_universe" ||
+			process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS !== "1")
+	)
+		throw new Error(
+			"Owned CPU profile requires --case sixteen_universe and diagnostics ON",
+		);
 	return values;
+}
+
+async function readOwnedCpuProfileDescriptor(filename) {
+	if (!path.isAbsolute(filename))
+		throw new Error("Owned profile descriptor must be absolute");
+	const descriptor = JSON.parse(await readFile(filename, "utf8"));
+	const exactKeys = (value, keys) =>
+		value &&
+		typeof value === "object" &&
+		Object.keys(value).sort().join(",") === [...keys].sort().join(",");
+	if (
+		!exactKeys(descriptor, ["schema", "source_sha", "roles"]) ||
+		descriptor.schema !== 1 ||
+		!/^[a-f0-9]{40}$/.test(descriptor.source_sha) ||
+		!Array.isArray(descriptor.roles) ||
+		descriptor.roles.length !== 2
+	)
+		throw new Error("Invalid owned profile descriptor");
+	const roles = new Set();
+	for (const entry of descriptor.roles) {
+		if (
+			!exactKeys(entry, ["role", "sha256", "build_id"]) ||
+			!["server", "native_renderer"].includes(entry.role) ||
+			roles.has(entry.role) ||
+			!/^[a-f0-9]{64}$/.test(entry.sha256) ||
+			!/^[a-f0-9]{1,128}$/.test(entry.build_id)
+		)
+			throw new Error("Invalid owned profile binary role");
+		roles.add(entry.role);
+	}
+	return descriptor;
+}
+
+function ownedCpuProfileObserver(descriptor, context) {
+	let completion, failure;
+	return {
+		start() {
+			if (completion) return;
+			completion = (async () => {
+				const manifest = {
+					schema: 1,
+					source_sha: descriptor.source_sha,
+					coordinator_pid: process.pid,
+					launch_pid: context.launchPid,
+					measurement_started_at_utc: new Date(
+						context.measurementStartedAt,
+					).toISOString(),
+					measurement_deadline_utc: new Date(
+						context.measurementStartedAt + DURATION_SECONDS * 1000,
+					).toISOString(),
+					roles: descriptor.roles,
+					case_id: context.caseId,
+					execution_mode: context.executionMode,
+				};
+				await writeFile(context.manifestPath, `${JSON.stringify(manifest)}\n`, {
+					flag: "wx",
+				});
+				const terminal = await new Promise((resolve) => {
+					let deadlineTimer,
+						killTimer,
+						settled = false;
+					const finish = (value) => {
+						if (settled) return;
+						settled = true;
+						clearTimeout(deadlineTimer);
+						clearTimeout(killTimer);
+						resolve(value);
+					};
+					const child = spawn(
+						"python3",
+						[
+							"-B",
+							path.resolve("tools/desktop-performance-profile.py"),
+							"owned-app",
+							"--manifest",
+							context.manifestPath,
+							"--output",
+							context.outputPath,
+						],
+						{ stdio: "ignore" },
+					);
+					child.once("error", () => finish({ closed: false }));
+					child.once("close", (code) => finish({ closed: true, code }));
+					deadlineTimer = setTimeout(() => {
+						child.kill("SIGTERM");
+						killTimer = setTimeout(() => {
+							child.kill("SIGKILL");
+							child.unref();
+							finish({ closed: false });
+						}, 8000);
+					}, 60000);
+				});
+				let receipt;
+				try {
+					receipt = JSON.parse(await readFile(context.outputPath, "utf8"));
+				} catch {}
+				if (!terminal.closed || receipt?.recorder_cleanup_verified !== true) {
+					const error = new Error(
+						"Owned CPU profile cleanup unverified; application quarantined",
+					);
+					error.cleanupUnverified = true;
+					throw error;
+				}
+				if (terminal.code !== 0 || receipt.status !== "PROFILED")
+					throw new Error("Owned CPU profile observer STOP");
+			})().catch((error) => {
+				failure = error;
+			});
+		},
+		async finish() {
+			if (!completion) return;
+			await completion;
+			if (failure) throw failure;
+		},
+	};
 }
 
 async function runCase(performanceCase, executionMode) {
@@ -166,6 +297,8 @@ async function runCase(performanceCase, executionMode) {
 	evidence.closed = closed;
 	let failure;
 	let result;
+	let observer;
+	let measured;
 	for (const stream of [child.stdout, child.stderr])
 		stream.on("data", (chunk) => {
 			evidence.log.write(chunk);
@@ -207,12 +340,25 @@ async function runCase(performanceCase, executionMode) {
 		);
 		state.phase = "measurement";
 		const measurementStartedAt = Date.now();
-		const measured = await measureWindow(
+		observer = options.ownedCpuProfile
+			? ownedCpuProfileObserver(options.ownedCpuProfile, {
+					caseId: performanceCase.caseId,
+					executionMode,
+					launchPid: child.pid,
+					measurementStartedAt,
+					manifestPath: `${evidence.prefix}-owned-profile-request.json`,
+					outputPath: `${evidence.prefix}-owned-profile.json`,
+				})
+			: undefined;
+		measured = await measureWindow(
 			api,
 			child.pid,
 			executionMode,
 			evidence.samples,
+			observer ? () => observer.start() : undefined,
 		);
+		state.phase = "observer-completion";
+		await observer?.finish();
 		state.phase = "fixture-sheet-liveness";
 		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode, {
 			startedAt: measurementStartedAt,
@@ -239,6 +385,7 @@ async function runCase(performanceCase, executionMode) {
 			...measured,
 		};
 	} catch (error) {
+		if (measured) state.measurement = measured;
 		const diagnostics = await retainCaseFailure({
 			performanceCase,
 			executionMode,
@@ -255,6 +402,13 @@ async function runCase(performanceCase, executionMode) {
 		failure = new Error(
 			`${performanceCase.caseId}/${executionMode}: ${error instanceof Error ? error.message : String(error)}; diagnostics: ${diagnostics}${output.length ? `\n${output.join("")}` : ""}`,
 		);
+		failure.cleanupUnverified = error.cleanupUnverified === true;
+	}
+	try {
+		await observer?.finish();
+	} catch (error) {
+		failure ??= error;
+		if (error.cleanupUnverified) failure.cleanupUnverified = true;
 	}
 	failure = await finalizeCaseEvidence(
 		child,
@@ -278,6 +432,20 @@ async function finalizeCaseEvidence(
 	temporaryRoot,
 	failure,
 ) {
+	if (failure?.cleanupUnverified) {
+		state.observerCleanup = { verified: false, quarantined: true };
+		child.stdout.destroy();
+		child.stderr.destroy();
+		child.unref();
+		await finishCaseEvidence(evidence, reportPath, preparedPath, state).catch(
+			(error) => {
+				console.error(
+					`Quarantined runtime evidence unavailable: ${error.message}`,
+				);
+			},
+		);
+		return failure;
+	}
 	try {
 		await terminateProcessTree(child.pid);
 	} catch (error) {
@@ -597,7 +765,7 @@ async function configureScheduler(api) {
 	});
 }
 
-async function measureWindow(api, rootPid, executionMode, samples) {
+async function measureWindow(api, rootPid, executionMode, samples, onObserved) {
 	const rates = [];
 	const resources = [];
 	let diagnosticsMonotonicStartMillis = performance.now();
@@ -689,6 +857,7 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 			native: resourceDelta(native(processes), native(nextProcesses)),
 			host: resourceDelta(host(processes), host(nextProcesses)),
 		});
+		if (second === 4) onObserved?.();
 		diagnostics = nextDiagnostics;
 		processes = nextProcesses;
 		counterObservationMillis = nextCounterObservationMillis;

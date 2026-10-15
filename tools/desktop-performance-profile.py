@@ -1,7 +1,7 @@
-"""Opt-in Linux perf capability preflight; never runs a ToskLight workload.
+"""Opt-in Linux CPU profiling: synthetic capability or exact owned-app observation.
 
 No invocation of perf is authorized merely by importing or testing this module.
-The public receipt contains only validated synthetic-probe evidence. Unvalidated
+The public receipt contains only validated owned-target aggregates. Unvalidated
 perf output stays in a no-follow, private spool and is never printed or uploaded.
 """
 
@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import argparse
 import collections
+import concurrent.futures
+import datetime
+import bisect
 import hashlib
 import json
 import os
@@ -240,7 +243,8 @@ def find_perf():
 
 def same_process(expected):
     try:
-        return process_identity(expected["pid"]) == expected
+        actual = process_identity(expected["pid"])
+        return all(actual.get(key) == value for key, value in expected.items() if key != "inode") and ("inode" not in expected or fast_same_process(expected))
     except (OSError, ValueError):
         return False
 
@@ -262,7 +266,7 @@ def derived_uid(request):
     for _ in range(16):
         parent = process_identity(cursor)
         if cursor == coordinator["pid"]:
-            if parent != coordinator or parent["uid"] != uid:
+            if any(parent.get(k) != v for k, v in coordinator.items() if k != "inode") or parent["uid"] != uid:
                 raise Refused("coordinator_uid_mismatch")
             return uid
         cursor = parent["ppid"]
@@ -446,6 +450,8 @@ def attribute_ids(data, attr_offset, attr_size):
 
 
 def validate_id_index(data, offset, length, misc, attr_offset, attr_size, target_tid, cpus):
+    if isinstance(target_tid, (list, tuple)):
+        return validate_app_id_index(data, offset, length, misc, attr_offset, attr_size, target_tid, cpus)
     # Linux v6.8.12 synthetic-events.c writes one entry per evsel core ID.
     # lib/perf/evlist.c idx is the mmap/CPU-map index, NOT evsel index.
     if target_tid is None or not cpus or misc != 0 or length < 16:
@@ -514,6 +520,14 @@ def validate_metadata(event, record, ids, target_tid, cpus):
         if length != 8:
             raise Refused("invalid_finished_marker")
         return "FINISHED_ROUND" if event == 68 else "FINISHED_INIT"
+    if event == 73 and isinstance(target_tid, (list, tuple)):
+        nr = struct.unpack_from("<Q", record, 8)[0] if length >= 16 else 0
+        if nr != len(target_tid) or length != 16 + 24 * nr:
+            raise Refused("invalid_application_thread_map")
+        found = [struct.unpack_from("<Q", record, 16 + 24 * i)[0] for i in range(nr)]
+        if len(set(found)) != nr or set(found) != set(target_tid):
+            raise Refused("foreign_application_thread_map")
+        return "THREAD_MAP"
     if event == 73:
         if length != 40 or struct.unpack_from("<QQ", record, 8) != (1, target_tid):
             raise Refused("foreign_or_invalid_thread_map")
@@ -522,7 +536,7 @@ def validate_metadata(event, record, ids, target_tid, cpus):
         return "THREAD_MAP"
     if event == 74:
         mapped = decode_cpu_map(record[8:])
-        if mapped != cpus and not (mapped == [-1] and len(ids) == 1):
+        if mapped != cpus and not (mapped == [-1] and len(ids) == (len(target_tid) if isinstance(target_tid, (list, tuple)) else 1)):
             raise Refused("foreign_cpu_map")
         return "CPU_MAP"
     if length < 24:
@@ -648,7 +662,7 @@ def event_census(data, target_tid=None, cpus=None, deadline=None):
     return counts
 
 
-def validate_export(text, census, target, tids, interval):
+def validate_export(text, census, target, tids, interval, own_resolver=None):
     """Decode installed-perf typed samples/task metadata without exporting raw text.
 
     Linux6.8.12 synthesized task records have zeroed sample-ID trailers. With
@@ -706,6 +720,9 @@ def validate_export(text, census, target, tids, interval):
         # parent. It does not authorize sampling that parent or arbitrary PIDs.
         if synthetic and kind == "FORK":
             owned = identities == [(target["pid"], target["pid"]), (target["ppid"], target["ppid"])]
+            if own_resolver is not None and len(identities) == 2:
+                child, parent = identities
+                owned = child[0] == target["pid"] and child[1] in tids and parent == ((target["ppid"], target["ppid"]) if child[1] == target["pid"] else (target["pid"], target["pid"]))
         if not owned:
             refuse("foreign_metadata_identity", False)
         if prefix_class != "owned" and not (synthetic and prefix_class == "zero_placeholder"):
@@ -719,6 +736,8 @@ def validate_export(text, census, target, tids, interval):
     header_counts = {name: expected.pop(name) for name in header_names if name in expected}
     if counts != expected:
         raise Refused("typed_event_census_mismatch")
+    if own_resolver is not None:
+        return aggregate_owned_samples(samples, counts, header_counts, own_resolver)
     present = [[any(name in frame for frame in sample) for name in PROBE_NAMES] for sample in samples]
     leaf = sum(row[1] for row in present)
     parent = sum(row[0] for row in present)
@@ -793,7 +812,10 @@ def recorder(request):
         raise Refused("invalid_preflight_deadline")
     bounded_timeout(request["work_deadline"], 1)
     uid = derived_uid(request)
-    tids = verify_probe(request, uid)
+    application = request.get("kind") == "owned_app"
+    tids = verify_app(request, uid) if application else verify_probe(request, uid)
+    stable = fast_same_process if application else same_process
+    own_resolver = app_symbol_resolver(request["target"], request["work_deadline"]) if application else None
     cpus = online_cpu_map()
     perf = str(Path(request["perf"]).resolve(strict=True))
     if digest(perf) != request["perf_sha256"] or build_id(perf, request["work_deadline"]) != request["perf_build_id"]:
@@ -829,17 +851,22 @@ def recorder(request):
             raise Refused("recorder_executable_changed")
         write_receipt(fd, {"recorder": recorded, "coordinator": request["coordinator"], "nonce": request["nonce"]})
         emit({"event": "started", "spool": name})
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + (10 if application else 2)
         if deadline > request["work_deadline"]:
             raise Refused("insufficient_budget_for_two_second_probe")
+        next_thread_check = 0
         while time.monotonic() < deadline:
-            if not same_process(request["target"]) or select.select([target_fd], [], [], 0)[0]:
+            if not stable(request["target"]) or select.select([target_fd], [], [], 0)[0]:
                 raise Refused("target_died_or_changed_quarantined")
-            if not same_process(request["coordinator"]):
+            if not stable(request["coordinator"]):
                 raise Refused("coordinator_changed_quarantined")
-            for tid, expected in tids.items():
-                if task_identity(tid) != expected:
-                    raise Refused("thread_lifetime_changed_quarantined")
+            if not application or time.monotonic() >= next_thread_check:
+                if application and set(int(t.name) for t in Path(f"/proc/{request['target']['pid']}/task").iterdir()) != set(tids):
+                    raise Refused("thread_set_changed_quarantined")
+                for tid, expected in tids.items():
+                    if task_identity(tid) != expected:
+                        raise Refused("thread_lifetime_changed_quarantined")
+                next_thread_check = time.monotonic() + .25
             for entry in ("perf.data", "recorder.log"):
                 try:
                     if os.stat(entry, dir_fd=fd, follow_symlinks=False).st_size > LIMIT:
@@ -857,6 +884,9 @@ def recorder(request):
         end = time.monotonic_ns()
         if not same_process(request["target"]) or not same_process(request["coordinator"]):
             raise Refused("post_capture_identity_changed_quarantined")
+        if application:
+            if verify_app(request, uid) != tids:
+                raise Refused("post_capture_application_thread_identity_changed")
         raw_fd = os.open("perf.data", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
         try:
             info = os.fstat(raw_fd)
@@ -865,12 +895,14 @@ def recorder(request):
             raw = os.read(raw_fd, LIMIT + 1)
             if online_cpu_map() != cpus:
                 raise Refused("online_cpu_map_changed")
-            census = event_census(raw, request["target"]["pid"], cpus, request["work_deadline"])
+            census = event_census(raw, sorted(tids) if application else request["target"]["pid"], cpus, request["work_deadline"])
             typed = run_perf_tool(perf, [
                 "script", "--ns", "--show-task-events", "--show-mmap-events",
                 "-F", "pid,tid,time,event,ip,sym,dso", "-i", "perf.data",
             ], fd, request["work_deadline"])
-            result = validate_export(typed, census, request["target"], tids, (begin, end))
+            result = validate_export(typed, census, request["target"], tids, (begin, end), own_resolver)
+            if application and own_executable_maps(request["target"]) != own_resolver.maps:
+                raise Refused("owned_elf_mapping_changed")
             final = os.fstat(raw_fd)
             if (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns) != (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns):
                 raise Refused("output_mutated_during_validation")
@@ -928,7 +960,7 @@ def collect_attempt(request, privileged):
             recovery = subprocess.run(recovery_command, input=json.dumps(request) + "\n", text=True, capture_output=True, timeout=bounded_timeout(request["overall_deadline"] - 4, 6))
             if recovery.returncode:
                 raise Refused("helper_cleanup_unverified")
-            return {"status": "STOP", "code": "helper_aborted_recorder_recovered"}
+            return {"status": "STOP", "code": "helper_aborted_recorder_recovered", "recorder_gone": True}
         if terminal.get("status") == "CAPABLE" and terminal.get("recorder_gone") is not True:
             raise Refused("successful_profile_cleanup_not_verified")
         return terminal
@@ -1015,10 +1047,306 @@ def preflight(output):
     return 0 if report["canonical_build_allowed"] else 2
 
 
+def validate_app_id_index(data, offset, length, misc, attr_offset, attr_size, tids, cpus):
+    if misc or length < 16 or not tids or len(set(tids)) != len(tids):
+        raise Refused("invalid_application_id_index_scope")
+    nr = struct.unpack_from("<Q", data, offset + 8)[0]
+    if length != 16 + 32 * nr:
+        raise Refused("invalid_or_guest_id_index_length")
+    ids = attribute_ids(data, attr_offset, attr_size)
+    entries = [struct.unpack_from("<QQQq", data, offset + 16 + 32 * i) for i in range(nr)]
+    if nr != len(ids) or {e[0] for e in entries} != set(ids):
+        raise Refused("application_id_index_attr_mismatch")
+    per_thread = all(e[2] == (1 << 64) - 1 for e in entries)
+    cpu_map = [-1] if per_thread else cpus
+    expected_pairs = {(cpu % (1 << 64), tid) for cpu in cpu_map for tid in tids}
+    if len(entries) != len(expected_pairs) or {(e[2], e[3]) for e in entries} != expected_pairs:
+        raise Refused("foreign_or_incomplete_application_id_index")
+    for event_id, idx, cpu, tid in entries:
+        expected_index = ids.index(event_id) if per_thread else cpus.index(cpu)
+        if idx != expected_index:
+            raise Refused("application_id_index_ring_mismatch")
+        if per_thread and event_id != ids[idx]:
+            raise Refused("application_id_index_event_mismatch")
+
+
+def pinned_process(pid):
+    result = process_identity(pid)
+    info = os.stat(f"/proc/{pid}/exe")
+    result["inode"] = [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
+    return result
+
+
+def fast_same_process(expected):
+    try:
+        info = os.stat(f"/proc/{expected['pid']}/exe")
+        identity = task_identity(expected["pid"])
+        return (all(identity[k] == expected[k] for k in identity)
+                and str(Path(f"/proc/{expected['pid']}/exe").resolve(strict=True)) == expected["exe"]
+                and [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns] == expected["inode"])
+    except (OSError, ValueError):
+        return False
+
+
+def owned_descendants(launch, uid):
+    pending, identities = [launch], {}
+    while pending:
+        pid = pending.pop()
+        if pid in identities or len(identities) >= 128:
+            raise Refused("invalid_or_unbounded_owned_process_tree")
+        identity = task_identity(pid)
+        if identity["uid"] != uid or identity["tgid"] != pid:
+            raise Refused("foreign_owned_process_tree")
+        identities[pid] = identity
+        children = set()
+        for task in Path(f"/proc/{pid}/task").iterdir():
+            children.update(int(value) for value in (task / 'children').read_text().split())
+        for child in children:
+            if task_identity(child)["ppid"] != pid:
+                raise Refused("owned_child_parent_changed")
+        pending.extend(sorted(children))
+    return identities
+
+
+def verify_app(request, uid):
+    target = request["target"]
+    if request.get("helper_sha256") != digest(__file__) or not fast_same_process(target):
+        raise Refused("application_or_helper_changed")
+    if target["uid"] != uid or target["tgid"] != target["pid"]:
+        raise Refused("foreign_application_owner")
+    for key in ("runner", "launch"):
+        if not fast_same_process(request[key]) or request[key]["uid"] != uid:
+            raise Refused("application_ancestry_changed")
+    if request["coordinator"]["ppid"] != request["runner"]["pid"] or request["launch"]["ppid"] != request["runner"]["pid"]:
+        raise Refused("application_not_owned_by_invoking_runner")
+    descendants = owned_descendants(request["launch"]["pid"], uid)
+    if target["pid"] not in descendants or digest(f"/proc/{target['pid']}/exe") != target["sha256"]:
+        raise Refused("application_not_owned_descendant")
+    if build_id(target["exe"], request["work_deadline"]) != request["target_build_id"]:
+        raise Refused("application_build_id_changed")
+    tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
+    if not tids or len(tids) > 256 or any(t["uid"] != uid or t["tgid"] != target["pid"] for t in tids.values()):
+        raise Refused("application_threads_outside_bounded_scope")
+    if tids != {int(k): v for k, v in request["tids"].items()}:
+        raise Refused("application_thread_identity_changed")
+    return tids
+
+
+def own_executable_maps(target):
+    info = os.stat(f"/proc/{target['pid']}/exe")
+    entries = []
+    for line in Path(f"/proc/{target['pid']}/maps").read_text().splitlines():
+        fields = line.split(maxsplit=5)
+        if len(fields) < 5:
+            raise Refused("invalid_process_maps")
+        major, minor = (int(v, 16) for v in fields[3].split(':'))
+        if int(fields[4]) == info.st_ino and os.makedev(major, minor) == info.st_dev and 'x' in fields[1]:
+            begin, end = (int(v, 16) for v in fields[0].split('-'))
+            entries.append((begin, end, int(fields[2], 16)))
+    if not entries:
+        raise Refused("owned_elf_executable_mapping_absent")
+    return entries
+
+
+class OwnElfResolver:
+    def __init__(self, maps, loads, symbols, page=4096):
+        self.maps, self.symbols = maps, sorted(symbols)
+        self.starts = [s[0] for s in self.symbols]
+        self.ranges = []
+        for begin, end, offset in maps:
+            matches = [(vaddr // page * page) + offset - (fileoff // page * page)
+                       for fileoff, vaddr, filesz, executable in loads
+                       if executable and fileoff // page * page <= offset < ((fileoff + filesz + page - 1) // page * page)]
+            if len(matches) != 1:
+                raise Refused("ambiguous_owned_elf_load_mapping")
+            self.ranges.append((begin, end, begin - matches[0]))
+
+    def __call__(self, ip):
+        for begin, end, bias in self.ranges:
+            if begin <= ip < end:
+                address = ip - bias
+                index = bisect.bisect_right(self.starts, address) - 1
+                if index >= 0:
+                    start, size, name = self.symbols[index]
+                    if start <= address < start + size:
+                        return name
+                return "[own ELF unresolved]"
+        return "[external or unmapped]"
+
+
+def app_symbol_resolver(target, deadline):
+    executable = target["exe"]
+    def read(*args):
+        return subprocess.run(['readelf', *args, executable], check=True, capture_output=True,
+                              text=True, timeout=bounded_timeout(deadline, 3), env=isolated_env()).stdout
+    symbols = []
+    for line in read('--symbols', '--wide').splitlines():
+        match = re.match(r'\s*\d+:\s+([0-9a-fA-F]+)\s+(\d+)\s+FUNC\s+\S+\s+\S+\s+(\S+)\s+(\S+)', line)
+        if match and match[3] != 'UND' and int(match[2]) > 0:
+            # Only names actually defined in the exact verified owned ELF can
+            # enter public aggregates. Perf's display names/DSOs are untrusted.
+            name = match[4]
+            if len(name) <= 1024 and re.fullmatch(r'[A-Za-z0-9_.$@:+<>~,*&()\[\]-]+', name):
+                symbols.append((int(match[1], 16), int(match[2]), name))
+    loads = []
+    for line in read('--program-headers', '--wide').splitlines():
+        match = re.match(r'\s*LOAD\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+(.+?)\s+0x[0-9a-f]+\s*$', line)
+        if match:
+            loads.append((int(match[1], 16), int(match[2], 16), int(match[3], 16), 'E' in match[4]))
+    if not symbols or not loads:
+        raise Refused("owned_elf_symbols_or_loads_unavailable_no_codegen_flag_change")
+    return OwnElfResolver(own_executable_maps(target), loads, list(set(symbols)), os.sysconf('SC_PAGE_SIZE'))
+
+
+def aggregate_owned_samples(samples, counts, headers, resolve):
+    leaf, inclusive = collections.Counter(), collections.Counter()
+    own_samples = caller_samples = 0
+    for sample in samples:
+        ips = []
+        first = re.match(r'cpu-clock:u:\s+([0-9a-fA-F]+)\b', sample[0])
+        if first:
+            ips.append(int(first[1], 16))
+        for line in sample[1:]:
+            match = re.match(r'([0-9a-fA-F]+)\s', line)
+            if match:
+                ips.append(int(match[1], 16))
+        if not ips:
+            raise Refused("sample_instruction_pointer_not_decoded")
+        names = [resolve(ip) for ip in ips]
+        leaf[names[0]] += 1
+        for name in set(names):
+            inclusive[name] += 1
+        own_samples += any(not name.startswith('[') for name in names)
+        caller_samples += len(ips) > 1
+    if len(samples) < 10 or own_samples == 0:
+        raise Refused("insufficient_owned_elf_sample_coverage")
+    def top(counter):
+        return [{'function': name, 'samples': count} for name, count in counter.most_common(20)]
+    return {'event_counts': dict(counts), 'validated_header_records': headers,
+            'samples': len(samples), 'own_elf_samples': own_samples,
+            'samples_with_callers': caller_samples, 'caller_coverage': 'partial_frame_pointer_only',
+            'leaf_top20': top(leaf), 'inclusive_top20': top(inclusive)}
+
+
+def validate_app_manifest(value):
+    fields = {'schema', 'source_sha', 'coordinator_pid', 'launch_pid', 'measurement_started_at_utc',
+              'measurement_deadline_utc', 'roles', 'case_id', 'execution_mode'}
+    if set(value) != fields or value['schema'] != 1 or value['case_id'] != 'sixteen_universe' or value['execution_mode'] != 'unrestricted':
+        raise Refused('invalid_owned_application_manifest')
+    if not re.fullmatch('[0-9a-f]{40}', value['source_sha']):
+        raise Refused('invalid_application_source_pin')
+    roles = value['roles']
+    if len(roles) != 2 or {r.get('role') for r in roles} != {'server', 'native_renderer'}:
+        raise Refused('invalid_application_roles')
+    for role in roles:
+        if set(role) != {'role', 'sha256', 'build_id'} or not re.fullmatch('[0-9a-f]{64}', role['sha256']) or not re.fullmatch('[0-9a-f]{8,128}', role['build_id']):
+            raise Refused('invalid_application_binary_pin')
+    start = datetime.datetime.fromisoformat(value['measurement_started_at_utc'].replace('Z', '+00:00'))
+    end = datetime.datetime.fromisoformat(value['measurement_deadline_utc'].replace('Z', '+00:00'))
+    if start.utcoffset() != datetime.timedelta(0) or end - start != datetime.timedelta(seconds=60):
+        raise Refused('invalid_application_measurement_window')
+    return end.timestamp()
+
+
+def collect_owned_requests(requests):
+    def collect(request):
+        attempts = [collect_attempt(request, False)]
+        if attempts[-1].get('code') == 'perf_permission_denied' and attempts[-1].get('recorder_gone') is True:
+            attempts.append(collect_attempt(request, True))
+        return {'role': request['role'], 'sha256': request['target']['sha256'],
+                'build_id': request['target_build_id'], 'attempts': attempts}
+    reports, verified = [], True
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(collect, request) for request in requests]
+        # A first failure never discards the other recorder's cleanup receipt.
+        for future in futures:
+            try:
+                report = future.result()
+                reports.append(report)
+                verified &= all(a.get('recorder_gone') is True for a in report['attempts'])
+            except BaseException:
+                verified = False
+    return reports, verified
+
+
+def owned_app(manifest, output):
+    report = {'schema': 1, 'status': 'STOP', 'recorder_cleanup_verified': True,
+              'purpose': 'owned_application_cpu_cause_only_not_performance_acceptance', 'roles': []}
+    cleanup_verified = True
+    try:
+        root = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT').resolve()
+        results = artifact_path('LIGHT_TEST_RESULTS_DIR', 'TEST_RESULTS').resolve()
+        if not manifest.is_absolute() or not output.is_absolute() or not any(output.resolve().is_relative_to(p) for p in (root, results)):
+            raise Refused('owned_profile_paths_not_canonical')
+        if sys.platform != 'linux' or os.getuid() == 0:
+            raise Refused('requires_ordinary_linux_ci_coordinator')
+        value = json.loads(manifest.read_text())
+        utc_deadline = validate_app_manifest(value)
+        overall = min(time.monotonic() + 50, time.monotonic() + utc_deadline - time.time() - 5)
+        work = overall - 16
+        if bounded_timeout(work, 10) < 10:
+            raise Refused('insufficient_owned_profile_measurement_budget')
+        if value['coordinator_pid'] != os.getppid():
+            raise Refused('runner_is_not_actual_invoking_parent')
+        runner, launch = pinned_process(os.getppid()), pinned_process(value['launch_pid'])
+        if launch['ppid'] != runner['pid'] or launch['uid'] != os.getuid():
+            raise Refused('launch_not_owned_runner_child')
+        descendants = owned_descendants(launch['pid'], os.getuid())
+        perf = find_perf()
+        if not perf:
+            raise Refused('perf_unavailable')
+        base = {'kind': 'owned_app', 'coordinator': pinned_process(os.getpid()), 'runner': runner,
+                'launch': launch, 'helper_sha256': digest(__file__), 'spool_parent': str(root),
+                'perf': str(Path(perf).resolve()), 'perf_sha256': digest(perf),
+                'perf_build_id': build_id(perf, work), 'work_deadline': work, 'overall_deadline': overall}
+        requests = []
+        for role in value['roles']:
+            matches = []
+            for pid in descendants:
+                name = Path(f'/proc/{pid}/exe').resolve(strict=True).name
+                expected_name = 'light-headless' if role['role'] == 'server' else 'viz-renderer'
+                if name == expected_name or name.startswith(expected_name + '-'):
+                    target = pinned_process(pid)
+                    if target['sha256'] == role['sha256'] and build_id(target['exe'], work) == role['build_id']:
+                        matches.append(target)
+            if len(matches) != 1:
+                raise Refused('exact_owned_application_role_not_unique')
+            target = matches[0]
+            tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
+            requests.append({**base, 'role': role['role'], 'target': target, 'target_build_id': role['build_id'],
+                             'tids': tids, 'nonce': uuid.uuid4().hex})
+        # Validate both ELF resolvers before starting either recorder. No compiler
+        # flags or caller-coverage promises are silently introduced here.
+        for request in requests:
+            verify_app(request, os.getuid())
+            app_symbol_resolver(request['target'], work)
+        # Mark cleanup unknown before the first asynchronous spawn. A submit or
+        # executor failure after a previous submit cannot authorize target teardown.
+        cleanup_verified = False
+        report['roles'], cleanup_verified = collect_owned_requests(requests)
+        report.update(source_sha=value['source_sha'], helper_sha256=digest(__file__),
+                      perf_sha256=base['perf_sha256'], perf_build_id=base['perf_build_id'],
+                      sample_hz=49, requested_role_seconds=10, global_budget_seconds=50,
+                      codegen_flags_changed=False)
+        if cleanup_verified and len(report['roles']) == 2 and all(r['attempts'][-1].get('status') == 'CAPABLE' for r in report['roles']):
+            report['status'] = 'PROFILED'
+        else:
+            report['code'] = 'owned_application_profile_refused'
+    except (Refused, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        report['code'] = str(error) if isinstance(error, Refused) else 'owned_profile_scope_or_tools_refused'
+    report['recorder_cleanup_verified'] = cleanup_verified
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open('x') as stream:
+        json.dump(report, stream, indent=2)
+        stream.write('\n')
+    return 0 if report['status'] == 'PROFILED' else 2 if cleanup_verified else 3
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["preflight", "_record", "_cleanup"])
+    parser.add_argument("mode", choices=["preflight", "owned-app", "_record", "_cleanup"])
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--manifest", type=Path)
     args = parser.parse_args()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, cancelled)
@@ -1029,6 +1357,10 @@ def main():
             emit({"event": "terminal", "status": "STOP", "code": "helper_scope_or_cleanup_refused"})
             return 2
         return 0
+    if args.mode == "owned-app":
+        if args.manifest is None or args.output is None:
+            parser.error("owned-app requires --manifest and --output")
+        return owned_app(args.manifest, args.output)
     if args.output is None:
         parser.error("preflight requires --output under the canonical artifacts tree")
     try:

@@ -566,5 +566,151 @@ class PreflightPolicyTests(unittest.TestCase):
                 self.assertEqual(attempts, [False])
 
 
+
+class OwnedApplicationTests(unittest.TestCase):
+    def manifest(self):
+        return {"schema": 1, "source_sha": "a" * 40, "coordinator_pid": 400,
+                "launch_pid": 410, "measurement_started_at_utc": "2026-10-16T00:00:00Z",
+                "measurement_deadline_utc": "2026-10-16T00:01:00Z",
+                "roles": [{"role": role, "sha256": "b" * 64, "build_id": "c" * 40}
+                          for role in ("server", "native_renderer")],
+                "case_id": "sixteen_universe", "execution_mode": "unrestricted"}
+
+    def test_only_exact_existing_case_and_role_pins(self):
+        PROFILE.validate_app_manifest(self.manifest())
+        for key, replacement in [("case_id", "demo"), ("execution_mode", "single_core"),
+                                 ("source_sha", "main"), ("measurement_deadline_utc", "2026-10-16T00:02:00Z")]:
+            value = self.manifest()
+            value[key] = replacement
+            with self.subTest(key=key), self.assertRaises(PROFILE.Refused):
+                PROFILE.validate_app_manifest(value)
+        value = self.manifest()
+        value['unreviewed'] = True
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.validate_app_manifest(value)
+        value = self.manifest()
+        value['roles'][1]['role'] = 'server'
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.validate_app_manifest(value)
+
+    def test_own_elf_pie_ip_mapping_ignores_display_symbol_and_dso(self):
+        resolve = PROFILE.OwnElfResolver([(0x70001000, 0x70002000, 0x1000)],
+                                        [(0x1000, 0x1000, 0x1000, True)],
+                                        [(0x1100, 0x80, 'actual_owned_function')])
+        samples = [['cpu-clock:u: 70001110 invented_secret (/untrusted/path)',
+                    '70001120 foreign_name (/foreign/path)'] for _ in range(10)]
+        result = PROFILE.aggregate_owned_samples(samples, collections.Counter(SAMPLE=10), {}, resolve)
+        self.assertEqual(result['own_elf_samples'], 10)
+        self.assertEqual(result['leaf_top20'], [{'function': 'actual_owned_function', 'samples': 10}])
+        self.assertNotIn('secret', str(result))
+        self.assertNotIn('/foreign', str(result))
+        self.assertEqual(resolve(0x70001900), '[own ELF unresolved]')
+        self.assertEqual(resolve(0x80000000), '[external or unmapped]')
+
+    def test_non_pie_and_partial_external_callers_are_truthful(self):
+        resolve = PROFILE.OwnElfResolver([(0x401000, 0x402000, 0x1000)],
+                                        [(0x1000, 0x401000, 0x1000, True)],
+                                        [(0x401100, 0x80, 'owned')])
+        self.assertEqual(resolve(0x401110), 'owned')
+        samples = [['cpu-clock:u: 401110 ignored (ignored)'] for _ in range(10)]
+        result = PROFILE.aggregate_owned_samples(samples, collections.Counter(SAMPLE=10), {}, resolve)
+        self.assertEqual(result['samples_with_callers'], 0)
+        self.assertEqual(result['caller_coverage'], 'partial_frame_pointer_only')
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.aggregate_owned_samples([['cpu-clock:u: 80000000 ignored (ignored)']] * 10, {}, {}, resolve)
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.aggregate_owned_samples(samples[:9], {}, {}, resolve)
+
+    def test_multithread_per_thread_id_index_exact_scope(self):
+        entries = [(101, 0, (1 << 64) - 1, 410), (102, 1, (1 << 64) - 1, 411)]
+        data = indexed_perf_file(entries, ids=(101, 102))
+        PROFILE.event_census(data, [410, 411], [0, 1])
+        for invalid in [[(101, 0, (1 << 64) - 1, 410), (102, 1, (1 << 64) - 1, 999)],
+                        [(101, 1, (1 << 64) - 1, 410), (102, 0, (1 << 64) - 1, 411)],
+                        [(101, 0, (1 << 64) - 1, 410), (102, 1, (1 << 64) - 1, 410)]]:
+            with self.subTest(entries=invalid), self.assertRaises(PROFILE.Refused):
+                PROFILE.event_census(indexed_perf_file(invalid, ids=(101, 102)), [410, 411], [0, 1])
+
+    def test_multithread_cpu_matrix_requires_every_pair_once(self):
+        entries = [(101, 0, 0, 410), (102, 0, 0, 411),
+                   (103, 1, 1, 410), (104, 1, 1, 411)]
+        PROFILE.event_census(indexed_perf_file(entries), [410, 411], [0, 1])
+        entries[-1] = (104, 1, 1, 999)
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.event_census(indexed_perf_file(entries), [410, 411], [0, 1])
+
+    def test_thread_map_exact_owned_set_no_comm_export(self):
+        record = metadata_record(73, struct.pack('<Q', 2) +
+                                 struct.pack('<Q16s', 410, b'private-name') +
+                                 struct.pack('<Q16s', 411, b'another-name'))
+        self.assertEqual(PROFILE.validate_metadata(73, record, (101, 102), [410, 411], [0, 1]), 'THREAD_MAP')
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.validate_metadata(73, record, (101, 102), [410, 999], [0, 1])
+
+    def test_application_thread_lifecycle_payloads_never_authorize_foreign_samples(self):
+        resolve = PROFILE.OwnElfResolver([(0x1000, 0x2000, 0x1000)],
+                                        [(0x1000, 0x1000, 0x1000, True)], [(0x1100, 128, 'owned')])
+        tids = {410: TARGET, 411: {**TARGET, 'pid': 411}}
+        text = ('0/0 0.000000000: PERF_RECORD_FORK (410:411):(410:410)\n'
+                '0/0 0.000000000: PERF_RECORD_COMM private-thread:410/411\n' +
+                '410/411 2.000000000: cpu-clock:u: 1110 untrusted (untrusted)\n\n' * 10)
+        census = collections.Counter(FORK=1, COMM=1, SAMPLE=10)
+        result = PROFILE.validate_export(text, census, TARGET, tids, INTERVAL, resolve)
+        self.assertEqual(result['samples'], 10)
+        for changed in [text.replace('410/411 2.', '999/411 2.'),
+                        text.replace('(410:411):(410:410)', '(999:411):(410:410)'),
+                        text.replace('private-thread:410/411', 'private-thread:999/411'),
+                        text.replace('410/411 2.', '410/411 9.')]:
+            with self.subTest(text=changed[:30]), self.assertRaises(PROFILE.Refused):
+                PROFILE.validate_export(changed, census, TARGET, tids, INTERVAL, resolve)
+        self.assertNotIn('private-thread', str(result))
+        self.assertNotIn('untrusted', str(result))
+
+    def requests(self):
+        return [{'role': role, 'target': {'sha256': 'a' * 64}, 'target_build_id': 'b' * 40}
+                for role in ('server', 'native_renderer')]
+
+    def test_both_role_cleanup_receipts_required_even_after_first_failure(self):
+        calls = []
+        def attempt(request, privileged):
+            calls.append((request['role'], privileged))
+            if request['role'] == 'server':
+                raise BrokenPipeError('private error must not be published')
+            return {'status': 'CAPABLE', 'recorder_gone': True}
+        with patch.object(PROFILE, 'collect_attempt', side_effect=attempt):
+            reports, clean = PROFILE.collect_owned_requests(self.requests())
+        self.assertFalse(clean)
+        self.assertEqual(len(reports), 1)
+        self.assertEqual(set(calls), {('server', False), ('native_renderer', False)})
+        self.assertNotIn('private error', str(reports))
+
+    def test_only_permission_denied_verified_cleanup_allows_single_sudo_attempt(self):
+        calls = []
+        def attempt(request, privileged):
+            calls.append((request['role'], privileged))
+            return {'status': 'CAPABLE', 'recorder_gone': True} if privileged else {'status': 'STOP', 'code': 'perf_permission_denied', 'recorder_gone': True}
+        with patch.object(PROFILE, 'collect_attempt', side_effect=attempt):
+            reports, clean = PROFILE.collect_owned_requests(self.requests())
+        self.assertTrue(clean)
+        self.assertEqual(len(reports), 2)
+        self.assertEqual(set(calls), {(role, elevated) for role in ('server', 'native_renderer') for elevated in (False, True)})
+        for terminal in [{'status': 'STOP', 'code': 'other', 'recorder_gone': True},
+                         {'status': 'STOP', 'code': 'perf_permission_denied'}]:
+            with self.subTest(terminal=terminal), patch.object(PROFILE, 'collect_attempt', return_value=terminal) as attempt:
+                _, clean = PROFILE.collect_owned_requests(self.requests())
+                self.assertEqual(clean, terminal.get('recorder_gone') is True)
+                self.assertEqual(attempt.call_count, 2)
+
+    def test_no_actor_manifest_refusal_is_clean_but_missing_collect_receipt_is_not(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request, output = root / 'request.json', root / 'receipt.json'
+            request.write_text('{}')
+            with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.sys, 'platform', 'linux'), patch.object(PROFILE.os, 'getuid', return_value=1001), patch.object(PROFILE.subprocess, 'Popen') as popen:
+                self.assertEqual(PROFILE.owned_app(request, output), 2)
+                self.assertTrue(__import__('json').loads(output.read_text())['recorder_cleanup_verified'])
+                popen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

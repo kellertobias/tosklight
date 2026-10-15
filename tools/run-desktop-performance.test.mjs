@@ -297,7 +297,7 @@ test("actual case finalization flushes termination logs on success and original 
 		"finishCaseEvidence",
 		"\nasync function retainCaseFailure(",
 	);
-	for (const fail of [false, true, "spawn"]) {
+	for (const fail of [false, true, "spawn", "observer"]) {
 		const child = Object.assign(new EventEmitter(), {
 			pid: 999,
 			stdout: new EventEmitter(),
@@ -318,7 +318,17 @@ test("actual case finalization flushes termination logs on success and original 
 			},
 		);
 		const run = load("runCase", "\nasync function finalizeCaseEvidence(", {
-			options: { "output-dir": scratch, application: "/isolated/stub.app" },
+			options: {
+				"output-dir": scratch,
+				application: "/isolated/stub.app",
+				...(fail === "observer" ? { ownedCpuProfile: {} } : {}),
+			},
+			ownedCpuProfileObserver: () => ({
+				start: () => {},
+				finish: async () => {
+					throw new Error("literal observer STOP");
+				},
+			}),
 			finalizeCaseEvidence: finalize,
 			freePort: async () => 19876,
 			applicationInvocation: () => ({
@@ -351,7 +361,8 @@ test("actual case finalization flushes termination logs on success and original 
 			prepareDemo: async () => ({ parameterCount: 10, fixtureRecords: 312 }),
 			waitForFixtureSheet: async () => {},
 			drawBudgetMillis: () => 100,
-			measureWindow: async (_api, _pid, _mode, samples) => {
+			measureWindow: async (_api, _pid, _mode, samples, onObserved) => {
+				onObserved?.();
 				samples.push({ diagnostics: { output: { frames_sent: 40 } } });
 				return { average_completed_hz: 40 };
 			},
@@ -372,7 +383,9 @@ test("actual case finalization flushes termination logs on success and original 
 				run({ caseId: "demo", demo: true }, "unrestricted"),
 				fail === "spawn"
 					? /literal startup spawn refusal/
-					: /literal liveness failure/,
+					: fail === "observer"
+						? /literal observer STOP/
+						: /literal liveness failure/,
 			);
 		else
 			assert.equal(
@@ -389,6 +402,11 @@ test("actual case finalization flushes termination logs on success and original 
 			JSON.parse(await readFile(saved.measurement, "utf8")).samples.length,
 			fail === "spawn" ? 0 : 1,
 		);
+		if (fail === "observer") {
+			const measurement = JSON.parse(await readFile(saved.measurement, "utf8"));
+			assert.equal(measurement.state.measurement.average_completed_hz, 40);
+			assert.equal(measurement.samples.length, 1);
+		}
 		assert.equal(e.log.writableFinished, true);
 	}
 });
@@ -804,4 +822,328 @@ test("normally closed child drain clears its timeout without retaining timer han
 	});
 	await drain({ closed: Promise.resolve() });
 	assert.equal(pending.size, 0);
+});
+
+test("single576 selector is optional and observer cannot run on OFF or another case", () => {
+	const code = source.slice(
+		source.indexOf("function parseArguments("),
+		source.indexOf("\nasync function runCase("),
+	);
+	const parse = vm.runInNewContext(`${code}\nparseArguments`, {
+		process: { env: { LIGHT_OUTPUT_PHASE_DIAGNOSTICS: "1" } },
+	});
+	const base = [
+		"--application",
+		"/owned/app",
+		"--output-dir",
+		scratch,
+		"--demo-show",
+		"/owned/demo.show",
+	];
+	assert.equal(parse(base).case, undefined);
+	assert.equal(
+		parse([...base, "--case", "sixteen_universe"]).case,
+		"sixteen_universe",
+	);
+	assert.throws(() => parse([...base, "--case", "demo"]), /sixteen_universe/);
+	assert.throws(
+		() => parse([...base, "--owned-cpu-profile-binaries", "/owned/roles.json"]),
+		/sixteen_universe/,
+	);
+	const off = vm.runInNewContext(`${code}\nparseArguments`, {
+		process: { env: { LIGHT_OUTPUT_PHASE_DIAGNOSTICS: "0" } },
+	});
+	assert.throws(
+		() =>
+			off([
+				...base,
+				"--case",
+				"sixteen_universe",
+				"--owned-cpu-profile-binaries",
+				"/owned/roles.json",
+			]),
+		/diagnostics/,
+	);
+});
+
+test("observation5 callback is once and does not alter60 diagnostic observations", async () => {
+	let clock = 0,
+		reads = 0,
+		callbacks = 0;
+	const samples = [];
+	const measure = load("measureWindow", "\nfunction apiClient(", {
+		DURATION_SECONDS: 60,
+		performance: { now: () => clock },
+		setTimeout: (cb) => {
+			clock += 1000;
+			cb();
+		},
+		readLinuxProcessTree: async () => [],
+		processTreeResourceDelta: () => ({ cpuPercent: 0, residentBytes: 0 }),
+		LINUX_PROCESS_OPTIONS: {},
+		average: (a) => a.reduce((x, y) => x + y, 0) / a.length,
+		percentile: (a) => a[0],
+	});
+	const result = await measure(
+		{
+			request: async () => ({
+				output: { frames_sent: 40 * reads++, frame_rate_band_counts: [1] },
+			}),
+		},
+		999,
+		"unrestricted",
+		samples,
+		() => {
+			callbacks++;
+			assert.equal(samples.length, 6);
+		},
+	);
+	assert.equal(callbacks, 1);
+	assert.equal(reads, 61);
+	assert.equal(samples.length, 61);
+	assert.equal(result.average_completed_hz, 40);
+});
+
+test("owned observer starts only once without waiting, keeps fixed helper argv and propagates STOP", async () => {
+	const directory = await mkdtemp(path.join(scratch, "observer-"));
+	const config = {
+		source_sha: "a".repeat(40),
+		roles: [
+			{ role: "server", sha256: "b".repeat(64), build_id: "1234" },
+			{ role: "native_renderer", sha256: "c".repeat(64), build_id: "5678" },
+		],
+	};
+	const code = source.slice(
+		source.indexOf("function ownedCpuProfileObserver("),
+		source.indexOf("\nasync function runCase("),
+	);
+	let spawns = 0,
+		child;
+	const factory = vm.runInNewContext(`${code}\nownedCpuProfileObserver`, {
+		writeFile,
+		readFile,
+		path,
+		Date,
+		setTimeout,
+		clearTimeout,
+		DURATION_SECONDS: 60,
+		process: { pid: 123 },
+		spawn: (command, args, options) => {
+			spawns++;
+			assert.equal(command, "python3");
+			assert.equal(args[0], "-B");
+			assert.equal(
+				args[1],
+				path.resolve("tools/desktop-performance-profile.py"),
+			);
+			assert.equal(args[2], "owned-app");
+			assert.equal(options.stdio, "ignore");
+			child = new EventEmitter();
+			return child;
+		},
+	});
+	const manifest = path.join(directory, "request.json");
+	const observer = factory(config, {
+		launchPid: 456,
+		measurementStartedAt: 100000,
+		manifestPath: manifest,
+		outputPath: path.join(directory, "receipt.json"),
+		caseId: "sixteen_universe",
+		executionMode: "unrestricted",
+	});
+	assert.equal(observer.start(), undefined);
+	observer.start();
+	while (!child) await new Promise((resolve) => setImmediate(resolve));
+	const request = JSON.parse(await readFile(manifest, "utf8"));
+	assert.equal(request.coordinator_pid, 123);
+	assert.equal(request.launch_pid, 456);
+	assert.equal(
+		Date.parse(request.measurement_deadline_utc) -
+			Date.parse(request.measurement_started_at_utc),
+		60000,
+	);
+	await writeFile(
+		path.join(directory, "receipt.json"),
+		JSON.stringify({ status: "STOP", recorder_cleanup_verified: true }),
+	);
+	child.emit("close", 2);
+	await assert.rejects(observer.finish(), /observer STOP/);
+	assert.equal(spawns, 1);
+});
+
+test("owned binary descriptor rejects foreign scope roles and unspecified fields", async () => {
+	const filename = path.join(scratch, "roles.json");
+	const read = load(
+		"readOwnedCpuProfileDescriptor",
+		"\nfunction ownedCpuProfileObserver(",
+	);
+	const descriptor = {
+		schema: 1,
+		source_sha: "a".repeat(40),
+		roles: [
+			{ role: "server", sha256: "b".repeat(64), build_id: "1234" },
+			{ role: "native_renderer", sha256: "c".repeat(64), build_id: "5678" },
+		],
+	};
+	await writeFile(filename, JSON.stringify(descriptor));
+	assert.equal((await read(filename)).roles.length, 2);
+	for (const bad of [
+		{ ...descriptor, all_host: true },
+		{ ...descriptor, roles: [descriptor.roles[0], descriptor.roles[0]] },
+		{
+			...descriptor,
+			roles: [descriptor.roles[0], { ...descriptor.roles[1], role: "all" }],
+		},
+	]) {
+		await writeFile(filename, JSON.stringify(bad));
+		await assert.rejects(read(filename), /Invalid owned profile/);
+	}
+});
+
+test("unverified recorder cleanup quarantines application without termination or closed wait", async () => {
+	let killed = 0,
+		removed = 0,
+		saved = 0,
+		destroyed = 0,
+		unref = 0;
+	const finalize = load(
+		"finalizeCaseEvidence",
+		"\nasync function drainCaseLog(",
+		{
+			terminateProcessTree: async () => {
+				killed++;
+			},
+			drainCaseLog: async () => {
+				throw new Error("must not wait for live quarantined child");
+			},
+			finishCaseEvidence: async () => {
+				saved++;
+			},
+			rm: async () => {
+				removed++;
+			},
+		},
+	);
+	const failure = Object.assign(new Error("unverified observer"), {
+		cleanupUnverified: true,
+	});
+	const state = {};
+	const child = {
+		pid: 123,
+		stdout: { destroy: () => destroyed++ },
+		stderr: { destroy: () => destroyed++ },
+		unref: () => unref++,
+	};
+	assert.equal(
+		await finalize(child, {}, "sheet", "prepared", state, "scratch", failure),
+		failure,
+	);
+	assert.equal(killed, 0);
+	assert.equal(removed, 0);
+	assert.equal(saved, 1);
+	assert.equal(destroyed, 2);
+	assert.equal(unref, 1);
+	assert.equal(state.observerCleanup.quarantined, true);
+});
+
+test("default CLI runs the original four cohorts, exact selector runs only existing576", async () => {
+	const caseCode = source.slice(
+		source.indexOf("const CASES = ["),
+		source.indexOf("\nconst options ="),
+	);
+	const cases = vm.runInNewContext(`${caseCode}\nCASES`);
+	const start = source.indexOf("const results = [];");
+	const end = source.indexOf("\nfunction parseArguments(", start);
+	for (const selected of [undefined, "sixteen_universe"]) {
+		const calls = [];
+		const out = await mkdtemp(path.join(scratch, "cases-"));
+		await vm.runInNewContext(`(async()=>{${source.slice(start, end)}})()`, {
+			CASES: cases,
+			options: { "output-dir": out, case: selected },
+			writeFile,
+			path,
+			JSON,
+			runCase: async (c, mode) => {
+				calls.push([c.caseId, mode]);
+				return { case_id: c.caseId };
+			},
+		});
+		assert.deepEqual(
+			calls,
+			selected
+				? [["sixteen_universe", "unrestricted"]]
+				: [
+						["demo", "unrestricted"],
+						["demo", "one_core"],
+						["sixteen_universe", "unrestricted"],
+						["required_1024", "unrestricted"],
+					],
+		);
+	}
+});
+
+test("missing or false observer receipt and hung helper never assert recorder cleanup", async () => {
+	const code = source.slice(
+		source.indexOf("function ownedCpuProfileObserver("),
+		source.indexOf("\nasync function runCase("),
+	);
+	for (const mode of ["missing", "false", "hang"]) {
+		const directory = await mkdtemp(path.join(scratch, "bad-receipt-"));
+		let child;
+		const signals = [],
+			timers = [];
+		const factory = vm.runInNewContext(`${code}\nownedCpuProfileObserver`, {
+			writeFile,
+			readFile,
+			path,
+			Date,
+			DURATION_SECONDS: 60,
+			process: { pid: 123 },
+			setTimeout: (cb, ms) => {
+				const timer = { cb, ms };
+				timers.push(timer);
+				return timer;
+			},
+			clearTimeout: () => {},
+			spawn: () => {
+				child = new EventEmitter();
+				child.kill = (signal) => signals.push(signal);
+				child.unref = () => {};
+				return child;
+			},
+		});
+		const receipt = path.join(directory, "receipt.json");
+		if (mode === "false")
+			await writeFile(
+				receipt,
+				JSON.stringify({
+					status: "PROFILED",
+					recorder_cleanup_verified: false,
+				}),
+			);
+		const observer = factory(
+			{ source_sha: "a".repeat(40), roles: [] },
+			{
+				launchPid: 456,
+				measurementStartedAt: 100000,
+				manifestPath: path.join(directory, "request.json"),
+				outputPath: receipt,
+				caseId: "sixteen_universe",
+				executionMode: "unrestricted",
+			},
+		);
+		observer.start();
+		while (!child) await new Promise((resolve) => setImmediate(resolve));
+		if (mode === "hang") {
+			assert.equal(timers[0].ms, 60000);
+			timers[0].cb();
+			assert.equal(timers[1].ms, 8000);
+			timers[1].cb();
+			assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+		} else child.emit("close", 0);
+		await assert.rejects(
+			observer.finish(),
+			(error) => error.cleanupUnverified === true,
+		);
+	}
 });
