@@ -1,4 +1,8 @@
 import {
+	effectiveOrderingShape,
+	orderingWithUpdatedShape,
+} from "../../features/dynamics/phaseOrderingShape";
+import {
 	Button,
 	ColorPickerField,
 	CyclingValueToggle,
@@ -86,7 +90,6 @@ import { useStageLayout } from "../stageWindow/useStageLayout";
 import type { DynamicEditorView } from "./DynamicsEditor";
 import {
 	clamp,
-	isSpatialOrdering,
 	keyframeName,
 	laneShapeLabel,
 	normalizeDegrees,
@@ -141,7 +144,8 @@ function dynamicEncoderSlots(
 		);
 	if (view === "projection")
 		return projectionEncoderSlots(dynamic, visibleEncoderCount, onMutate);
-	if (view === "phase") return phaseEncoderSlots(phase, applyPhase);
+	if (view === "phase")
+		return phaseEncoderSlots(phase, applyPhase, dynamic.spatial_mapping);
 	return speedEncoderSlots(dynamic, onMutate);
 }
 
@@ -209,6 +213,7 @@ export function DynamicEncoderDeck({
 		onLaneChange,
 		onMutate,
 	);
+	const phaseUnavailable = view === "phase" && dynamic.phase_mode === "per_lane" && !lane;
 	const allSlots = dynamicEncoderSlots(
 		view,
 		lane,
@@ -222,13 +227,8 @@ export function DynamicEncoderDeck({
 		phase,
 		applyPhase,
 	);
-	const visiblePage = Math.min(
-		Math.max(1, page),
-		Math.max(1, Math.ceil(allSlots.length / visibleEncoderCount)),
-	);
-	const slots = allSlots.slice(
-		(visiblePage - 1) * visibleEncoderCount,
-		visiblePage * visibleEncoderCount,
+	const { visiblePage, slots } = visibleEncoderSlots(
+		allSlots, page, visibleEncoderCount, phaseUnavailable,
 	);
 	const items = encoderSectionItems(slots);
 	const slotsRef = useRef(slots);
@@ -351,11 +351,31 @@ function dynamicPhaseBinding(
 	const applyPhase = (
 		nextPhase: DynamicDefinitionProjection["phase"],
 		group?: string,
-	) =>
-		dynamic.phase_mode === "per_lane" && lane
-			? onLaneChange((current) => ({ ...current, phase: nextPhase }), group)
-			: onMutate({ type: "set_phase", phase: nextPhase }, group);
+	) => {
+		if (dynamic.phase_mode === "per_lane") {
+			return lane
+				? onLaneChange((current) => ({ ...current, phase: nextPhase }), group)
+				: Promise.resolve();
+		}
+		return onMutate({ type: "set_phase", phase: nextPhase }, group);
+	};
 	return { phase, applyPhase };
+}
+
+function visibleEncoderSlots(
+	allSlots: DynamicEncoderSlot[],
+	page: number,
+	count: number,
+	phaseUnavailable: boolean,
+) {
+	const visiblePage = Math.min(
+		Math.max(1, page),
+		Math.max(1, Math.ceil(allSlots.length / count)),
+	);
+	const slots = allSlots
+		.slice((visiblePage - 1) * count, visiblePage * count)
+		.map((slot) => phaseUnavailable ? { ...slot, disabled: true } : slot);
+	return { visiblePage, slots };
 }
 
 function encoderSectionItems(
@@ -426,6 +446,7 @@ function phaseEncoderSlots(
 		phase: DynamicDefinitionProjection["phase"],
 		group?: string,
 	) => Promise<void>,
+	spatialMapping: unknown,
 ): DynamicEncoderSlot[] {
 	return [
 		{
@@ -510,7 +531,7 @@ function phaseEncoderSlots(
 			apply: (value, group) =>
 				applyPhase({ ...phase, wings: value >= 0.5 }, group),
 		},
-		phaseDirectionSlot(phase, applyPhase),
+		phaseDirectionSlot(phase, applyPhase, spatialMapping),
 	];
 }
 
@@ -587,42 +608,30 @@ function phaseDirectionSlot(
 		phase: DynamicDefinitionProjection["phase"],
 		mutationGroup?: string,
 	) => Promise<void>,
+	spatialMapping: unknown,
 ): DynamicEncoderSlot {
-	const ordering = phase.ordering;
-	const direction = ordering.type === "grid_linear";
-	const spatial = isSpatialOrdering(ordering);
-	const value = direction
-		? ordering.angle_degrees
-		: spatial
-			? ordering.center_x
-			: 0;
+	const shape = effectiveOrderingShape(phase.ordering, spatialMapping);
+	const direction = shape?.type === "grid";
+	const center = shape?.type === "radial" || shape?.type === "radar";
+	const value = direction ? shape.angle_degrees : center ? shape.center_u : 0;
 	return {
 		id: "direction-center",
-		label: direction
-			? "Direction"
-			: spatial
-				? "Center X"
-				: "Direction / center",
-		display: direction ? `${value}°` : spatial ? String(value) : "Unavailable",
+		label: direction ? "Direction" : center ? "Centre U" : "Direction / center",
+		display: direction ? `${value}°` : center ? String(value) : "Unavailable",
 		value,
 		minimum: direction ? 0 : -10_000,
 		maximum: direction ? 359 : 10_000,
 		inputScale: 1,
 		fineStep: direction ? 5 : 0.1,
 		coarseStep: direction ? 45 : 1,
-		disabled: !direction && !spatial,
-		apply: (next, group) =>
-			applyPhase(
-				{
-					...phase,
-					ordering: direction
-						? { ...ordering, angle_degrees: normalizeDegrees(next) }
-						: spatial
-							? { ...ordering, center_x: next }
-							: ordering,
-				},
-				group,
-			),
+		disabled: !direction && !center,
+		apply: (next, group) => {
+			if (!direction && !center) return Promise.resolve();
+			const updated = direction
+				? { ...shape, angle_degrees: normalizeDegrees(next) }
+				: { ...shape, center_u: next };
+			return applyPhase({ ...phase, ordering: orderingWithUpdatedShape(phase.ordering, updated) }, group);
+		},
 	};
 }
 

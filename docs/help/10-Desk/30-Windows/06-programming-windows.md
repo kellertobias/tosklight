@@ -50,7 +50,9 @@ direction and rotation.
 **Phase** owns the ordering — **Inherit**, Linear, Grid, Radial, Radar, or Random — alongside
 offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior. **Inherit**
 takes the Group's ordering and appears only for a Dynamic bound to a live Group, because anything
-else has nothing to inherit from. **Random** ignores fixture positions and projection.
+else has nothing to inherit from. **Linear** follows source selection order even when the
+Group has a spatial mapping. In per-lane mode, ordering edits affect only the selected lane;
+Projection remains shared. **Random** ignores fixture positions and projection.
 
 With an empty programmer selection, the first ordinary tap on a populated Preset selects every
 fixture or logical head for which that Preset stores a value; it does not recall values. Tap the

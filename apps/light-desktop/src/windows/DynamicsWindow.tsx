@@ -19,6 +19,7 @@ import { ApiRequestError } from "../api/ApiRequestError";
 import { createLightApi } from "../api/client/api";
 import type {
 	DynamicRuntimeSnapshotProjection,
+	DynamicPhaseOrderingProjection,
 	DynamicSpatialMappingOverrideProjection,
 	DynamicUpdateIntent,
 } from "../api/types";
@@ -370,7 +371,7 @@ function useDynamicSpatialCallbacks({
 		() => showObjectsStore.getSnapshot().showRevision,
 	);
 	const loadSpatialPreview = useCallback(
-		async (spatialMapping: DynamicSpatialMappingOverrideProjection) => {
+		async (spatialMapping: DynamicSpatialMappingOverrideProjection, phaseOrdering?: DynamicPhaseOrderingProjection) => {
 			if (!showId || showRevision == null)
 				throw new Error("No authoritative show revision");
 			const request = (dynamicRevision: number, revision: number) =>
@@ -378,6 +379,7 @@ function useDynamicSpatialCallbacks({
 					expected_dynamic_revision: dynamicRevision,
 					expected_show_revision: revision,
 					spatial_mapping: spatialMapping,
+					...(phaseOrdering ? { phase_ordering: phaseOrdering } : {}),
 				});
 			try {
 				return await request(selected.revision, showRevision);

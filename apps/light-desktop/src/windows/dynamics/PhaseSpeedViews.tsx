@@ -13,15 +13,18 @@ import { useMemo, useRef } from "react";
 import type {
 	DynamicDefinitionProjection,
 	DynamicLaneProjection,
-	DynamicPhaseOrderingProjection,
+	DynamicSelectionShapeProjection,
 	DynamicRuntimeSnapshotProjection,
 	DynamicUpdateIntent,
 	SpeedGroupId,
 } from "../../api/types";
 import {
 	INHERIT_ORDERING,
-	inheritsOrdering,
-	spatialMappingForOrdering,
+	effectiveOrderingShape,
+	orderingWithUpdatedShape,
+	phaseOrderingChoice,
+	phaseOrderingForChoice,
+	selectedDynamicPhase,
 } from "../../features/dynamics/phaseOrderingShape";
 import type { ShowObject } from "../../features/showObjects/contracts";
 import {
@@ -32,8 +35,6 @@ import {
 
 import {
 	clamp,
-	isSpatialOrdering,
-	orderingFor,
 	rationalFromNumber,
 	rationalValue,
 } from "./DynamicsEditor";
@@ -60,16 +61,12 @@ export function PhaseView({
 	onMutate(dynamic: DynamicObject, intent: DynamicUpdateIntent): void;
 }) {
 	const phaseMode = dynamic.body.phase_mode;
-	const phase =
-		phaseMode === "per_lane"
-			? (lane?.phase ?? dynamic.body.phase)
-			: dynamic.body.phase;
-	const spatialOrdering = isSpatialOrdering(phase.ordering)
-		? phase.ordering
-		: null;
+	const phase = selectedDynamicPhase(dynamic.body, lane);
+	const shape = effectiveOrderingShape(phase.ordering, dynamic.body.spatial_mapping);
 	const update = (patch: Partial<typeof phase>) => {
 		const nextPhase = { ...phase, ...patch };
-		if (phaseMode === "per_lane" && lane) {
+		if (phaseMode === "per_lane") {
+			if (!lane) return;
 			onMutate(dynamic, {
 				type: "replace_lane",
 				lane_id: lane.id,
@@ -79,29 +76,29 @@ export function PhaseView({
 		}
 		onMutate(dynamic, { type: "set_phase", phase: nextPhase });
 	};
-	// The shape stage is what a Group is inherited from, so an ordering choice has to move it
-	// too; otherwise the Group's shape would keep winning over the operator's pick.
-	const applyOrderingShape = (
-		ordering: DynamicPhaseOrderingProjection | null,
-	) =>
-		onMutate(dynamic, {
-			type: "set_spatial_mapping",
-			spatial_mapping: spatialMappingForOrdering(
-				dynamic.body.spatial_mapping,
-				ordering,
-			),
-		});
+
 	return (
 		<div className="dynamic-phase-view">
+			<MultiValueToggleField
+				label="Phase distribution"
+				value={phaseMode}
+				options={[
+					{ value: "uniform", label: "Uniform" },
+					{ value: "per_lane", label: "Per lane" },
+				]}
+				onChange={(mode) => {
+					if (mode === phaseMode) return;
+					onMutate(dynamic, { type: "set_phase_mode", phase_mode: mode });
+				}}
+			/>
 			<PhaseControls
 				dynamic={dynamic}
 				lane={lane}
 				phase={phase}
 				phaseMode={phaseMode}
-				spatialOrdering={spatialOrdering}
+				shape={shape}
 				onSelectLane={onSelectLane}
 				onUpdate={update}
-				onOrderingShape={applyOrderingShape}
 			/>
 			<PhaseFooter
 				dynamic={dynamic}
@@ -402,38 +399,34 @@ function ActivationFields({
 }
 
 type DynamicPhase = DynamicDefinitionProjection["phase"];
-type SpatialOrdering = Extract<
-	DynamicPhaseOrderingProjection,
-	{ type: "radial_out" | "radial_in" | "axial" }
->;
 
 function PhaseControls({
 	dynamic,
 	lane,
 	phase,
 	phaseMode,
-	spatialOrdering,
+	shape,
 	onSelectLane,
 	onUpdate,
-	onOrderingShape,
 }: {
 	dynamic: DynamicObject;
 	lane?: DynamicLaneProjection;
 	phase: DynamicPhase;
 	phaseMode: DynamicDefinitionProjection["phase_mode"];
-	spatialOrdering: SpatialOrdering | null;
+	shape: DynamicSelectionShapeProjection | null;
 	onSelectLane(id: string): void;
 	onUpdate(patch: Partial<DynamicPhase>): void;
-	onOrderingShape(ordering: DynamicPhaseOrderingProjection | null): void;
 }) {
-	// The Projection places fixtures in a plane; this orders that plane. Inheriting takes the
-	// Group's ordering, so the ordering's own fields have nothing to configure.
-	const inherited = inheritsOrdering(
+	const choice = phaseOrderingChoice(
+		phase.ordering,
 		dynamic.body.spatial_mapping,
 		dynamic.body.target_binding,
 	);
 	return (
-		<section className="dynamic-phase-controls">
+		<fieldset
+			className="dynamic-phase-controls"
+			disabled={phaseMode === "per_lane" && !lane}
+		>
 			{phaseMode === "per_lane" && lane && (
 				<SelectField
 					className="dynamic-phase-lane"
@@ -452,109 +445,131 @@ function PhaseControls({
 					<MultiValueToggleField
 						className="dynamic-phase-ordering"
 						label="Ordering mode"
-						value={
-							inherited
-								? INHERIT_ORDERING
-								: phase.ordering.type === "radial_in"
-									? "radial_out"
-									: phase.ordering.type
-						}
+						value={choice}
 						options={[
 							...(dynamic.body.target_binding.type === "live_group"
 								? [{ value: INHERIT_ORDERING, label: "Inherit" }]
 								: []),
-							{ value: "selection", label: "Linear" },
-							{ value: "grid_linear", label: "Grid" },
-							{ value: "radial_out", label: "Radial" },
-							{ value: "axial", label: "Radar" },
-							{ value: "random_each_loop", label: "Random" },
+							{ value: "source_order", label: "Linear" },
+							{ value: "grid", label: "Grid" },
+							{ value: "radial", label: "Radial" },
+							{ value: "radar", label: "Radar" },
+							{ value: "random", label: "Random" },
 						]}
-						onChange={(choice) => {
-							if (choice === INHERIT_ORDERING) {
-								onOrderingShape(null);
-								return;
-							}
-							const ordering = orderingFor(choice, phase.ordering);
-							onUpdate({ ordering });
-							onOrderingShape(ordering);
+						onChange={(next) => {
+							if (next === choice) return;
+							onUpdate({ ordering: phaseOrderingForChoice(next, shape) });
 						}}
 					/>
 				</div>
-				{!inherited && (
+				{choice !== INHERIT_ORDERING && (
 					<PhaseOrderingFields
-						phase={phase}
-						spatialOrdering={spatialOrdering}
+						ordering={phase.ordering}
+						shape={shape}
 						onUpdate={onUpdate}
 					/>
 				)}
 				<SharedPhaseFields phase={phase} onUpdate={onUpdate} />
 			</FormLayout>
-		</section>
+		</fieldset>
 	);
 }
 
 function PhaseOrderingFields({
-	phase,
-	spatialOrdering,
+	ordering,
+	shape,
 	onUpdate,
 }: {
-	phase: DynamicPhase;
-	spatialOrdering: SpatialOrdering | null;
+	ordering: DynamicPhase["ordering"];
+	shape: DynamicSelectionShapeProjection | null;
 	onUpdate(patch: Partial<DynamicPhase>): void;
 }) {
-	if (phase.ordering.type === "grid_linear")
-		return (
-			<div className="dynamic-phase-field dynamic-phase-direction-field">
-				<NumberField
-					label="Direction"
-					value={phase.ordering.angle_degrees}
-					allowDecimal
-					unit="°"
-					onValueChange={(angle_degrees) =>
-						onUpdate({
-							ordering: {
-								type: "grid_linear",
-								angle_degrees: Number(angle_degrees),
-							},
-						})
-					}
-				/>
-			</div>
-		);
-	if (!spatialOrdering) return null;
+	if (!shape) return null;
+	const change = (next: DynamicSelectionShapeProjection) =>
+		onUpdate({ ordering: orderingWithUpdatedShape(ordering, next) });
 	return (
-		<>
-			<div className="dynamic-phase-field dynamic-phase-center-x-field">
-				<NumberField
-					label="Center X"
-					value={spatialOrdering.center_x}
-					allowDecimal
-					onValueChange={(center_x) =>
-						onUpdate({
-							ordering: {
-								...spatialOrdering,
-								center_x: Number(center_x),
-							},
-						})
-					}
+		<div className="dynamic-phase-shape-fields">
+			{["grid_linear", "radial_in", "radial_out", "axial"].includes(ordering.type) && (
+				<p>Legacy X/Z ordering</p>
+			)}
+			{ordering.type === "axial" && <p>Start angle −180° · Counter-clockwise</p>}
+			{shape.type === "grid" && (
+				<>
+					<NumberField
+						label="Direction"
+						value={shape.angle_degrees}
+						unit="°"
+						allowDecimal
+						onValueChange={(value) => change({ ...shape, angle_degrees: Number(value) })}
+					/>
+					<SelectField
+						disabled={ordering.type === "grid_linear"}
+						label="Rank direction"
+						value={shape.direction}
+						options={[
+							{ value: "ascending", label: "Ascending" },
+							{ value: "descending", label: "Descending" },
+						]}
+						onChange={(direction) => change({ ...shape, direction })}
+					/>
+				</>
+			)}
+			{(shape.type === "radial" || shape.type === "radar") && (
+				<>
+					<NumberField
+						label="Centre U"
+						value={shape.center_u}
+						allowDecimal
+						onValueChange={(value) => change({ ...shape, center_u: Number(value) })}
+					/>
+					<NumberField
+						label="Centre V"
+						value={shape.center_v}
+						allowDecimal
+						onValueChange={(value) => change({ ...shape, center_v: Number(value) })}
+					/>
+				</>
+			)}
+			{shape.type === "radial" && (
+				<SelectField
+					label="Radial direction"
+					value={shape.direction}
+					options={[
+						{ value: "outward", label: "Outward" },
+						{ value: "inward", label: "Inward" },
+					]}
+					onChange={(direction) => change({ ...shape, direction })}
 				/>
-			</div>
-			<div className="dynamic-phase-field dynamic-phase-center-z-field">
+			)}
+			{shape.type === "radar" && ordering.type !== "axial" && (
+				<>
+					<NumberField
+						label="Start angle"
+						value={shape.start_angle_degrees}
+						unit="°"
+						allowDecimal
+						onValueChange={(value) => change({ ...shape, start_angle_degrees: Number(value) })}
+					/>
+					<SelectField
+						label="Sweep"
+						value={shape.sweep}
+						options={[
+							{ value: "clockwise", label: "Clockwise" },
+							{ value: "counter_clockwise", label: "Counter-clockwise" },
+						]}
+						onChange={(sweep) => change({ ...shape, sweep })}
+					/>
+				</>
+			)}
+			{shape.type === "random" && (
 				<NumberField
-					label="Center Z"
-					value={spatialOrdering.center_z}
-					allowDecimal
-					onValueChange={(center_z) =>
-						onUpdate({
-							ordering: {
-								...spatialOrdering,
-								center_z: Number(center_z),
-							},
-						})
-					}
+					label="Seed"
+					value={shape.seed}
+					min={0}
+					onValueChange={(value) => change({ ...shape, seed: Math.max(0, Math.round(Number(value))) })}
 				/>
-			</div>
-		</>
+			)}
+		</div>
 	);
 }
 

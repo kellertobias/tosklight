@@ -35,12 +35,29 @@ pub(super) async fn dynamic_spatial_preview(
     let draft = decode_spatial_mapping(request.spatial_mapping.clone())?;
     let snapshot = state.output.snapshot();
     let context = dynamic_spatial_context(&snapshot, &definition)?;
-    let ranked = light_dynamics::evaluate_dynamic_spatial_mapping(
-        context.inherited_mapping.as_ref(),
-        &draft,
-        &context.targets,
-        None,
-    )
+    let phase_ordering = request
+        .phase_ordering
+        .clone()
+        .map(|ordering| {
+            decode_dynamic_part::<light_dynamics::PhaseOrdering>("phase ordering", ordering)
+        })
+        .transpose()?;
+    let ranked = if let Some(ordering) = &phase_ordering {
+        light_dynamics::evaluate_phase_ordering(
+            ordering,
+            context.inherited_mapping.as_ref(),
+            &draft,
+            &context.targets,
+            0,
+        )
+    } else {
+        light_dynamics::evaluate_dynamic_spatial_mapping(
+            context.inherited_mapping.as_ref(),
+            &draft,
+            &context.targets,
+            None,
+        )
+    }
     .map_err(|error| ApiError::bad_request(error.to_string()))?;
     let ranks = ranked
         .ordered_fixture_ids
@@ -52,28 +69,7 @@ pub(super) async fn dynamic_spatial_preview(
             },
         )
         .collect();
-    // The plane the ranking actually happens on, so the Phase view plots what ranks rather than
-    // a top-down picture that agrees with it only when the projection happens to look down.
-    let projected_positions =
-        effective_spatial_projection(&draft, context.inherited_mapping.as_ref())
-            .map(|projection| {
-                light_dynamics::project_spatial_positions(&projection, &context.targets)
-                    .map(|positions| {
-                        positions
-                            .into_iter()
-                            .map(|position| {
-                                light_wire::v2::group_management::GroupProjectedPositionProjection {
-                                    fixture_id: position.fixture_id.0,
-                                    u: position.u,
-                                    v: position.v,
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .map_err(|error| ApiError::bad_request(error.to_string()))
-            })
-            .transpose()?
-            .unwrap_or_default();
+    let projected_positions = phase_projected_positions(phase_ordering.as_ref(), &draft, &context)?;
     Ok(Json(
         light_wire::v2::dynamics::DynamicSpatialPreviewResponse {
             fixture_positions: Some(physical_fixture_positions(&snapshot)),
@@ -108,6 +104,97 @@ pub(super) async fn dynamic_spatial_preview(
                 .collect(),
         },
     ))
+}
+
+/// Return the actual ranking plane; positional plots are absent for source order and Random.
+fn phase_projected_positions(
+    phase_ordering: Option<&light_dynamics::PhaseOrdering>,
+    draft: &light_dynamics::DynamicSpatialMappingOverride,
+    context: &DynamicSpatialContext,
+) -> Result<Vec<light_wire::v2::group_management::GroupProjectedPositionProjection>, ApiError> {
+    // The plane the ranking actually happens on, so the Phase view plots what ranks rather than
+    // a top-down picture that agrees with it only when the projection happens to look down.
+    let source_order = matches!(
+        phase_ordering,
+        Some(light_dynamics::PhaseOrdering::SourceOrder)
+    );
+    let local_shape = match phase_ordering {
+        Some(light_dynamics::PhaseOrdering::Spatial { shape }) => shape,
+        _ => &draft.shape,
+    };
+    let random = matches!(
+        phase_ordering,
+        Some(light_dynamics::PhaseOrdering::RandomEachLoop { .. })
+    ) || (matches!(
+        phase_ordering,
+        Some(
+            light_dynamics::PhaseOrdering::Selection
+                | light_dynamics::PhaseOrdering::Spatial { .. }
+        )
+    ) && matches!(
+        local_shape,
+        light_dynamics::OverrideStage::Replace(
+            light_dynamics::DynamicSelectionShape::Random { .. }
+        )
+    ));
+    let legacy_plane = phase_ordering.is_some_and(|ordering| {
+        !matches!(
+            ordering,
+            light_dynamics::PhaseOrdering::Selection
+                | light_dynamics::PhaseOrdering::SourceOrder
+                | light_dynamics::PhaseOrdering::Spatial { .. }
+        )
+    });
+    let projection = effective_spatial_projection(draft, context.inherited_mapping.as_ref())
+        .or_else(|| {
+            (phase_ordering.is_some()
+                && matches!(local_shape, light_dynamics::OverrideStage::Replace(_)))
+            .then(|| {
+                light_dynamics::SpatialProjection::from_preset(
+                    light_dynamics::ProjectionPreset::Top,
+                    light_dynamics::Position3d::default(),
+                )
+            })
+        });
+    let projected_positions = if source_order || random {
+        Vec::new()
+    } else if legacy_plane {
+        // Legacy modes deliberately rank the historical X/Z plane, independent of Projection.
+        context
+            .targets
+            .iter()
+            .filter_map(|target| {
+                target.position.map(|position| {
+                    light_wire::v2::group_management::GroupProjectedPositionProjection {
+                        fixture_id: target.fixture_id.0,
+                        u: Some(position.x),
+                        v: Some(position.z),
+                    }
+                })
+            })
+            .collect()
+    } else {
+        projection
+            .map(|projection| {
+                light_dynamics::project_spatial_positions(&projection, &context.targets)
+                    .map(|positions| {
+                        positions
+                            .into_iter()
+                            .map(|position| {
+                                light_wire::v2::group_management::GroupProjectedPositionProjection {
+                                    fixture_id: position.fixture_id.0,
+                                    u: position.u,
+                                    v: position.v,
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .map_err(|error| ApiError::bad_request(error.to_string()))
+            })
+            .transpose()?
+            .unwrap_or_default()
+    };
+    Ok(projected_positions)
 }
 
 /// Reuse the compiled physical model; this route never recalculates transforms or point masters.

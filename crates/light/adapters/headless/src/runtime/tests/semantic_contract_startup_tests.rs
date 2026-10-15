@@ -1154,3 +1154,119 @@ async fn production_startup_records_independent_101_selects_uuid_and_preserves_s
 
 #[path = "automation_playback_recovery_tests.rs"]
 mod automation_playback_recovery_tests;
+
+/// TL-807: the real older-reader startup and show-library paths must preserve an
+/// additive phase-local ordering, rather than opening it with legacy phase semantics.
+#[tokio::test]
+async fn phase_local_ordering_startup_refuses_reader_four_and_recovers_without_changing_original() {
+    let desk = ContractDesk::new("tl807-phase-recovery");
+    let show = desk.create_show("Phase local ordering");
+    let mut definition = command_test_dynamic(Uuid::new_v4(), 1);
+    definition.phase.ordering = serde_json::from_value(serde_json::json!({
+        "type": "spatial", "shape": {"type": "inherit"}
+    }))
+    .unwrap();
+    let authored = serde_json::to_value(&definition).unwrap();
+    let store = show.store();
+    let mut transaction = store.portable_document().unwrap().transaction();
+    transaction.put("dynamic", definition.id.to_string(), authored.clone());
+    transaction.check_programming_contract(5).unwrap();
+    transaction.stamp_programming_contract(5);
+    store.apply_portable_transaction(transaction).unwrap();
+    assert_eq!(
+        store.programming_contract_marker().unwrap(),
+        light_show::ProgrammingContractMarker::Declared(5)
+    );
+    drop(store);
+    desk.activate(&show);
+    desk.desk().set_setting(UNRELATED.0, UNRELATED.1).unwrap();
+    let original = show.bytes();
+
+    let startup = desk.load_at(4);
+    let error = startup
+        .active_show_error
+        .as_deref()
+        .expect("visible refusal");
+    for expected in [
+        "programming contract 5",
+        "supports 4",
+        "show file was not changed",
+    ] {
+        assert!(error.contains(expected), "{expected:?} missing: {error}");
+    }
+    assert!(startup.engine.snapshot().fixtures.is_empty());
+    assert!(startup.engine.snapshot().dynamics.is_empty());
+    assert_eq!(
+        startup
+            .persistent
+            .active_show
+            .as_ref()
+            .map(|entry| entry.id),
+        Some(show.entry.id)
+    );
+    assert_eq!(show.bytes(), original);
+    let served = desk.serve(startup).await;
+    let state = served.state.clone();
+    assert_eq!(
+        state.installation.setting(UNRELATED.0).unwrap().as_deref(),
+        Some(UNRELATED.1)
+    );
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let clean = create_show(&app, &token, "Clean after phase refusal").await;
+    let response = app
+        .clone()
+        .oneshot(open_show_request(&token, clean["id"].as_str().unwrap()))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .clone()
+        .oneshot(open_show_request(&token, show.entry.id.0))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = json(response).await;
+    let error = body["error"].as_str().unwrap();
+    assert!(error.contains("programming contract 5"), "{body}");
+    assert!(error.contains("supports 4"), "{body}");
+    assert_eq!(
+        state
+            .active_show
+            .current()
+            .as_ref()
+            .map(|entry| entry.id.0.to_string()),
+        clean["id"].as_str().map(str::to_owned),
+        "the separately opened clean show stays active"
+    );
+    drop(app);
+    served.close().await;
+    drop(state);
+    assert_eq!(
+        show.bytes(),
+        original,
+        "both older-reader paths preserve the original"
+    );
+    assert_eq!(
+        desk.desk().setting(UNRELATED.0).unwrap().as_deref(),
+        Some(UNRELATED.1)
+    );
+
+    desk.activate(&show);
+    let current = desk.load_at(5);
+    assert_eq!(current.active_show_error, None);
+    let snapshot = current.engine.snapshot();
+    assert_eq!(snapshot.required_programming_contract(), 5);
+    assert_eq!(snapshot.dynamics.len(), 1);
+    assert_eq!(snapshot.dynamics[0].phase, definition.phase);
+    assert_eq!(
+        show.store()
+            .portable_document()
+            .unwrap()
+            .object("dynamic", &definition.id.to_string())
+            .unwrap()
+            .body(),
+        &authored,
+        "newest reader preserves the authored definition"
+    );
+}

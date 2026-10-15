@@ -172,7 +172,7 @@ export type DynamicSelectionShapeProjection = { "type": "grid", angle_degrees: n
 export type DynamicSpatialShapeStageProjection = { "type": "inherit", } | { "type": "replace", value: DynamicSelectionShapeProjection, };
 export type DynamicSpatialMappingOverrideProjection = { projection: DynamicSpatialProjectionStageProjection, shape: DynamicSpatialShapeStageProjection, };
 export type DynamicSpatialPreviewBaseProjection = { "type": "live_group", group_id: string, mapping_provenance: GroupMappingProvenanceProjection, } | { "type": "frozen_targets", } | { "type": "targetless", };
-export type DynamicSpatialPreviewRequest = { expected_dynamic_revision: number, expected_show_revision: number, spatial_mapping: DynamicSpatialMappingOverrideProjection, };
+export type DynamicSpatialPreviewRequest = { expected_dynamic_revision: number, expected_show_revision: number, spatial_mapping: DynamicSpatialMappingOverrideProjection, phase_ordering?: DynamicPhaseOrderingProjection, };
 export type DynamicSpatialPreviewResponse = {
 /**
  * Physical root and logical-head positions for the projection's rig context. Older
@@ -219,7 +219,7 @@ export type DynamicPeriodicFunctionProjection = "sinus" | "cosinus" | "linear_up
 export type DynamicPwmShapeProjection = { attack: number, on: number, decay: number, off: number, attack_interpolation: DynamicScalarInterpolationProjection, decay_interpolation: DynamicScalarInterpolationProjection, };
 export type DynamicRandomGroupProjection = { id: string, seed: number, decision_interval_millis: number, start_probability: number, mean_duration_millis: number, duration_spread_millis: number, attack_ratio: number, decay_ratio: number, } & ({ low: DynamicScalarSourceProjection, high: DynamicScalarSourceProjection, } | { programming_range: DynamicProgrammingRandomRangeProjection, });
 export type DynamicPhaseDistributionProjection = { ordering: DynamicPhaseOrderingProjection, offset_degrees: number, span_degrees: number, block_size: number, repeats: number, wings: boolean, anchors_degrees: Array<number>, };
-export type DynamicPhaseOrderingProjection = { "type": "selection" } | { "type": "grid_linear", angle_degrees: number, } | { "type": "radial_out", center_x: number, center_z: number, } | { "type": "radial_in", center_x: number, center_z: number, } | { "type": "axial", center_x: number, center_z: number, } | { "type": "random_each_loop", seed: number, };
+export type DynamicPhaseOrderingProjection = { "type": "selection" } | { "type": "source_order" } | { "type": "spatial", shape: DynamicSpatialShapeStageProjection, } | { "type": "grid_linear", angle_degrees: number, } | { "type": "radial_out", center_x: number, center_z: number, } | { "type": "radial_in", center_x: number, center_z: number, } | { "type": "axial", center_x: number, center_z: number, } | { "type": "random_each_loop", seed: number, };
 export type DynamicSpeedProjection = { "type": "fixed", duration_millis: number, } | { "type": "speed_group", group: DynamicSpeedGroupProjection, beats_per_cycle: DynamicRationalProjection, };
 export type DynamicSpeedGroupProjection = "A" | "B" | "C" | "D" | "E";
 export type DynamicRationalProjection = { numerator: number, denominator: number, };

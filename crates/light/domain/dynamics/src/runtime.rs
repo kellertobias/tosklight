@@ -1,7 +1,7 @@
 use crate::{
     DynamicDefinition, DynamicSampleExpression, DynamicTargetBinding, PhaseOrdering, Position3d,
-    ScalarSourceResolver, SpatialPosition, SpatialSelectionMapping, SpatialTarget,
-    evaluate_dynamic_spatial_mapping, project_phase, project_ranked_phase, validate_definition,
+    ScalarSourceResolver, SpatialPosition, SpatialSelectionMapping, SpatialTarget, project_phase,
+    project_ranked_phase, validate_definition,
 };
 use light_core::{AttributeKey, FixtureId, FrameAddress, FrameAddressResolver};
 use serde::{Deserialize, Serialize};

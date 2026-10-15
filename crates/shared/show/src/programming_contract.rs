@@ -34,6 +34,9 @@ pub const PROGRAMMING_OBJECT_KINDS: &[&str] = &[
 
 /// Required feature contract of authored payload, independent of runtime capability.
 pub fn required_object_programming_contract(body: &Value) -> u16 {
+    if contains_phase_local_ordering(body) {
+        return light_core::programming::DYNAMIC_PHASE_ORDERING_CONTRACT;
+    }
     let nonempty_map = |value: Option<&Value>| {
         value
             .and_then(Value::as_object)
@@ -97,6 +100,24 @@ pub fn required_object_programming_contract(body: &Value) -> u16 {
         2
     } else {
         1
+    }
+}
+
+/// Embedded Dynamic fallbacks in Presets, Cues and retained programming need the same gate
+/// as standalone definitions. Inspect only phase.ordering, never arbitrary type labels.
+fn contains_phase_local_ordering(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => {
+            object
+                .get("phase")
+                .and_then(|phase| phase.get("ordering"))
+                .and_then(|ordering| ordering.get("type"))
+                .and_then(Value::as_str)
+                .is_some_and(|kind| matches!(kind, "source_order" | "spatial"))
+                || object.values().any(contains_phase_local_ordering)
+        }
+        Value::Array(values) => values.iter().any(contains_phase_local_ordering),
+        _ => false,
     }
 }
 
@@ -567,6 +588,7 @@ pub(crate) fn stamp_direct_write<'a>(
     tx: &rusqlite::Transaction<'_>,
     writer_contract: u16,
     changed_kinds: impl Iterator<Item = &'a str>,
+    required_floor: u16,
 ) -> Result<(), StoreError> {
     if writer_stamps_programming_contract(writer_contract, changed_kinds) {
         let current: Option<String> = tx
@@ -579,7 +601,8 @@ pub(crate) fn stamp_direct_write<'a>(
         let mut required = current
             .and_then(|value| value.parse::<u16>().ok())
             .unwrap_or(0)
-            .max(1);
+            .max(1)
+            .max(required_floor);
         let mut query = tx.prepare("SELECT body_json FROM objects WHERE kind='cue_list'")?;
         let bodies = query.query_map([], |row| row.get::<_, String>(0))?;
         for body in bodies {

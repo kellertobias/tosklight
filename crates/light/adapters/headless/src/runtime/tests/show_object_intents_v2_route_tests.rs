@@ -1461,3 +1461,109 @@ async fn dynamic_spatial_preview_includes_canonical_root_and_logical_head_positi
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn dynamic_spatial_preview_uses_requested_phase_ordering_without_mutation() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let dynamic_id = Uuid::new_v4();
+    let ids = [
+        Uuid::from_u128(807_001),
+        Uuid::from_u128(807_002),
+        Uuid::from_u128(807_003),
+    ];
+    let mut definition = dynamic_definition_json(150);
+    definition["id"] = serde_json::json!(dynamic_id);
+    definition["target_binding"] = serde_json::json!({"type":"frozen_targets", "targets":ids});
+    let show_id = create_seeded_show(
+        &state,
+        &app,
+        &token,
+        "Phase ordering preview",
+        &[("dynamic", &dynamic_id.to_string(), definition)],
+    )
+    .await;
+    let mut snapshot = state.output.snapshot().as_ref().clone();
+    snapshot.dynamic_stage_positions = ids
+        .iter()
+        .zip([2.0, 0.0, 1.0])
+        .map(|(id, x)| {
+            (
+                light_core::FixtureId(*id),
+                light_dynamics::SpatialPosition { x, y: 0.0, z: 0.0 },
+            )
+        })
+        .collect::<std::collections::HashMap<_, _>>()
+        .into();
+    state.output.replace_snapshot(snapshot).unwrap();
+    let entry = state
+        .installation
+        .show(light_core::ShowId(Uuid::parse_str(&show_id).unwrap()))
+        .unwrap()
+        .unwrap();
+    let store = ShowStore::open(&entry.path).unwrap();
+    let before = store.portable_document().unwrap();
+    let revision = before.revision().value();
+    let mapping = serde_json::json!({"projection":{"type":"replace", "value":{"anchor":{"x":0,"y":0,"z":0}, "view_direction":{"x":0,"y":0,"z":-1}, "rotation_degrees":0}}, "shape":{"type":"replace", "value":{"type":"grid", "angle_degrees":0,"direction":"descending"}}});
+    for (ordering, expected) in [
+        (
+            serde_json::json!({"type":"source_order"}),
+            vec![ids[0], ids[1], ids[2]],
+        ),
+        (
+            serde_json::json!({"type":"spatial", "shape":{"type":"replace", "value":{"type":"grid", "angle_degrees":0,"direction":"ascending"}}}),
+            vec![ids[1], ids[2], ids[0]],
+        ),
+    ] {
+        let (status, preview) = post_show_object_intent(&app, &token, &show_id, &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"), serde_json::json!({"expected_dynamic_revision":1,"expected_show_revision":revision,"spatial_mapping":mapping,"phase_ordering":ordering})).await;
+        assert_eq!(status, StatusCode::OK, "{preview}");
+        assert_eq!(preview["ordered_fixture_ids"], serde_json::json!(expected));
+        assert_eq!(preview["rank_count"], 3);
+        assert_eq!(
+            preview["projected_positions"].as_array().unwrap().len(),
+            if ordering["type"] == "source_order" {
+                0
+            } else {
+                3
+            }
+        );
+        assert_eq!(preview["show_revision"], revision);
+    }
+    for (shape, expected_points) in [
+        (
+            serde_json::json!({"type":"grid","angle_degrees":0,"direction":"ascending"}),
+            3,
+        ),
+        (serde_json::json!({"type":"random","seed":201}), 0),
+    ] {
+        let (status, preview) = post_show_object_intent(
+            &app,
+            &token,
+            &show_id,
+            &format!("/api/v2/dynamics/{dynamic_id}/spatial-preview"),
+            serde_json::json!({"expected_dynamic_revision":1,"expected_show_revision":revision,
+                "spatial_mapping":{"projection":{"type":"inherit"},"shape":{"type":"inherit"}},
+                "phase_ordering":{"type":"spatial","shape":{"type":"replace","value":shape}}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{preview}");
+        assert_eq!(
+            preview["projected_positions"].as_array().unwrap().len(),
+            expected_points
+        );
+        if expected_points == 3 {
+            assert_eq!(
+                preview["ordered_fixture_ids"],
+                serde_json::json!([ids[1], ids[2], ids[0]])
+            );
+            assert_eq!(preview["projected_positions"][0]["u"], 2.0);
+            assert_eq!(preview["projected_positions"][0]["v"], 0.0);
+        }
+    }
+    assert_eq!(
+        store.portable_document().unwrap().revision(),
+        before.revision()
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

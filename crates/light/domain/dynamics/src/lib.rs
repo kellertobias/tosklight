@@ -23,7 +23,9 @@ pub use canonical_migration::migrate_canonical_attributes;
 pub use evaluate::{DynamicEvaluationContext, DynamicEvaluator, ScalarSourceResolver};
 pub use lane::*;
 pub use model::*;
-pub use phase::{PhasePosition, SpatialPosition, project_phase, project_ranked_phase};
+pub use phase::{
+    PhasePosition, SpatialPosition, evaluate_phase_ordering, project_phase, project_ranked_phase,
+};
 pub use programming::*;
 pub use runtime::{
     CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling, DynamicControl,

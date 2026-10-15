@@ -36,7 +36,12 @@ pub(crate) fn put_legacy_object(
     let tx = immediate_transaction(conn)?;
     let revision = write_checked(&tx, kind, id, body, expected, &timestamp())?;
     crate::playback_contract::stamp_direct_playback_write(&tx, [kind].into_iter())?;
-    crate::programming_contract::stamp_direct_write(&tx, writer_contract, [kind].into_iter())?;
+    crate::programming_contract::stamp_direct_write(
+        &tx,
+        writer_contract,
+        [kind].into_iter(),
+        crate::required_object_programming_contract(body),
+    )?;
     bump_revision(&tx)?;
     tx.commit()?;
     Ok(revision)
@@ -72,6 +77,11 @@ pub(crate) fn mutate_legacy_objects(
             .iter()
             .map(|write| write.kind)
             .chain(deletes.iter().map(|delete| delete.kind)),
+        writes
+            .iter()
+            .map(|write| crate::required_object_programming_contract(write.body))
+            .max()
+            .unwrap_or(1),
     )?;
     if !writes.is_empty() || deleted {
         bump_revision(&tx)?;
@@ -204,7 +214,12 @@ pub(crate) fn delete_legacy_object(
     let tx = immediate_transaction(conn)?;
     let deleted = delete_current(&tx, &PortableShowObjectKey::new(kind, id))?;
     if deleted {
-        crate::programming_contract::stamp_direct_write(&tx, writer_contract, [kind].into_iter())?;
+        crate::programming_contract::stamp_direct_write(
+            &tx,
+            writer_contract,
+            [kind].into_iter(),
+            1,
+        )?;
         bump_revision(&tx)?;
     }
     tx.commit()?;

@@ -23,9 +23,104 @@ pub fn project_phase(
     positions: &HashMap<FixtureId, SpatialPosition>,
     loop_index: u64,
 ) -> Vec<PhasePosition> {
+    if !matches!(
+        distribution.ordering,
+        PhaseOrdering::SourceOrder | PhaseOrdering::Spatial { .. }
+    ) {
+        return project_ranked_phase(
+            distribution,
+            &legacy_ranked_selection(&distribution.ordering, targets, positions, loop_index),
+        );
+    }
+    let spatial_targets = targets
+        .iter()
+        .map(|id| crate::SpatialTarget {
+            fixture_id: *id,
+            position: positions.get(id).map(|p| crate::Position3d {
+                x: f64::from(p.x),
+                y: f64::from(p.y),
+                z: f64::from(p.z),
+            }),
+        })
+        .collect::<Vec<_>>();
+    evaluate_phase_ordering(
+        &distribution.ordering,
+        None,
+        &crate::DynamicSpatialMappingOverride::default(),
+        &spatial_targets,
+        loop_index,
+    )
+    .map(|ranked| project_ranked_phase(distribution, &ranked))
+    .unwrap_or_default()
+}
+
+/// Resolve actual phase ranks, retaining legacy ordering semantics and phase-local spatial authority.
+/// New Spatial choices share the definition projection but never its legacy global shape.
+pub fn evaluate_phase_ordering(
+    ordering: &PhaseOrdering,
+    inherited: Option<&crate::SpatialSelectionMapping>,
+    mapping: &crate::DynamicSpatialMappingOverride,
+    targets: &[crate::SpatialTarget],
+    loop_index: u64,
+) -> Result<RankedSelection, crate::SpatialMappingError> {
+    match ordering {
+        PhaseOrdering::Selection => {
+            crate::evaluate_dynamic_spatial_mapping(inherited, mapping, targets, Some(loop_index))
+        }
+        PhaseOrdering::SourceOrder => crate::evaluate_dynamic_spatial_mapping(
+            None,
+            &crate::DynamicSpatialMappingOverride::default(),
+            targets,
+            Some(loop_index),
+        ),
+        PhaseOrdering::Spatial { shape } => crate::evaluate_dynamic_spatial_mapping(
+            inherited,
+            &crate::DynamicSpatialMappingOverride {
+                projection: mapping.projection.clone(),
+                shape: shape.clone(),
+            },
+            targets,
+            Some(loop_index),
+        ),
+        _ => {
+            let ids = targets
+                .iter()
+                .map(|target| target.fixture_id)
+                .collect::<Vec<_>>();
+            let positions = targets
+                .iter()
+                .filter_map(|target| {
+                    target.position.map(|p| {
+                        (
+                            target.fixture_id,
+                            SpatialPosition {
+                                x: p.x as f32,
+                                y: p.y as f32,
+                                z: p.z as f32,
+                            },
+                        )
+                    })
+                })
+                .collect();
+            Ok(legacy_ranked_selection(
+                ordering, &ids, &positions, loop_index,
+            ))
+        }
+    }
+}
+
+fn legacy_ranked_selection(
+    ordering: &PhaseOrdering,
+    targets: &[FixtureId],
+    positions: &HashMap<FixtureId, SpatialPosition>,
+    loop_index: u64,
+) -> RankedSelection {
     let mut ordered = targets.iter().copied().enumerate().collect::<Vec<_>>();
-    match distribution.ordering {
-        PhaseOrdering::Selection => {}
+    match *ordering {
+        PhaseOrdering::Selection | PhaseOrdering::SourceOrder => {}
+        PhaseOrdering::Spatial { .. } => {
+            unreachable!("spatial ordering resolves through evaluate_phase_ordering")
+        }
         PhaseOrdering::GridLinear { angle_degrees } => {
             let direction = direction_cosines(angle_degrees);
             ordered.sort_by(|left, right| {
@@ -36,7 +131,7 @@ pub fn project_phase(
         }
         PhaseOrdering::RadialOut { center_x, center_z }
         | PhaseOrdering::RadialIn { center_x, center_z } => {
-            let inward = matches!(distribution.ordering, PhaseOrdering::RadialIn { .. });
+            let inward = matches!(ordering, PhaseOrdering::RadialIn { .. });
             ordered.sort_by(|left, right| {
                 let left_position = positions.get(&left.1);
                 let right_position = positions.get(&right.1);
@@ -63,41 +158,16 @@ pub fn project_phase(
         }
     }
 
-    let ranked = spatial_ranks(&distribution.ordering, &ordered, positions);
-    let block = usize::from(distribution.block_size.max(1));
-    let rank_count = ranked
-        .last()
-        .map_or(0, |(_, rank)| rank.saturating_add(1))
-        .div_ceil(block);
-    let repeats = usize::from(distribution.repeats.max(1)).min(rank_count.max(1));
-    ranked
-        .into_iter()
-        .map(|((_, target), spatial_rank)| {
-            let rank = spatial_rank / block;
-            let (_, local, length) = balanced_repeat(rank, rank_count, repeats);
-            let local = if distribution.wings {
-                local.min(length.saturating_sub(1).saturating_sub(local))
-            } else {
-                local
-            };
-            let effective_length = if distribution.wings {
-                length.div_ceil(2)
-            } else {
-                length
-            };
-            let distributed = if distribution.anchors_degrees.len() >= 2 {
-                anchor_phase(&distribution.anchors_degrees, local, effective_length)
-            } else if effective_length <= 1 {
-                0.0
-            } else {
-                local as f32 / effective_length as f32 * distribution.span_degrees
-            };
-            PhasePosition {
-                target,
-                degrees: distribution.offset_degrees + distributed,
-            }
-        })
-        .collect()
+    let ranked = spatial_ranks(ordering, &ordered, positions);
+    RankedSelection {
+        rank_count: ranked.last().map_or(0, |(_, rank)| rank + 1),
+        ordered_fixture_ids: ranked.iter().map(|((_, target), _)| *target).collect(),
+        rank_by_fixture: ranked
+            .into_iter()
+            .map(|((_, target), rank)| (target, rank))
+            .collect(),
+        warnings: Vec::new(),
+    }
 }
 
 /// Projects an authoritative spatial ranking into phase degrees.
@@ -150,7 +220,10 @@ fn spatial_ranks(
 ) -> Vec<((usize, FixtureId), usize)> {
     let spatial = !matches!(
         ordering,
-        PhaseOrdering::Selection | PhaseOrdering::RandomEachLoop { .. }
+        PhaseOrdering::Selection
+            | PhaseOrdering::SourceOrder
+            | PhaseOrdering::Spatial { .. }
+            | PhaseOrdering::RandomEachLoop { .. }
     );
     if !spatial {
         return ordered
@@ -224,7 +297,10 @@ fn spatial_key(ordering: &PhaseOrdering, position: Option<&SpatialPosition>) -> 
         PhaseOrdering::Axial { center_x, center_z } => {
             (position.z - center_z).atan2(position.x - center_x)
         }
-        PhaseOrdering::Selection | PhaseOrdering::RandomEachLoop { .. } => return None,
+        PhaseOrdering::Selection
+        | PhaseOrdering::SourceOrder
+        | PhaseOrdering::Spatial { .. }
+        | PhaseOrdering::RandomEachLoop { .. } => return None,
     };
     Some(value)
 }

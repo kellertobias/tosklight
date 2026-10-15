@@ -1039,3 +1039,175 @@ fn legacy_playback_and_output_runtime_payloads_are_preserved_for_recovery_at_con
         std::fs::remove_dir_all(data_dir).unwrap();
     }
 }
+
+/// A deleted Dynamic survives only in the Output checkpoint, so the active show marker
+/// cannot protect an older reader. Exercise the actual startup recovery boundary.
+#[test]
+fn phase_local_checkpoint_reader_four_preserves_deleted_dynamic_for_recovery() {
+    let temporary = std::path::PathBuf::from(
+        std::env::var_os("LIGHT_TMP_DIR").expect("repository test runner sets LIGHT_TMP_DIR"),
+    );
+    let data_dir = temporary.join(format!("tl807-output-recovery-{}", Uuid::new_v4()));
+    activate_blank_show(&data_dir);
+    let initial = super::semantic_contract_startup_support::load_startup_at(
+        5,
+        contract_recovery_options(&data_dir),
+    )
+    .unwrap();
+    let show_id = initial.persistent.active_show.as_ref().unwrap().id;
+    assert!(initial.engine.snapshot().dynamics.is_empty());
+    let mut definition = command_test_dynamic(Uuid::new_v4(), 1);
+    definition.phase.ordering = light_dynamics::PhaseOrdering::SourceOrder;
+    assert_eq!(definition.required_programming_contract(), 5);
+    let definition_id = definition.id;
+    let mut runtime = light_dynamics::DynamicRuntime::with_programming_contract_support(5);
+    runtime.install_definitions([definition]).unwrap();
+    runtime
+        .start(light_dynamics::DynamicStartRequest {
+            definition_id,
+            controller: light_dynamics::DynamicController {
+                id: Uuid::new_v4(),
+                source: light_dynamics::DynamicControllerSource::Programmer {
+                    programmer_id: Uuid::new_v4(),
+                    instance_link: None,
+                },
+                priority: 0,
+                activated_at_millis: 0,
+                size: 1.0,
+                speed_multiplier: 1.0,
+                phase_offset_degrees: 0.0,
+                paused: false,
+            },
+            target_scope: light_dynamics::DynamicTargetScope {
+                ordered_targets: vec![light_core::FixtureId::new()],
+            },
+            stage_positions: HashMap::new(),
+            inherited_spatial_mapping: None,
+            now_millis: 0,
+            activation_delay_millis: 0,
+            activation_duration_millis: 0,
+            activation_policy_override: None,
+            reuse_matching_targetless: false,
+        })
+        .unwrap();
+    let original = serde_json::to_string(&PersistedOutputRuntime {
+        dynamic_runtime: Some(runtime.snapshot()),
+        ..Default::default()
+    })
+    .unwrap();
+    // Rule out a malformed fixture/checkpoint as the reason the old reader refuses it.
+    PersistedOutputRuntime::decode_for_support(&original, 5).unwrap();
+    initial
+        .persistent
+        .desk
+        .set_setting(&output_runtime_setting(show_id), &original)
+        .unwrap();
+    drop(initial);
+    let startup = super::semantic_contract_startup_support::load_startup_at(
+        4,
+        contract_recovery_options(&data_dir),
+    )
+    .expect("older desk still starts in a recoverable state");
+    let error = startup
+        .active_show_error
+        .as_deref()
+        .expect("visible recovery message");
+    assert!(error.contains("programming contract 5"), "{error}");
+    assert!(error.contains("original data is preserved"), "{error}");
+    assert!(startup.output_runtime.dynamic_runtime.is_none());
+    assert_eq!(startup.persistent.active_show.as_ref().unwrap().id, show_id);
+    assert_eq!(
+        startup
+            .persistent
+            .desk
+            .setting(&output_runtime_setting(show_id))
+            .unwrap()
+            .as_deref(),
+        Some(original.as_str())
+    );
+    assert_eq!(preserved_runtime(&data_dir)["serialized"], original);
+    drop(startup);
+    std::fs::remove_dir_all(data_dir).unwrap();
+}
+
+#[test]
+fn phase_local_programmer_fallback_reader_four_preserves_normal_and_preload() {
+    let temporary = std::path::PathBuf::from(
+        std::env::var_os("LIGHT_TMP_DIR").expect("repository test runner sets LIGHT_TMP_DIR"),
+    );
+    for lane in [
+        "dynamic_values",
+        "preload_dynamic_pending",
+        "preload_dynamic_active",
+    ] {
+        let data_dir = temporary.join(format!("tl807-{lane}-recovery-{}", Uuid::new_v4()));
+        activate_blank_show(&data_dir);
+        let (session, empty, _) = contract_programmer();
+        let mut definition = command_test_dynamic(Uuid::new_v4(), 1);
+        definition.phase.ordering = light_dynamics::PhaseOrdering::SourceOrder;
+        let value = light_dynamics::DynamicAddressValue {
+            fixture_id: light_core::FixtureId::new(),
+            attribute: light_core::AttributeKey::intensity(),
+            value: light_dynamics::DynamicSemanticValue::DynamicOn {
+                instance_link: Uuid::new_v4(),
+                dynamic: light_dynamics::DynamicReference {
+                    dynamic_id: None,
+                    last_known_pool_number: 1,
+                    embedded_fallback: light_dynamics::DynamicDefinitionSnapshot {
+                        definition: Arc::new(definition.clone()),
+                    },
+                },
+                lane_id: definition.lanes[0].id,
+                overrides: light_dynamics::DynamicInstanceOverrides {
+                    size: 1.0,
+                    speed_multiplier: light_dynamics::Rational::ONE,
+                    phase_offset_degrees: 0.0,
+                },
+                timing: Default::default(),
+            },
+            programmer_order: 1,
+            changed_at_millis: fixed_test_time().timestamp_millis() as u64,
+        };
+        let mut stored = empty;
+        stored[lane] = serde_json::to_value(vec![value]).unwrap();
+        let typed: light_programmer::ProgrammerState =
+            serde_json::from_value(stored.clone()).unwrap();
+        assert_eq!(typed.required_programming_contract(), 5, "{lane}");
+        typed.validate_programming().unwrap();
+        let original = stored.to_string();
+        let desk = DeskStore::open(data_dir.join("desk.sqlite")).unwrap();
+        desk.save_session(&light_show::PersistedSession {
+            id: session,
+            token: "tl807-private-token".into(),
+            programmer_json: original.clone(),
+            connected: false,
+            updated_at: fixed_test_time().to_rfc3339(),
+        })
+        .unwrap();
+        drop(desk);
+        let startup = super::semantic_contract_startup_support::load_startup_at(
+            4,
+            contract_recovery_options(&data_dir),
+        )
+        .expect("older desk remains recoverable");
+        let error = startup
+            .active_show_error
+            .as_deref()
+            .expect("visible recovery");
+        assert!(error.contains("programming contract 5"), "{lane}: {error}");
+        assert!(
+            error.contains("original data is preserved"),
+            "{lane}: {error}"
+        );
+        assert!(startup.programmers.get(session).is_none());
+        assert_eq!(
+            startup.persistent.desk.persisted_sessions().unwrap()[0].programmer_json,
+            original
+        );
+        let report = preserved_runtime(&data_dir);
+        assert_eq!(report["serialized"], original);
+        assert!(!report.to_string().contains("tl807-private-token"));
+        drop(startup);
+        std::fs::remove_dir_all(data_dir).unwrap();
+    }
+}

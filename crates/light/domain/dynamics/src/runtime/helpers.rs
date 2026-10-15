@@ -7,58 +7,57 @@ pub(super) fn project_instance_phases(
     stage_positions: &HashMap<FixtureId, SpatialPosition>,
     inherited_spatial_mapping: Option<&SpatialSelectionMapping>,
 ) -> Result<HashMap<(Uuid, FixtureId), f32>, DynamicRuntimeError> {
-    let ranked_selection = definition
-        .lanes
+    let spatial_targets = targets
         .iter()
-        .any(|lane| {
-            matches!(
-                definition.phase_for_lane(lane).ordering,
-                PhaseOrdering::Selection
-            )
+        .copied()
+        .map(|fixture_id| SpatialTarget {
+            fixture_id,
+            position: stage_positions.get(&fixture_id).map(|p| Position3d {
+                x: f64::from(p.x),
+                y: f64::from(p.y),
+                z: f64::from(p.z),
+            }),
         })
-        .then(|| {
-            let spatial_targets = targets
-                .iter()
-                .copied()
-                .map(|fixture_id| SpatialTarget {
-                    fixture_id,
-                    position: stage_positions.get(&fixture_id).map(|position| Position3d {
-                        x: f64::from(position.x),
-                        y: f64::from(position.y),
-                        z: f64::from(position.z),
-                    }),
-                })
-                .collect::<Vec<_>>();
-            evaluate_dynamic_spatial_mapping(
+        .collect::<Vec<_>>();
+    let mut selection_ranking = None;
+    let mut source_ranking = None;
+    let mut result = HashMap::new();
+    for lane in &definition.lanes {
+        let phase = definition.phase_for_lane(lane);
+        let ranking = || {
+            crate::evaluate_phase_ordering(
+                &phase.ordering,
                 inherited_spatial_mapping,
                 &definition.spatial_mapping,
                 &spatial_targets,
-                None,
+                0,
             )
             .map_err(|error| DynamicRuntimeError::InvalidSpatialMapping(error.to_string()))
-        })
-        .transpose()?;
-
-    Ok(definition
-        .lanes
-        .iter()
-        .flat_map(|lane| {
-            let phase = definition.phase_for_lane(lane);
-            let projected = if matches!(phase.ordering, PhaseOrdering::Selection) {
-                project_ranked_phase(
-                    phase,
-                    ranked_selection
-                        .as_ref()
-                        .expect("Selection lanes resolve one shared spatial ranking"),
-                )
-            } else {
-                project_phase(phase, targets, stage_positions, 0)
-            };
-            projected
-                .into_iter()
-                .map(move |phase| ((lane.id, phase.target), phase.degrees))
-        })
-        .collect())
+        };
+        let owned;
+        let ranked = match phase.ordering {
+            PhaseOrdering::Selection => {
+                if selection_ranking.is_none() {
+                    selection_ranking = Some(ranking()?);
+                }
+                selection_ranking.as_ref().unwrap()
+            }
+            PhaseOrdering::SourceOrder => {
+                if source_ranking.is_none() {
+                    source_ranking = Some(ranking()?);
+                }
+                source_ranking.as_ref().unwrap()
+            }
+            _ => {
+                owned = ranking()?;
+                &owned
+            }
+        };
+        for projected in project_ranked_phase(phase, ranked) {
+            result.insert((lane.id, projected.target), projected.degrees);
+        }
+    }
+    Ok(result)
 }
 
 pub(super) fn sample_values_snapshot(

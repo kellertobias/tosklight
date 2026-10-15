@@ -528,6 +528,34 @@
         {
           "type": "object",
           "properties": {
+            "type": {
+              "type": "string",
+              "const": "source_order"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "shape": {
+              "$ref": "#/$defs/DynamicSpatialShapeStageProjection"
+            },
+            "type": {
+              "type": "string",
+              "const": "spatial"
+            }
+          },
+          "required": [
+            "type",
+            "shape"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
             "angle_degrees": {
               "type": "number",
               "format": "float"

@@ -71,6 +71,7 @@ export interface DynamicEditorProps {
 	): Promise<void>;
 	onLoadSpatialPreview?(
 		draft: DynamicSpatialMappingOverrideProjection,
+		phaseOrdering?: DynamicPhaseOrderingProjection,
 	): Promise<DynamicSpatialPreviewResponse>;
 	onApplySpatialMapping?(
 		draft: DynamicSpatialMappingOverrideProjection,
@@ -168,20 +169,20 @@ export function DynamicEditor({
 		selection,
 		onMutate,
 	);
-	const projectedPlane = useProjectedPlane(dynamic, onLoadSpatialPreview);
+	const projectedPlane = useProjectedPlane(
+		dynamic,
+		view === "phase" ? undefined : onLoadSpatialPreview,
+	);
 	const { contentSidebar, contentFooter } = editorSupplementalContent({
 		dynamic,
 		view,
 		previewPhase: previewing ? previewPhase : 0,
 		selection,
-		selectionAvailable: selection.length > 0 || selectedGroupId !== null,
 		positions: stageLayout.positions,
 		positions3d: stageLayout.positions3d,
 		projected: projectedPlane,
-		running,
-		takeSelection,
-		clearSelection,
-		onMutate,
+		lane,
+		loadPreview: onLoadSpatialPreview,
 	});
 	useEditorSynchronization({
 		dynamic,
@@ -347,29 +348,29 @@ function editorSupplementalContent({
 	view,
 	previewPhase,
 	selection,
-	selectionAvailable,
 	positions,
 	positions3d,
 	projected,
-	running,
-	takeSelection,
-	clearSelection,
-	onMutate,
+	lane,
+	loadPreview,
 }: {
 	dynamic: DynamicObject;
 	view: DynamicEditorView;
 	previewPhase: number;
 	selection: readonly string[];
-	selectionAvailable: boolean;
 	positions: ReturnType<typeof useStageLayout>["positions"];
 	positions3d: ReturnType<typeof useStageLayout>["positions3d"];
 	projected: ProjectedPlanePositions | undefined;
-	running: boolean;
-	takeSelection(): unknown;
-	clearSelection(): unknown;
-	onMutate: DynamicEditorProps["onMutate"];
+	lane: DynamicLaneProjection | undefined;
+	loadPreview: DynamicEditorProps["onLoadSpatialPreview"];
 }) {
-	const contentSidebar = (
+	const contentSidebar = view === "phase" ? (
+		<DynamicPhaseRankPreview
+			dynamic={dynamic}
+			lane={lane}
+			loadPreview={loadPreview}
+		/>
+	) : (
 		<DynamicSelectionPreview
 			dynamic={dynamic}
 			previewPhase={previewPhase}
@@ -379,23 +380,7 @@ function editorSupplementalContent({
 			projected={projected}
 		/>
 	);
-	const contentFooter =
-		view === "phase" ? (
-			<DynamicPhaseQuickControls
-				phase={dynamic.body.phase}
-				running={running}
-				selectionCount={selectionAvailable ? 1 : 0}
-				targetless={dynamic.body.target_binding.type === "targetless"}
-				onPhasePatch={(patch) =>
-					void onMutate(dynamic, {
-						type: "set_phase",
-						phase: { ...dynamic.body.phase, ...patch },
-					})
-				}
-				onTakeSelection={() => void takeSelection()}
-				onClearSelection={() => void clearSelection()}
-			/>
-		) : null;
+	const contentFooter = null;
 	return { contentSidebar, contentFooter };
 }
 
@@ -581,7 +566,7 @@ function useDynamicEditorSessionSync({
 }
 
 import {
-	DynamicPhaseQuickControls,
+	DynamicPhaseRankPreview,
 	DynamicSelectionPreview,
 	dynamicPreviewCycleMillis,
 	type ProjectedPlanePositions,

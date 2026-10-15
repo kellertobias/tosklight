@@ -559,7 +559,7 @@ describe("DynamicsWindow", () => {
 		).toBeInTheDocument();
 	});
 
-	it("uses the production selection preview and Phase footer", () => {
+	it("uses the authoritative Phase preview with truthful targetless guidance", () => {
 		dynamics = [dynamicObject()];
 		const { container } = renderWindow();
 
@@ -569,22 +569,17 @@ describe("DynamicsWindow", () => {
 		fireEvent.click(screen.getByRole("tab", { name: "Phase" }));
 
 		expect(
-			container.querySelector('aside[aria-label="Selection preview"]'),
+			container.querySelector('aside[aria-label="Authoritative Phase preview"]'),
 		).toBeInTheDocument();
-		expect(
-			container.querySelector(
-				'[role="img"][aria-label="Front-end-only preview of 400 virtual fixtures"]',
-			),
-		).toBeInTheDocument();
-		const quickControls = screen.getByRole("group", {
-			name: "Phase quick controls",
-		});
-		expect(
-			within(quickControls).getByRole("radio", { name: "Linear" }),
-		).toBeInTheDocument();
-		expect(
-			within(quickControls).getByRole("button", { name: "Take Selection" }),
-		).toBeDisabled();
+		expect(screen.getByText(
+			"Choose a saved Group or frozen targets to preview Phase ranks.",
+		)).toBeInTheDocument();
+		expect(container.querySelector(
+			'[role="img"][aria-label="Front-end-only preview of 400 virtual fixtures"]',
+		)).toBeNull();
+		expect(screen.queryByRole("group", { name: "Phase quick controls" })).toBeNull();
+		expect(screen.getAllByRole("radiogroup", { name: "Ordering mode" })).toHaveLength(1);
+		expect(screen.getByRole("radio", { name: /^Linear$/ })).toHaveAttribute("aria-checked", "true");
 	});
 
 	it("sends speed-group taps to the selected group", async () => {
@@ -1063,7 +1058,7 @@ describe("DynamicsWindow", () => {
 		expect(shiftLatch).toHaveAttribute("aria-pressed", "false");
 	});
 
-	it("uses an ordering-mode toggle without exposing uniform or per-lane scope", async () => {
+	it("uses phase-local ordering with visible uniform and per-lane scope", async () => {
 		dynamics = [dynamicObject({ multipleLanes: true })];
 		renderWindow();
 		fireEvent.click(screen.getByRole("button", { name: /Pulse/i }), {
@@ -1074,8 +1069,8 @@ describe("DynamicsWindow", () => {
 		expect(
 			screen.getByRole("radiogroup", { name: "Ordering mode" }),
 		).toBeInTheDocument();
-		expect(screen.queryByRole("button", { name: "Uniform" })).toBeNull();
-		expect(screen.queryByRole("button", { name: "Per lane" })).toBeNull();
+		expect(screen.getByRole("radio", { name: "Uniform" })).toHaveAttribute("aria-checked", "true");
+		expect(screen.getByRole("radio", { name: "Per lane" })).toBeInTheDocument();
 		expect(screen.queryByLabelText("Dynamic phase lane")).toBeNull();
 
 		fireEvent.click(screen.getByRole("radio", { name: "Grid" }));
@@ -1088,7 +1083,12 @@ describe("DynamicsWindow", () => {
 				expect.objectContaining({
 					type: "set_phase",
 					phase: expect.objectContaining({
-						ordering: expect.objectContaining({ type: "grid_linear" }),
+						ordering: {
+							type: "spatial",
+							shape: { type: "replace", value: {
+								type: "grid", angle_degrees: 0, direction: "ascending",
+							} },
+						},
 					}),
 				}),
 				undefined,

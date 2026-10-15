@@ -131,7 +131,9 @@ fn legacy_spatial_mapping(ordering: &PhaseOrdering) -> DynamicSpatialMappingOver
         ))
     };
     let (projection, shape) = match *ordering {
-        PhaseOrdering::Selection => return DynamicSpatialMappingOverride::default(),
+        PhaseOrdering::Selection | PhaseOrdering::SourceOrder | PhaseOrdering::Spatial { .. } => {
+            return DynamicSpatialMappingOverride::default();
+        }
         PhaseOrdering::GridLinear { angle_degrees } => (
             front(),
             OverrideStage::Replace(DynamicSelectionShape::Grid {
@@ -363,11 +365,30 @@ pub struct PhaseDistribution {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PhaseOrdering {
     Selection,
-    GridLinear { angle_degrees: f32 },
-    RadialOut { center_x: f32, center_z: f32 },
-    RadialIn { center_x: f32, center_z: f32 },
-    Axial { center_x: f32, center_z: f32 },
-    RandomEachLoop { seed: u64 },
+    /// Explicit source order, independent of any Group or stored spatial mapping.
+    SourceOrder,
+    /// A phase-local shape sharing only the Dynamic's projection stage.
+    Spatial {
+        shape: OverrideStage<DynamicSelectionShape>,
+    },
+    GridLinear {
+        angle_degrees: f32,
+    },
+    RadialOut {
+        center_x: f32,
+        center_z: f32,
+    },
+    RadialIn {
+        center_x: f32,
+        center_z: f32,
+    },
+    Axial {
+        center_x: f32,
+        center_z: f32,
+    },
+    RandomEachLoop {
+        seed: u64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

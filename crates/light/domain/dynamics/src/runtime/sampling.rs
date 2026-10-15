@@ -501,7 +501,16 @@ fn random_phase_by_lane_target(
         .iter()
         .filter_map(|lane| {
             let phase = definition.phase_for_lane(lane);
-            matches!(phase.ordering, crate::PhaseOrdering::RandomEachLoop { .. }).then(|| {
+            matches!(
+                phase.ordering,
+                crate::PhaseOrdering::RandomEachLoop { .. }
+                    | crate::PhaseOrdering::Spatial {
+                        shape: crate::OverrideStage::Replace(
+                            crate::DynamicSelectionShape::Random { .. }
+                        )
+                    }
+            )
+            .then(|| {
                 let loop_index = match definition.phase_spread_mode {
                     crate::DynamicPhaseSpreadMode::Uniform => {
                         elapsed / cycle_duration_millis.max(1)
@@ -514,7 +523,7 @@ fn random_phase_by_lane_target(
                 };
                 (
                     lane.id,
-                    project_phase(phase, targets, &HashMap::new(), loop_index)
+                    random_ordered_phases(phase, targets, loop_index)
                         .into_iter()
                         .map(|phase| (phase.target, phase.degrees))
                         .collect(),
@@ -759,4 +768,30 @@ fn finish_synchronized_resume(
             .synchronized_hold_angle_sources
             .retain(|key| instance.unavailable_samples.contains_key(key));
     }
+}
+
+fn random_ordered_phases(
+    phase: &crate::PhaseDistribution,
+    targets: &[FixtureId],
+    loop_index: u64,
+) -> Vec<crate::PhasePosition> {
+    if matches!(phase.ordering, crate::PhaseOrdering::RandomEachLoop { .. }) {
+        return project_phase(phase, targets, &HashMap::new(), loop_index);
+    }
+    let spatial_targets = targets
+        .iter()
+        .map(|id| SpatialTarget {
+            fixture_id: *id,
+            position: None,
+        })
+        .collect::<Vec<_>>();
+    crate::evaluate_phase_ordering(
+        &phase.ordering,
+        None,
+        &crate::DynamicSpatialMappingOverride::default(),
+        &spatial_targets,
+        loop_index,
+    )
+    .map(|ranked| project_ranked_phase(phase, &ranked))
+    .unwrap_or_default()
 }

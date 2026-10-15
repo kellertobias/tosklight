@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 mod change_lead;
 mod lane_contract;
+mod phase_authority;
 mod runtime_control;
 mod runtime_control_journal;
 mod runtime_output_gate;

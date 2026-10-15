@@ -61,7 +61,9 @@ pub const LIVE_PRESET_REFERENCE_CONTRACT: u16 = 2;
 pub const INDEPENDENT_CUELIST_POOL_CONTRACT: u16 = 3;
 /// Explicit operator-consented projection of already-authored replacement programming.
 pub const REPLACEMENT_PROGRAM_PROJECTION_CONTRACT: u16 = 4;
-pub const SUPPORTED_PROGRAMMING_CONTRACT: u16 = REPLACEMENT_PROGRAM_PROJECTION_CONTRACT;
+/// Explicit source order and phase-local spatial ordering, independent for each Dynamic lane.
+pub const DYNAMIC_PHASE_ORDERING_CONTRACT: u16 = 5;
+pub const SUPPORTED_PROGRAMMING_CONTRACT: u16 = DYNAMIC_PHASE_ORDERING_CONTRACT;
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{0}")]

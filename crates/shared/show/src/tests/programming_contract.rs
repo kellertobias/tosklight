@@ -756,3 +756,99 @@ fn replacement_projection_feature_is_gated_even_when_destinations_are_dormant() 
         1
     );
 }
+
+#[test]
+fn phase_local_orderings_require_five_in_global_lane_and_embedded_definitions() {
+    for ordering in [
+        json!({"type":"source_order"}),
+        json!({"type":"spatial", "shape":{"type":"inherit"}}),
+    ] {
+        let global = json!({"phase":{"ordering":ordering}, "lanes":[]});
+        let lane = json!({"phase":{"ordering":{"type":"selection"}}, "lanes":[{"phase":{"ordering":ordering}}]});
+        for body in [global, lane] {
+            for authored in [
+                body.clone(),
+                json!({"cues":[{"changes":[{"value":{"dynamic_fallback":body}}]}]}),
+                json!({"values":{"dynamic":{"definition":body}}}),
+            ] {
+                assert_eq!(
+                    required_object_programming_contract(&authored),
+                    5,
+                    "{authored}"
+                );
+                assert!(
+                    check_programming_object_writes(4, [("dynamic", "d1", &authored)]).is_err()
+                );
+                check_programming_object_writes(5, [("dynamic", "d1", &authored)]).unwrap();
+            }
+        }
+    }
+    for ordering in ["selection", "grid", "radial", "radar", "random_each_loop"] {
+        assert_eq!(
+            required_object_programming_contract(&json!({"phase":{"ordering":{"type":ordering}}})),
+            1
+        );
+    }
+}
+
+#[test]
+fn phase_local_writer_stamps_five_and_reader_four_preserves_original_file() {
+    let (path, store) = create("tl807-phase-marker");
+    let mut transaction = store.portable_document().unwrap().transaction();
+    transaction.put(
+        "dynamic",
+        "d1",
+        json!({"phase":{"ordering":{"type":"spatial", "shape":{"type":"inherit"}}}}),
+    );
+    transaction.check_programming_contract(5).unwrap();
+    assert!(transaction.stamp_programming_contract(5));
+    store.apply_portable_transaction(transaction).unwrap();
+    assert_eq!(
+        store.programming_contract_marker().unwrap(),
+        ProgrammingContractMarker::Declared(5)
+    );
+    drop(store);
+    let before = bytes(&path);
+    assert!(
+        validate_show_programming_contract(&path, 4)
+            .unwrap_err()
+            .to_string()
+            .contains("supports 4")
+    );
+    assert_eq!(bytes(&path), before);
+    validate_show_programming_contract(&path, 5).unwrap();
+    remove(&path);
+}
+
+#[test]
+fn phase_local_direct_writer_stamps_five_without_upgrading_legacy_dynamic() {
+    let (path, store) = create("tl807-direct-phase-marker");
+    store
+        .put_object_at_contract(
+            "dynamic",
+            "old",
+            &json!({"phase":{"ordering":{"type":"selection"}}}),
+            0,
+            5,
+        )
+        .unwrap();
+    assert_eq!(
+        store.programming_contract_marker().unwrap(),
+        ProgrammingContractMarker::Declared(1)
+    );
+    store
+        .put_object_at_contract(
+            "dynamic",
+            "new",
+            &json!({"phase":{"ordering":{"type":"source_order"}}}),
+            0,
+            5,
+        )
+        .unwrap();
+    assert_eq!(
+        store.programming_contract_marker().unwrap(),
+        ProgrammingContractMarker::Declared(5)
+    );
+    drop(store);
+    remove(&path);
+}

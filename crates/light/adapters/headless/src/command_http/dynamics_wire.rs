@@ -387,8 +387,23 @@ fn random_group(value: &domain::DynamicRandomGroup) -> wire::DynamicRandomGroupP
 
 fn phase(value: &domain::PhaseDistribution) -> wire::DynamicPhaseDistributionProjection {
     wire::DynamicPhaseDistributionProjection {
-        ordering: match value.ordering {
+        ordering: match value.ordering.clone() {
             domain::PhaseOrdering::Selection => wire::DynamicPhaseOrderingProjection::Selection,
+            domain::PhaseOrdering::SourceOrder => wire::DynamicPhaseOrderingProjection::SourceOrder,
+            domain::PhaseOrdering::Spatial { shape } => {
+                wire::DynamicPhaseOrderingProjection::Spatial {
+                    shape: match shape {
+                        domain::OverrideStage::Inherit => {
+                            wire::DynamicSpatialShapeStageProjection::Inherit {}
+                        }
+                        domain::OverrideStage::Replace(value) => {
+                            wire::DynamicSpatialShapeStageProjection::Replace {
+                                value: wire_shape(&value),
+                            }
+                        }
+                    },
+                }
+            }
             domain::PhaseOrdering::GridLinear { angle_degrees } => {
                 wire::DynamicPhaseOrderingProjection::GridLinear { angle_degrees }
             }

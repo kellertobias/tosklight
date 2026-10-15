@@ -1,3 +1,10 @@
+import {
+	usePatchStoreOrNull,
+	usePatchView,
+} from "../../features/patch/PatchContext";
+import { PhaseOrderPreview } from "../../features/spatialMapping/PhaseOrderPreview";
+import { phaseOrderingChoice, selectedDynamicPhase } from "../../features/dynamics/phaseOrderingShape";
+import { dynamicSpatialDraft } from "../../features/dynamics/dynamicSpatialDraft";
 import { type ScalarDynamicLane } from "../../features/dynamics/laneModel";
 import {
 	dynamicLaneDomain,
@@ -6,10 +13,18 @@ import {
 	graphLane,
 } from "../../features/dynamics/editableLane";
 import { laneGraphFraction } from "../../features/dynamics/laneDomain";
-import { Button, MultiValueToggle } from "@tosklight/ui";
-import { type CSSProperties, useMemo } from "react";
+import {
+	type CSSProperties,
+	useEffect,
+	useMemo,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import type {
 	DynamicDefinitionProjection,
+	DynamicPhaseOrderingProjection,
+	DynamicSpatialMappingOverrideProjection,
+	DynamicSpatialPreviewResponse,
 	DynamicLaneProjection,
 	DynamicPeriodicFunctionProjection,
 	DynamicScalarSourceProjection,
@@ -518,78 +533,95 @@ export function dynamicPreviewCycleMillis(
 	);
 }
 
-export function DynamicPhaseQuickControls({
-	phase,
-	running,
-	selectionCount,
-	targetless,
-	onPhasePatch,
-	onTakeSelection,
-	onClearSelection,
+
+/** A Phase view reads the exact selected lane's rank authority; it never invents a rig. */
+export function DynamicPhaseRankPreview({
+	dynamic,
+	lane,
+	loadPreview,
 }: {
-	phase: DynamicObject["body"]["phase"];
-	running: boolean;
-	selectionCount: number;
-	targetless: boolean;
-	onPhasePatch(patch: Partial<DynamicObject["body"]["phase"]>): void;
-	onTakeSelection(): void;
-	onClearSelection(): void;
+	dynamic: DynamicObject;
+	lane: DynamicLaneProjection | undefined;
+	loadPreview?: (
+		draft: DynamicSpatialMappingOverrideProjection,
+		ordering?: DynamicPhaseOrderingProjection,
+	) => Promise<DynamicSpatialPreviewResponse>;
 }) {
-	const orderingValue =
-		phase.ordering.type === "radial_in" ? "radial_out" : phase.ordering.type;
+	usePatchView(dynamic.body.target_binding.type !== "targetless");
+	const patch = usePatchStoreOrNull();
+	const patchRevision = useSyncExternalStore(
+		patch?.subscribe ?? noPhasePatchSubscription,
+		() => patch?.getSnapshot().patchRevision ?? null,
+	);
+	const [preview, setPreview] = useState<DynamicSpatialPreviewResponse | null>(null);
+	const [error, setError] = useState(false);
+	const ordering = selectedDynamicPhase(dynamic.body, lane).ordering;
+	const orderingChoice = phaseOrderingChoice(
+		ordering, dynamic.body.spatial_mapping, dynamic.body.target_binding,
+	);
+	const orderingKey = JSON.stringify(ordering);
+	const mappingKey = JSON.stringify(dynamic.body.spatial_mapping);
+	useEffect(() => {
+		let cancelled = false;
+		setPreview(null);
+		setError(false);
+		if (!loadPreview || dynamic.body.target_binding.type === "targetless") return;
+		void loadPreview(dynamicSpatialDraft(dynamic.body.spatial_mapping), ordering)
+			.then((next) => {
+				if (!cancelled) setPreview(next);
+			})
+			.catch(() => {
+				if (!cancelled) setError(true);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [dynamic.id, dynamic.revision, orderingKey, mappingKey, patchRevision, loadPreview]);
 	return (
-		<fieldset
-			className="dynamic-discussion-phase-controls"
-			aria-label="Phase quick controls"
+		<aside
+			className="dynamic-discussion-preview-sidebar dynamic-phase-rank-preview"
+			aria-label="Authoritative Phase preview"
 		>
-			<div className="dynamic-discussion-phase-ordering">
-				<MultiValueToggle
-					ariaLabel="Ordering mode"
-					value={orderingValue}
-					options={[
-						{ value: "selection", label: "Linear" },
-						{ value: "grid_linear", label: "Grid" },
-						{ value: "radial_out", label: "Radial" },
-						{ value: "axial", label: "Radar" },
-						{ value: "random_each_loop", label: "Random" },
-					]}
-					onChange={(type) => {
-						const center =
-							phase.ordering.type === "radial_out" ||
-							phase.ordering.type === "radial_in" ||
-							phase.ordering.type === "axial"
-								? {
-										center_x: phase.ordering.center_x,
-										center_z: phase.ordering.center_z,
-									}
-								: { center_x: 0, center_z: 0 };
-						onPhasePatch({
-							ordering:
-								type === "grid_linear"
-									? { type, angle_degrees: 90 }
-									: type === "radial_out" || type === "axial"
-										? { type, ...center }
-										: type === "random_each_loop"
-											? { type, seed: 201 }
-											: { type: "selection" },
-						});
-					}}
+			<h3>Phase ranks</h3>
+			{dynamic.body.target_binding.type === "targetless" ? (
+				<p>Choose a saved Group or frozen targets to preview Phase ranks.</p>
+			) : error || !loadPreview ? (
+				<p role="status">Phase preview unavailable. Reopen the view to retry.</p>
+			) : !preview ? (
+				<p>Loading authoritative Phase ranks…</p>
+			) : !preview.source_order.length ? (
+				<p>No resolved targets to preview.</p>
+			) : preview.projected_positions.some((point) => point.u != null && point.v != null) ? (
+				<PhaseOrderPreview
+					positions={preview.projected_positions.map((point) => ({
+						...point, u: point.u ?? null, v: point.v ?? null,
+					}))}
+					ranks={preview.ranks}
+					rankCount={preview.rank_count}
+					unplaced={preview.warnings.length}
 				/>
-			</div>
-			<div className="dynamic-discussion-phase-actions">
-				<Button
-					disabled={running || selectionCount === 0}
-					onClick={onTakeSelection}
-				>
-					Take Selection
-				</Button>
-				<Button disabled={running || targetless} onClick={onClearSelection}>
-					Clear Selection
-				</Button>
-			</div>
-		</fieldset>
+			) : (
+				<>
+					<p>{orderingChoice === "source_order"
+						? "Source order; no spatial plane is used."
+						: orderingChoice === "random"
+							? "Random ranks; no spatial plane is used."
+							: "Spatial positions unavailable; showing authoritative ranks."}</p>
+					<ol>
+						{preview.source_order.map((id, index) => (
+							<li key={id} title={id}>
+								Target {index + 1}: Rank {(preview.ranks.find((row) => row.fixture_id === id)?.rank ?? index) + 1}
+							</li>
+						))}
+					</ol>
+				</>
+			)}
+		</aside>
 	);
 }
+
+const noPhasePatchSubscription = () => () => undefined;
+
 
 function clamp(value: number, minimum: number, maximum: number) {
 	return Math.max(minimum, Math.min(maximum, value));

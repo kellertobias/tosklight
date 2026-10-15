@@ -228,6 +228,19 @@ fn valid_phase(phase: &crate::PhaseDistribution) -> bool {
         && phase.block_size > 0
         && phase.repeats > 0
         && phase.anchors_degrees.iter().all(|value| value.is_finite())
+        && match &phase.ordering {
+            PhaseOrdering::Spatial { shape } => crate::evaluate_dynamic_spatial_mapping(
+                None,
+                &DynamicSpatialMappingOverride {
+                    projection: OverrideStage::Inherit,
+                    shape: shape.clone(),
+                },
+                &[],
+                None,
+            )
+            .is_ok(),
+            _ => true,
+        }
 }
 
 fn validate_lane(

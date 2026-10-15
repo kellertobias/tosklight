@@ -104,6 +104,21 @@ impl DynamicLane {
 
 impl DynamicDefinition {
     pub fn required_programming_contract(&self) -> u16 {
+        let phase_requires_five = |phase: &PhaseDistribution| {
+            matches!(
+                phase.ordering,
+                PhaseOrdering::SourceOrder | PhaseOrdering::Spatial { .. }
+            )
+        };
+        if phase_requires_five(&self.phase)
+            || self
+                .lanes
+                .iter()
+                .filter_map(|lane| lane.phase.as_ref())
+                .any(phase_requires_five)
+        {
+            return light_core::programming::DYNAMIC_PHASE_ORDERING_CONTRACT;
+        }
         u16::from(
             self.lanes
                 .iter()

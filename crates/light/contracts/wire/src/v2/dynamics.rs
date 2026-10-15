@@ -137,6 +137,9 @@ pub struct DynamicSpatialPreviewRequest {
     #[ts(type = "number")]
     pub expected_show_revision: u64,
     pub spatial_mapping: DynamicSpatialMappingOverrideProjection,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub phase_ordering: Option<DynamicPhaseOrderingProjection>,
 }
 
 /// Authoritative physical position, including logical-head aliases of one physical fixture.
@@ -375,6 +378,10 @@ pub struct DynamicPhaseDistributionProjection {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DynamicPhaseOrderingProjection {
     Selection,
+    SourceOrder,
+    Spatial {
+        shape: DynamicSpatialShapeStageProjection,
+    },
     GridLinear {
         angle_degrees: f32,
     },

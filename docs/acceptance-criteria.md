@@ -66,3 +66,12 @@ the applicable compatibility and recovery path above.
   supporting at most 2 refuse marker 3. Ambiguous legacy addresses are rejected. See
   [the compatibility plan](plans/independent-cuelist-addresses.md). Implementation and operator
   acceptance remain separately tracked in the release evidence.
+
+
+- **Phase-local Dynamic ordering (TL-807), feature contract 5.** Explicit Linear uses
+  source order; a phase-local spatial choice uses its own inherited or overridden shape and
+  the Dynamic's Projection. Each lane can retain a separate choice. Existing Selection and
+  legacy spatial ordering variants retain their previous meaning and are not rewritten when
+  opened. Only newly authored `source_order` or `spatial` ordering requires marker 5,
+  including embedded Dynamic fallbacks; older readers refuse it before writable use.
+  The SQLite schema is unchanged. Native and release acceptance remain separately tracked.
