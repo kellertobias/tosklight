@@ -4,6 +4,7 @@ mod fixtures;
 mod installed_color;
 mod locations;
 mod native_color;
+mod preset_links;
 mod programming;
 mod rewrite;
 
@@ -12,6 +13,7 @@ use light_show::PortableShowObject;
 
 pub(super) use fixtures::FixtureIdentityCatalog;
 pub(super) use native_color::PinnedProfileMap;
+pub(super) use preset_links::{PresetInstanceCatalog, PresetOwnerRewrite, add_cue_preset_links};
 pub(super) use rewrite::{IdentityMap, ProfileMap, rewrite_body};
 
 #[derive(Clone, Copy)]

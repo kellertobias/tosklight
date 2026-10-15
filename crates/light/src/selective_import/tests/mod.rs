@@ -14,3 +14,5 @@ mod semantic_static_import;
 mod support;
 
 mod position_freeze;
+
+mod preset_instance_identity;

@@ -5,7 +5,7 @@ use crate::{
         AppliedImportObject, ImportBlocker, ImportDependency, ImportManagedAssetAction,
         ImportManagedAssetPreview, ImportObjectAction, ImportProfilePreview,
         SelectiveShowImportPorts, SelectiveShowImportPreview,
-        references::{IdentityMap, PinnedProfileMap, ProfileMap, rewrite_body},
+        references::{IdentityMap, PinnedProfileMap, PresetOwnerRewrite, ProfileMap, rewrite_body},
     },
 };
 use light_show::PortableShowObjectKey;
@@ -51,6 +51,26 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 Some((*source, (original, copied)))
             })
             .collect();
+        let written_presets = self
+            .items
+            .iter()
+            .filter(|(source, item)| {
+                source.kind() == "preset"
+                    && matches!(
+                        item.action,
+                        ImportObjectAction::ImportPreservingId
+                            | ImportObjectAction::ReplaceDestination
+                            | ImportObjectAction::Duplicate { .. }
+                    )
+            })
+            .map(|(source, _)| source.clone())
+            .collect();
+        let owners = PresetOwnerRewrite {
+            identities,
+            written_presets: &written_presets,
+            source_fixtures: &self.source_fixtures,
+            target_fixtures: &self.target_fixtures,
+        };
         let mut writes = Vec::new();
         for (source, item) in &self.items {
             if !matches!(
@@ -69,8 +89,21 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 identities,
                 profiles,
                 &pinned_profiles,
-            ) {
+            )
+            .and_then(|mut body| {
+                owners.rewrite(&item.body, &mut body, source, &item.descriptor)?;
+                Ok(body)
+            }) {
                 Ok(mut body) => {
+                    if source.kind() == "preset"
+                        && matches!(item.action, ImportObjectAction::ReplaceDestination)
+                    {
+                        preserve_replaced_preset_instance(
+                            &mut body,
+                            self.target
+                                .object(item.destination.kind(), item.destination.id()),
+                        );
+                    }
                     if source.kind() == "schedule" {
                         reset_schedule_anchor(&mut body);
                     }
@@ -176,5 +209,21 @@ fn reset_schedule_anchor(body: &mut serde_json::Value) {
             );
         }
         _ => {}
+    }
+}
+
+/// Replacement edits the destination instance; a legacy source has no identity slot
+/// to rewrite, so retain the existing destination identity explicitly before migration.
+/// New/copied legacy Presets still use the ordinary one-time identity migration.
+fn preserve_replaced_preset_instance(
+    body: &mut serde_json::Value,
+    destination: Option<&light_show::PortableShowObject>,
+) {
+    if let Some(instance) = destination
+        .and_then(|object| object.body().get("instance_id"))
+        .filter(|value| !value.is_null())
+        && let Some(body) = body.as_object_mut()
+    {
+        body.insert("instance_id".into(), instance.clone());
     }
 }

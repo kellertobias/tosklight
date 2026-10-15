@@ -111,7 +111,9 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
         if matches!(action, ImportObjectAction::KeepDestination) {
             return self.destination_descriptor_identities(destination, descriptor);
         }
-        if matches!(action, ImportObjectAction::ReplaceDestination) && source != destination {
+        if matches!(action, ImportObjectAction::ReplaceDestination)
+            && (source != destination || source.kind() == "preset")
+        {
             return self.replacement_destination_identities(source, destination, descriptor);
         }
         let mut identities = BTreeMap::new();
@@ -163,6 +165,10 @@ impl<P: SelectiveShowImportPorts> Planner<'_, P> {
                 Some(value) => {
                     identities.insert(source_identity.slot.clone(), value.clone());
                 }
+                // An optional legacy instance is not invented by keeping an object.
+                // A Cue that needs this absent slot still fails the exact rewrite below.
+                None if destination.kind() == "preset"
+                    && source_identity.slot == "preset_instance" => {}
                 None => self.blockers.push(ImportBlocker::InvalidResolution {
                     key: destination.clone(),
                     message: format!(

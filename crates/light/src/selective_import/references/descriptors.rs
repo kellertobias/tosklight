@@ -286,6 +286,7 @@ pub(super) fn preset_descriptor(
         )?],
         ..ImportObjectDescriptor::default()
     };
+    super::preset_links::add_preset_instance_identity(object.body(), &mut descriptor)?;
     add_fixture_map_keys(object.body(), "/values", source, target, &mut descriptor)?;
     add_direct_map_keys(object.body(), "/group_values", "group", &mut descriptor)?;
     ProgrammingReferences {

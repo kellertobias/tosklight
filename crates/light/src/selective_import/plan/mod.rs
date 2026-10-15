@@ -4,8 +4,8 @@ use super::{
     SelectiveShowImportPorts, SelectiveShowImportPreview, SelectiveShowImportRequest,
     identity::IdentityAllocator,
     references::{
-        FixtureIdentityCatalog, IdentityMap, ProfileMap, is_registered_object_kind,
-        registered_descriptor,
+        FixtureIdentityCatalog, IdentityMap, PresetInstanceCatalog, ProfileMap,
+        add_cue_preset_links, is_registered_object_kind, registered_descriptor,
     },
 };
 use crate::AssetReference;
@@ -55,6 +55,8 @@ pub(super) struct Planner<'a, P: SelectiveShowImportPorts> {
     ports: &'a P,
     source_fixtures: FixtureIdentityCatalog,
     target_fixtures: FixtureIdentityCatalog,
+    source_presets: PresetInstanceCatalog,
+    target_presets: PresetInstanceCatalog,
     source_custom_descriptors: CustomDescriptorCatalog,
     target_custom_descriptors: CustomDescriptorCatalog,
     allocator: IdentityAllocator,
@@ -81,38 +83,18 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
     ) -> Self {
         let source_fixtures = FixtureIdentityCatalog::from_document(source);
         let target_fixtures = FixtureIdentityCatalog::from_document(target);
-        let reserves_generated_identities = request.mode == super::ImportLoadMode::AddToEnd
-            || request
-                .conflict_resolutions
-                .values()
-                .any(|resolution| matches!(resolution, super::ImportConflictResolution::Duplicate))
-            || request
-                .profile_conflict_resolutions
-                .values()
-                .any(|resolution| {
-                    matches!(
-                        resolution,
-                        super::ImportProfileConflictResolution::Duplicate
-                    )
-                });
+        let source_presets = PresetInstanceCatalog::from_document(source);
+        let target_presets = PresetInstanceCatalog::from_document(target);
         let (source_custom_descriptors, target_custom_descriptors) =
-            if reserves_generated_identities {
-                (
-                    CustomDescriptorCatalog::from_document(source, ports),
-                    CustomDescriptorCatalog::from_document(target, ports),
-                )
-            } else {
-                (
-                    CustomDescriptorCatalog::default(),
-                    CustomDescriptorCatalog::default(),
-                )
-            };
+            custom_identity_catalogs(request, source, target, ports);
         let mut keys = target
             .objects()
             .map(|object| object.key().clone())
             .collect::<Vec<_>>();
-        let mut identity_values = target_fixtures
-            .values()
+        let mut identity_values = source_presets
+            .identity_values()
+            .chain(target_presets.identity_values())
+            .chain(target_fixtures.values())
             .chain(target_custom_descriptors.identity_values())
             .chain(
                 target
@@ -196,6 +178,8 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
             ports,
             source_fixtures,
             target_fixtures,
+            source_presets,
+            target_presets,
             source_custom_descriptors,
             target_custom_descriptors,
             allocator: IdentityAllocator::new(
@@ -331,7 +315,19 @@ impl<'a, P: SelectiveShowImportPorts> Planner<'a, P> {
         } else {
             self.custom_descriptor(object, DocumentSide::Source)
         };
-        self.describe(object, custom)
+        let mut descriptor = self.describe(object, custom);
+        if let Err(message) = add_cue_preset_links(
+            object,
+            &self.source_presets,
+            &self.target_presets,
+            &mut descriptor,
+        ) {
+            self.blockers.push(ImportBlocker::InvalidDescriptor {
+                key: object.key().clone(),
+                message,
+            });
+        }
+        descriptor
     }
 
     fn describe_target(&mut self, object: &PortableShowObject) -> ImportObjectDescriptor {
@@ -483,6 +479,41 @@ fn positional_identity(
         .iter()
         .find(|identity| identity.slot == "object")
         .map(|identity| identity.value.clone())
+}
+
+/// Reserve custom identities only for the existing generated-identity branches.
+fn custom_identity_catalogs<P: SelectiveShowImportPorts>(
+    request: &SelectiveShowImportRequest,
+    source: &PortableShowDocument,
+    target: &PortableShowDocument,
+    ports: &P,
+) -> (CustomDescriptorCatalog, CustomDescriptorCatalog) {
+    let reserves_generated_identities = request.mode == super::ImportLoadMode::AddToEnd
+        || request
+            .conflict_resolutions
+            .values()
+            .any(|resolution| matches!(resolution, super::ImportConflictResolution::Duplicate))
+        || request
+            .profile_conflict_resolutions
+            .values()
+            .any(|resolution| {
+                matches!(
+                    resolution,
+                    super::ImportProfileConflictResolution::Duplicate
+                )
+            });
+    let (source_custom_descriptors, target_custom_descriptors) = if reserves_generated_identities {
+        (
+            CustomDescriptorCatalog::from_document(source, ports),
+            CustomDescriptorCatalog::from_document(target, ports),
+        )
+    } else {
+        (
+            CustomDescriptorCatalog::default(),
+            CustomDescriptorCatalog::default(),
+        )
+    };
+    (source_custom_descriptors, target_custom_descriptors)
 }
 
 /// Caches capability-owned descriptors once per planning pass. Besides avoiding repeated adapter
