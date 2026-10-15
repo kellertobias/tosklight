@@ -860,3 +860,205 @@ async fn timecode_seek_resolves_overlap_and_nonfirst_clip_entry_from_actual_sche
         let _ = std::fs::remove_dir_all(data_dir);
     }
 }
+
+#[tokio::test]
+async fn tl795_assigned_go_resumes_paused_frame_and_scheduled_cue_history() {
+    use light_playback::{TimecodeFrame, TimecodeTransportAction, TimecodeTransportState};
+    let clock = Arc::new(ManualClock::new(fixed_test_time()));
+    let (state, data_dir) = test_state_with_clock(clock.clone());
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Assigned Timecode resume").await;
+    let show = create_show(&app, &token, "Assigned resume").await;
+    assert_eq!(
+        app.clone()
+            .oneshot(open_show_request(&token, show["id"].as_str().unwrap()))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
+    let session = state
+        .sessions
+        .sessions()
+        .into_iter()
+        .find(|session| session.token == token)
+        .unwrap();
+    let fixtures = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+    let list = asymmetric_timeline_cues(fixtures);
+    let definition = asymmetric_timeline_definition(&list);
+    let assignment: light_playback::PlaybackDefinition =
+        serde_json::from_value(serde_json::json!({
+            "name":"Shared Timecode","target":{"type":"timecode","timecode_id":definition.id},
+            "has_fader":false,"buttons":["go","pause","off"]
+        }))
+        .unwrap();
+    let mut second = operational_fixture(fixtures[1]);
+    second.address = Some(2);
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(fixtures[0]), second].into(),
+            cue_lists: vec![list.clone()].into(),
+            playback_pages: vec![
+                light_playback::PlaybackPage {
+                    number: 1,
+                    name: "Main".into(),
+                    assignments: std::collections::HashMap::from([(7, assignment.clone())]),
+                },
+                light_playback::PlaybackPage {
+                    number: 2,
+                    name: "Pane".into(),
+                    assignments: std::collections::HashMap::from([(1, assignment)]),
+                },
+            ]
+            .into(),
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+    state.timecodes.install(definition.clone(), None).unwrap();
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Pause)
+        .unwrap();
+    state
+        .timecodes
+        .handle(
+            definition.id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(200),
+            },
+        )
+        .unwrap();
+    state.timecodes.reconcile_cue_lists(state.output.engine());
+    let _ = output_scheduler::render_test_tick(state.clone()).await;
+    let held = state.output.dmx_snapshot().0;
+    assert_eq!(
+        state
+            .output
+            .engine()
+            .playback_runtime_status_for_cue_list(list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(list.cues[1].id)
+    );
+    let response = app
+        .clone()
+        .oneshot(playback_action_request(
+            &token,
+            state.active_show.current().unwrap().id,
+            session.desk.id,
+            "resume-paused-main",
+        ))
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = json(response).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let resumed = state.timecodes.snapshot(definition.id).unwrap();
+    assert_eq!(resumed.transport, TimecodeTransportState::Playing);
+    assert_eq!(
+        resumed.frame,
+        TimecodeFrame(200),
+        "assigned GO must resume the held Timecode, not restart at0"
+    );
+    let _ = output_scheduler::render_test_tick(state.clone()).await;
+    assert_eq!(
+        state.output.dmx_snapshot().0.universes[0].slots[..2],
+        held.universes[0].slots[..2]
+    );
+    assert_eq!(
+        state
+            .output
+            .engine()
+            .playback_runtime_status_for_cue_list(list.id)
+            .unwrap()
+            .playback
+            .current_cue_id,
+        Some(list.cues[1].id)
+    );
+    clock.advance_millis(250);
+    let _ = output_scheduler::render_test_tick(state.clone()).await;
+    assert_eq!(
+        state.timecodes.snapshot(definition.id).unwrap().frame,
+        TimecodeFrame(211)
+    );
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Pause)
+        .unwrap();
+    let pane=dispatch_live_action(&state,&session,live_action_frame(&session,"resume-paused-pane",serde_json::from_value(serde_json::json!({
+        "type":"playback","request":{"address":{"kind":"playback","page":2,"position":1},
+        "action":{"type":"go","pressed":true},"control_source":{"surface_id":"pane:timecode","control_id":1}}
+    })).unwrap()));
+    assert!(pane.ok, "{:?}", pane.error);
+    assert_eq!(
+        state.timecodes.snapshot(definition.id).unwrap().frame,
+        TimecodeFrame(211)
+    );
+    // An already-playing assigned GO retains its existing restart behavior; direct editor Go too.
+    let response = app
+        .clone()
+        .oneshot(playback_action_request(
+            &token,
+            state.active_show.current().unwrap().id,
+            session.desk.id,
+            "restart-playing-main",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        state.timecodes.snapshot(definition.id).unwrap().frame,
+        TimecodeFrame::ZERO
+    );
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Pause)
+        .unwrap();
+    state
+        .timecodes
+        .handle(
+            definition.id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(200),
+            },
+        )
+        .unwrap();
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Go)
+        .unwrap();
+    assert_eq!(
+        state.timecodes.snapshot(definition.id).unwrap().frame,
+        TimecodeFrame::ZERO,
+        "direct editor Play still restarts"
+    );
+    state
+        .timecodes
+        .handle(definition.id, TimecodeTransportAction::Stop)
+        .unwrap();
+    let response = app
+        .oneshot(playback_action_request(
+            &token,
+            state.active_show.current().unwrap().id,
+            session.desk.id,
+            "start-stopped-main",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        state.timecodes.snapshot(definition.id).unwrap().transport,
+        TimecodeTransportState::Playing
+    );
+    assert_eq!(
+        state.timecodes.snapshot(definition.id).unwrap().frame,
+        TimecodeFrame::ZERO
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}

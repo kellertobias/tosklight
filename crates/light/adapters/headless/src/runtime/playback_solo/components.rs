@@ -189,10 +189,12 @@ impl SoloCoordinator<'_> {
         } else {
             Vec::new()
         };
-        let output = self
-            .timecodes
-            .handle(id, action)
-            .map_err(|error| ApiError::bad_request(error.message))?;
+        let output = if matches!(action, TimecodeTransportAction::Go) {
+            self.timecodes.handle_playback_go(id)
+        } else {
+            self.timecodes.handle(id, action)
+        }
+        .map_err(|error| ApiError::bad_request(error.message))?;
         let stopped_timecodes = if before.transport == TimecodeTransportState::Stopped
             && output.snapshot.transport != TimecodeTransportState::Stopped
         {

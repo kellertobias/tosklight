@@ -113,6 +113,8 @@ pub struct TimecodeRuntimeService {
     clock: Arc<dyn TimecodeClock>,
     publisher: Arc<dyn TimecodeChangePublisher>,
     rate: TimecodeFrameRate,
+    // Serializes transport/definition changes without holding the runtime map over native audio IO.
+    transport_commands: Arc<Mutex<()>>,
     runtimes: Arc<Mutex<BTreeMap<TimecodeId, Runtime>>>,
     audio: Option<Arc<TimecodeAudioService>>,
     cue_list_runtime: Arc<Mutex<CueListRuntime>>,
@@ -132,6 +134,7 @@ impl TimecodeRuntimeService {
             clock,
             publisher,
             rate,
+            transport_commands: Arc::new(Mutex::new(())),
             runtimes: Arc::new(Mutex::new(BTreeMap::new())),
             audio: None,
             cue_list_runtime: Arc::new(Mutex::new(CueListRuntime::default())),
@@ -151,6 +154,10 @@ impl TimecodeRuntimeService {
         metadata: WavMetadata,
         looping: bool,
     ) -> Result<TimecodeFrame, TimecodeRuntimeError> {
+        let _command = self
+            .transport_commands
+            .lock()
+            .expect("Timecode command lock poisoned");
         let audio = self.audio.as_ref().ok_or_else(|| {
             TimecodeRuntimeError::new("native Timecode audio output is unavailable")
         })?;
@@ -197,6 +204,10 @@ impl TimecodeRuntimeService {
         definition: TimecodeDefinition,
         audio_duration: Option<TimecodeFrame>,
     ) -> Result<TimecodeRuntimeSnapshot, TimecodeRuntimeError> {
+        let _command = self
+            .transport_commands
+            .lock()
+            .expect("Timecode command lock poisoned");
         definition
             .validate()
             .map_err(|error| TimecodeRuntimeError::new(error.message))?;
@@ -279,6 +290,10 @@ impl TimecodeRuntimeService {
     /// Called only after a successful show activation, while output and live actions are excluded.
     /// Old clip ownership is forgotten without releasing the destination's restored playbacks.
     pub fn reset_for_show_activation(&self) {
+        let _command = self
+            .transport_commands
+            .lock()
+            .expect("Timecode command lock poisoned");
         let previous = std::mem::take(
             &mut *self
                 .runtimes
@@ -483,6 +498,10 @@ impl TimecodeRuntimeService {
 
     /// Removes stale runtime state after a portable Timecode is deleted or becomes unrunnable.
     pub fn uninstall(&self, id: TimecodeId) -> Result<bool, TimecodeRuntimeError> {
+        let _command = self
+            .transport_commands
+            .lock()
+            .expect("Timecode command lock poisoned");
         if let Some(audio) = &self.audio {
             audio.unprepare(id).map_err(TimecodeRuntimeError::new)?;
         }
@@ -499,7 +518,15 @@ impl TimecodeRuntimeService {
         id: TimecodeId,
         action: TimecodeTransportAction,
     ) -> Result<TimecodeRuntimeOutcome, TimecodeRuntimeError> {
-        self.handle_transport(id, action, false)
+        self.handle_transport(id, action, false, false)
+    }
+
+    /// Assigned GO resumes a paused timeline; direct editor GO deliberately restarts it.
+    pub fn handle_playback_go(
+        &self,
+        id: TimecodeId,
+    ) -> Result<TimecodeRuntimeOutcome, TimecodeRuntimeError> {
+        self.handle_transport(id, TimecodeTransportAction::Go, false, true)
     }
 
     fn handle_transport(
@@ -507,12 +534,22 @@ impl TimecodeRuntimeService {
         id: TimecodeId,
         action: TimecodeTransportAction,
         rearm_external: bool,
+        resume_paused: bool,
     ) -> Result<TimecodeRuntimeOutcome, TimecodeRuntimeError> {
+        let _command = self
+            .transport_commands
+            .lock()
+            .expect("Timecode command lock poisoned");
+        let installed = self.snapshot(id)?;
+        let action = if resume_paused && installed.transport == TimecodeTransportState::Paused {
+            TimecodeTransportAction::Pause
+        } else {
+            action
+        };
         let now = self.clock.now_micros();
         // Reject a missing runtime before touching the output transport. Once installed, the
         // in-memory action cannot fail; applying audio first avoids advertising a transport state
         // that the device rejected.
-        let installed = self.snapshot(id)?;
         if installed.audio_linked
             && let Some(audio) = &self.audio
         {
@@ -618,7 +655,7 @@ impl TimecodeRuntimeService {
                 "source loss must pause or stop Timecode",
             ));
         }
-        self.handle_transport(id, action, true)
+        self.handle_transport(id, action, true, false)
     }
 
     /// Advances every running Timecode in stable object-id order.
@@ -679,6 +716,10 @@ impl TimecodeRuntimeService {
         &self,
         transport_frame: TimecodeFrame,
     ) -> Vec<TimecodeRuntimeChange> {
+        let _command = self
+            .transport_commands
+            .lock()
+            .expect("Timecode command lock poisoned");
         let now = self.clock.now_micros();
         let (changes, started) = {
             let mut runtimes = self

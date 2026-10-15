@@ -1087,3 +1087,157 @@ fn partial_clip_execution_failure_reports_the_accepted_activation_truthfully() {
 }
 
 mod retained_off;
+
+#[test]
+fn tl795_assigned_go_serializes_competing_stop_without_blocking_paused_tick() {
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicBool, Ordering},
+    };
+    struct BlockingClock {
+        block: AtomicBool,
+        entered: Barrier,
+        release: Barrier,
+    }
+    impl TimecodeClock for BlockingClock {
+        fn now_micros(&self) -> u64 {
+            if self.block.swap(false, Ordering::SeqCst) {
+                self.entered.wait();
+                self.release.wait();
+            }
+            0
+        }
+    }
+    let clock = Arc::new(BlockingClock {
+        block: AtomicBool::new(false),
+        entered: Barrier::new(2),
+        release: Barrier::new(2),
+    });
+    let service = Arc::new(TimecodeRuntimeService::new(
+        clock.clone(),
+        Arc::new(RecordingPublisher::default()),
+        TimecodeFrameRate::whole_frames(25).unwrap(),
+    ));
+    let id = definition().id;
+    service.install(definition(), None).unwrap();
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    service.handle(id, TimecodeTransportAction::Pause).unwrap();
+    service
+        .handle(
+            id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(12),
+            },
+        )
+        .unwrap();
+    clock.block.store(true, Ordering::SeqCst);
+    let go_service = service.clone();
+    let go = std::thread::spawn(move || go_service.handle_playback_go(id).unwrap());
+    clock.entered.wait();
+    // GO has selected its paused action. A scheduler tick still runs and cannot change that state.
+    assert!(service.transport_commands.try_lock().is_err());
+    assert!(service.tick().is_empty());
+    assert_eq!(
+        service.snapshot(id).unwrap().transport,
+        TimecodeTransportState::Paused
+    );
+    let stop_entered = Arc::new(Barrier::new(2));
+    let stop_barrier = stop_entered.clone();
+    let stop_service = service.clone();
+    let stop = std::thread::spawn(move || {
+        stop_barrier.wait();
+        stop_service
+            .handle(id, TimecodeTransportAction::Stop)
+            .unwrap()
+    });
+    stop_entered.wait();
+    clock.release.wait();
+    let resumed = go.join().unwrap().snapshot;
+    assert_eq!(resumed.transport, TimecodeTransportState::Playing);
+    assert_eq!(resumed.frame, TimecodeFrame(12));
+    let stopped = stop.join().unwrap().snapshot;
+    assert_eq!(stopped.transport, TimecodeTransportState::Stopped);
+    assert_eq!(stopped.frame, TimecodeFrame::ZERO);
+    assert_eq!(
+        service.snapshot(id).unwrap().transport,
+        TimecodeTransportState::Stopped
+    );
+}
+
+#[test]
+fn tl795_assigned_go_resumes_linked_audio_but_editor_go_restarts() {
+    let clock = Arc::new(ManualTimecodeClock::default());
+    let output = Arc::new(RecordingAudioOutput::default());
+    let audio = Arc::new(TimecodeAudioService::new(output.clone()));
+    let rate = TimecodeFrameRate::whole_frames(25).unwrap();
+    let id = definition().id;
+    audio
+        .prepare(
+            id,
+            crate::AssetReference {
+                id: crate::AssetId(Uuid::from_u128(90)),
+                revision: crate::AssetRevision(1),
+            },
+            WavMetadata {
+                encoding: WavEncoding::PcmInteger,
+                channels: 2,
+                sample_rate: 48_000,
+                bits_per_sample: 16,
+                data_bytes: 192_000,
+                sample_frames: 48_000,
+            },
+            rate,
+            true,
+        )
+        .unwrap();
+    let service = TimecodeRuntimeService::new(clock, Arc::new(RecordingPublisher::default()), rate)
+        .with_audio(audio);
+    let mut definition = definition();
+    definition.audio = Some(light_playback::TimecodeAudio {
+        asset_id: Uuid::from_u128(90),
+        asset_revision: 1,
+        file_name: None,
+        end_fade_frames: None,
+    });
+    service
+        .install(definition, Some(TimecodeFrame(25)))
+        .unwrap();
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    service.handle(id, TimecodeTransportAction::Pause).unwrap();
+    service
+        .handle(
+            id,
+            TimecodeTransportAction::Seek {
+                frame: TimecodeFrame(12),
+            },
+        )
+        .unwrap();
+    output.0.lock().unwrap().clear();
+    let resumed = service.handle_playback_go(id).unwrap();
+    assert_eq!(resumed.snapshot.frame, TimecodeFrame(12));
+    assert!(
+        output
+            .0
+            .lock()
+            .unwrap()
+            .contains(&TimecodeAudioCommand::Play {
+                timecode_id: id,
+                source_frame: TimecodeFrame(12),
+                audible_at_micros: 5_000,
+            })
+    );
+    service.handle(id, TimecodeTransportAction::Pause).unwrap();
+    output.0.lock().unwrap().clear();
+    service.handle(id, TimecodeTransportAction::Go).unwrap();
+    assert!(
+        output
+            .0
+            .lock()
+            .unwrap()
+            .contains(&TimecodeAudioCommand::Play {
+                timecode_id: id,
+                source_frame: TimecodeFrame::ZERO,
+                audible_at_micros: 5_000,
+            })
+    );
+}
