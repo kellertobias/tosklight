@@ -2921,7 +2921,13 @@ test("configured colors and derived or frozen states use complete outlines and r
 	await page.goto(
 		"/iframe.html?id=tosklight-windows-pools--groups-status-markers&viewMode=story",
 	);
-	await expect(page.getByLabel(/Derived state/u)).toBeVisible();
+	const reference = page.getByRole("img", {
+		name: "Group 1, every 2 fixtures starting at position 1",
+		exact: true,
+	});
+	await expect(reference).toBeVisible();
+	await expect(reference).toHaveText("1 % 2");
+	await expect(reference.locator('svg[aria-hidden="true"]')).toBeVisible();
 	await expect(page.getByLabel(/Frozen state/u)).toBeVisible();
 });
 
