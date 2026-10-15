@@ -24,10 +24,12 @@ const TRAILING_TOKEN_REJECTION =
 
 // Exact UpdateError display contracts; Group/Preset IDs are opaque tokens, not UUID-only.
 // Unknown Update failures and appended authority/runtime faults retain diagnostics.
-const UPDATE_NO_CHANGES =
-	/^Update would not change [^\r\n]* \S+$/i;
+const UPDATE_NO_CHANGES = /^Update would not change [^\r\n]* \S+$/i;
 const UPDATE_NO_CURRENT_CUE =
 	/^(?:Playback [1-9]\d*\.[1-9]\d*|Cuelist [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) has no current Cue; identify an explicit Cue$/i;
+
+// The parser includes exactly one invalid family token, never runtime detail.
+const UNKNOWN_PRESET_FAMILY_REJECTION = /^unknown Preset family [^\s]+$/i;
 
 const EMPTY_PRESET_FAMILY_REJECTION =
 	"the normal programmer has no values in the requested preset family";
@@ -113,7 +115,10 @@ const FAMILY_VALUE_REJECTIONS = new Set([
 function isUnexpectedFailure(message: string): boolean {
 	return (
 		UNEXPECTED.test(message) &&
-		!TRAILING_TOKEN_REJECTION.test(message.replace(/^invalid data:\s*/i, ""))
+		!TRAILING_TOKEN_REJECTION.test(message.replace(/^invalid data:\s*/i, "")) &&
+		!UNKNOWN_PRESET_FAMILY_REJECTION.test(
+			message.replace(/^invalid data:\s*/i, ""),
+		)
 	);
 }
 
@@ -129,6 +134,7 @@ export function commandErrorFeedback(
 			!isUnexpectedFailure(detail) &&
 			(UPDATE_NO_CHANGES.test(message) ||
 				UPDATE_NO_CURRENT_CUE.test(message) ||
+				UNKNOWN_PRESET_FAMILY_REJECTION.test(message) ||
 				OPERATOR_REJECTION.test(message) ||
 				REVERSED_OPERATOR_REJECTION.test(message) ||
 				SELECTION_REQUIRED.test(message) ||
@@ -146,6 +152,8 @@ export function commandErrorFeedback(
 export function commandErrorSummary(message: string): string {
 	const domainMessage = message.replace(/^invalid data:\s*/i, "");
 	if (!isUnexpectedFailure(message)) {
+		if (UNKNOWN_PRESET_FAMILY_REJECTION.test(domainMessage))
+			return "Unknown Preset Family";
 		if (UPDATE_NO_CHANGES.test(domainMessage)) return "No Changes";
 		if (UPDATE_NO_CURRENT_CUE.test(domainMessage)) return "No Current Cue";
 	}
