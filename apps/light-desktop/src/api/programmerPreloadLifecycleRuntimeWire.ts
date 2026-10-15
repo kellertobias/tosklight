@@ -35,6 +35,8 @@ function assertProjectionShape(value: unknown, path: string) {
 	const projection = recordAt(value, path);
 	const target = enumAt(projection.target, `${path}.target`, [
 		"missing",
+		"macro",
+		"timecode",
 		"cue_list",
 		"dynamic",
 		"group",
@@ -44,19 +46,30 @@ function assertProjectionShape(value: unknown, path: string) {
 		"cue_fade",
 	]);
 	const variant =
-		target === "cue_list"
-			? ["cue_list_id", "runtime"]
-			: target === "dynamic"
-				? ["dynamic_id", "last_known_pool_number", "embedded", "runtime"]
-				: target === "group"
-					? ["group_id", "master", "flash_level"]
-					: target === "speed_group"
-						? ["group", "runtime"]
-						: target === "grand_master"
-							? ["runtime"]
-							: target === "programmer_fade" || target === "cue_fade"
-								? ["millis"]
-								: [];
+		target === "macro"
+			? ["macro_id"]
+			: target === "timecode"
+				? ["timecode_id"]
+				: target === "cue_list"
+					? ["cue_list_id", "runtime"]
+					: target === "dynamic"
+						? ["dynamic_id", "last_known_pool_number", "embedded", "runtime"]
+						: target === "group"
+							? [
+									"group_id",
+									"master",
+									"flash_level",
+									"fader_position",
+									"fader_pickup_required",
+									"fader_pickup_target",
+								]
+							: target === "speed_group"
+								? ["group", "runtime"]
+								: target === "grand_master"
+									? ["runtime"]
+									: target === "programmer_fade" || target === "cue_fade"
+										? ["millis"]
+										: [];
 	exactRecordAt(value, path, [
 		"scope",
 		"identity",

@@ -388,3 +388,204 @@ describe("Preload committed standalone Dynamic projections", () => {
 		);
 	});
 });
+
+function receiptCommit(body: WireOutcome) {
+	if (!body.commit)
+		throw new Error("accepted GO receipt fixture requires a commit");
+	return body.commit;
+}
+const TIMECODE_ID = "d63061ad-6aad-4701-8442-b6f0d2aca93b";
+const MACRO_ID = "80000000-0000-4000-8000-000000000001";
+function externalTargetResponse(target: "macro" | "timecode"): WireOutcome {
+	const body = response();
+	const first = receiptCommit(body).runtime_changes[0];
+	first.projection = {
+		scope: first.projection.scope,
+		identity: { kind: "playback", page: 3, position: 1 },
+		...(target === "timecode"
+			? { target, timecode_id: TIMECODE_ID }
+			: { target, macro_id: MACRO_ID }),
+	};
+	receiptCommit(body).executed[0] = {
+		address: { page: 3, position: 1 },
+		action: "go",
+		control_source: { surface_id: "hardware:217", control_id: 21702 },
+	};
+	return body;
+}
+
+describe("Preload receipt externally owned target projections", () => {
+	it.each(["macro", "timecode"] as const)(
+		"decodes a complete accepted %s GO receipt without inventing Cue runtime",
+		(target) => {
+			const body = externalTargetResponse(target);
+			const decoded = decodeProgrammerPreloadLifecycleOutcome(body, request);
+			expect(decoded.commit?.runtimeChanges[0]).toEqual({
+				eventSequence: 11,
+				projection: receiptCommit(body).runtime_changes[0].projection,
+			});
+			expect(decoded.commit?.executed[0]).toMatchObject({
+				address: { page: 3, position: 1 },
+				action: "go",
+			});
+			expect(decoded.commit?.runtimeChanges[0].projection).not.toHaveProperty(
+				"runtime",
+			);
+		},
+	);
+	for (const target of ["macro", "timecode"] as const) {
+		const field = target === "macro" ? "macro_id" : "timecode_id";
+		it.each([undefined, null, "", 17, {}])(
+			`refuses missing or malformed ${field}: %s`,
+			(value) => {
+				const body = externalTargetResponse(target);
+				const projection = receiptCommit(body).runtime_changes[0]
+					.projection as unknown as Record<string, unknown>;
+				if (value === undefined) delete projection[field];
+				else projection[field] = value;
+				expect(() =>
+					decodeProgrammerPreloadLifecycleOutcome(body, request),
+				).toThrow(new RegExp(`projection\\.${field}`));
+			},
+		);
+		it(`keeps exact ${target} shape and current receipt scope strict`, () => {
+			for (const extra of ["runtime", "foreign"]) {
+				const body = externalTargetResponse(target);
+				Object.assign(receiptCommit(body).runtime_changes[0].projection, {
+					[extra]: {},
+				});
+				expect(() =>
+					decodeProgrammerPreloadLifecycleOutcome(body, request),
+				).toThrow(new RegExp(`projection\\.${extra}`));
+			}
+			const stale = externalTargetResponse(target);
+			receiptCommit(stale).runtime_changes[0].projection.scope.show_revision =
+				3;
+			expect(() =>
+				decodeProgrammerPreloadLifecycleOutcome(stale, request),
+			).toThrow(/projection.scope.show_revision/);
+		});
+	}
+	it("still refuses an unknown future target", () => {
+		const body = externalTargetResponse("timecode");
+		Object.assign(receiptCommit(body).runtime_changes[0].projection, {
+			target: "future_transport",
+		});
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, request),
+		).toThrow(/projection.target/);
+	});
+});
+
+function canonicalTargets() {
+	const cue = firstRuntime(response());
+	const dynamic = receiptCommit(dynamicResponse(true, false)).runtime_changes[0]
+		.projection;
+	if (dynamic.target !== "dynamic") throw new Error("Dynamic fixture required");
+	return {
+		missing: { target: "missing" },
+		cue_list: {
+			target: "cue_list",
+			cue_list_id: cue.cue_list_id,
+			runtime: cue.runtime,
+		},
+		dynamic,
+		macro: { target: "macro", macro_id: MACRO_ID },
+		timecode: { target: "timecode", timecode_id: TIMECODE_ID },
+		group: {
+			target: "group",
+			group_id: "91",
+			master: 0.75,
+			flash_level: 0,
+			fader_position: 0.5,
+			fader_pickup_required: true,
+			fader_pickup_target: 0.75,
+		},
+		speed_group: {
+			target: "speed_group",
+			group: "A",
+			runtime: {
+				manual_bpm: 120,
+				sound_bpm: null,
+				effective_bpm: 120,
+				source: "manual",
+				sound_status: { status: "disabled" },
+				paused: false,
+				phase_advancing: true,
+				speed_master_scale: 1,
+				sound_multiplier: 1,
+				source_available: false,
+				usable_signal: false,
+				input_level: 0,
+				selected_band_level: 0,
+				synchronized_with: null,
+				phase_origin_millis: 0,
+				beat_phase: 0.5,
+			},
+		},
+		grand_master: {
+			target: "grand_master",
+			runtime: {
+				level: 1,
+				effective_level: 1,
+				blackout: false,
+				flash_active: false,
+				dynamics_paused: false,
+			},
+		},
+		programmer_fade: { target: "programmer_fade", millis: 3000 },
+		cue_fade: { target: "cue_fade", millis: 2000 },
+	} satisfies Record<
+		import("./generated/light-wire").PlaybackTargetProjection["target"],
+		import("./generated/light-wire").PlaybackTargetProjection
+	>;
+}
+
+describe("Preload strict receipt covers the current generated target contract", () => {
+	it.each(Object.entries(canonicalTargets()))(
+		"accepts all declared fields of canonical %s in a full committed receipt",
+		(_target, target) => {
+			const body = response();
+			const change = receiptCommit(body).runtime_changes[0];
+			change.projection = {
+				scope: change.projection.scope,
+				identity: change.projection.identity,
+				...target,
+			};
+			const decoded = decodeProgrammerPreloadLifecycleOutcome(body, request);
+			expect(decoded.commit?.runtimeChanges[0].projection).toEqual(
+				change.projection,
+			);
+		},
+	);
+	it.each([
+		["fader_position", "half"],
+		["fader_pickup_required", 1],
+		["fader_pickup_target", "three quarters"],
+	])("keeps malformed Group %s strict", (field, value) => {
+		const body = response();
+		const change = receiptCommit(body).runtime_changes[0];
+		change.projection = {
+			scope: change.projection.scope,
+			identity: change.projection.identity,
+			...canonicalTargets().group,
+		};
+		Object.assign(change.projection, { [field]: value });
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, request),
+		).toThrow(new RegExp(`projection\\.${field}`));
+	});
+	it("keeps unknown Group fields strict", () => {
+		const body = response();
+		const change = receiptCommit(body).runtime_changes[0];
+		change.projection = {
+			scope: change.projection.scope,
+			identity: change.projection.identity,
+			...canonicalTargets().group,
+		};
+		Object.assign(change.projection, { foreign: true });
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, request),
+		).toThrow(/projection.foreign/);
+	});
+});
