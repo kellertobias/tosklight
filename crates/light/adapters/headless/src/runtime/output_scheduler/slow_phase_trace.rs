@@ -1,5 +1,7 @@
 //! Sampled tracing of output ticks whose phases exceed one slow-frame threshold.
 
+pub(in crate::runtime::output_scheduler) mod live_phases;
+
 use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,

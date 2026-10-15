@@ -188,10 +188,12 @@ pub(super) fn family_output_frame<T>(
     family: &LiveFamilyAdapters,
     finish: impl FnOnce(OutputRenderSource<'_>) -> Result<T, EngineError>,
 ) -> Result<(T, CapturedDynamicSample), EngineError> {
-    let mut state = family.state.lock();
+    use crate::runtime::output_scheduler::slow_phase_trace::live_phases::{Phase, Span, measure};
+    let mut state = measure(Phase::FamilyLockAcquire, || family.state.lock());
     let LiveFamilyState { lanes, scratch } = &mut *state;
     let lanes = &*lanes;
     let mut observer = FamilyFrameObserver::new(lanes).with_pool(engine.output_pool());
+    let preparation_span = Span::begin(Phase::FamilyPreparationInclusive);
     let published = prepare_captured_hybrid_frame_with_observer(
         engine,
         frame,
@@ -204,9 +206,13 @@ pub(super) fn family_output_frame<T>(
         None,
         &mut observer,
     );
-    observer.retire();
-    let published =
-        published.and_then(|prepared| finalize_live_family_frame(engine, frame, lanes, prepared));
+    drop(preparation_span);
+    measure(Phase::FamilyRetire, || observer.retire());
+    let published = published.and_then(|prepared| {
+        measure(Phase::FamilyFinalize, || {
+            finalize_live_family_frame(engine, frame, lanes, prepared)
+        })
+    });
     let published = match published {
         Ok(published) => published,
         Err(error) => {

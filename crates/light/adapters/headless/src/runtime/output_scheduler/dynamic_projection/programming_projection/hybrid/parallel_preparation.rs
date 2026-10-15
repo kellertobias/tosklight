@@ -11,6 +11,8 @@ use super::*;
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::family_lanes::{
     FamilyLanesWorker, FamilyStaging,
 };
+use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
+use diagnostics::Count;
 use light_dynamics::{
     CompletedChunk, CompletedDynamicSamples, DeferredTypedSampling,
     DynamicFamilyPreparationRequirement, DynamicRuntimeError, DynamicRuntimeSample,
@@ -65,6 +67,7 @@ fn prepare_families_on<T>(
     pool: Option<&light_engine::parallel::OutputPool>,
 ) -> Result<(), TransitionError> {
     let Some(pool) = pool.filter(|_| samples.len() >= MIN_PARALLEL_SAMPLES && typed.forks()) else {
+        diagnostics::count(Count::PreparationSerial, 1);
         return prepare_dynamic_family_samples_with_requirements(
             samples,
             sampling_requirements,
@@ -75,6 +78,7 @@ fn prepare_families_on<T>(
         .map(drop);
     };
     if !lends_lanes(observer) {
+        diagnostics::count(Count::PreparationSerial, 1);
         return prepare_dynamic_family_samples_with_requirements(
             samples,
             sampling_requirements,
@@ -84,6 +88,7 @@ fn prepare_families_on<T>(
         )
         .map(drop);
     }
+    diagnostics::count(Count::PreparationParallel, 1);
     let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
     let result = light_dynamics::prepare_dynamic_family_samples_in_parallel(
         samples,
@@ -121,11 +126,14 @@ pub(super) fn complete_deferred<'frame, T>(
     let Some(pool) =
         pool.filter(|_| deferred.typed_lane_count() >= MIN_PARALLEL_SAMPLES && typed.forks())
     else {
+        diagnostics::count(Count::DeferredSerial, 1);
         return deferred.complete(typed);
     };
     if !lends_lanes(observer) {
+        diagnostics::count(Count::DeferredSerial, 1);
         return deferred.complete(typed);
     }
+    diagnostics::count(Count::DeferredParallel, 1);
     let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
     let result = deferred.complete_in_parallel(typed, &mut workers);
     let stagings = workers.stagings;
@@ -227,6 +235,8 @@ impl<O: HybridFrameObserver<T>, T> FrameWorkers<'_, '_, O, T> {
             let Some((shared, _, _)) = lanes else {
                 return;
             };
+            diagnostics::count(Count::ForkInvocations, 1);
+            diagnostics::count(Count::ForkChunks, chunks);
             outputs = Some(typed.with_fork_base(&frozen, |base| {
                 light_engine::parallel::run_ordered(Some(pool), &mut slots, chunks, |_, chunk| {
                     let missed = Cell::new(false);

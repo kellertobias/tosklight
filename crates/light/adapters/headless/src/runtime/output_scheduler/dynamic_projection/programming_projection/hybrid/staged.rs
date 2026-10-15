@@ -5,6 +5,8 @@ use super::super::super::family_inputs::CapturedFamilyInput;
 use super::super::super::fixed_masks::PreparedFixedMask;
 use super::super::static_rows::StaticFamilyRows;
 use super::*;
+use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
+use diagnostics::{Count, Stage};
 
 /// Branch constructors provide both scalar Current and static tokens from the same immutable
 /// lane. Keeping the staged sampler/composer here prevents Live and Preload semantics drifting.
@@ -33,6 +35,7 @@ pub(super) fn prepare_hybrid_frame<T>(
     begin_hybrid_frame(resolver, &frame_token, static_token)?;
     observer.begin_frame(&frame_token).map_err(invalid)?;
     let static_sources = PreparedFamilySources(static_token);
+    diagnostics::count(Count::RuntimeInstances, runtime.instance_count());
     let models = runtime.captured_native_color_models();
     let HybridFrameScratch {
         sampling,
@@ -54,6 +57,7 @@ pub(super) fn prepare_hybrid_frame<T>(
         runtime,
         inputs,
         |runtime, now, interval, assignments, controls| {
+            let bind_span = diagnostics::Span::begin(Stage::BindAndControl);
             let authored_origins = bind_cohort_sources(runtime, origins, inputs, assignments)?;
             let authored = source_bindings::AuthoredDynamicSources(&authored_origins);
             let (fixed, endpoint_controls) = compile_cohort_controls(
@@ -63,6 +67,8 @@ pub(super) fn prepare_hybrid_frame<T>(
                 fixed,
                 controls,
             )?;
+            drop(bind_span);
+            let mut sampling_span = Some(diagnostics::Span::begin(Stage::SamplingBeforeCallback));
             runtime.sample_all_programming_staged_shared(
                 now,
                 interval,
@@ -72,90 +78,199 @@ pub(super) fn prepare_hybrid_frame<T>(
                 Some(inputs.addresser),
                 sampling,
                 |legacy, deferred| {
-                    let mut batches = project_hybrid_scalar_samples(
-                        inputs,
-                        legacy,
-                        controls,
-                        scalar_sources,
-                        fixed,
-                        scalar,
-                    );
-                    collect_legacy_owners(&batches, legacy_owners);
-                    batches.extend_from_slice(baseline_samples);
-                    let mut token = prepare_static(&batches);
-                    let geometry = final_geometry(engine, capture, &mut token, &frame_token)?;
-                    let frame = HybridFrameContext {
+                    drop(sampling_span.take());
+                    compose_sampled_cohort(
+                        engine,
                         capture,
-                        geometry: &geometry,
-                        native_models: models.as_ref(),
-                        token: &frame_token,
-                        scalar: &token,
-                    };
-                    let adopt =
-                        |target, original: &AttributeValue, address: &DynamicValueAddress| {
-                            resolver.adopt(frame, target, original, address)
-                        };
-                    let typed = CapturedProgrammingSources::new(&static_sources, &adopt, presets)
-                        .with_source_transaction(origins)
-                        .with_native_current_validation(models.as_ref(), native_current);
-                    let mut completed = super::parallel_preparation::complete_deferred(
+                        &frame_token,
+                        baseline_samples,
+                        legacy,
                         deferred,
-                        &typed,
-                        frame,
-                        observer,
-                        output_pool.as_deref(),
-                    )?;
-                    super::parallel_preparation::prepare_families(
-                        completed.samples(),
-                        completed.requirements(),
-                        &typed,
-                        frame,
-                        models.as_ref(),
-                        preparation,
-                        observer,
-                        output_pool.as_deref(),
-                    )
-                    .map_err(invalid)?;
-                    let prepared = preparation.prepared();
-                    typed.check().map_err(invalid)?;
-                    let control = |rank| endpoint_controls.control_for(rank);
-                    let view = CohortView {
-                        frame,
+                        origins,
+                        inputs,
                         resolver,
-                        typed: &typed,
-                        static_sources: &static_sources,
-                        static_token,
-                        scalar_token: &token,
-                        legacy_owners,
-                        control: &control,
-                    };
-                    let (requirements, mut projections) = compose_family_cohort(
-                        &view,
-                        &prepared,
-                        fixed,
-                        families,
+                        presets,
                         observer,
-                        composition,
-                        position_batch_scratch,
-                        (static_rows, parallel, output_pool.as_deref()),
-                    )?;
-                    // TL-639 round 6: moved, not cloned; nothing reads them from `completed` again.
-                    let samples = completed.take_samples();
-                    finish_cohort(observer, frame, typed, &mut projections, &requirements)?;
-                    let sidecars = project_family_rows(&mut token, projections)?;
-                    observer
-                        .project_native(capture, &frame_token, &mut token, &sidecars)
-                        .map_err(invalid)?;
-                    Ok((
-                        completed,
-                        (samples, (token, geometry, sidecars, requirements)),
-                    ))
+                        scalar_sources,
+                        &static_sources,
+                        static_token,
+                        models.as_ref(),
+                        fixed,
+                        controls,
+                        &endpoint_controls,
+                        output_pool.as_deref(),
+                        (
+                            scalar,
+                            legacy_owners,
+                            preparation,
+                            families,
+                            composition,
+                            position_batch_scratch,
+                            static_rows,
+                            parallel,
+                            native_current,
+                        ),
+                        &prepare_static,
+                    )
                 },
             )
         },
     );
     native_current.borrow_mut().finish_frame();
     finish_hybrid_frame(result?, resolver, models, origins, frame_token)
+}
+
+/// Completes exactly the sampled cohort; extracted to keep diagnostic boundaries bounded.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn compose_sampled_cohort<'f, T>(
+    engine: &Engine,
+    capture: &PreparedOutputFrame,
+    frame_token: &CapturedFrameToken,
+    baseline_samples: &[ContributionBatch],
+    legacy: &[light_dynamics::DynamicRuntimeSample],
+    deferred: light_dynamics::DeferredTypedSampling<'f>,
+    origins: &mut DynamicSourceOrigins,
+    inputs: &CapturedDynamicInputs<'_>,
+    resolver: &impl HybridFrameResolver,
+    presets: Option<&dyn DynamicValueSourceResolver>,
+    observer: &mut impl HybridFrameObserver<T>,
+    scalar_sources: &(impl DynamicTickSource + Sync),
+    static_sources: &PreparedFamilySources<'_>,
+    static_token: &PreparedStaticFamilyFrame,
+    models: &dyn DynamicNativeModelResolver,
+    fixed: &[PreparedFixedMask],
+    controls: CapturedDynamicOutputControls<'_>,
+    endpoint_controls: &CapturedFamilyEndpointControls<'_>,
+    output_pool: Option<&light_engine::parallel::OutputPool>,
+    (
+        scalar,
+        legacy_owners,
+        preparation,
+        families,
+        composition,
+        position_batch_scratch,
+        static_rows,
+        parallel,
+        native_current,
+    ): (
+        &mut HybridScalarProjectionScratch,
+        &mut FxHashSet<(FixtureId, ProgrammingOwner)>,
+        &mut DynamicFamilyPreparationScratch,
+        &mut CapturedFamilyInputScratch,
+        &mut RetainedFamilyCompositionScratch,
+        &mut Vec<RetainedFamilyCompositionScratch>,
+        &mut StaticFamilyRows,
+        &mut Vec<RetainedFamilyCompositionScratch>,
+        &RefCell<CurrentNativeVerificationCache>,
+    ),
+    prepare_static: &impl Fn(&[ContributionBatch]) -> PreparedStaticFamilyFrame,
+) -> Result<
+    (
+        light_dynamics::CompletedDynamicSamples<'f>,
+        (
+            Vec<light_dynamics::DynamicRuntimeSample>,
+            (
+                PreparedStaticFamilyFrame,
+                PreparedFrameGeometry,
+                Vec<T>,
+                Vec<HybridFamilyRequirement>,
+            ),
+        ),
+    ),
+    DynamicRuntimeError,
+> {
+    diagnostics::count_with(Count::TypedLanes, || deferred.typed_lane_count());
+    let mut batches =
+        project_hybrid_scalar_samples(inputs, legacy, controls, scalar_sources, fixed, scalar);
+    diagnostics::count_with(Count::ScalarSamples, || {
+        batches.iter().map(ContributionBatch::len).sum()
+    });
+    collect_legacy_owners(&batches, legacy_owners);
+    batches.extend_from_slice(baseline_samples);
+    diagnostics::count(Count::StaticCalls, 1);
+    let mut token = {
+        let _span = diagnostics::Span::begin(Stage::ScalarStatic);
+        prepare_static(&batches)
+    };
+    let geometry = {
+        let _span = diagnostics::Span::begin(Stage::FinalGeometry);
+        final_geometry(engine, capture, &mut token, frame_token)?
+    };
+    let frame = HybridFrameContext {
+        capture,
+        geometry: &geometry,
+        native_models: models,
+        token: frame_token,
+        scalar: &token,
+    };
+    let adopt = |target, original: &AttributeValue, address: &DynamicValueAddress| {
+        resolver.adopt(frame, target, original, address)
+    };
+    let typed = CapturedProgrammingSources::new(static_sources, &adopt, presets)
+        .with_source_transaction(origins)
+        .with_native_current_validation(models, native_current);
+    let deferred_span = diagnostics::Span::begin(Stage::CompleteDeferred);
+    let mut completed = super::parallel_preparation::complete_deferred(
+        deferred,
+        &typed,
+        frame,
+        observer,
+        output_pool,
+    )?;
+    drop(deferred_span);
+    diagnostics::count(Count::FamilySamples, completed.samples().len());
+    let prepare_span = diagnostics::Span::begin(Stage::PrepareFamilies);
+    super::parallel_preparation::prepare_families(
+        completed.samples(),
+        completed.requirements(),
+        &typed,
+        frame,
+        models,
+        preparation,
+        observer,
+        output_pool,
+    )
+    .map_err(invalid)?;
+    drop(prepare_span);
+    let prepared = preparation.prepared();
+    typed.check().map_err(invalid)?;
+    let control = |rank| endpoint_controls.control_for(rank);
+    let view = CohortView {
+        frame,
+        resolver,
+        typed: &typed,
+        static_sources,
+        static_token,
+        scalar_token: &token,
+        legacy_owners,
+        control: &control,
+    };
+    let (requirements, mut projections) = compose_family_cohort(
+        &view,
+        &prepared,
+        fixed,
+        families,
+        observer,
+        composition,
+        position_batch_scratch,
+        (static_rows, parallel, output_pool.as_deref()),
+    )?;
+    // TL-639 round 6: moved, not cloned; nothing reads them from `completed` again.
+    let samples = completed.take_samples();
+    {
+        let _span = diagnostics::Span::begin(Stage::OrderedFinish);
+        finish_cohort(observer, frame, typed, &mut projections, &requirements)?;
+    }
+    let native_span = diagnostics::Span::begin(Stage::NativeProjection);
+    let sidecars = project_family_rows(&mut token, projections)?;
+    observer
+        .project_native(capture, frame_token, &mut token, &sidecars)
+        .map_err(invalid)?;
+    drop(native_span);
+    Ok((
+        completed,
+        (samples, (token, geometry, sidecars, requirements)),
+    ))
 }
 
 /// TL-639 round 7: the frame's Dynamic instances pin and complete on the output pool too.
@@ -357,10 +472,21 @@ pub(super) fn prepare_static_with_fixed_bases(
     baseline_samples: &[ContributionBatch],
     prepare_static: &impl Fn(&[ContributionBatch]) -> PreparedStaticFamilyFrame,
 ) -> (PreparedStaticFamilyFrame, Option<Vec<ContributionBatch>>) {
-    let mut static_token = prepare_static(baseline_samples);
-    let with_fixed_bases = match fixed_bases::missing(engine, runtime, inputs, &static_token) {
+    diagnostics::count(Count::StaticCalls, 1);
+    let mut static_token = {
+        let _span = diagnostics::Span::begin(Stage::InitialStatic);
+        prepare_static(baseline_samples)
+    };
+    let missing = {
+        let _span = diagnostics::Span::begin(Stage::MissingFixedBases);
+        fixed_bases::missing(engine, runtime, inputs, &static_token)
+    };
+    let with_fixed_bases = match missing {
         Some(bases) => {
             let with_fixed_bases = [baseline_samples, &[bases]].concat();
+            diagnostics::count(Count::MissingBaseBatches, 1);
+            diagnostics::count(Count::StaticCalls, 1);
+            let _span = diagnostics::Span::begin(Stage::RepeatStatic);
             static_token = prepare_static(&with_fixed_bases);
             Some(with_fixed_bases)
         }
@@ -425,6 +551,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         Option<&light_engine::parallel::OutputPool>,
     ),
 ) -> Result<(Vec<HybridFamilyRequirement>, Vec<OwnedHybridProjection<T>>), DynamicRuntimeError> {
+    let setup_span = diagnostics::Span::begin(Stage::CohortSetup);
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
@@ -432,7 +559,9 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     if !view.frame.capture.freezes_nothing() {
         families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
     }
+    diagnostics::count(Count::StaticTargets, static_targets.len());
     let (groups, static_only) = families.with_static_targets(&static_targets);
+    diagnostics::count(Count::Groups, groups.len());
     // TL-596: membership is asked once per group and batch row; a slice scan made the cohort
     // quadratic in its static-only targets (thousands at full-rig size).
     let static_only = static_only.into_iter().collect::<StaticOnlyTargets>();
@@ -464,6 +593,9 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         .prepare_programs(view.frame, &programs)
         .map_err(invalid)?;
     let eligible_position_groups = eligible_position_groups(view, groups, static_only);
+    diagnostics::count(Count::PositionGroups, eligible_position_groups.len());
+    drop(setup_span);
+    let position_span = diagnostics::Span::begin(Stage::PositionCompose);
     let handled_position = compose_position_batch(
         view,
         &eligible_position_groups,
@@ -474,6 +606,9 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         &mut projections,
         &mut requirements,
     )?;
+    drop(position_span);
+    diagnostics::count(Count::PositionHandled, handled_position.len());
+    let owner_span = diagnostics::Span::begin(Stage::OwnerCompose);
     super::parallel_groups::compose_owner_groups(
         view,
         groups,
@@ -485,6 +620,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         &mut requirements,
         pool,
     )?;
+    drop(owner_span);
     static_rows.finish_cohort();
     requirements.extend(view.typed.requirements().into_iter().map(|required| {
         HybridFamilyRequirement {
