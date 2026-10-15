@@ -14,8 +14,8 @@ import {
 	BeamAttribute,
 	ColorAttribute,
 	degreesEncoderValue,
-	EncoderGroup,
 	type EncoderCatalogEntry,
+	EncoderGroup,
 	encoderCatalogEntry,
 	FocusAttribute,
 	IntensityAttribute,
@@ -26,6 +26,162 @@ import {
 	ShapersAttribute,
 } from "./encoderCatalog";
 import { BrowserOscEncoderRoute } from "./encoderOscScenario";
+
+export interface EncoderDragInput {
+	attribute: string;
+	fixtureIds: string[];
+	requestId: string;
+	delta: number;
+	sentAt: number;
+	acknowledged: boolean;
+}
+
+export interface EncoderDragReport {
+	box: { x: number; y: number; width: number; height: number };
+	displacement: number;
+	pointerEvents: Array<{ type: string; timeStamp: number; y: number }>;
+	inputs: EncoderDragInput[];
+	normal: {
+		projection: {
+			fixture_values: Array<{
+				fixture_id: string;
+				attribute: string;
+				value: { kind: string; value: number };
+				fade: boolean;
+			}>;
+		};
+	} | null;
+}
+
+/** Records only relative input and receipts, never socket/session credentials. */
+export function recordEncoderDragFrame(
+	report: EncoderDragReport,
+	payload: string,
+	sent: boolean,
+) {
+	let frame: {
+		request_id?: string;
+		ok?: boolean;
+		action?: {
+			type?: string;
+			request?: {
+				request_id: string;
+				action: {
+					attribute: string;
+					fixture_ids: string[];
+					operation?: { type: string; delta: number };
+				};
+			};
+		};
+	} | null;
+	try {
+		frame = JSON.parse(payload);
+	} catch {
+		return;
+	}
+	if (!frame || typeof frame !== "object") return;
+	if (!sent) {
+		for (const input of report.inputs)
+			if (input.requestId === frame.request_id)
+				input.acknowledged = frame.ok === true;
+		return;
+	}
+	const request =
+		frame.action?.type === "programming_values" ? frame.action.request : null;
+	const operation = request?.action?.operation;
+	if (!request || operation?.type !== "relative_step") return;
+	report.inputs.push({
+		attribute: request.action.attribute,
+		fixtureIds: request.action.fixture_ids,
+		requestId: request.request_id,
+		delta: operation.delta,
+		sentAt: performance.now(),
+		acknowledged: false,
+	});
+}
+
+/** A continuous drag is a quantity of acknowledged input, not a fixed number of detents. */
+export function acceptedEncoderDragTarget(report: EncoderDragReport): number {
+	const inputs = report.inputs;
+	if (
+		!inputs.length ||
+		inputs.some(
+			(input) =>
+				!input.acknowledged ||
+				!Number.isFinite(input.delta) ||
+				input.delta <= 0,
+		)
+	)
+		throw new Error(
+			"The increasing drag needs acknowledged positive relative input",
+		);
+	if (new Set(inputs.map((input) => input.requestId)).size !== inputs.length)
+		throw new Error("The drag repeated a request identity");
+	const rows = report.normal?.projection.fixture_values ?? [];
+	const target = rows.find((row) => row.attribute === "intensity");
+	if (!target || target.value.kind !== "normalized" || target.fade !== false)
+		throw new Error("The drag must store direct normalized Intensity intent");
+	if (
+		inputs.some(
+			(input) =>
+				input.attribute !== "intensity" ||
+				input.fixtureIds.length !== 1 ||
+				input.fixtureIds[0] !== target.fixture_id,
+		)
+	)
+		throw new Error(
+			"The drag input does not address the observed fixture Intensity",
+		);
+	const sum = inputs.reduce((value, input) => value + input.delta, 0);
+	const value = target.value.value;
+	// Programmer alignment rounds each accepted input to micro-units; allow only that
+	// accumulated precision, never an extra/missing encoder pulse or a DMX-byte tolerance.
+	if (
+		!Number.isFinite(value) ||
+		value <= 0 ||
+		value >= 0.1 ||
+		Math.abs(value - sum) > inputs.length * 0.000001
+	)
+		throw new Error(
+			"Authoritative drag intent differs from its bounded accepted input",
+		);
+	return value;
+}
+
+interface PointerTraceElement extends HTMLElement {
+	benchEncoderTrace?: {
+		events: EncoderDragReport["pointerEvents"];
+		listener: (event: PointerEvent) => void;
+	};
+}
+
+async function pointerTrace(
+	control: Locator,
+	start: boolean,
+): Promise<EncoderDragReport["pointerEvents"]> {
+	return control.evaluate((node, begin) => {
+		const element = node as PointerTraceElement;
+		if (begin) {
+			const events: EncoderDragReport["pointerEvents"] = [];
+			const listener = (event: PointerEvent) =>
+				events.push({
+					type: event.type,
+					timeStamp: event.timeStamp,
+					y: event.clientY,
+				});
+			element.benchEncoderTrace = { events, listener };
+			for (const type of ["pointerdown", "pointermove", "pointerup"])
+				element.addEventListener(type, listener as EventListener, true);
+			return events;
+		}
+		const trace = element.benchEncoderTrace;
+		if (!trace) throw new Error("Encoder pointer observation was not started");
+		for (const type of ["pointerdown", "pointermove", "pointerup"])
+			element.removeEventListener(type, trace.listener as EventListener, true);
+		delete element.benchEncoderTrace;
+		return trace.events;
+	}, start);
+}
 
 type EncoderRoute = "api" | "ui" | "osc";
 type EncoderOperation = "set" | "add" | "subtract";
@@ -95,7 +251,10 @@ class VisibleEncoderPort implements NormalizedEncoderPort {
 		return this.encoder.release();
 	}
 
-	drag(direction: "add" | "subtract", rate: "slow" | "fast"): Promise<void> {
+	drag(
+		direction: "add" | "subtract",
+		rate: "slow" | "fast",
+	): Promise<EncoderDragReport> {
 		return this.encoder.drag(direction, rate);
 	}
 }
@@ -125,7 +284,10 @@ export class NormalizedEncoder implements NormalizedEncoderPort {
 		readonly key: string,
 	) {}
 
-	drag(direction: "add" | "subtract", rate: "slow" | "fast"): Promise<void> {
+	drag(
+		direction: "add" | "subtract",
+		rate: "slow" | "fast",
+	): Promise<EncoderDragReport> {
 		return this.owner.drag(this, direction, rate);
 	}
 
@@ -167,6 +329,7 @@ export class BrowserEncoders {
 	readonly routeReports: EncoderRouteReport[] = [];
 	private actionIndex = 0;
 	private readonly osc: BrowserOscEncoderRoute;
+	private observedDrag: EncoderDragReport | null = null;
 
 	constructor(
 		private readonly api: ApiDriver,
@@ -184,6 +347,16 @@ export class BrowserEncoders {
 		this.focus = this.group(EncoderGroup.Focus, FocusAttribute);
 		this.discrete = new BrowserDiscreteEncoders(api, selection, desk, page);
 		this.osc = new BrowserOscEncoderRoute(api, page, desk, hardware);
+		page.on("websocket", (socket) => {
+			socket.on("framesent", ({ payload }) => {
+				if (this.observedDrag)
+					recordEncoderDragFrame(this.observedDrag, String(payload), true);
+			});
+			socket.on("framereceived", ({ payload }) => {
+				if (this.observedDrag)
+					recordEncoderDragFrame(this.observedDrag, String(payload), false);
+			});
+		});
 	}
 
 	async releaseAttribute(encoder: NormalizedEncoder): Promise<void> {
@@ -212,7 +385,7 @@ export class BrowserEncoders {
 		encoder: NormalizedEncoder,
 		direction: "add" | "subtract",
 		rate: "slow" | "fast",
-	): Promise<void> {
+	): Promise<EncoderDragReport> {
 		const catalog = encoderCatalogEntry(encoder.group, encoder.key);
 		await this.desk.recordStep(
 			"ENCODER DRAG",
@@ -225,14 +398,41 @@ export class BrowserEncoders {
 		if (!box) throw new Error("Visible touch encoder has no pointer box");
 		const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 		const displacement = rate === "slow" ? 20 : 90;
-		await this.page.mouse.move(start.x, start.y);
-		await this.page.mouse.down();
-		await this.page.mouse.move(
-			start.x,
-			start.y + (direction === "add" ? -displacement : displacement),
-		);
-		await this.page.waitForTimeout(120);
-		await this.page.mouse.up();
+		const report: EncoderDragReport = {
+			box,
+			displacement,
+			pointerEvents: [],
+			inputs: [],
+			normal: null,
+		};
+		this.observedDrag = report;
+		await pointerTrace(control, true);
+		try {
+			await this.page.mouse.move(start.x, start.y);
+			await this.page.mouse.down();
+			await this.page.mouse.move(
+				start.x,
+				start.y + (direction === "add" ? -displacement : displacement),
+			);
+			await this.page.waitForTimeout(120);
+			await this.page.mouse.up();
+			await expect
+				.poll(
+					() =>
+						report.inputs.length > 0 &&
+						report.inputs.every((input) => input.acknowledged),
+				)
+				.toBe(true);
+			report.normal = await this.api.request(
+				"GET",
+				"/api/v2/programmer/values/snapshot",
+			);
+			return report;
+		} finally {
+			report.pointerEvents = await pointerTrace(control, false);
+			this.observedDrag = null;
+			console.log("Encoder physical drag observation", JSON.stringify(report));
+		}
 	}
 
 	async unqualified(

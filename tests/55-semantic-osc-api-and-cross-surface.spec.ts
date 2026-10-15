@@ -1,10 +1,11 @@
 // @bench-semantic-world
 
 import { expect } from "@playwright/test";
-import { fixtureRange } from "./bench/output/fixtureDmxContract";
 import { scenario } from "./bench/core/scenario";
+import { acceptedEncoderDragTarget } from "./bench/encoders/encoderScenario";
 import { StoreMode } from "./bench/groups-presets/groupScenario";
 import { fixture } from "./bench/output/fixtureDmx";
+import { fixtureRange } from "./bench/output/fixtureDmxContract";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
 import { Show } from "./bench/show/showScenario";
 
@@ -122,9 +123,20 @@ scenario(
 
 		await t.selection.fixtures.via.api.item(1);
 		await t.encoder.intensity.dimmer.via.ui.set(0);
-		await t.encoder.intensity.dimmer.via.ui.drag("add", "slow");
-		await t.clock.advanceStep();
-		await t.expectFixtureDMX(fixture(1), { Intensity: 1 });
+		const beforeDrag = await t.clock.advanceStep();
+		expect(
+			beforeDrag.universes.find((item) => item.universe === 1)?.slots[0],
+		).toBe(0);
+		const drag = await t.encoder.intensity.dimmer.via.ui.drag("add", "slow");
+		const target = acceptedEncoderDragTarget(drag);
+		const firstFrame = await t.clock.advanceStep();
+		// A wall-clock rate gesture can emit different pulse counts. Its independently
+		// acknowledged Normal target must reach the very first frame with lighting time frozen,
+		// despite the configured 5s fade. Exact single-detent checks below stay fixed.
+		expect(firstFrame.now).toBe(beforeDrag.now);
+		expect(
+			firstFrame.universes.find((item) => item.universe === 1)?.slots[0],
+		).toBe(Math.round(target * 255));
 		await t.encoder.intensity.dimmer.via.ui.set(0);
 		await t.encoder.intensity.dimmer.via.ui.add(10);
 		await t.clock.advanceStep();
