@@ -74,7 +74,9 @@ export function useCommandLineSurface({
 	const execute = useCallback(
 		async (value?: string, poolTap?: CommandPoolTapProjection) => {
 			if (!writable() || !actions) return false;
-			const outcome = await actions.execute(value, poolTap);
+			const outcome = await (poolTap
+				? actions.execute(value, poolTap)
+				: actions.execute(value));
 			if (outcome.report === "concurrent_change")
 				reportConcurrentCommandChange();
 			if (outcome.report === "unreconciled") reportUnreconciledCommand();
