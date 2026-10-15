@@ -1850,6 +1850,32 @@
 	color: var(--blue);
 }
 
+/* Group construction stays secondary to the unchanged name and number. */
+.group-card .pool-card-state-marker.derived {
+	max-width: 100%;
+	padding: 0;
+	background: transparent;
+	color: var(--text-muted, #9aa8b1);
+	font-weight: 400;
+}
+
+.group-reference-construction {
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
+}
+
+.group-reference-construction > svg {
+	flex-shrink: 0;
+}
+
+.group-reference-expression {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .pool-card-state-marker.frozen {
 	color: var(--amber);
 }

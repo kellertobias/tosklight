@@ -1,6 +1,9 @@
 import { PoolCard } from "@tosklight/ui/pools";
 import { useEffect, useRef } from "react";
-import type { PoolPresentationConfiguration } from "../../api/types";
+import type {
+	GroupReference,
+	PoolPresentationConfiguration,
+} from "../../api/types";
 import type { PoolMutationOperation } from "../../features/controlSurfaceInteraction/poolCommandTarget";
 import { resolveConfiguredPoolPresentation } from "../../features/poolPresentation/poolPresentation";
 import type { StagedSelectionWrite } from "../../features/programmingInteraction/selectionWriter";
@@ -43,13 +46,86 @@ function emptyGroupHint(storeArmed: boolean, updateArmed: boolean) {
 	return "Press Record to use this slot";
 }
 
-export function groupReferencePresentation(
-	references: readonly { group_id: string }[],
-) {
-	const numbers = references.map((reference) => reference.group_id);
+export function groupReferencePresentation(references: readonly GroupReference[]) {
+	const parts = references.map(({ group_id, rule }) => {
+		const n = rule.type === "every_nth" ? rule.n : 2;
+		const offset =
+			rule.type === "every_nth" ? rule.offset : rule.type === "even" ? 1 : 0;
+		return {
+			compact:
+				rule.type === "all"
+					? group_id
+					: `${group_id} % ${n}${offset ? ` + ${offset}` : ""}`,
+			description:
+				rule.type === "all"
+					? `Group ${group_id}, all fixtures`
+					: `Group ${group_id}, every ${n} fixtures starting at position ${offset + 1}`,
+		};
+	});
 	return {
-		compact: `Ref: ${numbers.join(", ")}`,
-		description: `References ${numbers.length === 1 ? "Group" : "Groups"} ${numbers.join(", ")}`,
+		compact: parts.map((part) => part.compact).join(", "),
+		description: parts.map((part) => part.description).join("; "),
+	};
+}
+
+function legacyGroupReference(group: Group | null): GroupReference[] {
+	const derived = group?.body.derived_from;
+	if (!derived) return [];
+	const { type, n, offset } = derived.rule;
+	if (type === "all" || type === "odd" || type === "even") {
+		return [{ group_id: derived.source_group_id, rule: { type } }];
+	}
+	if (
+		type === "every_nth" &&
+		typeof n === "number" &&
+		Number.isInteger(n) &&
+		n > 0 &&
+		typeof offset === "number" &&
+		Number.isInteger(offset) &&
+		offset >= 0
+	) {
+		return [{ group_id: derived.source_group_id, rule: { type, n, offset } }];
+	}
+	return [];
+}
+
+function groupReferenceModel(group: Group | null) {
+	const canonicalSource = group ? canonicalGroupSource(group.body) : null;
+	const presentationReferences =
+		canonicalSource?.type === "references"
+			? canonicalSource.references
+			: canonicalSource
+				? []
+				: legacyGroupReference(group);
+	const referencePresentation = groupReferencePresentation(presentationReferences);
+	return {
+		derived: presentationReferences.length > 0,
+		derivedLabel:
+			presentationReferences.length > 0 ? (
+				<span
+					className="group-reference-construction"
+					title={referencePresentation.description}
+				>
+					<svg
+						aria-hidden="true"
+						width="11"
+						height="11"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+					>
+						<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2" />
+					</svg>
+					<span className="group-reference-expression">
+						{referencePresentation.compact}
+					</span>
+				</span>
+			) : undefined,
+		derivedDescription:
+			presentationReferences.length > 0
+				? referencePresentation.description
+				: undefined,
 	};
 }
 
@@ -107,10 +183,7 @@ export function GroupCard({
 	const { scheduleLiveSelection, selectFrozen, cancelSelection } =
 		useGroupClickSelection({ stageSelect, consumeHold, select, dereference });
 	const missing = missingFixtureCount(group, knownFixtureIds);
-	const canonicalSource = group ? canonicalGroupSource(group.body) : null;
-	const canonicalReferences =
-		canonicalSource?.type === "references" ? canonicalSource.references : [];
-	const referencePresentation = groupReferencePresentation(canonicalReferences);
+
 	const attributes = Object.keys(group?.body.programming ?? {});
 	const unsupported = unsupportedValueCount(group, attributes, capabilities);
 	const presentation = resolveConfiguredPoolPresentation(poolPresentation, {
@@ -169,18 +242,7 @@ export function GroupCard({
 					? (recordLabel ?? (group?.body.fixtures.length ? "REC MRG" : "REC"))
 					: undefined,
 				states: presentation.states,
-				derived:
-					canonicalReferences.length > 0 || Boolean(group?.body.derived_from),
-				derivedLabel:
-					canonicalReferences.length > 0
-						? referencePresentation.compact
-						: group?.body.derived_from
-							? `Derived · ${group.body.derived_from.rule.type}`
-							: undefined,
-				derivedDescription:
-					canonicalReferences.length > 0
-						? referencePresentation.description
-						: undefined,
+				...groupReferenceModel(group),
 				frozen: Boolean(group?.body.frozen_from),
 				frozenLabel: group?.body.frozen_from
 					? `Frozen · rev ${group.body.frozen_from.source_revision}`
