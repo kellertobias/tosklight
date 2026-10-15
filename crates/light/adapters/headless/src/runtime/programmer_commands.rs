@@ -202,6 +202,7 @@ pub(super) fn execute_programmer_command_effect_from(
     let manual_playback_command = raw_tokens.first().is_some_and(|root| {
         root.eq_ignore_ascii_case("GO")
             || root.eq_ignore_ascii_case("LOAD")
+            || root.eq_ignore_ascii_case("OFF")
             || root.eq_ignore_ascii_case("PBK")
             || root.eq_ignore_ascii_case("CUELIST")
             || (matches!(root.to_ascii_uppercase().as_str(), "RECORD" | "REC")

@@ -111,6 +111,7 @@ impl<'a> ServerProgrammingPorts<'a> {
             .or_else(|| self.link_cue_command(programmers, context, command))
             .or_else(|| self.record_group_command(programmers, context, command))
             .or_else(|| self.record_preset_command(programmers, context, command))
+            .or_else(|| self.off_playback_command(programmers, context, command))
             .or_else(|| self.select_playback_command(programmers, context, command, policy))
             .or_else(|| self.update_add_cue_command(programmers, context, command))
             .or_else(|| self.record_cue_command(programmers, context, command))

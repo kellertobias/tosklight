@@ -77,6 +77,7 @@ pub(crate) fn prevalidate_typed_command(
             false
         }
         || super::cue_navigation_command::parse(command)?.is_some()
+        || super::playback_off_command::parse(command)?.is_some()
         || super::playback_selection_command::parse(command)?.is_some()
         || super::speed_group_command::parse(command)?.is_some();
     if parsed && state.active_show.current().is_none() {
@@ -109,6 +110,10 @@ pub(crate) fn prevalidate_external_command(
         return Ok(());
     }
     match tokens.first().map(String::as_str) {
+        Some("OFF") => super::playback_off_command::parse(command)?
+            .is_some()
+            .then_some(())
+            .ok_or_else(|| "expected PBK playback address".into()),
         Some("GO" | "LOAD") => super::cue_navigation_command::parse(command)?
             .is_some()
             .then_some(())
@@ -664,6 +669,7 @@ pub(super) fn compatibility_only_family(command: &str) -> Result<Option<&'static
         || super::cue_link_command::parse(command)?.is_some()
         || super::cue_deletion_command::is_cue_deletion(command)
         || super::cue_navigation_command::parse(command)?.is_some()
+        || super::playback_off_command::parse(command)?.is_some()
         || super::playback_selection_command::parse(command)?.is_some()
         || super::speed_group_command::parse(command)?.is_some()
     {

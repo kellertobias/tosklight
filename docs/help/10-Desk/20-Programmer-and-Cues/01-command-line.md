@@ -401,6 +401,8 @@ This allows more Cues to be inserted between existing Cues without first renumbe
 
 There is no separate Select button. To select a playback on the current page, press `[PBK] <playback-number> [ENT]`. To select a playback on an explicit page, press `[PBK] <page> [.] <playback-number> [ENT]`. The part before the dot is always the Playback page; the part after it is always the position. The current page comes from the visibly selected Playback surface and is shared by software, keyboard and attached OSC input. The selected playback's assigned Cuelist becomes the selected Cuelist. Repeated `[PBK]` presses keep this same unified address syntax.
 
+To turn off a playback, press `[OFF][PBK] <playback-number> [ENT]`. Use `[OFF][PBK] <page>[.]<playback-number> [ENT]` for an explicit page, for example `OFF PBK 3.16`. The address without a page follows the visibly selected Playback surface. This uses the same Off action as pressing `[OFF]` and then touching the playback; it does not delete its Cue or Cuelist.
+
 To select a Cuelist directly, press `[CUE][CUE] <Cuelist-number> [ENT]`. A single `[CUE]` always addresses a Cue inside the selected Cuelist. For example, `[CUE] 2.1 [ENT]` addresses Cue `2.1` in the selected Cuelist, while `[CUE][CUE] 4 [CUE] 2.1 [ENT]` addresses Cue `2.1` in Cuelist 4.
 
 Running a different playback does not silently change the selection.

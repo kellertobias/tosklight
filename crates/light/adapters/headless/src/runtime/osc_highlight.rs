@@ -438,6 +438,11 @@ fn route_programmer_osc_action(
     action: &str,
     request_id: Option<&str>,
 ) -> bool {
+    if action == "off"
+        && command_http::open_running_output_on_repeated_off(state, session, path, request_id)
+    {
+        return true;
+    }
     if action == "align" {
         return apply_align_osc(state, session, request_id, false);
     }
@@ -458,7 +463,7 @@ fn route_programmer_osc_action(
         true
     } else if matches!(
         action,
-        "escape" | "menu" | "prog-playback" | "off" | "page-up" | "page-down" | "diff"
+        "escape" | "menu" | "prog-playback" | "page-up" | "page-down" | "diff"
     ) {
         emit(
             state,
@@ -526,6 +531,11 @@ pub(super) fn handle_programmer_osc(
         return false;
     }
     let action = parts[3];
+    if action == "off"
+        && (!subscriber.capability.may_program() || !session.capability.may_program())
+    {
+        return false;
+    }
     if action == "shift" {
         handle_shift_osc(state, &session, parts[1], source, pressed);
         return true;

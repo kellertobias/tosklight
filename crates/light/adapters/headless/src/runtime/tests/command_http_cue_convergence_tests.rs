@@ -956,3 +956,5 @@ async fn a_guest_runs_playback_while_the_programming_user_holds_a_record() {
 
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+include!("playback_off_command_tests.rs");

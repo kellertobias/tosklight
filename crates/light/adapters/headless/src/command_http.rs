@@ -84,6 +84,9 @@ mod lifecycle_routes;
 mod lifecycle_wire;
 #[path = "command_http/playback_address_command.rs"]
 pub(crate) mod playback_address_command;
+#[path = "command_http/playback_off_command.rs"]
+mod playback_off_command;
+pub(crate) use playback_off_command::open_running_output_on_repeated_off;
 #[path = "command_http/playback_selection_command.rs"]
 mod playback_selection_command;
 #[path = "command_http/playback_selection_programming_ports.rs"]
