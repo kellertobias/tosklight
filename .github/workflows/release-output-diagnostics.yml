@@ -4,7 +4,7 @@ name: Release output diagnostics (artifact only)
 # independently of this workflow commit, using the reviewed current release source.
 on:
   push:
-    branches: [codex/release-playback-off-command]
+    branches: [codex/release-output-cohort-diagnostics]
     paths: [.github/workflows/release-output-diagnostics.yml]
 
 permissions:
@@ -16,7 +16,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CANDIDATE_SHA: b6adbffd2cf77c04554067ad35c79a48745b2a05
+  CANDIDATE_SHA: a3ba4219d593f988edb2b81358893184f9bfb55e
   PUBLISHED_SHA: 676e3a707a9f921a7dee25ad4116aa2edade9c56
   PUBLISHED_TAG: v2.0.18
 
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: b6adbffd2cf77c04554067ad35c79a48745b2a05
+          ref: a3ba4219d593f988edb2b81358893184f9bfb55e
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
