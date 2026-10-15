@@ -1,0 +1,314 @@
+name: Release output diagnostics (artifact only)
+
+# Diagnostic orchestration does not build, tag or publish a release. The binary source is pinned
+# independently of this workflow commit, using the reviewed current release source.
+on:
+  push:
+    branches: [codex/release-playback-off-command]
+    paths: [.github/workflows/release-output-diagnostics.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: output-diagnostics-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CANDIDATE_SHA: b6adbffd2cf77c04554067ad35c79a48745b2a05
+  PUBLISHED_SHA: 676e3a707a9f921a7dee25ad4116aa2edade9c56
+  PUBLISHED_TAG: v2.0.18
+
+jobs:
+  candidate-desktop:
+    name: Candidate / Paired unchanged Linux desktop cohorts
+    if: github.repository == 'kellertobias/tosklight'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      OUT: .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: b6adbffd2cf77c04554067ad35c79a48745b2a05
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Freeze actual source and host identity
+        shell: bash
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          mkdir -p "$OUT"
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, platform, subprocess
+          def command(*args):
+              return subprocess.check_output(args, text=True).strip()
+          paths = ['Cargo.lock', 'package-lock.json', 'assets/demo.show',
+                   'tools/run-desktop-performance.mjs', 'tools/process-tree-resources.mjs']
+          paths += ['apps/light-headless/src/bin/light_benchmark/patch_mutation.rs', 'apps/light-headless/src/bin/light_benchmark/patch_mutation/diagnostics.rs', 'crates/shared/show/src/playback_contract.rs', 'crates/shared/show/src/show_store.rs', 'crates/shared/show/src/portable/migration.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/output_transaction.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/output_transaction/family_frame.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid/parallel_groups.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid/parallel_preparation.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid/staged.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/slow_phase_trace.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/slow_phase_trace/live_phases.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/slow_phase_trace/live_phases/family_preparation.rs']
+          data = {'binary_source_sha': os.environ['CANDIDATE_SHA'],
+                  'workflow_commit_sha': os.environ['WORKFLOW_SHA'],
+                  'qualification': 'Reviewed candidate pinned independently of orchestration; diagnostics do not establish full main acceptance.',
+                  'platform': platform.platform(), 'cpu_count': os.cpu_count(),
+                  'allowed_cpus': sorted(os.sched_getaffinity(0)),
+                  'cpuinfo': pathlib.Path('/proc/cpuinfo').read_text(),
+                  'meminfo': pathlib.Path('/proc/meminfo').read_text(),
+                  'node': command('node', '--version'), 'rustc': command('rustc', '-Vv'),
+                  'cargo': command('cargo', '--version'),
+                  'source_sha256': {p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in paths},
+                  'pair_order': ['off', 'on'], 'nested_phase_opt_in': {'off': 'false', 'on': '1'},
+                  'observer_caveat': 'Sequential paired cohorts on one host; order and process warmup are confounders. Inclusive wall time is not CPU or parked lock wait.'}
+          path = pathlib.Path(os.environ['OUT']) / 'candidate-source-host.json'
+          with path.open('x') as stream:
+              json.dump(data, stream, indent=2)
+              stream.write('\n')
+          PYTHON
+
+      - uses: ./.github/actions/package-mirror
+
+      - name: Install canonical Linux bundle and measurement dependencies
+        timeout-minutes: 25
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          sudo timeout 180 apt-get update
+          sudo timeout 900 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev \
+            libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools \
+            build-essential xvfb libgl1-mesa-dri
+
+      - name: Build pinned canonical release Control and sidecars
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci 2>&1 | tee "$OUT/npm-ci.log"
+          npm run build --prefix apps/light-desktop 2>&1 | tee "$OUT/frontend-build.log"
+          cargo build --release --locked --target "$TARGET" \
+            -p light-headless --bin light-headless --bin light-benchmark -p viz-renderer --bin viz-renderer \
+            2>&1 | tee "$OUT/sidecar-build.log"
+          sidecars="$(npm run --silent artifact-path -- tmp)/tl775-diagnostic-sidecars"
+          mkdir -p "$sidecars"
+          cp ".artifacts/build/cargo/$TARGET/release/light-headless" "$sidecars/light-headless-$TARGET"
+          cp ".artifacts/build/cargo/$TARGET/release/viz-renderer" "$sidecars/viz-renderer-$TARGET"
+          export LIGHT_DESKTOP_SIDECAR_DIR="$sidecars"
+          export LIGHT_DESKTOP_SIDECAR_TARGET="$TARGET"
+          config="$(npm run --silent artifact-path -- tmp)/tl775-diagnostic-control.json"
+          node tools/write-tauri-artifact-config.mjs control "$config"
+          cp "$config" "$OUT/tauri-control-config.json"
+          npm run --prefix apps/light-desktop tauri:build -- --target "$TARGET" \
+            --config "$config" --bundles appimage 2>&1 | tee "$OUT/control-build.log"
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib
+          root = pathlib.Path('.artifacts/build/cargo') / os.environ['TARGET'] / 'release'
+          apps = sorted((root / 'bundle/appimage').glob('*.AppImage'))
+          if len(apps) != 1:
+              raise RuntimeError(f'Expected exactly one canonical AppImage, got {apps}')
+          paths = [apps[0], root / 'light-headless', root / 'viz-renderer', root / 'light-benchmark']
+          data = {'source_sha': os.environ['CANDIDATE_SHA'],
+                  'binaries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest(),
+                                'size_bytes': p.stat().st_size} for p in paths]}
+          out = pathlib.Path(os.environ['OUT'])
+          with (out / 'candidate-binaries.json').open('x') as stream:
+              json.dump(data, stream, indent=2)
+              stream.write('\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write(f'DIAGNOSTIC_APPIMAGE={apps[0].resolve()}\n')
+          PYTHON
+
+      - name: Measure unchanged four cases with diagnostics off, then on
+        id: measure
+        shell: bash
+        env:
+          RUST_LOG: info
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          # Identical unpacked AppImage runner workaround to the published collector.
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+        run: |
+          set -euo pipefail
+          # No builds or other measurement actors overlap either full cohort. Each case still
+          # owns a fresh data directory/process tree and preserves its ordinary cleanup/errors.
+          overall=0
+          for observer in off on; do
+            mkdir -p "$OUT/$observer"
+            enabled=false
+            if [[ "$observer" == on ]]; then enabled=1; fi
+            status=0
+            LIGHT_OUTPUT_PHASE_DIAGNOSTICS="$enabled" xvfb-run -a \
+            node tools/run-desktop-performance.mjs \
+            --application "$DIAGNOSTIC_APPIMAGE" --output-dir "$OUT/$observer" \
+            --demo-show assets/demo.show >"$OUT/$observer/collector.stdout.log" \
+            2>"$OUT/$observer/collector.stderr.log" || status=$?
+            printf '%s\n' "$status" >"$OUT/$observer/collector-exit-code.txt"
+            if [[ "$status" != 0 ]]; then overall=1; fi
+          done
+          python3 - <<'PYTHON'
+          import json, os, pathlib
+          out = pathlib.Path(os.environ['OUT'])
+          evidence = {}
+          valid = True
+          for observer in ['off', 'on']:
+              logs = sorted((out / observer).glob('*-light-headless.log'))
+              counts = {p.name: p.read_text(errors='replace').count('bounded live output nested phase sample') for p in logs}
+              evidence[observer] = counts
+              valid &= len(logs) == 4 and all((n == 0 if observer == 'off' else n > 0) for n in counts.values())
+          with (out / 'observer-presence.json').open('x') as stream:
+              json.dump({'valid': valid, 'counts': evidence,
+                         'qualification': 'Presence only; exact measured-window phase coverage requires independent timestamp audit.'}, stream, indent=2)
+              stream.write('\n')
+          if not valid:
+              raise SystemExit('Missing or unexpected observer logs; collector exit evidence preserved.')
+          PYTHON
+          # Preserve failure: a second successful cohort cannot turn the first failure green.
+          exit "$overall"
+
+      - name: Measure one unchanged candidate Patch cohort
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=".artifacts/build/cargo/$TARGET/release/light-benchmark"
+          mkdir -p "$OUT/patch"
+          test -x "$binary"
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, platform
+          binary = pathlib.Path('.artifacts/build/cargo') / os.environ['TARGET'] / 'release/light-benchmark'
+          data = {'source_sha': os.environ['CANDIDATE_SHA'],
+                  'binary_path': str(binary), 'binary_sha256': hashlib.sha256(binary.read_bytes()).hexdigest(),
+                  'platform': platform.platform(), 'cpu_count': os.cpu_count(),
+                  'allowed_cpus': sorted(os.sched_getaffinity(0)),
+                  'cpuinfo': pathlib.Path('/proc/cpuinfo').read_text(),
+                  'loadavg': pathlib.Path('/proc/loadavg').read_text(),
+                  'qualification': 'ONE fixed candidate cohort after both desktop cohorts have terminated. No build or measurement overlap. Original profile, eight warmups, forty samples and 250/500 ms Patch gates. Opt-in observer overhead remains; no retry or threshold change.'}
+          with (pathlib.Path(os.environ['OUT']) / 'patch/source-binary-host.json').open('x') as stream:
+              json.dump(data, stream, indent=2)
+              stream.write('\n')
+          PYTHON
+          status=0
+          LIGHT_PATCH_REQUEST_DIAGNOSTICS=1 "$binary" \
+            --profile hard-floor --protocol artnet --transport encode-only \
+            --seconds 15 --warmup-seconds 1 --fixtures-per-universe 32 \
+            --universes 32 --rate-hz 60 \
+            --hardware-label "Candidate Linux matched Patch diagnostic" \
+            --mutation-gate --patch-gate \
+            >"$OUT/patch/hard-floor.json" 2>"$OUT/patch/stderr.log" || status=$?
+          printf '%s\n' "$status" >"$OUT/patch/exit-code.txt"
+          exit "$status"
+
+      - name: Retain candidate evidence and exact AppImage
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tl775-candidate-opted-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+            .artifacts/build/cargo/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+  published-mutation-rerun:
+    name: Immutable v2.0.18 / One unchanged hard-floor rerun
+    # Candidate localisation only; retain the prior immutable published failure without rerun.
+    if: ${{ false }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      OUT: .artifacts/test/results/tl775-main676-rerun-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: 676e3a707a9f921a7dee25ad4116aa2edade9c56
+          persist-credentials: false
+
+      - name: Download immutable release input and freeze provenance
+        shell: bash
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$PUBLISHED_SHA"
+          mkdir -p "$OUT/input"
+          tag_identity="$(gh api repos/kellertobias/tosklight/git/ref/tags/v2.0.18 \
+            --jq '.object.type + " " + .object.sha')"
+          test "$tag_identity" = "commit $PUBLISHED_SHA"
+          gh release download "$PUBLISHED_TAG" --repo kellertobias/tosklight \
+            --pattern tosklight-bundle-linux_amd64.zip --dir "$OUT/input"
+          gh release download "$PUBLISHED_TAG" --repo kellertobias/tosklight --pattern report-performance.zip --dir "$OUT/input"
+          gh release download "$PUBLISHED_TAG" --repo kellertobias/tosklight --pattern report-performance-status.json --dir "$OUT/input"
+          unzip -q "$OUT/input/tosklight-bundle-linux_amd64.zip" -d "$OUT/input/unpacked"
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, platform
+          out = pathlib.Path(os.environ['OUT'])
+          binaries = list((out / 'input/unpacked').rglob('light-benchmark'))
+          if len(binaries) != 1:
+              raise RuntimeError(f'Expected one released benchmark, got {binaries}')
+          binary = binaries[0]
+          binary.chmod(binary.stat().st_mode | 0o111)
+          archive = out / 'input/tosklight-bundle-linux_amd64.zip'
+          data = {'tag': os.environ['PUBLISHED_TAG'], 'verified_tag_commit': os.environ['PUBLISHED_SHA'],
+                  'workflow_commit_sha': os.environ['WORKFLOW_SHA'], 'platform': platform.platform(),
+                  'cpu_count': os.cpu_count(), 'allowed_cpus': sorted(os.sched_getaffinity(0)),
+                  'cpuinfo': pathlib.Path('/proc/cpuinfo').read_text(),
+                  'meminfo': pathlib.Path('/proc/meminfo').read_text(),
+                  'inputs': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest(),
+                              'size_bytes': p.stat().st_size} for p in [archive, binary, out / 'input/report-performance.zip',
+                                        out / 'input/report-performance-status.json']],
+                  'qualification': 'One predeclared rerun; original published18 failure retained, no release/report replacement.'}
+          with (out / 'published-input-host.json').open('x') as stream:
+              json.dump(data, stream, indent=2)
+              stream.write('\n')
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write(f'PUBLISHED_BENCHMARK={binary.resolve()}\n')
+          PYTHON
+
+      - name: Run original hard-floor, mutation and patch gates once
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Exact published baseline invocation: 32u x32 fixtures, 60Hz, 15s+1s warmup,
+          # unchanged mutation 200 samples/20 warmups and patch40 samples/8 warmups.
+          status=0
+          "$PUBLISHED_BENCHMARK" --profile hard-floor --protocol artnet --transport encode-only \
+            --seconds 15 --warmup-seconds 1 --fixtures-per-universe 32 --universes 32 \
+            --rate-hz 60 --hardware-label "GitHub Actions ubuntu-22.04 (identity in published-input-host.json)" \
+            --mutation-gate --patch-gate >"$OUT/hard-floor.json" \
+            2>"$OUT/hard-floor.stderr.log" || status=$?
+          printf '%s\n' "$status" >"$OUT/benchmark-exit-code.txt"
+          # The executable reports gate results in JSON; preserve its exit and separately enforce
+          # those exact original booleans, without tolerances or a rerun-until-green loop.
+          python3 - <<'PYTHON'
+          import json, os, pathlib
+          out = pathlib.Path(os.environ['OUT'])
+          data = json.loads((out / 'hard-floor.json').read_text())
+          if (data['required_floor_met'] is not True or data['show_mutation']['gate_met'] is not True
+                  or data['patch_mutation']['gate_met'] is not True):
+              raise SystemExit('Original hard-floor, show_mutation or patch_mutation gate failed; raw report retained.')
+          PYTHON
+          exit "$status"
+
+      - name: Retain rerun separately from published assets
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tl775-main676-immutable-rerun-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/test/results/tl775-main676-rerun-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
