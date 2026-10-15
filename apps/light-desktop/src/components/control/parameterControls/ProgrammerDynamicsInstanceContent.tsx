@@ -66,7 +66,7 @@ export function ProgrammerDynamicsInstanceContent(props: InstanceContentProps) {
 	]
 		.filter(Boolean)
 		.join(" · ");
-	return (
+	const content = (
 		<>
 			<DynamicsToolbar {...props} />
 			{view !== "instance" && selectedObject ? (
@@ -85,6 +85,12 @@ export function ProgrammerDynamicsInstanceContent(props: InstanceContentProps) {
 				/>
 			)}
 		</>
+	);
+	return props.controller.hardwareConnected &&
+		(view === "instance" || !selectedObject) ? (
+		<div className="programmer-dynamics-instance-hardware">{content}</div>
+	) : (
+		content
 	);
 }
 

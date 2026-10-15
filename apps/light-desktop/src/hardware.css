@@ -611,3 +611,69 @@
 	font-size:10px;
 	line-height:13px;
 }
+
+/* Keep Dynamic inspector tools outside the configured hardware readout cells. */
+.hardware-connected .programmer-dynamics-instance-hardware {
+	grid-column: 1 / -1;
+	min-width: 0;
+	min-height: 0;
+	display: grid;
+	grid-template-columns: subgrid;
+	grid-template-rows: 24px minmax(0, 1fr);
+	gap: 4px;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	.programmer-dynamics-toolbar {
+	grid-column: 1 / -1;
+	min-width: 0;
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) repeat(4, max-content);
+	gap: 4px;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	.programmer-dynamics-toolbar
+	.ui-button {
+	height: 24px;
+	min-height: 0;
+	padding: 0 6px;
+	font-size: 10px;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	> .hardware-encoder-display {
+	grid-template-rows: max-content minmax(0, 1fr);
+	gap: 1px;
+	padding: 3px 4px;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	.hardware-encoder-primary-labels {
+	position: static;
+	inset: auto;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	.hardware-encoder-display.single-target
+	.hardware-encoder-target {
+	position: static;
+	inset: auto;
+	min-height: 0;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	.hardware-encoder-display.single-target
+	.hardware-encoder-target
+	> strong {
+	position: static;
+	inset: auto;
+	transform: none;
+	line-height: 1.2;
+}
+.hardware-connected
+	.programmer-dynamics-instance-hardware
+	> .hardware-encoder-display:nth-child(2)
+	strong {
+	font-size: 10px;
+}
