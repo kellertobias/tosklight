@@ -16,7 +16,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CANDIDATE_SHA: a3ba4219d593f988edb2b81358893184f9bfb55e
+  CANDIDATE_SHA: cfa4e87a66d693c4bae342e912690b81cd4e2733
   PUBLISHED_SHA: 676e3a707a9f921a7dee25ad4116aa2edade9c56
   PUBLISHED_TAG: v2.0.18
 
@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: a3ba4219d593f988edb2b81358893184f9bfb55e
+          ref: cfa4e87a66d693c4bae342e912690b81cd4e2733
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
