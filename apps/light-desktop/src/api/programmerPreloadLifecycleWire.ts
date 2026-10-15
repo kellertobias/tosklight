@@ -360,6 +360,10 @@ function assertCommit(
 			commit.executed.length,
 			commit.executedPlaybackActions,
 		);
+	// Layout-only commits advance portable authority without replacing the compiled output.
+	// One atomic GO still returns projections from exactly one compiled generation.
+	const compiledRevision =
+		commit.runtimeChanges[0]?.projection.scope.show_revision;
 	for (const [index, change] of commit.runtimeChanges.entries()) {
 		if (
 			change.projection.scope.show_id.toLowerCase() !==
@@ -370,10 +374,16 @@ function assertCommit(
 				commit.showId,
 				change.projection.scope.show_id,
 			);
-		if (change.projection.scope.show_revision !== commit.showRevision)
+		if (change.projection.scope.show_revision > commit.showRevision)
 			throw mismatch(
 				`$.commit.runtime_changes[${index}].projection.scope.show_revision`,
-				commit.showRevision,
+				`at most ${commit.showRevision}`,
+				change.projection.scope.show_revision,
+			);
+		if (change.projection.scope.show_revision !== compiledRevision)
+			throw mismatch(
+				`$.commit.runtime_changes[${index}].projection.scope.show_revision`,
+				compiledRevision,
 				change.projection.scope.show_revision,
 			);
 		if (

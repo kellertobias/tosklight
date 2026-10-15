@@ -194,6 +194,89 @@ describe("Preload commit exact runtime owners", () => {
 	});
 });
 
+describe("TL755 portable commit and compiled runtime authorities", () => {
+	function layoutCommit(engineRevision = 664) {
+		const body = response();
+		const commit = body.commit;
+		if (!commit) throw new Error("commit fixture required");
+		commit.show_revision = 665;
+		for (const change of commit.runtime_changes)
+			change.projection.scope.show_revision = engineRevision;
+		const layoutRequest: ProgrammerPreloadLifecycleRequest = {
+			...request,
+			action: {
+				type: "go",
+				showId: SHOW_ID,
+				expectedShowRevision: 665,
+				expectedPlaybackEventSequence: 10,
+			},
+		};
+		return { body, commit, layoutRequest };
+	}
+	it.each([
+		664, 660,
+	])("accepts a layout-only portable advance with compiled revision %s", (engineRevision) => {
+		const { body, layoutRequest } = layoutCommit(engineRevision);
+		const first = firstRuntime(body);
+		first.identity = { kind: "playback", page: 3, position: 16 };
+		if (!first.runtime) throw new Error("runtime fixture required");
+		first.runtime.owner = { kind: "playback", page: 3, position: 16 };
+		first.runtime.enabled = false;
+		const before = structuredClone(body);
+		const decoded = decodeProgrammerPreloadLifecycleOutcome(
+			body,
+			layoutRequest,
+		);
+		const decodedCommit = decoded.commit;
+		if (!decodedCommit) throw new Error("decoded commit required");
+		expect(decodedCommit.showRevision).toBe(665);
+		expect(
+			decodedCommit.runtimeChanges.map(
+				(change) => change.projection.scope.show_revision,
+			),
+		).toEqual([engineRevision, engineRevision]);
+		expect(decodedCommit.runtimeChanges[0].projection).toEqual(first);
+		expect(decoded.queueProjection?.actions).toEqual([]);
+		expect(body).toEqual(before);
+	});
+	it("rejects a compiled revision newer than portable commit authority", () => {
+		const { body, layoutRequest } = layoutCommit(666);
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, layoutRequest),
+		).toThrow(/runtime_changes\[0\].projection.scope.show_revision/);
+	});
+	it("rejects mixed compiled generations within one atomic GO", () => {
+		const { body, commit, layoutRequest } = layoutCommit();
+		commit.runtime_changes[1].projection.scope.show_revision = 663;
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, layoutRequest),
+		).toThrow(/runtime_changes\[1\].projection.scope.show_revision/);
+	});
+	it("still rejects a foreign runtime show", () => {
+		const { body, commit, layoutRequest } = layoutCommit();
+		commit.runtime_changes[0].projection.scope.show_id =
+			"ffffffff-ffff-4fff-8fff-ffffffffffff";
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, layoutRequest),
+		).toThrow(/runtime_changes\[0\].projection.scope.show_id/);
+	});
+	it("still rejects a stale portable commit receipt", () => {
+		const { body, commit, layoutRequest } = layoutCommit();
+		commit.show_revision = 666;
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, layoutRequest),
+		).toThrow(/\$\.commit.show_revision/);
+	});
+	it.each([
+		10, 13,
+	])("still rejects runtime event %s outside the committed interval", (eventSequence) => {
+		const { body, commit, layoutRequest } = layoutCommit();
+		commit.runtime_changes[0].event_sequence = eventSequence;
+		expect(() =>
+			decodeProgrammerPreloadLifecycleOutcome(body, layoutRequest),
+		).toThrow(/runtime_changes\[0\].event_sequence/);
+	});
+});
 function dynamicResponse(active: boolean, embedded: boolean): WireOutcome {
 	const body = response();
 	for (const change of body.commit!.runtime_changes) {
