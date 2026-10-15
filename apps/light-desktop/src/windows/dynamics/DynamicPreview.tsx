@@ -579,7 +579,7 @@ export function DynamicPhaseRankPreview({
 	}, [dynamic.id, dynamic.revision, orderingKey, mappingKey, patchRevision, loadPreview]);
 	return (
 		<aside
-			className="dynamic-discussion-preview-sidebar dynamic-phase-rank-preview"
+			className="dynamic-face-preview-sidebar dynamic-discussion-preview-sidebar dynamic-phase-rank-preview"
 			aria-label="Authoritative Phase preview"
 		>
 			<h3>Phase ranks</h3>

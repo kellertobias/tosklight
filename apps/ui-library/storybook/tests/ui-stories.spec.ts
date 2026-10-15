@@ -757,7 +757,7 @@ test("Dynamics lane layout preserves full-width geometry and isolated interactio
 	);
 });
 
-test("Dynamics full application discussion keeps the selection preview across tabs and exposes shared Phase controls", async ({
+test("Dynamics full application discussion preserves Lanes and Speed previews and exposes authoritative Phase controls", async ({
 	page,
 }) => {
 	const storyUrl =
@@ -910,139 +910,101 @@ test("Dynamics full application discussion keeps the selection preview across ta
 	}
 
 	await editor.getByRole("tab", { name: "Phase", exact: true }).click();
+	const phasePreview = editor.getByRole("complementary", {
+		name: "Authoritative Phase preview",
+	});
+	await expect(phasePreview).toBeVisible();
+	// This offline story has no server preview loader. It must state that limitation,
+	// rather than present the Lanes/Speed animation as authoritative fixture ranks.
+	await expect(phasePreview.getByRole("status")).toHaveText(
+		"Phase preview unavailable. Reopen the view to retry.",
+	);
+	await expect(preview).toHaveCount(0);
+	await expect(fixtureField).toHaveCount(0);
+	await expect(editor.getByRole("group", { name: "Phase quick controls" })).toHaveCount(0);
+	const phaseControls = editor.locator(".dynamic-phase-controls");
+	const ordering = phaseControls.getByRole("radiogroup", { name: "Ordering mode" });
+	await expect(editor.getByRole("radiogroup", { name: "Ordering mode", includeHidden: true })).toHaveCount(1);
+	await expect(ordering).toBeVisible();
+	await expect(editor.getByRole("radiogroup", { name: "Phase distribution" })).toBeVisible();
+	await expect(editor.getByRole("radio", { name: "Uniform", exact: true })).toHaveAttribute("aria-checked", "true");
+	await expect(editor.getByRole("radio", { name: "Per lane", exact: true })).toBeVisible();
+	const gridOrdering = ordering.getByRole("radio", { name: "Grid", exact: true });
+	await expect(gridOrdering).toHaveAttribute("aria-checked", "true");
+	await expect(editor.getByLabel("Direction", { exact: true })).toHaveValue("32");
+	await expect(editor.getByText("Legacy X/Z ordering", { exact: true })).toBeVisible();
+	await expect(
+		editor.locator(".ui-form-field").filter({ hasText: "Rank direction" })
+			.getByRole("button", { name: "Ascending", exact: true }),
+	).toBeDisabled();
+	// UI observation only: callback-level no-write proof lives in mounted tests.
+	// This story hides PaneView's header, including its mutation-message telemetry.
+	await gridOrdering.click();
+	await expect(gridOrdering).toHaveAttribute("aria-checked", "true");
+	await expect(editor.getByLabel("Direction", { exact: true })).toHaveValue("32");
+	await editor.getByRole("tab", { name: "Lanes", exact: true }).click();
 	await expect(preview).toBeVisible();
-	await expect(editor.getByText("2D phase distribution")).toHaveCount(0);
-	await expect(
-		editor.getByText("Fill shows color · outline glow shows intensity"),
-	).toHaveCount(0);
-	await expect(editor.locator(".dynamic-phase-position-map")).toHaveCount(0);
-	await expect(
-		editor.getByRole("radiogroup", { name: "Phase mode" }),
-	).toHaveCount(0);
-	await expect(
-		editor
-			.locator(".dynamic-phase-controls")
-			.getByRole("radiogroup", { name: "Ordering mode" }),
-	).toBeHidden();
-	await expect(
-		editor.getByText(
-			"Ordering stays centered · hold or right-click to choose any method",
-		),
-	).toHaveCount(0);
-
-	const phaseControls = page.getByRole("group", {
-		name: "Phase quick controls",
-	});
-	await expect(phaseControls).toBeVisible();
-	await expect(
-		phaseControls.getByRole("radiogroup", { name: "Ordering mode" }),
-	).toBeVisible();
-	await expect(
-		phaseControls.getByRole("radio", { name: "Linear", exact: true }),
-	).toBeVisible();
-	await expect(
-		phaseControls.getByRole("radio", { name: "Selection", exact: true }),
-	).toHaveCount(0);
-	await expect(
-		phaseControls.getByText("Ordering mode", { exact: true }),
-	).toHaveCount(0);
-	await expect(
-		phaseControls.getByRole("button", { name: "Take Selection" }),
-	).toBeVisible();
-	await expect(
-		phaseControls.getByRole("button", { name: "Clear Selection" }),
-	).toBeVisible();
-	const [phaseControlsBox, orderingBox, takeSelectionBox, clearSelectionBox] =
-		await Promise.all([
-			phaseControls.boundingBox(),
-			phaseControls
-				.getByRole("radiogroup", { name: "Ordering mode" })
-				.boundingBox(),
-			phaseControls
-				.getByRole("button", { name: "Take Selection" })
-				.boundingBox(),
-			phaseControls
-				.getByRole("button", { name: "Clear Selection" })
-				.boundingBox(),
-		]);
-	expect(phaseControlsBox?.height).toBeCloseTo(composerBox?.height ?? 0, 0);
-	expect(orderingBox?.height).toBeCloseTo(composerControlBox?.height ?? 0, 0);
-	const orderingCenter = (orderingBox?.y ?? 0) + (orderingBox?.height ?? 0) / 2;
-	expect(
-		(takeSelectionBox?.x ?? 0) -
-			((orderingBox?.x ?? 0) + (orderingBox?.width ?? 0)),
-	).toBeGreaterThanOrEqual(8);
-	for (const actionBox of [takeSelectionBox, clearSelectionBox]) {
-		const actionCenter = (actionBox?.y ?? 0) + (actionBox?.height ?? 0) / 2;
-		expect(actionCenter).toBeCloseTo(orderingCenter, 0);
-		expect(actionBox?.height).toBeCloseTo(orderingBox?.height ?? 0, 0);
+	await editor.getByRole("tab", { name: "Phase", exact: true }).click();
+	await expect(gridOrdering).toHaveAttribute("aria-checked", "true");
+	await expect(editor.getByLabel("Direction", { exact: true })).toHaveValue("32");
+	for (const label of ["Offset", "Span", "Blocks", "Repeats", "Explicit anchors"]) {
+		await expect(phaseControls.getByLabel(label, { exact: true })).toBeVisible();
 	}
-	expect(
-		await editor.getByRole("button", { name: "Take Selection" }).count(),
-	).toBe(1);
-	expect(
-		await editor.getByRole("button", { name: "Clear Selection" }).count(),
-	).toBe(1);
-	for (const label of ["Offset", "Span", "Blocks", "Repeats"]) {
-		await expect(
-			editor
-				.locator(".dynamic-phase-shared-fields")
-				.getByLabel(label, { exact: true }),
-		).toBeVisible();
-		await expect(phaseControls.getByLabel(label, { exact: true })).toHaveCount(
-			0,
-		);
+	await expect(phaseControls.getByRole("switch", { name: "Wings" })).toBeVisible();
+	await expect(editor.getByLabel("Dynamic phase lane", { exact: true })).toHaveCount(0);
+	// Phase wrappers use display:contents; measure the rendered FormField owning
+	// each labelled control instead of a layout wrapper with no box.
+	const phaseField = (label: string) => phaseControls
+		.getByLabel(label, { exact: true })
+		.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " ui-form-field ")][1]');
+	const fields = ["Offset", "Span", "Blocks", "Repeats", "Wings", "Explicit anchors"];
+	const boxes = await Promise.all(fields.map(async (label) => {
+		const field = phaseField(label);
+		await expect(field).toHaveCount(1);
+		return field.boundingBox();
+	}));
+	const controlsBox = await phaseControls.boundingBox();
+	for (const box of boxes) {
+		expect(box).not.toBeNull();
+		expect(box!.width).toBeGreaterThan(0);
+		expect(box!.height).toBeGreaterThan(0);
+		expect(box!.x).toBeGreaterThanOrEqual((controlsBox?.x ?? 0) - 1);
+		expect(box!.x + box!.width).toBeLessThanOrEqual((controlsBox?.x ?? 0) + (controlsBox?.width ?? 0) + 1);
 	}
-	await expect(
-		editor
-			.locator(".dynamic-phase-controls")
-			.getByRole("switch", { name: "Wings" }),
-	).toBeVisible();
-	await expect(
-		editor.getByLabel("Explicit anchors", { exact: true }),
-	).toBeHidden();
-	const [blocksBox, repeatsBox, wingsBox, offsetBox, spanBox] =
-		await Promise.all([
-			editor.locator(".dynamic-phase-blocks-field").boundingBox(),
-			editor.locator(".dynamic-phase-repeats-field").boundingBox(),
-			editor.locator(".dynamic-phase-wings-field").boundingBox(),
-			editor.locator(".dynamic-phase-offset-field").boundingBox(),
-			editor.locator(".dynamic-phase-span-field").boundingBox(),
-		]);
-	expect(blocksBox?.y).toBeCloseTo(repeatsBox?.y ?? 0, 0);
-	expect(blocksBox?.y).toBeCloseTo(wingsBox?.y ?? 0, 0);
+	for (let left = 0; left < boxes.length; left += 1) {
+		for (let right = left + 1; right < boxes.length; right += 1) {
+			const a = boxes[left]!;
+			const b = boxes[right]!;
+			const overlapWidth = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+			const overlapHeight = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+			expect(overlapWidth <= 1 || overlapHeight <= 1, `${fields[left]} overlaps ${fields[right]}`).toBe(true);
+		}
+	}
+	const [offsetBox, spanBox, blocksBox, repeatsBox] = boxes;
 	expect(offsetBox?.y).toBeCloseTo(spanBox?.y ?? 0, 0);
-	expect(offsetBox?.y ?? 0).toBeGreaterThan(blocksBox?.y ?? 0);
-	await expect(
-		page.getByRole("combobox", { name: "Dynamic lane" }),
-	).toHaveCount(0);
-	const radialOrdering = phaseControls.getByRole("radio", {
-		name: "Radial",
-		exact: true,
-	});
+	expect(blocksBox?.y).toBeCloseTo(repeatsBox?.y ?? 0, 0);
+	expect(blocksBox?.y ?? 0).toBeGreaterThanOrEqual((offsetBox?.y ?? 0) + (offsetBox?.height ?? 0));
+	const radialOrdering = ordering.getByRole("radio", { name: "Radial", exact: true });
 	await radialOrdering.click();
 	await expect(radialOrdering).toHaveAttribute("aria-checked", "true");
 	await expect(radialOrdering).toHaveClass(/is-active/);
-	const gridOrdering = phaseControls.getByRole("radio", {
-		name: "Grid",
-		exact: true,
-	});
 	await expect(gridOrdering).toHaveAttribute("aria-checked", "false");
 	await expect(gridOrdering).not.toHaveClass(/is-active/);
 	await expect(editor.getByLabel("Direction", { exact: true })).toHaveCount(0);
-	// This dynamic takes its ordering from the Group it is bound to, and an inherited ordering
-	// has no centre of its own to place: the radial centres stay away rather than offering an
-	// edit the Group would overrule. Choosing Radial here changes how the inherited order is
-	// read, not where it is centred.
-	await expect(editor.getByLabel("Center X", { exact: true })).toHaveCount(0);
-	await expect(editor.getByLabel("Center Z", { exact: true })).toHaveCount(0);
+	await expect(editor.getByText("Legacy X/Z ordering", { exact: true })).toHaveCount(0);
+	await expect(editor.getByLabel("Centre U", { exact: true })).toBeVisible();
+	await expect(editor.getByLabel("Centre V", { exact: true })).toBeVisible();
 	await expect(
-		phaseControls.getByRole("radio", { name: "Radial in", exact: true }),
-	).toHaveCount(0);
+		editor.locator(".ui-form-field").filter({ hasText: "Radial direction" })
+			.getByRole("button", { name: "Outward", exact: true }),
+	).toBeVisible();
+	await expect(phasePreview.getByRole("status")).toHaveText(
+		"Phase preview unavailable. Reopen the view to retry.",
+	);
 	await page.screenshot({ path: screenshotPath });
 
 	await page.setViewportSize({ width: 1199, height: 800 });
-	await expect(preview).toBeHidden();
+	await expect(phasePreview).toBeHidden();
 });
 
 test("every story family has autodocs source preview", () => {
