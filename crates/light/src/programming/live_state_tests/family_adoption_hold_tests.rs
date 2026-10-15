@@ -493,3 +493,76 @@ fn complete_same_pose_pair_detaches_target_in_normal_and_preload() {
         assert_eq!(desk.value(fixture, false), angles(45., 30.));
     }
 }
+
+#[test]
+fn cold_complete_literal_position_pairs_need_no_seed_in_either_lane_or_group() {
+    for preload in [false, true] {
+        for group in [false, true] {
+            for pan in [-90., 450., -450.] {
+                let mut desk = GestureDesk::new(preload);
+                desk.setup.ports.environment.current_values.clear();
+                desk.setup.ports.environment.default_values.clear();
+                desk.setup.ports.environment.group_family_templates.clear();
+                desk.setup.ports.environment.family_contexts.clear();
+                let mut intent = desk.intent(group, set(pan), "cold-pair");
+                intent.operation = ProgrammingValueOperation::ComponentEdits(vec![
+                    ComponentEdit::Scalar {
+                        component: ProgrammingComponent::Pan,
+                        operation: set(pan),
+                    },
+                    ComponentEdit::Scalar {
+                        component: ProgrammingComponent::Tilt,
+                        operation: set(0.),
+                    },
+                ]);
+                desk.apply("cold-pair", intent)
+                    .expect("a full literal pair does not need a previous pose");
+                let members = if group {
+                    desk.setup.ports.environment.group_members["front"].clone()
+                } else {
+                    vec![desk.setup.fixtures[0]]
+                };
+                for member in members {
+                    assert_eq!(desk.value(member, group), angles(pan, 0.));
+                }
+                let state = desk.setup.registry.get(desk.setup.session).unwrap();
+                if preload {
+                    assert!(state.values.is_empty());
+                    assert!(state.group_values.is_empty());
+                } else {
+                    assert!(state.preload_pending.is_empty());
+                    assert!(state.preload_group_pending.is_empty());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cold_partial_position_edits_still_hold_without_inventing_a_pose() {
+    for preload in [false, true] {
+        let mut desk = GestureDesk::new(preload);
+        desk.setup.ports.environment.current_values.clear();
+        desk.setup.ports.environment.default_values.clear();
+        desk.setup.ports.environment.family_contexts.clear();
+        for fixture in desk.setup.fixtures {
+            desk.setup.ports.environment.family_contexts.insert(
+                fixture,
+                crate::ProgrammingFamilyContext {
+                    position_adoption_attempted: true,
+                    ..Default::default()
+                },
+            );
+        }
+        let before = desk.setup.registry.get(desk.setup.session).unwrap();
+        for (id, operation) in [
+            ("cold-partial", set(-90.)),
+            ("cold-relative", ScalarEdit::Relative(450.)),
+        ] {
+            desk.apply(id, desk.intent(false, operation, id)).unwrap();
+            let after = desk.setup.registry.get(desk.setup.session).unwrap();
+            assert_eq!(after.values, before.values);
+            assert_eq!(after.preload_pending, before.preload_pending);
+        }
+    }
+}

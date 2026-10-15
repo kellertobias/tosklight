@@ -13,6 +13,15 @@ use std::{
 type FixtureValues = HashMap<(FixtureId, AttributeKey), AttributeValue>;
 type GroupValues = HashMap<(String, AttributeKey), AttributeValue>;
 
+/// Only a complete literal pair can replace Position without adopting a previous pose.
+fn literal_position_seed(edits: &[ComponentEdit]) -> Option<AttributeValue> {
+    let pair = absolute_position_pair(edits)?;
+    Some(AttributeValue::Position(Arc::new(PositionIntent::angles(
+        pair.pan_degrees,
+        pair.tilt_degrees,
+    ))))
+}
+
 pub(super) fn plan_component_edits(
     intent: &ProgrammingValueIntent,
     edits: &[ComponentEdit],
@@ -32,6 +41,7 @@ pub(super) fn plan_component_edits(
     }
     let count = intent.fixture_ids.len();
     let ranked = rank_edits(edits, count)?;
+    let literal_seed = literal_position_seed(edits);
     let mut result = Vec::new();
     for (rank, fixture) in intent.fixture_ids.iter().enumerate() {
         let address = (*fixture, intent.attribute.clone());
@@ -39,6 +49,7 @@ pub(super) fn plan_component_edits(
             .get(&address)
             .or_else(|| environment.current_values.get(&address))
             .or_else(|| environment.default_values.get(&address))
+            .or(literal_seed.as_ref())
             .ok_or_else(|| {
                 invalid(IntentError(
                     "component edit requires a complete current or default family".into(),
@@ -198,6 +209,7 @@ pub(super) fn adopt_group_family(
         .map(Vec::as_slice)
         .unwrap_or(&[]);
     let explicit_template = environment.group_family_templates.get(&address);
+    let literal_seed = literal_position_seed(edits);
     let mut seeds = BTreeMap::new();
     for fixture in members {
         let address = (*fixture, intent.attribute.clone());
@@ -208,7 +220,8 @@ pub(super) fn adopt_group_family(
                 .get(&address)
                 .or_else(|| environment.current_values.get(&address))
                 .or_else(|| environment.default_values.get(&address))
-                .or(explicit_template),
+                .or(explicit_template)
+                .or(literal_seed.as_ref()),
         }
         .ok_or_else(|| {
             invalid(IntentError(

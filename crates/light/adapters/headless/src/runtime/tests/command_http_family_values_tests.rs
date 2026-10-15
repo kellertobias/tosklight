@@ -611,3 +611,60 @@ async fn complete_typed_pair_matching_captured_copy_pose_detaches_target() {
     );
     let _ = std::fs::remove_dir_all(&scenario.data_dir);
 }
+
+#[tokio::test]
+async fn cold_jbled_complete_position_pair_accepts_signed_and_unwrapped_angles() {
+    for preload in [false, true] {
+        let scenario = CommandHttpScenario::new().await;
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../../assets/fixture-library/jb-lighting--jbled-a7.toskfixture");
+        let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
+        let mode_id = Uuid::parse_str("e4aa7f44-fad4-3185-61ef-3646fcbf3c58").unwrap();
+        let mover = FixtureId::new();
+        let mut lamp = patched(&profile, mover, 1);
+        lamp.fixture_number = Some(101);
+        lamp.definition = profile.resolved_definition(mode_id).unwrap();
+        scenario
+            .state
+            .output
+            .replace_snapshot(EngineSnapshot {
+                fixtures: vec![lamp].into(),
+                revision: 1,
+                ..Default::default()
+            })
+            .unwrap();
+        if preload {
+            scenario
+                .state
+                .programming
+                .arm_preload(scenario.session.id, true);
+        }
+        for (index, command, pan) in [
+            (0, "FIXTURE 101 AT POSITION - - 90 DIV 0", -90.),
+            (1, "FIXTURE 101 AT POSITION 450 DIV 0", 450.),
+            (2, "FIXTURE 101 AT POSITION - - 450 DIV 0", -450.),
+        ] {
+            accepted(&scenario, &format!("cold-jbled-{index}"), command).await;
+            let state = scenario.state.programming.get(scenario.session.id).unwrap();
+            let values = if preload {
+                &state.preload_pending
+            } else {
+                state.values.as_ref()
+            };
+            let value = values
+                .iter()
+                .find(|v| v.fixture_id == mover && v.attribute == ProgrammingOwner::Position.key())
+                .unwrap();
+            assert_eq!(
+                value.value,
+                AttributeValue::Position(Arc::new(PositionIntent::angles(pan, 0.)))
+            );
+            if preload {
+                assert!(state.values.is_empty());
+            } else {
+                assert!(state.preload_pending.is_empty());
+            }
+        }
+        let _ = std::fs::remove_dir_all(&scenario.data_dir);
+    }
+}
