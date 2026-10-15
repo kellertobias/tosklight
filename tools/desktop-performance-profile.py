@@ -57,6 +57,15 @@ class Refused(RuntimeError):
     """A fixed scope/capability code, safe to publish without tool output."""
 
 
+class TypedRefused(Refused):
+    """Fixed enum/boolean classifications only, never raw typed export content."""
+
+    def __init__(self, code, event_kind, prefix_class, payload_matches, time_class):
+        super().__init__(code)
+        self.diagnostic = {"event_kind": event_kind, "prefix_class": prefix_class,
+                           "payload_owner_matches": payload_matches, "time_class": time_class}
+
+
 class CensusRefused(Refused):
     """Numeric record-header diagnostics only; no event payload is published."""
 
@@ -536,10 +545,11 @@ def event_census(data, target_tid=None, cpus=None, deadline=None):
 
 
 def validate_export(text, census, target, tids, interval):
-    """Strict installed-perf typed output; unknown syntax or missing records refuses.
+    """Decode installed-perf typed samples/task metadata without exporting raw text.
 
-    SAMPLE prefix is selected with -F pid,tid,time,event,ip,sym,dso. Metadata
-    spellings follow Linux tools/perf/util/event.c; no unknown line is ignored.
+    Linux6.8.12 synthesized task records have zeroed sample-ID trailers. With
+    sample_id_all, builtin-script prints that0/0/time0 prefix; actual identities
+    remain in the event payload. Samples always require exact owned PID/TID.
     """
     counts = collections.Counter()
     samples = []
@@ -555,35 +565,49 @@ def validate_export(text, census, target, tids, interval):
             if current is not None and frame.match(line):
                 current.append(line.strip())
                 continue
-            raise Refused("unsupported_typed_event_syntax")
+            raise TypedRefused("unsupported_typed_event_syntax", "UNKNOWN", "unparsed", None, "unparsed")
         pid, tid = int(match[1]), int(match[2])
-        if pid != target["pid"] or tid not in tids:
-            raise Refused("foreign_or_unverified_event_identity")
         body = match[4]
+        is_sample = body.startswith("cpu-clock:u:")
+        event = re.match(r"PERF_RECORD_(COMM|MMAP2?|FORK|EXIT)\b(.*)", body)
+        kind = "SAMPLE" if is_sample else event[1] if event else "UNKNOWN"
+        prefix_class = "owned" if pid == target["pid"] and tid in tids else "zero_placeholder" if pid == tid == 0 else "foreign_or_unverified"
         seconds, nanos = match[3].split(".")
         if len(nanos) > 9:
-            raise Refused("unsupported_timestamp_precision")
+            raise TypedRefused("unsupported_timestamp_precision", kind, prefix_class, None, "unparsed")
         timestamp = int(seconds) * 1_000_000_000 + int(nanos.ljust(9, "0"))
-        initial_metadata = timestamp == 0 and body.startswith(("PERF_RECORD_COMM", "PERF_RECORD_MMAP"))
-        if not initial_metadata and not interval[0] <= timestamp <= interval[1]:
-            raise Refused("event_outside_verified_target_lifetime")
-        if body.startswith("cpu-clock:u:"):
+        time_class = "zero" if timestamp == 0 else "within_verified_lifetime" if interval[0] <= timestamp <= interval[1] else "outside_verified_lifetime"
+        def refuse(code, payload=None):
+            raise TypedRefused(code, kind, prefix_class, payload, time_class)
+        if is_sample:
+            if prefix_class != "owned":
+                refuse("foreign_or_unverified_event_identity")
+            if time_class != "within_verified_lifetime":
+                refuse("event_outside_verified_target_lifetime")
             counts["SAMPLE"] += 1
             current = [body]
             samples.append(current)
             continue
         current = None
-        event = re.match(r"PERF_RECORD_(COMM|MMAP2?|FORK|EXIT)\b(.*)", body)
         if not event:
-            raise Refused("unsupported_typed_metadata")
-        kind, detail = event.groups()
+            refuse("unsupported_typed_metadata")
+        synthetic = timestamp == 0 and kind in ("COMM", "MMAP", "MMAP2", "FORK")
         separator = ":" if kind in ("FORK", "EXIT") else "/"
-        identities = re.findall(rf"(?<!\d)(\d+)\s*{separator}\s*(\d+)(?!\d)", detail)
+        identities = [(int(owner), int(thread)) for owner, thread in
+                      re.findall(rf"(?<!\d)(\d+)\s*{separator}\s*(\d+)(?!\d)", event[2])]
         if not identities:
-            raise Refused("metadata_identity_not_decoded")
-        for owner, thread in identities:
-            if int(owner) != target["pid"] or int(thread) not in tids:
-                raise Refused("foreign_metadata_identity")
+            refuse("metadata_identity_not_decoded", False)
+        owned = all(owner == target["pid"] and thread in tids for owner, thread in identities)
+        # Synthesized FORK describes this probe's already-verified coordinator
+        # parent. It does not authorize sampling that parent or arbitrary PIDs.
+        if synthetic and kind == "FORK":
+            owned = identities == [(target["pid"], target["pid"]), (target["ppid"], target["ppid"])]
+        if not owned:
+            refuse("foreign_metadata_identity", False)
+        if prefix_class != "owned" and not (synthetic and prefix_class == "zero_placeholder"):
+            refuse("foreign_or_unverified_event_identity", True)
+        if not synthetic and time_class != "within_verified_lifetime":
+            refuse("event_outside_verified_target_lifetime", True)
         counts[kind] += 1
     expected = census.copy()
     header_names = ("ID_INDEX", "EVENT_UPDATE_UNIT", "EVENT_UPDATE_SCALE", "EVENT_UPDATE_CPUS",
@@ -750,6 +774,8 @@ def recorder(request):
         receipt = {"status": "STOP", "code": str(error) if isinstance(error, Refused) else "preflight_tool_or_scope_unavailable"}
         if isinstance(error, CensusRefused):
             receipt["record_header_diagnostic"] = error.diagnostic
+        if isinstance(error, TypedRefused):
+            receipt["typed_event_diagnostic"] = error.diagnostic
     finally:
         if child is not None:
             stop_owned(child, recorder_fd, request["overall_deadline"] - 10)

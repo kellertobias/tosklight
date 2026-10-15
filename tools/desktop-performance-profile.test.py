@@ -248,6 +248,37 @@ class EventScopeTests(unittest.TestCase):
         self.assertFalse(inventory["complete"])
         self.assertEqual(inventory["incomplete_reason"], "diagnostic_subtype_limit")
 
+    def test_owned_synthetic_zero_prefix_metadata_and_verified_parent_fork(self):
+        text = exported().replace("410/ 410 0.", "0/0 0.").replace("410/410 0.", "0/0 0.")
+        text = " 0/0 0.000000000: PERF_RECORD_FORK(410:410):(400:400)\n" + text
+        census = collections.Counter(COMM=1, MMAP2=1, FORK=1, SAMPLE=10)
+        self.assertEqual(PROFILE.validate_export(text, census, TARGET, TIDS, INTERVAL)["probe_chains"], 10)
+
+    def test_synthetic_prefix_never_excuses_foreign_samples_payloads_or_unverified_parent(self):
+        valid = exported().replace("410/ 410 0.", "0/0 0.").replace("410/410 0.", "0/0 0.")
+        bad = [valid.replace("410/410 2.", "0/0 2."),
+               valid.replace("0/0 0.", "777/777 0."),
+               valid.replace("0/0 0.", "0/0 2."),
+               valid.replace("MMAP2 410/410", "MMAP2 777/777"),
+               "0/0 0.000000000: PERF_RECORD_FORK(410:410):(399:399)\n" + valid]
+        for text in bad:
+            with self.assertRaises(PROFILE.Refused):
+                PROFILE.validate_export(text, collections.Counter(COMM=1, MMAP2=1, SAMPLE=10), TARGET, TIDS, INTERVAL)
+
+    def test_typed_stop_diagnostics_never_export_raw_identities_or_text(self):
+        text = "0/0 0.000000000: PERF_RECORD_FORK(410:410):(987654:987654) private-path\n"
+        with self.assertRaises(PROFILE.TypedRefused) as caught:
+            PROFILE.validate_export(text, collections.Counter(FORK=1), TARGET, TIDS, INTERVAL)
+        self.assertEqual(caught.exception.diagnostic, {"event_kind": "FORK", "prefix_class": "zero_placeholder",
+            "payload_owner_matches": False, "time_class": "zero"})
+        for raw in ("987654", "410", "private-path"):
+            self.assertNotIn(raw, str(caught.exception.diagnostic))
+        sample = "0/0 2.000000000: cpu-clock:u: 1 foreign-symbol (/foreign/path)\n"
+        with self.assertRaises(PROFILE.TypedRefused) as sample_error:
+            PROFILE.validate_export(sample, collections.Counter(SAMPLE=1), TARGET, TIDS, INTERVAL)
+        self.assertEqual(sample_error.exception.diagnostic, {"event_kind": "SAMPLE", "prefix_class": "zero_placeholder",
+            "payload_owner_matches": None, "time_class": "within_verified_lifetime"})
+
     def test_insufficient_symbolized_callchains_cannot_allow_build(self):
         with self.assertRaises(PROFILE.Refused):
             PROFILE.validate_export(exported(9), collections.Counter(COMM=1, MMAP2=1, SAMPLE=9), TARGET, TIDS, INTERVAL)
