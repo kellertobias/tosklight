@@ -8,6 +8,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(in crate::runtime::output_scheduler) mod family_preparation;
+
 const PERIOD: Duration = Duration::from_secs(1);
 const LIMIT: u16 = 1024;
 static ENABLED: LazyLock<bool> = LazyLock::new(|| {
@@ -61,6 +63,7 @@ pub(in crate::runtime::output_scheduler) enum Phase {
 }
 const COUNT: usize = 10;
 struct Frame {
+    family: family_preparation::Summary,
     phases: [Duration; COUNT],
     generation: Option<u64>,
     show_revision: Option<u64>,
@@ -88,6 +91,7 @@ impl Scope {
         ACTIVE.with(|active| {
             *active.borrow_mut() = Some(Frame {
                 phases: [Duration::ZERO; COUNT],
+                family: family_preparation::Summary::default(),
                 generation: None,
                 show_revision: None,
                 sampled_at_millis: None,
@@ -136,6 +140,23 @@ impl Drop for Scope {
             family_retire_micros = micros(Phase::FamilyRetire),
             family_finalize_micros = micros(Phase::FamilyFinalize),
             reconciliation_micros = micros(Phase::Reconciliation),
+            family_initial_static_micros = frame.family.micros(family_preparation::Stage::InitialStatic),
+            family_missing_fixed_bases_micros = frame.family.micros(family_preparation::Stage::MissingFixedBases),
+            family_repeat_static_micros = frame.family.micros(family_preparation::Stage::RepeatStatic),
+            family_bind_and_control_micros = frame.family.micros(family_preparation::Stage::BindAndControl),
+            family_sampling_before_callback_micros = frame.family.micros(family_preparation::Stage::SamplingBeforeCallback),
+            family_scalar_static_micros = frame.family.micros(family_preparation::Stage::ScalarStatic),
+            family_final_geometry_micros = frame.family.micros(family_preparation::Stage::FinalGeometry),
+            family_complete_deferred_micros = frame.family.micros(family_preparation::Stage::CompleteDeferred),
+            family_prepare_families_micros = frame.family.micros(family_preparation::Stage::PrepareFamilies),
+            family_cohort_setup_micros = frame.family.micros(family_preparation::Stage::CohortSetup),
+            family_position_compose_micros = frame.family.micros(family_preparation::Stage::PositionCompose),
+            family_owner_compose_micros = frame.family.micros(family_preparation::Stage::OwnerCompose),
+            family_ordered_finish_micros = frame.family.micros(family_preparation::Stage::OrderedFinish),
+            family_native_projection_micros = frame.family.micros(family_preparation::Stage::NativeProjection),
+            family_diagnostics_schema = 1u8,
+            family_stage_calls = ?frame.family.calls,
+            family_counts = ?frame.family.counts,
             "bounded live output nested phase sample"
         );
     }
@@ -228,6 +249,7 @@ mod tests {
         ACTIVE.with(|active| {
             *active.borrow_mut() = Some(Frame {
                 phases: [Duration::ZERO; COUNT],
+                family: family_preparation::Summary::default(),
                 generation: None,
                 show_revision: None,
                 sampled_at_millis: None,
@@ -271,6 +293,7 @@ mod tests {
         ACTIVE.with(|active| {
             *active.borrow_mut() = Some(Frame {
                 phases: [Duration::ZERO; COUNT],
+                family: family_preparation::Summary::default(),
                 generation: None,
                 show_revision: None,
                 sampled_at_millis: None,

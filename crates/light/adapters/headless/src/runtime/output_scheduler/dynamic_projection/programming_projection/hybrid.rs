@@ -28,6 +28,7 @@ use super::super::{
 use super::current_native::CurrentNativeVerificationCache;
 use super::static_rows::StaticFamilyRows;
 use super::*;
+use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
 use light_core::programming::{
     ProgrammingFieldScope, ProgrammingTransitionTrace, independent_programming_component,
 };
@@ -884,8 +885,14 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) fn prepare_captured
     // TL-553: without missing fixed bases the static lane is the scalar observation's own
     // resolution; reading it resolves the frame once instead of twice.
     let scalar_sources = match with_fixed_bases {
-        None => scalar_sources.over_static(&static_token),
-        Some(_) => scalar_sources,
+        None => {
+            diagnostics::count(diagnostics::Count::ScalarReuseStatic, 1);
+            scalar_sources.over_static(&static_token)
+        }
+        Some(_) => {
+            diagnostics::count(diagnostics::Count::ScalarSeparateStatic, 1);
+            scalar_sources
+        }
     };
     prepare_hybrid_frame(
         engine,
@@ -1037,4 +1044,130 @@ pub(in crate::runtime::output_scheduler::dynamic_projection) fn prepare_captured
         },
         prepare_static,
     )
+}
+
+#[cfg(test)]
+mod diagnostic_transparency_tests {
+    use super::*;
+    use light_programmer::ProgrammerRegistry;
+    struct StaticResolver;
+    impl HybridFrameResolver for StaticResolver {
+        fn adopt(
+            &self,
+            _: HybridFrameContext<'_>,
+            _: FixtureId,
+            _: &AttributeValue,
+            _: &DynamicValueAddress,
+        ) -> Result<AttributeValue, TransitionError> {
+            panic!("scalar-only frame does not adopt typed families")
+        }
+    }
+    fn run(observed: bool, foreign: bool) -> Result<Option<AttributeValue>, String> {
+        let clock = Arc::new(light_core::ManualClock::new(
+            chrono::DateTime::from_timestamp_millis(1000).unwrap(),
+        ));
+        let programmers = ProgrammerRegistry::with_clock(clock);
+        let fixture = FixtureId(Uuid::from_u128(775));
+        let session = light_core::SessionId::new();
+        programmers.start(session);
+        programmers.set(
+            session,
+            fixture,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5),
+        );
+        let engine = Engine::with_programming_contract_support(
+            programmers,
+            light_core::programming::PROGRAMMING_CONTRACT_VERSION,
+        );
+        let capture = engine.prepare_output_frame(Default::default());
+        let snapshot = capture.snapshot();
+        let addresser = capture.frame_addresser();
+        let speeds = std::array::from_fn(|_| light_dynamics::DynamicSpeedTransport {
+            effective_bpm: 120.,
+            phase_origin_millis: 0,
+            phase_reference_millis: 1000,
+            beat_phase: 0.,
+            phase_advancing: true,
+        });
+        let inputs = CapturedDynamicInputs {
+            now: capture.sampled_at() + chrono::Duration::milliseconds(if foreign { 1 } else { 0 }),
+            speed_transports: &speeds,
+            rate: 40,
+            snapshot: &snapshot,
+            programmer_values: capture.dynamic_programmer_values(),
+            programmer_rows: Some(capture.dynamic_programmer_rows()),
+            cue_values: capture.cue_dynamic_values(),
+            dynamic_playbacks: capture.dynamic_playbacks(),
+            playback_paused: capture.playback_dynamics_paused(),
+            addresser: &addresser,
+            extra_programmer_values: &[],
+            programmer_reconciliation_cache: None,
+            force_source_reconciliation: false,
+        };
+        let mut runtime = DynamicRuntime::with_programming_contract_support(
+            light_core::programming::PROGRAMMING_CONTRACT_VERSION,
+        );
+        let before = runtime.snapshot();
+        let mut origins = DynamicSourceOrigins::default();
+        let mut scratch = HybridFrameScratch::default();
+        let mut work = || {
+            runtime.with_output_frame_transaction(
+                &mut light_dynamics::DynamicOutputFrameScratch::default(),
+                |runtime| {
+                    prepare_captured_hybrid_frame::<()>(
+                        &engine,
+                        &capture,
+                        &[],
+                        runtime,
+                        &mut origins,
+                        &inputs,
+                        &mut scratch,
+                        &StaticResolver,
+                        None,
+                        |_| panic!("no typed rows in scalar baseline"),
+                    )
+                    .map_err(|e| e.to_string())
+                    .map(|prepared| {
+                        engine
+                            .render_static_family_frame(&capture, prepared.token)
+                            .unwrap()
+                            .resolved_values
+                            .value(fixture, &AttributeKey::intensity())
+                            .cloned()
+                    })
+                },
+            )
+        };
+        let result = if observed {
+            let (result, calls, counts) = diagnostics::observe_for_test(work);
+            if foreign {
+                assert!(calls.iter().all(|count| *count == 0));
+                assert!(counts.iter().all(|count| *count == 0));
+            } else {
+                assert_eq!(calls[diagnostics::Stage::InitialStatic as usize], 1);
+                assert_eq!(calls[diagnostics::Stage::ScalarStatic as usize], 1);
+                assert_eq!(counts[diagnostics::Count::StaticCalls as usize], 2);
+            }
+            result
+        } else {
+            work()
+        };
+        if foreign {
+            assert_eq!(runtime.snapshot(), before);
+        }
+        result
+    }
+    #[test]
+    fn admitted_diagnostics_preserve_actual_hybrid_scalar_output() {
+        let off = run(false, false).unwrap();
+        let on = run(true, false).unwrap();
+        assert_eq!(off, Some(AttributeValue::Normalized(0.5)));
+        assert_eq!(on, off);
+    }
+    #[test]
+    fn admitted_diagnostics_preserve_foreign_capture_error_and_runtime() {
+        assert_eq!(run(true, true), run(false, true));
+        assert!(run(true, true).is_err());
+    }
 }

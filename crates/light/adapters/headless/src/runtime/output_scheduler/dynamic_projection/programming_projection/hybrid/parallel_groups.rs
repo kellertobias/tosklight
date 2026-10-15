@@ -22,6 +22,8 @@ use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::fami
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::position::{
     PositionFrameShared, PositionPendingLog,
 };
+use crate::runtime::output_scheduler::slow_phase_trace::live_phases::family_preparation as diagnostics;
+use diagnostics::Count;
 use std::cell::Cell;
 
 /// Below this many groups a cohort composes them in turn. Tests take the parallel path from
@@ -175,11 +177,13 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
         partitioned = Some(partition);
     }
     let (Some((outputs, wrap)), Some(partition)) = (parallel, partitioned) else {
+        diagnostics::count(Count::OwnerSerial, 1);
         for entry in groups {
             compose_here!(entry)?;
         }
         return Ok(());
     };
+    diagnostics::count(Count::OwnerParallel, 1);
     // Keyed state first (caches, bindings, stagings, kept rows), so every group the frame
     // composes itself below reads what it would have read in turn.
     let mut chunks = Vec::with_capacity(outputs.len());
@@ -210,6 +214,7 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
             if let Some(error) = error.take() {
                 return Err(error);
             }
+            diagnostics::count(Count::OwnerFallback, 1);
             compose_here!(entry)?;
             continue;
         }
@@ -224,9 +229,11 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
             pending: pending_to,
         } = record
         else {
+            diagnostics::count(Count::OwnerFallback, 1);
             compose_here!(entry)?;
             continue;
         };
+        diagnostics::count(Count::OwnerWorker, 1);
         let (rows_from, required_from, logs_from, pending_from) = cursor.taken;
         projections.extend(cursor.rows.by_ref().take(rows_to - rows_from).map(|row| {
             OwnedHybridProjection {
