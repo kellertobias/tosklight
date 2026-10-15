@@ -10,6 +10,7 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaybackDefinition } from "../../api/types";
+import { encodePlaybackTopologyRequest } from "../../api/playbackTopologyWire";
 import {
 	normalizePlaybackTopology,
 	PlaybackConfigurationDialog,
@@ -927,6 +928,26 @@ it.each([
 					type === "macro" ? ["go", "none", "none"] : ["go", "pause", "off"],
 			}),
 		),
+	);
+	const definition = mocks.savePlaybackSlot.mock.calls.at(-1)?.[2] as PlaybackDefinition;
+	const encoded = JSON.parse(
+		JSON.stringify(
+			encodePlaybackTopologyRequest({
+				requestId: "selected-target-assignment",
+				action: {
+					type: "assign_playback",
+					address: { page: 2, position: 4 },
+					expectedPageObjectId: "page-two",
+					expectedPageRevision: 1,
+					definition,
+				},
+			}),
+		),
+	);
+	expect(encoded.action.definition.target).toEqual(
+		type === "macro"
+			? { type, macro_id: "macro-1" }
+			: { type, timecode_id: "timecode-1" },
 	);
 });
 it("prevents saving a Timecode target removed from the authoritative options", () => {

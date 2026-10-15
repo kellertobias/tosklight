@@ -513,3 +513,37 @@ describe("Unified page topology wire", () => {
 		).toThrow();
 	});
 });
+
+
+it.each(["assign_playback", "update_playback"] as const)(
+	"preserves saved Macro and Timecode identities in actual %s JSON",
+	(operation) => {
+		for (const target of [
+			{ type: "macro", macro_id: "bdd36e24-730f-4090-a6bc-43fcadff5add" },
+			{ type: "timecode", timecode_id: "d63061ad-6aad-4701-8442-b6f0d2aca93b" },
+		] as const) {
+			const value = request(operation);
+			if (!("definition" in value.action)) throw Error("fixture");
+			value.action.definition.target = target;
+			const wire = JSON.parse(JSON.stringify(encodePlaybackTopologyRequest(value)));
+			expect(wire.action.definition.target).toEqual(target);
+			expect(wire.action.expected_page_revision).toBe(7);
+			expect(wire.request_id).toBe(REQUEST_ID);
+		}
+	},
+);
+
+it.each(["macro", "timecode"] as const)(
+	"rejects missing or malformed %s identity before sending an assignment",
+	(type) => {
+		for (const identity of [undefined, "", "bad\nidentity", 5]) {
+			const value = request("assign_playback");
+			if (!("definition" in value.action)) throw Error("fixture");
+			value.action.definition.target = {
+				type,
+				[`${type}_id`]: identity,
+			} as PlaybackDefinition["target"];
+			expect(() => encodePlaybackTopologyRequest(value)).toThrow();
+		}
+	},
+);

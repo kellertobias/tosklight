@@ -199,6 +199,24 @@ function encodeTarget(target: PlaybackDefinition["target"]) {
 				128,
 			),
 		};
+	if (target.type === "macro")
+		return {
+			type: target.type,
+			macro_id: printableStringAt(
+				target.macro_id,
+				"$.action.playback.target.macro_id",
+				128,
+			),
+		};
+	if (target.type === "timecode")
+		return {
+			type: target.type,
+			timecode_id: printableStringAt(
+				target.timecode_id,
+				"$.action.playback.target.timecode_id",
+				128,
+			),
+		};
 	if (target.type === "group")
 		return {
 			type: target.type,
