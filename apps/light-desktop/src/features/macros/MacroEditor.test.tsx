@@ -63,6 +63,30 @@ const valid = (overrides: Partial<MacroValidation> = {}): MacroValidation => ({
 });
 
 describe("MacroEditor", () => {
+	it("keeps unwrapped source, highlight and line numbers on the same internal scroll", () => {
+		const { container } = render(
+			<MacroEditor
+				showId="show-a"
+				macro={macro}
+				api={api(valid())}
+				onClose={vi.fn()}
+				onSaved={vi.fn()}
+			/>,
+		);
+		const source = screen.getByRole("textbox", {
+			name: "Macro command lines",
+		}) as HTMLTextAreaElement;
+		const highlight = container.querySelector(".macro-source-highlight");
+		const lineNumbers = container.querySelector(".macro-line-numbers");
+		if (!highlight || !lineNumbers)
+			throw new Error("Missing source scroll layers");
+		expect(source).toHaveAttribute("wrap", "off");
+		fireEvent.scroll(source, { target: { scrollTop: 80, scrollLeft: 24 } });
+		expect(highlight.scrollTop).toBe(80);
+		expect(highlight.scrollLeft).toBe(24);
+		expect(lineNumbers.scrollTop).toBe(80);
+		expect(lineNumbers.scrollLeft).toBe(0);
+	});
 	it("claims focused desk input, inserts attached keypad text at the selection, and releases on blur", async () => {
 		const client = api(valid());
 		render(

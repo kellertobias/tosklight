@@ -1,6 +1,6 @@
-import { ErrorAlert } from "@tosklight/ui";
 import {
 	Button,
+	ErrorAlert,
 	FormLayout,
 	IconPickerField,
 	ModalPortal,
@@ -596,67 +596,72 @@ function MacroEditorHeader({
 	controller,
 }: Pick<MacroEditorProps, "onClose"> & { controller: MacroEditorController }) {
 	return (
-		<WindowHeader
-			title="Macro"
-			info={{
-				primary: controller.draft.name,
-				secondary: (
-					<ErrorAlert as="span"
-						className="macro-editor-status"
-						role={controller.status.error ? "alert" : "status"}
-					>
-						{controller.status.text}
-					</ErrorAlert>
-				),
-			}}
-			groups={[
-				{
-					id: "macro-navigation",
-					actions: [{ id: "back", label: "← Macros", onPress: onClose }],
-				},
-				{
-					id: "macro-run",
-					actions: [
-						{
-							id: "run-macro",
-							label: (
-								<span>
-									<span aria-hidden="true">▶</span> Run Macro
-								</span>
-							),
-							ariaLabel: "Run Macro",
-							disabled: controller.isNew || controller.busy,
-							onPress: () => void controller.runMacro(),
-						},
-						{
-							id: "run-line",
-							label: "Run line",
-							onPress: () => void controller.runLine(),
-						},
-						{
-							id: "undo-run-line",
-							label: "Undo last run",
-							disabled: !controller.runLineUndo || controller.busy,
-							onPress: () => void controller.undoLastRun(),
-						},
-					],
-				},
-				{
-					id: "macro-help",
-					actions: [
-						{
-							id: "toggle-help",
-							icon: <span aria-hidden="true">?</span>,
-							ariaLabel: "Toggle Macro help",
-							active: controller.helpOpen,
-							onPress: () => controller.setHelpOpen(!controller.helpOpen),
-						},
-					],
-				},
-			]}
-			settings
-			onSettings={() => controller.setSettingsOpen(true)}
-		/>
+		<div className="macro-editor-header">
+			<WindowHeader
+				title="Macro"
+				info={{
+					primary: controller.draft.name,
+					secondary: (
+						<ErrorAlert
+							as="span"
+							className="macro-editor-status"
+							role={controller.status.error ? "alert" : "status"}
+						>
+							<span className="macro-editor-status-text">
+								{controller.status.text}
+							</span>
+						</ErrorAlert>
+					),
+				}}
+				groups={[
+					{
+						id: "macro-navigation",
+						actions: [{ id: "back", label: "← Macros", onPress: onClose }],
+					},
+					{
+						id: "macro-run",
+						actions: [
+							{
+								id: "run-macro",
+								label: (
+									<span>
+										<span aria-hidden="true">▶</span> Run Macro
+									</span>
+								),
+								ariaLabel: "Run Macro",
+								disabled: controller.isNew || controller.busy,
+								onPress: () => void controller.runMacro(),
+							},
+							{
+								id: "run-line",
+								label: "Run line",
+								onPress: () => void controller.runLine(),
+							},
+							{
+								id: "undo-run-line",
+								label: "Undo last run",
+								disabled: !controller.runLineUndo || controller.busy,
+								onPress: () => void controller.undoLastRun(),
+							},
+						],
+					},
+					{
+						id: "macro-help",
+						actions: [
+							{
+								id: "toggle-help",
+								icon: <span aria-hidden="true">?</span>,
+								ariaLabel: "Toggle Macro help",
+								active: controller.helpOpen,
+								onPress: () => controller.setHelpOpen(!controller.helpOpen),
+							},
+						],
+					},
+				]}
+				settings
+				onSettings={() => controller.setSettingsOpen(true)}
+			/>
+		</div>
 	);
 }
 
@@ -837,6 +842,7 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 					onBlur={controller.releaseEditorInput}
 					value={controller.draft.source}
 					spellCheck={false}
+					wrap="off"
 					aria-autocomplete="list"
 					aria-controls={
 						controller.suggestionsOpen ? controller.suggestionListId : undefined
@@ -859,6 +865,11 @@ function MacroSource({ controller }: { controller: MacroEditorController }) {
 							event.currentTarget.scrollTop;
 						controller.highlightOverlay.current.scrollLeft =
 							event.currentTarget.scrollLeft;
+						const lineNumbers = event.currentTarget
+							.closest(".macro-source-editor")
+							?.querySelector(".macro-line-numbers");
+						if (lineNumbers)
+							lineNumbers.scrollTop = event.currentTarget.scrollTop;
 					}}
 					onChange={(event) =>
 						controller.editDraft({

@@ -2,11 +2,135 @@
 .macro-editor {
 	container: macro-editor / inline-size;
 	display: flex;
+	min-width: 0;
 	min-height: 0;
 	height: 100%;
 	flex-direction: column;
 	background: var(--surface-1, #151719);
 	color: var(--text-primary, #f5f5f5);
+}
+
+.macro-editor-header {
+	min-width: 0;
+	flex: none;
+}
+
+.macro-editor-header .ui-title-chrome {
+	flex-shrink: 0;
+}
+
+.macro-editor-header .ui-window-header:has(.macro-editor-status[role="alert"]) {
+	height: auto;
+	min-height: 44px;
+}
+
+.macro-editor-header .ui-window-info:has([role="alert"]) {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.macro-editor-header .ui-window-info:has([role="alert"]) > b {
+	max-width: 35%;
+}
+
+.macro-editor-header .ui-window-info:has([role="alert"]) > small {
+	min-width: 0;
+	flex: 1;
+	margin-top: 0;
+}
+
+.macro-editor-header .macro-editor-status[role="alert"] {
+	display: flex;
+	align-items: center;
+	max-width: 100%;
+	padding: 0;
+	background: transparent;
+}
+
+.macro-editor-status-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.macro-editor-header button.ui-error-copy {
+	width: 44px;
+	min-width: 44px;
+	height: 44px;
+	min-height: 44px;
+	margin-inline-start: 4px;
+}
+
+/* The editor stays usable in the default 6 × 6 pane as well as fullscreen. */
+@container macro-editor (max-width: 44rem) {
+	.macro-editor-header > .ui-window-header {
+		height: auto;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+		padding-left: 0;
+		overflow: visible;
+	}
+
+	.macro-editor-header .ui-window-title {
+		min-height: 44px;
+		padding-left: 8px;
+	}
+
+	.macro-editor-header .ui-window-info {
+		min-height: 44px;
+		flex: 1;
+		margin-left: 8px;
+		padding-right: 8px;
+	}
+
+	.macro-editor-header .ui-window-header-spacer {
+		display: none;
+	}
+
+	.macro-editor-header .ui-window-info:has([role="alert"]) > b {
+		display: none;
+	}
+
+	.macro-editor-header .ui-title-chrome-group:first-child {
+		grid-column: 3;
+		grid-row: 1;
+	}
+
+	.macro-editor-header .ui-title-chrome-group:nth-child(3) {
+		grid-column: 4;
+		grid-row: 1;
+	}
+
+	.macro-editor-header .ui-title-chrome-terminals {
+		grid-column: 5;
+		grid-row: 1;
+	}
+
+	.macro-editor-header .ui-title-chrome,
+	.macro-editor-header .ui-title-chrome-groups {
+		display: contents;
+	}
+
+	.macro-editor-header .ui-title-chrome-group:nth-child(2) {
+		grid-column: 1 / -1;
+		grid-row: 2;
+	}
+
+	.macro-editor-header .ui-title-chrome-action {
+		flex: 1 0 auto;
+	}
+
+	.macro-editor-header .ui-title-chrome-action > .ui-button:not(.is-icon-only) {
+		padding-inline: 8px;
+	}
+
+	.macro-editor-header .ui-title-chrome-action > .ui-button {
+		min-height: 44px;
+		height: 44px;
+		width: 100%;
+	}
 }
 
 .macro-editor-workspace {
@@ -64,12 +188,19 @@
 	.macro-editor-workspace.has-help {
 		overflow-y: auto;
 		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: minmax(18rem, 1fr) auto;
+		position: relative;
+		grid-template-rows: minmax(0, 1fr);
+	}
+
+	.macro-editor-workspace.has-help > .macro-source-editor {
+		visibility: hidden;
 	}
 
 	.macro-help-sidebar {
-		max-height: 18rem;
-		border-top: 1px solid var(--border-subtle, #393c3f);
+		position: absolute;
+		inset: 0;
+		z-index: 3;
+		max-height: none;
 		border-left: 0;
 	}
 }
@@ -92,7 +223,8 @@
 
 .macro-source-editor {
 	display: grid;
-	min-height: 18rem;
+	overflow: hidden;
+	min-height: 0;
 	height: 100%;
 	grid-template-columns: 3.5rem minmax(0, 1fr);
 	background: #101214;
@@ -115,7 +247,7 @@
 .macro-source-stack {
 	position: relative;
 	min-width: 0;
-	min-height: 18rem;
+	min-height: 0;
 }
 
 .macro-source-editor textarea,
@@ -123,7 +255,7 @@
 	box-sizing: border-box;
 	width: 100%;
 	height: 100%;
-	min-height: 18rem;
+	min-height: 0;
 	resize: none;
 	border: 0;
 	border-left: 1px solid #393c3f;
@@ -148,6 +280,7 @@
 
 .macro-source-editor textarea {
 	position: relative;
+	overflow: auto;
 	z-index: 1;
 	caret-color: #fff;
 	color: transparent;
