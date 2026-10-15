@@ -1,5 +1,22 @@
 use crate::*;
 
+/// Cold, runtime-only clock authority captured with the active owners it belongs to.
+/// It is never part of a saved checkpoint or a portable show.
+#[derive(Clone, Debug)]
+pub struct PlaybackTimelineClockState(Vec<TimelineClockOwner>);
+
+#[derive(Clone, Debug)]
+struct TimelineClockOwner {
+    id: CueListId,
+    sampled_at: Option<DateTime<Utc>>,
+    activated_at: DateTime<Utc>,
+    transition_ordinal: u64,
+    cue_id: Uuid,
+    source: SequenceMasterSource,
+    paused: bool,
+    paused_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Clone, Debug)]
 pub struct PlaybackEngine {
     pub(crate) cue_lists: HashMap<CueListId, CueList>,
@@ -17,7 +34,8 @@ pub struct PlaybackEngine {
     pub(crate) dynamic_flash_states: HashMap<PlaybackControlKey, DynamicFlashState>,
     pub(crate) temporary: HashMap<(PlaybackControlKey, TemporaryPlaybackKind), ActivePlayback>,
     pub(crate) swap_held: HashSet<PlaybackControlKey>,
-    pub(crate) timeline_controlled: HashSet<CueListId>,
+    /// Timeline ownership with an optional external sample clock; not persisted or operator Pause.
+    pub(crate) timeline_controlled: HashMap<CueListId, Option<DateTime<Utc>>>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,
     pub(crate) speed_groups_bpm: [f64; 5],
     pub(crate) speed_groups_paused: [bool; 5],
@@ -55,7 +73,7 @@ impl PlaybackEngine {
             dynamic_flash_states: HashMap::new(),
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
-            timeline_controlled: HashSet::new(),
+            timeline_controlled: HashMap::new(),
             dynamics_paused_at: None,
             speed_groups_bpm: [120.0, 90.0, 60.0, 30.0, 15.0],
             speed_groups_paused: [false; 5],
@@ -74,6 +92,75 @@ impl PlaybackEngine {
     /// Install where a Position that fades in from no previous Cue value starts (TL-552).
     pub fn set_family_start(&mut self, source: Option<Arc<dyn crate::FamilyStartSource>>) {
         self.family_start = crate::contribution::FamilyStartSlot(source);
+    }
+
+    pub(crate) fn timeline_time(
+        &self,
+        playback: &ActivePlayback,
+        now: DateTime<Utc>,
+    ) -> DateTime<Utc> {
+        playback
+            .paused_at
+            .or_else(|| {
+                if playback.temporary {
+                    None
+                } else {
+                    self.timeline_controlled
+                        .get(&playback.cue_list_id)
+                        .copied()
+                        .flatten()
+                }
+            })
+            .unwrap_or(now)
+    }
+
+    /// Capture while the caller reads the same active rows for a preserving generation.
+    pub fn capture_timeline_clock_state(&self) -> PlaybackTimelineClockState {
+        PlaybackTimelineClockState(
+            self.timeline_controlled
+                .iter()
+                .filter_map(|(&id, &sampled_at)| {
+                    let active = self.active.get(&PlaybackKey::CueList(id))?;
+                    (active.enabled && !active.temporary).then_some(TimelineClockOwner {
+                        id,
+                        sampled_at,
+                        activated_at: active.activated_at,
+                        transition_ordinal: active.transition_ordinal,
+                        cue_id: active.current_cue_id?,
+                        source: active.sequence_master_source(),
+                        paused: active.paused,
+                        paused_at: active.paused_at,
+                    })
+                })
+                .collect(),
+        )
+    }
+
+    /// A same-show generation may retain the exact old owner. New/deleted/remapped owners
+    /// receive no clock authority, and show activation never calls this preserving operation.
+    pub fn restore_timeline_clock_state(&mut self, state: PlaybackTimelineClockState) {
+        self.timeline_controlled.clear();
+        for owner in state.0 {
+            let matches =
+                self.active
+                    .get(&PlaybackKey::CueList(owner.id))
+                    .is_some_and(|active| {
+                        active.enabled
+                            && !active.temporary
+                            && active.activated_at == owner.activated_at
+                            && active.transition_ordinal == owner.transition_ordinal
+                            && active.current_cue_id == Some(owner.cue_id)
+                            && active.sequence_master_source() == owner.source
+                            && active.paused == owner.paused
+                            && active.paused_at == owner.paused_at
+                            && self.cue_lists.get(&owner.id).is_some_and(|list| {
+                                list.cues.iter().any(|cue| cue.id == owner.cue_id)
+                            })
+                    });
+            if matches {
+                self.timeline_controlled.insert(owner.id, owner.sampled_at);
+            }
+        }
     }
 
     pub fn clock(&self) -> SharedClock {
@@ -140,7 +227,12 @@ impl PlaybackEngine {
             if old_step == next_step {
                 continue;
             }
-            let phase_at = playback.paused_at.unwrap_or(now);
+            let sampled = self
+                .timeline_controlled
+                .get(&playback.cue_list_id)
+                .copied()
+                .flatten();
+            let phase_at = playback.paused_at.or(sampled).unwrap_or(now);
             let elapsed = (phase_at - playback.activated_at).num_milliseconds().max(0) as u64;
             let completed_steps = elapsed / old_step;
             advance_chaser_steps(playback, cue_list, completed_steps);

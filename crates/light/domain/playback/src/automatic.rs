@@ -71,7 +71,7 @@ impl PlaybackEngine {
     fn advance_temporary_cues(&mut self, now: DateTime<Utc>, timecode_frame: Option<u64>) {
         let timing = self.automatic_timing(now, timecode_frame);
         for playback in self.temporary.values_mut() {
-            if self.timeline_controlled.contains(&playback.cue_list_id) {
+            if self.timeline_controlled.contains_key(&playback.cue_list_id) {
                 continue;
             }
             let (Some(cue_list), Some(compiled)) = (
@@ -113,7 +113,7 @@ impl PlaybackEngine {
             self.compiled_cue_lists.get(&playback.cue_list_id),
         ) {
             (Some(cue_list), Some(compiled)) => {
-                !self.timeline_controlled.contains(&playback.cue_list_id)
+                !self.timeline_controlled.contains_key(&playback.cue_list_id)
                     && holds_nothing(playback, cue_list, compiled, &timing)
             }
             _ => false,
@@ -186,7 +186,8 @@ impl PlaybackEngine {
         });
         let mut transitions = Vec::with_capacity(keys.len());
         for key in keys {
-            if matches!(key, PlaybackKey::CueList(id) if self.timeline_controlled.contains(&id)) {
+            if matches!(key, PlaybackKey::CueList(id) if self.timeline_controlled.contains_key(&id))
+            {
                 continue;
             }
             let transition_source = self.transition_source_at(key, now);

@@ -553,7 +553,7 @@ impl Engine {
         preserve_playback: bool,
         sampled_at: DateTime<Utc>,
     ) {
-        let (mut active, active_dynamics, dynamics_paused_at) = {
+        let (mut active, active_dynamics, dynamics_paused_at, timeline_clocks) = {
             let current = generation.playback().read();
             // Source history can survive outside active Playback rows (for example in a
             // held Dynamic). Generation replacement must never reopen those identities.
@@ -565,11 +565,13 @@ impl Engine {
                 current.active_for_snapshot(&snapshot.cue_lists, sampled_at),
                 current.active_dynamics_for_snapshot(playback),
                 current.dynamics_paused_since(),
+                current.capture_timeline_clock_state(),
             )
         };
         let detached_cue_lists = detached_cue_list_targets(generation.snapshot(), snapshot);
         active.retain(|runtime| !detached_cue_lists.contains(&runtime.cue_list_id));
         playback.restore_active(active);
+        playback.restore_timeline_clock_state(timeline_clocks);
         playback.restore_active_dynamics(active_dynamics);
         playback.restore_dynamics_paused_since(dynamics_paused_at);
     }

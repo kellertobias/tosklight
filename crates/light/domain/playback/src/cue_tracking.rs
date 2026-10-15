@@ -40,7 +40,6 @@ impl PlaybackEngine {
         self.pause_at_mutation(id, now).map(|_| ())
     }
     pub fn go_at(&mut self, id: CueListId, now: DateTime<Utc>) -> Result<&ActivePlayback, String> {
-        self.timeline_controlled.remove(&id);
         let key = self.key_for_cue_list(id)?;
         self.go_at_key(key, id, now, None)
     }
@@ -77,6 +76,7 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
+        self.timeline_controlled.remove(&id);
         let transition_ordinal = self.take_transition_ordinal(now);
         let source_ordinal = self.take_source_occurrence_ordinal();
         let jump_index = self
@@ -236,7 +236,7 @@ impl PlaybackEngine {
             .and_then(|key| self.active.get(&key))
             .is_some_and(|playback| !playback.enabled);
         self.jump_to_cue_id(id, cue_id)?;
-        self.timeline_controlled.insert(id);
+        self.timeline_controlled.insert(id, None);
         let key = self.key_for_cue_list(id)?;
         let playback = self.active.get_mut(&key).expect("jump installed playback");
         // An explicit Timecode Cue start owns activation, unlike an addressed GO
@@ -269,7 +269,7 @@ impl PlaybackEngine {
         let elapsed =
             chrono::Duration::milliseconds(i64::try_from(elapsed_millis).unwrap_or(i64::MAX));
         self.jump_at(id, number, self.clock.now() - elapsed)?;
-        self.timeline_controlled.insert(id);
+        self.timeline_controlled.insert(id, None);
         let key = self.key_for_cue_list(id)?;
         let playback = self.active.get_mut(&key).expect("jump installed playback");
         playback.enabled = true;
@@ -339,6 +339,25 @@ impl PlaybackEngine {
         Ok(playback)
     }
 
+    /// Reconstruct once per external frame, then evaluate its timing at that exact sample.
+    /// Playing remains visible; ordinary GO/Back/Release discard this private clock authority.
+    pub fn reconstruct_sampled_timeline_cues(
+        &mut self,
+        id: CueListId,
+        cues: &[(Uuid, u64)],
+    ) -> Result<&ActivePlayback, String> {
+        self.reconstruct_timeline_cues(id, cues)?;
+        let key = self.key_for_cue_list(id)?;
+        let playback = self.active.get(&key).ok_or("cue list is not active")?;
+        // Recover the exact instant used by the final reconstruction, rather than reading
+        // a later wall clock after potentially expensive Cue history preparation.
+        let age = cues.last().expect("reconstruction validated history").1;
+        let sampled = playback.activated_at
+            + chrono::Duration::milliseconds(i64::try_from(age).unwrap_or(i64::MAX));
+        self.timeline_controlled.insert(id, Some(sampled));
+        Ok(playback)
+    }
+
     pub fn jump_at(
         &mut self,
         id: CueListId,
@@ -359,6 +378,7 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
+        self.timeline_controlled.remove(&id);
         let transition_ordinal = self.take_transition_ordinal(now);
         let source_ordinal = self.take_source_occurrence_ordinal();
         let cue_list = self.cue_lists.get(&id).ok_or("cue list does not exist")?;
@@ -439,7 +459,6 @@ impl PlaybackEngine {
         id: CueListId,
         now: DateTime<Utc>,
     ) -> Result<&ActivePlayback, String> {
-        self.timeline_controlled.remove(&id);
         let key = self.key_for_cue_list(id)?;
         self.back_at_key(key, id, now, None)
     }
@@ -452,6 +471,7 @@ impl PlaybackEngine {
     ) -> Result<&ActivePlayback, String> {
         let source = self.action_source(key, id, identity);
         let interrupted_source = self.transition_source_at(key, now);
+        self.timeline_controlled.remove(&id);
         let transition_ordinal = self.take_transition_ordinal(now);
         let source_ordinal = self.take_source_occurrence_ordinal();
         let compiled = &self.compiled_cue_lists[&id];
@@ -528,6 +548,9 @@ impl PlaybackEngine {
             playback.activated_at += now - paused_at;
         }
         playback.paused = false;
+        if let Some(Some(sampled)) = self.timeline_controlled.get_mut(&id) {
+            *sampled = now;
+        }
         Ok(())
     }
     fn pause_key_at_mutation(
@@ -536,12 +559,16 @@ impl PlaybackEngine {
         now: DateTime<Utc>,
         inactive_error: &'static str,
     ) -> Result<PlaybackMutation<()>, String> {
+        let sample = self
+            .active
+            .get(&key)
+            .map(|playback| self.timeline_time(playback, now));
         let playback = self.active.get_mut(&key).ok_or(inactive_error)?;
         if playback.paused {
             return Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::None));
         }
         playback.paused = true;
-        playback.paused_at = Some(now);
+        playback.paused_at = Some(sample.unwrap_or(now));
         Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Durable))
     }
     pub fn release(&mut self, id: CueListId) -> bool {

@@ -87,7 +87,7 @@ impl PlaybackEngine {
         if completion == 0 {
             return 1.0;
         }
-        let observed = playback.paused_at.unwrap_or(at).max(playback.activated_at);
+        let observed = self.timeline_time(playback, at).max(playback.activated_at);
         let elapsed = (observed - playback.activated_at).num_milliseconds().max(0) as u64;
         (elapsed as f64 / completion as f64).min(1.0) as f32
     }

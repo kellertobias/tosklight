@@ -235,7 +235,9 @@ impl TimecodeRuntimeService {
             .expect("Timecode runtime lock poisoned");
         let runtime = if let Some(runtime) = runtimes.get_mut(&id) {
             let now = self.clock.now_micros();
-            runtime.synchronize(now, self.rate);
+            if !runtime.external_clock {
+                runtime.synchronize(now, self.rate);
+            }
             if runtime.definition.auto_start != definition.auto_start {
                 runtime.external_armed = definition.auto_start;
             }
@@ -388,6 +390,7 @@ impl TimecodeRuntimeService {
                     runtime.state,
                     runtime.frame,
                     runtime.cue_list_reconcile_mode,
+                    runtime.external_clock,
                 )
             })
             .collect::<Vec<_>>();
@@ -398,7 +401,7 @@ impl TimecodeRuntimeService {
         };
         let mut statuses = BTreeMap::<TimecodeId, Vec<TimecodeCueListClipExecution>>::new();
         let mut desired = HashMap::new();
-        for (definition, transport, frame, reconcile_mode) in installed {
+        for (definition, transport, frame, reconcile_mode, external_clock) in installed {
             let resolved =
                 definition.cue_list_clip_execution(cue_lists, frame, transport, cue_timing);
             for clip in &resolved {
@@ -420,6 +423,7 @@ impl TimecodeRuntimeService {
                             reconcile_mode,
                             frame,
                             frame_rate: self.rate,
+                            external_clock,
                         },
                     );
                 }
@@ -601,10 +605,16 @@ impl TimecodeRuntimeService {
                 .get_mut(&id)
                 .ok_or_else(|| TimecodeRuntimeError::new("Timecode runtime is not installed"))?;
             let before = runtime.operator_state();
-            runtime.synchronize(now, self.rate);
+            // Loss Pause freezes the last accepted source frame, not its dormant takeover anchor.
+            if !rearm_external && !runtime.external_clock {
+                runtime.synchronize(now, self.rate);
+            }
             let action_changed = runtime.apply(action, now);
             if rearm_external {
                 runtime.external_armed = true;
+                runtime.external_clock = false;
+            } else if !matches!(action, TimecodeTransportAction::Pause) {
+                runtime.external_clock = false;
             }
             if action_changed {
                 runtime.cue_list_reconcile_mode = match action {
@@ -686,12 +696,15 @@ impl TimecodeRuntimeService {
             runtimes
                 .values_mut()
                 .filter_map(|runtime| {
+                    let was_external = runtime.external_clock;
+                    runtime.external_clock = false;
                     let advance = runtime.synchronize(now, self.rate)?;
-                    runtime.cue_list_reconcile_mode = if advance.completed_loops == 0 {
-                        CueListReconcileMode::Forward
-                    } else {
-                        CueListReconcileMode::Reconstruct
-                    };
+                    runtime.cue_list_reconcile_mode =
+                        if !was_external && advance.completed_loops == 0 {
+                            CueListReconcileMode::Forward
+                        } else {
+                            CueListReconcileMode::Reconstruct
+                        };
                     runtime.revision = runtime.revision.saturating_add(1);
                     Some(TimecodeRuntimeChange {
                         cause: TimecodeRuntimeChangeCause::Tick {
@@ -769,6 +782,7 @@ impl TimecodeRuntimeService {
                     }
                     runtime.frame = TimecodeFrame(local.0 % runtime.duration.0);
                     runtime.cue_list_reconcile_mode = CueListReconcileMode::Reconstruct;
+                    runtime.external_clock = true;
                     // This anchor is dormant while an external source is locked, then gives
                     // Continue Internal a seamless takeover point if that source is lost.
                     runtime.start(now);
@@ -833,7 +847,11 @@ fn reconcile_desired_cue_list(
         .as_ref()
         .is_none_or(|status| status.playback.current_cue_id != Some(next.cue_id));
     let reconstruct_timing_changed = next.reconcile_mode == CueListReconcileMode::Reconstruct
-        && before.is_some_and(|before| before.frame != next.frame);
+        && before.is_some_and(|before| {
+            before.frame != next.frame
+                || before.external_clock != next.external_clock
+                || (next.external_clock && before.transport != next.transport)
+        });
     let changed_cue = desired_changed || actual_drifted || reconstruct_timing_changed;
     let mut outcome = if changed_cue {
         let entering = before.is_none_or(|before| before.source != next.source);
@@ -850,17 +868,21 @@ fn reconcile_desired_cue_list(
         let action = if should_execute {
             CueListPlaybackAction::ExecuteCueId(next.cue_id)
         } else {
-            CueListPlaybackAction::ReconstructTimelineCues(
-                next.cue_history
-                    .iter()
-                    .map(|(start, cue_id)| {
-                        (
-                            *cue_id,
-                            frames_to_millis(next.frame.0.saturating_sub(start.0), next.frame_rate),
-                        )
-                    })
-                    .collect(),
-            )
+            let cues = next
+                .cue_history
+                .iter()
+                .map(|(start, cue_id)| {
+                    (
+                        *cue_id,
+                        frames_to_millis(next.frame.0.saturating_sub(start.0), next.frame_rate),
+                    )
+                })
+                .collect();
+            if next.external_clock {
+                CueListPlaybackAction::ReconstructSampledTimelineCues(cues)
+            } else {
+                CueListPlaybackAction::ReconstructTimelineCues(cues)
+            }
         };
         execute(
             EnginePlaybackCommand::CueList {
@@ -923,6 +945,8 @@ struct Runtime {
     frame: TimecodeFrame,
     running: Option<RunningAnchor>,
     external_armed: bool,
+    /// Runtime-only authority: Cue timing samples this frame until an internal tick takes over.
+    external_clock: bool,
     cue_list_clips: Vec<TimecodeCueListClipExecution>,
     cue_list_reconcile_mode: CueListReconcileMode,
 }
@@ -956,6 +980,7 @@ struct AppliedCueListClip {
     reconcile_mode: CueListReconcileMode,
     frame: TimecodeFrame,
     frame_rate: TimecodeFrameRate,
+    external_clock: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -994,6 +1019,7 @@ impl Runtime {
             frame: TimecodeFrame::ZERO,
             running: None,
             external_armed,
+            external_clock: false,
             cue_list_clips: Vec::new(),
             cue_list_reconcile_mode: CueListReconcileMode::Reconstruct,
         }
@@ -1013,8 +1039,13 @@ impl Runtime {
         }
     }
 
-    fn operator_state(&self) -> (TimecodeTransportState, TimecodeFrame, bool) {
-        (self.state, self.frame, self.external_armed)
+    fn operator_state(&self) -> (TimecodeTransportState, TimecodeFrame, bool, bool) {
+        (
+            self.state,
+            self.frame,
+            self.external_armed,
+            self.external_clock,
+        )
     }
 
     fn synchronize(&mut self, now: u64, rate: TimecodeFrameRate) -> Option<TickAdvance> {

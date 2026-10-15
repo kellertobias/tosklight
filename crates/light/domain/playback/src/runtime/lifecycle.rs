@@ -76,6 +76,7 @@ impl PlaybackEngine {
         dynamics: impl IntoIterator<Item = ActiveDynamicPlayback>,
     ) {
         self.active.clear();
+        self.timeline_controlled.clear();
         self.temporary.clear();
         self.cuelist_flash_states.clear();
         self.cuelist_swap_states.clear();
@@ -108,6 +109,9 @@ impl PlaybackEngine {
             let Some(last) = cue_list.cues.len().checked_sub(1) else {
                 continue;
             };
+            // Checkpoints carry active state, never implicit external clock authority.
+            // The preserving generation path restores a separately matched clock token.
+            self.timeline_controlled.remove(&playback.cue_list_id);
             if playback.deleted_cue_hold.is_none()
                 && let Some(index) = playback
                     .current_cue_id

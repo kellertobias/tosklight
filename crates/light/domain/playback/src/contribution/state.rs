@@ -68,7 +68,7 @@ impl<'a> PlaybackFrame<'a> {
                 outgoing_fade
             }
         });
-        let effective_now = playback.paused_at.unwrap_or(context.now);
+        let effective_now = context.engine.timeline_time(playback, context.now);
         let elapsed = (effective_now - playback.activated_at)
             .num_milliseconds()
             .max(0) as u64;

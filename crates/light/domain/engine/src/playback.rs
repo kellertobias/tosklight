@@ -53,6 +53,8 @@ pub enum CueListPlaybackAction {
     },
     /// In-process Timecode history; ages are relative to the requested frame.
     ReconstructTimelineCues(Vec<(uuid::Uuid, u64)>),
+    /// External Timecode owns the evaluation clock without setting operator Pause.
+    ReconstructSampledTimelineCues(Vec<(uuid::Uuid, u64)>),
     Pause,
     Resume,
     Release,
@@ -556,6 +558,11 @@ fn execute_cue_list(
             .map(EnginePlaybackOutcome::Active),
         CueListPlaybackAction::ReconstructTimelineCues(cues) => playback
             .reconstruct_timeline_cues(id, &cues)
+            .cloned()
+            .map(Box::new)
+            .map(EnginePlaybackOutcome::Active),
+        CueListPlaybackAction::ReconstructSampledTimelineCues(cues) => playback
+            .reconstruct_sampled_timeline_cues(id, &cues)
             .cloned()
             .map(Box::new)
             .map(EnginePlaybackOutcome::Active),
