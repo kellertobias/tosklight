@@ -1,13 +1,25 @@
 import { Button } from "@tosklight/ui";
 import { TouchEncoder } from "@tosklight/ui/encoders";
 import { useEffect, useState } from "react";
-import type { TimecodeEncoderDeck } from "../../features/timecode/timecodeEncoderBridge";
+import type {
+	TimecodeEncoderDeck,
+	TimecodeEncoderSlot,
+} from "../../features/timecode/timecodeEncoderBridge";
 import { clampEncoderPage, encoderPages } from "./encoderPaging";
 import { HardwareEncoderDisplay } from "./HardwareEncoderDisplay";
 import {
 	resolveVisibleEncoderCount,
 	useVisibleEncoderCount,
 } from "./parameterControls/VisibleEncoderCount";
+
+/** Absolute entry follows the displayed unit; rotary deltas stay in slot units. */
+function timecodeInputScale(slot: TimecodeEncoderSlot) {
+	if (slot.id === "timecode-timeline-zone") return 100;
+	if (slot.id === "timecode-timeline-scroll")
+		return slot.maximum > 0 ? 100 / slot.maximum : 1;
+	if (/^timecode-cue-(in|out)-(delay|fade)$/.test(slot.id)) return 0.001;
+	return 1;
+}
 
 export function TimecodeParameterControls({
 	hardwareConnected,
@@ -103,6 +115,7 @@ export function TimecodeParameterControls({
 							display={slot.display}
 							minimum={slot.minimum}
 							maximum={slot.maximum}
+							inputScale={timecodeInputScale(slot)}
 							slowStep={slot.fineStep}
 							fastStep={slot.coarseStep}
 							disabled={slot.disabled}
