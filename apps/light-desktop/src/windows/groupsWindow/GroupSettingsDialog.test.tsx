@@ -555,6 +555,11 @@ describe("Group settings modal", () => {
 		expect(screen.queryByLabelText("Grid angle")).not.toBeInTheDocument();
 		expect(manage).not.toHaveBeenCalled();
 		await waitFor(() => expect(settings).toHaveBeenCalledOnce());
+		const preview = screen.getByLabelText("Phase preview");
+		expect(within(preview).getByText(/Source order is active/)).toBeInTheDocument();
+		expect(
+			screen.queryByText("No fixture in this Group has a Stage position to order."),
+		).not.toBeInTheDocument();
 		settings.mockResolvedValue(settingsSnapshot(group({
 			mapping: {
 				...defaultSpatialMapping(),

@@ -426,7 +426,12 @@ function PhaseSettingsPanel({
 		<section className="group-settings-panel group-settings-split">
 			<div className="group-settings-visual" aria-label="Phase preview">
 				<h3>Phase preview</h3>
-				{resolvedSpatial ? (
+				{!displayedMapping ? (
+					<p className="phase-order-empty">
+						Source order is active. Choose Grid, Radial, or Radar to preview
+						spatial ranks.
+					</p>
+				) : resolvedSpatial ? (
 					<PhaseOrderPreview
 						positions={resolvedSpatial.projected_positions}
 						ranks={resolvedSpatial.ranks}
@@ -435,7 +440,7 @@ function PhaseSettingsPanel({
 					/>
 				) : (
 					<p className="phase-order-empty">
-						Loading authoritative Stage ranks…
+						Loading authoritative spatial ranks…
 					</p>
 				)}
 			</div>
