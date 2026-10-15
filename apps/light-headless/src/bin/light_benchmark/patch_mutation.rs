@@ -145,6 +145,7 @@ struct BenchmarkPorts {
     engine: Arc<Engine>,
     counters: Arc<Counters>,
     phases: Arc<Mutex<BTreeMap<PatchPerformancePhase, Vec<Duration>>>>,
+    boundaries: Option<diagnostics::BoundaryLog>,
 }
 
 struct BenchmarkUnit {
@@ -204,27 +205,34 @@ impl ActiveShowPorts for BenchmarkPorts {
 
     fn begin_active_show(
         &self,
-        _context: &ActionContext,
+        context: &ActionContext,
         show_id: ShowId,
     ) -> Result<Self::UnitOfWork, ActionError> {
-        self.counters
-            .active_show_begins
-            .fetch_add(1, Ordering::SeqCst);
-        if show_id != self.show_id {
-            return Err(ActionError::new(
-                ActionErrorKind::NotFound,
-                "show is not active",
-            ));
-        }
-        let show = ShowStore::open(&self.show_path).map_err(store_error)?;
-        let document = show.portable_document().map_err(store_error)?;
-        Ok(BenchmarkUnit {
-            show,
-            document,
-            show_path: self.show_path.clone(),
-            backup_dir: self.backup_dir.clone(),
-            counters: Arc::clone(&self.counters),
-            phases: Arc::clone(&self.phases),
+        diagnostics::observe_boundary(self.boundaries.as_ref(), context, show_id, |timing| {
+            self.counters
+                .active_show_begins
+                .fetch_add(1, Ordering::SeqCst);
+            if show_id != self.show_id {
+                return Err(ActionError::new(
+                    ActionErrorKind::NotFound,
+                    "show is not active",
+                ));
+            }
+            diagnostics::mark_boundary(timing, "validation");
+            let show = ShowStore::open(&self.show_path).map_err(store_error)?;
+            diagnostics::mark_boundary(timing, "open_store");
+            let document = show.portable_document().map_err(store_error)?;
+            diagnostics::mark_boundary(timing, "portable_document");
+            let unit = BenchmarkUnit {
+                show,
+                document,
+                show_path: self.show_path.clone(),
+                backup_dir: self.backup_dir.clone(),
+                counters: Arc::clone(&self.counters),
+                phases: Arc::clone(&self.phases),
+            };
+            diagnostics::mark_boundary(timing, "unit_setup");
+            Ok(unit)
         })
     }
 
@@ -325,6 +333,7 @@ fn run_scenario(
     let service = ShowPatchService::new(active_show);
     let counters = Arc::new(Counters::default());
     let phases = Arc::new(Mutex::new(BTreeMap::new()));
+    let mut observations = diagnostics::Collector::from_environment(WARMUPS, SAMPLES);
     let ports = BenchmarkPorts {
         show_path: scratch.show_path.clone(),
         backup_dir: scratch.backup_dir.clone(),
@@ -333,8 +342,10 @@ fn run_scenario(
         engine: Arc::new(Engine::new(ProgrammerRegistry::default())),
         counters: Arc::clone(&counters),
         phases: Arc::clone(&phases),
+        boundaries: observations
+            .as_ref()
+            .map(diagnostics::Collector::boundary_log),
     };
-    let mut observations = diagnostics::Collector::from_environment(WARMUPS, SAMPLES);
     let mut revision = 0_u64;
     for index in 0..WARMUPS {
         revision = execute(

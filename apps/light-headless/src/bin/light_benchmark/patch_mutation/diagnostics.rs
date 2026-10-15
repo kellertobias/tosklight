@@ -1,11 +1,12 @@
 //! Opt-in, bounded request attribution for the released Patch benchmark only.
 //! No requests, gates, timer boundary, shared production hooks or SQLite settings are changed.
-use super::{PatchPerformancePhase, phase_name};
+use super::{ActionContext, ActionError, PatchPerformancePhase, ShowId, phase_name};
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
     fs,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -45,6 +46,7 @@ pub struct Request {
     pub outer_segments_microseconds: BTreeMap<&'static str, f64>,
     pub phases_microseconds: BTreeMap<&'static str, Vec<f64>>,
     pub phase_accounting: Accounting,
+    pub active_show_boundaries: Vec<ActiveShowBoundary>,
     pub before: Resources,
     pub after: Resources,
 }
@@ -55,6 +57,8 @@ pub struct Accounting {
     pub service_nonnested_covered_microseconds: f64,
     pub service_unattributed_microseconds: Option<f64>,
     pub qualification: &'static str,
+    pub active_show_boundary_nesting: &'static str,
+    pub service_unattributed_after_transaction_begin_microseconds: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -83,6 +87,7 @@ pub(super) struct Collector {
     warmup_limit: usize,
     sample_limit: usize,
     report: Report,
+    boundaries: BoundaryLog,
 }
 
 impl Collector {
@@ -99,6 +104,10 @@ impl Collector {
         Self {
             warmup_limit: warmups,
             sample_limit: samples,
+            boundaries: Arc::new(Mutex::new(Boundaries {
+                rows: Vec::with_capacity(warmups.saturating_add(samples).saturating_mul(2)),
+                limit: warmups.saturating_add(samples).saturating_mul(2),
+            })),
             report: Report {
                 qualification: "Diagnostic observer overhead remains; Linux resource reads bracket but are outside the decode-to-response timer. Inclusive wall phases are not parked wait or CPU time.",
                 host: Host::read(),
@@ -106,6 +115,10 @@ impl Collector {
                 measured: Vec::with_capacity(samples),
             },
         }
+    }
+
+    pub(super) fn boundary_log(&self) -> BoundaryLog {
+        Arc::clone(&self.boundaries)
     }
 
     pub(super) fn begin(
@@ -135,6 +148,7 @@ impl Collector {
             index,
             revision,
             cursors,
+            boundary_cursor: self.boundaries.lock().rows.len(),
             segments: BTreeMap::new(),
             last: Duration::ZERO,
             before: Resources::read(),
@@ -160,7 +174,24 @@ impl Collector {
             },
         );
         let slices = slices(&phases.lock(), &observation.cursors);
-        let accounting = accounting(&observation.segments, &slices);
+        let boundaries = self.boundaries.lock().rows[observation.boundary_cursor..].to_vec();
+        let mut accounting = accounting(&observation.segments, &slices);
+        // The first call is already enclosed by SnapshotLoad; only subtract the second call.
+        if boundaries.len() == 2
+            && boundaries[0].correlation_id == boundaries[1].correlation_id
+            && boundaries[0].show_id == boundaries[1].show_id
+            && boundaries[0].expected_revision == boundaries[1].expected_revision
+            && boundaries.iter().all(|boundary| {
+                boundary.request_id.as_deref() == Some(observation.request_id.as_str())
+            })
+        {
+            accounting.service_unattributed_after_transaction_begin_microseconds = accounting
+                .service_unattributed_microseconds
+                .and_then(|residual| {
+                    (residual >= boundaries[1].total_microseconds)
+                        .then_some(residual - boundaries[1].total_microseconds)
+                });
+        }
         let row = Request {
             request_id: observation.request_id,
             fixture_count: observation.fixture_count,
@@ -174,6 +205,7 @@ impl Collector {
             outer_segments_microseconds: observation.segments,
             phases_microseconds: slices,
             phase_accounting: accounting,
+            active_show_boundaries: boundaries,
             before: observation.before,
             after,
         };
@@ -200,12 +232,111 @@ impl Collector {
     }
 }
 
+/// Only allocated for an opted-in, finite scenario. Calls remain in invocation order.
+pub(super) type BoundaryLog = Arc<Mutex<Boundaries>>;
+pub(super) struct Boundaries {
+    rows: Vec<ActiveShowBoundary>,
+    limit: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ActiveShowBoundary {
+    pub request_id: Option<String>,
+    pub correlation_id: uuid::Uuid,
+    pub show_id: uuid::Uuid,
+    pub expected_revision: Option<u64>,
+    pub total_microseconds: f64,
+    pub segments_microseconds: BTreeMap<&'static str, f64>,
+    pub failed_segment: Option<&'static str>,
+    pub error: Option<String>,
+}
+
+pub(super) struct BoundaryTiming {
+    started: Instant,
+    last: Duration,
+    segments: BTreeMap<&'static str, f64>,
+    next: &'static str,
+}
+impl BoundaryTiming {
+    fn close(&mut self, elapsed: Duration, name: &'static str) {
+        self.segments
+            .insert(name, micros(elapsed.saturating_sub(self.last)));
+        self.last = elapsed;
+    }
+}
+
+/// Leaves the operation, error and both actual store/document calls unchanged.
+/// Disabled diagnostics perform no diagnostic clocks, allocations or log locks.
+pub(super) fn observe_boundary<T>(
+    log: Option<&BoundaryLog>,
+    context: &ActionContext,
+    show_id: ShowId,
+    operation: impl FnOnce(&mut Option<BoundaryTiming>) -> Result<T, ActionError>,
+) -> Result<T, ActionError> {
+    let Some(log) = log else {
+        return operation(&mut None);
+    };
+    let admitted = {
+        let log = log.lock();
+        log.rows.len() < log.limit
+    };
+    if !admitted {
+        return operation(&mut None);
+    }
+    let mut timing = Some(BoundaryTiming {
+        started: Instant::now(),
+        last: Duration::ZERO,
+        segments: BTreeMap::new(),
+        next: "validation",
+    });
+    let result = operation(&mut timing);
+    let mut timing = timing.expect("boundary timing remains present");
+    let total = timing.started.elapsed();
+    let failed_segment = result.as_ref().err().map(|_| timing.next);
+    timing.close(
+        total,
+        if result.is_err() {
+            "failed_segment"
+        } else {
+            "completion"
+        },
+    );
+    let row = ActiveShowBoundary {
+        request_id: context.request_id.clone(),
+        correlation_id: context.correlation_id,
+        show_id: show_id.0,
+        expected_revision: context.expected_revision,
+        total_microseconds: micros(total),
+        segments_microseconds: timing.segments,
+        failed_segment,
+        error: result.as_ref().err().map(|error| error.message.clone()),
+    };
+    let mut log = log.lock();
+    if log.rows.len() < log.limit {
+        log.rows.push(row);
+    }
+    result
+}
+
+pub(super) fn mark_boundary(timing: &mut Option<BoundaryTiming>, name: &'static str) {
+    if let Some(timing) = timing {
+        timing.close(timing.started.elapsed(), name);
+        timing.next = match name {
+            "validation" => "open_store",
+            "open_store" => "portable_document",
+            "portable_document" => "unit_setup",
+            _ => "completion",
+        };
+    }
+}
+
 pub(super) struct Observation {
     request_id: String,
     fixture_count: usize,
     index: usize,
     revision: u64,
     cursors: BTreeMap<PatchPerformancePhase, usize>,
+    boundary_cursor: usize,
     segments: BTreeMap<&'static str, f64>,
     last: Duration,
     before: Resources,
@@ -275,6 +406,8 @@ fn accounting(
         .get("service_handle_inclusive")
         .and_then(|total| (*total >= covered).then_some(*total - covered));
     Accounting {
+        active_show_boundary_nesting: "Both calls are inside service_handle_inclusive. In this benchmark the first begin_active_show is inside snapshot_load; the second is transaction begin outside snapshot_load. Boundary segments telescope to their inclusive total and must not be added to their parent. Adjusted residual subtracts only the second total when exactly two same-request calls exist; not CPU or parked wait.",
+        service_unattributed_after_transaction_begin_microseconds: None,
         compile_is_nested_in: "candidate_preparation_including_compile",
         service_nonnested_covered_microseconds: covered,
         service_unattributed_microseconds: residual,
@@ -462,6 +595,176 @@ mod tests {
                 .is_none()
         );
     }
+    fn boundary_context(request: &str) -> ActionContext {
+        ActionContext::operator(
+            uuid::Uuid::from_u128(1),
+            uuid::Uuid::from_u128(3),
+            super::super::ActionSource::Http,
+        )
+        .with_request_id(request)
+        .with_expected_revision(7)
+    }
+
+    #[test]
+    fn repeated_boundaries_are_correlated_and_do_not_leak_into_next_request() {
+        let mut collector = Collector::new(0, 2);
+        let log = collector.boundary_log();
+        let phases = Mutex::new(Phases::new());
+        for (index, name) in ["first", "second"].into_iter().enumerate() {
+            let observation = collector.begin(name, 100, index, 7, &phases).unwrap();
+            let context = boundary_context(name);
+            for _ in 0..2 {
+                observe_boundary(
+                    Some(&log),
+                    &context,
+                    ShowId(uuid::Uuid::from_u128(9)),
+                    |timing| {
+                        mark_boundary(timing, "validation");
+                        mark_boundary(timing, "open_store");
+                        mark_boundary(timing, "portable_document");
+                        mark_boundary(timing, "unit_setup");
+                        Ok(())
+                    },
+                )
+                .unwrap();
+            }
+            collector.record(
+                observation,
+                Duration::from_millis(1),
+                1,
+                &Ok((8, 1)),
+                &phases,
+            );
+        }
+        assert_eq!(log.lock().rows.len(), 4);
+        observe_boundary(
+            Some(&log),
+            &boundary_context("overflow"),
+            ShowId(uuid::Uuid::from_u128(9)),
+            |timing| {
+                assert!(timing.is_none());
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(log.lock().rows.len(), 4);
+        for (row, name) in collector.report.measured.iter().zip(["first", "second"]) {
+            assert_eq!(row.active_show_boundaries.len(), 2);
+            for boundary in &row.active_show_boundaries {
+                assert_eq!(boundary.request_id.as_deref(), Some(name));
+                assert_eq!(
+                    boundary.correlation_id,
+                    row.active_show_boundaries[0].correlation_id
+                );
+                assert!(
+                    (boundary.segments_microseconds.values().sum::<f64>()
+                        - boundary.total_microseconds)
+                        .abs()
+                        < 0.000001
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn boundary_failure_keeps_original_error_context_and_telescoping_segments() {
+        let collector = Collector::new(0, 1);
+        let log = collector.boundary_log();
+        let context = boundary_context("failed");
+        let original = ActionError::new(
+            super::super::ActionErrorKind::Unavailable,
+            "original open refusal",
+        )
+        .at_revision(19);
+        let result: Result<(), ActionError> = observe_boundary(
+            Some(&log),
+            &context,
+            ShowId(uuid::Uuid::from_u128(9)),
+            |timing| {
+                mark_boundary(timing, "validation");
+                Err(original.clone())
+            },
+        );
+        assert_eq!(result.unwrap_err(), original);
+        let rows = &log.lock().rows;
+        assert_eq!(rows.len(), 1);
+        let row = &rows[0];
+        assert_eq!(row.request_id.as_deref(), Some("failed"));
+        assert_eq!(row.correlation_id, context.correlation_id);
+        assert_eq!(row.expected_revision, Some(7));
+        assert_eq!(row.failed_segment, Some("open_store"));
+        assert_eq!(row.error.as_deref(), Some("original open refusal"));
+        assert!(
+            (row.segments_microseconds.values().sum::<f64>() - row.total_microseconds).abs()
+                < 0.000001
+        );
+        assert!(!row.segments_microseconds.contains_key("portable_document"));
+    }
+
+    #[test]
+    fn disabled_or_full_boundary_log_passes_through_without_a_timer() {
+        let context = boundary_context("disabled");
+        let original =
+            ActionError::new(super::super::ActionErrorKind::Invalid, "unchanged refusal");
+        for log in [None, Some(Collector::new(0, 0).boundary_log())] {
+            let result: Result<(), ActionError> = observe_boundary(
+                log.as_ref(),
+                &context,
+                ShowId(uuid::Uuid::from_u128(9)),
+                |timing| {
+                    assert!(timing.is_none());
+                    mark_boundary(timing, "open_store");
+                    Err(original.clone())
+                },
+            );
+            assert_eq!(result.unwrap_err(), original);
+            if let Some(log) = log {
+                assert!(log.lock().rows.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn adjusted_service_residual_subtracts_only_transaction_begin_not_snapshot_begin() {
+        let mut collector = Collector::new(0, 1);
+        let log = collector.boundary_log();
+        let phases = Mutex::new(Phases::new());
+        let mut observation = collector.begin("paired", 100, 0, 7, &phases).unwrap();
+        observation
+            .segments
+            .insert("service_handle_inclusive", 100.0);
+        phases.lock().insert(
+            PatchPerformancePhase::SnapshotLoad,
+            vec![Duration::from_micros(30)],
+        );
+        let context = boundary_context("paired");
+        for total in [20.0, 40.0] {
+            log.lock().rows.push(ActiveShowBoundary {
+                request_id: context.request_id.clone(),
+                correlation_id: context.correlation_id,
+                show_id: uuid::Uuid::from_u128(9),
+                expected_revision: Some(7),
+                total_microseconds: total,
+                segments_microseconds: BTreeMap::new(),
+                failed_segment: None,
+                error: None,
+            });
+        }
+        collector.record(
+            observation,
+            Duration::from_micros(100),
+            1,
+            &Ok((8, 1)),
+            &phases,
+        );
+        let accounting = &collector.report.measured[0].phase_accounting;
+        assert_eq!(accounting.service_unattributed_microseconds, Some(70.0));
+        assert_eq!(
+            accounting.service_unattributed_after_transaction_begin_microseconds,
+            Some(30.0)
+        );
+    }
+
     #[test]
     fn existing_scenario_serialization_omits_disabled_diagnostics() {
         use super::super::{ByteDistribution, PatchInvariants, PatchScenarioReport, distribution};
