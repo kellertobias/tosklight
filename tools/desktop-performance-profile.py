@@ -57,6 +57,14 @@ class Refused(RuntimeError):
     """A fixed scope/capability code, safe to publish without tool output."""
 
 
+class MachineFrameRefused(Refused):
+    """Only boolean proofs about the two fixed functions in our compiled ELF."""
+
+    def __init__(self, proof):
+        super().__init__("expected_probe_machine_frame_unverified")
+        self.diagnostic = proof
+
+
 class CallchainRefused(Refused):
     """Only aggregate counts for the two controlled probe functions."""
 
@@ -151,6 +159,67 @@ def verify_probe_elf_symbols(executable, deadline):
     if found != set(PROBE_NAMES):
         raise Refused("expected_probe_elf_symbols_unverified")
     return True
+
+
+def probe_instructions(text, name):
+    if len(text) > 1024 * 1024:
+        return []
+    active = False
+    instructions = []
+    for line in text.splitlines():
+        header = re.fullmatch(r"\s*[0-9a-fA-F]+ <([^>]+)>:\s*", line)
+        if header:
+            if active:
+                break
+            active = header[1] == name
+            continue
+        instruction = re.fullmatch(r"\s*[0-9a-fA-F]+:\s+([a-z][a-z0-9]*)\s*(.*?)\s*", line)
+        if active and instruction:
+            instructions.append((instruction[1], instruction[2]))
+    return instructions
+
+
+def entry_frame_verified(instructions):
+    # Conservative x86_64 entry proof; no generic disassembler or unwinder.
+    body = list(instructions)
+    while body and body[0][0] in ("endbr64", "nop", "nopl", "nopw"):
+        body.pop(0)
+    return len(body) >= 2 and body[0] == ("push", "rbp") and body[1][0] == "mov" and re.sub(r"\s+", "", body[1][1]) == "rbp,rsp"
+
+
+def verify_probe_machine_frame(executable, deadline):
+    proof = {"x86_64_elf_verified": False, "leaf_body_decoded": False,
+             "parent_body_decoded": False, "leaf_entry_frame_verified": False,
+             "parent_entry_frame_verified": False, "parent_calls_leaf_verified": False,
+             "verified": False}
+    try:
+        header = subprocess.run(["readelf", "--file-header", str(executable)],
+                                check=True, capture_output=True, text=True, env=isolated_env(),
+                                timeout=bounded_timeout(deadline, 2)).stdout
+        proof["x86_64_elf_verified"] = (len(header) <= 65536
+            and bool(re.search(r"Class:\s+ELF64\b", header))
+            and bool(re.search(r"Data:.*little endian", header))
+            and bool(re.search(r"Machine:\s+Advanced Micro Devices X86-64", header)))
+        if not proof["x86_64_elf_verified"]:
+            raise MachineFrameRefused(proof)
+        bodies = {}
+        for name in PROBE_NAMES:
+            result = subprocess.run(["objdump", "--disassemble=" + name, "--no-show-raw-insn",
+                                     "-M", "intel", str(executable)], check=True, capture_output=True,
+                                    text=True, env=isolated_env(), timeout=bounded_timeout(deadline, 2))
+            bodies[name] = probe_instructions(result.stdout, name)
+        parent, leaf = [bodies[name] for name in PROBE_NAMES]
+        proof.update(parent_body_decoded=bool(parent), leaf_body_decoded=bool(leaf),
+                     parent_entry_frame_verified=entry_frame_verified(parent),
+                     leaf_entry_frame_verified=entry_frame_verified(leaf),
+                     parent_calls_leaf_verified=any(op == "call" and re.fullmatch(
+                         r"[0-9a-fA-F]+ <" + PROBE_NAMES[1] + r">", operand) for op, operand in parent))
+        proof["verified"] = all(proof[key] for key in proof if key != "verified")
+        if not proof["verified"]:
+            raise MachineFrameRefused(proof)
+        return proof
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise MachineFrameRefused(proof) from error
 
 
 def find_perf():
@@ -896,6 +965,7 @@ def preflight(output):
             str(source), "-o", str(binary),
         ], check=True, capture_output=True, timeout=bounded_timeout(work_deadline, 5))
         symbols_verified = verify_probe_elf_symbols(binary, work_deadline)
+        machine_frame_proof = verify_probe_machine_frame(binary, work_deadline)
         probe = subprocess.Popen([str(binary)], stdout=subprocess.PIPE, text=True)
         if not select.select([probe.stdout], [], [], bounded_timeout(work_deadline, 2))[0] or probe.stdout.readline() != "READY\n":
             raise Refused("synthetic_probe_not_ready")
@@ -920,6 +990,7 @@ def preflight(output):
             "schema": 1, "purpose": "synthetic_cpu_stack_capability_only_not_acceptance",
             "public_artifacts": True, "attempts": attempts,
             "expected_probe_elf_symbols_verified": symbols_verified,
+            "probe_machine_frame_proof": machine_frame_proof,
             "status": attempts[-1]["status"], "canonical_build_allowed": attempts[-1]["status"] == "CAPABLE",
             "helper_sha256": request["helper_sha256"], "probe_sha256": request["target"]["sha256"],
             "probe_build_id": request["target_build_id"], "perf_sha256": request["perf_sha256"],
@@ -962,6 +1033,8 @@ def main():
             "status": "STOP", "canonical_build_allowed": False,
             "code": str(error) if isinstance(error, Refused) else "preflight_unavailable_or_cleanup_unverified",
         }
+        if isinstance(error, MachineFrameRefused):
+            failure["probe_machine_frame_proof"] = error.diagnostic
         if str(error) != "public_receipt_not_in_canonical_artifacts" and not args.output.exists():
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open("x") as stream:

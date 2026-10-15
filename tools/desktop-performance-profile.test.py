@@ -448,6 +448,37 @@ class OwnershipTests(unittest.TestCase):
             with patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout=text)), self.assertRaises(PROFILE.Refused):
                 PROFILE.verify_probe_elf_symbols("/owned/cpu-probe", PROFILE.time.monotonic() + 2)
 
+    def test_compiled_probe_frame_and_callproof_is_fixed_x86_64_and_private(self):
+        header = "Class: ELF64\nData: 2's complement, little endian\nMachine: Advanced Micro Devices X86-64\n"
+        parent, leaf = PROFILE.PROBE_NAMES
+        def body(name, frame=True, call=False):
+            entry = "1000: push rbp\n1001: mov rbp,rsp\n" if frame else "1000: mov eax,0x186a0\n"
+            return f"/private/own-elf: fileformat\n1000 <{name}>:\n" + entry + (f"1004: call 2000 <{leaf}>\n" if call else "") + "1009: ret\n"
+        with patch.object(PROFILE.subprocess, "run", side_effect=[Mock(stdout=header), Mock(stdout=body(parent, call=True)), Mock(stdout=body(leaf))]) as run:
+            proof = PROFILE.verify_probe_machine_frame("/private/own-elf", PROFILE.time.monotonic() + 10)
+        self.assertTrue(all(proof.values()))
+        self.assertEqual(run.call_args_list[1].args[0], ["objdump", "--disassemble=" + parent, "--no-show-raw-insn", "-M", "intel", "/private/own-elf"])
+        self.assertEqual(run.call_args_list[2].args[0][1], "--disassemble=" + leaf)
+        with patch.object(PROFILE.subprocess, "run", side_effect=[Mock(stdout=header), Mock(stdout=body(parent, call=True)), Mock(stdout=body(leaf, frame=False))]), self.assertRaises(PROFILE.MachineFrameRefused) as missing:
+            PROFILE.verify_probe_machine_frame("/private/own-elf", PROFILE.time.monotonic() + 10)
+        self.assertTrue(missing.exception.diagnostic["leaf_body_decoded"])
+        self.assertFalse(missing.exception.diagnostic["leaf_entry_frame_verified"])
+        self.assertTrue(missing.exception.diagnostic["parent_calls_leaf_verified"])
+        self.assertNotIn("1000", str(missing.exception.diagnostic))
+        self.assertNotIn("private", str(missing.exception.diagnostic))
+        for parent_body in (body(parent), body(parent, call=True).replace("<" + leaf + ">", "<foreign-function>")):
+            with patch.object(PROFILE.subprocess, "run", side_effect=[Mock(stdout=header), Mock(stdout=parent_body), Mock(stdout=body(leaf))]), self.assertRaises(PROFILE.MachineFrameRefused) as wrong_call:
+                PROFILE.verify_probe_machine_frame("/private/own-elf", PROFILE.time.monotonic() + 10)
+            self.assertFalse(wrong_call.exception.diagnostic["parent_calls_leaf_verified"])
+        with patch.object(PROFILE.subprocess, "run", side_effect=FileNotFoundError("objdump unavailable")), self.assertRaises(PROFILE.MachineFrameRefused) as tool:
+            PROFILE.verify_probe_machine_frame("/private/own-elf", PROFILE.time.monotonic() + 10)
+        self.assertFalse(tool.exception.diagnostic["verified"])
+        with patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout=header.replace("ELF64", "ELF32"))) as wrong, self.assertRaises(PROFILE.MachineFrameRefused):
+            PROFILE.verify_probe_machine_frame("/private/own-elf", PROFILE.time.monotonic() + 10)
+        self.assertEqual(wrong.call_count, 1)
+        self.assertFalse(PROFILE.entry_frame_verified([("push", "rbp"), ("mov", "rsp,rbp")]))
+        self.assertEqual(PROFILE.probe_instructions(body("foreign"), leaf), [])
+
     def test_perf_config_uses_supported_list_with_isolated_environment(self):
         result = Mock(returncode=0, stdout=b"")
         with patch.object(PROFILE.subprocess, "run", return_value=result) as run:
@@ -472,7 +503,7 @@ class PreflightPolicyTests(unittest.TestCase):
         probe.wait.return_value = 0
         coordinator = {**TARGET, "pid": 400, "sha256": "fixture-executable-hash"}
         root = Path(directory)
-        with patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "find_perf", return_value=str(perf)), patch.object(PROFILE.shutil, "which", return_value="/never/executed/cc"), patch.object(PROFILE, "artifact_path", return_value=root), patch.object(PROFILE, "process_identity", return_value=coordinator), patch.object(PROFILE, "build_id", return_value="abc123"), patch.object(PROFILE, "verify_probe_elf_symbols", return_value=True), patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout="perf fixture version")), patch.object(PROFILE.subprocess, "Popen", return_value=probe), patch.object(PROFILE.select, "select", return_value=([probe.stdout], [], [])), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "collect_attempt", side_effect=outcomes) as attempts:
+        with patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "find_perf", return_value=str(perf)), patch.object(PROFILE.shutil, "which", return_value="/never/executed/cc"), patch.object(PROFILE, "artifact_path", return_value=root), patch.object(PROFILE, "process_identity", return_value=coordinator), patch.object(PROFILE, "build_id", return_value="abc123"), patch.object(PROFILE, "verify_probe_elf_symbols", return_value=True), patch.object(PROFILE, "verify_probe_machine_frame", return_value={"verified": True}), patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout="perf fixture version")), patch.object(PROFILE.subprocess, "Popen", return_value=probe), patch.object(PROFILE.select, "select", return_value=([probe.stdout], [], [])), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "collect_attempt", side_effect=outcomes) as attempts:
             if expected_error is None:
                 status = PROFILE.preflight(root / "receipt.json")
             else:
@@ -512,6 +543,13 @@ class PreflightPolicyTests(unittest.TestCase):
                 PROFILE.preflight(Path(directory) / "receipt.json")
             spawn.assert_not_called()
             collect.assert_not_called()
+            self.assertFalse(list(Path(directory).glob("tl775-probe-source-*")))
+
+    def test_unverified_machine_frame_stops_before_target_or_recorder(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(PROFILE.sys, "platform", "linux"), patch.object(PROFILE.os, "getuid", return_value=1001), patch.object(PROFILE, "artifact_path", return_value=Path(directory)), patch.object(PROFILE.os, "pidfd_open", create=True), patch.object(PROFILE.signal, "pidfd_send_signal", create=True), patch.object(PROFILE, "find_perf", return_value="/owned/perf"), patch.object(PROFILE.shutil, "which", return_value="/never/executed/cc"), patch.object(PROFILE.subprocess, "run", return_value=Mock(stdout="fixture version")), patch.object(PROFILE, "verify_probe_elf_symbols", return_value=True), patch.object(PROFILE, "verify_probe_machine_frame", create=True, side_effect=PROFILE.Refused("expected_probe_machine_frame_unverified")), patch.object(PROFILE.subprocess, "Popen") as spawn, patch.object(PROFILE, "collect_attempt", return_value={"status": "STOP", "recorder_gone": True}), patch.object(PROFILE, "process_identity", return_value={**TARGET, "sha256": "fixture"}), patch.object(PROFILE, "build_id", return_value="fixture"), patch.object(PROFILE.select, "select", return_value=([], [], [])):
+            with self.assertRaisesRegex(PROFILE.Refused, "expected_probe_machine_frame_unverified"):
+                PROFILE.preflight(Path(directory) / "receipt.json")
+            spawn.assert_not_called()
             self.assertFalse(list(Path(directory).glob("tl775-probe-source-*")))
 
     def test_missing_perf_stops_before_probe_compile_or_any_process(self):
