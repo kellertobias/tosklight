@@ -2,6 +2,11 @@ import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerControlSurfaceTarget } from "../../features/controlSurfaceInteraction/registry";
 import "../../styles.css";
+import {
+	emptyProgrammerValuesState,
+	type ProgrammerValuesState,
+} from "../../features/programmerValues/storeState";
+import { useNormalProgrammerValueCount } from "../../features/programmerValues/useProgrammerValuesActivity";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import { softwareDeskKeypadLayout } from "@tosklight/ui/programmer-keypad";
 import {
@@ -65,6 +70,7 @@ const valuesActivity = {
 		pendingValueCount: 0,
 	},
 };
+const normalActivityState = { current: emptyProgrammerValuesState() };
 const programmerValuesActions = {
 	clear: vi.fn().mockResolvedValue(null),
 };
@@ -135,10 +141,19 @@ vi.mock("../../state/AppContext", () => ({
 	useApp: () => ({ state, dispatch }),
 	useOptionalApp: () => ({ state, dispatch }),
 }));
-vi.mock("../../features/programmerValues/useProgrammerValuesActivity", () => ({
-	useProgrammerValuesActivity: () => valuesActivity.current,
-}));
+vi.mock(
+	"../../features/programmerValues/useProgrammerValuesActivity",
+	async (importOriginal) => ({
+		...(await importOriginal()),
+		useProgrammerValuesActivity: () => valuesActivity.current,
+	}),
+);
 vi.mock("../../features/programmerValues/ProgrammerValuesView", () => ({
+	useProgrammerValuesSelector: (
+		selector: (state: ProgrammerValuesState) => number | null,
+		_equal: unknown,
+		enabled: boolean,
+	) => (enabled ? selector(normalActivityState.current) : null),
 	useProgrammerValuesActions: () => programmerValuesActions,
 }));
 vi.mock("../../features/programmerActions/ProgrammerActionsContext", () => ({
@@ -181,6 +196,7 @@ afterEach(() => {
 	cleanup();
 	server.bootstrap.active_programmers = [];
 	server.selectedFixtures = [];
+	normalActivityState.current = emptyProgrammerValuesState();
 	commandProjection.text = "FIXTURE";
 	commandProjection.pristine = true;
 	state.shiftArmed = false;
@@ -284,6 +300,99 @@ describe("NumericPad Clear and SET routing", () => {
 
 		expect(preloadLifecycle.actions.clearPending).toHaveBeenCalledOnce();
 		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
+	});
+
+	it("clears Normal selection while committed Preload remains active", () => {
+		preloadLifecycle.active = true;
+		server.selectedFixtures = ["fixture-1"];
+		valuesActivity.current = {
+			authority: "normal",
+			ready: true,
+			valueCount: 1,
+			pendingValueCount: 0,
+		};
+		render(<NumericPad />);
+		fireEvent.click(screen.getByRole("button", { name: "CLR" }));
+		expect(selectionActions.replace).toHaveBeenCalledExactlyOnceWith({
+			resolvedFixtures: [],
+		});
+		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.clearPending).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
+		expect(preloadLifecycle.active).toBe(true);
+	});
+	it("clears a Normal Dynamic Off value without releasing committed Preload", () => {
+		preloadLifecycle.active = true;
+		normalActivityState.current = {
+			...emptyProgrammerValuesState(),
+			status: "ready",
+			projection: {
+				revision: 1,
+				fixtureValues: [],
+				groupValues: [],
+				dynamicValues: [
+					{
+						fixtureId: "00000000-0000-4001-8000-0000000001ca",
+						attribute: "position",
+						value: {
+							type: "dynamic_off",
+							instance_link: "2670bfdb-73f6-4337-b1bf-d3bd580558a8",
+							timing: {},
+						},
+						programmerOrder: 792,
+						changedAtMillis: 1792033376377,
+					},
+				],
+			},
+		};
+		const { result } = renderHook(() => useNormalProgrammerValueCount());
+		const count = result.current;
+		expect(count).toBe(1);
+		if (count === null) throw new Error("ready Dynamic Off count required");
+		valuesActivity.current = {
+			authority: "normal",
+			ready: true,
+			valueCount: count,
+			pendingValueCount: 0,
+		};
+		const { rerender } = render(<NumericPad />);
+		fireEvent.click(screen.getByRole("button", { name: "CLR" }));
+		expect(programmerValuesActions.clear).toHaveBeenCalledExactlyOnceWith(
+			expect.any(String),
+		);
+		expect(selectionActions.replace).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.clearPending).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
+		expect(preloadLifecycle.active).toBe(true);
+		valuesActivity.current = { ...valuesActivity.current, valueCount: 0 };
+		rerender(<NumericPad />);
+		fireEvent.click(screen.getByRole("button", { name: "CLR" }));
+		expect(programmerValuesActions.clear).toHaveBeenCalledOnce();
+		expect(preloadLifecycle.actions.clearPending).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
+	});
+	it.each([
+		{ armed: true, authority: "normal" as const },
+		{ armed: false, authority: "preload" as const },
+	])("preserves pending CLR authority for armed=$armed authority=$authority", ({
+		armed,
+		authority,
+	}) => {
+		preloadLifecycle.armed = armed;
+		preloadLifecycle.active = true;
+		server.selectedFixtures = ["fixture-1"];
+		valuesActivity.current = {
+			authority,
+			ready: true,
+			valueCount: 1,
+			pendingValueCount: authority === "preload" ? 1 : 0,
+		};
+		render(<NumericPad />);
+		fireEvent.click(screen.getByRole("button", { name: "CLR" }));
+		expect(preloadLifecycle.actions.clearPending).toHaveBeenCalledOnce();
+		expect(programmerValuesActions.clear).not.toHaveBeenCalled();
+		expect(selectionActions.replace).not.toHaveBeenCalled();
+		expect(preloadLifecycle.actions.release).not.toHaveBeenCalled();
 	});
 
 	it("shows shifted Freeze as a stable action instead of blinking Clear", () => {

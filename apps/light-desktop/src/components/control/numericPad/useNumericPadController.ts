@@ -318,7 +318,7 @@ function clearProgrammerStep(context: NumericPadContext) {
 	for (const [type, armed] of clearableArmedStates(state))
 		if (armed) dispatch({ type, value: false });
 	void command.reset();
-	if (preload.armed || preload.active || values.authority === "preload") {
+	if (preload.armed || values.authority === "preload") {
 		if (preload.ready) void preload.actions?.clearPending();
 		return;
 	}
