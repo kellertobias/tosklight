@@ -268,6 +268,26 @@ class PackagedPerfDiscoveryTests(unittest.TestCase):
         exec(compile(module, str(workflow), "exec"), namespace)
         return namespace["canonical_packages"]
 
+    def test_tool_query_timeout_uses_ten_seconds_with_remaining_global_budget(self):
+        workflow = Path(__file__).resolve().parents[1] / ".github/workflows/release-cpu-profile-preflight.yml"
+        text = workflow.read_text()
+        start = text.index("          def query(args):")
+        end = text.index("          def canonical_packages(", start)
+        module = ast.parse(textwrap.dedent(text[start:end]))
+        for remaining in (50, 5, 0):
+            tool = Mock()
+            namespace = {"time": Mock(monotonic=Mock(return_value=100 - remaining)),
+                         "deadline": 100, "subprocess": tool}
+            exec(compile(module, str(workflow), "exec"), namespace)
+            if not remaining:
+                with self.assertRaises(TimeoutError):
+                    namespace["query"](["dpkg-query", "-S", "/exact/perf"])
+                tool.run.assert_not_called()
+            else:
+                namespace["query"](["dpkg-query", "-S", "/exact/perf"])
+                tool.run.assert_called_once_with(["dpkg-query", "-S", "/exact/perf"],
+                    text=True, capture_output=True, timeout=min(10, remaining))
+
     def test_canonical_vendor_package_requires_installed_exact_file_ownership(self):
         canonical = "/usr/lib/linux-azure-6.8-tools-6.8.0-1064/perf"
         package = "linux-azure-6.8-tools-6.8.0-1064"

@@ -83,7 +83,7 @@ jobs:
               remaining = deadline - time.monotonic()
               if remaining <= 0:
                   raise TimeoutError('tool discovery deadline exceeded')
-              return subprocess.run(args, text=True, capture_output=True, timeout=min(2, remaining))
+              return subprocess.run(args, text=True, capture_output=True, timeout=min(10, remaining))
           def canonical_packages(canonical, owned, query, owner_checks):
               if canonical in owned:
                   return owned[canonical]
