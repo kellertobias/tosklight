@@ -491,7 +491,10 @@ source data does not prove that a fixture has been physically measured.
 ### Installed Color calibration
 
 In **Show → Setup → Patch**, open a physical fixture's **Light source** editor and choose
-**Color calibration…**. A root fixture and each multi-patch copy hold independent observations.
+**Color calibration…**. If the profile has authored Color paths but no Stage geometry emitter,
+choose **Color calibration…** directly in the **Light source** cell; **No emitter** still describes
+the unavailable Stage appearance. Use **SET** to edit, or open the cell's context menu.
+A root fixture and each multi-patch copy hold independent observations.
 
 Add an emitter's **output gain** when its output differs from the profile: 1.0 keeps the profile
 output and 0.0 represents no output. This scales the emitter's XYZ and spectral power together;
@@ -507,8 +510,10 @@ ones for that lamp. A physical hardware swap using the same profile also needs a
 review. New Architect duplicates start without Color calibration. **Clear Color calibration**
 removes observations from only the selected physical instance.
 
-This increment saves and validates installation data. Applying it to live color fitting and
-Stage is part of the subsequent engine integration; saved presets and cues are not modified.
+Compatible observations are used for live Color fitting for the selected physical instance.
+A copy uses its own calibration independently of the root fixture and other copies. Stored
+Preset and Cue Color intent stays unchanged; the fitted native output can change. Saving an
+observation does not certify its measurement quality or turn unknown source data into measured data.
 
 
 ## Physical geometry and individual axis calibration

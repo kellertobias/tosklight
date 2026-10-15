@@ -1,3 +1,4 @@
+import fixtureHelp from "../../../../../../docs/help/10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md?raw";
 import {
 	cleanup,
 	fireEvent,
@@ -81,6 +82,42 @@ function example() {
 	return { mode, path, identity };
 }
 describe("installed Color calibration editor", () => {
+	it("keeps installed calibration help consistent with the available path and live fitting", () => {
+		const installed = fixtureHelp
+			.split("### Installed Color calibration")[1]
+			.split("## Physical geometry")[0];
+		expect(installed).toContain("choose **Color calibration…** directly");
+		expect(installed).toContain("no Stage geometry emitter");
+		expect(installed).toContain("used for live Color fitting");
+		expect(installed).toContain(
+			"Stored\nPreset and Cue Color intent stays unchanged",
+		);
+		expect(installed).not.toContain("subsequent engine integration");
+	});
+
+	it("explains live fitting, independent copies and preserved programming", () => {
+		const { mode, identity } = example();
+		render(
+			<ColorCalibrationEditor
+				identity="Fixture 1"
+				initial={null}
+				mode={mode}
+				identities={[identity]}
+				onSave={vi.fn()}
+				onClose={vi.fn()}
+			/>,
+		);
+		expect(screen.getByText(/used for live Color fitting/)).toHaveTextContent(
+			"Copies have independent calibration",
+		);
+		expect(screen.getByText(/used for live Color fitting/)).toHaveTextContent(
+			"Stored Preset and Cue intent stays unchanged",
+		);
+		expect(
+			screen.queryByText(/do not yet change live/),
+		).not.toBeInTheDocument();
+	});
+
 	it("authors a zero gain with exact server identity and saves only calibration", async () => {
 		const { mode, identity } = example();
 		const save = vi.fn().mockResolvedValue(true),

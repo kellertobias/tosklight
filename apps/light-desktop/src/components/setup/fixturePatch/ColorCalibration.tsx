@@ -193,8 +193,9 @@ export function ColorCalibrationEditor({
 					/>
 					<p className="field-hint">
 						Observations belong to this physical lamp only. Copies have
-						independent calibration. These saved values do not yet change live
-						output or Stage.
+						independent calibration. Compatible observations are used for live
+						Color fitting. Stored Preset and Cue intent stays unchanged. Saving
+						observations does not verify their measurement quality.
 					</p>
 					{stale && (
 						<p role="status">

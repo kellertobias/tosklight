@@ -37,6 +37,23 @@ export function LightSourceCell({
 		return (
 			<td className="patch-stacked-cell">
 				<span className="patch-stacked-line patch-secondary">No emitter</span>
+				{hasColorCalibrationPath(fixture) && (
+					<Button
+						className="patch-value patch-stacked-editor"
+						aria-label={`Color calibration ${instance?.name || fixtureDisplayId(fixture)}`}
+						onClick={() => {
+							if (controller.appState.patchSetArmed)
+								openColorCalibration(controller, fixture, instance?.id ?? null);
+						}}
+						onContextMenu={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							openColorCalibration(controller, fixture, instance?.id ?? null);
+						}}
+					>
+						Color calibration…
+					</Button>
+				)}
 			</td>
 		);
 
@@ -165,7 +182,17 @@ function AppearanceEditor({
 						closeLabel="Close light source editor"
 						onClose={close}
 					/>
-                    <Button disabled={busy} onClick={() => controller.ui.setColorCalibrationEdit({ fixtureId: fixture.fixture_id, multipatchInstanceId: instance?.id ?? null })}>Color calibration…</Button>
+					<Button
+						disabled={busy}
+						onClick={() =>
+							controller.ui.setColorCalibrationEdit({
+								fixtureId: fixture.fixture_id,
+								multipatchInstanceId: instance?.id ?? null,
+							})
+						}
+					>
+						Color calibration…
+					</Button>
 					<LightSourceAppearanceForm
 						draft={draft}
 						setDraft={setDraft}
@@ -235,4 +262,34 @@ export function hasGeometryEmitter(fixture: PatchedFixture) {
 				return mode ? modeGeometry(snapshot, mode).emitters.length : 0;
 			})(),
 	);
+}
+
+function hasColorCalibrationPath(fixture: PatchedFixture) {
+	const context = fixture.definition.color_calibration_context;
+	return Boolean(
+		context?.mode?.color_physical?.paths.some((path) =>
+			context.identities.some(
+				(identity) =>
+					identity.mode_id === context.mode.id &&
+					identity.path_id === path.id &&
+					identity.head_id === path.head_id,
+			),
+		),
+	);
+}
+
+function openColorCalibration(
+	controller: PatchController,
+	fixture: PatchedFixture,
+	multipatchInstanceId: string | null,
+) {
+	controller.ui.setSelectedFixture(fixture.fixture_id);
+	controller.patch.selectPatchInstance({
+		fixtureId: fixture.fixture_id,
+		multipatchInstanceId,
+	});
+	controller.ui.setColorCalibrationEdit({
+		fixtureId: fixture.fixture_id,
+		multipatchInstanceId,
+	});
 }
