@@ -50,6 +50,23 @@ def indexed_perf_file(entries=None, ids=(101, 102, 103, 104)):
     return bytes(data)
 
 
+def append_metadata(raw, records):
+    data = bytearray(raw)
+    start, size = struct.unpack_from("<QQ", data, 40)
+    extra = b"".join(records)
+    data.extend(extra)
+    struct.pack_into("<Q", data, 48, size + len(extra))
+    return bytes(data)
+
+
+def metadata_record(kind, payload=b"", misc=0):
+    return struct.pack("<IHH", kind, misc, 8 + len(payload)) + payload
+
+
+def clock_update(subtype, payload, event_id=101):
+    return metadata_record(78, struct.pack("<QQ", subtype, event_id) + payload)
+
+
 def exported(samples=10):
     initial = " 410/ 410 0.000000000: PERF_RECORD_COMM: cpu-probe:410/410\n"
     initial += " 410/410 0.000000000: PERF_RECORD_MMAP2 410/410: [0x1(0x2) @ 0]: /owned/cpu-probe\n"
@@ -99,12 +116,15 @@ class EventScopeTests(unittest.TestCase):
         self.assertEqual(PROFILE.event_census(perf_file([9], flags=1 | (1 << 5) | (1 << 6))), {"SAMPLE": 1})
 
     def test_unknown_record_refusal_contains_only_safe_header_diagnostics(self):
-        for kind in (2, 82, 999):
+        for kind in (2, 79, 999):
             with self.subTest(kind=kind), self.assertRaises(PROFILE.CensusRefused) as caught:
                 PROFILE.event_census(perf_file([3, 9, kind]))
             error = caught.exception
             self.assertEqual(str(error), "unsupported_or_lost_perf_record")
-            self.assertEqual(error.diagnostic, {
+            diagnostic = error.diagnostic.copy()
+            inventory = diagnostic.pop("header_inventory")
+            self.assertTrue(inventory["complete"])
+            self.assertEqual(diagnostic, {
                 "record_type": kind, "record_misc": 2, "record_length": 8,
                 "preceding_record_counts": {"COMM": 1, "SAMPLE": 1},
                 "attribute_sample_type": 1 | 2 | 4 | 32 | 128 | 256,
@@ -153,6 +173,80 @@ class EventScopeTests(unittest.TestCase):
         for text in ("", "3-1", "0,0", "1,0", "0-999999", "unknown"):
             with patch.object(PROFILE.Path, "read_text", return_value=text), self.assertRaises(PROFILE.Refused):
                 PROFILE.online_cpu_map()
+
+    def test_clock_metadata_and_markers_keep_full_typed_sample_census(self):
+        records = [clock_update(0, b"msec\0" + b"\0" * 19),
+                   clock_update(1, struct.pack("<d", 1e-6) + b"\0" * 16),
+                   metadata_record(73, struct.pack("<QQ", 1, TARGET["pid"]) + b"\0" * 16),
+                   metadata_record(74, struct.pack("<HBBHH", 2, 0, 0, 0, 3)),
+                   metadata_record(82), metadata_record(68), metadata_record(68)]
+        census = PROFILE.event_census(append_metadata(indexed_perf_file(), records), TARGET["pid"], [0, 1, 2, 3])
+        result = PROFILE.validate_export(exported(), census, TARGET, TIDS, INTERVAL)
+        self.assertEqual(result["samples"], 10)
+        self.assertEqual(result["validated_header_records"], {"ID_INDEX": 1, "EVENT_UPDATE_UNIT": 1,
+            "EVENT_UPDATE_SCALE": 1, "THREAD_MAP": 1, "CPU_MAP": 1, "FINISHED_INIT": 1, "FINISHED_ROUND": 2})
+
+    def test_known_metadata_foreign_ids_threads_unknown_subtypes_and_bad_values_refuse(self):
+        bad = [clock_update(0, b"msec\0" + b"\0" * 19, 999),
+               clock_update(0, b"other\0" + b"\0" * 18),
+               clock_update(1, struct.pack("<d", float("nan")) + b"\0" * 16),
+               clock_update(1, struct.pack("<d", 1.0) + b"\0" * 16),
+               clock_update(2, b"cpu-clock:u\0"), clock_update(999, b""),
+               metadata_record(73, struct.pack("<QQ", 1, 777) + b"\0" * 16),
+               metadata_record(73, struct.pack("<QQ", 1, TARGET["pid"]) + b"foreign" + b"\0" * 9),
+               metadata_record(74, struct.pack("<HBBHH", 2, 0, 0, 0, 4)),
+               metadata_record(82, b"bad"), metadata_record(68, misc=1)]
+        for record in bad:
+            with self.subTest(record=record[:8]), self.assertRaises(PROFILE.Refused):
+                PROFILE.event_census(append_metadata(indexed_perf_file(), [record]), TARGET["pid"], [0, 1, 2, 3])
+        with self.assertRaisesRegex(PROFILE.Refused, "duplicate"):
+            PROFILE.event_census(append_metadata(indexed_perf_file(), [metadata_record(82)] * 2), TARGET["pid"], [0, 1, 2, 3])
+
+    def test_cpu_map_encodings_are_bounded_and_exact(self):
+        valid = [struct.pack("<HH4H", 0, 4, 0, 1, 2, 3) + b"\0" * 4,
+                 struct.pack("<HHHI", 1, 1, 4, 15) + b"\0" * 6,
+                 struct.pack("<HHHIQ", 1, 1, 8, 0, 15) + b"\0" * 6,
+                 struct.pack("<HBBHH", 2, 0, 0, 0, 3)]
+        for payload in valid:
+            self.assertEqual(PROFILE.decode_cpu_map(payload), [0, 1, 2, 3])
+        for payload in (b"", b"\0" * 7, struct.pack("<HBBHH", 2, 0, 1, 0, 3),
+                        valid[0][:-1] + b"x", struct.pack("<HHHH", 0, 2, 1, 1),
+                        struct.pack("<HHHH", 1, 1, 3, 0)):
+            with self.assertRaises(PROFILE.Refused):
+                PROFILE.decode_cpu_map(payload)
+
+    def test_unknown_stop_inventory_sees_all_headers_without_exporting_ids_or_payload(self):
+        records = [clock_update(999, b"private-payload", 101), metadata_record(79, b""),
+                   metadata_record(73, struct.pack("<QQ", 1, 777) + b"foreign-name" + b"\0" * 4),
+                   clock_update(123456, b"secret", 987654321)]
+        with self.assertRaises(PROFILE.CensusRefused) as caught:
+            PROFILE.event_census(append_metadata(indexed_perf_file(), records), TARGET["pid"], [0, 1, 2, 3])
+        inventory = caught.exception.diagnostic["header_inventory"]
+        self.assertTrue(inventory["complete"])
+        self.assertEqual({row["type"] for row in inventory["headers"]}, {69, 3, 10, 9, 78, 79, 73})
+        self.assertIn({"event_id_matches": True, "subtype": 999, "count": 1}, inventory["event_updates"])
+        self.assertIn({"event_id_matches": False, "subtype": None, "count": 1}, inventory["event_updates"])
+        encoded = str(inventory)
+        for private in ("987654321", "123456", "secret", "foreign-name", "private-payload"):
+            self.assertNotIn(private, encoded)
+        with self.assertRaisesRegex(PROFILE.Refused, "incomplete"):
+            PROFILE.event_census(indexed_perf_file(), TARGET["pid"], [0, 1, 2, 3], deadline=0)
+
+    def test_numeric_inventory_reports_explicit_capacity_limits(self):
+        for kinds, expected in ((range(1000, 1130), "diagnostic_distinct_header_limit"),
+                                ([999] * 131073, "diagnostic_limit_or_deadline")):
+            raw = perf_file(kinds)
+            offset, size = struct.unpack_from("<QQ", raw, 40)
+            inventory = PROFILE.numeric_header_inventory(raw, offset, offset + size, 104, 128, None)
+            self.assertFalse(inventory["complete"])
+            self.assertEqual(inventory["incomplete_reason"], expected)
+        updates = [clock_update(i, b"") for i in range(129)]
+        raw = append_metadata(indexed_perf_file(), updates)
+        attr_offset = struct.unpack_from("<Q", raw, 24)[0]
+        offset, size = struct.unpack_from("<QQ", raw, 40)
+        inventory = PROFILE.numeric_header_inventory(raw, offset, offset + size, attr_offset, 128, None)
+        self.assertFalse(inventory["complete"])
+        self.assertEqual(inventory["incomplete_reason"], "diagnostic_subtype_limit")
 
     def test_insufficient_symbolized_callchains_cannot_allow_build(self):
         with self.assertRaises(PROFILE.Refused):
@@ -273,6 +367,9 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(command[command.index("--pid") + 1], "410")
         self.assertIn("--no-inherit", command)
         self.assertIn("--no-buildid-cache", command)
+        self.assertIn("--no-bpf-event", command)
+        self.assertIn("--synth=task,mmap", command)
+        self.assertNotIn("--synth=all", command)
         self.assertNotIn("-a", command)
         self.assertNotIn("dwarf", command)
         self.assertNotIn("HOME", PROFILE.isolated_env())

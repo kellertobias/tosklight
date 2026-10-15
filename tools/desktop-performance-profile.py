@@ -60,13 +60,15 @@ class Refused(RuntimeError):
 class CensusRefused(Refused):
     """Numeric record-header diagnostics only; no event payload is published."""
 
-    def __init__(self, event, misc, length, counts, sample_type, flags):
-        super().__init__("unsupported_or_lost_perf_record")
+    def __init__(self, event, misc, length, counts, sample_type, flags, inventory=None, code="unsupported_or_lost_perf_record"):
+        super().__init__(code)
         self.diagnostic = {
             "record_type": event, "record_misc": misc, "record_length": length,
             "preceding_record_counts": dict(counts),
             "attribute_sample_type": sample_type, "attribute_flags": flags,
         }
+        if inventory is not None:
+            self.diagnostic["header_inventory"] = inventory
 
 
 def digest(path):
@@ -237,7 +239,7 @@ def perf_command(perf, pid):
         perf, "record", "--event", "cpu-clock:u", "--freq", "49",
         "--call-graph", "fp", "--timestamp", "--mmap-pages", "128",
         "--clockid", "mono",
-        "--no-inherit", "--no-buildid-cache", "--pid", str(pid),
+        "--no-inherit", "--no-buildid-cache", "--no-bpf-event", "--synth=task,mmap", "--pid", str(pid),
         "--output", "perf.data",
     ]
 
@@ -313,6 +315,23 @@ def online_cpu_map():
     return cpus
 
 
+def attribute_ids(data, attr_offset, attr_size):
+    if attr_size < 64:
+        raise Refused("invalid_id_index_attr_section")
+    ids_offset, ids_size = struct.unpack_from("<QQ", data, attr_offset + attr_size - 16)
+    if not ids_size or ids_size > 4096 * 8 or ids_size % 8 or ids_offset + ids_size > len(data):
+        raise Refused("invalid_id_index_attr_ids")
+    record_offset, record_size = struct.unpack_from("<QQ", data, 40)
+    ids_end = ids_offset + ids_size
+    if ids_offset < 104 or (ids_offset < attr_offset + attr_size and attr_offset < ids_end) or (ids_offset < record_offset + record_size and record_offset < ids_end):
+        raise Refused("overlapping_id_index_attr_ids")
+    nr = ids_size // 8
+    ids = struct.unpack_from(f"<{nr}Q", data, ids_offset)
+    if len(set(ids)) != nr or 0 in ids:
+        raise Refused("invalid_id_index_attr_ids")
+    return ids
+
+
 def validate_id_index(data, offset, length, misc, attr_offset, attr_size, target_tid, cpus):
     # Linux v6.8.12 synthetic-events.c writes one entry per evsel core ID.
     # lib/perf/evlist.c idx is the mmap/CPU-map index, NOT evsel index.
@@ -322,17 +341,8 @@ def validate_id_index(data, offset, length, misc, attr_offset, attr_size, target
     if not nr or length != 16 + 32 * nr:
         # Guest extensions are intentionally outside this single-host probe.
         raise Refused("invalid_or_guest_id_index_length")
-    if attr_size < 64:
-        raise Refused("invalid_id_index_attr_section")
-    ids_offset, ids_size = struct.unpack_from("<QQ", data, attr_offset + attr_size - 16)
-    if not ids_size or ids_size % 8 or ids_offset + ids_size > len(data) or ids_size // 8 != nr:
-        raise Refused("invalid_id_index_attr_ids")
-    record_offset, record_size = struct.unpack_from("<QQ", data, 40)
-    ids_end = ids_offset + ids_size
-    if ids_offset < 104 or (ids_offset < attr_offset + attr_size and attr_offset < ids_end) or (ids_offset < record_offset + record_size and record_offset < ids_end):
-        raise Refused("overlapping_id_index_attr_ids")
-    ids = struct.unpack_from(f"<{nr}Q", data, ids_offset)
-    if len(set(ids)) != nr or 0 in ids:
+    ids = attribute_ids(data, attr_offset, attr_size)
+    if len(ids) != nr:
         raise Refused("invalid_id_index_attr_ids")
     entries = [struct.unpack_from("<QQQq", data, offset + 16 + 32 * i) for i in range(nr)]
     if {entry[0] for entry in entries} != set(ids):
@@ -347,11 +357,127 @@ def validate_id_index(data, offset, length, misc, attr_offset, attr_size, target
             raise Refused("id_index_id_cpu_ring_mismatch")
 
 
-def event_census(data, target_tid=None, cpus=None):
-    """Read only file/record headers; installed perf decodes every event payload.
+def decode_cpu_map(payload):
+    if len(payload) < 8 or len(payload) > 8192 or len(payload) % 8:
+        raise Refused("invalid_cpu_map_length")
+    kind = struct.unpack_from("<H", payload)[0]
+    if kind == 0:
+        nr = struct.unpack_from("<H", payload, 2)[0]
+        used = 4 + 2 * nr
+        if not nr or used > len(payload):
+            raise Refused("invalid_cpu_map_list")
+        cpus = list(struct.unpack_from(f"<{nr}H", payload, 4))
+        cpus = [-1 if cpu == 65535 else cpu for cpu in cpus]
+    elif kind == 1:
+        nr, width = struct.unpack_from("<HH", payload, 2)
+        if not nr or width not in (4, 8):
+            raise Refused("invalid_cpu_map_mask")
+        start = 6 if width == 4 else 10
+        if width == 8 and any(payload[6:10]):
+            raise Refused("invalid_cpu_map_padding")
+        used = start + nr * width
+        if used > len(payload):
+            raise Refused("invalid_cpu_map_mask")
+        bits = int.from_bytes(payload[start:used], "little")
+        cpus = [i for i in range(nr * width * 8) if bits & (1 << i)]
+    elif kind == 2:
+        any_cpu, padding, first, last = struct.unpack_from("<BBHH", payload, 2)
+        if any_cpu not in (0, 1) or padding or last < first or last - first > 4096:
+            raise Refused("invalid_cpu_map_range")
+        cpus = ([-1] if any_cpu else []) + list(range(first, last + 1))
+        used = 8
+    else:
+        raise Refused("unsupported_cpu_map_encoding")
+    if not cpus or len(cpus) > 4096 or cpus != sorted(set(cpus)) or len(payload) != (used + 7) // 8 * 8 or any(payload[used:]):
+        raise Refused("invalid_cpu_map_padding_or_order")
+    return cpus
 
-    PERFILE2 header/record layout: Linux tools/perf/util/header.h and
-    include/uapi/linux/perf_event.h. No custom stack/sample payload decoder.
+
+def validate_metadata(event, record, ids, target_tid, cpus):
+    _, misc, length = struct.unpack_from("<IHH", record)
+    if misc or target_tid is None or not cpus:
+        raise Refused("unverified_metadata_scope")
+    if event in (68, 82):
+        if length != 8:
+            raise Refused("invalid_finished_marker")
+        return "FINISHED_ROUND" if event == 68 else "FINISHED_INIT"
+    if event == 73:
+        if length != 40 or struct.unpack_from("<QQ", record, 8) != (1, target_tid):
+            raise Refused("foreign_or_invalid_thread_map")
+        if record[24:] not in (b"\0" * 16, b"cpu-probe\0" + b"\0" * 6):
+            raise Refused("unexpected_thread_map_comm")
+        return "THREAD_MAP"
+    if event == 74:
+        mapped = decode_cpu_map(record[8:])
+        if mapped != cpus and not (mapped == [-1] and len(ids) == 1):
+            raise Refused("foreign_cpu_map")
+        return "CPU_MAP"
+    if length < 24:
+        raise Refused("invalid_event_update_length")
+    subtype, event_id = struct.unpack_from("<QQ", record, 8)
+    if not ids or event_id != ids[0]:
+        raise Refused("foreign_event_update_id")
+    if subtype == 0:
+        if length != 48 or record[24:29] != b"msec\0" or any(record[29:]):
+            raise Refused("unexpected_clock_unit_update")
+        return "EVENT_UPDATE_UNIT"
+    if subtype == 1:
+        if length != 48 or struct.unpack_from("<d", record, 24)[0] != 1e-6 or any(record[32:]):
+            raise Refused("unexpected_clock_scale_update")
+        return "EVENT_UPDATE_SCALE"
+    if subtype == 3:
+        if decode_cpu_map(record[24:]) != cpus:
+            raise Refused("foreign_event_update_cpu_map")
+        return "EVENT_UPDATE_CPUS"
+    raise Refused("unsupported_event_update_subtype")
+
+
+def numeric_header_inventory(data, offset, end, attr_offset, attr_size, deadline):
+    """Diagnostic headers only: unknown payloads are never exported or accepted."""
+    counts = collections.Counter()
+    updates = collections.Counter()
+    total = 0
+    try:
+        ids = attribute_ids(data, attr_offset, attr_size)
+    except Refused:
+        ids = ()
+    reason = None
+    while offset < end:
+        if total >= 131072 or (deadline is not None and time.monotonic() >= deadline):
+            reason = "diagnostic_limit_or_deadline"
+            break
+        if offset + 8 > end:
+            reason = "truncated_header"
+            break
+        event, misc, length = struct.unpack_from("<IHH", data, offset)
+        if length < 8 or offset + length > end:
+            reason = "invalid_record_bounds"
+            break
+        key = (event, misc, length)
+        if key not in counts and len(counts) >= 128:
+            reason = "diagnostic_distinct_header_limit"
+            break
+        counts[key] += 1
+        if event == 78 and length >= 24:
+            subtype, event_id = struct.unpack_from("<QQ", data, offset + 8)
+            matched = bool(ids) and event_id == ids[0]
+            update_key = (matched, subtype if matched else None)
+            if update_key not in updates and len(updates) >= 128:
+                reason = "diagnostic_subtype_limit"
+                break
+            updates[update_key] += 1
+        offset += length
+        total += 1
+    return {"complete": reason is None, "incomplete_reason": reason, "records": total,
+            "headers": [{"type": key[0], "misc": key[1], "length": key[2], "count": count} for key, count in counts.items()],
+            "event_updates": [{"event_id_matches": key[0], "subtype": key[1], "count": count} for key, count in updates.items()]}
+
+
+def event_census(data, target_tid=None, cpus=None, deadline=None):
+    """Validate headers and proven owned synthetic metadata, never sample payloads.
+
+    PERFILE2 layout: Linux tools/perf/util/header.h; known synthetic layouts:
+    tools/lib/perf/include/perf/event.h. Installed perf decodes task/sample data.
     """
     if len(data) < 104 or data[:8] != b"PERFILE2":
         raise Refused("unsupported_perf_file_header")
@@ -371,7 +497,12 @@ def event_census(data, target_tid=None, cpus=None):
         raise Refused("invalid_perf_data_bounds")
     names = {1: "MMAP", 3: "COMM", 4: "EXIT", 7: "FORK", 9: "SAMPLE", 10: "MMAP2"}
     counts = collections.Counter()
+    inventory = numeric_header_inventory(data, offset, end, attr_offset, attr_size, deadline)
+    if not inventory["complete"]:
+        raise CensusRefused(0, 0, 0, counts, sample_type, flags, inventory, "header_inventory_incomplete")
     while offset < end:
+        if deadline is not None and time.monotonic() >= deadline:
+            raise Refused("metadata_validation_deadline")
         if offset + 8 > end:
             raise Refused("truncated_perf_record")
         event, misc, length = struct.unpack_from("<IHH", data, offset)
@@ -384,8 +515,19 @@ def event_census(data, target_tid=None, cpus=None):
             counts["ID_INDEX"] += 1
             offset += length
             continue
+        if event in (68, 73, 74, 78, 82):
+            try:
+                ids = attribute_ids(data, attr_offset, attr_size)
+                name = validate_metadata(event, data[offset:offset + length], ids, target_tid, cpus)
+                if counts[name] and event != 68:
+                    raise Refused("duplicate_synthetic_metadata")
+            except Refused as error:
+                raise CensusRefused(event, misc, length, counts, sample_type, flags, inventory, str(error)) from error
+            counts[name] += 1
+            offset += length
+            continue
         if event not in names:
-            raise CensusRefused(event, misc, length, counts, sample_type, flags)
+            raise CensusRefused(event, misc, length, counts, sample_type, flags, inventory)
         if event in (1, 9, 10) and misc & 7 != 2:
             raise Refused("non_user_sample_or_mapping")
         counts[names[event]] += 1
@@ -444,13 +586,15 @@ def validate_export(text, census, target, tids, interval):
                 raise Refused("foreign_metadata_identity")
         counts[kind] += 1
     expected = census.copy()
-    id_index_records = expected.pop("ID_INDEX", 0)
+    header_names = ("ID_INDEX", "EVENT_UPDATE_UNIT", "EVENT_UPDATE_SCALE", "EVENT_UPDATE_CPUS",
+                    "THREAD_MAP", "CPU_MAP", "FINISHED_INIT", "FINISHED_ROUND")
+    header_counts = {name: expected.pop(name) for name in header_names if name in expected}
     if counts != expected:
         raise Refused("typed_event_census_mismatch")
     useful = sum(all(any(name in frame for frame in sample) for name in PROBE_NAMES) for sample in samples)
     if len(samples) < 10 or useful < 10:
         raise Refused("symbolized_probe_callchain_unavailable")
-    return {"event_counts": dict(counts), "validated_header_records": {"ID_INDEX": id_index_records},
+    return {"event_counts": dict(counts), "validated_header_records": header_counts,
             "samples": len(samples), "probe_chains": useful}
 
 
@@ -590,7 +734,7 @@ def recorder(request):
             raw = os.read(raw_fd, LIMIT + 1)
             if online_cpu_map() != cpus:
                 raise Refused("online_cpu_map_changed")
-            census = event_census(raw, request["target"]["pid"], cpus)
+            census = event_census(raw, request["target"]["pid"], cpus, request["work_deadline"])
             typed = run_perf_tool(perf, [
                 "script", "--ns", "--show-task-events", "--show-mmap-events",
                 "-F", "pid,tid,time,event,ip,sym,dso", "-i", "perf.data",
