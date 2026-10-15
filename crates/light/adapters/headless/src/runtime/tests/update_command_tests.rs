@@ -132,10 +132,7 @@ fn command_line_update_all_adds_new_group_content_without_using_a_desk_default()
 #[test]
 fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets() {
     let (state, data_dir) = test_state();
-    let desk = state
-        .installation
-        .desk()
-        .unwrap();
+    let desk = state.installation.desk().unwrap();
     let session = Session {
         capability: light_core::SurfaceCapability::Programming,
         id: SessionId::new(),
@@ -149,24 +146,61 @@ fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets(
 
     let fixture = light_core::FixtureId::new();
     let (cue_list, mut snapshot) = update_undo_snapshot(fixture);
-    let mut page=snapshot.playback_pages[0].clone();
-    page.assignments.insert(1000,page.assignments[&7].clone());
-    snapshot.playback_pages=vec![page].into();
+    let mut page = snapshot.playback_pages[0].clone();
+    page.assignments.insert(1000, page.assignments[&7].clone());
+    snapshot.playback_pages = vec![page].into();
 
     let show_path = data_dir.join("shows/manual-update-grammar.show");
-    let show = state
-        .installation
-        .upsert_show(
-            "Manual Update grammar",
-            &show_path.display().to_string(),
-            false,
-        )
-        .unwrap();
-    let show_id = show.id;
-    state.active_show.replace_current(Some(show));
+    let show_id = initialise_show(&show_path, "Manual Update grammar").unwrap();
+    state.active_show.replace_current(Some(ShowEntry {
+        is_base_show: false,
+        id: show_id,
+        name: "Manual Update grammar".into(),
+        path: show_path.display().to_string(),
+        revision: 0,
+        updated_at: String::new(),
+        created_at: None,
+        last_loaded_at: None,
+        revision_copy: None,
+    }));
+    let store = ActiveShowRepository::open(&show_path).unwrap();
+    for (id, family, number) in [
+        ("2.22", light_programmer::PresetFamily::Color, 22),
+        ("0.3", light_programmer::PresetFamily::Mixed, 3),
+    ] {
+        store
+            .put_object(
+                "preset",
+                id,
+                &serde_json::to_value(light_programmer::Preset {
+                    name: format!("Grammar Preset {id}"),
+                    family,
+                    number,
+                    ..Default::default()
+                })
+                .unwrap(),
+                0,
+            )
+            .unwrap();
+    }
+    let stored_presets = || {
+        ["2.22", "0.3"].map(|id| {
+            let object = stored_update_object(&store, "preset", id).unwrap();
+            (object.id, object.revision, object.body)
+        })
+    };
+    let before_presets = stored_presets();
+    let show_revision = store.portable_document().unwrap().revision().value();
     state
         .installation
-        .set_selected_playback(session.desk.id, show_id, Some(light_show::PlaybackSelection{page:1,position:7}))
+        .set_selected_playback(
+            session.desk.id,
+            show_id,
+            Some(light_show::PlaybackSelection {
+                page: 1,
+                position: 7,
+            }),
+        )
         .unwrap();
 
     let request = |command: &str| {
@@ -179,7 +213,10 @@ fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets(
         selected.mode,
         update::UpdateMode::Cue(update::CueUpdateMode::ExistingInCurrentCue)
     );
-    assert_eq!(selected.target.playback_address, Some(cue_programming_test_address(1,7)));
+    assert_eq!(
+        selected.target.playback_address,
+        Some(cue_programming_test_address(1, 7))
+    );
     assert_eq!(selected.target.cue_number.as_deref(), Some("3"));
 
     let explicit = request("UPDATE TRACKED CUELIST 7 CUE 2").unwrap();
@@ -194,7 +231,10 @@ fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets(
         current_page.mode,
         update::UpdateMode::Cue(update::CueUpdateMode::AddToCurrentCue)
     );
-    assert_eq!(current_page.target.playback_address, Some(cue_programming_test_address(1,7)));
+    assert_eq!(
+        current_page.target.playback_address,
+        Some(cue_programming_test_address(1, 7))
+    );
     assert_eq!(current_page.target.cue_id, None);
 
     let explicit_page_target = request("UPDATE ALL PBK 1 . 1000").unwrap();
@@ -202,11 +242,15 @@ fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets(
         explicit_page_target.mode,
         update::UpdateMode::Cue(update::CueUpdateMode::AddNew)
     );
-    assert_eq!(explicit_page_target.target.playback_address, Some(cue_programming_test_address(1,1000)));
+    assert_eq!(
+        explicit_page_target.target.playback_address,
+        Some(cue_programming_test_address(1, 1000))
+    );
 
     let preset = request("UPDATE COLOR PRESET 22").unwrap();
     assert_eq!(preset.target.family, UpdateApiTargetFamily::Preset);
     assert_eq!(preset.target.object_id.as_deref(), Some("2.22"));
+    assert_eq!(preset.expected_show_revision, Some(show_revision));
     assert_eq!(
         preset.mode,
         update::UpdateMode::ExistingContent(update::ExistingContentMode::UpdateExisting)
@@ -231,6 +275,26 @@ fn manual_update_grammar_resolves_selected_explicit_playback_and_preset_targets(
     for obsolete in ["UPDATE SET 1 CUE 2", "UPDATE 2 . 22"] {
         assert!(request(obsolete).is_err(), "{obsolete}");
     }
+    for command in [
+        "UPDATE ALL COLOR PRESET 22",
+        "UPDATE ALL PRESET 3",
+        "UPDATE ALL ALL PRESET 3",
+    ] {
+        assert_eq!(
+            request(command).unwrap().expected_show_revision,
+            Some(show_revision),
+            "{command} must retain the exact portable authority"
+        );
+    }
+    assert_eq!(
+        stored_presets(),
+        before_presets,
+        "grammar resolution must not write Presets"
+    );
+    assert_eq!(
+        store.portable_document().unwrap().revision().value(),
+        show_revision
+    );
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
