@@ -33,6 +33,23 @@ def perf_file(types, sample_type=1 | 2 | 4 | 32 | 128 | 256, flags=(1 << 5) | (1
     return bytes(data)
 
 
+def indexed_perf_file(entries=None, ids=(101, 102, 103, 104)):
+    entries = entries if entries is not None else [(value, i, i, TARGET["pid"]) for i, value in enumerate(ids)]
+    attr_offset = 104 + 8 * len(ids)
+    data_offset = attr_offset + 128
+    metadata = struct.pack("<IHHQ", 69, 0, 16 + 32 * len(entries), len(entries))
+    metadata += b"".join(struct.pack("<QQQq", *entry) for entry in entries)
+    records = metadata + b"".join(struct.pack("<IHH", kind, 2, 8) for kind in [3, 10] + [9] * 10)
+    data = bytearray(data_offset)
+    data[:8] = b"PERFILE2"
+    struct.pack_into("<6Q", data, 8, 104, 128, attr_offset, 128, data_offset, len(records))
+    struct.pack_into(f"<{len(ids)}Q", data, 104, *ids)
+    struct.pack_into("<II5Q", data, attr_offset, 1, 112, 0, 1, 295, 0, (1 << 5) | (1 << 6))
+    struct.pack_into("<QQ", data, attr_offset + 112, 104, len(ids) * 8)
+    data.extend(records)
+    return bytes(data)
+
+
 def exported(samples=10):
     initial = " 410/ 410 0.000000000: PERF_RECORD_COMM: cpu-probe:410/410\n"
     initial += " 410/410 0.000000000: PERF_RECORD_MMAP2 410/410: [0x1(0x2) @ 0]: /owned/cpu-probe\n"
@@ -93,6 +110,49 @@ class EventScopeTests(unittest.TestCase):
                 "attribute_sample_type": 1 | 2 | 4 | 32 | 128 | 256,
                 "attribute_flags": (1 << 5) | (1 << 6),
             })
+
+    def test_owned_id_index_is_verified_separately_from_typed_samples(self):
+        census = PROFILE.event_census(indexed_perf_file(), TARGET["pid"], [0, 1, 2, 3])
+        self.assertEqual(census, {"ID_INDEX": 1, "COMM": 1, "MMAP2": 1, "SAMPLE": 10})
+        result = PROFILE.validate_export(exported(), census, TARGET, TIDS, INTERVAL)
+        self.assertEqual(result["validated_header_records"], {"ID_INDEX": 1})
+        self.assertEqual(result["probe_chains"], 10)
+        singleton = indexed_perf_file([(101, 0, (1 << 64) - 1, TARGET["pid"])], ids=(101,))
+        self.assertEqual(PROFILE.event_census(singleton, TARGET["pid"], [0, 1])["ID_INDEX"], 1)
+        with self.assertRaisesRegex(PROFILE.Refused, "scope"):
+            PROFILE.event_census(indexed_perf_file())
+
+    def test_id_index_foreign_tid_wrong_id_ring_cpu_guest_and_truncation_refused(self):
+        valid = [(101 + i, i, i, TARGET["pid"]) for i in range(4)]
+        for field, value in ((0, 999), (1, 99), (2, 99), (3, 777), (3, -1)):
+            entries = valid.copy()
+            row = list(entries[0]); row[field] = value; entries[0] = tuple(row)
+            with self.subTest(field=field, value=value), self.assertRaises(PROFILE.Refused):
+                PROFILE.event_census(indexed_perf_file(entries), TARGET["pid"], [0, 1, 2, 3])
+        raw = indexed_perf_file()
+        offset = struct.unpack_from("<Q", raw, 40)[0]
+        for mutate in ("truncated", "nr", "guest", "ids", "duplicate"):
+            data = bytearray(raw)
+            if mutate == "truncated":
+                data = data[:-1]
+            elif mutate == "nr":
+                struct.pack_into("<Q", data, offset + 8, 5)
+            elif mutate == "guest":
+                struct.pack_into("<H", data, offset + 6, 16 + 48 * 4)
+            elif mutate == "ids":
+                struct.pack_into("<Q", data, 104, 999)
+            else:
+                struct.pack_into("<Q", data, 112, 101)
+            with self.subTest(mutate=mutate), self.assertRaises(PROFILE.Refused):
+                PROFILE.event_census(bytes(data), TARGET["pid"], [0, 1, 2, 3])
+
+    def test_online_cpu_map_is_scoped_and_rejects_malformed_ranges(self):
+        for text, expected in (("0-3", [0, 1, 2, 3]), ("0,2-3", [0, 2, 3])):
+            with patch.object(PROFILE.Path, "read_text", return_value=text):
+                self.assertEqual(PROFILE.online_cpu_map(), expected)
+        for text in ("", "3-1", "0,0", "1,0", "0-999999", "unknown"):
+            with patch.object(PROFILE.Path, "read_text", return_value=text), self.assertRaises(PROFILE.Refused):
+                PROFILE.online_cpu_map()
 
     def test_insufficient_symbolized_callchains_cannot_allow_build(self):
         with self.assertRaises(PROFILE.Refused):

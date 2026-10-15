@@ -297,7 +297,57 @@ def verify_perf_config(perf, fd, deadline):
         raise Refused("perf_configuration_not_isolated")
 
 
-def event_census(data):
+def online_cpu_map():
+    text = Path("/sys/devices/system/cpu/online").read_text().strip()
+    if not re.fullmatch(r"[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*", text):
+        raise Refused("unsupported_online_cpu_map")
+    cpus = []
+    for part in text.split(","):
+        bounds = [int(value) for value in part.split("-")]
+        first, last = bounds[0], bounds[-1]
+        if last < first or last - first > 4096:
+            raise Refused("unsupported_online_cpu_map")
+        cpus.extend(range(first, last + 1))
+    if not cpus or len(cpus) > 4096 or cpus != sorted(set(cpus)):
+        raise Refused("unsupported_online_cpu_map")
+    return cpus
+
+
+def validate_id_index(data, offset, length, misc, attr_offset, attr_size, target_tid, cpus):
+    # Linux v6.8.12 synthetic-events.c writes one entry per evsel core ID.
+    # lib/perf/evlist.c idx is the mmap/CPU-map index, NOT evsel index.
+    if target_tid is None or not cpus or misc != 0 or length < 16:
+        raise Refused("unverified_id_index_scope")
+    nr = struct.unpack_from("<Q", data, offset + 8)[0]
+    if not nr or length != 16 + 32 * nr:
+        # Guest extensions are intentionally outside this single-host probe.
+        raise Refused("invalid_or_guest_id_index_length")
+    if attr_size < 64:
+        raise Refused("invalid_id_index_attr_section")
+    ids_offset, ids_size = struct.unpack_from("<QQ", data, attr_offset + attr_size - 16)
+    if not ids_size or ids_size % 8 or ids_offset + ids_size > len(data) or ids_size // 8 != nr:
+        raise Refused("invalid_id_index_attr_ids")
+    record_offset, record_size = struct.unpack_from("<QQ", data, 40)
+    ids_end = ids_offset + ids_size
+    if ids_offset < 104 or (ids_offset < attr_offset + attr_size and attr_offset < ids_end) or (ids_offset < record_offset + record_size and record_offset < ids_end):
+        raise Refused("overlapping_id_index_attr_ids")
+    ids = struct.unpack_from(f"<{nr}Q", data, ids_offset)
+    if len(set(ids)) != nr or 0 in ids:
+        raise Refused("invalid_id_index_attr_ids")
+    entries = [struct.unpack_from("<QQQq", data, offset + 16 + 32 * i) for i in range(nr)]
+    if {entry[0] for entry in entries} != set(ids):
+        raise Refused("id_index_attr_id_mismatch")
+    cpu_map = [-1] if nr == 1 and entries[0][2] == (1 << 64) - 1 else cpus
+    if nr != len(cpu_map):
+        raise Refused("id_index_cpu_map_mismatch")
+    for event_id, idx, cpu, tid in entries:
+        if tid != target_tid:
+            raise Refused("foreign_id_index_tid")
+        if idx >= nr or event_id != ids[idx] or cpu != cpu_map[idx] % (1 << 64):
+            raise Refused("id_index_id_cpu_ring_mismatch")
+
+
+def event_census(data, target_tid=None, cpus=None):
     """Read only file/record headers; installed perf decodes every event payload.
 
     PERFILE2 header/record layout: Linux tools/perf/util/header.h and
@@ -327,6 +377,13 @@ def event_census(data):
         event, misc, length = struct.unpack_from("<IHH", data, offset)
         if length < 8 or offset + length > end:
             raise Refused("invalid_perf_record_length")
+        if event == 69:
+            if counts["ID_INDEX"]:
+                raise Refused("duplicate_id_index_record")
+            validate_id_index(data, offset, length, misc, attr_offset, attr_size, target_tid, cpus)
+            counts["ID_INDEX"] += 1
+            offset += length
+            continue
         if event not in names:
             raise CensusRefused(event, misc, length, counts, sample_type, flags)
         if event in (1, 9, 10) and misc & 7 != 2:
@@ -386,12 +443,15 @@ def validate_export(text, census, target, tids, interval):
             if int(owner) != target["pid"] or int(thread) not in tids:
                 raise Refused("foreign_metadata_identity")
         counts[kind] += 1
-    if counts != census:
+    expected = census.copy()
+    id_index_records = expected.pop("ID_INDEX", 0)
+    if counts != expected:
         raise Refused("typed_event_census_mismatch")
     useful = sum(all(any(name in frame for frame in sample) for name in PROBE_NAMES) for sample in samples)
     if len(samples) < 10 or useful < 10:
         raise Refused("symbolized_probe_callchain_unavailable")
-    return {"event_counts": dict(counts), "samples": len(samples), "probe_chains": useful}
+    return {"event_counts": dict(counts), "validated_header_records": {"ID_INDEX": id_index_records},
+            "samples": len(samples), "probe_chains": useful}
 
 
 def write_receipt(fd, value):
@@ -459,6 +519,7 @@ def recorder(request):
     bounded_timeout(request["work_deadline"], 1)
     uid = derived_uid(request)
     tids = verify_probe(request, uid)
+    cpus = online_cpu_map()
     perf = str(Path(request["perf"]).resolve(strict=True))
     if digest(perf) != request["perf_sha256"] or build_id(perf, request["work_deadline"]) != request["perf_build_id"]:
         raise Refused("perf_executable_changed")
@@ -527,7 +588,9 @@ def recorder(request):
             if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_size > LIMIT:
                 raise Refused("unexpected_perf_output_inode")
             raw = os.read(raw_fd, LIMIT + 1)
-            census = event_census(raw)
+            if online_cpu_map() != cpus:
+                raise Refused("online_cpu_map_changed")
+            census = event_census(raw, request["target"]["pid"], cpus)
             typed = run_perf_tool(perf, [
                 "script", "--ns", "--show-task-events", "--show-mmap-events",
                 "-F", "pid,tid,time,event,ip,sym,dso", "-i", "perf.data",
