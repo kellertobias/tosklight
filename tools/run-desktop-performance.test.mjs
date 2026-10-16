@@ -1040,3 +1040,155 @@ test("normally closed child drain clears its timeout without retaining timer han
 	await drain({ closed: Promise.resolve() });
 	assert.equal(pending.size, 0);
 });
+
+test(
+  "explicit CPU off/on select only unchanged 576 unrestricted case; ordinary run retains four cases",
+	async () => {
+	  const start = source.indexOf("const results = [];");
+		const end = source.indexOf("\nfunction parseArguments(", start);
+		const casesStart = source.indexOf("const CASES = [");
+		const casesEnd = source.indexOf("\n];", casesStart) + 3;
+		const cases = vm.runInNewContext(`${source.slice(casesStart, casesEnd)}\nCASES`);
+
+		for (const mode of [undefined, "off", "on"]) {
+		  const observed = [];
+
+			await vm.runInNewContext(`(async()=>{${source.slice(start, end)}})()`, {
+			  CASES: cases,
+
+			  options: {
+				  "output-dir": scratch,
+				  "typed-cpu-diagnostics": mode
+				},
+
+			  path,
+			  JSON,
+			  writeFile: async () => {},
+			  runCase: async (performanceCase, executionMode) => observed.push([performanceCase.caseId, performanceCase.fixtureRecords, executionMode])
+			});
+
+			assert.deepEqual(observed, mode ? [["sixteen_universe", 576, "unrestricted"]] : [
+			  ["demo", 264, "unrestricted"],
+			  ["demo", 264, "one_core"],
+			  ["sixteen_universe", 576, "unrestricted"],
+			  ["required_1024", 1024, "unrestricted"]
+			]);
+		}
+
+		assert.match(source, /const DURATION_SECONDS = 60;/);
+		assert.match(source, /const REQUESTED_RATE_HZ = 40;/);
+	}
+);
+
+test(
+  "CPU finalization exports after owned termination and drain, before deletion; original failures survive",
+	async () => {
+	  for (const scenario of ["success", "workload", "export", "drain"]) {
+		  const order = [], original = scenario === "workload" ? new Error("original workload gate") : undefined;
+
+			const evidence = {
+			  manifestPath: "private/evidence.json",
+
+			  cpu: {
+				  finish: async () => {
+					  order.push("export");
+
+						if (scenario === "export")
+						  throw new Error("numeric validation refused");
+					}
+				}
+			};
+
+			const finalize = load("finalizeCaseEvidence", "\nasync function drainCaseLog(", {
+			  terminateProcessTree: async () => {
+				  order.push("terminate");
+				},
+
+			  drainCaseLog: async () => {
+				  order.push("drain");
+
+					if (scenario === "drain")
+					  throw new Error("drain unavailable");
+				},
+
+			  finishCaseEvidence: async () => {
+				  order.push("private-evidence");
+				},
+
+			  rm: async () => {
+				  order.push("rm");
+				},
+
+			  console: {
+				  error: () => {}
+				}
+			});
+
+			const child = {
+			  pid: 100,
+
+			  stdout: {
+				  destroy() {}
+				},
+
+			  stderr: {
+				  destroy() {}
+				},
+
+			  unref() {}
+			};
+
+			const outcome = await finalize(child, evidence, "sheet", "prepared", {}, "private/root", original);
+
+			if (scenario === "success") {
+			  assert.equal(outcome, undefined);
+				assert.deepEqual(order, ["terminate", "drain", "private-evidence", "export", "rm"]);
+			}
+
+			if (scenario === "workload") {
+			  assert.equal(outcome, original);
+				assert.ok(!order.includes("rm"));
+			}
+
+			if (scenario === "export" || scenario === "drain") {
+			  assert.ok(outcome);
+				assert.ok(!order.includes("rm"));
+			}
+
+			if (scenario === "drain")
+			  assert.ok(!order.includes("export"));
+		}
+	}
+);
+
+test("CPU capture failure cannot replace an existing workload failure", async () => {
+  const original = new Error("original workload failure");
+
+	const finalize = load("finalizeCaseEvidence", "\nasync function drainCaseLog(", {
+	  terminateProcessTree: async () => {},
+	  drainCaseLog: async () => {},
+	  finishCaseEvidence: async () => {},
+
+	  rm: async () => {
+		  throw new Error("must retain private scratch");
+		},
+
+	  console: {
+		  error: () => {}
+		}
+	});
+
+	const result = await finalize({
+	  pid: 100
+	}, {
+	  manifestPath: "private",
+
+	  cpu: {
+		  finish: async () => {
+			  throw new Error("bad capture");
+			}
+		}
+	}, "sheet", "prepared", {}, "private-root", original);
+
+	assert.equal(result, original);
+});

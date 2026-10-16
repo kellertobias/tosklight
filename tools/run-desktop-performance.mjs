@@ -11,6 +11,7 @@ import {
 	processTreeResourceDelta,
 	readLinuxProcessTree,
 } from "./process-tree-resources.mjs";
+import { createCpuDiagnosticRun } from "./desktop-performance-cpu-stages.mjs";
 import { createLargeStageDynamicsPlan } from "./stage-dynamics-scene.mjs";
 import { createPerformanceFixtureInputs } from "./stage-large-scene.mjs";
 
@@ -51,40 +52,44 @@ await mkdir(path.resolve(options["output-dir"]), { recursive: true });
 const results = [];
 // Every show is measured unrestricted. The demo show is measured a second time locked to one
 // core, which is the case that says whether a modest machine can still run a real show.
-for (const performanceCase of CASES)
+for (const performanceCase of options["typed-cpu-diagnostics"]
+	? CASES.filter((entry) => entry.caseId === "sixteen_universe")
+	: CASES)
 	for (const executionMode of performanceCase.demo
 		? ["unrestricted", "one_core"]
 		: ["unrestricted"])
 		try {
 			results.push(await runCase(performanceCase, executionMode));
 		} catch (error) {
-			await writeFile(
-				path.resolve(options["output-dir"], "desktop-scenarios.partial.json"),
-				`${JSON.stringify(
-					{
-						schema_version: 1,
-						complete: false,
-						scenarios: results,
-						failed_case: {
-							case_id: performanceCase.caseId,
-							execution_mode: executionMode,
-							error: error instanceof Error ? error.message : String(error),
+			if (!options["typed-cpu-diagnostics"])
+				await writeFile(
+					path.resolve(options["output-dir"], "desktop-scenarios.partial.json"),
+					`${JSON.stringify(
+						{
+							schema_version: 1,
+							complete: false,
+							scenarios: results,
+							failed_case: {
+								case_id: performanceCase.caseId,
+								execution_mode: executionMode,
+								error: error instanceof Error ? error.message : String(error),
+							},
 						},
-					},
-					null,
-					2,
-				)}\n`,
-			).catch((diagnosticError) => {
-				console.error(
-					`Partial desktop report unavailable: ${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)}`,
-				);
-			});
+						null,
+						2,
+					)}\n`,
+				).catch((diagnosticError) => {
+					console.error(
+						`Partial desktop report unavailable: ${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)}`,
+					);
+				});
 			throw error;
 		}
-await writeFile(
-	path.resolve(options["output-dir"], "desktop-scenarios.json"),
-	`${JSON.stringify({ schema_version: 1, scenarios: results }, null, 2)}\n`,
-);
+if (!options["typed-cpu-diagnostics"])
+	await writeFile(
+		path.resolve(options["output-dir"], "desktop-scenarios.json"),
+		`${JSON.stringify({ schema_version: 1, scenarios: results }, null, 2)}\n`,
+	);
 
 function parseArguments(arguments_) {
 	const values = {};
@@ -97,16 +102,29 @@ function parseArguments(arguments_) {
 	}
 	for (const required of ["application", "output-dir", "demo-show"])
 		if (!values[required]) throw new Error(`--${required} is required`);
+	if (
+		Object.hasOwn(values, "typed-cpu-diagnostics") &&
+		!["off", "on"].includes(values["typed-cpu-diagnostics"])
+	)
+		throw new Error("--typed-cpu-diagnostics must be off or on");
 	return values;
 }
 
 async function runCase(performanceCase, executionMode) {
-	const temporaryRoot = await mkdtemp(
-		path.join(
-			path.resolve(options["output-dir"]),
-			`${performanceCase.caseId}-`,
-		),
-	);
+	const cpu = options["typed-cpu-diagnostics"]
+		? await createCpuDiagnosticRun(
+				options["typed-cpu-diagnostics"],
+				options["output-dir"],
+			)
+		: null;
+	const temporaryRoot =
+		cpu?.root ??
+		(await mkdtemp(
+			path.join(
+				path.resolve(options["output-dir"]),
+				`${performanceCase.caseId}-`,
+			),
+		));
 	const port = await freePort();
 	const reportPath = path.join(temporaryRoot, "fixture-sheet.jsonl");
 	// A bundle launched with a benchmark report runs the benchmark surface instead of the
@@ -121,6 +139,7 @@ async function runCase(performanceCase, executionMode) {
 		detached: true,
 		env: {
 			...process.env,
+			...cpu?.environment,
 			APPIMAGE_EXTRACT_AND_RUN: "1",
 			LIGHT_DESKTOP_TEST_BIND: `127.0.0.1:${port}`,
 			LIGHT_DESKTOP_TEST_DATA_DIR: path.join(temporaryRoot, "data"),
@@ -162,7 +181,9 @@ async function runCase(performanceCase, executionMode) {
 		sheet: null,
 	};
 	const output = [];
-	const evidence = await createCaseEvidence(temporaryRoot);
+	const evidence = await createCaseEvidence(temporaryRoot, cpu?.root);
+	evidence.cpu = cpu;
+	cpu?.start(child.pid);
 	evidence.closed = closed;
 	let failure;
 	let result;
@@ -212,6 +233,7 @@ async function runCase(performanceCase, executionMode) {
 			child.pid,
 			executionMode,
 			evidence.samples,
+			cpu,
 		);
 		state.phase = "fixture-sheet-liveness";
 		await requireFixtureSheetActive(
@@ -248,6 +270,7 @@ async function runCase(performanceCase, executionMode) {
 		};
 	} catch (error) {
 		const diagnostics = await retainCaseFailure({
+			privateRoot: cpu?.root,
 			performanceCase,
 			executionMode,
 			state,
@@ -264,6 +287,7 @@ async function runCase(performanceCase, executionMode) {
 			`${performanceCase.caseId}/${executionMode}: ${error instanceof Error ? error.message : String(error)}; diagnostics: ${diagnostics}${output.length ? `\n${output.join("")}` : ""}`,
 		);
 	}
+	cpu?.setWorkload(result, state);
 	failure = await finalizeCaseEvidence(
 		child,
 		evidence,
@@ -304,7 +328,9 @@ async function finalizeCaseEvidence(
 	try {
 		await finishCaseEvidence(evidence, reportPath, preparedPath, state);
 		if (drainError) throw drainError;
-		await rm(temporaryRoot, { recursive: true, force: true });
+		await evidence.cpu?.finish(evidence, failure);
+		if (!failure || !evidence.cpu)
+			await rm(temporaryRoot, { recursive: true, force: true });
 	} catch (error) {
 		const message = `Runtime evidence unavailable at ${evidence.manifestPath}; scratch preserved at ${temporaryRoot}: ${error instanceof Error ? error.message : String(error)}`;
 		if (failure) console.error(message);
@@ -335,13 +361,16 @@ async function drainCaseLog(evidence) {
 	}
 }
 
-async function createCaseEvidence(temporaryRoot) {
+async function createCaseEvidence(temporaryRoot, privateRoot) {
 	const prefix = path.join(
-		path.resolve(options["output-dir"]),
+		privateRoot ?? path.resolve(options["output-dir"]),
 		path.basename(temporaryRoot),
 	);
 	const runtimeLog = `${prefix}-runtime.log`;
-	const log = createWriteStream(runtimeLog, { flags: "wx" });
+	const log = createWriteStream(runtimeLog, {
+		flags: "wx",
+		...(privateRoot ? { mode: 0o600 } : {}),
+	});
 	// Observe errors immediately, even if setup fails before the finalizer awaits this stream.
 	const completion = finished(log).then(
 		() => null,
@@ -359,6 +388,7 @@ async function createCaseEvidence(temporaryRoot) {
 }
 
 async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
+	await evidence.cpu?.retain();
 	evidence.log.end();
 	const logError = await evidence.completion;
 	if (logError) throw logError;
@@ -397,6 +427,7 @@ async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
 }
 
 async function retainCaseFailure({
+	privateRoot,
 	performanceCase,
 	executionMode,
 	state,
@@ -408,7 +439,7 @@ async function retainCaseFailure({
 }) {
 	const directory = await mkdtemp(
 		path.join(
-			path.resolve(options["output-dir"]),
+			privateRoot ?? path.resolve(options["output-dir"]),
 			`${performanceCase.caseId}-${executionMode}-failure-`,
 		),
 	);
@@ -605,11 +636,13 @@ async function configureScheduler(api) {
 	});
 }
 
-async function measureWindow(api, rootPid, executionMode, samples) {
+async function measureWindow(api, rootPid, executionMode, samples, cpuStages) {
 	const rates = [];
 	const resources = [];
 	let diagnosticsMonotonicStartMillis = performance.now();
+	let		cpuRequest = cpuStages?.requestStart();
 	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
+	cpuStages?.requestEnd(cpuRequest);
 	let diagnosticsMonotonicEndMillis = performance.now();
 	let counterObservationMillis =
 		(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
@@ -617,6 +650,7 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 	let processMonotonicStartMillis = performance.now();
 	let processes = await readLinuxProcessTree(rootPid);
 	let processMonotonicEndMillis = performance.now();
+	await cpuStages?.observe(processes);
 	let processObservationMillis =
 		(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
 	samples.push({
@@ -633,11 +667,13 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		await new Promise((resolve) => setTimeout(resolve, 1_000));
 		const diagnosticsStartedAt = new Date().toISOString();
 		diagnosticsMonotonicStartMillis = performance.now();
+		cpuRequest = cpuStages?.requestStart();
 		const nextDiagnostics = await api.request(
 			"GET",
 			"/api/v2/diagnostics/performance",
 		);
 		diagnosticsMonotonicEndMillis = performance.now();
+		cpuStages?.requestEnd(cpuRequest);
 		const diagnosticsEndedAt = new Date().toISOString();
 		// The counter is sampled inside the request. Retain both bounds and use their
 		// midpoint consistently, including intervening I/O rather than only the sleep.
@@ -648,6 +684,7 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		processMonotonicStartMillis = performance.now();
 		const nextProcesses = await readLinuxProcessTree(rootPid);
 		processMonotonicEndMillis = performance.now();
+		await cpuStages?.observe(nextProcesses);
 		const nextProcessObservationMillis =
 			(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
 		const processElapsed =
