@@ -76,7 +76,7 @@ export function functionId(symbol) {
 }
 export function emptyReport() {
 	return {
-		schema_version: 2,
+		schema_version: 3,
 		function_mapping_version: 1,
 		requested_frequency_hz: 49,
 		preflight_available: 0,
@@ -94,6 +94,8 @@ export function emptyReport() {
 		record_capped: null,
 		record_stop_requested: null,
 		record_stop_acknowledged: null,
+		record_disable_requested: null,
+		record_disable_acknowledged: null,
 		record_ack_count: null,
 		record_ended_early: null,
 		record_stderr_class: null,
@@ -107,6 +109,9 @@ export function emptyReport() {
 		sampling_overhead_present: 1,
 		privileged: 0,
 		recording_wall_ns: null,
+		active_sampling_wall_ns: null,
+		recording_wall_includes_disabled_tail: 1,
+		disable_boundary_verified: 0,
 		initial_threads: null,
 		final_threads: null,
 		late_threads: null,
@@ -165,6 +170,8 @@ export class PerfScriptParser {
 		this.current = null;
 		this.tids = new Set();
 		this.resolved = 0;
+		this.minimumSampleNs = null;
+		this.maximumSampleNs = null;
 	}
 	feed(chunk) {
 		this.bytes += Buffer.byteLength(chunk);
@@ -208,7 +215,10 @@ export class PerfScriptParser {
 				this.report.samples + this.report.foreign_samples < this.limits.samples,
 				"sample cap",
 			);
+			const [seconds, fraction] = header[3].split(".");
+			require_(fraction.length <= 9, "sample timestamp precision");
 			this.current = {
+				timeNs: BigInt(seconds) * 1000000000n + BigInt(fraction.padEnd(9, "0")),
 				pid: uint(Number(header[1])),
 				tid: uint(Number(header[2])),
 				period: uint(Number(header[4])),
@@ -237,6 +247,14 @@ export class PerfScriptParser {
 			this.report.foreign_samples++;
 			return;
 		}
+		this.minimumSampleNs =
+			this.minimumSampleNs === null || sample.timeNs < this.minimumSampleNs
+				? sample.timeNs
+				: this.minimumSampleNs;
+		this.maximumSampleNs =
+			this.maximumSampleNs === null || sample.timeNs > this.maximumSampleNs
+				? sample.timeNs
+				: this.maximumSampleNs;
 		this.report.samples++;
 		this.tids.add(sample.tid);
 		this.report.weighted_period = add(
@@ -402,7 +420,65 @@ async function ownedHelper() {
 		throw error;
 	}
 }
+export async function verifyMonotonicClock(
+	root,
+	command = boundedCommand,
+	name = "monotonic-clock",
+) {
+	const before = process.hrtime.bigint();
+	const text = await command(
+		root,
+		name,
+		"/usr/bin/python3",
+		["-c", "import time; print(time.clock_gettime_ns(time.CLOCK_MONOTONIC))"],
+		4096,
+		undefined,
+		undefined,
+		2000,
+	);
+	const after = process.hrtime.bigint();
+	require_(/^\d+\n$/u.test(text), "monotonic clock response");
+	const python = BigInt(text.trim());
+	require_(
+		python >= before && python <= after,
+		"monotonic clock epoch or units differ",
+	);
+	return {
+		before_ns: String(before),
+		python_ns: String(python),
+		after_ns: String(after),
+	};
+}
+export function validateDisabledSamples(parsed, stopped, minimumTailNs = 0n) {
+	require_(
+		stopped.diagnostics?.record_disable_acknowledged === 1 &&
+			typeof stopped.disableAckNs === "bigint" &&
+			typeof stopped.closedNs === "bigint",
+		"disable clock receipt unavailable",
+	);
+	require_(
+		parsed.report.samples > 0 &&
+			!parsed.report.malformed_lines &&
+			!parsed.report.decode_warnings &&
+			!parsed.report.foreign_samples &&
+			parsed.report.lost_events === 0 &&
+			parsed.minimumSampleNs !== null &&
+			parsed.maximumSampleNs !== null &&
+			parsed.maximumSampleNs <= stopped.disableAckNs,
+		"samples after disable acknowledgment or absent",
+	);
+	require_(
+		stopped.closedNs - stopped.disableAckNs >= minimumTailNs,
+		"disabled observation tail too short",
+	);
+}
+
 async function helperPreflight(root, perf, privileged) {
+	const clock = await verifyMonotonicClock(
+		root,
+		boundedCommand,
+		privileged ? "sudo-monotonic-clock" : "user-monotonic-clock",
+	);
 	const helper = await ownedHelper();
 	let recording, control, evidence, failure;
 	try {
@@ -444,12 +520,27 @@ async function helperPreflight(root, perf, privileged) {
 			binding: helper.binding,
 			seconds: 3,
 		});
+		await new Promise((resolve) => setTimeout(resolve, 150));
 		const stopped = await control.finish();
+		const controlParsed = await decode(
+			root,
+			privileged ? "sudo-control-script" : "user-control-script",
+			perf,
+			control.raw.filename,
+			helper.binding.pid,
+		);
+		validateDisabledSamples(controlParsed, stopped, 150000000n);
 		require_(
-			stopped.ack >= 3 && !stopped.capped,
-			"enable/stop acknowledgment preflight",
+			stopped.ack >= 3 &&
+				!stopped.capped &&
+				stopped.diagnostics?.record_disable_acknowledged === 1,
+			"enable/disable acknowledgment preflight",
 		);
 		evidence = {
+			clock,
+			disable_ack_ns: String(stopped.disableAckNs),
+			closed_ns: String(stopped.closedNs),
+			control_sample_max_ns: String(controlParsed.maximumSampleNs),
 			helper: helper.binding,
 			initial: helper.initial,
 			late: created,
@@ -465,7 +556,8 @@ async function helperPreflight(root, perf, privileged) {
 			late_threads_excluded: 1,
 			unwind_verified: 1,
 			lifetime_bound_verified: 1,
-			control_stop_verified: 1,
+			control_disable_verified: 1,
+			monotonic_clock_verified: 1,
 		};
 	} catch (error) {
 		failure = error;
@@ -576,7 +668,7 @@ export async function exportReport(outputDirectory, report) {
 	assertNumericOnly(report);
 	const baseline = emptyReport();
 	require_(
-		report.schema_version === 2 &&
+		report.schema_version === 3 &&
 			report.function_mapping_version === 1 &&
 			report.requested_frequency_hz === 49,
 		"unknown public schema",
@@ -586,6 +678,8 @@ export async function exportReport(outputDirectory, report) {
 		"record_spawn_error",
 		"record_capture_error",
 		"record_capped",
+		"record_disable_requested",
+		"record_disable_acknowledged",
 		"record_stop_requested",
 		"record_stop_acknowledged",
 		"record_ended_early",
@@ -624,6 +718,8 @@ export async function exportReport(outputDirectory, report) {
 		"recorder_ended_early",
 		"workload_failed",
 		"per_frame_join_available",
+		"recording_wall_includes_disabled_tail",
+		"disable_boundary_verified",
 		"sampling_overhead_present",
 		"privileged",
 	])
@@ -696,13 +792,14 @@ export async function createHeadlessStackCapture(cpu, options) {
 			Object.keys(preflight).length === 8 &&
 				typeof preflight.privileged === "boolean" &&
 				preflight.proof &&
-				Object.keys(preflight.proof).length === 5 &&
+				Object.keys(preflight.proof).length === 6 &&
 				[
 					"existing_threads_verified",
 					"late_threads_excluded",
 					"unwind_verified",
 					"lifetime_bound_verified",
-					"control_stop_verified",
+					"control_disable_verified",
+					"monotonic_clock_verified",
 				].every((key) => preflight.proof[key] === 1) &&
 				preflight.schema === 1 &&
 				preflight.uid === process.getuid() &&
@@ -806,6 +903,14 @@ export class HeadlessStackCapture {
 				this.report.workload_failed = 1;
 			}
 			const stopped = await recording.finish();
+			for (const key of Object.keys(this.report))
+				if (
+					key.startsWith("record_") &&
+					Object.hasOwn(stopped.diagnostics ?? {}, key)
+				)
+					this.report[key] = stopped.diagnostics[key];
+			this.report.active_sampling_wall_ns =
+				stopped.activeSamplingWallNs ?? null;
 			this.report.recorder_ended_early = Number(stopped.endedEarly);
 			this.report.recording_wall_ns = uint(
 				Math.ceil((performance.now() - start) * 1e6),
@@ -821,6 +926,8 @@ export class HeadlessStackCapture {
 				final_threads: finalThreads,
 				recorder_births: recording.recorderBirths,
 				control_acks: stopped.ack,
+				disable_ack_ns: String(stopped.disableAckNs),
+				closed_ns: String(stopped.closedNs),
 				recorder_gone: 1,
 			});
 			this.report.final_threads = finalThreads.length;
@@ -838,6 +945,8 @@ export class HeadlessStackCapture {
 				recording.raw.filename,
 				binding.pid,
 			);
+			validateDisabledSamples(parsed, stopped);
+			this.report.disable_boundary_verified = 1;
 			const fields = [
 				"samples",
 				"foreign_samples",

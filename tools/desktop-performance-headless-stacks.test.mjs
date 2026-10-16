@@ -98,7 +98,16 @@ function captureFixture(changes = {}) {
 		capped: false,
 		finish: async () => {
 			if (!stops++) calls.push("stop");
-			return { endedEarly: false };
+			return {
+				endedEarly: false,
+				activeSamplingWallNs: 100,
+				disableAckNs: 1234000000002n,
+				closedNs: 1234000000003n,
+				diagnostics: {
+					record_disable_requested: 1,
+					record_disable_acknowledged: 1,
+				},
+			};
 		},
 	};
 	const capture = new HeadlessStackCapture(
@@ -628,7 +637,7 @@ function recorderHarness({
 		if (command === "ping\n" && !acknowledgePing)
 			child.stderr.emit("data", Buffer.from("ack extra\nnotack\n"));
 		else child.stderr.emit("data", Buffer.from("ack\n"));
-		if (command === "stop\n" && child.exitCode === null) {
+		if (["stop\n", "disable\n"].includes(command) && child.exitCode === null) {
 			child.exitCode = 0;
 			calls.push("child-exit");
 			child.emit("close", 0, null);
@@ -725,7 +734,8 @@ test("actual recorder control path binds exact privileged argv, accepts only str
 	const stopped = await recorder.finish();
 	await recorder.finish();
 	assert.equal(stopped.ack, 3);
-	assert.equal(f.calls.filter((item) => item === "stop").length, 1);
+	assert.equal(f.calls.filter((item) => item === "disable").length, 1);
+	assert.equal(f.calls.filter((item) => item === "stop").length, 0);
 	assert.ok(f.calls.indexOf("child-exit") < f.calls.indexOf("recorder-gone"));
 	assert.ok(f.calls.includes("descendant-true"));
 });
@@ -1028,6 +1038,7 @@ test("real capture creation fails before workload for missing CFI/symbols or sta
 		"CFI",
 		"symbols",
 		"empty-proof",
+		"old-stop-proof",
 		"stale",
 		"extra",
 	]) {
@@ -1046,10 +1057,15 @@ test("real capture creation fails before workload for missing CFI/symbols or sta
 				late_threads_excluded: 1,
 				unwind_verified: 1,
 				lifetime_bound_verified: 1,
-				control_stop_verified: 1,
+				control_disable_verified: 1,
+				monotonic_clock_verified: 1,
 			},
 		};
 		if (variant === "empty-proof") receipt.proof = {};
+		if (variant === "old-stop-proof") {
+			receipt.proof.control_stop_verified = 1;
+			delete receipt.proof.control_disable_verified;
+		}
 		if (variant === "stale") receipt.created_ms -= 3600001;
 		if (variant === "extra") receipt.private_unknown = 1;
 		const create = vm.runInNewContext(
@@ -1126,6 +1142,9 @@ test("actual helper preflight cleans its owned helper even when memoized recorde
 		const preflight = vm.runInNewContext(
 			`${moduleSource.slice(start, end)}; helperPreflight`,
 			{
+				verifyMonotonicClock: async () => ({}),
+				boundedCommand: async () => {},
+				setTimeout,
 				ownedHelper: async () => ({
 					child,
 					binding: { pid: 10 },

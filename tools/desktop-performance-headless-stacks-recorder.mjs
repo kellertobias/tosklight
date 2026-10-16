@@ -333,6 +333,8 @@ export function recordArguments(pid, seconds) {
 		"--call-graph",
 		"dwarf,8192",
 		"--no-inherit",
+		"--clockid",
+		"mono",
 		"--max-size",
 		"60M",
 		"--mmap-pages",
@@ -385,6 +387,8 @@ export function recorderFailureDetails({
 	ack,
 	stopRequested,
 	stopAcknowledged,
+	disableRequested,
+	disableAcknowledged,
 	endedEarly,
 	stderr,
 }) {
@@ -421,6 +425,10 @@ export function recorderFailureDetails({
 			stopRequested === false || stopAcknowledged == null
 				? null
 				: Number(stopAcknowledged),
+		record_disable_requested:
+			disableRequested == null ? null : Number(disableRequested),
+		record_disable_acknowledged:
+			disableAcknowledged == null ? null : Number(disableAcknowledged),
 		record_ack_count: Number.isSafeInteger(ack) && ack >= 0 ? ack : null,
 		record_ended_early: endedEarly == null ? null : Number(endedEarly),
 		record_stderr_class: stderrClassification(stderr),
@@ -440,7 +448,13 @@ export async function openRecorder({
 	await privateDirectory(root);
 	let capped = false,
 		stopRequested = false,
-		stopAckObserved = null;
+		stopAckObserved = null,
+		disableRequested = false,
+		disableAcknowledged = null,
+		enabledAt,
+		activeSamplingWallNs = null,
+		disableAckNs = null,
+		closedNs = null;
 	const requestStop = () => {
 		stopRequested = true;
 		child.stdin.write("stop\n");
@@ -513,27 +527,28 @@ export async function openRecorder({
 	let closedResult = null;
 	const closed = new Promise((resolve) =>
 		child.once("close", (code, signal) => {
+			closedNs = process.hrtime.bigint();
 			closedResult = { code, signal };
 			resolve(closedResult);
 		}),
 	);
 	let recorderBirths = [],
 		finishing,
-		stopAcknowledged = null,
 		endedEarly = null;
-	const finishOnce = async (sendStop = true) => {
+	const finishOnce = async (sendDisable = true) => {
 		endedEarly =
-			sendStop && (child.exitCode !== null || Boolean(child.signalCode));
-		stopAcknowledged = !sendStop;
-		if (sendStop && child.exitCode === null && !child.signalCode) {
+			sendDisable && (child.exitCode !== null || Boolean(child.signalCode));
+		if (sendDisable && !endedEarly && !stopRequested) {
 			const expectedAck = ack + 1;
-			requestStop();
+			disableRequested = true;
+			child.stdin.write("disable\n");
 			try {
 				await until(() => ack >= expectedAck, 2000, child);
-				stopAcknowledged = true;
-				stopAckObserved = true;
+				disableAckNs = process.hrtime.bigint();
+				disableAcknowledged = true;
+				activeSamplingWallNs = Number(disableAckNs - enabledAt);
 			} catch {
-				stopAckObserved = false;
+				disableAcknowledged = false;
 			}
 		}
 		// The sleep is perf's OWN workload: its exit terminates privileged perf, not a sudo timeout wrapper.
@@ -567,8 +582,23 @@ export async function openRecorder({
 			!spawnError && !captureError && result.code === 0 && !result.signal,
 			"record command failed",
 		);
-		require_(!sendStop || stopAcknowledged, "stop acknowledgment unavailable");
-		return { raw, stderr, capped, ack, recorderBirths, endedEarly };
+		require_(!capped && !stopRequested, "capture aborted by STOP or cap");
+		require_(
+			!sendDisable || (!endedEarly && disableAcknowledged),
+			"disable acknowledgment unavailable or early exit",
+		);
+		return {
+			raw,
+			stderr,
+			capped,
+			ack,
+			recorderBirths,
+			endedEarly,
+			activeSamplingWallNs,
+			disableAckNs,
+			closedNs,
+			diagnostics: await failureDetails(),
+		};
 	};
 	const failureDetails = async () => {
 		let text = null;
@@ -586,12 +616,14 @@ export async function openRecorder({
 			ack,
 			stopRequested,
 			stopAcknowledged: stopAckObserved,
+			disableRequested,
+			disableAcknowledged,
 			endedEarly,
 			stderr: text,
 		});
 	};
-	const finish = (sendStop = true) => {
-		finishing ??= finishOnce(sendStop).catch(async (error) => {
+	const finish = (sendDisable = true) => {
+		finishing ??= finishOnce(sendDisable).catch(async (error) => {
 			error.recordDiagnostics = await failureDetails();
 			throw error;
 		});
@@ -604,6 +636,7 @@ export async function openRecorder({
 		await verifyIdentity(binding);
 		child.stdin.write("enable\n");
 		await until(() => ack >= 2, 2000, child);
+		enabledAt = process.hrtime.bigint();
 		return {
 			finish,
 			raw,
@@ -618,7 +651,9 @@ export async function openRecorder({
 			},
 		};
 	} catch (error) {
-		await finish().catch(() => {});
+		if (child.exitCode === null && !child.signalCode && !stopRequested)
+			requestStop();
+		await finish(false).catch(() => {});
 		error.recordDiagnostics = await failureDetails();
 		try {
 			await stderr.verify();
@@ -639,6 +674,7 @@ export async function boundedCommand(
 	cap = LIMITS.raw,
 	onOutput,
 	inputFile,
+	timeoutMs = 15000,
 ) {
 	require_(/^[a-z][a-z0-9-]{0,63}$/u.test(name), "private command name");
 	await privateDirectory(root);
@@ -704,7 +740,7 @@ export async function boundedCommand(
 	const timer = setTimeout(() => {
 		failure ??= new Error("bounded tool timeout");
 		child.kill("SIGKILL");
-	}, 15000);
+	}, timeoutMs);
 	const status = await new Promise((resolve) => child.once("close", resolve));
 	clearTimeout(timer);
 	out.close();

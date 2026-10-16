@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFile, mkdtemp } from "node:fs/promises";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import vm from "node:vm";
 import * as recorder from "./desktop-performance-headless-stacks-recorder.mjs";
 import { artifactPaths } from "./artifact-paths.mjs";
@@ -11,7 +11,14 @@ import {
 	HeadlessStackCapture,
 	emptyReport,
 	exportReport,
+	verifyMonotonicClock,
+	validateDisabledSamples,
+	PerfScriptParser,
 } from "./desktop-performance-headless-stacks.mjs";
+const scratch = await mkdtemp(
+	path.join(artifactPaths.tmp, "stack-recorder-tests-"),
+);
+after(() => rm(scratch, { recursive: true, force: true }));
 const source = await readFile(
 	new URL(
 		"./desktop-performance-headless-stacks-recorder.mjs",
@@ -31,6 +38,9 @@ function failedControl({
 	captureFailure = false,
 	noPingAck = false,
 	capRaw = false,
+	disableAck = "ack\n",
+	neverExit = false,
+	immediateDeadline = false,
 } = {}) {
 	const child = new EventEmitter();
 	Object.assign(child, {
@@ -60,7 +70,20 @@ function failedControl({
 		close() {}
 		async verify() {}
 	}
+	const commands = [];
 	child.stdin.write = (command) => {
+		commands.push(command);
+		if (command === "disable\n") {
+			child.stderr.emit("data", Buffer.from(disableAck));
+			if (neverExit) return;
+			queueMicrotask(() => {
+				child.stderr.emit("data", Buffer.from(diagnostic));
+				child.exitCode = code;
+				child.signalCode = signal;
+				child.emit("close", code, signal);
+			});
+			return;
+		}
 		if (command !== "ping\n" || !noPingAck)
 			child.stderr.emit("data", Buffer.from("ack\n"));
 		if (command === "stop\n" && child.exitCode === null && !child.signalCode) {
@@ -98,14 +121,19 @@ function failedControl({
 			require_: (ok, message) => {
 				if (!ok) throw new Error(message);
 			},
-			setTimeout,
+			setTimeout: immediateDeadline
+				? (callback) => {
+						queueMicrotask(callback);
+						return 1;
+					}
+				: setTimeout,
 			clearTimeout,
 			privateText: async (filename) => sinks.get(filename)?.text ?? "",
 		},
 	);
-	return { child, open };
+	return { child, open, commands };
 }
-test("actual privileged stop rejection retains stage, primitive exit and ACK evidence without changing failure", async () => {
+test("actual privileged disable/natural rejection retains stage, primitive exit and ACK evidence without changing failure", async () => {
 	const f = failedControl();
 	const recording = await f.open({
 		root: "/private",
@@ -120,7 +148,8 @@ test("actual privileged stop rejection retains stage, primitive exit and ACK evi
 		assert.equal(error.recordDiagnostics?.record_exit_code, 255);
 		assert.equal(error.recordDiagnostics?.record_signal, 0);
 		assert.equal(error.recordDiagnostics?.record_privileged, 1);
-		assert.equal(error.recordDiagnostics?.record_stop_acknowledged, 1);
+		assert.equal(error.recordDiagnostics?.record_stop_acknowledged, null);
+		assert.equal(error.recordDiagnostics?.record_disable_acknowledged, 1);
 		assert.equal(error.recordDiagnostics?.record_ack_count, 3);
 		assert.equal(error.recordDiagnostics?.record_stderr_class, 1);
 		return true;
@@ -196,7 +225,7 @@ test("actual recorder retains direct SIGTERM versus sudo143 without treating eit
 		await assert.rejects(recording.finish(), (error) => {
 			assert.equal(error.recordDiagnostics.record_exit_code, exitExpected);
 			assert.equal(error.recordDiagnostics.record_signal, signalExpected);
-			assert.equal(error.recordDiagnostics.record_stop_acknowledged, 1);
+			assert.equal(error.recordDiagnostics.record_stop_acknowledged, null);
 			return true;
 		});
 	}
@@ -261,7 +290,7 @@ test("stderr classifier is closed and never publishes diagnostic text, paths, sy
 		assert.doesNotMatch(JSON.stringify(value), /private|secret|symbol|pid123/);
 	}
 });
-test("schema2 numeric export retains exact failure evidence and rejects oldschema, raw and hostile enum fields", async () => {
+test("schema3 numeric export retains exact failure evidence and rejects oldschema, raw and hostile enum fields", async () => {
 	const details = recorder.recorderFailureDetails({
 		name: "sudo-control",
 		privileged: true,
@@ -279,10 +308,8 @@ test("schema2 numeric export retains exact failure evidence and rejects oldschem
 		failure_code: 1,
 		privileged: 1,
 	};
-	assert.equal(report.schema_version, 2);
-	const directory = await mkdtemp(
-		path.join(artifactPaths.tmp, "stack-failure-public-"),
-	);
+	assert.equal(report.schema_version, 3);
+	const directory = await mkdtemp(path.join(scratch, "stack-failure-public-"));
 	await exportReport(directory, report);
 	assert.deepEqual(
 		JSON.parse(
@@ -295,6 +322,7 @@ test("schema2 numeric export retains exact failure evidence and rejects oldschem
 	);
 	for (const patch of [
 		{ schema_version: 1 },
+		{ schema_version: 2 },
 		{ record_stage: 4 },
 		{ record_signal: 14 },
 		{ record_exit_code: -1 },
@@ -326,7 +354,7 @@ test("startup ACK failure keeps bounded recorder evidence without replacing orig
 			assert.equal(error.recordDiagnostics.record_stage, 1);
 			assert.equal(error.recordDiagnostics.record_exit_code, 255);
 			assert.equal(error.recordDiagnostics.record_ack_count, 1);
-			assert.equal(error.recordDiagnostics.record_stop_acknowledged, 1);
+			assert.equal(error.recordDiagnostics.record_stop_acknowledged, null);
 			return true;
 		},
 	);
@@ -451,4 +479,140 @@ test("actual measurement boundary exports recorder failure while retaining origi
 	assert.equal(report.record_stop_acknowledged, 1);
 	assert.equal(report.workload_failed, 1);
 	assert.equal(report.capture_complete, 0);
+});
+
+test("normal completion disables with ACK then waits natural zero, never sends STOP", async () => {
+	const f = failedControl({ code: 0, diagnostic: "" });
+	const recording = await f.open({
+		root: "/private",
+		name: "user-control",
+		perf: "/installed/perf",
+		binding: { pid: 10 },
+	});
+	const result = await recording.finish();
+	assert.deepEqual(f.commands, ["ping\n", "enable\n", "disable\n"]);
+	assert.equal(result.diagnostics.record_disable_requested, 1);
+	assert.equal(result.diagnostics.record_disable_acknowledged, 1);
+	assert.equal(result.diagnostics.record_stop_requested, 0);
+	assert.equal(result.diagnostics.record_stop_acknowledged, null);
+	assert.ok(result.activeSamplingWallNs >= 0);
+});
+test("missing or malformed disable ACK never accepts natural zero", async () => {
+	for (const disableAck of ["", "ack extra\n"]) {
+		const f = failedControl({ code: 0, disableAck });
+		const recording = await f.open({
+			root: "/private",
+			name: "user-control",
+			perf: "/installed/perf",
+			binding: { pid: 10 },
+		});
+		await assert.rejects(recording.finish(), (error) => {
+			assert.equal(error.recordDiagnostics.record_disable_acknowledged, 0);
+			assert.equal(error.recordDiagnostics.record_stop_requested, 0);
+			return true;
+		});
+	}
+});
+
+test("monotonic epoch/units require actual bounded Python value inside Node bracket", async () => {
+	await verifyMonotonicClock("/private", async (...args) => {
+		assert.equal(args[2], "/usr/bin/python3");
+		assert.deepEqual(args[3], [
+			"-c",
+			"import time; print(time.clock_gettime_ns(time.CLOCK_MONOTONIC))",
+		]);
+		assert.equal(args[4], 4096);
+		assert.equal(args[7], 2000);
+		return String(process.hrtime.bigint()) + "\n";
+	});
+	for (const response of [
+		"0\n",
+		"99999999999999999999999\n",
+		"private raw text",
+	]) {
+		await assert.rejects(
+			verifyMonotonicClock("/private", async () => response),
+		);
+	}
+});
+test("decoded samples enforce conservative disable clock boundary and positive busy tail", () => {
+	const parser = new PerfScriptParser(10);
+	parser.feed(
+		"10/10 1234.000000001: 20 cpu-clock:u:\n  a malloc (/private/server)\n\n",
+	);
+	parser.finish();
+	const stopped = {
+		disableAckNs: 1234000000002n,
+		closedNs: 1234150000002n,
+		diagnostics: { record_disable_acknowledged: 1 },
+	};
+	validateDisabledSamples(parser, stopped, 150000000n);
+	assert.throws(() =>
+		validateDisabledSamples(parser, {
+			...stopped,
+			disableAckNs: 1234000000000n,
+		}),
+	);
+	assert.throws(() =>
+		validateDisabledSamples(
+			parser,
+			{ ...stopped, closedNs: stopped.disableAckNs },
+			150000000n,
+		),
+	);
+	assert.throws(() =>
+		validateDisabledSamples(new PerfScriptParser(10), stopped),
+	);
+	assert.throws(() =>
+		validateDisabledSamples(parser, {
+			...stopped,
+			diagnostics: { record_disable_acknowledged: 0 },
+		}),
+	);
+	assert.equal(
+		Object.keys(parser.report).some((k) => /timestamp|SampleNs|ack_ns/.test(k)),
+		false,
+	);
+});
+
+test("normal completion never accepts early zero, natural signal, cap STOP or missing deadline exit", async () => {
+	for (const scenario of [
+		"early-zero",
+		"signal",
+		"cap",
+		"capture-error",
+		"deadline",
+	]) {
+		const f = failedControl({
+			code: 0,
+			capRaw: scenario === "cap",
+			captureFailure: scenario === "capture-error",
+			neverExit: scenario === "deadline",
+			immediateDeadline: scenario === "deadline",
+		});
+		const recording = await f.open({
+			root: "/private",
+			name: "headless",
+			perf: "/installed/perf",
+			binding: { pid: 10 },
+		});
+		if (scenario === "early-zero" || scenario === "signal") {
+			f.child.exitCode = scenario === "signal" ? null : 0;
+			f.child.signalCode = scenario === "signal" ? "SIGTERM" : null;
+			f.child.emit("close", f.child.exitCode, f.child.signalCode);
+		}
+		if (scenario === "cap" || scenario === "capture-error")
+			f.child.stdout.emit("data", Buffer.from("data"));
+		await assert.rejects(recording.finish(scenario !== "signal"), (error) => {
+			if (scenario === "signal")
+				assert.equal(error.recordDiagnostics.record_signal, 15);
+			if (scenario === "cap")
+				assert.equal(error.recordDiagnostics.record_capped, 1);
+			if (scenario === "capture-error")
+				assert.equal(error.recordDiagnostics.record_capture_error, 1);
+			if (scenario === "deadline")
+				assert.match(error.message, /lifetime bound/);
+			return true;
+		});
+	}
 });
