@@ -3699,3 +3699,91 @@ describe("immutable imported mode editor", () => {
 		expect(patchFeature.updateFixtureIntent).not.toHaveBeenCalled();
 	});
 });
+
+
+describe("fixture name physical confirmation", () => {
+	function openNameEditor() {
+		render(<FixturePatchSetup />);
+		const row = screen.getByRole("row", { name: /17 Split Wash 17/ }) as HTMLTableRowElement;
+		rightClick(within(row.cells[2]).getByRole("button"));
+		const dialog = screen.getByRole("heading", { name: "Set fixture name" }).closest("section") as HTMLElement;
+		expect(within(dialog).queryByRole("button", { name: "Set" })).not.toBeInTheDocument();
+		return { dialog, input: within(dialog).getByRole("textbox", { name: "Fixture name" }) };
+	}
+
+	it("commits the focused input current text once on physical Enter without leaking the key", async () => {
+		const { input } = openNameEditor();
+		const escaped = vi.fn();
+		document.addEventListener("keydown", escaped);
+		try {
+			fireEvent.change(input, { target: { value: "Physical rename" } });
+			expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+			fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
+			await waitFor(() => expect(patchFeature.updateFixture).toHaveBeenCalledExactlyOnceWith(
+				"fixture-split", { name: "Physical rename" },
+			));
+			expect(screen.queryByRole("heading", { name: "Set fixture name" })).not.toBeInTheDocument();
+			expect(escaped).not.toHaveBeenCalled();
+			expectContextEditWithoutSetArm();
+		} finally {
+			document.removeEventListener("keydown", escaped);
+		}
+	});
+
+	it("uses the live native input value rather than a stale controlled draft", async () => {
+		const { input } = openNameEditor();
+		const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+		if (!setter) throw new Error("Native input value setter unavailable");
+		setter.call(input, "Native current value");
+		fireEvent.keyDown(input, { key: "Enter" });
+		await waitFor(() => expect(patchFeature.updateFixture).toHaveBeenCalledExactlyOnceWith(
+			"fixture-split", { name: "Native current value" },
+		));
+	});
+
+	it.each([
+		{ label: "composition", event: { isComposing: true } },
+		{ label: "legacy IME composition", event: { keyCode: 229 } },
+		{ label: "repeat", event: { repeat: true } },
+	])("does not commit or leak $label Enter, then accepts an ordinary Enter", async ({ event }) => {
+		const { input } = openNameEditor();
+		const escaped = vi.fn();
+		document.addEventListener("keydown", escaped);
+		try {
+			fireEvent.change(input, { target: { value: "Guarded rename" } });
+			fireEvent.keyDown(input, { key: "Enter", ...event });
+			expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+			expect(screen.getByRole("heading", { name: "Set fixture name" })).toBeInTheDocument();
+			expect(escaped).not.toHaveBeenCalled();
+			fireEvent.keyDown(input, { key: "Enter" });
+			fireEvent.keyDown(input, { key: "Enter", repeat: true });
+			await waitFor(() => expect(patchFeature.updateFixture).toHaveBeenCalledExactlyOnceWith(
+				"fixture-split", { name: "Guarded rename" },
+			));
+			expect(escaped).not.toHaveBeenCalled();
+		} finally {
+			document.removeEventListener("keydown", escaped);
+		}
+	});
+
+	it("cancels an edited name without writing and leaves its original name intact", () => {
+		const { dialog, input } = openNameEditor();
+		fireEvent.change(input, { target: { value: "Discarded rename" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Cancel fixture name" }));
+		expect(patchFeature.updateFixture).not.toHaveBeenCalled();
+		expect(server.patch.fixtures[0].name).toBe("Split Wash 17");
+		expect(screen.queryByRole("heading", { name: "Set fixture name" })).not.toBeInTheDocument();
+	});
+
+	it("retains software keyboard confirmation through the real input modal", async () => {
+		const { dialog, input } = openNameEditor();
+		fireEvent.change(input, { target: { value: "Software rename" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Open keyboard" }));
+		fireEvent.click(screen.getByRole("button", { name: "Enter · Confirm" }));
+		await waitFor(() => expect(patchFeature.updateFixture).toHaveBeenCalledExactlyOnceWith(
+			"fixture-split", { name: "Software rename" },
+		));
+		expect(screen.queryByRole("heading", { name: "Set fixture name" })).not.toBeInTheDocument();
+	});
+
+});

@@ -281,6 +281,13 @@ function FixtureEditFields() {
 				aria-label="Fixture name"
 				value={editText}
 				onChange={(event) => controller.ui.setEditText(event.target.value)}
+				onKeyDown={(event) => {
+					if (event.key !== "Enter") return;
+					event.preventDefault();
+					event.stopPropagation();
+					if (event.nativeEvent.isComposing || event.keyCode === 229 || event.repeat) return;
+					saveEdit(controller, event.currentTarget.value);
+				}}
 				onKeyboardCommit={(value) => saveEdit(controller, value)}
 			/>
 		);
