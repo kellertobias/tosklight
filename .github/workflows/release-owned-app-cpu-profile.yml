@@ -272,6 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$CANDIDATE_DIR"
+          test -z "${PATCHELF+x}"
           test -z "${RUSTFLAGS:-}"
           test -z "${CARGO_ENCODED_RUSTFLAGS:-}"
           npm ci
@@ -311,8 +312,16 @@ jobs:
           manifest = json.loads(out.read_text())
           actual_source = subprocess.check_output(['git', '-C', str(candidate), 'rev-parse', 'HEAD'], text=True).strip()
           try:
+              if actual_source != os.environ['CANDIDATE_SHA']:
+                  raise SystemExit('STOP: candidate source changed before packager provenance')
+              cache_root = pathlib.Path(os.environ.get('XDG_CACHE_HOME', pathlib.Path.home() / '.cache'))
+              replay = profile.prepare_packager_replay(cache_root / 'tauri/linuxdeploy-x86_64.AppImage',
+                  pathlib.Path(os.environ['TMPDIR']) / 'tl775-exact-packager-replay',
+                  actual_source, image_sha, time.monotonic() + 45)
+              manifest['packager_tool_provenance'] = replay['public']
+              out.write_text(json.dumps(manifest, indent=2) + '\n')
               proof = profile.verified_packaged_roles(release, stage / 'squashfs-root', apps[0], image_sha,
-                  os.environ['CANDIDATE_SHA'], actual_source, time.monotonic() + 30)
+                  os.environ['CANDIDATE_SHA'], actual_source, time.monotonic() + 30, replay=replay)
           except profile.PackagedBindingRefused as error:
               manifest.update(packaged_preflight_status='STOP', packaged_preflight_code=str(error),
                               packaged_preflight=error.diagnostic)

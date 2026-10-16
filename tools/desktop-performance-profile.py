@@ -1321,7 +1321,111 @@ def defined_function_count(path, deadline):
                for line in text.splitlines())
 
 
-def verified_packaged_roles(release, appdir, appimage, expected_image_sha, source_sha, actual_source_sha, deadline):
+# Official tauri-apps/binary-releases asset182515537, unchanged since2024-07-29.
+# Pinned TauriCLI2.11.4 zeroes image bytes8..10 before using this cache file.
+PACKAGER_IMAGE_SHA = 'e762bea85c8eb0d4b3508d46e5c1f037f717d0f9303ae3b4aafc8b04991fa1ef'
+PACKAGER_CACHE_SHA = '20eebde3c18ae2e44279bd624fc72482503aece216d5d77f10932235342f71c1'
+PACKAGER_ELF_SHA = 'eb6fec35c90d4e5a271d00abfc84fdfaf47256d75ab4a66be99fbf05dbf99099'
+PATCHELF_SHA = 'c15c1282d9dadcaaf5e492c0ee5f929d34453f8af759cc4aadad03b5b65df879'
+PACKAGER_RPATH = '$ORIGIN/../lib'
+
+
+def verified_tool_file(path, expected_sha):
+    path = Path(path)
+    info = path.lstat()
+    if (not path.is_absolute() or path.resolve(strict=True) != path or not stat.S_ISREG(info.st_mode)
+            or info.st_uid != os.getuid() or info.st_nlink != 1 or info.st_size > 32 * 1024 * 1024 or not info.st_mode & 0o111
+            or digest(path) != expected_sha):
+        raise Refused('packager_tool_identity_unverified')
+    return path
+
+
+def packager_version(path, prefix, deadline):
+    result = subprocess.run([str(path), '--version'], check=True, capture_output=True,
+                            text=True, timeout=bounded_timeout(deadline, 5), env=isolated_env())
+    line = (result.stdout + result.stderr).splitlines()[0]
+    if not line.startswith(prefix) or not re.fullmatch(r'[A-Za-z0-9 ._(),:/+\-]{1,256}', line):
+        raise Refused('packager_version_unverified')
+    return line
+
+
+def prepare_packager_replay(cache, stage, source_sha, image_sha, deadline):
+    public = {'source_sha': source_sha, 'appimage_sha256': image_sha,
+              'official_linuxdeploy_image_sha256': PACKAGER_IMAGE_SHA,
+              'official_asset_id': 182515537,
+              'official_asset_url': 'https://github.com/tauri-apps/binary-releases/releases/download/linuxdeploy/linuxdeploy-x86_64.AppImage',
+              'tauri_zero_magic_bytes_8_through_10_verified_by_full_cache_hash': True,
+              'tauri_cache_expected_sha256': PACKAGER_CACHE_SHA,
+              'tauri_cli_source_tag': 'tauri-cli-v2.11.4',
+              'patchelf_override_absent': 'PATCHELF' not in os.environ,
+              'selection': 'actual canonical Tauri cache, exact pinned embedded sibling patchelf; no PATH wrapper',
+              'replay_argv_template': ['patchelf', '--set-rpath', PACKAGER_RPATH, '<owned-role-copy>']}
+    try:
+        if not re.fullmatch('[0-9a-f]{40}', source_sha) or not re.fullmatch('[0-9a-f]{64}', image_sha):
+            raise Refused('packager_source_or_image_pin_invalid')
+        if not public['patchelf_override_absent']:
+            raise Refused('packager_override_present')
+        cache = verified_tool_file(cache, PACKAGER_CACHE_SHA)
+        public['tauri_cache_actual_sha256'] = digest(cache)
+        stage = Path(stage)
+        root = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT').resolve()
+        if not stage.is_absolute() or not stage.resolve().is_relative_to(root):
+            raise Refused('packager_staging_not_canonical')
+        anchor = open_directory(stage.parent)
+        try:
+            os.mkdir(stage.name, 0o700, dir_fd=anchor)
+        finally:
+            os.close(anchor)
+        subprocess.run([str(cache), '--appimage-extract'], cwd=stage, check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=bounded_timeout(deadline, 20), env=isolated_env())
+        extracted = stage / 'squashfs-root/usr/bin'
+        linuxdeploy = verified_tool_file(extracted / 'linuxdeploy', PACKAGER_ELF_SHA)
+        patchelf = verified_tool_file(extracted / 'patchelf', PATCHELF_SHA)
+        public.update(linuxdeploy_sha256=digest(linuxdeploy), patchelf_sha256=digest(patchelf),
+                      linuxdeploy_version=packager_version(linuxdeploy, 'linuxdeploy version ', deadline),
+                      patchelf_version=packager_version(patchelf, 'patchelf ', deadline))
+        verified_tool_file(cache, PACKAGER_CACHE_SHA)
+        return {'cache': cache, 'patchelf': patchelf, 'stage': stage,
+                'source_sha': source_sha, 'appimage_sha256': image_sha, 'public': public}
+    except (Refused, OSError, ValueError, IndexError, subprocess.SubprocessError) as error:
+        code = str(error) if isinstance(error, Refused) else 'packager_tool_or_scope_refused'
+        raise PackagedBindingRefused(code, {'packager_tool_provenance': public}) from None
+
+
+def exact_packager_replay(built, packaged, role, context, source_sha, image_sha, deadline):
+    if (role not in ('server', 'native_renderer') or context.get('source_sha') != source_sha
+            or context.get('appimage_sha256') != image_sha
+            or context['public'].get('replay_argv_template') != ['patchelf', '--set-rpath', PACKAGER_RPATH, '<owned-role-copy>']):
+        raise Refused('packager_replay_binding_mismatch')
+    verified_tool_file(context['cache'], PACKAGER_CACHE_SHA)
+    tool = verified_tool_file(context['patchelf'], PATCHELF_SHA)
+    before, target = digest(built), digest(packaged)
+    copy = context['stage'] / f'replay-{role}'
+    with copy.open('xb') as stream:
+        stream.write(Path(built).read_bytes())
+    copy.chmod(0o700)
+    if digest(copy) != before:
+        raise Refused('packager_replay_input_not_byte_exact')
+    command = [str(tool), '--set-rpath', PACKAGER_RPATH, str(copy)]
+    subprocess.run(command, check=True, capture_output=True, timeout=bounded_timeout(deadline, 10),
+                   cwd=context['stage'], env=isolated_env())
+    replay_sha = digest(copy)
+    verified_tool_file(context['cache'], PACKAGER_CACHE_SHA)
+    verified_tool_file(tool, PATCHELF_SHA)
+    if digest(built) != before or digest(packaged) != target:
+        raise Refused('packager_replay_source_or_target_changed')
+    result = {'input_cargo_sha256': before, 'output_replay_sha256': replay_sha,
+              'actual_packaged_sha256': target, 'full_output_equals_packaged': replay_sha == target,
+              'tool_sha256': PATCHELF_SHA,
+              'argv_template': ['patchelf', '--set-rpath', PACKAGER_RPATH, '<owned-role-copy>'],
+              'normalization': 'none'}
+    if replay_sha != target:
+        raise Refused('packager_replay_full_hash_mismatch')
+    return result
+
+
+def verified_packaged_roles(release, appdir, appimage, expected_image_sha, source_sha, actual_source_sha, deadline, replay=None):
     diagnostic = {'source_verified': source_sha == actual_source_sha,
                   'appimage_sha256': digest(appimage), 'fixed_packaged_paths_verified': False,
                   'comparisons': [], 'roles': []}
@@ -1329,6 +1433,8 @@ def verified_packaged_roles(release, appdir, appimage, expected_image_sha, sourc
         raise PackagedBindingRefused('packaged_candidate_source_mismatch', diagnostic)
     if diagnostic['appimage_sha256'] != expected_image_sha:
         raise PackagedBindingRefused('appimage_changed_before_packaged_preflight', diagnostic)
+    if replay is not None:
+        diagnostic['packager_tool_provenance'] = replay['public']
     appdir = Path(appdir)
     if appdir.is_symlink() or not appdir.is_dir():
         raise PackagedBindingRefused('packaged_appdir_not_owned_directory', diagnostic)
@@ -1357,8 +1463,20 @@ def verified_packaged_roles(release, appdir, appimage, expected_image_sha, sourc
                       'loaded_images_equal': original_code == packaged_code,
                       'packaged_defined_functions': functions}
         diagnostic['comparisons'].append(comparison)
-        if original_id != packaged_id or original_code != packaged_code:
+        if original_id != packaged_id:
             raise PackagedBindingRefused('packaged_role_code_or_build_identity_changed', diagnostic)
+        if original_sha != packaged_sha:
+            if replay is None:
+                raise PackagedBindingRefused('packaged_role_requires_exact_replay', diagnostic)
+            try:
+                comparison['exact_replay'] = exact_packager_replay(built, packaged, role, replay, source_sha, expected_image_sha, deadline)
+            except (Refused, OSError, ValueError, subprocess.SubprocessError) as error:
+                comparison['exact_replay_status'] = 'STOP'
+                comparison['exact_replay_code'] = str(error) if isinstance(error, Refused) else 'packager_replay_tool_or_scope_refused'
+                raise PackagedBindingRefused('packaged_role_exact_replay_refused', diagnostic) from None
+        else:
+            comparison['exact_replay_status'] = 'not_needed_byte_identical'
+
         if not functions:
             raise PackagedBindingRefused('packaged_role_symbols_unavailable_before_workload', diagnostic)
         diagnostic['roles'].append({'role': role, 'sha256': packaged_sha, 'build_id': packaged_id})

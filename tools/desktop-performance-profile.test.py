@@ -729,8 +729,11 @@ class OwnedApplicationTests(unittest.TestCase):
             proof = {'roles': roles, 'appimage_sha256': PROFILE.digest(app),
                      'source_verified': True, 'fixed_packaged_paths_verified': True, 'comparisons': []}
             package_bind = Mock(return_value=proof)
+            replay_context = {'public': {'tool_verified': True}}
+            prepare_replay = Mock(return_value=replay_context)
             fake = types.SimpleNamespace(digest=PROFILE.digest, build_id=Mock(return_value='7' * 40),
-                                         verified_packaged_roles=package_bind)
+                                         verified_packaged_roles=package_bind, prepare_packager_replay=prepare_replay,
+                                         PackagedBindingRefused=PROFILE.PackagedBindingRefused)
             spec = Mock()
             environment = {'CANDIDATE_DIR': str(candidate), 'TARGET': 'x86_64-unknown-linux-gnu',
                            'TMPDIR': str(temporary), 'PROFILE_PREFLIGHT_OUT': str(output),
@@ -740,6 +743,8 @@ class OwnedApplicationTests(unittest.TestCase):
             descriptor = json.loads((temporary / 'tl775-owned-profile-binaries.json').read_text())
             self.assertEqual(descriptor['roles'], roles)
             package_bind.assert_called_once()
+            prepare_replay.assert_called_once()
+            self.assertEqual(package_bind.call_args.kwargs['replay'], replay_context)
             arguments = package_bind.call_args.args
             self.assertEqual(arguments[0], release)
             self.assertEqual(arguments[2], app)
@@ -770,20 +775,22 @@ class OwnedApplicationTests(unittest.TestCase):
             packaged.chmod(0o755)
         return release, appdir, image
 
-    def test_packaged_provenance_allows_only_noncode_byte_drift_with_same_build_identity(self):
+    def test_byte_identical_packaged_provenance_keeps_direct_path(self):
         with tempfile.TemporaryDirectory() as directory:
             release, appdir, image = self.packaged_fixture(Path(directory))
             with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5):
+                for name in ('light-headless', 'viz-renderer'):
+                    (appdir / 'usr/bin' / name).write_bytes((release / name).read_bytes())
                 proof = PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
             self.assertTrue(proof['source_verified'])
             self.assertTrue(proof['fixed_packaged_paths_verified'])
             self.assertEqual(len(proof['roles']), 2)
             for role, comparison in zip(proof['roles'], proof['comparisons']):
-                self.assertFalse(comparison['full_bytes_equal'])
+                self.assertTrue(comparison['full_bytes_equal'])
                 self.assertTrue(comparison['build_ids_equal'])
                 self.assertTrue(comparison['loaded_images_equal'])
                 self.assertEqual(role['sha256'], comparison['packaged_sha256'])
-                self.assertNotEqual(role['sha256'], comparison['cargo_sha256'])
+                self.assertEqual(role['sha256'], comparison['cargo_sha256'])
             self.assertNotIn(str(directory), str(proof))
             self.assertNotIn('401000', str(proof))
 
@@ -794,7 +801,7 @@ class OwnedApplicationTests(unittest.TestCase):
                 (appdir / 'usr/bin/light-headless').write_bytes(self.elf_fixture(code, address))
                 with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), self.assertRaises(PROFILE.PackagedBindingRefused) as error:
                     PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
-                self.assertEqual(str(error.exception), 'packaged_role_code_or_build_identity_changed')
+                self.assertEqual(str(error.exception), 'packaged_role_requires_exact_replay')
                 self.assertFalse(error.exception.diagnostic['fixed_packaged_paths_verified'])
 
     def test_packaged_source_bundle_buildid_symbols_and_symlink_are_guarded(self):
@@ -865,6 +872,160 @@ class OwnedApplicationTests(unittest.TestCase):
                 packaged.write_bytes(data)
                 with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), self.assertRaises(PROFILE.PackagedBindingRefused):
                     PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
+
+    def test_unproven_unloaded_metadata_change_requires_full_byte_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release, appdir, image = self.packaged_fixture(Path(directory))
+            with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), self.assertRaises(PROFILE.PackagedBindingRefused):
+                PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
+
+    def known_rpath_transform(self, data):
+        # Pure deterministic fixture: preserve original payload, relocate program
+        # headers, append one RW metadata load containing the literal RPATH.
+        result = bytearray(data)
+        offset = 512
+        result.extend(b'\0' * (offset - len(result)))
+        original_headers = bytes(result[64:64 + 56 * 3])
+        struct.pack_into('<Q', result, 32, offset)
+        struct.pack_into('<H', result, 56, 4)
+        result.extend(original_headers)
+        payload = PROFILE.PACKAGER_RPATH.encode() + b'\0'
+        size = 56 * 4 + len(payload)
+        result.extend(struct.pack('<IIQQQQQQ', 1, 6, offset, 0x500000, 0x500000, size, size, 4096))
+        result.extend(payload)
+        return bytes(result)
+
+    def replay_context(self, root, image):
+        cache, tool, stage = root / 'cached-tool.AppImage', root / 'patchelf', root / 'replay'
+        cache.write_bytes(b'pinned actual cache'); cache.chmod(0o700)
+        tool.write_bytes(b'pinned embedded patchelf'); tool.chmod(0o700)
+        stage.mkdir()
+        return {'cache': cache, 'patchelf': tool, 'stage': stage, 'source_sha': 'a' * 40,
+                'appimage_sha256': PROFILE.digest(image),
+                'public': {'replay_argv_template': ['patchelf', '--set-rpath', PROFILE.PACKAGER_RPATH, '<owned-role-copy>']}}
+
+    def test_exact_replay_accepts_changed_layout_only_with_full_byte_equality(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release, appdir, image = self.packaged_fixture(root)
+            context = self.replay_context(root, image)
+            original = self.multi_load_elf_fixture()
+            for name in ('light-headless', 'viz-renderer'):
+                (release / name).write_bytes(original)
+                (appdir / 'usr/bin' / name).write_bytes(self.known_rpath_transform(original))
+            commands = []
+            def run(command, **kwargs):
+                commands.append(command)
+                self.assertEqual(command[:3], [str(context['patchelf']), '--set-rpath', '$ORIGIN/../lib'])
+                path = Path(command[3])
+                self.assertEqual(path.parent, context['stage'])
+                self.assertEqual(path.read_bytes(), original)
+                path.write_bytes(self.known_rpath_transform(path.read_bytes()))
+                return Mock(returncode=0)
+            with patch.object(PROFILE, 'PACKAGER_CACHE_SHA', PROFILE.digest(context['cache'])), patch.object(PROFILE, 'PATCHELF_SHA', PROFILE.digest(context['patchelf'])), patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), patch.object(PROFILE.subprocess, 'run', side_effect=run):
+                proof = PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, None, replay=context)
+            self.assertEqual(len(commands), 2)
+            self.assertEqual(len(proof['roles']), 2)
+            for comparison in proof['comparisons']:
+                self.assertFalse(comparison['loaded_images_equal'])
+                self.assertTrue(comparison['exact_replay']['full_output_equals_packaged'])
+                self.assertEqual(comparison['exact_replay']['output_replay_sha256'], comparison['packaged_sha256'])
+                self.assertEqual(comparison['exact_replay']['normalization'], 'none')
+            self.assertNotIn(directory, str(proof))
+
+    def test_replay_rejects_readonly_data_bss_or_extra_metadata_changes(self):
+        for mutation in ('readonly', 'data', 'bss', 'extra_metadata'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                release, appdir, image = self.packaged_fixture(root)
+                context = self.replay_context(root, image)
+                original = self.multi_load_elf_fixture()
+                target = bytearray(self.known_rpath_transform(original))
+                if mutation == 'readonly': target[260:264] = b'EVIL'
+                elif mutation == 'data': target[264:268] = b'EVIL'
+                elif mutation == 'bss': struct.pack_into('<Q', target, 512 + 2 * 56 + 40, 999)
+                else: target.extend(b'UNPROVEN')
+                (release / 'light-headless').write_bytes(original)
+                (appdir / 'usr/bin/light-headless').write_bytes(target)
+                def run(command, **kwargs):
+                    path = Path(command[-1]); path.write_bytes(self.known_rpath_transform(path.read_bytes()))
+                    return Mock(returncode=0)
+                with patch.object(PROFILE, 'PACKAGER_CACHE_SHA', PROFILE.digest(context['cache'])), patch.object(PROFILE, 'PATCHELF_SHA', PROFILE.digest(context['patchelf'])), patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), patch.object(PROFILE.subprocess, 'run', side_effect=run), self.assertRaises(PROFILE.PackagedBindingRefused) as error:
+                    PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, None, replay=context)
+                self.assertEqual(error.exception.diagnostic['comparisons'][0]['exact_replay_code'], 'packager_replay_full_hash_mismatch')
+
+    def test_replay_wrong_tool_argv_or_cross_source_refuses_before_command(self):
+        for mutation in ('tool', 'cache', 'argv', 'source', 'image'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                release, appdir, image = self.packaged_fixture(root)
+                context = self.replay_context(root, image)
+                cache_sha, tool_sha = PROFILE.digest(context['cache']), PROFILE.digest(context['patchelf'])
+                if mutation == 'tool': context['patchelf'].write_bytes(b'foreign tool')
+                elif mutation == 'cache': context['cache'].write_bytes(b'foreign image')
+                elif mutation == 'argv': context['public']['replay_argv_template'][2] = '/unreviewed/path'
+                elif mutation == 'source': context['source_sha'] = 'd' * 40
+                else: context['appimage_sha256'] = 'd' * 64
+                with patch.object(PROFILE, 'PACKAGER_CACHE_SHA', cache_sha), patch.object(PROFILE, 'PATCHELF_SHA', tool_sha), patch.object(PROFILE.subprocess, 'run') as run, self.assertRaises(PROFILE.Refused):
+                    PROFILE.exact_packager_replay(release / 'light-headless', appdir / 'usr/bin/light-headless', 'server', context, 'a' * 40, PROFILE.digest(image), None)
+                run.assert_not_called()
+
+    def test_packager_override_or_unknown_cache_never_extracts(self):
+        for override in (False, True):
+            with self.subTest(override=override), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); cache = root / 'unknown.AppImage'
+                cache.write_bytes(b'unreviewed tool'); cache.chmod(0o700)
+                env = {'PATCHELF': '/unreviewed/tool'} if override else {}
+                with patch.dict(os.environ, env, clear=True), patch.object(PROFILE.subprocess, 'run') as run, self.assertRaises(PROFILE.PackagedBindingRefused):
+                    PROFILE.prepare_packager_replay(cache, root / 'stage', 'a' * 40, 'b' * 64, None)
+                run.assert_not_called()
+
+    def test_prepare_uses_only_pinned_actual_cache_and_embedded_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cache = root / 'linuxdeploy-x86_64.AppImage'
+            cache.write_bytes(b'exact cached packager'); cache.chmod(0o700)
+            stage = root / 'private-stage'
+            commands = []
+            def run(command, **kwargs):
+                commands.append(command)
+                if command == [str(cache), '--appimage-extract']:
+                    self.assertEqual(kwargs['cwd'], stage)
+                    tools = stage / 'squashfs-root/usr/bin'
+                    tools.mkdir(parents=True)
+                    for name in ('linuxdeploy', 'patchelf'):
+                        path = tools / name; path.write_bytes(name.encode()); path.chmod(0o700)
+                    return Mock(returncode=0)
+                self.assertEqual(command[1:], ['--version'])
+                name = Path(command[0]).name
+                self.assertEqual(Path(command[0]).parent, stage / 'squashfs-root/usr/bin')
+                return Mock(returncode=0, stdout='linuxdeploy version 1-alpha (git commit ID abc1234)\n' if name == 'linuxdeploy' else 'patchelf 0.8\n', stderr='')
+            with patch.dict(os.environ, {}, clear=True), patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE, 'PACKAGER_CACHE_SHA', PROFILE.digest(cache)), patch.object(PROFILE, 'PACKAGER_ELF_SHA', __import__('hashlib').sha256(b'linuxdeploy').hexdigest()), patch.object(PROFILE, 'PATCHELF_SHA', __import__('hashlib').sha256(b'patchelf').hexdigest()), patch.object(PROFILE.subprocess, 'run', side_effect=run):
+                context = PROFILE.prepare_packager_replay(cache, stage, 'a' * 40, 'b' * 64, None)
+            self.assertEqual(len(commands), 3)
+            self.assertEqual(context['public']['patchelf_version'], 'patchelf 0.8')
+            self.assertTrue(context['public']['patchelf_override_absent'])
+            self.assertEqual(context['public']['tauri_cache_actual_sha256'], PROFILE.digest(cache))
+            self.assertNotIn(directory, str(context['public']))
+            self.assertEqual(stage.stat().st_mode & 0o777, 0o700)
+
+    def test_prepare_refuses_cache_mutation_and_unexpected_version_privately(self):
+        for mutation in ('cache', 'version'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); cache = root / 'linuxdeploy-x86_64.AppImage'
+                cache.write_bytes(b'pinned cache'); cache.chmod(0o700)
+                stage = root / 'stage'
+                def run(command, **kwargs):
+                    if command[1] == '--appimage-extract':
+                        tools = stage / 'squashfs-root/usr/bin'; tools.mkdir(parents=True)
+                        for name in ('linuxdeploy', 'patchelf'):
+                            p = tools / name; p.write_bytes(name.encode()); p.chmod(0o700)
+                        if mutation == 'cache': cache.write_bytes(b'changed')
+                        return Mock(returncode=0)
+                    return Mock(returncode=0, stdout='/private/unexpected-version' if mutation == 'version' else ('linuxdeploy version 1-alpha' if Path(command[0]).name == 'linuxdeploy' else 'patchelf 0.8'), stderr='')
+                with patch.dict(os.environ, {}, clear=True), patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE, 'PACKAGER_CACHE_SHA', PROFILE.digest(cache)), patch.object(PROFILE, 'PACKAGER_ELF_SHA', __import__('hashlib').sha256(b'linuxdeploy').hexdigest()), patch.object(PROFILE, 'PATCHELF_SHA', __import__('hashlib').sha256(b'patchelf').hexdigest()), patch.object(PROFILE.subprocess, 'run', side_effect=run), self.assertRaises(PROFILE.PackagedBindingRefused) as error:
+                    PROFILE.prepare_packager_replay(cache, stage, 'a' * 40, 'b' * 64, None)
+                self.assertNotIn('/private', str(error.exception.diagnostic))
 
     def requests(self):
         return [{'role': role, 'target': {'sha256': 'a' * 64}, 'target_build_id': 'b' * 40}
