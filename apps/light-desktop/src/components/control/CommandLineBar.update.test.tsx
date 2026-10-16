@@ -26,6 +26,8 @@ import {
 	settleSession,
 } from "../../features/programmingInteraction/testFixtures";
 import { createCommandLineTestAuthority } from "../../features/programmingInteraction/testing/commandLineTestAuthority";
+import { createCommandLineActions as createServerCommandLineActions } from "../../features/server/commandLine";
+import type { ServerController } from "../../features/server/model";
 import { routeOperatorEvent } from "../../features/server/operatorEventRouting";
 import type { ServerState } from "../../features/server/useServerState";
 import { CommandLineBar } from "./CommandLineBar";
@@ -1209,6 +1211,98 @@ describe("Shift+Record Update gestures", () => {
 });
 
 describe("shared command rejection presentation", () => {
+	it.each(["F4", "FIXTURE"])("retains an actual software keypad rejection through writer reconciliation until attached %s", async next => {
+		let projection = commandLine(1, "G999AT50", "GROUP");
+		const store = new ProgrammingInteractionStore();
+		const transport = new FakeProgrammingTransport();
+		const executeRequest = vi.fn(async () => { throw new Error("No Selection"); });
+		const replace = vi.fn();
+		const actions = createServerCommandLineActions({
+			api: { programming: { executeCommandLine: executeRequest } },
+			programmingInteractionStore: store,
+			commandLine: projection.text,
+			commandLinePristine: false,
+			commandLineEpoch: { current: 0 },
+			commandLineWrite: { current: Promise.resolve() },
+			commandTargetModeRef: { current: "GROUP" },
+			setCommandTargetMode: vi.fn(),
+		} as unknown as ServerController);
+		function KeypadEnter() {
+			const keypad = useNumericPadController();
+			return <Button onClick={() => keypad.press("ENT")}>Keypad Enter</Button>;
+		}
+		render(<ProgrammingInteractionViewProvider showId={SHOW_ID} deskId={DESK_ID}
+			store={store} transport={transport}
+			loadSnapshot={async () => programmingSnapshot({ command: { ...projection, revision: ++projection.revision } })}
+			replaceCommandLine={replace}
+			executeCommand={({ command, target, pristine }) => actions.executeCommandLine(command, { target, pristine })}>
+			<KeypadEnter /><CommandLineBar />
+		</ProgrammingInteractionViewProvider>);
+		await act(settleSession);
+		fireEvent.click(screen.getByRole("button", { name: "Keypad Enter" }));
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(executeRequest).toHaveBeenCalledTimes(1);
+		expect(executeRequest).toHaveBeenCalledWith("G999AT50");
+		expect(input).toHaveValue("G999AT50");
+		expect(input).toHaveClass("rejected");
+		expect(input).toHaveClass("error");
+		expect(screen.getByRole("alert")).toHaveTextContent("No Selection");
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		act(() => vi.advanceTimersByTime(2600));
+		expect(input).toHaveValue("G999AT50");
+		expect(input).toHaveClass("rejected");
+		expect(input).not.toHaveClass("error");
+		expect(screen.queryByRole("alert")).toBeNull();
+		projection = commandLine(projection.revision + 1, next);
+		act(() => transport.emit({ type: "event", sequence: 20, correlationId: null,
+			change: commandChange({ revision: projection.revision, text: next }) }));
+		expect(input).toHaveValue(next);
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(replace).not.toHaveBeenCalled();
+	});
+
+	it("suppresses an actual keypad transport rejection after its authority epoch retires", async () => {
+		const gate = deferred<boolean>();
+		const store = new ProgrammingInteractionStore();
+		const replace = vi.fn();
+		const executeRequest = vi.fn(async () => { await gate.promise; throw new Error("No Selection"); });
+		const actions = createServerCommandLineActions({
+			api: { programming: { executeCommandLine: executeRequest } },
+			programmingInteractionStore: store,
+			commandLine: "G999AT50", commandLinePristine: false,
+			commandLineEpoch: { current: 0 }, commandLineWrite: { current: Promise.resolve() },
+			commandTargetModeRef: { current: "GROUP" }, setCommandTargetMode: vi.fn(),
+		} as unknown as ServerController);
+		function KeypadEnter() {
+			const keypad = useNumericPadController();
+			return <Button onClick={() => keypad.press("ENT")}>Keypad Enter</Button>;
+		}
+		render(<ProgrammingInteractionViewProvider showId={SHOW_ID} deskId={DESK_ID}
+			store={store} transport={null}
+			loadSnapshot={async () => programmingSnapshot({ command: commandLine(1, "G999AT50", "GROUP") })}
+			replaceCommandLine={replace}
+			executeCommand={({ command, target, pristine }) => actions.executeCommandLine(command, { target, pristine })}>
+			<KeypadEnter /><CommandLineBar />
+		</ProgrammingInteractionViewProvider>);
+		await act(settleSession);
+		fireEvent.click(screen.getByRole("button", { name: "Keypad Enter" }));
+		await act(settleSession);
+		expect(executeRequest).toHaveBeenCalledTimes(1);
+		act(() => {
+			store.reset(SHOW_ID, DESK_ID, "replacement-authority");
+			store.installSnapshot(programmingSnapshot({ command: commandLine(1, "F4") }));
+		});
+		await act(async () => { gate.resolve(false); await settleSession(); });
+		act(() => vi.advanceTimersByTime(1));
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(input).toHaveValue("F4");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(replace).not.toHaveBeenCalled();
+	});
 	function mountedAuthority(text = "DELETE GROUP 991", executeCommand?: () => Promise<boolean>, readText?: () => string) {
 		const transport = new FakeProgrammingTransport();
 		const replace = vi.fn();
