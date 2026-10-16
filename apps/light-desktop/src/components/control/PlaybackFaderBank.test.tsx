@@ -549,8 +549,8 @@ describe("PlaybackFaderBank layout and configuration surfaces", () => {
 		});
 		const { container } = render(<PlaybackFaderBank count={1} />);
 		const card = container.querySelector<HTMLElement>("[data-playback-slot]");
-		expect(card).toHaveTextContent("OFF");
-		expect(card).toHaveTextContent("OFF · 0%");
+		expect(card?.querySelector(".playback-summary > span")).toHaveTextContent(/^OFF$/);
+		expect(card?.querySelector(".vertical-touch-fader strong")).toHaveTextContent(/^0%$/);
 		expect(screen.queryByText("Unavailable")).toBeNull();
 		expect(screen.getByRole("slider")).toBeEnabled();
 		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
