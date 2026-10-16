@@ -398,23 +398,33 @@ export function windowClass(anchor, durationNs, window) {
 export function validateOwnedBinding(manifest, receipts, timestamp, durationNs) {
   const end = timestamp === null ? null : timestamp + Math.ceil(durationNs / 1e6);
 
-	if (timestamp === null)
-	  return false;
+  if (timestamp === null) return false;
 
-	for (let index = 0; index + 1 < receipts.length; index++) {
-	  const before = receipts[index], after = receipts[index + 1];
+  for (let index = 0; index + 1 < receipts.length; index++) {
+    const before = receipts[index],
+      after = receipts[index + 1];
 
-		if (!(before.wall_end_ms < timestamp - 6 && end + 6 < after.wall_start_ms))
-		  continue;
+    if (!(before.wall_end_ms < timestamp - 6 && end + 6 < after.wall_start_ms)) continue;
 
-		const a = before.owned.find(entry => entry.pid === manifest.child_pid);
-		const b = after.owned.find(entry => entry.pid === manifest.child_pid);
+    const a = before.owned.find((entry) => entry.pid === manifest.child_pid);
+    const b = after.owned.find((entry) => entry.pid === manifest.child_pid);
 
-		if (a && b && a.parent_pid === manifest.parent_pid && b.parent_pid === manifest.parent_pid && a.start_ticks === b.start_ticks && a.executable === b.executable && a.executable === manifest.executable)
-		  return true;
-	}
+    if (
+      a &&
+      b &&
+      a.parent_pid === manifest.parent_pid &&
+      b.parent_pid === manifest.parent_pid &&
+      (manifest.start_ticks === undefined || a.start_ticks === manifest.start_ticks) &&
+      a.start_ticks === b.start_ticks &&
+      JSON.stringify(a.ancestry) === JSON.stringify(b.ancestry) &&
+      (manifest.ancestry === undefined || JSON.stringify(a.ancestry) === JSON.stringify(manifest.ancestry)) &&
+      a.executable === b.executable &&
+      a.executable === manifest.executable
+    )
+      return true;
+  }
 
-	return false;
+  return false;
 }
 
 function summary(rows) {
@@ -636,173 +646,204 @@ export function workloadSummary(result, samples = [], state = {}) {
 	};
 }
 
-export function numericReport(
-  {
-	  mode,
-	  requests,
-	  native,
-	  server,
-	  receipts,
-	  complete = 1,
-	  observerWallNs = 0,
-	  workloadResult,
-	  workloadSamples,
-	  workloadState,
-	  serverOnly = false,
-	  serverStreamValidated = 1,
-	  observerFailureReason = 0,
+export function numericReport({
+  mode,
+  requests,
+  native,
+  server,
+  receipts,
+  complete = 1,
+  observerWallNs = 0,
+  workloadResult,
+  workloadSamples,
+  workloadState,
+  serverOnly = false,
+  serverStreamValidated = 1,
+  observerFailureReason = 0,
+  nativeInvalidCaptures = 0,
+  nativeUnverified = 0,
+  sampledNative = false,
 
-	  captureStatus = {
-		  failure_category: complete ? 0 : 1,
-		  capture_stage: 6,
-		  capture_validated: 1
-		}
-	}
-) {
+  captureStatus = {
+    failure_category: complete ? 0 : 1,
+    capture_stage: 6,
+    capture_validated: 1,
+  },
+}) {
   require_(["on", "off"].includes(mode), "invalid diagnostic mode");
-	uint(complete, 1);
-	uint(serverStreamValidated, 1);
-	uint(observerFailureReason, 6);
+  uint(complete, 1);
+  uint(serverStreamValidated, 1);
+  uint(observerFailureReason, 6);
 
-	require_(
-	  !serverOnly || (complete === 0 && native.length === 0 && captureStatus.capture_validated === 0),
-		"server-priority report must remain partial without native attribution"
-	);
+  require_(
+    !serverOnly || (complete === 0 && (sampledNative || native.length === 0) && captureStatus.capture_validated === 0),
+    "server-priority report must remain partial without native attribution",
+  );
 
-	exact(captureStatus, ["failure_category", "capture_stage", "capture_validated"]);
-	uint(captureStatus.failure_category, 3);
-	uint(captureStatus.capture_stage, 6);
-	uint(captureStatus.capture_validated, 1);
+  exact(captureStatus, ["failure_category", "capture_stage", "capture_validated"]);
+  uint(captureStatus.failure_category, 3);
+  uint(captureStatus.capture_stage, 6);
+  uint(captureStatus.capture_validated, 1);
 
-	require_(
-	  !complete || (captureStatus.capture_validated === 1 && captureStatus.capture_stage === 6 && captureStatus.failure_category === 0),
-		"complete report requires validated successful capture"
-	);
+  require_(
+    !complete ||
+      (captureStatus.capture_validated === 1 &&
+        captureStatus.capture_stage === 6 &&
+        captureStatus.failure_category === 0),
+    "complete report requires validated successful capture",
+  );
 
-	const window = qualifyWindow(requests), records = [], overhead = [], excluded = [0, 0, 0, 0, 0, 0];
+  const window = qualifyWindow(requests),
+    records = [],
+    overhead = [],
+    excluded = [0, 0, 0, 0, 0, 0];
 
-	const append = (role, child, ordinal, stage, anchor, entry, accepted = null) => records.push({
-	  role,
-	  child,
-	  sample: ordinal,
-	  stage,
-	  sampled_at_millis: anchor,
-	  accepted,
-	  ...entry
-	});
+  const append = (role, child, ordinal, stage, anchor, entry, accepted = null) =>
+    records.push({
+      role,
+      child,
+      sample: ordinal,
+      stage,
+      sampled_at_millis: anchor,
+      accepted,
+      ...entry,
+    });
 
-	if (mode === "off")
-	  require_(native.length === 0 && server.size === 0, "OFF unexpectedly emitted CPU records");
+  if (mode === "off") require_(native.length === 0 && server.size === 0, "OFF unexpectedly emitted CPU records");
 
-	for (const [index, capture] of native.entries()) {
-	  for (const [ordinal, group] of capture.groups) {
-		  const meta = group.stages.get(0).meta;
-			let classification = windowClass(meta.sampled_at_millis, group.overhead.window_wall_ns, window);
+  for (const [index, capture] of native.entries()) {
+    for (const [ordinal, group] of capture.groups) {
+      const meta = group.stages.get(0).meta;
+      let classification = windowClass(meta.sampled_at_millis, group.overhead.window_wall_ns, window);
 
-			if (classification === 0 && !validateOwnedBinding(capture.binding, receipts, meta.sampled_at_millis, group.overhead.window_wall_ns))
-			  classification = 5;
+      if (
+        classification === 0 &&
+        !validateOwnedBinding(capture.binding, receipts, meta.sampled_at_millis, group.overhead.window_wall_ns)
+      )
+        classification = 5;
 
-			if (classification !== 0) {
-			  excluded[classification]++;
-				continue;
-			}
+      if (classification !== 0) {
+        excluded[classification]++;
+        continue;
+      }
 
-			for (const [stage, value] of group.stages) append(2, index + 1, ordinal, stage, meta.sampled_at_millis, {
-			  ...value.tuple,
-			  transport: meta.transport,
-			  outcome: meta.outcome,
-			  redrawn: meta.redrawn,
-			  send_outcome: meta.send_outcome,
-			  source_before: meta.source_before,
-			  source_after: meta.source_after,
-			  presented_before: meta.presented_before,
-			  presented_after: meta.presented_after,
-			  relative_ns: meta.relative_ns
-			});
+      for (const [stage, value] of group.stages)
+        append(2, index + 1, ordinal, stage, meta.sampled_at_millis, {
+          ...value.tuple,
+          transport: meta.transport,
+          outcome: meta.outcome,
+          redrawn: meta.redrawn,
+          send_outcome: meta.send_outcome,
+          source_before: meta.source_before,
+          source_after: meta.source_after,
+          presented_before: meta.presented_before,
+          presented_after: meta.presented_after,
+          relative_ns: meta.relative_ns,
+        });
 
-			overhead.push({
-			  role: 2,
-			  child: index + 1,
-			  sample: ordinal,
-			  sampled_at_millis: meta.sampled_at_millis,
-			  export_wall_ns: group.overhead.export_wall_ns,
-			  window_wall_ns: group.overhead.window_wall_ns
-			});
-		}
-	}
+      overhead.push({
+        role: 2,
+        child: index + 1,
+        sample: ordinal,
+        sampled_at_millis: meta.sampled_at_millis,
+        export_wall_ns: group.overhead.export_wall_ns,
+        window_wall_ns: group.overhead.window_wall_ns,
+      });
+    }
+  }
 
-	for (const [ordinal, group] of server) {
-	  if (!group[0] || !group[1]) {
-		  excluded[5]++;
-			continue;
-		}
+  for (const [ordinal, group] of server) {
+    if (!group[0] || !group[1]) {
+      excluded[5]++;
+      continue;
+    }
 
-		const major = group[0], nested = group[1];
-		let classification = windowClass(major.anchor, major.tuples[0].wall_ns, window);
+    const major = group[0],
+      nested = group[1];
+    let classification = windowClass(major.anchor, major.tuples[0].wall_ns, window);
 
-		if (nested.anchor === null)
-		  classification = 3;
-		else if (major.anchor === null || nested.anchor < major.anchor - 1 || nested.anchor > major.anchor + Math.ceil(major.tuples[0].wall_ns / 1e6) + 1)
-		  classification = 5;
+    if (nested.anchor === null) classification = 3;
+    else if (
+      major.anchor === null ||
+      nested.anchor < major.anchor - 1 ||
+      nested.anchor > major.anchor + Math.ceil(major.tuples[0].wall_ns / 1e6) + 1
+    )
+      classification = 5;
 
-		const binding = receipts.find(receipt => receipt.server)?.server;
+    const binding = receipts.find((receipt) => receipt.server)?.server;
 
-		if (classification === 0 && (!binding || !validateOwnedBinding(binding, receipts, major.anchor, major.tuples[0].wall_ns)))
-		  classification = 5;
+    if (
+      classification === 0 &&
+      (!binding || !validateOwnedBinding(binding, receipts, major.anchor, major.tuples[0].wall_ns))
+    )
+      classification = 5;
 
-		if (classification !== 0) {
-		  excluded[classification]++;
-			continue;
-		}
+    if (classification !== 0) {
+      excluded[classification]++;
+      continue;
+    }
 
-		major.tuples.forEach((entry, stage) => append(1, 0, ordinal, stage, major.anchor, entry));
-		nested.tuples.forEach((entry, stage) => append(1, 0, ordinal, stage + 5, nested.anchor, entry, nested.accepted));
-	}
+    major.tuples.forEach((entry, stage) => append(1, 0, ordinal, stage, major.anchor, entry));
+    nested.tuples.forEach((entry, stage) => append(1, 0, ordinal, stage + 5, nested.anchor, entry, nested.accepted));
+  }
 
-	const report = {
-	  schema: serverOnly ? 2 : 1,
-	  mode: mode === "on" ? 1 : 0,
-	  complete,
-	  capture_partial: serverOnly ? 1 : complete ? 0 : 1,
-	  server_stream_validated: serverStreamValidated,
-	  server_capture_validated: serverStreamValidated && observerFailureReason === 0 && window.available && receipts.length === 61 && (mode === "off" || records.some(row => row.role === 1)) ? 1 : 0,
-	  native_capture_available: serverOnly ? 0 : records.some(row => row.role === 2) ? 1 : 0,
-	  native_capture_validated: serverOnly ? 0 : records.some(row => row.role === 2) ? 1 : 0,
-	  native_unavailable_reason: serverOnly ? 1 : records.some(row => row.role === 2) ? 0 : 2,
-	  native_thread_cpu_ns: null,
-	  native_export_wall_ns: null,
-	  expected_role_count: 3,
-	  pane_binding_available: 0,
-	  accepted_frame_binding_available: 0,
-	  worker_cpu_coverage: 0,
-	  runqueue_availability: 0,
-	  clock_tolerance_ms: 5,
-	  boundary_margin_ms: 6,
-	  window,
-	  observer_wall_ns: uint(observerWallNs),
+  const report = {
+    schema: serverOnly ? 2 : 1,
+    mode: mode === "on" ? 1 : 0,
+    complete,
+    capture_partial: serverOnly ? 1 : complete ? 0 : 1,
+    server_stream_validated: serverStreamValidated,
+    server_capture_validated:
+      serverStreamValidated &&
+      observerFailureReason === 0 &&
+      window.available &&
+      receipts.length === 61 &&
+      (mode === "off" || records.some((row) => row.role === 1))
+        ? 1
+        : 0,
+    native_capture_available: records.some((row) => row.role === 2) ? 1 : 0,
+    native_samples_validated: records.filter((row) => row.role === 2 && row.stage === 0).length,
+    native_generation_count: new Set(records.filter((row) => row.role === 2).map((row) => row.child)).size,
+    native_attribution_partial: complete ? 0 : 1,
+    native_lifetime_coverage_available: 0,
+    native_invalid_captures: uint(nativeInvalidCaptures),
+    native_unverified_observations: uint(nativeUnverified),
+    native_capture_validated: serverOnly ? 0 : records.some((row) => row.role === 2) ? 1 : 0,
+    native_unavailable_reason: serverOnly ? 1 : records.some((row) => row.role === 2) ? 0 : 2,
+    native_thread_cpu_ns: null,
+    native_export_wall_ns: null,
+    expected_role_count: 3,
+    pane_binding_available: 0,
+    accepted_frame_binding_available: 0,
+    worker_cpu_coverage: 0,
+    runqueue_availability: 0,
+    clock_tolerance_ms: 5,
+    boundary_margin_ms: 6,
+    window,
+    observer_wall_ns: uint(observerWallNs),
 
-	  diagnostic_status: {
-		  ...captureStatus,
-		  observer_failure_reason: observerFailureReason,
-		  completed_request_bounds: uint(requests.length, 61),
-		  owned_observations: uint(receipts.length, 61)
-		},
+    diagnostic_status: {
+      ...captureStatus,
+      observer_failure_reason: observerFailureReason,
+      completed_request_bounds: uint(requests.length, 61),
+      owned_observations: uint(receipts.length, 61),
+    },
 
-	  workload: workloadSummary(workloadResult, workloadSamples, workloadState),
-	  coordinator_final_export_overhead_available: 0,
-	  observer_measured_within_window_only: 0,
-	  records,
-	  native_export_overhead: overhead,
-	  excluded_outside: excluded[1],
-	  excluded_boundary: excluded[2],
-	  excluded_null_anchor: excluded[3],
-	  excluded_clock_unbound: excluded[4],
-	  excluded_identity_or_join: excluded[5],
-	  summaries: summary(records)
-	};
+    workload: workloadSummary(workloadResult, workloadSamples, workloadState),
+    coordinator_final_export_overhead_available: 0,
+    observer_measured_within_window_only: 0,
+    records,
+    native_export_overhead: overhead,
+    excluded_outside: excluded[1],
+    excluded_boundary: excluded[2],
+    excluded_null_anchor: excluded[3],
+    excluded_clock_unbound: excluded[4],
+    excluded_identity_or_join: excluded[5],
+    summaries: summary(records),
+  };
 
-	assertNumericOnly(report);
-	return report;
+  assertNumericOnly(report);
+  return report;
 }
 
 export function assertNumericOnly(value) {
@@ -823,28 +864,52 @@ export function assertNumericOnly(value) {
 async function privateText(filename, maximum = MAX_BYTES, permissions = 0o600) {
   const metadata = await lstat(filename);
 
-	require_(
-	  metadata.isFile() && !metadata.isSymbolicLink() && metadata.uid === process.getuid() && (metadata.mode & 0o7777) === permissions && metadata.nlink === 1 && metadata.size <= maximum,
-		"unsafe private capture file"
-	);
+  require_(
+    metadata.isFile() &&
+      !metadata.isSymbolicLink() &&
+      metadata.uid === process.getuid() &&
+      (metadata.mode & 0o7777) === permissions &&
+      metadata.nlink === 1 &&
+      metadata.size <= maximum,
+    "unsafe private capture file",
+  );
 
-	const file = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const file = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
 
-	try {
-	  const opened = await file.stat();
+  try {
+    const opened = await file.stat();
 
-		require_(
-		  opened.ino === metadata.ino && opened.dev === metadata.dev && opened.size <= maximum,
-			"private file changed identity"
-		);
+    require_(
+      opened.isFile() &&
+        opened.ino === metadata.ino &&
+        opened.dev === metadata.dev &&
+        opened.size === metadata.size &&
+        opened.mtimeMs === metadata.mtimeMs &&
+        opened.uid === metadata.uid &&
+        opened.nlink === 1 &&
+        (opened.mode & 0o7777) === permissions,
+      "private file changed identity",
+    );
 
-		return await file.readFile("utf8");
-	} finally {
-	  await file.close();
-	}
+    const text = await file.readFile("utf8");
+    const after = await file.stat();
+    require_(
+      after.ino === opened.ino &&
+        after.dev === opened.dev &&
+        after.size === opened.size &&
+        after.mtimeMs === opened.mtimeMs &&
+        after.nlink === 1 &&
+        after.uid === opened.uid &&
+        (after.mode & 0o7777) === permissions,
+      "private file changed while reading",
+    );
+    return text;
+  } finally {
+    await file.close();
+  }
 }
 
-async function drainedPrivateText(filename) {
+async function drainedPrivateText(filename, maximum = MAX_BYTES) {
   const before = await lstat(filename);
 	await new Promise(resolve => setTimeout(resolve, 100));
 	const after = await lstat(filename);
@@ -854,93 +919,110 @@ async function drainedPrivateText(filename) {
 		"private stream has not drained"
 	);
 
-	return privateText(filename);
+	return privateText(filename, maximum);
 }
 
 export class CpuDiagnosticRun extends CpuProcessObserver {
   constructor(mode, root, outputDirectory, io = {}) {
-	  super(io);
-		this.mode = mode;
-		this.root = root;
-		this.outputDirectory = outputDirectory;
-		this.directory = path.join(root, "native-cpu-private");
-		this.environment = cpuEnvironment(mode, this.directory);
-	}
+    super(io);
+    this.mode = mode;
+    this.root = root;
+    this.outputDirectory = outputDirectory;
+    this.directory = path.join(root, "native-cpu-private");
+    this.environment = cpuEnvironment(mode, this.directory);
+  }
 
-	setWorkload(result, state) {
-	  this.workload = {
-		  result,
-		  state
-		};
-	}
+  setWorkload(result, state) {
+    this.workload = {
+      result,
+      state,
+    };
+  }
 
-	async retain() {
-	  await writeFile(path.join(this.root, "typed-cpu-private-window.json"), JSON.stringify({
-		  root_pid: this.rootPid,
-		  requests: this.requests,
-		  receipts: this.receipts,
-		  observer_failure_reason: this.observerFailureReason
-		}), {
-		  flag: "wx",
-		  mode: 0o600
-		});
-	}
+  async retain() {
+    await writeFile(
+      path.join(this.root, "typed-cpu-private-window.json"),
+      JSON.stringify({
+        root_pid: this.rootPid,
+        requests: this.requests,
+        receipts: this.receipts,
+        observer_failure_reason: this.observerFailureReason,
+      }),
+      {
+        flag: "wx",
+        mode: 0o600,
+      },
+    );
+  }
 
-	async finish(evidence, failure) {
-	  await this.requireStopped();
-		const started = performance.now();
-		let server = new Map(), serverStreamValidated = 0, validationFailure;
+  async finish(evidence, failure) {
+    await this.requireStopped();
+    const started = performance.now();
+    let server = new Map(),
+      serverStreamValidated = 0,
+      validationFailure;
 
-		const captureStatus = {
-		  failure_category: failure ? 3 : 2,
-		  capture_stage: 5,
-		  capture_validated: 0
-		};
+    const captureStatus = {
+      failure_category: failure ? 3 : 2,
+      capture_stage: 5,
+      capture_validated: 0,
+    };
 
-		try {
-		  const metadata = await lstat(evidence.sidecarLogPath);
+    try {
+      const metadata = await lstat(evidence.sidecarLogPath);
 
-			require_(
-			  metadata.isFile() && !metadata.isSymbolicLink() && metadata.uid === process.getuid(),
-				"server log is not owned regular evidence"
-			);
+      require_(
+        metadata.isFile() && !metadata.isSymbolicLink() && metadata.uid === process.getuid(),
+        "server log is not owned regular evidence",
+      );
 
-			await chmod(evidence.sidecarLogPath, 0o600);
-			server = parseServerCapture(await drainedPrivateText(evidence.sidecarLogPath));
-			require_(this.mode === "off" || server.size > 0, "server diagnostic counter rows are missing");
-			serverStreamValidated = 1;
-			captureStatus.capture_stage = 6;
-		} catch (error) {
-		  server = new Map();
-			validationFailure = error;
-		}
+      await chmod(evidence.sidecarLogPath, 0o600);
+      server = parseServerCapture(await drainedPrivateText(evidence.sidecarLogPath));
+      require_(this.mode === "off" || server.size > 0, "server diagnostic counter rows are missing");
+      serverStreamValidated = 1;
+      captureStatus.capture_stage = 6;
+    } catch (error) {
+      server = new Map();
+      validationFailure = error;
+    }
 
-		const report = numericReport({
-		  mode: this.mode,
-		  requests: this.requests,
-		  native: [],
-		  server,
-		  receipts: this.receipts,
-		  complete: 0,
-		  serverOnly: true,
-		  serverStreamValidated,
-		  observerFailureReason: this.observerFailureReason,
-		  observerWallNs: add(this.observerWallNs, Math.ceil((performance.now() - started) * 1e6)),
-		  workloadResult: this.workload?.result,
-		  workloadSamples: evidence.samples,
-		  workloadState: this.workload?.state,
-		  captureStatus
-		});
+    const native =
+      this.mode === "on"
+        ? await this.nativeCaptures(this.directory, drainedPrivateText, parseNativeCapture)
+        : { captures: [], invalid: 0 };
 
-		await writeFile(path.join(this.outputDirectory, "typed-cpu-numeric.json"), `${JSON.stringify(report)}\n`, {
-		  flag: "wx",
-		  mode: 0o600
-		});
+    const report = numericReport({
+      mode: this.mode,
+      requests: this.requests,
+      native: native.captures,
+      sampledNative: true,
+      nativeInvalidCaptures: native.invalid,
+      nativeUnverified: this.nativeUnverified,
+      server,
+      receipts: this.receipts,
+      complete: 0,
+      serverOnly: true,
+      serverStreamValidated,
+      observerFailureReason: this.observerFailureReason,
+      observerWallNs: add(this.observerWallNs, Math.ceil((performance.now() - started) * 1e6)),
+      workloadResult: this.workload?.result,
+      workloadSamples: evidence.samples,
+      workloadState: this.workload?.state,
+      captureStatus,
+    });
 
-		// Native captures remain private and unparsed. Partial diagnostic exit never erases workload failure.
-		if (!failure)
-		  throw validationFailure ?? new Error("Typed CPU diagnostic partial: native CPU attribution is unavailable in server-priority capture");
-	}
+    await writeFile(path.join(this.outputDirectory, "typed-cpu-numeric.json"), `${JSON.stringify(report)}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
+
+    // Only individually owned samples are exported; unknown lifetimes keep capture partial.
+    if (!failure)
+      throw (
+        validationFailure ??
+        new Error("Typed CPU diagnostic partial: native lifetime coverage is unavailable in sampled capture")
+      );
+  }
 }
 
 export async function createCpuDiagnosticRun(mode, outputDirectory) {

@@ -525,7 +525,7 @@ test("capture-time observer verifies owned server without trusting native manife
 	};
 
 	await outside.observe(processes());
-	assert.deepEqual([...new Set(lookedUp)], ["/proc/101/exe"]);
+	assert.deepEqual([...new Set(lookedUp)], ["/proc/101/exe", "/proc/102/exe", "/proc/103/exe"]);
 	assert.ok(!lookedUp.some(file => file.includes("/999/")));
 });
 
