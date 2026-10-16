@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::{
-    AssetId, LayerState, MediaAddress, OutputId, OutputTempo, PlayMode, SourceFailure,
-    SourceStatus, Timestamp,
+    AssetId, LayerState, MediaAddress, OnceEndState, OutputId, OutputTempo, PlayMode, Presentation,
+    SourceFailure, SourceStatus, Timestamp,
 };
 use media_library::LibraryStorage;
 
@@ -20,6 +20,13 @@ use crate::MediaLoader;
 #[cfg(test)]
 use crate::loader::ClipLoader;
 use crate::session::PlaybackSession;
+
+fn completed_end_state(presentation: Presentation) -> Option<OnceEndState> {
+    match presentation {
+        Presentation::Completed { end_state, .. } => Some(end_state),
+        _ => None,
+    }
+}
 
 /// One layer's live selection.
 struct Selected {
@@ -35,6 +42,8 @@ pub struct LayerSource {
     pub asset: AssetId,
     pub frame: Option<usize>,
     pub status: SourceStatus,
+    /// Terminal visual policy is distinct from the final decoded frame and source lifecycle.
+    pub completed: Option<OnceEndState>,
     /// The source's own dimensions, which the compositor scales from.
     pub size: (u32, u32),
     /// The clip this layer showed before its current selection, while that selection is not yet
@@ -45,6 +54,7 @@ pub struct LayerSource {
 /// A previous clip a layer keeps playing while its new selection loads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HeldClip {
+    pub completed: Option<OnceEndState>,
     pub asset: AssetId,
     pub frame: Option<usize>,
     pub size: (u32, u32),
@@ -183,6 +193,7 @@ impl LayerSessions {
                     status: SourceStatus::Failed {
                         failure: failed.failure,
                     },
+                    completed: None,
                     size: (0, 0),
                     outgoing: None,
                 });
@@ -234,6 +245,7 @@ impl LayerSessions {
                     asset: AssetId::default(),
                     frame: None,
                     status: SourceStatus::Failed { failure },
+                    completed: None,
                     size: (0, 0),
                     outgoing: None,
                 });
@@ -246,6 +258,7 @@ impl LayerSessions {
                 asset: catalog_asset.unwrap_or_default(),
                 frame: None,
                 status: SourceStatus::Loading,
+                completed: None,
                 size: (0, 0),
                 outgoing,
             });
@@ -261,6 +274,7 @@ impl LayerSessions {
             asset: selected.asset,
             frame: delivery.frame,
             status: delivery.status,
+            completed: completed_end_state(delivery.presentation),
             size,
             outgoing,
         })
@@ -276,6 +290,7 @@ impl LayerSessions {
         let tempo = self.tempo.resolve(layer.playback_bpm, now);
         let delivery = outgoing.selected.session.deliver(layer, tempo, now);
         Some(HeldClip {
+            completed: completed_end_state(delivery.presentation),
             asset,
             frame: delivery.frame,
             size: self.sizes.get(&asset).copied().unwrap_or((0, 0)),
@@ -481,6 +496,33 @@ mod tests {
         LayerState {
             address: MediaAddress::new(folder, file),
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn completed_visual_policy_survives_selection_and_outgoing_switch_hold() {
+        for end_state in [
+            OnceEndState::Hold,
+            OnceEndState::Black,
+            OnceEndState::Transparent,
+        ] {
+            let mut bench = Bench::new(&format!("completed-policy-{end_state:?}"));
+            bench.add(1, 1, "First", 2);
+            bench.add(1, 2, "Second", 2);
+            bench.sessions.set_switch_hold(Duration::from_millis(300));
+            let mut layer = pointing_at(1, 1);
+            layer.play_mode = PlayMode::Once { end_state };
+            assert_eq!(bench.reconcile(&layer, 0).unwrap().completed, None);
+            let completed = bench.reconcile(&layer, 300).unwrap();
+            assert_eq!(completed.frame, Some(1));
+            assert_eq!(completed.status, SourceStatus::Completed);
+            assert_eq!(completed.completed, Some(end_state));
+            layer.address = MediaAddress::new(1, 2);
+            layer.play_mode = PlayMode::Loop;
+            let switched = bench.reconcile(&layer, 350).unwrap();
+            assert_eq!(switched.completed, None, "new selection runs independently");
+            assert_eq!(switched.outgoing.unwrap().completed, Some(end_state));
+            assert_eq!(switched.outgoing.unwrap().frame, Some(1));
         }
     }
 
@@ -702,6 +744,7 @@ mod tests {
         assert_eq!(
             switched.outgoing,
             Some(HeldClip {
+                completed: None,
                 asset: first,
                 frame: Some(5),
                 size: (320, 180),

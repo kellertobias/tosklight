@@ -8,11 +8,16 @@
 //! sessions selecting the mask's own address, so a mask loads, fails, and reports like any other
 //! source instead of being a special case that silently does nothing.
 
+use std::collections::HashMap;
+
 use media_application::MediaConfiguration;
 use media_domain::audio::Analysis;
 use media_domain::catalog::CatalogSnapshot;
 use media_domain::geometry::Size;
-use media_domain::{AddressClass, LayerState, MediaAddress, OutputState, PlayMode, Timestamp};
+use media_domain::{
+    AddressClass, LayerState, MediaAddress, OnceEndState, OutputState, PlayMode, SourceFailure,
+    Timestamp,
+};
 #[cfg(test)]
 use media_playback::ClipLoader;
 use media_playback::LayerSessions;
@@ -31,6 +36,8 @@ const GENERATED_MASK_SLOT_BASE: usize = MASTER_MASK_SLOT + 1;
 /// Which texture a prepared layer draws from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot {
+    /// Opaque terminal source, preserving the completed clip's dimensions.
+    Black(usize),
     /// An uploaded video or still frame.
     Media(usize),
     /// The previous clip a layer keeps showing while its new selection loads.
@@ -120,6 +127,8 @@ pub struct Prepared {
 
 /// One output's sessions, uploads, and generated sources.
 pub struct LayerPipeline {
+    gpu: Gpu,
+    black: HashMap<usize, SourceTexture>,
     media: LayerSessions,
     uploads: LayerSources,
     /// Textures of clips a layer is switching away from, kept apart so the incoming clip's first
@@ -139,6 +148,8 @@ impl LayerPipeline {
         size: Size,
     ) -> Self {
         Self {
+            gpu: gpu.clone(),
+            black: HashMap::new(),
             media: LayerSessions::new(output, storage.clone()),
             uploads: LayerSources::new(gpu, size),
             outgoing_uploads: LayerSources::new(gpu, size),
@@ -221,6 +232,7 @@ impl LayerPipeline {
     /// A texture a prepared slot points at.
     pub fn texture(&self, slot: Slot) -> Option<&SourceTexture> {
         match slot {
+            Slot::Black(layer) => self.black.get(&layer),
             Slot::Media(layer) => self.uploads.texture(layer),
             Slot::Outgoing(layer) => self.outgoing_uploads.texture(layer),
             Slot::Mask(layer) => self.mask_uploads.texture(layer),
@@ -297,8 +309,23 @@ impl LayerPipeline {
         match incoming {
             Ok(true) => {
                 self.end_hold(index, loader);
-                prepared.statuses.push((index, resolved.status));
-                Some(Slot::Media(index))
+                match self.presented_source(
+                    index,
+                    Slot::Media(index),
+                    resolved.completed,
+                    resolved.size,
+                ) {
+                    Ok(source) => {
+                        prepared.statuses.push((index, resolved.status));
+                        source
+                    }
+                    Err(failure) => {
+                        prepared
+                            .statuses
+                            .push((index, media_domain::SourceStatus::Failed { failure }));
+                        None
+                    }
+                }
             }
             Ok(false) => {
                 let status = if resolved.frame.is_some() {
@@ -339,12 +366,52 @@ impl LayerPipeline {
             None => Ok(self.outgoing_uploads.texture(index).is_some()),
         };
         match drawn {
-            Ok(true) => Some(Slot::Outgoing(index)),
+            Ok(true) => {
+                match self.presented_source(index, Slot::Outgoing(index), held.completed, held.size)
+                {
+                    Ok(source) => source,
+                    Err(_) => {
+                        self.end_hold(index, loader);
+                        None
+                    }
+                }
+            }
             Ok(false) => None,
             Err(_) => {
                 self.end_hold(index, loader);
                 None
             }
+        }
+    }
+
+    /// Keep terminal visual policy after decoding: Black is a real opaque source and
+    /// Transparent contributes no draw. Neither changes the authored layer or its lifecycle.
+    fn presented_source(
+        &mut self,
+        index: usize,
+        source: Slot,
+        completed: Option<OnceEndState>,
+        dimensions: (u32, u32),
+    ) -> Result<Option<Slot>, SourceFailure> {
+        match completed {
+            Some(OnceEndState::Transparent) => Ok(None),
+            Some(OnceEndState::Black) => {
+                let size = Size::new(dimensions.0, dimensions.1);
+                if !self.gpu.supports_resolution(size.width, size.height) {
+                    return Err(SourceFailure::GpuUploadFailed);
+                }
+                if self
+                    .black
+                    .get(&index)
+                    .is_none_or(|texture| texture.size() != size)
+                {
+                    let texture = SourceTexture::solid(&self.gpu, size, [0, 0, 0, 255])
+                        .map_err(|_| SourceFailure::GpuUploadFailed)?;
+                    self.black.insert(index, texture);
+                }
+                Ok(Some(Slot::Black(index)))
+            }
+            _ => Ok(Some(source)),
         }
     }
 
@@ -1074,3 +1141,7 @@ mod tests {
 #[cfg(test)]
 #[path = "layer_pipeline_effect_continuity_tests.rs"]
 mod effect_continuity_tests;
+
+#[cfg(test)]
+#[path = "layer_pipeline_once_tests.rs"]
+mod once_tests;
