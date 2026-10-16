@@ -1209,6 +1209,186 @@ describe("Shift+Record Update gestures", () => {
 });
 
 describe("shared command rejection presentation", () => {
+	function mountedAuthority(text = "DELETE GROUP 991") {
+		const transport = new FakeProgrammingTransport();
+		const replace = vi.fn();
+		const store = new ProgrammingInteractionStore();
+		const view = () => (
+			<ProgrammingInteractionViewProvider
+				showId={SHOW_ID}
+				deskId={DESK_ID}
+				store={store}
+				transport={transport}
+				loadSnapshot={loadSnapshot}
+				replaceCommandLine={replace}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>
+		);
+		const loadSnapshot = async () => programmingSnapshot({
+			command: commandLine(1, text)
+		});
+		const mounted = render(view());
+		let sequence = 10;
+		const edit = (text: string, revision: number) => act(() => transport.emit({
+			type: "event",
+			sequence: ++sequence,
+			correlationId: null,
+			change: commandChange({
+				revision,
+				text
+			})
+		}));
+		return {
+			...mounted,
+			store,
+			replace,
+			edit,
+			view
+		};
+	}
+	it.each(["FIXTURE", "F4"])("new attached authority %s replaces a retained software rejection without another write", async next => {
+		const authority = mountedAuthority();
+		await act(settleSession);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: {
+				message: "Not allowed",
+				kind: "operator",
+				command: "DELETE GROUP 991"
+			}
+		}));
+		const input = screen.getByRole("textbox", {
+			name: "Command line"
+		});
+		act(() => vi.advanceTimersByTime(2600));
+		expect(input).toHaveValue("DELETE GROUP 991");
+		expect(input).toHaveClass("rejected");
+		authority.edit("FIXTURE", 2);
+		if (next === "F4") authority.edit("F4", 3);
+		expect(input).toHaveValue(next);
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(authority.replace).not.toHaveBeenCalled();
+		expect(server.setCommandLine).not.toHaveBeenCalled();
+		expect(server.executeCommandLine).not.toHaveBeenCalled();
+	});
+	it("preserves a fresh OSC rejection across late same-command authority and unrelated updates, then clears on the next edit", async () => {
+		const previous = server.commandHistory;
+		const authority = mountedAuthority("FIXTURE");
+		await act(settleSession);
+		try {
+			server.commandHistory = [{
+				id: "osc-delete-new",
+				desk_id: DESK_ID,
+				session_id: "attached-osc",
+				command: "DELETE GROUP 991",
+				feedback: "Not allowed",
+				status: "rejected",
+				source: "osc",
+				at: new Date().toISOString()
+			}, ...previous];
+			authority.rerender(authority.view());
+			const input = screen.getByRole("textbox", {
+				name: "Command line"
+			});
+			authority.edit("DELETE GROUP 991", 2);
+			act(() => authority.store.applyChange({
+				deskId: DESK_ID,
+				selection: {
+					selected: [],
+					expression: {
+						type: "static"
+					},
+					revision: 2,
+					gestureOpen: false
+				}
+			}, 12));
+			act(() => vi.advanceTimersByTime(2600));
+			expect(input).toHaveValue("DELETE GROUP 991");
+			expect(input).toHaveClass("rejected");
+			authority.edit("F4", 3);
+			expect(input).toHaveValue("F4");
+			expect(input).not.toHaveClass("rejected");
+			expect(authority.replace).not.toHaveBeenCalled();
+		} finally {
+			server.commandHistory = previous;
+		}
+	});
+	it("does not clear a new rejection delivered in the same render as matching authority", async () => {
+		const authority = mountedAuthority("FIXTURE");
+		await act(settleSession);
+		act(() => {
+			authority.edit("DELETE GROUP 991", 2);
+			window.dispatchEvent(new CustomEvent("light:command-error", {
+				detail: {
+					message: "Not allowed",
+					kind: "operator",
+					command: "DELETE GROUP 991"
+				}
+			}));
+		});
+		const input = screen.getByRole("textbox", {
+			name: "Command line"
+		});
+		expect(input).toHaveValue("DELETE GROUP 991");
+		expect(input).toHaveClass("rejected");
+		expect(screen.getByRole("alert")).toHaveTextContent("Not allowed");
+		authority.edit("DELETE GROUP 991", 3);
+		expect(input).toHaveClass("rejected");
+		authority.edit("F4", 4);
+		expect(input).toHaveValue("F4");
+		expect(input).not.toHaveClass("rejected");
+		expect(authority.replace).not.toHaveBeenCalled();
+	});
+	it.each(["desk", "show"])("does not retain a rejected command through unavailable %s authority", async scope => {
+		const authority = mountedAuthority();
+		await act(settleSession);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: {
+				message: "Not allowed",
+				kind: "operator",
+				command: "DELETE GROUP 991"
+			}
+		}));
+		const input = screen.getByRole("textbox", {
+			name: "Command line"
+		});
+		expect(input).toHaveClass("rejected");
+		act(() => authority.store.reset(scope === "show" ? "other-show" : SHOW_ID, scope === "desk" ? "other-desk" : DESK_ID));
+		expect(input).toHaveValue("");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(authority.replace).not.toHaveBeenCalled();
+	});
+	it("ignores a fresh rejection from another desk", async () => {
+		const previous = server.commandHistory;
+		const authority = mountedAuthority();
+		await act(settleSession);
+		try {
+			server.commandHistory = [{
+				id: "other-desk-rejection",
+				desk_id: "other-desk",
+				session_id: "attached-osc",
+				command: "OTHER COMMAND",
+				feedback: "Not allowed",
+				status: "rejected",
+				source: "osc",
+				at: new Date().toISOString()
+			}, ...previous];
+			authority.rerender(authority.view());
+			expect(screen.getByRole("textbox", {
+				name: "Command line"
+			})).toHaveValue("DELETE GROUP 991");
+			expect(screen.getByRole("textbox", {
+				name: "Command line"
+			})).not.toHaveClass("rejected");
+			expect(screen.queryByRole("alert")).toBeNull();
+			expect(authority.replace).not.toHaveBeenCalled();
+		} finally {
+			server.commandHistory = previous;
+		}
+	});
+
 	it.each([
 		[
 			"FIXTURE 1 AT POSITION X DIV 30",

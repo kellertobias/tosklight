@@ -38,6 +38,7 @@ import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import {
+	useCommandRejectionEdits,
 	useOSCCommandRejections,
 	useUnexpectedCommandHistory,
 } from "./commandLine/useCommandRejectionHistory";
@@ -259,6 +260,7 @@ function useCommandLineBarModel() {
 	const [completed, setCompleted] = useCompletedCommand(command.pristine);
 	const editGeneration = useRef(0);
 	const errors = useCommandErrors(setCompleted);
+	useCommandRejectionEdits(errors);
 	useOSCCommandRejections(
 		authoritativeHistory,
 		errors.setCommandError,
