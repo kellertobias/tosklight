@@ -45,6 +45,8 @@ pub struct Compositor {
     size: Size,
     program: wgpu::Texture,
     program_view: wgpu::TextureView,
+    /// Isolated captures must not replace the last full Program between presentations.
+    layer_preview_program: Option<(wgpu::Texture, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
     layer_pipeline: wgpu::RenderPipeline,
     overlay_pipeline: wgpu::RenderPipeline,
@@ -153,6 +155,7 @@ impl Compositor {
             size,
             program,
             program_view,
+            layer_preview_program: None,
             sampler: device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("media-source"),
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -202,6 +205,7 @@ impl Compositor {
         let (program, view) = program_target(&self.gpu.device, size);
         self.program = program;
         self.program_view = view;
+        self.layer_preview_program = None;
         let (backdrop, backdrop_view) = backdrop_target(&self.gpu.device, size);
         self.backdrop = backdrop;
         self.backdrop_view = backdrop_view;
@@ -277,6 +281,14 @@ impl Compositor {
         output_id: OutputId,
         now: Timestamp,
     ) {
+        // The window can retain its last successful presentation while acquisition is skipped.
+        // Program-only readback must still see that full composite after any isolated capture.
+        let (mut program, mut view) = self
+            .layer_preview_program
+            .take()
+            .unwrap_or_else(|| program_target(&self.gpu.device, self.size));
+        std::mem::swap(&mut self.program, &mut program);
+        std::mem::swap(&mut self.program_view, &mut view);
         self.render_internal(
             &[layer],
             &MasterState::default(),
@@ -289,6 +301,9 @@ impl Compositor {
             None,
             None,
         );
+        std::mem::swap(&mut self.program, &mut program);
+        std::mem::swap(&mut self.program_view, &mut view);
+        self.layer_preview_program = Some((program, view));
     }
 
     #[allow(clippy::too_many_arguments)]
