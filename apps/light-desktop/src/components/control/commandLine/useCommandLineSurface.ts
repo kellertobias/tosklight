@@ -1,5 +1,5 @@
 import type { CommandPoolTapProjection } from "../../../api/types";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { CommandTarget } from "../../../features/programmingInteraction/contracts";
 import { selectedGroupId, selectedGroupIds } from "../../../features/programmingInteraction/contracts";
 import {
@@ -35,6 +35,8 @@ export function useCommandLineSurface({
 	const selectionProjection = useProgrammingSelectionView(selection && enabled);
 	const actions = useProgrammingCommandLineActions();
 	const store = useProgrammingInteractionStore();
+	const authority = useRef({ store, enabled, hasActions: actions !== null });
+	authority.current = { store, enabled, hasActions: actions !== null };
 	const authoritative = useProgrammingCommandLineReady(enabled);
 	const ready = authoritative && actions !== null;
 	const text = projection?.text ?? NOT_READY.text;
@@ -74,15 +76,21 @@ export function useCommandLineSurface({
 	const execute = useCallback(
 		async (value?: string, poolTap?: CommandPoolTapProjection) => {
 			if (!writable() || !actions) return false;
+			const scope = store.captureScope();
+			// Callback refreshes can recreate the actions facade within the same authority.
+			const isCurrent = () => authority.current.enabled &&
+				authority.current.store === store && authority.current.hasActions &&
+				store.isScopeCurrent(scope);
 			const outcome = await (poolTap
 				? actions.execute(value, poolTap)
 				: actions.execute(value));
+			if (!isCurrent()) return false;
 			if (outcome.report === "concurrent_change")
 				reportConcurrentCommandChange();
-			if (outcome.report === "unreconciled") reportUnreconciledCommand();
+			if (outcome.report === "unreconciled") reportUnreconciledCommand(isCurrent);
 			return outcome.executed;
 		},
-		[actions, writable],
+		[actions, writable, store],
 	);
 	const cancelChoice = useCallback(
 		() =>
@@ -115,8 +123,9 @@ function reportConcurrentCommandChange() {
 	);
 }
 
-function reportUnreconciledCommand() {
+function reportUnreconciledCommand(isCurrent: () => boolean) {
 	globalThis.setTimeout(() => {
+		if (!isCurrent()) return;
 		window.dispatchEvent(
 			new CustomEvent("light:command-error", {
 				detail:

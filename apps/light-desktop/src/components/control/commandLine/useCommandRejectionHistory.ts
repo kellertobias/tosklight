@@ -23,14 +23,15 @@ export function useCommandRejectionEdits({
 }) {
 	const store = useProgrammingInteractionStore();
 	const { showId, deskId, commandLine } = store.getSnapshot();
-	const current = { store, showId, deskId, commandLine, errorRevision };
+	const authorityScope = store.captureScope();
+	const current = { store, showId, deskId, authorityScope, commandLine, errorRevision };
 	const previous = useRef(current);
 	useEffect(() => {
 		const before = previous.current;
 		previous.current = current;
 		if (!message) return;
 		const scopeChanged =
-			before.store !== store ||
+			before.store !== store || before.authorityScope !== authorityScope ||
 			before.showId !== showId ||
 			before.deskId !== deskId;
 		const lostAuthority = before.commandLine !== null && commandLine === null;
@@ -47,7 +48,7 @@ export function useCommandRejectionEdits({
 			(edited && !newRejection && commandLine?.text !== rejectedCommand)
 		) updateError(null);
 	}, [
-		store, showId, deskId, commandLine, message,
+		store, showId, deskId, authorityScope, commandLine, message,
 		errorRevision, rejectedCommand, updateError,
 	]);
 }
@@ -58,14 +59,17 @@ export function useOSCCommandRejections(
 	updateError: UpdateError,
 	setCompleted: Dispatch<SetStateAction<boolean>>,
 ) {
-	const { showId, deskId } = useProgrammingInteractionStore().getSnapshot();
-	const scope = useRef({ showId, deskId });
+	const store = useProgrammingInteractionStore();
+	const { showId, deskId } = store.getSnapshot();
+	const authorityScope = store.captureScope();
+	const scope = useRef({ store, showId, deskId, authorityScope });
 	const seenHistoryId = useRef(history[0]?.id);
 	const mountedAt = useRef(Date.now());
 	useEffect(() => {
 		const latest = history[0];
-		if (scope.current.showId !== showId || scope.current.deskId !== deskId) {
-			scope.current = { showId, deskId };
+		if (scope.current.store !== store || scope.current.authorityScope !== authorityScope ||
+			scope.current.showId !== showId || scope.current.deskId !== deskId) {
+			scope.current = { store, showId, deskId, authorityScope };
 			seenHistoryId.current = latest?.id;
 			mountedAt.current = Date.now();
 			return;
@@ -82,7 +86,7 @@ export function useOSCCommandRejections(
 			updateError(feedback.message, feedback.kind, latest.command);
 			setCompleted(false);
 		} else updateError(null);
-	}, [history, showId, deskId, updateError, setCompleted]);
+	}, [history, store, showId, deskId, authorityScope, updateError, setCompleted]);
 }
 
 /** Ordinary mistakes never open the larger history panel automatically. */

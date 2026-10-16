@@ -1209,7 +1209,7 @@ describe("Shift+Record Update gestures", () => {
 });
 
 describe("shared command rejection presentation", () => {
-	function mountedAuthority(text = "DELETE GROUP 991") {
+	function mountedAuthority(text = "DELETE GROUP 991", executeCommand?: () => Promise<boolean>, readText?: () => string) {
 		const transport = new FakeProgrammingTransport();
 		const replace = vi.fn();
 		const store = new ProgrammingInteractionStore();
@@ -1221,12 +1221,14 @@ describe("shared command rejection presentation", () => {
 				transport={transport}
 				loadSnapshot={loadSnapshot}
 				replaceCommandLine={replace}
+				executeCommand={executeCommand}
 			>
 				<CommandLineBar />
 			</ProgrammingInteractionViewProvider>
 		);
+		let snapshotRevision = 0;
 		const loadSnapshot = async () => programmingSnapshot({
-			command: commandLine(1, text)
+			command: commandLine(++snapshotRevision, readText?.() ?? text)
 		});
 		const mounted = render(view());
 		let sequence = 10;
@@ -1247,6 +1249,231 @@ describe("shared command rejection presentation", () => {
 			view
 		};
 	}
+	it.each(["rejected", "reset"])("keeps an unlabelled operator rejection through %s execution reconciliation without opening diagnostics", async reconciliation => {
+		const outcome = deferred<boolean>();
+		const execute = vi.fn(() => outcome.promise);
+		const invalid = "FIXTURE 2 THRU 3 + 1 AT NOPE";
+		let authoritative = invalid;
+		const authority = mountedAuthority(invalid, execute, () => authoritative);
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		expect(execute).toHaveBeenCalledTimes(1);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "level must be a percentage or FULL", kind: "operator" }
+		}));
+		if (reconciliation === "reset") authoritative = "FIXTURE";
+		await act(async () => { outcome.resolve(false); await settleSession(); });
+		expect(input).toHaveValue(invalid);
+		expect(input).toHaveClass("rejected");
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(screen.getByRole("alert")).toHaveTextContent("level must be a percentage or FULL");
+		act(() => vi.advanceTimersByTime(2600));
+		expect(input).toHaveValue(invalid);
+		expect(input).toHaveClass("rejected");
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(authority.replace).not.toHaveBeenCalled();
+		authority.edit("F4", 3);
+		expect(input).toHaveValue("F4");
+		expect(input).not.toHaveClass("rejected");
+	});
+	it("does not replace dismissed operator feedback with diagnostics when a real attached edit precedes the failed result", async () => {
+		const outcome = deferred<boolean>();
+		let authoritative = "FIXTURE 2 THRU 3 + 1 AT NOPE";
+		const authority = mountedAuthority(authoritative, () => outcome.promise, () => authoritative);
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "level must be a percentage or FULL", kind: "operator" }
+		}));
+		authoritative = "F4";
+		authority.edit(authoritative, 2);
+		await act(async () => { outcome.resolve(false); await settleSession(); });
+		expect(input).toHaveValue("F4");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(authority.replace).not.toHaveBeenCalled();
+	});
+	it.each([false, true])("retains real execution diagnostics when feedback was reported: %s", async reported => {
+		const outcome = deferred<boolean>();
+		const authority = mountedAuthority("FIXTURE 1", () => outcome.promise);
+		await act(settleSession);
+		fireEvent.keyDown(screen.getByRole("textbox", { name: "Command line" }), { key: "Enter" });
+		await act(settleSession);
+		if (reported) fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "Invalid server response\ndiagnostic detail", kind: "unexpected" }
+		}));
+		await act(async () => { outcome.resolve(false); await settleSession(); });
+		expect(screen.getByRole("dialog", { name: "Command line history" })).toBeInTheDocument();
+		if (reported) expect(screen.getByRole("alert")).toHaveTextContent("diagnostic detail");
+		else expect(screen.getByRole("alert")).toHaveTextContent("The command could not be executed.");
+		expect(authority.replace).not.toHaveBeenCalled();
+	});
+	it.each([false, true])("isolates a new writer from an old pending execution when new feedback is reported: %s", async reported => {
+		const oldOutcome = deferred<boolean>(), newOutcome = deferred<boolean>();
+		const oldExecute = vi.fn(() => oldOutcome.promise), newExecute = vi.fn(() => newOutcome.promise);
+		const stores = [new ProgrammingInteractionStore(), new ProgrammingInteractionStore()];
+		const replace = vi.fn();
+		const view = (index: number) => (
+			<ProgrammingInteractionViewProvider
+				showId={index ? "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" : SHOW_ID}
+				deskId={DESK_ID}
+				store={stores[index]}
+				transport={null}
+				loadSnapshot={async () => programmingSnapshot({ command: commandLine(1, `FIXTURE ${index + 1}`) })}
+				replaceCommandLine={replace}
+				executeCommand={index ? newExecute : oldExecute}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>
+		);
+		const mounted = render(view(0));
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "old operator rejection", kind: "operator" }
+		}));
+		mounted.rerender(view(1));
+		await act(settleSession);
+		expect(input).not.toHaveClass("rejected");
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		if (reported) fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "new operator rejection", kind: "operator" }
+		}));
+		await act(async () => { newOutcome.resolve(false); await settleSession(); });
+		expect(input).toHaveValue("FIXTURE 2");
+		if (reported) {
+			expect(input).toHaveClass("rejected");
+			expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+			expect(screen.getByRole("alert")).toHaveTextContent("new operator rejection");
+		} else expect(screen.getByRole("dialog", { name: "Command line history" })).toBeInTheDocument();
+		await act(async () => { oldOutcome.resolve(false); await settleSession(); });
+		expect(input).toHaveValue("FIXTURE 2");
+		expect(oldExecute).toHaveBeenCalledTimes(1);
+		expect(newExecute).toHaveBeenCalledTimes(1);
+		expect(replace).not.toHaveBeenCalled();
+	});
+	it("discards an old scope's unreported failed execution result instead of opening new-scope diagnostics", async () => {
+		const outcome = deferred<boolean>();
+		const execute = vi.fn(() => outcome.promise), replace = vi.fn();
+		const stores = [new ProgrammingInteractionStore(), new ProgrammingInteractionStore()];
+		const view = (index: number) => (
+			<ProgrammingInteractionViewProvider
+				showId={index ? "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" : SHOW_ID}
+				deskId={DESK_ID}
+				store={stores[index]}
+				transport={null}
+				loadSnapshot={async () => programmingSnapshot({ command: commandLine(1, `FIXTURE ${index + 1}`) })}
+				replaceCommandLine={replace}
+				executeCommand={execute}
+			>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>
+		);
+		const mounted = render(view(0));
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		mounted.rerender(view(1));
+		await act(settleSession);
+		expect(input).toHaveValue("FIXTURE 2");
+		await act(async () => { outcome.resolve(false); await settleSession(); });
+		act(() => vi.advanceTimersByTime(1));
+		expect(input).toHaveValue("FIXTURE 2");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(execute).toHaveBeenCalledTimes(1);
+		expect(replace).not.toHaveBeenCalled();
+	});
+	it("retains current-scope unreconciled diagnostics after scheduled delivery", async () => {
+		const outcome = deferred<boolean>();
+		let unavailable = false;
+		const authority = mountedAuthority("FIXTURE 1", () => outcome.promise, () => {
+			if (unavailable) throw new Error("snapshot unavailable");
+			return "FIXTURE 1";
+		});
+		await act(settleSession);
+		fireEvent.keyDown(screen.getByRole("textbox", { name: "Command line" }), { key: "Enter" });
+		await act(settleSession);
+		unavailable = true;
+		await act(async () => { outcome.resolve(true); await settleSession(); });
+		act(() => vi.advanceTimersByTime(1));
+		expect(screen.getByRole("dialog", { name: "Command line history" })).toBeInTheDocument();
+		expect(screen.getByRole("alert")).toHaveTextContent("could not be synchronized");
+		expect(authority.replace).not.toHaveBeenCalled();
+	});
+	it("accepts a current-scope execution after its action facade refreshes", async () => {
+		const outcome = deferred<boolean>();
+		const execute = vi.fn(() => outcome.promise), replace = vi.fn();
+		const store = new ProgrammingInteractionStore();
+		let projection = commandLine(1, "FIXTURE 1");
+		const loadSnapshot = async () => programmingSnapshot({ command: projection });
+		const view = () => (
+			<ProgrammingInteractionViewProvider showId={SHOW_ID} deskId={DESK_ID}
+				store={store} transport={null} loadSnapshot={loadSnapshot}
+				replaceCommandLine={replace} executeCommand={() => execute()}>
+				<CommandLineBar />
+			</ProgrammingInteractionViewProvider>
+		);
+		const mounted = render(view());
+		await act(settleSession);
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		fireEvent.keyDown(input, { key: "Enter" });
+		await act(settleSession);
+		mounted.rerender(view());
+		projection = commandLine(2, "FIXTURE");
+		await act(async () => { outcome.resolve(true); await settleSession(); });
+		expect(input).toHaveValue("FIXTURE");
+		expect(input).toHaveClass("completed");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("dialog", { name: "Command line history" })).toBeNull();
+		expect(execute).toHaveBeenCalledTimes(1);
+		expect(replace).not.toHaveBeenCalled();
+	});
+	it("clears feedback across a batched authority epoch replacement with the same show, desk and command", async () => {
+		const authority = mountedAuthority();
+		await act(settleSession);
+		fireEvent(window, new CustomEvent("light:command-error", {
+			detail: { message: "Not allowed", kind: "operator", command: "DELETE GROUP 991" }
+		}));
+		const input = screen.getByRole("textbox", { name: "Command line" });
+		expect(input).toHaveClass("rejected");
+		act(() => {
+			authority.store.reset(SHOW_ID, DESK_ID, "replacement-authority");
+			authority.store.installSnapshot(programmingSnapshot({ command: commandLine(1, "DELETE GROUP 991") }));
+		});
+		expect(input).toHaveValue("DELETE GROUP 991");
+		expect(input).not.toHaveClass("rejected");
+		expect(screen.queryByRole("alert")).toBeNull();
+		expect(authority.replace).not.toHaveBeenCalled();
+	});
+	it("does not replay retained OSC history from a replaced authority epoch", async () => {
+		const previous = server.commandHistory;
+		const authority = mountedAuthority("FIXTURE");
+		await act(settleSession);
+		try {
+			act(() => {
+				server.commandHistory = [{ id: "replacement-history", desk_id: DESK_ID,
+					session_id: "old-authority", command: "OLD COMMAND", feedback: "Not allowed",
+					status: "rejected", source: "osc", at: new Date().toISOString() }, ...previous];
+				authority.store.reset(SHOW_ID, DESK_ID, "replacement-authority");
+				authority.store.installSnapshot(programmingSnapshot({ command: commandLine(1, "FIXTURE") }));
+			});
+			expect(screen.getByRole("textbox", { name: "Command line" })).toHaveValue("FIXTURE");
+			expect(screen.getByRole("textbox", { name: "Command line" })).not.toHaveClass("rejected");
+			expect(screen.queryByRole("alert")).toBeNull();
+			expect(authority.replace).not.toHaveBeenCalled();
+		} finally { server.commandHistory = previous; }
+	});
 	it.each(["FIXTURE", "F4"])("new attached authority %s replaces a retained software rejection without another write", async next => {
 		const authority = mountedAuthority();
 		await act(settleSession);
