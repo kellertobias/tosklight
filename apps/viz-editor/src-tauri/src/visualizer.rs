@@ -24,6 +24,49 @@ impl VisualizerLauncher {
             child: Mutex::new(None),
         }
     }
+
+    /// Stop only the renderer launched by this editor and reap its process handle.
+    pub fn stop(&self) -> Result<(), String> {
+        let mut current = self.child.lock();
+        let Some(child) = current.as_mut() else {
+            return Ok(());
+        };
+        if child
+            .try_wait()
+            .map_err(|error| format!("could not inspect the visualizer during shutdown: {error}"))?
+            .is_none()
+        {
+            if let Err(error) = child.kill() {
+                // The process may have exited between the preceding inspection and kill.
+                match child.try_wait() {
+                    Ok(Some(_)) => {}
+                    Ok(None) => {
+                        return Err(format!(
+                            "could not stop the visualizer during shutdown: {error}"
+                        ));
+                    }
+                    Err(inspect) => {
+                        return Err(format!(
+                            "could not stop the visualizer during shutdown: {error}; could not inspect it again: {inspect}"
+                        ));
+                    }
+                }
+            }
+            child.wait().map_err(|error| {
+                format!("could not reap the visualizer during shutdown: {error}")
+            })?;
+        }
+        *current = None;
+        Ok(())
+    }
+}
+
+impl Drop for VisualizerLauncher {
+    fn drop(&mut self) {
+        if let Err(error) = self.stop() {
+            eprintln!("{error}");
+        }
+    }
 }
 
 #[tauri::command]
@@ -223,11 +266,89 @@ fn existing(path: PathBuf) -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use super::VisualizerLauncher;
     use super::{
         RendererSettings, existing, reuse_running_child, visualizer_arguments, visualizer_command,
     };
     use std::net::{Ipv4Addr, SocketAddr};
     use std::path::Path;
+
+    #[cfg(unix)]
+    fn owned_test_child(seconds: &str) -> (VisualizerLauncher, u32) {
+        let child = std::process::Command::new("/bin/sleep")
+            .arg(seconds)
+            .spawn()
+            .expect("bounded test child starts");
+        let pid = child.id();
+        let launcher = VisualizerLauncher::new(SocketAddr::from((Ipv4Addr::LOCALHOST, 1)));
+        *launcher.child.lock() = Some(child);
+        (launcher, pid)
+    }
+
+    #[cfg(unix)]
+    fn process_state(pid: u32) -> String {
+        let output = std::process::Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "stat="])
+            .output()
+            .expect("inspect the exact test process");
+        String::from_utf8(output.stdout)
+            .expect("ASCII process state")
+            .trim()
+            .to_owned()
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stopping_terminates_and_reaps_only_the_owned_child() {
+        let (launcher, pid) = owned_test_child("30");
+        let (other, other_pid) = owned_test_child("30");
+        launcher.stop().expect("owned renderer stops");
+        assert!(process_state(pid).is_empty(), "owned process is reaped");
+        assert!(
+            !process_state(other_pid).is_empty(),
+            "another renderer stays alive"
+        );
+        other.stop().expect("test cleanup");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stopping_twice_and_stopping_without_a_renderer_are_harmless() {
+        let (launcher, _) = owned_test_child("30");
+        launcher.stop().expect("first stop");
+        launcher.stop().expect("repeated stop");
+        VisualizerLauncher::new(SocketAddr::from((Ipv4Addr::LOCALHOST, 1)))
+            .stop()
+            .expect("nothing launched");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn stopping_reaps_a_renderer_that_already_exited() {
+        let (launcher, pid) = owned_test_child("0");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !process_state(pid).starts_with('Z') {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "bounded child must exit"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        launcher.stop().expect("exited renderer reaped");
+        assert!(process_state(pid).is_empty());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn dropping_the_launcher_terminates_and_reaps_its_renderer() {
+        let (launcher, pid) = owned_test_child("30");
+        drop(launcher);
+        assert!(
+            process_state(pid).is_empty(),
+            "Drop reaps the owned renderer"
+        );
+    }
 
     #[test]
     fn configured_visualizer_must_be_a_file() {

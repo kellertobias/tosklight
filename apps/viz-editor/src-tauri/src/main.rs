@@ -424,8 +424,18 @@ fn main() {
             venue_models::import_venue_model,
         ])
         .setup(setup_editor)
-        .run(tauri::generate_context!())
-        .expect("failed to run the ToskLight Viz editor")
+        .build(tauri::generate_context!())
+        .expect("failed to build the ToskLight Viz editor")
+        .run(|app, event| {
+            // ExitRequested can still be cancelled; only terminal exit owns this cleanup.
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(launcher) = app.try_state::<visualizer::VisualizerLauncher>() {
+                    if let Err(error) = launcher.stop() {
+                        eprintln!("{error}");
+                    }
+                }
+            }
+        })
 }
 
 #[cfg(test)]
