@@ -16,6 +16,7 @@
 mod atmosphere;
 mod bracket;
 mod diagnostics;
+pub mod input_monitor;
 mod model;
 mod persistence;
 mod points;

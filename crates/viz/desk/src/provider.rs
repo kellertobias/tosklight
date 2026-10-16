@@ -159,6 +159,7 @@ pub struct DeskProvider {
     worker: Option<std::thread::JoinHandle<()>>,
     receivers: Option<DmxReceiver>,
     decoder: Option<Decoder>,
+    monitor_frames: Option<std::collections::BTreeMap<u16, Vec<u8>>>,
     scene: Option<viz_scene::Scene>,
     values: SceneValues,
     diagnostics: ProviderDiagnostics,
@@ -247,6 +248,7 @@ impl DeskProvider {
             worker,
             receivers: None,
             decoder: None,
+            monitor_frames: None,
             scene: None,
             values: SceneValues::default(),
             diagnostics: ProviderDiagnostics::default(),
@@ -296,6 +298,9 @@ impl DeskProvider {
             .listens_on_the_network()
             .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
         self.mappings = mappings;
+        if let Some(frames) = &mut self.monitor_frames {
+            frames.clear();
+        }
         self.values = SceneValues::default();
         self.values.resize(scene.emitters.len());
         apply_selection(&mut self.values, &self.selection);
@@ -354,6 +359,9 @@ impl DeskProvider {
                 .listens_on_the_network()
                 .then(|| DmxReceiver::start(mappings.clone(), self.epoch));
             self.mappings = mappings;
+            if let Some(frames) = &mut self.monitor_frames {
+                frames.clear();
+            }
             self.reported_input_micros = 0;
         } else if let Some(receivers) = &self.receivers {
             // The bindings are new; every held universe has to be decoded through them again.
@@ -619,6 +627,16 @@ impl SceneProvider for DeskProvider {
             (&self.receivers, &mut self.decoder, &self.scene)
         {
             let frames = receivers.drain_changed();
+            if let Some(observed) = &mut self.monitor_frames {
+                for frame in &frames {
+                    if frame.received_micros > 0
+                        && (observed.len() < viz_scene::input_monitor::MAX_MONITOR_UNIVERSES
+                            || observed.contains_key(&frame.logical_universe))
+                    {
+                        observed.insert(frame.logical_universe, frame.slots.to_vec());
+                    }
+                }
+            }
             let elapsed = self.epoch.elapsed().as_secs_f32();
             if !frames.is_empty() {
                 decoder.apply(scene, &frames, &mut self.values, elapsed);
@@ -671,6 +689,57 @@ impl SceneProvider for DeskProvider {
 
     fn update_renderer_settings(&mut self, intent: viz_scene::RendererSettingsIntent) {
         let _ = self.commands.send(Command::RendererSettings(intent));
+    }
+
+    fn set_input_monitoring(&mut self, enabled: bool) {
+        self.monitor_frames = enabled.then(std::collections::BTreeMap::new);
+        if enabled && let Some(receiver) = &self.receivers {
+            receiver.refresh_all();
+        }
+    }
+
+    fn input_monitor_snapshot(&self) -> Option<viz_scene::input_monitor::MonitorSnapshot> {
+        use viz_scene::input_monitor::{MonitorContext, MonitorSnapshot, ReceivedDmx};
+        if self.mappings.len() > viz_scene::input_monitor::MAX_MONITOR_INPUTS
+            || self
+                .mappings
+                .iter()
+                .filter(|mapping| mapping.enabled)
+                .map(|mapping| mapping.logical_universe)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                > viz_scene::input_monitor::MAX_MONITOR_UNIVERSES
+        {
+            return None;
+        }
+        let frames = self.monitor_frames.as_ref()?;
+        let scene = self.scene.as_ref()?;
+        let receiver = self.receivers.as_ref()?;
+        Some(MonitorSnapshot {
+            version: 1,
+            generated_millis: viz_scene::input_monitor::unix_millis(),
+            context: MonitorContext {
+                producer: "network_receiver".into(),
+                endpoint: scene.source_identity.clone(),
+                show_id: scene.show_id,
+                show_revision: scene.source_show_revision,
+                mappings: self
+                    .mappings
+                    .iter()
+                    .map(|mapping| format!("{mapping:?}"))
+                    .collect(),
+            },
+            received: ReceivedDmx::from_receiver(
+                frames,
+                self.mappings
+                    .iter()
+                    .filter(|mapping| mapping.enabled)
+                    .map(|mapping| mapping.logical_universe),
+                receiver.universes(),
+                receiver.status(),
+                Vec::new(),
+            ),
+        })
     }
 
     fn shutdown(&mut self) {
@@ -1021,3 +1090,6 @@ use event_stream::watch;
 #[cfg(test)]
 #[path = "provider_tests.rs"]
 mod provider_tests;
+
+#[cfg(test)]
+mod input_monitor_tests;

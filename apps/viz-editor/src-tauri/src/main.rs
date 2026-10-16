@@ -244,7 +244,14 @@ fn prepare_local_visualizer(app: &tauri::App) -> Result<(), String> {
             eprintln!("local visualizer scene source on {address}: {error}");
         }
     });
-    app.manage(visualizer::VisualizerLauncher::new(address));
+    app.manage(visualizer::VisualizerLauncher::for_editor_launch(
+        address,
+        scene_address(),
+        std::env::var(viz_scene::input_monitor::MONITOR_ENV)
+            .ok()
+            .as_deref(),
+        std::io::stdin(),
+    ));
     Ok(())
 }
 

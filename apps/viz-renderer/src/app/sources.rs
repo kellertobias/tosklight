@@ -59,7 +59,13 @@ impl Application {
 
     pub(super) fn start_session(&mut self) {
         let (provider, kind) = self.build_provider();
-        self.session = Some(Session::new(provider, kind, self.epoch));
+        let mut session = Session::new(provider, kind, self.epoch);
+        session.set_child_input_monitor(
+            self.planning_window
+                .as_ref()
+                .map(|window| window.input_monitor()),
+        );
+        self.session = Some(session);
     }
 
     /// Build the provider the current preferences select. Demo mode hosts the canonical show file
@@ -249,6 +255,13 @@ impl Application {
             session.replace_provider(provider, kind);
         } else {
             self.session = Some(Session::new(provider, kind, self.epoch));
+        }
+        if let Some(session) = self.session.as_mut() {
+            session.set_child_input_monitor(
+                self.planning_window
+                    .as_ref()
+                    .map(|window| window.input_monitor()),
+            );
         }
     }
 }

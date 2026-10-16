@@ -11,6 +11,7 @@ mod demo;
 mod effects;
 mod embedded;
 mod helper_source;
+mod input_monitor;
 mod lasers;
 mod physics;
 

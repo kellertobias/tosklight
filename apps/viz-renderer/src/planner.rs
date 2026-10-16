@@ -18,6 +18,7 @@ use std::process::{Child, Command, Stdio};
 pub struct PlanningWindow {
     child: Child,
     port: u16,
+    input_monitor: crate::input_monitor::InputMonitor,
 }
 
 impl PlanningWindow {
@@ -26,15 +27,33 @@ impl PlanningWindow {
         let binary = editor_binary()?;
         let port = free_port()?;
         let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-        let child = Command::new(&binary)
-            .arg("--serve")
-            .arg(address.to_string())
-            .stdin(Stdio::null())
+        let mut command = Command::new(&binary);
+        command.arg("--serve").arg(address.to_string());
+        Self::launch(command, port)
+    }
+
+    fn launch(mut command: Command, port: u16) -> Result<Self, String> {
+        let mut child = command
+            .env(viz_scene::input_monitor::MONITOR_ENV, "stdin")
+            .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|error| format!("could not start {}: {error}", binary.display()))?;
-        Ok(Self { child, port })
+            .map_err(|error| format!("could not start planning window: {error}"))?;
+        let Some(input) = child.stdin.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("the planning window has no passive DMX monitor pipe".into());
+        };
+        Ok(Self {
+            child,
+            port,
+            input_monitor: crate::input_monitor::InputMonitor::with_writer(input),
+        })
+    }
+
+    pub fn input_monitor(&self) -> crate::input_monitor::InputMonitor {
+        self.input_monitor.clone()
     }
 
     pub const fn port(&self) -> u16 {
@@ -310,5 +329,100 @@ mod tests {
         let first = free_port().expect("first");
         let second = free_port().expect("second");
         assert!(first > 0 && second > 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn stdin_monitor_child_fixture() {
+        use std::io::BufRead;
+        assert_eq!(
+            std::env::var(viz_scene::input_monitor::MONITOR_ENV).unwrap(),
+            "stdin"
+        );
+        let mut input = std::io::stdin().lock();
+        for revision in [7, 8] {
+            let mut line = String::new();
+            input.read_line(&mut line).unwrap();
+            let snapshot: viz_scene::input_monitor::MonitorSnapshot =
+                serde_json::from_str(&line).unwrap();
+            assert!(snapshot.validate());
+            assert_eq!(snapshot.context.show_revision, revision);
+            assert_eq!(
+                snapshot.received.universes[0].slots.as_ref().unwrap(),
+                &vec![123; 512]
+            );
+        }
+    }
+
+    #[test]
+    fn owned_editor_input_monitor_stdin_survives_session_handle_replacement_and_reaps_child() {
+        use std::time::{Duration, Instant};
+        use viz_scene::input_monitor::{
+            MonitorContext, MonitorSnapshot, ReceivedDmx, ReceivedUniverse,
+        };
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command.args([
+            "--exact",
+            "planner::tests::stdin_monitor_child_fixture",
+            "--ignored",
+            "--nocapture",
+        ]);
+        let mut window = PlanningWindow::launch(command, 1234).unwrap();
+        let snapshot = |revision| MonitorSnapshot {
+            version: 1,
+            generated_millis: viz_scene::input_monitor::unix_millis(),
+            context: MonitorContext {
+                producer: "network_receiver".into(),
+                endpoint: "http://127.0.0.1:1234".into(),
+                show_id: None,
+                show_revision: revision,
+                mappings: vec![],
+            },
+            received: ReceivedDmx {
+                universes: vec![ReceivedUniverse {
+                    universe: 1,
+                    slots: Some(vec![123; 512]),
+                    live: true,
+                    rate_hz: 44.0,
+                    protocol: Some("artnet".into()),
+                }],
+                inputs: vec![],
+                warnings: vec![],
+            },
+        };
+        let session_handle = window.input_monitor();
+        let queued = Instant::now() + Duration::from_secs(2);
+        while !session_handle.publish(snapshot(7)) {
+            assert!(Instant::now() < queued);
+            std::thread::yield_now();
+        }
+        // Wait for the first pending message to be taken before publishing the replacement.
+        let until = Instant::now() + Duration::from_secs(2);
+        while session_handle.has_pending_observation() {
+            assert!(Instant::now() < until);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        drop(session_handle);
+        let replacement = window.input_monitor();
+        let queued = Instant::now() + Duration::from_secs(2);
+        while !replacement.publish(snapshot(8)) {
+            assert!(Instant::now() < queued);
+            std::thread::yield_now();
+        }
+        drop(replacement);
+        let until = Instant::now() + Duration::from_secs(3);
+        loop {
+            if let Some(status) = window.child.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            assert!(
+                Instant::now() < until,
+                "owned stdin child must receive both session generations"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(window.exited());
+        // Drop retains the existing exact-owned child cleanup behavior.
     }
 }

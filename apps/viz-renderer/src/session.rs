@@ -16,6 +16,8 @@ const LATENCY_SAMPLES: usize = 240;
 
 pub struct Session {
     provider: Box<dyn SceneProvider>,
+    input_monitor: Option<crate::input_monitor::InputMonitor>,
+    child_input_monitor: Option<crate::input_monitor::InputMonitor>,
     pub kind: ProviderKind,
     pub scene: Scene,
     pub values: SceneValues,
@@ -39,7 +41,24 @@ pub struct Session {
 
 impl Session {
     pub fn new(provider: Box<dyn SceneProvider>, kind: ProviderKind, epoch: Instant) -> Self {
+        Self::with_input_monitor(
+            provider,
+            kind,
+            epoch,
+            crate::input_monitor::InputMonitor::from_environment(),
+        )
+    }
+
+    fn with_input_monitor(
+        mut provider: Box<dyn SceneProvider>,
+        kind: ProviderKind,
+        epoch: Instant,
+        input_monitor: Option<crate::input_monitor::InputMonitor>,
+    ) -> Self {
+        provider.set_input_monitoring(input_monitor.is_some());
         Self {
+            input_monitor,
+            child_input_monitor: None,
             provider,
             kind,
             scene: Scene::default(),
@@ -60,7 +79,10 @@ impl Session {
     }
 
     /// Replace the active provider without ever merging two sources.
-    pub fn replace_provider(&mut self, provider: Box<dyn SceneProvider>, kind: ProviderKind) {
+    pub fn replace_provider(&mut self, mut provider: Box<dyn SceneProvider>, kind: ProviderKind) {
+        provider.set_input_monitoring(
+            self.input_monitor.is_some() || self.child_input_monitor.is_some(),
+        );
         self.provider.shutdown();
         self.provider = provider;
         self.kind = kind;
@@ -171,6 +193,43 @@ impl Session {
                     };
                     self.provider.request_resync();
                 }
+            }
+        }
+        self.publish_input_monitor(now);
+    }
+
+    /// A renderer-owned Editor keeps its pipe across provider/session replacements.
+    pub(crate) fn set_child_input_monitor(
+        &mut self,
+        monitor: Option<crate::input_monitor::InputMonitor>,
+    ) {
+        let was_enabled = self.input_monitor.is_some() || self.child_input_monitor.is_some();
+        self.child_input_monitor = monitor;
+        let enabled = self.input_monitor.is_some() || self.child_input_monitor.is_some();
+        if was_enabled != enabled {
+            self.provider.set_input_monitoring(enabled);
+        }
+    }
+
+    fn publish_input_monitor(&mut self, now: Instant) {
+        let parent_due = self
+            .input_monitor
+            .as_mut()
+            .is_some_and(|monitor| monitor.due(now));
+        let child_due = self
+            .child_input_monitor
+            .as_mut()
+            .is_some_and(|monitor| monitor.due(now));
+        if (parent_due || child_due)
+            && !self.awaiting_snapshot
+            && self.connection.is_connected()
+            && let Some(snapshot) = self.provider.input_monitor_snapshot()
+        {
+            if parent_due && let Some(monitor) = &self.input_monitor {
+                monitor.publish(snapshot.clone());
+            }
+            if child_due && let Some(monitor) = &self.child_input_monitor {
+                monitor.publish(snapshot);
             }
         }
     }
@@ -706,5 +765,90 @@ mod tests {
         assert!(p50 <= p95);
         assert!(p95 <= max);
         assert_eq!(max, 90.0);
+    }
+
+    #[test]
+    fn input_monitor_pump_opts_in_before_poll_and_never_publishes_unready_source() {
+        use std::sync::{Arc, Mutex, mpsc};
+        use viz_scene::input_monitor::{MonitorContext, MonitorSnapshot, ReceivedDmx};
+        struct Probe(Arc<Mutex<Vec<&'static str>>>);
+        impl SceneProvider for Probe {
+            fn capabilities(&self) -> viz_scene::ProviderCapabilities {
+                DemoProvider::new().capabilities()
+            }
+            fn set_input_monitoring(&mut self, enabled: bool) {
+                assert!(enabled);
+                self.0.lock().unwrap().push("enabled");
+            }
+            fn poll(&mut self) -> Vec<ProviderEvent> {
+                self.0.lock().unwrap().push("poll");
+                vec![]
+            }
+            fn request_resync(&mut self) {}
+            fn shutdown(&mut self) {}
+            fn input_monitor_snapshot(&self) -> Option<MonitorSnapshot> {
+                self.0.lock().unwrap().push("snapshot");
+                Some(MonitorSnapshot {
+                    version: 1,
+                    generated_millis: viz_scene::input_monitor::unix_millis(),
+                    context: MonitorContext {
+                        producer: "network_receiver".into(),
+                        endpoint: "owned".into(),
+                        show_id: None,
+                        show_revision: 7,
+                        mappings: vec![],
+                    },
+                    received: ReceivedDmx {
+                        universes: vec![],
+                        inputs: vec![],
+                        warnings: vec![],
+                    },
+                })
+            }
+        }
+        struct Writer(mpsc::Sender<Vec<u8>>);
+        impl std::io::Write for Writer {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.send(bytes.to_vec()).unwrap();
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let calls = Arc::new(Mutex::new(vec![]));
+        let (writer, received) = mpsc::channel();
+        let monitor = crate::input_monitor::InputMonitor::with_writer(Writer(writer));
+        let mut session = Session::with_input_monitor(
+            Box::new(Probe(calls.clone())),
+            ProviderKind::LightingDesk,
+            Instant::now(),
+            Some(monitor),
+        );
+        session.pump(Instant::now());
+        assert_eq!(*calls.lock().unwrap(), vec!["enabled", "poll"]);
+        assert!(
+            received.try_recv().is_err(),
+            "unready source cannot publish a held previous snapshot"
+        );
+        session.awaiting_snapshot = false;
+        session.connection = ConnectionState::Connected {
+            endpoint: "owned".into(),
+            revision: 7,
+        };
+        session.pump(Instant::now() + Duration::from_secs(1));
+        let message = received.recv_timeout(Duration::from_secs(2)).unwrap();
+        let snapshot: MonitorSnapshot = serde_json::from_slice(&message).unwrap();
+        assert_eq!(snapshot.context.show_revision, 7);
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec!["enabled", "poll", "poll", "snapshot"]
+        );
+        session.connection = ConnectionState::Stale {
+            endpoint: "owned".into(),
+            reason: "disconnected".into(),
+        };
+        session.pump(Instant::now() + Duration::from_secs(2));
+        assert!(received.try_recv().is_err());
     }
 }
