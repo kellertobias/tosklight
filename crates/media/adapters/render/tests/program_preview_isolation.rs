@@ -204,3 +204,211 @@ fn an_unlit_layer_preview_cannot_clear_retained_program() {
     assert!(preview.iter().all(|byte| *byte == 0));
     assert_eq!(bench.program(SIZE, &master), expected);
 }
+
+#[test]
+fn unavailable_surface_demand_refreshes_red_to_green_once_without_clobbering_isolated_alpha() {
+    let mut bench = Bench::new();
+    let red = bench.solid([220, 20, 10, 255]);
+    let green = bench.solid([10, 200, 30, 255]);
+    let alpha = bench.solid([255, 255, 255, 128]);
+    let state = ready(LayerState::default());
+    let black = ready(LayerState {
+        tint: Tint::new(0.0, 0.0, 0.0),
+        dimmer: 0.32,
+        ..Default::default()
+    });
+    let red_draw = LayerDraw {
+        state: &state,
+        source: &red,
+        mask: None,
+    };
+    let green_draw = LayerDraw {
+        state: &state,
+        source: &green,
+        mask: None,
+    };
+    let alpha_draw = LayerDraw {
+        state: &black,
+        source: &alpha,
+        mask: None,
+    };
+    let master = MasterState {
+        dimmer: 0.6,
+        tint: Tint::new(0.8, 1.0, 0.7),
+        ..Default::default()
+    };
+    bench.present(&[red_draw, alpha_draw], &master);
+    let stale = bench.program(SIZE, &master);
+    let expected_target = OffScreenOutput::new(&bench.gpu, SIZE);
+    let mut reference = Compositor::new(&bench.gpu, SIZE, PROGRAM_FORMAT);
+    let now = Timestamp::from_millis(100);
+    reference.render(
+        &[green_draw, alpha_draw],
+        &master,
+        None,
+        expected_target.view(),
+        bench.output,
+        now,
+        None,
+    );
+    let expected = expected_target.read_image();
+    assert_ne!(stale, expected);
+    // Timeout/occlusion means acquire_frame returns before render. No surface render occurs here.
+    let unavailable: Result<(), media_render::SurfaceLost> =
+        Err(media_render::SurfaceLost::Timeout);
+    assert!(unavailable.is_err());
+    bench
+        .compositor
+        .refresh_program(&[green_draw, alpha_draw], bench.output, now);
+    assert_eq!(
+        bench.program(SIZE, &master),
+        expected,
+        "demanded Program must not republish the old red surface frame"
+    );
+    let isolated = bench.layer(SIZE, alpha_draw, now);
+    assert!(
+        isolated
+            .chunks_exact(4)
+            .all(|p| p[..3] == [0, 0, 0] && p[3] > 0 && p[3] < 255)
+    );
+    assert!(
+        !bench
+            .compositor
+            .refresh_program(&[green_draw, alpha_draw], bench.output, now)
+    );
+    assert_eq!(bench.program(SIZE, &master), expected);
+    assert_eq!(
+        bench.presented.read_image(),
+        stale,
+        "the unavailable native surface itself was not presented"
+    );
+}
+
+#[test]
+fn present_then_capture_reuses_program_but_a_new_timestamp_and_resize_refresh_it() {
+    let mut bench = Bench::new();
+    let source = bench.solid([20, 180, 40, 255]);
+    let state = ready(LayerState::default());
+    let draws = [LayerDraw {
+        state: &state,
+        source: &source,
+        mask: None,
+    }];
+    bench.present(&draws, &MasterState::default());
+    assert!(
+        !bench
+            .compositor
+            .refresh_program(&draws, bench.output, Timestamp::ZERO)
+    );
+    assert!(
+        bench
+            .compositor
+            .refresh_program(&draws, bench.output, Timestamp::from_millis(1))
+    );
+    assert!(
+        !bench
+            .compositor
+            .refresh_program(&draws, bench.output, Timestamp::from_millis(1))
+    );
+    bench.compositor.resize(Size::new(48, 24));
+    assert!(
+        bench
+            .compositor
+            .refresh_program(&draws, bench.output, Timestamp::from_millis(1))
+    );
+    assert!(
+        bench
+            .program(Size::new(48, 24), &MasterState::default())
+            .chunks_exact(4)
+            .all(|p| p[..3] == [20, 180, 40])
+    );
+}
+
+#[test]
+fn demanded_feedback_matches_presented_feedback_once_per_frame_and_excludes_operator_overlay() {
+    let mut bench = Bench::new();
+    let mut reference = Compositor::new(&bench.gpu, SIZE, PROGRAM_FORMAT);
+    let target = OffScreenOutput::new(&bench.gpu, SIZE);
+    let mut effect = media_domain::EffectSlot::feedback();
+    effect.enabled = true;
+    effect.seed = 0x310;
+    effect.parameters = media_domain::FeedbackParameters {
+        amount: 0.9,
+        motion: 1.0,
+        direction: media_domain::FeedbackMotion::Top,
+    }
+    .as_array()
+    .to_vec();
+    let mut state = ready(LayerState::default());
+    state.effects[0] = effect;
+    let overlay_state = ready(LayerState::default());
+    let overlay_source = bench.solid([255, 255, 255, 255]);
+    for (frame, color) in [[220, 20, 10, 255], [10, 200, 30, 255], [20, 30, 220, 255]]
+        .into_iter()
+        .enumerate()
+    {
+        let source = bench.solid(color);
+        let draw = LayerDraw {
+            state: &state,
+            source: &source,
+            mask: None,
+        };
+        let now = Timestamp::from_millis(frame as u64 * 100);
+        reference.render(
+            &[draw],
+            &MasterState::default(),
+            None,
+            target.view(),
+            bench.output,
+            now,
+            None,
+        );
+        assert!(bench.compositor.refresh_program(&[draw], bench.output, now));
+        let expected = target.read_image();
+        assert_eq!(bench.program(SIZE, &MasterState::default()), expected);
+        bench.layer(SIZE, draw, now);
+        assert!(!bench.compositor.refresh_program(&[draw], bench.output, now));
+        assert_eq!(
+            bench.program(SIZE, &MasterState::default()),
+            expected,
+            "isolated capture and another demand must not advance feedback again"
+        );
+    }
+    let now = Timestamp::from_millis(400);
+    let source = bench.solid([20, 180, 40, 255]);
+    let plain = ready(LayerState::default());
+    let draw = LayerDraw {
+        state: &plain,
+        source: &source,
+        mask: None,
+    };
+    bench.compositor.render_with_overlay(
+        &[draw],
+        &MasterState::default(),
+        None,
+        bench.presented.view(),
+        bench.output,
+        now,
+        None,
+        LayerDraw {
+            state: &overlay_state,
+            source: &overlay_source,
+            mask: None,
+        },
+    );
+    assert!(
+        bench
+            .presented
+            .read_image()
+            .chunks_exact(4)
+            .all(|p| p[..3] == [255, 255, 255])
+    );
+    assert!(!bench.compositor.refresh_program(&[draw], bench.output, now));
+    assert!(
+        bench
+            .program(SIZE, &MasterState::default())
+            .chunks_exact(4)
+            .all(|p| p[..3] == [20, 180, 40]),
+        "the operator overlay remains native-only"
+    );
+}

@@ -922,6 +922,9 @@ fn capture_previews(
     now: Timestamp,
 ) {
     let output_id = state.id;
+    if render_worker::program_capture_due(sinks, configuration, output_id, now) {
+        output.refresh_program(draws, now);
+    }
     // Pixel mapping is output rather than a preview: it happens whether or not anyone is watching
     // a thumbnail, and on its own cadence.
     map_pixels(

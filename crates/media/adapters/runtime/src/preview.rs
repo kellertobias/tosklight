@@ -200,6 +200,11 @@ impl Preview {
             || self.requested_until_unix_millis.load(Ordering::SeqCst) > unix_millis()
     }
 
+    #[cfg(test)]
+    pub(crate) fn expire_browser_request(&self) {
+        self.requested_until_unix_millis.store(0, Ordering::SeqCst);
+    }
+
     /// Requests demand-driven frames for a browser that polls the snapshot endpoint.
     pub fn requested_for_browser(&self, size: Option<(u16, u16)>) {
         self.requested_size_is(size);

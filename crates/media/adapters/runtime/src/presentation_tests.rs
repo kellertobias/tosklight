@@ -230,3 +230,106 @@ fn what_the_renderer_saw_reaches_the_authoritative_state() {
         "a report for an output that is not here changes nothing"
     );
 }
+
+fn capture_sinks(configuration: &MediaConfiguration) -> CaptureSinks {
+    CaptureSinks {
+        previews: crate::preview::SharedPreviews::configured(configuration),
+        last_preview_millis: Default::default(),
+        pixels: Default::default(),
+        universe_inputs: crate::dmx::universe_inputs(),
+        instance: [0; 16],
+    }
+}
+
+#[test]
+fn program_capture_demand_stops_with_the_browser_lease_and_keeps_layer_only_requests_isolated() {
+    let output = monitor_output();
+    let configuration = MediaConfiguration {
+        outputs: vec![output.clone()],
+        ..Default::default()
+    };
+    let mut sinks = capture_sinks(&configuration);
+    let due = |sinks: &CaptureSinks, millis| {
+        render_worker::program_capture_due(
+            sinks,
+            &output,
+            output.id,
+            Timestamp::from_millis(millis),
+        )
+    };
+    assert!(
+        !due(&sinks, 0),
+        "an occluded output with no demand must not compose speculatively"
+    );
+    sinks
+        .previews
+        .for_layer(output.id, 0)
+        .unwrap()
+        .subscribed(true, None);
+    assert!(
+        !due(&sinks, 0),
+        "isolated layer demand does not require Program"
+    );
+    let program = Arc::clone(sinks.previews.for_output(output.id).unwrap());
+    program.requested_for_browser(None);
+    assert!(due(&sinks, 0));
+    sinks.last_preview_millis.insert(output.id, 0);
+    assert!(!due(&sinks, 99));
+    assert!(due(&sinks, 100));
+    program.expire_browser_request();
+    assert!(!due(&sinks, 200));
+    program.subscribed(true, None);
+    assert!(
+        due(&sinks, 200),
+        "CITP subscriptions survive an expired browser lease"
+    );
+    program.subscribed(false, None);
+    assert!(!due(&sinks, 300));
+}
+
+#[test]
+fn mapped_pixel_demand_requires_program_without_any_preview_subscription() {
+    use media_application::configuration::PixelOutputRoute;
+    use media_domain::pixel_map::{CanvasPoint, PixelLayout, PixelOrder, PixelZone};
+    let mut output = monitor_output();
+    output.pixel_map.zones.push(PixelZone {
+        id: "zone".into(),
+        name: "Zone".into(),
+        start: CanvasPoint::new(0.0, 0.0),
+        end: CanvasPoint::new(1.0, 1.0),
+        columns: 1,
+        rows: 1,
+        layout: PixelLayout::rgb(),
+        order: PixelOrder::RowMajor,
+        universe: 1,
+        start_address: 1,
+        enabled: true,
+    });
+    output.pixel_map.routes.push(PixelOutputRoute {
+        id: "route".into(),
+        name: "Route".into(),
+        protocol: Default::default(),
+        universe: 1,
+        destination: None,
+        enabled: true,
+    });
+    let configuration = MediaConfiguration {
+        outputs: vec![output.clone()],
+        ..Default::default()
+    };
+    let sinks = capture_sinks(&configuration);
+    assert!(!sinks.previews.for_output(output.id).unwrap().wanted());
+    assert!(render_worker::program_capture_due(
+        &sinks,
+        &output,
+        output.id,
+        Timestamp::ZERO
+    ));
+    output.pixel_map.routes[0].enabled = false;
+    assert!(!render_worker::program_capture_due(
+        &sinks,
+        &output,
+        output.id,
+        Timestamp::ZERO
+    ));
+}

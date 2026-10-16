@@ -178,3 +178,22 @@ impl RenderWorkerState {
         });
     }
 }
+
+/// A layer thumbnail alone never asks for the full canvas. Pixel mapping has its own cadence;
+/// Program/CITP demand shares the existing preview throttle and expiring browser lease.
+pub(super) fn program_capture_due(
+    sinks: &CaptureSinks,
+    configuration: &OutputConfiguration,
+    output: media_domain::OutputId,
+    now: Timestamp,
+) -> bool {
+    sinks.pixels.wants(configuration, now.as_millis())
+        || (sinks
+            .previews
+            .for_output(output)
+            .is_some_and(|preview| preview.wanted())
+            && crate::preview::due(
+                sinks.last_preview_millis.get(&output).copied(),
+                now.as_millis(),
+            ))
+}

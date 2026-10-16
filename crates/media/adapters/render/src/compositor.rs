@@ -45,6 +45,7 @@ pub struct Compositor {
     size: Size,
     program: wgpu::Texture,
     program_view: wgpu::TextureView,
+    program_frame: Option<Timestamp>,
     /// Isolated captures must not replace the last full Program between presentations.
     layer_preview_program: Option<(wgpu::Texture, wgpu::TextureView)>,
     sampler: wgpu::Sampler,
@@ -155,6 +156,7 @@ impl Compositor {
             size,
             program,
             program_view,
+            program_frame: None,
             layer_preview_program: None,
             sampler: device.create_sampler(&wgpu::SamplerDescriptor {
                 label: Some("media-source"),
@@ -205,6 +207,7 @@ impl Compositor {
         let (program, view) = program_target(&self.gpu.device, size);
         self.program = program;
         self.program_view = view;
+        self.program_frame = None;
         self.layer_preview_program = None;
         let (backdrop, backdrop_view) = backdrop_target(&self.gpu.device, size);
         self.backdrop = backdrop;
@@ -326,20 +329,13 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("media-frame"),
             });
-        if advance_feedback {
-            self.feedback.advance(&mut encoder, layers, now);
-        }
-        // A layer mapped onto a 3D model renders its look onto the mesh first. From here on it is
-        // an ordinary flat layer, so blend mode, strobe, and opacity apply exactly as they do to
-        // any other layer.
-        self.prepare_models(&mut encoder, layers, output_id, now);
-        let mapped_layers = self.models.substitute(layers);
-        self.draw_layers(
+        self.draw_program(
             &mut encoder,
-            mapped_layers.as_slice(),
+            layers,
             output_id,
             now,
             preserve_alpha,
+            advance_feedback,
         );
         self.master_pass(
             &mut encoder,
@@ -353,6 +349,58 @@ impl Compositor {
             self.overlay_pass(&mut encoder, target, output_id, now, overlay);
         }
         self.gpu.queue.submit([encoder.finish()]);
+        if advance_feedback {
+            self.program_frame = Some(now);
+        }
+    }
+
+    /// Composes the current canvas without acquiring a native surface or allocating a second
+    /// full-size target. A presented frame already composed at this timestamp is reused.
+    pub fn refresh_program(
+        &mut self,
+        layers: &[LayerDraw<'_>],
+        output_id: OutputId,
+        now: Timestamp,
+    ) -> bool {
+        if self.program_frame == Some(now) {
+            return false;
+        }
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("media-demanded-program"),
+            });
+        self.draw_program(&mut encoder, layers, output_id, now, false, true);
+        self.gpu.queue.submit([encoder.finish()]);
+        self.program_frame = Some(now);
+        true
+    }
+
+    fn draw_program(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        layers: &[LayerDraw<'_>],
+        output_id: OutputId,
+        now: Timestamp,
+        preserve_alpha: bool,
+        advance_feedback: bool,
+    ) {
+        if advance_feedback {
+            self.feedback.advance(encoder, layers, now);
+        }
+        // A layer mapped onto a 3D model renders its look onto the mesh first. From here on it is
+        // an ordinary flat layer, so blend mode, strobe, and opacity apply exactly as they do to
+        // any other layer.
+        self.prepare_models(encoder, layers, output_id, now);
+        let mapped_layers = self.models.substitute(layers);
+        self.draw_layers(
+            encoder,
+            mapped_layers.as_slice(),
+            output_id,
+            now,
+            preserve_alpha,
+        );
     }
 
     /// Renders every model-mapped layer's look onto its mesh, ready for
