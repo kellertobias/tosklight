@@ -290,6 +290,38 @@ pub(super) fn parse_subset_rule(
     Ok(light_programmer::SelectionRule::EveryNth { n, offset })
 }
 
+fn fixtures_in_number_range(
+    fixtures: &[light_fixture::PatchedFixture],
+    first: u32,
+    last: u32,
+) -> Vec<&light_fixture::PatchedFixture> {
+    // Traverse existing fixtures, so sparse ranges cost show size, not numeric span.
+    let unnumbered = fixtures
+        .iter()
+        .all(|fixture| fixture.fixture_number.is_none());
+    let low = first.min(last);
+    let high = first.max(last);
+    let mut ordered = fixtures
+        .iter()
+        .enumerate()
+        .filter_map(|(index, fixture)| {
+            let number = if unnumbered {
+                u32::try_from(index).ok()?.checked_add(1)?
+            } else {
+                fixture.fixture_number?
+            };
+            (low..=high).contains(&number).then_some((number, fixture))
+        })
+        .collect::<Vec<_>>();
+    // Stable sorting and dedup retain fixture_by_number's first-match semantics.
+    ordered.sort_by_key(|(number, _)| *number);
+    ordered.dedup_by_key(|(number, _)| *number);
+    if first > last {
+        ordered.reverse();
+    }
+    ordered.into_iter().map(|(_, fixture)| fixture).collect()
+}
+
 pub(super) fn parse_fixture_selection(
     fixtures: &[light_fixture::PatchedFixture],
     tokens: &[String],
@@ -366,31 +398,7 @@ pub(super) fn parse_fixture_selection(
             }
             match (first.head, last.head) {
                 (None, None) => {
-                    // Traverse existing fixtures, so sparse ranges cost show size, not numeric span.
-                    let unnumbered = fixtures
-                        .iter()
-                        .all(|fixture| fixture.fixture_number.is_none());
-                    let low = first.number.min(last.number);
-                    let high = first.number.max(last.number);
-                    let mut ordered = fixtures
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, fixture)| {
-                            let number = if unnumbered {
-                                u32::try_from(index).ok()?.checked_add(1)?
-                            } else {
-                                fixture.fixture_number?
-                            };
-                            (low..=high).contains(&number).then_some((number, fixture))
-                        })
-                        .collect::<Vec<_>>();
-                    // Stable sorting and dedup retain fixture_by_number's first-match semantics.
-                    ordered.sort_by_key(|(number, _)| *number);
-                    ordered.dedup_by_key(|(number, _)| *number);
-                    if first.number > last.number {
-                        ordered.reverse();
-                    }
-                    for (_, fixture) in ordered {
+                    for fixture in fixtures_in_number_range(fixtures, first.number, last.number) {
                         let children = ordered_child_ids(fixture);
                         if children.is_empty() {
                             push_unique(&mut selected, fixture.fixture_id);
