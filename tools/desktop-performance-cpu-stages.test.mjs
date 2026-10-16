@@ -62,6 +62,9 @@ const family = [
 
 const observation = (cpu = 5, calls = 1) => ({
   calls,
+  process_cpu_ns: null,
+  process_cpu_tick_hz: null,
+  process_cpu_resolution_ns: null,
   wall_ns: calls ? 1000 : 0,
   thread_cpu_ns: calls ? cpu : null,
   runnable_queue_ns: calls ? 0 : null,
@@ -1131,3 +1134,49 @@ test(
 		}
 	}
 );
+
+
+test("server process CPU survives numeric report with zero, missing and mismatched tick metadata", () => {
+  const options = reportOptions();
+  const rows = [serverRows(1), serverRows(2)];
+  for (const [index, pair] of rows.entries()) Object.assign(pair[0].major.parts.dynamic, {
+    process_cpu_ns: index * 10000000, process_cpu_tick_hz: 100, process_cpu_resolution_ns: 10000000
+  });
+  const reportFor = () => numericReport({ ...options, server: parseServerCapture(rows.map(pair => serverText(pair)).join("")) });
+  let report = reportFor();
+  let summary = report.summaries.find(row => row.role === 1 && row.stage === 1);
+  assert.equal(summary.process_cpu_ns, 10000000);
+  assert.equal(summary.valid_process_cpu_rows, 2);
+  assert.equal(report.records.find(row => row.role === 1 && row.stage === 1).process_cpu_ns, 0);
+  assertNumericOnly(JSON.parse(JSON.stringify(report)));
+  Object.assign(rows[1][0].major.parts.dynamic, { process_cpu_tick_hz: 200, process_cpu_resolution_ns: 5000000 });
+  summary = reportFor().summaries.find(row => row.role === 1 && row.stage === 1);
+  assert.equal(summary.process_cpu_ns, null);
+  assert.equal(summary.valid_process_cpu_rows + summary.missing_process_cpu_rows, 2);
+  Object.assign(rows[1][0].major.parts.dynamic, { process_cpu_ns: null, process_cpu_tick_hz: null, process_cpu_resolution_ns: null });
+  summary = reportFor().summaries.find(row => row.role === 1 && row.stage === 1);
+  assert.equal(summary.process_cpu_ns, null);
+  assert.equal(summary.missing_process_cpu_rows, 1);
+});
+
+test("process metadata is strict, numeric, synchronous and server-only", () => {
+  for (const fields of [
+    { process_cpu_ns: 0 }, { process_cpu_ns: -1 }, { process_cpu_ns: "private/path" },
+    { process_cpu_tick_hz: 0 }, { process_cpu_tick_hz: 1000000001 },
+    { process_cpu_ns: 0, process_cpu_tick_hz: 100, process_cpu_resolution_ns: 1 },
+    { process_cpu_ns: Number.MAX_SAFE_INTEGER + 1 }, { private_process: 1 }
+  ]) {
+    const rows = serverRows();
+    Object.assign(rows[0].major.parts.dynamic, fields);
+    assert.throws(() => parseServerCapture(serverText(rows)), /STOP/);
+  }
+  for (const name of ["tick", "send"]) {
+    const rows = serverRows();
+    const entry = name === "tick" ? rows[0].major.tick : rows[0].major.parts.send;
+    Object.assign(entry, { process_cpu_ns: 0, process_cpu_tick_hz: 100, process_cpu_resolution_ns: 10000000 });
+    assert.throws(() => parseServerCapture(serverText(rows)), /async/);
+  }
+  const native = nativeRows();
+  native[0].process_cpu_ns = 0;
+  assert.throws(() => parseNativeCapture(lines(native)), /field/);
+});

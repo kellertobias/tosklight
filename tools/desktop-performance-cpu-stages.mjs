@@ -37,7 +37,7 @@ const FAMILY = [
   "native_projection"
 ];
 
-const TUPLE = ["calls", "wall_ns", "thread_cpu_ns", "runnable_queue_ns", "timeslices", "counter_read_wall_ns"];
+const TUPLE = ["calls", "wall_ns", "thread_cpu_ns", "runnable_queue_ns", "timeslices", "counter_read_wall_ns", "process_cpu_ns", "process_cpu_tick_hz", "process_cpu_resolution_ns"];
 
 const NATIVE_META = [
   "schema",
@@ -115,6 +115,14 @@ function tuple(value, native = false) {
 	  counter_read_wall_ns: uint(value.counter_read_wall_ns)
 	};
 
+  if (!native) {
+    const cpu = nullable(value.process_cpu_ns);
+    const hz = value.process_cpu_tick_hz === null ? null : uint(value.process_cpu_tick_hz, 1000000000);
+    const resolution = nullable(value.process_cpu_resolution_ns);
+    require_(cpu === null ? hz === null && resolution === null : hz > 0 && resolution === Math.ceil(1e9 / hz), "invalid process CPU metadata");
+    require_(result.calls > 0 || cpu === null, "not-run process CPU observation");
+    Object.assign(result, { process_cpu_ns: cpu, process_cpu_tick_hz: hz, process_cpu_resolution_ns: resolution });
+  }
 	if (result.calls === 0) require_(
 	  result.wall_ns === 0 && result.counter_read_wall_ns === 0 && result.thread_cpu_ns === null && result.runnable_queue_ns === null && result.timeslices === null,
 		"not-run tuple contains observations"
@@ -263,7 +271,7 @@ export function parseServerCapture(text) {
 			};
 
 			for (const entry of [group[0].tuples[0], group[0].tuples[4]]) require_(
-			  entry.thread_cpu_ns === null && entry.runnable_queue_ns === null && entry.timeslices === null,
+			  entry.process_cpu_ns === null && entry.thread_cpu_ns === null && entry.runnable_queue_ns === null && entry.timeslices === null,
 				"async tuple claims CPU"
 			);
 		} else {
@@ -425,9 +433,20 @@ function summary(rows) {
 		  valid_cpu_rows: 0,
 		  missing_cpu_rows: 0,
 		  thread_cpu_ns: null,
-		  counter_read_wall_ns: 0
+		  counter_read_wall_ns: 0,
+      ...(row.role === 1 ? { process_cpu_ns: null, process_cpu_tick_hz: null, process_cpu_resolution_ns: null, valid_process_cpu_rows: 0, missing_process_cpu_rows: 0 } : {})
 		};
 
+    if (row.role === 1 && row.calls > 0) {
+      const incompatible = value.valid_process_cpu_rows > 0 && (value.process_cpu_tick_hz !== row.process_cpu_tick_hz || value.process_cpu_resolution_ns !== row.process_cpu_resolution_ns);
+      if (row.process_cpu_ns === null || incompatible) value.missing_process_cpu_rows++;
+      else {
+        value.valid_process_cpu_rows++;
+        value.process_cpu_ns = add(value.process_cpu_ns ?? 0, row.process_cpu_ns);
+        value.process_cpu_tick_hz = row.process_cpu_tick_hz;
+        value.process_cpu_resolution_ns = row.process_cpu_resolution_ns;
+      }
+    }
 		value.rows++;
 		value.calls = add(value.calls, row.calls);
 		value.wall_ns = add(value.wall_ns, row.wall_ns);
@@ -447,7 +466,8 @@ function summary(rows) {
 
 	return [...groups.values()].map(entry => ({
 	  ...entry,
-	  thread_cpu_ns: entry.missing_cpu_rows ? null : entry.thread_cpu_ns
+	  thread_cpu_ns: entry.missing_cpu_rows ? null : entry.thread_cpu_ns,
+    ...(entry.role === 1 && entry.missing_process_cpu_rows ? { process_cpu_ns: null, process_cpu_tick_hz: null, process_cpu_resolution_ns: null } : {})
 	}));
 }
 
