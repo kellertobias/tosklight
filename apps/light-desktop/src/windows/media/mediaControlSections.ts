@@ -17,7 +17,11 @@ import type {
 	MediaControlSection,
 	MediaPointFrameRate,
 } from "./mediaPaneModel";
-import { type ClipLength, clipLengthReadout, pointDisplay } from "./mediaPointTime";
+import {
+	type ClipLength,
+	clipLengthReadout,
+	pointDisplay,
+} from "./mediaPointTime";
 import {
 	normalizedValue,
 	specializedControl,
@@ -67,7 +71,9 @@ function attributeIsOwned(
  */
 export function selectedClipLength(
 	input: Pick<BuildMediaPaneModelInput, "inspection">,
-	status: { folder: number; file: number; length_frames: number; fps: number } | undefined,
+	status:
+		| { folder: number; file: number; length_frames: number; fps: number }
+		| undefined,
 	folder: number | undefined,
 	file: number | undefined,
 ): ClipLength {
@@ -77,7 +83,8 @@ export function selectedClipLength(
 		status && status.folder === folder && status.file === file
 			? status
 			: input.inspection.files.find(
-					(candidate) => candidate.folder_id === folder && candidate.id === file,
+					(candidate) =>
+						candidate.folder_id === folder && candidate.id === file,
 				);
 	if (!reported || reported.length_frames <= 0 || reported.fps <= 0)
 		return { kind: "unknown" };
@@ -107,8 +114,7 @@ function clipLengthControl(
 		description: shown.description,
 		action: {
 			label: "Clear playback range",
-			disabled:
-				point("media.in_point") === 0 && point("media.out_point") === 0,
+			disabled: point("media.in_point") === 0 && point("media.out_point") === 0,
 			changes: [
 				{ controlId: "media.in_point", value: 0 },
 				{ controlId: "media.out_point", value: 0 },
@@ -161,7 +167,10 @@ export function controlSections(
 						: []),
 					{
 						...advertisedControl(input, attribute, signedMasterScale),
-						disabled: !attributeIsOwned(owned, attribute),
+						disabled:
+							!attributeIsOwned(owned, attribute) ||
+							(input.controlValues !== undefined &&
+								!controlValueKnown(input, attribute)),
 					},
 				]),
 		}))
@@ -179,7 +188,7 @@ export function controlSections(
 	return sections;
 }
 
-function advertisedControl(
+function resolvedControl(
 	input: BuildMediaPaneModelInput,
 	attribute: string,
 	signedMasterScale = false,
@@ -338,4 +347,40 @@ function valueControl(
 		step,
 		display,
 	};
+}
+
+function controlValueKnown(input: BuildMediaPaneModelInput, attribute: string) {
+	if (attribute === "color.tint")
+		return (
+			input.liveProgrammer?.some(
+				(value) =>
+					value.attribute === "color" &&
+					(value.value.kind === "color_program" ||
+						value.value.kind === "color_xyz"),
+			) ||
+			["color.red", "color.green", "color.blue"].every(
+				(name) => normalizedValue(input.liveProgrammer, name) !== undefined,
+			)
+		);
+	return normalizedValue(input.liveProgrammer, attribute) !== undefined;
+}
+
+function advertisedControl(
+	input: BuildMediaPaneModelInput,
+	attribute: string,
+	signedMasterScale = false,
+): MediaControlSection["controls"][number] {
+	const control = resolvedControl(input, attribute, signedMasterScale);
+	if (input.controlValues === undefined || controlValueKnown(input, attribute))
+		return control;
+	const unknown = {
+		...control,
+		disabled: true,
+		description: "Current value unknown",
+	};
+	if (unknown.kind === "value" || unknown.kind === "point-time")
+		return { ...unknown, display: "Unknown" };
+	if (unknown.kind === "choice" || unknown.kind === "color")
+		return { ...unknown, value: "" };
+	return unknown;
 }

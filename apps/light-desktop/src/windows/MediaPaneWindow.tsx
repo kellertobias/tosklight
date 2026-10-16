@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { MediaServerInspection } from "../api/client/mediaOutput";
 import type { MediaServerFixture } from "../api/types";
 import { useMediaServers } from "../features/mediaServers/MediaServersContext";
@@ -82,7 +82,6 @@ export function MediaPaneWindow({
 	const loadMediaThumbnail = media?.mediaThumbnail;
 	const selectionActions = useProgrammingSelectionActions(active);
 	const valuesQueue = useProgrammerValuesMutationQueue(active);
-	const programmerValues = useMediaProgrammerValues(active, valuesQueue.route);
 	const eligibleServers = media?.mediaServers ?? [];
 	const [selectedServerId, setSelectedServerId] = useState(
 		mediaPaneState?.serverId ?? eligibleServers[0]?.fixture_id ?? "",
@@ -187,9 +186,11 @@ export function MediaPaneWindow({
 		load: nativeMedia ?? unavailableNativeMedia,
 		update: updateNativeMediaEffect ?? unavailableNativeMediaEffect,
 	});
-	const liveProgrammer = programmerValues?.filter(
-		(value) => value.fixtureId === selectedFixtureId,
-	);
+	const liveProgrammer = useMediaProgrammerValues(active, valuesQueue.route, {
+		fixtureId: selectedFixtureId,
+		sourceKey: `${selectedServerId}:${endpointKey}`,
+		output: liveOutput,
+	});
 
 	const actions = useMediaPaneActions({
 		servers: eligibleServers,
@@ -225,50 +226,27 @@ export function MediaPaneWindow({
 		onPersist: onMediaPaneStateChange,
 	});
 
-	const model = useMemo(
-		() =>
-			buildMediaPaneModel({
-				inspection,
-				inspectionError,
-				servers: eligibleServers,
-				selectedServer,
-				selectedServerId,
-				selectedLayerId,
-				browserMode,
-				sourceFilter,
-				selectedControlSectionId,
-				mainSectionId,
-				rightPaneVisible,
-				draftFolderId,
-				draftFileId,
-				thumbnailUrls,
-				previewUrls: media?.mediaPreviewUrls ?? {},
-				liveProgrammer,
-				liveOutput,
-				...nativeEffects.modelInput,
-			}),
-		[
-			browserMode,
-			sourceFilter,
-			draftFileId,
-			draftFolderId,
-			eligibleServers,
-			inspection,
-			inspectionError,
-			liveProgrammer,
-			liveOutput,
-			nativeMedia,
-			mainSectionId,
-			selectedControlSectionId,
-			media?.mediaPreviewUrls,
-			rightPaneVisible,
-			selectedLayerId,
-			selectedServer,
-			selectedServerId,
-			thumbnailUrls,
-			nativeEffects.modelInput,
-		],
-	);
+	const model = buildMediaPaneModel({
+		inspection,
+		inspectionError,
+		servers: eligibleServers,
+		selectedServer,
+		selectedServerId,
+		selectedLayerId,
+		browserMode,
+		sourceFilter,
+		selectedControlSectionId,
+		mainSectionId,
+		rightPaneVisible,
+		draftFolderId,
+		draftFileId,
+		thumbnailUrls,
+		previewUrls: media?.mediaPreviewUrls ?? {},
+		liveProgrammer,
+		liveOutput,
+		controlValues: liveProgrammer ?? [],
+		...nativeEffects.modelInput,
+	});
 
 	return (
 		<MediaPaneSurface
@@ -324,7 +302,6 @@ function unavailableNativeMediaEffect(): Promise<never> {
 		new Error("Native Media effect controls are unavailable"),
 	);
 }
-
 
 /** Normal resolved desk output only; an errored retained snapshot is not a live readout. */
 function useMediaLiveOutput(enabled: boolean) {

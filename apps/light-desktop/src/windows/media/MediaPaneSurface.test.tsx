@@ -9,6 +9,7 @@ import { SafePreviewImage } from "./MediaPanePreview";
 import { MediaPaneSurface } from "./MediaPaneSurface";
 import type { MediaPaneModel, MediaPaneUiCallbacks } from "./mediaPaneModel";
 
+const unavailableRead = () => Promise.reject(new Error("No scoped reader in row-only harness"));
 const windowReadout = vi.hoisted(() => ({
 	snapshot: null as VisualizationSnapshot | null,
 	ready: true,
@@ -31,6 +32,7 @@ vi.mock("../../features/mediaServers/MediaServersContext", () => ({
 	}),
 }));
 vi.mock("../../features/visualizationRuntime/VisualizationRuntimeView", () => ({
+	useVisualizationRuntimeRead: () => unavailableRead,
 	useVisualizationRuntimeView: (options: Record<string, unknown>) => {
 		windowReadout.options = options;
 		return {
