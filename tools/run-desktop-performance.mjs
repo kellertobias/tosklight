@@ -850,6 +850,7 @@ async function waitForFixtureSheet(
 	observe = () => {},
 ) {
 	const deadline = Date.now() + budgetMs;
+	let lastSnapshot;
 	while (Date.now() < deadline) {
 		assertRunning(child);
 		const records = await readFile(reportPath, "utf8").catch(() => "");
@@ -894,7 +895,7 @@ async function waitForFixtureSheet(
 						(record) => record.kind === "fixture-sheet-container-unmounted",
 					) ?? null)
 			: null;
-		observe({
+		const snapshot = {
 			observedAt: new Date().toISOString(),
 			expectedFixtureRecords: expected,
 			reportPresent: records.length > 0,
@@ -908,6 +909,7 @@ async function waitForFixtureSheet(
 			renderFailure,
 			lifecycleFailure,
 			readyAppendFailure,
+			readyFixtureRecords: ready?.fixtureRecords ?? null,
 			lastRecords: records
 				.trim()
 				.split("\n")
@@ -940,7 +942,9 @@ async function waitForFixtureSheet(
 						]),
 				...(readyAppendFailure ? [] : ["Tauri append failure"]),
 			],
-		});
+		};
+		lastSnapshot = snapshot;
+		observe(snapshot);
 		if (renderFailure)
 			throw new Error(
 				`Fixture Sheet render failed: ${renderFailure.errorName ?? "Unknown"}: ${renderFailure.errorMessage ?? "unavailable"}`,
@@ -956,6 +960,7 @@ async function waitForFixtureSheet(
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 	// Say what the Sheet did report, so a mismatch names itself instead of being guessed at.
+	observe({ ...lastSnapshot, readinessTimedOut: true });
 	const seen = await sheetReadyCounts(reportPath);
 	throw new Error(
 		expected === null
@@ -1080,6 +1085,11 @@ async function requireFixtureSheetActive(
 	let widestSilence = 0;
 	for (let index = 1; index < edges.length; index += 1)
 		widestSilence = Math.max(widestSilence, edges[index] - edges[index - 1]);
+	observe({
+		heartbeatCount: covering.length, widestSilenceMillis: widestSilence,
+		toleratedSilenceMillis: tolerance,
+		livenessPassed: Boolean(covering.length) && widestSilence <= tolerance,
+	});
 	if (covering.length && widestSilence <= tolerance) return;
 	const seconds = (value) => `${(value / 1_000).toFixed(1)}s`;
 	// A silence has several possible causes and they are told apart by the shape of the

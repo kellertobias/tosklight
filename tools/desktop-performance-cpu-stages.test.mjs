@@ -1,22 +1,23 @@
 import assert from "node:assert/strict";
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import vm from "node:vm";
 import test, { after } from "node:test";
 import { artifactPaths } from "./artifact-paths.mjs";
 
-import {
+const {
   CpuDiagnosticRun,
-	assertNumericOnly,
-	cpuEnvironment,
-	createCpuDiagnosticRun,
-	numericReport,
-	parseNativeCapture,
-	parseServerCapture,
-	qualifyWindow,
-	validateOwnedBinding,
-	windowClass,
-	workloadSummary,
-} from "./desktop-performance-cpu-stages.mjs";
+  assertNumericOnly,
+  cpuEnvironment,
+  createCpuDiagnosticRun,
+  numericReport,
+  parseNativeCapture,
+  parseServerCapture,
+  qualifyWindow,
+  validateOwnedBinding,
+  windowClass,
+  workloadSummary
+} = await import(process.env.LIGHT_DESKTOP_CPU_TEST_MODULE ?? "./desktop-performance-cpu-stages.mjs");
 
 await mkdir(artifactPaths.tmp, {
   recursive: true
@@ -603,6 +604,8 @@ test(
 		const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
 		assert.equal(report.records.length, 45);
 		assert.equal(report.complete, 1);
+		assert.equal(report.diagnostic_status.failure_category, 0);
+		assert.equal(report.diagnostic_status.capture_validated, 1);
 		assertNumericOnly(report);
 
 		await assert.rejects(run.finish({
@@ -667,6 +670,7 @@ test("export refuses an observed child that survived owned termination", async (
   const run = await fixtureRun();
 	await run.observe(processes());
 	await assert.rejects(run.finish({}, undefined), /still alive after termination/);
+	await assert.rejects(run.finish({}, new Error("original workload failure")), /still alive after termination/);
 	assert.deepEqual(await readdir(run.outputDirectory), []);
 });
 
@@ -863,3 +867,333 @@ test("bounded drain rejects streams still changing and retains private evidence"
 	assert.deepEqual(await readdir(run.outputDirectory), []);
 	assert.ok((await readFile(filename)).length > 0);
 });
+
+test(
+  "pre-window Sheet failure exposes bounded phase and observed readiness without private strings or invented gates",
+	() => {
+	  const state = {
+		  phase: "fixture-sheet-readiness",
+		  backendReady: true,
+		  prepared: true,
+
+		  sheet: {
+			  ready: false,
+			  readinessTimedOut: true,
+			  reportPresent: true,
+			  expectedFixtureRecords: 576,
+			  readyFixtureRecords: null,
+
+			  surface: {
+				  kind: "fixture-sheet-container-mounted",
+				  private_path: "/private/scene"
+				},
+
+			  readiness: {
+				  active: true,
+				  configState: "loaded",
+				  fixtureSheetEnabled: true,
+				  rowCount: 415,
+				  fixtureRecords: 415,
+				  activeValuesLoading: true,
+				  groupRuntimeLoading: false
+				},
+
+			  renderFailure: null,
+			  lifecycleFailure: null,
+			  readyAppendFailure: null,
+			  error: "arbitrary secret",
+			  pid: 1234
+			}
+		};
+
+		const summary = workloadSummary(undefined, [], state);
+		assert.equal(summary.phase, 3);
+		assert.equal(summary.fixture_sheet.ready, 0);
+		assert.equal(summary.fixture_sheet.readiness_timed_out, 1);
+		assert.equal(summary.fixture_sheet.reported_fixture_records, 415);
+		assert.equal(summary.fixture_sheet.ready_fixture_records, null);
+		assert.equal(summary.fixture_sheet.surface_mounted, 1);
+		assert.equal(summary.fixture_sheet.active_values_loading, 1);
+		assert.equal(summary.fixture_sheet.group_runtime_loading, 0);
+		assert.equal(summary.fixture_sheet_liveness_gate_met, null);
+		assert.equal(summary.rate_gate_met, null);
+		assert.equal(summary.deadline_gate_met, null);
+		assert.equal(summary.send_error_gate_met, null);
+		assertNumericOnly(summary);
+		assert.ok(!JSON.stringify(summary).includes("private"));
+		assert.ok(!JSON.stringify(summary).includes("secret"));
+	}
+);
+
+test(
+  "one opening snapshot is not a zero-delta observation or passing gate; partial positive failures remain failures",
+	() => {
+	  const opening = {
+		  phase: "opening",
+
+		  diagnostics: {
+			  output: {
+				  frames_sent: 10,
+				  deadline_misses: 2,
+				  send_errors: 3
+				}
+			}
+		};
+
+		const first = workloadSummary(undefined, [opening]);
+		assert.equal(first.frames_sent_delta, null);
+		assert.equal(first.output_deadline_misses_delta, null);
+		assert.equal(first.deadline_gate_met, null);
+
+		const second = {
+		  phase: "measurement",
+
+		  diagnostics: {
+			  output: {
+				  frames_sent: 50,
+				  deadline_misses: 2,
+				  send_errors: 4
+				}
+			}
+		};
+
+		const partial = workloadSummary(undefined, [opening, second]);
+		assert.equal(partial.frames_sent_delta, 40);
+		assert.equal(partial.deadline_gate_met, null);
+		assert.equal(partial.send_error_gate_met, 0);
+	}
+);
+
+test(
+  "actual runCase pre-window failure retains its original error and emits ON missing-child safe report",
+	async () => {
+	  for (const missing of [true, false]) {
+		  const run = await fixtureRun();
+
+			if (missing) {
+			  await rm(run.directory, {
+				  recursive: true
+				});
+
+				await mkdir(run.directory, {
+				  mode: 0o700
+				});
+			}
+
+			const failure = new Error("original Sheet timeout /private/path pid1234");
+			const source = await readFile(new URL("./run-desktop-performance.mjs", import.meta.url), "utf8");
+			const start = source.indexOf("async function runCase(");
+			const end = source.indexOf("\nasync function drainCaseLog(", start);
+
+			const stream = {
+			  on() {}
+			};
+
+			const child = {
+			  pid: 100,
+			  once() {},
+			  stdout: stream,
+			  stderr: stream
+			};
+
+			const execute = vm.runInNewContext(`${source.slice(start, end)}; runCase`, {
+			  process: {
+				  cwd: () => scratch,
+				  env: {}
+				},
+
+			  DURATION_SECONDS: 60,
+
+			  options: {
+				  "typed-cpu-diagnostics": "on",
+				  "output-dir": run.outputDirectory,
+				  application: "/private/app"
+				},
+
+			  path,
+			  createCpuDiagnosticRun: async () => run,
+			  freePort: async () => 5001,
+
+			  applicationInvocation: () => ({
+				  command: "/private/app",
+				  arguments: []
+				}),
+
+			  spawn: () => child,
+
+			  createCaseEvidence: async () => ({
+				  samples: [],
+				  manifestPath: "/private/manifest"
+				}),
+
+			  waitForReadiness: async () => {},
+
+			  apiClient: () => ({
+				  request: async () => ({})
+				}),
+
+			  configureScheduler: async () => {},
+
+			  prepareMixed: async () => ({
+				  fixtureRecords: 576
+				}),
+
+			  writeFile,
+
+			  waitForFixtureSheet: async (...args) => {
+				  args.at(-1)({
+					  ready: false,
+					  readiness: null,
+					  reportPresent: false,
+					  readinessTimedOut: true
+					});
+
+					throw failure;
+				},
+
+			  drawBudgetMillis: () => 60000,
+			  retainCaseFailure: async () => "/private/case",
+			  terminateProcessTree: async () => markStopped(run),
+			  drainCaseLog: async () => {},
+			  finishCaseEvidence: async () => {},
+			  rm: async () => assert.fail("must retain failed scratch"),
+
+			  console: {
+				  error() {}
+				}
+			});
+
+			await assert.rejects(execute({
+			  caseId: "sixteen_universe",
+			  fixtureRecords: 576
+			}, "unrestricted"), error => error.message.includes(failure.message));
+
+			const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
+			assert.equal(report.complete, 0);
+			assert.equal(report.diagnostic_status.failure_category, 3);
+			assert.equal(report.diagnostic_status.capture_stage, missing ? 2 : 3);
+			assert.equal(report.diagnostic_status.capture_validated, 0);
+			assert.equal(report.diagnostic_status.completed_request_bounds, 0);
+			assert.equal(report.workload.phase, 3);
+			assert.equal(report.workload.fixture_sheet.report_present, 0);
+			assert.equal(report.workload.fixture_sheet.active, null);
+			assert.equal(report.workload.observed_poll_iterations, 0);
+			assert.equal(report.workload.deadline_gate_met, null);
+			assert.deepEqual(report.records, []);
+			assert.equal(report.workload.backend_ready, 1);
+			assert.equal(report.workload.show_prepared, 1);
+			assertNumericOnly(report);
+
+			for (const privateValue of ["private", "pid1234", "timeout"])
+			  assert.ok(!JSON.stringify(report).includes(privateValue));
+		}
+	}
+);
+
+test("Sheet liveness observations retain explicit failures and reject malformed safe fields", () => {
+  const result = workloadSummary(undefined, [], {
+	  phase: "fixture-sheet-liveness",
+
+	  sheet: {
+		  livenessPassed: false,
+		  heartbeatCount: 0,
+		  widestSilenceMillis: 60000,
+		  toleratedSilenceMillis: 10000
+		}
+	});
+
+	assert.equal(result.phase, 5);
+	assert.equal(result.fixture_sheet_liveness_gate_met, 0);
+	assert.equal(result.fixture_sheet.heartbeat_count, 0);
+	assert.equal(result.fixture_sheet.widest_silence_ms, 60000);
+	assert.equal(result.fixture_sheet.tolerated_silence_ms, 10000);
+
+	for (const sheet of [{
+	  ready: "secret"
+	}, {
+	  readiness: {
+		  rowCount: -1
+		}
+	}, {
+	  readiness: {
+		  configState: "private-state"
+		}
+	}, {
+	  surface: {
+		  kind: "private-kind"
+		}
+	}]) {
+	  assert.throws(() => workloadSummary(undefined, [], {
+		  sheet
+		}), /STOP/);
+	}
+});
+
+test("numeric diagnostic status is a closed bounded record", () => {
+  const captureStatus = {
+	  failure_category: 0,
+	  capture_stage: 6,
+	  capture_validated: 1
+	};
+
+	assert.throws(() => numericReport({
+	  ...reportOptions(),
+
+	  captureStatus: {
+		  ...captureStatus,
+		  pid: 123
+		}
+	}), /unknown/);
+
+	for (const [field, value] of [["failure_category", 4], ["capture_stage", 7], ["capture_validated", true]]) {
+	  assert.throws(() => numericReport({
+		  ...reportOptions(),
+
+		  captureStatus: {
+			  ...captureStatus,
+			  [field]: value
+			}
+		}), /unsigned/);
+	}
+
+	assert.throws(() => numericReport({
+	  ...reportOptions(),
+
+	  captureStatus: {
+		  ...captureStatus,
+		  capture_validated: 0
+		}
+	}), /requires validated/);
+});
+
+test(
+  "failed-workload fallback discards every CPU row when a later child fails strict parsing",
+	async () => {
+	  const run = await fixtureRun();
+		await run.observe(processes());
+		markStopped(run);
+		run.requests = requests();
+		run.receipts = receipts();
+
+		run.setWorkload(undefined, {
+		  phase: "measurement",
+		  backendReady: true,
+		  prepared: true
+		});
+
+		const rows = nativeRows();
+		rows[0].private_key = "/secret/path";
+		await writeFile(path.join(run.directory, "viz-cpu-100-2.stderr"), lines(rows));
+		await run.finish({}, new Error("original workload failure"));
+		const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
+		assert.equal(report.complete, 0);
+		assert.equal(report.diagnostic_status.capture_stage, 4);
+		assert.equal(report.diagnostic_status.failure_category, 3);
+		assert.equal(report.diagnostic_status.capture_validated, 0);
+		assert.equal(report.diagnostic_status.completed_request_bounds, 61);
+		assert.equal(report.diagnostic_status.owned_observations, 61);
+		assert.deepEqual(report.records, []);
+		assert.deepEqual(report.native_export_overhead, []);
+		assert.ok(!JSON.stringify(report).includes("secret"));
+	}
+);

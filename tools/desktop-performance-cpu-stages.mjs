@@ -469,6 +469,75 @@ function scaled(value, factor = 1000000) {
 	return uint(Math.floor(value * factor));
 }
 
+// Failure categories: 0 none, 1 prior case failure, 2 reserved capture-only, 3 prior+capture failure.
+// Capture stages: 2 manifest, 3 owned binding, 4 native drain/parse, 5 server drain/parse, 6 validated.
+// Workload phases: 0 unavailable, 1 backend, 2 prepare, 3 Sheet ready, 4 measure, 5 live, 6 complete.
+const WORKLOAD_PHASES = [
+  "backend-readiness",
+  "show-preparation",
+  "fixture-sheet-readiness",
+  "measurement",
+  "fixture-sheet-liveness",
+  "complete"
+];
+
+function observedBoolean(value) {
+  if (value === undefined || value === null)
+	  return null;
+
+	require_(typeof value === "boolean", "invalid observed boolean");
+	return value ? 1 : 0;
+}
+
+function observedEvent(value) {
+  if (value === undefined)
+	  return null;
+
+	if (value === null)
+	  return 0;
+
+	require_(typeof value === "object" && !Array.isArray(value), "invalid observed event");
+	return 1;
+}
+
+function sheetSummary(sheet = {}) {
+  sheet ??= {};
+	const readiness = sheet.readiness;
+	const count = value => value === undefined || value === null ? null : uint(value);
+	const config = readiness?.configState;
+	const configState = config === undefined ? null : ["loading", "unavailable", "loaded"].indexOf(config);
+	require_(configState === null || configState >= 0, "unknown Sheet configuration state");
+	const surface = sheet.surface?.kind;
+
+	require_(
+	  surface === undefined || ["fixture-sheet-container-mounted", "fixture-sheet-container-unmounted"].includes(surface),
+		"unknown Sheet surface state"
+	);
+
+	return {
+	  ready: observedBoolean(sheet.ready),
+	  readiness_timed_out: observedBoolean(sheet.readinessTimedOut),
+	  report_present: observedBoolean(sheet.reportPresent),
+	  expected_fixture_records: count(sheet.expectedFixtureRecords),
+	  ready_fixture_records: count(sheet.readyFixtureRecords),
+	  surface_mounted: surface === undefined ? null : surface === "fixture-sheet-container-mounted" ? 1 : 0,
+	  readiness_observed: observedEvent(readiness),
+	  configuration_state: configState,
+	  active: observedBoolean(readiness?.active),
+	  fixture_sheet_enabled: observedBoolean(readiness?.fixtureSheetEnabled),
+	  reported_fixture_records: count(readiness?.fixtureRecords),
+	  row_count: count(readiness?.rowCount),
+	  active_values_loading: observedBoolean(readiness?.activeValuesLoading),
+	  group_runtime_loading: observedBoolean(readiness?.groupRuntimeLoading),
+	  render_failed: observedEvent(sheet.renderFailure),
+	  lifecycle_failed: observedEvent(sheet.lifecycleFailure),
+	  ready_append_failed: observedEvent(sheet.readyAppendFailure),
+	  heartbeat_count: count(sheet.heartbeatCount),
+	  widest_silence_ms: count(sheet.widestSilenceMillis),
+	  tolerated_silence_ms: count(sheet.toleratedSilenceMillis)
+	};
+}
+
 export function workloadSummary(result, samples = [], state = {}) {
   const complete = result === undefined ? 0 : 1;
 
@@ -481,7 +550,7 @@ export function workloadSummary(result, samples = [], state = {}) {
 	const last = samples.at(-1)?.diagnostics?.output;
 
 	const delta = key => {
-	  if (first?.[key] === undefined || last?.[key] === undefined)
+	  if (samples.length < 2 || first?.[key] === undefined || last?.[key] === undefined)
 		  return null;
 
 		const before = uint(first[key]), after = uint(last[key]);
@@ -521,9 +590,11 @@ export function workloadSummary(result, samples = [], state = {}) {
 	  configured_poll_iterations: 60,
 	  observed_poll_iterations: samples.filter(entry => entry.phase === "measurement").length,
 	  workload_complete: complete,
+	  phase: WORKLOAD_PHASES.indexOf(state.phase) + 1,
+	  fixture_sheet: sheetSummary(state.sheet),
 	  backend_ready: state.backendReady === true ? 1 : 0,
 	  show_prepared: state.prepared === true ? 1 : 0,
-	  fixture_sheet_liveness_gate_met: complete ? 1 : null,
+	  fixture_sheet_liveness_gate_met: observedBoolean(state.sheet?.livenessPassed) ?? (complete ? 1 : null),
 	  minimum_one_second_completed_microhz: minimum,
 	  average_completed_microhz: scaled(result?.average_completed_hz),
 	  p95_one_second_completed_microhz: scaled(result?.p95_one_second_completed_hz),
@@ -535,8 +606,8 @@ export function workloadSummary(result, samples = [], state = {}) {
 	  frames_sent_delta: delta("frames_sent"),
 	  output_deadline_misses_delta: deadline,
 	  output_send_errors_delta: errors,
-	  deadline_gate_met: deadline === null ? null : deadline === 0 ? 1 : 0,
-	  send_error_gate_met: errors === null ? null : errors === 0 ? 1 : 0,
+	  deadline_gate_met: deadline === null ? null : deadline > 0 ? 0 : complete ? 1 : null,
+	  send_error_gate_met: errors === null ? null : errors > 0 ? 0 : complete ? 1 : null,
 	  mutation_measurement_available: 0,
 	  mutation_budget_ns: 5000000,
 	  mutation_p95_ns: null,
@@ -566,11 +637,27 @@ export function numericReport(
 	  observerWallNs = 0,
 	  workloadResult,
 	  workloadSamples,
-	  workloadState
+	  workloadState,
+
+	  captureStatus = {
+		  failure_category: complete ? 0 : 1,
+		  capture_stage: 6,
+		  capture_validated: 1
+		}
 	}
 ) {
   require_(["on", "off"].includes(mode), "invalid diagnostic mode");
 	uint(complete, 1);
+	exact(captureStatus, ["failure_category", "capture_stage", "capture_validated"]);
+	uint(captureStatus.failure_category, 3);
+	uint(captureStatus.capture_stage, 6);
+	uint(captureStatus.capture_validated, 1);
+
+	require_(
+	  !complete || (captureStatus.capture_validated === 1 && captureStatus.capture_stage === 6 && captureStatus.failure_category === 0),
+		"complete report requires validated successful capture"
+	);
+
 	const window = qualifyWindow(requests), records = [], overhead = [], excluded = [0, 0, 0, 0, 0, 0];
 
 	const append = (role, child, ordinal, stage, anchor, entry, accepted = null) => records.push({
@@ -664,6 +751,13 @@ export function numericReport(
 	  boundary_margin_ms: 6,
 	  window,
 	  observer_wall_ns: uint(observerWallNs),
+
+	  diagnostic_status: {
+		  ...captureStatus,
+		  completed_request_bounds: uint(requests.length, 61),
+		  owned_observations: uint(receipts.length, 61)
+		},
+
 	  workload: workloadSummary(workloadResult, workloadSamples, workloadState),
 	  coordinator_final_export_overhead_available: 0,
 	  observer_measured_within_window_only: 0,
@@ -941,43 +1035,68 @@ export class CpuDiagnosticRun {
 	async finish(evidence, failure) {
 	  await this.requireStopped();
 		const started = performance.now();
-		const bindings = this.mode === "on" ? await manifests(this.directory) : [];
-		require_(this.mode === "off" || bindings.length === 2, "two bound native children required");
-		const native = [];
+		let native = [], server = new Map();
 
-		for (const binding of bindings) {
-		  const observed = this.bindings.get(binding.child_pid);
-			const verified = this.verifiedManifests.get(binding.spawn_ordinal);
+		const captureStatus = {
+		  failure_category: failure ? 1 : 0,
+		  capture_stage: 2,
+		  capture_validated: 0
+		};
+
+		try {
+		  const bindings = this.mode === "on" ? await manifests(this.directory) : [];
+			require_(this.mode === "off" || bindings.length === 2, "two bound native children required");
+
+			for (const binding of bindings) {
+			  captureStatus.capture_stage = 3;
+				const observed = this.bindings.get(binding.child_pid);
+				const verified = this.verifiedManifests.get(binding.spawn_ordinal);
+
+				require_(
+				  observed && verified?.manifest === JSON.stringify(binding) && verified.executable === observed.executable,
+					"capture child was not independently observed"
+				);
+
+				captureStatus.capture_stage = 4;
+
+				native.push({
+				  binding: {
+					  ...binding,
+					  executable: observed.executable
+					},
+
+				  groups: parseNativeCapture(await drainedPrivateText(binding.stderr_path))
+				});
+			}
+
+			captureStatus.capture_stage = 5;
+			const serverMetadata = await lstat(evidence.sidecarLogPath);
 
 			require_(
-			  observed && verified?.manifest === JSON.stringify(binding) && verified.executable === observed.executable,
-				"capture child was not independently observed"
+			  serverMetadata.isFile() && !serverMetadata.isSymbolicLink() && serverMetadata.uid === process.getuid(),
+				"server log is not owned regular evidence"
 			);
 
-			native.push({
-			  binding: {
-				  ...binding,
-				  executable: observed.executable
-				},
+			await chmod(evidence.sidecarLogPath, 0o600);
+			server = parseServerCapture(await drainedPrivateText(evidence.sidecarLogPath));
 
-			  groups: parseNativeCapture(await drainedPrivateText(binding.stderr_path))
-			});
+			require_(
+			  this.mode === "off" || server.size > 0 && native.every(capture => capture.groups.size > 0),
+				"diagnostic counter rows are missing"
+			);
+
+			captureStatus.capture_stage = 6;
+			captureStatus.capture_validated = 1;
+		} catch (error) {
+		  if (!failure)
+			  throw error;
+
+			// Keep the original workload failure and private evidence. No unvalidated CPU row survives.
+			native = [];
+
+			server = new Map();
+			captureStatus.failure_category = 3;
 		}
-
-		const serverMetadata = await lstat(evidence.sidecarLogPath);
-
-		require_(
-		  serverMetadata.isFile() && !serverMetadata.isSymbolicLink() && serverMetadata.uid === process.getuid(),
-			"server log is not owned regular evidence"
-		);
-
-		await chmod(evidence.sidecarLogPath, 0o600);
-		const server = parseServerCapture(await drainedPrivateText(evidence.sidecarLogPath));
-
-		require_(
-		  this.mode === "off" || server.size > 0 && native.every(capture => capture.groups.size > 0),
-			"diagnostic counter rows are missing"
-		);
 
 		const report = numericReport({
 		  mode: this.mode,
@@ -989,7 +1108,8 @@ export class CpuDiagnosticRun {
 		  observerWallNs: add(this.observerWallNs, Math.ceil((performance.now() - started) * 1e6)),
 		  workloadResult: this.workload?.result,
 		  workloadSamples: evidence.samples,
-		  workloadState: this.workload?.state
+		  workloadState: this.workload?.state,
+		  captureStatus
 		});
 
 		await writeFile(path.join(this.outputDirectory, "typed-cpu-numeric.json"), `${JSON.stringify(report)}\n`, {

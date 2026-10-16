@@ -108,6 +108,7 @@ test("actual ready evidence satisfies unchanged exact count gate and is observed
 		observed = s;
 	});
 	assert.equal(observed.ready, true);
+	assert.equal(observed.readyFixtureRecords, 264);
 	assert.equal(observed.lastRecords[0].fixtureRecords, 264);
 });
 test("wrong count fails unchanged gate while preserving exact observed count", async () => {
@@ -239,10 +240,13 @@ test("earlier Strict Mode container cleanup followed by mount does not fail a he
 			.join("\n"),
 	);
 	await wait(p, 3, {}, 100);
+	const observations = [];
 	await requireActive(p, 3, "unrestricted", {
 		startedAt,
 		endedAt: startedAt + 60_000,
-	});
+	}, observations.push.bind(observations));
+	assert.equal(observations.at(-1).heartbeatCount, 61);
+	assert.equal(observations.at(-1).livenessPassed, true);
 });
 test("remounting after readiness cannot hide an active-case container unmount", async () => {
 	const wait = load(
@@ -298,6 +302,7 @@ test("missing report retains uncertainty instead of invented loading predicate",
 		/never reported itself ready/,
 	);
 	assert.equal(observed.reportPresent, false);
+	assert.equal(observed.readinessTimedOut, true);
 	assert.equal(observed.ready, false);
 	assert.ok(observed.unobservedPredicates.includes("group-runtime loading"));
 	assert.equal(observed.surface, null);
