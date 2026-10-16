@@ -11,6 +11,8 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { ShowScreen } from "./ShowScreen";
+import type { DocumentSummary } from "./document/session";
 import "./styles.css";
 
 /** One profile, shaped as the document core returns it. */
@@ -2257,4 +2259,129 @@ describe("startup recovery visibility", () => {
   await waitFor(() => expect(invoke).toHaveBeenCalledWith("startup_recovery"));
   expect(screen.queryByRole("alert", {name: "Recent show could not be opened"})).toBeNull();
  });
+});
+
+
+describe("authoritative Show summary freshness", () => {
+	it("validates a late initial summary against the matching scene that arrived first", async () => {
+		const normal = invoke.getMockImplementation();
+		const old = { ...document, fixtureCount: 313, universeCount: 10, lastSavedAt: 1000 };
+		const latest = { ...old, fixtureCount: 314, universeCount: 11, lastSavedAt: 2000 };
+		let releaseSummary!: (summary: unknown) => void;
+		const initialSummary = new Promise((resolve) => { releaseSummary = resolve; });
+		let reads = 0;
+		invoke.mockImplementation((command: string, args?: unknown) => {
+			if (command === "document_summary") return ++reads === 1 ? initialSummary : Promise.resolve(latest);
+			if (command === "cad_scene_snapshot") return Promise.resolve({
+				showId: SHOW_ID, sceneRevision: 2, selectionRevision: 0,
+				entities: [cadEntity], drawings: [], selectedIds: [], attachments: [],
+			});
+			return normal?.(command, args);
+		});
+		renderApp();
+		await act(async () => {});
+		expect(invoke).toHaveBeenCalledWith("cad_scene_snapshot");
+		// Flush the already-resolved CAD read before releasing the independent old summary.
+		await act(async () => releaseSummary(old));
+		const info = await screen.findByRole("region", { name: "Show information" });
+		await waitFor(() => expect(within(info).getByText("314")).toBeVisible());
+		expect(within(info).getByText("11")).toBeVisible();
+	});
+
+	it("refreshes metadata when the deferred initial CAD snapshot first binds the visible show", async () => {
+		const normal = invoke.getMockImplementation();
+		let summary = { ...document, fixtureCount: 313, universeCount: 10, lastSavedAt: 1000 };
+		let releaseScene!: (scene: unknown) => void;
+		const initialScene = new Promise((resolve) => { releaseScene = resolve; });
+		invoke.mockImplementation((command: string, args?: unknown) => {
+			if (command === "document_summary") return Promise.resolve(summary);
+			if (command === "cad_scene_snapshot") return initialScene;
+			return normal?.(command, args);
+		});
+		renderApp();
+		const info = await screen.findByRole("region", { name: "Show information" });
+		await waitFor(() => expect(within(info).getByText("313")).toBeVisible());
+		// A committed edit occurs after the summary read but before the first scene arrives.
+		summary = { ...summary, fixtureCount: 314, universeCount: 11, lastSavedAt: 2000 };
+		await act(async () => releaseScene({
+			showId: SHOW_ID, sceneRevision: 2, selectionRevision: 0,
+			entities: [cadEntity], drawings: [], selectedIds: [], attachments: [],
+		}));
+		await waitFor(() => expect(within(info).getByText("314")).toBeVisible());
+		expect(within(info).getByText("11")).toBeVisible();
+		expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
+	});
+
+	it("refreshes Show metadata after actual scene deltas without reopening the document", async () => {
+		const normal = invoke.getMockImplementation();
+		let summary = { ...document, fixtureCount: 313, universeCount: 10, lastSavedAt: 1000 };
+		invoke.mockImplementation((command: string, args?: unknown) => command === "document_summary"
+			? Promise.resolve(summary) : normal?.(command, args));
+		renderApp();
+		const info = await screen.findByRole("region", { name: "Show information" });
+		await waitFor(() => expect(within(info).getByText("313")).toBeVisible());
+		const libraryReads = invoke.mock.calls.filter(([command]) => command === "library_profiles").length;
+		const cases = [[314, 11], [314, 10], [314, 11], [313, 10], [314, 11]];
+		for (const [index, [fixtureCount, universeCount]] of cases.entries()) {
+			summary = { ...summary, fixtureCount, universeCount, lastSavedAt: 2000 + index };
+			await act(async () => eventHandlers.get("cad-scene-delta")?.({ payload: {
+				sceneRevision: index + 2, upserted: [], removedIds: [], drawings: [], attachments: [],
+			} }));
+			await waitFor(() => expect(within(info).getByText(String(fixtureCount))).toBeVisible());
+			expect(within(info).getByText(String(universeCount))).toBeVisible();
+		}
+		expect(invoke.mock.calls.filter(([command]) => command === "library_profiles")).toHaveLength(libraryReads);
+		expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
+		expect(invoke).not.toHaveBeenCalledWith("save_document_paperwork", expect.anything());
+	});
+
+	it("preserves dirty Show paperwork while authoritative saved time changes", async () => {
+		const summary = { ...document, project: "Stored project", lastSavedAt: 1000 } as DocumentSummary;
+		const props = { document: summary, cadScene: null, onDocument: vi.fn(),
+			onReloadProfiles: vi.fn(), onReloadDocument: vi.fn(), onError: vi.fn() };
+		const view = renderApp(<ShowScreen {...props} />);
+		const project = screen.getByRole("textbox", { name: "Project" });
+		fireEvent.change(project, { target: { value: "Unsaved project draft" } });
+		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, lastSavedAt: 2000, fixtureCount: 314 }} /></ModalProvider>);
+		expect(project).toHaveValue("Unsaved project draft");
+		expect(props.onDocument).not.toHaveBeenCalled();
+		expect(invoke).not.toHaveBeenCalledWith("save_document_paperwork", expect.anything());
+	});
+});
+
+
+describe("Show paperwork draft reconciliation", () => {
+	it("keeps project, venue, designer and uploaded logo drafts across rig summary updates", async () => {
+		const normal = invoke.getMockImplementation();
+		const logo = { mediaType: "image/jpeg", width: 1, height: 1, data: "/9j/2Q==" };
+		vi.mocked(dialog.open).mockResolvedValueOnce("/chosen/logo.jpg");
+		invoke.mockImplementation((command: string, args?: unknown) => command === "read_company_logo"
+			? Promise.resolve(logo) : normal?.(command, args));
+		const summary = { ...document, project: "Stored", venue: "Stored venue", lightingDesigner: "Stored designer", lastSavedAt: 1000 } as DocumentSummary;
+		const props = { document: summary, cadScene: null, onDocument: vi.fn(),
+			onReloadProfiles: vi.fn(), onReloadDocument: vi.fn(), onError: vi.fn() };
+		const view = renderApp(<ShowScreen {...props} />);
+		for (const label of ["Project", "Venue", "Lighting designer name"])
+			fireEvent.change(screen.getByRole("textbox", { name: label }), { target: { value: `Draft ${label}` } });
+		fireEvent.click(screen.getByRole("button", { name: "Upload logo" }));
+		await screen.findByRole("img", { name: "Company logo" });
+		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, lastSavedAt: 2000, fixtureCount: 314 }} /></ModalProvider>);
+		for (const label of ["Project", "Venue", "Lighting designer name"])
+			expect(screen.getByRole("textbox", { name: label })).toHaveValue(`Draft ${label}`);
+		expect(screen.getByRole("img", { name: "Company logo" })).toHaveAttribute("src", "data:image/jpeg;base64,/9j/2Q==");
+		expect(props.onDocument).not.toHaveBeenCalled();
+		expect(invoke).not.toHaveBeenCalledWith("save_document_paperwork", expect.anything());
+	});
+
+	it("adopts changed authoritative paperwork when clean and resets drafts for a different show", () => {
+		const summary = { ...document, project: "Stored", lastSavedAt: 1000 } as DocumentSummary;
+		const props = { document: summary, cadScene: null, onDocument: vi.fn(),
+			onReloadProfiles: vi.fn(), onReloadDocument: vi.fn(), onError: vi.fn() };
+		const view = renderApp(<ShowScreen {...props} />);
+		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, project: "Other window saved" }} /></ModalProvider>);
+		expect(screen.getByRole("textbox", { name: "Project" })).toHaveValue("Other window saved");
+		fireEvent.change(screen.getByRole("textbox", { name: "Project" }), { target: { value: "Draft" } });
+		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, showId: "different-show", project: "New show" }} /></ModalProvider>);
+		expect(screen.getByRole("textbox", { name: "Project" })).toHaveValue("New show");
+	});
 });

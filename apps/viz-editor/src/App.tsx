@@ -51,6 +51,7 @@ import { MediaWorkspace } from "./MediaWorkspace";
 import { PreviewControls } from "./PreviewControls";
 import { ErrorMessage } from "./ErrorMessage";
 import { ShowScreen } from "./ShowScreen";
+import { useSceneDocumentSummaryRefresh } from "./document/useDocumentSummaryRefresh";
 import { beginWindowDrag } from "./WindowChrome";
 
 const DEFAULT_LAYER: PatchLayer = {
@@ -303,9 +304,17 @@ function writeMovedPatch(
 	});
 }
 
+/** Own the library snapshot and its focused refresh after profile authoring. */
+function useFixtureProfiles(report: (reason: unknown) => void) {
+	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
+	const reloadProfiles = useCallback(() => {
+		documentSession.fixtureProfiles().then(setProfiles).catch(report);
+	}, [report]);
+	return { profiles, setProfiles, reloadProfiles };
+}
+
 export function App() {
 	const [document, setDocument] = useState<DocumentSummary | null>(null);
-	const [profiles, setProfiles] = useState<readonly FixtureProfile[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [workspace, setWorkspace] = useState<EditorWorkspace>("show");
 	const [settingsPage, setSettingsPage] = useState<SettingsPage>("visualizer");
@@ -515,10 +524,10 @@ export function App() {
 	const report = useCallback((reason: unknown) => {
 		setError(formatErrorDetails(reason));
 	}, []);
-	/** Re-read the machine's fixture library, after authoring a fixture or opening a document. */
-	const reloadProfiles = useCallback(() => {
-		documentSession.fixtureProfiles().then(setProfiles).catch(report);
-	}, [report]);
+	const { profiles, setProfiles, reloadProfiles } = useFixtureProfiles(report);
+	useSceneDocumentSummaryRefresh(
+		workspace === "show", document, cadScene, setDocument, report,
+	);
 	const { library, reload: reloadLibrary } = useSessionLibrary(profiles, report);
 	useEffect(() => {
 		if (!error) return;

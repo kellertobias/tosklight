@@ -8,7 +8,7 @@
  */
 import { open } from "@tauri-apps/plugin-dialog";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CadProjectPanel, type CadPaperwork } from "./cad/CadProjectPanel";
 import { CadRigOverview } from "./cad/CadViewport";
 import type { CadSceneSnapshot } from "./cad/types";
@@ -47,10 +47,20 @@ function ShowPaperwork({
 	const [draft, setDraft] = useState(() => paperworkOf(document));
 	const [saving, setSaving] = useState(false);
 	const [status, setStatus] = useState("");
-	// Another show, or the same show saved from elsewhere, replaces the draft with what it says.
+	const previousDocument = useRef(document);
 	useEffect(() => {
-		setDraft(paperworkOf(document));
-	}, [document?.showId, document?.lastSavedAt]);
+		const previous = previousDocument.current;
+		previousDocument.current = document;
+		const before = paperworkOf(previous);
+		const next = paperworkOf(document);
+		const sameShow = previous?.showId === document?.showId;
+		// Rig counts/save time do not replace paperwork. An external paperwork edit updates a
+		// clean form, while an operator's unsaved fields survive changes to this same show.
+		if (sameShow && JSON.stringify(before) === JSON.stringify(next)) return;
+		setDraft((current) => (
+			!sameShow || JSON.stringify(current) === JSON.stringify(before) ? next : current
+		));
+	}, [document]);
 
 	if (!document)
 		return (
