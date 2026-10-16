@@ -12,6 +12,10 @@ import {
 	readLinuxProcessTree,
 } from "./process-tree-resources.mjs";
 import { createCpuDiagnosticRun } from "./desktop-performance-cpu-stages.mjs";
+import {
+	createHeadlessStackCapture,
+	validateHeadlessStackOptions,
+} from "./desktop-performance-headless-stacks.mjs";
 import { createLargeStageDynamicsPlan } from "./stage-dynamics-scene.mjs";
 import { createPerformanceFixtureInputs } from "./stage-large-scene.mjs";
 
@@ -107,6 +111,8 @@ function parseArguments(arguments_) {
 		!["off", "on"].includes(values["typed-cpu-diagnostics"])
 	)
 		throw new Error("--typed-cpu-diagnostics must be off or on");
+	if (Object.hasOwn(values, "headless-stacks"))
+		validateHeadlessStackOptions(values);
 	return values;
 }
 
@@ -117,6 +123,8 @@ async function runCase(performanceCase, executionMode) {
 				options["output-dir"],
 			)
 		: null;
+	if (options["headless-stacks"])
+		cpu.headlessStacks = await createHeadlessStackCapture(cpu, options);
 	const temporaryRoot =
 		cpu?.root ??
 		(await mkdtemp(
@@ -640,7 +648,7 @@ async function measureWindow(api, rootPid, executionMode, samples, cpuStages) {
 	const rates = [];
 	const resources = [];
 	let diagnosticsMonotonicStartMillis = performance.now();
-	let		cpuRequest = cpuStages?.requestStart();
+	let cpuRequest = cpuStages?.requestStart();
 	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
 	cpuStages?.requestEnd(cpuRequest);
 	let diagnosticsMonotonicEndMillis = performance.now();
@@ -663,82 +671,87 @@ async function measureWindow(api, rootPid, executionMode, samples, cpuStages) {
 		diagnostics,
 		processes,
 	});
-	for (let second = 0; second < DURATION_SECONDS; second++) {
-		await new Promise((resolve) => setTimeout(resolve, 1_000));
-		const diagnosticsStartedAt = new Date().toISOString();
-		diagnosticsMonotonicStartMillis = performance.now();
-		cpuRequest = cpuStages?.requestStart();
-		const nextDiagnostics = await api.request(
-			"GET",
-			"/api/v2/diagnostics/performance",
-		);
-		diagnosticsMonotonicEndMillis = performance.now();
-		cpuStages?.requestEnd(cpuRequest);
-		const diagnosticsEndedAt = new Date().toISOString();
-		// The counter is sampled inside the request. Retain both bounds and use their
-		// midpoint consistently, including intervening I/O rather than only the sleep.
-		const nextCounterObservationMillis =
-			(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
-		const elapsed =
-			(nextCounterObservationMillis - counterObservationMillis) / 1_000;
-		processMonotonicStartMillis = performance.now();
-		const nextProcesses = await readLinuxProcessTree(rootPid);
-		processMonotonicEndMillis = performance.now();
-		await cpuStages?.observe(nextProcesses);
-		const nextProcessObservationMillis =
-			(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
-		const processElapsed =
-			(nextProcessObservationMillis - processObservationMillis) / 1_000;
-		samples.push({
-			phase: "measurement",
-			second,
-			elapsed,
-			processElapsed,
-			diagnosticsMonotonicStartMillis,
-			diagnosticsMonotonicEndMillis,
-			processMonotonicStartMillis,
-			processMonotonicEndMillis,
-			diagnosticsStartedAt,
-			diagnosticsEndedAt,
-			diagnostics: nextDiagnostics,
-			processes: nextProcesses,
-		});
-		rates.push(
-			(nextDiagnostics.output.frames_sent - diagnostics.output.frames_sent) /
+	const measurement = async () => {
+		for (let second = 0; second < DURATION_SECONDS; second++) {
+			await new Promise((resolve) => setTimeout(resolve, 1_000));
+			const diagnosticsStartedAt = new Date().toISOString();
+			diagnosticsMonotonicStartMillis = performance.now();
+			cpuRequest = cpuStages?.requestStart();
+			const nextDiagnostics = await api.request(
+				"GET",
+				"/api/v2/diagnostics/performance",
+			);
+			diagnosticsMonotonicEndMillis = performance.now();
+			cpuStages?.requestEnd(cpuRequest);
+			const diagnosticsEndedAt = new Date().toISOString();
+			// The counter is sampled inside the request. Retain both bounds and use their
+			// midpoint consistently, including intervening I/O rather than only the sleep.
+			const nextCounterObservationMillis =
+				(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
+			const elapsed =
+				(nextCounterObservationMillis - counterObservationMillis) / 1_000;
+			processMonotonicStartMillis = performance.now();
+			const nextProcesses = await readLinuxProcessTree(rootPid);
+			processMonotonicEndMillis = performance.now();
+			await cpuStages?.observe(nextProcesses);
+			const nextProcessObservationMillis =
+				(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
+			const processElapsed =
+				(nextProcessObservationMillis - processObservationMillis) / 1_000;
+			samples.push({
+				phase: "measurement",
+				second,
 				elapsed,
-		);
-		const server = (entries) =>
-			entries.filter((entry) => entry.command.includes("light-headless"));
-		const native = (entries) =>
-			entries.filter((entry) => entry.command.includes("viz-renderer"));
-		const ui = (entries) =>
-			entries.filter((entry) => entry.command.startsWith("WebKit"));
-		const host = (entries) =>
-			entries.filter(
-				(entry) =>
-					!entry.command.includes("light-headless") &&
-					!entry.command.includes("viz-renderer") &&
-					!entry.command.startsWith("WebKit"),
-			);
-		const resourceDelta = (before, after) =>
-			processTreeResourceDelta(
-				before,
-				after,
 				processElapsed,
-				LINUX_PROCESS_OPTIONS,
+				diagnosticsMonotonicStartMillis,
+				diagnosticsMonotonicEndMillis,
+				processMonotonicStartMillis,
+				processMonotonicEndMillis,
+				diagnosticsStartedAt,
+				diagnosticsEndedAt,
+				diagnostics: nextDiagnostics,
+				processes: nextProcesses,
+			});
+			rates.push(
+				(nextDiagnostics.output.frames_sent - diagnostics.output.frames_sent) /
+					elapsed,
 			);
-		resources.push({
-			application: resourceDelta(processes, nextProcesses),
-			server: resourceDelta(server(processes), server(nextProcesses)),
-			ui: resourceDelta(ui(processes), ui(nextProcesses)),
-			native: resourceDelta(native(processes), native(nextProcesses)),
-			host: resourceDelta(host(processes), host(nextProcesses)),
-		});
-		diagnostics = nextDiagnostics;
-		processes = nextProcesses;
-		counterObservationMillis = nextCounterObservationMillis;
-		processObservationMillis = nextProcessObservationMillis;
-	}
+			const server = (entries) =>
+				entries.filter((entry) => entry.command.includes("light-headless"));
+			const native = (entries) =>
+				entries.filter((entry) => entry.command.includes("viz-renderer"));
+			const ui = (entries) =>
+				entries.filter((entry) => entry.command.startsWith("WebKit"));
+			const host = (entries) =>
+				entries.filter(
+					(entry) =>
+						!entry.command.includes("light-headless") &&
+						!entry.command.includes("viz-renderer") &&
+						!entry.command.startsWith("WebKit"),
+				);
+			const resourceDelta = (before, after) =>
+				processTreeResourceDelta(
+					before,
+					after,
+					processElapsed,
+					LINUX_PROCESS_OPTIONS,
+				);
+			resources.push({
+				application: resourceDelta(processes, nextProcesses),
+				server: resourceDelta(server(processes), server(nextProcesses)),
+				ui: resourceDelta(ui(processes), ui(nextProcesses)),
+				native: resourceDelta(native(processes), native(nextProcesses)),
+				host: resourceDelta(host(processes), host(nextProcesses)),
+			});
+			diagnostics = nextDiagnostics;
+			processes = nextProcesses;
+			counterObservationMillis = nextCounterObservationMillis;
+			processObservationMillis = nextProcessObservationMillis;
+		}
+	};
+	if (cpuStages?.headlessStacks)
+		await cpuStages.headlessStacks.run(cpuStages, measurement);
+	else await measurement();
 	const sorted = [...rates].sort((left, right) => left - right);
 	// The band counts run from show start, so the window's histogram is the difference between
 	// the reading taken before the first second and the reading taken after the last.
@@ -1086,7 +1099,8 @@ async function requireFixtureSheetActive(
 	for (let index = 1; index < edges.length; index += 1)
 		widestSilence = Math.max(widestSilence, edges[index] - edges[index - 1]);
 	observe({
-		heartbeatCount: covering.length, widestSilenceMillis: widestSilence,
+		heartbeatCount: covering.length,
+		widestSilenceMillis: widestSilence,
 		toleratedSilenceMillis: tolerance,
 		livenessPassed: Boolean(covering.length) && widestSilence <= tolerance,
 	});
