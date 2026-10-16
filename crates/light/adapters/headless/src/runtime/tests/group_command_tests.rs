@@ -813,3 +813,77 @@ fn documented_simple_timing_preserves_group_owner_fixture_values_and_atomic_refu
     }
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[test]
+fn protected_dynamic_group_delete_returns_operator_message_without_changing_show() {
+    let (state, data_dir) = test_state();
+    let session = Session {
+        capability: light_core::SurfaceCapability::Programming,
+        id: SessionId::new(), token: "test".into(), connected: true, desk: test_control_desk(),
+    };
+    state.programming.start(session.id);
+    attach_session_command_context(&state, &session);
+    let show_path = data_dir.join("shows/protected-dynamic-group.show");
+    let show_id = default_show::initialise_legacy_test_show(&show_path).unwrap();
+    let entry = ShowEntry { is_base_show:false, id:show_id, name:"Protected dependency".into(),
+        path:show_path.display().to_string(), revision:0, updated_at:String::new(),
+        created_at:None, last_loaded_at:None, revision_copy:None };
+    let mut dynamic = command_test_dynamic(Uuid::new_v4(), 1);
+    dynamic.target_binding = light_dynamics::DynamicTargetBinding::LiveGroup { group_id:"991".into() };
+    let store = ShowStore::open(&show_path).unwrap();
+    store.put_object("group", "991", &serde_json::json!({"id":"991","name":"Protected","fixtures":[]}), 0).unwrap();
+    store.put_object("dynamic", &dynamic.id.to_string(), &serde_json::to_value(&dynamic).unwrap(), 0).unwrap();
+    let before = store.portable_document().unwrap();
+    state.active_show.replace_current(Some(entry.clone()));
+    state.output.replace_snapshot(load_engine_snapshot(&entry).unwrap()).unwrap();
+    let runtime_before = state.output.snapshot();
+    // The raw legacy dispatcher still reaches the final engine integrity guard. Keep that
+    // safety proof separately from the authoritative HTTP/WS/OSC command service below.
+    assert_eq!(
+        execute_programmer_command(&state, &session, "DELETE GROUP 991").unwrap_err(),
+        "snapshot validation failed: Dynamic 1 references a missing Group"
+    );
+    let expected = "Group 991 cannot be deleted: Dynamic 1 depends on it. Retarget that Dynamic first.";
+    for (source, action_source) in [
+        ("software", light_application::ActionSource::UserInterface),
+        ("http", light_application::ActionSource::Http),
+    ] {
+        let context = light_application::ActionContext::operator(
+            session.desk.id, session.id.0, action_source,
+        );
+        let result = command_http::run_service_with_source(
+            &state, &session, context,
+            light_application::ProgrammingCommand::Execute {
+                command: Some("DELETE GROUP 991".into()),
+                policy: light_application::ExecutionPolicy::AtomicProgrammer,
+                origin: light_application::CommandOrigin::CommandLine,
+            }, source,
+        ).unwrap();
+        assert!(matches!(result.outcome,
+            light_application::ProgrammingOutcome::Rejected { ref error } if error == expected
+        ), "{source}: {:?}", result.outcome);
+        assert_eq!(result.command_line.visible_text(), "DELETE GROUP 991");
+    }
+    state.programming.set_command_line(session.id, "DELETE GROUP 991".into());
+    let event_start = state.events.audit_events().len();
+    assert_eq!(command_http::route_osc_command_key_outcome(
+        &state, &session, "desk", "enter", Some("protected-dynamic-group-delete")
+    ), Some(true));
+    let events = state.events.audit_events();
+    assert!(events[event_start..].iter().any(|event|
+        event.kind == "programmer_command_rejected" && event.payload["error"] == expected
+            && event.payload["source"] == "osc"
+    ), "OSC must publish the same actionable operator rejection");
+    assert_eq!(state.programming.get(session.id).unwrap().command_line, "DELETE GROUP 991");
+    let after = store.portable_document().unwrap();
+    assert_eq!(after.revision(), before.revision());
+    for object in before.objects() {
+        let retained = after.object(object.key().kind(), object.key().id()).unwrap();
+        assert_eq!(retained.revision(), object.revision());
+        assert_eq!(retained.body(), object.body());
+    }
+    assert!(std::sync::Arc::ptr_eq(&runtime_before, &state.output.snapshot()));
+    assert!(state.output.snapshot().groups.iter().any(|g|g.id == "991"));
+    drop(store); drop(state);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
