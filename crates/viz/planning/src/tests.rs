@@ -926,3 +926,187 @@ fn a_subtractive_colour_channel_is_inverted_before_it_is_written() {
         "the same red on a subtractive fixture opens green and magenta rather than red"
     );
 }
+
+fn installation_calibrations(
+    profile: &FixtureProfile,
+    zero: f32,
+    revision: u32,
+) -> (
+    light_fixture::InstalledPositionCalibration,
+    light_fixture::InstalledColorCalibration,
+) {
+    let mode = &profile.modes[0];
+    let context = light_fixture::PositionCalibrationContext::new(profile, mode.id)
+        .unwrap()
+        .unwrap();
+    let position = serde_json::from_value(serde_json::json!({
+        "revision": revision, "quality": "estimated", "source": format!("rig {revision}"),
+        "pan_zero_degrees": zero, "tilt_zero_degrees": -zero,
+        "axis_overrides": {
+            "version": 1, "source_identity": context.identity,
+            "axes": [{"node_id": context.axis_ids[0], "zero_degrees": zero + 1.0, "invert": true}]
+        }
+    }))
+    .unwrap();
+    let identity = profile.native_color_identities(mode.id).unwrap().remove(0);
+    let path = mode
+        .color_physical
+        .as_ref()
+        .unwrap()
+        .paths
+        .iter()
+        .find(|path| path.id == identity.path_id)
+        .unwrap();
+    let recipe: Vec<_> = path
+        .controls
+        .iter()
+        .map(|id| {
+            let channel = mode
+                .channels
+                .iter()
+                .find(|channel| channel.id == *id)
+                .unwrap();
+            serde_json::json!({"channel_id": id, "function_id": channel.functions[0].id,
+            "raw": channel.functions[0].dmx_from})
+        })
+        .collect();
+    let color = serde_json::from_value(serde_json::json!({
+        "version": 1, "revision": revision,
+        "paths": [{ "source_identity": identity,
+            "measurements": [{ "recipe": recipe, "xyz": {"x": 0.4, "y": 0.5, "z": 0.3},
+                "provenance": {"quality": "estimated", "source": format!("meter {revision}"), "revision": revision}
+            }]
+        }]
+    })).unwrap();
+    (position, color)
+}
+
+#[tokio::test]
+async fn planning_patch_preserves_each_instances_installation_calibrations() {
+    let path = temp_path("installation-calibrations");
+    let document = PlanningDocument::create(&path, "Calibrated rig").unwrap();
+    let package = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/cameo--auro-spot-z300.toskfixture");
+    let profile = light_fixture::read_fixture_package(&std::fs::read(package).unwrap()).unwrap();
+    patch_one(
+        &document,
+        &path,
+        profile.clone(),
+        FixtureId(Uuid::new_v4()),
+        "Spot",
+        Some(1),
+    );
+    let mut fixture = document.patch_snapshot().unwrap().fixtures[0].clone();
+    let (root_position, root_color) = installation_calibrations(&profile, -4.0, 3);
+    let (copy_position, copy_color) = installation_calibrations(&profile, 10.0, 7);
+    fixture.patch.position_calibration = Some(root_position.clone());
+    fixture.patch.color_calibration = Some(root_color.clone());
+    fixture.patch.bracket_angle = -12.0;
+    fixture.patch.shaper_angle = Some(9.0);
+    fixture.patch.installed_appearance.light_source = InstalledLightSource::Tungsten;
+    let copy = light_fixture::MultiPatchInstance {
+        id: Uuid::new_v4(),
+        name: "Mounted copy".into(),
+        split_patches: vec![SplitPatch {
+            split: 1,
+            universe: Some(1),
+            address: Some(20),
+        }],
+        location: FixtureLocation {
+            x: 0,
+            y: -2_000,
+            z: 3_000,
+        },
+        rotation: FixtureVector {
+            x: 0.0,
+            y: 0.0,
+            z: 90.0,
+        },
+        invert_pan: true,
+        invert_tilt: false,
+        bracket_angle: 15.0,
+        shaper_angle: Some(-3.0),
+        position_calibration: Some(copy_position.clone()),
+        color_calibration: Some(copy_color.clone()),
+        installed_appearance: light_fixture::InstalledFixtureAppearance {
+            color_temperature_kelvin: Some(4_200),
+            shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let uncalibrated_id = Uuid::new_v4();
+    fixture.patch.multipatch = vec![
+        copy.clone(),
+        light_fixture::MultiPatchInstance {
+            id: uncalibrated_id,
+            name: "Uncalibrated copy".into(),
+            split_patches: vec![SplitPatch {
+                split: 1,
+                universe: None,
+                address: None,
+            }],
+            ..Default::default()
+        },
+    ];
+    let expected_root = fixture.patch.clone();
+    // Keep distinct identity-bound observations unchanged through the actual HTTP projection.
+    document
+        .patch_fixtures(PatchFixturesCommand {
+            show_id: document.show_id(),
+            fixtures: vec![PatchFixtureCandidate {
+                profile: fixture.profile,
+                patch: fixture.patch,
+            }],
+            remove_fixture_ids: Vec::new(),
+            placements: Vec::new(),
+            vector_spreads: Vec::new(),
+            fixture_updates: Vec::new(),
+        })
+        .unwrap();
+    let source = SceneSource::new(document);
+    let patch: viz_desk::wire::PatchSnapshot = get(&source, "/api/v2/patch").await;
+    let root = &patch.fixtures[0];
+    let actual = root.multipatch.iter().find(|c| c.id == copy.id).unwrap();
+    assert_eq!(actual.position_calibration.as_ref(), Some(&copy_position));
+    assert_eq!(actual.color_calibration.as_ref(), Some(&copy_color));
+    assert_eq!(root.position_calibration.as_ref(), Some(&root_position));
+    assert_eq!(root.color_calibration.as_ref(), Some(&root_color));
+    assert_eq!(
+        (root.location.x, root.location.y, root.location.z),
+        (1_000, 2_000, 3_000)
+    );
+    assert_eq!(root.rotation.y, 45.0);
+    assert_eq!((root.invert_pan, root.invert_tilt), (false, true));
+    assert_eq!((root.bracket_angle, root.shaper_angle), (-12.0, Some(9.0)));
+    assert_eq!(
+        root.installed_appearance,
+        expected_root.installed_appearance
+    );
+    assert_eq!(
+        (actual.location.x, actual.location.y, actual.location.z),
+        (0, -2_000, 3_000)
+    );
+    assert_eq!(
+        (actual.rotation.x, actual.rotation.y, actual.rotation.z),
+        (0.0, 0.0, 90.0)
+    );
+    assert_eq!((actual.invert_pan, actual.invert_tilt), (true, false));
+    assert_eq!(
+        (actual.bracket_angle, actual.shaper_angle),
+        (15.0, Some(-3.0))
+    );
+    assert_eq!(actual.installed_appearance, copy.installed_appearance);
+    assert_eq!(actual.split_patches[0].address, Some(20));
+    let absent = root
+        .multipatch
+        .iter()
+        .find(|c| c.id == uncalibrated_id)
+        .unwrap();
+    assert!(absent.position_calibration.is_none());
+    assert!(
+        absent.color_calibration.is_none(),
+        "copies never inherit root calibration"
+    );
+    let _ = std::fs::remove_file(path);
+}
