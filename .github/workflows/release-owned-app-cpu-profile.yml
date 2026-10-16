@@ -291,6 +291,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           python3 -B - <<'PYTHON'
           import hashlib, importlib.util, json, os, pathlib, sys, time
+          import subprocess
           sys.path.insert(0, 'tools')
           spec = importlib.util.spec_from_file_location('profile', 'tools/desktop-performance-profile.py')
           profile = importlib.util.module_from_spec(spec); spec.loader.exec_module(profile)
@@ -299,15 +300,31 @@ jobs:
           apps = list((release / 'bundle/appimage').glob('*.AppImage'))
           if len(apps) != 1:
               raise SystemExit('STOP: canonical AppImage is not unique')
-          roles = [{'role': role, 'sha256': profile.digest(release / name),
-                    'build_id': profile.build_id(release / name, time.monotonic() + 5)}
-                   for role, name in [('server', 'light-headless'), ('native_renderer', 'viz-renderer')]]
+          # Freeze the exact generated image before extraction. This executes
+          # only its fixed extraction runtime, never AppRun or the desk workload.
+          image_sha = profile.digest(apps[0])
+          stage = pathlib.Path(os.environ['TMPDIR']) / 'tl775-packaged-sidecar-preflight'
+          stage.mkdir(mode=0o700, exist_ok=False)
+          subprocess.run([str(apps[0]), '--appimage-extract'], cwd=stage,
+                         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+          out = pathlib.Path(os.environ['PROFILE_PREFLIGHT_OUT']) / 'application-source-binaries.json'
+          manifest = json.loads(out.read_text())
+          actual_source = subprocess.check_output(['git', '-C', str(candidate), 'rev-parse', 'HEAD'], text=True).strip()
+          try:
+              proof = profile.verified_packaged_roles(release, stage / 'squashfs-root', apps[0], image_sha,
+                  os.environ['CANDIDATE_SHA'], actual_source, time.monotonic() + 30)
+          except profile.PackagedBindingRefused as error:
+              manifest.update(packaged_preflight_status='STOP', packaged_preflight_code=str(error),
+                              packaged_preflight=error.diagnostic)
+              out.write_text(json.dumps(manifest, indent=2) + '\n')
+              raise SystemExit('STOP: packaged sidecar provenance/symbol preflight refused before any workload')
+          roles = proof['roles']
           descriptor = {'schema': 1, 'source_sha': os.environ['CANDIDATE_SHA'], 'roles': roles}
           path = pathlib.Path(os.environ['TMPDIR']) / 'tl775-owned-profile-binaries.json'
           path.write_text(json.dumps(descriptor) + '\n')
-          out = pathlib.Path(os.environ['PROFILE_PREFLIGHT_OUT']) / 'application-source-binaries.json'
-          manifest = json.loads(out.read_text())
-          manifest.update(roles=roles, appimage_sha256=profile.digest(apps[0]))
+          manifest.update(roles=roles, appimage_sha256=image_sha,
+                          packaged_preflight_status='VERIFIED', packaged_preflight=proof,
+                          descriptor_source='fixed executables extracted from exact canonical AppImage')
           manifest['source_sha256'] = {p: profile.digest(candidate / p) for p in ['Cargo.lock', 'package-lock.json']}
           out.write_text(json.dumps(manifest, indent=2) + '\n')
           with open(os.environ['GITHUB_ENV'], 'a') as stream:

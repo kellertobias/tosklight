@@ -666,6 +666,206 @@ class OwnedApplicationTests(unittest.TestCase):
         self.assertNotIn('private-thread', str(result))
         self.assertNotIn('untrusted', str(result))
 
+    def test_role_sha_mismatch_stop_has_numeric_diagnostic_and_starts_no_recorder(self):
+        import datetime
+        import json
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = self.manifest()
+            now = datetime.datetime.now(datetime.timezone.utc)
+            value.update(coordinator_pid=400, launch_pid=410,
+                         measurement_started_at_utc=now.isoformat(),
+                         measurement_deadline_utc=(now + datetime.timedelta(seconds=60)).isoformat())
+            request, output = root / 'request.json', root / 'receipt.json'
+            request.write_text(json.dumps(value))
+            identities = {pid: {**TARGET, 'pid': pid, 'tgid': pid, 'ppid': 400, 'sha256': 'd' * 64,
+                                'exe': '/private/owned-binary', 'inode': [1, 2, 3, 4]}
+                          for pid in (400, 410, 420, 421)}
+            original_resolve = Path.resolve
+            def resolve(path, *args, **kwargs):
+                if str(path) == '/proc/420/exe':
+                    return Path('/private/light-headless')
+                if str(path) == '/proc/421/exe':
+                    return Path('/private/viz-renderer')
+                return original_resolve(path, *args, **kwargs)
+            with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.sys, 'platform', 'linux'), patch.object(PROFILE.os, 'getuid', return_value=1001), patch.object(PROFILE.os, 'getppid', return_value=400), patch.object(PROFILE, 'pinned_process', side_effect=lambda pid: identities.get(pid, {**identities[400], 'pid': pid, 'tgid': pid})), patch.object(PROFILE, 'owned_descendants', return_value={420: identities[420], 421: identities[421]}), patch.object(PROFILE, 'find_perf', return_value='/private/perf'), patch.object(PROFILE, 'digest', return_value='f' * 64), patch.object(PROFILE, 'build_id', return_value='c' * 40), patch.object(Path, 'resolve', resolve), patch.object(PROFILE, 'collect_attempt') as collect:
+                self.assertEqual(PROFILE.owned_app(request, output), 2)
+            report = json.loads(output.read_text())
+            self.assertEqual(report['code'], 'exact_owned_application_role_not_unique')
+            self.assertTrue(report['recorder_cleanup_verified'])
+            self.assertEqual(report.get('role_binding_diagnostic'), [{'role': 'server',
+                'owned_name_candidates': 1, 'sha256_matches': 0, 'build_id_matches': 1, 'exact_matches': 0},
+                {'role': 'native_renderer', 'owned_name_candidates': 1, 'sha256_matches': 0,
+                 'build_id_matches': 1, 'exact_matches': 0}])
+            collect.assert_not_called()
+            for private in ['420', '/private', 'owned-binary']:
+                self.assertNotIn(private, json.dumps(report))
+
+    def test_workflow_descriptor_comes_from_verified_actual_packaged_sidecars(self):
+        import importlib.util
+        import json
+        import types
+        workflow = Path(__file__).resolve().parents[1] / '.github/workflows/release-owned-app-cpu-profile.yml'
+        lines = workflow.read_text().splitlines()
+        start = next(i for i, line in enumerate(lines) if line.strip() == 'import hashlib, importlib.util, json, os, pathlib, sys, time')
+        end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'PYTHON')
+        code = '\n'.join(line[10:] for line in lines[start:end])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            candidate, output, temporary = root / 'candidate', root / 'out', root / 'tmp'
+            for folder in (candidate, output, temporary):
+                folder.mkdir()
+            release = candidate / '.artifacts/build/cargo/x86_64-unknown-linux-gnu/release'
+            app = release / 'bundle/appimage/Control.AppImage'
+            app.parent.mkdir(parents=True)
+            app.write_bytes(b'exact image')
+            for name in ('light-headless', 'viz-renderer'):
+                (release / name).write_bytes(b'cargo output ' + name.encode())
+            for name in ('Cargo.lock', 'package-lock.json'):
+                (candidate / name).write_text('fixed')
+            (output / 'application-source-binaries.json').write_text('{}')
+            roles = [{'role': role, 'sha256': '9' * 64, 'build_id': '8' * 40}
+                     for role in ('server', 'native_renderer')]
+            proof = {'roles': roles, 'appimage_sha256': PROFILE.digest(app),
+                     'source_verified': True, 'fixed_packaged_paths_verified': True, 'comparisons': []}
+            package_bind = Mock(return_value=proof)
+            fake = types.SimpleNamespace(digest=PROFILE.digest, build_id=Mock(return_value='7' * 40),
+                                         verified_packaged_roles=package_bind)
+            spec = Mock()
+            environment = {'CANDIDATE_DIR': str(candidate), 'TARGET': 'x86_64-unknown-linux-gnu',
+                           'TMPDIR': str(temporary), 'PROFILE_PREFLIGHT_OUT': str(output),
+                           'CANDIDATE_SHA': 'a' * 40, 'GITHUB_ENV': str(root / 'env')}
+            with patch.dict(os.environ, environment), patch.object(importlib.util, 'spec_from_file_location', return_value=spec), patch.object(importlib.util, 'module_from_spec', return_value=fake), patch.object(subprocess, 'run') as run, patch.object(subprocess, 'check_output', return_value='a' * 40 + '\n'):
+                exec(compile(code, 'workflow-embedded-packaged-preflight', 'exec'), {})
+            descriptor = json.loads((temporary / 'tl775-owned-profile-binaries.json').read_text())
+            self.assertEqual(descriptor['roles'], roles)
+            package_bind.assert_called_once()
+            arguments = package_bind.call_args.args
+            self.assertEqual(arguments[0], release)
+            self.assertEqual(arguments[2], app)
+            self.assertEqual(arguments[3], PROFILE.digest(app))
+            self.assertEqual(arguments[4:6], ('a' * 40, 'a' * 40))
+            run.assert_called_once()
+            self.assertEqual(run.call_args.args[0], [str(app), '--appimage-extract'])
+            self.assertEqual(run.call_args.kwargs['timeout'], 60)
+
+    def elf_fixture(self, code=b'CODE', address=0x401000, extra=b''):
+        data = bytearray(128 + len(code))
+        data[:7] = b'\x7fELF\x02\x01\x01'
+        struct.pack_into('<HHI', data, 16, 3, 62, 1)
+        struct.pack_into('<Q', data, 32, 64)
+        struct.pack_into('<HH', data, 54, 56, 1)
+        struct.pack_into('<IIQQQQQQ', data, 64, 1, 5, 128, address, address, len(code), len(code), 4096)
+        data[128:] = code
+        return bytes(data) + extra
+
+    def packaged_fixture(self, root):
+        release, appdir, image = root / 'release', root / 'extracted', root / 'Control.AppImage'
+        release.mkdir(); (appdir / 'usr/bin').mkdir(parents=True)
+        image.write_bytes(b'exact frozen bundle')
+        for name in ('light-headless', 'viz-renderer'):
+            (release / name).write_bytes(self.elf_fixture(extra=b'original symbols'))
+            packaged = appdir / 'usr/bin' / name
+            packaged.write_bytes(self.elf_fixture(extra=b'packaged metadata'))
+            packaged.chmod(0o755)
+        return release, appdir, image
+
+    def test_packaged_provenance_allows_only_noncode_byte_drift_with_same_build_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            release, appdir, image = self.packaged_fixture(Path(directory))
+            with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5):
+                proof = PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
+            self.assertTrue(proof['source_verified'])
+            self.assertTrue(proof['fixed_packaged_paths_verified'])
+            self.assertEqual(len(proof['roles']), 2)
+            for role, comparison in zip(proof['roles'], proof['comparisons']):
+                self.assertFalse(comparison['full_bytes_equal'])
+                self.assertTrue(comparison['build_ids_equal'])
+                self.assertTrue(comparison['loaded_images_equal'])
+                self.assertEqual(role['sha256'], comparison['packaged_sha256'])
+                self.assertNotEqual(role['sha256'], comparison['cargo_sha256'])
+            self.assertNotIn(str(directory), str(proof))
+            self.assertNotIn('401000', str(proof))
+
+    def test_packaged_code_or_load_address_change_never_authorizes_descriptor(self):
+        for code, address in [(b'EVIL', 0x401000), (b'CODE', 0x402000)]:
+            with self.subTest(code=code, address=address), tempfile.TemporaryDirectory() as directory:
+                release, appdir, image = self.packaged_fixture(Path(directory))
+                (appdir / 'usr/bin/light-headless').write_bytes(self.elf_fixture(code, address))
+                with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), self.assertRaises(PROFILE.PackagedBindingRefused) as error:
+                    PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
+                self.assertEqual(str(error.exception), 'packaged_role_code_or_build_identity_changed')
+                self.assertFalse(error.exception.diagnostic['fixed_packaged_paths_verified'])
+
+    def test_packaged_source_bundle_buildid_symbols_and_symlink_are_guarded(self):
+        for case in ('source', 'bundle', 'buildid', 'symbols', 'symlink'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                release, appdir, image = self.packaged_fixture(Path(directory))
+                packaged = appdir / 'usr/bin/light-headless'
+                if case == 'symlink':
+                    packaged.unlink(); packaged.symlink_to(release / 'light-headless')
+                def identity(path, deadline):
+                    return ('c' if case == 'buildid' and Path(path) == packaged else 'b') * 40
+                with patch.object(PROFILE, 'build_id', side_effect=identity), patch.object(PROFILE, 'defined_function_count', return_value=0 if case == 'symbols' else 5), self.assertRaises(PROFILE.PackagedBindingRefused):
+                    PROFILE.verified_packaged_roles(release, appdir, image,
+                        '9' * 64 if case == 'bundle' else PROFILE.digest(image),
+                        'a' * 40, 'd' * 40 if case == 'source' else 'a' * 40, 99)
+
+    def test_elf_fingerprint_rejects_unproven_architecture_and_truncated_loads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'fixture'
+            valid = self.elf_fixture()
+            for blob in [b'not an ELF', valid[:90], valid[:18] + struct.pack('<H', 183) + valid[20:], valid[:-1]]:
+                path.write_bytes(blob)
+                with self.subTest(size=len(blob)), self.assertRaises(PROFILE.Refused):
+                    PROFILE.loaded_image_fingerprint(path)
+
+    def multi_load_elf_fixture(self):
+        data = bytearray(268)
+        data[:7] = b'\x7fELF\x02\x01\x01'
+        struct.pack_into('<HHI', data, 16, 3, 62, 1)
+        struct.pack_into('<Q', data, 32, 64)
+        struct.pack_into('<HH', data, 54, 56, 3)
+        for index, (flags, payload) in enumerate([(5, b'CODE'), (4, b'CONS'), (6, b'DATA')]):
+            offset, address = 256 + index * 4, 0x401000 + index * 0x1000
+            struct.pack_into('<IIQQQQQQ', data, 64 + index * 56, 1, flags, offset,
+                             address, address, 4, 12 if index == 2 else 4, 4096)
+            data[offset:offset + 4] = payload
+        return bytes(data)
+
+    def test_nonexecutable_loaded_constants_data_and_permissions_cannot_change(self):
+        for mutation in ('readonly_constants', 'writable_data', 'readonly_permissions', 'zero_fill'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                release, appdir, image = self.packaged_fixture(Path(directory))
+                original = self.multi_load_elf_fixture()
+                for name in ('light-headless', 'viz-renderer'):
+                    (release / name).write_bytes(original)
+                    (appdir / 'usr/bin' / name).write_bytes(original)
+                changed = bytearray(original)
+                if mutation == 'readonly_constants':
+                    changed[260:264] = b'EVIL'
+                elif mutation == 'writable_data':
+                    changed[264:268] = b'EVIL'
+                elif mutation == 'readonly_permissions':
+                    struct.pack_into('<I', changed, 64 + 56 + 4, 6)
+                else:
+                    struct.pack_into('<Q', changed, 64 + 2 * 56 + 40, 16)
+                (appdir / 'usr/bin/light-headless').write_bytes(changed)
+                with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), self.assertRaises(PROFILE.PackagedBindingRefused):
+                    PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
+
+    def test_elf_header_section_offset_entrypoint_and_program_alignment_are_not_masked(self):
+        for field, offset, value in [('section_offset', 40, 256), ('entrypoint', 24, 0x401000),
+                                     ('program_alignment', 64 + 48, 8192)]:
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                release, appdir, image = self.packaged_fixture(Path(directory))
+                packaged = appdir / 'usr/bin/light-headless'
+                data = bytearray(packaged.read_bytes())
+                struct.pack_into('<Q', data, offset, value)
+                packaged.write_bytes(data)
+                with patch.object(PROFILE, 'build_id', return_value='b' * 40), patch.object(PROFILE, 'defined_function_count', return_value=5), self.assertRaises(PROFILE.PackagedBindingRefused):
+                    PROFILE.verified_packaged_roles(release, appdir, image, PROFILE.digest(image), 'a' * 40, 'a' * 40, 99)
+
     def requests(self):
         return [{'role': role, 'target': {'sha256': 'a' * 64}, 'target_build_id': 'b' * 40}
                 for role in ('server', 'native_renderer')]

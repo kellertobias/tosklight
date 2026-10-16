@@ -1269,6 +1269,130 @@ def collect_owned_requests(requests):
     return reports, verified
 
 
+class PackagedBindingRefused(Refused):
+    def __init__(self, code, diagnostic):
+        super().__init__(code)
+        self.diagnostic = diagnostic
+
+
+def loaded_image_fingerprint(path):
+    """Bind all loaded payload, layout and loader metadata without normalization.
+
+    ELF64 little-endian x86_64 only. Strict header/program-header equality also
+    rejects section-table-offset changes; no actual packaging observation yet
+    justifies masking even those metadata bytes. Unmapped symbol sections can
+    differ only when no bound header or program segment changes.
+    """
+    data = Path(path).read_bytes()
+    if len(data) < 64 or data[:7] != b'\x7fELF\x02\x01\x01' or struct.unpack_from('<HHI', data, 16) not in ((2, 62, 1), (3, 62, 1)):
+        raise Refused('packaged_provenance_requires_x86_64_elf')
+    offset = struct.unpack_from('<Q', data, 32)[0]
+    size, count = struct.unpack_from('<HH', data, 54)
+    if size != 56 or offset < 64 or not 0 < count <= 1024 or offset + size * count > len(data):
+        raise Refused('invalid_packaged_elf_program_headers')
+    fingerprint = hashlib.sha256(data[:64])
+    fingerprint.update(data[offset:offset + size * count])
+    loads = executable_loads = file_backed_segments = 0
+    for index in range(count):
+        kind, flags, file_offset, _, _, file_size, memory_size, _ = struct.unpack_from('<IIQQQQQQ', data, offset + size * index)
+        if file_offset + file_size > len(data) or (kind == 1 and memory_size < file_size):
+            raise Refused('invalid_packaged_program_segment')
+        if kind == 1:
+            loads += 1
+            executable_loads += bool(flags & 1 and file_size)
+        if file_size:
+            # Also bind file-backed interpreter/dynamic/note program metadata.
+            # All flags, virtual addresses, alignment and zero-fill lengths were
+            # already bound by the complete unchanged program-header table.
+            fingerprint.update(struct.pack('<Q', index))
+            fingerprint.update(data[file_offset:file_offset + file_size])
+            file_backed_segments += 1
+    if not loads or not executable_loads:
+        raise Refused('packaged_executable_load_missing')
+    return {'sha256': fingerprint.hexdigest(), 'load_segments': loads,
+            'file_backed_program_segments': file_backed_segments, 'normalization': 'none'}
+
+
+def defined_function_count(path, deadline):
+    text = subprocess.run(['readelf', '--symbols', '--wide', str(path)], check=True,
+                          capture_output=True, text=True, env=isolated_env(),
+                          timeout=bounded_timeout(deadline, 5)).stdout
+    return sum(bool(re.match(r'\s*\d+:\s+[0-9a-fA-F]+\s+[1-9][0-9]*\s+FUNC\s+\S+\s+\S+\s+(?!UND\b)\S+\s+\S+', line))
+               for line in text.splitlines())
+
+
+def verified_packaged_roles(release, appdir, appimage, expected_image_sha, source_sha, actual_source_sha, deadline):
+    diagnostic = {'source_verified': source_sha == actual_source_sha,
+                  'appimage_sha256': digest(appimage), 'fixed_packaged_paths_verified': False,
+                  'comparisons': [], 'roles': []}
+    if not diagnostic['source_verified'] or not re.fullmatch('[0-9a-f]{40}', source_sha):
+        raise PackagedBindingRefused('packaged_candidate_source_mismatch', diagnostic)
+    if diagnostic['appimage_sha256'] != expected_image_sha:
+        raise PackagedBindingRefused('appimage_changed_before_packaged_preflight', diagnostic)
+    appdir = Path(appdir)
+    if appdir.is_symlink() or not appdir.is_dir():
+        raise PackagedBindingRefused('packaged_appdir_not_owned_directory', diagnostic)
+    for role, name in [('server', 'light-headless'), ('native_renderer', 'viz-renderer')]:
+        packaged = appdir / 'usr/bin' / name
+        # Resolve every component so an extracted symlink cannot redirect a fixed
+        # role to another location. No arbitrary path supplied by a show is used.
+        relative = packaged.relative_to(appdir)
+        cursor = appdir
+        for component in relative.parts:
+            cursor = cursor / component
+            if cursor.is_symlink():
+                raise PackagedBindingRefused('packaged_role_path_symlink', diagnostic)
+        info = packaged.stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or not info.st_mode & 0o111:
+            raise PackagedBindingRefused('packaged_role_inode_unverified', diagnostic)
+        built = Path(release) / name
+        original_sha, packaged_sha = digest(built), digest(packaged)
+        original_id, packaged_id = build_id(built, deadline), build_id(packaged, deadline)
+        original_code, packaged_code = loaded_image_fingerprint(built), loaded_image_fingerprint(packaged)
+        functions = defined_function_count(packaged, deadline)
+        comparison = {'role': role, 'cargo_sha256': original_sha, 'packaged_sha256': packaged_sha,
+                      'cargo_build_id': original_id, 'packaged_build_id': packaged_id,
+                      'full_bytes_equal': original_sha == packaged_sha, 'build_ids_equal': original_id == packaged_id,
+                      'cargo_loaded_image': original_code, 'packaged_loaded_image': packaged_code,
+                      'loaded_images_equal': original_code == packaged_code,
+                      'packaged_defined_functions': functions}
+        diagnostic['comparisons'].append(comparison)
+        if original_id != packaged_id or original_code != packaged_code:
+            raise PackagedBindingRefused('packaged_role_code_or_build_identity_changed', diagnostic)
+        if not functions:
+            raise PackagedBindingRefused('packaged_role_symbols_unavailable_before_workload', diagnostic)
+        diagnostic['roles'].append({'role': role, 'sha256': packaged_sha, 'build_id': packaged_id})
+    if digest(appimage) != expected_image_sha:
+        raise PackagedBindingRefused('appimage_changed_during_packaged_preflight', diagnostic)
+    diagnostic['fixed_packaged_paths_verified'] = True
+    return diagnostic
+
+
+def discover_app_roles(descendants, roles, deadline):
+    matches, diagnostics = {}, []
+    for role in roles:
+        found = []
+        counts = {'role': role['role'], 'owned_name_candidates': 0, 'sha256_matches': 0,
+                  'build_id_matches': 0, 'exact_matches': 0}
+        expected_name = 'light-headless' if role['role'] == 'server' else 'viz-renderer'
+        for pid in descendants:
+            name = Path(f'/proc/{pid}/exe').resolve(strict=True).name
+            if name != expected_name and not name.startswith(expected_name + '-'):
+                continue
+            counts['owned_name_candidates'] += 1
+            target = pinned_process(pid)
+            sha_match = target['sha256'] == role['sha256']
+            build_match = build_id(target['exe'], deadline) == role['build_id']
+            counts['sha256_matches'] += sha_match
+            counts['build_id_matches'] += build_match
+            if sha_match and build_match:
+                found.append(target)
+        counts['exact_matches'] = len(found)
+        matches[role['role']] = found
+        diagnostics.append(counts)
+    return matches, diagnostics
+
+
 def owned_app(manifest, output):
     report = {'schema': 1, 'status': 'STOP', 'recorder_cleanup_verified': True,
               'purpose': 'owned_application_cpu_cause_only_not_performance_acceptance', 'roles': []}
@@ -1299,19 +1423,12 @@ def owned_app(manifest, output):
                 'launch': launch, 'helper_sha256': digest(__file__), 'spool_parent': str(root),
                 'perf': str(Path(perf).resolve()), 'perf_sha256': digest(perf),
                 'perf_build_id': build_id(perf, work), 'work_deadline': work, 'overall_deadline': overall}
+        matches, report['role_binding_diagnostic'] = discover_app_roles(descendants, value['roles'], work)
+        if any(len(matches[role['role']]) != 1 for role in value['roles']):
+            raise Refused('exact_owned_application_role_not_unique')
         requests = []
         for role in value['roles']:
-            matches = []
-            for pid in descendants:
-                name = Path(f'/proc/{pid}/exe').resolve(strict=True).name
-                expected_name = 'light-headless' if role['role'] == 'server' else 'viz-renderer'
-                if name == expected_name or name.startswith(expected_name + '-'):
-                    target = pinned_process(pid)
-                    if target['sha256'] == role['sha256'] and build_id(target['exe'], work) == role['build_id']:
-                        matches.append(target)
-            if len(matches) != 1:
-                raise Refused('exact_owned_application_role_not_unique')
-            target = matches[0]
+            target = matches[role['role']][0]
             tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
             requests.append({**base, 'role': role['role'], 'target': target, 'target_build_id': role['build_id'],
                              'tids': tids, 'nonce': uuid.uuid4().hex})
