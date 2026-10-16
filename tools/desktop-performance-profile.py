@@ -813,7 +813,7 @@ def recorder(request):
     bounded_timeout(request["work_deadline"], 1)
     uid = derived_uid(request)
     application = request.get("kind") == "owned_app"
-    tids = verify_app(request, uid) if application else verify_probe(request, uid)
+    tids = verify_recording_target(request, uid) if application else verify_probe(request, uid)
     stable = fast_same_process if application else same_process
     own_resolver = app_symbol_resolver(request["target"], request["work_deadline"]) if application else None
     cpus = online_cpu_map()
@@ -832,7 +832,7 @@ def recorder(request):
         output = os.open("recorder.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=fd)
         try:
             # Resolver/config work must not leave a stale admission at attach.
-            if application and verify_app(request, uid) != tids:
+            if application and verify_recording_target(request, uid) != tids:
                 raise Refused('pre_capture_application_thread_identity_changed')
             if application and time.monotonic() + 10 > request['work_deadline']:
                 raise Refused('insufficient_owned_profile_measurement_budget')
@@ -867,7 +867,7 @@ def recorder(request):
                 raise Refused("coordinator_changed_quarantined")
             if not application or time.monotonic() >= next_thread_check:
                 if application:
-                    verify_family(request)
+                    verify_family_identity(request)
                 if application and set(int(t.name) for t in Path(f"/proc/{request['target']['pid']}/task").iterdir()) != set(tids):
                     raise Refused("thread_set_changed_quarantined")
                 for tid, expected in tids.items():
@@ -892,7 +892,7 @@ def recorder(request):
         if not same_process(request["target"]) or not same_process(request["coordinator"]):
             raise Refused("post_capture_identity_changed_quarantined")
         if application:
-            if verify_app(request, uid) != tids:
+            if verify_recording_target(request, uid) != tids:
                 raise Refused("post_capture_application_thread_identity_changed")
         raw_fd = os.open("perf.data", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
         try:
@@ -1116,6 +1116,16 @@ def owned_descendants(launch, uid):
 
 
 def verify_app(request, uid):
+    """Coordinator admission still requires every frozen family thread set."""
+    return _verify_application_scope(request, uid, verify_family)
+
+
+def verify_recording_target(request, uid):
+    """One recorder samples one frozen target; all family identities stay guarded."""
+    return _verify_application_scope(request, uid, verify_family_identity)
+
+
+def _verify_application_scope(request, uid, family_guard):
     target = request["target"]
     if request.get("helper_sha256") != digest(__file__) or not fast_same_process(target):
         raise Refused("application_or_helper_changed")
@@ -1128,7 +1138,7 @@ def verify_app(request, uid):
         raise Refused("application_not_owned_by_invoking_runner")
     if not same_process(request['owner']):
         raise Refused('packaged_owner_identity_changed')
-    verify_family(request)
+    family_guard(request)
     descendants = owned_descendants(request["launch"]["pid"], uid)
     if target["pid"] not in descendants or digest(f"/proc/{target['pid']}/exe") != target["sha256"]:
         raise Refused("application_not_owned_descendant")
@@ -1752,7 +1762,10 @@ def owned_app(manifest, output):
         report.update(source_sha=value['source_sha'], helper_sha256=digest(__file__),
                       perf_sha256=base['perf_sha256'], perf_build_id=base['perf_build_id'],
                       sample_hz=49, requested_role_seconds=10, global_budget_seconds=50,
-                      codegen_flags_changed=False)
+                      codegen_flags_changed=False,
+                      thread_guard_scope='per_target_frozen_admission',
+                      family_guard_scope='all_pinned_processes_and_private_channels',
+                      coordinator_admission_scope='all_three_frozen_thread_sets')
         if cleanup_verified and len(report['roles']) == 3 and all(r['attempts'][-1].get('status') == 'CAPABLE' for r in report['roles']):
             report['status'] = 'PROFILED'
         else:

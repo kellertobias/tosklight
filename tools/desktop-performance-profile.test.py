@@ -1239,7 +1239,7 @@ class RendererFamilyAdmissionTests(unittest.TestCase):
 
 
 class PreparationThreadAdmissionTests(unittest.TestCase):
-    def owned_run(self, directory, birth_during_preparation=False, birth_after_admission=False, parent_change=False, exhausted=False):
+    def owned_run(self, directory, birth_during_preparation=False, birth_after_admission=False, parent_change=False, exhausted=False, record_after_other_change=False, record_own_change=False, record_family_change=False, record_thread_mutation=None):
         import contextlib
         import datetime
         import json
@@ -1261,6 +1261,10 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
         identities[450]['sha256'] = value['owner']['sha256']
         helper = {**identities[400], 'pid': 420, 'tgid': 420, 'ppid': 400}
         members = {pid: [pid] for pid in identities}
+        if record_thread_mutation:
+            identities[515] = {**identities[501], 'pid': 515, 'tgid': 501, 'start': 515}
+            members[501].append(515)
+        channels = {'changed': False}
         prepared = []
         collected = []
         original_resolve, original_read = Path.resolve, Path.read_text
@@ -1273,6 +1277,8 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
                 return '500 501 502'
             return original_read(path, *args, **kwargs)
         def resolve(path, *args, **kwargs):
+            if str(path) == '/own/perf':
+                return path
             if str(path).startswith('/proc/') and path.name == 'exe':
                 return Path(identities[int(path.parts[2])]['exe'])
             return original_resolve(path, *args, **kwargs)
@@ -1293,6 +1299,25 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             collected.extend(requests)
             for req in requests:
                 verify(req, 1001)
+            if record_after_other_change:
+                add_thread(510)  # Only the server changed; both renderer scopes remain frozen.
+                if record_family_change == 'channel':
+                    channels['changed'] = True
+                elif record_family_change:
+                    identities[501]['ppid'] = 9
+                if record_thread_mutation == 'removed':
+                    members[501].remove(515)
+                elif record_thread_mutation:
+                    identities[515] = {**identities[515], record_thread_mutation: 9999}
+                def mutate_own(target):
+                    if record_own_change and target['pid'] == 501 and 511 not in identities:
+                        identities[511] = {**identities[501], 'pid': 511, 'tgid': 501, 'start': 511}
+                        members[501].append(511)
+                reports = []
+                for req in requests:
+                    receipt = self.mock_recording(req, root / str(req['target']['pid']), mutate_own)
+                    reports.append({'role': req['role'], 'attempts': [receipt]})
+                return reports, all(r['attempts'][0].get('recorder_gone') is True for r in reports)
             return [{'role': req['role'], 'attempts': [{'status': 'CAPABLE', 'recorder_gone': True}]}
                     for req in requests], True
         ticks = iter(i / 10 for i in range(10000))
@@ -1304,7 +1329,7 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
                      ('discover_app_roles', lambda *args: ({'server': [identities[500]], 'native_renderer': [identities[501], identities[502]]},
                          [{'owned_name_candidates': 1, 'exact_matches': 1}, {'owned_name_candidates': 2, 'exact_matches': 2}])),
                      ('fast_same_process', lambda identity: True), ('same_process', lambda identity: True),
-                     ('task_identity', lambda tid: identities[tid]), ('renderer_channel', lambda target, owner: [str(target['pid']), 'out']),
+                     ('task_identity', lambda tid: identities[tid]), ('renderer_channel', lambda target, owner: ['changed' if channels['changed'] and target['pid'] == 501 else str(target['pid']), 'out']),
                      ('app_symbol_resolver', metadata), ('verify_app', final_verify), ('collect_owned_requests', collect)]
             for name, implementation in mocks:
                 stack.enter_context(patch.object(PROFILE, name, side_effect=implementation))
@@ -1370,7 +1395,7 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             def spool(*args):
                 return os.open(root, os.O_RDONLY), os.open(root, os.O_RDONLY)
             stack.enter_context(patch.object(PROFILE, 'derived_uid', return_value=1001))
-            stack.enter_context(patch.object(PROFILE, 'verify_app', side_effect=verify))
+            stack.enter_context(patch.object(PROFILE, 'verify_recording_target', side_effect=verify))
             stack.enter_context(patch.object(PROFILE, 'app_symbol_resolver', side_effect=lambda *args: events.append('resolver')))
             stack.enter_context(patch.object(PROFILE, 'online_cpu_map', return_value=[0]))
             stack.enter_context(patch.object(PROFILE, 'digest', return_value='b' * 64))
@@ -1387,6 +1412,110 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             self.assertEqual(events, ['verify', 'resolver', 'config', 'verify'])
             self.assertEqual(emit.call_args.args[0]['code'], 'application_participant_thread_set_changed')
             self.assertTrue(emit.call_args.args[0]['recorder_gone'])
+
+
+    @staticmethod
+    def mock_recording(request, root, during_metadata):
+        """Actual recorder and validators; all perf/process operations are inert fixtures."""
+        import contextlib
+        import types
+        root.mkdir()
+        target = request['target']
+        (root / 'perf.data').write_bytes(perf_file([9] * 10))
+        received = []
+        child = Mock(pid=700)
+        child.poll.return_value = None
+        ticks = iter(i / 2 for i in range(1000))
+        original_fstat = os.fstat
+        class Resolver:
+            maps = [(0x1000, 0x2000, 0)]
+            def __call__(self, ip):
+                return 'owned_test_function' if ip == 0x1100 else '[external or unmapped]'
+        def spool(*args):
+            return os.open(root, os.O_RDONLY), os.open(root, os.O_RDONLY)
+        def metadata(*args):
+            during_metadata(target)
+            return Resolver()
+        def stat_owned(fd):
+            info = original_fstat(fd)
+            return types.SimpleNamespace(**{name: (1001 if name == 'st_uid' else getattr(info, name))
+                for name in ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_nlink', 'st_size', 'st_mtime_ns')})
+        text = (f"{target['pid']}/{target['pid']} 2.000000000: cpu-clock:u: 1100 untrusted (untrusted)\n\n") * 10
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(PROFILE, 'derived_uid', return_value=1001))
+            stack.enter_context(patch.object(PROFILE, 'app_symbol_resolver', side_effect=metadata))
+            stack.enter_context(patch.object(PROFILE, 'online_cpu_map', return_value=[0]))
+            stack.enter_context(patch.object(PROFILE, 'validate_spool_request'))
+            stack.enter_context(patch.object(PROFILE, 'private_spool', side_effect=spool))
+            stack.enter_context(patch.object(PROFILE.os, 'pidfd_open', side_effect=lambda *args: os.open(root, os.O_RDONLY), create=True))
+            stack.enter_context(patch.object(PROFILE, 'verify_perf_config'))
+            stack.enter_context(patch.object(PROFILE, 'clean_spool'))
+            stack.enter_context(patch.object(PROFILE, 'write_receipt'))
+            stack.enter_context(patch.object(PROFILE, 'process_identity', return_value={'sha256': request['perf_sha256']}))
+            stack.enter_context(patch.object(PROFILE.subprocess, 'Popen', return_value=child))
+            stack.enter_context(patch.object(PROFILE, 'stop_owned', side_effect=lambda *args: setattr(child.poll, 'return_value', 0)))
+            stack.enter_context(patch.object(PROFILE.select, 'select', return_value=([], [], [])))
+            stack.enter_context(patch.object(PROFILE.time, 'monotonic', side_effect=lambda: next(ticks)))
+            stack.enter_context(patch.object(PROFILE.time, 'monotonic_ns', side_effect=[1_000_000_000, 12_000_000_000]))
+            stack.enter_context(patch.object(PROFILE, 'run_perf_tool', return_value=text))
+            stack.enter_context(patch.object(PROFILE, 'own_executable_maps', return_value=Resolver.maps))
+            stack.enter_context(patch.object(PROFILE.os, 'fstat', side_effect=stat_owned))
+            stack.enter_context(patch.object(PROFILE, 'emit', side_effect=received.append))
+            try:
+                PROFILE.recorder(request)
+            except PROFILE.Refused as error:
+                # Entry refusal happens before the recorder exists.
+                received.append({'status': 'STOP', 'code': str(error), 'recorder_gone': True})
+        return received[-1]
+
+    def test_other_role_thread_change_preserves_two_valid_recordings_but_aggregate_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, report, requests, prepared = self.owned_run(directory, record_after_other_change=True)
+        roles = {role['role']: role['attempts'][0] for role in report['roles']}
+        self.assertEqual(result, 2)
+        self.assertEqual(report['status'], 'STOP')
+        self.assertTrue(report['recorder_cleanup_verified'])
+        self.assertEqual(roles['server']['status'], 'STOP')
+        for role in ('native_renderer_1', 'native_renderer_2'):
+            self.assertEqual(roles[role]['status'], 'CAPABLE')
+            self.assertEqual(roles[role]['samples'], 10)
+            self.assertEqual(roles[role]['own_elf_samples'], 10)
+            self.assertEqual(roles[role]['leaf_top20'], [{'function': 'owned_test_function', 'samples': 10}])
+        self.assertEqual(set(requests[0]['tids']), {500}, 'no post-admission refresh')
+        self.assertEqual(report['thread_guard_scope'], 'per_target_frozen_admission')
+        self.assertEqual(report['family_guard_scope'], 'all_pinned_processes_and_private_channels')
+        self.assertEqual(report['coordinator_admission_scope'], 'all_three_frozen_thread_sets')
+
+    def test_own_metadata_time_thread_change_still_refuses_while_other_target_remains_valid(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, report, _, _ = self.owned_run(directory, record_after_other_change=True, record_own_change=True)
+        roles = {role['role']: role['attempts'][0] for role in report['roles']}
+        self.assertEqual(result, 2)
+        self.assertEqual(roles['native_renderer_1']['status'], 'STOP')
+        self.assertEqual(roles['native_renderer_2']['status'], 'CAPABLE')
+        self.assertEqual(roles['native_renderer_2']['samples'], 10)
+        self.assertTrue(report['recorder_cleanup_verified'])
+
+    def test_any_other_role_process_or_channel_change_still_refuses_all_recordings(self):
+        for change in (True, 'channel'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                result, report, _, _ = self.owned_run(directory, record_after_other_change=True, record_family_change=change)
+            self.assertEqual(result, 2)
+            self.assertEqual(len(report['roles']), 3)
+            self.assertTrue(all(role['attempts'][0]['status'] == 'STOP' for role in report['roles']))
+            self.assertTrue(report['recorder_cleanup_verified'])
+
+    def test_own_frozen_nonleader_start_uid_tgid_and_removal_still_refuse(self):
+        for change in ('start', 'uid', 'tgid', 'removed'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                result, report, requests, _ = self.owned_run(directory, record_after_other_change=True, record_thread_mutation=change)
+            roles = {role['role']: role['attempts'][0] for role in report['roles']}
+            self.assertEqual(result, 2)
+            self.assertEqual(roles['native_renderer_1']['status'], 'STOP')
+            self.assertEqual(roles['native_renderer_2']['status'], 'CAPABLE')
+            self.assertEqual(roles['native_renderer_2']['own_elf_samples'], 10)
+            self.assertEqual(set(requests[1]['tids']), {501, 515}, 'frozen scope never refreshed')
+            self.assertTrue(report['recorder_cleanup_verified'])
 
 
 if __name__ == "__main__":
