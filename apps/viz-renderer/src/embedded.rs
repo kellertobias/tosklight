@@ -20,7 +20,10 @@
 //! If neither is available the desk never starts this at all and keeps drawing the Stage with its
 //! own web renderer, which is why nothing here has to cope with having no transport.
 
+pub(super) mod cpu_diagnostics;
+
 use crate::helper_source::{Embedding, HelperSource};
+use cpu_diagnostics::{Sample, Stage};
 use std::time::{Duration, Instant};
 use viz_desk::{DeskConnection, DeskProvider};
 use viz_helper::protocol::{FrameTransport, PaneInput};
@@ -48,6 +51,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         }
     };
     let epoch = Instant::now();
+    let mut cpu_diagnostics = cpu_diagnostics::Sampler::from_env();
 
     /*
      * The rig comes from the desk's own server, through the same provider the standalone
@@ -61,12 +65,9 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
     let mut rig = embedded_desk_provider(&embedding, epoch);
 
     loop {
-        if let Some(rig) = rig.as_mut() {
-            let events = rig.poll();
-            drain(events, &mut state);
-        }
-        let events = source.poll();
-        if drain(events, &mut state) {
+        let (mut observation, finished) =
+            poll_iteration(&mut rig, &mut source, &mut state, &mut cpu_diagnostics);
+        if finished {
             // The desk's channel ended. Its window has gone or it asked this to stop; either way
             // there is nothing left to draw for.
             return Ok(());
@@ -181,18 +182,83 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
             };
         }
-        state.resize_for(&embedding)?;
-        match state.draw(epoch, &mut source) {
-            Ok(()) => {}
-            // A frame that failed is not fatal on its own: a surface can be lost while a display
-            // is reconfigured and be there again next frame. The desk is told, and the loop keeps
-            // going rather than taking the pane away over one bad frame.
-            Err(detail) => {
-                source.report(&detail);
-            }
-        }
+        draw_iteration(
+            &mut state,
+            &mut source,
+            &embedding,
+            epoch,
+            observation.as_mut(),
+        )?;
+        drop(observation);
         std::thread::sleep(IDLE_SLEEP);
     }
+}
+
+/// Preserve redraw/error behavior while finalizing the sampled iteration's frame binding.
+fn draw_iteration(
+    state: &mut PaneState,
+    source: &mut HelperSource,
+    embedding: &Embedding,
+    epoch: Instant,
+    mut observation: Option<&mut Sample>,
+) -> Result<(), String> {
+    if let Some(sample) = observation.as_mut() {
+        sample.finish(state.values.frame, state.presented_frames, 2);
+    }
+    state.resize_for(embedding)?;
+    let result = state.draw(epoch, source, observation.as_deref_mut());
+    if let Some(sample) = observation.as_mut() {
+        sample.finish(
+            state.values.frame,
+            state.presented_frames,
+            if result.is_err() { 2 } else { 1 },
+        );
+    }
+    match result {
+        Ok(()) => {}
+        // A frame that failed is not fatal on its own: a surface can be lost while a display
+        // is reconfigured and be there again next frame. The desk is told, and the loop keeps
+        // going rather than taking the pane away over one bad frame.
+        Err(detail) => {
+            source.report(&detail);
+        }
+    }
+    Ok(())
+}
+
+/// Poll and adopt both synchronous providers inside this iteration's observation.
+/// The independently running channel/network decoders remain outside these CPU counters.
+fn poll_iteration(
+    rig: &mut Option<Box<DeskProvider>>,
+    source: &mut HelperSource,
+    state: &mut PaneState,
+    cpu_diagnostics: &mut Option<cpu_diagnostics::Sampler>,
+) -> (Option<Sample>, bool) {
+    let mut observation = cpu_diagnostics.as_mut().and_then(|sampler| {
+        sampler.sample(
+            state.values.frame,
+            state.presented_frames,
+            if state.transport == FrameTransport::Copy {
+                1
+            } else {
+                2
+            },
+        )
+    });
+    if let Some(sample) = observation.as_mut() {
+        sample.begin_phase(Stage::ProviderPollAdopt);
+    }
+    if let Some(rig) = rig.as_mut() {
+        let events = rig.poll();
+        drain(events, state);
+    }
+    let events = source.poll();
+    let finished = drain(events, state);
+    if let Some(sample) = observation.as_mut() {
+        sample.end_phase(Stage::ProviderPollAdopt);
+        sample.finish(state.values.frame, state.presented_frames, 3);
+    }
+    (observation, finished)
 }
 
 fn embedded_desk_provider(embedding: &Embedding, epoch: Instant) -> Option<Box<DeskProvider>> {
@@ -616,7 +682,15 @@ impl PaneState {
         }
     }
 
-    fn draw(&mut self, epoch: Instant, source: &mut HelperSource) -> Result<(), String> {
+    fn draw(
+        &mut self,
+        epoch: Instant,
+        source: &mut HelperSource,
+        mut observation: Option<&mut Sample>,
+    ) -> Result<(), String> {
+        if let Some(sample) = observation.as_mut() {
+            sample.begin_phase(Stage::PhysicsOverlayPrepare);
+        }
         let now = Instant::now();
         let elapsed = now
             .saturating_duration_since(self.last_tick)
@@ -662,12 +736,19 @@ impl PaneState {
             self.size,
             &self.overlay.quads,
         );
-        if !self.redraw_gate.should_draw(redraw_state, time_driven) {
+        let should_draw = self.redraw_gate.should_draw(redraw_state, time_driven);
+        if let Some(sample) = observation.as_mut() {
+            sample.end_phase(Stage::PhysicsOverlayPrepare);
+        }
+        if !should_draw {
             return Ok(());
         }
+        if let Some(sample) = observation.as_mut() {
+            sample.redrawn();
+        }
         let stats = match self.transport {
-            FrameTransport::Shared => self.draw_shared(time, source),
-            FrameTransport::Copy => self.draw_copy(time, source),
+            FrameTransport::Shared => self.draw_shared(time, source, observation),
+            FrameTransport::Copy => self.draw_copy(time, source, observation),
         }?;
         self.presented_frames = self.presented_frames.saturating_add(1);
         let presented_epoch_micros = std::time::SystemTime::now()
@@ -706,6 +787,7 @@ impl PaneState {
         &mut self,
         time: f32,
         source: &mut HelperSource,
+        mut observation: Option<&mut Sample>,
     ) -> Result<viz_render::FrameStats, String> {
         if self.shared.is_none() {
             let surface = viz_surface::create(self.renderer.device(), self.size.0, self.size.1)
@@ -728,13 +810,16 @@ impl PaneState {
             return Ok(self.renderer.stats());
         };
         self.renderer
-            .render_into(
+            .render_into_observed(
                 surface.view(),
                 &self.scene,
                 &self.values,
                 &self.view,
                 &self.overlay,
                 time,
+                observation
+                    .as_mut()
+                    .map(|s| &mut **s as &mut dyn viz_render::RenderCpuObserver),
             )
             .map_err(|error| error.to_string())
     }
@@ -744,12 +829,27 @@ impl PaneState {
         &mut self,
         time: f32,
         source: &mut HelperSource,
+        mut observation: Option<&mut Sample>,
     ) -> Result<viz_render::FrameStats, String> {
         let image = self
             .renderer
-            .capture(&self.scene, &self.values, &self.view, &self.overlay, time)
+            .capture_observed(
+                &self.scene,
+                &self.values,
+                &self.view,
+                &self.overlay,
+                time,
+                observation
+                    .as_mut()
+                    .map(|s| &mut **s as &mut dyn viz_render::RenderCpuObserver),
+            )
             .map_err(|error| error.to_string())?;
-        source.send_frame(image.width, image.height, image.rgba);
+        match observation {
+            Some(sample) => {
+                source.send_frame_observed(image.width, image.height, image.rgba, Some(sample))
+            }
+            None => source.send_frame(image.width, image.height, image.rgba),
+        }
         Ok(self.renderer.stats())
     }
 }

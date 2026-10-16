@@ -134,12 +134,29 @@ impl HelperSource {
     /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
     /// finishing for that reason. Saying so twice would not help anybody.
     pub fn send_frame(&mut self, width: u32, height: u32, rgba: Vec<u8>) {
+        self.send_frame_observed(width, height, rgba, None);
+    }
+
+    pub(super) fn send_frame_observed(
+        &mut self,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+        mut observation: Option<&mut crate::embedded::cpu_diagnostics::Sample>,
+    ) {
+        if let Some(sample) = observation.as_mut() {
+            sample.begin_phase(crate::embedded::cpu_diagnostics::Stage::PixelSerializeSend);
+        }
         let message = viz_helper::protocol::FromHelper::Frame {
             width,
             height,
             rgba,
         };
-        self.send(&message);
+        let success = self.send_result(&message);
+        if let Some(sample) = observation.as_mut() {
+            sample.end_phase(crate::embedded::cpu_diagnostics::Stage::PixelSerializeSend);
+            sample.sent(success);
+        }
     }
 
     pub fn send_frame_presented(
@@ -177,8 +194,13 @@ impl HelperSource {
     /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
     /// finishing for that reason.
     fn send(&mut self, message: &viz_helper::protocol::FromHelper) {
-        if let Ok(payload) = viz_helper::protocol::encode(message) {
-            let _ = viz_helper::framing::write_frame(&mut self.to_desk, &payload);
+        let _ = self.send_result(message);
+    }
+
+    fn send_result(&mut self, message: &viz_helper::protocol::FromHelper) -> bool {
+        match viz_helper::protocol::encode(message) {
+            Ok(payload) => viz_helper::framing::write_frame(&mut self.to_desk, &payload).is_ok(),
+            Err(_) => false,
         }
     }
 
@@ -637,5 +659,61 @@ mod tests {
             !source.capabilities().uses_network_input,
             "the desk decodes DMX, not this"
         );
+    }
+}
+
+#[cfg(test)]
+mod cpu_frame_tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    #[derive(Clone, Default)]
+    struct Bytes(Arc<Mutex<Vec<u8>>>);
+    impl Write for Bytes {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    struct Broken;
+    impl Write for Broken {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::ErrorKind::BrokenPipe.into())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    // Construct directly: no channel reader thread or handshake in this transport assertion.
+    fn source(writer: Box<dyn Write + Send>) -> HelperSource {
+        let (_, inbox) = channel();
+        HelperSource {
+            inbox,
+            title: None,
+            connection: ConnectionState::Idle,
+            diagnostics: ProviderDiagnostics::default(),
+            have_scene: false,
+            finished: false,
+            to_desk: writer,
+            pane: None,
+            embedding: None,
+            input: Vec::new(),
+            picture: None,
+            selection: None,
+        }
+    }
+    #[test]
+    fn observed_frame_preserves_wire_bytes_and_ignored_failure() {
+        let plain = Bytes::default();
+        let observed = Bytes::default();
+        source(Box::new(plain.clone())).send_frame(2, 1, vec![9; 8]);
+        let mut sample = crate::embedded::cpu_diagnostics::Sample::for_test();
+        source(Box::new(observed.clone())).send_frame_observed(2, 1, vec![9; 8], Some(&mut sample));
+        assert_eq!(*plain.0.lock().unwrap(), *observed.0.lock().unwrap());
+        assert_eq!(sample.phase_result(6), (1, 1));
+        source(Box::new(Broken)).send_frame_observed(2, 1, vec![9; 8], Some(&mut sample));
+        assert_eq!(sample.phase_result(6), (2, 2));
     }
 }

@@ -57,6 +57,19 @@ impl Renderer {
         overlay: &crate::overlay::Overlay,
         time_seconds: f32,
     ) -> Result<FrameStats, RenderError> {
+        self.render_observed(scene, values, view, overlay, time_seconds, None)
+    }
+
+    pub fn render_observed(
+        &mut self,
+        scene: &Scene,
+        values: &SceneValues,
+        view: &ViewConfiguration,
+        overlay: &crate::overlay::Overlay,
+        time_seconds: f32,
+        observer: Option<&mut dyn super::RenderCpuObserver>,
+    ) -> Result<FrameStats, RenderError> {
+        let submit = super::CpuScope::new(observer, super::RenderCpuStage::RenderSubmit);
         let started = std::time::Instant::now();
         // Progress asynchronous timestamp mappings without ever waiting for the GPU. Without this
         // poll, native backends are allowed to leave a completed map callback queued forever.
@@ -140,6 +153,7 @@ impl Renderer {
             timer.resolve(&mut encoder);
         }
         queue.submit(Some(encoder.finish()));
+        drop(submit);
         if let Some(timer) = self.timer.as_ref() {
             timer.request_readback();
         }

@@ -1,7 +1,7 @@
 //! Fixed-size, initiating-thread observations for already-admitted output frames.
 //! Timers are inclusive wall time, not CPU or worker wait attribution. Counts use actual
 //! selected branches; zero phase calls distinguish not-run from a zero-duration observation.
-use super::{ACTIVE, Duration, Instant};
+use super::{ACTIVE, Duration, Instant, typed_cpu};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, Copy)]
@@ -22,6 +22,22 @@ pub(in crate::runtime::output_scheduler) enum Stage {
     NativeProjection,
 }
 const STAGES: usize = 14;
+const STAGE_NAMES: [&str; STAGES] = [
+    "initial_static",
+    "missing_fixed_bases",
+    "repeat_static",
+    "bind_and_control",
+    "sampling_before_callback",
+    "scalar_static",
+    "final_geometry",
+    "complete_deferred",
+    "prepare_families",
+    "cohort_setup",
+    "position_compose",
+    "owner_compose",
+    "ordered_finish",
+    "native_projection",
+];
 
 #[derive(Clone, Copy)]
 pub(in crate::runtime::output_scheduler) enum Count {
@@ -52,7 +68,8 @@ const COUNTS: usize = 22;
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
 pub(super) struct Summary {
-    epoch: u64,
+    pub(super) epoch: u64,
+    pub(super) cpu: [typed_cpu::Observation; STAGES],
     durations: [Duration; STAGES],
     pub(super) calls: [u64; STAGES],
     pub(super) counts: [u64; COUNTS],
@@ -61,6 +78,7 @@ impl Default for Summary {
     fn default() -> Self {
         Self {
             epoch: NEXT.fetch_add(1, Ordering::Relaxed),
+            cpu: [typed_cpu::Observation::default(); STAGES],
             durations: [Duration::ZERO; STAGES],
             calls: [0; STAGES],
             counts: [0; COUNTS],
@@ -68,6 +86,9 @@ impl Default for Summary {
     }
 }
 impl Summary {
+    pub(super) fn cpu_json(&self) -> serde_json::Value {
+        typed_cpu::named(&STAGE_NAMES, &self.cpu)
+    }
     pub(super) fn micros(&self, stage: Stage) -> u64 {
         super::super::duration_micros(self.durations[stage as usize])
     }
@@ -77,6 +98,7 @@ impl Summary {
 pub(in crate::runtime::output_scheduler) struct Span {
     stage: Stage,
     started: Option<(Instant, u64)>,
+    cpu: Option<typed_cpu::Measurement>,
 }
 impl Span {
     pub(in crate::runtime::output_scheduler) fn begin(stage: Stage) -> Self {
@@ -87,18 +109,33 @@ impl Span {
                 (Instant::now(), summary.epoch)
             })
         });
-        Self { stage, started }
+        let cpu = ACTIVE.with(|a| {
+            a.borrow()
+                .as_ref()
+                .filter(|f| f.typed_sample.is_some())
+                .map(|_| typed_cpu::Measurement::begin())
+        });
+        Self {
+            stage,
+            started,
+            cpu,
+        }
     }
 }
 impl Drop for Span {
     fn drop(&mut self) {
         if let Some((started, epoch)) = self.started {
+            let elapsed = started.elapsed();
+            let cpu = self.cpu.take().map(typed_cpu::Measurement::finish);
             ACTIVE.with(|active| {
                 if let Some(frame) = active.borrow_mut().as_mut()
                     && frame.family.epoch == epoch
                 {
                     let duration = &mut frame.family.durations[self.stage as usize];
-                    *duration = duration.saturating_add(started.elapsed());
+                    *duration = duration.saturating_add(elapsed);
+                    if let Some(cpu) = cpu {
+                        frame.family.cpu[self.stage as usize].add(cpu);
+                    }
                 }
             });
         }
@@ -127,6 +164,8 @@ mod tests {
     fn install() {
         ACTIVE.with(|active| {
             *active.borrow_mut() = Some(super::super::Frame {
+                typed_sample: None,
+                cpu: [typed_cpu::Observation::default(); super::super::COUNT],
                 phases: [Duration::ZERO; super::super::COUNT],
                 family: Summary::default(),
                 generation: None,
@@ -213,6 +252,8 @@ pub(in crate::runtime::output_scheduler) fn observe_for_test<T>(
     assert!(ACTIVE.with(|a| a.borrow().is_none()));
     ACTIVE.with(|a| {
         *a.borrow_mut() = Some(super::Frame {
+            typed_sample: None,
+            cpu: [typed_cpu::Observation::default(); super::COUNT],
             phases: [Duration::ZERO; super::COUNT],
             family: Summary::default(),
             generation: None,

@@ -12,6 +12,8 @@
 //! protocol on top, and are deliberately not here — supervision that can only be exercised through
 //! a GPU is supervision nobody tests.
 
+mod cpu_diagnostics;
+
 pub mod channel;
 pub mod framing;
 pub mod handshake;
@@ -153,21 +155,53 @@ impl SupervisedHelper {
         // one and reads the helper's answers up the other. Stderr is discarded rather than
         // inherited — a child writing over the desk's console would be the desk's problem, which
         // is the opposite of isolation.
+        let mut capture = match cpu_diagnostics::prepare(&self.environment) {
+            Ok(capture) => capture,
+            Err(error) => return Err(self.diagnostic_stop(error)),
+        };
         let mut command = Command::new(&self.program);
         command
             .args(&self.arguments)
             .envs(self.environment.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(
+                capture
+                    .as_mut()
+                    .map_or_else(Stdio::null, cpu_diagnostics::Capture::stderr),
+            );
         #[cfg(target_os = "windows")]
         command.creation_flags(CREATE_NO_WINDOW);
         let child = command
             .spawn()
             .map_err(|error| format!("could not start {}: {error}", self.program.display()))?;
         self.child = Some(child);
+        if let Some(capture) = capture.as_mut() {
+            self.bind_capture(capture)?;
+        }
         self.state = HelperState::Running;
         Ok(())
+    }
+
+    fn bind_capture(&mut self, capture: &mut cpu_diagnostics::Capture) -> Result<(), String> {
+        let child_pid = self
+            .child
+            .as_ref()
+            .expect("owned child installed before binding")
+            .id();
+        capture
+            .bind(child_pid, &self.program, &self.arguments)
+            .map_err(|error| self.diagnostic_stop(error))
+    }
+
+    fn diagnostic_stop(&mut self, error: String) -> String {
+        self.stop(); // Reaps only this supervisor's owned child, including failed manifest binding.
+        let detail = format!("STOP: private CPU capture failed: {error}");
+        self.state = HelperState::GaveUp {
+            failures: self.failures,
+            detail: detail.clone(),
+        };
+        detail
     }
 
     /// Notice what has happened to the helper and act on it.
@@ -195,7 +229,9 @@ impl SupervisedHelper {
             && now >= due
         {
             self.restart_at = None;
-            if let Err(error) = self.spawn() {
+            if let Err(error) = self.spawn()
+                && !matches!(self.state, HelperState::GaveUp { .. })
+            {
                 self.died(error, now);
             }
         }

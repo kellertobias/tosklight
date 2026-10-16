@@ -10,6 +10,40 @@ use std::collections::HashMap;
 use viz_scene::{Scene, SceneValues, ViewConfiguration};
 use wgpu::BufferUsages;
 
+/// Synchronous caller CPU boundaries; never GPU execution timings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(usize)]
+pub enum RenderCpuStage {
+    RenderSubmit = 2,
+    CaptureReadbackSetup = 3,
+    CaptureReadbackWait = 4,
+    PixelPack = 5,
+}
+pub trait RenderCpuObserver {
+    fn begin(&mut self, stage: RenderCpuStage);
+    fn end(&mut self, stage: RenderCpuStage);
+}
+struct CpuScope<'a> {
+    observer: Option<&'a mut dyn RenderCpuObserver>,
+    stage: RenderCpuStage,
+}
+impl<'a> CpuScope<'a> {
+    fn new(observer: Option<&'a mut dyn RenderCpuObserver>, stage: RenderCpuStage) -> Self {
+        let mut scope = Self { observer, stage };
+        if let Some(observer) = scope.observer.as_mut() {
+            observer.begin(stage);
+        }
+        scope
+    }
+}
+impl Drop for CpuScope<'_> {
+    fn drop(&mut self) {
+        if let Some(observer) = self.observer.as_mut() {
+            observer.end(self.stage);
+        }
+    }
+}
+
 const COMMON_WGSL: &str = include_str!("shaders/common.wgsl");
 const SURFACE_WGSL: &str = include_str!("shaders/surface.wgsl");
 const MEDIA_WGSL: &str = include_str!("shaders/media.wgsl");
@@ -542,8 +576,21 @@ impl Renderer {
         overlay: &crate::overlay::Overlay,
         time_seconds: f32,
     ) -> Result<FrameStats, RenderError> {
+        self.render_into_observed(target, scene, values, view, overlay, time_seconds, None)
+    }
+
+    pub fn render_into_observed(
+        &mut self,
+        target: &wgpu::TextureView,
+        scene: &Scene,
+        values: &SceneValues,
+        view: &ViewConfiguration,
+        overlay: &crate::overlay::Overlay,
+        time_seconds: f32,
+        observer: Option<&mut dyn RenderCpuObserver>,
+    ) -> Result<FrameStats, RenderError> {
         self.capture_request = Some(target.clone());
-        self.render(scene, values, view, overlay, time_seconds)
+        self.render_observed(scene, values, view, overlay, time_seconds, observer)
     }
 
     /// Adopt the quality tier's render scale. Rebuilding every target is far too expensive to do
@@ -821,6 +868,18 @@ impl Renderer {
         overlay: &crate::overlay::Overlay,
         time_seconds: f32,
     ) -> Result<CapturedImage, RenderError> {
+        self.capture_observed(scene, values, view, overlay, time_seconds, None)
+    }
+
+    pub fn capture_observed(
+        &mut self,
+        scene: &Scene,
+        values: &SceneValues,
+        view: &ViewConfiguration,
+        overlay: &crate::overlay::Overlay,
+        time_seconds: f32,
+        mut observer: Option<&mut dyn RenderCpuObserver>,
+    ) -> Result<CapturedImage, RenderError> {
         let device = self.gpu.device.clone();
         let queue = self.gpu.queue.clone();
         let width = self.gpu.config.width;
@@ -840,8 +899,23 @@ impl Renderer {
             view_formats: &[],
         });
         self.capture_request = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
-        self.render(scene, values, view, overlay, time_seconds)?;
-
+        match observer.as_mut() {
+            Some(observer) => self.render_observed(
+                scene,
+                values,
+                view,
+                overlay,
+                time_seconds,
+                Some(&mut **observer),
+            )?,
+            None => self.render(scene, values, view, overlay, time_seconds)?,
+        };
+        let setup = CpuScope::new(
+            observer
+                .as_mut()
+                .map(|o| &mut **o as &mut dyn RenderCpuObserver),
+            RenderCpuStage::CaptureReadbackSetup,
+        );
         let row_bytes = width * 4;
         let padded = row_bytes.div_ceil(256) * 256;
         let buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -872,10 +946,24 @@ impl Renderer {
         queue.submit(Some(encoder.finish()));
         let slice = buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |_| {});
+        drop(setup);
+        let wait = CpuScope::new(
+            observer
+                .as_mut()
+                .map(|o| &mut **o as &mut dyn RenderCpuObserver),
+            RenderCpuStage::CaptureReadbackWait,
+        );
         let _ = device.poll(wgpu::PollType::Wait {
             submission_index: None,
             timeout: None,
         });
+        drop(wait);
+        let _pack = CpuScope::new(
+            observer
+                .as_mut()
+                .map(|o| &mut **o as &mut dyn RenderCpuObserver),
+            RenderCpuStage::PixelPack,
+        );
         let mapped = slice
             .get_mapped_range()
             .map_err(|error| RenderError::Surface(format!("capture readback: {error}")))?;
@@ -1016,3 +1104,42 @@ const _: () = assert!(TILE_SIZE == 16);
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod cpu_observer_tests {
+    use super::{CpuScope, RenderCpuObserver, RenderCpuStage};
+    #[derive(Default)]
+    struct Observer(Vec<(RenderCpuStage, bool)>);
+    impl RenderCpuObserver for Observer {
+        fn begin(&mut self, stage: RenderCpuStage) {
+            self.0.push((stage, true));
+        }
+        fn end(&mut self, stage: RenderCpuStage) {
+            self.0.push((stage, false));
+        }
+    }
+    fn boundaries(observer: Option<&mut dyn RenderCpuObserver>, fail: bool) -> Result<(), ()> {
+        let _scope = CpuScope::new(observer, RenderCpuStage::RenderSubmit);
+        if fail {
+            return Err(());
+        }
+        Ok(())
+    }
+    #[test]
+    fn fixed_scope_closes_on_success_and_early_error() {
+        let mut observer = Observer::default();
+        assert!(boundaries(Some(&mut observer), false).is_ok());
+        assert!(boundaries(Some(&mut observer), true).is_err());
+        assert_eq!(
+            observer.0,
+            vec![
+                (RenderCpuStage::RenderSubmit, true),
+                (RenderCpuStage::RenderSubmit, false),
+                (RenderCpuStage::RenderSubmit, true),
+                (RenderCpuStage::RenderSubmit, false),
+            ]
+        );
+        assert!(boundaries(None, false).is_ok());
+        assert_eq!(observer.0.len(), 4);
+    }
+}

@@ -54,6 +54,7 @@ pub(super) use dynamic_projection::physical_adapter::{
 pub(in crate::runtime) mod change_lead;
 mod dynamic_reconciliation;
 mod slow_phase_trace;
+mod typed_cpu;
 use slow_phase_trace::trace_slow_output_phases;
 mod live_output_bench;
 pub use live_output_bench::{
@@ -349,6 +350,7 @@ async fn run(
 // frames, and sends configured routes. Network I/O starts only after rendering completes.
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let tick_started = Instant::now();
+    let typed_tick = slow_phase_trace::live_phases::begin_typed_tick();
     let action_timing = runtime.action_timing.begin_output_render();
     let options = runtime.control.lock().render_options();
     let (rendered, visualization_scope, dynamic, engine) = {
@@ -359,7 +361,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
         let completed = ordered_output_operation(&runtime.playback, || {
-            render_ordered_output_frame(&runtime, options)
+            render_ordered_output_frame(&runtime, options, typed_tick.as_ref())
         });
         let (rendered, dynamic, engine) = match completed {
             Ok(completed) => completed,
@@ -380,6 +382,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         &rendered.rendered.resolved_values,
     );
     let publish_started = Instant::now();
+    let typed_publish = typed_cpu::publish(typed_tick.as_ref());
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
         if !control.effective_hold() {
@@ -397,7 +400,9 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         )
     };
     let publish = publish_started.elapsed();
+    drop(typed_publish);
     let send_started = Instant::now();
+    let typed_send = typed_cpu::send(typed_tick.as_ref());
     let result = runtime
         .delivery_policy
         .send(
@@ -410,6 +415,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         )
         .await;
     let send = send_started.elapsed();
+    drop(typed_send);
     trace_slow_output_phases(tick_started.elapsed(), dynamic, engine, publish, send);
     let delivered = result.is_ok();
     change_lead::record_change_lead(
@@ -458,12 +464,14 @@ fn settle_ordered_timecode_frame(
 fn render_ordered_output_frame(
     runtime: &Runtime,
     options: RenderOptions,
+    typed_tick: Option<&typed_cpu::Tick>,
 ) -> PlaybackOperation<Result<(RenderedSemanticFrame, Duration, Duration), EngineError>> {
-    let phase_scope = slow_phase_trace::live_phases::Scope::begin();
+    let phase_scope = slow_phase_trace::live_phases::Scope::begin(typed_tick);
     let capture_span = slow_phase_trace::live_phases::Span::begin(
         slow_phase_trace::live_phases::Phase::CaptureSettle,
     );
     let dynamic_started = Instant::now();
+    let mut typed_dynamic = typed_cpu::Dynamic::begin(typed_tick);
     let Some(settled) = settle_ordered_timecode_frame(runtime, options) else {
         return PlaybackOperation::new(Err(EngineError::StalePreparedFrame));
     };
@@ -519,7 +527,7 @@ fn render_ordered_output_frame(
         &runtime.family_adapters,
         |source| {
             let dynamic = dynamic_started.elapsed();
-            let engine_started = Instant::now();
+            let (engine_started, _typed_engine) = typed_dynamic.engine();
             let operation = source.playback_operation(
                 &runtime.engine,
                 &runtime.active_show,
