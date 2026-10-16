@@ -40,3 +40,6 @@ workspace = true
 light-fixture = { path = "../../crates/shared/fixture" }
 pollster.workspace = true
 wgpu.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "=1.1.4", features = ["process"] }

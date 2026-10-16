@@ -10,6 +10,7 @@ mod app;
 mod demo;
 mod effects;
 mod embedded;
+mod embedded_priority;
 mod helper_source;
 mod lasers;
 mod physics;
@@ -85,7 +86,7 @@ fn main() {
     // inside it, and the chrome above the picture is the desk's own web interface. So this launch
     // never reaches the window system — no event loop, no activation policy, nothing to activate.
     if options.embed {
-        std::process::exit(run_embedded());
+        std::process::exit(embedded_priority::run(run_embedded));
     }
 
     // A renderer launched by the desk or the PreViz editor is their window, not another

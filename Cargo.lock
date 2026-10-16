@@ -8408,6 +8408,7 @@ dependencies = [
  "pollster",
  "rfd 0.15.4",
  "rusqlite",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "tokio",
