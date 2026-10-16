@@ -24,6 +24,7 @@ import {
 } from "../features/programmingInteraction/ProgrammingInteractionView";
 import { useDesktopBridge } from "../platform/desktop";
 import { useApp } from "../state/AppContext";
+import { useFixtureSheetReadinessDiagnostics } from "./FixtureSheetBenchmarkDiagnostics";
 import {
 	DEFAULT_FIXTURE_SHEET_COLUMNS,
 	FixtureSheetSettings,
@@ -260,6 +261,14 @@ export function useFixtureSheetBenchmarkReady({
 	const [config, setConfig] = useState<
 		Awaited<ReturnType<typeof desktop.packagedStageBenchmarkConfig>> | undefined
 	>();
+	const reportReadyAppendFailure = useFixtureSheetReadinessDiagnostics({
+		config,
+		ready,
+		active,
+		rows,
+		activeValuesLoading,
+		groupRuntimeLoading,
+	});
 	useEffect(() => {
 		if (typeof desktop.packagedStageBenchmarkConfig !== "function") {
 			setConfig(null);
@@ -308,9 +317,18 @@ export function useFixtureSheetBenchmarkReady({
 			.catch(() => {
 				reported.current = false;
 				setReady(false);
+				reportReadyAppendFailure();
 			});
 		setReady(true);
-	}, [active, activeValuesLoading, config, desktop, groupRuntimeLoading, rows]);
+	}, [
+		active,
+		activeValuesLoading,
+		config,
+		desktop,
+		groupRuntimeLoading,
+		rows,
+		reportReadyAppendFailure,
+	]);
 	// Each beat reads the rows of the moment. Depending on `rows` instead would tie the
 	// interval's life to the data's identity: live values give the Sheet a new rows array
 	// every couple of seconds, which tore the interval down before it could fire and made a
@@ -328,9 +346,8 @@ export function useFixtureSheetBenchmarkReady({
 			return;
 		const heartbeat = window.setInterval(() => {
 			const current = latestRows.current;
-			const fixtureRecords = new Set(
-				current.map((row) => row.parentFixtureId),
-			).size;
+			const fixtureRecords = new Set(current.map((row) => row.parentFixtureId))
+				.size;
 			// A row count that has not settled yet skips this beat rather than ending the
 			// heartbeat, so a transient mismatch cannot silence the Sheet for good.
 			if (
@@ -351,7 +368,14 @@ export function useFixtureSheetBenchmarkReady({
 				.catch(() => undefined);
 		}, 1_000);
 		return () => window.clearInterval(heartbeat);
-	}, [active, activeValuesLoading, config, desktop, groupRuntimeLoading, ready]);
+	}, [
+		active,
+		activeValuesLoading,
+		config,
+		desktop,
+		groupRuntimeLoading,
+		ready,
+	]);
 }
 
 function useVisibleFixtureIds() {

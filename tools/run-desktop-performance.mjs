@@ -214,10 +214,18 @@ async function runCase(performanceCase, executionMode) {
 			evidence.samples,
 		);
 		state.phase = "fixture-sheet-liveness";
-		await requireFixtureSheetActive(reportPath, sheetRecords, executionMode, {
-			startedAt: measurementStartedAt,
-			endedAt: Date.now(),
-		});
+		await requireFixtureSheetActive(
+			reportPath,
+			sheetRecords,
+			executionMode,
+			{
+				startedAt: measurementStartedAt,
+				endedAt: Date.now(),
+			},
+			(snapshot) => {
+				state.sheet = { ...state.sheet, ...snapshot };
+			},
+		);
 		state.phase = "complete";
 		result = {
 			case_id: performanceCase.caseId,
@@ -808,7 +816,7 @@ async function waitForFixtureSheet(
 	while (Date.now() < deadline) {
 		assertRunning(child);
 		const records = await readFile(reportPath, "utf8").catch(() => "");
-		const ready = records
+		const diagnostics = records
 			.trim()
 			.split("\n")
 			.filter(Boolean)
@@ -818,17 +826,51 @@ async function waitForFixtureSheet(
 				} catch {
 					return [];
 				}
-			})
-			.find(
+			});
+		const ready = diagnostics.find(
+			(record) =>
+				record.kind === "fixture-sheet-ready" &&
+				(expected === null || record.fixtureRecords === expected),
+		);
+		const readiness =
+			diagnostics.findLast(
+				(record) => record.kind === "fixture-sheet-readiness",
+			) ?? null;
+		const readyAppendFailure =
+			diagnostics.findLast(
+				(record) => record.kind === "fixture-sheet-ready-append-failed",
+			) ?? null;
+		const surface =
+			diagnostics.findLast(
 				(record) =>
-					record.kind === "fixture-sheet-ready" &&
-					(expected === null || record.fixtureRecords === expected),
-			);
+					record.kind === "fixture-sheet-container-mounted" ||
+					record.kind === "fixture-sheet-container-unmounted",
+			) ?? null;
+		const renderFailure =
+			diagnostics.findLast(
+				(record) => record.kind === "fixture-sheet-render-failed",
+			) ?? null;
+		const lifecycleFailure = ready
+			? (diagnostics
+					.slice(diagnostics.indexOf(ready) + 1)
+					.find(
+						(record) => record.kind === "fixture-sheet-container-unmounted",
+					) ?? null)
+			: null;
 		observe({
 			observedAt: new Date().toISOString(),
 			expectedFixtureRecords: expected,
 			reportPresent: records.length > 0,
-			ready: Boolean(ready),
+			ready:
+				Boolean(ready) &&
+				!renderFailure &&
+				!lifecycleFailure &&
+				surface?.kind !== "fixture-sheet-container-unmounted",
+			surface,
+			readiness,
+			renderFailure,
+			lifecycleFailure,
+			readyAppendFailure,
 			lastRecords: records
 				.trim()
 				.split("\n")
@@ -850,13 +892,29 @@ async function waitForFixtureSheet(
 					}
 				}),
 			unobservedPredicates: [
-				"frontend active",
-				"nonempty rows",
-				"active-values loading",
-				"group-runtime loading",
-				"Tauri append failure",
+				...(readiness
+					? []
+					: [
+							"frontend active",
+							"nonempty rows",
+							"active-values loading",
+							"group-runtime loading",
+							"benchmark configuration",
+						]),
+				...(readyAppendFailure ? [] : ["Tauri append failure"]),
 			],
 		});
+		if (renderFailure)
+			throw new Error(
+				`Fixture Sheet render failed: ${renderFailure.errorName ?? "Unknown"}: ${renderFailure.errorMessage ?? "unavailable"}`,
+			);
+		if (
+			lifecycleFailure ||
+			(ready && surface?.kind === "fixture-sheet-container-unmounted")
+		)
+			throw new Error(
+				"Fixture Sheet container unmounted during the active benchmark",
+			);
 		if (ready) return;
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
@@ -895,6 +953,7 @@ async function requireFixtureSheetActive(
 	expected,
 	executionMode,
 	measurement,
+	observe = () => {},
 ) {
 	const records = (await readFile(reportPath, "utf8"))
 		.trim()
@@ -907,6 +966,57 @@ async function requireFixtureSheetActive(
 				return [];
 			}
 		});
+	const renderFailure =
+		records.findLast(
+			(record) => record.kind === "fixture-sheet-render-failed",
+		) ?? null;
+	const surface =
+		records.findLast(
+			(record) =>
+				record.kind === "fixture-sheet-container-mounted" ||
+				record.kind === "fixture-sheet-container-unmounted",
+		) ?? null;
+	const readyIndex = records.findIndex(
+		(record) =>
+			record.kind === "fixture-sheet-ready" &&
+			(expected === null || record.fixtureRecords === expected),
+	);
+	const lifecycleFailure =
+		readyIndex === -1
+			? null
+			: (records
+					.slice(readyIndex + 1)
+					.find(
+						(record) => record.kind === "fixture-sheet-container-unmounted",
+					) ?? null);
+	observe({
+		observedAt: new Date().toISOString(),
+		surface,
+		renderFailure,
+		lifecycleFailure,
+		readiness:
+			records.findLast((record) => record.kind === "fixture-sheet-readiness") ??
+			null,
+		ready:
+			records.some(
+				(record) =>
+					record.kind === "fixture-sheet-ready" &&
+					(expected === null || record.fixtureRecords === expected),
+			) &&
+			!renderFailure &&
+			!lifecycleFailure &&
+			surface?.kind !== "fixture-sheet-container-unmounted",
+	});
+	// Explicit workload loss is a failure even inside the scheduling-noise tolerance below.
+	// This runs before owned-process termination, so normal terminal cleanup is not judged.
+	if (renderFailure)
+		throw new Error(
+			`Fixture Sheet render failed: ${renderFailure.errorName ?? "Unknown"}: ${renderFailure.errorMessage ?? "unavailable"}`,
+		);
+	if (lifecycleFailure || surface?.kind === "fixture-sheet-container-unmounted")
+		throw new Error(
+			"Fixture Sheet container unmounted during the active benchmark",
+		);
 	const beats = records
 		.filter(
 			(record) =>

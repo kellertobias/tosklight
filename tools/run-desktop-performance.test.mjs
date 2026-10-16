@@ -128,6 +128,162 @@ test("wrong count fails unchanged gate while preserving exact observed count", a
 	assert.equal(observed.ready, false);
 	assert.equal(observed.lastRecords[0].fixtureRecords, 263);
 });
+test("earlier ready evidence cannot hide a later renderer failure or active-case unmount", async () => {
+	const wait = load(
+		"waitForFixtureSheet",
+		"\nasync function sheetReadyCounts(",
+		{ sheetReadyCounts: async () => [3] },
+	);
+	for (const kind of [
+		"fixture-sheet-render-failed",
+		"fixture-sheet-container-unmounted",
+	]) {
+		const p = path.join(scratch, `${kind}-after-ready.jsonl`);
+		await writeFile(
+			p,
+			[
+				{ kind: "fixture-sheet-container-mounted" },
+				{ kind: "fixture-sheet-ready", fixtureRecords: 3 },
+				{ kind, errorName: "Error", errorMessage: "late render failure" },
+			]
+				.map((value) => JSON.stringify(value))
+				.join("\n"),
+		);
+		await assert.rejects(
+			wait(p, 3, {}, 100),
+			/Fixture Sheet (render failed|container unmounted)/,
+		);
+	}
+});
+test("late observed render failures and active-case unmounts fail even within existing heartbeat tolerances", async () => {
+	const requireActive = load(
+		"requireFixtureSheetActive",
+		"\nfunction assertRunning(",
+	);
+	const startedAt = Date.parse("2026-10-16T08:00:00Z");
+	for (const executionMode of ["unrestricted", "one_core"]) {
+		for (const kind of [
+			"fixture-sheet-render-failed",
+			"fixture-sheet-container-unmounted",
+		]) {
+			const p = path.join(scratch, `${executionMode}-${kind}-late.jsonl`);
+			await writeFile(
+				p,
+				[
+					{ kind: "fixture-sheet-ready", fixtureRecords: 3 },
+					...Array.from({ length: 56 }, (_, second) => ({
+						kind: "fixture-sheet-heartbeat",
+						fixtureRecords: 3,
+						recordedAt: new Date(startedAt + second * 1_000).toISOString(),
+					})),
+					{
+						kind,
+						errorName: "Error",
+						errorMessage: "failed after last beat",
+						recordedAt: new Date(startedAt + 56_000).toISOString(),
+					},
+				]
+					.map((value) => JSON.stringify(value))
+					.join("\n"),
+			);
+			let observed;
+			await assert.rejects(
+				requireActive(
+					p,
+					3,
+					executionMode,
+					{ startedAt, endedAt: startedAt + 60_000 },
+					(snapshot) => {
+						observed = snapshot;
+					},
+				),
+				/Fixture Sheet (render failed|container unmounted)/,
+			);
+			assert.equal(observed.ready, false);
+			assert.equal(
+				(kind === "fixture-sheet-render-failed"
+					? observed.renderFailure
+					: observed.surface
+				).kind,
+				kind,
+			);
+		}
+	}
+});
+test("earlier Strict Mode container cleanup followed by mount does not fail a healthy active case", async () => {
+	const wait = load(
+		"waitForFixtureSheet",
+		"\nasync function sheetReadyCounts(",
+		{ sheetReadyCounts: async () => [3] },
+	);
+	const requireActive = load(
+		"requireFixtureSheetActive",
+		"\nfunction assertRunning(",
+	);
+	const startedAt = Date.parse("2026-10-16T08:00:00Z");
+	const p = path.join(scratch, "strict-mode-remount.jsonl");
+	await writeFile(
+		p,
+		[
+			{ kind: "fixture-sheet-container-mounted" },
+			{ kind: "fixture-sheet-container-unmounted" },
+			{ kind: "fixture-sheet-container-mounted" },
+			{ kind: "fixture-sheet-ready", fixtureRecords: 3 },
+			...Array.from({ length: 61 }, (_, second) => ({
+				kind: "fixture-sheet-heartbeat",
+				fixtureRecords: 3,
+				recordedAt: new Date(startedAt + second * 1_000).toISOString(),
+			})),
+		]
+			.map((value) => JSON.stringify(value))
+			.join("\n"),
+	);
+	await wait(p, 3, {}, 100);
+	await requireActive(p, 3, "unrestricted", {
+		startedAt,
+		endedAt: startedAt + 60_000,
+	});
+});
+test("remounting after readiness cannot hide an active-case container unmount", async () => {
+	const wait = load(
+		"waitForFixtureSheet",
+		"\nasync function sheetReadyCounts(",
+		{ sheetReadyCounts: async () => [3] },
+	);
+	const requireActive = load(
+		"requireFixtureSheetActive",
+		"\nfunction assertRunning(",
+	);
+	const startedAt = Date.parse("2026-10-16T08:00:00Z");
+	const p = path.join(scratch, "post-ready-remount.jsonl");
+	await writeFile(
+		p,
+		[
+			{ kind: "fixture-sheet-container-mounted" },
+			{ kind: "fixture-sheet-ready", fixtureRecords: 3 },
+			{ kind: "fixture-sheet-container-unmounted" },
+			{ kind: "fixture-sheet-container-mounted" },
+			...Array.from({ length: 61 }, (_, second) => ({
+				kind: "fixture-sheet-heartbeat",
+				fixtureRecords: 3,
+				recordedAt: new Date(startedAt + second * 1_000).toISOString(),
+			})),
+		]
+			.map((value) => JSON.stringify(value))
+			.join("\n"),
+	);
+	await assert.rejects(
+		wait(p, 3, {}, 100),
+		/Fixture Sheet container unmounted/,
+	);
+	await assert.rejects(
+		requireActive(p, 3, "unrestricted", {
+			startedAt,
+			endedAt: startedAt + 60_000,
+		}),
+		/Fixture Sheet container unmounted/,
+	);
+});
 test("missing report retains uncertainty instead of invented loading predicate", async () => {
 	const wait = load(
 		"waitForFixtureSheet",
@@ -144,6 +300,58 @@ test("missing report retains uncertainty instead of invented loading predicate",
 	assert.equal(observed.reportPresent, false);
 	assert.equal(observed.ready, false);
 	assert.ok(observed.unobservedPredicates.includes("group-runtime loading"));
+	assert.equal(observed.surface, null);
+	assert.equal(observed.readiness, null);
+	assert.equal(observed.renderFailure, null);
+});
+test("explicit render failure retains actual mount and blocked predicates before failing the gate", async () => {
+	const wait = load(
+		"waitForFixtureSheet",
+		"\nasync function sheetReadyCounts(",
+		{
+			sheetReadyCounts: async () => [],
+		},
+	);
+	const p = path.join(scratch, "diagnosed-not-ready.jsonl");
+	const predicates = {
+		kind: "fixture-sheet-readiness",
+		active: true,
+		rowCount: 0,
+		fixtureRecords: 0,
+		activeValuesLoading: false,
+		groupRuntimeLoading: true,
+	};
+	await writeFile(
+		p,
+		[
+			{ kind: "fixture-sheet-container-mounted" },
+			predicates,
+			{
+				kind: "fixture-sheet-render-failed",
+				errorName: "Error",
+				errorMessage: "fixture display failed",
+			},
+		]
+			.map((value) => JSON.stringify(value))
+			.join("\n"),
+	);
+	let observed;
+	await assert.rejects(
+		wait(p, null, {}, 100, (value) => {
+			observed = value;
+		}),
+		/Fixture Sheet render failed/,
+	);
+	assert.ok(observed.readiness, "actual readiness predicates must be retained");
+	assert.deepEqual(JSON.parse(JSON.stringify(observed.readiness)), predicates);
+	assert.equal(observed.surface.kind, "fixture-sheet-container-mounted");
+	assert.equal(observed.renderFailure.errorMessage, "fixture display failed");
+	assert.equal(observed.ready, false);
+	assert.equal(
+		observed.unobservedPredicates.includes("group-runtime loading"),
+		false,
+	);
+	assert.ok(observed.unobservedPredicates.includes("Tauri append failure"));
 });
 test("production runner writes prior successful cases as incomplete on later failure without successful aggregate", async () => {
 	const out = await mkdtemp(path.join(scratch, "aggregate-"));
@@ -297,7 +505,7 @@ test("actual case finalization flushes termination logs on success and original 
 		"finishCaseEvidence",
 		"\nasync function retainCaseFailure(",
 	);
-	for (const fail of [false, true, "spawn"]) {
+	for (const fail of [false, true, "spawn", "render"]) {
 		const child = Object.assign(new EventEmitter(), {
 			pid: 999,
 			stdout: new EventEmitter(),
@@ -355,7 +563,23 @@ test("actual case finalization flushes termination logs on success and original 
 				samples.push({ diagnostics: { output: { frames_sent: 40 } } });
 				return { average_completed_hz: 40 };
 			},
-			requireFixtureSheetActive: async () => {
+			requireFixtureSheetActive: async (
+				_path,
+				_expected,
+				_mode,
+				_window,
+				observe,
+			) => {
+				if (fail === "render") {
+					observe({
+						ready: false,
+						renderFailure: {
+							kind: "fixture-sheet-render-failed",
+							errorMessage: "literal renderer failure",
+						},
+					});
+					throw new Error("literal renderer failure");
+				}
 				if (fail === true) throw new Error("literal liveness failure");
 			},
 			retainCaseFailure: async () => "retained-original-failure.json",
@@ -372,7 +596,9 @@ test("actual case finalization flushes termination logs on success and original 
 				run({ caseId: "demo", demo: true }, "unrestricted"),
 				fail === "spawn"
 					? /literal startup spawn refusal/
-					: /literal liveness failure/,
+					: fail === "render"
+						? /literal renderer failure/
+						: /literal liveness failure/,
 			);
 		else
 			assert.equal(
@@ -389,6 +615,15 @@ test("actual case finalization flushes termination logs on success and original 
 			JSON.parse(await readFile(saved.measurement, "utf8")).samples.length,
 			fail === "spawn" ? 0 : 1,
 		);
+		if (fail === "render") {
+			const state = JSON.parse(await readFile(saved.measurement, "utf8")).state;
+			assert.equal(state.sheet.ready, false);
+			assert.equal(
+				state.sheet.renderFailure.errorMessage,
+				"literal renderer failure",
+			);
+			assert.equal(state.phase, "fixture-sheet-liveness");
+		}
 		assert.equal(e.log.writableFinished, true);
 	}
 });

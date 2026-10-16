@@ -9,6 +9,7 @@ import type {
 	StagePaneBenchmarkSample,
 } from "./platform/desktop/types";
 import { AppProvider, useApp } from "./state/AppContext";
+import { FixtureSheetBenchmarkDiagnostics } from "./windows/FixtureSheetBenchmarkDiagnostics";
 import { FixtureSheetWindow } from "./windows/FixtureSheetWindow";
 import { StageWindow } from "./windows/StageWindow";
 
@@ -130,11 +131,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		const sample = window.setInterval(() => {
 			void desktop.takeStagePaneBenchmarkSamples().then((samples) => {
 				const first = frames.current.length;
-				appendNativeFrames(
-					frames.current,
-					samples,
-					latestFrameByPane.current,
-				);
+				appendNativeFrames(frames.current, samples, latestFrameByPane.current);
 				const renderSamples = frames.current.slice(first).map((frame) => ({
 					benchmarkSequence: `${frame.paneId}:${frame.sequence}`,
 					paneId: frame.paneId,
@@ -167,11 +164,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		if (!stageEnabled) return;
 		const finish = window.setTimeout(() => {
 			void desktop.takeStagePaneBenchmarkSamples().then(async (samples) => {
-				appendNativeFrames(
-					frames.current,
-					samples,
-					latestFrameByPane.current,
-				);
+				appendNativeFrames(frames.current, samples, latestFrameByPane.current);
 				await desktop.appendPackagedStageBenchmarkSample({
 					schemaVersion: 2,
 					kind: "complete",
@@ -282,7 +275,9 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 			)}
 			{config.fixtureSheet && (
 				<div style={{ minWidth: 0, minHeight: 0, overflow: "hidden" }}>
-					<FixtureSheetWindow compact active={stageEnabled} />
+					<FixtureSheetBenchmarkDiagnostics profile={config.profile}>
+						<FixtureSheetWindow compact active={stageEnabled} />
+					</FixtureSheetBenchmarkDiagnostics>
 				</div>
 			)}
 		</div>
