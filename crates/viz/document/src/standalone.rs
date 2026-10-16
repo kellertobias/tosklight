@@ -10,7 +10,7 @@
 //! the identifier here still matches the one the editor is built with — a rename that moved the
 //! editor's record without moving this would silently stop the visualizer reopening anything.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The Viz application's bundle identifier, as `apps/viz-editor/src-tauri/tauri.conf.json` states.
 pub const VIZ_IDENTIFIER: &str = "de.tokenet.tosklight.visualizer";
@@ -45,9 +45,16 @@ pub fn config_dir() -> Option<PathBuf> {
 /// failure to have finished with a show, and a launch that reported one would be worse than a
 /// launch that simply offers the editor.
 pub fn recent_show() -> Option<PathBuf> {
-    let recorded = std::fs::read_to_string(config_dir()?.join(RECENT_SHOW_FILE)).ok()?;
-    let path = PathBuf::from(recorded.trim());
-    path.is_file().then_some(path)
+    recent_show_at(&config_dir()?.join(RECENT_SHOW_FILE))
+}
+
+fn recent_show_at(record: &Path) -> Option<PathBuf> {
+    let recorded = std::fs::read_to_string(record).ok()?;
+    // Architect stores newest-first JSON paths; older installations stored one
+    // plain path. Reading either representation must never rewrite the record.
+    let paths: Vec<PathBuf> =
+        serde_json::from_str(&recorded).unwrap_or_else(|_| vec![PathBuf::from(recorded.trim())]);
+    paths.into_iter().find(|path| path.is_file())
 }
 
 #[cfg(test)]
@@ -72,23 +79,110 @@ mod tests {
         );
     }
 
+    struct RecentFixture(PathBuf);
+
+    impl RecentFixture {
+        fn new() -> Self {
+            let base = std::env::var_os("LIGHT_TMP_DIR")
+                .expect("tests use the repository's canonical LIGHT_TMP_DIR");
+            let root =
+                PathBuf::from(base).join(format!("viz-standalone-recent-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).expect("isolated recent fixture");
+            Self(root)
+        }
+
+        fn record(&self) -> PathBuf {
+            self.0.join(RECENT_SHOW_FILE)
+        }
+
+        fn show(&self, name: &str) -> PathBuf {
+            let path = self.0.join(name);
+            std::fs::write(&path, b"original portable show bytes").expect("show fixture");
+            path
+        }
+
+        fn assert_read(&self, bytes: &[u8], expected: Option<PathBuf>) {
+            std::fs::write(self.record(), bytes).expect("recent fixture");
+            assert_eq!(recent_show_at(&self.record()), expected);
+            assert_eq!(
+                std::fs::read(self.record()).expect("record unchanged"),
+                bytes
+            );
+        }
+    }
+
+    impl Drop for RecentFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     #[test]
-    fn a_record_naming_a_file_that_is_gone_is_forgotten() {
-        let directory = std::env::temp_dir().join("viz-standalone-recent");
-        let _ = std::fs::remove_dir_all(&directory);
-        std::fs::create_dir_all(&directory).expect("workspace");
-        let missing = directory.join("gone.show");
-        std::fs::write(
-            directory.join(RECENT_SHOW_FILE),
-            missing.display().to_string(),
-        )
-        .expect("record");
-        // Read through the same steps `recent_show` takes, with the directory this test owns.
-        let recorded =
-            std::fs::read_to_string(directory.join(RECENT_SHOW_FILE)).expect("record reads");
-        let path = PathBuf::from(recorded.trim());
-        assert!(!path.is_file(), "the named show is deliberately absent");
-        assert_eq!(path.is_file().then_some(path), None);
+    fn architect_json_list_reopens_the_first_existing_file_in_recorded_order() {
+        let fixture = RecentFixture::new();
+        let first = fixture.show("first existing with spaces.show");
+        let second = fixture.show("second.show");
+        let missing = fixture.0.join("missing.show");
+        let directory = fixture.0.join("directory.show");
+        std::fs::create_dir(&directory).expect("a directory is not a show file");
+        let bytes = serde_json::to_vec(&vec![missing, directory, first.clone(), second.clone()])
+            .expect("Architect's ordered JSON path list");
+        fixture.assert_read(&bytes, Some(first.clone()));
+        let reversed = serde_json::to_vec(&vec![second.clone(), first.clone()]).unwrap();
+        fixture.assert_read(&reversed, Some(second.clone()));
+        for show in [first, second] {
+            assert_eq!(
+                std::fs::read(show).unwrap(),
+                b"original portable show bytes"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_plain_path_and_current_single_entry_list_are_both_read_only() {
+        let fixture = RecentFixture::new();
+        let show = fixture.show("legacy show.show");
+        fixture.assert_read(
+            format!("  {}\n", show.display()).as_bytes(),
+            Some(show.clone()),
+        );
+        fixture.assert_read(
+            &serde_json::to_vec(&vec![show.clone()]).unwrap(),
+            Some(show.clone()),
+        );
+        assert_eq!(
+            std::fs::read(show).unwrap(),
+            b"original portable show bytes"
+        );
+    }
+
+    #[test]
+    fn empty_malformed_missing_and_unreadable_records_offer_no_recent_show() {
+        let fixture = RecentFixture::new();
+        assert_eq!(recent_show_at(&fixture.record()), None, "missing record");
+        for bytes in [
+            b"".as_slice(),
+            b"  \n",
+            b"[]",
+            b"[broken",
+            b"{}",
+            b"null",
+            b"[null]",
+            b"\xff",
+        ] {
+            fixture.assert_read(bytes, None);
+        }
+        let missing = fixture.0.join("gone.show");
+        fixture.assert_read(missing.to_string_lossy().as_bytes(), None);
+        fixture.assert_read(&serde_json::to_vec(&vec![missing]).unwrap(), None);
+        std::fs::remove_file(fixture.record()).unwrap();
+        std::fs::create_dir(fixture.record()).unwrap();
+        assert_eq!(
+            recent_show_at(&fixture.record()),
+            None,
+            "record cannot be read as a file"
+        );
+        assert!(fixture.record().is_dir(), "unreadable input remains intact");
     }
 
     #[test]
