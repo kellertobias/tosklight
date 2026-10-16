@@ -1,5 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
+import { ShowLifecycleProvider } from "../../features/showLifecycle/ShowLifecycleContext";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerController } from "../../features/server/model";
 import { createShowLifecycleActions } from "../../features/server/showLifecycle";
@@ -14,6 +16,7 @@ vi.mock("../../features/deskLock/DeskLockActionsProvider", () => ({
 
 const mocks = vi.hoisted(() => ({
   lifecycleAvailable: true,
+  realLifecycleProvider: false,
   setupOpen: true,
   desktopAvailable: false,
   updatePlaybackSurface: vi.fn(),
@@ -97,10 +100,16 @@ vi.mock("../../features/deskSnapshot/DeskSnapshotState", async (importOriginal) 
 }));
 vi.mock(
 	"../../features/showLifecycle/ShowLifecycleContext",
-	async (importOriginal) => ({
-		...(await importOriginal<object>()),
-		useShowLifecycle: () => mocks.lifecycleAvailable ? mocks.server : null,
-	}),
+    async (importOriginal) => {
+        const actual = await importOriginal<typeof import("../../features/showLifecycle/ShowLifecycleContext")>();
+        return {
+            ...actual,
+            useShowLifecycle: () => {
+                const context = actual.useShowLifecycle();
+                return mocks.realLifecycleProvider ? context : mocks.lifecycleAvailable ? mocks.server : null;
+            },
+        };
+    },
 );
 vi.mock("../../features/selectiveImport/SelectiveImportContext", () => ({
 	useSelectiveImport: () => ({
@@ -136,6 +145,7 @@ vi.mock("../../state/AppContext", () => ({
 
 beforeEach(() => {
     mocks.lifecycleAvailable = true;
+    mocks.realLifecycleProvider = false;
     mocks.setupOpen = true;
     mocks.desktopAvailable = false;
     mocks.screensSnapshot = null;
@@ -765,7 +775,7 @@ describe("Show Load read and preparation recovery", () => {
 					show_id: string;
 				}>
 			>();
-		mocks.server.listShowRevisions.mockReturnValue(pending.promise);
+		mocks.server.listShowRevisions.mockImplementation((id: string) => id === "original" ? pending.promise : Promise.resolve([]));
 		render(<QuickSetupModal />);
 		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
 		fireEvent.click(
@@ -969,6 +979,8 @@ it("keyboard-activates actual Load Latest without executing a retained desk comm
 	const browser = await screen.findByRole("dialog", { name: "Load show" });
 	const row = await within(browser).findByRole("row", { name: /Festival/ });
 	const button = within(row).getByRole("button", { name: "Load Latest" });
+    // Wait for the real initial modal-focus lifecycle before choosing the operator's control.
+    await waitFor(() => expect(browser).toContainElement(document.activeElement as HTMLElement));
 	button.focus();
 	expect(button).toHaveFocus();
 	await userEvent.keyboard("{Enter}");
@@ -977,4 +989,335 @@ it("keyboard-activates actual Load Latest without executing a retained desk comm
 	await waitFor(() => expect(apiOpen).toHaveBeenCalledOnce());
 	expect(apiOpen).toHaveBeenCalledWith("other", "safe_blackout");
 	expect(refresh).not.toHaveBeenCalled();
+});
+
+
+describe("Show catalogue production lifecycle provider churn", () => {
+	it("keeps catalogue nodes and focus across fresh production action closures", async () => {
+		mocks.realLifecycleProvider = true;
+		const apiOpen = vi.fn().mockResolvedValue(undefined);
+		const model = {
+			api: { shows: { openShow: apiOpen } },
+			shows: mocks.server.shows,
+			refresh: vi.fn().mockResolvedValue(undefined),
+			setError: vi.fn(),
+			beginDeskLoading: vi.fn().mockReturnValue(1),
+			finishDeskLoading: vi.fn(),
+		} as unknown as ServerController;
+		function Provider({ previewRevision }: { previewRevision: number }) {
+			// ServerRuntime recreates these real production actions when a Media preview URL changes.
+			const lifecycle = {
+				...mocks.server,
+				...createShowLifecycleActions(model),
+			};
+			return (
+				<ShowLifecycleProvider lifecycle={lifecycle}>
+					<span>{previewRevision}</span>
+					<QuickSetupModal />
+				</ShowLifecycleProvider>
+			);
+		}
+		const view = render(<Provider previewRevision={0} />);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		const browser = screen.getByRole("dialog", { name: "Load show" });
+		const buttons = await within(browser).findAllByRole("button", {
+			name: "Load Latest",
+		});
+		expect(buttons.length).toBeGreaterThan(0);
+		const tourRow = within(browser)
+			.getByText("Tour", { exact: true })
+			.closest("tr")!;
+		const first = within(tourRow).getByRole("button", { name: "Load Latest" });
+        await waitFor(() => expect(browser).toContainElement(document.activeElement as HTMLElement));
+		first.focus();
+		const rootsBefore = mocks.files.fileRoots.mock.calls.length;
+		const entriesBefore = mocks.files.fileEntries.mock.calls.length;
+		for (let revision = 1; revision <= 3; revision++) {
+			await act(async () =>
+				view.rerender(<Provider previewRevision={revision} />),
+			);
+		}
+		expect(mocks.files.fileRoots).toHaveBeenCalledTimes(rootsBefore);
+		expect(mocks.files.fileEntries).toHaveBeenCalledTimes(entriesBefore);
+		expect(first.isConnected).toBe(true);
+		expect(first).toHaveFocus();
+		expect(
+			within(
+				within(browser).getByText("Tour", { exact: true }).closest("tr")!,
+			).getByRole("button", { name: "Load Latest" }),
+		).toBe(first);
+		fireEvent.click(first);
+		await waitFor(() =>
+			expect(apiOpen).toHaveBeenCalledWith("original", "safe_blackout"),
+		);
+		expect(apiOpen).toHaveBeenCalledOnce();
+		await waitFor(() =>
+			expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull(),
+		);
+		fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+		await screen.findByRole("button", { name: "Revisions for Tour" });
+		expect(mocks.files.fileEntries).toHaveBeenCalledTimes(entriesBefore + 1);
+	});
+});
+
+it.each([
+	"active show",
+	"desk session",
+	"active revision",
+	"catalogue revision",
+])("invalidates named revisions across %s changes and ignores their late response", async (change) => {
+	mocks.realLifecycleProvider = true;
+	const pending = loadDeferred<any[]>();
+	mocks.server.listShowRevisions.mockImplementation((id: string) =>
+		id === "original" ? pending.promise : Promise.resolve([]),
+	);
+	const model = {
+		api: { shows: {} },
+		shows: mocks.server.shows,
+	} as unknown as ServerController;
+	function Provider({ revision }: { revision: number }) {
+		return (
+			<ShowLifecycleProvider
+				lifecycle={{ ...mocks.server, ...createShowLifecycleActions(model) }}
+			>
+				<span>{revision}</span>
+				<QuickSetupModal />
+			</ShowLifecycleProvider>
+		);
+	}
+	const view = render(<Provider revision={0} />);
+	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+	const revisions = await screen.findByRole("button", {
+		name: "Revisions for Tour",
+	});
+	fireEvent.click(revisions);
+	expect(
+		screen.getByRole("status", { name: "Reading named revisions" }),
+	).toBeVisible();
+	if (change === "desk session") {
+		mocks.server.session = {
+			...mocks.server.session,
+			session_id: "new-session",
+			desk: { id: "new-desk" },
+		} as any;
+	} else if (change === "catalogue revision") {
+		mocks.server.shows = mocks.server.shows.map((show) =>
+			show.id === "original" ? { ...show, revision: show.revision + 1 } : show,
+		);
+	} else {
+		mocks.server.bootstrap = {
+			...mocks.server.bootstrap,
+			active_show: {
+				...mocks.server.bootstrap.active_show,
+				id:
+					change === "active show"
+						? "changed-active-show"
+						: mocks.server.bootstrap.active_show.id,
+				revision: mocks.server.bootstrap.active_show.revision + 1,
+			},
+		};
+	}
+	await act(async () => view.rerender(<Provider revision={1} />));
+	await act(async () =>
+		pending.resolve([
+			{ revision: 999, name: "Stale response", created_at: "" },
+		]),
+	);
+	await waitFor(() =>
+		expect(
+			screen.queryByRole("status", { name: "Reading show catalogue" }),
+		).toBeNull(),
+	);
+	expect(screen.queryByText(/Stale response/)).toBeNull();
+	expect(
+		screen.queryByRole("dialog", { name: "Revisions for Tour" }),
+	).toBeNull();
+	expect(mocks.server.openShow).not.toHaveBeenCalled();
+	expect(mocks.server.openShowRevision).not.toHaveBeenCalled();
+	expect(mocks.files.fileEntries).toHaveBeenCalledTimes(2);
+});
+
+it("reads deliberate Load folder navigation and a fresh catalogue on reopening", async () => {
+	mocks.files.fileEntries.mockImplementation(
+		async (_root: string, path: string) => ({
+			entries: path
+				? []
+				: [{ kind: "folder", name: "Tour folder", path: "Tour folder" }],
+		}),
+	);
+	render(<QuickSetupModal />);
+	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+	fireEvent.click(
+		await screen.findByRole("button", { name: "📁 Tour folder" }),
+	);
+	await waitFor(() =>
+		expect(mocks.files.fileEntries).toHaveBeenLastCalledWith(
+			"shows",
+			"Tour folder",
+		),
+	);
+	await waitFor(() =>
+		expect(screen.getByRole("button", { name: "Up one folder" })).toBeEnabled(),
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Up one folder" }));
+	await screen.findByRole("button", { name: "📁 Tour folder" });
+	expect(mocks.files.fileEntries).toHaveBeenCalledTimes(3);
+	fireEvent.click(screen.getByRole("button", { name: "Close Load Show" }));
+	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+	await screen.findByRole("button", { name: "📁 Tour folder" });
+	expect(mocks.files.fileEntries).toHaveBeenCalledTimes(4);
+	expect(mocks.server.openShow).not.toHaveBeenCalled();
+});
+
+
+it("recovers a failed protected load after a scope change by rereading before reselecting", async () => {
+	const pending = loadDeferred<boolean>();
+	mocks.server.openShow
+		.mockReset()
+		.mockReturnValueOnce(pending.promise)
+		.mockResolvedValue(true);
+	const view = render(<QuickSetupModal />);
+	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+	const browser = screen.getByRole("dialog", { name: "Load show" });
+	const row = (
+		await within(browser).findByText("Tour", { exact: true })
+	).closest("tr")!;
+	fireEvent.click(within(row).getByRole("button", { name: "Load Latest" }));
+	expect(
+		screen.getByRole("status", { name: "Loading selected show" }),
+	).toBeVisible();
+	mocks.server.bootstrap = {
+		...mocks.server.bootstrap,
+		active_show: {
+			...mocks.server.bootstrap.active_show,
+			revision: mocks.server.bootstrap.active_show.revision + 1,
+		},
+	};
+	view.rerender(<QuickSetupModal />);
+	expect(
+		screen.getByRole("button", { name: "Close Load Show" }),
+	).toBeDisabled();
+	await act(async () =>
+		pending.reject(new Error("Selected show refused after scope changed")),
+	);
+	expect(await within(browser).findByRole("alert")).toHaveTextContent(
+		"Selected show refused after scope changed",
+	);
+	expect(mocks.files.fileEntries).toHaveBeenCalledTimes(1);
+	fireEvent.click(within(browser).getByRole("button", { name: "Retry" }));
+	await waitFor(() => expect(mocks.files.fileEntries).toHaveBeenCalledTimes(2));
+	expect(mocks.server.openShow).toHaveBeenCalledTimes(1);
+	const refreshed = (
+		await within(browser).findByText("Tour", { exact: true })
+	).closest("tr")!;
+	fireEvent.click(
+		within(refreshed).getByRole("button", { name: "Load Latest" }),
+	);
+	await waitFor(() =>
+		expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull(),
+	);
+	expect(mocks.server.openShow).toHaveBeenCalledTimes(2);
+});
+
+
+it.each([
+	"destination changed",
+	"session changed",
+	"library addition only",
+])("guards successful file preparation when %s", async (change) => {
+	mocks.realLifecycleProvider = true;
+	const pending = loadDeferred<any>();
+	const prepared = {
+		id: "incoming-copy",
+		name: "Incoming",
+		path: "incoming-copy.show",
+		revision: 1,
+		updated_at: "",
+	};
+	mocks.files.fileEntries.mockResolvedValue({
+		entries: [
+			{
+				name: "incoming.show",
+				path: "incoming.show",
+				kind: "file",
+				modified_millis: 0,
+			},
+		],
+	});
+	const apiCreate = vi.fn().mockReturnValue(pending.promise);
+	function Provider({ revision }: { revision: number }) {
+		const [shows, setShows] = useState(mocks.server.shows);
+		const model = {
+			api: {
+				files: {
+					fileContent: vi
+						.fn()
+						.mockResolvedValue({
+							arrayBuffer: async () => new Uint8Array([1]).buffer,
+						}),
+				},
+				shows: {
+					createShow: apiCreate,
+					shows: async () => [...mocks.server.shows, prepared],
+				},
+			},
+			shows,
+			setShows,
+			setError: vi.fn(),
+		} as unknown as ServerController;
+		const lifecycle = {
+			...mocks.server,
+			shows,
+			...createShowLifecycleActions(model),
+		};
+		return (
+			<ShowLifecycleProvider lifecycle={lifecycle}>
+				<span>{revision}</span>
+				<QuickSetupModal />
+			</ShowLifecycleProvider>
+		);
+	}
+	const view = render(<Provider revision={0} />);
+	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
+	fireEvent.click(
+		await screen.findByRole("button", { name: "Revisions for incoming" }),
+	);
+	const revisions = screen.getByRole("dialog", {
+		name: "Revisions for incoming",
+	});
+	fireEvent.click(
+		await within(revisions).findByRole("button", { name: "Partial Load" }),
+	);
+	await waitFor(() => expect(apiCreate).toHaveBeenCalledOnce());
+	if (change === "destination changed") {
+		mocks.server.bootstrap = {
+			...mocks.server.bootstrap,
+			active_show: {
+				...mocks.server.bootstrap.active_show,
+				id: "another-destination",
+			},
+		};
+	} else if (change === "session changed") {
+		mocks.server.session = {
+			...mocks.server.session,
+			session_id: "prepare-new-session",
+			desk: { id: "prepare-new-desk" },
+		} as any;
+	}
+	await act(async () => view.rerender(<Provider revision={1} />));
+	await act(async () => pending.resolve(prepared));
+	if (change === "library addition only") {
+		expect(
+			await screen.findByRole("dialog", { name: "Partial Show Load" }),
+		).toBeInTheDocument();
+		expect(screen.queryByRole("dialog", { name: "Load show" })).toBeNull();
+	} else {
+		expect(
+			screen.queryByRole("dialog", { name: "Partial Show Load" }),
+		).toBeNull();
+		expect(await screen.findByRole("alert")).toHaveTextContent(/changed/i);
+		expect(
+			screen.getByRole("dialog", { name: "Load show" }),
+		).toBeInTheDocument();
+	}
 });

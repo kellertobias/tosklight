@@ -5,7 +5,7 @@ import {
 	OperationBusyOverlay,
 } from "@tosklight/ui";
 import { WindowScrollArea } from "@tosklight/ui/window-kit";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
 	FileEntry,
 	FileRoot,
@@ -15,6 +15,7 @@ import type {
 	ShowRevision,
 } from "../../api/types";
 import { useFiles } from "../../features/files/FilesContext";
+import { useStableCallback } from "../../features/shared/useStableCallback";
 import type { QuickSetupModel } from "./QuickSetupModal";
 import { useShowLoadOperation } from "./showLoadOperation";
 
@@ -35,6 +36,102 @@ const dateLabel = (value: string | null) => {
 		: "Date unavailable";
 };
 
+function showLoadIntent(model: QuickSetupModel) {
+	return JSON.stringify([
+		model.authorities.session?.session_id,
+		model.authorities.session?.desk?.id,
+		model.authorities.bootstrap?.active_show?.id,
+		model.authorities.bootstrap?.active_show?.revision,
+	]);
+}
+
+function showLoadScope(
+	model: QuickSetupModel,
+	source: Source,
+	rootId: string,
+	path: string,
+) {
+	const lifecycle = model.authorities.lifecycle;
+	return JSON.stringify([
+		source,
+		rootId,
+		path,
+		Boolean(lifecycle),
+		showLoadIntent(model),
+		lifecycle?.shows.map((show) => [
+			show.id,
+			show.revision,
+			show.name,
+			show.path,
+			show.updated_at,
+		]),
+	]);
+}
+
+function requireCatalogueScope(
+	scope: string,
+	current: string,
+	loaded: string | null,
+) {
+	if (scope !== current || loaded !== scope)
+		throw new Error(
+			"The show catalogue changed. Select the show again before loading.",
+		);
+}
+
+function loadOperation(
+	operation: ReturnType<typeof useShowLoadOperation>,
+	pending: { current: boolean },
+	read: (current: () => boolean) => Promise<void>,
+) {
+	return {
+		...operation,
+		retry: () => {
+			if (operation.isBusy()) return;
+			if (!pending.current) return operation.retry();
+			// Keep a protected commit's error visible until Retry, then read the new
+			// catalogue rather than replaying the stale commit.
+			pending.current = false;
+			void operation.run("catalogue", read);
+		},
+	};
+}
+
+function useLoadScope(
+	model: QuickSetupModel,
+	source: Source,
+	root: string,
+	path: string,
+) {
+	const scope = showLoadScope(model, source, root, path);
+	const intent = showLoadIntent(model);
+	const latest = useRef({ scope, intent });
+	latest.current = { scope, intent };
+	return { scope, intent, latest };
+}
+
+function showLoadListing(
+	source: Source,
+	root: FileRoot | undefined,
+	path: string,
+	entries: FileEntry[],
+) {
+	const sourceLabel =
+		source === "internal"
+			? "Internal"
+			: source === "usb"
+				? `USB: ${root?.label ?? "No drive connected"}`
+				: "Network";
+	const folderTitle =
+		source === "network"
+			? "Network shows"
+			: `${root?.label ?? (source === "usb" ? "USB" : "Shows")} / ${path}`;
+	const folders = entries
+		.filter((entry) => entry.kind === "folder")
+		.sort((a, b) => a.name.localeCompare(b.name));
+	return { sourceLabel, folderTitle, folders };
+}
+
 function useShowLoadBrowserState(model: QuickSetupModel) {
 	const files = useFiles();
 	const lifecycle = model.authorities.lifecycle;
@@ -49,52 +146,58 @@ function useShowLoadBrowserState(model: QuickSetupModel) {
 	const error = operation.error;
 	const [selected, setSelected] = useState<Row | null>(null);
 	const [revisions, setRevisions] = useState<ShowRevision[]>([]);
-	useEffect(() => {
-		void operation.run("catalogue", async (current) => {
-			if (source === "network" && !lifecycle)
+	// Runtime actions are recreated when unrelated previews update. Catalogue reads
+	// follow their actual source/session/show scope, never the facade object's identity.
+	const { scope, intent, latest } = useLoadScope(model, source, rootId, path);
+	const catalogueScope = useRef<string | null>(null);
+	const pendingCatalogue = useRef(false);
+	const readCatalogue = useStableCallback(async (current: () => boolean) => {
+		if (source === "network" && !lifecycle)
+			throw new Error("Desk is disconnected. Reconnect, then Retry.");
+		const found = await files.fileRoots();
+		if (!current()) return;
+		setRoots(found);
+		if (source === "usb" && !rootId) {
+			setEntries([]);
+			setPeers([]);
+			catalogueScope.current = scope;
+			return;
+		}
+		if (source === "network") {
+			if (!lifecycle)
 				throw new Error("Desk is disconnected. Reconnect, then Retry.");
-			const found = await files.fileRoots();
-			if (!current()) return;
-			setRoots(found);
-			if (source === "usb" && !rootId) {
+			const catalog = await lifecycle.networkShows();
+			if (current()) {
+				setPeers(catalog.peers);
 				setEntries([]);
+			}
+		} else {
+			const directory = await files.fileEntries(rootId, path);
+			if (current()) {
+				setEntries(directory.entries);
 				setPeers([]);
-				return;
 			}
-			if (source === "network") {
-				if (!lifecycle)
-					throw new Error("Desk is disconnected. Reconnect, then Retry.");
-				const catalog = await lifecycle.networkShows();
-				if (current()) {
-					setPeers(catalog.peers);
-					setEntries([]);
-				}
-			} else {
-				const directory = await files.fileEntries(rootId, path);
-				if (current()) {
-					setEntries(directory.entries);
-					setPeers([]);
-				}
-			}
-		});
+		}
+		if (current()) catalogueScope.current = scope;
+	});
+	useEffect(() => {
+		catalogueScope.current = null;
+		setSelected(null);
+		setRevisions([]);
+		pendingCatalogue.current = operation.committing;
+		if (!pendingCatalogue.current)
+			void operation.run("catalogue", readCatalogue);
 		return () => {
 			operation.cancelRead();
 		};
-	}, [source, rootId, path, files, lifecycle]);
+	}, [scope, files, readCatalogue]);
 	const root = roots.find((root) => root.id === rootId);
-	const sourceLabel =
-		source === "internal"
-			? "Internal"
-			: source === "usb"
-				? `USB: ${root?.label ?? "No drive connected"}`
-				: "Network";
-	const folderTitle =
-		source === "network"
-			? "Network shows"
-			: `${root?.label ?? (source === "usb" ? "USB" : "Shows")} / ${path}`;
-	const folders = entries
-		.filter((entry) => entry.kind === "folder")
-		.sort((a, b) => a.name.localeCompare(b.name));
+	const { sourceLabel, folderTitle, folders } = showLoadListing(
+		source,
+		root,
+		path,
+		entries,
+	);
 	const rows = showLoadRows(source, peers, entries, lifecycle);
 	function requestClose() {
 		if (!operation.cancelRead()) return;
@@ -114,9 +217,14 @@ function useShowLoadBrowserState(model: QuickSetupModel) {
 	}
 	async function revisionsFor(row: Row) {
 		if (operation.isBusy()) return;
-		setSelected(row);
-		setRevisions([]);
 		await operation.run("revisions", async (current) => {
+			requireCatalogueScope(
+				scope,
+				latest.current.scope,
+				catalogueScope.current,
+			);
+			setSelected(row);
+			setRevisions([]);
 			if (!lifecycle)
 				throw new Error("Desk is disconnected. Reconnect, then Retry.");
 			const found = row.local
@@ -127,11 +235,19 @@ function useShowLoadBrowserState(model: QuickSetupModel) {
 	}
 	async function perform(row: Row, named: number | null, partial: boolean) {
 		await operation.run(partial ? "prepare" : "load", async (current) => {
+			requireCatalogueScope(
+				scope,
+				latest.current.scope,
+				catalogueScope.current,
+			);
 			if (!lifecycle)
 				throw new Error("Desk is disconnected. Reconnect, then Retry.");
 			if (partial) {
 				const prepared = await prepareShowSource(lifecycle, row, rootId, named);
 				if (!current()) return;
+				// Preparing a file may add a library row itself. Only the original
+				// destination/desk intent must remain unchanged before opening import.
+				requireCatalogueScope(intent, latest.current.intent, intent);
 				model.dialogs.setPartialSource(prepared);
 				model.dialogs.setSelectiveImportOpen(true);
 			} else {
@@ -153,7 +269,7 @@ function useShowLoadBrowserState(model: QuickSetupModel) {
 		peers,
 		busy,
 		error,
-		operation,
+		operation: loadOperation(operation, pendingCatalogue, readCatalogue),
 		selected,
 		revisions,
 		requestClose,
