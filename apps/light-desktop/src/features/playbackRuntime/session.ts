@@ -24,6 +24,8 @@ export interface PlaybackRuntimeSessionOptions {
 	resetStore?: boolean;
 }
 
+type RepairResult = "installed" | "superseded" | Error;
+
 export class PlaybackRuntimeSession {
 	private readonly scope = new PlaybackViewScope();
 	private readonly showId: string;
@@ -38,8 +40,7 @@ export class PlaybackRuntimeSession {
 	private lifecycle = 0;
 	private reconnectTimer: ReturnType<typeof globalThis.setTimeout> | null =
 		null;
-	private repairRunning = false;
-	private repairPromise: Promise<void> | null = null;
+	private repairPromise: Promise<RepairResult> | null = null;
 	private readonly hydratedIdentities = new Set<string>();
 	private deskHydrated = false;
 	private resumeFromSnapshot = false;
@@ -93,18 +94,27 @@ export class PlaybackRuntimeSession {
 	}
 
 	async refreshAuthority() {
-		if (
-			this.storeScope === null ||
-			!this.store.isScopeCurrent(this.storeScope) ||
-			!this.scope.hasViews()
-		)
-			throw new Error("The Playback runtime authority is unavailable");
-		await this.repair(this.lifecycle);
-		if (this.store.getSnapshot().status === "error")
-			throw (
-				this.store.getSnapshot().error ??
-				new Error("Playback runtime refresh failed")
-			);
+		// A subscription change can invalidate an in-flight repair. Only an admitted snapshot
+		// for the current generation satisfies the caller's freshness requirement.
+		while (this.hasAuthority()) {
+			const generation = this.lifecycle;
+			const result = await this.repair(generation);
+			if (!this.hasAuthority()) break;
+			if (result instanceof Error) throw result;
+			const state = this.store.getSnapshot();
+			if (state.status === "error")
+				throw state.error ?? new Error("Playback runtime refresh failed");
+			if (result === "installed" && generation === this.lifecycle) return;
+		}
+		throw new Error("The Playback runtime authority is unavailable");
+	}
+
+	private hasAuthority() {
+		return (
+			this.storeScope !== null &&
+			this.store.isScopeCurrent(this.storeScope) &&
+			this.scope.hasViews()
+		);
 	}
 
 	stop() {
@@ -259,17 +269,15 @@ export class PlaybackRuntimeSession {
 	}
 
 	private repair(generation: number) {
-		if (this.repairRunning) return this.repairPromise ?? Promise.resolve();
+		if (this.repairPromise) return this.repairPromise;
 		const repair = this.performRepair(generation).finally(() => {
-			this.repairRunning = false;
 			if (this.repairPromise === repair) this.repairPromise = null;
 		});
-		this.repairRunning = true;
 		this.repairPromise = repair;
 		return repair;
 	}
 
-	private async performRepair(generation: number) {
+	private async performRepair(generation: number): Promise<RepairResult> {
 		const identities = this.scope.values();
 		try {
 			const snapshots = await this.loadSnapshots(identities);
@@ -278,7 +286,7 @@ export class PlaybackRuntimeSession {
 				this.storeScope == null ||
 				!this.store.isScopeCurrent(this.storeScope)
 			)
-				return;
+				return "superseded";
 			for (const { snapshot, identities: batch } of snapshots) {
 				this.assertSnapshotScope(snapshot, batch);
 				this.store.installSnapshot(snapshot, batch);
@@ -290,8 +298,13 @@ export class PlaybackRuntimeSession {
 				Math.min(...snapshots.map(({ snapshot }) => snapshot.cursor.sequence)),
 			);
 			this.onError?.(null);
+			return "installed";
 		} catch (reason) {
-			if (generation === this.lifecycle) this.protocolReset(asError(reason));
+			if (generation !== this.lifecycle || !this.hasAuthority())
+				return "superseded";
+			const error = asError(reason);
+			this.protocolReset(error);
+			return error;
 		}
 	}
 

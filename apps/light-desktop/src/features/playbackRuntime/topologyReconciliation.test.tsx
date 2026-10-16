@@ -1,22 +1,23 @@
-import { StrictMode } from "react";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PlaybackSnapshot } from "./contracts";
 import {
 	PlaybackRuntimeViewProvider,
+	usePlaybackDeskView,
 	usePlaybackProjectionMap,
 } from "./PlaybackRuntimeView";
 import { PlaybackRuntimeStore } from "./store";
 import {
 	CUE_LIST_ID,
 	DESK_ID,
-	SHOW_ID,
 	playbackSnapshot,
+	SHOW_ID,
 } from "./testFixtures";
 import {
 	playbackTargetMatches,
 	usePlaybackTopologyRuntimeReconciliation,
 } from "./topologyReconciliation";
-import type { PlaybackSnapshot } from "./contracts";
 
 afterEach(cleanup);
 
@@ -44,6 +45,10 @@ function Probe({ target }: { target: string }) {
 		</span>
 	);
 }
+function DeskConsumer() {
+	usePlaybackDeskView();
+	return null;
+}
 function harness() {
 	const store = new PlaybackRuntimeStore();
 	let resolve: (value: PlaybackSnapshot) => void = () => {};
@@ -61,7 +66,7 @@ function harness() {
 			resolve = done;
 		});
 	});
-	const wrap = (target: string) => (
+	const wrap = (target: string, desk = false) => (
 		<PlaybackRuntimeViewProvider
 			showId={SHOW_ID}
 			deskId={DESK_ID}
@@ -70,6 +75,7 @@ function harness() {
 			transport={null}
 			loadSnapshot={load}
 		>
+			{desk ? <DeskConsumer /> : null}
 			<Probe target={target} />
 		</PlaybackRuntimeViewProvider>
 	);
@@ -137,5 +143,20 @@ describe("visible playback reassignment reconciliation", () => {
 		await waitFor(() => expect(h.load).toHaveBeenCalledTimes(3));
 		await act(async () => h.resolve(third));
 		await screen.findByText(`GO ${third}`);
+	});
+	it("keeps loading when a subscription supersedes the matching topology repair", async () => {
+		const h = harness();
+		const view = render(h.wrap(CUE_LIST_ID));
+		await screen.findByText(`GO ${CUE_LIST_ID}`);
+		view.rerender(h.wrap(NEXT));
+		await waitFor(() => expect(h.load).toHaveBeenCalledTimes(2));
+		view.rerender(h.wrap(NEXT, true));
+		await act(async () => {});
+		await act(async () => h.resolve(NEXT));
+		expect(screen.queryByText("Authority error")).not.toBeInTheDocument();
+		expect(screen.queryByText(`GO ${CUE_LIST_ID}`)).not.toBeInTheDocument();
+		await waitFor(() => expect(h.load).toHaveBeenCalledTimes(3));
+		await act(async () => h.resolve(NEXT));
+		await screen.findByText(`GO ${NEXT}`);
 	});
 });
