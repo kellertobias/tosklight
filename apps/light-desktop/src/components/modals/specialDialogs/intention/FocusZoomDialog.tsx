@@ -235,7 +235,7 @@ function BeamDiagram({ zoom, focus, active, nextId, latest, stopGesture, statuse
 
 	const zoomLimits = resolveLimits(zoom);
 	const focusLimits = resolveLimits(focus, [0, 1]);
-	const zoomValue = bounded(zoom.value, zoomLimits.minimum, zoomLimits.maximum);
+	const zoomValue = bounded(Number.isFinite(zoom.value) ? zoom.value : zoomLimits.minimum, zoomLimits.minimum, zoomLimits.maximum);
 	const focusValue = bounded(focus.value, focusLimits.minimum, focusLimits.maximum);
 	const left = MARGIN;
 	const right = Math.max(left + 60, size.width - MARGIN);
@@ -255,6 +255,12 @@ function BeamDiagram({ zoom, focus, active, nextId, latest, stopGesture, statuse
 	const edgeStartX = left + length * .2;
 	const edgeStartHeight = halfOpening * .2;
 	const zoomText = formatZoom(zoomValue, zoomLimits);
+	// The schematic and gestures stay within the control range; the readout preserves the request.
+	const requestedZoom = Number.isFinite(zoom.value) ? zoom.value : zoomValue;
+	const requestedZoomText = formatZoom(requestedZoom, zoomLimits);
+	const zoomValueText = requestedZoom !== zoomValue
+		? `Requested ${requestedZoom} degrees; control range ${zoomLimits.minimum}–${zoomLimits.maximum} degrees`
+		: `${zoomText} degrees`;
 	const focusText = formatFocus(focusValue, focusLimits);
 	const percentDecimals = focusPercentDecimals(focusLimits);
 	const conventionLabel = zoom.convention === "field" ? "Field" : zoom.convention === "beam" ? "Beam" : "Zoom";
@@ -357,11 +363,11 @@ function BeamDiagram({ zoom, focus, active, nextId, latest, stopGesture, statuse
 			<div ref={viewport} className="focus-zoom-viewport">
 				<BeamSvg svg={svg} size={size} left={left} right={right} center={center} halfOpening={halfOpening} edgeStartX={edgeStartX}
 					edgeStartHeight={edgeStartHeight} planeX={planeX} planeHalfHeight={planeHalfHeight} handleOffset={handleOffset} zoomLimits={zoomLimits}
-					focusLimits={focusLimits} zoomText={zoomText} focusText={focusText} percentDecimals={percentDecimals} conventionLabel={conventionLabel}
+					focusLimits={focusLimits} zoomText={zoomText} zoomValueText={zoomValueText} focusText={focusText} percentDecimals={percentDecimals} conventionLabel={conventionLabel}
 					keys={keys} pointerHandlers={pointerHandlers} disabled={disabled} />
 			</div>
 			<div className="focus-zoom-readouts">
-				<span>{conventionLabel} <strong>{zoomText}°</strong>{statuses.zoom ? <Status text={statuses.zoom} control="zoom" /> : null}</span>
+				<span>{conventionLabel} <strong>{requestedZoomText}°</strong>{statuses.zoom ? <Status text={statuses.zoom} control="zoom" /> : null}</span>
 				<span>Focus <strong>{focusText}%</strong>{statuses.focus ? <Status text={statuses.focus} control="focus" /> : null}</span>
 			</div>
 		</div>
@@ -413,6 +419,7 @@ interface BeamSvgProps {
 	zoomLimits: ResolvedLimits;
 	focusLimits: ResolvedLimits;
 	zoomText: string;
+	zoomValueText: string;
 	focusText: string;
 	percentDecimals: number;
 	conventionLabel: string;
@@ -424,7 +431,7 @@ interface BeamSvgProps {
 /** Presentational beam schematic: cone, edge/angle handles and focus plane with their gesture hooks. */
 function BeamSvg({
 	svg, size, left, right, center, halfOpening, edgeStartX, edgeStartHeight, planeX, planeHalfHeight, handleOffset,
-	zoomLimits, focusLimits, zoomText, focusText, percentDecimals, conventionLabel, keys, pointerHandlers, disabled,
+	zoomLimits, focusLimits, zoomText, zoomValueText, focusText, percentDecimals, conventionLabel, keys, pointerHandlers, disabled,
 }: BeamSvgProps) {
 	return (
 		<svg ref={svg} viewBox={`0 0 ${size.width} ${size.height}`} preserveAspectRatio="none" aria-label="Beam angle and focus diagram" role="group">
@@ -444,7 +451,7 @@ function BeamSvg({
 				<rect x={planeX - 13} y={center - 11} width="26" height="22" rx="4" className="focus-zoom-focus-handle fam-focus-handle" />
 			</g>
 			<g role="slider" tabIndex={0} aria-disabled={disabled || undefined} aria-label={`${conventionLabel} opening angle`} aria-valuemin={zoomLimits.minimum} aria-valuemax={zoomLimits.maximum}
-				aria-valuenow={Number(zoomText)} aria-valuetext={`${zoomText} degrees`}
+				aria-valuenow={Number(zoomText)} aria-valuetext={zoomValueText}
 				onKeyDown={event => keys("zoom", event)} data-testid="beam-angle-drag" {...pointerHandlers("zoom")}>
 				{[-1, 1].map(side => (
 					<g key={side} data-beam-side={side} data-angle-handle data-testid={`beam-angle-handle-${side < 0 ? "upper" : "lower"}`}>

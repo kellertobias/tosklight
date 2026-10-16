@@ -133,6 +133,8 @@ export function zoomDialogValue(input: ZoomDialogInput): {
 		return { zoom, status: ZOOM_UNSUPPORTED_STATUS };
 	if (input.local === undefined && input.requested.value === null)
 		return { zoom, status: unsharedStatus(input.requested) };
+	if (Number.isFinite(value) && (value < limits.minimum || value > limits.maximum))
+		return { zoom, status: `Requested · outside ${limits.minimum}–${limits.maximum}° range · achieved not reported` };
 	return { zoom, status: ZOOM_REQUESTED_STATUS };
 }
 

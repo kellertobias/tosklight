@@ -117,6 +117,25 @@ describe("Focus Special Dialog (production)", () => {
 		expect(normal.finishGesture).not.toHaveBeenCalled();
 	});
 
+	it.each([40, 5])("preserves an out-of-range %s° request without claiming it is achieved or editing it", (degrees) => {
+		const { normal, preload, close } = setup({
+			zoomSlot: { ...ZOOM, limits: { min: 10, max: 25 } },
+			programmerValues: [zoomValue(FIXTURE_A, degrees), zoomValue(FIXTURE_B, degrees), focusValue(FIXTURE_A, 0.5), focusValue(FIXTURE_B, 0.5)],
+		});
+		const slider = screen.getByRole("slider", { name: "Beam opening angle" });
+		expect(document.querySelector(".focus-zoom-readouts strong")).toHaveTextContent(`${degrees}.0°`);
+		expect(screen.getByTestId("focus-zoom-zoom-status")).toHaveTextContent("Requested · outside 10–25° range · achieved not reported");
+		expect(slider).toHaveAttribute("aria-valuenow", String(Math.max(10, Math.min(25, degrees))));
+		expect(slider).toHaveAttribute("aria-valuetext", `Requested ${degrees} degrees; control range 10–25 degrees`);
+		expect(focusSlider()).toHaveAttribute("aria-valuetext", "50%");
+		fireEvent.click(screen.getByRole("button", { name: "Close Focus Special Dialog" }));
+		expect(close).toHaveBeenCalledTimes(1);
+		for (const writer of [normal, preload]) {
+			expect(writer.applyIntent).not.toHaveBeenCalled();
+			expect(writer.finishGesture).not.toHaveBeenCalled();
+		}
+	});
+
 	it("turns a beam-edge drag into Zoom degree edits from the grab offset, then one Finish", async () => {
 		const { normal } = setup();
 		const release = dragZoom(3, 9, [0, 10, 20]);
