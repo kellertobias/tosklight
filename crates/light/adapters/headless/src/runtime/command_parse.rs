@@ -361,15 +361,36 @@ pub(super) fn parse_fixture_selection(
         if tokens.get(index).is_some_and(|token| token == "THRU") {
             index += 1;
             let last = parse_fixture_reference_tokens(tokens, &mut index, div)?;
-            if last.number < first.number {
+            if last.number < first.number && (first.head.is_some() || last.head.is_some()) {
                 return Err("fixture range is invalid".into());
             }
             match (first.head, last.head) {
                 (None, None) => {
-                    for number in first.number..=last.number {
-                        let Some(fixture) = fixture_by_number(fixtures, number) else {
-                            continue;
-                        };
+                    // Traverse existing fixtures, so sparse ranges cost show size, not numeric span.
+                    let unnumbered = fixtures
+                        .iter()
+                        .all(|fixture| fixture.fixture_number.is_none());
+                    let low = first.number.min(last.number);
+                    let high = first.number.max(last.number);
+                    let mut ordered = fixtures
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, fixture)| {
+                            let number = if unnumbered {
+                                u32::try_from(index).ok()?.checked_add(1)?
+                            } else {
+                                fixture.fixture_number?
+                            };
+                            (low..=high).contains(&number).then_some((number, fixture))
+                        })
+                        .collect::<Vec<_>>();
+                    // Stable sorting and dedup retain fixture_by_number's first-match semantics.
+                    ordered.sort_by_key(|(number, _)| *number);
+                    ordered.dedup_by_key(|(number, _)| *number);
+                    if first.number > last.number {
+                        ordered.reverse();
+                    }
+                    for (_, fixture) in ordered {
                         let children = ordered_child_ids(fixture);
                         if children.is_empty() {
                             push_unique(&mut selected, fixture.fixture_id);

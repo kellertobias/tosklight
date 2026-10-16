@@ -1,4 +1,101 @@
 #[test]
+fn descending_fixture_ranges_are_bounded_by_sparse_show_size_and_keep_lookup_rules() {
+    let mut fixtures = Vec::new();
+    for number in [Some(2), Some(u32::MAX - 1), Some(2), None] {
+        let mut fixture = schema_v2_direct_fixture().0;
+        fixture.fixture_id = light_core::FixtureId::new();
+        fixture.fixture_number = number;
+        fixtures.push(fixture);
+    }
+    let ids = fixtures
+        .iter()
+        .map(|fixture| fixture.fixture_id)
+        .collect::<Vec<_>>();
+    let select = |fixtures: &[light_fixture::PatchedFixture], text: &str| {
+        parse_fixture_selection(
+            fixtures,
+            &text
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
+    };
+    // Both missing endpoints are near the u32 extremes. Duplicated numbers select the first
+    // stored fixture, while an unnumbered fixture is excluded from a partially numbered show.
+    assert_eq!(select(&fixtures, "4294967295 THRU 1"), vec![ids[1], ids[0]]);
+    assert_eq!(select(&fixtures, "1 THRU 4294967295"), vec![ids[0], ids[1]]);
+    assert_eq!(select(&fixtures, "2 THRU 2"), vec![ids[0]]);
+    assert!(select(&[], "4294967295 THRU 1").is_empty());
+    for fixture in &mut fixtures {
+        fixture.fixture_number = None;
+    }
+    assert_eq!(
+        select(&fixtures, "4294967295 THRU 1"),
+        vec![ids[3], ids[2], ids[1], ids[0]]
+    );
+    assert_eq!(select(&fixtures, "1 THRU 4294967295"), ids);
+}
+
+#[test]
+fn descending_fixture_ranges_keep_profile_head_order_and_explicit_head_rules() {
+    let mut fixtures = Vec::new();
+    let mut roots = Vec::new();
+    let mut heads = Vec::new();
+    for number in 1..=2 {
+        let mut fixture = schema_v2_direct_fixture().0;
+        fixture.fixture_number = Some(number);
+        roots.push(fixture.fixture_id);
+        let children = [light_core::FixtureId::new(), light_core::FixtureId::new()];
+        // The profile order is authoritative, even when the patched storage is reversed.
+        fixture.definition.heads = [0, 1, 2]
+            .into_iter()
+            .map(|index| light_fixture::LogicalHead {
+                index,
+                name: format!("Head {index}"),
+                shared: index == 0,
+                parameters: Vec::new(),
+            })
+            .collect();
+        fixture.logical_heads = [2, 1]
+            .into_iter()
+            .map(|head_index| light_fixture::PatchedHead {
+                profile_head_id: None,
+                head_index,
+                fixture_id: children[head_index as usize - 1],
+            })
+            .collect();
+        heads.push(children);
+        fixtures.push(fixture);
+    }
+    let parse = |text: &str| {
+        parse_fixture_selection(
+            &fixtures,
+            &text
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        )
+    };
+    assert_eq!(
+        parse("2 THRU 1").unwrap(),
+        vec![heads[1][0], heads[1][1], heads[0][0], heads[0][1]]
+    );
+    assert_eq!(
+        parse("1 + 2 THRU 1").unwrap(),
+        vec![heads[0][0], heads[0][1], heads[1][0], heads[1][1]]
+    );
+    assert_eq!(parse("1 . 0 THRU 2 . 0").unwrap(), roots);
+    assert_eq!(parse("1 . 1 THRU 1 . 2").unwrap(), heads[0]);
+    assert_eq!(
+        parse("2 . 0 THRU 1 . 0").unwrap_err(),
+        "fixture range is invalid"
+    );
+    assert!(parse("1 . 2 THRU 1 . 1").is_err());
+    assert!(parse("2 . 1 THRU 1").is_err());
+}
+
+#[test]
 fn command_backspace_removes_words_as_tokens_and_numbers_as_characters() {
     let mut value = "GROUP 1 THRU 6 AT 88".to_string();
     for expected in [

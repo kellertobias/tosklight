@@ -1,4 +1,111 @@
 #[tokio::test]
+async fn descending_fixture_ranges_preserve_operator_order_through_http() {
+    let scenario = CommandHttpScenario::new().await;
+    let template = schema_v2_direct_fixture().0;
+    let mut ids = HashMap::new();
+    let fixtures = [2, 4, 1]
+        .into_iter()
+        .map(|number| {
+            let mut fixture = template.clone();
+            fixture.fixture_id = light_core::FixtureId::new();
+            fixture.fixture_number = Some(number);
+            // Unpatched fixtures remain selectable and participate in the spread.
+            fixture.universe = None;
+            fixture.address = None;
+            ids.insert(number, fixture.fixture_id);
+            fixture
+        })
+        .collect::<Vec<_>>();
+    scenario
+        .state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: fixtures.into(),
+            revision: 1,
+            ..EngineSnapshot::default()
+        })
+        .unwrap();
+
+    for (index, (command, numbers)) in [
+        ("FIXTURE 5 THRU 1", vec![4, 2, 1]),
+        ("FIXTURE 1 THRU 5", vec![1, 2, 4]),
+        ("FIXTURE 4294967295 THRU 1", vec![4, 2, 1]),
+        ("FIXTURE 1 THRU 4294967295", vec![1, 2, 4]),
+        ("FIXTURE 2 + 5 THRU 1", vec![2, 4, 1]),
+        ("FIXTURE 5 THRU 1 - 2", vec![4, 1]),
+        ("FIXTURE 5 THRU 1 DIV 2", vec![4, 1]),
+        ("FIXTURE 5 THRU 1 DIV 2 OFFSET 1", vec![2]),
+        ("FIXTURE 4 THRU 1 AT 0 THRU 100", vec![4, 2, 1]),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let response = scenario
+            .execute(&format!("descending-{index}"), Some(command))
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json(response).await;
+        assert_ne!(response["outcome"], "rejected", "{command}: {response}");
+        assert_eq!(
+            scenario
+                .state
+                .programming
+                .selection(scenario.session.id)
+                .unwrap()
+                .selected,
+            numbers
+                .into_iter()
+                .map(|number| ids[&number])
+                .collect::<Vec<_>>(),
+            "{command}"
+        );
+    }
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+    for (number, expected) in [(4, 0.0), (2, 0.5), (1, 1.0)] {
+        let value = programmer
+            .values
+            .iter()
+            .find(|value| {
+                value.fixture_id == ids[&number]
+                    && value.attribute == light_core::AttributeKey::intensity()
+            })
+            .unwrap();
+        assert_eq!(value.value.normalized(), Some(expected));
+    }
+    let before = scenario
+        .state
+        .programming
+        .selection(scenario.session.id)
+        .unwrap();
+    for (index, command) in [
+        "FIXTURE 0 THRU 1",
+        "FIXTURE 4 THRU 1 +",
+        "FIXTURE 4 THRU 1 DIV 0",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let response = json(
+            scenario
+                .execute(&format!("descending-invalid-{index}"), Some(command))
+                .await,
+        )
+        .await;
+        assert_eq!(response["outcome"], "rejected", "{response}");
+        assert_eq!(
+            scenario
+                .state
+                .programming
+                .selection(scenario.session.id)
+                .unwrap(),
+            before,
+            "invalid command must not change selection: {command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}
+
+#[tokio::test]
 async fn programming_selection_actions_are_scoped_revisioned_and_replay_safe() {
     let scenario = CommandHttpScenario::new().await;
     let fixture = scenario.install_direct_fixture();
