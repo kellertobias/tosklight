@@ -13,14 +13,17 @@ use viz_document::PlanningDocument;
 /// commits the mirror has not caught up with yet.
 pub(crate) struct Knowledge<'a> {
     pub mirror: &'a VersionedState,
-    pub known: &'a BTreeMap<ObjectKey, u64>,
+    pub known: &'a BTreeMap<ObjectKey, (u64, u64)>,
 }
 
 impl DeskKnowledge for Knowledge<'_> {
     fn revision(&self, key: &ObjectKey) -> Option<u64> {
+        // Object counters may restart after delete/recreate. Show revisions order the sources:
+        // an acknowledgement is useful only until its commit has reached the confirmed mirror.
         self.known
             .get(key)
-            .copied()
+            .filter(|(_, show_revision)| *show_revision > self.mirror.show_revision)
+            .map(|(revision, _)| *revision)
             .or_else(|| self.mirror.revisions.get(key).copied())
     }
 
@@ -95,5 +98,93 @@ impl Shared {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod revision_tests {
+    use super::*;
+    use crate::intent::PendingOperation;
+    use crate::state::SyncState;
+    use serde_json::json;
+
+    #[test]
+    fn fresh_delete_after_remote_update_uses_newer_mirror_revision() {
+        let key = ObjectKey::new("patched_fixture", "fixture");
+        let mut mirror = VersionedState::default();
+        mirror.revisions.insert(key.clone(), 6);
+        mirror.show_revision = 811;
+        let known = BTreeMap::from([(key.clone(), (5, 810))]);
+        let before = SyncState {
+            objects: BTreeMap::from([(key.clone(), json!({"name":"remote"}))]),
+            ..SyncState::default()
+        };
+        let intent = ShowEditIntent::capture(
+            &before,
+            &SyncState::default(),
+            &Knowledge {
+                mirror: &mirror,
+                known: &known,
+            },
+            &|_| None,
+        )
+        .unwrap();
+        assert_eq!(
+            intent.operations(),
+            &[PendingOperation::DeleteObject {
+                key,
+                base_revision: Some(6)
+            }]
+        );
+    }
+}
+
+#[cfg(test)]
+mod acknowledgement_tests {
+    use super::*;
+    #[test]
+    fn acknowledgement_only_precedes_its_own_mirror_commit() {
+        let key = ObjectKey::new("cad_annotation", "recreated");
+        let mut mirror = VersionedState::default();
+        mirror.show_revision = 10;
+        mirror.revisions.insert(key.clone(), 1);
+        let known = BTreeMap::from([(key.clone(), (7, 9))]);
+        assert_eq!(
+            Knowledge {
+                mirror: &mirror,
+                known: &known
+            }
+            .revision(&key),
+            Some(1)
+        );
+        let known = BTreeMap::from([(key.clone(), (2, 11))]);
+        assert_eq!(
+            Knowledge {
+                mirror: &mirror,
+                known: &known
+            }
+            .revision(&key),
+            Some(2)
+        );
+        mirror.show_revision = 11;
+        mirror.revisions.insert(key.clone(), 2);
+        assert_eq!(
+            Knowledge {
+                mirror: &mirror,
+                known: &known
+            }
+            .revision(&key),
+            Some(2)
+        );
+        mirror.show_revision = 12;
+        mirror.revisions.remove(&key);
+        assert_eq!(
+            Knowledge {
+                mirror: &mirror,
+                known: &known
+            }
+            .revision(&key),
+            None
+        );
     }
 }

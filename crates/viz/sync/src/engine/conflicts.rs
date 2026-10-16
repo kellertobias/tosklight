@@ -141,7 +141,9 @@ fn views(entry: &JournalEntry) -> Vec<ConflictView> {
 fn use_mine(
     conflicts: &[ShowSyncConflict],
     drafts: &BTreeMap<String, Value>,
-) -> Vec<PendingOperation> {
+    original: &[PendingOperation],
+    recovered: bool,
+) -> Answer<Vec<PendingOperation>> {
     let mut fields: BTreeMap<ObjectKey, Vec<ShowSyncFieldEdit>> = BTreeMap::new();
     let mut whole = Vec::new();
     for conflict in conflicts {
@@ -175,6 +177,24 @@ fn use_mine(
             });
             continue;
         }
+        // Old servers persisted deletion conflicts without the existing fixture body. Only the
+        // matching typed operation can identify those null/null records as deletion intent.
+        if conflict.reason == ShowSyncConflictReason::ObjectModified
+            && conflict.mine.is_none()
+            && original.iter().any(|operation| {
+                matches!(operation,
+                PendingOperation::DeleteObject { key: deleted, .. } if deleted == &key)
+            })
+        {
+            let revision = conflict
+                .theirs_revision
+                .ok_or("Control did not provide the current revision for this deletion")?;
+            whole.push(PendingOperation::DeleteObject {
+                key,
+                base_revision: Some(revision),
+            });
+            continue;
+        }
         match (&conflict.mine, &conflict.theirs) {
             (Some(mine), Some(theirs)) => {
                 let mut edits = Vec::new();
@@ -185,14 +205,23 @@ fn use_mine(
                 key,
                 body: mine.clone(),
             }),
-            (None, Some(_)) => whole.push(PendingOperation::DeleteObject {
+            (None, Some(_)) if recovered => whole.push(PendingOperation::DeleteObject {
                 key,
-                base_revision: conflict.theirs_revision,
+                base_revision: Some(
+                    conflict
+                        .theirs_revision
+                        .ok_or("Control did not provide the current revision for this deletion")?,
+                ),
             }),
-            (None, None) => {}
+            (None, _) => {
+                return Err(
+                    "This conflict has no recoverable operation; keep Control or retry the edit"
+                        .into(),
+                );
+            }
         }
     }
-    whole
+    Ok(whole
         .into_iter()
         .chain(
             fields
@@ -200,7 +229,7 @@ fn use_mine(
                 .filter(|(_, fields)| !fields.is_empty())
                 .map(|(key, fields)| PendingOperation::UpdateObject { key, fields }),
         )
-        .collect()
+        .collect())
 }
 
 fn as_text(value: &Value) -> Option<String> {
@@ -237,7 +266,12 @@ impl Shared {
             }
             (Resolution::UseMine, _) => {
                 let outcome = entry.outcome.clone().unwrap_or_default();
-                ShowEditIntent::from_operations(use_mine(&outcome.conflicts, &outcome.drafts))
+                ShowEditIntent::from_operations(use_mine(
+                    &outcome.conflicts,
+                    &outcome.drafts,
+                    &entry.operations,
+                    outcome.recovered,
+                )?)
             }
         };
         let keys: BTreeSet<ObjectKey> = entry
@@ -267,3 +301,7 @@ impl Shared {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "conflicts_tests.rs"]
+mod tests;

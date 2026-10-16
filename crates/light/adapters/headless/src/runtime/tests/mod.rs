@@ -223,3 +223,6 @@ mod timecode_show_scope_tests;
 mod preload_transport_batch_tests;
 
 mod timecode_clock_status_tests;
+
+#[path = "show_sync_fixture_delete_tests.rs"]
+mod show_sync_fixture_delete_tests;

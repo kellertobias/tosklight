@@ -126,7 +126,7 @@ impl Staging {
             ShowSyncOperation::RemovePatchFixture {
                 fixture_id,
                 base_fixture_revision,
-            } => self.remove_fixture(document, *fixture_id, *base_fixture_revision),
+            } => self.remove_fixture(document, *fixture_id, *base_fixture_revision, ports),
             ShowSyncOperation::RetainProfileRevision {
                 profile_id,
                 revision,
@@ -320,17 +320,18 @@ impl Staging {
         Ok(())
     }
 
-    fn remove_fixture(
+    fn remove_fixture<P: ShowSyncPorts>(
         &mut self,
         document: &PortableShowDocument,
         fixture_id: FixtureId,
         base_fixture_revision: u64,
+        ports: &P,
     ) -> Result<(), ActionError> {
-        let Some(projection) = fixture_projection(document, fixture_id)? else {
+        let Some((body, revision)) = self.fixture_document(document, fixture_id, ports)? else {
             self.fixtures.remove(&fixture_id.0);
             return Ok(());
         };
-        if projection.fixture_revision == base_fixture_revision {
+        if revision == base_fixture_revision {
             self.fixtures.remove(&fixture_id.0);
             self.removed_fixtures.push(fixture_id);
             return Ok(());
@@ -341,8 +342,8 @@ impl Staging {
             path: String::new(),
             base: None,
             mine: None,
-            theirs: None,
-            theirs_revision: Some(projection.fixture_revision),
+            theirs: Some(body),
+            theirs_revision: Some(revision),
             reason: ShowSyncConflictReason::ObjectModified,
         });
         Ok(())

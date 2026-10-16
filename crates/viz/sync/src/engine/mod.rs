@@ -72,8 +72,8 @@ pub(crate) struct Shared {
     /// The mirror was damaged: the next snapshot of the desk turns every difference between the
     /// document and the desk into a recoverable conflict instead of trusting either side.
     pub rebuild_mirror: AtomicBool,
-    /// Desk revisions the desk reported in outcomes before their commit reached the mirror.
-    pub known_revisions: Mutex<BTreeMap<ObjectKey, u64>>,
+    /// (Object revision, show revision) reported before a commit reaches the mirror.
+    pub known_revisions: Mutex<BTreeMap<ObjectKey, (u64, u64)>>,
 }
 
 /// One bound document's synchronization. Cloning shares it.

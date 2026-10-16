@@ -298,10 +298,13 @@ fn request(
         .iter()
         .map(|operation| {
             operation.to_wire(|key| {
-                known
-                    .get(key)
-                    .copied()
-                    .or_else(|| mirror.state().revisions.get(key).copied())
+                crate::intent::DeskKnowledge::revision(
+                    &super::capture::Knowledge {
+                        mirror: mirror.state(),
+                        known: &known,
+                    },
+                    key,
+                )
             })
         })
         .collect::<Answer<Vec<_>>>()?;
@@ -326,7 +329,7 @@ async fn record(shared: &Arc<Shared>, entry: &JournalEntry, outcome: ShowSyncTra
             let key = crate::state::ObjectKey::new(&object.kind, &object.id);
             match object.revision {
                 Some(revision) if !object.deleted => {
-                    known.insert(key, revision);
+                    known.insert(key, (revision, outcome.show_revision));
                 }
                 _ => {
                     known.remove(&key);
