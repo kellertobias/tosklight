@@ -908,6 +908,8 @@ test("owned observer starts only once without waiting, keeps fixed helper argv a
 	const directory = await mkdtemp(path.join(scratch, "observer-"));
 	const config = {
 		source_sha: "a".repeat(40),
+		owner: {sha256: "d".repeat(64), build_id: "e".repeat(40)},
+		layout_hashes: {a: "1", b: "2", c: "3", d: "4"},
 		roles: [
 			{ role: "server", sha256: "b".repeat(64), build_id: "1234" },
 			{ role: "native_renderer", sha256: "c".repeat(64), build_id: "5678" },
@@ -942,9 +944,12 @@ test("owned observer starts only once without waiting, keeps fixed helper argv a
 			return child;
 		},
 	});
+	const reportPath = path.join(directory, "stage.jsonl");
+	await writeFile(reportPath, JSON.stringify({kind: "started", config: {profile: "sixteen_universe"}}) + "\n" + JSON.stringify({kind: "stage-started"}) + "\n");
 	const manifest = path.join(directory, "request.json");
 	const observer = factory(config, {
 		launchPid: 456,
+		reportPath,
 		measurementStartedAt: 100000,
 		manifestPath: manifest,
 		outputPath: path.join(directory, "receipt.json"),
@@ -957,6 +962,8 @@ test("owned observer starts only once without waiting, keeps fixed helper argv a
 	const request = JSON.parse(await readFile(manifest, "utf8"));
 	assert.equal(request.coordinator_pid, 123);
 	assert.equal(request.launch_pid, 456);
+	assert.equal(request.stage_clock.started.config.profile, "sixteen_universe");
+	assert.equal(request.owner.sha256, "d".repeat(64));
 	assert.equal(
 		Date.parse(request.measurement_deadline_utc) -
 			Date.parse(request.measurement_started_at_utc),
@@ -980,6 +987,8 @@ test("owned binary descriptor rejects foreign scope roles and unspecified fields
 	const descriptor = {
 		schema: 1,
 		source_sha: "a".repeat(40),
+		owner: {sha256: "d".repeat(64), build_id: "e".repeat(40)},
+		layout_hashes: {a: "1", b: "2", c: "3", d: "4"},
 		roles: [
 			{ role: "server", sha256: "b".repeat(64), build_id: "1234" },
 			{ role: "native_renderer", sha256: "c".repeat(64), build_id: "5678" },
@@ -1112,6 +1121,8 @@ test("missing or false observer receipt and hung helper never assert recorder cl
 				return child;
 			},
 		});
+		const reportPath = path.join(directory, "stage.jsonl");
+		await writeFile(reportPath, '{"kind":"started"}\n{"kind":"stage-started"}\n');
 		const receipt = path.join(directory, "receipt.json");
 		if (mode === "false")
 			await writeFile(
@@ -1125,6 +1136,7 @@ test("missing or false observer receipt and hung helper never assert recorder cl
 			{ source_sha: "a".repeat(40), roles: [] },
 			{
 				launchPid: 456,
+				reportPath,
 				measurementStartedAt: 100000,
 				manifestPath: path.join(directory, "request.json"),
 				outputPath: receipt,
@@ -1145,5 +1157,23 @@ test("missing or false observer receipt and hung helper never assert recorder cl
 			observer.finish(),
 			(error) => error.cleanupUnverified === true,
 		);
+	}
+});
+
+
+test("missing or duplicate authoritative Stage clock stops before any profiler spawn", async () => {
+	const code = source.slice(source.indexOf("function ownedCpuProfileObserver("), source.indexOf("\nasync function runCase("));
+	for (const rows of [[{kind: "started"}], [{kind: "started"}, {kind: "stage-started"}, {kind: "stage-started"}]]) {
+		let spawns = 0, writes = 0;
+		const factory = vm.runInNewContext(`${code}\nownedCpuProfileObserver`, {
+			readFile: async () => rows.map(row => JSON.stringify(row)).join("\n"),
+			writeFile: async () => { writes++; }, Date, path, process: {pid: 1},
+			spawn: () => { spawns++; throw new Error("must not spawn"); }
+		});
+		const observer = factory({}, {reportPath: "/own/fixture-sheet.jsonl"});
+		observer.start();
+		await assert.rejects(observer.finish(), /Ambiguous owned Stage/);
+		assert.equal(spawns, 0);
+		assert.equal(writes, 0);
 	}
 });

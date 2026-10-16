@@ -569,9 +569,12 @@ class PreflightPolicyTests(unittest.TestCase):
 
 class OwnedApplicationTests(unittest.TestCase):
     def manifest(self):
-        return {"schema": 1, "source_sha": "a" * 40, "coordinator_pid": 400,
-                "launch_pid": 410, "measurement_started_at_utc": "2026-10-16T00:00:00Z",
-                "measurement_deadline_utc": "2026-10-16T00:01:00Z",
+        return {"schema": 1, "source_sha": PROFILE.APP_SOURCE, "coordinator_pid": 400,
+                "owner": {"sha256": "e" * 64, "build_id": "f" * 40},
+                "layout_hashes": PROFILE.LAYOUT_HASHES,
+                "stage_clock": RendererFamilyAdmissionTests.clock(),
+                "launch_pid": 410, "measurement_started_at_utc": "2026-10-16T00:00:05Z",
+                "measurement_deadline_utc": "2026-10-16T00:01:05Z",
                 "roles": [{"role": role, "sha256": "b" * 64, "build_id": "c" * 40}
                           for role in ("server", "native_renderer")],
                 "case_id": "sixteen_universe", "execution_mode": "unrestricted"}
@@ -673,6 +676,8 @@ class OwnedApplicationTests(unittest.TestCase):
             root = Path(directory)
             value = self.manifest()
             now = datetime.datetime.now(datetime.timezone.utc)
+            value["stage_clock"]["started"]["startedAt"] = (now - datetime.timedelta(seconds=24)).isoformat()
+            value["stage_clock"]["stage"]["recordedAt"] = (now - datetime.timedelta(seconds=23)).isoformat()
             value.update(coordinator_pid=400, launch_pid=410,
                          measurement_started_at_utc=now.isoformat(),
                          measurement_deadline_utc=(now + datetime.timedelta(seconds=60)).isoformat())
@@ -721,6 +726,10 @@ class OwnedApplicationTests(unittest.TestCase):
             app.write_bytes(b'exact image')
             for name in ('light-headless', 'viz-renderer'):
                 (release / name).write_bytes(b'cargo output ' + name.encode())
+            for name in PROFILE.LAYOUT_HASHES:
+                target = candidate / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text('layout fixture')
             for name in ('Cargo.lock', 'package-lock.json'):
                 (candidate / name).write_text('fixed')
             (output / 'application-source-binaries.json').write_text('{}')
@@ -728,20 +737,30 @@ class OwnedApplicationTests(unittest.TestCase):
                      for role in ('server', 'native_renderer')]
             proof = {'roles': roles, 'appimage_sha256': PROFILE.digest(app),
                      'source_verified': True, 'fixed_packaged_paths_verified': True, 'comparisons': []}
+            packaged_owner = temporary / 'tl775-appimage-extracted/squashfs-root/usr/bin/light-desktop'
+            # Match actual workflow's fixed extraction directory.
             package_bind = Mock(return_value=proof)
             replay_context = {'public': {'tool_verified': True}}
             prepare_replay = Mock(return_value=replay_context)
-            fake = types.SimpleNamespace(digest=PROFILE.digest, build_id=Mock(return_value='7' * 40),
+            fixture_layout = {name: PROFILE.digest(candidate / name) for name in PROFILE.LAYOUT_HASHES}
+            def package_extract(*args, **kwargs):
+                owner = Path(kwargs['cwd']) / 'squashfs-root/usr/bin/light-desktop'
+                owner.parent.mkdir(parents=True, exist_ok=True)
+                owner.write_bytes(b'fixed packaged owner')
+                owner.chmod(0o700)
+            fake = types.SimpleNamespace(APP_SOURCE='a' * 40, LAYOUT_HASHES=fixture_layout, digest=PROFILE.digest, build_id=Mock(return_value='7' * 40),
                                          verified_packaged_roles=package_bind, prepare_packager_replay=prepare_replay,
                                          PackagedBindingRefused=PROFILE.PackagedBindingRefused)
             spec = Mock()
             environment = {'CANDIDATE_DIR': str(candidate), 'TARGET': 'x86_64-unknown-linux-gnu',
                            'TMPDIR': str(temporary), 'PROFILE_PREFLIGHT_OUT': str(output),
                            'CANDIDATE_SHA': 'a' * 40, 'GITHUB_ENV': str(root / 'env')}
-            with patch.dict(os.environ, environment), patch.object(importlib.util, 'spec_from_file_location', return_value=spec), patch.object(importlib.util, 'module_from_spec', return_value=fake), patch.object(subprocess, 'run') as run, patch.object(subprocess, 'check_output', return_value='a' * 40 + '\n'):
+            with patch.dict(os.environ, environment), patch.object(importlib.util, 'spec_from_file_location', return_value=spec), patch.object(importlib.util, 'module_from_spec', return_value=fake), patch.object(subprocess, 'run', side_effect=package_extract) as run, patch.object(subprocess, 'check_output', return_value='a' * 40 + '\n'):
                 exec(compile(code, 'workflow-embedded-packaged-preflight', 'exec'), {})
             descriptor = json.loads((temporary / 'tl775-owned-profile-binaries.json').read_text())
             self.assertEqual(descriptor['roles'], roles)
+            self.assertEqual(descriptor['layout_hashes'], fixture_layout)
+            self.assertEqual(descriptor['owner']['build_id'], '7' * 40)
             package_bind.assert_called_once()
             prepare_replay.assert_called_once()
             self.assertEqual(package_bind.call_args.kwargs['replay'], replay_context)
@@ -1071,6 +1090,152 @@ class OwnedApplicationTests(unittest.TestCase):
                 self.assertEqual(PROFILE.owned_app(request, output), 2)
                 self.assertTrue(__import__('json').loads(output.read_text())['recorder_cleanup_verified'])
                 popen.assert_not_called()
+
+
+class RendererFamilyAdmissionTests(unittest.TestCase):
+    @staticmethod
+    def clock():
+        return {"started": {"schemaVersion": 2, "kind": "started",
+            "measurementSurface": "packaged-tauri-native-stage", "profile": "sixteen_universe",
+            "startedAt": "2026-10-16T00:00:00Z", "config": {"durationSeconds": 240,
+            "controlDurationSeconds": 30, "profile": "sixteen_universe",
+            "additionalStageWindow": False, "fixtureSheet": True, "expectedFixtureRecords": 576}},
+            "stage": {"schemaVersion": 2, "kind": "stage-started",
+            "measurementSurface": "packaged-tauri-native-stage", "profile": "sixteen_universe",
+            "recordedAt": "2026-10-16T00:00:01Z"}}
+
+    def test_source_schedule_is_fixed_and_rejects_unreviewed_layout(self):
+        rows = {'started': {'schemaVersion': 2, 'kind': 'started',
+            'measurementSurface': 'packaged-tauri-native-stage', 'profile': 'sixteen_universe',
+            'startedAt': '2026-10-16T00:00:00Z', 'config': {'durationSeconds': 240,
+            'controlDurationSeconds': 30, 'profile': 'sixteen_universe',
+            'additionalStageWindow': False, 'fixtureSheet': True, 'expectedFixtureRecords': 576}},
+            'stage': {'schemaVersion': 2, 'kind': 'stage-started',
+            'measurementSurface': 'packaged-tauri-native-stage', 'profile': 'sixteen_universe',
+            'recordedAt': '2026-10-16T00:00:01Z'}}
+        self.assertEqual(PROFILE.source_recreation_time(rows, 1792108805), 1792108817)
+        for key, bad in [('additionalStageWindow', True), ('fixtureSheet', False),
+                         ('expectedFixtureRecords', 575), ('profile', 'demo')]:
+            import copy
+            changed = copy.deepcopy(rows)
+            changed['started']['config'][key] = bad
+            with self.subTest(key=key), self.assertRaises(PROFILE.Refused):
+                PROFILE.source_recreation_time(changed, 1792108805)
+        with self.assertRaises(PROFILE.Refused):
+            PROFILE.source_recreation_time(rows, 1792108790)
+
+    def test_family_cardinality_includes_both_renderers_and_rejects_extras(self):
+        server = {'pid': 10, 'start': 1}
+        renderers = [{'pid': 30, 'start': 3}, {'pid': 20, 'start': 2}]
+        self.assertEqual(PROFILE.family_targets({'server': [server], 'native_renderer': renderers}),
+                         [('server', server), ('native_renderer_1', renderers[1]),
+                          ('native_renderer_2', renderers[0])])
+        for n in (0, 1, 3):
+            with self.subTest(n=n), self.assertRaises(PROFILE.Refused):
+                PROFILE.family_targets({'server': [server], 'native_renderer': renderers[:n] if n < 3 else renderers + [server]})
+
+    def test_all_three_cleanup_receipts_are_retained(self):
+        requests = [{'role': role, 'target': {'sha256': 'a' * 64}, 'target_build_id': 'b' * 40}
+                    for role in ('server', 'native_renderer_1', 'native_renderer_2')]
+        def attempt(request, privileged):
+            return {'status': 'CAPABLE', 'recorder_gone': request['role'] != 'native_renderer_1'}
+        with patch.object(PROFILE, 'collect_attempt', side_effect=attempt):
+            reports, clean = PROFILE.collect_owned_requests(requests)
+        self.assertEqual({r['role'] for r in reports}, {r['role'] for r in requests})
+        self.assertFalse(clean)
+
+
+    def test_renderer_argv_and_owner_pipe_direction_are_bound(self):
+        target, owner = {'pid': 20, 'exe': '/own/viz-renderer'}, {'pid': 10}
+        endpoints = {20: {0: ('pipe:[1]', os.O_RDONLY), 1: ('pipe:[2]', os.O_WRONLY)},
+                     10: {7: ('pipe:[1]', os.O_WRONLY), 8: ('pipe:[2]', os.O_RDONLY)}}
+        with patch.object(Path, 'read_bytes', return_value=b'/own/viz-renderer\0--embed\0'), patch.object(PROFILE, 'pipe_endpoints', side_effect=lambda pid: endpoints[pid]):
+            self.assertEqual(PROFILE.renderer_channel(target, owner), ['pipe:[1]', 'pipe:[2]'])
+            endpoints[10][7] = ('pipe:[1]', os.O_RDONLY)
+            with self.assertRaisesRegex(PROFILE.Refused, 'not_connected'):
+                PROFILE.renderer_channel(target, owner)
+        for argv in (b'/foreign/viz-renderer\0--embed\0', b'/own/viz-renderer\0--embed\0--other\0'):
+            with patch.object(Path, 'read_bytes', return_value=argv), self.assertRaisesRegex(PROFILE.Refused, 'argv'):
+                PROFILE.renderer_channel(target, owner)
+
+    def test_all_three_tasks_run_concurrently_and_no_cleanup_is_discarded(self):
+        import threading
+        barrier = threading.Barrier(3, timeout=2)
+        requests = [{'role': role, 'target': {'sha256': 'a' * 64}, 'target_build_id': 'b' * 40}
+                    for role in ('server', 'native_renderer_1', 'native_renderer_2')]
+        def attempt(request, privileged):
+            barrier.wait()
+            if request['role'] == 'server':
+                raise BrokenPipeError('private')
+            return {'status': 'CAPABLE', 'recorder_gone': True}
+        with patch.object(PROFILE, 'collect_attempt', side_effect=attempt):
+            reports, clean = PROFILE.collect_owned_requests(requests)
+        self.assertFalse(clean)
+        self.assertEqual({r['role'] for r in reports}, {'native_renderer_1', 'native_renderer_2'})
+
+
+    def test_source_boundary_wait_never_resets_work_deadline_or_consumes_capture_reserve(self):
+        with patch.object(PROFILE.time, 'time', return_value=10), patch.object(PROFILE.time, 'monotonic', return_value=100), patch.object(PROFILE.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(PROFILE.Refused, 'budget'):
+                PROFILE.await_source_phase(26, 126)
+            sleep.assert_not_called()
+        with patch.object(PROFILE.time, 'time', return_value=27), patch.object(PROFILE.time, 'monotonic', return_value=117), patch.object(PROFILE.time, 'sleep') as sleep:
+            PROFILE.await_source_phase(26, 128)
+            sleep.assert_not_called()
+            with self.assertRaisesRegex(PROFILE.Refused, 'budget'):
+                PROFILE.await_source_phase(26, 127.9)
+
+    def test_reused_owner_refuses_before_any_child_access(self):
+        with patch.object(PROFILE, 'fast_same_process', return_value=False), patch.object(Path, 'iterdir') as access:
+            with self.assertRaisesRegex(PROFILE.Refused, 'owner_lifetime'):
+                PROFILE.verify_family({'owner': {'pid': 10}})
+            access.assert_not_called()
+
+
+    def test_fixed_family_rejects_extra_child_wrong_parent_thread_and_channel(self):
+        import copy
+        owner = {'pid': 10, 'uid': 1001}
+        identities = {pid: {'pid': pid, 'ppid': 10, 'uid': 1001, 'start': pid, 'tgid': pid}
+                      for pid in (20, 30, 40, 50)}
+        participants = [{'role': label, 'target': identities[pid], 'tids': {pid: identities[pid]},
+                         **({'channels': [str(pid), 'out']} if pid != 20 else {})}
+                        for label, pid in [('server', 20), ('native_renderer_1', 30), ('native_renderer_2', 40)]]
+        def run(request, children='20 30 40', channel_changed=False, thread_changed=False):
+            def iterate(path):
+                pid = int(path.parts[2])
+                return iter([Path(f'/proc/{pid}/task/{pid}')])
+            def identity(pid):
+                value = identities[pid]
+                return {**value, 'start': 999} if thread_changed and pid == 40 else value
+            def resolve(path, *args, **kwargs):
+                return Path('/owned/light-headless' if path.parts[2] == '20' else '/owned/viz-renderer')
+            with patch.object(PROFILE, 'fast_same_process', return_value=True), patch.object(Path, 'iterdir', iterate), patch.object(Path, 'read_text', return_value=children), patch.object(Path, 'resolve', resolve), patch.object(PROFILE, 'task_identity', side_effect=identity), patch.object(PROFILE, 'renderer_channel', side_effect=lambda target, own: ['changed', 'out'] if channel_changed else [str(target['pid']), 'out']):
+                PROFILE.verify_family(request)
+        request = {'owner': owner, 'participants': participants}
+        run(request)
+        for kwargs in [{'children': '20 30 40 50'}, {'children': '20 30'},
+                       {'channel_changed': True}, {'thread_changed': True}]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(PROFILE.Refused):
+                run(request, **kwargs)
+        changed = copy.deepcopy(request)
+        changed['participants'][1]['target']['ppid'] = 9
+        with self.assertRaisesRegex(PROFILE.Refused, 'lifetime'):
+            run(changed)
+
+
+    def test_transitional_family_wait_keeps_exact_count_and_original_deadline(self):
+        valid = {'server': [{'pid': 20, 'start': 1}],
+                 'native_renderer': [{'pid': 30, 'start': 2}, {'pid': 40, 'start': 3}]}
+        transient = {'server': valid['server'], 'native_renderer': valid['native_renderer'][:1]}
+        diagnostic = [{'owned_name_candidates': 1, 'exact_matches': 1}]
+        with patch.object(PROFILE.time, 'monotonic', side_effect=[0, .1]), patch.object(PROFILE.time, 'sleep') as sleep, patch.object(PROFILE, 'owned_descendants', return_value={}), patch.object(PROFILE, 'discover_app_roles', side_effect=[(transient, diagnostic), (valid, diagnostic)]):
+            targets, _, _ = PROFILE.await_family_matches({'pid': 10}, [], 12)
+            self.assertEqual([label for label, _ in targets], ['server', 'native_renderer_1', 'native_renderer_2'])
+            sleep.assert_called_once_with(.1)
+        with patch.object(PROFILE.time, 'monotonic', return_value=2), patch.object(PROFILE, 'discover_app_roles') as discover:
+            with self.assertRaisesRegex(PROFILE.Refused, 'not_unique'):
+                PROFILE.await_family_matches({'pid': 10}, [], 12)
+            discover.assert_not_called()
 
 
 if __name__ == "__main__":

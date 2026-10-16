@@ -861,6 +861,8 @@ def recorder(request):
             if not stable(request["coordinator"]):
                 raise Refused("coordinator_changed_quarantined")
             if not application or time.monotonic() >= next_thread_check:
+                if application:
+                    verify_family(request)
                 if application and set(int(t.name) for t in Path(f"/proc/{request['target']['pid']}/task").iterdir()) != set(tids):
                     raise Refused("thread_set_changed_quarantined")
                 for tid, expected in tids.items():
@@ -1119,6 +1121,9 @@ def verify_app(request, uid):
             raise Refused("application_ancestry_changed")
     if request["coordinator"]["ppid"] != request["runner"]["pid"] or request["launch"]["ppid"] != request["runner"]["pid"]:
         raise Refused("application_not_owned_by_invoking_runner")
+    if not same_process(request['owner']):
+        raise Refused('packaged_owner_identity_changed')
+    verify_family(request)
     descendants = owned_descendants(request["launch"]["pid"], uid)
     if target["pid"] not in descendants or digest(f"/proc/{target['pid']}/exe") != target["sha256"]:
         raise Refused("application_not_owned_descendant")
@@ -1228,12 +1233,140 @@ def aggregate_owned_samples(samples, counts, headers, resolve):
             'leaf_top20': top(leaf), 'inclusive_top20': top(inclusive)}
 
 
+APP_SOURCE = '702d935b6dd31105f9b034d608e59f74614b98be'
+LAYOUT_HASHES = {
+    'apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx': '66d9bc1440ae579cdb6ae92e529ff3f8933efbe50f2804ea673bb280b2a237c2',
+    'apps/light-desktop/src/windows/stageWindow/StageRendererView.tsx': 'f8d54295c6966a821ef6ed34152223b24861b842ba84b79d4492cb3780b24852',
+    'apps/light-desktop/src/windows/stageWindow/useNativeStagePane.ts': '7d92838c6a86983e1663de0e5a6e6d52a5fbeac58fa52cf2c946dc9765c8fec3',
+    'apps/light-desktop/src-tauri/src/stage_pane.rs': 'f39cc9de2754f0085b4efb36cbc4d52feda9263bf49e01caa0286d23b19ff854',
+}
+
+
+def utc_seconds(value):
+    parsed = datetime.datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if parsed.utcoffset() != datetime.timedelta(0):
+        raise Refused('source_clock_not_utc')
+    return parsed.timestamp()
+
+
+def source_recreation_time(rows, measurement_start):
+    if set(rows) != {'started', 'stage'}:
+        raise Refused('ambiguous_source_stage_clock')
+    started, stage = rows['started'], rows['stage']
+    for row, kind in ((started, 'started'), (stage, 'stage-started')):
+        if row.get('schemaVersion') != 2 or row.get('kind') != kind or row.get('profile') != 'sixteen_universe' or row.get('measurementSurface') != 'packaged-tauri-native-stage':
+            raise Refused('unreviewed_source_stage_clock')
+    config = started['config']
+    if set(config) != {'durationSeconds', 'controlDurationSeconds', 'profile', 'additionalStageWindow', 'fixtureSheet', 'expectedFixtureRecords'} or config['profile'] != 'sixteen_universe' or config['additionalStageWindow'] is not False or config['fixtureSheet'] is not True or config['expectedFixtureRecords'] != 576:
+        raise Refused('unreviewed_source_stage_layout')
+    duration = config['durationSeconds']
+    if type(duration) is not int or duration != 240 or config['controlDurationSeconds'] != 30:
+        raise Refused('unreviewed_source_stage_duration')
+    origin, stage_start = utc_seconds(started['startedAt']), utc_seconds(stage['recordedAt'])
+    if not origin <= stage_start <= measurement_start or measurement_start - origin > duration:
+        raise Refused('source_stage_clock_outside_owned_measurement')
+    release = min(15000, duration * 350)
+    quality = max(100, min(1000, duration * 1000 / 8))
+    return stage_start + (release + max(250, quality)) / 1000
+
+
+def await_source_phase(not_before, work_deadline):
+    while time.time() < not_before:
+        remaining = max(0, not_before - time.time())
+        if time.monotonic() + remaining + 11 > work_deadline:
+            raise Refused('insufficient_post_recreation_capture_budget')
+        time.sleep(min(.1, remaining))
+    if time.monotonic() + 11 > work_deadline:
+        raise Refused('insufficient_post_recreation_capture_budget')
+
+
+def family_targets(matches):
+    if set(matches) != {'server', 'native_renderer'} or len(matches['server']) != 1 or len(matches['native_renderer']) != 2:
+        raise Refused('exact_owned_application_role_not_unique')
+    targets = [('server', matches['server'][0])]
+    targets += [(f'native_renderer_{i + 1}', target) for i, target in enumerate(
+        sorted(matches['native_renderer'], key=lambda t: (t['pid'], t['start'])))]
+    if len({target['pid'] for _, target in targets}) != 3:
+        raise Refused('duplicate_application_participant')
+    return targets
+
+
+def await_family_matches(launch, roles, work_deadline):
+    diagnostic = []
+    while time.monotonic() + 11 <= work_deadline:
+        descendants = owned_descendants(launch['pid'], os.getuid())
+        matches, diagnostic = discover_app_roles(descendants, roles, work_deadline)
+        if any(row['owned_name_candidates'] != row['exact_matches'] for row in diagnostic):
+            raise Refused('application_participant_binary_mismatch')
+        if len(matches['server']) == 1 and len(matches['native_renderer']) == 2:
+            return family_targets(matches), diagnostic, descendants
+        time.sleep(.1)
+    raise Refused('exact_owned_application_role_not_unique')
+
+
+def pipe_endpoints(pid):
+    endpoints = {}
+    for index, entry in enumerate(Path(f'/proc/{pid}/fd').iterdir()):
+        if index >= 4096:
+            raise Refused('unbounded_owner_pipe_set')
+        try:
+            link = os.readlink(entry)
+            if not re.fullmatch(r'pipe:\[\d+\]', link):
+                continue
+            flags_line = next(line for line in Path(f'/proc/{pid}/fdinfo/{entry.name}').read_text().splitlines() if line.startswith('flags:'))
+            endpoints[int(entry.name)] = (link, int(flags_line.split()[1], 8) & os.O_ACCMODE)
+        except FileNotFoundError:
+            continue
+    return endpoints
+
+
+def renderer_channel(target, owner):
+    argv = Path(f"/proc/{target['pid']}/cmdline").read_bytes().split(b'\0')
+    if argv != [os.fsencode(target['exe']), b'--embed', b'']:
+        raise Refused('renderer_argv_not_fixed_embed')
+    child, parent = pipe_endpoints(target['pid']), pipe_endpoints(owner['pid'])
+    if 0 not in child or 1 not in child or child[0][1] != os.O_RDONLY or child[1][1] != os.O_WRONLY or child[0][0] == child[1][0]:
+        raise Refused('renderer_channels_not_private_pipes')
+    if not any(value == (child[0][0], os.O_WRONLY) for value in parent.values()) or not any(value == (child[1][0], os.O_RDONLY) for value in parent.values()):
+        raise Refused('renderer_channels_not_connected_to_owner')
+    return [child[0][0], child[1][0]]
+
+
+def verify_family(request):
+    owner = request['owner']
+    if not fast_same_process(owner):
+        raise Refused('packaged_owner_lifetime_changed')
+    expected = request['participants']
+    children = set()
+    for task in Path(f"/proc/{owner['pid']}/task").iterdir():
+        children.update(int(v) for v in (task / 'children').read_text().split())
+    actual = set()
+    for pid in children:
+        identity = task_identity(pid)
+        if identity['uid'] != owner['uid'] or identity['ppid'] != owner['pid']:
+            raise Refused('foreign_owner_child')
+        name = Path(f'/proc/{pid}/exe').resolve(strict=True).name
+        if name == 'viz-renderer' or name.startswith('viz-renderer-') or name == 'light-headless' or name.startswith('light-headless-'):
+            actual.add(pid)
+    if actual != {p['target']['pid'] for p in expected}:
+        raise Refused('application_participant_set_changed')
+    for participant in expected:
+        target = participant['target']
+        if target['ppid'] != owner['pid'] or target['uid'] != owner['uid'] or not fast_same_process(target):
+            raise Refused('application_participant_lifetime_changed')
+        tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
+        if tids != {int(k): v for k, v in participant['tids'].items()}:
+            raise Refused('application_participant_thread_set_changed')
+        if participant['role'].startswith('native_renderer') and renderer_channel(target, owner) != participant['channels']:
+            raise Refused('application_participant_channel_changed')
+
+
 def validate_app_manifest(value):
     fields = {'schema', 'source_sha', 'coordinator_pid', 'launch_pid', 'measurement_started_at_utc',
-              'measurement_deadline_utc', 'roles', 'case_id', 'execution_mode'}
+              'measurement_deadline_utc', 'roles', 'case_id', 'execution_mode', 'owner', 'layout_hashes', 'stage_clock'}
     if set(value) != fields or value['schema'] != 1 or value['case_id'] != 'sixteen_universe' or value['execution_mode'] != 'unrestricted':
         raise Refused('invalid_owned_application_manifest')
-    if not re.fullmatch('[0-9a-f]{40}', value['source_sha']):
+    if value['source_sha'] != APP_SOURCE or value['layout_hashes'] != LAYOUT_HASHES:
         raise Refused('invalid_application_source_pin')
     roles = value['roles']
     if len(roles) != 2 or {r.get('role') for r in roles} != {'server', 'native_renderer'}:
@@ -1241,6 +1374,10 @@ def validate_app_manifest(value):
     for role in roles:
         if set(role) != {'role', 'sha256', 'build_id'} or not re.fullmatch('[0-9a-f]{64}', role['sha256']) or not re.fullmatch('[0-9a-f]{8,128}', role['build_id']):
             raise Refused('invalid_application_binary_pin')
+    owner = value['owner']
+    if set(owner) != {'sha256', 'build_id'} or not re.fullmatch('[0-9a-f]{64}', owner['sha256']) or not re.fullmatch('[0-9a-f]{8,128}', owner['build_id']):
+        raise Refused('invalid_packaged_owner_pin')
+    source_recreation_time(value['stage_clock'], utc_seconds(value['measurement_started_at_utc']))
     start = datetime.datetime.fromisoformat(value['measurement_started_at_utc'].replace('Z', '+00:00'))
     end = datetime.datetime.fromisoformat(value['measurement_deadline_utc'].replace('Z', '+00:00'))
     if start.utcoffset() != datetime.timedelta(0) or end - start != datetime.timedelta(seconds=60):
@@ -1256,7 +1393,7 @@ def collect_owned_requests(requests):
         return {'role': request['role'], 'sha256': request['target']['sha256'],
                 'build_id': request['target_build_id'], 'attempts': attempts}
     reports, verified = [], True
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         futures = [pool.submit(collect, request) for request in requests]
         # A first failure never discards the other recorder's cleanup receipt.
         for future in futures:
@@ -1541,15 +1678,43 @@ def owned_app(manifest, output):
                 'launch': launch, 'helper_sha256': digest(__file__), 'spool_parent': str(root),
                 'perf': str(Path(perf).resolve()), 'perf_sha256': digest(perf),
                 'perf_build_id': build_id(perf, work), 'work_deadline': work, 'overall_deadline': overall}
+        not_before = source_recreation_time(value['stage_clock'], utc_seconds(value['measurement_started_at_utc']))
+        await_source_phase(not_before, work)
+        # Preserve numeric evidence on immediate mismatch; only transitional
+        # cardinality may wait within the original immutable work deadline.
+        descendants = owned_descendants(launch['pid'], os.getuid())
         matches, report['role_binding_diagnostic'] = discover_app_roles(descendants, value['roles'], work)
-        if any(len(matches[role['role']]) != 1 for role in value['roles']):
+        if any(row['owned_name_candidates'] != row['exact_matches'] for row in report['role_binding_diagnostic']):
             raise Refused('exact_owned_application_role_not_unique')
-        requests = []
-        for role in value['roles']:
-            target = matches[role['role']][0]
+        if len(matches['server']) == 1 and len(matches['native_renderer']) == 2:
+            targets = family_targets(matches)
+        else:
+            targets, report['role_binding_diagnostic'], descendants = await_family_matches(launch, value['roles'], work)
+        owner = pinned_process(targets[0][1]['ppid'])
+        if owner['pid'] not in descendants or owner['uid'] != os.getuid() or owner['sha256'] != value['owner']['sha256'] or build_id(owner['exe'], work) != value['owner']['build_id']:
+            raise Refused('packaged_tauri_owner_not_verified')
+        requests, participants = [], []
+        for label, target in targets:
+            role = next(r for r in value['roles'] if r['role'] == ('server' if label == 'server' else 'native_renderer'))
             tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
-            requests.append({**base, 'role': role['role'], 'target': target, 'target_build_id': role['build_id'],
-                             'tids': tids, 'nonce': uuid.uuid4().hex})
+            participant = {'role': label, 'target': target, 'tids': tids}
+            if label.startswith('native_renderer'):
+                participant['channels'] = renderer_channel(target, owner)
+            participants.append(participant)
+            requests.append({**base, **participant, 'owner': owner, 'target_build_id': role['build_id'],
+                             'participants': participants, 'nonce': uuid.uuid4().hex})
+        if len({tuple(p['channels']) for p in participants if 'channels' in p}) != 2:
+            raise Refused('renderer_private_channels_duplicated')
+        # One stable second after source-scheduled recreation; D/W never reset.
+        stable_until = time.monotonic() + 1
+        while time.monotonic() < stable_until:
+            if time.monotonic() + 10 > work:
+                raise Refused('insufficient_post_recreation_capture_budget')
+            verify_family(requests[0])
+            time.sleep(.05)
+        report['participant_scope'] = {'server': 1, 'native_renderer': 2,
+            'pane_attribution': 'none', 'source_recreation_guard': True,
+            'stable_admission_seconds': 1, 'packaged_owner_verified': True}
         # Validate both ELF resolvers before starting either recorder. No compiler
         # flags or caller-coverage promises are silently introduced here.
         for request in requests:
@@ -1563,7 +1728,7 @@ def owned_app(manifest, output):
                       perf_sha256=base['perf_sha256'], perf_build_id=base['perf_build_id'],
                       sample_hz=49, requested_role_seconds=10, global_budget_seconds=50,
                       codegen_flags_changed=False)
-        if cleanup_verified and len(report['roles']) == 2 and all(r['attempts'][-1].get('status') == 'CAPABLE' for r in report['roles']):
+        if cleanup_verified and len(report['roles']) == 3 and all(r['attempts'][-1].get('status') == 'CAPABLE' for r in report['roles']):
             report['status'] = 'PROFILED'
         else:
             report['code'] = 'owned_application_profile_refused'

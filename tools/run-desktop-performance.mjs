@@ -125,7 +125,7 @@ async function readOwnedCpuProfileDescriptor(filename) {
 		typeof value === "object" &&
 		Object.keys(value).sort().join(",") === [...keys].sort().join(",");
 	if (
-		!exactKeys(descriptor, ["schema", "source_sha", "roles"]) ||
+		!exactKeys(descriptor, ["schema", "source_sha", "roles", "owner", "layout_hashes"]) ||
 		descriptor.schema !== 1 ||
 		!/^[a-f0-9]{40}$/.test(descriptor.source_sha) ||
 		!Array.isArray(descriptor.roles) ||
@@ -144,6 +144,14 @@ async function readOwnedCpuProfileDescriptor(filename) {
 			throw new Error("Invalid owned profile binary role");
 		roles.add(entry.role);
 	}
+	if (
+		!exactKeys(descriptor.owner, ["sha256", "build_id"]) ||
+		!/^[a-f0-9]{64}$/.test(descriptor.owner.sha256) ||
+		!/^[a-f0-9]{8,128}$/.test(descriptor.owner.build_id) ||
+		!descriptor.layout_hashes ||
+		Object.keys(descriptor.layout_hashes).length !== 4
+	)
+		throw new Error("Invalid owned profile owner/layout");
 	return descriptor;
 }
 
@@ -153,6 +161,14 @@ function ownedCpuProfileObserver(descriptor, context) {
 		start() {
 			if (completion) return;
 			completion = (async () => {
+				const rows = (await readFile(context.reportPath, "utf8"))
+					.trim()
+					.split("\n")
+					.map((line) => JSON.parse(line));
+				const starts = rows.filter(row => row.kind === "started");
+				const stages = rows.filter(row => row.kind === "stage-started");
+				if (starts.length !== 1 || stages.length !== 1)
+					throw new Error("Ambiguous owned Stage lifecycle clock");
 				const manifest = {
 					schema: 1,
 					source_sha: descriptor.source_sha,
@@ -165,6 +181,9 @@ function ownedCpuProfileObserver(descriptor, context) {
 						context.measurementStartedAt + DURATION_SECONDS * 1000,
 					).toISOString(),
 					roles: descriptor.roles,
+					owner: descriptor.owner,
+					layout_hashes: descriptor.layout_hashes,
+					stage_clock: { started: starts[0], stage: stages[0] },
 					case_id: context.caseId,
 					execution_mode: context.executionMode,
 				};
@@ -345,6 +364,7 @@ async function runCase(performanceCase, executionMode) {
 					caseId: performanceCase.caseId,
 					executionMode,
 					launchPid: child.pid,
+					reportPath,
 					measurementStartedAt,
 					manifestPath: `${evidence.prefix}-owned-profile-request.json`,
 					outputPath: `${evidence.prefix}-owned-profile.json`,

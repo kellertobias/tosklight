@@ -328,10 +328,18 @@ jobs:
               out.write_text(json.dumps(manifest, indent=2) + '\n')
               raise SystemExit('STOP: packaged sidecar provenance/symbol preflight refused before any workload')
           roles = proof['roles']
-          descriptor = {'schema': 1, 'source_sha': os.environ['CANDIDATE_SHA'], 'roles': roles}
+          owner_path = stage / 'squashfs-root/usr/bin/light-desktop'
+          if owner_path.is_symlink() or not owner_path.is_file() or not os.access(owner_path, os.X_OK):
+              raise SystemExit('STOP: fixed packaged Tauri owner unavailable')
+          owner = {'sha256': profile.digest(owner_path), 'build_id': profile.build_id(owner_path, time.monotonic() + 3)}
+          layout_hashes = {p: profile.digest(candidate / p) for p in profile.LAYOUT_HASHES}
+          if layout_hashes != profile.LAYOUT_HASHES or actual_source != profile.APP_SOURCE:
+              raise SystemExit('STOP: unreviewed source layout')
+          descriptor = {'schema': 1, 'source_sha': os.environ['CANDIDATE_SHA'], 'roles': roles,
+                        'owner': owner, 'layout_hashes': layout_hashes}
           path = pathlib.Path(os.environ['TMPDIR']) / 'tl775-owned-profile-binaries.json'
           path.write_text(json.dumps(descriptor) + '\n')
-          manifest.update(roles=roles, appimage_sha256=image_sha,
+          manifest.update(roles=roles, owner=owner, layout_hashes=layout_hashes, appimage_sha256=image_sha,
                           packaged_preflight_status='VERIFIED', packaged_preflight=proof,
                           descriptor_source='fixed executables extracted from exact canonical AppImage')
           manifest['source_sha256'] = {p: profile.digest(candidate / p) for p in ['Cargo.lock', 'package-lock.json']}
