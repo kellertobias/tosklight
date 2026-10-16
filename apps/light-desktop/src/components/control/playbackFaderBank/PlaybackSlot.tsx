@@ -21,7 +21,7 @@ import { playbackHasRuntimeError } from "../playbackRuntimeError";
 import { formatSpeedGroupBpm } from "../speedGroupFormatting";
 import { isPlaybackSetClickArmed } from "./actions";
 import type { PlaybackBankController } from "./controller";
-import { playbackFaderValue } from "./feedback";
+import { dynamicPlaybackSummary, playbackFaderValue } from "./feedback";
 import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
 import { playbackCellGridStyle } from "./projection";
 import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
@@ -281,17 +281,7 @@ function playbackSummary({
 			detail: value === 0 ? undefined : `${Math.round(value)}%`,
 		};
 	if (target === "dynamic" && projection?.target === "dynamic") {
-		const runtime = projection.runtime;
-		return {
-			label: runtime
-				? runtime.state.toUpperCase()
-				: runtime === null
-					? "OFF"
-					: "Unavailable",
-			detail: runtime
-				? `Size ${Math.round(runtime.size * 100)}% · ${runtime.effective_speed_multiplier.toFixed(2)}× · ${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} addr`
-				: undefined,
-		};
+		return dynamicPlaybackSummary(projection);
 	}
 	if (target === "speed_group" && projection?.target === "speed_group") {
 		const runtime = projection.runtime;
