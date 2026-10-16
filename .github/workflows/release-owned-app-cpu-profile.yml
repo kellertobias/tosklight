@@ -335,8 +335,20 @@ jobs:
           layout_hashes = {p: profile.digest(candidate / p) for p in profile.LAYOUT_HASHES}
           if layout_hashes != profile.LAYOUT_HASHES or actual_source != profile.APP_SOURCE:
               raise SystemExit('STOP: unreviewed source layout')
+          preflight = json.loads((pathlib.Path(os.environ['PROFILE_PREFLIGHT_OUT']) / 'preflight.json').read_text())
+          if preflight.get('status') != 'CAPABLE' or preflight.get('helper_sha256') != profile.digest(profile.__file__):
+              raise SystemExit('STOP: preverified perf binding unavailable')
+          perf_identity = {'sha256': preflight['perf_sha256'], 'build_id': preflight['perf_build_id']}
+          if profile.digest(profile.find_perf()) != perf_identity['sha256']:
+              raise SystemExit('STOP: selected perf changed after preflight')
+          templates = profile.prepare_elf_templates(stage / 'squashfs-root', roles,
+              {'owner': owner, 'perf': perf_identity}, pathlib.Path(os.environ['TMPDIR']) / 'tl775-immutable-elf-tables',
+              time.monotonic() + 60)
           descriptor = {'schema': 1, 'source_sha': os.environ['CANDIDATE_SHA'], 'roles': roles,
-                        'owner': owner, 'layout_hashes': layout_hashes}
+                        'owner': owner, 'layout_hashes': layout_hashes, 'perf_identity': perf_identity, 'elf_templates': templates}
+          manifest['immutable_elf_preparation'] = {'source_sha': actual_source,
+              'producer_sha256': profile.digest(profile.__file__), 'prepared_before_either_cohort': True,
+              'tables': [{key: ref[key] for key in ('role', 'sha256', 'binary_sha256', 'build_id')} for ref in templates]}
           path = pathlib.Path(os.environ['TMPDIR']) / 'tl775-owned-profile-binaries.json'
           path.write_text(json.dumps(descriptor) + '\n')
           manifest.update(roles=roles, owner=owner, layout_hashes=layout_hashes, appimage_sha256=image_sha,

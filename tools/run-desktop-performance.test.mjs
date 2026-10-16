@@ -910,6 +910,11 @@ test("owned observer starts only once without waiting, keeps fixed helper argv a
 		source_sha: "a".repeat(40),
 		owner: {sha256: "d".repeat(64), build_id: "e".repeat(40)},
 		layout_hashes: {a: "1", b: "2", c: "3", d: "4"},
+		perf_identity: {sha256: "f".repeat(64), build_id: "9".repeat(40)},
+		elf_templates: [
+			{role: "server", file: "/private/server.json", sha256: "a".repeat(64), binary_sha256: "b".repeat(64), build_id: "1234"},
+			{role: "native_renderer", file: "/private/native_renderer.json", sha256: "a".repeat(64), binary_sha256: "c".repeat(64), build_id: "5678"},
+		],
 		roles: [
 			{ role: "server", sha256: "b".repeat(64), build_id: "1234" },
 			{ role: "native_renderer", sha256: "c".repeat(64), build_id: "5678" },
@@ -964,6 +969,8 @@ test("owned observer starts only once without waiting, keeps fixed helper argv a
 	assert.equal(request.launch_pid, 456);
 	assert.equal(request.stage_clock.started.config.profile, "sixteen_universe");
 	assert.equal(request.owner.sha256, "d".repeat(64));
+	assert.deepEqual(request.elf_templates, config.elf_templates);
+	assert.deepEqual(request.perf_identity, config.perf_identity);
 	assert.equal(
 		Date.parse(request.measurement_deadline_utc) -
 			Date.parse(request.measurement_started_at_utc),
@@ -989,6 +996,11 @@ test("owned binary descriptor rejects foreign scope roles and unspecified fields
 		source_sha: "a".repeat(40),
 		owner: {sha256: "d".repeat(64), build_id: "e".repeat(40)},
 		layout_hashes: {a: "1", b: "2", c: "3", d: "4"},
+		perf_identity: {sha256: "f".repeat(64), build_id: "9".repeat(40)},
+		elf_templates: [
+			{role: "server", file: "/private/server.json", sha256: "a".repeat(64), binary_sha256: "b".repeat(64), build_id: "1234"},
+			{role: "native_renderer", file: "/private/native_renderer.json", sha256: "a".repeat(64), binary_sha256: "c".repeat(64), build_id: "5678"},
+		],
 		roles: [
 			{ role: "server", sha256: "b".repeat(64), build_id: "1234" },
 			{ role: "native_renderer", sha256: "c".repeat(64), build_id: "5678" },
@@ -998,6 +1010,12 @@ test("owned binary descriptor rejects foreign scope roles and unspecified fields
 	assert.equal((await read(filename)).roles.length, 2);
 	for (const bad of [
 		{ ...descriptor, all_host: true },
+		{ ...descriptor, perf_identity: undefined },
+		{ ...descriptor, elf_templates: [] },
+		{ ...descriptor, elf_templates: [descriptor.elf_templates[0], descriptor.elf_templates[0]] },
+		{ ...descriptor, elf_templates: [{...descriptor.elf_templates[0], binary_sha256: "0".repeat(64)}, descriptor.elf_templates[1]] },
+		{ ...descriptor, elf_templates: [{...descriptor.elf_templates[0], build_id: "0".repeat(40)}, descriptor.elf_templates[1]] },
+		{ ...descriptor, elf_templates: [{...descriptor.elf_templates[0], file: "relative.json"}, descriptor.elf_templates[1]] },
 		{ ...descriptor, roles: [descriptor.roles[0], descriptor.roles[0]] },
 		{
 			...descriptor,
@@ -1005,7 +1023,7 @@ test("owned binary descriptor rejects foreign scope roles and unspecified fields
 		},
 	]) {
 		await writeFile(filename, JSON.stringify(bad));
-		await assert.rejects(read(filename), /Invalid owned profile/);
+		await assert.rejects(read(filename), /Invalid owned profile|prepared ELF/);
 	}
 });
 

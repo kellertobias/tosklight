@@ -66,6 +66,21 @@ class Refused(RuntimeError):
     """A fixed scope/capability code, safe to publish without tool output."""
 
 
+class ThreadScopeRefused(Refused):
+    def __init__(self, role, expected, actual):
+        super().__init__('application_thread_identity_changed')
+        added, removed = set(actual) - set(expected), set(expected) - set(actual)
+        modified = {key for key in set(expected) & set(actual) if expected[key] != actual[key]}
+        reason = ('added' if added and not removed and not modified else
+            'removed' if removed and not added and not modified else 'modified' if modified and not added and not removed else 'mixed')
+        if reason == 'modified':
+            changed_keys = {key for tid in modified for key in expected[tid] if expected[tid][key] != actual[tid].get(key)}
+            if changed_keys in ({'start'}, {'uid'}, {'tgid'}):
+                reason = next(iter(changed_keys)) + '_changed'
+        self.diagnostic = {'role': role, 'reason': reason,
+            'added_count': len(added), 'removed_count': len(removed), 'modified_count': len(modified)}
+
+
 class MachineFrameRefused(Refused):
     """Only boolean proofs about the two fixed functions in our compiled ELF."""
 
@@ -811,14 +826,16 @@ def recorder(request):
     if request["overall_deadline"] - time.monotonic() > 50:
         raise Refused("invalid_preflight_deadline")
     bounded_timeout(request["work_deadline"], 1)
+    preparation_start = time.monotonic()
+    budget = {"recorder_started": False}
     uid = derived_uid(request)
     application = request.get("kind") == "owned_app"
     tids = verify_recording_target(request, uid) if application else verify_probe(request, uid)
     stable = fast_same_process if application else same_process
-    own_resolver = app_symbol_resolver(request["target"], request["work_deadline"]) if application else None
+    own_resolver = app_symbol_resolver(request["target"], request["work_deadline"], request.get("elf_template"), request.get("bindings")) if application else None
     cpus = online_cpu_map()
     perf = str(Path(request["perf"]).resolve(strict=True))
-    if digest(perf) != request["perf_sha256"] or build_id(perf, request["work_deadline"]) != request["perf_build_id"]:
+    if digest(perf) != request["perf_sha256"] or (request.get("bindings", {}).get("perf") != {"sha256": request["perf_sha256"], "build_id": request["perf_build_id"]} if application else build_id(perf, request["work_deadline"]) != request["perf_build_id"]):
         raise Refused("perf_executable_changed")
     validate_spool_request(request)
     name = f"tl775-probe-{request['nonce']}-{os.getuid()}"
@@ -834,8 +851,12 @@ def recorder(request):
             # Resolver/config work must not leave a stale admission at attach.
             if application and verify_recording_target(request, uid) != tids:
                 raise Refused('pre_capture_application_thread_identity_changed')
-            if application and time.monotonic() + 10 > request['work_deadline']:
-                raise Refused('insufficient_owned_profile_measurement_budget')
+            if application:
+                now = time.monotonic()
+                budget.update(prep_elapsed_ms=round((now - preparation_start) * 1000, 3),
+                    remaining_work_ms_before_perf=round((request['work_deadline'] - now) * 1000, 3))
+                if now + 10 > request['work_deadline']:
+                    raise Refused('insufficient_owned_profile_measurement_budget')
             begin = time.monotonic_ns()
             child = subprocess.Popen(
                 perf_command(perf, request["target"]["pid"]),
@@ -844,6 +865,7 @@ def recorder(request):
             )
         finally:
             os.close(output)
+        budget["recorder_started"] = True
         recorder_fd = os.pidfd_open(child.pid)
         try:
             recorded = process_identity(child.pid)
@@ -868,11 +890,12 @@ def recorder(request):
             if not application or time.monotonic() >= next_thread_check:
                 if application:
                     verify_family_identity(request)
-                if application and set(int(t.name) for t in Path(f"/proc/{request['target']['pid']}/task").iterdir()) != set(tids):
-                    raise Refused("thread_set_changed_quarantined")
-                for tid, expected in tids.items():
-                    if task_identity(tid) != expected:
-                        raise Refused("thread_lifetime_changed_quarantined")
+                if application:
+                    application_threads(request['target'], uid, tids, request['role'])
+                else:
+                    for tid, expected in tids.items():
+                        if task_identity(tid) != expected:
+                            raise Refused("thread_lifetime_changed_quarantined")
                 next_thread_check = time.monotonic() + .25
             for entry in ("perf.data", "recorder.log"):
                 try:
@@ -918,6 +941,8 @@ def recorder(request):
         receipt = {"status": "CAPABLE", "recorder_uid": os.getuid(), **result}
     except (Refused, OSError, ValueError, subprocess.SubprocessError) as error:
         receipt = {"status": "STOP", "code": str(error) if isinstance(error, Refused) else "preflight_tool_or_scope_unavailable"}
+        if isinstance(error, ThreadScopeRefused):
+            receipt["thread_scope_diagnostic"] = error.diagnostic
         if isinstance(error, CensusRefused):
             receipt["record_header_diagnostic"] = error.diagnostic
         if isinstance(error, TypedRefused):
@@ -933,6 +958,8 @@ def recorder(request):
         clean_spool(anchor, fd, name)
         os.close(fd)
         os.close(anchor)
+    if application:
+        receipt["preparation_budget"] = budget
     emit({"event": "terminal", "recorder_gone": child is None or child.poll() is not None, **receipt})
 
 
@@ -967,7 +994,14 @@ def collect_attempt(request, privileged):
             recovery = subprocess.run(recovery_command, input=json.dumps(request) + "\n", text=True, capture_output=True, timeout=bounded_timeout(request["overall_deadline"] - 4, 6))
             if recovery.returncode:
                 raise Refused("helper_cleanup_unverified")
-            return {"status": "STOP", "code": "helper_aborted_recorder_recovered", "recorder_gone": True}
+            recovered = {"status": "STOP", "code": "helper_aborted_recorder_recovered", "recorder_gone": True}
+            diagnostic = (terminal or {}).get('thread_scope_diagnostic')
+            if (isinstance(diagnostic, dict) and set(diagnostic) == {'role', 'reason', 'added_count', 'removed_count', 'modified_count'}
+                    and diagnostic['role'] in ('server', 'native_renderer_1', 'native_renderer_2')
+                    and diagnostic['reason'] in ('added', 'removed', 'modified', 'mixed', 'start_changed', 'uid_changed', 'tgid_changed')
+                    and all(type(diagnostic[k]) is int and 0 <= diagnostic[k] <= 256 for k in ('added_count', 'removed_count', 'modified_count'))):
+                recovered['thread_scope_diagnostic'] = diagnostic
+            return recovered
         if terminal.get("status") == "CAPABLE" and terminal.get("recorder_gone") is not True:
             raise Refused("successful_profile_cleanup_not_verified")
         return terminal
@@ -1142,12 +1176,9 @@ def _verify_application_scope(request, uid, family_guard):
     descendants = owned_descendants(request["launch"]["pid"], uid)
     if target["pid"] not in descendants or digest(f"/proc/{target['pid']}/exe") != target["sha256"]:
         raise Refused("application_not_owned_descendant")
-    if build_id(target["exe"], request["work_deadline"]) != request["target_build_id"]:
+    if request["elf_template"]["build_id"] != request["target_build_id"] or request["elf_template"]["binary_sha256"] != target["sha256"]:
         raise Refused("application_build_id_changed")
-    tids = application_threads(target, uid)
-    if tids != {int(k): v for k, v in request["tids"].items()}:
-        raise Refused("application_thread_identity_changed")
-    return tids
+    return application_threads(target, uid, request['tids'], request['role'])
 
 
 def own_executable_maps(target):
@@ -1192,11 +1223,7 @@ class OwnElfResolver:
         return "[external or unmapped]"
 
 
-def app_symbol_resolver(target, deadline):
-    executable = target["exe"]
-    def read(*args):
-        return subprocess.run(['readelf', *args, executable], check=True, capture_output=True,
-                              text=True, timeout=bounded_timeout(deadline, 3), env=isolated_env()).stdout
+def parse_elf_tables(read):
     symbols = []
     for line in read('--symbols', '--wide').splitlines():
         match = re.match(r'\s*\d+:\s+([0-9a-fA-F]+)\s+(\d+)\s+FUNC\s+\S+\s+\S+\s+(\S+)\s+(\S+)', line)
@@ -1213,7 +1240,158 @@ def app_symbol_resolver(target, deadline):
             loads.append((int(match[1], 16), int(match[2], 16), int(match[3], 16), 'E' in match[4]))
     if not symbols or not loads:
         raise Refused("owned_elf_symbols_or_loads_unavailable_no_codegen_flag_change")
-    return OwnElfResolver(own_executable_maps(target), loads, list(set(symbols)), os.sysconf('SC_PAGE_SIZE'))
+    return loads, list(set(symbols))
+
+
+def valid_binary_binding(value):
+    return (isinstance(value, dict) and set(value) == {'sha256', 'build_id'}
+            and isinstance(value['sha256'], str) and re.fullmatch('[0-9a-f]{64}', value['sha256'])
+            and isinstance(value['build_id'], str) and re.fullmatch('[0-9a-f]{8,128}', value['build_id']))
+
+
+def validate_template_refs(refs, roles):
+    if not isinstance(refs, list) or len(refs) != 2 or any(not isinstance(ref, dict) for ref in refs):
+        raise Refused('missing_prepared_elf_tables')
+    for role in roles:
+        found = [ref for ref in refs if ref.get('role') == role['role']]
+        if len(found) != 1:
+            raise Refused('invalid_prepared_elf_role')
+        ref = found[0]
+        if (set(ref) != {'role', 'file', 'sha256', 'binary_sha256', 'build_id'}
+                or not isinstance(ref['file'], str) or not Path(ref['file']).is_absolute()
+                or Path(ref['file']).name != role['role'] + '.json'
+                or not re.fullmatch('[0-9a-f]{64}', ref['sha256'])
+                or ref['binary_sha256'] != role['sha256'] or ref['build_id'] != role['build_id']):
+            raise Refused('invalid_prepared_elf_reference')
+
+
+def stable_file_identity(info):
+    return tuple(getattr(info, key, None) for key in ('st_dev', 'st_ino', 'st_mode', 'st_uid', 'st_nlink', 'st_size', 'st_mtime_ns', 'st_ctime_ns'))
+
+
+def private_table_bytes(path, uid):
+    root = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT').resolve()
+    path = Path(path)
+    if not path.is_absolute() or path.resolve() != path or not path.is_relative_to(root):
+        raise Refused('elf_table_path_not_canonical')
+    parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(parent)
+        if info.st_uid != uid or stat.S_IMODE(info.st_mode) != 0o700:
+            raise Refused('elf_table_directory_not_private')
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parent)
+        try:
+            before = os.fstat(fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != uid or before.st_nlink != 1
+                    or stat.S_IMODE(before.st_mode) != 0o600 or before.st_size > LIMIT):
+                raise Refused('elf_table_inode_not_private')
+            raw = os.read(fd, LIMIT + 1)
+            if len(raw) != before.st_size or stable_file_identity(os.fstat(fd)) != stable_file_identity(before):
+                raise Refused('elf_table_changed')
+            return raw
+        finally:
+            os.close(fd)
+    finally:
+        os.close(parent)
+
+
+def load_elf_table(target, ref, bindings):
+    if (not ref or not bindings or set(bindings) != {'owner', 'perf'}
+            or not all(valid_binary_binding(v) for v in bindings.values())
+            or Path(ref['file']).name != ref['role'] + '.json' or ref['binary_sha256'] != target['sha256']):
+        raise Refused('missing_or_wrong_prepared_elf_binding')
+    raw = private_table_bytes(ref['file'], target['uid'])
+    if hashlib.sha256(raw).hexdigest() != ref['sha256']:
+        raise Refused('elf_table_content_changed')
+    value = json.loads(raw)
+    expected = {'schema': 1, 'source_sha': APP_SOURCE, 'producer_sha256': digest(__file__),
+                'role': ref['role'], 'binary_sha256': target['sha256'], 'build_id': ref['build_id'],
+                'bindings': bindings}
+    if set(value) != set(expected) | {'loads', 'symbols'} or any(value[k] != v for k, v in expected.items()):
+        raise Refused('elf_table_header_binding_changed')
+    loads, symbols = value['loads'], value['symbols']
+    if not isinstance(loads, list) or not 0 < len(loads) <= 128 or not isinstance(symbols, list) or not 0 < len(symbols) <= 1000000:
+        raise Refused('elf_table_bounds_invalid')
+    for row in loads:
+        if (not isinstance(row, list) or len(row) != 4 or type(row[3]) is not bool
+                or any(type(v) is not int or not 0 <= v < 2**64 for v in row[:3]) or row[2] == 0):
+            raise Refused('elf_table_load_invalid')
+    for row in symbols:
+        if (not isinstance(row, list) or len(row) != 3 or any(type(v) is not int or not 0 <= v < 2**64 for v in row[:2])
+                or row[1] == 0 or row[0] + row[1] >= 2**64 or not isinstance(row[2], str)
+                or len(row[2]) > 1024 or not re.fullmatch(r'[A-Za-z0-9_.$@:+<>~,*&()\[\]-]+', row[2])):
+            raise Refused('elf_table_symbol_invalid')
+    return loads, symbols
+
+
+def prepare_elf_templates(appdir, roles, bindings, directory, deadline):
+    """Before either cohort: same no-follow ELF fd binds every static table byte."""
+    if set(bindings) != {'owner', 'perf'} or not all(valid_binary_binding(v) for v in bindings.values()):
+        raise Refused('invalid_preparation_binary_bindings')
+    if len(roles) != 2 or {r.get('role') for r in roles} != {'server', 'native_renderer'}:
+        raise Refused('invalid_preparation_roles')
+    root = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT').resolve()
+    directory = Path(directory)
+    if directory.resolve() != directory or not directory.is_relative_to(root):
+        raise Refused('elf_preparation_not_canonical')
+    directory.mkdir(mode=0o700)
+    refs = []
+    for role in roles:
+        name = {'server': 'light-headless', 'native_renderer': 'viz-renderer'}.get(role['role'])
+        if name is None or not valid_binary_binding({k: role[k] for k in ('sha256', 'build_id')}):
+            raise Refused('invalid_preparation_role')
+        path = Path(appdir) / 'usr/bin' / name
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            before = os.fstat(fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.getuid() or before.st_nlink != 1
+                    or not before.st_mode & 0o111):
+                raise Refused('elf_preparation_inode_invalid')
+            def hash_fd():
+                h = hashlib.sha256()
+                offset = 0
+                while data := os.pread(fd, 1024 * 1024, offset):
+                    h.update(data)
+                    offset += len(data)
+                    bounded_timeout(deadline, 1)
+                return h.hexdigest()
+            header = os.pread(fd, 20, 0)
+            if header[:7] != b'\x7fELF\x02\x01\x01' or header[18:20] != b'\x3e\x00' or hash_fd() != role['sha256']:
+                raise Refused('elf_preparation_full_identity_mismatch')
+            def read(*args):
+                result = subprocess.run(['readelf', *args, f'/proc/self/fd/{fd}'], pass_fds=(fd,),
+                    check=True, capture_output=True, text=True, timeout=bounded_timeout(deadline, 10), env=isolated_env()).stdout
+                if len(result) > LIMIT:
+                    raise Refused('elf_table_tool_output_limit')
+                return result
+            notes = re.search(r'Build ID:\s*([0-9a-f]+)', read('--notes'))
+            if not notes or notes[1] != role['build_id']:
+                raise Refused('elf_preparation_build_id_mismatch')
+            loads, symbols = parse_elf_tables(read)
+            if stable_file_identity(os.fstat(fd)) != stable_file_identity(before) or hash_fd() != role['sha256']:
+                raise Refused('elf_preparation_changed_during_read')
+            value = {'schema': 1, 'source_sha': APP_SOURCE, 'producer_sha256': digest(__file__),
+                'role': role['role'], 'binary_sha256': role['sha256'], 'build_id': role['build_id'],
+                'bindings': bindings, 'loads': loads, 'symbols': symbols}
+            raw = (json.dumps(value, separators=(',', ':')) + '\n').encode()
+            if len(raw) > LIMIT:
+                raise Refused('elf_table_size_limit')
+            output = directory / (role['role'] + '.json')
+            dest = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(dest, 'wb') as stream:
+                stream.write(raw)
+            refs.append({'role': role['role'], 'file': str(output), 'sha256': hashlib.sha256(raw).hexdigest(),
+                         'binary_sha256': role['sha256'], 'build_id': role['build_id']})
+        finally:
+            os.close(fd)
+    validate_template_refs(refs, roles)
+    return refs
+
+
+def app_symbol_resolver(target, deadline, template=None, bindings=None):
+    bounded_timeout(deadline, 1)
+    loads, symbols = load_elf_table(target, template, bindings)
+    return OwnElfResolver(own_executable_maps(target), loads, symbols, os.sysconf('SC_PAGE_SIZE'))
 
 
 def aggregate_owned_samples(samples, counts, headers, resolve):
@@ -1371,9 +1549,11 @@ def verify_family_identity(request):
             raise Refused('application_participant_channel_changed')
 
 
-def application_threads(target, uid):
+def application_threads(target, uid, expected=None, role=None):
     tids = {int(p.name): task_identity(int(p.name))
             for p in Path(f"/proc/{target['pid']}/task").iterdir()}
+    if expected is not None and tids != {int(k): v for k, v in expected.items()}:
+        raise ThreadScopeRefused(role, {int(k): v for k, v in expected.items()}, tids)
     if not tids or len(tids) > 256 or any(t['uid'] != uid or t['tgid'] != target['pid'] for t in tids.values()):
         raise Refused('application_threads_outside_bounded_scope')
     return tids
@@ -1389,7 +1569,7 @@ def verify_family(request):
 
 def validate_app_manifest(value):
     fields = {'schema', 'source_sha', 'coordinator_pid', 'launch_pid', 'measurement_started_at_utc',
-              'measurement_deadline_utc', 'roles', 'case_id', 'execution_mode', 'owner', 'layout_hashes', 'stage_clock'}
+              'measurement_deadline_utc', 'roles', 'case_id', 'execution_mode', 'owner', 'layout_hashes', 'stage_clock', 'elf_templates', 'perf_identity'}
     if set(value) != fields or value['schema'] != 1 or value['case_id'] != 'sixteen_universe' or value['execution_mode'] != 'unrestricted':
         raise Refused('invalid_owned_application_manifest')
     if value['source_sha'] != APP_SOURCE or value['layout_hashes'] != LAYOUT_HASHES:
@@ -1403,6 +1583,9 @@ def validate_app_manifest(value):
     owner = value['owner']
     if set(owner) != {'sha256', 'build_id'} or not re.fullmatch('[0-9a-f]{64}', owner['sha256']) or not re.fullmatch('[0-9a-f]{8,128}', owner['build_id']):
         raise Refused('invalid_packaged_owner_pin')
+    validate_template_refs(value['elf_templates'], roles)
+    if not valid_binary_binding(value['perf_identity']):
+        raise Refused('invalid_preverified_perf_binding')
     source_recreation_time(value['stage_clock'], utc_seconds(value['measurement_started_at_utc']))
     start = datetime.datetime.fromisoformat(value['measurement_started_at_utc'].replace('Z', '+00:00'))
     end = datetime.datetime.fromisoformat(value['measurement_deadline_utc'].replace('Z', '+00:00'))
@@ -1663,7 +1846,7 @@ def discover_app_roles(descendants, roles, deadline):
             counts['owned_name_candidates'] += 1
             target = pinned_process(pid)
             sha_match = target['sha256'] == role['sha256']
-            build_match = build_id(target['exe'], deadline) == role['build_id']
+            build_match = sha_match  # Full-file SHA binds the preverified notes from preparation.
             counts['sha256_matches'] += sha_match
             counts['build_id_matches'] += build_match
             if sha_match and build_match:
@@ -1703,7 +1886,9 @@ def owned_app(manifest, output):
         base = {'kind': 'owned_app', 'coordinator': pinned_process(os.getpid()), 'runner': runner,
                 'launch': launch, 'helper_sha256': digest(__file__), 'spool_parent': str(root),
                 'perf': str(Path(perf).resolve()), 'perf_sha256': digest(perf),
-                'perf_build_id': build_id(perf, work), 'work_deadline': work, 'overall_deadline': overall}
+                'perf_build_id': value['perf_identity']['build_id'], 'work_deadline': work, 'overall_deadline': overall}
+        if base['perf_sha256'] != value['perf_identity']['sha256']:
+            raise Refused('preverified_perf_identity_changed')
         not_before = source_recreation_time(value['stage_clock'], utc_seconds(value['measurement_started_at_utc']))
         await_source_phase(not_before, work)
         # Preserve numeric evidence on immediate mismatch; only transitional
@@ -1717,7 +1902,7 @@ def owned_app(manifest, output):
         else:
             targets, report['role_binding_diagnostic'], descendants = await_family_matches(launch, value['roles'], work)
         owner = pinned_process(targets[0][1]['ppid'])
-        if owner['pid'] not in descendants or owner['uid'] != os.getuid() or owner['sha256'] != value['owner']['sha256'] or build_id(owner['exe'], work) != value['owner']['build_id']:
+        if owner['pid'] not in descendants or owner['uid'] != os.getuid() or owner['sha256'] != value['owner']['sha256']:
             raise Refused('packaged_tauri_owner_not_verified')
         requests, participants = [], []
         for label, target in targets:
@@ -1727,7 +1912,9 @@ def owned_app(manifest, output):
                 participant['channels'] = renderer_channel(target, owner)
             participants.append(participant)
             requests.append({**base, **participant, 'owner': owner, 'target_build_id': role['build_id'],
-                             'participants': participants, 'nonce': uuid.uuid4().hex})
+                             'participants': participants, 'nonce': uuid.uuid4().hex,
+                             'elf_template': next(ref for ref in value['elf_templates'] if ref['role'] == role['role']),
+                             'bindings': {'owner': value['owner'], 'perf': value['perf_identity']}})
         if len({tuple(p['channels']) for p in participants if 'channels' in p}) != 2:
             raise Refused('renderer_private_channels_duplicated')
         # Bind ELF preparation to the already pinned family before establishing
@@ -1735,7 +1922,7 @@ def owned_app(manifest, output):
         # not make that later admission snapshot stale.
         for request in requests:
             verify_family_identity(request)
-            app_symbol_resolver(request['target'], work)
+            app_symbol_resolver(request['target'], work, request['elf_template'], request['bindings'])
             verify_family_identity(request)
         for request, participant in zip(requests, participants):
             participant['tids'] = application_threads(participant['target'], os.getuid())
@@ -1791,8 +1978,11 @@ def main():
     if args.mode in ("_record", "_cleanup"):
         try:
             (recorder if args.mode == "_record" else recover_recorder)(json.loads(sys.stdin.readline()))
-        except (Refused, OSError, ValueError, subprocess.SubprocessError):
-            emit({"event": "terminal", "status": "STOP", "code": "helper_scope_or_cleanup_refused"})
+        except (Refused, OSError, ValueError, subprocess.SubprocessError) as error:
+            receipt = {"event": "terminal", "status": "STOP", "code": "helper_scope_or_cleanup_refused"}
+            if isinstance(error, ThreadScopeRefused):
+                receipt['thread_scope_diagnostic'] = error.diagnostic
+            emit(receipt)
             return 2
         return 0
     if args.mode == "owned-app":

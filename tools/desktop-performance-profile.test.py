@@ -572,6 +572,9 @@ class OwnedApplicationTests(unittest.TestCase):
         return {"schema": 1, "source_sha": PROFILE.APP_SOURCE, "coordinator_pid": 400,
                 "owner": {"sha256": "e" * 64, "build_id": "f" * 40},
                 "layout_hashes": PROFILE.LAYOUT_HASHES,
+                "perf_identity": {"sha256": "b" * 64, "build_id": "c" * 40},
+                "elf_templates": [{"role": role, "file": "/private/elf/" + role + ".json", "sha256": "d" * 64,
+                    "binary_sha256": "b" * 64, "build_id": "c" * 40} for role in ("server", "native_renderer")],
                 "stage_clock": RendererFamilyAdmissionTests.clock(),
                 "launch_pid": 410, "measurement_started_at_utc": "2026-10-16T00:00:05Z",
                 "measurement_deadline_utc": "2026-10-16T00:01:05Z",
@@ -693,15 +696,15 @@ class OwnedApplicationTests(unittest.TestCase):
                 if str(path) == '/proc/421/exe':
                     return Path('/private/viz-renderer')
                 return original_resolve(path, *args, **kwargs)
-            with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.sys, 'platform', 'linux'), patch.object(PROFILE.os, 'getuid', return_value=1001), patch.object(PROFILE.os, 'getppid', return_value=400), patch.object(PROFILE, 'pinned_process', side_effect=lambda pid: identities.get(pid, {**identities[400], 'pid': pid, 'tgid': pid})), patch.object(PROFILE, 'owned_descendants', return_value={420: identities[420], 421: identities[421]}), patch.object(PROFILE, 'find_perf', return_value='/private/perf'), patch.object(PROFILE, 'digest', return_value='f' * 64), patch.object(PROFILE, 'build_id', return_value='c' * 40), patch.object(Path, 'resolve', resolve), patch.object(PROFILE, 'collect_attempt') as collect:
+            with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.sys, 'platform', 'linux'), patch.object(PROFILE.os, 'getuid', return_value=1001), patch.object(PROFILE.os, 'getppid', return_value=400), patch.object(PROFILE, 'pinned_process', side_effect=lambda pid: identities.get(pid, {**identities[400], 'pid': pid, 'tgid': pid})), patch.object(PROFILE, 'owned_descendants', return_value={420: identities[420], 421: identities[421]}), patch.object(PROFILE, 'find_perf', return_value='/private/perf'), patch.object(PROFILE, 'digest', return_value='b' * 64), patch.object(PROFILE, 'build_id', return_value='c' * 40), patch.object(Path, 'resolve', resolve), patch.object(PROFILE, 'collect_attempt') as collect:
                 self.assertEqual(PROFILE.owned_app(request, output), 2)
             report = json.loads(output.read_text())
             self.assertEqual(report['code'], 'exact_owned_application_role_not_unique')
             self.assertTrue(report['recorder_cleanup_verified'])
             self.assertEqual(report.get('role_binding_diagnostic'), [{'role': 'server',
-                'owned_name_candidates': 1, 'sha256_matches': 0, 'build_id_matches': 1, 'exact_matches': 0},
+                'owned_name_candidates': 1, 'sha256_matches': 0, 'build_id_matches': 0, 'exact_matches': 0},
                 {'role': 'native_renderer', 'owned_name_candidates': 1, 'sha256_matches': 0,
-                 'build_id_matches': 1, 'exact_matches': 0}])
+                 'build_id_matches': 0, 'exact_matches': 0}])
             collect.assert_not_called()
             for private in ['420', '/private', 'owned-binary']:
                 self.assertNotIn(private, json.dumps(report))
@@ -751,6 +754,14 @@ class OwnedApplicationTests(unittest.TestCase):
             fake = types.SimpleNamespace(APP_SOURCE='a' * 40, LAYOUT_HASHES=fixture_layout, digest=PROFILE.digest, build_id=Mock(return_value='7' * 40),
                                          verified_packaged_roles=package_bind, prepare_packager_replay=prepare_replay,
                                          PackagedBindingRefused=PROFILE.PackagedBindingRefused)
+            fake.__file__ = str(root / 'helper.py')
+            Path(fake.__file__).write_text('fixed helper')
+            perf = root / 'perf'
+            perf.write_text('fixed perf')
+            fake.find_perf = Mock(return_value=perf)
+            fake.prepare_elf_templates = Mock(return_value=[{'role': role['role'], 'sha256': '1' * 64, 'binary_sha256': role['sha256'], 'build_id': role['build_id'], 'file': '/private/' + role['role'] + '.json'} for role in roles])
+            (output / 'preflight.json').write_text(json.dumps({'status': 'CAPABLE',
+                'helper_sha256': PROFILE.digest(fake.__file__), 'perf_sha256': PROFILE.digest(perf), 'perf_build_id': '6' * 40}))
             spec = Mock()
             environment = {'CANDIDATE_DIR': str(candidate), 'TARGET': 'x86_64-unknown-linux-gnu',
                            'TMPDIR': str(temporary), 'PROFILE_PREFLIGHT_OUT': str(output),
@@ -759,6 +770,11 @@ class OwnedApplicationTests(unittest.TestCase):
                 exec(compile(code, 'workflow-embedded-packaged-preflight', 'exec'), {})
             descriptor = json.loads((temporary / 'tl775-owned-profile-binaries.json').read_text())
             self.assertEqual(descriptor['roles'], roles)
+            self.assertEqual(descriptor['elf_templates'], fake.prepare_elf_templates.return_value)
+            self.assertEqual(descriptor['perf_identity']['sha256'], PROFILE.digest(perf))
+            fake.prepare_elf_templates.assert_called_once()
+            self.assertEqual(fake.prepare_elf_templates.call_args.args[1], roles)
+            self.assertEqual(fake.prepare_elf_templates.call_args.args[2]['owner'], descriptor['owner'])
             self.assertEqual(descriptor['layout_hashes'], fixture_layout)
             self.assertEqual(descriptor['owner']['build_id'], '7' * 40)
             package_bind.assert_called_once()
@@ -1239,7 +1255,7 @@ class RendererFamilyAdmissionTests(unittest.TestCase):
 
 
 class PreparationThreadAdmissionTests(unittest.TestCase):
-    def owned_run(self, directory, birth_during_preparation=False, birth_after_admission=False, parent_change=False, exhausted=False, record_after_other_change=False, record_own_change=False, record_family_change=False, record_thread_mutation=None):
+    def owned_run(self, directory, birth_during_preparation=False, birth_after_admission=False, parent_change=False, exhausted=False, record_after_other_change=False, record_own_change=False, record_family_change=False, record_thread_mutation=None, record_with_template=False):
         import contextlib
         import datetime
         import json
@@ -1267,8 +1283,10 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
         channels = {'changed': False}
         prepared = []
         collected = []
+        self.fixture_note_calls = []
         original_resolve, original_read = Path.resolve, Path.read_text
         verify = PROFILE.verify_app
+        real_resolver = PROFILE.app_symbol_resolver
         def iterate(path):
             pid = int(path.parts[2])
             return iter(Path(f'/proc/{pid}/task/{tid}') for tid in members[pid])
@@ -1285,7 +1303,7 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
         def add_thread(tid):
             identities[tid] = {**identities[500], 'pid': tid, 'tgid': 500, 'start': tid}
             members[500].append(tid)
-        def metadata(target, deadline):
+        def metadata(target, deadline, *args, **kwargs):
             prepared.append(target['pid'])
             if birth_during_preparation and len(prepared) == 1:
                 add_thread(510)
@@ -1299,8 +1317,9 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             collected.extend(requests)
             for req in requests:
                 verify(req, 1001)
-            if record_after_other_change:
-                add_thread(510)  # Only the server changed; both renderer scopes remain frozen.
+            if record_after_other_change or record_with_template:
+                if record_after_other_change:
+                    add_thread(510)  # Only the server changed; both renderer scopes remain frozen.
                 if record_family_change == 'channel':
                     channels['changed'] = True
                 elif record_family_change:
@@ -1313,9 +1332,30 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
                     if record_own_change and target['pid'] == 501 and 511 not in identities:
                         identities[511] = {**identities[501], 'pid': 511, 'tgid': 501, 'start': 511}
                         members[501].append(511)
+                self.fixture_readelf_calls = []
+                if record_with_template:
+                    import hashlib
+                    cache = root / 'elf-tables'
+                    cache.mkdir(mode=0o700)
+                    refs = {}
+                    bindings = {'owner': value['owner'], 'perf': {'sha256': 'b' * 64, 'build_id': 'c' * 40}}
+                    for role in ('server', 'native_renderer'):
+                        table = {'schema': 1, 'source_sha': PROFILE.APP_SOURCE, 'producer_sha256': 'b' * 64,
+                            'role': role, 'binary_sha256': 'b' * 64, 'build_id': 'c' * 40,
+                            'bindings': bindings, 'loads': [[0, 0x1000, 0x2000, True]],
+                            'symbols': [[0x1100, 128, 'owned_test_function']]}
+                        file = cache / (role + '.json')
+                        file.write_text(json.dumps(table))
+                        file.chmod(0o600)
+                        refs[role] = {'role': role, 'file': str(file), 'sha256': hashlib.sha256(file.read_bytes()).hexdigest(),
+                                      'binary_sha256': 'b' * 64, 'build_id': 'c' * 40}
                 reports = []
                 for req in requests:
-                    receipt = self.mock_recording(req, root / str(req['target']['pid']), mutate_own)
+                    if record_with_template:
+                        req['elf_template'] = refs['server' if req['role'] == 'server' else 'native_renderer']
+                        req['bindings'] = bindings
+                    receipt = self.mock_recording(req, root / str(req['target']['pid']), mutate_own,
+                        real_symbols=record_with_template, readelf_calls=self.fixture_readelf_calls, resolver=real_resolver)
                     reports.append({'role': req['role'], 'attempts': [receipt]})
                 return reports, all(r['attempts'][0].get('recorder_gone') is True for r in reports)
             return [{'role': req['role'], 'attempts': [{'status': 'CAPABLE', 'recorder_gone': True}]}
@@ -1325,7 +1365,7 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             mocks = [('artifact_path', lambda *args: root), ('pinned_process', lambda pid: helper if pid == 420 else identities[pid]),
                      ('owned_descendants', lambda *args: {pid: identities[pid] for pid in (410, 450, 500, 501, 502)}),
                      ('find_perf', lambda: '/own/perf'), ('digest', lambda path: 'b' * 64),
-                     ('build_id', lambda path, deadline: value['owner']['build_id'] if str(path).endswith('light-desktop') else 'c' * 40),
+                     ('build_id', lambda path, deadline: self.fixture_note_calls.append(str(path)) or (value['owner']['build_id'] if str(path).endswith('light-desktop') else 'c' * 40)),
                      ('discover_app_roles', lambda *args: ({'server': [identities[500]], 'native_renderer': [identities[501], identities[502]]},
                          [{'owned_name_candidates': 1, 'exact_matches': 1}, {'owned_name_candidates': 2, 'exact_matches': 2}])),
                      ('fast_same_process', lambda identity: True), ('same_process', lambda identity: True),
@@ -1391,12 +1431,13 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             request = {'kind': 'owned_app', 'overall_deadline': now + 30, 'work_deadline': now + 14,
                        'target': TARGET, 'coordinator': TARGET, 'perf': str(root / 'perf'),
                        'perf_sha256': 'b' * 64, 'perf_build_id': 'c' * 40,
+                       'bindings': {'perf': {'sha256': 'b' * 64, 'build_id': 'c' * 40}},
                        'spool_parent': str(root), 'nonce': 'a' * 32}
             def spool(*args):
                 return os.open(root, os.O_RDONLY), os.open(root, os.O_RDONLY)
             stack.enter_context(patch.object(PROFILE, 'derived_uid', return_value=1001))
             stack.enter_context(patch.object(PROFILE, 'verify_recording_target', side_effect=verify))
-            stack.enter_context(patch.object(PROFILE, 'app_symbol_resolver', side_effect=lambda *args: events.append('resolver')))
+            stack.enter_context(patch.object(PROFILE, 'app_symbol_resolver', side_effect=lambda *args, **kwargs: events.append('resolver')))
             stack.enter_context(patch.object(PROFILE, 'online_cpu_map', return_value=[0]))
             stack.enter_context(patch.object(PROFILE, 'digest', return_value='b' * 64))
             stack.enter_context(patch.object(PROFILE, 'build_id', return_value='c' * 40))
@@ -1415,7 +1456,7 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
 
 
     @staticmethod
-    def mock_recording(request, root, during_metadata):
+    def mock_recording(request, root, during_metadata, real_symbols=False, readelf_calls=None, resolver=None):
         """Actual recorder and validators; all perf/process operations are inert fixtures."""
         import contextlib
         import types
@@ -1423,6 +1464,7 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
         target = request['target']
         (root / 'perf.data').write_bytes(perf_file([9] * 10))
         received = []
+        original_resolver = resolver or PROFILE.app_symbol_resolver
         child = Mock(pid=700)
         child.poll.return_value = None
         ticks = iter(i / 2 for i in range(1000))
@@ -1433,9 +1475,18 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
                 return 'owned_test_function' if ip == 0x1100 else '[external or unmapped]'
         def spool(*args):
             return os.open(root, os.O_RDONLY), os.open(root, os.O_RDONLY)
-        def metadata(*args):
+        def metadata(*args, **kwargs):
             during_metadata(target)
-            return Resolver()
+            return original_resolver(*args, **kwargs) if real_symbols else Resolver()
+        def static_readelf(command, **kwargs):
+            readelf_calls.append(list(command))
+            if '--symbols' in command:
+                text = ' 1: 0000000000001100 128 FUNC GLOBAL DEFAULT 1 owned_test_function\n'
+            elif '--program-headers' in command:
+                text = ' LOAD 0x000000 0x00001000 0x00001000 0x002000 0x002000 R E 0x1000\n'
+            else:
+                raise AssertionError('unexpected measured ELF tool')
+            return types.SimpleNamespace(stdout=text)
         def stat_owned(fd):
             info = original_fstat(fd)
             return types.SimpleNamespace(**{name: (1001 if name == 'st_uid' else getattr(info, name))
@@ -1453,6 +1504,10 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             stack.enter_context(patch.object(PROFILE, 'write_receipt'))
             stack.enter_context(patch.object(PROFILE, 'process_identity', return_value={'sha256': request['perf_sha256']}))
             stack.enter_context(patch.object(PROFILE.subprocess, 'Popen', return_value=child))
+            if real_symbols:
+                # The fixed ELF/map fixture models the actual Linux4KiB ABI.
+                stack.enter_context(patch.object(PROFILE.os, 'sysconf', return_value=4096))
+                stack.enter_context(patch.object(PROFILE.subprocess, 'run', side_effect=static_readelf))
             stack.enter_context(patch.object(PROFILE, 'stop_owned', side_effect=lambda *args: setattr(child.poll, 'return_value', 0)))
             stack.enter_context(patch.object(PROFILE.select, 'select', return_value=([], [], [])))
             stack.enter_context(patch.object(PROFILE.time, 'monotonic', side_effect=lambda: next(ticks)))
@@ -1465,7 +1520,8 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
                 PROFILE.recorder(request)
             except PROFILE.Refused as error:
                 # Entry refusal happens before the recorder exists.
-                received.append({'status': 'STOP', 'code': str(error), 'recorder_gone': True})
+                received.append({'status': 'STOP', 'code': str(error), 'recorder_gone': True,
+                    **({'thread_scope_diagnostic': error.diagnostic} if isinstance(error, PROFILE.ThreadScopeRefused) else {})})
         return received[-1]
 
     def test_other_role_thread_change_preserves_two_valid_recordings_but_aggregate_stops(self):
@@ -1512,10 +1568,162 @@ class PreparationThreadAdmissionTests(unittest.TestCase):
             roles = {role['role']: role['attempts'][0] for role in report['roles']}
             self.assertEqual(result, 2)
             self.assertEqual(roles['native_renderer_1']['status'], 'STOP')
+            diagnostic = roles['native_renderer_1'].get('thread_scope_diagnostic')
+            self.assertEqual(diagnostic['reason'], 'removed' if change == 'removed' else change + '_changed')
+            self.assertEqual(set(diagnostic), {'role', 'reason', 'added_count', 'removed_count', 'modified_count'})
             self.assertEqual(roles['native_renderer_2']['status'], 'CAPABLE')
             self.assertEqual(roles['native_renderer_2']['own_elf_samples'], 10)
             self.assertEqual(set(requests[1]['tids']), {501, 515}, 'frozen scope never refreshed')
             self.assertTrue(report['recorder_cleanup_verified'])
+
+
+    def test_prepared_elf_tables_yield_valid_samples_without_any_measured_readelf(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, report, _, _ = self.owned_run(directory, record_with_template=True)
+        self.assertEqual(result, 0)
+        for role in report['roles']:
+            self.assertEqual(role['attempts'][0]['samples'], 10)
+            self.assertEqual(role['attempts'][0]['own_elf_samples'], 10)
+        self.assertEqual(self.fixture_readelf_calls, [], 'immutable ELF parsing belongs before both cohorts')
+        self.assertEqual(self.fixture_note_calls, [], 'preverified full-file identities replace measured readelf notes')
+
+    def test_own_thread_refusal_has_only_safe_reason_categories_and_counts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, report, _, _ = self.owned_run(directory, record_after_other_change=True, record_thread_mutation='removed')
+        role = next(role for role in report['roles'] if role['role'] == 'native_renderer_1')
+        self.assertEqual(result, 2)
+        self.assertEqual(role['attempts'][0].get('thread_scope_diagnostic'), {
+            'role': 'native_renderer_1', 'reason': 'removed', 'added_count': 0,
+            'removed_count': 1, 'modified_count': 0})
+
+
+class ImmutableElfPreparationTests(unittest.TestCase):
+    def fixture(self, root):
+        app = root / 'app'
+        binary_dir = app / 'usr/bin'
+        binary_dir.mkdir(parents=True)
+        roles = []
+        for role, name in [('server', 'light-headless'), ('native_renderer', 'viz-renderer')]:
+            blob = bytearray(8192)
+            blob[:7] = b'\x7fELF\x02\x01\x01'
+            blob[18:20] = b'\x3e\x00'
+            blob[4096:4100] = b'CODE'
+            blob[7000:7007] = b'RO-DATA'
+            path = binary_dir / name
+            path.write_bytes(blob)
+            path.chmod(0o700)
+            roles.append({'role': role, 'sha256': PROFILE.digest(path), 'build_id': 'c' * 40})
+        bindings = {'owner': {'sha256': 'd' * 64, 'build_id': 'e' * 40},
+                    'perf': {'sha256': 'f' * 64, 'build_id': 'a' * 40}}
+        return app, roles, bindings
+
+    @staticmethod
+    def elf_tool(command, **kwargs):
+        import types
+        fd = int(command[-1].split('/')[-1])
+        assert kwargs['pass_fds'] == (fd,)
+        assert os.pread(fd, 4, 0) == b'\x7fELF'
+        if '--notes' in command:
+            text = ' Build ID: ' + 'c' * 40
+        elif '--symbols' in command:
+            text = ' 1: 0000000000001100 128 FUNC GLOBAL DEFAULT 1 owned_function\n'
+        elif '--program-headers' in command:
+            text = ' LOAD 0x000000 0x00001000 0x00001000 0x002000 0x002000 R E 0x1000\n'
+        else:
+            raise AssertionError('unexpected tool argument')
+        return types.SimpleNamespace(stdout=text)
+
+    def prepared(self, root):
+        app, roles, bindings = self.fixture(root)
+        with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.subprocess, 'run', side_effect=self.elf_tool) as run:
+            refs = PROFILE.prepare_elf_templates(app, roles, bindings, root / 'tables', PROFILE.time.monotonic() + 60)
+        self.assertEqual(run.call_count, 6)
+        return app, roles, bindings, refs
+
+    def test_same_fd_whole_elf_tables_resolve_with_fresh_maps_without_tools(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app, roles, bindings, refs = self.prepared(root)
+            target = {'uid': os.getuid(), 'sha256': roles[0]['sha256']}
+            with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE, 'own_executable_maps', return_value=[(0x1000, 0x2000, 0)]) as maps, patch.object(PROFILE.os, 'sysconf', return_value=4096), patch.object(PROFILE.subprocess, 'run') as tool:
+                resolver = PROFILE.app_symbol_resolver(target, PROFILE.time.monotonic() + 5, refs[0], bindings)
+                self.assertEqual(resolver(0x1101), 'owned_function')
+                maps.assert_called_once_with(target)
+                tool.assert_not_called()
+                with self.assertRaises(PROFILE.Refused):
+                    PROFILE.app_symbol_resolver(target, PROFILE.time.monotonic() + 5)
+
+    def test_nonexecuting_payload_change_and_wrong_build_id_stop_before_table_export(self):
+        for change in ('rodata', 'build_id', 'machine', 'symlink', 'not_executable'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                app, roles, bindings = self.fixture(root)
+                path = app / 'usr/bin/light-headless'
+                if change in ('rodata', 'machine'):
+                    raw = bytearray(path.read_bytes())
+                    raw[7001 if change == 'rodata' else 18] ^= 1
+                    path.write_bytes(raw)
+                    if change == 'machine':
+                        roles[0]['sha256'] = PROFILE.digest(path)
+                elif change == 'build_id':
+                    roles[0]['build_id'] = '0' * 40
+                elif change == 'symlink':
+                    path.rename(path.with_name('actual'))
+                    path.symlink_to('actual')
+                else:
+                    path.chmod(0o600)
+                with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.subprocess, 'run', side_effect=self.elf_tool), self.assertRaises((PROFILE.Refused, OSError)):
+                    PROFILE.prepare_elf_templates(app, roles, bindings, root / 'tables', PROFILE.time.monotonic() + 60)
+                self.assertFalse((root / 'tables/server.json').exists())
+
+    def test_private_table_tamper_metadata_identity_and_permissions_refuse_without_tools(self):
+        import copy
+        import hashlib
+        import json
+        for change in ('content', 'source', 'producer', 'binary', 'build_id', 'owner', 'perf', 'symbol', 'load', 'file_mode', 'directory_mode', 'symlink', 'uid', 'target_sha'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                app, roles, bindings, refs = self.prepared(root)
+                ref = copy.deepcopy(refs[0])
+                path = Path(ref['file'])
+                value = json.loads(path.read_text())
+                target = {'uid': os.getuid(), 'sha256': roles[0]['sha256']}
+                if change == 'content':
+                    path.write_bytes(path.read_bytes() + b' ')
+                elif change in ('source', 'producer', 'binary', 'build_id', 'owner', 'perf', 'symbol', 'load'):
+                    if change in ('owner', 'perf'):
+                        value['bindings'][change]['sha256'] = '0' * 64
+                    elif change == 'symbol':
+                        value['symbols'][0][2] = '/foreign/path or symbol'
+                    elif change == 'load':
+                        value['loads'][0][0] = -1
+                    else:
+                        key = {'source': 'source_sha', 'producer': 'producer_sha256', 'binary': 'binary_sha256'}.get(change, change)
+                        value[key] = '0' * len(value[key])
+                    raw = json.dumps(value).encode()
+                    path.write_bytes(raw)
+                    ref['sha256'] = hashlib.sha256(raw).hexdigest()  # Header validation, not merely checksum.
+                elif change == 'file_mode':
+                    path.chmod(0o644)
+                elif change == 'directory_mode':
+                    path.parent.chmod(0o755)
+                elif change == 'symlink':
+                    path.rename(path.with_name('real.json'))
+                    path.symlink_to('real.json')
+                elif change == 'uid':
+                    target['uid'] += 1
+                elif change == 'target_sha':
+                    target['sha256'] = '0' * 64
+                with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.subprocess, 'run') as tool, self.assertRaises((PROFILE.Refused, OSError)):
+                    PROFILE.load_elf_table(target, ref, bindings)
+                tool.assert_not_called()
+
+    def test_live_mapping_mismatch_does_not_reuse_cached_aslr_mapping(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app, roles, bindings, refs = self.prepared(root)
+            with patch.object(PROFILE, 'artifact_path', return_value=root), patch.object(PROFILE.os, 'sysconf', return_value=4096), patch.object(PROFILE, 'own_executable_maps', return_value=[(0x1000, 0x2000, 0x9000)]), self.assertRaises(PROFILE.Refused):
+                PROFILE.app_symbol_resolver({'uid': os.getuid(), 'sha256': roles[0]['sha256']}, PROFILE.time.monotonic() + 5, refs[0], bindings)
 
 
 if __name__ == "__main__":

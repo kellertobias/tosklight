@@ -125,7 +125,7 @@ async function readOwnedCpuProfileDescriptor(filename) {
 		typeof value === "object" &&
 		Object.keys(value).sort().join(",") === [...keys].sort().join(",");
 	if (
-		!exactKeys(descriptor, ["schema", "source_sha", "roles", "owner", "layout_hashes"]) ||
+		!exactKeys(descriptor, ["schema", "source_sha", "roles", "owner", "layout_hashes", "perf_identity", "elf_templates"]) ||
 		descriptor.schema !== 1 ||
 		!/^[a-f0-9]{40}$/.test(descriptor.source_sha) ||
 		!Array.isArray(descriptor.roles) ||
@@ -152,6 +152,18 @@ async function readOwnedCpuProfileDescriptor(filename) {
 		Object.keys(descriptor.layout_hashes).length !== 4
 	)
 		throw new Error("Invalid owned profile owner/layout");
+	if (!exactKeys(descriptor.perf_identity, ["sha256", "build_id"]) ||
+		!/^[a-f0-9]{64}$/.test(descriptor.perf_identity.sha256) ||
+		!/^[a-f0-9]{8,128}$/.test(descriptor.perf_identity.build_id) ||
+		!Array.isArray(descriptor.elf_templates) || descriptor.elf_templates.length !== 2)
+		throw new Error("Missing prepared ELF identity");
+	for (const role of descriptor.roles) {
+		const refs = descriptor.elf_templates.filter(ref => ref.role === role.role);
+		if (refs.length !== 1 || !exactKeys(refs[0], ["role", "file", "sha256", "binary_sha256", "build_id"]) ||
+			!path.isAbsolute(refs[0].file) || !/^[a-f0-9]{64}$/.test(refs[0].sha256) ||
+			refs[0].binary_sha256 !== role.sha256 || refs[0].build_id !== role.build_id)
+			throw new Error("Invalid prepared ELF reference");
+	}
 	return descriptor;
 }
 
@@ -181,6 +193,8 @@ function ownedCpuProfileObserver(descriptor, context) {
 						context.measurementStartedAt + DURATION_SECONDS * 1000,
 					).toISOString(),
 					roles: descriptor.roles,
+					elf_templates: descriptor.elf_templates,
+					perf_identity: descriptor.perf_identity,
 					owner: descriptor.owner,
 					layout_hashes: descriptor.layout_hashes,
 					stage_clock: { started: starts[0], stage: stages[0] },
