@@ -3,7 +3,7 @@ import type {
 	NativeMediaEffectSlot,
 	NativeMediaVisualizerChannel,
 } from "../../api/client/mediaOutput";
-import type { MediaServerFixture } from "../../api/types";
+import type { MediaServerFixture, VisualizationSnapshot } from "../../api/types";
 import type { ProgrammerFixtureValue } from "../../features/programmerValues/contracts";
 import { controlSections, selectedClipLength } from "./mediaControlSections";
 import { libraryModel, selectionModel } from "./mediaPaneLibraryModel";
@@ -38,6 +38,8 @@ export interface BuildMediaPaneModelInput {
 	thumbnailUrls: Record<string, string>;
 	previewUrls: Record<string, string>;
 	liveProgrammer: readonly ProgrammerFixtureValue[] | undefined;
+	/** Accepted normal output only; pending/preload values never represent live layer intensity. */
+	liveOutput?: VisualizationSnapshot | null;
 	nativeEffects?: NativeMediaEffectSlot[];
 	nativeEffectsError?: string | null;
 	/** Sparse native-library status; settings remain owned by Pixel's Effects library. */

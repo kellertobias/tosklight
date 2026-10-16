@@ -1,9 +1,45 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { buildMediaPaneModel, type BuildMediaPaneModelInput } from "./buildMediaPaneModel";
+import { EMPTY_MEDIA_INSPECTION } from "./useMediaPaneData";
+import { MediaPaneWindow } from "../MediaPaneWindow";
+import type { VisualizationSnapshot } from "../../api/types";
 import { SafePreviewImage } from "./MediaPanePreview";
 import { MediaPaneSurface } from "./MediaPaneSurface";
 import type { MediaPaneModel, MediaPaneUiCallbacks } from "./mediaPaneModel";
+
+const windowReadout = vi.hoisted(() => ({
+	snapshot: null as VisualizationSnapshot | null,
+	ready: true,
+	error: null as string | null,
+	dispatch: vi.fn(),
+	options: {} as Record<string, unknown>,
+}));
+vi.mock("../../state/AppContext", () => ({ useApp: () => ({ dispatch: windowReadout.dispatch }) }));
+vi.mock("../../features/mediaServers/MediaServersContext", () => ({
+	useMediaServers: () => ({
+		mediaServers: [
+			{
+				fixture_id: "window-server",
+				name: "Pixel",
+				endpoint: null,
+				status: { online: false, last_success: null, last_error: null },
+				layers: [{ fixture_id: "window-layer", head_index: 1 }],
+			},
+		],
+	}),
+}));
+vi.mock("../../features/visualizationRuntime/VisualizationRuntimeView", () => ({
+	useVisualizationRuntimeView: (options: Record<string, unknown>) => {
+		windowReadout.options = options;
+		return {
+			ready: options.enabled && windowReadout.ready,
+			snapshot: windowReadout.snapshot,
+			error: windowReadout.error,
+		};
+	},
+}));
 
 describe("MediaPaneSurface control state", () => {
 	vi.stubGlobal(
@@ -239,7 +275,7 @@ describe("MediaPaneSurface control state", () => {
 		const thumbnail = view.container.querySelector(".media-layer-thumbnail");
 		expect(thumbnail).toHaveClass("is-empty");
 		expect(thumbnail?.querySelector("img")).not.toBeInTheDocument();
-		expect(view.getByText("Dimmer 100%")).toBeInTheDocument();
+		expect(view.getByText("Dimmer unknown")).toBeInTheDocument();
 	});
 
 	it("keeps live preview transport failures visible on both master and layer", () => {
@@ -989,3 +1025,147 @@ function renderSurface(
 		/>,
 	);
 }
+
+
+describe("Media layer accepted output readouts", () => {
+	function input(
+		values: number[],
+		patch: Partial<BuildMediaPaneModelInput> = {},
+	): BuildMediaPaneModelInput {
+		const server = {
+			fixture_id: "server",
+			name: "Pixel",
+			endpoint: null,
+			status: { online: true, last_success: null, last_error: null },
+			layers: ["a", "b", "c"].map((fixture_id, head_index) => ({ fixture_id, head_index })),
+		};
+		return {
+			inspection: EMPTY_MEDIA_INSPECTION,
+			inspectionError: null,
+			servers: [server],
+			selectedServer: server,
+			selectedServerId: "server",
+			selectedLayerId: "a",
+			browserMode: "media",
+			selectedControlSectionId: "playback",
+			mainSectionId: "content",
+			rightPaneVisible: false,
+			draftFolderId: "0",
+			draftFileId: null,
+			thumbnailUrls: {},
+			previewUrls: {},
+			liveProgrammer: [],
+			liveOutput: {
+				revision: 1,
+				generated_at: "2026-10-16T00:00:00Z",
+				grand_master: 1,
+				blackout: false,
+				values: values.map((value, i) => ({
+					fixture_id: ["a", "b", "c"][i],
+					attribute: "intensity",
+					value: { kind: "normalized", value },
+				})),
+			},
+			...patch,
+		};
+	}
+	function Surface({ state }: { state: BuildMediaPaneModelInput }) {
+		return <MediaPaneSurface model={buildMediaPaneModel(state)} {...callbacks} />;
+	}
+	const callbacks = {
+		onSelectServer: vi.fn(),
+		onSelectLayer: vi.fn(),
+		onOpenPatch: vi.fn(),
+		onSelectBrowserMode: vi.fn(),
+		onBrowseItem: vi.fn(),
+		onSelectControlSection: vi.fn(),
+		onSetRightPaneVisible: vi.fn(),
+		onChangeControl: vi.fn(),
+	};
+	it("renders independent100/32/0 and updates unselected heads from Cue output with empty Programmer", () => {
+		const view = render(<Surface state={input([1, 0.32, 0])} />);
+		expect(within(view.container).getByRole("img", { name: "Opacity 100%" })).toBeInTheDocument();
+		expect(within(view.container).getByRole("img", { name: "Opacity 32%" })).toBeInTheDocument();
+		expect(within(view.container).getByRole("img", { name: "Opacity 0%" })).toBeInTheDocument();
+		view.rerender(<Surface state={input([1, 0.6, 0.1])} />);
+		expect(within(view.container).getByText("Dimmer 60%")).toBeInTheDocument();
+		expect(within(view.container).getByText("Dimmer 10%")).toBeInTheDocument();
+		for (const callback of Object.values(callbacks)) expect(callback).not.toHaveBeenCalled();
+		view.unmount();
+	});
+	it("does not substitute requested or pending Programmer values for accepted live output", () => {
+		const state = input([1, 0.32, 0], {
+			liveProgrammer: [
+				{
+					fixtureId: "b",
+					attribute: "intensity",
+					value: { kind: "normalized", value: 0.9 },
+					programmerOrder: 1,
+					fade: false,
+					fadeMillis: null,
+					delayMillis: null,
+				},
+			],
+		});
+		const view = render(<Surface state={state} />);
+		expect(within(view.container).getByText("Dimmer 32%")).toBeInTheDocument();
+		expect(within(view.container).queryByText("Dimmer 90%")).not.toBeInTheDocument();
+		view.rerender(
+			<Surface state={{ ...state, liveOutput: { ...state.liveOutput!, preload: true } }} />,
+		);
+		expect(within(view.container).getAllByText("Dimmer unknown")).toHaveLength(3);
+		for (const callback of Object.values(callbacks)) expect(callback).not.toHaveBeenCalled();
+		view.unmount();
+	});
+	it("keeps absent and invalid accepted values unknown without inventing zero or full", () => {
+		for (const liveOutput of [
+			null,
+			input([NaN, Infinity, -1]).liveOutput,
+			input([1.1]).liveOutput,
+		]) {
+			const model = buildMediaPaneModel(input([], { liveOutput }));
+			expect(model.layers.every((layer) => layer.opacityPercent === undefined)).toBe(true);
+			const view = render(<Surface state={input([], { liveOutput })} />);
+			expect(within(view.container).getAllByText("Dimmer unknown")).toHaveLength(3);
+			view.unmount();
+		}
+	});
+});
+
+it("wires the mounted Media window to normal accepted output and retires it when not ready or inactive", () => {
+	windowReadout.snapshot = {
+		revision: 1,
+		generated_at: "2026-10-16T00:00:00Z",
+		grand_master: 1,
+		blackout: false,
+		values: [
+			{
+				fixture_id: "window-layer",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.32 },
+			},
+		],
+	};
+	const view = render(<MediaPaneWindow />);
+	expect(windowReadout.options).toMatchObject({
+		lane: "normal",
+		enabled: true,
+		consumerId: "media-layer-readouts",
+	});
+	expect(within(view.container).getByText("Dimmer 32%")).toBeInTheDocument();
+	windowReadout.error = "Output stream disconnected";
+	view.rerender(<MediaPaneWindow />);
+	expect(within(view.container).getByText("Dimmer unknown")).toBeInTheDocument();
+	windowReadout.error = null;
+	view.rerender(<MediaPaneWindow />);
+	expect(within(view.container).getByText("Dimmer 32%")).toBeInTheDocument();
+	windowReadout.ready = false;
+	view.rerender(<MediaPaneWindow />);
+	expect(within(view.container).getByText("Dimmer unknown")).toBeInTheDocument();
+	windowReadout.ready = true;
+	view.rerender(<MediaPaneWindow active={false} />);
+	expect(windowReadout.dispatch).not.toHaveBeenCalled();
+	expect(windowReadout.options.enabled).toBe(false);
+	expect(within(view.container).getByText("Dimmer unknown")).toBeInTheDocument();
+	view.unmount();
+});

@@ -186,9 +186,31 @@ export function layerModels(input: BuildMediaPaneModelInput): MediaPaneLayer[] {
 							`${input.selectedServer?.fixture_id}:${source.id}`
 						]
 					: undefined,
+			opacityPercent: liveLayerIntensity(input, head.fixture_id),
 			liveSourceLabel: status
 				? `Folder ${status.folder} · File ${status.file}`
 				: undefined,
 		};
 	});
+}
+
+
+/** Read the resolved normal desk output, independently of selection and requested controls. */
+function liveLayerIntensity(
+	input: BuildMediaPaneModelInput,
+	fixtureId: string,
+): number | undefined {
+	const snapshot = input.liveOutput;
+	if (!snapshot || snapshot.preload) return undefined;
+	const intensity = snapshot.values.find(
+		(entry) => entry.fixture_id === fixtureId && entry.attribute === "intensity",
+	)?.value;
+	if (
+		intensity?.kind !== "normalized" ||
+		!Number.isFinite(intensity.value) ||
+		intensity.value < 0 ||
+		intensity.value > 1
+	)
+		return undefined;
+	return Math.round(intensity.value * 100);
 }
