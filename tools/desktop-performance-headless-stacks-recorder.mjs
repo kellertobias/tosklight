@@ -349,6 +349,84 @@ export function recordArguments(pid, seconds) {
 		String(seconds),
 	];
 }
+function stderrClassification(stderr) {
+	if (typeof stderr !== "string") return null;
+	const text = stderr
+		.split("\n")
+		.filter((line) => line.trim() && line !== "ack")
+		.join("\n");
+	if (!text) return 0;
+	const classifiers = [
+		[2, /Operation not permitted|Permission denied|perf_event_paranoid/iu],
+		[
+			3,
+			/Input\/output error|No space left on device|Broken pipe|failed to write|write error|failed to mmap/iu,
+		],
+		[
+			4,
+			/not supported|unknown option|unrecognized option|invalid option|not compiled in/iu,
+		],
+		[1, /no samples|zero samples|zero-sized data|no data collected/iu],
+		[5, /\bfatal\b|segmentation fault|assertion.*failed/iu],
+	];
+	return classifiers.find(([, pattern]) => pattern.test(text))?.[0] ?? 6;
+}
+
+// Public numeric enums: stage0=none,1=timed helper,2=stop helper,3=headless.
+// Signal0=none,TERM=15,KILL=9,INT=2,SEGV=11,ABRT=6,255=other; null=not observed.
+// Stderr0=empty/ACK,1=no samples,2=permission,3=I/O/resource,4=unsupported,5=fatal,6=other.
+export function recorderFailureDetails({
+	name,
+	privileged,
+	result,
+	spawnError,
+	captureError,
+	capped,
+	ack,
+	stopRequested,
+	stopAcknowledged,
+	endedEarly,
+	stderr,
+}) {
+	const stage =
+		name === "headless"
+			? 3
+			: ["user-bound", "sudo-bound"].includes(name)
+				? 1
+				: ["user-control", "sudo-control"].includes(name)
+					? 2
+					: 0;
+	const signal = result
+		? result.signal == null
+			? 0
+			: ({ SIGTERM: 15, SIGKILL: 9, SIGINT: 2, SIGSEGV: 11, SIGABRT: 6 }[
+					result.signal
+				] ?? 255)
+		: null;
+	return {
+		record_stage: stage,
+		record_exit_code:
+			Number.isSafeInteger(result?.code) &&
+			result.code >= 0 &&
+			result.code <= 255
+				? result.code
+				: null,
+		record_signal: signal,
+		record_privileged: Number(Boolean(privileged)),
+		record_spawn_error: Number(Boolean(spawnError)),
+		record_capture_error: Number(Boolean(captureError)),
+		record_capped: Number(Boolean(capped)),
+		record_stop_requested: stopRequested == null ? null : Number(stopRequested),
+		record_stop_acknowledged:
+			stopRequested === false || stopAcknowledged == null
+				? null
+				: Number(stopAcknowledged),
+		record_ack_count: Number.isSafeInteger(ack) && ack >= 0 ? ack : null,
+		record_ended_early: endedEarly == null ? null : Number(endedEarly),
+		record_stderr_class: stderrClassification(stderr),
+	};
+}
+
 export async function openRecorder({
 	root,
 	name,
@@ -360,13 +438,19 @@ export async function openRecorder({
 	require_(/^[a-z][a-z0-9-]{0,63}$/u.test(name), "private capture name");
 	await verifyIdentity(binding);
 	await privateDirectory(root);
-	let capped = false;
+	let capped = false,
+		stopRequested = false,
+		stopAckObserved = null;
+	const requestStop = () => {
+		stopRequested = true;
+		child.stdin.write("stop\n");
+	};
 	const raw = new PrivateSink(
 		path.join(root, `${name}.data`),
 		LIMITS.raw,
 		() => {
 			capped = true;
-			child.stdin.write("stop\n");
+			requestStop();
 		},
 	);
 	const stderr = new PrivateSink(
@@ -374,7 +458,7 @@ export async function openRecorder({
 		LIMITS.stderr,
 		() => {
 			capped = true;
-			child.stdin.write("stop\n");
+			requestStop();
 		},
 	);
 	const args = recordArguments(binding.pid, seconds);
@@ -404,7 +488,7 @@ export async function openRecorder({
 			raw.write(chunk);
 		} catch (error) {
 			captureError ??= error;
-			child.stdin.write("stop\n");
+			requestStop();
 		}
 	});
 	child.stderr.on("data", (chunk) => {
@@ -412,13 +496,13 @@ export async function openRecorder({
 			stderr.write(chunk);
 		} catch (error) {
 			captureError ??= error;
-			child.stdin.write("stop\n");
+			requestStop();
 		}
 		pending += chunk.toString("utf8");
 		if (pending.length > LIMITS.stderr) {
 			pending = "";
 			capped = true;
-			child.stdin.write("stop\n");
+			requestStop();
 		}
 		let newline;
 		while ((newline = pending.indexOf("\n")) >= 0) {
@@ -426,22 +510,31 @@ export async function openRecorder({
 			pending = pending.slice(newline + 1);
 		}
 	});
+	let closedResult = null;
 	const closed = new Promise((resolve) =>
-		child.once("close", (code, signal) => resolve({ code, signal })),
+		child.once("close", (code, signal) => {
+			closedResult = { code, signal };
+			resolve(closedResult);
+		}),
 	);
 	let recorderBirths = [],
-		finishing;
+		finishing,
+		stopAcknowledged = null,
+		endedEarly = null;
 	const finishOnce = async (sendStop = true) => {
-		const endedEarly =
+		endedEarly =
 			sendStop && (child.exitCode !== null || Boolean(child.signalCode));
-		let stopAcknowledged = !sendStop;
+		stopAcknowledged = !sendStop;
 		if (sendStop && child.exitCode === null && !child.signalCode) {
 			const expectedAck = ack + 1;
-			child.stdin.write("stop\n");
+			requestStop();
 			try {
 				await until(() => ack >= expectedAck, 2000, child);
 				stopAcknowledged = true;
-			} catch {}
+				stopAckObserved = true;
+			} catch {
+				stopAckObserved = false;
+			}
 		}
 		// The sleep is perf's OWN workload: its exit terminates privileged perf, not a sudo timeout wrapper.
 		let timer, result;
@@ -477,8 +570,31 @@ export async function openRecorder({
 		require_(!sendStop || stopAcknowledged, "stop acknowledgment unavailable");
 		return { raw, stderr, capped, ack, recorderBirths, endedEarly };
 	};
+	const failureDetails = async () => {
+		let text = null;
+		try {
+			await stderr.verify();
+			text = await privateText(stderr.filename);
+		} catch {}
+		return recorderFailureDetails({
+			name,
+			privileged,
+			result: closedResult,
+			spawnError,
+			captureError,
+			capped,
+			ack,
+			stopRequested,
+			stopAcknowledged: stopAckObserved,
+			endedEarly,
+			stderr: text,
+		});
+	};
 	const finish = (sendStop = true) => {
-		finishing ??= finishOnce(sendStop);
+		finishing ??= finishOnce(sendStop).catch(async (error) => {
+			error.recordDiagnostics = await failureDetails();
+			throw error;
+		});
 		return finishing;
 	};
 	try {
@@ -503,6 +619,7 @@ export async function openRecorder({
 		};
 	} catch (error) {
 		await finish().catch(() => {});
+		error.recordDiagnostics = await failureDetails();
 		try {
 			await stderr.verify();
 			error.permissionDenied =

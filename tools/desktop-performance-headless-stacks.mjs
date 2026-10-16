@@ -76,7 +76,7 @@ export function functionId(symbol) {
 }
 export function emptyReport() {
 	return {
-		schema_version: 1,
+		schema_version: 2,
 		function_mapping_version: 1,
 		requested_frequency_hz: 49,
 		preflight_available: 0,
@@ -85,6 +85,18 @@ export function emptyReport() {
 		recording_started: 0,
 		capture_complete: 0,
 		failure_code: 0,
+		record_stage: 0,
+		record_exit_code: null,
+		record_signal: null,
+		record_privileged: null,
+		record_spawn_error: null,
+		record_capture_error: null,
+		record_capped: null,
+		record_stop_requested: null,
+		record_stop_acknowledged: null,
+		record_ack_count: null,
+		record_ended_early: null,
+		record_stderr_class: null,
 		cap_code: 0,
 		existing_threads_only: 1,
 		future_thread_coverage: 0,
@@ -547,6 +559,14 @@ export async function hostPreflight(perf, outputDirectory) {
 		);
 		return filename;
 	} catch (error) {
+		for (const key of Object.keys(report))
+			if (
+				key.startsWith("record_") &&
+				Object.hasOwn(error.recordDiagnostics ?? {}, key)
+			)
+				report[key] = error.recordDiagnostics[key];
+		if (report.record_privileged !== null)
+			report.privileged = report.record_privileged;
 		report.failure_code = 1;
 		await exportReport(outputDirectory, report);
 		throw error;
@@ -556,11 +576,42 @@ export async function exportReport(outputDirectory, report) {
 	assertNumericOnly(report);
 	const baseline = emptyReport();
 	require_(
-		report.schema_version === 1 &&
+		report.schema_version === 2 &&
 			report.function_mapping_version === 1 &&
 			report.requested_frequency_hz === 49,
 		"unknown public schema",
 	);
+	for (const key of [
+		"record_privileged",
+		"record_spawn_error",
+		"record_capture_error",
+		"record_capped",
+		"record_stop_requested",
+		"record_stop_acknowledged",
+		"record_ended_early",
+	])
+		require_(
+			report[key] === null || report[key] === 0 || report[key] === 1,
+			"public recorder flag bound",
+		);
+	require_(
+		report.record_signal === null ||
+			[0, 2, 6, 9, 11, 15, 255].includes(report.record_signal),
+		"public recorder signal bound",
+	);
+	for (const [key, maximum] of [
+		["record_stage", 3],
+		["record_exit_code", 255],
+		["record_ack_count", LIMITS.stderr / 4],
+		["record_stderr_class", 6],
+	])
+		require_(
+			report[key] === null ||
+				(Number.isSafeInteger(report[key]) &&
+					report[key] >= 0 &&
+					report[key] <= maximum),
+			"public recorder enum bound",
+		);
 	for (const key of [
 		"preflight_available",
 		"symbols_available",
@@ -824,6 +875,12 @@ export class HeadlessStackCapture {
 			);
 			require_(this.report.capture_complete, "partial sampling coverage");
 		} catch (error) {
+			for (const key of Object.keys(this.report))
+				if (
+					key.startsWith("record_") &&
+					Object.hasOwn(error.recordDiagnostics ?? {}, key)
+				)
+					this.report[key] = error.recordDiagnostics[key];
 			this.report.failure_code = 3;
 			if (!this.report.samples) this.report.lost_events = null;
 			if (recording?.capped) this.report.cap_code = 1;

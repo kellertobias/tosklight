@@ -1,3 +1,4 @@
+import * as recorderModule from "./desktop-performance-headless-stacks-recorder.mjs";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
@@ -511,7 +512,7 @@ test("numeric output roundtrip rejects unknown fields, raw strings, duplicated I
 		{ ...report, samples: LIMITS.samples + 1 },
 		{ ...report, raw_bytes: LIMITS.raw + 1 },
 		{ ...report, capture_complete: 2 },
-		{ ...report, schema_version: 2 },
+		{ ...report, schema_version: 1 },
 		{ ...report, multi_frame_samples: report.samples + 1 },
 		{ ...report, weighted_period: 0 },
 		{
@@ -668,6 +669,7 @@ function recorderHarness({
 			Buffer,
 			process,
 			recordArguments,
+			recorderFailureDetails: recorderModule.recorderFailureDetails,
 			spawn: (command, args) => {
 				calls.push({ command, args });
 				return child;
