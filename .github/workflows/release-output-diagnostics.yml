@@ -9,6 +9,11 @@ on:
         description: Reviewed instrumented source commit (exact 40-character SHA)
         required: true
         type: string
+      worker_comparison:
+        description: Compare requested output worker counts 1 then 4 on the same host and binaries
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -20,10 +25,11 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+  WORKER_COMPARISON: ${{ inputs.worker_comparison && '1' || '0' }}
 
 jobs:
   candidate-desktop:
-    name: Candidate / One unchanged 576-fixture OFF and ON pair
+    name: Candidate / Unchanged 576-fixture diagnostic cohorts
     if: github.repository == 'kellertobias/tosklight'
     runs-on: ubuntu-22.04
     timeout-minutes: 180
@@ -70,7 +76,7 @@ jobs:
           paths += ['apps/light-headless/src/bin/light_benchmark/patch_mutation.rs', 'apps/light-headless/src/bin/light_benchmark/patch_mutation/diagnostics.rs', 'crates/shared/show/src/playback_contract.rs', 'crates/shared/show/src/show_store.rs', 'crates/shared/show/src/portable/migration.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/output_transaction.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/output_transaction/family_frame.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid/parallel_groups.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid/parallel_preparation.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/dynamic_projection/programming_projection/hybrid/staged.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/slow_phase_trace.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/slow_phase_trace/live_phases.rs', 'crates/light/adapters/headless/src/runtime/output_scheduler/slow_phase_trace/live_phases/family_preparation.rs']
           data = {'binary_source_sha': os.environ['CANDIDATE_SHA'],
                   'workflow_commit_sha': os.environ['WORKFLOW_SHA'],
-                  'qualification': 'One diagnostic pair only; original workloads and gates retained. No release acceptance, pane binding or accepted-frame attribution.',
+                  'qualification': 'One diagnostic pair by default; optional same-host worker comparison runs two ordered pairs. Original workloads and gates retained. No release acceptance, pane binding or accepted-frame attribution.',
                   'platform': platform.platform(), 'cpu_count': os.cpu_count(),
                   'allowed_cpus': sorted(os.sched_getaffinity(0)),
                   'baseline_source_sha': '0f37830ffe7fcea054280332c1c91278dcae4a16',
@@ -78,6 +84,8 @@ jobs:
                   'cargo': command('cargo', '--version'),
                   'source_sha256': {p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in paths},
                   'pair_order': ['off', 'on'], 'typed_cpu_opt_in': {'off': '0', 'on': '1'},
+                  'requested_output_worker_sequence': [1, 4] if os.environ['WORKER_COMPARISON'] == '1' else None,
+                  'worker_qualification': 'Requested startup environment only; no actual pool-size or worker CPU attribution. Same-host ordered cohorts retain warmup/order confounders.',
                   'observer_caveat': 'Sequential paired cohorts on one host; order and process warmup are confounders. Inclusive wall time is not CPU or parked lock wait.'}
           path = pathlib.Path(os.environ['OUT']) / 'candidate-source-host.json'
           with path.open('x') as stream:
@@ -138,7 +146,7 @@ jobs:
               stream.write(f'DIAGNOSTIC_APPIMAGE={apps[0].resolve()}\n')
           PYTHON
 
-      - name: Measure one unchanged 576-fixture case OFF then ON
+      - name: Measure unchanged 576-fixture case OFF then ON for each requested worker setting
         id: measure
         shell: bash
         env:
@@ -150,7 +158,12 @@ jobs:
         run: |
           set -euo pipefail
           overall=0
-          for observer in off on; do
+          workers=default
+          if [[ "$WORKER_COMPARISON" == 1 ]]; then workers="1 4"; fi
+          for worker in $workers; do
+            cohort="$OUT"
+            if [[ "$worker" != default ]]; then cohort="$OUT/workers-$worker"; fi
+            for observer in off on; do
             # Verify the same pinned source and exact binaries before both sequential cohorts.
             test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
             python3 - <<'PYTHON'
@@ -160,16 +173,20 @@ jobs:
           for entry in data['binaries']:
               assert hashlib.sha256(pathlib.Path(entry['path']).read_bytes()).hexdigest() == entry['sha256']
           PYTHON
-            mkdir -p "$OUT/$observer"
+            mkdir -p "$cohort/$observer"
+            # A requested count affects scheduling only, never the fixture workload or gates.
+            if [[ "$worker" != default ]]; then export LIGHT_OUTPUT_WORKERS="$worker"; fi
             status=0
             xvfb-run -a node tools/run-desktop-performance.mjs \
-              --application "$DIAGNOSTIC_APPIMAGE" --output-dir "$OUT/$observer" \
+              --application "$DIAGNOSTIC_APPIMAGE" --output-dir "$cohort/$observer" \
               --demo-show assets/demo.show --typed-cpu-diagnostics "$observer" \
-              >"$OUT/$observer/collector.stdout.log" \
-              2>"$OUT/$observer/collector.stderr.log" || status=$?
-            printf '%s\n' "$status" >"$OUT/$observer/collector-exit-code.txt"
+              >"$cohort/$observer/collector.stdout.log" \
+              2>"$cohort/$observer/collector.stderr.log" || status=$?
+            printf '%s\n' "$status" >"$cohort/$observer/collector-exit-code.txt"
             if [[ "$status" != 0 ]]; then overall=1; fi
+            done
           done
+          # A later cohort cannot erase any earlier workload or validation failure.
           # An ON success cannot erase an OFF workload or validation failure. No retries.
           exit "$overall"
 
@@ -183,4 +200,6 @@ jobs:
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/candidate-binaries.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/off/typed-cpu-numeric.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/on/typed-cpu-numeric.json
+            .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/workers-*/off/typed-cpu-numeric.json
+            .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/workers-*/on/typed-cpu-numeric.json
           if-no-files-found: error
