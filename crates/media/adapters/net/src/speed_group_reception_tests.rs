@@ -66,14 +66,15 @@ fn an_accepted_update_becomes_the_groups_clock() {
 }
 
 #[test]
-fn a_paused_group_is_a_tempo_of_zero_but_still_reports_its_rate() {
+fn a_paused_group_retains_its_tempo_and_independent_transport() {
     let mut reception = reception();
     let paused = SpeedGroupUpdate {
         running: false,
         ..update("desk", 1, 1, 120.0)
     };
     reception.accept(paused, from(), at(0)).unwrap();
-    assert_eq!(bpm(&reception, 1), Some(0.0));
+    assert_eq!(bpm(&reception, 1), Some(120.0));
+    assert!(!reception.snapshot(SpeedGroupId::new(1)).unwrap().running);
     let status = reception.status(at(0));
     assert_eq!(status.groups[0].bpm, 120.0);
     assert!(!status.groups[0].running);

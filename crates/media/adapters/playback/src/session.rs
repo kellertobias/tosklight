@@ -61,9 +61,9 @@ pub struct PlaybackSession {
     /// Whether the current pass has shown anything yet. Before it has, a range is simply taken
     /// over: there is no playhead on screen to preserve.
     delivered: bool,
-    /// The tempo the transport last advanced at, so a tempo change continues from the frame on
+    /// The clock (including pause) the transport last advanced at, so a clock change continues from the frame on
     /// screen instead of re-deriving the whole pass at the new rate.
-    tempo_bpm: Option<f64>,
+    tempo: ResolvedTempo,
     /// The rate In and Out points count in. `None` counts the clip's own frames.
     point_rate: Option<u8>,
 }
@@ -89,7 +89,7 @@ impl PlaybackSession {
             range: full,
             requested: full,
             delivered: false,
-            tempo_bpm: None,
+            tempo: ResolvedTempo::None,
             point_rate: None,
         }
     }
@@ -98,6 +98,26 @@ impl PlaybackSession {
     /// `None` counts the clip's own frames.
     pub fn set_point_rate(&mut self, frames_per_second: Option<u8>) {
         self.point_rate = frames_per_second;
+    }
+
+    /// Adopts the catalog's resolved tempo correction without restarting this selection.
+    /// The catalog includes explicit clearing and legacy header fallback; the decoded clip stays
+    /// immutable. Preserve distance at the previous rate before changing its authored reference.
+    pub(crate) fn set_intrinsic_bpm(
+        &mut self,
+        bpm: Option<f64>,
+        layer: &LayerState,
+        now: Timestamp,
+    ) {
+        if self.timing.intrinsic_bpm == bpm {
+            return;
+        }
+        if self.delivered && self.mode.is_synchronized() {
+            let (_, _, advanced) = self.locate(layer, self.tempo, now);
+            self.anchor = now;
+            self.offset = advanced;
+        }
+        self.timing.intrinsic_bpm = bpm;
     }
 
     pub const fn asset(&self) -> AssetId {
@@ -214,13 +234,11 @@ impl PlaybackSession {
     /// at the new one, so a desk moving its Speed Group never makes the clip jump. The same
     /// tempo sequence always yields the same frames, whatever the frame rate of the output.
     fn retime(&mut self, layer: &LayerState, tempo: ResolvedTempo, now: Timestamp) {
-        let bpm = tempo.bpm();
-        let previous = std::mem::replace(&mut self.tempo_bpm, bpm);
-        if previous == bpm || !self.delivered || !self.mode.is_synchronized() {
+        let previous = std::mem::replace(&mut self.tempo, tempo);
+        if previous == tempo || !self.delivered || !self.mode.is_synchronized() {
             return;
         }
-        let before = previous.map_or(ResolvedTempo::None, |bpm| ResolvedTempo::Live { bpm });
-        let (_, _, advanced) = self.locate(layer, before, now);
+        let (_, _, advanced) = self.locate(layer, previous, now);
         self.anchor = now;
         self.offset = advanced;
     }
@@ -270,7 +288,7 @@ impl PlaybackSession {
         let multiplier = f64::from(layer.speed_multiplier.factor());
         let synchronized = self.mode.is_synchronized();
         let whole_clip = effective_rate(synchronized, self.timing.intrinsic_bpm, tempo, multiplier);
-        if !(synchronized && pass.ranged) {
+        if !(synchronized && pass.ranged) || tempo.is_paused() {
             return whole_clip;
         }
         match (tempo.bpm(), self.timing.intrinsic_bpm) {
@@ -1136,3 +1154,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "speed_group_pause_tests.rs"]
+mod speed_group_pause_tests;

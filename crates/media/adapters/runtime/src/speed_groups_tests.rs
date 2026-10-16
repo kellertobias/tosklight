@@ -256,3 +256,64 @@ async fn a_new_listen_address_is_taken_without_a_restart() {
     UdpSocket::bind(second).expect("turning reception off closed the socket");
     shutdown.request(crate::shutdown::ShutdownReason::Requested);
 }
+
+#[test]
+fn received_pause_freezes_synced_movie_with_or_without_intrinsic_bpm() {
+    use media_domain::timeline::MediaTiming;
+    use media_domain::{AssetId, LayerState, MediaAddress, PlayMode, Timestamp};
+    use media_playback::PlaybackSession;
+    let at = Timestamp::from_millis;
+    for intrinsic in [None, Some(60.0)] {
+        let configuration = configuration(None, group(1));
+        let reception = shared();
+        let output = configuration.outputs[0].id;
+        let mut timing = MediaTiming::from_frames(100, 10.0);
+        timing.intrinsic_bpm = intrinsic;
+        let mut session = PlaybackSession::new(
+            AssetId::new(),
+            timing,
+            Arc::from((0..100).map(|n| n * 100_000).collect::<Vec<u64>>()),
+            at(0),
+            PlayMode::LoopSynced,
+        );
+        let layer = LayerState {
+            address: MediaAddress::new(150, 6),
+            play_mode: PlayMode::LoopSynced,
+            ..Default::default()
+        };
+        let publish = |sequence, bpm, running, millis| {
+            let mut message = update(sequence, 1, bpm);
+            message.running = running;
+            apply(
+                &reception,
+                (
+                    "127.0.0.1:52000".parse().unwrap(),
+                    decode(&encode(&message)),
+                ),
+                at(millis),
+            );
+            output_tempo(&configuration, output, &reception).resolve(Some(90), at(millis))
+        };
+        let running = publish(1, 60.0, true, 0);
+        assert_eq!(session.deliver(&layer, running, at(0)).frame, Some(0));
+        assert_eq!(session.deliver(&layer, running, at(300)).frame, Some(3));
+        let paused = publish(2, 120.0, false, 300);
+        assert_eq!(session.deliver(&layer, paused, at(300)).frame, Some(3));
+        assert_eq!(
+            session.deliver(&layer, paused, at(900)).frame,
+            Some(3),
+            "accepted pause must freeze intrinsic={intrinsic:?}"
+        );
+        assert_eq!(
+            paused.bpm(),
+            Some(120.0),
+            "pause retains the published tempo independently"
+        );
+        let resumed = publish(3, 120.0, true, 900);
+        assert_eq!(session.deliver(&layer, resumed, at(900)).frame, Some(3));
+        assert_eq!(
+            session.deliver(&layer, resumed, at(1_000)).frame,
+            Some(if intrinsic.is_some() { 5 } else { 4 })
+        );
+    }
+}

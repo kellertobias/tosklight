@@ -115,7 +115,11 @@ pub struct UpdateLibraryItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<u8>,
     /// Correct or clear the authored tempo. An absent field leaves it unchanged.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "explicit_bpm",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub intrinsic_bpm: Option<Option<f64>>,
     /// Enable or disable playback without changing the stored media.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -123,6 +127,14 @@ pub struct UpdateLibraryItem {
     /// Exchange addresses when the destination is occupied. False refuses the edit.
     #[serde(default)]
     pub swap: bool,
+}
+
+/// A present null clears the correction; an omitted field leaves it unchanged.
+fn explicit_bpm<'de, D>(deserializer: D) -> Result<Option<Option<f64>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<f64>::deserialize(deserializer).map(Some)
 }
 
 /// Permanently deleting one catalog item. The request id makes retries safe.

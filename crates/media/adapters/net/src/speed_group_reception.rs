@@ -298,13 +298,14 @@ impl SpeedGroupReception {
 
     /// The clock a group last published, for [`media_domain::resolve_tempo`].
     ///
-    /// A paused group is a tempo of zero: synchronized playback holds its frame until the desk
-    /// resumes the group.
+    /// Keep tempo and transport independent: a paused group retains its BPM, including for
+    /// clips without an authored tempo, while synchronized playback holds its current frame.
     pub fn snapshot(&self, group: SpeedGroupId) -> Option<SpeedGroupSnapshot> {
         let entry = self.groups.get(&group.value())?;
         Some(SpeedGroupSnapshot {
             group_id: group,
-            bpm: if entry.running { entry.bpm } else { 0.0 },
+            bpm: entry.bpm,
+            running: entry.running,
             phase_beats: entry.beat_phase,
             observed_at: entry.observed_at,
         })

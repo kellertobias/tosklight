@@ -848,3 +848,92 @@ async fn upload_streams_one_file_and_returns_the_import_job() {
         ))
     );
 }
+
+#[test]
+fn bpm_update_wire_distinguishes_absent_null_and_numeric_intent() {
+    use crate::wire::UpdateLibraryItem;
+    let absent: UpdateLibraryItem =
+        serde_json::from_value(serde_json::json!({"requestId":"a"})).unwrap();
+    assert_eq!(absent.intrinsic_bpm, None);
+    let clear: UpdateLibraryItem =
+        serde_json::from_value(serde_json::json!({"requestId":"b", "intrinsicBpm":null})).unwrap();
+    assert_eq!(clear.intrinsic_bpm, Some(None));
+    let corrected: UpdateLibraryItem =
+        serde_json::from_value(serde_json::json!({"requestId":"c", "intrinsicBpm":60})).unwrap();
+    assert_eq!(corrected.intrinsic_bpm, Some(Some(60.0)));
+    assert_eq!(
+        serde_json::to_value(clear).unwrap()["intrinsicBpm"],
+        serde_json::Value::Null
+    );
+    assert!(
+        serde_json::to_value(absent)
+            .unwrap()
+            .get("intrinsicBpm")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn bpm_update_null_reaches_library_once_while_absent_and_malformed_do_not_clear() {
+    let edits = Arc::new(Mutex::new(Vec::new()));
+    let recorded = Arc::clone(&edits);
+    let diagnostics = Diagnostics {
+        library: LibraryAccess {
+            edit: Arc::new(move |edit| {
+                recorded.lock().unwrap().push(edit);
+                Ok(())
+            }),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let bench = bench_with(diagnostics);
+    let id = uuid::Uuid::new_v4();
+    let url = format!("/api/v2/library/items/{id}/update");
+    post_ok(
+        &bench.router,
+        &url,
+        r#"{"requestId":"set","intrinsicBpm":60}"#,
+    )
+    .await;
+    let clear = r#"{"requestId":"clear","intrinsicBpm":null,"futureField":true}"#;
+    for _ in 0..2 {
+        post_ok(&bench.router, &url, clear).await;
+    }
+    post_ok(
+        &bench.router,
+        &url,
+        r#"{"requestId":"rename-only","name":"New name"}"#,
+    )
+    .await;
+    let (status, _) = send(
+        &bench.router,
+        post(url.clone(), r#"{"requestId":"absent"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = send(
+        &bench.router,
+        post(url, r#"{"requestId":"bad-bpm","intrinsicBpm":"wrong"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let asset = media_domain::AssetId::from_uuid(id);
+    assert_eq!(
+        edits.lock().unwrap().as_slice(),
+        [
+            LibraryEdit::SetItemBpm {
+                id: asset,
+                bpm: Some(60.0)
+            },
+            LibraryEdit::SetItemBpm {
+                id: asset,
+                bpm: None
+            },
+            LibraryEdit::RenameItem {
+                id: asset,
+                name: "New name".into()
+            },
+        ]
+    );
+}

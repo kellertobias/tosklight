@@ -83,9 +83,19 @@ mod tests {
 pub struct SpeedGroupSnapshot {
     pub group_id: SpeedGroupId,
     pub bpm: f64,
+    /// Transport is independent of the retained tempo. Older snapshots were running.
+    #[serde(default = "running_by_default", skip_serializing_if = "is_running")]
+    pub running: bool,
     /// Position within the bar at [`Self::observed_at`], in beats.
     pub phase_beats: f64,
     pub observed_at: crate::command::Timestamp,
+}
+
+const fn running_by_default() -> bool {
+    true
+}
+fn is_running(value: &bool) -> bool {
+    *value
 }
 
 /// How long a Speed Group observation stays live.
@@ -113,18 +123,24 @@ pub enum ResolvedTempo {
     /// The last tempo a Speed Group published, held past its freshness. The output keeps running
     /// at this rate and warns.
     Stale { bpm: f64 },
+    /// An explicitly paused group retains its BPM and pause even when reception is stale.
+    Paused { bpm: f64, stale: bool },
 }
 
 impl ResolvedTempo {
     pub const fn bpm(self) -> Option<f64> {
         match self {
             Self::None => None,
-            Self::Live { bpm } | Self::Stale { bpm } => Some(bpm),
+            Self::Live { bpm } | Self::Stale { bpm } | Self::Paused { bpm, .. } => Some(bpm),
         }
     }
 
+    pub const fn is_paused(self) -> bool {
+        matches!(self, Self::Paused { .. })
+    }
+
     pub const fn is_stale(self) -> bool {
-        matches!(self, Self::Stale { .. })
+        matches!(self, Self::Stale { .. } | Self::Paused { stale: true, .. })
     }
 }
 
@@ -149,7 +165,12 @@ pub fn resolve_tempo(
         TempoSource::SpeedGroup { group_id } => match snapshot {
             // A snapshot for a different group is not this output's clock.
             Some(snapshot) if snapshot.group_id == group_id => {
-                if snapshot.is_fresh(now) {
+                if !snapshot.running {
+                    ResolvedTempo::Paused {
+                        bpm: snapshot.bpm,
+                        stale: !snapshot.is_fresh(now),
+                    }
+                } else if snapshot.is_fresh(now) {
                     ResolvedTempo::Live { bpm: snapshot.bpm }
                 } else {
                     ResolvedTempo::Stale { bpm: snapshot.bpm }
@@ -206,6 +227,9 @@ pub fn effective_rate(
     if !synchronized {
         return multiplier;
     }
+    if tempo.is_paused() {
+        return 0.0;
+    }
     match (tempo.bpm(), intrinsic_bpm) {
         // A zero or negative intrinsic tempo is not a ratio; treat the asset as unauthored rather
         // than dividing by it.
@@ -223,6 +247,7 @@ mod tempo_resolution_tests {
         SpeedGroupSnapshot {
             group_id: SpeedGroupId::new(group),
             bpm,
+            running: true,
             phase_beats: 0.0,
             observed_at: Timestamp::from_millis(observed_millis),
         }
@@ -345,6 +370,66 @@ mod tempo_resolution_tests {
             assert!(rate.is_finite(), "intrinsic {intrinsic} produced {rate}");
             assert_eq!(rate, 1.0);
         }
+    }
+
+    #[test]
+    fn pause_preserves_bpm_and_transport_when_stale_and_ignores_the_channel() {
+        let source = TempoSource::SpeedGroup {
+            group_id: SpeedGroupId::new(1),
+        };
+        let mut paused = snapshot(1, 120.0, 0);
+        paused.running = false;
+        for millis in [0, 1_500, 20_000] {
+            let tempo = resolve_tempo(source, Some(paused), Some(90), at(millis));
+            assert_eq!(tempo.bpm(), Some(120.0));
+            assert!(tempo.is_paused());
+            assert_eq!(tempo.is_stale(), millis >= 1_500);
+            for intrinsic in [None, Some(60.0)] {
+                assert_eq!(effective_rate(true, intrinsic, tempo, 2.0), 0.0);
+                assert_eq!(effective_rate(false, intrinsic, tempo, 2.0), 2.0);
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_snapshot_and_resolved_tempo_json_remain_readable_and_unchanged() {
+        let legacy = serde_json::json!({"groupId":1,"bpm":120.0,"phaseBeats":0.25,"observedAt":42});
+        let mut snapshot: SpeedGroupSnapshot = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(snapshot.running);
+        assert_eq!(serde_json::to_value(snapshot).unwrap(), legacy);
+        snapshot.running = false;
+        let paused = serde_json::to_value(snapshot).unwrap();
+        assert_eq!(paused["running"], false);
+        assert!(
+            !serde_json::from_value::<SpeedGroupSnapshot>(paused)
+                .unwrap()
+                .running
+        );
+        for (kind, tempo) in [
+            ("live", ResolvedTempo::Live { bpm: 120.0 }),
+            ("stale", ResolvedTempo::Stale { bpm: 120.0 }),
+        ] {
+            let json = serde_json::json!({"kind":kind,"bpm":120.0});
+            assert_eq!(
+                serde_json::from_value::<ResolvedTempo>(json.clone()).unwrap(),
+                tempo
+            );
+            assert_eq!(serde_json::to_value(tempo).unwrap(), json);
+        }
+    }
+
+    #[test]
+    fn explicit_pause_does_not_change_existing_unseen_or_zero_tempo_fallbacks() {
+        let source = TempoSource::SpeedGroup {
+            group_id: SpeedGroupId::new(1),
+        };
+        let none = resolve_tempo(source, None, Some(90), at(0));
+        assert_eq!(none, ResolvedTempo::None);
+        assert_eq!(effective_rate(true, None, none, 1.0), 1.0);
+        let zero = resolve_tempo(source, Some(snapshot(1, 0.0, 0)), Some(90), at(0));
+        assert!(!zero.is_paused());
+        assert_eq!(effective_rate(true, None, zero, 1.0), 1.0);
+        assert_eq!(effective_rate(true, Some(60.0), zero, 1.0), 0.0);
     }
 
     #[test]

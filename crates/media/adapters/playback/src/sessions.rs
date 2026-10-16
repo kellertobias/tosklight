@@ -170,7 +170,8 @@ impl LayerSessions {
             return None;
         }
 
-        let catalog_asset = catalog.resolve(layer.address).map(|item| item.id);
+        let catalog_item = catalog.resolve(layer.address);
+        let catalog_asset = catalog_item.map(|item| item.id);
 
         if self
             .outgoing
@@ -252,7 +253,7 @@ impl LayerSessions {
             }
         }
 
-        let outgoing = self.held(layer_index, layer, now);
+        let outgoing = self.held(layer_index, layer, catalog, now);
         let Some(selected) = self.selected.get_mut(&layer_index) else {
             return Some(LayerSource {
                 asset: catalog_asset.unwrap_or_default(),
@@ -264,6 +265,11 @@ impl LayerSessions {
             });
         };
         selected.reset_trigger_id = layer.reset_trigger_id;
+        if let Some(item) = catalog_item.filter(|item| item.id == selected.asset) {
+            selected
+                .session
+                .set_intrinsic_bpm(item.intrinsic_bpm, layer, now);
+        }
         selected.session.set_point_rate(self.point_rate);
         selected.session.reconcile(layer, now);
         let tempo = self.tempo.resolve(layer.playback_bpm, now);
@@ -284,9 +290,21 @@ impl LayerSessions {
     ///
     /// The previous clip keeps the transport it had: it is only filling in, so a play mode or
     /// reset sent with the new selection belongs to the new selection.
-    fn held(&mut self, layer_index: usize, layer: &LayerState, now: Timestamp) -> Option<HeldClip> {
+    fn held(
+        &mut self,
+        layer_index: usize,
+        layer: &LayerState,
+        catalog: &CatalogSnapshot,
+        now: Timestamp,
+    ) -> Option<HeldClip> {
         let outgoing = self.outgoing.get_mut(&layer_index)?;
         let asset = outgoing.selected.asset;
+        if let Some((_, item)) = catalog.item(asset) {
+            outgoing
+                .selected
+                .session
+                .set_intrinsic_bpm(item.intrinsic_bpm, layer, now);
+        }
         let tempo = self.tempo.resolve(layer.playback_bpm, now);
         let delivery = outgoing.selected.session.deliver(layer, tempo, now);
         Some(HeldClip {
@@ -363,6 +381,8 @@ impl LayerSessions {
         self.pending.remove(&layer_index);
         loader.finish_selection(asset);
         self.sizes.insert(asset, (loaded.width, loaded.height));
+        let mut timing = loaded.timing;
+        timing.intrinsic_bpm = item.intrinsic_bpm;
         self.selected.insert(
             layer_index,
             Selected {
@@ -371,7 +391,7 @@ impl LayerSessions {
                 reset_trigger_id: layer.reset_trigger_id,
                 session: PlaybackSession::new(
                     asset,
-                    loaded.timing,
+                    timing,
                     loaded.presentation_micros,
                     now,
                     if layer.play_mode.is_transport_running() {
@@ -873,3 +893,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "sessions_bpm_tests.rs"]
+mod bpm_correction_tests;
