@@ -728,6 +728,8 @@ fn unchanged_tree_reuses_owned_cache_but_activation_progress_and_membership_rema
         .unwrap();
     let original = scratch.cache.values().next().unwrap().expression.clone();
     input.activation_mix = 0.2;
+    input.priority = 11;
+    input.activated_at_millis = 200;
     {
         let prepared = prepare_dynamic_family_samples(
             &[input.clone()],
@@ -740,6 +742,7 @@ fn unchanged_tree_reuses_owned_cache_but_activation_progress_and_membership_rema
             panic!()
         };
         assert_eq!(value.activation_mix, 0.2);
+        assert_eq!(value.rank, rank(&input));
     }
     assert!(Arc::ptr_eq(
         &original,
@@ -754,4 +757,209 @@ fn unchanged_tree_reuses_owned_cache_but_activation_progress_and_membership_rema
     prepare_dynamic_family_samples(&[], &Sources::default(), None, &mut scratch).unwrap();
     assert!(scratch.cache.is_empty());
     assert!(scratch.families.is_empty());
+}
+
+thread_local! {
+    static COMPILED_SAMPLE_CLONES: Cell<usize> = const { Cell::new(0) };
+}
+
+// Mirror the production derive without adding a production counter or allocator hook.
+impl Clone for CompiledSample {
+    fn clone(&self) -> Self {
+        COMPILED_SAMPLE_CLONES.with(|count| count.set(count.get() + 1));
+        Self {
+            expression: self.expression.clone(),
+            samples: self.samples.clone(),
+        }
+    }
+}
+
+fn cached_color_sample() -> (HashMap<CacheKey, CompiledSample>, CacheKey) {
+    let input = sample(10, resume(Some(color(ColorComponent::Uv, 0.8)), None, 0.25));
+    let mut scratch = DynamicFamilyPreparationScratch::default();
+    prepare_dynamic_family_samples(&[input], &Sources::default(), None, &mut scratch).unwrap();
+    assert_eq!(scratch.cache.len(), 1);
+    let key = *scratch.cache.keys().next().unwrap();
+    (scratch.cache, key)
+}
+
+fn assert_cached_samples_equal(actual: &CompiledSample, expected: &CompiledSample) {
+    assert!(Arc::ptr_eq(&actual.expression, &expected.expression));
+    assert_eq!(actual.samples.len(), expected.samples.len());
+    assert!(!actual.samples.is_empty());
+    for (actual, expected) in actual.samples.iter().zip(&expected.samples) {
+        let (FamilyCompositionSample::Known(actual), FamilyCompositionSample::Known(expected)) =
+            (actual, expected)
+        else {
+            panic!("expected compiled Color component samples")
+        };
+        assert_eq!(actual.rank, expected.rank);
+        assert_eq!(actual.activation_mix, expected.activation_mix);
+    }
+    let group = |samples| DynamicFamilySampleGroup {
+        target: FixtureId(Uuid::from_u128(3)),
+        owner: ProgrammingOwner::Color,
+        samples,
+    };
+    let base = semantic(ColorIntent::default());
+    assert_eq!(
+        compose(&group(actual.samples.clone()), &base).unwrap(),
+        compose(&group(expected.samples.clone()), &base).unwrap()
+    );
+}
+
+#[test]
+fn shared_cache_mismatch_does_not_clone_discarded_samples() {
+    let (cache, key) = cached_color_sample();
+    let changed = Arc::new(resume(Some(color(ColorComponent::Uv, 0.8)), None, 0.5));
+    COMPILED_SAMPLE_CLONES.with(|count| count.set(0));
+    let result = controller::Previous::Shared(&cache).take_matching(&key, &changed);
+    assert!(result.is_none());
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 0));
+    assert_eq!(cache.len(), 1);
+}
+
+#[test]
+fn shared_cache_hit_clones_once_and_preserves_compiled_samples() {
+    let (cache, key) = cached_color_sample();
+    let expected = &cache[&key];
+    COMPILED_SAMPLE_CLONES.with(|count| count.set(0));
+    let result = controller::Previous::Shared(&cache)
+        .take_matching(&key, &expected.expression)
+        .unwrap();
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 1));
+    assert_cached_samples_equal(&result, expected);
+    assert_eq!(cache.len(), 1);
+}
+
+#[test]
+fn owned_cache_hit_moves_samples_and_mismatch_consumes_entry_without_cloning() {
+    let (mut cache, key) = cached_color_sample();
+    let expression = cache[&key].expression.clone();
+    let sample_storage = cache[&key].samples.as_ptr();
+    COMPILED_SAMPLE_CLONES.with(|count| count.set(0));
+    let result = controller::Previous::Owned(&mut cache)
+        .take_matching(&key, &expression)
+        .unwrap();
+    assert_eq!(result.samples.as_ptr(), sample_storage);
+    assert!(cache.is_empty());
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 0));
+    cache.insert(key, result);
+    let changed = Arc::new(resume(Some(color(ColorComponent::Uv, 0.8)), None, 0.5));
+    assert!(
+        controller::Previous::Owned(&mut cache)
+            .take_matching(&key, &changed)
+            .is_none()
+    );
+    assert!(cache.is_empty());
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 0));
+}
+
+impl PreparationSources for Sources {
+    fn finish_controller(&self) -> Option<(usize, usize)> {
+        Some((0, 0))
+    }
+}
+
+struct FourChunks;
+impl PreparationWorkers for FourChunks {
+    fn chunks(&self) -> usize {
+        4
+    }
+
+    fn run(
+        &mut self,
+        prepare: &(dyn Fn(usize, &dyn PreparationSources) -> PreparedChunk + Sync),
+    ) -> Result<Vec<PreparedChunk>, TransitionError> {
+        // Exercise production chunk preparation/replay without claiming thread scheduling coverage.
+        Ok((0..4)
+            .map(|chunk| prepare(chunk, &Sources::default()))
+            .collect())
+    }
+
+    fn run_completion(
+        &mut self,
+        _: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),
+    ) -> Result<Vec<crate::CompletedChunk>, TransitionError> {
+        panic!("this test exercises family preparation, not deferred completion")
+    }
+
+    fn append_logs(&mut self, _: usize, from: (usize, usize), to: (usize, usize)) {
+        assert_eq!(from, (0, 0));
+        assert_eq!(to, (0, 0));
+    }
+}
+
+#[test]
+fn serial_and_shared_cache_preparation_match_across_changed_and_unchanged_frames() {
+    let mut serial = DynamicFamilyPreparationScratch::default();
+    let mut parallel = DynamicFamilyPreparationScratch::default();
+    let base = semantic(ColorIntent::default());
+    for (frame, progress) in [0.25, 0.5, 0.5].into_iter().enumerate() {
+        let mut inputs = Vec::new();
+        for index in 0..8 {
+            let mut input = sample(
+                10 + index,
+                resume(Some(color(ColorComponent::Uv, 0.8)), None, progress),
+            );
+            input.target = FixtureId(Uuid::from_u128(100 + index));
+            input.priority += frame as i16;
+            input.activation_mix = 1.0 - frame as f32 * 0.2;
+            inputs.push(input);
+        }
+        inputs.push(sample(
+            30,
+            E::LegacyScalar {
+                attribute: AttributeKey::intensity(),
+                value: 0.4,
+                occurrence: None,
+                dependency_occurrence: None,
+            },
+        ));
+        let expected =
+            prepare_dynamic_family_samples(&inputs, &Sources::default(), None, &mut serial)
+                .unwrap();
+        let actual = prepare_dynamic_family_samples_in_parallel(
+            &inputs,
+            &[],
+            &Sources::default(),
+            None,
+            &mut parallel,
+            &mut FourChunks,
+        )
+        .unwrap();
+        assert_eq!(actual.requirements, expected.requirements);
+        assert_eq!(actual.legacy.len(), expected.legacy.len());
+        for (actual, expected) in actual.legacy.iter().zip(expected.legacy) {
+            assert_eq!(actual.expression, expected.expression);
+            assert_eq!(rank(actual), rank(expected));
+            assert_eq!(actual.activation_mix, expected.activation_mix);
+        }
+        assert_eq!(actual.families.len(), 8);
+        assert_eq!(actual.families.len(), expected.families.len());
+        for (actual, expected) in actual.families.iter().zip(expected.families) {
+            assert_eq!(actual.target, expected.target);
+            assert_eq!(actual.owner, expected.owner);
+            assert_eq!(actual.samples.len(), expected.samples.len());
+            for (actual, expected) in actual.samples.iter().zip(&expected.samples) {
+                let (
+                    FamilyCompositionSample::Known(actual),
+                    FamilyCompositionSample::Known(expected),
+                ) = (actual, expected)
+                else {
+                    panic!("expected retained Color samples")
+                };
+                assert_eq!(actual.rank, expected.rank);
+                assert_eq!(actual.activation_mix, expected.activation_mix);
+            }
+            assert_eq!(
+                compose(actual, &base).unwrap(),
+                compose(expected, &base).unwrap()
+            );
+        }
+        assert_eq!(serial.cache.len(), parallel.cache.len());
+        for (key, expected) in &serial.cache {
+            assert_eq!(parallel.cache[key].expression, expected.expression);
+        }
+    }
 }
