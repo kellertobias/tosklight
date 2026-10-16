@@ -1238,5 +1238,156 @@ class RendererFamilyAdmissionTests(unittest.TestCase):
             discover.assert_not_called()
 
 
+class PreparationThreadAdmissionTests(unittest.TestCase):
+    def owned_run(self, directory, birth_during_preparation=False, birth_after_admission=False, parent_change=False, exhausted=False):
+        import contextlib
+        import datetime
+        import json
+        root = Path(directory)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        value = OwnedApplicationTests().manifest()
+        value.update(measurement_started_at_utc=now.isoformat(),
+                     measurement_deadline_utc=(now + datetime.timedelta(seconds=60)).isoformat())
+        value['stage_clock']['started']['startedAt'] = (now - datetime.timedelta(seconds=60)).isoformat()
+        value['stage_clock']['stage']['recordedAt'] = (now - datetime.timedelta(seconds=30)).isoformat()
+        request, output = root / 'request.json', root / 'receipt.json'
+        request.write_text(json.dumps(value))
+        identities = {pid: {'pid': pid, 'tgid': pid, 'ppid': parent, 'uid': 1001,
+                           'start': pid, 'sha256': 'b' * 64,
+                           'exe': '/own/' + name, 'inode': [1, pid, 3, 4]}
+                      for pid, parent, name in [(400, 1, 'node'), (410, 400, 'AppRun'),
+                          (450, 410, 'light-desktop'), (500, 450, 'light-headless'),
+                          (501, 450, 'viz-renderer'), (502, 450, 'viz-renderer')]}
+        identities[450]['sha256'] = value['owner']['sha256']
+        helper = {**identities[400], 'pid': 420, 'tgid': 420, 'ppid': 400}
+        members = {pid: [pid] for pid in identities}
+        prepared = []
+        collected = []
+        original_resolve, original_read = Path.resolve, Path.read_text
+        verify = PROFILE.verify_app
+        def iterate(path):
+            pid = int(path.parts[2])
+            return iter(Path(f'/proc/{pid}/task/{tid}') for tid in members[pid])
+        def read(path, *args, **kwargs):
+            if str(path).startswith('/proc/') and path.name == 'children':
+                return '500 501 502'
+            return original_read(path, *args, **kwargs)
+        def resolve(path, *args, **kwargs):
+            if str(path).startswith('/proc/') and path.name == 'exe':
+                return Path(identities[int(path.parts[2])]['exe'])
+            return original_resolve(path, *args, **kwargs)
+        def add_thread(tid):
+            identities[tid] = {**identities[500], 'pid': tid, 'tgid': 500, 'start': tid}
+            members[500].append(tid)
+        def metadata(target, deadline):
+            prepared.append(target['pid'])
+            if birth_during_preparation and len(prepared) == 1:
+                add_thread(510)
+            if parent_change and len(prepared) == 1:
+                identities[501]['ppid'] = 9
+        def final_verify(req, uid):
+            if birth_after_admission and len(prepared) == 3 and 511 not in identities:
+                add_thread(511)
+            return verify(req, uid)
+        def collect(requests):
+            collected.extend(requests)
+            for req in requests:
+                verify(req, 1001)
+            return [{'role': req['role'], 'attempts': [{'status': 'CAPABLE', 'recorder_gone': True}]}
+                    for req in requests], True
+        ticks = iter(i / 10 for i in range(10000))
+        with contextlib.ExitStack() as stack:
+            mocks = [('artifact_path', lambda *args: root), ('pinned_process', lambda pid: helper if pid == 420 else identities[pid]),
+                     ('owned_descendants', lambda *args: {pid: identities[pid] for pid in (410, 450, 500, 501, 502)}),
+                     ('find_perf', lambda: '/own/perf'), ('digest', lambda path: 'b' * 64),
+                     ('build_id', lambda path, deadline: value['owner']['build_id'] if str(path).endswith('light-desktop') else 'c' * 40),
+                     ('discover_app_roles', lambda *args: ({'server': [identities[500]], 'native_renderer': [identities[501], identities[502]]},
+                         [{'owned_name_candidates': 1, 'exact_matches': 1}, {'owned_name_candidates': 2, 'exact_matches': 2}])),
+                     ('fast_same_process', lambda identity: True), ('same_process', lambda identity: True),
+                     ('task_identity', lambda tid: identities[tid]), ('renderer_channel', lambda target, owner: [str(target['pid']), 'out']),
+                     ('app_symbol_resolver', metadata), ('verify_app', final_verify), ('collect_owned_requests', collect)]
+            for name, implementation in mocks:
+                stack.enter_context(patch.object(PROFILE, name, side_effect=implementation))
+            stack.enter_context(patch.object(PROFILE.sys, 'platform', 'linux'))
+            stack.enter_context(patch.object(PROFILE.os, 'getuid', return_value=1001))
+            stack.enter_context(patch.object(PROFILE.os, 'getpid', return_value=420))
+            stack.enter_context(patch.object(PROFILE.os, 'getppid', return_value=400))
+            stack.enter_context(patch.object(PROFILE.time, 'monotonic', side_effect=lambda: next(ticks) + (100 if exhausted and len(prepared) == 3 else 0)))
+            stack.enter_context(patch.object(PROFILE.time, 'sleep'))
+            stack.enter_context(patch.object(Path, 'iterdir', iterate))
+            stack.enter_context(patch.object(Path, 'read_text', read))
+            stack.enter_context(patch.object(Path, 'resolve', resolve))
+            result = PROFILE.owned_app(request, output)
+        return result, json.loads(output.read_text()), collected, prepared
+
+    def test_thread_born_during_elf_preparation_is_admitted_only_before_final_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, report, requests, prepared = self.owned_run(directory, birth_during_preparation=True)
+        self.assertEqual(prepared, [500, 501, 502])
+        self.assertEqual(result, 0)
+        self.assertEqual(report['status'], 'PROFILED')
+        self.assertEqual([r['role'] for r in requests], ['server', 'native_renderer_1', 'native_renderer_2'])
+        self.assertEqual(set(requests[0]['tids']), {500, 510})
+        for req in requests:
+            self.assertEqual(set(req['participants'][0]['tids']), {500, 510})
+
+    def test_thread_change_after_final_admission_refuses_before_any_collector(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, report, requests, prepared = self.owned_run(directory, birth_after_admission=True)
+        self.assertEqual(prepared, [500, 501, 502])
+        self.assertEqual(result, 2)
+        self.assertEqual(report['code'], 'application_participant_thread_set_changed')
+        self.assertTrue(report['recorder_cleanup_verified'])
+        self.assertEqual(requests, [])
+
+
+    def test_preparation_parent_change_and_exhausted_original_budget_start_no_collector(self):
+        for mode, code in [('parent_change', 'foreign_owner_child'),
+                           ('exhausted', 'insufficient_post_recreation_capture_budget')]:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                result, report, requests, prepared = self.owned_run(directory, **{mode: True})
+                self.assertEqual(result, 2)
+                self.assertEqual(report['code'], code)
+                self.assertTrue(report['recorder_cleanup_verified'])
+                self.assertEqual(requests, [])
+
+    def test_inner_resolver_and_config_change_refuses_immediately_before_popen(self):
+        import contextlib
+        events = []
+        def verify(request, uid):
+            events.append('verify')
+            if events.count('verify') > 1:
+                raise PROFILE.Refused('application_participant_thread_set_changed')
+            return TIDS
+        with tempfile.TemporaryDirectory() as directory, contextlib.ExitStack() as stack:
+            root = Path(directory)
+            (root / 'perf').write_bytes(b'pure fixture, never executed')
+            now = PROFILE.time.monotonic()
+            request = {'kind': 'owned_app', 'overall_deadline': now + 30, 'work_deadline': now + 14,
+                       'target': TARGET, 'coordinator': TARGET, 'perf': str(root / 'perf'),
+                       'perf_sha256': 'b' * 64, 'perf_build_id': 'c' * 40,
+                       'spool_parent': str(root), 'nonce': 'a' * 32}
+            def spool(*args):
+                return os.open(root, os.O_RDONLY), os.open(root, os.O_RDONLY)
+            stack.enter_context(patch.object(PROFILE, 'derived_uid', return_value=1001))
+            stack.enter_context(patch.object(PROFILE, 'verify_app', side_effect=verify))
+            stack.enter_context(patch.object(PROFILE, 'app_symbol_resolver', side_effect=lambda *args: events.append('resolver')))
+            stack.enter_context(patch.object(PROFILE, 'online_cpu_map', return_value=[0]))
+            stack.enter_context(patch.object(PROFILE, 'digest', return_value='b' * 64))
+            stack.enter_context(patch.object(PROFILE, 'build_id', return_value='c' * 40))
+            stack.enter_context(patch.object(PROFILE, 'validate_spool_request'))
+            stack.enter_context(patch.object(PROFILE, 'private_spool', side_effect=spool))
+            stack.enter_context(patch.object(PROFILE.os, 'pidfd_open', side_effect=lambda *args: os.open(root, os.O_RDONLY), create=True))
+            stack.enter_context(patch.object(PROFILE, 'verify_perf_config', side_effect=lambda *args: events.append('config')))
+            stack.enter_context(patch.object(PROFILE, 'clean_spool'))
+            popen = stack.enter_context(patch.object(PROFILE.subprocess, 'Popen'))
+            emit = stack.enter_context(patch.object(PROFILE, 'emit'))
+            PROFILE.recorder(request)
+            popen.assert_not_called()
+            self.assertEqual(events, ['verify', 'resolver', 'config', 'verify'])
+            self.assertEqual(emit.call_args.args[0]['code'], 'application_participant_thread_set_changed')
+            self.assertTrue(emit.call_args.args[0]['recorder_gone'])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -831,6 +831,11 @@ def recorder(request):
         verify_perf_config(perf, fd, request["work_deadline"])
         output = os.open("recorder.log", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=fd)
         try:
+            # Resolver/config work must not leave a stale admission at attach.
+            if application and verify_app(request, uid) != tids:
+                raise Refused('pre_capture_application_thread_identity_changed')
+            if application and time.monotonic() + 10 > request['work_deadline']:
+                raise Refused('insufficient_owned_profile_measurement_budget')
             begin = time.monotonic_ns()
             child = subprocess.Popen(
                 perf_command(perf, request["target"]["pid"]),
@@ -1129,9 +1134,7 @@ def verify_app(request, uid):
         raise Refused("application_not_owned_descendant")
     if build_id(target["exe"], request["work_deadline"]) != request["target_build_id"]:
         raise Refused("application_build_id_changed")
-    tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
-    if not tids or len(tids) > 256 or any(t["uid"] != uid or t["tgid"] != target["pid"] for t in tids.values()):
-        raise Refused("application_threads_outside_bounded_scope")
+    tids = application_threads(target, uid)
     if tids != {int(k): v for k, v in request["tids"].items()}:
         raise Refused("application_thread_identity_changed")
     return tids
@@ -1332,7 +1335,7 @@ def renderer_channel(target, owner):
     return [child[0][0], child[1][0]]
 
 
-def verify_family(request):
+def verify_family_identity(request):
     owner = request['owner']
     if not fast_same_process(owner):
         raise Refused('packaged_owner_lifetime_changed')
@@ -1354,11 +1357,24 @@ def verify_family(request):
         target = participant['target']
         if target['ppid'] != owner['pid'] or target['uid'] != owner['uid'] or not fast_same_process(target):
             raise Refused('application_participant_lifetime_changed')
-        tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
-        if tids != {int(k): v for k, v in participant['tids'].items()}:
-            raise Refused('application_participant_thread_set_changed')
         if participant['role'].startswith('native_renderer') and renderer_channel(target, owner) != participant['channels']:
             raise Refused('application_participant_channel_changed')
+
+
+def application_threads(target, uid):
+    tids = {int(p.name): task_identity(int(p.name))
+            for p in Path(f"/proc/{target['pid']}/task").iterdir()}
+    if not tids or len(tids) > 256 or any(t['uid'] != uid or t['tgid'] != target['pid'] for t in tids.values()):
+        raise Refused('application_threads_outside_bounded_scope')
+    return tids
+
+
+def verify_family(request):
+    verify_family_identity(request)
+    for participant in request['participants']:
+        tids = application_threads(participant['target'], request['owner']['uid'])
+        if tids != {int(k): v for k, v in participant['tids'].items()}:
+            raise Refused('application_participant_thread_set_changed')
 
 
 def validate_app_manifest(value):
@@ -1696,8 +1712,7 @@ def owned_app(manifest, output):
         requests, participants = [], []
         for label, target in targets:
             role = next(r for r in value['roles'] if r['role'] == ('server' if label == 'server' else 'native_renderer'))
-            tids = {int(p.name): task_identity(int(p.name)) for p in Path(f"/proc/{target['pid']}/task").iterdir()}
-            participant = {'role': label, 'target': target, 'tids': tids}
+            participant = {'role': label, 'target': target}
             if label.startswith('native_renderer'):
                 participant['channels'] = renderer_channel(target, owner)
             participants.append(participant)
@@ -1705,6 +1720,16 @@ def owned_app(manifest, output):
                              'participants': participants, 'nonce': uuid.uuid4().hex})
         if len({tuple(p['channels']) for p in participants if 'channels' in p}) != 2:
             raise Refused('renderer_private_channels_duplicated')
+        # Bind ELF preparation to the already pinned family before establishing
+        # the final sampled thread scope. Legitimate preparation-time threads do
+        # not make that later admission snapshot stale.
+        for request in requests:
+            verify_family_identity(request)
+            app_symbol_resolver(request['target'], work)
+            verify_family_identity(request)
+        for request, participant in zip(requests, participants):
+            participant['tids'] = application_threads(participant['target'], os.getuid())
+            request['tids'] = participant['tids']
         # One stable second after source-scheduled recreation; D/W never reset.
         stable_until = time.monotonic() + 1
         while time.monotonic() < stable_until:
@@ -1715,11 +1740,11 @@ def owned_app(manifest, output):
         report['participant_scope'] = {'server': 1, 'native_renderer': 2,
             'pane_attribution': 'none', 'source_recreation_guard': True,
             'stable_admission_seconds': 1, 'packaged_owner_verified': True}
-        # Validate both ELF resolvers before starting either recorder. No compiler
-        # flags or caller-coverage promises are silently introduced here.
+        # All three final scopes are fixed now; never resnapshot after admission.
         for request in requests:
             verify_app(request, os.getuid())
-            app_symbol_resolver(request['target'], work)
+        if time.monotonic() + 10 > work:
+            raise Refused('insufficient_post_recreation_capture_budget')
         # Mark cleanup unknown before the first asynchronous spawn. A submit or
         # executor failure after a previous submit cannot authorize target teardown.
         cleanup_verified = False
