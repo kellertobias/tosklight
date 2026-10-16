@@ -813,8 +813,8 @@
 	color: var(--text);
 }
 
-/* Dynamic state belongs above the controls; the fader keeps its numeric position. */
-.playback-kind-dynamic .playback-summary {
+/* Dynamic state belongs above the controls; beat summaries keep their full-height track. */
+.playback-kind-dynamic .playback-summary:not(.has-beat) {
 	grid-template-columns: minmax(0, 1fr);
 	align-content: center;
 	gap: 1px;
