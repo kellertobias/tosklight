@@ -10,6 +10,7 @@ import { ICON_CATALOG_GROUPS } from "@tosklight/ui/controls";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { DEFAULT_POOL_COLOR_PALETTE } from "@tosklight/ui/pools";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as playbackContext from "../../operator/PlaybackTakeoverContext";
 import { aCatalog, stubServer } from "../../testing/server";
 import {
 	allocateFreeAddresses,
@@ -635,6 +636,121 @@ describe("the CITP media library", () => {
 			false,
 		);
 	});
+
+	it("reconciles a selected empty slot only after its authoritative media arrives", async () => {
+		const show = vi.fn();
+		const setEnabled = vi.fn();
+		const preview = vi
+			.spyOn(playbackContext, "useOptionalLibraryPreview")
+			.mockReturnValue({ outputId: null, show, setEnabled });
+		const onUploadAt = vi.fn();
+		const onUpdateItem = vi.fn();
+		let catalog = aCatalog();
+		const view = (failure?: string) => (
+			<LibraryBrowserView
+				catalog={catalog}
+				onUploadAt={onUploadAt}
+				onUpdateItem={onUpdateItem}
+				failure={failure}
+			/>
+		);
+		try {
+			const { container, rerender } = render(view());
+			await userEvent.click(
+				container.querySelector(
+					'.media-library-pool .pool-card.empty[data-pool-position="2"]',
+				) as HTMLButtonElement,
+			);
+			const file = new File(["pixels"], "loop.png", { type: "image/png" });
+			fireEvent.change(
+				container.querySelector(
+					'.media-library-inspector input[type="file"]',
+				) as HTMLInputElement,
+				{ target: { files: [file] } },
+			);
+			expect(onUploadAt).toHaveBeenCalledOnce();
+			rerender(view());
+			expect(screen.getByRole("heading", { name: "Empty" })).toBeInTheDocument();
+			rerender(view("Import failed"));
+			expect(screen.getByRole("heading", { name: "Empty" })).toBeInTheDocument();
+			catalog = structuredClone(catalog);
+			catalog.folders[0].items.push({
+				...catalog.folders[0].items[1],
+				id: "arrived",
+				file: 3,
+				name: "New loop",
+			});
+			catalog.revision++;
+			rerender(view());
+			expect(
+				screen.queryByRole("heading", { name: "Empty" }),
+			).not.toBeInTheDocument();
+			const inspector = within(
+				container.querySelector(".media-library-inspector") as HTMLElement,
+			);
+			expect(inspector.getByDisplayValue("New loop")).toBeInTheDocument();
+			expect(screen.getByText("New loop").closest("button")).toHaveClass("selected");
+			expect(show).not.toHaveBeenCalled();
+			expect(setEnabled).not.toHaveBeenCalled();
+			expect(onUpdateItem).not.toHaveBeenCalled();
+		} finally {
+			preview.mockRestore();
+		}
+	});
+
+	it.each(["slot", "folder", "item"] as const)(
+		"does not steal a newer %s selection when the old empty slot materializes",
+		async (selection) => {
+			let catalog = aCatalog();
+			catalog.folders.push({ folder: 2, name: "Other", items: [] });
+			const view = () => <LibraryBrowserView catalog={catalog} />;
+			const { container, rerender } = render(view());
+			const empty = (position: number) =>
+				container.querySelector(
+					`.media-library-pool .pool-card.empty[data-pool-position="${position}"]`,
+				) as HTMLButtonElement;
+			await userEvent.click(empty(2));
+			if (selection === "slot") await userEvent.click(empty(3));
+			if (selection === "folder") {
+				await userEvent.click(
+					container.querySelector(
+						'.media-library-folders [data-folder="2"]',
+					) as HTMLButtonElement,
+				);
+			}
+			if (selection === "item") {
+				await userEvent.click(
+					screen.getByText("Blue haze").closest("button") as HTMLButtonElement,
+				);
+			}
+			catalog = structuredClone(catalog);
+			catalog.folders[0].items.push({
+				...catalog.folders[0].items[1],
+				id: "arrived",
+				file: 3,
+				name: "New loop",
+			});
+			// A matching address in a newly selected folder must not revive the old selection.
+			catalog.folders[1].items.push({
+				...catalog.folders[0].items[1],
+				id: "other",
+				file: 3,
+				name: "Other loop",
+			});
+			rerender(view());
+			const inspector = within(
+				container.querySelector(".media-library-inspector") as HTMLElement,
+			);
+			expect(inspector.queryByDisplayValue("New loop")).not.toBeInTheDocument();
+			expect(inspector.queryByDisplayValue("Other loop")).not.toBeInTheDocument();
+			if (selection === "slot") {
+				expect(inspector.getByText("001 / 004")).toBeInTheDocument();
+			}
+			if (selection === "item") {
+				expect(inspector.getByDisplayValue("Blue haze")).toBeInTheDocument();
+			}
+		},
+	);
 
 	it("replaces filled media without changing its address", async () => {
 		const onUploadAt = vi.fn();

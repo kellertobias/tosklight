@@ -239,8 +239,28 @@ const [selectedFolders, setSelectedFolders] = useState<Set<number>>( new Set(), 
 const [folderEditor, setFolderEditor] = useState<number | null>(null); const [search, setSearch] = useState(""); const [dropFailure, setDropFailure] = useState<string | null>(null); const picker = useRef<HTMLInputElement>(null); const selectionAnchorId = useRef<string | null>(null);
 const rangeBaseIds = useRef<Set<string>>(new Set()); const selectedFolder = catalog.folders.find( (entry) => entry.folder === folder, ); const visibleItems = useMemo(() => {
 const needle = search.trim().toLowerCase(); return (selectedFolder?.items ?? []).filter( (item) => !needle || item.name.toLowerCase().includes(needle), ); }, [search, selectedFolder]);
-const focused = selectedFolder?.items.find((item) => item.id === focusedId);  useEffect(() => { setSelectedIds(new Set()); setFocusedId(null);
-setEmptyFile(null); selectionAnchorId.current = null; rangeBaseIds.current = new Set(); }, [folder]);
+const focused = selectedFolder?.items.find((item) => item.id === focusedId);
+const selectionFolder = useRef(folder);
+useEffect(() => {
+	if (selectionFolder.current !== folder) {
+		selectionFolder.current = folder;
+		setSelectedIds(new Set());
+		setFocusedId(null);
+		setEmptyFile(null);
+		selectionAnchorId.current = null;
+		rangeBaseIds.current = new Set();
+		return;
+	}
+	// Import acceptance precedes catalog publication. Follow only the still-selected address,
+	// without using choose(), which also sends the item to the live preview.
+	const arrived = selectedFolder?.items.find((item) => item.file === emptyFile);
+	if (!arrived) return;
+	setFocusedId(arrived.id);
+	setSelectedIds(new Set([arrived.id]));
+	setEmptyFile(null);
+	selectionAnchorId.current = arrived.id;
+	rangeBaseIds.current = new Set();
+}, [folder, emptyFile, selectedFolder]);
 const choose = (item: CatalogItem, event: MouseEvent<HTMLButtonElement>) => { if (!event.shiftKey && !event.metaKey && !event.ctrlKey) void preview?.show({ slot: { folder, file: item.file } }); setSelectedFolders(new Set()); setFocusedId(item.id); setEmptyFile(null); setFolderEditor(null);
 setSelectedIds((current) => { if (event.shiftKey && selectionAnchorId.current) { const anchor = selectedFolder?.items.find( (candidate) => candidate.id === selectionAnchorId.current, );
 if (anchor) { const first = Math.min(anchor.file, item.file); const last = Math.max(anchor.file, item.file); const next = new Set(rangeBaseIds.current); for (const candidate of selectedFolder?.items ?? []) {
