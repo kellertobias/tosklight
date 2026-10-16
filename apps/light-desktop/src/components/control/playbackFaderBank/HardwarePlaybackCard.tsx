@@ -15,7 +15,7 @@ import type { PlaybackRuntimeProjection } from "../../../api/types";
 import { activateHardwareCard } from "./actions";
 import type { PlaybackBankController } from "./controller";
 import { ExpandedPlaybackControls } from "./ExpandedPlaybackControls";
-import { playbackFaderDisplay } from "./feedback";
+import { playbackFaderDisplay, playbackFaderReadout } from "./feedback";
 import { HardwareCueRows } from "./HardwareCueRows";
 import { playbackRowUnits } from "./projection";
 import {
@@ -65,7 +65,7 @@ export function HardwarePlaybackCard({
 }: HardwarePlaybackCardProps) {
 	const { playback, cue, group, slot, row, rowIndex } = slotData;
 	const cueIndex = active?.enabled === false ? -1 : (active?.cue_index ?? -1);
-	const display = playbackFaderDisplay(
+	const display = playbackFaderReadout(
 		playback,
 		active,
 		value,
@@ -90,6 +90,9 @@ export function HardwarePlaybackCard({
 		faderValue: value,
 		faderLabel: playback?.name ?? `Playback ${slot}`,
 		faderDisplay: display,
+		description: playback?.target.type === "dynamic"
+			? playbackFaderDisplay(playback, active, value, runtimeProjection)
+			: undefined,
 		summary,
 		disabled: !playback || !controller.runtimeActions,
 		hardwarePickup:
@@ -142,7 +145,7 @@ export function HardwarePlaybackCard({
 							<small>{value}% master</small>
 						</div>
 					</div>
-				) : playback?.target.type === "macro" || playback?.target.type === "timecode" ? (
+			) : playback?.target.type === "dynamic" || playback?.target.type === "macro" || playback?.target.type === "timecode" ? (
 					undefined
 				) : (
 					<div className="hardware-cue-list single" />

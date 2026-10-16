@@ -33,6 +33,16 @@ const model: PlaybackCardViewModel = {
 afterEach(cleanup);
 
 describe("playback card views", () => {
+	it.each([HardwarePlaybackCardView, TouchPlaybackCardView])("keeps essential Dynamic warnings visible and diagnostic text in optional metadata", (Card) => {
+		const { container, rerender } = render(<Card model={{ ...model, kind: "dynamic", summary: { label: "PENDING", detail: "1/2 targets", warning: "1 missing" }, faderDisplay: "60%", description: "Secondary controller diagnosis" }} />);
+		expect(screen.getByText("PENDING")).toBeVisible();
+		expect(screen.getByText("1 missing")).toBeVisible();
+		expect(container.querySelector("article")?.getAttribute("aria-description")).toBe("Secondary controller diagnosis");
+		expect(container.textContent).not.toContain("Secondary controller diagnosis");
+		rerender(<Card model={{ ...model, kind: "dynamic", summary: { label: "OFF", detail: "0/0 targets" }, faderDisplay: "60%" }} />);
+		expect(screen.queryByText("1 missing")).not.toBeInTheDocument();
+		expect(screen.getByText("OFF", { selector: ".playback-summary > span" })).toBeVisible();
+	});
 	it.each([
 		TouchPlaybackCardView,
 		HardwarePlaybackCardView,

@@ -430,3 +430,29 @@ describe("family value parser feedback", () => {
 		);
 	});
 });
+
+describe("protected Group deletion feedback", () => {
+	it.each([
+		"Group 991 cannot be deleted: Dynamic 1 depends on it. Retarget that Dynamic first.",
+		"Group source cannot be deleted: derived Group dependent depends on it. Retarget that Group first.",
+	])("keeps the domain dependency refusal brief: %s", (message) => {
+		const dispatch = vi.spyOn(window, "dispatchEvent");
+		reportProgrammingCommandError(new Error(message));
+		expect((dispatch.mock.lastCall?.[0] as CustomEvent).detail).toEqual({
+			message,
+			kind: "operator",
+		});
+		expect(commandErrorFeedback(message)).toEqual({
+			message,
+			kind: "operator",
+		});
+	});
+	it("does not convert snapshot, authority or appended internal faults into operator mistakes", () => {
+		for (const message of [
+			"snapshot validation failed: Dynamic 1 references a missing Group",
+			"snapshot validation failed: inconsistent arbitrary snapshot",
+			"Group 991 cannot be deleted: Dynamic 1 depends on it. database unavailable",
+			"Group 991 cannot be deleted: Dynamic 1 depends on it. unauthorized",
+		]) expect(commandErrorFeedback(message).kind).toBe("unexpected");
+	});
+});

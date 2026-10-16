@@ -38,6 +38,8 @@ export const PLAYBACK_CARD_DEFAULT_COLORS: Record<
 export interface PlaybackCardSummary {
 	label: ReactNode;
 	detail?: ReactNode;
+	/** Essential operator warning, visible without hover or opening another window. */
+	warning?: string;
 	/** Normalized progress behind the summary text. */
 	progress?: number;
 	beat?: {
@@ -65,6 +67,8 @@ export interface PlaybackCardViewModel {
 	faderValue: number;
 	faderLabel: string;
 	faderDisplay: string;
+	/** Optional secondary runtime diagnostics; never the primary fader readout. */
+	description?: string;
 	faderMode?: string;
 	summary?: PlaybackCardSummary;
 	status?: { kind: "loaded" | "flash" | "swap"; label: string };
@@ -255,7 +259,7 @@ function PlaybackTopWidget({
 	const progress = Math.max(0, Math.min(1, summary.progress ?? 0));
 	return (
 		<div
-			className={`playback-top-widget playback-summary ${summary.beat ? "has-beat" : ""} ${status?.kind === "loaded" ? "has-loaded" : ""}`.trim()}
+			className={`playback-top-widget playback-summary ${summary.beat ? "has-beat" : ""} ${summary.warning ? "has-warning" : ""} ${status?.kind === "loaded" ? "has-loaded" : ""}`.trim()}
 			style={{ "--playback-summary-progress": progress } as CSSProperties}
 		>
 			{summary.beat && (
@@ -283,6 +287,7 @@ function PlaybackTopWidget({
 				) : (
 					summary.detail != null && <small>{summary.detail}</small>
 				))}
+			{summary.warning && <em className="playback-summary-warning">{summary.warning}</em>}
 		</div>
 	);
 }
@@ -290,6 +295,8 @@ function PlaybackTopWidget({
 function cardData(model: PlaybackCardViewModel) {
 	const hasFader = model.assigned && model.hasFader;
 	return {
+		"aria-description": model.description,
+		title: model.description,
 		"data-image-source": model.artwork?.imageSource,
 		"data-preview-notice": model.artwork?.notice,
 		"data-page": model.page,

@@ -16,6 +16,7 @@ import type { PlaybackBankController } from "./controller";
 import { ExpandedPlaybackControls } from "./ExpandedPlaybackControls";
 import {
 	playbackFaderDisplay,
+	playbackFaderReadout,
 	playbackFaderLabel,
 	playbackFaderModeFeedback,
 } from "./feedback";
@@ -67,7 +68,7 @@ export function TouchPlaybackCard({
 }: TouchPlaybackCardProps) {
 	const { playback, cue, slot, row, rowIndex } = slotData;
 	const rowUnits = row ? playbackRowUnits(row, controller.hardware) : 1;
-	const display = playbackFaderDisplay(
+	const display = playbackFaderReadout(
 		playback,
 		active,
 		value,
@@ -92,8 +93,13 @@ export function TouchPlaybackCard({
 		presentation: row?.presentation,
 		hasFader,
 		faderValue: value,
-		faderLabel: playbackFaderLabel(playback),
+		faderLabel: playback?.target.type === "dynamic"
+			? { none: "Level", size: "Size", master: "Master", size_and_master: "Size + Master" }[playback.target.assignment.fader_mode]
+			: playbackFaderLabel(playback),
 		faderDisplay: display,
+		description: playback?.target.type === "dynamic"
+			? playbackFaderDisplay(playback, active, value, runtimeProjection)
+			: undefined,
 		faderMode: playbackFaderModeFeedback(playback, active),
 		summary,
 		disabled:

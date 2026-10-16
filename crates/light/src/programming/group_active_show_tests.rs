@@ -197,7 +197,22 @@ fn empty_subtract_deletes_but_a_direct_live_dependency_blocks_it() {
     );
     let error = recording_error(prepare_recording(&blocked.document, &commit));
     assert_eq!(error.kind, ActionErrorKind::Conflict);
-    assert!(error.message.contains("dependent"));
+    assert_eq!(
+        error.message,
+        "Group source cannot be deleted: derived Group dependent depends on it. Retarget that Group first."
+    );
+    let unchanged = ShowStore::open(&blocked.path)
+        .unwrap()
+        .portable_document()
+        .unwrap();
+    assert_eq!(unchanged.revision(), blocked.document.revision());
+    for object in blocked.document.objects() {
+        let retained = unchanged
+            .object(object.key().kind(), object.key().id())
+            .unwrap();
+        assert_eq!(retained.revision(), object.revision());
+        assert_eq!(retained.body(), object.body());
+    }
 
     let allowed = TestDocument::new([("source", source)]);
     let commit = recording(
@@ -353,5 +368,136 @@ impl Drop for TestDocument {
         for suffix in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{}", self.path.display(), suffix));
         }
+    }
+}
+
+#[test]
+fn delete_group_with_stored_dynamic_dependency_is_actionable_and_deterministic() {
+    for reversed in [false, true] {
+        let mut document = TestDocument::new([("source", group_body("source", "Source", []))]);
+        let store = ShowStore::open(&document.path).unwrap();
+        let mut dependencies = [(Uuid::from_u128(7), 7), (Uuid::from_u128(3), 3)];
+        if reversed {
+            dependencies.reverse();
+        }
+        for (id, pool) in dependencies {
+            let mut body = stored_dependency_dynamic(id, pool);
+            body["future_operator_content"] = json!({"retain":true});
+            store
+                .put_object("dynamic", &id.to_string(), &body, 0)
+                .unwrap();
+        }
+        document.document = store.portable_document().unwrap();
+        let before = document.document.clone();
+        let commit = recording(
+            &document,
+            "source",
+            [],
+            ProgrammingGroupRecordOperation::Subtract,
+        );
+        let error = recording_error(prepare_recording(&document.document, &commit));
+        assert_eq!(error.kind, ActionErrorKind::Conflict);
+        assert_eq!(
+            error.message,
+            "Group source cannot be deleted: Dynamic 3 depends on it. Retarget that Dynamic first."
+        );
+        assert_eq!(
+            store.portable_document().unwrap().revision(),
+            before.revision()
+        );
+        for object in before.objects() {
+            let current = document
+                .document
+                .object(object.key().kind(), object.key().id())
+                .unwrap();
+            assert_eq!(current.revision(), object.revision());
+            assert_eq!(current.body(), object.body());
+        }
+    }
+}
+
+#[test]
+fn unrelated_or_frozen_dynamic_targets_do_not_block_group_deletion() {
+    let mut document = TestDocument::new([("source", group_body("source", "Source", []))]);
+    let store = ShowStore::open(&document.path).unwrap();
+    for (id, binding) in [
+        (
+            "frozen",
+            json!({"type":"frozen_targets", "targets":[Uuid::from_u128(22)]}),
+        ),
+        (
+            "unrelated",
+            json!({"type":"live_group", "group_id":"other"}),
+        ),
+        ("targetless", json!({"type":"targetless"})),
+    ] {
+        let mut body = stored_dependency_dynamic(Uuid::from_u128(21), 1);
+        body["target_binding"] = binding;
+        let definition: light_dynamics::DynamicDefinition =
+            serde_json::from_value(body.clone()).unwrap();
+        light_dynamics::validate_definition(&definition).unwrap();
+        store.put_object("dynamic", id, &body, 0).unwrap();
+    }
+    document.document = store.portable_document().unwrap();
+    let commit = recording(
+        &document,
+        "source",
+        [],
+        ProgrammingGroupRecordOperation::Subtract,
+    );
+    let result = prepared_result(prepare_recording(&document.document, &commit).unwrap());
+    assert!(result.projection.deleted);
+}
+
+fn stored_dependency_dynamic(id: Uuid, pool: u16) -> Value {
+    let body = json!({
+        "id":id,"pool_number":pool,"revision":1,"name":"Stopped unassigned dependency",
+        "target_binding":{"type":"live_group","group_id":"source"},
+        "lanes":[{"id":Uuid::from_u128(102),"attribute":"intensity","mode":"keyframes",
+            "keyframes":{"points":[
+                {"position":0.0,"source":{"type":"value","value":0.25},"interpolation":"linear"},
+                {"position":0.5,"source":{"type":"value","value":0.75},"interpolation":"linear"}],"size":1.0},
+            "max_min":{"minimum":{"type":"value","value":0.25},"maximum":{"type":"value","value":0.75},"function":"sinus","size":1.0},
+            "middle_amplitude":{"middle":{"type":"current"},"amplitude":0.25,"function":"sinus","size":1.0},
+            "speed_multiplier":{"numerator":1,"denominator":1},"width":1.0,"random_group_id":null}],
+        "phase":{"ordering":{"type":"selection"},"offset_degrees":0.0,"span_degrees":360.0,
+            "block_size":1,"repeats":1,"wings":false,"anchors_degrees":[]},
+        "speed":{"type":"fixed","duration_millis":1000},"default_activation":"start_now"
+    });
+    let definition: light_dynamics::DynamicDefinition =
+        serde_json::from_value(body.clone()).unwrap();
+    light_dynamics::validate_definition(&definition).unwrap();
+    body
+}
+
+#[test]
+fn repairable_invalid_dynamics_do_not_gain_runtime_group_dependencies() {
+    let mut document = TestDocument::new([("source", group_body("source", "Source", []))]);
+    let store = ShowStore::open(&document.path).unwrap();
+    let mut invalid = stored_dependency_dynamic(Uuid::from_u128(8), 8);
+    invalid["lanes"] = json!([]);
+    assert!(
+        light_dynamics::validate_definition(
+            &serde_json::from_value::<light_dynamics::DynamicDefinition>(invalid.clone()).unwrap()
+        )
+        .is_err()
+    );
+    let malformed = json!({"target_binding":{"type":"live_group","group_id":"source"}});
+    for (id, body) in [("invalid", &invalid), ("malformed", &malformed)] {
+        store.put_object("dynamic", id, body, 0).unwrap();
+    }
+    document.document = store.portable_document().unwrap();
+    let commit = recording(
+        &document,
+        "source",
+        [],
+        ProgrammingGroupRecordOperation::Subtract,
+    );
+    let result = prepared_result(prepare_recording(&document.document, &commit).unwrap());
+    assert!(result.projection.deleted);
+    let unchanged = store.portable_document().unwrap();
+    assert_eq!(unchanged.revision(), document.document.revision());
+    for (id, body) in [("invalid", invalid), ("malformed", malformed)] {
+        assert_eq!(unchanged.object("dynamic", id).unwrap().body(), &body);
     }
 }

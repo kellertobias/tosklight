@@ -103,7 +103,50 @@ fn prepare_delete(
         return Err(ActionError::new(
             ActionErrorKind::Conflict,
             format!(
-                "cannot delete Group {}; derived Group {dependent} depends on it",
+                "Group {} cannot be deleted: derived Group {dependent} depends on it. Retarget that Group first.",
+                commit.group_id
+            ),
+        ));
+    }
+    // Inspect stored definitions, including stopped or unassigned Dynamics. Runtime
+    // validation remains the final authority, but this known dependency is an operator refusal.
+    if let Some(dynamic) = document
+        .objects_of_kind("dynamic")
+        .filter(|object| {
+            // Match the compiler's repairable-content boundary: invalid definitions are
+            // retained in the document, but do not own runtime Group dependencies.
+            serde_json::from_value::<light_dynamics::DynamicDefinition>(object.body().clone())
+                .ok()
+                .filter(|definition| light_dynamics::validate_definition(definition).is_ok())
+                .is_some_and(|definition| {
+                    matches!(definition.target_binding,
+                    light_dynamics::DynamicTargetBinding::LiveGroup { group_id }
+                        if group_id == commit.group_id)
+                })
+        })
+        .min_by_key(|object| {
+            (
+                object
+                    .body()
+                    .get("pool_number")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(u64::MAX),
+                object.key().id(),
+            )
+        })
+    {
+        let label = dynamic
+            .body()
+            .get("pool_number")
+            .and_then(serde_json::Value::as_u64)
+            .map_or_else(
+                || dynamic.key().id().to_owned(),
+                |number| number.to_string(),
+            );
+        return Err(ActionError::new(
+            ActionErrorKind::Conflict,
+            format!(
+                "Group {} cannot be deleted: Dynamic {label} depends on it. Retarget that Dynamic first.",
                 commit.group_id
             ),
         ));

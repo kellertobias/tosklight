@@ -2,6 +2,7 @@ import type {
 	PlaybackDefinition,
 	PlaybackRuntimeProjection,
 } from "../../../api/types";
+import type { PlaybackCardSummary } from "@tosklight/ui/playback";
 import { formatSpeedGroupBpm } from "../speedGroupFormatting";
 import type { PlaybackSnapshotActive } from "./types";
 
@@ -143,6 +144,41 @@ export function playbackFaderLabel(playback: PlaybackDefinition | null) {
 		: playback.fader === "temp"
 			? "Temp"
 			: "Master";
+}
+
+/** The fader shows its configured control position, not a runtime diagnostic paragraph. */
+export function playbackFaderReadout(
+	playback: PlaybackDefinition | null,
+	active: PlaybackSnapshotActive | undefined,
+	value: number,
+	projection?: PlaybackRuntimeProjection,
+) {
+	return playback?.target.type === "dynamic" && projection?.target === "dynamic" && projection.runtime !== undefined
+		? `${Math.round(value)}%`
+		: playbackFaderDisplay(playback, active, value, projection);
+}
+
+export function dynamicPlaybackSummary(
+	projection: Extract<PlaybackRuntimeProjection, { target: "dynamic" }>,
+): PlaybackCardSummary {
+	const runtime = projection.runtime;
+	if (!runtime) return { label: runtime === null ? "OFF" : "Unavailable" };
+	const warnings: string[] = [];
+	if (runtime.missing_target_count) warnings.push(`${runtime.missing_target_count} missing`);
+	if (runtime.unpatched_target_count) warnings.push(`${runtime.unpatched_target_count} unpatched`);
+	for (const warning of runtime.warning?.split(" · ") ?? []) {
+		if (warning.startsWith("Aliasing:")) warnings.push("Aliasing");
+		else if (/^\d+ of \d+ target\/lane addresses run;/.test(warning))
+			warnings.push(`${runtime.supported_address_count}/${runtime.target_count * runtime.lane_count} addr`);
+		else if (warning === "Dynamic Playback controller disappeared after an accepted start")
+			warnings.push("Controller lost");
+		else if (warning) warnings.push(warning);
+	}
+	return {
+		label: runtime.state.toUpperCase(),
+		detail: `${runtime.compatible_target_count}/${runtime.target_count} targets`,
+		warning: warnings.length ? warnings.join(" · ") : undefined,
+	};
 }
 
 export function playbackFaderModeFeedback(

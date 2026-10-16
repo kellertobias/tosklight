@@ -813,6 +813,52 @@
 	color: var(--text);
 }
 
+/* Dynamic state belongs above the controls; beat summaries keep their full-height track. */
+.playback-kind-dynamic .playback-summary:not(.has-beat) {
+	grid-template-columns: minmax(0, 1fr);
+	align-content: center;
+	gap: 1px;
+	padding: 2px;
+}
+
+.playback-kind-dynamic .playback-summary > span {
+	font-weight: 700;
+}
+
+.playback-kind-dynamic .playback-summary > small {
+	font-size: 8px;
+}
+
+.playback-summary-warning {
+	min-width: 0;
+	color: var(--amber);
+	font-size: 9px;
+	font-style: normal;
+	line-height: 1.1;
+	overflow-wrap: anywhere;
+}
+
+.touch-playback-card.playback-kind-dynamic {
+	grid-template-rows: 20px auto minmax(0, 1fr);
+	padding: 2px;
+}
+
+.playback-fader-bank article.touch-playback-card.playback-kind-dynamic .vertical-touch-fader {
+	padding: 2px;
+}
+
+.playback-fader-bank article.touch-playback-card.playback-kind-dynamic .vertical-touch-fader > span {
+	font-size: 8px;
+	line-height: 1.1;
+}
+
+.playback-fader-bank article.touch-playback-card.playback-kind-dynamic .vertical-touch-fader > strong {
+	left: 0;
+	bottom: 0;
+	font-size: clamp(10px, 16cqw, 16px);
+	line-height: 1;
+}
+
 .playback-summary > .playback-summary-loaded {
 	padding: 0 2px;
 	border: 1px solid var(--amber);
