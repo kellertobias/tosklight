@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, open, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseLinuxProcessStat } from "./process-tree-resources.mjs";
+import { CpuProcessObserver } from "./desktop-performance-cpu-observer.mjs";
 import { artifactPaths } from "./artifact-paths.mjs";
 const LIMIT = 1024;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -57,16 +57,6 @@ const NATIVE_META = [
 
 const NATIVE_COUNTERS = ["calls", "wall_ns", "thread_cpu_ns", "queue_ns", "slices", "counter_read_wall_ns"];
 const OVERHEAD = ["schema", "role", "ordinal", "sampled_at_millis", "export_wall_ns", "window_wall_ns"];
-
-const MANIFEST = [
-  "private_capture_schema",
-  "child_pid",
-  "parent_pid",
-  "spawn_ordinal",
-  "program",
-  "arguments",
-  "stderr_path"
-];
 
 const FLAGS = [
   "LIGHT_OUTPUT_PHASE_DIAGNOSTICS",
@@ -469,8 +459,8 @@ function scaled(value, factor = 1000000) {
 	return uint(Math.floor(value * factor));
 }
 
-// Failure categories: 0 none, 1 prior case failure, 2 reserved capture-only, 3 prior+capture failure.
-// Capture stages: 2 manifest, 3 owned binding, 4 native drain/parse, 5 server drain/parse, 6 validated.
+// Failure categories: 0 none, 1 prior failure, 2 partial capture only, 3 prior failure + partial capture.
+// Capture stage 5: server drain/parse; 6: server stream validated (native remains unavailable).
 // Workload phases: 0 unavailable, 1 backend, 2 prepare, 3 Sheet ready, 4 measure, 5 live, 6 complete.
 const WORKLOAD_PHASES = [
   "backend-readiness",
@@ -638,6 +628,9 @@ export function numericReport(
 	  workloadResult,
 	  workloadSamples,
 	  workloadState,
+	  serverOnly = false,
+	  serverStreamValidated = 1,
+	  observerFailureReason = 0,
 
 	  captureStatus = {
 		  failure_category: complete ? 0 : 1,
@@ -648,6 +641,14 @@ export function numericReport(
 ) {
   require_(["on", "off"].includes(mode), "invalid diagnostic mode");
 	uint(complete, 1);
+	uint(serverStreamValidated, 1);
+	uint(observerFailureReason, 6);
+
+	require_(
+	  !serverOnly || (complete === 0 && native.length === 0 && captureStatus.capture_validated === 0),
+		"server-priority report must remain partial without native attribution"
+	);
+
 	exact(captureStatus, ["failure_category", "capture_stage", "capture_validated"]);
 	uint(captureStatus.failure_category, 3);
 	uint(captureStatus.capture_stage, 6);
@@ -739,9 +740,17 @@ export function numericReport(
 	}
 
 	const report = {
-	  schema: 1,
+	  schema: serverOnly ? 2 : 1,
 	  mode: mode === "on" ? 1 : 0,
 	  complete,
+	  capture_partial: serverOnly ? 1 : complete ? 0 : 1,
+	  server_stream_validated: serverStreamValidated,
+	  server_capture_validated: serverStreamValidated && observerFailureReason === 0 && window.available && receipts.length === 61 && (mode === "off" || records.some(row => row.role === 1)) ? 1 : 0,
+	  native_capture_available: serverOnly ? 0 : records.some(row => row.role === 2) ? 1 : 0,
+	  native_capture_validated: serverOnly ? 0 : records.some(row => row.role === 2) ? 1 : 0,
+	  native_unavailable_reason: serverOnly ? 1 : records.some(row => row.role === 2) ? 0 : 2,
+	  native_thread_cpu_ns: null,
+	  native_export_wall_ns: null,
 	  expected_role_count: 3,
 	  pane_binding_available: 0,
 	  accepted_frame_binding_available: 0,
@@ -754,6 +763,7 @@ export function numericReport(
 
 	  diagnostic_status: {
 		  ...captureStatus,
+		  observer_failure_reason: observerFailureReason,
 		  completed_request_bounds: uint(requests.length, 61),
 		  owned_observations: uint(receipts.length, 61)
 		},
@@ -827,178 +837,14 @@ async function drainedPrivateText(filename) {
 	return privateText(filename);
 }
 
-async function manifests(directory, pending = false) {
-  const metadata = await lstat(directory);
-
-	require_(
-	  metadata.isDirectory() && !metadata.isSymbolicLink() && metadata.uid === process.getuid() && (metadata.mode & 0o7777) === 0o700,
-		"unsafe private capture directory"
-	);
-
-	const names = await readdir(directory);
-
-	require_(
-	  names.length <= 4 && names.every(name => /^viz-cpu-\d+-\d+\.(?:json|stderr)$/u.test(name)),
-		"unexpected capture files or helper count"
-	);
-
-	const result = [];
-
-	for (const name of names.filter(name => name.endsWith(".json"))) {
-	  const text = await privateText(path.join(directory, name), 32768);
-
-		if (pending && !text)
-		  continue;
-
-		const value = JSON.parse(text);
-		exact(value, MANIFEST);
-		require_(value.private_capture_schema === 1, "unknown private capture schema");
-		uint(value.child_pid);
-		uint(value.parent_pid);
-		sample(value.spawn_ordinal);
-
-		require_(
-		  typeof value.program === "string" && path.isAbsolute(value.program) && Array.isArray(value.arguments) && value.arguments.every(entry => typeof entry === "string"),
-			"invalid private program identity"
-		);
-
-		const stem = `viz-cpu-${value.parent_pid}-${value.spawn_ordinal}`;
-
-		require_(
-		  name === `${stem}.json` && value.stderr_path === path.join(directory, `${stem}.stderr`) && names.includes(`${stem}.stderr`),
-			"capture identity/path mismatch"
-		);
-
-		result.push(value);
-	}
-
-	require_(
-	  new Set(result.map(entry => entry.spawn_ordinal)).size === result.length && new Set(result.map(entry => entry.child_pid)).size === result.length,
-		"duplicate child or spawn ordinal"
-	);
-
-	return result.sort((a, b) => a.spawn_ordinal - b.spawn_ordinal);
-}
-
-function ancestry(entries, entry, rootPid) {
-  const seen = new Set();
-	let current = entry;
-
-	while (current?.pid !== rootPid) {
-	  require_(current && !seen.has(current.pid), "owned child ancestry is unavailable");
-		seen.add(current.pid);
-		current = entries.find(candidate => candidate.pid === current.parentPid);
-	}
-
-	require_(current, "owned root missing");
-}
-
-export class CpuDiagnosticRun {
+export class CpuDiagnosticRun extends CpuProcessObserver {
   constructor(mode, root, outputDirectory, io = {}) {
-	  this.mode = mode;
+	  super(io);
+		this.mode = mode;
 		this.root = root;
 		this.outputDirectory = outputDirectory;
 		this.directory = path.join(root, "native-cpu-private");
 		this.environment = cpuEnvironment(mode, this.directory);
-		this.requests = [];
-		this.receipts = [];
-		this.bindings = new Map();
-		this.verifiedManifests = new Map();
-		this.observerWallNs = 0;
-		this.readStat = io.readStat ?? (filename => readFile(filename, "utf8"));
-		this.readlink = io.readlink ?? readlink;
-		this.realpath = io.realpath ?? realpath;
-	}
-
-	requestStart() {
-	  return {
-		  wall_start_ms: Date.now(),
-		  mono_start_ns: Math.floor(performance.now() * 1e6)
-		};
-	}
-
-	requestEnd(start) {
-	  this.requests.push({
-		  ...start,
-		  wall_end_ms: Date.now(),
-		  mono_end_ns: Math.floor(performance.now() * 1e6)
-		});
-	}
-
-	start(rootPid) {
-	  this.rootPid = uint(rootPid);
-	}
-
-	async observe(processes) {
-	  const started = performance.now(), wallStart = Date.now(), owned = [];
-		const candidates = processes.filter(entry => /^(?:viz-renderer|light-headless)/u.test(entry.command));
-
-		require_(
-		  candidates.filter(entry => entry.command.startsWith("viz-renderer")).length === 2 && candidates.filter(entry => entry.command.startsWith("light-headless")).length === 1,
-			"expected one server and two owned renderers"
-		);
-
-		for (const entry of candidates) {
-		  ancestry(processes, entry, this.rootPid);
-			const executable = await this.readlink(`/proc/${entry.pid}/exe`);
-
-			require_(
-			  path.isAbsolute(executable) && !executable.endsWith(" (deleted)") && path.basename(executable).startsWith(entry.command.startsWith("viz-renderer") ? "viz-renderer" : "light-headless"),
-				"actual executable identity mismatch"
-			);
-
-			const confirmed = parseLinuxProcessStat(await this.readStat(`/proc/${entry.pid}/stat`));
-
-			require_(
-			  confirmed.pid === entry.pid && confirmed.parentPid === entry.parentPid && confirmed.startTicks === entry.startTicks,
-				"process changed during executable verification"
-			);
-
-			const record = {
-			  pid: uint(entry.pid),
-			  parent_pid: uint(entry.parentPid),
-			  start_ticks: uint(entry.startTicks),
-			  executable
-			};
-
-			const previous = this.bindings.get(entry.pid);
-			require_(!previous || JSON.stringify(previous) === JSON.stringify(record), "owned process identity changed");
-			this.bindings.set(entry.pid, record);
-			owned.push(record);
-		}
-
-		require_(this.bindings.size === 3, "owned role set changed during measurement");
-		const privateBindings = this.mode === "on" ? await manifests(this.directory, true) : [];
-
-		for (const manifest of privateBindings) {
-		  const child = owned.find(entry => entry.pid === manifest.child_pid);
-
-			require_(
-			  child && child.parent_pid === manifest.parent_pid && child.executable === (await this.realpath(manifest.program)),
-				"manifest differs from actual owned executable/parent"
-			);
-
-			this.verifiedManifests.set(manifest.spawn_ordinal, {
-			  manifest: JSON.stringify(manifest),
-			  executable: child.executable
-			});
-		}
-
-		const server = owned.find(entry => path.basename(entry.executable).startsWith("light-headless"));
-
-		this.receipts.push({
-		  wall_start_ms: wallStart,
-		  wall_end_ms: Date.now(),
-		  owned,
-
-		  server: {
-			  child_pid: server.pid,
-			  parent_pid: server.parent_pid,
-			  executable: server.executable
-			}
-		});
-
-		this.observerWallNs = add(this.observerWallNs, Math.ceil((performance.now() - started) * 1e6));
 	}
 
 	setWorkload(result, state) {
@@ -1013,98 +859,52 @@ export class CpuDiagnosticRun {
 		  root_pid: this.rootPid,
 		  requests: this.requests,
 		  receipts: this.receipts,
-		  manifest_verification: [...this.verifiedManifests]
+		  observer_failure_reason: this.observerFailureReason
 		}), {
 		  flag: "wx",
 		  mode: 0o600
 		});
 	}
 
-	async requireStopped() {
-	  for (const identity of this.bindings.values()) {
-		  try {
-			  const current = parseLinuxProcessStat(await this.readStat(`/proc/${identity.pid}/stat`));
-				require_(current.startTicks !== identity.start_ticks, "owned child still alive after termination");
-			} catch (error) {
-			  if (error.code !== "ENOENT" && error.code !== "ESRCH")
-				  throw error;
-			}
-		}
-	}
-
 	async finish(evidence, failure) {
 	  await this.requireStopped();
 		const started = performance.now();
-		let native = [], server = new Map();
+		let server = new Map(), serverStreamValidated = 0, validationFailure;
 
 		const captureStatus = {
-		  failure_category: failure ? 1 : 0,
-		  capture_stage: 2,
+		  failure_category: failure ? 3 : 2,
+		  capture_stage: 5,
 		  capture_validated: 0
 		};
 
 		try {
-		  const bindings = this.mode === "on" ? await manifests(this.directory) : [];
-			require_(this.mode === "off" || bindings.length === 2, "two bound native children required");
-
-			for (const binding of bindings) {
-			  captureStatus.capture_stage = 3;
-				const observed = this.bindings.get(binding.child_pid);
-				const verified = this.verifiedManifests.get(binding.spawn_ordinal);
-
-				require_(
-				  observed && verified?.manifest === JSON.stringify(binding) && verified.executable === observed.executable,
-					"capture child was not independently observed"
-				);
-
-				captureStatus.capture_stage = 4;
-
-				native.push({
-				  binding: {
-					  ...binding,
-					  executable: observed.executable
-					},
-
-				  groups: parseNativeCapture(await drainedPrivateText(binding.stderr_path))
-				});
-			}
-
-			captureStatus.capture_stage = 5;
-			const serverMetadata = await lstat(evidence.sidecarLogPath);
+		  const metadata = await lstat(evidence.sidecarLogPath);
 
 			require_(
-			  serverMetadata.isFile() && !serverMetadata.isSymbolicLink() && serverMetadata.uid === process.getuid(),
+			  metadata.isFile() && !metadata.isSymbolicLink() && metadata.uid === process.getuid(),
 				"server log is not owned regular evidence"
 			);
 
 			await chmod(evidence.sidecarLogPath, 0o600);
 			server = parseServerCapture(await drainedPrivateText(evidence.sidecarLogPath));
-
-			require_(
-			  this.mode === "off" || server.size > 0 && native.every(capture => capture.groups.size > 0),
-				"diagnostic counter rows are missing"
-			);
-
+			require_(this.mode === "off" || server.size > 0, "server diagnostic counter rows are missing");
+			serverStreamValidated = 1;
 			captureStatus.capture_stage = 6;
-			captureStatus.capture_validated = 1;
 		} catch (error) {
-		  if (!failure)
-			  throw error;
-
-			// Keep the original workload failure and private evidence. No unvalidated CPU row survives.
-			native = [];
-
-			server = new Map();
-			captureStatus.failure_category = 3;
+		  server = new Map();
+			validationFailure = error;
 		}
 
 		const report = numericReport({
 		  mode: this.mode,
 		  requests: this.requests,
-		  native,
+		  native: [],
 		  server,
 		  receipts: this.receipts,
-		  complete: failure ? 0 : 1,
+		  complete: 0,
+		  serverOnly: true,
+		  serverStreamValidated,
+		  observerFailureReason: this.observerFailureReason,
 		  observerWallNs: add(this.observerWallNs, Math.ceil((performance.now() - started) * 1e6)),
 		  workloadResult: this.workload?.result,
 		  workloadSamples: evidence.samples,
@@ -1116,6 +916,10 @@ export class CpuDiagnosticRun {
 		  flag: "wx",
 		  mode: 0o600
 		});
+
+		// Native captures remain private and unparsed. Partial diagnostic exit never erases workload failure.
+		if (!failure)
+		  throw validationFailure ?? new Error("Typed CPU diagnostic partial: native CPU attribution is unavailable in server-priority capture");
 	}
 }
 

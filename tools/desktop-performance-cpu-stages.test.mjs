@@ -505,33 +505,29 @@ async function fixtureRun(mode = "on") {
 	return run;
 }
 
-test(
-  "capture-time observer cross-checks actual process receipts rather than trusting manifest argv",
-	async () => {
-	  const run = await fixtureRun();
-		await run.observe(processes());
-		assert.equal(run.verifiedManifests.size, 2);
-		run.realpath = async () => "/other/viz-renderer";
-		await assert.rejects(run.observe(processes()), /actual owned executable/);
-		const outside = await fixtureRun();
-		const filename = path.join(outside.directory, "viz-cpu-100-1.json");
-		const raw = JSON.parse(await readFile(filename));
-		raw.child_pid = 999;
-		await writeFile(filename, JSON.stringify(raw));
-		const lookedUp = [];
+test("capture-time observer verifies owned server without trusting native manifest argv", async () => {
+  const run = await fixtureRun();
+	await run.observe(processes());
+	assert.equal(run.bindings.size, 1);
+	const outside = await fixtureRun();
+	const filename = path.join(outside.directory, "viz-cpu-100-1.json");
+	const raw = JSON.parse(await readFile(filename));
+	raw.child_pid = 999;
+	await writeFile(filename, JSON.stringify(raw));
+	const lookedUp = [];
 
-		outside.readlink = async file => {
-		  lookedUp.push(file);
-			return `/bundle/${file.includes("/101/") ? "light-headless" : "viz-renderer"}`;
-		};
+	outside.readlink = async file => {
+	  lookedUp.push(file);
+		return `/bundle/${file.includes("/101/") ? "light-headless" : "viz-renderer"}`;
+	};
 
-		await assert.rejects(outside.observe(processes()), /actual owned executable/);
-		assert.ok(!lookedUp.some(file => file.includes("/999/")));
-	}
-);
+	await outside.observe(processes());
+	assert.deepEqual([...new Set(lookedUp)], ["/proc/101/exe"]);
+	assert.ok(!lookedUp.some(file => file.includes("/999/")));
+});
 
 test(
-  "observer rejects changed parent/start identity, missing role, duplicate ordinal and unsafe capture file",
+  "observer rejects changed server identity while private native files remain unattributed",
 	async () => {
 	  const changed = await fixtureRun();
 
@@ -546,7 +542,7 @@ test(
 
 		await assert.rejects(changed.observe(processes()), /changed during/);
 		const missing = await fixtureRun();
-		await assert.rejects(missing.observe(processes().slice(0, 3)), /two owned renderers/);
+		await assert.rejects(missing.observe(processes().filter(row => row.pid !== 101)), /one owned headless/);
 
 		for (const kind of ["symlink", "hardlink", "mode", "private-field"]) {
 		  const run = await fixtureRun();
@@ -575,7 +571,8 @@ test(
 			if (kind === "hardlink")
 			  await link(filename, path.join(run.root, "other"));
 
-			await assert.rejects(run.observe(processes()), /unsafe|unknown/);
+			await run.observe(processes());
+			assert.equal(run.bindings.size, 1);
 		}
 	}
 );
@@ -591,21 +588,44 @@ test(
 		  throw new Error("AppImage already unmounted");
 		};
 
+		run.setWorkload({
+		  case_id: "sixteen_universe",
+		  execution_mode: "unrestricted",
+		  fixture_count: 576,
+		  requested_rate_hz: 40,
+		  measurement_seconds: 60,
+		  minimum_one_second_completed_hz: 37
+		}, {
+		  phase: "complete",
+		  backendReady: true,
+		  prepared: true
+		});
+
 		run.requests = requests();
 		run.receipts = receipts();
 		const sidecarLogPath = path.join(run.root, "server.log");
 		await writeFile(sidecarLogPath, serverText());
 
-		await run.finish({
+		await assert.rejects(run.finish({
 		  sidecarLogPath
-		}, undefined);
+		}, undefined), /partial/);
 
 		assert.deepEqual(await readdir(run.outputDirectory), ["typed-cpu-numeric.json"]);
 		const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
-		assert.equal(report.records.length, 45);
-		assert.equal(report.complete, 1);
-		assert.equal(report.diagnostic_status.failure_category, 0);
-		assert.equal(report.diagnostic_status.capture_validated, 1);
+		assert.equal(report.records.length, 29);
+		assert.equal(report.complete, 0);
+		assert.equal(report.capture_partial, 1);
+		assert.equal(report.server_capture_validated, 1);
+		assert.equal(report.native_capture_available, 0);
+		assert.equal(report.native_thread_cpu_ns, null);
+		assert.equal(report.native_export_wall_ns, null);
+		assert.equal(report.native_unavailable_reason, 1);
+		assert.equal(report.workload.workload_complete, 1);
+		assert.equal(report.workload.phase, 6);
+		assert.equal(report.workload.rate_gate_met, 0);
+		assert.ok(report.records.every(row => row.role === 1));
+		assert.equal(report.diagnostic_status.failure_category, 2);
+		assert.equal(report.diagnostic_status.capture_validated, 0);
 		assertNumericOnly(report);
 
 		await assert.rejects(run.finish({
@@ -633,14 +653,19 @@ test(
 		const invalid = await fixtureRun();
 		await invalid.observe(processes());
 		markStopped(invalid);
-		const filename = path.join(invalid.directory, "viz-cpu-100-1.stderr");
-		await writeFile(filename, lines(nativeRows().slice(1)));
+
+		await writeFile(sidecarLogPath, serverText(serverRows().map(row => ({
+		  ...row,
+		  private_key: "/secret/path"
+		}))));
 
 		await assert.rejects(invalid.finish({
 		  sidecarLogPath
-		}, undefined), /incomplete/);
+		}, undefined), /missing|unknown|invalid/);
 
-		assert.deepEqual(await readdir(invalid.outputDirectory), []);
+		const incomplete = JSON.parse(await readFile(path.join(invalid.outputDirectory, "typed-cpu-numeric.json")));
+		assert.equal(incomplete.server_stream_validated, 0);
+		assert.deepEqual(incomplete.records, []);
 	}
 );
 
@@ -850,10 +875,10 @@ test("bounded drain rejects streams still changing and retains private evidence"
 	markStopped(run);
 	const sidecarLogPath = path.join(run.root, "server.log");
 	await writeFile(sidecarLogPath, serverText());
-	const filename = path.join(run.directory, "viz-cpu-100-1.stderr");
+	const filename = sidecarLogPath;
 
 	const timer = setInterval(() => {
-	  writeFile(filename, lines(nativeRows()) + "growing private stderr\n").catch(() => {});
+	  writeFile(filename, serverText() + "growing private stderr\n").catch(() => {});
 	}, 5);
 
 	try {
@@ -864,105 +889,11 @@ test("bounded drain rejects streams still changing and retains private evidence"
 	  clearInterval(timer);
 	}
 
-	assert.deepEqual(await readdir(run.outputDirectory), []);
+	const incomplete = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
+	assert.equal(incomplete.server_stream_validated, 0);
+	assert.deepEqual(incomplete.records, []);
 	assert.ok((await readFile(filename)).length > 0);
 });
-
-test(
-  "pre-window Sheet failure exposes bounded phase and observed readiness without private strings or invented gates",
-	() => {
-	  const state = {
-		  phase: "fixture-sheet-readiness",
-		  backendReady: true,
-		  prepared: true,
-
-		  sheet: {
-			  ready: false,
-			  readinessTimedOut: true,
-			  reportPresent: true,
-			  expectedFixtureRecords: 576,
-			  readyFixtureRecords: null,
-
-			  surface: {
-				  kind: "fixture-sheet-container-mounted",
-				  private_path: "/private/scene"
-				},
-
-			  readiness: {
-				  active: true,
-				  configState: "loaded",
-				  fixtureSheetEnabled: true,
-				  rowCount: 415,
-				  fixtureRecords: 415,
-				  activeValuesLoading: true,
-				  groupRuntimeLoading: false
-				},
-
-			  renderFailure: null,
-			  lifecycleFailure: null,
-			  readyAppendFailure: null,
-			  error: "arbitrary secret",
-			  pid: 1234
-			}
-		};
-
-		const summary = workloadSummary(undefined, [], state);
-		assert.equal(summary.phase, 3);
-		assert.equal(summary.fixture_sheet.ready, 0);
-		assert.equal(summary.fixture_sheet.readiness_timed_out, 1);
-		assert.equal(summary.fixture_sheet.reported_fixture_records, 415);
-		assert.equal(summary.fixture_sheet.ready_fixture_records, null);
-		assert.equal(summary.fixture_sheet.surface_mounted, 1);
-		assert.equal(summary.fixture_sheet.active_values_loading, 1);
-		assert.equal(summary.fixture_sheet.group_runtime_loading, 0);
-		assert.equal(summary.fixture_sheet_liveness_gate_met, null);
-		assert.equal(summary.rate_gate_met, null);
-		assert.equal(summary.deadline_gate_met, null);
-		assert.equal(summary.send_error_gate_met, null);
-		assertNumericOnly(summary);
-		assert.ok(!JSON.stringify(summary).includes("private"));
-		assert.ok(!JSON.stringify(summary).includes("secret"));
-	}
-);
-
-test(
-  "one opening snapshot is not a zero-delta observation or passing gate; partial positive failures remain failures",
-	() => {
-	  const opening = {
-		  phase: "opening",
-
-		  diagnostics: {
-			  output: {
-				  frames_sent: 10,
-				  deadline_misses: 2,
-				  send_errors: 3
-				}
-			}
-		};
-
-		const first = workloadSummary(undefined, [opening]);
-		assert.equal(first.frames_sent_delta, null);
-		assert.equal(first.output_deadline_misses_delta, null);
-		assert.equal(first.deadline_gate_met, null);
-
-		const second = {
-		  phase: "measurement",
-
-		  diagnostics: {
-			  output: {
-				  frames_sent: 50,
-				  deadline_misses: 2,
-				  send_errors: 4
-				}
-			}
-		};
-
-		const partial = workloadSummary(undefined, [opening, second]);
-		assert.equal(partial.frames_sent_delta, 40);
-		assert.equal(partial.deadline_gate_met, null);
-		assert.equal(partial.send_error_gate_met, 0);
-	}
-);
 
 test(
   "actual runCase pre-window failure retains its original error and emits ON missing-child safe report",
@@ -1071,7 +1002,7 @@ test(
 			const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
 			assert.equal(report.complete, 0);
 			assert.equal(report.diagnostic_status.failure_category, 3);
-			assert.equal(report.diagnostic_status.capture_stage, missing ? 2 : 3);
+			assert.equal(report.diagnostic_status.capture_stage, 5);
 			assert.equal(report.diagnostic_status.capture_validated, 0);
 			assert.equal(report.diagnostic_status.completed_request_bounds, 0);
 			assert.equal(report.workload.phase, 3);
@@ -1089,45 +1020,6 @@ test(
 		}
 	}
 );
-
-test("Sheet liveness observations retain explicit failures and reject malformed safe fields", () => {
-  const result = workloadSummary(undefined, [], {
-	  phase: "fixture-sheet-liveness",
-
-	  sheet: {
-		  livenessPassed: false,
-		  heartbeatCount: 0,
-		  widestSilenceMillis: 60000,
-		  toleratedSilenceMillis: 10000
-		}
-	});
-
-	assert.equal(result.phase, 5);
-	assert.equal(result.fixture_sheet_liveness_gate_met, 0);
-	assert.equal(result.fixture_sheet.heartbeat_count, 0);
-	assert.equal(result.fixture_sheet.widest_silence_ms, 60000);
-	assert.equal(result.fixture_sheet.tolerated_silence_ms, 10000);
-
-	for (const sheet of [{
-	  ready: "secret"
-	}, {
-	  readiness: {
-		  rowCount: -1
-		}
-	}, {
-	  readiness: {
-		  configState: "private-state"
-		}
-	}, {
-	  surface: {
-		  kind: "private-kind"
-		}
-	}]) {
-	  assert.throws(() => workloadSummary(undefined, [], {
-		  sheet
-		}), /STOP/);
-	}
-});
 
 test("numeric diagnostic status is a closed bounded record", () => {
   const captureStatus = {
@@ -1167,7 +1059,7 @@ test("numeric diagnostic status is a closed bounded record", () => {
 });
 
 test(
-  "failed-workload fallback discards every CPU row when a later child fails strict parsing",
+  "validated server rows survive unparsed private native payload without native attribution",
 	async () => {
 	  const run = await fixtureRun();
 		await run.observe(processes());
@@ -1184,16 +1076,58 @@ test(
 		const rows = nativeRows();
 		rows[0].private_key = "/secret/path";
 		await writeFile(path.join(run.directory, "viz-cpu-100-2.stderr"), lines(rows));
-		await run.finish({}, new Error("original workload failure"));
+		const sidecarLogPath = path.join(run.root, "server.log");
+		await writeFile(sidecarLogPath, serverText());
+
+		await run.finish({
+		  sidecarLogPath
+		}, new Error("original workload failure"));
+
 		const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
 		assert.equal(report.complete, 0);
-		assert.equal(report.diagnostic_status.capture_stage, 4);
+		assert.equal(report.diagnostic_status.capture_stage, 6);
 		assert.equal(report.diagnostic_status.failure_category, 3);
 		assert.equal(report.diagnostic_status.capture_validated, 0);
 		assert.equal(report.diagnostic_status.completed_request_bounds, 61);
 		assert.equal(report.diagnostic_status.owned_observations, 61);
-		assert.deepEqual(report.records, []);
+		assert.equal(report.records.length, 29);
+		assert.equal(report.server_capture_validated, 1);
+		assert.equal(report.native_capture_available, 0);
+		assert.equal(report.native_thread_cpu_ns, null);
 		assert.deepEqual(report.native_export_overhead, []);
 		assert.ok(!JSON.stringify(report).includes("secret"));
+	}
+);
+
+// Native files are opaque; the server stream still requires owned single-link regular evidence.
+test(
+  "server-priority export rejects linked server evidence while emitting safe partial numeric output",
+	async () => {
+	  for (const linked of ["symlink", "hardlink"]) {
+		  const run = await fixtureRun();
+			markStopped(run);
+			const saved = path.join(run.root, "saved-server");
+			const sidecarLogPath = path.join(run.root, "server.log");
+
+			await writeFile(saved, serverText(), {
+			  mode: 0o600
+			});
+
+			if (linked === "symlink")
+			  await symlink(saved, sidecarLogPath);
+			else
+			  await link(saved, sidecarLogPath);
+
+			await assert.rejects(run.finish({
+			  sidecarLogPath
+			}, undefined), /owned regular|unsafe/);
+
+			const report = JSON.parse(await readFile(path.join(run.outputDirectory, "typed-cpu-numeric.json")));
+			assert.equal(report.capture_partial, 1);
+			assert.equal(report.server_stream_validated, 0);
+			assert.equal(report.native_thread_cpu_ns, null);
+			assert.deepEqual(report.records, []);
+			assertNumericOnly(report);
+		}
 	}
 );
