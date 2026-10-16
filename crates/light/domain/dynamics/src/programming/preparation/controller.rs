@@ -66,10 +66,20 @@ pub(super) enum Previous<'a> {
 }
 
 impl Previous<'_> {
-    pub(super) fn take(&mut self, key: &CacheKey) -> Option<CompiledSample> {
+    pub(super) fn take_matching(
+        &mut self,
+        key: &CacheKey,
+        expression: &Arc<DynamicSampleExpression>,
+    ) -> Option<CompiledSample> {
         match self {
-            Self::Owned(previous) => previous.remove(key),
-            Self::Shared(previous) => previous.get(key).cloned(),
+            Self::Owned(previous) => previous
+                .remove(key)
+                .filter(|cached| cached.expression == *expression),
+            // A changed tree must not allocate/copy its previous samples just to discard them.
+            Self::Shared(previous) => previous
+                .get(key)
+                .filter(|cached| cached.expression == *expression)
+                .cloned(),
         }
     }
 }

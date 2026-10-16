@@ -50,7 +50,7 @@ struct CacheKey {
     owner: ProgrammingOwner,
 }
 
-#[derive(Clone)]
+#[cfg_attr(not(test), derive(Clone))]
 struct CompiledSample {
     // Own the original expression, never a raw pointer key with an unrelated lifetime.
     expression: Arc<DynamicSampleExpression>,
@@ -339,8 +339,7 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             .as_ref()
             .map(|models| models as &dyn DynamicNativeModelResolver);
         let compiled = if !shape.native
-            && let Some(cached) = self.previous.take(&key)
-            && cached.expression == expression
+            && let Some(cached) = self.previous.take_matching(&key, &expression)
         {
             cached
         } else {
