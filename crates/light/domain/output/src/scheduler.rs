@@ -13,6 +13,9 @@ use std::{
 };
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
+
+mod diagnostics;
 
 // @tour rust-by-example:30 Inject asynchronous work with generic futures
 // The scheduler owns timing and cancellation while callers provide the async tick operation.
@@ -135,12 +138,28 @@ async fn run_scheduler_dynamic_inner<F, Fut>(
 {
     let mut deadline = Instant::now();
     let mut scheduled_tick = true;
+    let mut diagnostics = diagnostics::Budget::default();
     while !cancel.is_cancelled() {
         let current_rate = rate_hz.load(Ordering::Relaxed).clamp(40, 60);
         let interval = Duration::from_secs_f64(1.0 / f64::from(current_rate));
+        let trace = diagnostics.next();
         let tick_started = Instant::now();
-        record_tick_result(&health, current_rate, tick().await);
+        let result = match trace.as_ref() {
+            Some(span) => tick().instrument(span.clone()).await,
+            None => tick().await,
+        };
+        let observation = trace.as_ref().map(|_| {
+            (
+                tick_started.elapsed(),
+                result.is_ok(),
+                result.as_ref().copied().unwrap_or(0),
+            )
+        });
+        record_tick_result(&health, current_rate, result);
         record_tick_duration(&health, tick_started, interval);
+        if let (Some(span), Some((duration, ok, packets))) = (trace.as_ref(), observation) {
+            diagnostics::tick(span, interval, duration, scheduled_tick, ok, packets);
+        }
         if scheduled_tick {
             deadline += interval;
         } else if Instant::now() >= deadline {
@@ -149,9 +168,12 @@ async fn run_scheduler_dynamic_inner<F, Fut>(
             // reporting the useful extra work as a scheduler miss.
             deadline += interval;
         }
-        scheduled_tick =
-            wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, wake.as_deref())
-                .await;
+        let waiting =
+            wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, wake.as_deref());
+        scheduled_tick = match trace {
+            Some(span) => waiting.instrument(span).await,
+            None => waiting.await,
+        };
     }
 }
 
@@ -193,7 +215,9 @@ async fn wait_for_deadline_or_wake(
     wake: Option<&Notify>,
 ) -> bool {
     let now = Instant::now();
-    if now > *deadline {
+    let already_late = now > *deadline;
+    let late = now.saturating_duration_since(*deadline);
+    if already_late {
         let lateness = now.duration_since(*deadline).as_micros() as u64;
         // Waking a few microseconds after the requested instant is ordinary timer jitter, not a
         // lost output frame. A deadline is missed only once the next complete frame interval can
@@ -205,8 +229,11 @@ async fn wait_for_deadline_or_wake(
             current.maximum_lateness_micros = current.maximum_lateness_micros.max(lateness);
             *deadline = now;
         }
+        diagnostics::deadline(interval, late, late >= interval, true);
+        diagnostics::resumed(0);
         return true;
     }
+    diagnostics::deadline(interval, late, false, false);
     let wake = async {
         match wake {
             Some(wake) => wake.notified().await,
@@ -214,8 +241,8 @@ async fn wait_for_deadline_or_wake(
         }
     };
     tokio::select! {
-        _ = tokio::time::sleep_until(tokio::time::Instant::from_std(*deadline)) => true,
-        _ = cancel.cancelled() => true,
-        _ = wake => false,
+        _ = tokio::time::sleep_until(tokio::time::Instant::from_std(*deadline)) => { diagnostics::resumed(1); true },
+        _ = cancel.cancelled() => { diagnostics::resumed(2); true },
+        _ = wake => { diagnostics::resumed(3); false },
     }
 }
