@@ -51,12 +51,12 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           mkdir -p "$OUT/public"
+          npm ci >"$OUT/npm-ci.log" 2>&1
           node --test tools/desktop-performance-576-proof-observers.test.mjs
           cargo test --locked -p light-dynamics --lib
       - name: Build exact canonical release Control and sidecars
         run: |
           set -euo pipefail
-          npm ci >"$OUT/npm-ci.log" 2>&1
           npm run build --prefix apps/light-desktop >"$OUT/frontend-build.log" 2>&1
           cargo build --release --locked --target "$TARGET" -p light-headless --bin light-headless -p viz-renderer --bin viz-renderer >"$OUT/sidecar-build.log" 2>&1
           sidecars="$(npm run --silent artifact-path -- tmp)/linux-576-sidecars"
