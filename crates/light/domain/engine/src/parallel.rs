@@ -9,6 +9,8 @@
 //! The threads persist in an [`OutputPool`] the engine owns; a frame's chunks borrow its inputs
 //! only for the call (`rayon`'s scoped install), and a panic in any chunk resumes on the caller.
 
+pub mod diagnostics;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The default never exceeds this many threads: beyond it the frame's serial share dominates
@@ -92,7 +94,10 @@ impl OutputPool {
     /// Free `garbage` on a pool thread while the frame goes on: what a frame drops (last frame's
     /// compiled samples) is a long tail of frees nothing waits for.
     pub fn drop_later<T: Send + 'static>(&self, garbage: T) {
-        self.pool.spawn(move || drop(garbage));
+        match diagnostics::cleanup() {
+            Some(trace) => self.pool.spawn(move || trace.run(|| drop(garbage))),
+            None => self.pool.spawn(move || drop(garbage)),
+        }
     }
 }
 
@@ -104,8 +109,16 @@ impl light_dynamics::InstanceWorkers for OutputPool {
             (0..count).for_each(run);
             return;
         }
-        self.pool
-            .install(|| (0..count).into_par_iter().with_max_len(1).for_each(run));
+        let coverage = diagnostics::current();
+        self.pool.install(|| {
+            (0..count)
+                .into_par_iter()
+                .with_max_len(1)
+                .for_each(|index| match &coverage {
+                    Some(coverage) => coverage.job(|| run(index)),
+                    None => run(index),
+                })
+        });
     }
 }
 
@@ -121,9 +134,11 @@ pub fn sort_unstable_by_key<T: Send, K: Ord>(
 ) {
     use rayon::prelude::*;
     match pool.filter(|pool| pool.workers() > 1 && items.len() >= MIN_PARALLEL_SORT) {
-        Some(pool) => pool
-            .pool
-            .install(|| items.par_sort_unstable_by_key(|item| key(item))),
+        Some(pool) => {
+            diagnostics::uncovered_sort();
+            pool.pool
+                .install(|| items.par_sort_unstable_by_key(|item| key(item)))
+        }
         None => items.sort_unstable_by_key(key),
     }
 }
@@ -149,6 +164,7 @@ pub fn run_ordered<W: Send, R: Send>(
         workers.len() >= pool.workers(),
         "one scratch entry per output worker"
     );
+    let coverage = diagnostics::current();
     let slots = workers
         .iter_mut()
         .map(parking_lot::Mutex::new)
@@ -160,7 +176,10 @@ pub fn run_ordered<W: Send, R: Send>(
             .map(|chunk| {
                 let index = rayon::current_thread_index().expect("a pool thread");
                 let mut worker = slots[index].lock();
-                run(&mut worker, chunk)
+                match &coverage {
+                    Some(coverage) => coverage.job(|| run(&mut worker, chunk)),
+                    None => run(&mut worker, chunk),
+                }
             })
             .collect()
     })

@@ -180,6 +180,7 @@ impl Drop for Scope {
             family_counts = ?frame.family.counts,
             "bounded live output nested phase sample"
         );
+        frame.family.emit_cpu();
     }
 }
 

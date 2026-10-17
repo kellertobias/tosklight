@@ -90,15 +90,17 @@ fn prepare_families_on<T>(
     }
     diagnostics::count(Count::PreparationParallel, 1);
     let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
-    let result = light_dynamics::prepare_dynamic_family_samples_in_parallel(
-        samples,
-        sampling_requirements,
-        typed,
-        Some(native_models),
-        scratch,
-        &mut workers,
-    )
-    .map(drop);
+    let result = diagnostics::covered(diagnostics::WorkerStage::PrepareFamilies, || {
+        light_dynamics::prepare_dynamic_family_samples_in_parallel(
+            samples,
+            sampling_requirements,
+            typed,
+            Some(native_models),
+            scratch,
+            &mut workers,
+        )
+        .map(drop)
+    });
     let stagings = workers.stagings;
     for staging in stagings {
         observer.merge_parallel(frame.token, staging)?;
@@ -135,7 +137,9 @@ pub(super) fn complete_deferred<'frame, T>(
     }
     diagnostics::count(Count::DeferredParallel, 1);
     let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
-    let result = deferred.complete_in_parallel(typed, &mut workers);
+    let result = diagnostics::covered(diagnostics::WorkerStage::CompleteDeferred, || {
+        deferred.complete_in_parallel(typed, &mut workers)
+    });
     let stagings = workers.stagings;
     for staging in stagings {
         observer

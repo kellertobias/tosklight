@@ -2,6 +2,8 @@
 //! Timers are inclusive wall time, not CPU or worker wait attribution. Counts use actual
 //! selected branches; zero phase calls distinguish not-run from a zero-duration observation.
 use super::{ACTIVE, Duration, Instant};
+mod cpu;
+pub(in crate::runtime::output_scheduler) use cpu::{Subspan, Substage, WorkerStage, covered};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, Copy)]
@@ -53,6 +55,7 @@ static NEXT: AtomicU64 = AtomicU64::new(1);
 
 pub(super) struct Summary {
     epoch: u64,
+    pub(super) cpu: Option<cpu::Summary>,
     durations: [Duration; STAGES],
     pub(super) calls: [u64; STAGES],
     pub(super) counts: [u64; COUNTS],
@@ -61,6 +64,7 @@ impl Default for Summary {
     fn default() -> Self {
         Self {
             epoch: NEXT.fetch_add(1, Ordering::Relaxed),
+            cpu: super::full_frequency_enabled().then(cpu::Summary::default),
             durations: [Duration::ZERO; STAGES],
             calls: [0; STAGES],
             counts: [0; COUNTS],
@@ -68,6 +72,11 @@ impl Default for Summary {
     }
 }
 impl Summary {
+    pub(super) fn emit_cpu(&self) {
+        if let Some(cpu) = &self.cpu {
+            cpu.emit();
+        }
+    }
     pub(super) fn micros(&self, stage: Stage) -> u64 {
         super::super::duration_micros(self.durations[stage as usize])
     }
@@ -77,26 +86,38 @@ impl Summary {
 pub(in crate::runtime::output_scheduler) struct Span {
     stage: Stage,
     started: Option<(Instant, u64)>,
+    cpu_timer: Option<light_engine::parallel::diagnostics::CpuTimer>,
 }
 impl Span {
     pub(in crate::runtime::output_scheduler) fn begin(stage: Stage) -> Self {
-        let started = ACTIVE.with(|active| {
-            active.borrow_mut().as_mut().map(|frame| {
+        let (started, cpu_timer) = ACTIVE.with(|active| {
+            active.borrow_mut().as_mut().map_or((None, None), |frame| {
                 let summary = &mut frame.family;
                 summary.calls[stage as usize] = summary.calls[stage as usize].saturating_add(1);
-                (Instant::now(), summary.epoch)
+                let started = Some((Instant::now(), summary.epoch));
+                let timer =
+                    light_engine::parallel::diagnostics::CpuTimer::start_if(summary.cpu.is_some());
+                (started, timer)
             })
         });
-        Self { stage, started }
+        Self {
+            stage,
+            started,
+            cpu_timer,
+        }
     }
 }
 impl Drop for Span {
     fn drop(&mut self) {
+        let cpu_sample = self.cpu_timer.take().map(|timer| timer.finish());
         if let Some((started, epoch)) = self.started {
             ACTIVE.with(|active| {
                 if let Some(frame) = active.borrow_mut().as_mut()
                     && frame.family.epoch == epoch
                 {
+                    if let (Some(cpu), Some(sample)) = (frame.family.cpu.as_mut(), cpu_sample) {
+                        cpu.stage(self.stage as usize, sample);
+                    }
                     let duration = &mut frame.family.durations[self.stage as usize];
                     *duration = duration.saturating_add(started.elapsed());
                 }

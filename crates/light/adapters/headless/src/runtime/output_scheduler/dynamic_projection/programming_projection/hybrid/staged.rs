@@ -332,11 +332,17 @@ fn finish_cohort<T>(
     projections: &mut Vec<OwnedHybridProjection<T>>,
     requirements: &[HybridFamilyRequirement],
 ) -> Result<(), DynamicRuntimeError> {
+    let observer_span = diagnostics::Subspan::begin(diagnostics::Substage::ObserverFinish);
     observer
         .finish(frame, projections, requirements)
         .map_err(invalid)?;
+    drop(observer_span);
+    let bindings_span = diagnostics::Subspan::begin(diagnostics::Substage::SourceBindings);
     typed.finish_source_bindings().map_err(invalid)?;
+    drop(bindings_span);
+    let drop_span = diagnostics::Subspan::begin(diagnostics::Substage::SourcesDrop);
     drop(typed);
+    drop(drop_span);
     Ok(())
 }
 
@@ -552,9 +558,12 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     ),
 ) -> Result<(Vec<HybridFamilyRequirement>, Vec<OwnedHybridProjection<T>>), DynamicRuntimeError> {
     let setup_span = diagnostics::Span::begin(Stage::CohortSetup);
+    let discovery_span = diagnostics::Subspan::begin(diagnostics::Substage::StaticDiscovery);
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
+    drop(discovery_span);
+    let assembly_span = diagnostics::Subspan::begin(diagnostics::Substage::Assembly);
     assemble_captured_family_inputs_draining(prepared, fixed, families, pool);
     if !view.frame.capture.freezes_nothing() {
         families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
@@ -570,9 +579,13 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     // list of thousands of rows by doubling allocated and copied it about a dozen times.
     let (mut requirements, mut projections) = (Vec::new(), Vec::with_capacity(groups.len()));
     let protected_current = protected_current_targets(view, groups);
+    drop(assembly_span);
+    let current_span = diagnostics::Subspan::begin(diagnostics::Substage::PrepareCurrent);
     observer
         .prepare_current(view.frame, view.static_token, &protected_current)
         .map_err(invalid)?;
+    drop(current_span);
+    let programs_span = diagnostics::Subspan::begin(diagnostics::Substage::PreparePrograms);
     let programs = groups
         .iter()
         .filter_map(|entry| {
@@ -592,6 +605,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     observer
         .prepare_programs(view.frame, &programs)
         .map_err(invalid)?;
+    drop(programs_span);
     let eligible_position_groups = eligible_position_groups(view, groups, static_only);
     diagnostics::count(Count::PositionGroups, eligible_position_groups.len());
     drop(setup_span);
