@@ -10,6 +10,7 @@
 //! only for the call (`rayon`'s scoped install), and a panic in any chunk resumes on the caller.
 
 pub mod diagnostics;
+mod linux_worker_budget;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -20,14 +21,21 @@ pub const MAX_DEFAULT_OUTPUT_WORKERS: usize = 8;
 /// Process-wide default for engines created after it is set; 0 means "not set".
 static DEFAULT_OUTPUT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 
-/// The output worker count a new engine starts with: the configured default, or the available
-/// parallelism capped at [`MAX_DEFAULT_OUTPUT_WORKERS`].
+/// The output worker count a new engine starts with: an explicit setting, or a bounded
+/// automatic budget. Small Linux SMT guests can use their observed guest core count;
+/// unavailable or inconsistent topology preserves the available-parallelism cap.
 pub fn default_output_workers() -> usize {
-    match DEFAULT_OUTPUT_WORKERS.load(Ordering::Relaxed) {
-        0 => std::thread::available_parallelism()
-            .map_or(1, |count| count.get())
-            .clamp(1, MAX_DEFAULT_OUTPUT_WORKERS),
-        configured => configured,
+    configured_or_default(DEFAULT_OUTPUT_WORKERS.load(Ordering::Relaxed), || {
+        linux_worker_budget::automatic(
+            std::thread::available_parallelism().map_or(1, |count| count.get()),
+        )
+    })
+}
+fn configured_or_default(configured: usize, automatic: impl FnOnce() -> usize) -> usize {
+    if configured == 0 {
+        automatic()
+    } else {
+        configured
     }
 }
 
@@ -232,10 +240,22 @@ mod tests {
     }
 
     #[test]
+    fn explicit_worker_configuration_bypasses_automatic_budget() {
+        assert_eq!(
+            configured_or_default(7, || panic!("explicit setting must win")),
+            7
+        );
+        assert_eq!(configured_or_default(0, || 2), 2);
+    }
+
+    #[test]
     fn worker_settings_parse() {
         assert_eq!(parse_output_workers("3"), Some(3));
         assert_eq!(parse_output_workers("0"), None);
-        assert!(parse_output_workers("max").is_some_and(|count| count >= 1));
+        assert_eq!(
+            parse_output_workers("max"),
+            Some(std::thread::available_parallelism().map_or(1, |count| count.get()))
+        );
         assert_eq!(parse_output_workers("x"), None);
     }
 }
