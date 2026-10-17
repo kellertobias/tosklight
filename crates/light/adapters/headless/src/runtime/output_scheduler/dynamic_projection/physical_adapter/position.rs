@@ -20,6 +20,7 @@ mod fit_cache;
 mod frame_observer;
 mod frame_worker;
 pub(in crate::runtime) mod native_rows;
+mod root_index;
 mod static_crossing;
 #[cfg(test)]
 pub(in crate::runtime) mod tests;
@@ -139,6 +140,7 @@ type InstanceCache = (
 #[derive(Default)]
 pub(in crate::runtime) struct PositionAdapter {
     cache: parking_lot::Mutex<Option<InstanceCache>>,
+    root_index: root_index::RootIndexCache,
     counters: parking_lot::Mutex<PositionAdapterCounters>,
     tracking: SharedCell<tracking::TrackingState>,
 }
