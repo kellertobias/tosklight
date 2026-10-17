@@ -136,12 +136,6 @@ impl DynamicFamilyPreparationScratch {
     }
 }
 
-#[cfg(test)]
-thread_local! {
-    static MIXED_PLAIN_GENERAL_ONLY: Cell<bool> = const { Cell::new(false) };
-    static MIXED_PLAIN_HITS: Cell<usize> = const { Cell::new(0) };
-}
-
 impl<O: PreparationOutput> Preparer<'_, O> {
     fn prepare_sample(
         &mut self,
@@ -203,26 +197,6 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             }
         }
         for index in 0..self.controller.len() {
-            // Angle pairing does not change independent Color leaves. Reuse the same exact
-            // fixed-slot lowering as prepare_sample before cloning/splitting this source.
-            let plain = plain_scalar::leaf(&self.controller[index].expression);
-            #[cfg(test)]
-            let plain = if MIXED_PLAIN_GENERAL_ONLY.with(Cell::get) {
-                None
-            } else {
-                plain
-            };
-            if let Some(leaf) = plain {
-                let sample = &self.controller[index];
-                if !self.sampling_required(sample, ProgrammingOwner::Color) {
-                    let value = leaf.materialize(rank(sample), sample.activation_mix)?;
-                    self.out
-                        .append_one(sample.target, ProgrammingOwner::Color, value.into());
-                    #[cfg(test)]
-                    MIXED_PLAIN_HITS.with(|hits| hits.set(hits.get() + 1));
-                }
-                continue;
-            }
             let sample = self.controller[index].clone();
             for (owner, expression) in split_owners(Arc::new(sample.expression.clone()))? {
                 if owner == Some(ProgrammingOwner::Position) {

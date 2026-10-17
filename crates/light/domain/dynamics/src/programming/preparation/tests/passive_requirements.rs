@@ -158,13 +158,7 @@ fn recovering_current_reuses_buffers_and_does_not_reuse_failed_position_or_requi
     let inputs = [
         sample(10, angle(ProgrammingComponent::Pan, 90.0)),
         sample(11, current(ProgrammingComponent::Tilt)),
-        sample(
-            12,
-            E::Operation {
-                origin: None,
-                value: Arc::new(color(ColorComponent::Uv, 0.8)),
-            },
-        ),
+        sample(12, color(ColorComponent::Uv, 0.8)),
     ];
     let mut scratch = DynamicFamilyPreparationScratch::default();
     prepare_dynamic_family_samples(&inputs, &Sources::default(), None, &mut scratch).unwrap();
