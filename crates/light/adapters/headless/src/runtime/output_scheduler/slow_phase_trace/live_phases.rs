@@ -324,3 +324,6 @@ mod tests {
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
     }
 }
+
+#[cfg(test)]
+mod mixed576_tests;

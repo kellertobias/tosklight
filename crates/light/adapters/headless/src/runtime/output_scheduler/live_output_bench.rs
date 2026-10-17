@@ -297,6 +297,24 @@ impl LiveOutputBench {
         })
     }
 
+    /// Cold-frame reconciliation starts instances after the pre-binding trace count.
+    #[cfg(test)]
+    pub(in crate::runtime::output_scheduler) fn test_runtime_instance_count(&self) -> usize {
+        self.dynamics.lock().instance_count()
+    }
+
+    /// Private test observation; never compiled into a production library or public export.
+    #[cfg(test)]
+    pub(in crate::runtime::output_scheduler) fn test_take_requirement_rows(&self) -> Vec<String> {
+        let published = self
+            .family
+            .take_published()
+            .expect("accepted hybrid test frame");
+        let mut rows = published.requirements;
+        rows.sort();
+        rows
+    }
+
     /// TL-639: what readers see of `rendered`, per programming target: the accepted Color
     /// heads, outputs and held targets of that exact frame. The benchmark's `--digest-ticks`
     /// mode hashes it to compare two builds frame by frame. Frame tokens are process-local and
