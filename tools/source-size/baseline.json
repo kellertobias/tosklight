@@ -31,7 +31,6 @@
     "apps/light-desktop/src/windows/TimecodeRuntimeWindow.tsx::javascript:function:TimecodeRuntimeWindow:d912494f991d:1": 228,
     "apps/media/src/features/layers/MediaPanePage.tsx::javascript:function:MediaPanePageContent:c637161b075d:1": 548,
     "apps/media/src/features/media-library/GeneratedLibraryBrowserView.tsx::javascript:function:GeneratedLibraryBrowserView:769e02b14aaa:1": 181,
-    "apps/media/src/features/settings/OutputSettings.tsx::javascript:function:OutputEditor:ff5a9b2ff366:1": 178,
     "apps/media/src/features/text-sources/TextSourcesPage.tsx::javascript:function:TextSourcesPage:ebe7b9314459:1": 199,
     "apps/media/src/features/visualizers/VisualizersPage.tsx::javascript:function:VisualizersPage:4307e0da767c:1": 186,
     "apps/media/src/shared/api/layerControl.ts::javascript:function:useLayerControl:8500e8375aef:1": 231,

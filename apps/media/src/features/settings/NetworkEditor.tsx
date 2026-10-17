@@ -27,6 +27,8 @@ export interface NetworkEditorProps {
 	onCancel?: () => void;
 	showActions?: boolean;
 	onChanged?: () => void;
+	/** Explicit Revert updates only restart-bound draft fields before another operator edit. */
+	revertRevision?: number;
 }
 
 /// Each listen address, with what it is for. The order is the order an operator meets them in.
@@ -66,6 +68,7 @@ export function NetworkEditor({
 	onCancel,
 	showActions = true,
 	onChanged,
+	revertRevision = 0,
 }: NetworkEditorProps) {
 	const [preset, setPreset] = useState(network.sameComputerPreset);
 	const [listeners, setListeners] = useState<Record<ListenField, string>>({
@@ -78,16 +81,66 @@ export function NetworkEditor({
 		network.stored.speedGroupEndpoint ?? "",
 	);
 	const form = useRef<HTMLFormElement>(null);
+	const intent = useRef(0);
+	const editedFields = useRef(new Map<string, number>());
+	const markIntent = (fields: string[]) => {
+		const version = ++intent.current;
+		for (const field of fields) editedFields.current.set(field, version);
+	};
+	const [editRevision, setEditRevision] = useState(0);
+	const editedByUser = (field: string) => {
+		markIntent([field]);
+		setEditRevision((value) => value + 1);
+	};
 	useEffect(() => {
-		setPreset(network.sameComputerPreset);
-		setListeners({
-			artNetListen: network.stored.artNetListen,
-			sacnListen: network.stored.sacnListen,
-			citpListen: network.stored.citpListen,
-			httpListen: network.stored.httpListen,
-		});
-		setEndpoint(network.stored.speedGroupEndpoint ?? "");
+		const versions = new Map(editedFields.current);
+		const adopt = <T,>(field: string, current: T, next: T): T => {
+			const version = editedFields.current.get(field);
+			if (version === undefined) return next;
+			if (!busy && version === versions.get(field) && current === next)
+				editedFields.current.delete(field);
+			return current;
+		};
+		setPreset((current) =>
+			adopt("sameComputerPreset", current, network.sameComputerPreset),
+		);
+		setListeners(
+			(current) =>
+				Object.fromEntries(
+					LISTENERS.map(({ field }) => [
+						field,
+						adopt(field, current[field], network.stored[field]),
+					]),
+				) as Record<ListenField, string>,
+		);
+		setEndpoint((current) =>
+			adopt(
+				"speedGroupEndpoint",
+				current,
+				network.stored.speedGroupEndpoint ?? "",
+			),
+		);
 	}, [network]);
+	const reverted = useRef(revertRevision);
+	const reverting = reverted.current !== revertRevision;
+	useEffect(() => {
+		if (reverted.current === revertRevision) return;
+		reverted.current = revertRevision;
+		queued.current = JSON.stringify({
+			sameComputerPreset: network.activeSameComputerPreset,
+			...listeners,
+			citpListen: network.activeStored.citpListen,
+			httpListen: network.activeStored.httpListen,
+			speedGroupEndpoint: endpoint.trim() === "" ? null : endpoint.trim(),
+		});
+		markIntent(["sameComputerPreset", "citpListen", "httpListen"]);
+		setPreset(network.activeSameComputerPreset);
+		setListeners((current) => ({
+			...current,
+			citpListen: network.activeStored.citpListen,
+			httpListen: network.activeStored.httpListen,
+		}));
+	}, [revertRevision, network]);
 	// Only a draft that differs from what the server stored is saved. Comparing values rather than
 	// counting renders keeps a page load, a reload after a save, or React's development double
 	// effects from sending an edit nobody made.
@@ -98,12 +151,46 @@ export function NetworkEditor({
 				listeners[listener.field] !== network.stored[listener.field],
 		) ||
 		endpoint.trim() !== (network.stored.speedGroupEndpoint ?? "");
+	const draft = {
+		sameComputerPreset: preset,
+		...listeners,
+		speedGroupEndpoint: endpoint.trim() === "" ? null : endpoint.trim(),
+	};
+	const draftKey = JSON.stringify(draft);
+	const queued = useRef<string | null>(null);
+	const baseline = useRef(network);
+	const attempted = useRef(0);
+	const save = useRef({ onSave, draft });
+	save.current = { onSave, draft };
 	useEffect(() => {
-		if (showActions || !edited) return;
+		// The prop-sync effect above retires an acknowledged draft; do not enqueue its old render.
+		if (reverting) return;
+		if (baseline.current !== network) {
+			baseline.current = network;
+			queued.current = null;
+			return;
+		}
+		if (attempted.current === editRevision) return;
+		attempted.current = editRevision;
+		if (
+			showActions ||
+			(!edited && queued.current === null) ||
+			queued.current === draftKey ||
+			!form.current?.checkValidity()
+		)
+			return;
+		queued.current = draftKey;
 		onChanged?.();
-		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
-		return () => window.clearTimeout(timer);
-	}, [preset, listeners, endpoint, edited, onChanged, showActions]);
+		save.current.onSave({ requestId: requestId(), ...save.current.draft });
+	}, [
+		network,
+		showActions,
+		edited,
+		draftKey,
+		editRevision,
+		onChanged,
+		reverting,
+	]);
 
 	return (
 		<form
@@ -135,26 +222,33 @@ export function NetworkEditor({
 						label={listener.label}
 						description={listener.description}
 						value={listeners[listener.field]}
-						onChange={(event) =>
+						onChange={(event) => {
 							setListeners((current) => ({
 								...current,
 								[listener.field]: event.target.value,
-							}))
-						}
+							}));
+							editedByUser(listener.field);
+						}}
 					/>
 				))}
 				<TextField
 					label="Speed Groups"
 					description="UDP, usually 0.0.0.0:4810. Tos Light Control sends its Speed Group tempos here over OSC. Leave empty to not follow a desk's Speed Groups. Applies immediately."
 					value={endpoint}
-					onChange={(event) => setEndpoint(event.target.value)}
+					onChange={(event) => {
+						setEndpoint(event.target.value);
+						editedByUser("speedGroupEndpoint");
+					}}
 				/>
 				<CheckboxField
 					label="Light and Media are on this computer"
 					stateLabel="Listen on 127.0.0.1"
 					description="Listens on 127.0.0.1 without changing the addresses above, so they come back when you turn it off. Art-Net, sACN and Speed Groups move immediately; CITP and this interface on restart."
 					checked={preset}
-					onChange={(event) => setPreset(event.target.checked)}
+					onChange={(event) => {
+						setPreset(event.target.checked);
+						editedByUser("sameComputerPreset");
+					}}
 				/>
 			</fieldset>
 

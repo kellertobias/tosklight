@@ -1,12 +1,21 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+	act,
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../../app/ToastContext";
 import { aNetwork, stubServer } from "../../testing/server";
+import { OutputSettings } from "./OutputSettings";
 import { SettingsPage } from "./SettingsPage";
 
 afterEach(() => {
+	vi.useRealTimers();
 	window.history.replaceState(null, "", "/");
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
@@ -809,6 +818,133 @@ describe("the settings page", () => {
 		await waitFor(() =>
 			expect(server.network.stored.speedGroupEndpoint).toBeNull(),
 		);
+	});
+
+	it("stores the final protocol when leaving its tab30ms after editing", async () => {
+		const output = stubOutputConfiguration({ protocol: "sacn" });
+		renderSettings();
+		await screen.findByRole("article", { name: "Main DMX input settings" });
+		vi.useFakeTimers();
+		fireEvent.click(screen.getByRole("button", { name: "sACN" }));
+		fireEvent.click(screen.getByRole("option", { name: "Art-Net" }));
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(30);
+		});
+		expect(output.writes).toEqual([]);
+		fireEvent.click(screen.getByRole("tab", { name: "Picture" }));
+		await act(async () => {});
+		expect(output.writes).toHaveLength(1);
+		expect(output.writes[0]).toMatchObject({ protocol: "art-net" });
+		expect(output.writes[0]).not.toHaveProperty("width");
+		await act(async () => {
+			fireEvent.click(screen.getByRole("tab", { name: "Network & DMX" }));
+		});
+		expect(screen.getByRole("button", { name: "Art-Net" })).toBeVisible();
+	});
+
+	it("coalesces pending output drafts including reverting to the stored value", async () => {
+		const output = stubOutputConfiguration();
+		const storedUniverse = output.configuration.universe;
+		renderSettings();
+		const article = await screen.findByRole("article", {
+			name: "Main DMX input settings",
+		});
+		vi.useFakeTimers();
+		const universe = within(article).getByLabelText("Universe");
+		fireEvent.change(universe, { target: { value: "7" } });
+		expect(within(article).getByRole("status")).toHaveTextContent("Saving");
+		fireEvent.change(universe, { target: { value: "8" } });
+		fireEvent.change(universe, { target: { value: String(storedUniverse) } });
+		fireEvent.click(screen.getByRole("tab", { name: "Sound" }));
+		await act(async () => {});
+		expect(output.writes).toHaveLength(1);
+		expect(output.writes[0]).toMatchObject({ universe: storedUniverse });
+		expect(output.writes[0]).not.toHaveProperty("soundOutputKind");
+		expect(output.writes[0]).not.toHaveProperty("targetKind");
+	});
+
+	it("keeps rapid output edits isolated by actual output identity", async () => {
+		const first = stubOutputConfiguration();
+		const second = installOutputConfiguration({
+			...first.configuration,
+			id: "22222222-2222-4222-8222-222222222222",
+			name: "Second",
+		});
+		const view = render(
+			<ModalProvider>
+				<ToastProvider>
+					<OutputSettings
+						outputId={first.configuration.id}
+						outputName="Main"
+						mode="dmx"
+						direct
+					/>
+					<OutputSettings
+						outputId={second.configuration.id}
+						outputName="Second"
+						mode="dmx"
+						direct
+					/>
+				</ToastProvider>
+			</ModalProvider>,
+		);
+		const main = await screen.findByRole("article", {
+			name: "Main DMX input settings",
+		});
+		const other = await screen.findByRole("article", {
+			name: "Second DMX input settings",
+		});
+		expect(first.writes).toEqual([]);
+		expect(second.writes).toEqual([]);
+		vi.useFakeTimers();
+		fireEvent.change(within(main).getByLabelText("Universe"), {
+			target: { value: "7" },
+		});
+		fireEvent.change(within(main).getByLabelText("Universe"), {
+			target: { value: "8" },
+		});
+		fireEvent.change(within(other).getByLabelText("Universe"), {
+			target: { value: "9" },
+		});
+		await act(async () => view.unmount());
+		expect(first.writes).toHaveLength(1);
+		expect(second.writes).toHaveLength(1);
+		expect(first.writes[0]).toMatchObject({ universe: 8 });
+		expect(second.writes[0]).toMatchObject({ universe: 9 });
+	});
+
+	it("reports a flushed output refusal after navigation without claiming persistence", async () => {
+		const output = stubOutputConfiguration();
+		const storedUniverse = output.configuration.universe;
+		const base = globalThis.fetch;
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+				if (String(input).endsWith("/configuration/update"))
+					return new Response(
+						JSON.stringify({
+							code: "output-invalid",
+							message: "Output protocol could not be saved",
+						}),
+						{ status: 400, headers: { "content-type": "application/json" } },
+					);
+				return base(input, init);
+			}),
+		);
+		renderSettings();
+		const article = await screen.findByRole("article", {
+			name: "Main DMX input settings",
+		});
+		vi.useFakeTimers();
+		fireEvent.change(within(article).getByLabelText("Universe"), {
+			target: { value: "7" },
+		});
+		fireEvent.click(screen.getByRole("tab", { name: "Picture" }));
+		await act(async () => {});
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"Output protocol could not be saved",
+		);
+		expect(output.configuration.universe).toBe(storedUniverse);
 	});
 
 	it("says why a refused change was not applied", async () => {

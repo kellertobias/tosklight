@@ -7,7 +7,7 @@ import { ErrorAlert } from "@tosklight/ui";
 // Selecting another monitor moves an open output while Pixel is running.
 
 import { Button } from "@tosklight/ui/controls";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ResourceState } from "../../app/ResourceState";
 import { useFailureToast } from "../../app/ToastContext";
 import {
@@ -16,7 +16,10 @@ import {
 } from "../../operator/MediaServerSurface";
 import { api } from "../../shared/api/client";
 import { requestId, useEditing } from "../../shared/api/editing";
-import type { NetworkView } from "../../shared/api/generated/media-wire";
+import type {
+	NetworkView,
+	UpdateNetwork,
+} from "../../shared/api/generated/media-wire";
 import { useNetwork, useOutputs } from "../../shared/api/queries";
 import { LogsPage } from "../logs/LogsPage";
 import { LibrarySettingsSection } from "./LibrarySettingsSection";
@@ -27,10 +30,27 @@ import { SpeedGroupStatus } from "./SpeedGroupStatus";
 
 const HEALTH_POLL_MS = 15_000;
 
+/** Keep partial Revert after pending full drafts without dropping their unrelated fields. */
+function useNetworkEditing(reload: () => void) {
+	const editing = useEditing(reload);
+	const generation = useRef(0);
+	return {
+		...editing,
+		queue: (edit: UpdateNetwork, revert = false) => {
+			if (revert) generation.current++;
+			editing.saveLive(
+				() => api.updateNetwork(edit),
+				`network:${generation.current}`,
+			);
+			if (revert) generation.current++;
+		},
+	};
+}
+
 export function SettingsPage() {
 	const outputs = useOutputs(HEALTH_POLL_MS);
 	const network = useNetwork();
-	const editing = useEditing(network.reload);
+	const editing = useNetworkEditing(network.reload);
 	// `section=dmx` is the address DMX diagnostics link to; DMX input lives with Network now.
 	const initialSection: MediaSettingsSection =
 		window.location.pathname === "/logs" ? "logs" : "network";
@@ -49,9 +69,8 @@ export function SettingsPage() {
 								network={data}
 								busy={editing.busy}
 								failed={editing.failure !== undefined}
-								onSave={(edit) =>
-									void editing.save(() => api.updateNetwork(edit))
-								}
+								onSave={(edit) => editing.queue(edit)}
+								onRevert={(edit) => editing.queue(edit, true)}
 							/>
 						)}
 					</ResourceState>
@@ -129,13 +148,16 @@ function Network({
 	busy,
 	failed,
 	onSave,
+	onRevert,
 }: {
 	formId?: string;
 	network: NetworkView;
 	busy: boolean;
 	failed: boolean;
-	onSave: (edit: Parameters<typeof api.updateNetwork>[0]) => void;
+	onSave: (edit: UpdateNetwork) => void;
+	onRevert: (edit: UpdateNetwork) => void;
 }) {
+	const [revertRevision, setRevertRevision] = useState(0);
 	return (
 		<article className="media-settings-section" aria-label="Network">
 			<div className="media-settings-section-heading">
@@ -152,10 +174,16 @@ function Network({
 				busy={busy}
 				onSave={onSave}
 				showActions={false}
+				revertRevision={revertRevision}
 			/>
 			<SpeedGroupStatus />
 			{network.warnings.map((warning) => (
-				<ErrorAlert as="p" key={warning} className="media-state is-error" role="alert">
+				<ErrorAlert
+					as="p"
+					key={warning}
+					className="media-state is-error"
+					role="alert"
+				>
 					{warning}
 				</ErrorAlert>
 			))}
@@ -170,14 +198,15 @@ function Network({
 					</p>
 					<div className="media-settings-actions">
 						<Button
-							onClick={() =>
-								onSave({
+							onClick={() => {
+								setRevertRevision((value) => value + 1);
+								onRevert({
 									requestId: requestId(),
 									sameComputerPreset: network.activeSameComputerPreset,
 									citpListen: network.activeStored.citpListen,
 									httpListen: network.activeStored.httpListen,
-								})
-							}
+								});
+							}}
 						>
 							Revert to current settings
 						</Button>
