@@ -7,12 +7,14 @@
 use super::fixed_masks::{CompiledFixedMaskState, FixedMaskRequirement, PreparedFixedMask};
 use light_core::{FixtureId, programming::ProgrammingOwner};
 use light_dynamics::{
-    DynamicFamilyPreparationRequirement, DynamicFamilySampleGroup, DynamicSourceOccurrenceId,
-    FamilySampleRank, PreparedDynamicFamilySamples, ProgrammingFamilyFixAt,
+    DrainingPreparedDynamicFamilySamples, DynamicFamilyPreparationRequirement,
+    DynamicFamilySampleGroup, DynamicSourceOccurrenceId, FamilySampleRank,
+    PreparedDynamicFamilySamples, ProgrammingFamilyFixAt,
 };
 use rustc_hash::FxHashMap;
 
 #[derive(Clone)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub(super) enum CapturedFamilyRequirement {
     Dynamic(DynamicFamilyPreparationRequirement),
     Fixed {
@@ -126,7 +128,34 @@ pub(super) fn assemble_captured_family_inputs<'a>(
             .samples
             .extend(group.samples.iter().cloned());
     }
-    for requirement in dynamic.requirements {
+    finish_assembly(dynamic.requirements, fixed, scratch)
+}
+
+/// Production's single consumer takes prepared output samples without duplicating immutable
+/// addresses/expressions. The borrowed assembler remains available for callers retaining output.
+pub(super) fn assemble_captured_family_inputs_draining<'a>(
+    dynamic: DrainingPreparedDynamicFamilySamples<'_>,
+    fixed: &[PreparedFixedMask],
+    scratch: &'a mut CapturedFamilyInputScratch,
+    pool: Option<&light_engine::parallel::OutputPool>,
+) -> &'a [CapturedFamilyInput] {
+    scratch.clear(pool);
+    for group in dynamic.families {
+        scratch
+            .group(group.target, group.owner)
+            .group
+            .samples
+            .append(&mut group.samples);
+    }
+    finish_assembly(dynamic.requirements, fixed, scratch)
+}
+
+fn finish_assembly<'a>(
+    requirements: &[DynamicFamilyPreparationRequirement],
+    fixed: &[PreparedFixedMask],
+    scratch: &'a mut CapturedFamilyInputScratch,
+) -> &'a [CapturedFamilyInput] {
+    for requirement in requirements {
         scratch
             .group(requirement.target, requirement.owner)
             .requirements

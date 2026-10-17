@@ -8,6 +8,9 @@ use rustc_hash::FxHashMap as HashMap;
 use std::{cell::Cell, sync::Arc};
 use uuid::Uuid;
 
+mod handoff;
+pub use handoff::DrainingPreparedDynamicFamilySamples;
+
 pub struct DynamicFamilySampleGroup {
     pub target: FixtureId,
     pub owner: ProgrammingOwner,
@@ -107,15 +110,6 @@ impl DynamicFamilyPreparationScratch {
             std::mem::take(&mut self.retired),
             std::mem::take(&mut self.retired_output),
         )
-    }
-
-    /// The last preparation's result.
-    pub fn prepared(&self) -> PreparedDynamicFamilySamples<'_> {
-        PreparedDynamicFamilySamples {
-            families: &self.families,
-            legacy: &self.legacy,
-            requirements: &self.requirements,
-        }
     }
 
     /// Drop retained compiled sources at a show/dependency boundary.

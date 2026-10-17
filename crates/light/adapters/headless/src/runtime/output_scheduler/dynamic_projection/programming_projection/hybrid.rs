@@ -18,7 +18,8 @@
 use super::super::{
     endpoint_controls::CapturedFamilyEndpointControls,
     family_inputs::{
-        CapturedFamilyInputScratch, CapturedFamilyRequirement, assemble_captured_family_inputs,
+        CapturedFamilyInputScratch, CapturedFamilyRequirement,
+        assemble_captured_family_inputs_draining,
     },
     fixed_masks::{
         CapturedFixedMaskRows, FixedMaskCompilationScratch, compile_captured_fixed_masks,

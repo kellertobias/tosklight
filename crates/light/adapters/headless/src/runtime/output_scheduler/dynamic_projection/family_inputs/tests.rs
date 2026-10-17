@@ -90,6 +90,140 @@ fn compose(group: &CapturedFamilyInput, base: &AttributeValue) -> AttributeValue
     .unwrap()
 }
 
+fn assert_draining_matches_borrowed(
+    dynamic: &PreparedDynamicFamilySamples<'_>,
+    fixed: &[PreparedFixedMask],
+    frozen: &rustc_hash::FxHashSet<(FixtureId, ProgrammingOwner)>,
+) {
+    let mut moving = dynamic
+        .families
+        .iter()
+        .map(|group| DynamicFamilySampleGroup {
+            target: group.target,
+            owner: group.owner,
+            samples: group.samples.clone(),
+        })
+        .collect::<Vec<_>>();
+    let mut reference = CapturedFamilyInputScratch::default();
+    let mut actual = CapturedFamilyInputScratch::default();
+    assemble_captured_family_inputs(dynamic, fixed, &mut reference, None);
+    assemble_captured_family_inputs_draining(
+        DrainingPreparedDynamicFamilySamples {
+            families: &mut moving,
+            requirements: dynamic.requirements,
+        },
+        fixed,
+        &mut actual,
+        None,
+    );
+    assert!(moving.iter().all(|group| group.samples.is_empty()));
+    reference.hold_frozen(frozen);
+    actual.hold_frozen(frozen);
+    let static_targets = [
+        (target(10), ProgrammingOwner::Position),
+        (target(901), ProgrammingOwner::Focus),
+    ];
+    let (expected, expected_static) = reference.with_static_targets(&static_targets);
+    let (observed, observed_static) = actual.with_static_targets(&static_targets);
+    assert_eq!(expected_static, observed_static);
+    assert_eq!(expected.len(), observed.len());
+    for (expected, observed) in expected.iter().zip(observed) {
+        assert_eq!(
+            (expected.group.target, expected.group.owner),
+            (observed.group.target, observed.group.owner)
+        );
+        assert_eq!(expected.requirements, observed.requirements);
+        assert_eq!(expected.group.samples.len(), observed.group.samples.len());
+        for (expected, observed) in expected.group.samples.iter().zip(&observed.group.samples) {
+            match (expected, observed) {
+                (FamilyCompositionSample::Known(a), FamilyCompositionSample::Known(b)) => {
+                    assert_eq!(a.address().address(), b.address().address());
+                    assert_eq!(a.materialized_value(), b.materialized_value());
+                    assert_eq!(
+                        (a.rank, a.activation_mix, a.is_fix_at()),
+                        (b.rank, b.activation_mix, b.is_fix_at())
+                    );
+                }
+                (
+                    FamilyCompositionSample::WholeExpression {
+                        expression: a,
+                        rank: ar,
+                        activation_mix: am,
+                    },
+                    FamilyCompositionSample::WholeExpression {
+                        expression: b,
+                        rank: br,
+                        activation_mix: bm,
+                    },
+                ) => {
+                    assert!(Arc::ptr_eq(a, b));
+                    assert_eq!((ar, am), (br, bm));
+                }
+                (
+                    FamilyCompositionSample::CoupledExpression {
+                        expression: a,
+                        rank: ar,
+                        activation_mix: am,
+                    },
+                    FamilyCompositionSample::CoupledExpression {
+                        expression: b,
+                        rank: br,
+                        activation_mix: bm,
+                    },
+                ) => {
+                    assert!(Arc::ptr_eq(a, b));
+                    assert_eq!((ar, am), (br, bm));
+                }
+                _ => panic!("sample variant changed during consuming handoff"),
+            }
+        }
+        let base = match expected.group.owner {
+            ProgrammingOwner::Position => {
+                AttributeValue::Position(Arc::new(PositionIntent::angles(0.0, 10.0)))
+            }
+            ProgrammingOwner::Color => {
+                AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+                    intent: ColorIntent::default(),
+                }))
+            }
+            _ => AttributeValue::Normalized(0.2),
+        };
+        let mut expected_trace = RetainedFamilyCompositionScratch::default();
+        let mut actual_trace = RetainedFamilyCompositionScratch::default();
+        let compose = |entry: &CapturedFamilyInput,
+                       scratch: &mut RetainedFamilyCompositionScratch| {
+            compose_retained_dynamic_family_traced(
+                entry.group.owner,
+                &base,
+                &entry.group.samples,
+                &FamilyCompositionContext::default(),
+                &NoFrame,
+                scratch,
+            )
+            .map_err(|error| format!("{error:?}"))
+        };
+        assert_eq!(
+            compose(expected, &mut expected_trace),
+            compose(observed, &mut actual_trace)
+        );
+        for component in [
+            ProgrammingComponent::Pan,
+            ProgrammingComponent::Tilt,
+            ProgrammingComponent::Focus,
+            ProgrammingComponent::Color(ColorComponent::Red),
+            ProgrammingComponent::Color(ColorComponent::Uv),
+        ] {
+            let sources = |scratch: &RetainedFamilyCompositionScratch| {
+                let trace = scratch.family_trace();
+                trace
+                    .root()
+                    .and_then(|root| trace.sources_for_component(root, component))
+            };
+            assert_eq!(sources(&expected_trace), sources(&actual_trace));
+        }
+    }
+}
+
 #[test]
 fn fixed_pan_masks_one_axis_of_the_complete_dynamic_pair_and_focus_merges_in_its_own_group() {
     let angles = |pan, tilt| AttributeValue::Position(Arc::new(PositionIntent::angles(pan, tilt)));
@@ -136,6 +270,7 @@ fn fixed_pan_masks_one_axis_of_the_complete_dynamic_pair_and_focus_merges_in_its
     let mut compilation = FixedMaskCompilationScratch::default();
     let fixed = compile_captured_fixed_masks(&input(&rows), None, None, &mut compilation).unwrap();
     let mut scratch = CapturedFamilyInputScratch::default();
+    assert_draining_matches_borrowed(&dynamic, fixed, &Default::default());
     let groups = assemble_captured_family_inputs(&dynamic, fixed, &mut scratch, None);
     assert_eq!(groups.len(), 2);
     for group in groups {
@@ -213,6 +348,7 @@ fn unavailable_fixed_and_position_inputs_keep_complete_evidence_even_without_rea
     let mut compilation = FixedMaskCompilationScratch::default();
     let fixed = compile_captured_fixed_masks(&input(&rows), None, None, &mut compilation).unwrap();
     let mut scratch = CapturedFamilyInputScratch::default();
+    assert_draining_matches_borrowed(&dynamic, fixed, &Default::default());
     let groups = assemble_captured_family_inputs(&dynamic, fixed, &mut scratch, None);
     assert_eq!(groups.len(), 2);
     assert!(groups.iter().all(|group| group.group.samples.is_empty()));
@@ -307,4 +443,206 @@ fn adding_static_programs_preserves_existing_dynamic_groups_and_deduplicates_tar
     let (groups, added) = scratch.with_static_targets(&[(active, ProgrammingOwner::Position)]);
     assert_eq!(groups.len(), 1);
     assert_eq!(added, vec![(active, ProgrammingOwner::Position)]);
+}
+
+#[test]
+fn consuming_handoff_does_not_add_a_compiled_address_reference() {
+    let address = Arc::new(
+        CompiledDynamicValueAddress::new(
+            DynamicValueAddress::whole_family(
+                ProgrammingOwner::Focus,
+                &AttributeValue::Normalized(0.4),
+            )
+            .unwrap(),
+            None,
+        )
+        .unwrap(),
+    );
+    let mut dynamic = [DynamicFamilySampleGroup {
+        target: target(10),
+        owner: ProgrammingOwner::Focus,
+        samples: vec![
+            FamilySample::new(
+                address.clone(),
+                DynamicValue::Family(AttributeValue::Normalized(0.4)),
+                rank(),
+                1.0,
+            )
+            .unwrap()
+            .into(),
+        ],
+    }];
+    let storage = dynamic[0].samples.as_ptr();
+    let capacity = dynamic[0].samples.capacity();
+    let before = Arc::strong_count(&address);
+    let mut scratch = CapturedFamilyInputScratch::default();
+    let groups = assemble_captured_family_inputs_draining(
+        DrainingPreparedDynamicFamilySamples {
+            families: &mut dynamic,
+            requirements: &[],
+        },
+        &[],
+        &mut scratch,
+        None,
+    );
+    assert_eq!(groups[0].group.samples.len(), 1);
+    assert_eq!(
+        Arc::strong_count(&address),
+        before,
+        "handoff must move samples, not clone their immutable compiled address"
+    );
+    assert!(dynamic[0].samples.is_empty());
+    assert_eq!(dynamic[0].samples.as_ptr(), storage);
+    assert_eq!(dynamic[0].samples.capacity(), capacity);
+}
+
+#[test]
+fn consuming_handoff_matches_clone_oracle_for_changing_color_duplicate_groups_and_freeze() {
+    let mut reference = CapturedFamilyInputScratch::default();
+    let mut actual = CapturedFamilyInputScratch::default();
+    for value in [0.1, 0.8, 0.3] {
+        let mut known = match sample(ProgrammingOwner::Focus, AttributeValue::Normalized(value)) {
+            FamilyCompositionSample::Known(sample) => sample,
+            _ => unreachable!(),
+        };
+        known.activation_mix = 0.75;
+        known.rank.changed_at_submillis_nanos = 42;
+        let source = FamilyTraceSource {
+            rank: known.rank,
+            footprint: FamilyTraceFootprint::Whole,
+            role: FamilyTraceRole::CalculationDependency,
+            occurrence: None,
+        };
+        let dynamic = [
+            DynamicFamilySampleGroup {
+                target: target(10),
+                owner: ProgrammingOwner::Focus,
+                samples: vec![known.with_trace_sources(Arc::from([source])).into()],
+            },
+            DynamicFamilySampleGroup {
+                target: target(10),
+                owner: ProgrammingOwner::Focus,
+                samples: vec![sample(
+                    ProgrammingOwner::Focus,
+                    AttributeValue::Normalized(value / 2.0),
+                )],
+            },
+            DynamicFamilySampleGroup {
+                target: target(20),
+                owner: ProgrammingOwner::Color,
+                samples: vec![sample(
+                    ProgrammingOwner::Color,
+                    AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic {
+                        intent: ColorIntent {
+                            relative_output: value,
+                            ..Default::default()
+                        },
+                    })),
+                )],
+            },
+        ];
+        let borrowed = PreparedDynamicFamilySamples {
+            families: &dynamic,
+            legacy: &[],
+            requirements: &[],
+        };
+        assert_draining_matches_borrowed(&borrowed, &[], &Default::default());
+        assert_draining_matches_borrowed(
+            &borrowed,
+            &[],
+            &[(target(10), ProgrammingOwner::Focus)]
+                .into_iter()
+                .collect(),
+        );
+        let mut moving = dynamic;
+        assemble_captured_family_inputs(
+            &PreparedDynamicFamilySamples {
+                families: &moving,
+                legacy: &[],
+                requirements: &[],
+            },
+            &[],
+            &mut reference,
+            None,
+        );
+        assemble_captured_family_inputs_draining(
+            DrainingPreparedDynamicFamilySamples {
+                families: &mut moving,
+                requirements: &[],
+            },
+            &[],
+            &mut actual,
+            None,
+        );
+        assert_eq!(
+            compose(&reference.groups[0], &AttributeValue::Normalized(0.2)),
+            compose(&actual.groups[0], &AttributeValue::Normalized(0.2))
+        );
+    }
+    // The next empty frame releases the same candidate inventory instead of retaining old data.
+    assemble_captured_family_inputs_draining(
+        DrainingPreparedDynamicFamilySamples {
+            families: &mut [],
+            requirements: &[],
+        },
+        &[],
+        &mut actual,
+        None,
+    );
+    assert!(actual.groups.is_empty() && actual.spare.is_empty());
+}
+
+#[test]
+fn consuming_handoff_keeps_retained_resume_expression_and_underlay_provenance() {
+    let endpoint = AttributeValue::Normalized(0.9);
+    for progress in [0.0, 0.35, 1.0] {
+        let expression = Arc::new(
+            CompiledProgrammingFamilyExpression::new(
+                Arc::new(DynamicSampleExpression::Transition {
+                    from: None,
+                    to: Some(Arc::new(DynamicSampleExpression::Programming {
+                        address: Arc::new(
+                            DynamicValueAddress::whole_family(ProgrammingOwner::Focus, &endpoint)
+                                .unwrap(),
+                        ),
+                        value: DynamicValue::Family(endpoint.clone()),
+                        occurrence: None,
+                        dependency_occurrence: None,
+                    })),
+                    progress,
+                    reason: DynamicTransitionReason::Resume {
+                        occurrence_id: Uuid::from_u128(123),
+                    },
+                }),
+                ProgrammingOwner::Focus,
+                None,
+                None,
+            )
+            .unwrap(),
+        );
+        let dynamic = [DynamicFamilySampleGroup {
+            target: target(10),
+            owner: ProgrammingOwner::Focus,
+            samples: vec![
+                sample(ProgrammingOwner::Focus, AttributeValue::Normalized(0.4)),
+                FamilyCompositionSample::WholeExpression {
+                    expression,
+                    rank: FamilySampleRank {
+                        stable_order: 1,
+                        ..rank()
+                    },
+                    activation_mix: 0.75,
+                },
+            ],
+        }];
+        assert_draining_matches_borrowed(
+            &PreparedDynamicFamilySamples {
+                families: &dynamic,
+                legacy: &[],
+                requirements: &[],
+            },
+            &[],
+            &Default::default(),
+        );
+    }
 }

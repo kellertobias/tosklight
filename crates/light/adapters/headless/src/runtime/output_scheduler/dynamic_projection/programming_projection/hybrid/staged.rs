@@ -232,7 +232,7 @@ fn compose_sampled_cohort<'f, T>(
     )
     .map_err(invalid)?;
     drop(prepare_span);
-    let prepared = preparation.prepared();
+    let prepared = preparation.prepared_for_drain();
     typed.check().map_err(invalid)?;
     let control = |rank| endpoint_controls.control_for(rank);
     let view = CohortView {
@@ -247,7 +247,7 @@ fn compose_sampled_cohort<'f, T>(
     };
     let (requirements, mut projections) = compose_family_cohort(
         &view,
-        &prepared,
+        prepared,
         fixed,
         families,
         observer,
@@ -539,7 +539,7 @@ fn frozen_family_owners(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn compose_family_cohort<T, R: HybridFrameResolver>(
     view: &CohortView<'_, '_, PreparedFamilySources<'_>, R>,
-    prepared: &light_dynamics::PreparedDynamicFamilySamples<'_>,
+    prepared: light_dynamics::DrainingPreparedDynamicFamilySamples<'_>,
     fixed: &[PreparedFixedMask],
     families: &mut CapturedFamilyInputScratch,
     observer: &mut impl HybridFrameObserver<T>,
@@ -555,7 +555,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
-    assemble_captured_family_inputs(prepared, fixed, families, pool);
+    assemble_captured_family_inputs_draining(prepared, fixed, families, pool);
     if !view.frame.capture.freezes_nothing() {
         families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
     }
