@@ -11,6 +11,8 @@
 //! worker attribution. A worker count alone does not reproduce
 //! full-desktop Linux renderer contention. No UI, renderer, network, output
 //! deadline gate or prior Linux show's random logical-head identity is reproduced here.
+mod legacy_equivalence;
+
 use super::*;
 use crate::runtime::output_scheduler::LiveOutputBench;
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color::profiles::patched;
@@ -761,7 +763,30 @@ fn case(input: &Input, workers: usize, frames: ProbeFrames) -> Case {
 #[test]
 #[ignore = "private full mixed576 measurement; requires explicit root-authorized quiet window"]
 fn manual_exact_mixed576_serial_and_four_workers() {
-    compare_worker_cases(4);
+    let configured = std::env::var("LIGHT_MIXED576_WORKERS");
+    let workers = match configured {
+        Ok(value) => replay_workers(Some(&value)),
+        Err(std::env::VarError::NotPresent) => replay_workers(None),
+        Err(_) => Err("invalid replay worker setting"),
+    }
+    .expect("bounded replay worker setting");
+    compare_worker_cases(workers);
+}
+fn replay_workers(value: Option<&str>) -> Result<usize, &'static str> {
+    match value {
+        None | Some("4") => Ok(4),
+        Some("2") => Ok(2),
+        _ => Err("replay workers must be 2 or 4"),
+    }
+}
+#[test]
+fn replay_worker_selection_is_explicit_bounded_and_defaults_to_four() {
+    assert_eq!(replay_workers(None), Ok(4));
+    assert_eq!(replay_workers(Some("4")), Ok(4));
+    assert_eq!(replay_workers(Some("2")), Ok(2));
+    for value in ["", "0", "1", "3", "8", " 2", "2\n", "2.0", "two"] {
+        assert!(replay_workers(Some(value)).is_err());
+    }
 }
 
 #[test]
