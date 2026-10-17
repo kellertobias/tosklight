@@ -8,6 +8,7 @@ import net from "node:net";
 import assert from "node:assert/strict";
 import { chmod, realpath } from "node:fs/promises";
 import { artifactPaths } from "./artifact-paths.mjs";
+import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
@@ -48,8 +49,14 @@ const CASES = [{ caseId: "sixteen_universe", fixtureRecords: 576 }];
 const options = parseArguments(process.argv.slice(2));
 const numericPath = path.resolve(options["numeric-report"]);
 assert(numericPath.startsWith(`${path.resolve(artifactPaths.results)}${path.sep}`), "numeric output must be beneath canonical test results");
+const phaseNumericPath = path.join(path.dirname(numericPath), "phase-numeric.json");
+async function retainPhaseDiagnostics(file, window) {
+  // This observer is diagnostic only: unavailable data or a write error never changes Control gates.
+  await writePhaseDiagnostics(phaseNumericPath, file, window).catch(() => {});
+}
 const checkpoint = new ProofCheckpoint(numericPath);
 await checkpoint.enter(1);
+await retainPhaseDiagnostics(null, null);
 let published;
 try {
   assert.equal(process.platform,"linux","The released Desk performance harness requires Linux /proc and Xvfb");
@@ -154,6 +161,7 @@ async function runCase(performanceCase, executionMode) {
 	let failure;
 	let result;
   let packetProof;
+  let phaseWindow = null;
   let watchdogFailure;
   const watchdog = setTimeout(() => {
     watchdogFailure = new Error("Owned desktop proof exceeded 400-second lifetime");
@@ -225,12 +233,20 @@ async function runCase(performanceCase, executionMode) {
 			evidence.samples,
 		);
     const measurementEndedAt = Date.now();
+    const diagnosticMidpoint = sample => (sample.diagnosticsMonotonicStartMillis + sample.diagnosticsMonotonicEndMillis) / 2;
+    // Map the same opening/closing diagnostic counter midpoints to the wall-clock log domain.
+    // This is an epoch estimate from the recorded wall/monotonic anchor, not the enclosing I/O window.
+    phaseWindow = {
+      startedAt: measurementStartedAt + (diagnosticMidpoint(evidence.samples[0]) - measurementMonotonicStart),
+      endedAt: measurementStartedAt + (diagnosticMidpoint(evidence.samples.at(-1)) - measurementMonotonicStart),
+    };
     measured.wall_monotonic_difference_ms = Math.abs((measurementEndedAt-measurementStartedAt)-(performance.now()-measurementMonotonicStart));
     Object.assign(checkpoint.result,measured);
     await checkpoint.enter(8);
     const packets = packetProof.snapshot();
     checkpoint.result.proof.packets = packets;
     await checkpoint.save();
+    await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
     const interaction = await packetProof.interact(async (phase,partial) => {
       if(partial) checkpoint.result.proof.interaction = partial;
       await checkpoint.enter(phase);
@@ -320,6 +336,7 @@ async function runCase(performanceCase, executionMode) {
 		temporaryRoot,
 		failure,
 	);
+  await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
   failure = finalized.failure;
   cleanupPassed = Number(cleanupPassed && finalized.cleanupPassed);
   await checkpoint.finish(cleanupPassed);

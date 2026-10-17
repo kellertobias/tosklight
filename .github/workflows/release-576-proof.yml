@@ -52,7 +52,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           mkdir -p "$OUT/public"
           npm ci >"$OUT/npm-ci.log" 2>&1
-          node --test tools/desktop-performance-576-proof-observers.test.mjs
+          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs
           cargo test --locked -p light-dynamics --lib
       - name: Build exact canonical release Control and sidecars
         run: |
@@ -91,7 +91,7 @@ jobs:
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
-          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'false'
+          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
         run: |
           set -euo pipefail
           private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}"
@@ -104,4 +104,5 @@ jobs:
           path: |
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/provenance.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/desktop-576-proof-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/phase-numeric.json
           if-no-files-found: error
