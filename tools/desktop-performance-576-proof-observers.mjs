@@ -1,7 +1,7 @@
 // Observers for the focused released Desk proof. Raw records never leave private scratch.
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { readFile, stat, writeFile, mkdir } from "node:fs/promises";
+import { readFile, stat, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 
@@ -145,13 +145,15 @@ export async function configurePacketProof(api, port) {
     return {
       start() { assert(!aggregate); aggregate = new PacketAggregate(); cursor = receiver.mark(); timer = setInterval(drain,10); },
       snapshot() { drain(); const result = aggregate.snapshot(); assert(result.rows.every(row => row.packets > 0),"missing universe"); return result; },
-      async interact() {
+      async interact(checkpoint = async () => {}) {
         drain(); assert.equal(aggregate.staticRows.at(-1)?.value,0,"static fixture not initially zero");
         const ramps = [];
         for (const [command,from,to] of [["FIXTURE 421 AT 50 TIME 3",0,128],["FIXTURE 421 AT 25 TIME 3",128,64]]) {
-          const start = performance.now(); const response = await executeCommand(api,port,command); commands.push({command,start_monotonic_ms:start,response}); await sleep(4200); drain();
+          await checkpoint(ramps.length === 0 ? 9 : 10,{accepted_commands:commands.length,ramps:[...ramps]});
+          const start = performance.now(); const response = await executeCommand(api,port,command); commands.push({command,start_monotonic_ms:start,response}); await checkpoint(ramps.length === 0 ? 9 : 10,{accepted_commands:commands.length,ramps:[...ramps]}); await sleep(4200); drain();
           if (aggregate.error) throw aggregate.error;
           ramps.push(summarizeRamp(aggregate.staticRows,start,from,to));
+          await checkpoint(ramps.length === 1 ? 9 : 10,{accepted_commands:commands.length,ramps:[...ramps]});
         }
         return {accepted_commands:2, ramps};
       },
@@ -183,94 +185,191 @@ async function waitRecord(file, kind, timeout, assertRunning) {
 export const waitStageStarted = (file,assertRunning) => waitRecord(file,"stage-started",90_000,assertRunning);
 export const waitStageComplete = (file,assertRunning) => waitRecord(file,"complete",300_000,assertRunning);
 
+// A missing lane or coverage gap is numeric diagnostic evidence, not an exception that
+// discards the already-completed backend measurement. No pane identifier is exported.
 export function summarizeStageWindow(complete, start, end) {
   nonnegative(start); nonnegative(end); assert(end-start >= 60_000,"short Stage window");
-  assert(complete.kind === "complete" && complete.measurementSurface === "packaged-tauri-native-stage");
-  const frames = complete.nativeStage?.frames; assert(Array.isArray(frames) && frames.length <= 100_000,"Stage frame cap");
-  const lanes = ["normal","preload"].map(lane => {
-    const rows = frames.filter(frame => frame.lane === lane);
-    assert(rows.length >= 2, "missing Stage lane");
-    const times = [];
-    for (const row of rows) {
-      assert(typeof row.paneId === "string" && row.paneId.length > 0 && row.width > 0 && row.height > 0 && row.drawCalls > 0,"invalid Stage sample");
-      assert(row.followPreload === (lane === "preload"),"Stage lane provenance mismatch");
-      uint(row.sequence);uint(row.sourceFrame); nonnegative(row.presentedEpochMicros);
-      times.push(row.presentedEpochMicros/1000);
+  const stage=complete?.nativeStage, activity=stage?.activity, heartbeats=stage?.heartbeats, filtered=stage?.frames;
+  const overflow=stage?.observerOverflow;
+  const shape=complete?.schemaVersion === 2 && complete?.kind === "complete" && complete?.measurementSurface === "packaged-tauri-native-stage" && Array.isArray(filtered) && filtered.length <= 100_000 && Array.isArray(activity) && activity.length <= 20_000 && Array.isArray(heartbeats) && heartbeats.length <= 10_000;
+  const overflowValid=overflow && Object.keys(overflow).sort().join(",") === "activity,errors,heartbeats" && Object.values(overflow).every(value => Number.isSafeInteger(value) && value >= 0);
+  const reportAvailable=Boolean(shape && overflowValid), observerFailed=!overflowValid || Object.values(overflow).some(value => value !== 0);
+  const integer=value => Number.isSafeInteger(value) && value >= 0;
+  const identity=row => typeof row?.paneId === "string" && row.paneId.startsWith("main:") && row.paneId.length <= 256 && typeof row.attachmentId === "string" && row.attachmentId.length > 0 && row.attachmentId.length <= 128;
+  const key=row => `${row.paneId}\0${row.attachmentId}`;
+  const closeClock=micros => integer(micros) && Math.abs(micros/1000-start) <= 400_000;
+  const inWindow=millis => millis >= start && millis <= end;
+  const frameShape=row => identity(row) && typeof row.followPreload === "boolean" && integer(row.sequence) && integer(row.sourceFrame) && closeClock(row.presentedEpochMicros) && integer(row.width) && row.width > 0 && integer(row.height) && row.height > 0 && integer(row.drawCalls) && row.drawCalls > 0;
+  const heartbeatShape=row => identity(row) && typeof row.followPreload === "boolean" && integer(row.sequence) && integer(row.lastPresentedSequence) && integer(row.sourceFrame) && closeClock(row.epochMicros) && closeClock(row.receivedEpochMicros) && integer(row.width) && integer(row.height) && typeof row.attached === "boolean" && typeof row.visible === "boolean" && typeof row.idleUnchanged === "boolean" && typeof row.drawHealthy === "boolean";
+  const coverage=times => {
+    const ordered=[...times].sort((a,b) => a-b), inside=ordered.filter(inWindow), edges=[start,...inside,end];
+    return {observed:inside.length,first:ordered.length ? ordered[0]-start : 0,last:ordered.length ? ordered.at(-1)-start : 0,begin:inside.length ? inside[0]-start : end-start,end:inside.length ? end-inside.at(-1) : end-start,max:Math.max(...edges.slice(1).map((t,i) => t-edges[i])),bracketed:Number(ordered.length > 0 && ordered[0] <= start && ordered.at(-1) >= end)};
+  };
+  const unknownLane=reportAvailable && [...activity,...heartbeats].some(row => typeof row?.followPreload !== "boolean");
+  const lanes=[false,true].map(preload => {
+    const all=reportAvailable ? activity.filter(row => row?.followPreload === preload) : [];
+    const allHeartbeats=reportAvailable ? heartbeats.filter(row => row?.followPreload === preload) : [];
+    const candidates=new Set();
+    for(const row of all) if(frameShape(row) && inWindow(row.presentedEpochMicros/1000)) candidates.add(key(row));
+    for(const row of allHeartbeats) if(heartbeatShape(row) && inWindow(row.receivedEpochMicros/1000)) candidates.add(key(row));
+    const selected=[...candidates][0];
+    const rows=all.filter(row => frameShape(row) && key(row) === selected);
+    const invalid=all.filter(row => !frameShape(row)).length;
+    const hbRows=allHeartbeats.filter(row => heartbeatShape(row) && key(row) === selected);
+    const hbInvalid=allHeartbeats.filter(row => !heartbeatShape(row)).length;
+    let reordered=0, hbReordered=0, previous, previousHeartbeat;
+    for(const row of rows) {
+      if(previous && (row.sequence <= previous.sequence || row.presentedEpochMicros <= previous.presentedEpochMicros || row.sourceFrame < previous.sourceFrame)) reordered++;
+      previous=row;
     }
-    times.sort((a,b) => a-b);
-    assert(times[0] <= start && times.at(-1) >= end,"Stage samples do not bracket measurement");
-    const inside = times.filter(t => t >= start && t <= end); assert(inside.length > 0,"no Stage samples in window");
-    const edges = [start,...inside,end];
-    const gap = Math.max(...edges.slice(1).map((t,i) => t-edges[i]));
-    assert(gap <= 5000,"Stage presentation observation gap exceeds 5000ms");
-    return {observed_samples:inside.length,max_gap_ms:gap,bracketed:1};
+    for(const row of hbRows) {
+      if(previousHeartbeat && (row.sequence <= previousHeartbeat.sequence || row.epochMicros <= previousHeartbeat.epochMicros || row.receivedEpochMicros < previousHeartbeat.receivedEpochMicros || row.lastPresentedSequence < previousHeartbeat.lastPresentedSequence || row.sourceFrame < previousHeartbeat.sourceFrame)) hbReordered++;
+      previousHeartbeat=row;
+    }
+    const bySequence=new Map(rows.map(row => [row.sequence,row]));
+    let linkFailures=0, badIdle=0;
+    const eligible=[];
+    for(const hb of hbRows) {
+      const frame=bySequence.get(hb.lastPresentedSequence);
+      const linked=frame && hb.lastPresentedSequence > 0 && frame.presentedEpochMicros <= hb.epochMicros && frame.sourceFrame === hb.sourceFrame && frame.width === hb.width && frame.height === hb.height && frame.followPreload === hb.followPreload;
+      const fresh=hb.receivedEpochMicros >= hb.epochMicros && hb.receivedEpochMicros-hb.epochMicros <= 5_000_000;
+      if(inWindow(hb.receivedEpochMicros/1000) && (!linked || !fresh)) linkFailures++;
+      const idle=Boolean(linked && fresh && hb.idleUnchanged && hb.drawHealthy && hb.attached && hb.visible && hb.width > 0 && hb.height > 0);
+      if(idle) eligible.push(hb.receivedEpochMicros/1000);
+      else if(inWindow(hb.receivedEpochMicros/1000)) badIdle++;
+    }
+    const sourceChanges=[];let lastSource;
+    for(const row of rows) {if(lastSource === undefined || row.sourceFrame > lastSource) sourceChanges.push(row.presentedEpochMicros/1000);lastSource=row.sourceFrame;}
+    const source=coverage(sourceChanges);
+    const sourcePassed=Number(sourceChanges.length >= 2 && source.observed > 0 && source.bracketed && source.max <= 5000);
+    const presentation=coverage(rows.map(row => row.presentedEpochMicros/1000)), heartbeat=coverage(eligible);
+    const ownerValid=candidates.size === 1 && !unknownLane && invalid === 0 && hbInvalid === 0 && reordered === 0 && hbReordered === 0 && !observerFailed;
+    const presentationPassed=Number(ownerValid && presentation.observed > 0 && presentation.bracketed && presentation.max <= 5000 && (preload || sourcePassed));
+    const idlePassed=Number(ownerValid && preload && rows.length > 0 && badIdle === 0 && linkFailures === 0 && heartbeat.observed > 0 && heartbeat.bracketed && heartbeat.max <= 5000);
+    return {
+      available:Number(rows.length > 0),validation_passed:Number(Boolean(presentationPassed || idlePassed)),
+      retained_samples:rows.length+invalid,valid_samples:rows.length,invalid_samples:invalid,
+      all_activity_samples:all.length,filtered_samples:reportAvailable ? filtered.filter(row => row?.followPreload === preload).length : 0,
+      first_sample_offset_ms:presentation.first,last_sample_offset_ms:presentation.last,observed_samples:presentation.observed,begin_gap_ms:presentation.begin,end_gap_ms:presentation.end,max_gap_ms:presentation.max,bracketed:presentation.bracketed,
+      attachment_count:candidates.size,activity_reordered_samples:reordered,presentation_continuity_passed:presentationPassed,
+      source_change_samples:Math.max(0,sourceChanges.length-1),source_observed_advances:sourceChanges.slice(1).filter(inWindow).length,source_begin_gap_ms:source.begin,source_end_gap_ms:source.end,source_max_gap_ms:source.max,source_bracketed:source.bracketed,source_continuity_passed:sourcePassed,idle_continuity_passed:idlePassed,
+      heartbeat_samples:allHeartbeats.length,heartbeat_valid_samples:hbRows.length,heartbeat_invalid_samples:hbInvalid,heartbeat_reordered_samples:hbReordered,heartbeat_link_failures:linkFailures,heartbeat_ineligible_samples:badIdle,
+      idle_heartbeat_samples:eligible.length,heartbeat_observed_samples:heartbeat.observed,heartbeat_begin_gap_ms:heartbeat.begin,heartbeat_end_gap_ms:heartbeat.end,heartbeat_max_gap_ms:heartbeat.max,heartbeat_bracketed:heartbeat.bracketed,
+      observer_failed:Number(Boolean(observerFailed || unknownLane)),
+    };
   });
-  return {lanes,max_allowed_gap_ms:5000,retrospective:1};
+  return {report_available:Number(reportAvailable),validation_passed:Number(reportAvailable && lanes.every(row => row.validation_passed === 1)),lanes,max_allowed_gap_ms:5000,retrospective:1};
 }
 
-const SCALARS = ["schema_version","complete","all_gates_passed","requested_hz","minimum_required_hz","counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","stage_max_allowed_gap_ms","wall_monotonic_difference_ms","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"];
+// Phase codes are assigned only at trusted harness checkpoints, never inferred from errors:
+// 0 finished/no exception;1 preflight;2 launch/backend;3 seed;4 routes;5 Sheet ready;
+// 6 Stage start+17s;7 measurement;8 UDP;9 fade1;10 fade2;11 Sheet live;
+// 12 Stage complete wait;13 Stage coverage;14 cleanup/evidence;15 outer failure.
+export const FAILURE_STAGE_CODES = Object.freeze(Array.from({length:16},(_,i) => i));
+function phase(value) { uint(value); assert(FAILURE_STAGE_CODES.includes(value),"unknown phase code"); return value; }
+const FLAGS = ["complete","all_gates_passed","workload_available","measurement_available","measurement_passed","resources_available","udp_available","udp_passed","interaction_available","interaction_passed","sheet_liveness_checked","sheet_liveness_passed","stage_report_available","stage_validation_passed","cleanup_complete"];
+const METRICS = ["requested_hz","minimum_required_hz","counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","stage_max_allowed_gap_ms","wall_monotonic_difference_ms","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"];
+const SCALARS = ["schema_version","current_stage_code","failure_stage_code",...FLAGS,...METRICS];
 const RESOURCE_FIELDS = ["cpu_average_percent","cpu_max_percent","peak_resident_bytes"];
-// UDP capture includes opening/closing request bounds whereas backend counter time uses
-// midpoints. Predeclared allowance: at most two fewer/eight additional packets per universe.
-// This tests decoded loopback delivery only, not sender identity or kernel/raw wire loss.
-function gates(report) {
-  return Boolean(report.complete && report.counter_observations === 61 && report.interval_count === 60 && report.actual_window_seconds >= 60 && report.minimum_interval_hz >= 38 && report.windows_below_38hz === 0 && report.deadline_misses === 0 && report.send_errors === 0 && report.accepted_commands === 2 && report.wall_monotonic_difference_ms <= 1000 && report.universes.every(row => row.packets >= report.completed_frames-2 && row.packets <= report.completed_frames+8 && row.packets/report.actual_window_seconds >= 38 && row.sequence_discontinuities === 0 && row.zero_sequence_packets === 0));
-}
-export function validateNumericProof(report) {
-  assert.deepEqual(Object.keys(report).sort(), [...SCALARS,"resources","universes","ramps","stage_lanes"].sort(),"public closed shape");
-  for (const name of SCALARS) nonnegative(report[name]);
-  assert.equal(report.schema_version,1);
-  assert([0,1].includes(report.complete) && [0,1].includes(report.all_gates_passed));
-  assert.equal(report.requested_hz,40);assert.equal(report.minimum_required_hz,38);
-  assert(Array.isArray(report.resources) && report.resources.length === 5);
-  for (const row of report.resources) { assert.deepEqual(Object.keys(row).sort(),RESOURCE_FIELDS.slice().sort()); for (const value of Object.values(row)) nonnegative(value); }
-  for (const [name,length,keys] of [["universes",16,["packets","sequence_discontinuities","zero_sequence_packets"]],["ramps",2,["from_value","to_value","intermediate_values","target_delay_ms","monotonic"]],["stage_lanes",2,["observed_samples","max_gap_ms","bracketed"]]]) {
-    assert(Array.isArray(report[name]) && report[name].length === length,"public fixed rows");
-    for (const row of report[name]) { assert.deepEqual(Object.keys(row).sort(),keys.slice().sort()); for (const value of Object.values(row)) nonnegative(value); }
+const LANE_FIELDS = ["retained_samples","first_sample_offset_ms","last_sample_offset_ms","available","validation_passed","valid_samples","invalid_samples","observed_samples","begin_gap_ms","end_gap_ms","max_gap_ms","bracketed","all_activity_samples","filtered_samples","attachment_count","activity_reordered_samples","presentation_continuity_passed","idle_continuity_passed","heartbeat_samples","heartbeat_valid_samples","heartbeat_invalid_samples","heartbeat_reordered_samples","heartbeat_link_failures","heartbeat_ineligible_samples","idle_heartbeat_samples","heartbeat_observed_samples","heartbeat_begin_gap_ms","heartbeat_end_gap_ms","heartbeat_max_gap_ms","heartbeat_bracketed","observer_failed","source_change_samples","source_observed_advances","source_begin_gap_ms","source_end_gap_ms","source_max_gap_ms","source_bracketed","source_continuity_passed"];
+const RAMP_FIELDS = ["available","from_value","to_value","intermediate_values","target_delay_ms","monotonic"];
+const MEASUREMENT_FIELDS = ["counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","wall_monotonic_difference_ms"];
+function measurementPass(r) { return Boolean(r.measurement_available && r.counter_observations === 61 && r.interval_count === 60 && r.actual_window_seconds >= 60 && r.minimum_interval_hz >= 38 && r.windows_below_38hz === 0 && r.deadline_misses === 0 && r.send_errors === 0 && r.wall_monotonic_difference_ms <= 1000); }
+// Decoded loopback only: midpoint/envelope allowance is two fewer/eight more packets.
+function udpPass(r) { return Boolean(r.udp_available && r.measurement_available && r.actual_window_seconds > 0 && r.universes.every(row => row.packets >= r.completed_frames-2 && row.packets <= r.completed_frames+8 && row.packets/r.actual_window_seconds >= 38 && row.sequence_discontinuities === 0 && row.zero_sequence_packets === 0)); }
+function interactionPass(r) { return Boolean(r.interaction_available && r.accepted_commands === 2 && r.ramps.every(row => row.available && row.monotonic === 1 && row.intermediate_values >= 2 && row.target_delay_ms >= 2500 && row.target_delay_ms <= 4000) && r.ramps[0].from_value === 0 && r.ramps[0].to_value === 128 && r.ramps[1].from_value === 128 && r.ramps[1].to_value === 64); }
+function gates(r) { return Boolean(r.complete && r.failure_stage_code === 0 && r.workload_available && r.measurement_passed && r.resources_available && r.udp_passed && r.interaction_passed && r.sheet_liveness_checked && r.sheet_liveness_passed && r.stage_report_available && r.stage_validation_passed && r.cleanup_complete); }
+function closed(row,keys) { assert(row && !Array.isArray(row)); assert.deepEqual(Object.keys(row).sort(),keys.slice().sort(),"public closed shape"); for(const [name,value] of Object.entries(row)) {if(name === "first_sample_offset_ms" || name === "last_sample_offset_ms") assert(typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 400_000,"invalid bounded offset");else nonnegative(value);} }
+function bit(value) { assert(value === 0 || value === 1,"invalid boolean flag"); }
+export function validateNumericProof(r) {
+  closed(Object.fromEntries(Object.entries(r).filter(([name]) => !["resources","universes","ramps","stage_lanes"].includes(name))),SCALARS);
+  assert.deepEqual(Object.keys(r).sort(),[...SCALARS,"resources","universes","ramps","stage_lanes"].sort(),"public closed shape");
+  assert.equal(r.schema_version,2); phase(r.current_stage_code);phase(r.failure_stage_code);
+  for(const name of FLAGS) bit(r[name]);
+  assert.equal(r.requested_hz,40);assert.equal(r.minimum_required_hz,38);
+  for (const [name,length,keys] of [["resources",5,RESOURCE_FIELDS],["universes",16,["packets","sequence_discontinuities","zero_sequence_packets"]],["ramps",2,RAMP_FIELDS],["stage_lanes",2,LANE_FIELDS]]) {
+    assert(Array.isArray(r[name]) && r[name].length === length,"public fixed rows");
+    for(const row of r[name]) closed(row,keys);
   }
-  assert.equal(report.packet_count, report.universes.reduce((sum,row) => sum+row.packets,0));
-  for (const name of ["counter_observations","interval_count","completed_frames","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"]) uint(report[name]);
-  for (const row of report.universes) { for(const value of Object.values(row)) uint(value); assert(row.zero_sequence_packets <= row.packets && row.sequence_discontinuities <= row.packets); }
-  if (report.complete) {
-    assert.deepEqual([report.fixture_records,report.physical_instances,report.parameter_count,report.universe_count,report.animated_attributes,report.master_lanes],[576,576,8064,16,5408,20]);
-    assert.equal(report.counter_observations,61); assert.equal(report.interval_count,60);
-    assert(report.actual_window_seconds >= 60);
-    assert(Math.abs(report.weighted_completed_hz-report.completed_frames/report.actual_window_seconds) <= 1e-9);
-    assert(report.stage_lanes.every(row => row.observed_samples > 0 && row.bracketed === 1 && row.max_gap_ms <= 5000));
-    assert.equal(report.stage_max_allowed_gap_ms,5000);
-    assert(report.ramps.every(row => row.monotonic === 1 && row.intermediate_values >= 2 && row.target_delay_ms >= 2500 && row.target_delay_ms <= 4000));
-    assert.deepEqual(report.ramps.map(row => [row.from_value,row.to_value]),[[0,128],[128,64]]);
-  } else assert.equal(report.all_gates_passed,0);
-  assert.equal(report.all_gates_passed, Number(gates(report)), "public gate truth mismatch");
-  return report;
+  for(const name of ["counter_observations","interval_count","completed_frames","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"]) uint(r[name]);
+  for(const row of r.universes) {for(const value of Object.values(row)) uint(value);assert(row.zero_sequence_packets <= row.packets && row.sequence_discontinuities <= row.packets);}
+  assert.equal(r.packet_count,r.universes.reduce((n,row) => n+row.packets,0));
+  if(r.workload_available) assert.deepEqual([r.fixture_records,r.physical_instances,r.parameter_count,r.universe_count,r.animated_attributes,r.master_lanes],[576,576,8064,16,5408,20]);
+  else assert([r.fixture_records,r.physical_instances,r.parameter_count,r.universe_count,r.animated_attributes,r.master_lanes].every(value => value === 0));
+  if(r.measurement_available) {
+    assert.equal(r.counter_observations,61);assert.equal(r.interval_count,60);assert(r.actual_window_seconds >= 60);
+    assert(Math.abs(r.weighted_completed_hz-r.completed_frames/r.actual_window_seconds) <= 1e-9);
+  } else assert(MEASUREMENT_FIELDS.every(name => r[name] === 0),"unavailable measurement has values");
+  if(!r.resources_available) assert(r.resources.every(row => Object.values(row).every(value => value === 0)));
+  if(!r.udp_available) assert(r.packet_count === 0 && r.universes.every(row => Object.values(row).every(value => value === 0)));
+  for(const row of r.ramps) {bit(row.available);bit(row.monotonic);if(!row.available) assert(Object.values(row).every(value => value === 0));}
+  assert.equal(r.interaction_available,Number(r.ramps.some(row => row.available)));
+  assert(r.accepted_commands <= 2);
+  for(const [laneIndex,row] of r.stage_lanes.entries()) {
+    for(const name of ["available","validation_passed","bracketed","presentation_continuity_passed","idle_continuity_passed","heartbeat_bracketed","observer_failed","source_bracketed","source_continuity_passed"]) bit(row[name]);
+    for(const name of ["retained_samples","valid_samples","invalid_samples","observed_samples"]) uint(row[name]);
+    assert(row.observed_samples <= row.valid_samples);assert.equal(row.retained_samples,row.valid_samples+row.invalid_samples);
+    assert.equal(row.available,Number(row.valid_samples > 0));
+    if(row.available) assert(row.first_sample_offset_ms <= row.last_sample_offset_ms);else assert(row.first_sample_offset_ms === 0 && row.last_sample_offset_ms === 0);
+    for(const name of ["all_activity_samples","filtered_samples","attachment_count","activity_reordered_samples","heartbeat_samples","heartbeat_valid_samples","heartbeat_invalid_samples","heartbeat_reordered_samples","heartbeat_link_failures","heartbeat_ineligible_samples","idle_heartbeat_samples","heartbeat_observed_samples","source_change_samples","source_observed_advances"]) uint(row[name]);
+    assert(row.retained_samples <= row.all_activity_samples && row.heartbeat_observed_samples <= row.idle_heartbeat_samples && row.idle_heartbeat_samples <= row.heartbeat_valid_samples && row.heartbeat_valid_samples+row.heartbeat_invalid_samples <= row.heartbeat_samples);
+    if(row.source_continuity_passed) assert(row.source_change_samples > 0 && row.source_observed_advances > 0 && row.source_bracketed && row.source_max_gap_ms <= 5000);
+    if(row.presentation_continuity_passed) assert(row.available && row.observed_samples > 0 && row.bracketed && row.max_gap_ms <= 5000 && (laneIndex === 1 || row.source_continuity_passed));
+    if(row.idle_continuity_passed) assert(laneIndex === 1 && row.available && row.heartbeat_observed_samples > 0 && row.heartbeat_bracketed && row.heartbeat_max_gap_ms <= 5000 && row.heartbeat_ineligible_samples === 0 && row.heartbeat_link_failures === 0);
+    assert.equal(row.validation_passed,Number(Boolean(row.presentation_continuity_passed || row.idle_continuity_passed)));
+    if(row.validation_passed) assert(row.attachment_count === 1 && row.invalid_samples === 0 && row.heartbeat_invalid_samples === 0 && row.activity_reordered_samples === 0 && row.heartbeat_reordered_samples === 0 && row.observer_failed === 0);
+  }
+  assert.equal(r.stage_validation_passed,Number(Boolean(r.stage_report_available && r.stage_lanes.every(row => row.validation_passed))));
+  if(!r.stage_report_available) assert(r.stage_validation_passed === 0);
+  if(r.stage_report_available) assert.equal(r.stage_max_allowed_gap_ms,5000);
+  assert(r.sheet_liveness_passed <= r.sheet_liveness_checked);
+  assert.equal(r.measurement_passed,Number(measurementPass(r)));
+  assert.equal(r.udp_passed,Number(udpPass(r)));
+  assert.equal(r.interaction_passed,Number(interactionPass(r)));
+  if(r.failure_stage_code) assert.equal(r.complete,0);
+  if(r.complete) assert(r.current_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.udp_available && r.interaction_available && r.sheet_liveness_checked && r.stage_report_available && r.cleanup_complete);
+  assert.equal(r.all_gates_passed,Number(gates(r)),"public gate truth mismatch");
+  return r;
 }
-export function numericProof(result) {
-  const output = Object.fromEntries(SCALARS.map(name => [name,0]));
-  Object.assign(output,{schema_version:1,requested_hz:40,minimum_required_hz:38,
+export function numericProof(result,progress = {}) {
+  const r = Object.fromEntries(SCALARS.map(name => [name,0]));
+  Object.assign(r,{schema_version:2,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
     resources:Array.from({length:5},() => Object.fromEntries(RESOURCE_FIELDS.map(name => [name,0]))),
     universes:Array.from({length:16},() => ({packets:0,sequence_discontinuities:0,zero_sequence_packets:0})),
-    ramps:Array.from({length:2},() => ({from_value:0,to_value:0,intermediate_values:0,target_delay_ms:0,monotonic:0})),
-    stage_lanes:Array.from({length:2},() => ({observed_samples:0,max_gap_ms:0,bracketed:0})),
+    ramps:Array.from({length:2},() => Object.fromEntries(RAMP_FIELDS.map(name => [name,0]))),
+    stage_lanes:Array.from({length:2},() => Object.fromEntries(LANE_FIELDS.map(name => [name,0]))),
   });
-  if (result) {
-    const r = result.resources;
-    Object.assign(output,{
-      complete:1,fixture_records:result.fixture_count,physical_instances:result.physical_instance_count,parameter_count:result.parameter_count,universe_count:result.universes,animated_attributes:result.animated_attribute_count,master_lanes:result.master_lane_count,counter_observations:result.counter_observation_count,interval_count:result.counter_observation_count-1,
-      actual_window_seconds:result.counter_window_seconds,completed_frames:result.completed_frame_delta,
-      weighted_completed_hz:result.completed_frame_delta/result.counter_window_seconds,
-      minimum_interval_hz:result.minimum_one_second_completed_hz,mean_interval_hz:result.average_completed_hz,
-      windows_below_38hz:result.windows_below_target,deadline_misses:result.deadline_miss_delta,send_errors:result.send_error_delta,
-      packet_count:result.proof.packets.packet_count,universes:result.proof.packets.rows,
-      accepted_commands:result.proof.interaction.accepted_commands,ramps:result.proof.interaction.ramps,
-      stage_lanes:result.proof.stage.lanes,stage_max_allowed_gap_ms:result.proof.stage.max_allowed_gap_ms,
-      wall_monotonic_difference_ms:result.wall_monotonic_difference_ms,
-      resources:[{cpu_average_percent:r.application_cpu_average_percent,cpu_max_percent:r.application_cpu_max_percent,peak_resident_bytes:r.application_peak_resident_bytes},r.server,r.desktop_webview,r.native_renderer,r.desktop_host],
-    });
-    output.all_gates_passed = Number(gates(output));
-  }
-  return validateNumericProof(output);
+  if(result?.fixture_count !== undefined) Object.assign(r,{workload_available:1,fixture_records:result.fixture_count,physical_instances:result.physical_instance_count,parameter_count:result.parameter_count,universe_count:result.universes,animated_attributes:result.animated_attribute_count,master_lanes:result.master_lane_count});
+  if(result?.counter_observation_count !== undefined) Object.assign(r,{measurement_available:1,counter_observations:result.counter_observation_count,interval_count:result.counter_observation_count-1,actual_window_seconds:result.counter_window_seconds,completed_frames:result.completed_frame_delta,weighted_completed_hz:result.completed_frame_delta/result.counter_window_seconds,minimum_interval_hz:result.minimum_one_second_completed_hz,mean_interval_hz:result.average_completed_hz,windows_below_38hz:result.windows_below_target,deadline_misses:result.deadline_miss_delta,send_errors:result.send_error_delta,wall_monotonic_difference_ms:result.wall_monotonic_difference_ms});
+  if(result?.resources) {const v=result.resources;Object.assign(r,{resources_available:1,resources:[{cpu_average_percent:v.application_cpu_average_percent,cpu_max_percent:v.application_cpu_max_percent,peak_resident_bytes:v.application_peak_resident_bytes},v.server,v.desktop_webview,v.native_renderer,v.desktop_host]});}
+  if(result?.proof?.packets) Object.assign(r,{udp_available:1,packet_count:result.proof.packets.packet_count,universes:result.proof.packets.rows});
+  if(result?.proof?.interaction) {const v=result.proof.interaction;r.accepted_commands=v.accepted_commands;for(let i=0;i<v.ramps.length;i++)r.ramps[i]={available:1,...v.ramps[i]};r.interaction_available=Number(v.ramps.length>0);}
+  if(result?.proof?.stage) {const v=result.proof.stage;Object.assign(r,{stage_report_available:v.report_available,stage_validation_passed:v.validation_passed,stage_lanes:v.lanes,stage_max_allowed_gap_ms:v.max_allowed_gap_ms});}
+  // Completion, Sheet liveness and cleanup are trusted observations, never inferred
+  // merely from a result object's presence. Callers must supply them explicitly.
+  Object.assign(r,{complete:0,current_stage_code:1,sheet_liveness_checked:0,sheet_liveness_passed:0,cleanup_complete:0},progress);
+  r.measurement_passed=Number(measurementPass(r));r.udp_passed=Number(udpPass(r));r.interaction_passed=Number(interactionPass(r));r.all_gates_passed=Number(gates(r));
+  return validateNumericProof(r);
 }
-export async function writeNumericProof(file,result) {
-  const report = numericProof(result); await mkdir(path.dirname(file),{recursive:true});
-  await writeFile(file,`${JSON.stringify(report,null,2)}\n`,{flag:"wx",mode:0o600}); return report;
+async function atomicNumericWrite(file,report) {
+  await mkdir(path.dirname(file),{recursive:true});
+  const temporary = `${file}.checkpoint-${crypto.randomUUID()}.tmp`;
+  try {await writeFile(temporary,`${JSON.stringify(report,null,2)}\n`,{flag:"wx",mode:0o600});await rename(temporary,file);}
+  catch(error) {await unlink(temporary).catch(() => {});throw error;}
+}
+export async function writeNumericProof(file,result,progress) {const report=numericProof(result,progress);await atomicNumericWrite(file,report);return report;}
+export class ProofCheckpoint {
+  constructor(file,io = {}) {
+    this.file=file;this.write=io.write ?? atomicNumericWrite;this.result={proof:{}};
+    this.progress={complete:0,current_stage_code:1,failure_stage_code:0,sheet_liveness_checked:0,sheet_liveness_passed:0,cleanup_complete:0};
+    this.pending=Promise.resolve();
+  }
+  save() {
+    const report=structuredClone(numericProof(this.result,this.progress));
+    const next=this.pending.then(() => this.write(this.file,report));
+    this.pending=next.catch(() => {});return next.then(() => report);
+  }
+  enter(code) {phase(code);assert(code !== 0);this.progress.current_stage_code=code;this.progress.complete=0;return this.save();}
+  fail(code=this.progress.current_stage_code) {phase(code);assert(code !== 0);this.progress.failure_stage_code ||= code;this.progress.complete=0;return this.save();}
+  finish(cleanupPassed) {bit(cleanupPassed);this.progress.cleanup_complete=cleanupPassed;if(!cleanupPassed)this.progress.failure_stage_code ||= 14;this.progress.complete=Number(!this.progress.failure_stage_code && cleanupPassed);if(this.progress.complete)this.progress.current_stage_code=0;return this.save();}
 }

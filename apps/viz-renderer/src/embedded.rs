@@ -20,7 +20,9 @@
 //! If neither is available the desk never starts this at all and keeps drawing the Stage with its
 //! own web renderer, which is why nothing here has to cope with having no transport.
 
+mod benchmark;
 use crate::helper_source::{Embedding, HelperSource};
+use benchmark::{BenchmarkDrawWitness, BenchmarkHeartbeatClock};
 use std::time::{Duration, Instant};
 use viz_desk::{DeskConnection, DeskProvider};
 use viz_helper::protocol::{FrameTransport, PaneInput};
@@ -48,6 +50,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         }
     };
     let epoch = Instant::now();
+    let mut heartbeat_clock = BenchmarkHeartbeatClock::new(state.benchmark.is_some());
 
     /*
      * The rig comes from the desk's own server, through the same provider the standalone
@@ -182,15 +185,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             };
         }
         state.resize_for(&embedding)?;
-        match state.draw(epoch, &mut source) {
-            Ok(()) => {}
-            // A frame that failed is not fatal on its own: a surface can be lost while a display
-            // is reconfigured and be there again next frame. The desk is told, and the loop keeps
-            // going rather than taking the pane away over one bad frame.
-            Err(detail) => {
-                source.report(&detail);
-            }
-        }
+        benchmark::draw_and_observe(&mut state, epoch, &mut source, &mut heartbeat_clock);
         std::thread::sleep(IDLE_SLEEP);
     }
 }
@@ -233,6 +228,9 @@ fn wait_for_embedding(source: &mut HelperSource) -> Result<Embedding, String> {
 fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
     let mut finished = false;
     for event in events {
+        if let Some(benchmark) = state.benchmark.as_mut() {
+            benchmark.observe(&event);
+        }
         match event {
             ProviderEvent::Snapshot { scene, view } => {
                 state.scene = *scene;
@@ -304,6 +302,7 @@ struct PaneState {
     overlay_inputs: Option<crate::redraw::LabelInputs>,
     last_tick: Instant,
     presented_frames: u64,
+    benchmark: Option<BenchmarkDrawWitness>,
     physics: crate::physics::Physics,
 }
 
@@ -337,6 +336,10 @@ impl PaneState {
             overlay_inputs: None,
             last_tick: Instant::now(),
             presented_frames: 0,
+            benchmark: crate::helper_source::benchmark_reporting_enabled(
+                std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").as_deref(),
+            )
+            .then(|| BenchmarkDrawWitness::new(embedding.desk.is_some())),
             physics: crate::physics::Physics::with_state_path(physics_state_path),
         })
     }
@@ -617,6 +620,10 @@ impl PaneState {
     }
 
     fn draw(&mut self, epoch: Instant, source: &mut HelperSource) -> Result<(), String> {
+        if let Some(benchmark) = self.benchmark.as_mut() {
+            benchmark.idle_unchanged = false;
+            benchmark.draw_healthy = false;
+        }
         let now = Instant::now();
         let elapsed = now
             .saturating_duration_since(self.last_tick)
@@ -662,7 +669,21 @@ impl PaneState {
             self.size,
             &self.overlay.quads,
         );
+        let same_successful_picture = self.benchmark.as_ref().is_some_and(|benchmark| {
+            benchmark.ready()
+                && benchmark.last_success.as_ref() == Some(&redraw_state)
+                && benchmark.follow_preload == self.following_preload
+        });
+        // Clone only a changed diagnostic stamp; a static skipped loop keeps its existing witness.
+        let benchmark_candidate = if self.benchmark.is_some() && !same_successful_picture {
+            Some(redraw_state.clone())
+        } else {
+            None
+        };
         if !self.redraw_gate.should_draw(redraw_state, time_driven) {
+            if let Some(benchmark) = self.benchmark.as_mut() {
+                benchmark.skipped(same_successful_picture, self.presented_frames);
+            }
             return Ok(());
         }
         let stats = match self.transport {
@@ -670,6 +691,13 @@ impl PaneState {
             FrameTransport::Copy => self.draw_copy(time, source),
         }?;
         self.presented_frames = self.presented_frames.saturating_add(1);
+        if let Some(benchmark) = self.benchmark.as_mut() {
+            if let Some(candidate) = benchmark_candidate {
+                benchmark.last_success = Some(candidate);
+            }
+            benchmark.follow_preload = self.following_preload;
+            benchmark.draw_healthy = benchmark.ready();
+        }
         let presented_epoch_micros = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_micros() as u64)

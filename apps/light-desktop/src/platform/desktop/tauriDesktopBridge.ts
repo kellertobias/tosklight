@@ -4,6 +4,7 @@ import type {
 	DesktopDisplay,
 	DesktopUnsubscribe,
 	DesktopWindowState,
+	StagePaneBenchmarkObservations,
 } from "./types";
 
 const coreApi = () => import("@tauri-apps/api/core");
@@ -177,7 +178,7 @@ export const tauriDesktopBridge: DesktopBridge = {
 	},
 	takeStagePaneBenchmarkSamples: async () => {
 		const api = await coreApi();
-		return api.invoke("take_stage_pane_benchmark_samples");
+		return api.invoke<StagePaneBenchmarkObservations>("take_stage_pane_benchmark_samples");
 	},
 	packagedStageBenchmarkConfig: async () => {
 		const api = await coreApi();

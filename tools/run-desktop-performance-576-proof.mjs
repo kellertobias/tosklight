@@ -10,7 +10,7 @@ import { chmod, realpath } from "node:fs/promises";
 import { artifactPaths } from "./artifact-paths.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
-  waitStageComplete, summarizeStageWindow, writeNumericProof,
+  waitStageComplete, summarizeStageWindow, ProofCheckpoint,
 } from "./desktop-performance-576-proof-observers.mjs";
 import path from "node:path";
 import { finished } from "node:stream/promises";
@@ -46,66 +46,30 @@ const LINUX_PROCESS_OPTIONS = {
 const CASES = [{ caseId: "sixteen_universe", fixtureRecords: 576 }];
 
 const options = parseArguments(process.argv.slice(2));
-if (process.platform !== "linux")
-	throw new Error(
-		"The released Desk performance harness requires Linux /proc and Xvfb",
-	);
-await verifyWorkloadFunctions({prepareMixed, installDynamics, summarizePatch});
-await mkdir(path.resolve(options["output-dir"]), { recursive: true, mode: 0o700 });
-const privateRoot = await realpath(path.resolve(options["output-dir"]));
-const canonicalTmp = await realpath(artifactPaths.tmp);
-assert(privateRoot.startsWith(`${canonicalTmp}${path.sep}`), "private output must be beneath canonical tmp");
-await chmod(privateRoot, 0o700);
 const numericPath = path.resolve(options["numeric-report"]);
 assert(numericPath.startsWith(`${path.resolve(artifactPaths.results)}${path.sep}`), "numeric output must be beneath canonical test results");
-assert(numericPath !== privateRoot && !numericPath.startsWith(`${privateRoot}${path.sep}`), "public report overlaps private output");
-let publicWritten = false;
+const checkpoint = new ProofCheckpoint(numericPath);
+await checkpoint.enter(1);
+let published;
 try {
-const results = [];
-// Every show is measured unrestricted. The demo show is measured a second time locked to one
-// core, which is the case that says whether a modest machine can still run a real show.
-for (const performanceCase of CASES)
-	for (const executionMode of performanceCase.demo
-		? ["unrestricted", "one_core"]
-		: ["unrestricted"])
-		try {
-			results.push(await runCase(performanceCase, executionMode));
-		} catch (error) {
-			await writeFile(
-				path.resolve(options["output-dir"], "desktop-scenarios.partial.json"),
-				`${JSON.stringify(
-					{
-						schema_version: 1,
-						complete: false,
-						scenarios: results,
-						failed_case: {
-							case_id: performanceCase.caseId,
-							execution_mode: executionMode,
-							error: error instanceof Error ? error.message : String(error),
-						},
-					},
-					null,
-					2,
-				)}\n`,
-			).catch((diagnosticError) => {
-				console.error(
-					`Partial desktop report unavailable: ${diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError)}`,
-				);
-			});
-            await writeNumericProof(numericPath, null);
-            publicWritten = true;
-            throw error;
-        }
-await writeFile(
-	path.resolve(options["output-dir"], "desktop-scenarios.json"),
-	`${JSON.stringify({ schema_version: 1, scenarios: results }, null, 2)}\n`,
-);
-const published = await writeNumericProof(numericPath, results[0]);
-publicWritten = true;
-assert.equal(published.all_gates_passed, 1, "focused576 performance proof gates failed");
-} finally {
-  if (!publicWritten) await writeNumericProof(numericPath, null);
+  assert.equal(process.platform,"linux","The released Desk performance harness requires Linux /proc and Xvfb");
+  await verifyWorkloadFunctions({prepareMixed, installDynamics, summarizePatch});
+  await mkdir(path.resolve(options["output-dir"]), { recursive: true, mode: 0o700 });
+  const privateRoot = await realpath(path.resolve(options["output-dir"]));
+  const canonicalTmp = await realpath(artifactPaths.tmp);
+  assert(privateRoot.startsWith(`${canonicalTmp}${path.sep}`), "private output must be beneath canonical tmp");
+  assert(numericPath !== privateRoot && !numericPath.startsWith(`${privateRoot}${path.sep}`), "public report overlaps private output");
+  await chmod(privateRoot,0o700);
+  await checkpoint.enter(2);
+  const result = await runCase(CASES[0],"unrestricted");
+  await checkpoint.enter(14);
+  await writeFile(path.resolve(options["output-dir"],"desktop-scenarios.json"),`${JSON.stringify({schema_version:1,scenarios:[result]},null,2)}\n`);
+  published = await checkpoint.finish(1);
+} catch(error) {
+  await checkpoint.fail(checkpoint.progress.current_stage_code || 15);
+  throw error;
 }
+assert.equal(published.all_gates_passed,1,"focused576 performance proof gates failed");
 
 function parseArguments(arguments_) {
 	const values = {};
@@ -183,7 +147,9 @@ async function runCase(performanceCase, executionMode) {
 		sheet: null,
 	};
 	const output = [];
-	const evidence = await createCaseEvidence(temporaryRoot);
+	let evidence;
+  try { evidence = await createCaseEvidence(temporaryRoot); }
+  catch(error) { await terminateProcessTree(child.pid); throw error; }
 	evidence.closed = closed;
 	let failure;
 	let result;
@@ -202,6 +168,7 @@ async function runCase(performanceCase, executionMode) {
 	try {
 		await waitForReadiness(child, port);
 		state.backendReady = true;
+    await checkpoint.enter(3);
 		state.phase = "show-preparation";
 		const api = apiClient(port);
 		// A v2 session is a client on a desk, not a named operator: the desk resolves which desk
@@ -215,11 +182,14 @@ async function runCase(performanceCase, executionMode) {
 			? await prepareDemo(api)
 			: await prepareMixed(api, performanceCase.fixtureRecords);
 		assert.deepEqual(prepared, {fixtureRecords:576,physicalInstances:576,parameterCount:8064,universes:16,animatedAttributes:5408,masterLanes:20});
+    Object.assign(checkpoint.result,{fixture_count:prepared.fixtureRecords,physical_instance_count:prepared.physicalInstances,parameter_count:prepared.parameterCount,universes:prepared.universes,animated_attribute_count:prepared.animatedAttributes,master_lane_count:prepared.masterLanes});
+    await checkpoint.enter(4);
     packetProof = await configurePacketProof(api, port);
     // The show exists now, so let the unchanged benchmark surface begin.
 		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
 		state.prepared = true;
 		state.phase = "fixture-sheet-readiness";
+    await checkpoint.enter(5);
 		// The Sheet counts the fixtures it shows, and a show holds what it could actually be
 		// given: measure against the patch that exists rather than the size that was ordered.
 		const sheetRecords = performanceCase.demo ? null : prepared.fixtureRecords;
@@ -234,11 +204,13 @@ async function runCase(performanceCase, executionMode) {
 				state.sheet = snapshot;
 			},
 		);
+    await checkpoint.enter(6);
     await waitStageStarted(reportPath, () => assertRunning(child));
     // Original surface resizes at 8s, releases live at 15s and recreates at 16s.
     // Readiness here is provisional: final per-pane telemetry validates the window retrospectively.
     await new Promise(resolve => setTimeout(resolve, 17_000));
     assertRunning(child);
+    await checkpoint.enter(7);
     packetProof.start();
 		state.phase = "measurement";
 		const measurementStartedAt = Date.now();
@@ -251,11 +223,21 @@ async function runCase(performanceCase, executionMode) {
 		);
     const measurementEndedAt = Date.now();
     measured.wall_monotonic_difference_ms = Math.abs((measurementEndedAt-measurementStartedAt)-(performance.now()-measurementMonotonicStart));
+    Object.assign(checkpoint.result,measured);
+    await checkpoint.enter(8);
     const packets = packetProof.snapshot();
-    const interaction = await packetProof.interact();
+    checkpoint.result.proof.packets = packets;
+    await checkpoint.save();
+    const interaction = await packetProof.interact(async (phase,partial) => {
+      if(partial) checkpoint.result.proof.interaction = partial;
+      await checkpoint.enter(phase);
+    });
+    checkpoint.result.proof.interaction = interaction;
+    await checkpoint.save();
     await packetProof.close();
     await writeFile(path.join(temporaryRoot,"packet-proof-private.json"), JSON.stringify(packetProof.privateState()), {flag:"wx",mode:0o600});
 		state.phase = "fixture-sheet-liveness";
+    await checkpoint.enter(11);
 		await requireFixtureSheetActive(
 			reportPath,
 			sheetRecords,
@@ -268,8 +250,15 @@ async function runCase(performanceCase, executionMode) {
 				state.sheet = { ...state.sheet, ...snapshot };
 			},
 		);
+    checkpoint.progress.sheet_liveness_checked=1;
+    checkpoint.progress.sheet_liveness_passed=1;
+    await checkpoint.enter(12);
     const complete = await waitStageComplete(reportPath, () => assertRunning(child));
+    await checkpoint.enter(13);
     const stage = summarizeStageWindow(complete, measurementStartedAt, measurementEndedAt);
+    checkpoint.result.proof.stage = stage;
+    await checkpoint.save();
+    assert.equal(stage.validation_passed,1,"Stage retrospective coverage failed");
     if (watchdogFailure) throw watchdogFailure;
 		state.phase = "complete";
 		result = {
@@ -293,6 +282,8 @@ async function runCase(performanceCase, executionMode) {
       proof: {packets, interaction, stage},
 		};
 	} catch (error) {
+    if(checkpoint.progress.current_stage_code === 11) checkpoint.progress.sheet_liveness_checked=1;
+    await checkpoint.fail();
 		const diagnostics = await retainCaseFailure({
 			performanceCase,
 			executionMode,
@@ -311,11 +302,13 @@ async function runCase(performanceCase, executionMode) {
 		);
 	}
   clearTimeout(watchdog);
-  try { await packetProof?.close(); } catch (error) { failure ??= error; }
+  await checkpoint.enter(14);
+  let cleanupPassed = 1;
+  try { await packetProof?.close(); } catch (error) { cleanupPassed=0;failure ??= error;await checkpoint.fail(14); }
   if (packetProof && failure) {
     await writeFile(path.join(temporaryRoot,"packet-proof-failure-private.json"), JSON.stringify(packetProof.privateState()), {flag:"wx",mode:0o600}).catch(() => {});
   }
-	failure = await finalizeCaseEvidence(
+	const finalized = await finalizeCaseEvidence(
 		child,
 		evidence,
 		reportPath,
@@ -324,6 +317,9 @@ async function runCase(performanceCase, executionMode) {
 		temporaryRoot,
 		failure,
 	);
+  failure = finalized.failure;
+  cleanupPassed = Number(cleanupPassed && finalized.cleanupPassed);
+  await checkpoint.finish(cleanupPassed);
 	if (failure) throw failure;
 	return result;
 }
@@ -337,15 +333,18 @@ async function finalizeCaseEvidence(
 	temporaryRoot,
 	failure,
 ) {
+  let cleanupPassed=1;
 	try {
 		await terminateProcessTree(child.pid);
 	} catch (error) {
+    cleanupPassed=0;
 		failure ??= error;
 	}
 	let drainError;
 	try {
 		await drainCaseLog(evidence);
 	} catch (error) {
+    cleanupPassed=0;
 		drainError = error;
 		state.runtimeLogDrain = { complete: false, error: error.message };
 		child.stdout.destroy();
@@ -357,11 +356,12 @@ async function finalizeCaseEvidence(
 		if (drainError) throw drainError;
 		// Keep bounded private evidence under canonical tmp for independent review.
 	} catch (error) {
+    cleanupPassed=0;
 		const message = `Runtime evidence unavailable at ${evidence.manifestPath}; scratch preserved at ${temporaryRoot}: ${error instanceof Error ? error.message : String(error)}`;
 		if (failure) console.error(message);
 		else failure = new Error(message);
 	}
-	return failure;
+	return {failure,cleanupPassed};
 }
 
 async function drainCaseLog(evidence) {

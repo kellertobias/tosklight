@@ -7,6 +7,9 @@ import { useDesktopBridge } from "./platform/desktop";
 import type {
 	PackagedStageBenchmarkConfig,
 	StagePaneBenchmarkSample,
+	StagePaneBenchmarkHeartbeat,
+	StagePaneBenchmarkObservations,
+	DesktopBridge,
 } from "./platform/desktop/types";
 import { AppProvider, useApp } from "./state/AppContext";
 import { FixtureSheetBenchmarkDiagnostics } from "./windows/FixtureSheetBenchmarkDiagnostics";
@@ -59,6 +62,75 @@ function appendNativeFrames(
 	}
 }
 
+const MAX_ACTIVITY_OBSERVATIONS = 20_000;
+const MAX_HEARTBEAT_OBSERVATIONS = 10_000;
+
+function retainNativeObservations(
+	batch: StagePaneBenchmarkObservations,
+	activity: StagePaneBenchmarkSample[],
+	heartbeats: StagePaneBenchmarkHeartbeat[],
+	overflow: { activity: number; heartbeats: number; errors: number },
+) {
+	// Preserve actual presentation activity before appendNativeFrames filters unchanged
+	// source frames. One latest observation per attachment per poll is sufficient for
+	// liveness; it is not a renderer-FPS sample stream.
+	const latest = new Map<string, StagePaneBenchmarkSample>();
+	for (const frame of batch.frames) {
+		latest.set(`${frame.paneId}\0${frame.attachmentId}`, frame);
+	}
+	for (const frame of latest.values()) {
+		if (activity.length < MAX_ACTIVITY_OBSERVATIONS) activity.push(frame);
+		else overflow.activity += 1;
+	}
+	// Keep every heartbeat in arrival order so foreign/reordered generations cannot be
+	// hidden by deduplication. An overflow preserves a bounded prefix and fails validation.
+	for (const heartbeat of batch.heartbeats) {
+		if (heartbeats.length < MAX_HEARTBEAT_OBSERVATIONS) heartbeats.push(heartbeat);
+		else overflow.heartbeats += 1;
+	}
+}
+
+interface NativeObservationContext {
+	desktop: DesktopBridge;
+	frames: { current: NativeFrameSample[] };
+	latestFrameByPane: { current: Map<string, NativeFrameSample> };
+	activity: { current: StagePaneBenchmarkSample[] };
+	heartbeats: { current: StagePaneBenchmarkHeartbeat[] };
+	observerOverflow: { current: { activity: number; heartbeats: number; errors: number } };
+	timeline: { current: Array<Record<string, unknown>> };
+	quality: { current: StagePaneBenchmarkSample["quality"] };
+	sampleInFlight: { current: Promise<void> | null };
+	finishing: { current: boolean };
+}
+
+function sampleNativeBenchmark(context: NativeObservationContext) {
+	const { desktop, frames, latestFrameByPane, activity, heartbeats, observerOverflow,
+		timeline, quality, sampleInFlight, finishing } = context;
+	if (finishing.current || sampleInFlight.current) return;
+	sampleInFlight.current = desktop.takeStagePaneBenchmarkSamples().then((batch) => {
+		retainNativeObservations(batch, activity.current, heartbeats.current, observerOverflow.current);
+		const first = frames.current.length;
+		appendNativeFrames(frames.current, batch.frames, latestFrameByPane.current);
+		const renderSamples = frames.current.slice(first).map((frame) => ({
+			benchmarkSequence: `${frame.paneId}:${frame.sequence}`,
+			paneId: frame.paneId,
+			submittedAt: frame.presentedEpochMicros / 1_000,
+			recordedAt: frame.presentedEpochMicros / 1_000,
+			renderQuality: frame.quality,
+			durationMs: frame.cpuMicros / 1_000,
+			calls: frame.drawCalls,
+			geometries: frame.instances,
+			textures: 0,
+		}));
+		timeline.current.push({
+			recordedAt: Date.now(), quality: quality.current, renders: frames.current.length,
+			newRenders: renderSamples, latestRender: renderSamples.at(-1) ?? null,
+			mainDocumentFocused: document.hasFocus(),
+		});
+	}).catch(() => { observerOverflow.current.errors += 1; })
+		.finally(() => { sampleInFlight.current = null; });
+}
+
 export function NativePackagedStageBenchmarkApp({
 	config,
 }: {
@@ -85,6 +157,11 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	const [liveVisible, setLiveVisible] = useState(true);
 	const [surfaceInset, setSurfaceInset] = useState(false);
 	const frames = useRef<NativeFrameSample[]>([]);
+	const activity = useRef<StagePaneBenchmarkSample[]>([]);
+	const heartbeats = useRef<StagePaneBenchmarkHeartbeat[]>([]);
+	const observerOverflow = useRef({ activity: 0, heartbeats: 0, errors: 0 });
+	const sampleInFlight = useRef<Promise<void> | null>(null);
+	const finishing = useRef(false);
 	const latestFrameByPane = useRef(new Map<string, NativeFrameSample>());
 	const timeline = useRef<Array<Record<string, unknown>>>([]);
 	const startedAt = useRef<string | null>(null);
@@ -128,31 +205,10 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 			setStageEnabled(true);
 		}, config.controlDurationSeconds * 1_000);
 
-		const sample = window.setInterval(() => {
-			void desktop.takeStagePaneBenchmarkSamples().then((samples) => {
-				const first = frames.current.length;
-				appendNativeFrames(frames.current, samples, latestFrameByPane.current);
-				const renderSamples = frames.current.slice(first).map((frame) => ({
-					benchmarkSequence: `${frame.paneId}:${frame.sequence}`,
-					paneId: frame.paneId,
-					submittedAt: frame.presentedEpochMicros / 1_000,
-					recordedAt: frame.presentedEpochMicros / 1_000,
-					renderQuality: frame.quality,
-					durationMs: frame.cpuMicros / 1_000,
-					calls: frame.drawCalls,
-					geometries: frame.instances,
-					textures: 0,
-				}));
-				timeline.current.push({
-					recordedAt: Date.now(),
-					quality: quality.current,
-					renders: frames.current.length,
-					newRenders: renderSamples,
-					latestRender: renderSamples.at(-1) ?? null,
-					mainDocumentFocused: document.hasFocus(),
-				});
-			});
-		}, 100);
+		const sample = window.setInterval(() => sampleNativeBenchmark({
+			desktop, frames, latestFrameByPane, activity, heartbeats, observerOverflow,
+			timeline, quality, sampleInFlight, finishing,
+		}), 100);
 
 		return () => {
 			window.clearTimeout(beginStage);
@@ -163,7 +219,15 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	useEffect(() => {
 		if (!stageEnabled) return;
 		const finish = window.setTimeout(() => {
-			void desktop.takeStagePaneBenchmarkSamples().then(async (samples) => {
+			void (async () => {
+				finishing.current = true;
+				await sampleInFlight.current;
+				const batch = await desktop.takeStagePaneBenchmarkSamples().catch(() => {
+					observerOverflow.current.errors += 1;
+					return { frames: [], heartbeats: [] };
+				});
+				retainNativeObservations(batch, activity.current, heartbeats.current, observerOverflow.current);
+				const samples = batch.frames;
 				appendNativeFrames(frames.current, samples, latestFrameByPane.current);
 				await desktop.appendPackagedStageBenchmarkSample({
 					schemaVersion: 2,
@@ -177,6 +241,9 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 						: ["stage-native-live", "stage-native-preload"],
 					nativeStage: {
 						frames: frames.current,
+						activity: activity.current,
+						heartbeats: heartbeats.current,
+						observerOverflow: observerOverflow.current,
 						rendererLifecycleExercise: "unmount-and-recreate",
 					},
 					timeline: timeline.current,
@@ -186,7 +253,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 					},
 				});
 				setStageEnabled(false);
-			});
+			})().catch(() => { observerOverflow.current.errors += 1; });
 		}, config.durationSeconds * 1_000);
 		return () => window.clearTimeout(finish);
 	}, [config, desktop, stageEnabled]);

@@ -17,6 +17,9 @@
 //! precisely what running the renderer in another process was meant to prevent.
 
 use crate::stage_compositor::StageCompositor;
+mod benchmark;
+use benchmark::{BenchmarkAttachment, benchmark_attachment};
+pub(crate) use benchmark::{FrameTelemetry, PaneHeartbeat, StagePaneBenchmarkSamples};
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::sync::{Arc, Mutex};
@@ -43,6 +46,7 @@ enum FromRenderer {
         rgba: Vec<u8>,
     },
     Presented(FrameTelemetry),
+    BenchmarkHeartbeat(PaneHeartbeat),
     /// Where the camera now is.
     Camera([f32; 6]),
     /// What the operator pointed at in the pane.
@@ -73,6 +77,8 @@ pub(crate) struct StagePane {
     /// drift the moment a mouse touched the pane.
     camera: Mutex<Option<[f32; 6]>>,
     telemetry: Mutex<Vec<FrameTelemetry>>,
+    heartbeats: Mutex<Vec<PaneHeartbeat>>,
+    heartbeat_overflow: std::sync::atomic::AtomicBool,
     /// Whether anything is embedded, readable without taking the lock.
     ///
     /// The frame pump asks this before posting anything to the main thread. A desk with no pane —
@@ -80,27 +86,6 @@ pub(crate) struct StagePane {
     /// paints on, and posting a task every few milliseconds from startup competes with the
     /// webview's own first paint.
     drawing: std::sync::atomic::AtomicBool,
-}
-
-#[derive(Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct FrameTelemetry {
-    pane_id: String,
-    sequence: u64,
-    source_frame: u64,
-    source_input_epoch_micros: u64,
-    presented_epoch_micros: u64,
-    cpu_micros: u64,
-    acquire_micros: u64,
-    gpu_micros: Option<u64>,
-    instances: u32,
-    draw_calls: u32,
-    degraded: bool,
-    renderer: String,
-    quality: &'static str,
-    follow_preload: bool,
-    width: u32,
-    height: u32,
 }
 
 #[derive(Default)]
@@ -114,22 +99,6 @@ struct RegisteredPane {
 }
 
 impl StagePanes {
-    fn take_benchmark_samples(&self) -> Result<Vec<FrameTelemetry>, String> {
-        let panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
-        let mut result = Vec::new();
-        for (pane_id, registered) in panes.iter() {
-            let mut samples = registered
-                .pane
-                .telemetry
-                .lock()
-                .map_err(|_| "the Stage pane benchmark telemetry")?;
-            for mut sample in samples.drain(..) {
-                sample.pane_id.clone_from(pane_id);
-                result.push(sample);
-            }
-        }
-        Ok(result)
-    }
     fn ensure_owner_available(&self, key: &str, live_3d: bool) -> Result<(), String> {
         let panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
         Self::ensure_owner_available_in(&panes, key, live_3d)
@@ -262,6 +231,10 @@ struct Running {
     compositor: StageCompositor,
     identity: HelperIdentity,
     transport: FrameTransport,
+    benchmark: Option<BenchmarkAttachment>,
+    pane: PaneRect,
+    scale: f32,
+    surface_size: (u32, u32),
 }
 
 impl StagePane {
@@ -287,10 +260,7 @@ impl StagePane {
             + 'static,
     {
         self.close()?;
-        self.telemetry
-            .lock()
-            .map_err(|_| "the Stage pane benchmark telemetry")?
-            .clear();
+        let benchmark = benchmark_attachment()?;
         let program = match crate::visualizer::helper_binary() {
             Ok(program) => program,
             Err(error) => {
@@ -298,8 +268,7 @@ impl StagePane {
                 return Err(error);
             }
         };
-        // `--embed` implies `--helper` and opens no window: the desk owns the window, and this
-        // process only ever draws the rectangle it is given.
+        // `--embed` opens no helper window: the desk owns the window and pane rectangle.
         let mut helper = crate::portable::renderer(program, vec!["--embed".to_owned()]);
         if let Err(error) = helper.start() {
             eprintln!("stage pane: the renderer would not start: {error}");
@@ -376,6 +345,10 @@ impl StagePane {
             compositor,
             identity,
             transport,
+            benchmark,
+            pane,
+            scale,
+            surface_size,
         };
         running.compositor.set_pane(pane, scale);
         running.send(&ToHelper::Embed {
@@ -432,6 +405,9 @@ impl StagePane {
         let Some(running) = guard.as_mut() else {
             return Ok(());
         };
+        running.pane = pane;
+        running.scale = scale;
+        running.surface_size = surface_size;
         running.compositor.resize(surface_size.0, surface_size.1);
         running.compositor.set_pane(pane, scale);
         running.send(&ToHelper::Pane { pane });
@@ -518,7 +494,12 @@ impl StagePane {
                 }) => {
                     // A surface that cannot be opened is not the end of the pane: the renderer
                     // replaces it on the next resize, and the last good picture stays up.
-                    if let Err(detail) = running.adopt(handle, width, height) {
+                    let adoption = running.adopt(handle, width, height);
+                    if let Some(benchmark) = running.benchmark.as_mut() {
+                        benchmark.source_ready = adoption.is_ok();
+                        benchmark.draw_healthy &= adoption.is_ok();
+                    }
+                    if let Err(detail) = adoption {
                         trouble = Some(detail);
                     }
                 }
@@ -527,20 +508,20 @@ impl StagePane {
                     height,
                     rgba,
                 }) => {
-                    if let Err(detail) = running.compositor.accept_copy(width, height, &rgba) {
+                    let adoption = running.compositor.accept_copy(width, height, &rgba);
+                    if let Some(benchmark) = running.benchmark.as_mut() {
+                        benchmark.source_ready = adoption.is_ok();
+                        benchmark.draw_healthy &= adoption.is_ok();
+                    }
+                    if let Err(detail) = adoption {
                         trouble = Some(detail);
                     }
                 }
                 Ok(FromRenderer::Presented(sample)) => {
-                    let mut samples = self
-                        .telemetry
-                        .lock()
-                        .map_err(|_| "the Stage pane benchmark telemetry")?;
-                    if samples.len() >= 2_048 {
-                        let overflow = samples.len() + 1 - 2_048;
-                        samples.drain(..overflow);
-                    }
-                    samples.push(sample);
+                    self.record_benchmark_frame(running, sample)?
+                }
+                Ok(FromRenderer::BenchmarkHeartbeat(heartbeat)) => {
+                    self.record_benchmark_heartbeat(running, heartbeat)?
                 }
                 Ok(FromRenderer::Camera(camera)) => latest_camera = Some(camera),
                 Ok(FromRenderer::Picked { fixture, additive }) => {
@@ -580,6 +561,9 @@ impl StagePane {
             return Ok(());
         }
         let result = running.compositor.draw();
+        if let Some(benchmark) = running.benchmark.as_mut() {
+            benchmark.draw_healthy = result.is_ok() && benchmark.source_ready;
+        }
         drop(guard);
         if let Some(camera) = latest_camera {
             *self.camera.lock().map_err(|_| "the Stage pane")? = Some(camera);
@@ -667,6 +651,7 @@ impl StagePane {
             running.helper.stop();
         }
         *guard = None;
+        self.clear_benchmark_samples()?;
         Ok(())
     }
 }
@@ -796,6 +781,7 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                 height,
             }) => outbox.send(FromRenderer::Presented(FrameTelemetry {
                 pane_id: String::new(),
+                attachment_id: String::new(),
                 sequence,
                 source_frame,
                 source_input_epoch_micros,
@@ -817,6 +803,9 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                 width,
                 height,
             })),
+            Ok(heartbeat @ FromHelper::BenchmarkHeartbeat { .. }) => {
+                benchmark::forward_heartbeat(heartbeat, outbox)
+            }
             Ok(FromHelper::Camera {
                 x,
                 y,
@@ -1173,12 +1162,17 @@ pub(crate) fn stage_pane_status(
 
 #[tauri::command]
 pub(crate) fn take_stage_pane_benchmark_samples(
+    window: tauri::WebviewWindow,
     panes: tauri::State<'_, StagePanes>,
-) -> Result<Vec<FrameTelemetry>, String> {
+) -> Result<StagePaneBenchmarkSamples, String> {
     if std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_none() {
-        return Ok(Vec::new());
+        return Ok(StagePaneBenchmarkSamples::default());
     }
-    panes.take_benchmark_samples()
+    // A query failure is unknown, never affirmative visibility. This describes host attachment
+    // and bounds, not occlusion, scanout, or acknowledgement of any individual helper frame.
+    let window_visible =
+        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true);
+    panes.take_benchmark_samples(window.label(), window_visible)
 }
 
 #[cfg(test)]
