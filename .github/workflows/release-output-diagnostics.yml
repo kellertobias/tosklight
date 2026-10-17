@@ -21,6 +21,12 @@ on:
         default: false
         type: boolean
 
+      recorder_lifetime_probe:
+        description: Add an owned 85-second active recorder preflight to runtime-symbols-only mode
+        required: false
+        default: false
+        type: boolean
+
       headless_stacks:
         description: One OFF576 cohort with bounded 49 Hz existing-thread headless stacks
         required: false
@@ -39,13 +45,14 @@ env:
   CANDIDATE_SHA: ${{ inputs.candidate_sha }}
   HEADLESS_STACKS: ${{ inputs.headless_stacks && '1' || '0' }}
   WORKER_COMPARISON: ${{ inputs.worker_comparison && '1' || '0' }}
+  RECORDER_LIFETIME_PROBE: ${{ inputs.recorder_lifetime_probe && '1' || '0' }}
 
 jobs:
   runtime-symbols:
     name: Runtime symbols / Owned compatibility probe
     if: github.repository == 'kellertobias/tosklight' && inputs.runtime_symbols_only
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -62,7 +69,9 @@ jobs:
           test "$HEADLESS_STACKS" = 0
           test "$WORKER_COMPARISON" = 0
           sudo timeout 180 apt-get update
-          sudo timeout 600 apt-get install -y binutils libc6-dbg
+          packages=(binutils libc6-dbg)
+          if [[ "$RECORDER_LIFETIME_PROBE" == 1 ]]; then packages+=(linux-tools-generic); fi
+          sudo timeout 600 apt-get install -y "${packages[@]}"
           test "$(dpkg-query -W -f='${Version}' libc6:amd64)" = "$(dpkg-query -W -f='${Version}' libc6-dbg:amd64)"
       - name: Verify owned mapped glibc and compatibility stub without sampling
         run: |
@@ -119,6 +128,32 @@ jobs:
           }
           NODE
 
+      - name: Verify bounded recorder across an 85-second active window
+        if: inputs.recorder_lifetime_probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t tools < <(find /usr/lib -maxdepth 3 -type f -path '*/linux-tools*/perf' | sort -V)
+          perf=/usr/bin/perf
+          if [[ "${#tools[@]}" -gt 0 ]]; then perf="${tools[-1]}"; fi
+          PERF_PROBE_TOOL="$perf" node --input-type=module <<'NODE'
+          import {mkdir,mkdtemp} from 'node:fs/promises';
+          import {artifactPaths} from './tools/artifact-paths.mjs';
+          import {assertNumericOnly} from './tools/desktop-performance-cpu-stages.mjs';
+          import {runRecorderLifetimeProbe} from './tools/desktop-performance-headless-stacks.mjs';
+          let report;
+          try {
+            await mkdir(artifactPaths.tmp,{recursive:true});
+            const output=await mkdtemp(artifactPaths.tmp+'/tl775-lifetime-preflight-');
+            report=await runRecorderLifetimeProbe(process.env.PERF_PROBE_TOOL,output);
+            assertNumericOnly(report);
+          } catch {
+            report={schema:1,passed:0,report_available:0,owned_helper_gone:0,owned_recorder_gone:0};
+          }
+          console.log(JSON.stringify(report));
+          if(report.passed!==1)process.exitCode=1;
+          NODE
+
   candidate-desktop:
     name: Candidate / Unchanged 576-fixture diagnostic cohorts
     if: github.repository == 'kellertobias/tosklight' && !inputs.runtime_symbols_only
@@ -152,6 +187,7 @@ jobs:
           set -euo pipefail
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          test "$RECORDER_LIFETIME_PROBE" = 0
           if [[ "$HEADLESS_STACKS" == 1 ]]; then test "$WORKER_COMPARISON" = 0; fi
           mkdir -p "$OUT"
           python3 - <<'PYTHON'
