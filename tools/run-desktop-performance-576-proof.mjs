@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { chmod, realpath } from "node:fs/promises";
 import { artifactPaths } from "./artifact-paths.mjs";
 import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
+import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
@@ -59,6 +60,11 @@ const phaseNumericPath = path.join(path.dirname(numericPath), "phase-numeric.jso
 async function retainPhaseDiagnostics(file, window) {
   // This observer is diagnostic only: unavailable data or a write error never changes Control gates.
   await writePhaseDiagnostics(phaseNumericPath, file, window).catch(() => {});
+  if (process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all") {
+    await writeTickTraceDiagnostics(path.join(path.dirname(numericPath), "tick-trace-numeric.json"), file, window, {
+      healthDeadlineMisses: checkpoint.result.deadline_miss_delta, completedFrames: checkpoint.result.completed_frame_delta,
+    }).catch(() => {});
+  }
 }
 const checkpoint = new ProofCheckpoint(numericPath);
 checkpoint.result.proof_mode_code = PROOF_MODES[proofMode];
