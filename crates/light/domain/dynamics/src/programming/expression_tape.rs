@@ -12,6 +12,7 @@ type InputKey = (usize, Option<RetainedNodeId>);
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Borrow,
     collections::{HashMap, HashSet},
     sync::Arc,
 };
@@ -398,8 +399,15 @@ impl RetainedExpressionTape {
         Ok((tape, keys))
     }
 
-    fn import_roots(
-        roots: &[Arc<DynamicSampleExpression>],
+    /// Import borrowed checkpoint roots without allocating temporary owning expressions.
+    pub(crate) fn from_borrowed_roots(
+        roots: &[&DynamicSampleExpression],
+    ) -> Result<Self, IntentError> {
+        Self::import_roots(roots, None)
+    }
+
+    fn import_roots<R: Borrow<DynamicSampleExpression>>(
+        roots: &[R],
         mut source_keys: Option<&mut Vec<InputKey>>,
     ) -> Result<Self, IntentError> {
         if let Some(tape) = Self::import_leaf_roots(roots, source_keys.as_deref_mut()) {
@@ -409,8 +417,8 @@ impl RetainedExpressionTape {
     }
 
     /// The general import: a depth-first walk that memoizes shared descendants.
-    fn import_roots_walk(
-        roots: &[Arc<DynamicSampleExpression>],
+    fn import_roots_walk<R: Borrow<DynamicSampleExpression>>(
+        roots: &[R],
         mut source_keys: Option<&mut Vec<InputKey>>,
     ) -> Result<Self, IntentError> {
         let mut tape = Self::empty();
@@ -421,7 +429,7 @@ impl RetainedExpressionTape {
         let mut pending = roots
             .iter()
             .rev()
-            .map(|root| (ExpressionNodeRef::new(root), false))
+            .map(|root| (ExpressionNodeRef::new(root.borrow()), false))
             .collect::<Vec<_>>();
         while let Some((node, exit)) = pending.pop() {
             let key = node.key();
@@ -486,7 +494,7 @@ impl RetainedExpressionTape {
         }
         tape.roots = roots
             .iter()
-            .map(|root| ids[&ExpressionNodeRef::new(root).key()])
+            .map(|root| ids[&ExpressionNodeRef::new(root.borrow()).key()])
             .collect();
         tape.validate()?;
         Ok(tape)
@@ -496,8 +504,8 @@ impl RetainedExpressionTape {
     /// visits each such root once, in order, with nothing to memoize, so this runs the same
     /// per-node import without its traversal maps. `None` when any root is a tape node, has
     /// children or repeats another root.
-    fn import_leaf_roots(
-        roots: &[Arc<DynamicSampleExpression>],
+    fn import_leaf_roots<R: Borrow<DynamicSampleExpression>>(
+        roots: &[R],
         mut source_keys: Option<&mut Vec<InputKey>>,
     ) -> Option<Result<Self, IntentError>> {
         const MAX_LEAF_ROOTS: usize = 8;
@@ -505,7 +513,7 @@ impl RetainedExpressionTape {
             return None;
         }
         for (index, root) in roots.iter().enumerate() {
-            let node = ExpressionNodeRef::new(root);
+            let node = ExpressionNodeRef::new(root.borrow());
             let ExpressionNodeRef::Tree(_) = node else {
                 return None;
             };
@@ -519,7 +527,7 @@ impl RetainedExpressionTape {
             if !leaf
                 || roots[..index]
                     .iter()
-                    .any(|other| ExpressionNodeRef::new(other).key() == node.key())
+                    .any(|other| ExpressionNodeRef::new(other.borrow()).key() == node.key())
             {
                 return None;
             }
@@ -529,7 +537,7 @@ impl RetainedExpressionTape {
             let mut interner = EmissionInterner::default();
             let no_children = FxHashMap::<InputKey, RetainedNodeId>::default();
             for root in roots {
-                let node = ExpressionNodeRef::new(root);
+                let node = ExpressionNodeRef::new(root.borrow());
                 let id = RetainedNodeId(tape.nodes.len() as u32);
                 let view = node.node()?;
                 let numeric = match &view {
@@ -1053,3 +1061,6 @@ mod numeric_tests;
 mod plain_leaf_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod borrowed_root_tests;

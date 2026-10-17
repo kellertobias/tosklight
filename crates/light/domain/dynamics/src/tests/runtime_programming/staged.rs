@@ -1,5 +1,6 @@
 use super::*;
 mod instances;
+mod recorded_completion;
 mod requirements;
 mod source_free;
 
