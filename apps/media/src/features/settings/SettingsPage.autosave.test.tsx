@@ -5,12 +5,139 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "../../app/ToastContext";
 import { aNetwork, stubServer } from "../../testing/server";
 import { SettingsPage } from "./SettingsPage";
+import { NetworkEditor } from "./NetworkEditor";
 
 afterEach(() => {
 	vi.useRealTimers();
 	window.history.replaceState(null, "", "/");
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
+});
+
+it.each([
+	{ returnToPrior: false, releaseAfterIdle: false },
+	{ returnToPrior: true, releaseAfterIdle: false },
+	{ returnToPrior: true, releaseAfterIdle: true },
+])("keeps newer focused network text across an older acknowledgement (%j)", async ({
+	returnToPrior,
+	releaseAfterIdle,
+}) => {
+	const server = stubSettingsServer();
+	renderSettings();
+	const art = await screen.findByLabelText("Art-Net");
+	const newer = returnToPrior
+		? server.network.stored.artNetListen
+		: "127.0.0.1:16455";
+	await userEvent.click(art);
+	const baseFetch = fetch;
+	let release!: () => void;
+	let observed!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const started = new Promise<void>((resolve) => {
+		observed = resolve;
+	});
+	let firstRead = true;
+	vi.stubGlobal(
+		"fetch",
+		vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const response = await baseFetch(input, init);
+			if (firstRead && String(input).endsWith("/network") && !init?.method) {
+				firstRead = false;
+				observed();
+				await held;
+			}
+			return response;
+		}),
+	);
+	vi.useFakeTimers();
+	fireEvent.change(art, { target: { value: "127.0.0.1:16454" } });
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(180);
+	});
+	await started;
+	expect(server.network.stored.artNetListen).toBe("127.0.0.1:16454");
+	fireEvent.change(art, { target: { value: newer } });
+	if (releaseAfterIdle) {
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(180);
+		});
+		const panel = art.closest("article")!;
+		expect(within(panel).getByText("Saved automatically")).toBeInTheDocument();
+		expect(art).toHaveValue(newer);
+	}
+	await act(async () => {
+		release();
+		await vi.advanceTimersByTimeAsync(0);
+	});
+	expect(screen.getByLabelText("Art-Net")).toBe(art);
+	expect(art).toHaveFocus();
+	expect(art).toHaveValue(newer);
+	await act(async () => {
+		await vi.advanceTimersByTimeAsync(180);
+	});
+	expect(server.network.stored.artNetListen).toBe(newer);
+});
+
+it("adopts untouched external network fields without authoring a prop-only edit", async () => {
+	const network = aNetwork();
+	const onSave = vi.fn();
+	const editor = (value: typeof network) => (
+		<NetworkEditor
+			network={value}
+			busy={false}
+			onSave={onSave}
+			showActions={false}
+		/>
+	);
+	const view = render(editor(network));
+	const art = screen.getByLabelText("Art-Net");
+	await userEvent.click(art);
+	fireEvent.change(art, { target: { value: "127.0.0.1:16455" } });
+	const calls = onSave.mock.calls.length;
+	view.rerender(
+		editor(
+			aNetwork({
+				...network,
+				stored: {
+					...network.stored,
+					artNetListen: "127.0.0.1:16454",
+					sacnListen: "127.0.0.1:15568",
+				},
+			}),
+		),
+	);
+	expect(screen.getByLabelText("Art-Net")).toBe(art);
+	expect(art).toHaveFocus();
+	expect(art).toHaveValue("127.0.0.1:16455");
+	expect(screen.getByLabelText("sACN")).toHaveValue("127.0.0.1:15568");
+	expect(onSave).toHaveBeenCalledTimes(calls);
+	fireEvent.change(art, { target: { value: "127.0.0.1:16456" } });
+	expect(onSave.mock.calls.at(-1)?.[0]).toMatchObject({
+		artNetListen: "127.0.0.1:16456",
+		sacnListen: "127.0.0.1:15568",
+	});
+	const savedCalls = onSave.mock.calls.length;
+	const acknowledged = aNetwork({
+		...network,
+		stored: {
+			...network.stored,
+			artNetListen: "127.0.0.1:16456",
+			sacnListen: "127.0.0.1:15568",
+		},
+	});
+	view.rerender(editor(acknowledged));
+	view.rerender(
+		editor(
+			aNetwork({
+				...acknowledged,
+				stored: { ...acknowledged.stored, artNetListen: "127.0.0.1:16457" },
+			}),
+		),
+	);
+	expect(art).toHaveValue("127.0.0.1:16457");
+	expect(onSave).toHaveBeenCalledTimes(savedCalls);
 });
 
 it("keeps a network edit made30ms before leaving its tab", async () => {

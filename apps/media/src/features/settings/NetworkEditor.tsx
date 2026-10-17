@@ -81,15 +81,45 @@ export function NetworkEditor({
 		network.stored.speedGroupEndpoint ?? "",
 	);
 	const form = useRef<HTMLFormElement>(null);
+	const intent = useRef(0);
+	const editedFields = useRef(new Map<string, number>());
+	const markIntent = (fields: string[]) => {
+		const version = ++intent.current;
+		for (const field of fields) editedFields.current.set(field, version);
+	};
+	const [editRevision, setEditRevision] = useState(0);
+	const editedByUser = (field: string) => {
+		markIntent([field]);
+		setEditRevision((value) => value + 1);
+	};
 	useEffect(() => {
-		setPreset(network.sameComputerPreset);
-		setListeners({
-			artNetListen: network.stored.artNetListen,
-			sacnListen: network.stored.sacnListen,
-			citpListen: network.stored.citpListen,
-			httpListen: network.stored.httpListen,
-		});
-		setEndpoint(network.stored.speedGroupEndpoint ?? "");
+		const versions = new Map(editedFields.current);
+		const adopt = <T,>(field: string, current: T, next: T): T => {
+			const version = editedFields.current.get(field);
+			if (version === undefined) return next;
+			if (!busy && version === versions.get(field) && current === next)
+				editedFields.current.delete(field);
+			return current;
+		};
+		setPreset((current) =>
+			adopt("sameComputerPreset", current, network.sameComputerPreset),
+		);
+		setListeners(
+			(current) =>
+				Object.fromEntries(
+					LISTENERS.map(({ field }) => [
+						field,
+						adopt(field, current[field], network.stored[field]),
+					]),
+				) as Record<ListenField, string>,
+		);
+		setEndpoint((current) =>
+			adopt(
+				"speedGroupEndpoint",
+				current,
+				network.stored.speedGroupEndpoint ?? "",
+			),
+		);
 	}, [network]);
 	const reverted = useRef(revertRevision);
 	const reverting = reverted.current !== revertRevision;
@@ -103,6 +133,7 @@ export function NetworkEditor({
 			httpListen: network.activeStored.httpListen,
 			speedGroupEndpoint: endpoint.trim() === "" ? null : endpoint.trim(),
 		});
+		markIntent(["sameComputerPreset", "citpListen", "httpListen"]);
 		setPreset(network.activeSameComputerPreset);
 		setListeners((current) => ({
 			...current,
@@ -128,6 +159,7 @@ export function NetworkEditor({
 	const draftKey = JSON.stringify(draft);
 	const queued = useRef<string | null>(null);
 	const baseline = useRef(network);
+	const attempted = useRef(0);
 	const save = useRef({ onSave, draft });
 	save.current = { onSave, draft };
 	useEffect(() => {
@@ -138,6 +170,8 @@ export function NetworkEditor({
 			queued.current = null;
 			return;
 		}
+		if (attempted.current === editRevision) return;
+		attempted.current = editRevision;
 		if (
 			showActions ||
 			(!edited && queued.current === null) ||
@@ -148,7 +182,15 @@ export function NetworkEditor({
 		queued.current = draftKey;
 		onChanged?.();
 		save.current.onSave({ requestId: requestId(), ...save.current.draft });
-	}, [network, showActions, edited, draftKey, onChanged, reverting]);
+	}, [
+		network,
+		showActions,
+		edited,
+		draftKey,
+		editRevision,
+		onChanged,
+		reverting,
+	]);
 
 	return (
 		<form
@@ -180,26 +222,33 @@ export function NetworkEditor({
 						label={listener.label}
 						description={listener.description}
 						value={listeners[listener.field]}
-						onChange={(event) =>
+						onChange={(event) => {
 							setListeners((current) => ({
 								...current,
 								[listener.field]: event.target.value,
-							}))
-						}
+							}));
+							editedByUser(listener.field);
+						}}
 					/>
 				))}
 				<TextField
 					label="Speed Groups"
 					description="UDP, usually 0.0.0.0:4810. Tos Light Control sends its Speed Group tempos here over OSC. Leave empty to not follow a desk's Speed Groups. Applies immediately."
 					value={endpoint}
-					onChange={(event) => setEndpoint(event.target.value)}
+					onChange={(event) => {
+						setEndpoint(event.target.value);
+						editedByUser("speedGroupEndpoint");
+					}}
 				/>
 				<CheckboxField
 					label="Light and Media are on this computer"
 					stateLabel="Listen on 127.0.0.1"
 					description="Listens on 127.0.0.1 without changing the addresses above, so they come back when you turn it off. Art-Net, sACN and Speed Groups move immediately; CITP and this interface on restart."
 					checked={preset}
-					onChange={(event) => setPreset(event.target.checked)}
+					onChange={(event) => {
+						setPreset(event.target.checked);
+						editedByUser("sameComputerPreset");
+					}}
 				/>
 			</fieldset>
 

@@ -70,7 +70,7 @@ function useOutputConfiguration(
 	}, [poll]);
 
 	return {
-		data,
+		data: data?.id === outputId ? data : undefined,
 		failure,
 		reload: useCallback(() => setRevision((value) => value + 1), []),
 	};
@@ -177,7 +177,7 @@ export function OutputSettings({
 			</div>
 			{direct || editing.editing === output.id ? (
 				<OutputEditor
-					key={outputEditorKey(output, mode)}
+					key={`${mode}:${output.id}`}
 					output={output}
 					mode={mode}
 					busy={editing.busy}
@@ -655,6 +655,7 @@ function useOutputAutosave(
 	enabled: boolean,
 	changed: boolean,
 	draftKey: string,
+	editRevision: number,
 	form: RefObject<HTMLFormElement | null>,
 	save: () => void,
 	revert?: { request: UpdateOutputConfiguration; draftKey: string },
@@ -665,12 +666,15 @@ function useOutputAutosave(
 	const current = useRef(save);
 	current.current = save;
 	const queued = useRef<string | null>(null);
+	const attempted = useRef(0);
 	useEffect(() => {
 		if (revert && appliedRevert.current !== revert.request) {
 			appliedRevert.current = revert.request;
 			queued.current = revert.draftKey;
 			return;
 		}
+		if (attempted.current === editRevision) return;
+		attempted.current = editRevision;
 		if (
 			!enabled ||
 			(!changed && queued.current === null) ||
@@ -681,94 +685,138 @@ function useOutputAutosave(
 		// A return to the stored value must replace an older queued draft too.
 		queued.current = draftKey;
 		current.current();
-	}, [enabled, changed, draftKey, form, revert]);
+	}, [enabled, changed, draftKey, editRevision, form, revert]);
 }
 
+function storedOutputDraft(output: OutputConfigurationView): OutputDraft {
+	return {
+		targetKind: output.targetKind,
+		monitorBy: output.monitorBy ?? "index",
+		monitorValue: output.monitorValue ?? "0",
+		fullscreen: output.fullscreen,
+		width: output.width,
+		height: output.height,
+		presentation: output.presentation,
+		framesPerSecond: output.framesPerSecond ?? 60,
+		soundOutputKind: output.soundOutputKind,
+		soundOutputName: output.soundOutputName ?? "",
+		personality: output.personality,
+		protocol: output.protocol,
+		universe: output.universe,
+		startAddress: output.startAddress,
+	};
+}
+
+/** Acknowledgements adopt untouched fields without replacing an operator's focused draft. */
 function useOutputDraft(
 	output: OutputConfigurationView,
+	busy: boolean,
 	revertRequest?: UpdateOutputConfiguration,
 ) {
-	const [targetKind, setTargetKind] = useState(output.targetKind);
-	const [monitorBy, setMonitorBy] = useState(output.monitorBy ?? "index");
-	const [monitorValue, setMonitorValue] = useState(output.monitorValue ?? "0");
-	const [fullscreen, setFullscreen] = useState(output.fullscreen);
-	const [width, setWidth] = useState(output.width);
-	const [height, setHeight] = useState(output.height);
-	const selectedMonitor = resolveMonitor(output, monitorBy, monitorValue);
+	const [draft, setDraft] = useState(() => storedOutputDraft(output));
+	const [editRevision, setEditRevision] = useState(0);
+	const intent = useRef(0);
+	const editedFields = useRef(new Map<keyof OutputDraft, number>());
+	const markIntent = (keys: (keyof OutputDraft)[]) => {
+		const version = ++intent.current;
+		for (const key of keys) editedFields.current.set(key, version);
+	};
+	const selectedMonitor = resolveMonitor(
+		output,
+		draft.monitorBy,
+		draft.monitorValue,
+	);
 	const [resolutionMode, setResolutionModeState] = useState<ResolutionMode>(
 		() => resolutionModeFor(output.width, output.height, selectedMonitor),
 	);
-	const [presentation, setPresentation] = useState(output.presentation);
-	const [framesPerSecond, setFramesPerSecond] = useState(
-		output.framesPerSecond ?? 60,
-	);
-	const [soundOutputKind, setSoundOutputKind] = useState(
-		output.soundOutputKind,
-	);
-	const [soundOutputName, setSoundOutputName] = useState(
-		output.soundOutputName ?? "",
-	);
-	const [personality, setPersonality] = useState(output.personality);
-	const [protocol, setProtocol] = useState(output.protocol);
-	const [universe, setUniverse] = useState(output.universe);
-	const [startAddress, setStartAddress] = useState(output.startAddress);
+	useEffect(() => {
+		const next = storedOutputDraft(output);
+		const versions = new Map(editedFields.current);
+		const dimensionsUntouched =
+			!editedFields.current.has("width") && !editedFields.current.has("height");
+		setDraft(
+			(current) =>
+				Object.fromEntries(
+					Object.entries(next).map(([field, value]) => {
+						const key = field as keyof OutputDraft;
+						const version = editedFields.current.get(key);
+						if (version === undefined) return [key, value];
+						// Only an idle writer's matching snapshot acknowledges this exact field intent.
+						if (
+							!busy &&
+							version === versions.get(key) &&
+							current[key] === value
+						)
+							editedFields.current.delete(key);
+						return [key, current[key]];
+					}),
+				) as OutputDraft,
+		);
+		if (dimensionsUntouched)
+			setResolutionModeState(
+				resolutionModeFor(next.width, next.height, selectedMonitor),
+			);
+	}, [output]);
 	useEffect(() => {
 		if (!revertRequest) return;
-		if (revertRequest.targetKind != null)
-			setTargetKind(revertRequest.targetKind);
-		if (revertRequest.monitorBy != null) setMonitorBy(revertRequest.monitorBy);
-		if (revertRequest.monitorValue != null)
-			setMonitorValue(revertRequest.monitorValue);
-		if (revertRequest.fullscreen != null)
-			setFullscreen(revertRequest.fullscreen);
-		if (revertRequest.width != null) setWidth(revertRequest.width);
-		if (revertRequest.height != null) setHeight(revertRequest.height);
-		if (revertRequest.presentation != null)
-			setPresentation(revertRequest.presentation);
-		if (revertRequest.framesPerSecond != null)
-			setFramesPerSecond(revertRequest.framesPerSecond);
-		if (revertRequest.soundOutputKind != null)
-			setSoundOutputKind(revertRequest.soundOutputKind);
-		if (revertRequest.soundOutputName != null)
-			setSoundOutputName(revertRequest.soundOutputName);
-		if (revertRequest.personality != null)
-			setPersonality(revertRequest.personality);
-		if (revertRequest.startAddress != null)
-			setStartAddress(revertRequest.startAddress);
+		const patch = Object.fromEntries(
+			Object.entries(revertRequest).filter(
+				([key, value]) => key in draft && value != null,
+			),
+		) as Partial<OutputDraft>;
+		markIntent(Object.keys(patch) as (keyof OutputDraft)[]);
+		setDraft((current) => ({ ...current, ...patch }));
+		if (patch.width != null || patch.height != null)
+			setResolutionModeState(
+				resolutionModeFor(
+					patch.width ?? draft.width,
+					patch.height ?? draft.height,
+					selectedMonitor,
+				),
+			);
 	}, [revertRequest]);
+	const setter =
+		<K extends keyof OutputDraft>(
+			key: K,
+		): Dispatch<SetStateAction<OutputDraft[K]>> =>
+		(value) => {
+			markIntent([key]);
+			setDraft((current) => ({
+				...current,
+				[key]: typeof value === "function" ? value(current[key]) : value,
+			}));
+			setEditRevision((value) => value + 1);
+		};
 	const setResolutionMode = (mode: ResolutionMode) => {
 		setResolutionModeState(mode);
 		const dimensions = resolutionDimensions(mode, selectedMonitor);
 		if (dimensions) {
-			setWidth(dimensions.width);
-			setHeight(dimensions.height);
+			markIntent(["width", "height"]);
+			setDraft((current) => ({ ...current, ...dimensions }));
+			setEditRevision((value) => value + 1);
 		}
 	};
-	const picture = { targetKind, monitorBy, monitorValue, fullscreen };
-	const size = { width, height, presentation, framesPerSecond };
-	const sound = { soundOutputKind, soundOutputName };
-	const dmx = { personality, protocol, universe, startAddress };
-	const draft = { ...picture, ...size, ...sound, ...dmx };
 	return {
 		draft,
+		editRevision,
 		selectedMonitor,
 		resolutionMode,
 		setResolutionMode,
 		setters: {
-			setTargetKind,
-			setMonitorBy,
-			setMonitorValue,
-			setFullscreen,
-			setWidth,
-			setHeight,
-			setPresentation,
-			setFramesPerSecond,
-			setSoundOutputKind,
-			setSoundOutputName,
-			setPersonality,
-			setProtocol,
-			setUniverse,
-			setStartAddress,
+			setTargetKind: setter("targetKind"),
+			setMonitorBy: setter("monitorBy"),
+			setMonitorValue: setter("monitorValue"),
+			setFullscreen: setter("fullscreen"),
+			setWidth: setter("width"),
+			setHeight: setter("height"),
+			setPresentation: setter("presentation"),
+			setFramesPerSecond: setter("framesPerSecond"),
+			setSoundOutputKind: setter("soundOutputKind"),
+			setSoundOutputName: setter("soundOutputName"),
+			setPersonality: setter("personality"),
+			setProtocol: setter("protocol"),
+			setUniverse: setter("universe"),
+			setStartAddress: setter("startAddress"),
 		},
 	};
 }
@@ -792,8 +840,14 @@ export function OutputEditor({
 	showActions?: boolean;
 	showCancel?: boolean;
 }) {
-	const { draft, setters, selectedMonitor, resolutionMode, setResolutionMode } =
-		useOutputDraft(output, revertRequest);
+	const {
+		draft,
+		editRevision,
+		setters,
+		selectedMonitor,
+		resolutionMode,
+		setResolutionMode,
+	} = useOutputDraft(output, busy, revertRequest);
 	const form = useRef<HTMLFormElement>(null);
 	// Only a draft that differs from what the server stored is saved, so opening the page, a
 	// reload after a save, or React's development double effects never send an edit nobody made.
@@ -802,6 +856,7 @@ export function OutputEditor({
 		!showActions,
 		draftDiffers(output, mode, draft),
 		JSON.stringify(draft),
+		editRevision,
 		form,
 		() => onSave(outputDraftEdit(mode, draft)),
 		revertRequest
@@ -1053,13 +1108,6 @@ function draftDiffers(
 	if (mode === "sound") return sound;
 	if (mode === "dmx") return dmx;
 	return picture || sound || dmx;
-}
-
-function outputEditorKey(
-	output: OutputConfigurationView,
-	mode: "all" | "picture" | "sound" | "dmx",
-): string {
-	return `${mode}:${output.targetKind}:${output.monitorBy}:${output.monitorValue}:${output.fullscreen}:${output.width}:${output.height}:${output.presentation}:${output.framesPerSecond}:${output.soundOutputKind}:${output.soundOutputName}:${output.personality}:${output.protocol}:${output.universe}:${output.startAddress}`;
 }
 
 function monitorOptions(
