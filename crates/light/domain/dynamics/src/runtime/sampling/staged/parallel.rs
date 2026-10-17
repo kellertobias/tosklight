@@ -11,7 +11,7 @@
 //! the frame), evaluating that lane and every later one of its chunk itself. Values,
 //! requirements, keyframe caches and source logs are those of the single-threaded loop for any
 //! worker count.
-use super::resolve::{Evaluated, evaluate_at_position};
+use super::resolve::{Evaluated, evaluate};
 mod source_free;
 use super::*;
 use crate::{PreparationSources, PreparationWorkers, shard_chunk, target_shard};
@@ -41,33 +41,6 @@ struct Item<'a> {
     compiled: &'a crate::CompiledProgrammingLane,
 }
 
-type PreparedPositions<'a> = Vec<
-    Option<(
-        &'a crate::CompiledProgrammingLane,
-        crate::evaluate::PreparedLanePosition,
-    )>,
->;
-
-/// The existing compiled-lane capture, with one immutable timing prefix for this plan only.
-fn prepare_lane_positions<'a>(
-    instance: &'a DynamicInstance,
-    plan: &PinnedInstance,
-) -> PreparedPositions<'a> {
-    plan.frame
-        .definition
-        .lanes
-        .iter()
-        .map(|lane| {
-            instance.programming_lanes.get(&lane.id).map(|compiled| {
-                (
-                    compiled,
-                    compiled.prepare_lane_position(plan.frame.elapsed, plan.cycle_duration_millis),
-                )
-            })
-        })
-        .collect()
-}
-
 impl<'frame> DeferredTypedSampling<'frame> {
     /// The typed lanes still to evaluate, in frame order.
     pub fn typed_lane_count(&self) -> usize {
@@ -95,7 +68,6 @@ impl<'frame> DeferredTypedSampling<'frame> {
             let plans = &*self.plans;
             let mut items = Vec::with_capacity(typed);
             let mut presets = Vec::with_capacity(plans.len());
-            let mut positions = Vec::with_capacity(plans.len());
             for (plan_index, plan) in plans.iter().enumerate() {
                 let instance = runtime
                     .instances
@@ -104,17 +76,20 @@ impl<'frame> DeferredTypedSampling<'frame> {
                 presets.push(Arc::clone(&instance.preset_values.by_binding));
                 // Each definition lane's compiled lane, looked up once per plan rather than
                 // once per target (TL-639 round 7).
-                let lanes = prepare_lane_positions(instance, plan);
+                let lanes = plan
+                    .frame
+                    .definition
+                    .lanes
+                    .iter()
+                    .map(|lane| instance.programming_lanes.get(&lane.id))
+                    .collect::<Vec<_>>();
                 for (work_index, work) in plan.controllers.iter().enumerate() {
                     for &lane in &work.typed_indices {
                         let pinned = &work.lanes[lane];
                         if !matches!(pinned.value, PinnedValue::Typed { .. }) {
                             continue;
                         }
-                        let compiled = lanes[pinned.lane_index]
-                            .as_ref()
-                            .expect("pinned compiled lane")
-                            .0;
+                        let compiled = lanes[pinned.lane_index].expect("pinned compiled lane");
                         chunk_of_item.push(shard_chunk(target_shard(pinned.target), chunks));
                         plan_of_item.push(plan_index);
                         items.push(Item {
@@ -125,7 +100,6 @@ impl<'frame> DeferredTypedSampling<'frame> {
                         });
                     }
                 }
-                positions.push(lanes);
             }
             let mut members = vec![Vec::new(); chunks];
             for (index, chunk) in chunk_of_item.iter().enumerate() {
@@ -134,7 +108,7 @@ impl<'frame> DeferredTypedSampling<'frame> {
             let (items, presets, members) = (&items, &presets, &members);
             workers
                 .run_completion(&|chunk, fork| {
-                    evaluate_chunk(plans, items, presets, &positions, &members[chunk], fork)
+                    evaluate_chunk(plans, items, presets, &members[chunk], fork)
                 })
                 .map_err(|error| DynamicRuntimeError::InvalidSample(error.to_string()))?
         };
@@ -223,7 +197,6 @@ fn evaluate_chunk(
     plans: &[PinnedInstance],
     items: &[Item<'_>],
     presets: &[Arc<HashMap<(Uuid, FixtureId), crate::DynamicValue>>],
-    positions: &[PreparedPositions<'_>],
     members: &[usize],
     fork: &dyn PreparationSources,
 ) -> CompletedChunk {
@@ -236,14 +209,10 @@ fn evaluate_chunk(
         let item = &items[index];
         let plan = &plans[item.plan];
         let work = &plan.controllers[item.work];
-        let prefix = &positions[item.plan][work.lanes[item.lane].lane_index]
-            .as_ref()
-            .expect("pinned compiled lane position")
-            .1;
         if item.compiled.source_free_scalar()
             && fork.source_free_completion()
             && let Some(evaluated) =
-                source_free::evaluate(item.compiled, plan, work, &work.lanes[item.lane], prefix)
+                source_free::evaluate(item.compiled, plan, work, &work.lanes[item.lane])
         {
             chunk.evaluated.push((evaluated, previous_logs));
             continue;
@@ -253,14 +222,13 @@ fn evaluate_chunk(
             instance_id: plan.instance_id,
             values: Arc::clone(&presets[item.plan]),
         };
-        let evaluated = evaluate_at_position(
+        let evaluated = evaluate(
             item.compiled,
             plan,
             work,
             &work.lanes[item.lane],
             &sources,
             true,
-            Some(prefix),
         );
         let Some(logs) = fork.finish_controller() else {
             chunk.stopped = Some(member);

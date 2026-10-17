@@ -39,7 +39,6 @@ pub struct CompiledProgrammingLane {
     address: CompiledDynamicValueAddress,
     expression_address: Arc<DynamicValueAddress>,
     source_free_scalar: bool,
-    prepared_scalar_wave: Option<super::value::PreparedScalarWave>,
     configuration: Configuration,
     speed_multiplier: Rational,
     width: f32,
@@ -170,29 +169,9 @@ impl CompiledProgrammingLane {
                 }
             }
         };
-        let source_free_scalar =
-            unavailable.is_none() && source_free::eligible(&body.address, &body.configuration);
-        let prepared_scalar_wave = if source_free_scalar {
-            match &body.configuration {
-                ProgrammingLaneConfiguration::MaxMin(c) => match (&c.minimum, &c.maximum) {
-                    (
-                        DynamicValueSource::Value {
-                            value: DynamicValue::Scalar(low),
-                        },
-                        DynamicValueSource::Value {
-                            value: DynamicValue::Scalar(high),
-                        },
-                    ) => address.prepare_scalar_wave(*low, *high, c.size),
-                    _ => None,
-                },
-                _ => None,
-            }
-        } else {
-            None
-        };
         Ok(Self {
-            source_free_scalar,
-            prepared_scalar_wave,
+            source_free_scalar: unavailable.is_none()
+                && source_free::eligible(&body.address, &body.configuration),
             unavailable,
             expression_address: Arc::new(body.address.clone()),
             address,
@@ -354,25 +333,6 @@ impl CompiledProgrammingLane {
         }
     }
 
-    pub(crate) fn prepare_lane_position(
-        &self,
-        elapsed: u64,
-        cycle: u64,
-    ) -> crate::evaluate::PreparedLanePosition {
-        let pwm = match &self.configuration {
-            Configuration::MaxMin(c) => c.function == PeriodicFunction::Pwm,
-            Configuration::MiddleAmplitude(c) => c.function == PeriodicFunction::Pwm,
-            _ => false,
-        };
-        crate::evaluate::PreparedLanePosition::new(
-            self.speed_multiplier,
-            self.width,
-            pwm,
-            elapsed,
-            cycle,
-        )
-    }
-
     fn evaluation_position(&self, context: &ProgrammingEvaluationContext<'_>) -> f32 {
         let function = match &self.configuration {
             Configuration::MaxMin(c) => Some(c.function),
@@ -407,16 +367,6 @@ impl CompiledProgrammingLane {
         controller_size: f32,
         operation: Option<DynamicOperationContext<'_>>,
     ) -> Result<AngleNumericSample, TransitionError> {
-        self.pin_angle_numeric_at_position(context, controller_size, operation, None)
-    }
-
-    pub(crate) fn pin_angle_numeric_at_position(
-        &self,
-        context: &ProgrammingEvaluationContext<'_>,
-        controller_size: f32,
-        operation: Option<DynamicOperationContext<'_>>,
-        position: Option<f32>,
-    ) -> Result<AngleNumericSample, TransitionError> {
         let address = self.address.address();
         if address.representation != DynamicFamilyRepresentation::Angles
             || !matches!(
@@ -433,7 +383,7 @@ impl CompiledProgrammingLane {
             controller_size.is_finite() && controller_size >= 0.,
             "Dynamic Size must be finite and nonnegative",
         )?;
-        let position = position.unwrap_or_else(|| self.evaluation_position(context));
+        let position = self.evaluation_position(context);
         if !self.angle_numeric_needs_current(position, controller_size) {
             return Ok(AngleNumericSample::NotApplicable);
         }
@@ -617,43 +567,6 @@ impl CompiledProgrammingLane {
         sampled
     }
 
-    fn sample_max_min(
-        &self,
-        config: &MaxMinConfiguration<CompiledDynamicValueSource>,
-        position: f32,
-        resolve: &impl Fn(&CompiledDynamicValueSource) -> Option<DynamicValue>,
-    ) -> Result<Option<DynamicValue>, IntentError> {
-        #[cfg(test)]
-        let prepared = self
-            .prepared_scalar_wave
-            .as_ref()
-            .filter(|_| !GENERIC_SCALAR_WAVES.with(std::cell::Cell::get));
-        #[cfg(not(test))]
-        let prepared = self.prepared_scalar_wave.as_ref();
-        if let Some(prepared) = prepared {
-            #[cfg(test)]
-            SCALAR_WAVE_SAMPLES.with(|count| count.set(count.get() + 1));
-            return prepared
-                .sample(crate::evaluate::periodic(
-                    config.function,
-                    position,
-                    config.pwm,
-                ))
-                .map(Some);
-        }
-        let (Some(low), Some(high)) = (resolve(&config.minimum), resolve(&config.maximum)) else {
-            return Ok(None);
-        };
-        self.address
-            .wave_between(
-                &low,
-                &high,
-                crate::evaluate::periodic(config.function, position, config.pwm),
-                config.size,
-            )
-            .map(Some)
-    }
-
     /// Keep a keyframe transition [`Self::sample_with_cache`] compiled.
     pub(crate) fn keep_transition(&mut self, compiled: Option<KeyframeTransition>) {
         if let Some(KeyframeTransition { key, transition }) = compiled {
@@ -670,17 +583,7 @@ impl CompiledProgrammingLane {
         operation: Option<DynamicOperationContext<'_>>,
         compiled: &mut Option<KeyframeTransition>,
     ) -> Result<Option<DynamicSampleExpression>, TransitionError> {
-        self.sample_with_cache_at_position(context, operation, compiled, None)
-    }
-
-    pub(crate) fn sample_with_cache_at_position(
-        &self,
-        context: ProgrammingEvaluationContext<'_>,
-        operation: Option<DynamicOperationContext<'_>>,
-        compiled: &mut Option<KeyframeTransition>,
-        position: Option<f32>,
-    ) -> Result<Option<DynamicSampleExpression>, TransitionError> {
-        let position = position.unwrap_or_else(|| self.evaluation_position(&context));
+        let position = self.evaluation_position(&context);
         let current_used = Cell::new(false);
         let resolve = |source: &CompiledDynamicValueSource| {
             if source.is_current() {
@@ -769,10 +672,17 @@ impl CompiledProgrammingLane {
                     self.address.scale_from(&pivot, &value, c.size)?
                 }
             }
-            Configuration::MaxMin(c) => match self.sample_max_min(c, position, &resolve)? {
-                Some(value) => value,
-                None => return Ok(None),
-            },
+            Configuration::MaxMin(c) => {
+                let (Some(low), Some(high)) = (resolve(&c.minimum), resolve(&c.maximum)) else {
+                    return Ok(None);
+                };
+                self.address.wave_between(
+                    &low,
+                    &high,
+                    crate::evaluate::periodic(c.function, position, c.pwm),
+                    c.size,
+                )?
+            }
             Configuration::MiddleAmplitude(c) => {
                 let Some(middle) = resolve(&c.middle) else {
                     return Ok(None);
@@ -874,32 +784,5 @@ impl AngleNumericBuilder {
                     dependency_occurrence: None,
                 })
             })
-    }
-}
-
-#[cfg(test)]
-mod prepared_position_tests;
-
-#[cfg(test)]
-mod prepared_scalar_wave_tests;
-#[cfg(test)]
-thread_local! {
-    static GENERIC_SCALAR_WAVES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    static SCALAR_WAVE_SAMPLES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-#[cfg(test)]
-impl crate::DynamicRuntime {
-    pub(crate) fn take_scalar_wave_samples() -> usize {
-        SCALAR_WAVE_SAMPLES.with(|count| count.replace(0))
-    }
-    pub(crate) fn with_generic_scalar_waves<R>(run: impl FnOnce() -> R) -> R {
-        struct Restore(bool);
-        impl Drop for Restore {
-            fn drop(&mut self) {
-                GENERIC_SCALAR_WAVES.with(|flag| flag.set(self.0));
-            }
-        }
-        let _restore = Restore(GENERIC_SCALAR_WAVES.with(|flag| flag.replace(true)));
-        run()
     }
 }

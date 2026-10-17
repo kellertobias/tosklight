@@ -21,18 +21,6 @@ pub(super) fn evaluate(
     sources: &dyn DynamicValueSourceResolver,
     checked: bool,
 ) -> Evaluated {
-    evaluate_at_position(compiled, plan, work, pinned, sources, checked, None)
-}
-
-pub(super) fn evaluate_at_position(
-    compiled: &crate::CompiledProgrammingLane,
-    plan: &PinnedInstance,
-    work: &PinnedController,
-    pinned: &PinnedLane,
-    sources: &dyn DynamicValueSourceResolver,
-    checked: bool,
-    prefix: Option<&crate::evaluate::PreparedLanePosition>,
-) -> Evaluated {
     let PinnedValue::Typed {
         phase,
         random_envelope,
@@ -77,7 +65,6 @@ pub(super) fn evaluate_at_position(
         input,
         operation,
         &mut kept,
-        prefix.map(|prefix| prefix.at(phase)),
     );
     let result = match (result, current.take_error()) {
         (Err(error @ TransitionError::Invalid(_)), _)
@@ -204,17 +191,16 @@ fn sample_typed_lane(
     input: &dyn DynamicValueSourceResolver,
     operation: Option<crate::DynamicOperationContext<'_>>,
     kept: &mut Option<crate::programming::KeyframeTransition>,
-    position: Option<f32>,
 ) -> Result<Option<DynamicSampleExpression>, TransitionError> {
     compiled
-        .pin_angle_numeric_at_position(&context, controller_size, operation, position)
+        .pin_angle_numeric_with_operations(&context, controller_size, operation)
         .and_then(|numeric| match numeric {
             crate::AngleNumericSample::Program(program) => {
                 Ok(Some(DynamicSampleExpression::AngleNumeric { program }))
             }
             crate::AngleNumericSample::Absent => Ok(None),
             crate::AngleNumericSample::NotApplicable => compiled
-                .sample_with_cache_at_position(context, operation, kept, position)
+                .sample_with_cache(context, operation, kept)
                 .and_then(|value| {
                     value
                         .map(|value| {

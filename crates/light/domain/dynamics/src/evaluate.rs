@@ -192,47 +192,6 @@ fn resolve_source(
     }
 }
 
-/// The invariant prefix of one compiled lane in one pinned instance frame. Never retained
-/// across frames: elapsed time and cycle duration belong to the current captured clock.
-#[derive(Clone, Copy)]
-pub(crate) struct PreparedLanePosition {
-    base: f64,
-    width: f32,
-    offset: f32,
-}
-impl PreparedLanePosition {
-    pub(crate) fn new(speed: Rational, width: f32, pwm: bool, elapsed: u64, cycle: u64) -> Self {
-        #[cfg(test)]
-        POSITION_PREFIXES.with(|count| count.set(count.get() + 1));
-        let duration = (cycle as f64 / speed.factor()).max(1.0);
-        let base = elapsed as f64 / duration;
-        let width = if pwm {
-            1.0
-        } else {
-            width.clamp(f32::EPSILON, 1.0)
-        };
-        Self {
-            base,
-            width,
-            offset: (1.0 - width) * 0.5,
-        }
-    }
-    pub(crate) fn at(self, phase: f32) -> f32 {
-        let interval_position = (self.base + f64::from(phase) / 360.0).rem_euclid(1.0) as f32;
-        ((interval_position - self.offset) / self.width).clamp(0.0, 1.0)
-    }
-}
-#[cfg(test)]
-thread_local! { static POSITION_PREFIXES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
-#[cfg(test)]
-impl crate::DynamicRuntime {
-    pub(crate) fn take_position_prefixes() -> usize {
-        POSITION_PREFIXES.with(|count| count.replace(0))
-    }
-}
-#[cfg(test)]
-mod position_tests;
-
 pub(crate) fn lane_position(
     speed: Rational,
     width: f32,

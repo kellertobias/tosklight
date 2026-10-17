@@ -54,7 +54,6 @@ pub(super) fn evaluate(
     plan: &PinnedInstance,
     work: &PinnedController,
     pinned: &PinnedLane,
-    prefix: &crate::evaluate::PreparedLanePosition,
 ) -> Option<Evaluated> {
     let controller = &plan.frame.controllers[work.controller_index];
     if !compiled.source_free_scalar() || controller.size != 1.0 {
@@ -64,7 +63,6 @@ pub(super) fn evaluate(
     // still receives that exact context. Its result and optional cache transition are local:
     // an unexpected source request can be discarded before any runtime state is applied.
     let sources = NoQueries::default();
-    let evaluated =
-        super::evaluate_at_position(compiled, plan, work, pinned, &sources, true, Some(prefix));
+    let evaluated = super::evaluate(compiled, plan, work, pinned, &sources, true);
     (!sources.0.get()).then_some(evaluated)
 }
