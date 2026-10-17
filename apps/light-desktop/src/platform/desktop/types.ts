@@ -32,6 +32,7 @@ export interface PackagedStageBenchmarkConfig {
 	controlDurationSeconds: number;
 	profile: string;
 	additionalStageWindow: boolean;
+	stageEnabled: boolean;
 	fixtureSheet: boolean;
 	expectedFixtureRecords: number | null;
 }
