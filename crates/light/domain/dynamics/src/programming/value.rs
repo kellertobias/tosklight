@@ -31,6 +31,27 @@ enum Domain {
     Family,
 }
 
+/// Validated immutable literal operands, never a sampled value or frame cache.
+#[derive(Clone)]
+pub(super) struct PreparedScalarWave {
+    low: f64,
+    delta: f64,
+    size: f64,
+}
+impl PreparedScalarWave {
+    pub(super) fn sample(&self, amount: f32) -> Result<DynamicValue, IntentError> {
+        ensure(
+            amount.is_finite(),
+            "Dynamic waveform and size must be finite",
+        )?;
+        let factor = 0.5 + (f64::from(amount) - 0.5) * self.size;
+        Ok(DynamicValue::Scalar(constrain_wide(
+            ScalarDomain::UNIT,
+            self.low + self.delta * factor,
+        )?))
+    }
+}
+
 /// Cold-compiled lane address. Native function bounds are derived from the verified pinned
 /// source, never accepted as arbitrary serialized per-lane limits.
 #[derive(Clone)]
@@ -91,6 +112,47 @@ impl CompiledDynamicValueAddress {
             domain,
             native_model,
             unverified_native: false,
+        })
+    }
+
+    /// Called only after ordinary lane/source compilation succeeded. Defensively keep any
+    /// unsupported shape on the generic path; this constructor never changes cold errors.
+    pub(super) fn prepare_scalar_wave(
+        &self,
+        low: f32,
+        high: f32,
+        size: f32,
+    ) -> Option<PreparedScalarWave> {
+        use super::{DynamicFamilyRepresentation as R, DynamicSemanticColorBasis as B};
+        use ColorComponent as C;
+        let selected = matches!(
+            (&self.address.representation, self.address.component),
+            (
+                R::SemanticColor { basis: B::Recipe },
+                Some(ProgrammingComponent::Color(
+                    C::Red | C::Green | C::Blue | C::Amber | C::WhiteBlend
+                ))
+            ) | (
+                R::SemanticColor { basis: B::Retain },
+                Some(ProgrammingComponent::Color(C::Uv))
+            )
+        );
+        let Domain::Scalar { domain, .. } = self.domain else {
+            return None;
+        };
+        if !selected
+            || domain != ScalarDomain::UNIT
+            || !domain.contains(low)
+            || !domain.contains(high)
+            || !size.is_finite()
+            || size < 0.0
+        {
+            return None;
+        }
+        Some(PreparedScalarWave {
+            low: f64::from(low),
+            delta: f64::from(high) - f64::from(low),
+            size: f64::from(size),
         })
     }
 
@@ -451,3 +513,6 @@ impl CompiledDynamicValueTransition {
         }
     }
 }
+
+#[cfg(test)]
+mod prepared_scalar_wave_tests;

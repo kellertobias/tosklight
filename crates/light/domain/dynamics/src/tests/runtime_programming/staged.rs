@@ -1,5 +1,7 @@
 use super::*;
 mod instances;
+mod prepared_positions;
+mod prepared_scalar_waves;
 mod recorded_completion;
 mod requirements;
 mod source_free;
