@@ -62,7 +62,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           mkdir -p "$OUT/public"
           npm ci >"$OUT/npm-ci.log" 2>&1
-          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs
+          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs
           cargo test --locked -p light-dynamics --lib
       - name: Build exact canonical release Control and sidecars
         run: |
@@ -128,7 +128,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: all
-          RUST_LOG: light_headless_runtime=info,light_output=info,tower_http=info
+          RUST_LOG: light_headless_runtime=info,light_output=info,light_engine=info,tower_http=info
         run: |
           set -euo pipefail
           private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-trace"
@@ -144,17 +144,21 @@ jobs:
           import assert from 'node:assert/strict';
           import { readFile } from 'node:fs/promises';
           import { validateTickTraceDiagnostics } from './tools/desktop-performance-576-tick-trace.mjs';
+          import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
+          import { validateCpuDiagnostics } from './tools/desktop-performance-576-cpu.mjs';
           const directory = `${process.env.OUT}/public/trace`;
-          const proof = JSON.parse(await readFile(`${directory}/desktop-576-proof-numeric.json`, 'utf8'));
+          const proof = validateNumericProof(JSON.parse(await readFile(`${directory}/desktop-576-proof-numeric.json`, 'utf8')));
           assert.equal(proof.proof_mode_code, 1);
           for (const name of ['complete','workload_available','measurement_available','udp_integrity_passed','interaction_passed','sheet_liveness_passed','stage_absence_passed','cleanup_complete']) assert.equal(proof[name], 1, name);
           assert.equal(proof.send_errors, 0);
           const trace = validateTickTraceDiagnostics(JSON.parse(await readFile(`${directory}/tick-trace-numeric.json`, 'utf8')));
           for (const name of ['available','capture_complete','parse_complete','join_complete','health_deadline_comparison_available','completed_frames_comparison_available']) assert.equal(trace[name], 1, name);
-          // Counter GETs are represented by their midpoint estimate; allow only a
-          // single boundary tick/decision, and preserve the signed differences.
+          // Tick completion logging follows its health-counter update; retain a
+          // single boundary tick/decision allowance and the signed differences.
           assert(Math.abs(trace.completed_frame_delta) <= 1);
           assert(Math.abs(trace.health_deadline_delta) <= 1);
+          const cpu = validateCpuDiagnostics(JSON.parse(await readFile(`${directory}/cpu-numeric.json`, 'utf8')));
+          for (const name of ['available','capture_complete','parse_complete','join_complete','cpu_complete','cpu_available']) assert.equal(cpu[name], 1, name);
           JAVASCRIPT
       - name: Publish closed numeric proof only
         if: always()
@@ -169,4 +173,5 @@ jobs:
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/phase-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/desktop-576-proof-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/tick-trace-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/cpu-numeric.json
           if-no-files-found: error
