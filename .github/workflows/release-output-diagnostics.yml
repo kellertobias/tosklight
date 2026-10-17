@@ -27,6 +27,12 @@ on:
         default: false
         type: boolean
 
+      headless_stack_audit:
+        description: Add closed numeric decode-parity and before-capture map audit (requires lifetime probe or headless stacks)
+        required: false
+        default: false
+        type: boolean
+
       headless_stacks:
         description: One OFF576 cohort with bounded 49 Hz existing-thread headless stacks
         required: false
@@ -46,6 +52,7 @@ env:
   HEADLESS_STACKS: ${{ inputs.headless_stacks && '1' || '0' }}
   WORKER_COMPARISON: ${{ inputs.worker_comparison && '1' || '0' }}
   RECORDER_LIFETIME_PROBE: ${{ inputs.recorder_lifetime_probe && '1' || '0' }}
+  LIGHT_HEADLESS_STACK_AUDIT: ${{ inputs.headless_stack_audit && '1' || '0' }}
 
 jobs:
   runtime-symbols:
@@ -68,6 +75,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           test "$HEADLESS_STACKS" = 0
           test "$WORKER_COMPARISON" = 0
+          if [[ "$LIGHT_HEADLESS_STACK_AUDIT" == 1 ]]; then test "$RECORDER_LIFETIME_PROBE" = 1; fi
           sudo timeout 180 apt-get update
           packages=(binutils libc6-dbg)
           if [[ "$RECORDER_LIFETIME_PROBE" == 1 ]]; then packages+=(linux-tools-generic); fi
@@ -188,6 +196,7 @@ jobs:
           [[ "$CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           test "$RECORDER_LIFETIME_PROBE" = 0
+          if [[ "$LIGHT_HEADLESS_STACK_AUDIT" == 1 ]]; then test "$HEADLESS_STACKS" = 1; fi
           if [[ "$HEADLESS_STACKS" == 1 ]]; then test "$WORKER_COMPARISON" = 0; fi
           mkdir -p "$OUT"
           python3 - <<'PYTHON'
@@ -198,6 +207,8 @@ jobs:
                    'tools/run-desktop-performance.mjs', 'tools/process-tree-resources.mjs',
                    'tools/desktop-performance-cpu-stages.mjs',
                    'tools/desktop-performance-headless-stacks.mjs',
+                   'tools/desktop-performance-headless-stack-audit.mjs',
+                   'tools/desktop-performance-headless-stack-audit.test.mjs',
                    'tools/desktop-performance-runtime-symbols.mjs',
                    'tools/desktop-performance-runtime-symbols.test.mjs',
                    'tools/desktop-performance-headless-stacks.test.mjs',
@@ -215,6 +226,7 @@ jobs:
           data = {'binary_source_sha': os.environ['CANDIDATE_SHA'],
                   'workflow_commit_sha': os.environ['WORKFLOW_SHA'],
                   'qualification': ('One existing OFF576 cohort with 49Hz existing-thread headless sampling; overhead present; no per-frame join or release acceptance.' if os.environ['HEADLESS_STACKS'] == '1' else 'One diagnostic pair by default; optional same-host worker comparison runs two ordered pairs. Original workloads and gates retained. No release acceptance, pane binding or accepted-frame attribution.'),
+                  'headless_stack_audit_opt_in': int(os.environ['LIGHT_HEADLESS_STACK_AUDIT']),
                   'platform': platform.platform(), 'cpu_count': os.cpu_count(),
                   'allowed_cpus': sorted(os.sched_getaffinity(0)),
                   'baseline_source_sha': '0f37830ffe7fcea054280332c1c91278dcae4a16',
@@ -386,6 +398,7 @@ jobs:
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/candidate-source-host.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/candidate-binaries.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/off/headless-stacks-numeric.json
+            .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/off/headless-stack-audit-numeric.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/off/typed-cpu-numeric.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/on/typed-cpu-numeric.json
             .artifacts/test/results/tl775-output-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}/workers-*/off/typed-cpu-numeric.json
