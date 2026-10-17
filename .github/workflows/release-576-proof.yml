@@ -31,6 +31,12 @@ jobs:
         with:
           toolchain: stable
           targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae
+        with:
+          key: tl775-linux576
+          workspaces: . -> .artifacts/build/cargo
+          cache-workspace-crates: false
+          cache-on-failure: true
       - uses: ./.github/actions/package-mirror
       - name: Install canonical Linux bundle dependencies
         env:
