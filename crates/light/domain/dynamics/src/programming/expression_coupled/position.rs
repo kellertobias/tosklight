@@ -61,9 +61,11 @@ impl CompiledCoupledExpression {
     ) -> Result<Self, TransitionError> {
         validate_forest_shape(forest, forest_root)?;
         let mut compilation = PositionForestCompilation::new(forest.len());
-        for (forest_node, branch) in forest.iter().enumerate() {
-            let root = compilation.compile_node(forest_node, branch)?;
-            compilation.mapped.push(root);
+        if !compilation.try_plain_angles(&retained, forest, forest_root)? {
+            for (forest_node, branch) in forest.iter().enumerate() {
+                let root = compilation.compile_node(forest_node, branch)?;
+                compilation.mapped.push(root);
+            }
         }
         let PositionForestCompilation {
             nodes,

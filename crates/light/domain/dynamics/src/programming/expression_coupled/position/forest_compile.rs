@@ -2,6 +2,8 @@
 //! while recording the cold lineage that maps each original node onto its compiled root.
 use super::*;
 
+mod plain_angles;
+
 /// Graph under construction. `mapped` holds each compiled forest node's graph root, so a
 /// Transition can only reference earlier original nodes (already checked by the shape pass).
 pub(super) struct PositionForestCompilation {
