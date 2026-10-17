@@ -761,10 +761,20 @@ fn case(input: &Input, workers: usize, frames: ProbeFrames) -> Case {
 #[test]
 #[ignore = "private full mixed576 measurement; requires explicit root-authorized quiet window"]
 fn manual_exact_mixed576_serial_and_four_workers() {
+    compare_worker_cases(4);
+}
+
+#[test]
+#[ignore = "private full mixed576 measurement; requires explicit root-authorized quiet window"]
+fn manual_exact_mixed576_serial_and_two_workers() {
+    compare_worker_cases(2);
+}
+
+fn compare_worker_cases(workers: usize) {
     let input = Input::load();
     let frames = ProbeFrames::from_env();
     let serial = case(&input, 1, frames);
-    let parallel = case(&input, 4, frames);
+    let parallel = case(&input, workers, frames);
     assert_eq!(
         serial.fingerprints, parallel.fingerprints,
         "all captured outputs must agree by logical frame, including full DMX, semantic values, physical diagnostics, Color readout and full accepted requirements"
@@ -783,6 +793,6 @@ fn manual_exact_mixed576_serial_and_four_workers() {
         })).collect::<Vec<_>>(),
         "cases":[serial.report,parallel.report],
         "host_available_parallelism":std::thread::available_parallelism().map(|n|n.get()).ok(),
-        "limits":"ManualClock25ms; no sleeps/pacing; trace clocks+coordinator counters active on every test frame; Linux processCPUallthreads includeswarmup+fingerprints whenavailable; no perworkerCPU; sameprocess serial/fourworkers; configuredworkers nothostCPUquota; no network/GPU/outputdeadline gate; harnesslogicalheadUUIDs not historicalLinux IDs"})
+        "limits":"ManualClock25ms; no sleeps/pacing; trace clocks+coordinator counters active on every test frame; Linux processCPUallthreads includeswarmup+fingerprints whenavailable; no perworkerCPU; sameprocess serial/configuredcomparisonworkers; configuredworkers nothostCPUquota; no network/GPU/outputdeadline gate; harnesslogicalheadUUIDs not historicalLinux IDs"})
     );
 }
