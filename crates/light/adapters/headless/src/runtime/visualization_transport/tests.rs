@@ -410,3 +410,110 @@ fn a_dynamic_stack_claim_receives_the_same_values_on_refresh_and_reuse_frames() 
         }
     }
 }
+
+fn publication_snapshot(sequence: u64) -> VisualizationServerMessage {
+    VisualizationServerMessage::Snapshot {
+        lane: VisualizationLane::Normal,
+        scope: VisualizationScope { show_id: None },
+        sequence,
+        source_frame: sequence,
+        source_timestamp: "2026-10-17T12:00:00Z".into(),
+        published_at: "2026-10-17T12:00:01Z".into(),
+        snapshot: untrimmed_lane(true),
+        lease: Some(sequence),
+        pending: None,
+    }
+}
+
+fn nested_publication_buffers(message: &VisualizationServerMessage) -> (usize, usize, usize) {
+    let VisualizationServerMessage::Snapshot { snapshot, .. } = message else {
+        panic!("expected snapshot");
+    };
+    (
+        snapshot.values.as_ptr() as usize,
+        snapshot.values[0].attribute.as_ptr() as usize,
+        snapshot.dynamic_stack.as_ptr() as usize,
+    )
+}
+
+#[tokio::test]
+async fn owned_publication_handoff_moves_nested_buffers_for_both_queue_outcomes() {
+    for replace_pending in [false, true] {
+        let queue = LatestBatch::default();
+        if replace_pending {
+            queue.replace(Vec::new(), Vec::new()).await.unwrap();
+        }
+        let response = publication_snapshot(11);
+        let replacement = publication_snapshot(12);
+        let expected = nested_publication_buffers(if replace_pending {
+            &replacement
+        } else {
+            &response
+        });
+        assert_eq!(
+            queue
+                .replace(
+                    owned_publication_messages(vec![response]),
+                    owned_publication_messages(vec![replacement])
+                )
+                .await,
+            Some(replace_pending)
+        );
+        let batch = queue.next().await.unwrap();
+        let VisualizationOutgoingMessage::Server(message) = &batch[0] else {
+            panic!("expected server message");
+        };
+        assert_eq!(
+            nested_publication_buffers(message),
+            expected,
+            "nested publication allocations must transfer to the queue"
+        );
+    }
+}
+
+#[tokio::test]
+async fn owned_publication_handoff_matches_clone_oracle_on_the_wire() {
+    for replace_pending in [false, true] {
+        for batched in [false, true] {
+            let queue = LatestBatch::default();
+            if replace_pending {
+                queue.replace(Vec::new(), Vec::new()).await.unwrap();
+            }
+            let responses = vec![
+                publication_snapshot(21),
+                VisualizationServerMessage::Error {
+                    code: "response".into(),
+                    message: "second message".into(),
+                },
+            ];
+            let replacements = vec![
+                publication_snapshot(22),
+                VisualizationServerMessage::Error {
+                    code: "replacement".into(),
+                    message: "complete fallback".into(),
+                },
+            ];
+            let oracle = if replace_pending {
+                &replacements
+            } else {
+                &responses
+            }
+            .iter()
+            .cloned()
+            .map(VisualizationOutgoingMessage::Server)
+            .collect();
+            let expected = serialize_outgoing_messages(oracle, batched).unwrap();
+            queue
+                .replace(
+                    owned_publication_messages(responses),
+                    owned_publication_messages(replacements),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                serialize_outgoing_messages(queue.next().await.unwrap(), batched).unwrap(),
+                expected
+            );
+        }
+    }
+}
