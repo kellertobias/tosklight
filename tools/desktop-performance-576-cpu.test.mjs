@@ -186,3 +186,19 @@ test("closed CPU array schema exactly matches the current Rust emitter",async()=
  assert.deepEqual([...emit.matchAll(/\b([a-z_]+)=\?/gu)].map(m=>m[1]),Object.keys(source()));
  assert(!emit.includes("dispatch_lag"));
 });
+
+test("integer microsecond endpoints join exact server boundaries without epoch floating rounding",()=>{
+ const startedAtMicros=epoch*1000+1,endedAtMicros=epoch*1000+60_000_001;
+ const precise={startedAtMicros,endedAtMicros,startedAt:startedAtMicros/1000,endedAt:endedAtMicros/1000};
+ const at=(text,millis,nanos)=>text.replace(new Date(epoch+millis).toISOString(),new Date(epoch+millis).toISOString().replace(".000Z","."+nanos+"Z"));
+ const text=at(tick(1,{at:0}),0,"000001000")+at(tick(2,{at:60000}),60000,"000001000")+at(tick(3,{at:0}),0,"000000999")+at(tick(4,{at:60000}),60000,"000001001")+
+  at(cleanup(0),0,"000001000")+at(cleanup(60000),60000,"000001000")+at(cleanup(0),0,"000000999")+at(cleanup(60000),60000,"000001001");
+ const r=parseCpuDiagnostics(text,precise);assert.equal(r.available,1);assert.equal(r.selected_ticks,2);assert.equal(r.window_seconds,60);
+ assert.deepEqual([r.cleanup.records_before_window,r.cleanup.records_in_window,r.cleanup.records_after_window],[1,2,1]);
+ for(const fields of [
+  {startedAtMicros}, {endedAtMicros}, {startedAtMicros:null,endedAtMicros},
+  {startedAtMicros:Number.MAX_SAFE_INTEGER+1,endedAtMicros},
+  {startedAtMicros:startedAtMicros+10,endedAtMicros},
+  {startedAtMicros,endedAtMicros:startedAtMicros},
+ ]){assert.equal(parseCpuDiagnostics(text,{...window,...fields}).read_status,7);}
+});

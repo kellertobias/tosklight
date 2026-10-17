@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { open, mkdir, writeFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { diagnosticWindowBounds } from "./desktop-performance-576-clock.mjs";
 import { PHASE_FIELDS } from "./desktop-performance-576-phases.mjs";
 import { parseTickTraceDiagnostics, APPLICATION_FIELDS } from "./desktop-performance-576-tick-trace.mjs";
 
@@ -39,10 +40,9 @@ const zeroStat = id => ({id,count:0,min_nanos:0,mean_nanos:0,p50_nanos:0,p95_nan
 const newRow = (id,sub=false) => ({id,calls:0,valid_calls:0,unavailable_calls:0,invalid_calls:0,called_records:0,cpu_records:0,partial_cpu_records:0,metrics:Array.from({length:sub?3:2},(_,i)=>zeroStat(i))});
 const newWorker = id => ({id,calls:0,jobs:0,valid_jobs:0,unavailable_jobs:0,invalid_jobs:0,job_records:0,cpu_records:0,partial_cpu_records:0,uncovered_sort_calls:0,metrics:CPU_WORKER_METRICS.map((_,i)=>zeroStat(i))});
 const newGroup = id => ({id,ticks:0,ordered_attempts:0,cpu_summaries:0,stages:CPU_STAGE_IDS.map((_,i)=>newRow(i)),substages:CPU_SUBSTAGE_IDS.map((_,i)=>newRow(i,true)),workers:CPU_WORKER_IDS.map((_,i)=>newWorker(i))});
-const validWindow = w => Number.isFinite(w?.startedAt)&&Number.isFinite(w?.endedAt)&&w.startedAt>=0&&w.endedAt>w.startedAt&&w.endedAt-w.startedAt<=400_000;
-const epochNanos = n => BigInt(Math.trunc(n))*1_000_000n+BigInt(Math.round((n-Math.trunc(n))*1_000_000));
+const validWindow = w => diagnosticWindowBounds(w)!==null;
 function blank(window,status=0) {
- return {...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:1,read_status:status,window_seconds:validWindow(window)?(window.endedAt-window.startedAt)/1000:0,groups:[newGroup(0),newGroup(1)],cleanup:{...Object.fromEntries(CLEANUP_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:CPU_CLEANUP_METRICS.map((_,i)=>zeroStat(i))}};
+ return {...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:1,read_status:status,window_seconds:diagnosticWindowBounds(window)?.seconds??0,groups:[newGroup(0),newGroup(1)],cleanup:{...Object.fromEntries(CLEANUP_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:CPU_CLEANUP_METRICS.map((_,i)=>zeroStat(i))}};
 }
 function timestamp(line) {
  const m=/^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z(?:\s|$)/u.exec(line);
@@ -147,7 +147,7 @@ function finishGroups(report,values) {
  for(const [i,group]of report.groups.entries())for(const kind of ["stages","substages","workers"])for(const [j,row]of group[kind].entries())row.metrics=values[i][kind][j].map(summarize);
 }
 function finalize(report,entries,cleanups,window,base) {
- const start=epochNanos(window.startedAt),end=epochNanos(window.endedAt),values=report.groups.map(buckets);
+ const {startedAtNanos:start,endedAtNanos:end}=diagnosticWindowBounds(window),values=report.groups.map(buckets);
  report.tick_trace_available=base.available;report.tick_trace_capture_complete=base.capture_complete;
  report.tick_trace_parse_complete=base.parse_complete;report.tick_trace_join_complete=base.join_complete;
  report.selected_ticks=base.selected_ticks;report.selected_missed_ticks=base.groups[1].ticks;
