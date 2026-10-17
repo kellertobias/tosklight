@@ -14,6 +14,16 @@ class ReceiptFailure extends Error {constructor(code,message){super(message);thi
 const fail=(code,message)=>{throw new ReceiptFailure(code,message);};
 function geometry(counts,expected){return expected===1?counts.every(n=>n===0):counts[0]>0&&counts.every((n,i)=>i<expected?n===counts[0]:n===0);}
 const empty=id=>({id,available:0,matches_expected:0,failure_code:0,task_count:0,output_thread_count:0,pool_count:0,index_counts:[0,0,0,0]});
+// The proof-only expectation never writes the application's worker configuration.
+export function expectedWorkerReceiptCount(environment) {
+ if(Object.hasOwn(environment,"LIGHT_OUTPUT_WORKER_PROOF_EXPECTED")) {
+  const expected=environment.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED;
+  assert(typeof expected==="string"&&/^[1-4]$/u.test(expected),"invalid proof-only worker expectation");
+  return Number(expected);
+ }
+ const configured=environment.LIGHT_OUTPUT_WORKERS;
+ return typeof configured==="string"&&/^[1-4]$/u.test(configured)?Number(configured):null;
+}
 export function bindOwnedHeadless(snapshot,rootPid){
  if(!positive(rootPid)||!Array.isArray(snapshot)||snapshot.length>WORKER_LIMITS.tasks)fail(1,"invalid owned process snapshot");
  const byPid=new Map();

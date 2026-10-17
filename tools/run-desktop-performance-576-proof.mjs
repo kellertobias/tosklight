@@ -12,7 +12,7 @@ import { capturePerformanceSample, ServerCounterClock } from "./desktop-performa
 import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
 import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
-import { WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
+import { expectedWorkerReceiptCount, WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
@@ -110,6 +110,8 @@ function parseArguments(arguments_) {
 }
 
 async function runCase(performanceCase, executionMode) {
+  // Validate a proof-only expectation before launching any application process.
+  const expectedWorkers=expectedWorkerReceiptCount(process.env);
 	const temporaryRoot = await mkdtemp(
 		path.join(
 			path.resolve(options["output-dir"]),
@@ -174,8 +176,7 @@ async function runCase(performanceCase, executionMode) {
   try { evidence = await createCaseEvidence(temporaryRoot); }
   catch(error) { await terminateProcessTree(child.pid); throw error; }
 	evidence.closed = closed;
-  const workerMode=process.env.LIGHT_OUTPUT_WORKERS;
-  const workerReceipt=/^[1-4]$/u.test(workerMode??"")?new WorkerCountReceipt(Number(workerMode)):null;
+  const workerReceipt=expectedWorkers===null?null:new WorkerCountReceipt(expectedWorkers);
   const workerNumericPath=path.join(path.dirname(numericPath),"worker-numeric.json");
   if(workerReceipt) {
     evidence.workerReceipt=workerReceipt;

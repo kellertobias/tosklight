@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFile,mkdtemp,rm,stat,readdir} from "node:fs/promises";
 import path from "node:path";
 import {artifactPaths} from "./artifact-paths.mjs";
-import {WORKER_LIMITS,bindOwnedHeadless,parseOutputWorkerNames,captureOwnedWorkerThreads,WorkerCountReceipt,validateWorkerDiagnostics,writeWorkerDiagnostics} from "./desktop-performance-576-workers.mjs";
+import {WORKER_LIMITS,expectedWorkerReceiptCount,bindOwnedHeadless,parseOutputWorkerNames,captureOwnedWorkerThreads,WorkerCountReceipt,validateWorkerDiagnostics,writeWorkerDiagnostics} from "./desktop-performance-576-workers.mjs";
 const root={pid:100,parentPid:1,startTicks:123,command:"light-desktop"},head={pid:200,parentPid:100,startTicks:456,command:"light-headless"},snapshot=[root,head];
 function proc(p){const fields=Array(22).fill("0");fields[0]="S";fields[1]=String(p.parentPid);fields[19]=String(p.startTicks);return `${p.pid} (${p.command}) ${fields.join(" ")}\n`;}
 function mock({names=["light-headless\n","light-output-0\n","light-output-1\n"],change=null,throwRead=false,cap=false}={}){
@@ -49,4 +49,23 @@ test("forged closed numeric receipts cannot claim capture, geometry or successfu
 });
 test("publication is atomic private-mode JSON with no temporary siblings",async()=>{
  const dir=await mkdtemp(path.join(artifactPaths.tmp,"tl775-worker-receipt-"));try{const destination=path.join(dir,"worker-numeric.json"),report=(await receipt()).summary();await writeWorkerDiagnostics(destination,report);assert.equal((await stat(destination)).mode&0o777,0o600);assert.deepEqual(JSON.parse(await readFile(destination,"utf8")),report);assert.deepEqual(await readdir(dir),["worker-numeric.json"]);}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+
+test("proof-only expected workers observes defaults without changing runtime configuration",()=>{
+ for(const workers of [1,2,3,4]) {
+  const onlyProof=Object.freeze({LIGHT_OUTPUT_WORKER_PROOF_EXPECTED:String(workers)});
+  assert.equal(expectedWorkerReceiptCount(onlyProof),workers);assert(!Object.hasOwn(onlyProof,"LIGHT_OUTPUT_WORKERS"));
+  const both=Object.freeze({LIGHT_OUTPUT_WORKER_PROOF_EXPECTED:String(workers),LIGHT_OUTPUT_WORKERS:"4"});
+  assert.equal(expectedWorkerReceiptCount(both),workers);assert.equal(both.LIGHT_OUTPUT_WORKERS,"4");
+  assert.equal(expectedWorkerReceiptCount({LIGHT_OUTPUT_WORKERS:String(workers)}),workers);
+ }
+ assert.equal(expectedWorkerReceiptCount({}),null);assert.equal(expectedWorkerReceiptCount({LIGHT_OUTPUT_WORKERS:"max"}),null);
+ for(const value of [undefined,null,"","0","5","02","2 ","max",2])assert.throws(()=>expectedWorkerReceiptCount({LIGHT_OUTPUT_WORKER_PROOF_EXPECTED:value,LIGHT_OUTPUT_WORKERS:"2"}),/proof-only/);
+});
+test("proof expectation validation precedes application launch and runtime environment stays inherited",async()=>{
+ const source=await readFile(new URL("./run-desktop-performance-576-proof.mjs",import.meta.url),"utf8");
+ const run=source.slice(source.indexOf("async function runCase("));
+ assert(run.indexOf("expectedWorkerReceiptCount(process.env)")<run.indexOf("spawn(invocation.command"));
+ assert(run.includes("...process.env,"));assert(!/LIGHT_OUTPUT_WORKERS\s*[:=]/u.test(run));
 });
