@@ -1,0 +1,99 @@
+name: Unchanged 576 Linux intention proof
+on:
+  push:
+    branches: [codex/tl775-intention-slots]
+    paths: [.github/workflows/release-576-proof.yml]
+permissions:
+  contents: read
+concurrency:
+  group: linux-576-proof-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  linux-576:
+    if: github.repository == 'kellertobias/tosklight'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+      OUT: .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}
+      CANDIDATE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+      - uses: ./.github/actions/package-mirror
+      - name: Install canonical Linux bundle dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          sudo timeout 180 apt-get update
+          sudo timeout 900 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb libgl1-mesa-dri
+      - name: Verify source and observer tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          mkdir -p "$OUT/public"
+          node --test tools/desktop-performance-576-proof-observers.test.mjs
+          cargo test --locked -p light-dynamics --lib
+      - name: Build exact canonical release Control and sidecars
+        run: |
+          set -euo pipefail
+          npm ci >"$OUT/npm-ci.log" 2>&1
+          npm run build --prefix apps/light-desktop >"$OUT/frontend-build.log" 2>&1
+          cargo build --release --locked --target "$TARGET" -p light-headless --bin light-headless -p viz-renderer --bin viz-renderer >"$OUT/sidecar-build.log" 2>&1
+          sidecars="$(npm run --silent artifact-path -- tmp)/linux-576-sidecars"
+          mkdir -p "$sidecars"
+          cp ".artifacts/build/cargo/$TARGET/release/light-headless" "$sidecars/light-headless-$TARGET"
+          cp ".artifacts/build/cargo/$TARGET/release/viz-renderer" "$sidecars/viz-renderer-$TARGET"
+          export LIGHT_DESKTOP_SIDECAR_DIR="$sidecars"
+          export LIGHT_DESKTOP_SIDECAR_TARGET="$TARGET"
+          config="$(npm run --silent artifact-path -- tmp)/linux-576-control.json"
+          node tools/write-tauri-artifact-config.mjs control "$config"
+          npm run --prefix apps/light-desktop tauri:build -- --target "$TARGET" --config "$config" --bundles appimage >"$OUT/control-build.log" 2>&1
+          git diff --exit-code
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, platform, subprocess
+          root=pathlib.Path('.artifacts/build/cargo')/os.environ['TARGET']/'release'
+          apps=list((root/'bundle/appimage').glob('*.AppImage'))
+          assert len(apps)==1
+          sources=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          proof={'source_commit':os.environ['CANDIDATE_SHA'],'workflow_commit':os.environ['GITHUB_SHA'],
+                 'platform':platform.platform(),'cpu_count':os.cpu_count(),'allowed_cpu_count':len(os.sched_getaffinity(0)),
+                 'rustc':subprocess.check_output(['rustc','-Vv'],text=True),
+                 'source_sha256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sources if p and pathlib.Path(p).is_file()},
+                 'binaries':{p.name:{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in [apps[0],root/'light-headless',root/'viz-renderer']}}
+          (pathlib.Path(os.environ['OUT'])/'public'/'provenance.json').write_text(json.dumps(proof,indent=2)+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write(f'PROOF_APPIMAGE={apps[0].resolve()}\n')
+          PYTHON
+      - name: Measure unchanged 576 fixture workload
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'false'
+        run: |
+          set -euo pipefail
+          private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}"
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$OUT/public/desktop-576-proof-numeric.json" >"$OUT/collector.stdout.log" 2>"$OUT/collector.stderr.log"
+      - name: Publish closed numeric proof only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/provenance.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/desktop-576-proof-numeric.json
+          if-no-files-found: error
