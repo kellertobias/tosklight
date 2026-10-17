@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFile, mkdtemp, stat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { artifactPaths } from "./artifact-paths.mjs";
-import { PacketAggregate, PacketWindowLedger, proofSurfaceDurationSeconds, drainPacketRing, summarizeRamp, summarizeStageWindow, numericProof, validateNumericProof, verifyWorkloadFunctions, ProofCheckpoint, writeNumericProof, validateStageReady, waitStageReady, summarizeStageAbsence, waitProofModeAck } from "./desktop-performance-576-proof-observers.mjs";
+import { ServerCounterClock, CLOCK_NUMERIC_FIELDS } from "./desktop-performance-576-clock.mjs";
+import { PacketAggregate, PacketWindowLedger, proofSurfaceDurationSeconds, drainPacketRing, summarizeRamp, summarizeStageWindow, numericProof, validateNumericProof, validateHistoricalNumericProofV4, verifyWorkloadFunctions, ProofCheckpoint, writeNumericProof, validateStageReady, waitStageReady, summarizeStageAbsence, waitProofModeAck } from "./desktop-performance-576-proof-observers.mjs";
 
 const completedProgress = () => ({complete:1,current_stage_code:0,sheet_liveness_checked:1,sheet_liveness_passed:1,cleanup_complete:1});
 
@@ -22,9 +23,15 @@ function staticPreloadStage() {
   report.nativeStage.heartbeats=Array.from({length:125},(_,i) => ({paneId:frame.paneId,attachmentId:frame.attachmentId,sequence:i+1,epochMicros:(99_000+i*500)*1000,receivedEpochMicros:(99_001+i*500)*1000,lastPresentedSequence:frame.sequence,sourceFrame:frame.sourceFrame,followPreload:true,width:frame.width,height:frame.height,attached:true,visible:true,idleUnchanged:true,drawHealthy:true}));
   return report;
 }
+function validClock() {
+  const clock=new ServerCounterClock(),epoch=1_792_231_200_000;
+  for(let i=0;i<=60;i++)clock.observe({diagnostics:{output_sample:{sampled_at_epoch_micros:(epoch+i*1000)*1000+500,monotonic_micros:i*1_000_000+500},output:{frames_sent:i*40,packets_sent:i*640,deadline_misses:0,send_errors:0}},diagnosticsUtcStartMillis:epoch+i*1000,diagnosticsUtcEndMillis:epoch+i*1000+1,diagnosticsMonotonicStartMillis:i*1000,diagnosticsMonotonicEndMillis:i*1000+1});
+  return clock.summary();
+}
+const VALID_CLOCK=validClock();
 function result() {
   const resources = {cpu_average_percent:100,cpu_max_percent:120,peak_resident_bytes:1024};
-  return {fixture_count:576,physical_instance_count:576,parameter_count:8064,universes:16,animated_attribute_count:5408,master_lane_count:20,counter_observation_count:61,counter_window_seconds:60,completed_frame_delta:2400,deadline_miss_delta:0,send_error_delta:0,minimum_one_second_completed_hz:40,average_completed_hz:40,windows_below_target:0,wall_monotonic_difference_ms:0,resources:{application_cpu_average_percent:400,application_cpu_max_percent:500,application_peak_resident_bytes:4096,server:resources,desktop_webview:resources,native_renderer:resources,desktop_host:resources},proof:{packets:{packet_count:38400,rows:Array.from({length:16},() => ({packets:2400,sequence_discontinuities:0,zero_sequence_packets:0}))},interaction:{accepted_commands:2,ramps:[{from_value:0,to_value:128,intermediate_values:100,target_delay_ms:3000,monotonic:1},{from_value:128,to_value:64,intermediate_values:60,target_delay_ms:3000,monotonic:1}]},stage:summarizeStageWindow(stage(),100_000,160_000)}};
+  return {...VALID_CLOCK,fixture_count:576,physical_instance_count:576,parameter_count:8064,universes:16,animated_attribute_count:5408,master_lane_count:20,counter_observation_count:61,counter_window_seconds:60,completed_frame_delta:2400,deadline_miss_delta:0,send_error_delta:0,minimum_one_second_completed_hz:40,average_completed_hz:40,windows_below_target:0,wall_monotonic_difference_ms:0,resources:{application_cpu_average_percent:400,application_cpu_max_percent:500,application_peak_resident_bytes:4096,server:resources,desktop_webview:resources,native_renderer:resources,desktop_host:resources},proof:{packets:{packet_count:38400,rows:Array.from({length:16},() => ({packets:2400,sequence_discontinuities:0,zero_sequence_packets:0}))},interaction:{accepted_commands:2,ramps:[{from_value:0,to_value:128,intermediate_values:100,target_delay_ms:3000,monotonic:1},{from_value:128,to_value:64,intermediate_values:60,target_delay_ms:3000,monotonic:1}]},stage:summarizeStageWindow(stage(),100_000,160_000)}};
 }
 
 test("executed focused workload declarations remain byte-identical to accepted canonical functions", async () => {
@@ -122,7 +129,7 @@ test("one-packet universe and disabled sequence cannot falsely pass full-minute 
 });
 
 
-test("schema4 Stage gaps preserve per-lane count, min/max offsets and edge diagnostics", () => {
+test("schema5 Stage gaps preserve per-lane count, min/max offsets and edge diagnostics", () => {
   const raw=stage(); raw.nativeStage.activity=raw.nativeStage.activity.filter(row => !row.followPreload);
   const diagnostic=summarizeStageWindow(raw,100_000,160_000);
   assert.equal(diagnostic.lanes[0].validation_passed,1);
@@ -139,7 +146,7 @@ test("atomic checkpoint state retains completed metrics on Stage wait failure an
   const measured=result();delete measured.proof.stage;delete measured.proof.interaction;
   Object.assign(proof.result,measured);
   await proof.enter(12);await proof.fail();await proof.enter(14);await proof.fail(14);await proof.finish(1);
-  const last=writes.at(-1);assert.equal(last.schema_version,4);assert.equal(last.failure_stage_code,12);assert.equal(last.current_stage_code,14);assert.equal(last.complete,0);assert.equal(last.cleanup_complete,1);
+  const last=writes.at(-1);assert.equal(last.schema_version,5);assert.equal(last.failure_stage_code,12);assert.equal(last.current_stage_code,14);assert.equal(last.complete,0);assert.equal(last.cleanup_complete,1);
   assert.equal(last.completed_frames,2400);assert.equal(last.measurement_available,1);assert.equal(last.udp_available,1);assert.equal(last.resources_available,1);assert.equal(last.stage_report_available,0);assert.equal(last.all_gates_passed,0);
   assert(writes.every(row => row.all_gates_passed === 0));
 });
@@ -171,8 +178,8 @@ test("result objects never imply unobserved Sheet liveness or cleanup", () => {
   assert.equal(report.complete,0);assert.equal(report.sheet_liveness_checked,0);assert.equal(report.sheet_liveness_passed,0);assert.equal(report.cleanup_complete,0);assert.equal(report.all_gates_passed,0);
   assert.equal(report.completed_frames,2400);assert.equal(report.measurement_available,1);
 });
-test("real atomic checkpoint replacement retains schema4 and leaves no temporary siblings", async () => {
-  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-proof-schema4-test-"));
+test("real atomic checkpoint replacement retains schema5 and leaves no temporary siblings", async () => {
+  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-proof-schema5-test-"));
   try {
     const file=path.join(directory,"numeric.json"),proof=new ProofCheckpoint(file);
     await proof.enter(7);await Promise.all([proof.enter(8),proof.enter(9)]);
@@ -336,7 +343,7 @@ test("null or undefined raw observations retain numeric failure without assignin
     assert(summary.lanes.every(row => row.activity_invalid_unlocalizable_samples === 0 && row.heartbeat_invalid_unlocalizable_samples === 0));
     const measured=result();measured.proof.stage=summary;
     const numeric=numericProof(measured,completedProgress());
-    assert.equal(numeric.schema_version,4);assert.equal(numeric.all_gates_passed,0);
+    assert.equal(numeric.schema_version,5);assert.equal(numeric.all_gates_passed,0);
     assert.deepEqual(validateNumericProof(JSON.parse(JSON.stringify(numeric))),numeric);
   }
 });
@@ -352,10 +359,10 @@ test("missing fields on an otherwise assigned lane retain bounded unlocalizable 
   }
 });
 
-test("numeric schema4 explicitly rejects schema2 while native source complete records remain schemaVersion2", () => {
+test("numeric schema5 explicitly rejects schema2 while native source complete records remain schemaVersion2", () => {
   const source=stage();assert.equal(source.schemaVersion,2);
   assert.equal(summarizeStageWindow(source,100_000,160_000).validation_passed,1);
-  const numeric=numericProof(result(),completedProgress());assert.equal(numeric.schema_version,4);
+  const numeric=numericProof(result(),completedProgress());assert.equal(numeric.schema_version,5);
   numeric.schema_version=2;assert.throws(() => validateNumericProof(numeric));
 });
 
@@ -534,7 +541,7 @@ test("Stage absence cannot be inferred from configuration, empty unavailable evi
   assert.equal(summarizeStageAbsence(good,100_000,160_000,samples.slice(1)).available,0);
   const missing=processWitnesses();missing[10].processes=[];assert.equal(summarizeStageAbsence(good,100_000,160_000,missing).available,0);
 });
-test("schema4 rejects unknown modes, fabricated absence/Stage success and contradictory integrity flags", () => {
+test("schema5 rejects unknown modes, fabricated absence/Stage success and contradictory integrity flags", () => {
   for(const mutate of [r => r.proof_mode_code=3,r => r.udp_integrity_passed=0,r => r.stage_absence_passed=1,r => r.schema_version=3]) {
     const value=numericProof(splitResult(2),completedProgress());mutate(value);assert.throws(() => validateNumericProof(value));
   }
@@ -552,7 +559,7 @@ test("mode acknowledgment binds the actual app configuration before opening the 
 });
 
 
-test("packet receive ledger selects the exact mapped counter midpoint window despite delayed process/checkpoint work", () => {
+test("packet receive ledger selects the exact server counter sample window despite delayed process/checkpoint work", () => {
   const ledger=new PacketWindowLedger(99_000),aggregate=new PacketAggregate();
   const add=(time,sequence,universe=101) => {const row={...packet(sequence,universe),receivedAt:time};aggregate.add(row,time);ledger.add(row);};
   for(const [time,sequence] of [[99_500,254],[100_000,255],[100_001,1],[159_999,2],[160_000,3],[160_001,4],[161_000,5]]) for(let universe=101;universe<=116;universe++) add(time,sequence,universe);
@@ -589,4 +596,26 @@ test("Control surface budget removes idle wait while preserving sixty-second mea
   assert.equal(proofSurfaceDurationSeconds(false,300_000,60),120);
   assert(proofSurfaceDurationSeconds(false,60_000,60)-60 >= 2*4,"margin includes both maximum accepted fade durations");
   assert.throws(() => proofSurfaceDurationSeconds(false,NaN,60));
+});
+
+test("schema5 preserves partial failed server-clock checkpoints and rejects historical schema4",async()=>{
+ const full=numericProof(result(),completedProgress());const historical=structuredClone(full);historical.schema_version=4;assert.throws(()=>validateNumericProof(historical));
+ const missing=structuredClone(full);delete missing.clock_source_code;assert.throws(()=>validateNumericProof(missing));
+ const clock=new ServerCounterClock();
+ const record={diagnosticsUtcStartMillis:1000,diagnosticsUtcEndMillis:1001,diagnosticsMonotonicStartMillis:1,diagnosticsMonotonicEndMillis:2,diagnostics:{output_sample:{sampled_at_epoch_micros:1000500,monotonic_micros:500},output:{frames_sent:1,packets_sent:16,deadline_misses:0,send_errors:0}}};
+ clock.observe(record);assert.throws(()=>clock.observe({...record,diagnostics:{output:record.diagnostics.output}}));
+ const writes=[],proof=new ProofCheckpoint("no-file",{write:async(_file,row)=>writes.push(structuredClone(row))});await proof.enter(7);Object.assign(proof.result,clock.summary());await proof.save();await proof.fail();await proof.enter(14);await proof.finish(1);
+ const final=writes.at(-1);assert.equal(final.clock_observations,2);assert.equal(final.clock_validated_samples,1);assert.equal(final.clock_metadata_failures,1);assert.equal(final.clock_validation_passed,0);assert.equal(final.measurement_available,0);assert.equal(final.complete,0);assert.equal(final.all_gates_passed,0);assert.equal(final.failure_stage_code,7);validateNumericProof(final);
+ const forged=structuredClone(full);Object.assign(forged,clock.summary());assert.throws(()=>validateNumericProof(forged));
+});
+
+
+test("explicit historical schema4 validation preserves the previous failed Control evidence",()=>{
+ // Static counter evidence from 39049988061; archived reports are never upgraded with fake clocks.
+ const old=numericProof(result(),completedProgress());for(const k of CLOCK_NUMERIC_FIELDS)delete old[k];
+ Object.assign(old,{schema_version:4,actual_window_seconds:62.169632237,completed_frames:2479,weighted_completed_hz:2479/62.169632237,minimum_interval_hz:33.534139,windows_below_38hz:4,deadline_misses:5,measurement_passed:0,udp_passed:1,all_gates_passed:0});
+ old.universes.forEach(row=>row.packets=2480);old.packet_count=16*2480;
+ const before=structuredClone(old);assert.equal(validateHistoricalNumericProofV4(old),old);assert.deepEqual(old,before);assert.equal(old.all_gates_passed,0);assert.throws(()=>validateNumericProof(old));
+ const forged=structuredClone(old);forged.measurement_passed=1;assert.throws(()=>validateHistoricalNumericProofV4(forged));
+ const current=numericProof(result(),completedProgress());assert.throws(()=>validateHistoricalNumericProofV4(current));
 });

@@ -8,6 +8,7 @@ import net from "node:net";
 import assert from "node:assert/strict";
 import { chmod, realpath } from "node:fs/promises";
 import { artifactPaths } from "./artifact-paths.mjs";
+import { capturePerformanceSample, ServerCounterClock } from "./desktop-performance-576-clock.mjs";
 import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
 import {
@@ -244,20 +245,19 @@ async function runCase(performanceCase, executionMode) {
 		state.phase = "measurement";
 		const measurementStartedAt = Date.now();
     const measurementMonotonicStart = performance.now();
-		const measured = await measureWindow(
-			api,
-			child.pid,
-			executionMode,
-			evidence.samples,
-		);
+    const counterClock = new ServerCounterClock();
+    let measured;
+    try {
+      measured = await measureWindow(api, child.pid, executionMode, evidence.samples, counterClock);
+    } finally {
+      // Preserve partial clock evidence even when a server observation fails validation.
+      Object.assign(checkpoint.result, counterClock.summary());
+      await checkpoint.save();
+    }
     const measurementEndedAt = Date.now();
-    const diagnosticMidpoint = sample => (sample.diagnosticsMonotonicStartMillis + sample.diagnosticsMonotonicEndMillis) / 2;
-    // Map the same opening/closing diagnostic counter midpoints to the wall-clock log domain.
-    // This is an epoch estimate from the recorded wall/monotonic anchor, not the enclosing I/O window.
-    phaseWindow = {
-      startedAt: measurementStartedAt + (diagnosticMidpoint(evidence.samples[0]) - measurementMonotonicStart),
-      endedAt: measurementStartedAt + (diagnosticMidpoint(evidence.samples.at(-1)) - measurementMonotonicStart),
-    };
+    // The health counter's same-lock UTC sample defines the packet and trace window.
+    // UDP receivedAt remains the JS receive callback clock, not a kernel arrival timestamp.
+    phaseWindow = counterClock.window();
     measured.packet_observation_window = {...phaseWindow};
     measured.wall_monotonic_difference_ms = Math.abs((measurementEndedAt-measurementStartedAt)-(performance.now()-measurementMonotonicStart));
     Object.assign(checkpoint.result,measured);
@@ -702,48 +702,34 @@ async function configureScheduler(api) {
 	});
 }
 
-async function measureWindow(api, rootPid, executionMode, samples) {
+async function measureWindow(api, rootPid, executionMode, samples, counterClock) {
 	const rates = [];
 	const resources = [];
-	let diagnosticsMonotonicStartMillis = performance.now();
-	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
-	let diagnosticsMonotonicEndMillis = performance.now();
-	let counterObservationMillis =
-		(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
-  const openingCounters = {...diagnostics.output};
-  const openingCounterMillis = counterObservationMillis;
+  const observe = async (phase, second) => {
+    const capture = await capturePerformanceSample(api);
+    // Retain the actual response and both client clock envelopes before validation can fail.
+    const record = {phase, ...(second === undefined ? {} : {second}), ...capture,
+      recordedAt: new Date().toISOString(),
+      diagnosticsStartedAt: new Date(capture.diagnosticsUtcStartMillis).toISOString(),
+      diagnosticsEndedAt: new Date(capture.diagnosticsUtcEndMillis).toISOString()};
+    samples.push(record);
+    const {elapsedSeconds} = counterClock.observe(capture);
+    return {record, elapsedSeconds};
+  };
+  const opening = await observe("opening");
+  let diagnostics = opening.record.diagnostics;
 	const openingBands = diagnostics.output.frame_rate_band_counts ?? [];
 	let processMonotonicStartMillis = performance.now();
 	let processes = await readLinuxProcessTree(rootPid);
 	let processMonotonicEndMillis = performance.now();
 	let processObservationMillis =
 		(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
-	samples.push({
-		phase: "opening",
-		recordedAt: new Date().toISOString(),
-		diagnosticsMonotonicStartMillis,
-		diagnosticsMonotonicEndMillis,
-		processMonotonicStartMillis,
-		processMonotonicEndMillis,
-		diagnostics,
-		processes,
-	});
+  Object.assign(opening.record, {processMonotonicStartMillis, processMonotonicEndMillis, processes});
 	for (let second = 0; second < DURATION_SECONDS; second++) {
 		await new Promise((resolve) => setTimeout(resolve, 1_000));
-		const diagnosticsStartedAt = new Date().toISOString();
-		diagnosticsMonotonicStartMillis = performance.now();
-		const nextDiagnostics = await api.request(
-			"GET",
-			"/api/v2/diagnostics/performance",
-		);
-		diagnosticsMonotonicEndMillis = performance.now();
-		const diagnosticsEndedAt = new Date().toISOString();
-		// The counter is sampled inside the request. Retain both bounds and use their
-		// midpoint consistently, including intervening I/O rather than only the sleep.
-		const nextCounterObservationMillis =
-			(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
-		const elapsed =
-			(nextCounterObservationMillis - counterObservationMillis) / 1_000;
+    const observation = await observe("measurement", second);
+    const nextDiagnostics = observation.record.diagnostics;
+    const elapsed = observation.elapsedSeconds;
 		processMonotonicStartMillis = performance.now();
 		const nextProcesses = await readLinuxProcessTree(rootPid);
 		processMonotonicEndMillis = performance.now();
@@ -751,20 +737,8 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 			(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
 		const processElapsed =
 			(nextProcessObservationMillis - processObservationMillis) / 1_000;
-		samples.push({
-			phase: "measurement",
-			second,
-			elapsed,
-			processElapsed,
-			diagnosticsMonotonicStartMillis,
-			diagnosticsMonotonicEndMillis,
-			processMonotonicStartMillis,
-			processMonotonicEndMillis,
-			diagnosticsStartedAt,
-			diagnosticsEndedAt,
-			diagnostics: nextDiagnostics,
-			processes: nextProcesses,
-		});
+    Object.assign(observation.record, {elapsed, processElapsed,
+      processMonotonicStartMillis, processMonotonicEndMillis, processes: nextProcesses});
 		rates.push(
 			(nextDiagnostics.output.frames_sent - diagnostics.output.frames_sent) /
 				elapsed,
@@ -798,7 +772,6 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		});
 		diagnostics = nextDiagnostics;
 		processes = nextProcesses;
-		counterObservationMillis = nextCounterObservationMillis;
 		processObservationMillis = nextProcessObservationMillis;
 	}
 	const sorted = [...rates].sort((left, right) => left - right);
@@ -829,17 +802,13 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		),
 	});
 	const cpuSorted = [...cpu].sort((left, right) => left - right);
-  const counterDelta = name => {
-    const before = openingCounters[name], after = diagnostics.output[name];
-    assert(Number.isSafeInteger(before) && before >= 0 && Number.isSafeInteger(after) && after >= before, `invalid ${name} counter`);
-    return after-before;
-  };
 	return {
+    ...counterClock.summary(),
     counter_observation_count: samples.length,
-    counter_window_seconds: (counterObservationMillis-openingCounterMillis)/1000,
-    completed_frame_delta: counterDelta("frames_sent"),
-    deadline_miss_delta: counterDelta("deadline_misses"),
-    send_error_delta: counterDelta("send_errors"),
+    counter_window_seconds: counterClock.elapsedSeconds(),
+    completed_frame_delta: counterClock.delta("frames_sent"),
+    deadline_miss_delta: counterClock.delta("deadline_misses"),
+    send_error_delta: counterClock.delta("send_errors"),
 		minimum_one_second_completed_hz: sorted[0],
 		average_completed_hz: average(rates),
 		// The p95 of a frame rate is its slow tail: the rate 95% of windows stayed at or above.

@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { readFile, stat, writeFile, mkdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { CLOCK_NUMERIC_FIELDS,emptyClockSummary,validateClockSummary } from "./desktop-performance-576-clock.mjs";
 
 const sha = value => crypto.createHash("sha256").update(value).digest("hex");
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -52,7 +53,7 @@ export class PacketAggregate {
 }
 
 // Compact private receive ledger: payload validation remains at the ordinary drain boundary.
-// Epoch receive time is selected against the very same mapped diagnostic midpoints as phases.
+// Epoch receive time is selected against the same server UTC counter samples as phases.
 export class PacketWindowLedger {
   constructor(startedAt = Date.now(), cap = 65_536) {
     this.startedAt=uint(startedAt);this.cap=uint(cap);assert(cap > 0 && cap <= 65_536,"packet ledger cap");this.rows=[];
@@ -395,28 +396,34 @@ function phase(value) { uint(value); assert(FAILURE_STAGE_CODES.includes(value),
 const FLAGS = ["complete","all_gates_passed","workload_available","measurement_available","measurement_passed","resources_available","udp_available","udp_passed","interaction_available","interaction_passed","sheet_liveness_checked","sheet_liveness_passed","stage_report_available","stage_validation_passed","mode_acknowledged","udp_integrity_passed","stage_absence_available","stage_absence_passed","cleanup_complete"];
 const METRICS = ["requested_hz","minimum_required_hz","counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","stage_max_allowed_gap_ms","wall_monotonic_difference_ms","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"];
 const ABSENCE_FIELDS = ["host_observations","host_max_gap_ms","host_bracketed","host_reordered_samples","activity_samples","heartbeat_samples","helper_observations","maximum_helpers"];
-const SCALARS = ["schema_version","proof_mode_code",...ABSENCE_FIELDS,"current_stage_code","failure_stage_code",...FLAGS,...METRICS];
+const SCALARS = ["schema_version","proof_mode_code",...CLOCK_NUMERIC_FIELDS,...ABSENCE_FIELDS,"current_stage_code","failure_stage_code",...FLAGS,...METRICS];
 const RESOURCE_FIELDS = ["cpu_average_percent","cpu_max_percent","peak_resident_bytes"];
 const LANE_FIELDS = [...stageInvalidFields("activity"),...stageInvalidFields("heartbeat"),"retained_samples","first_sample_offset_ms","last_sample_offset_ms","available","validation_passed","valid_samples","invalid_samples","observed_samples","begin_gap_ms","end_gap_ms","max_gap_ms","bracketed","all_activity_samples","filtered_samples","attachment_count","activity_reordered_samples","presentation_continuity_passed","idle_continuity_passed","heartbeat_samples","heartbeat_valid_samples","heartbeat_invalid_samples","heartbeat_reordered_samples","heartbeat_link_failures","heartbeat_ineligible_samples","idle_heartbeat_samples","heartbeat_observed_samples","heartbeat_begin_gap_ms","heartbeat_end_gap_ms","heartbeat_max_gap_ms","heartbeat_bracketed","observer_failed","source_change_samples","source_observed_advances","source_begin_gap_ms","source_end_gap_ms","source_max_gap_ms","source_bracketed","source_continuity_passed"];
 const RAMP_FIELDS = ["available","from_value","to_value","intermediate_values","target_delay_ms","monotonic"];
 const MEASUREMENT_FIELDS = ["counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","wall_monotonic_difference_ms"];
-function measurementPass(r) { return Boolean(r.measurement_available && r.counter_observations === 61 && r.interval_count === 60 && r.actual_window_seconds >= 60 && r.minimum_interval_hz >= 38 && r.windows_below_38hz === 0 && r.deadline_misses === 0 && r.send_errors === 0 && r.wall_monotonic_difference_ms <= 1000); }
-// Decoded loopback only: midpoint/envelope allowance is two fewer/eight more packets.
+function measurementPass(r, version=5) { return Boolean((version === 4 || r.clock_validation_passed) && r.measurement_available && r.counter_observations === 61 && r.interval_count === 60 && r.actual_window_seconds >= 60 && r.minimum_interval_hz >= 38 && r.windows_below_38hz === 0 && r.deadline_misses === 0 && r.send_errors === 0 && r.wall_monotonic_difference_ms <= 1000); }
+// Decoded loopback only: retain the accepted allowance of two fewer/eight more packets.
 function udpIntegrity(r) { return Boolean(r.udp_available && r.measurement_available && r.actual_window_seconds > 0 && r.universes.every(row => row.packets > 0 && row.packets >= r.completed_frames-2 && row.packets <= r.completed_frames+8 && row.sequence_discontinuities === 0 && row.zero_sequence_packets === 0)); }
 function udpPass(r) { return Boolean(udpIntegrity(r) && r.universes.every(row => row.packets/r.actual_window_seconds >= 38)); }
 function interactionPass(r) { return Boolean(r.interaction_available && r.accepted_commands === 2 && r.ramps.every(row => row.available && row.monotonic === 1 && row.intermediate_values >= 2 && row.target_delay_ms >= 2500 && row.target_delay_ms <= 4000) && r.ramps[0].from_value === 0 && r.ramps[0].to_value === 128 && r.ramps[1].from_value === 128 && r.ramps[1].to_value === 64); }
-function gates(r) {
-  const common=r.complete && r.failure_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.interaction_passed && r.sheet_liveness_checked && r.sheet_liveness_passed && r.cleanup_complete;
+function gates(r, version=5) {
+  const common=(version === 4 || r.clock_validation_passed) && r.complete && r.failure_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.interaction_passed && r.sheet_liveness_checked && r.sheet_liveness_passed && r.cleanup_complete;
   if(r.proof_mode_code === 1) return Boolean(common && r.mode_acknowledged && r.measurement_passed && r.udp_passed && r.stage_absence_passed);
   if(r.proof_mode_code === 2) return Boolean(common && r.mode_acknowledged && r.udp_integrity_passed && r.send_errors === 0 && r.stage_report_available && r.stage_validation_passed);
   return Boolean(common && r.measurement_passed && r.udp_passed && r.stage_report_available && r.stage_validation_passed);
 }
 function closed(row,keys) { assert(row && !Array.isArray(row)); assert.deepEqual(Object.keys(row).sort(),keys.slice().sort(),"public closed shape"); for(const [name,value] of Object.entries(row)) {if(name === "first_sample_offset_ms" || name === "last_sample_offset_ms") assert(typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 400_000,"invalid bounded offset");else nonnegative(value);} }
 function bit(value) { assert(value === 0 || value === 1,"invalid boolean flag"); }
-export function validateNumericProof(r) {
-  closed(Object.fromEntries(Object.entries(r).filter(([name]) => !["resources","universes","ramps","stage_lanes"].includes(name))),SCALARS);
-  assert.deepEqual(Object.keys(r).sort(),[...SCALARS,"resources","universes","ramps","stage_lanes"].sort(),"public closed shape");
-  assert.equal(r.schema_version,4);assert([0,1,2].includes(r.proof_mode_code)); phase(r.current_stage_code);phase(r.failure_stage_code);
+export function validateNumericProof(r) { return validateProofVersion(r,5); }
+// Explicit archival reader: preserves schema4 truth and never upgrades it to current proof.
+export function validateHistoricalNumericProofV4(r) { return validateProofVersion(r,4); }
+function validateProofVersion(r, version) {
+  const scalars=version === 4 ? SCALARS.filter(k=>!CLOCK_NUMERIC_FIELDS.includes(k)) : SCALARS;
+  closed(Object.fromEntries(Object.entries(r).filter(([name]) => !["resources","universes","ramps","stage_lanes"].includes(name))),scalars);
+  assert.deepEqual(Object.keys(r).sort(),[...scalars,"resources","universes","ramps","stage_lanes"].sort(),"public closed shape");
+  assert.equal(r.schema_version,version);
+  if(version === 5) validateClockSummary(Object.fromEntries(CLOCK_NUMERIC_FIELDS.map(k=>[k,r[k]])));
+  assert([0,1,2].includes(r.proof_mode_code)); phase(r.current_stage_code);phase(r.failure_stage_code);
   for(const name of FLAGS) bit(r[name]);
   assert.equal(r.requested_hz,40);assert.equal(r.minimum_required_hz,38);
   for (const [name,length,keys] of [["resources",5,RESOURCE_FIELDS],["universes",16,["packets","sequence_discontinuities","zero_sequence_packets"]],["ramps",2,RAMP_FIELDS],["stage_lanes",2,LANE_FIELDS]]) {
@@ -429,6 +436,7 @@ export function validateNumericProof(r) {
   if(r.workload_available) assert.deepEqual([r.fixture_records,r.physical_instances,r.parameter_count,r.universe_count,r.animated_attributes,r.master_lanes],[576,576,8064,16,5408,20]);
   else assert([r.fixture_records,r.physical_instances,r.parameter_count,r.universe_count,r.animated_attributes,r.master_lanes].every(value => value === 0));
   if(r.measurement_available) {
+    if(version === 5) {assert.equal(r.clock_validation_passed,1);assert.equal(r.clock_observations,61);}
     assert.equal(r.counter_observations,61);assert.equal(r.interval_count,60);assert(r.actual_window_seconds >= 60);
     assert(Math.abs(r.weighted_completed_hz-r.completed_frames/r.actual_window_seconds) <= 1e-9);
   } else assert(MEASUREMENT_FIELDS.every(name => r[name] === 0),"unavailable measurement has values");
@@ -467,17 +475,17 @@ export function validateNumericProof(r) {
   if(r.proof_mode_code !== 1) assert(r.stage_absence_available === 0 && r.stage_absence_passed === 0);
   if(r.proof_mode_code === 1) assert(r.stage_validation_passed === 0 && r.stage_report_available === 0);
   assert.equal(r.udp_integrity_passed,Number(udpIntegrity(r)));
-  assert.equal(r.measurement_passed,Number(measurementPass(r)));
+  assert.equal(r.measurement_passed,Number(measurementPass(r,version)));
   assert.equal(r.udp_passed,Number(udpPass(r)));
   assert.equal(r.interaction_passed,Number(interactionPass(r)));
   if(r.failure_stage_code) assert.equal(r.complete,0);
-  if(r.complete) assert(r.current_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.udp_available && r.interaction_available && r.sheet_liveness_checked && (r.proof_mode_code === 1 ? r.stage_absence_available : r.stage_report_available) && r.cleanup_complete);
-  assert.equal(r.all_gates_passed,Number(gates(r)),"public gate truth mismatch");
+  if(r.complete) assert((version === 4 || r.clock_validation_passed) && r.current_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.udp_available && r.interaction_available && r.sheet_liveness_checked && (r.proof_mode_code === 1 ? r.stage_absence_available : r.stage_report_available) && r.cleanup_complete);
+  assert.equal(r.all_gates_passed,Number(gates(r,version)),"public gate truth mismatch");
   return r;
 }
 export function numericProof(result,progress = {}) {
   const r = Object.fromEntries(SCALARS.map(name => [name,0]));
-  Object.assign(r,{schema_version:4,proof_mode_code:result?.proof_mode_code ?? 0,mode_acknowledged:result?.mode_acknowledged ?? 0,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
+  Object.assign(r,{...emptyClockSummary(),...Object.fromEntries(CLOCK_NUMERIC_FIELDS.filter(k=>result?.[k]!==undefined).map(k=>[k,result[k]])),schema_version:5,proof_mode_code:result?.proof_mode_code ?? 0,mode_acknowledged:result?.mode_acknowledged ?? 0,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
     resources:Array.from({length:5},() => Object.fromEntries(RESOURCE_FIELDS.map(name => [name,0]))),
     universes:Array.from({length:16},() => ({packets:0,sequence_discontinuities:0,zero_sequence_packets:0})),
     ramps:Array.from({length:2},() => Object.fromEntries(RAMP_FIELDS.map(name => [name,0]))),
