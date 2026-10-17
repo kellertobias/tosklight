@@ -13,6 +13,7 @@ import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
 import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
 import { writePoolDiagnostics } from "./desktop-performance-576-pool.mjs";
+import { writeApiDiagnostics } from "./desktop-performance-576-api.mjs";
 import { expectedWorkerReceiptCount, WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
@@ -63,7 +64,7 @@ assert(numericPath.startsWith(`${path.resolve(artifactPaths.results)}${path.sep}
 const phaseNumericPath = path.join(path.dirname(numericPath), "phase-numeric.json");
 async function retainPhaseDiagnostics(file, window) {
   // This observer is diagnostic only: unavailable data or a write error never changes Control gates.
-  await writePhaseDiagnostics(phaseNumericPath, file, window).catch(() => {});
+  await writePhaseDiagnostics(phaseNumericPath, file, window, {fullFrequency:process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all"}).catch(() => {});
   if (process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all") {
     await writeTickTraceDiagnostics(path.join(path.dirname(numericPath), "tick-trace-numeric.json"), file, window, {
       healthDeadlineMisses: checkpoint.result.deadline_miss_delta, completedFrames: checkpoint.result.completed_frame_delta,
@@ -503,6 +504,8 @@ async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
 		files[key] = `${evidence.prefix}-${suffix}`;
 		await writeFile(files[key], contents, { flag: "wx" });
 	}
+	// Summarize the same 61 captured responses after the window; never issue extra requests.
+	await writeApiDiagnostics(path.join(path.dirname(numericPath), "api-numeric.json"), evidence.samples).catch(() => {});
 	files.measurement = `${evidence.prefix}-measurement.json`;
 	await writeFile(
 		files.measurement,

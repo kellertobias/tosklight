@@ -24,6 +24,13 @@ const MESSAGE = "bounded live output nested phase sample";
 const META = ["generation", "show_revision", "sampled_at_millis", "accepted", "family_diagnostics_schema", "family_stage_calls", "family_counts"];
 const ALLOWED = new Set([...PHASE_FIELDS,...META]);
 export const PHASE_LIMITS = Object.freeze({ bytes:32*1024*1024, lines:100_000, lineBytes:64*1024, samples:1024, micros:400_000_000 });
+export const PHASE_FULL_FREQUENCY_SAMPLE_LIMIT = 16_384;
+function fullFrequencyOption(options) {
+  assert(options && typeof options==="object" && !Array.isArray(options));
+  assert(Object.keys(options).every(key=>key==="fullFrequency"));
+  assert(!Object.hasOwn(options,"fullFrequency") || typeof options.fullFrequency==="boolean");
+  return options.fullFrequency===true;
+}
 // read_status: 0 read, 1 missing, 2 byte cap, 3 line cap, 4 line-byte cap,
 // 5 sample cap, 6 read failure, 7 no measurement window, 8 incomplete trailing line.
 const TOP = ["schema_version","available","log_available","capture_complete","parse_complete","read_status","window_seconds","duration_field_count","lines_observed","phase_lines_observed","samples_before_window","samples_in_window","samples_after_window","invalid_samples","invalid_before_window","invalid_in_window","invalid_after_window","unlocalizable_samples","valid_samples_in_window"];
@@ -32,8 +39,8 @@ const unsigned=value => Number.isSafeInteger(value) && value >= 0;
 const zeroMetric=id => ({id,count:0,min_micros:0,mean_micros:0,p50_micros:0,p95_micros:0,max_micros:0});
 const epochMillis=value => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
 const validWindow=window => epochMillis(window?.startedAt) && epochMillis(window?.endedAt) && diagnosticWindowBounds(window)!==null;
-function blank(window,status=0) {
-  return {...Object.fromEntries(TOP.map(name=>[name,0])),schema_version:1,read_status:status,window_seconds:validWindow(window)?diagnosticWindowBounds(window).seconds:0,duration_field_count:PHASE_FIELDS.length,metrics:PHASE_FIELDS.map((_,id)=>zeroMetric(id))};
+function blank(window,status=0,fullFrequency=false) {
+  return {...Object.fromEntries(TOP.map(name=>[name,0])),schema_version:fullFrequency?2:1,...(fullFrequency?{sample_limit:PHASE_FULL_FREQUENCY_SAMPLE_LIMIT}:{}),read_status:status,window_seconds:validWindow(window)?diagnosticWindowBounds(window).seconds:0,duration_field_count:PHASE_FIELDS.length,metrics:PHASE_FIELDS.map((_,id)=>zeroMetric(id))};
 }
 function timestamp(line) {
   const match=/^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z(?:\s|$)/u.exec(line);
@@ -68,8 +75,9 @@ function summarize(values,id) {
   const ordered=[...values].sort((a,b)=>a-b),at=p=>ordered[Math.max(0,Math.ceil(ordered.length*p)-1)];
   return {id,count:ordered.length,min_micros:ordered[0],mean_micros:ordered.reduce((a,b)=>a+b,0)/ordered.length,p50_micros:at(0.5),p95_micros:at(0.95),max_micros:ordered.at(-1)};
 }
-export function parsePhaseDiagnostics(text,window) {
-  const report=blank(window),values=PHASE_FIELDS.map(()=>[]);
+export function parsePhaseDiagnostics(text,window,options={}) {
+  const fullFrequency=fullFrequencyOption(options),sampleLimit=fullFrequency?PHASE_FULL_FREQUENCY_SAMPLE_LIMIT:PHASE_LIMITS.samples;
+  const report=blank(window,0,fullFrequency),values=PHASE_FIELDS.map(()=>[]);
   report.log_available=1;
   if(!validWindow(window)){report.read_status=7;return validatePhaseDiagnostics(report);}
   if(typeof text!=="string" || Buffer.byteLength(text)>PHASE_LIMITS.bytes){report.read_status=2;return validatePhaseDiagnostics(report);}
@@ -83,7 +91,7 @@ export function parsePhaseDiagnostics(text,window) {
     if(Buffer.byteLength(raw)>PHASE_LIMITS.lineBytes){report.read_status=4;report.capture_complete=0;break;}
     const line=raw.replace(/\x1B\[[0-?]*[ -/]*[@-~]/gu,"");
     if(!line.includes(MESSAGE))continue;
-    if(report.phase_lines_observed===PHASE_LIMITS.samples){report.read_status=5;report.capture_complete=0;break;}
+    if(report.phase_lines_observed===sampleLimit){report.read_status=5;report.capture_complete=0;break;}
     report.phase_lines_observed++;
     const at=timestamp(line),durations=durationValues(line);
     if(at===null){report.unlocalizable_samples++;report.invalid_samples++;continue;}
@@ -98,9 +106,12 @@ export function parsePhaseDiagnostics(text,window) {
   return validatePhaseDiagnostics(report);
 }
 export function validatePhaseDiagnostics(report) {
-  assert.deepEqual(Object.keys(report).sort(),[...TOP,"metrics"].sort(),"closed phase report");
+  assert([1,2].includes(report.schema_version));
+  const fullFrequency=report.schema_version===2,sampleLimit=fullFrequency?PHASE_FULL_FREQUENCY_SAMPLE_LIMIT:PHASE_LIMITS.samples;
+  assert.deepEqual(Object.keys(report).sort(),[...TOP,"metrics",...(fullFrequency?["sample_limit"]:[])].sort(),"closed phase report");
+  if(fullFrequency)assert.equal(report.sample_limit,PHASE_FULL_FREQUENCY_SAMPLE_LIMIT);
   for(const name of TOP)assert(typeof report[name]==="number" && Number.isFinite(report[name]) && report[name]>=0,"numeric phase scalar");
-  assert.equal(report.schema_version,1);assert.equal(report.duration_field_count,25);
+  assert.equal(report.duration_field_count,25);
   for(const name of ["available","log_available","capture_complete","parse_complete"])assert([0,1].includes(report[name]));
   assert(unsigned(report.read_status)&&report.read_status<=8);assert(report.window_seconds<=400);
   assert(report.capture_complete <= report.log_available);
@@ -110,9 +121,9 @@ export function validatePhaseDiagnostics(report) {
   if([0,2,3,4,5,8].includes(report.read_status))assert.equal(report.log_available,1);
   if([1,6].includes(report.read_status))assert(report.log_available===0 && report.phase_lines_observed===0 && report.lines_observed===0);
   if([2,3].includes(report.read_status))assert(report.phase_lines_observed===0 && report.lines_observed===0);
-  if(report.read_status===5)assert.equal(report.phase_lines_observed,PHASE_LIMITS.samples);
+  if(report.read_status===5)assert.equal(report.phase_lines_observed,sampleLimit);
   for(const name of TOP.filter(name=>!["window_seconds"].includes(name)))assert(unsigned(report[name]));
-  assert(report.lines_observed<=PHASE_LIMITS.lines && report.phase_lines_observed<=PHASE_LIMITS.samples);
+  assert(report.lines_observed<=PHASE_LIMITS.lines && report.phase_lines_observed<=sampleLimit);
   assert.equal(report.phase_lines_observed,report.samples_before_window+report.samples_in_window+report.samples_after_window+report.unlocalizable_samples);
   assert.equal(report.invalid_samples,report.invalid_before_window+report.invalid_in_window+report.invalid_after_window+report.unlocalizable_samples);
   for(const scope of ["before_window","in_window","after_window"])assert(report[`invalid_${scope}`]<=report[`samples_${scope}`]);
@@ -129,23 +140,24 @@ export function validatePhaseDiagnostics(report) {
   }
   return report;
 }
-export async function readPhaseDiagnostics(file,window) {
-  if(!validWindow(window))return validatePhaseDiagnostics(blank(window,7));
+export async function readPhaseDiagnostics(file,window,options={}) {
+  const fullFrequency=fullFrequencyOption(options);
+  if(!validWindow(window))return validatePhaseDiagnostics(blank(window,7,fullFrequency));
   let handle;
   try {
     handle=await open(file,"r");const info=await handle.stat();
-    if(!info.isFile())return validatePhaseDiagnostics(blank(window,6));
-    if(info.size>PHASE_LIMITS.bytes)return validatePhaseDiagnostics({...blank(window,2),log_available:1});
+    if(!info.isFile())return validatePhaseDiagnostics(blank(window,6,fullFrequency));
+    if(info.size>PHASE_LIMITS.bytes)return validatePhaseDiagnostics({...blank(window,2,fullFrequency),log_available:1});
     const bytes=Buffer.alloc(info.size);let offset=0;
     while(offset<bytes.length){const {bytesRead}=await handle.read(bytes,offset,bytes.length-offset,offset);if(!bytesRead)break;offset+=bytesRead;}
-    const report=parsePhaseDiagnostics(bytes.subarray(0,offset).toString("utf8"),window);
+    const report=parsePhaseDiagnostics(bytes.subarray(0,offset).toString("utf8"),window,options);
     if(offset<info.size){report.read_status=8;report.capture_complete=0;report.parse_complete=0;report.available=0;report.metrics=PHASE_FIELDS.map((_,id)=>zeroMetric(id));}
     return validatePhaseDiagnostics(report);
-  } catch(error) {return validatePhaseDiagnostics(blank(window,error?.code==="ENOENT"?1:6));}
+  } catch(error) {return validatePhaseDiagnostics(blank(window,error?.code==="ENOENT"?1:6,fullFrequency));}
   finally {await handle?.close().catch(()=>{});}
 }
-export async function writePhaseDiagnostics(destination,file,window) {
-  const report=await readPhaseDiagnostics(file,window);
+export async function writePhaseDiagnostics(destination,file,window,options={}) {
+  const report=await readPhaseDiagnostics(file,window,options);
   await mkdir(path.dirname(destination),{recursive:true});
   const temporary=`${destination}.${crypto.randomUUID()}.tmp`;
   try {await writeFile(temporary,JSON.stringify(report,null,2)+"\n",{flag:"wx",mode:0o600});await rename(temporary,destination);}

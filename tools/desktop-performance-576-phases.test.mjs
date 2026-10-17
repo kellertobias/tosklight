@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFile,mkdtemp,writeFile,rm,readdir,stat } from "node:fs/promises";
 import path from "node:path";
 import { artifactPaths } from "./artifact-paths.mjs";
-import { PHASE_FIELDS,PHASE_LIMITS,parsePhaseDiagnostics,validatePhaseDiagnostics,readPhaseDiagnostics,writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
+import { PHASE_FIELDS,PHASE_LIMITS,PHASE_FULL_FREQUENCY_SAMPLE_LIMIT,parsePhaseDiagnostics,validatePhaseDiagnostics,readPhaseDiagnostics,writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
+import {TICK_TRACE_LIMITS} from "./desktop-performance-576-tick-trace.mjs";
 const window={startedAt:Date.parse("2026-10-17T10:00:00.000Z"),endedAt:Date.parse("2026-10-17T10:01:00.000Z")};
 function line(at=window.startedAt,value=10) {
   const fields=PHASE_FIELDS.map((field,id)=>`${field}=${value+id}`).join(" ");
@@ -95,4 +96,29 @@ test("integer microsecond windows classify nanosecond neighbors exactly and pres
  const report=parsePhaseDiagnostics(text,exact);assert.equal(report.available,1);assert.deepEqual([report.samples_before_window,report.samples_in_window,report.samples_after_window],[1,2,1]);assert.equal(report.metrics[0].mean_micros,25);assert.equal(report.window_seconds,60);
  const legacy=parsePhaseDiagnostics(text,{startedAt:exact.startedAt,endedAt:exact.endedAt});assert.equal(legacy.metrics[0].mean_micros,15);
  for(const bad of [{...exact,endedAtMicros:undefined},{...exact,startedAtMicros:exact.startedAtMicros+1000}]){const invalid=parsePhaseDiagnostics(text,bad);assert.equal(invalid.read_status,7);assert.equal(invalid.available,0);}
+});
+
+
+test("full frequency is explicit schema2 with fixed16384 limit while historical schema1 stays1024",()=>{
+ const text=line().repeat(1100),legacy=parsePhaseDiagnostics(text,window),full=parsePhaseDiagnostics(text,window,{fullFrequency:true});
+ assert.equal(legacy.schema_version,1);assert(!Object.hasOwn(legacy,'sample_limit'));assert.equal(legacy.read_status,5);assert.equal(legacy.phase_lines_observed,1024);assert.equal(legacy.available,0);
+ assert.equal(full.schema_version,2);assert.equal(full.sample_limit,16384);assert.equal(PHASE_FULL_FREQUENCY_SAMPLE_LIMIT,TICK_TRACE_LIMITS.ticks);assert.equal(full.read_status,0);assert.equal(full.available,1);assert.equal(full.parse_complete,1);assert.equal(full.metrics[0].count,1100);assert.equal(full.valid_samples_in_window,1100);
+ assert.deepEqual(parsePhaseDiagnostics(line(),window,{fullFrequency:false}),parsePhaseDiagnostics(line(),window));
+ const prior=process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS;try{process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS='all';assert.equal(parsePhaseDiagnostics(line(),window).schema_version,1);}finally{if(prior===undefined)delete process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS;else process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS=prior;}
+});
+test("full frequency admits exactly16384 and remains unavailable after fixedsample cap",()=>{
+ const text=line().repeat(PHASE_FULL_FREQUENCY_SAMPLE_LIMIT),exact=parsePhaseDiagnostics(text,window,{fullFrequency:true});assert.equal(exact.available,1);assert.equal(exact.metrics[0].count,16384);
+ const capped=parsePhaseDiagnostics(text+line(),window,{fullFrequency:true});assert.equal(capped.schema_version,2);assert.equal(capped.sample_limit,16384);assert.equal(capped.read_status,5);assert.equal(capped.phase_lines_observed,16384);assert.equal(capped.capture_complete,0);assert.equal(capped.available,0);assert(capped.metrics.every(m=>m.count===0));
+ for(const [text,status]of [['x'.repeat(PHASE_LIMITS.bytes+1),2],['\n'.repeat(PHASE_LIMITS.lines+1),3],['x'.repeat(PHASE_LIMITS.lineBytes+1)+'\n',4],[line().trimEnd(),8]]){const r=parsePhaseDiagnostics(text,window,{fullFrequency:true});assert.equal(r.read_status,status);assert.equal(r.schema_version,2);assert.equal(r.sample_limit,16384);assert.equal(r.available,0);}
+});
+test("phase schemas have exact closed shapes and cannot forge sample limits or observation caps",()=>{
+ const full=parsePhaseDiagnostics(line(),window,{fullFrequency:true});for(const mutate of [r=>r.sample_limit=1024,r=>r.sample_limit=16385,r=>delete r.sample_limit,r=>r.schema_version=1,r=>r.schema_version=3,r=>r.phase_lines_observed=16385]){const r=structuredClone(full);mutate(r);assert.throws(()=>validatePhaseDiagnostics(r));}
+ const legacy=parsePhaseDiagnostics(line(),window);legacy.sample_limit=16384;assert.throws(()=>validatePhaseDiagnostics(legacy));for(const options of [null,[],{fullFrequency:'true'},{fullFrequency:1},{sample_limit:16384}])assert.throws(()=>parsePhaseDiagnostics(line(),window,options));
+});
+test("read/write options preserve schema2 on valid missing oversized and unmeasured inputs",async()=>{
+ const directory=await mkdtemp(path.join(artifactPaths.tmp,'tl775-full-phase-test-'));try{const raw=path.join(directory,'private.log'),out=path.join(directory,'numeric.json');await writeFile(raw,line().repeat(1100));const full=await readPhaseDiagnostics(raw,window,{fullFrequency:true});assert.equal(full.available,1);assert.equal(full.sample_limit,16384);assert.equal((await readPhaseDiagnostics(raw,window)).read_status,5);const written=await writePhaseDiagnostics(out,raw,window,{fullFrequency:true});assert.deepEqual(JSON.parse(await readFile(out,'utf8')),written);assert.equal(written.schema_version,2);assert.equal((await stat(out)).mode&0o777,0o600);
+ for(const [file,bounds,status]of [[path.join(directory,'missing'),window,1],[raw,null,7]]){const r=await readPhaseDiagnostics(file,bounds,{fullFrequency:true});assert.equal(r.schema_version,2);assert.equal(r.sample_limit,16384);assert.equal(r.read_status,status);}
+ await writePhaseDiagnostics(out,path.join(directory,'missing'),window,{fullFrequency:true});assert.equal(JSON.parse(await readFile(out,'utf8')).schema_version,2);
+ const handle=await(await import('node:fs/promises')).open(raw,'w');await handle.truncate(PHASE_LIMITS.bytes+1);await handle.close();const capped=await readPhaseDiagnostics(raw,window,{fullFrequency:true});assert.equal(capped.read_status,2);assert.equal(capped.sample_limit,16384);assert.deepEqual((await readdir(directory)).sort(),['numeric.json','private.log']);
+ }finally{await rm(directory,{recursive:true,force:true});}
 });
