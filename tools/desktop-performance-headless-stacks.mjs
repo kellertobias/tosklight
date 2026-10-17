@@ -645,6 +645,229 @@ export async function hostPreflight(perf, outputDirectory) {
 		throw error;
 	}
 }
+// A lifecycle/coverage probe only: no desktop workload, cadence, resource or release verdict.
+// Dependency injection is for offline tests; production uses only freshly owned helper children.
+export async function runRecorderLifetimeProbe(
+	perf,
+	outputDirectory,
+	injected = {},
+) {
+	const io = {
+		platform: process.platform,
+		temporary: artifactPaths.tmp,
+		mkdir,
+		mkdtemp,
+		chmod,
+		privateDirectory,
+		hostPreflight,
+		privateJson,
+		ownedHelper,
+		openRecorder,
+		decode,
+		verifyIdentity,
+		requireGone,
+		writeFile,
+		now: () => process.hrtime.bigint(),
+		wait: (milliseconds) =>
+			new Promise((resolve) => setTimeout(resolve, milliseconds)),
+		waitClosed: async (closed, milliseconds) => {
+			let timer;
+			try {
+				return await Promise.race([
+					closed.then(() => true),
+					new Promise((resolve) => {
+						timer = setTimeout(() => resolve(false), milliseconds);
+					}),
+				]);
+			} finally {
+				clearTimeout(timer);
+			}
+		},
+		...injected,
+	};
+	require_(io.platform === "linux", "Linux required");
+	require_(
+		path.isAbsolute(perf) && path.isAbsolute(outputDirectory),
+		"absolute probe paths required",
+	);
+	let root;
+	const report = {
+		schema: 1,
+		passed: 0,
+		setup_stage: 0,
+		failure_code: 0,
+		requested_active_seconds: 85,
+		recorder_lifetime_seconds: 120,
+		active_wait_ns: null,
+		active_sampling_wall_ns: null,
+		disabled_tail_ns: null,
+		preflight_verified: 0,
+		disable_acknowledged: 0,
+		natural_exit_verified: 0,
+		samples: 0,
+		resolved_frames: 0,
+		unresolved_frames: null,
+		helper_gone: 0,
+		recorder_gone: 0,
+		private_proof_retained: 0,
+		performance_acceptance: 0,
+	};
+	let helper, recording, preflightPath, stopped, parsed, failure;
+	try {
+		await io.mkdir(io.temporary, { recursive: true });
+		root = await io.mkdtemp(
+			path.join(io.temporary, "headless-lifetime-private-"),
+		);
+		await io.chmod(root, 0o700);
+		await io.privateDirectory(root);
+		report.setup_stage = 1;
+		preflightPath = await io.hostPreflight(perf, outputDirectory);
+		const preflight = await io.privateJson(preflightPath);
+		require_(
+			preflight.perf === perf && typeof preflight.privileged === "boolean",
+			"lifetime preflight binding",
+		);
+		report.preflight_verified = 1;
+		report.setup_stage = 2;
+		helper = await io.ownedHelper();
+		await io.verifyIdentity(helper.binding);
+		report.setup_stage = 3;
+		recording = await io.openRecorder({
+			root,
+			name: "lifetime",
+			perf,
+			privileged: preflight.privileged,
+			binding: helper.binding,
+			seconds: 120,
+		});
+		report.setup_stage = 4;
+		const start = io.now();
+		await io.wait(85_000);
+		report.active_wait_ns = uint(Number(io.now() - start));
+		require_(
+			report.active_wait_ns >= 85_000_000_000,
+			"lifetime active wait too short",
+		);
+		await io.verifyIdentity(helper.binding);
+		report.setup_stage = 5;
+		stopped = await recording.finish();
+		await io.verifyIdentity(helper.binding);
+		require_(
+			stopped.diagnostics?.record_exit_code === 0 &&
+				stopped.diagnostics?.record_signal === 0 &&
+				stopped.diagnostics?.record_ended_early === 0 &&
+				stopped.diagnostics?.record_disable_acknowledged === 1 &&
+				stopped.diagnostics?.record_stop_requested === 0 &&
+				!stopped.capped,
+			"lifetime natural completion",
+		);
+		report.disable_acknowledged = 1;
+		report.natural_exit_verified = 1;
+		report.active_sampling_wall_ns = uint(stopped.activeSamplingWallNs);
+		report.disabled_tail_ns = uint(
+			Number(stopped.closedNs - stopped.disableAckNs),
+		);
+		report.setup_stage = 6;
+		parsed = await io.decode(
+			root,
+			"lifetime-script",
+			perf,
+			recording.raw.filename,
+			helper.binding.pid,
+		);
+		validateDisabledSamples(parsed, stopped, 1_000_000_000n);
+		require_(
+			parsed.report.multi_frame_samples > 0 && parsed.resolved > 0,
+			"lifetime positive decode",
+		);
+		report.samples = uint(parsed.report.samples);
+		report.resolved_frames = uint(parsed.resolved);
+		report.unresolved_frames = uint(parsed.report.unresolved_frames);
+	} catch (error) {
+		failure = error;
+		report.failure_code = report.setup_stage || 8;
+	} finally {
+		// finish is memoized. Keep its original failure; absence must be independently proven.
+		if (recording) {
+			try {
+				await recording.finish();
+			} catch (error) {
+				failure ??= error;
+				report.failure_code ||= 7;
+			}
+			try {
+				require_(
+					recording.recorderBirths?.length > 0,
+					"missing lifetime recorder births",
+				);
+				await io.requireGone(recording.recorderBirths);
+				report.recorder_gone = 1;
+			} catch (error) {
+				failure ??= error;
+				report.failure_code ||= 7;
+			}
+		}
+		if (helper) {
+			try {
+				if (helper.child.exitCode === null && !helper.child.signalCode) {
+					await io.verifyIdentity(helper.binding);
+					helper.child.kill("SIGTERM");
+				}
+				if (!(await io.waitClosed(helper.closed, 2000))) {
+					await io.verifyIdentity(helper.binding);
+					helper.child.kill("SIGKILL");
+					require_(
+						await io.waitClosed(helper.closed, 2000),
+						"lifetime helper remains alive",
+					);
+				}
+				await io.requireGone([helper.binding]);
+				report.helper_gone = 1;
+			} catch (error) {
+				failure ??= error;
+				report.failure_code ||= 7;
+			}
+		}
+		try {
+			require_(typeof root === "string", "private lifetime root unavailable");
+			const proofReport = {
+				...report,
+				private_proof_retained: 1,
+				passed: Number(
+					!failure && report.helper_gone === 1 && report.recorder_gone === 1,
+				),
+			};
+			await io.writeFile(
+				path.join(root, "lifetime-proof.json"),
+				JSON.stringify({
+					preflight_path: preflightPath,
+					helper: helper?.binding,
+					recorder_births: recording?.recorderBirths,
+					disable_ack_ns: stopped ? String(stopped.disableAckNs) : null,
+					closed_ns: stopped ? String(stopped.closedNs) : null,
+					error: failure ? String(failure.message).slice(0, 2048) : null,
+					report: proofReport,
+				}),
+				{ flag: "wx", mode: 0o600 },
+			);
+			report.private_proof_retained = 1;
+		} catch {
+			failure ??= new Error("private lifetime proof unavailable");
+			report.passed = 0;
+			report.private_proof_retained = 0;
+			report.failure_code = 8;
+		}
+	}
+	report.passed = Number(
+		!failure &&
+			report.helper_gone === 1 &&
+			report.recorder_gone === 1 &&
+			report.private_proof_retained === 1,
+	);
+	assertNumericOnly(report);
+	return report;
+}
+
 export async function exportReport(outputDirectory, report) {
 	assertNumericOnly(report);
 	const baseline = emptyReport();
@@ -896,6 +1119,9 @@ export class HeadlessStackCapture {
 				perf: this.preflight.perf,
 				privileged: this.preflight.privileged,
 				binding,
+				// Sixty sleeps also include request/observer work. This finite lifetime
+				// does not change the measurement polls or their elapsed denominators.
+				seconds: 120,
 			});
 			const start = performance.now();
 			this.report.recording_started = 1;

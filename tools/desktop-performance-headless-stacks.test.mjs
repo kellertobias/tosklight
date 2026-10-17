@@ -28,6 +28,7 @@ import {
 	exportReport,
 	functionId,
 	HeadlessStackCapture,
+	runRecorderLifetimeProbe,
 	LIMITS,
 	PerfScriptParser,
 	PrivateSink,
@@ -217,7 +218,8 @@ test("record argv targets one exact TGID, no inheritance, fixed rate/user stacks
 		assert.ok(!args.includes(illegal));
 	for (const pid of [0, -1, "123", 1.5, NaN])
 		assert.throws(() => recordArguments(pid, 75));
-	assert.throws(() => recordArguments(1, 76));
+	assert.throws(() => recordArguments(1, 121));
+	assert.equal(recordArguments(1, 120).at(-1), "120");
 });
 
 test("user preflight is preferred; permission failure uses only the approved privileged probe; both failures stay unavailable", async () => {
@@ -1196,4 +1198,236 @@ test("actual helper preflight cleans its owned helper even when memoized recorde
 		assert.deepEqual(calls.slice(-4), ["identity", "SIGTERM", "gone", "proof"]);
 		assert.equal(opened, controlFails ? 2 : 1);
 	}
+});
+
+test("headless observation explicitly uses120 seconds without changing generic preflight defaults", async () => {
+	let fixture;
+	fixture = captureFixture({
+		openRecorder: async (options) => {
+			assert.equal(options.seconds, 120);
+			return fixture.recorder;
+		},
+	});
+	await fixture.capture.run(fixture.cpu, async () => 1);
+});
+
+function lifetimeProbeFixture(scenario = "success") {
+	const calls = [],
+		proof = [];
+	let clock = 0n,
+		closed = false,
+		resolveClosed;
+	const helper = {
+		binding: { pid: 42, start_ticks: 7 },
+		closed: new Promise((resolve) => {
+			resolveClosed = resolve;
+		}),
+		child: {
+			exitCode: null,
+			signalCode: null,
+			kill(signal) {
+				calls.push(signal);
+				if (
+					scenario === "helper-hangs" ||
+					(scenario === "needs-kill" && signal === "SIGTERM")
+				)
+					return true;
+				this.signalCode = signal;
+				closed = true;
+				resolveClosed();
+				return true;
+			},
+		},
+	};
+	const stopped = {
+		activeSamplingWallNs: 85_000_000_000,
+		disableAckNs: 85_000_000_000n,
+		closedNs: scenario === "no-tail" ? 85_000_000_000n : 120_000_000_000n,
+		capped: false,
+		diagnostics: {
+			record_exit_code: 0,
+			record_signal: 0,
+			record_ended_early: 0,
+			record_disable_acknowledged: scenario === "no-ack" ? 0 : 1,
+			record_stop_requested: 0,
+		},
+	};
+	const recording = {
+		recorderBirths: [{ pid: 333, start_ticks: 1 }],
+		raw: { filename: "/private/capture/lifetime.data" },
+		async finish() {
+			calls.push("finish");
+			if (scenario === "finish") throw new Error("original finish failure");
+			if (scenario === "dies-disabled-tail") {
+				helper.child.exitCode = 0;
+				closed = true;
+				resolveClosed();
+			}
+			return stopped;
+		},
+	};
+	const io = {
+		platform: "linux",
+		temporary: "/private",
+		mkdir: async () => {},
+		mkdtemp: async () => "/private/capture",
+		chmod: async (_path, mode) => {
+			assert.equal(mode, 0o700);
+		},
+		privateDirectory: async () => {},
+		hostPreflight: async () => {
+			calls.push("preflight");
+			if (scenario === "preflight")
+				throw new Error("private preflight failure");
+			return "/private/ready.json";
+		},
+		privateJson: async () => ({ perf: "/installed/perf", privileged: true }),
+		ownedHelper: async () => {
+			calls.push("helper");
+			return helper;
+		},
+		verifyIdentity: async () => {
+			calls.push("identity");
+			if (helper.child.exitCode !== null) throw new Error("helper died");
+			if (
+				scenario === "identity" &&
+				calls.filter((x) => x === "identity").length > 1
+			)
+				throw new Error("reused child identity");
+		},
+		openRecorder: async (options) => {
+			calls.push("open");
+			assert.equal(options.seconds, 120);
+			assert.equal(options.binding, helper.binding);
+			if (scenario === "open") throw new Error("private open failure");
+			return recording;
+		},
+		now: () => clock,
+		wait: async (ms) => {
+			calls.push("wait");
+			assert.equal(ms, 85000);
+			if (scenario === "wait") throw new Error("private wait failure");
+			clock += 85_000_000_000n;
+			if (scenario === "dies-during-wait") {
+				helper.child.exitCode = 0;
+				closed = true;
+				resolveClosed();
+			}
+		},
+		waitClosed: async (_promise, milliseconds) => {
+			assert.equal(milliseconds, 2000);
+			return closed;
+		},
+		decode: async () => {
+			calls.push("decode");
+			if (scenario === "decode") throw new Error("private decode failure");
+			return {
+				report: {
+					samples: 2,
+					multi_frame_samples: 2,
+					malformed_lines: 0,
+					decode_warnings: 0,
+					foreign_samples: 0,
+					lost_events: 0,
+					unresolved_frames: 0,
+				},
+				resolved: 2,
+				minimumSampleNs: 1n,
+				maximumSampleNs: 84_000_000_000n,
+			};
+		},
+		requireGone: async (births) => {
+			calls.push(births[0].pid === 42 ? "helper-gone" : "recorder-gone");
+			if (scenario === "recorder-alive" && births[0].pid === 333)
+				throw new Error("recorder remains alive");
+		},
+		writeFile: async (_name, content, options) => {
+			assert.equal(options.mode, 0o600);
+			assert.equal(options.flag, "wx");
+			if (scenario === "proof") throw new Error("private proof error");
+			proof.push(JSON.parse(content));
+		},
+	};
+	return {
+		calls,
+		proof,
+		run: () => runRecorderLifetimeProbe("/installed/perf", "/numeric", io),
+	};
+}
+
+test("lifetime probe runs production-shaped85-second scope and returns only numeric lifecycle evidence", async () => {
+	const f = lifetimeProbeFixture();
+	const report = await f.run();
+	assert.equal(report.passed, 1);
+	assert.equal(report.active_wait_ns, 85_000_000_000);
+	assert.equal(report.disabled_tail_ns, 35_000_000_000);
+	assert.equal(report.samples, 2);
+	assert.equal(report.helper_gone, 1);
+	assert.equal(report.recorder_gone, 1);
+	assert.equal(report.performance_acceptance, 0);
+	assert(
+		Object.values(report).every(
+			(value) => value === null || typeof value === "number",
+		),
+	);
+	assert.equal(f.proof.length, 1);
+	assert.deepEqual(f.proof[0].report, report);
+	assert(f.calls.indexOf("finish") < f.calls.indexOf("decode"));
+	assert(f.calls.indexOf("recorder-gone") < f.calls.indexOf("SIGTERM"));
+});
+
+test("lifetime probe preserves all stage failures, keeps raw detail private and never invents child closure", async () => {
+	for (const scenario of [
+		"preflight",
+		"open",
+		"wait",
+		"finish",
+		"decode",
+		"no-ack",
+		"no-tail",
+		"identity",
+		"helper-hangs",
+		"recorder-alive",
+		"dies-during-wait",
+		"dies-disabled-tail",
+		"proof",
+	]) {
+		const f = lifetimeProbeFixture(scenario);
+		const report = await f.run();
+		assert.equal(report.passed, 0, scenario);
+		assert(report.failure_code > 0, scenario);
+		assert.equal(report.performance_acceptance, 0);
+		assert(
+			Object.values(report).every(
+				(value) => value === null || typeof value === "number",
+			),
+		);
+		if (scenario === "preflight") assert(!f.calls.includes("helper"));
+		if (scenario === "identity") assert(!f.calls.includes("SIGTERM"));
+		if (scenario === "helper-hangs") {
+			assert.equal(report.helper_gone, 0);
+			assert.deepEqual(
+				f.calls.filter((x) => x.startsWith("SIG")),
+				["SIGTERM", "SIGKILL"],
+			);
+		}
+		if (scenario === "recorder-alive") assert.equal(report.recorder_gone, 0);
+		if (scenario === "dies-during-wait" || scenario === "dies-disabled-tail") {
+			assert(!f.calls.includes("decode"));
+			assert.equal(
+				report.failure_code,
+				scenario === "dies-during-wait" ? 4 : 5,
+			);
+		}
+		if (scenario === "proof") {
+			assert.equal(report.private_proof_retained, 0);
+			assert.equal(report.failure_code, 8);
+		} else assert.deepEqual(f.proof[0].report, report);
+	}
+	const needsKill = lifetimeProbeFixture("needs-kill");
+	assert.equal((await needsKill.run()).passed, 1);
+	assert.deepEqual(
+		needsKill.calls.filter((x) => x.startsWith("SIG")),
+		["SIGTERM", "SIGKILL"],
+	);
 });

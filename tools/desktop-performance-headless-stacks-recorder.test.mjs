@@ -20,6 +20,7 @@ import * as recorder from "./desktop-performance-headless-stacks-recorder.mjs";
 import { artifactPaths } from "./artifact-paths.mjs";
 import {
 	HeadlessStackCapture,
+	hostPreflight,
 	emptyReport,
 	exportReport,
 	verifyMonotonicClock,
@@ -52,6 +53,7 @@ function failedControl({
 	disableAck = "ack\n",
 	neverExit = false,
 	immediateDeadline = false,
+	lifetimeClock = false,
 } = {}) {
 	const child = new EventEmitter();
 	Object.assign(child, {
@@ -82,11 +84,26 @@ function failedControl({
 		async verify() {}
 	}
 	const commands = [];
+	let nowSeconds = 0,
+		naturalSeconds;
+	const advance = (seconds) => {
+		nowSeconds += seconds;
+		if (
+			naturalSeconds !== undefined &&
+			nowSeconds >= naturalSeconds &&
+			child.exitCode === null &&
+			!child.signalCode
+		) {
+			child.exitCode = code;
+			child.signalCode = signal;
+			child.emit("close", code, signal);
+		}
+	};
 	child.stdin.write = (command) => {
 		commands.push(command);
 		if (command === "disable\n") {
 			child.stderr.emit("data", Buffer.from(disableAck));
-			if (neverExit) return;
+			if (neverExit || lifetimeClock) return;
 			queueMicrotask(() => {
 				child.stderr.emit("data", Buffer.from(diagnostic));
 				child.exitCode = code;
@@ -115,10 +132,16 @@ function failedControl({
 			path,
 			LIMITS: recorder.LIMITS,
 			Buffer,
-			process,
+			process: lifetimeClock
+				? {
+						...process,
+						hrtime: { bigint: () => BigInt(Math.round(nowSeconds * 1e9)) },
+					}
+				: process,
 			recordArguments: recorder.recordArguments,
 			recorderFailureDetails: recorder.recorderFailureDetails,
-			spawn: () => {
+			spawn: (_executable, args) => {
+				if (lifetimeClock) naturalSeconds = Number(args.at(-1));
 				if (spawnFailure)
 					queueMicrotask(() => child.emit("error", new Error("spawn failed")));
 				return child;
@@ -142,7 +165,7 @@ function failedControl({
 			privateText: async (filename) => sinks.get(filename)?.text ?? "",
 		},
 	);
-	return { child, open, commands };
+	return { child, open, commands, advance };
 }
 test("actual privileged disable/natural rejection retains stage, primitive exit and ACK evidence without changing failure", async () => {
 	const f = failedControl();
@@ -183,10 +206,8 @@ test("actual host preflight exports recorder evidence while preserving the origi
 		record_stderr_class: 1,
 	};
 	let report;
-	const a = stackSource.indexOf("export async function hostPreflight(");
-	const z = stackSource.indexOf("\nexport async function exportReport(", a);
 	const preflight = vm.runInNewContext(
-		`${stackSource.slice(a, z).replace("export async", "async")}; hostPreflight`,
+		`${hostPreflight.toString()}; hostPreflight`,
 		{
 			require_: (ok, message) => {
 				if (!ok) throw new Error(message);
@@ -908,4 +929,36 @@ test("workflow pins the packaged sidecar only for the explicit stack diagnostic"
 	);
 	assert.match(workflow, /paths\.append\(headless\)/u);
 	assert.match(workflow, /DIAGNOSTIC_HEADLESS=\{headless\.resolve\(\)\}/u);
+});
+
+test("an 85-second observation outlives old natural75 but explicit120 disables before natural close", async () => {
+	const options = {
+		root: "/private",
+		name: "headless",
+		perf: "/installed/perf",
+		binding: { pid: 10 },
+	};
+	const old = failedControl({ code: 0, lifetimeClock: true });
+	const oldRecording = await old.open(options); // Generic default remains75.
+	old.advance(85);
+	await assert.rejects(oldRecording.finish(), (error) => {
+		assert.equal(error.recordDiagnostics.record_ended_early, 1);
+		assert.equal(error.recordDiagnostics.record_disable_requested, 0);
+		return true;
+	});
+	const fresh = failedControl({ code: 0, lifetimeClock: true });
+	const recording = await fresh.open({ ...options, seconds: 120 });
+	fresh.advance(85);
+	assert.equal(fresh.child.exitCode, null);
+	const finishing = recording.finish();
+	for (let turn = 0; turn < 4; turn++) await Promise.resolve();
+	assert.deepEqual(fresh.commands, ["ping\n", "enable\n", "disable\n"]);
+	assert.equal(fresh.child.exitCode, null);
+	fresh.advance(35);
+	const result = await finishing;
+	assert.equal(result.diagnostics.record_ended_early, 0);
+	assert.equal(result.diagnostics.record_disable_acknowledged, 1);
+	assert.equal(result.diagnostics.record_stop_requested, 0);
+	assert.equal(result.activeSamplingWallNs, 85_000_000_000);
+	assert(result.closedNs - result.disableAckNs >= 1_000_000_000n);
 });

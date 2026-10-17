@@ -332,7 +332,7 @@ export function recordArguments(pid, seconds) {
 			pid > 0 &&
 			Number.isFinite(seconds) &&
 			seconds > 0 &&
-			seconds <= 75,
+			seconds <= 120,
 		"invalid record target/bound",
 	);
 	return [
