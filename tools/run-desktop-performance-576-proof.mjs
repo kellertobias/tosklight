@@ -12,7 +12,7 @@ import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
-  PROOF_MODES, waitProofModeAck, summarizeStageAbsence,
+  PROOF_MODES, waitProofModeAck, summarizeStageAbsence, proofSurfaceDurationSeconds,
 } from "./desktop-performance-576-proof-observers.mjs";
 import path from "node:path";
 import { finished } from "node:stream/promises";
@@ -134,9 +134,7 @@ async function runCase(performanceCase, executionMode) {
 			// for the wait that precedes the window, or it falls silent midway through and
 			// the liveness gate reports a Sheet that in fact did exactly as it was told.
 			LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS: String(
-				Math.ceil(drawBudgetMillis(performanceCase, executionMode) / 1_000) +
-					DURATION_SECONDS +
-					120,
+        proofSurfaceDurationSeconds(stageEnabled,drawBudgetMillis(performanceCase, executionMode),DURATION_SECONDS),
 			),
 			// The demo show carries whatever it was generated with, which is not ours to
 			// predict before it is loaded. The built workloads are exactly the size we ask for.
@@ -254,10 +252,11 @@ async function runCase(performanceCase, executionMode) {
       startedAt: measurementStartedAt + (diagnosticMidpoint(evidence.samples[0]) - measurementMonotonicStart),
       endedAt: measurementStartedAt + (diagnosticMidpoint(evidence.samples.at(-1)) - measurementMonotonicStart),
     };
+    measured.packet_observation_window = {...phaseWindow};
     measured.wall_monotonic_difference_ms = Math.abs((measurementEndedAt-measurementStartedAt)-(performance.now()-measurementMonotonicStart));
     Object.assign(checkpoint.result,measured);
     await checkpoint.enter(8);
-    const packets = packetProof.snapshot();
+    const packets = packetProof.snapshot(phaseWindow);
     checkpoint.result.proof.packets = packets;
     await checkpoint.save();
     await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);

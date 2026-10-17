@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, mkdtemp, stat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { artifactPaths } from "./artifact-paths.mjs";
-import { PacketAggregate, drainPacketRing, summarizeRamp, summarizeStageWindow, numericProof, validateNumericProof, verifyWorkloadFunctions, ProofCheckpoint, writeNumericProof, validateStageReady, waitStageReady, summarizeStageAbsence, waitProofModeAck } from "./desktop-performance-576-proof-observers.mjs";
+import { PacketAggregate, PacketWindowLedger, proofSurfaceDurationSeconds, drainPacketRing, summarizeRamp, summarizeStageWindow, numericProof, validateNumericProof, verifyWorkloadFunctions, ProofCheckpoint, writeNumericProof, validateStageReady, waitStageReady, summarizeStageAbsence, waitProofModeAck } from "./desktop-performance-576-proof-observers.mjs";
 
 const completedProgress = () => ({complete:1,current_stage_code:0,sheet_liveness_checked:1,sheet_liveness_passed:1,cleanup_complete:1});
 
@@ -549,4 +549,44 @@ test("mode acknowledgment binds the actual app configuration before opening the 
     await writeFile(file,[started,ack].map(JSON.stringify).join("\n")+"\n");assert.deepEqual(await waitProofModeAck(file,false,() => {}),ack);await assert.rejects(() => waitProofModeAck(file,true,() => {}));
     started.config.stageEnabled=true;await writeFile(file,[started,ack].map(JSON.stringify).join("\n")+"\n");await assert.rejects(() => waitProofModeAck(file,false,() => {}));
   } finally {await rm(directory,{recursive:true,force:true});}
+});
+
+
+test("packet receive ledger selects the exact mapped counter midpoint window despite delayed process/checkpoint work", () => {
+  const ledger=new PacketWindowLedger(99_000),aggregate=new PacketAggregate();
+  const add=(time,sequence,universe=101) => {const row={...packet(sequence,universe),receivedAt:time};aggregate.add(row,time);ledger.add(row);};
+  for(const [time,sequence] of [[99_500,254],[100_000,255],[100_001,1],[159_999,2],[160_000,3],[160_001,4],[161_000,5]]) for(let universe=101;universe<=116;universe++) add(time,sequence,universe);
+  const window={startedAt:100_000,endedAt:160_000};
+  const actual=ledger.snapshot(window,162_000);
+  assert.equal(aggregate.snapshot().packet_count,112);assert.equal(actual.packet_count,64);assert(actual.rows.every(row => row.packets===4 && row.sequence_discontinuities===0 && row.zero_sequence_packets===0));
+  // A later drain/checkpoint does not expand the already declared counter window.
+  for(let universe=101;universe<=116;universe++) add(164_000,6,universe);
+  assert.deepEqual(ledger.snapshot(window,165_000),actual);
+  const fractional=ledger.snapshot({startedAt:100_000.5,endedAt:160_000.5},165_000);assert(fractional.rows.every(row => row.packets===3));
+});
+test("packet window preserves discontinuity and disabled sequence evidence inside its boundaries", () => {
+  const ledger=new PacketWindowLedger(99_000);
+  for(const [time,sequence] of [[99_999,8],[100_000,10],[101_000,12],[102_000,0],[103_000,50],[160_000,51],[160_001,90]]) ledger.add({...packet(sequence),receivedAt:time});
+  assert.deepEqual(ledger.snapshot({startedAt:100_000,endedAt:160_000},161_000).rows[0],{packets:5,sequence_discontinuities:1,zero_sequence_packets:1});
+});
+test("packet ledger rejects invalid or retrograde receive clocks, cap overflow and windows outside actual capture", () => {
+  for(const time of [NaN,Infinity,-1,99_999.5,98_999]) {const ledger=new PacketWindowLedger(99_000);assert.throws(() => ledger.add({...packet(),receivedAt:time}));}
+  const ledger=new PacketWindowLedger(99_000,2);ledger.add({...packet(),receivedAt:100_000});assert.throws(() => ledger.add({...packet(),receivedAt:99_999}));ledger.add({...packet(2),receivedAt:100_000});assert.throws(() => ledger.add({...packet(3),receivedAt:100_001}));
+  for(const window of [{startedAt:98_999,endedAt:160_000},{startedAt:100_000,endedAt:159_999},{startedAt:100_000,endedAt:Infinity},{startedAt:100_000,endedAt:600_000}]) assert.throws(() => ledger.snapshot(window,200_000));
+  assert.throws(() => ledger.snapshot({startedAt:100_000,endedAt:160_000},159_999));
+});
+test("exact-window collection cannot hide a decoded receiver ring loss or a malformed packet", () => {
+  const aggregate=new PacketAggregate(),ledger=new PacketWindowLedger(99_000);
+  const combined={add(row,clock) {aggregate.add(row,clock);ledger.add(row);}};
+  const lost={mark:() => 3,packetsAfter:() => [{...packet(),receivedAt:100_000}]};assert.throws(() => drainPacketRing(lost,0,combined,() => 1),/ring lost/);
+  const malformed={mark:() => 1,packetsAfter:() => [{...packet(),slots:new Uint8Array(1),receivedAt:100_000}]};assert.throws(() => drainPacketRing(malformed,0,combined,() => 1),/full DMX/);assert.equal(ledger.rows.length,0);
+});
+
+test("Control surface budget removes idle wait while preserving sixty-second measurement and Stage budget", () => {
+  assert.equal(proofSurfaceDurationSeconds(false,60_000,60),120);
+  assert.equal(proofSurfaceDurationSeconds(true,60_000,60),240);
+  assert.equal(proofSurfaceDurationSeconds(true,300_000,60),480);
+  assert.equal(proofSurfaceDurationSeconds(false,300_000,60),120);
+  assert(proofSurfaceDurationSeconds(false,60_000,60)-60 >= 2*4,"margin includes both maximum accepted fade durations");
+  assert.throws(() => proofSurfaceDurationSeconds(false,NaN,60));
 });

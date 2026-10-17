@@ -51,6 +51,35 @@ export class PacketAggregate {
   }
 }
 
+// Compact private receive ledger: payload validation remains at the ordinary drain boundary.
+// Epoch receive time is selected against the very same mapped diagnostic midpoints as phases.
+export class PacketWindowLedger {
+  constructor(startedAt = Date.now(), cap = 65_536) {
+    this.startedAt=uint(startedAt);this.cap=uint(cap);assert(cap > 0 && cap <= 65_536,"packet ledger cap");this.rows=[];
+  }
+  add(packet) {
+    assert(this.rows.length < this.cap,"packet ledger cap");
+    const time=uint(packet.receivedAt),sequence=uint(packet.sequence),universe=uint(packet.universe);
+    assert(time >= this.startedAt && time >= (this.rows.at(-1)?.[0] ?? this.startedAt),"retrograde packet receive timestamp");
+    assert(sequence <= 255 && universe >= 101 && universe <= 116,"invalid packet ledger identity");
+    this.rows.push([time,universe,sequence]);
+  }
+  snapshot(window, capturedThrough = Date.now()) {
+    nonnegative(window?.startedAt);nonnegative(window?.endedAt);uint(capturedThrough);
+    assert(window.endedAt-window.startedAt >= 60_000 && window.endedAt-window.startedAt <= 400_000,"invalid packet window span");
+    assert(window.startedAt >= this.startedAt && capturedThrough >= window.endedAt && capturedThrough >= (this.rows.at(-1)?.[0] ?? this.startedAt),"packet window outside capture");
+    const rows=Array.from({length:16},() => ({packets:0,sequence_discontinuities:0,zero_sequence_packets:0})),previous=Array(16).fill(null);
+    let count=0;
+    for(const [time,universe,sequence] of this.rows) {
+      if(time < window.startedAt || time > window.endedAt) continue;
+      const index=universe-101,row=rows[index],before=previous[index];
+      if(sequence !== 0 && before !== null && before !== 0 && sequence !== (before === 255 ? 1 : before+1)) row.sequence_discontinuities++;
+      previous[index]=sequence;row.packets++;count++;if(sequence === 0) row.zero_sequence_packets++;
+    }
+    return {packet_count:count,rows};
+  }
+}
+
 export function drainPacketRing(receiver, cursor, aggregate, clock = () => performance.now()) {
   const next = receiver.mark(), rows = receiver.packetsAfter(cursor);
   assert.equal(rows.length, next-cursor, "decoded receiver ring lost packets");
@@ -121,12 +150,12 @@ export async function configurePacketProof(api, port) {
   const {DmxReceiver} = await import(`data:text/javascript;base64,${Buffer.from(compiled.code).toString("base64")}`);
   const receiver = await DmxReceiver.bind();
   const destination = `127.0.0.1:${receiver.port}`;
-  let timer, aggregate, cursor, closed = false;
+  let timer, aggregate, ledger, cursor, selectedWindow, closed = false;
   const commands = [];
   const drain = () => {
     if (!aggregate || aggregate.error) return;
     try {
-      cursor = drainPacketRing(receiver,cursor,aggregate);
+      cursor = drainPacketRing(receiver,cursor,{add(packet,clock) {aggregate.add(packet,clock);ledger.add(packet);}});
     } catch(error) { aggregate.error = error; }
   };
   const close = async () => { if (closed) return; closed = true; clearInterval(timer); drain(); await receiver.close(); };
@@ -143,8 +172,8 @@ export async function configurePacketProof(api, port) {
     const fixture = patch.fixtures.find(f => f.fixture_number === 421);
     assert(fixture && fixture.split_patches?.length === 1 && fixture.split_patches[0].universe === 101 && fixture.split_patches[0].address === 511,"static fixture address changed");
     return {
-      start() { assert(!aggregate); aggregate = new PacketAggregate(); cursor = receiver.mark(); timer = setInterval(drain,10); },
-      snapshot() { drain(); const result = aggregate.snapshot(); assert(result.rows.every(row => row.packets > 0),"missing universe"); return result; },
+      start() { assert(!aggregate); aggregate = new PacketAggregate(); ledger = new PacketWindowLedger(); cursor = receiver.mark(); timer = setInterval(drain,10); },
+      snapshot(window) { drain(); aggregate.snapshot(); const result = ledger.snapshot(window); assert(result.rows.every(row => row.packets > 0),"missing universe"); selectedWindow={...window}; return result; },
       async interact(checkpoint = async () => {}) {
         drain(); assert.equal(aggregate.staticRows.at(-1)?.value,0,"static fixture not initially zero");
         const ramps = [];
@@ -158,7 +187,7 @@ export async function configurePacketProof(api, port) {
         return {accepted_commands:2, ramps};
       },
       close,
-      privateState() { return aggregate ? {packets:{packet_count:aggregate.count,rows:aggregate.rows},static_rows:aggregate.staticRows,commands,failed:Number(Boolean(aggregate.error))} : null; },
+      privateState() { return aggregate ? {packet_window:selectedWindow,receive_ledger:ledger.rows,packets:{packet_count:aggregate.count,rows:aggregate.rows},static_rows:aggregate.staticRows,commands,failed:Number(Boolean(aggregate.error))} : null; },
     };
   } catch(error) { await close(); throw error; }
 }
@@ -318,6 +347,11 @@ export function summarizeStageWindow(complete, start, end) {
 }
 
 // Modes: zero preserves the historical combined proof; one isolates Control; two checks Stage health.
+export function proofSurfaceDurationSeconds(stageEnabled, drawBudgetMillis, measurementSeconds) {
+  assert(typeof stageEnabled === "boolean");nonnegative(drawBudgetMillis);uint(measurementSeconds);
+  // No-Stage has one minute of setup/fade margin. Exhausting it still fails coverage closed.
+  return stageEnabled ? Math.ceil(drawBudgetMillis/1000)+measurementSeconds+120 : measurementSeconds+60;
+}
 export const PROOF_MODES = Object.freeze({combined:0,"control-no-stage":1,"stage-functional":2});
 export async function waitProofModeAck(file, enabled, assertRunning) {
   const started = await waitRecord(file,"started",90_000,assertRunning);
