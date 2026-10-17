@@ -258,6 +258,14 @@ impl Engine {
         self.resolved_values_with_contribution_batches(&[])
     }
 
+    /// Perform the same raw resolution as [`Self::resolved_values`] for callers that discard
+    /// the values, without materializing and cloning the dense frame's named map.
+    /// Playback and continuity retain the ordinary read path's semantics.
+    pub fn refresh_resolved_state(&self) {
+        let generation = self.generation.load_full();
+        drop(self.resolved_attributes_at(&generation, self.clock.now(), &[]));
+    }
+
     /// The parameters as the desk shows them on its programming surfaces (Fixture Sheet, Dynamic
     /// stack): the raw resolution with every Freeze holding its captured parameters, and no master
     /// applied, since masters are output-only. A frozen parameter is shown as held, because that

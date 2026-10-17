@@ -66,7 +66,7 @@ pub(super) async fn diagnostics(
     // Refresh derived runtime state at the same application timestamp before exposing it. This is
     // especially important under the manually advanced Playwright clock, where no output frame is
     // guaranteed to have rendered between two exact MIB checkpoints.
-    let _ = state.output.resolved_values();
+    state.output.refresh_resolved_state();
     let route_send_errors = state.output.route_send_errors();
     let output_routes = NetworkOutput::route_diagnostics(&state.output.snapshot().routes);
     let output_bind_ip = state.installation.configuration().output_bind_ip;
@@ -143,7 +143,7 @@ pub(super) async fn performance_diagnostics(
     headers: HeaderMap,
 ) -> Result<Json<wire::RuntimePerformanceDiagnosticsSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
-    let _ = state.output.resolved_values();
+    state.output.refresh_resolved_state();
     let (health, output_sample) = state.output.health_sample().map_err(ApiError::internal)?;
     Ok(Json(wire::RuntimePerformanceDiagnosticsSnapshot {
         output_sample,
