@@ -10,7 +10,7 @@ import { chmod, realpath } from "node:fs/promises";
 import { artifactPaths } from "./artifact-paths.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
-  waitStageComplete, summarizeStageWindow, ProofCheckpoint,
+  waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
 } from "./desktop-performance-576-proof-observers.mjs";
 import path from "node:path";
 import { finished } from "node:stream/promises";
@@ -209,6 +209,9 @@ async function runCase(performanceCase, executionMode) {
     // Original surface resizes at 8s, releases live at 15s and recreates at 16s.
     // Readiness here is provisional: final per-pane telemetry validates the window retrospectively.
     await new Promise(resolve => setTimeout(resolve, 17_000));
+    // A lifecycle delay is not a presentation acknowledgment. The private readiness witness
+    // precedes this window; final per-pane coverage still validates the actual window.
+    await waitStageReady(reportPath, () => assertRunning(child));
     assertRunning(child);
     await checkpoint.enter(7);
     packetProof.start();

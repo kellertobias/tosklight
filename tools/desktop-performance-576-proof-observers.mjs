@@ -185,6 +185,34 @@ async function waitRecord(file, kind, timeout, assertRunning) {
 export const waitStageStarted = (file,assertRunning) => waitRecord(file,"stage-started",90_000,assertRunning);
 export const waitStageComplete = (file,assertRunning) => waitRecord(file,"complete",300_000,assertRunning);
 
+// Private one-shot readiness is a prior qualified observation, not proof of FPS or current
+// scanout. The complete report must still cover the entire subsequent measured window.
+export function validateStageReady(record) {
+  assert(record?.schemaVersion === 2 && record.kind === "stage-ready" && record.measurementSurface === "packaged-tauri-native-stage","invalid Stage readiness record");
+  const {lifecycleStartedEpochMillis:start,eligibleEpochMillis:eligible,readyEpochMillis:now}=record;
+  uint(start);uint(eligible);uint(now);assert(eligible === start+17_000 && now >= eligible,"Stage lifecycle not settled");
+  assert(Array.isArray(record.lanes) && record.lanes.length === 2,"missing ready Stage lane");
+  assert(record.lanes[0]?.frame?.paneId !== record.lanes[1]?.frame?.paneId && record.lanes[0]?.frame?.attachmentId !== record.lanes[1]?.frame?.attachmentId,"ready Stage lanes share one owner");
+  const identity=row => typeof row?.paneId === "string" && row.paneId.startsWith("main:") && typeof row.attachmentId === "string" && row.attachmentId.length > 0;
+  for(const [index,lane] of record.lanes.entries()) {
+    const frame=lane?.frame,hb=lane?.heartbeat,previous=lane?.previousLiveFrame;
+    assert(identity(frame) && identity(hb) && frame.paneId === hb.paneId && frame.attachmentId === hb.attachmentId,"foreign ready Stage attachment");
+    for(const name of ["sequence","sourceFrame","presentedEpochMicros","width","height","drawCalls"])uint(frame[name]);
+    for(const name of ["sequence","sourceFrame","lastPresentedSequence","epochMicros","receivedEpochMicros","width","height"])uint(hb[name]);
+    assert(frame.sequence > 0 && frame.sourceFrame > 0 && frame.width > 0 && frame.height > 0 && frame.drawCalls > 0 && hb.sequence > 0,"invalid ready presentation");
+    assert(hb.attached === true && hb.visible === true && hb.drawHealthy === true,"unhealthy ready Stage attachment");
+    assert(frame.sequence === hb.lastPresentedSequence && frame.sourceFrame === hb.sourceFrame && frame.width === hb.width && frame.height === hb.height && frame.followPreload === (index === 1) && hb.followPreload === frame.followPreload,"ready Stage source mismatch");
+    assert(frame.presentedEpochMicros <= hb.epochMicros && hb.epochMicros/1000 >= eligible && hb.receivedEpochMicros >= hb.epochMicros && hb.receivedEpochMicros-hb.epochMicros <= 5_000_000 && now >= hb.receivedEpochMicros/1000 && now-hb.receivedEpochMicros/1000 <= 5_000,"stale ready heartbeat");
+    const fresh=frame.presentedEpochMicros/1000 >= eligible && now >= frame.presentedEpochMicros/1000 && now-frame.presentedEpochMicros/1000 <= 5_000;
+    if(index === 1) assert(previous === null && (fresh || hb.idleUnchanged === true),"preload readiness lacks a presented or healthy idle picture");
+    else assert(fresh && identity(previous) && previous.paneId === frame.paneId && previous.attachmentId === frame.attachmentId && previous.followPreload === false && Number.isSafeInteger(previous.sequence) && previous.sequence > 0 && previous.sequence < frame.sequence && Number.isSafeInteger(previous.sourceFrame) && previous.sourceFrame > 0 && previous.sourceFrame < frame.sourceFrame && Number.isSafeInteger(previous.presentedEpochMicros) && previous.presentedEpochMicros/1000 >= eligible && previous.presentedEpochMicros < frame.presentedEpochMicros,"live readiness lacks advancing post-lifecycle source");
+  }
+  return record;
+}
+export async function waitStageReady(file,assertRunning,budgetMillis=90_000) {
+  return validateStageReady(await waitRecord(file,"stage-ready",budgetMillis,assertRunning));
+}
+
 const STAGE_INVALID_SCOPES = ["before", "in_window", "after", "unlocalizable"];
 const STAGE_INVALID_REASONS = ["identity", "clock", "sequence_source", "dimensions", "content"];
 const stageInvalidFields = prefix => [...STAGE_INVALID_SCOPES,...STAGE_INVALID_REASONS].map(name => `${prefix}_invalid_${name}_samples`);
