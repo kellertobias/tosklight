@@ -12,7 +12,7 @@ use std::{
 };
 
 #[derive(Default)]
-struct Sources {
+pub(super) struct Sources {
     pan: Option<f32>,
     tilt: Option<f32>,
     reads: Cell<usize>,
@@ -45,7 +45,7 @@ impl DynamicValueSourceResolver for Sources {
     }
 }
 
-struct Frame;
+pub(super) struct Frame;
 impl WholeFamilyExpressionFrameResolver for Frame {
     fn resolve(
         &self,
@@ -58,7 +58,7 @@ impl WholeFamilyExpressionFrameResolver for Frame {
     }
 }
 
-fn sample(lane: u128, expression: E) -> DynamicRuntimeSample {
+pub(super) fn sample(lane: u128, expression: E) -> DynamicRuntimeSample {
     DynamicRuntimeSample {
         instance_id: Uuid::from_u128(1),
         controller_id: Uuid::from_u128(2),
@@ -77,7 +77,7 @@ fn angle_address(component: ProgrammingComponent) -> Arc<DynamicValueAddress> {
         component: Some(component),
     })
 }
-fn angle(component: ProgrammingComponent, value: f32) -> E {
+pub(super) fn angle(component: ProgrammingComponent, value: f32) -> E {
     E::Programming {
         address: angle_address(component),
         value: DynamicValue::Scalar(value),
@@ -93,7 +93,7 @@ fn current(component: ProgrammingComponent) -> E {
 fn angles(pan: f32, tilt: f32) -> AttributeValue {
     AttributeValue::Position(Arc::new(PositionIntent::angles(pan, tilt)))
 }
-fn whole(owner: ProgrammingOwner, value: AttributeValue) -> E {
+pub(super) fn whole(owner: ProgrammingOwner, value: AttributeValue) -> E {
     E::Programming {
         address: Arc::new(DynamicValueAddress::whole_family(owner, &value).unwrap()),
         value: DynamicValue::Family(value),
@@ -101,7 +101,7 @@ fn whole(owner: ProgrammingOwner, value: AttributeValue) -> E {
         dependency_occurrence: None,
     }
 }
-fn color(component: ColorComponent, value: f32) -> E {
+pub(super) fn color(component: ColorComponent, value: f32) -> E {
     let basis = match component {
         ColorComponent::Red
         | ColorComponent::Green
@@ -122,7 +122,7 @@ fn color(component: ColorComponent, value: f32) -> E {
         dependency_occurrence: None,
     }
 }
-fn resume(from: Option<E>, to: Option<E>, progress: f32) -> E {
+pub(super) fn resume(from: Option<E>, to: Option<E>, progress: f32) -> E {
     E::Transition {
         from: from.map(Arc::new),
         to: to.map(Arc::new),
@@ -132,10 +132,10 @@ fn resume(from: Option<E>, to: Option<E>, progress: f32) -> E {
         },
     }
 }
-fn semantic(intent: ColorIntent) -> AttributeValue {
+pub(super) fn semantic(intent: ColorIntent) -> AttributeValue {
     AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic { intent }))
 }
-fn compose(
+pub(super) fn compose(
     group: &DynamicFamilySampleGroup,
     base: &AttributeValue,
 ) -> Result<AttributeValue, TransitionError> {
@@ -861,7 +861,7 @@ impl PreparationSources for Sources {
     }
 }
 
-struct FourChunks;
+pub(super) struct FourChunks;
 impl PreparationWorkers for FourChunks {
     fn chunks(&self) -> usize {
         4

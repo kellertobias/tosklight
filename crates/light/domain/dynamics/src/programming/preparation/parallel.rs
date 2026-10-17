@@ -83,6 +83,7 @@ pub fn family_order(group: &DynamicFamilySampleGroup) -> (Uuid, &'static str) {
 
 /// One write of a controller's preparation, in order.
 enum Prepared {
+    AppendOne(FixtureId, ProgrammingOwner, FamilyCompositionSample),
     Append(FixtureId, ProgrammingOwner, Vec<FamilyCompositionSample>),
     Legacy(DynamicRuntimeSample),
     Require(DynamicFamilyPreparationRequirement),
@@ -102,6 +103,15 @@ pub struct PreparedChunk {
 }
 
 impl PreparationOutput for Vec<Prepared> {
+    fn append_one(
+        &mut self,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+        sample: FamilyCompositionSample,
+    ) {
+        self.push(Prepared::AppendOne(target, owner, sample));
+    }
+
     fn append(
         &mut self,
         target: FixtureId,
@@ -255,6 +265,7 @@ fn prepare_in_parallel(
         let (writes_from, logs_from) = cursor.taken;
         for write in cursor.writes.by_ref().take(writes_to - writes_from) {
             match write {
+                Prepared::AppendOne(target, owner, sample) => out.append_one(target, owner, sample),
                 Prepared::Append(target, owner, samples) => out.append(target, owner, samples),
                 Prepared::Legacy(sample) => out.legacy(sample),
                 Prepared::Require(requirement) => out.require(requirement),

@@ -5,6 +5,13 @@ use super::*;
 /// Where a controller's preparation writes: the frame's family groups, legacy fragments and
 /// requirements, or a parallel worker's ordered record of the same (TL-639 round 5).
 pub(super) trait PreparationOutput {
+    /// One materialized leaf, without a temporary per-leaf vector.
+    fn append_one(
+        &mut self,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+        sample: FamilyCompositionSample,
+    );
     fn append(
         &mut self,
         target: FixtureId,
@@ -24,6 +31,28 @@ pub(super) struct FamilyOutput<'a> {
 }
 
 impl PreparationOutput for FamilyOutput<'_> {
+    fn append_one(
+        &mut self,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+        sample: FamilyCompositionSample,
+    ) {
+        let index = match self.family_indices.entry((target, owner)) {
+            std::collections::hash_map::Entry::Occupied(index) => *index.get(),
+            std::collections::hash_map::Entry::Vacant(index) => {
+                let next = self.families.len();
+                index.insert(next);
+                self.families.push(DynamicFamilySampleGroup {
+                    target,
+                    owner,
+                    samples: Vec::new(),
+                });
+                next
+            }
+        };
+        self.families[index].samples.push(sample);
+    }
+
     fn append(
         &mut self,
         target: FixtureId,

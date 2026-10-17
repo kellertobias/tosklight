@@ -8,13 +8,11 @@ use super::{
     address::ensure, extract_compatible_dynamic_value,
 };
 use light_core::{AttributeValue, programming::*};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 mod adoption;
+mod component_coverage;
 mod endpoint_output;
 mod native_fixed;
 mod position_segment;
@@ -525,7 +523,7 @@ struct ComponentCompositionScratch {
     components: Vec<(ProgrammingComponent, DynamicValue)>,
     angle_order: Vec<usize>,
     angle_address: Option<Arc<CompiledDynamicValueAddress>>,
-    covered_components: HashSet<ProgrammingComponent>,
+    covered_components: component_coverage::ComponentCoverage,
     covered_native_functions: HashMap<Uuid, Uuid>,
     covered: Vec<bool>,
     pending_native_model: Option<Arc<dyn NativeColorEditModel + Send + Sync>>,
