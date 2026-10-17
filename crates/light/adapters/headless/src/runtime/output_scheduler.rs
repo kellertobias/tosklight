@@ -54,12 +54,14 @@ pub(super) use dynamic_projection::physical_adapter::{
 pub(in crate::runtime) mod change_lead;
 mod dynamic_reconciliation;
 mod slow_phase_trace;
-use slow_phase_trace::trace_slow_output_phases;
+use slow_phase_trace::{ApplicationPhase, ApplicationSections, trace_slow_output_phases};
 mod live_output_bench;
 pub use live_output_bench::{
     LiveOutputBench, LiveOutputFrame, LiveOutputWork, ReadoutConsumerReport, ReadoutConsumers,
 };
 mod restored_dynamic_candidate;
+mod retained_output;
+use retained_output::send_retained_output;
 mod start_path_timing;
 mod timecode_audio;
 pub(in crate::runtime) use restored_dynamic_candidate::{
@@ -349,36 +351,48 @@ async fn run(
 // frames, and sends configured routes. Network I/O starts only after rendering completes.
 async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let tick_started = Instant::now();
+    let mut application = ApplicationSections::begin();
     let action_timing = runtime.action_timing.begin_output_render();
     let options = runtime.control.lock().render_options();
     let (rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
-            return send_retained_output(&runtime).await;
+            application.retain(1);
+            let result = send_retained_output(&runtime, &mut application).await;
+            application.finish(result.is_err());
+            return result;
         };
         let visualization_scope = VisualizationScope {
             show_id: runtime.active_show.current().map(|show| show.id.0),
         };
-        let completed = ordered_output_operation(&runtime.playback, || {
-            render_ordered_output_frame(&runtime, options)
+        let completed = application.measure(ApplicationPhase::OrderedOperation, || {
+            ordered_output_operation(&runtime.playback, || {
+                render_ordered_output_frame(&runtime, options)
+            })
         });
         let (rendered, dynamic, engine) = match completed {
             Ok(completed) => completed,
             Err(EngineError::StalePreparedFrame) => {
                 drop(_activation);
-                return send_retained_output(&runtime).await;
+                application.retain(2);
+                let result = send_retained_output(&runtime, &mut application).await;
+                application.finish(result.is_err());
+                return result;
             }
             Err(error) => {
+                application.finish(true);
                 return Err(io::Error::other(error));
             }
         };
         (rendered, visualization_scope, dynamic, engine)
     };
     let change_lead_start = rendered.change_lead_start();
-    runtime.internal_audio.lock().reconcile(
-        rendered.rendered.source_snapshot.fixtures.as_ref(),
-        rendered.rendered.profile_visualization_values.as_ref(),
-        &rendered.rendered.resolved_values,
-    );
+    application.measure(ApplicationPhase::AudioReconcile, || {
+        runtime.internal_audio.lock().reconcile(
+            rendered.rendered.source_snapshot.fixtures.as_ref(),
+            rendered.rendered.profile_visualization_values.as_ref(),
+            &rendered.rendered.resolved_values,
+        );
+    });
     let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
@@ -397,6 +411,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         )
     };
     let publish = publish_started.elapsed();
+    application.record(ApplicationPhase::PublicationPayload, publish);
     let send_started = Instant::now();
     let result = runtime
         .delivery_policy
@@ -410,6 +425,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
         )
         .await;
     let send = send_started.elapsed();
+    application.record(ApplicationPhase::Delivery, send);
     trace_slow_output_phases(tick_started.elapsed(), dynamic, engine, publish, send);
     let delivered = result.is_ok();
     change_lead::record_change_lead(
@@ -421,6 +437,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     if delivered {
         runtime.action_timing.complete_output_render(action_timing);
     }
+    application.finish(result.is_err());
     result
 }
 
@@ -592,38 +609,6 @@ fn render_ordered_output_frame(
         )
     });
     PlaybackOperation::with_events(result, events)
-}
-
-async fn send_retained_output(runtime: &Runtime) -> io::Result<u64> {
-    let tick_started = Instant::now();
-    let (routes, frames, patched_slots) = {
-        let control = runtime.control.lock();
-        (
-            Arc::clone(&control.last_routes),
-            control.last_frames.clone(),
-            control.last_patched_slots.clone(),
-        )
-    };
-    let send_started = Instant::now();
-    let result = runtime
-        .delivery_policy
-        .send(
-            &runtime.output,
-            &runtime.usb,
-            &routes,
-            &frames,
-            &patched_slots,
-            &mut *runtime.sequences.lock().await,
-        )
-        .await;
-    trace_slow_output_phases(
-        tick_started.elapsed(),
-        Duration::ZERO,
-        Duration::ZERO,
-        Duration::ZERO,
-        send_started.elapsed(),
-    );
-    result
 }
 
 pub(in crate::runtime) fn combined_delivery_result(
