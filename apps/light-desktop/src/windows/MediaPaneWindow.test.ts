@@ -8,7 +8,11 @@ import {
 } from "@testing-library/react";
 import { createElement, useCallback } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { VisualizationSnapshot } from "../api/types";
+import type { PatchedFixture, VisualizationSnapshot } from "../api/types";
+import {
+	blankFixtureProfile,
+	fixtureDefinitionFromProfileMode,
+} from "../components/setup/fixtureProfileModel";
 import type { ProgrammerFixtureValue } from "../features/programmerValues/contracts";
 import {
 	MediaPaneWindow,
@@ -218,10 +222,38 @@ const mediaReadout = vi.hoisted(() => ({
 	error: null as Error | null,
 	authority: "server-a",
 	sessionId: "client-a",
+	patchFixtures: [] as PatchedFixture[],
+	patchStatus: "ready",
+	patchError: null as string | null,
+	patchShowId: "show-a",
+	patchPending: new Set<string>(),
+	patchListeners: new Set<() => void>(),
 	read: vi.fn(),
 	dispatch: vi.fn(),
 	replace: vi.fn(),
 	submit: vi.fn(),
+}));
+vi.mock("../features/patch/PatchState", () => ({
+	useSelectedPatchedFixtures: (ids: readonly string[], active: boolean) =>
+		active
+			? mediaReadout.patchFixtures.filter((f) => ids.includes(f.fixture_id))
+			: [],
+	usePatchStatus: () => ({
+		status: mediaReadout.patchStatus,
+		error: mediaReadout.patchError,
+	}),
+}));
+vi.mock("../features/patch/PatchContext", () => ({
+	usePatchStoreOrNull: () => ({
+		subscribe: (listener: () => void) => {
+			mediaReadout.patchListeners.add(listener);
+			return () => mediaReadout.patchListeners.delete(listener);
+		},
+		getSnapshot: () => ({
+			showId: mediaReadout.patchShowId,
+			pendingFixtureIds: mediaReadout.patchPending,
+		}),
+	}),
 }));
 vi.mock("../state/AppContext", () => ({
 	useApp: () => ({ dispatch: mediaReadout.dispatch }),
@@ -255,7 +287,10 @@ vi.mock(
 );
 vi.mock(
 	"../features/programmerValues/useProgrammerValuesMutationQueue",
-	() => ({
+	async (importOriginal) => ({
+		...(await importOriginal<
+			typeof import("../features/programmerValues/useProgrammerValuesMutationQueue")
+		>()),
 		useProgrammerValuesMutationQueue: () => ({
 			route: mediaReadout.route,
 			submitLatest: mediaReadout.submit,
@@ -368,6 +403,7 @@ function MediaValuesHarness({
 }) {
 	const values = useMediaProgrammerValues(true, mediaReadout.route, {
 		fixtureId,
+		parentFixtureId: "server",
 		sourceKey,
 		output:
 			mediaReadout.ready && !mediaReadout.error ? mediaReadout.output : null,
@@ -398,6 +434,11 @@ describe("Media selected Cue readouts", () => {
 				disconnect() {}
 			},
 		);
+		mediaReadout.patchFixtures = [];
+		mediaReadout.patchStatus = "ready";
+		mediaReadout.patchError = null;
+		mediaReadout.patchShowId = "show-a";
+		mediaReadout.patchPending = new Set();
 		mediaReadout.output = cueSnapshot();
 		mediaReadout.normal = [];
 		mediaReadout.pending = [];
@@ -663,4 +704,280 @@ describe("Media selected Cue readouts", () => {
 			},
 		});
 	});
+});
+
+function defaultMediaFixture(volume = 1, revision = 1): PatchedFixture {
+	const parameter = (attribute: string, value: number) => ({
+		attribute,
+		default: value,
+		components: [],
+		virtual_dimmer: false,
+		capabilities: [],
+	});
+	const profile = blankFixtureProfile();
+	profile.id = "profile-a";
+	profile.revision = revision;
+	const mode = profile.modes[0];
+	mode.id = "mode-a";
+	mode.heads = Array.from({ length: 9 }, (_, i) => ({
+		id: `head-${i}`,
+		master_shared: i === 0,
+		name: String(i),
+	}));
+	const definition = fixtureDefinitionFromProfileMode(profile, mode);
+	return {
+		fixture_id: "server",
+		universe: null,
+		address: null,
+		logical_heads: [
+			{ fixture_id: "layer-8", head_index: 8, profile_head_id: "head-8" },
+		],
+		definition: {
+			...definition,
+			heads: [
+				{
+					index: 0,
+					name: "Master",
+					shared: true,
+					parameters: [parameter("intensity", 0.7)],
+				},
+				{
+					index: 8,
+					name: "Layer8",
+					shared: false,
+					parameters: [
+						parameter("intensity", 0),
+						parameter("volume", volume),
+						parameter("media.play_mode", 0),
+						parameter("media.playback_speed", 127 / 255),
+						parameter("media.in_point", 0),
+						parameter("media.out_point", 0),
+						parameter("color.red", 1),
+						parameter("color.green", 1),
+						parameter("color.blue", 1),
+					],
+				},
+			],
+		},
+	};
+}
+describe("Media authoritative profile homes", () => {
+	beforeEach(() => {
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				observe() {}
+				disconnect() {}
+			},
+		);
+		mediaReadout.patchFixtures = [defaultMediaFixture()];
+		mediaReadout.patchStatus = "ready";
+		mediaReadout.patchError = null;
+		mediaReadout.patchPending = new Set();
+		mediaReadout.patchShowId = "show-a";
+		mediaReadout.normal = [];
+		mediaReadout.pending = [];
+		mediaReadout.route = "normal";
+		mediaReadout.ready = true;
+		mediaReadout.error = null;
+		mediaReadout.output = { ...cueSnapshot(), scope: { show_id: "show-a" } };
+		mediaReadout.read
+			.mockReset()
+			.mockResolvedValue({ ...mediaReadout.output, values: [] });
+		mediaReadout.submit.mockClear();
+		mediaReadout.replace.mockClear();
+		mediaReadout.dispatch.mockClear();
+	});
+	afterEach(cleanup);
+	it("mounts real Window and Surface with empty Normal and permits first Play, volume and Dimmer edits", async () => {
+		const view = render(
+			createElement(MediaPaneWindow, {
+				mediaPaneState: { serverId: "server", layerId: "layer-8" },
+			}),
+		);
+		const ui = within(view.container);
+		await waitFor(() =>
+			expect(ui.getByRole("button", { name: "Play looped" })).toBeEnabled(),
+		);
+		expect(ui.getByRole("slider", { name: "Dimmer" })).toHaveValue("0");
+		expect(ui.getByRole("slider", { name: "Volume" })).toHaveValue("100");
+		expect(mediaReadout.submit).not.toHaveBeenCalled();
+		expect(mediaReadout.replace).not.toHaveBeenCalled();
+		fireEvent.click(ui.getByRole("button", { name: "Play looped" }));
+		expect(mediaReadout.submit.mock.lastCall?.[1]).toEqual([
+			expect.objectContaining({
+				action: "set_fixture",
+				fixtureId: "layer-8",
+				attribute: "media.play_mode",
+				value: { kind: "normalized", value: 0 },
+			}),
+		]);
+		mediaReadout.submit.mockClear();
+		fireEvent.input(ui.getByRole("slider", { name: "Volume" }), {
+			target: { value: "50" },
+		});
+		expect(mediaReadout.submit.mock.lastCall?.[1]).toEqual([
+			expect.objectContaining({
+				fixtureId: "layer-8",
+				attribute: "volume",
+				value: { kind: "normalized", value: 0.5 },
+			}),
+		]);
+		mediaReadout.submit.mockClear();
+		fireEvent.input(ui.getByRole("slider", { name: "Dimmer" }), {
+			target: { value: "50" },
+		});
+		expect(mediaReadout.submit.mock.lastCall?.[1]).toEqual([
+			expect.objectContaining({
+				fixtureId: "layer-8",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 0.5 },
+			}),
+		]);
+	});
+	it("uses exact nonstandard head home only after successful current read and retires replacement", async () => {
+		mediaReadout.patchFixtures = [defaultMediaFixture(0.2)];
+		const initial = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(initial.promise);
+		const view = render(selectedValues());
+		expect(readValues(view)).toEqual([]);
+		await act(async () =>
+			initial.resolve({
+				...cueSnapshot(),
+				scope: { show_id: "show-a" },
+				values: [],
+			}),
+		);
+		expect(
+			readValues(view).find((v) => v.attribute === "volume")?.value,
+		).toEqual({ kind: "normalized", value: 0.2 });
+		const replacement = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(replacement.promise);
+		mediaReadout.patchFixtures = [defaultMediaFixture(0.6, 2)];
+		view.rerender(selectedValues());
+		expect(readValues(view)).toEqual([]);
+		await act(async () =>
+			replacement.resolve({
+				...cueSnapshot(),
+				scope: { show_id: "show-a" },
+				values: [],
+			}),
+		);
+		expect(
+			readValues(view).find((v) => v.attribute === "volume")?.value,
+		).toEqual({ kind: "normalized", value: 0.6 });
+	});
+	it("keeps explicit Normal and Pending zero above homes and semantic Cue colour intact", async () => {
+		const colour = cueColour();
+		mediaReadout.read.mockResolvedValue({
+			...mediaReadout.output,
+			values: [
+				{
+					fixture_id: "layer-8",
+					attribute: "volume",
+					value: { kind: "normalized", value: 0 },
+				},
+				{ fixture_id: "layer-8", attribute: "color", value: colour.value },
+			],
+		});
+		const view = render(selectedValues());
+		await waitFor(() =>
+			expect(readValues(view).some((v) => v.attribute === "volume")).toBe(true),
+		);
+		expect(
+			readValues(view).find((v) => v.attribute === "volume")?.value,
+		).toEqual({ kind: "normalized", value: 0 });
+		expect(
+			controlModel(readValues(view)).find((c) => c.id === "color.tint"),
+		).toMatchObject({ value: "#000000", disabled: false });
+		mediaReadout.pending = [
+			{
+				...colour,
+				attribute: "volume",
+				value: { kind: "normalized", value: 0 },
+			},
+		];
+		mediaReadout.route = "preload";
+		view.rerender(selectedValues());
+		expect(
+			readValues(view).find((v) => v.attribute === "volume")?.value,
+		).toEqual({ kind: "normalized", value: 0 });
+		expect(mediaReadout.submit).not.toHaveBeenCalled();
+	});
+	it("exposes only shared Master homes or the exact selected logical head", async () => {
+		const master = render(selectedValues("server"));
+		await waitFor(() => expect(readValues(master)).toHaveLength(1));
+		expect(readValues(master)[0]).toMatchObject({
+			fixtureId: "server",
+			attribute: "intensity",
+			value: { kind: "normalized", value: 0.7 },
+		});
+		master.unmount();
+		const absent = render(selectedValues("layer-1"));
+		await act(async () => {});
+		expect(readValues(absent)).toEqual([]);
+	});
+	it("retires homes on pending-only Patch notifications and waits for a fresh read on recovery", async () => {
+		const view = render(selectedValues());
+		await waitFor(() =>
+			expect(readValues(view).some((v) => v.attribute === "volume")).toBe(true),
+		);
+		act(() => {
+			mediaReadout.patchPending = new Set(["server"]);
+			for (const listener of mediaReadout.patchListeners) listener();
+		});
+		expect(readValues(view)).toEqual([]);
+		let resolveRead!: (value: VisualizationSnapshot) => void;
+		mediaReadout.read.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveRead = resolve;
+				}),
+		);
+		act(() => {
+			mediaReadout.patchPending = new Set();
+			for (const listener of mediaReadout.patchListeners) listener();
+		});
+		expect(readValues(view)).toEqual([]);
+		await act(async () => resolveRead({ ...mediaReadout.output!, values: [] }));
+		await waitFor(() =>
+			expect(readValues(view).some((v) => v.attribute === "volume")).toBe(true),
+		);
+		expect(mediaReadout.submit).not.toHaveBeenCalled();
+	});
+	it.each([
+		"read-error",
+		"patch-error",
+		"pending-patch",
+		"wrong-show",
+		"wrong-profile-head",
+	])(
+		"retires homes for %s without masking unknown or writing",
+		async (reason) => {
+			const view = render(selectedValues());
+			await waitFor(() =>
+				expect(readValues(view).some((v) => v.attribute === "volume")).toBe(
+					true,
+				),
+			);
+			if (reason === "read-error")
+				mediaReadout.read.mockRejectedValueOnce(new Error("unavailable"));
+			if (reason === "patch-error") mediaReadout.patchError = "unavailable";
+			if (reason === "pending-patch")
+				mediaReadout.patchPending = new Set(["server"]);
+			if (reason === "wrong-show") mediaReadout.patchShowId = "show-b";
+			if (reason === "wrong-profile-head") {
+				const fixture = defaultMediaFixture();
+				fixture.logical_heads[0].profile_head_id = "another-head";
+				mediaReadout.patchFixtures = [fixture];
+			}
+			mediaReadout.output = { ...mediaReadout.output! };
+			view.rerender(selectedValues());
+			await waitFor(() => expect(readValues(view)).toEqual([]));
+			expect(
+				controlModel(readValues(view)).find((c) => c.id === "volume"),
+			).toMatchObject({ display: "Unknown", disabled: true });
+			expect(mediaReadout.submit).not.toHaveBeenCalled();
+		},
+	);
 });

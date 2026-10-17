@@ -79,7 +79,6 @@ export function MediaPaneWindow({
 	const applyMediaLibrarySelection = media?.applyMediaLibrarySelection;
 	const refreshMediaPreview = media?.refreshMediaPreview;
 	const refreshMediaThumbnails = media?.refreshMediaThumbnails;
-	const loadMediaThumbnail = media?.mediaThumbnail;
 	const selectionActions = useProgrammingSelectionActions(active);
 	const valuesQueue = useProgrammerValuesMutationQueue(active);
 	const eligibleServers = media?.mediaServers ?? [];
@@ -133,7 +132,7 @@ export function MediaPaneWindow({
 		inspect: inspectMediaServer,
 		refreshPreview: refreshMediaPreview,
 		refreshThumbnails: refreshMediaThumbnails,
-		loadThumbnail: loadMediaThumbnail,
+		loadThumbnail: media?.mediaThumbnail,
 	});
 
 	useEffect(() => {
@@ -188,6 +187,7 @@ export function MediaPaneWindow({
 	});
 	const liveProgrammer = useMediaProgrammerValues(active, valuesQueue.route, {
 		fixtureId: selectedFixtureId,
+		parentFixtureId: selectedServerId,
 		sourceKey: `${selectedServerId}:${endpointKey}`,
 		output: liveOutput,
 	});
