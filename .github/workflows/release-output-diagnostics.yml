@@ -80,7 +80,12 @@ jobs:
           let spawnError,hasClosed=false;
           child.on('error',error=>{spawnError=error;});
           const closed=new Promise(resolve=>child.once('close',()=>{hasClosed=true;resolve();}));
-          let stage=0,passed=0,libraries=0,inObject=0,stopped=0;
+          let stage=0,passed=0,libraries=0,inObject=0,stopped=0,failureCode=0;
+          // Closed numeric failure map: runtime100+, recorder200+, OS300+, unknown999.
+          const runtimeFailures=['runtime/debug ownership or size','read cap','runtime/debug ELF','ELF changed while reading','malformed maps encoding','malformed map','duplicate map range','deleted or unsafe runtime path','runtime inode absent','conflicting runtime mappings','runtime count','libc/loader mapping absent','invalid process binding','unsafe resolved runtime path','ELF identity changed','mapped runtime identity mismatch','readelf output cap','missing/ambiguous build ID','debug path redirect','debug build ID or symtab mismatch','mapped path changed'];
+          const recorderFailures=['private directory','private command name','tool working directory escaped private root','private file identity changed','bounded tool failed','private receipt','private receipt changed or exceeded cap','missing owned binding','owned birth or ancestry changed','owned executable changed'];
+          const osFailures=['ENOENT','EACCES','ELOOP','EINVAL','EPERM'];
+          const classify=error=>{const message=String(error?.message??'');let index=runtimeFailures.indexOf(message.replace(/^Runtime symbols unavailable: /u,''));if(index>=0)return 100+index;index=recorderFailures.indexOf(message.replace(/^Headless stacks unavailable: /u,''));if(index>=0)return 200+index;index=osFailures.indexOf(error?.code);return index>=0?300+index:999;};
           const timeout=setTimeout(()=>child.kill('SIGTERM'),30000);
           try {
             const ready=new Promise((resolve,reject)=>{let text=''; child.stdout.on('data',chunk=>{text+=chunk.toString();if(Buffer.byteLength(text)>64)return reject(Error('readycap'));if(text.includes('\n')){if(text==='ready\n')resolve();else reject(Error('readyline'));}});child.once('error',reject);});
@@ -95,13 +100,13 @@ jobs:
             inObject=receipt.libraries.filter(x=>x.symbol_source==='runtime_elf').length;
             assert(receipt.libraries.some(x=>x.runtime_path.endsWith('/libpthread.so.0')&&x.symbol_source==='runtime_elf'));
             stage=3; passed=1;
-          } catch { process.exitCode=1; }
+          } catch(error) { failureCode=classify(error); process.exitCode=1; }
           finally {
             child.kill('SIGTERM');
             const waitClose=async()=>{let timer;try{return await Promise.race([closed.then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),2000);})]);}finally{clearTimeout(timer);}};
             if(!await waitClose()){child.kill('SIGKILL');await waitClose();}
             clearTimeout(timeout);stopped=Number(hasClosed);if(!stopped||spawnError){passed=0;process.exitCode=1;}
-            console.log(JSON.stringify({schema:1,passed,setup_stage:stage,libraries,in_object_symbol_sources:inObject,owned_child_stopped:stopped,samples:0,performance_acceptance:0}));
+            console.log(JSON.stringify({schema:1,passed,setup_stage:stage,libraries,in_object_symbol_sources:inObject,owned_child_stopped:stopped,samples:0,performance_acceptance:0,failure_code:failureCode}));
           }
           NODE
 
