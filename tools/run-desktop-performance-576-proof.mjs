@@ -12,6 +12,7 @@ import { capturePerformanceSample, ServerCounterClock } from "./desktop-performa
 import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
 import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
+import { WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
@@ -173,6 +174,13 @@ async function runCase(performanceCase, executionMode) {
   try { evidence = await createCaseEvidence(temporaryRoot); }
   catch(error) { await terminateProcessTree(child.pid); throw error; }
 	evidence.closed = closed;
+  const workerMode=process.env.LIGHT_OUTPUT_WORKERS;
+  const workerReceipt=/^[1-4]$/u.test(workerMode??"")?new WorkerCountReceipt(Number(workerMode)):null;
+  const workerNumericPath=path.join(path.dirname(numericPath),"worker-numeric.json");
+  if(workerReceipt) {
+    evidence.workerReceipt=workerReceipt;
+    await writeWorkerDiagnostics(workerNumericPath,workerReceipt.summary()).catch(()=>{});
+  }
 	let failure;
 	let result;
   let packetProof;
@@ -245,6 +253,11 @@ async function runCase(performanceCase, executionMode) {
     await checkpoint.enter(7);
     packetProof.start();
 		state.phase = "measurement";
+    if(workerReceipt) {
+      // Thread enumeration stays outside the fixed 61 server-counter observations.
+      await workerReceipt.observe(await readLinuxProcessTree(child.pid),child.pid);
+      await writeWorkerDiagnostics(workerNumericPath,workerReceipt.summary()).catch(()=>{});
+    }
 		const measurementStartedAt = Date.now();
     const measurementMonotonicStart = performance.now();
     const counterClock = new ServerCounterClock();
@@ -263,6 +276,11 @@ async function runCase(performanceCase, executionMode) {
     measured.packet_observation_window = {...phaseWindow};
     measured.wall_monotonic_difference_ms = Math.abs((measurementEndedAt-measurementStartedAt)-(performance.now()-measurementMonotonicStart));
     Object.assign(checkpoint.result,measured);
+    if(workerReceipt) {
+      // Bind the final existing owned-tree snapshot and recheck its live process identity.
+      await workerReceipt.observe(evidence.samples.at(-1).processes,child.pid);
+      await writeWorkerDiagnostics(workerNumericPath,workerReceipt.summary()).catch(()=>{});
+    }
     await checkpoint.enter(8);
     const packets = packetProof.snapshot(phaseWindow);
     checkpoint.result.proof.packets = packets;
@@ -485,7 +503,7 @@ async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
 	files.measurement = `${evidence.prefix}-measurement.json`;
 	await writeFile(
 		files.measurement,
-		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples }, null, 2)}\n`,
+		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples, ...(evidence.workerReceipt?{workerReceipt:evidence.workerReceipt.privateState()}:{}) }, null, 2)}\n`,
 		{ flag: "wx" },
 	);
 	await writeFile(
