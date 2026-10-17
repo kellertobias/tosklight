@@ -80,6 +80,7 @@ jobs:
                  'rustc':subprocess.check_output(['rustc','-Vv'],text=True),
                  'source_sha256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sources if p and pathlib.Path(p).is_file()},
                  'binaries':{p.name:{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in [apps[0],root/'light-headless',root/'viz-renderer']}}
+          assert proof['source_sha256'] and len(proof['source_sha256']) == sum(bool(p) and pathlib.Path(p).is_file() for p in sources)
           (pathlib.Path(os.environ['OUT'])/'public'/'provenance.json').write_text(json.dumps(proof,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:f.write(f'PROOF_APPIMAGE={apps[0].resolve()}\n')
           PYTHON
