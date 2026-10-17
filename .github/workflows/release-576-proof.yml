@@ -81,7 +81,7 @@ jobs:
           assert len(cores)==2, 'default proof requires two guest topology cores'
           PYTHON
           npm ci >"$OUT/npm-ci.log" 2>&1
-          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs
+          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs tools/desktop-performance-576-pool.test.mjs
           cargo test --locked -p light-dynamics --lib
           cargo test --locked -p light-engine --lib parallel
       - name: Build exact canonical release Control and sidecars
@@ -222,6 +222,56 @@ jobs:
           printf 'proof_exit=%s validation_exit=%s\n' "$proof_status" "$validation_status" >"$OUT/stage-default-status.log"
           test "$proof_status" -eq 0
           test "$validation_status" -eq 0
+      - name: Trace default-policy Control pool coordination on unchanged 576 workload
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: all
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
+          RUST_LOG: light_headless_runtime=info,light_output=info,light_engine=info,tower_http=info
+        run: |
+          set -euo pipefail
+          test "${LIGHT_OUTPUT_WORKERS+x}" != x
+          private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-trace"
+          directory="$OUT/public/trace"
+          mkdir -p "$directory"
+          # Full tracing adds observer work; this separate run supplies attribution.
+          # Original Control acceptance and Stage functional gates above stay unchanged.
+          set +e
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode control --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/trace.stdout.log" 2>"$OUT/trace.stderr.log"
+          trace_status=$?
+          set -e
+          test "$trace_status" -le 1
+          node --input-type=module - "$directory" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
+          import { validateTickTraceDiagnostics } from './tools/desktop-performance-576-tick-trace.mjs';
+          import { validateCpuDiagnostics } from './tools/desktop-performance-576-cpu.mjs';
+          import { validatePoolDiagnostics } from './tools/desktop-performance-576-pool.mjs';
+          import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
+          const directory = process.argv[2];
+          const read = async name => JSON.parse(await readFile(`${directory}/${name}`, 'utf8'));
+          const proof = validateNumericProof(await read('desktop-576-proof-numeric.json'));
+          assert.equal(proof.proof_mode_code, 1);
+          for (const name of ['complete','workload_available','measurement_available','udp_integrity_passed','interaction_passed','sheet_liveness_passed','stage_absence_passed','cleanup_complete']) assert.equal(proof[name], 1, name);
+          assert.equal(proof.send_errors, 0);
+          const receipt = validateWorkerDiagnostics(await read('worker-numeric.json'));
+          assert.equal(receipt.expected_workers, 2);
+          for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
+          assert.equal(receipt.valid_observations, 2);
+          const trace = validateTickTraceDiagnostics(await read('tick-trace-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','join_complete','health_deadline_comparison_available','completed_frames_comparison_available']) assert.equal(trace[name], 1, name);
+          assert(Math.abs(trace.completed_frame_delta) <= 1);
+          assert(Math.abs(trace.health_deadline_delta) <= 1);
+          const cpu = validateCpuDiagnostics(await read('cpu-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','join_complete','cpu_complete','cpu_available']) assert.equal(cpu[name], 1, name);
+          const pool = validatePoolDiagnostics(await read('pool-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','join_complete']) assert.equal(pool[name], 1, name);
+          JAVASCRIPT
       - name: Publish closed numeric proof only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -235,4 +285,10 @@ jobs:
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/desktop-576-proof-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/phase-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/worker-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/desktop-576-proof-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/phase-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/worker-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/tick-trace-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/cpu-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/pool-numeric.json
           if-no-files-found: error

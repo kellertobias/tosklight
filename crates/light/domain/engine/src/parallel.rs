@@ -118,15 +118,24 @@ impl light_dynamics::InstanceWorkers for OutputPool {
             return;
         }
         let coverage = diagnostics::current();
+        let timing = coverage
+            .as_ref()
+            .map(|_| diagnostics::InstallTiming::begin());
         self.pool.install(|| {
             (0..count)
                 .into_par_iter()
                 .with_max_len(1)
                 .for_each(|index| match &coverage {
-                    Some(coverage) => coverage.job(|| run(index)),
+                    Some(coverage) => timing
+                        .as_ref()
+                        .expect("covered install")
+                        .job(|_| coverage.job(|| run(index))),
                     None => run(index),
                 })
         });
+        if let Some(timing) = timing {
+            timing.finish(coverage.as_ref().expect("covered install"));
+        }
     }
 }
 
@@ -177,20 +186,37 @@ pub fn run_ordered<W: Send, R: Send>(
         .iter_mut()
         .map(parking_lot::Mutex::new)
         .collect::<Vec<_>>();
-    pool.pool.install(|| {
+    let timing = coverage
+        .as_ref()
+        .map(|_| diagnostics::InstallTiming::begin());
+    let result = pool.pool.install(|| {
         (0..chunks)
             .into_par_iter()
             .with_max_len(1)
             .map(|chunk| {
                 let index = rayon::current_thread_index().expect("a pool thread");
-                let mut worker = slots[index].lock();
                 match &coverage {
-                    Some(coverage) => coverage.job(|| run(&mut worker, chunk)),
-                    None => run(&mut worker, chunk),
+                    Some(coverage) => {
+                        let timing = timing.as_ref().expect("covered install");
+                        timing.job(|_| {
+                            let lock_started = std::time::Instant::now();
+                            let mut worker = slots[index].lock();
+                            timing.lock_acquired(lock_started);
+                            coverage.job(|| run(&mut worker, chunk))
+                        })
+                    }
+                    None => {
+                        let mut worker = slots[index].lock();
+                        run(&mut worker, chunk)
+                    }
                 }
             })
             .collect()
-    })
+    });
+    if let Some(timing) = timing {
+        timing.finish(coverage.as_ref().expect("covered install"));
+    }
+    result
 }
 
 #[cfg(test)]

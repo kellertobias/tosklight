@@ -70,6 +70,7 @@ impl Summary {
     }
     fn worker(&mut self, index: usize, sample: WorkerSummary) {
         let target = &mut self.workers[index];
+        target.pool_timing.merge(sample.pool_timing);
         add(&mut target.calls, sample.calls);
         add(&mut target.jobs, sample.jobs);
         add(&mut target.cpu_valid_jobs, sample.cpu_valid_jobs);
@@ -97,6 +98,17 @@ impl Summary {
             substage_calls=?self.sub_calls,substage_wall_nanos=?self.sub_wall,substage_cpu_valid_calls=?self.sub_valid,substage_cpu_unavailable_calls=?self.sub_unavailable,substage_cpu_invalid_calls=?self.sub_invalid,substage_cpu_nanos=?self.sub_cpu,substage_counter_read_nanos=?self.sub_read,
             worker_calls=?values(|w|w.calls),worker_jobs=?values(|w|w.jobs),worker_cpu_valid_jobs=?values(|w|w.cpu_valid_jobs),worker_cpu_unavailable_jobs=?values(|w|w.cpu_unavailable_jobs),worker_cpu_invalid_jobs=?values(|w|w.cpu_invalid_jobs),worker_cpu_nanos=?values(|w|w.cpu_nanos),worker_counter_read_nanos=?values(|w|w.counter_read_nanos),worker_job_wall_nanos=?values(|w|w.job_wall_nanos),worker_job_wall_max_nanos=?values(|w|w.job_wall_max_nanos),worker_section_to_job_max_nanos=?values(|w|w.section_to_job_max_nanos),worker_uncovered_sort_calls=?values(|w|w.uncovered_sort_calls),
             "output preparation cpu summary");
+        let pool = |f: fn(&light_engine::parallel::diagnostics::PoolTimingSummary) -> u64| {
+            self.workers.each_ref().map(|w| f(&w.pool_timing))
+        };
+        tracing::info!(schema_version=1u8,
+            install_calls=?pool(|p|p.install_calls),install_jobs=?pool(|p|p.install_jobs),
+            install_empty_calls=?pool(|p|p.install_empty_calls),install_invalid_calls=?pool(|p|p.install_invalid_calls),
+            install_wall_nanos=?pool(|p|p.install_wall_nanos),submit_to_first_entry_nanos=?pool(|p|p.submit_to_first_entry_nanos),
+            submit_to_entry_max_nanos=?pool(|p|p.submit_to_entry_max_nanos),last_exit_to_return_nanos=?pool(|p|p.last_exit_to_return_nanos),
+            last_exit_to_return_max_nanos=?pool(|p|p.last_exit_to_return_max_nanos),scratch_lock_calls=?pool(|p|p.scratch_lock_calls),
+            scratch_lock_wall_nanos=?pool(|p|p.scratch_lock_wall_nanos),scratch_lock_wall_max_nanos=?pool(|p|p.scratch_lock_wall_max_nanos),
+            "output preparation pool timing");
     }
 }
 /// !Send and synchronous: never carry a CPU sample across a future poll boundary.
@@ -209,6 +221,19 @@ mod tests {
             job_wall_max_nanos: 20,
             section_to_job_max_nanos: 7,
             uncovered_sort_calls: 1,
+            pool_timing: light_engine::parallel::diagnostics::PoolTimingSummary {
+                install_calls: 1,
+                install_jobs: 2,
+                install_wall_nanos: 31,
+                submit_to_first_entry_nanos: 5,
+                submit_to_entry_max_nanos: 8,
+                last_exit_to_return_nanos: 3,
+                last_exit_to_return_max_nanos: 3,
+                scratch_lock_calls: 2,
+                scratch_lock_wall_nanos: 4,
+                scratch_lock_wall_max_nanos: 3,
+                ..Default::default()
+            },
             ..WorkerSummary::default()
         };
         summary.worker(0, worker);
@@ -220,6 +245,17 @@ mod tests {
         assert_eq!(summary.workers[0].section_to_job_max_nanos, 7);
         assert_eq!(summary.workers[0].uncovered_sort_calls, 2);
         assert_eq!(summary.workers[1].calls, 0);
+        let pool = summary.workers[0].pool_timing;
+        assert_eq!(pool.install_calls, 2);
+        assert_eq!(pool.install_jobs, 4);
+        assert_eq!(pool.install_wall_nanos, 62);
+        assert_eq!(pool.submit_to_first_entry_nanos, 10);
+        assert_eq!(pool.submit_to_entry_max_nanos, 8);
+        assert_eq!(pool.last_exit_to_return_nanos, 6);
+        assert_eq!(pool.last_exit_to_return_max_nanos, 3);
+        assert_eq!(pool.scratch_lock_calls, 4);
+        assert_eq!(pool.scratch_lock_wall_nanos, 8);
+        assert_eq!(pool.scratch_lock_wall_max_nanos, 3);
     }
     #[test]
     fn absent_frame_has_no_cpu_scope_and_preserves_result() {
