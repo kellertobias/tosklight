@@ -11,6 +11,7 @@ import { artifactPaths } from "./artifact-paths.mjs";
 import { capturePerformanceSample, ServerCounterClock } from "./desktop-performance-576-clock.mjs";
 import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
+import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
@@ -65,6 +66,7 @@ async function retainPhaseDiagnostics(file, window) {
     await writeTickTraceDiagnostics(path.join(path.dirname(numericPath), "tick-trace-numeric.json"), file, window, {
       healthDeadlineMisses: checkpoint.result.deadline_miss_delta, completedFrames: checkpoint.result.completed_frame_delta,
     }).catch(() => {});
+    await writeCpuDiagnostics(path.join(path.dirname(numericPath), "cpu-numeric.json"), file, window).catch(() => {});
   }
 }
 const checkpoint = new ProofCheckpoint(numericPath);
