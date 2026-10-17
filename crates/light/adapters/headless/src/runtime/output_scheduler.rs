@@ -102,7 +102,9 @@ pub(super) use dynamic_projection::{
 pub(in crate::runtime) use dynamic_projection::{
     LiveFamilyAdapters, ProgrammerReconciliationCache, dynamic_output_frame,
 };
-pub(super) use dynamic_projection::{dynamic_contributions, dynamic_projection};
+pub(super) use dynamic_projection::{
+    dynamic_contributions, dynamic_projection, observer_dynamic_projection,
+};
 use dynamic_reconciliation::{
     reconcile_cue_dynamics, reconcile_dynamic_playbacks, reconcile_programmer_dynamics,
 };

@@ -9,6 +9,8 @@ mod activation;
 mod family_adapters;
 mod finalization;
 mod health_sample;
+mod observer_projection;
+mod observer_projection_diagnostics;
 /// TL-548 C4 hook: Live handles for the Pending episode worker (own file).
 mod pending_episode_sources;
 mod preload_commit;
@@ -536,46 +538,6 @@ impl OutputResource {
     ) -> light_engine::ResolvedValues {
         self.visualization_dynamic_projection(extra_programmer_values, projected)
             .0
-    }
-
-    pub(in crate::runtime) fn visualization_dynamic_projection(
-        &self,
-        extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
-        _projected: bool,
-    ) -> (
-        light_engine::ResolvedValues,
-        light_dynamics::DynamicRuntimeSnapshot,
-        Vec<light_dynamics::DynamicRuntimeSample>,
-    ) {
-        // Visualization is observational. Sampling can retire completed release
-        // transitions, so always operate on a clone and leave the authoritative
-        // output scheduler responsible for mutating and publishing runtime state.
-        let snapshot = self.engine.snapshot();
-        let mut visualization_runtime =
-            light_dynamics::DynamicRuntime::with_programming_contract_support(
-                self.engine.supported_programming_contract(),
-            );
-        visualization_runtime
-            .install_definitions(snapshot.dynamics.iter().cloned())
-            .expect("Engine snapshot contains validated Dynamic definitions");
-        visualization_runtime
-            .restore_snapshot(self.dynamics.lock().snapshot())
-            .expect("live Dynamic runtime snapshot remains restorable");
-        let visualization_runtime = Mutex::new(visualization_runtime);
-        let (sampled, runtime_samples) = output_scheduler::dynamic_projection(
-            &self.engine,
-            &visualization_runtime,
-            &self.speed_groups,
-            &self.rate,
-            extra_programmer_values,
-        );
-        let runtime_snapshot = visualization_runtime.lock().output_projection_snapshot();
-        (
-            self.engine
-                .resolved_values_with_contribution_batches(&sampled),
-            runtime_snapshot,
-            runtime_samples,
-        )
     }
 
     pub(in crate::runtime) fn dynamic_programmer_values(

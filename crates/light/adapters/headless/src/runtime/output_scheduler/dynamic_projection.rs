@@ -817,6 +817,31 @@ pub(in crate::runtime) fn dynamic_projection(
     (batches, samples)
 }
 
+/// Observational projection with the post-sampling runtime already captured by that call.
+/// The private observer runtime is unchanged between this capture and returning its batches.
+pub(in crate::runtime) fn observer_dynamic_projection(
+    engine: &Engine,
+    dynamics: &Mutex<light_dynamics::DynamicRuntime>,
+    speed_groups: &Mutex<[light_control::speed::SpeedGroupController; 5]>,
+    rate: &AtomicU16,
+    extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+) -> (
+    Vec<ContributionBatch>,
+    light_dynamics::DynamicRuntimeSnapshot,
+    Vec<light_dynamics::DynamicRuntimeSample>,
+) {
+    let (batches, _, _, after_runtime, samples) = dynamic_contributions_with_auto_off(
+        engine,
+        dynamics,
+        speed_groups,
+        rate,
+        extra_programmer_values,
+        None,
+        false,
+    );
+    (batches, after_runtime, samples)
+}
+
 pub(super) fn dynamic_contributions_with_auto_off(
     engine: &Engine,
     dynamics: &Mutex<light_dynamics::DynamicRuntime>,
@@ -1100,3 +1125,6 @@ fn dynamic_tick_is_idle_from_presence(
 
 #[cfg(test)]
 mod tick_source_tests;
+
+#[cfg(test)]
+mod observer_projection_tests;

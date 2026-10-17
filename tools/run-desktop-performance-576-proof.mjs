@@ -14,6 +14,7 @@ import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.
 import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
 import { writePoolDiagnostics } from "./desktop-performance-576-pool.mjs";
 import { writeApiDiagnostics } from "./desktop-performance-576-api.mjs";
+import { writeObserverDiagnostics } from "./desktop-performance-576-observer.mjs";
 import { expectedWorkerReceiptCount, WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
@@ -71,6 +72,7 @@ async function retainPhaseDiagnostics(file, window) {
     }).catch(() => {});
     await writeCpuDiagnostics(path.join(path.dirname(numericPath), "cpu-numeric.json"), file, window).catch(() => {});
     await writePoolDiagnostics(path.join(path.dirname(numericPath), "pool-numeric.json"), file, window).catch(() => {});
+    await writeObserverDiagnostics(path.join(path.dirname(numericPath), "observer-numeric.json"), file, window).catch(() => {});
   }
 }
 const checkpoint = new ProofCheckpoint(numericPath);
