@@ -18,9 +18,12 @@ const require_ = (ok, message) => {
 	if (!ok) throw new Error(`Runtime symbols unavailable: ${message}`);
 };
 const fingerprint = (s) =>
-	`${s.dev}:${s.ino}:${s.size}:${s.mode}:${s.uid}:${s.mtimeMs}:${s.ctimeMs}`;
+	`${s.dev}:${s.ino}:${s.size}:${s.mode}:${s.uid}:${s.mtimeNs ?? s.mtimeMs}:${s.ctimeNs ?? s.ctimeMs}`;
 const immutable = (s) =>
-	s.isFile() && !s.isSymbolicLink?.() && s.uid === 0 && !(s.mode & 0o022);
+	s.isFile() &&
+	!s.isSymbolicLink?.() &&
+	BigInt(s.uid) === 0n &&
+	!(BigInt(s.mode) & 0o022n);
 const cleanPath = (p) =>
 	path.isAbsolute(p) && path.normalize(p) === p && !/[\x00-\x20\\]/u.test(p);
 
@@ -30,10 +33,10 @@ async function boundedRead(io, filename, cap, elf = false) {
 		constants.O_RDONLY | constants.O_NOFOLLOW,
 	);
 	try {
-		const before = await file.stat();
+		const before = await file.stat({ bigint: true });
 		if (elf)
 			require_(
-				immutable(before) && before.size <= cap,
+				immutable(before) && BigInt(before.size) <= BigInt(cap),
 				"runtime/debug ownership or size",
 			);
 		const chunks = [];
@@ -47,7 +50,7 @@ async function boundedRead(io, filename, cap, elf = false) {
 			chunks.push(buffer.subarray(0, bytesRead));
 		}
 		const bytes = Buffer.concat(chunks);
-		const after = await file.stat();
+		const after = await file.stat({ bigint: true });
 		if (elf) {
 			require_(
 				bytes.subarray(0, 4).equals(Buffer.from([127, 69, 76, 70])),
@@ -147,7 +150,7 @@ export async function verifyRuntimeSymbols({ root, binding }, injected = {}) {
 		const runtime = await io.realpath(mappedPath);
 		require_(cleanPath(runtime), "unsafe resolved runtime path");
 		const checkNamed = async (filename, metadata) => {
-			const named = await io.lstat(filename);
+			const named = await io.lstat(filename, { bigint: true });
 			require_(
 				immutable(named) &&
 					fingerprint(named) === fingerprint(metadata) &&

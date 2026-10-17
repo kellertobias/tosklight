@@ -252,3 +252,62 @@ test("in-object symbols do not bypass mapped identity or immutable ownership che
 		await assert.rejects(f.run(), /ownership|mapped runtime identity/);
 	}
 });
+
+function precisionFixture({
+	changedNamedNanoseconds = false,
+	exactInode = 9007199254740993n,
+} = {}) {
+	const f = fixture();
+	f.maps = line("1000", LIBC, exactInode) + line("2000", LOADER, 6);
+	f.files.get(LIBC).ino = exactInode;
+	const convert = (value, options, named = false) => {
+		if (!options?.bigint) return { ...value, ino: Number(value.ino) };
+		const result = { ...value };
+		for (const key of [
+			"dev",
+			"ino",
+			"size",
+			"mode",
+			"uid",
+			"mtimeMs",
+			"ctimeMs",
+		])
+			result[key] = BigInt(value[key]);
+		result.mtimeNs = 1000001n + (named && changedNamedNanoseconds ? 1n : 0n);
+		result.ctimeNs = 1000001n;
+		return result;
+	};
+	const originalOpen = f.io.open;
+	f.io.open = async (...args) => {
+		const file = await originalOpen(...args);
+		const originalStat = file.stat;
+		file.stat = async (options) => convert(await originalStat(), options);
+		return file;
+	};
+	f.io.lstat = async (name, options) =>
+		convert(f.files.get(name), options, true);
+	return f;
+}
+
+test("exact bigint stat and named identity preserve odd mapped inodes above Number precision", async () => {
+	const f = precisionFixture();
+	const receipt = await f.run();
+	assert.equal(receipt.library_count, 2);
+});
+
+test("named nanosecond identity change is rejected even within the same millisecond", async () => {
+	const f = precisionFixture({ changedNamedNanoseconds: true, exactInode: 5n });
+	await assert.rejects(f.run(), /ELF identity changed/);
+});
+
+test("bigint metadata retains root ownership, write-mode and size guards", async () => {
+	for (const patch of [
+		{ uid: 1000 },
+		{ mode: 0o100666 },
+		{ size: 256 * 1024 * 1024 + 1 },
+	]) {
+		const f = precisionFixture();
+		Object.assign(f.files.get(LIBC), patch);
+		await assert.rejects(f.run(), /ownership or size/);
+	}
+});
