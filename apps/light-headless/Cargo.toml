@@ -30,6 +30,7 @@ light-wire.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 

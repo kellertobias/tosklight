@@ -11,8 +11,6 @@
 //! worker attribution. A worker count alone does not reproduce
 //! full-desktop Linux renderer contention. No UI, renderer, network, output
 //! deadline gate or prior Linux show's random logical-head identity is reproduced here.
-mod legacy_equivalence;
-
 use super::*;
 use crate::runtime::output_scheduler::LiveOutputBench;
 use crate::runtime::output_scheduler::dynamic_projection::physical_adapter::color::profiles::patched;

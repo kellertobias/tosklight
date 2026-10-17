@@ -176,7 +176,14 @@ impl Arguments {
     pub fn parse(arguments: impl IntoIterator<Item = String>) -> Result<ParseOutcome, String> {
         let mut parsed = Self::default();
         let mut arguments = arguments.into_iter();
+        let mut non_pair_option = false;
         while let Some(argument) = arguments.next() {
+            if !matches!(
+                argument.as_str(),
+                "--legacy-contract-pair" | "--legacy-contract-pair-output"
+            ) {
+                non_pair_option = true;
+            }
             match argument.as_str() {
                 "--profile" => {
                     parsed.profiles = parse_profiles(&required_value(&mut arguments, &argument)?)?
@@ -266,6 +273,9 @@ impl Arguments {
                 _ if parsed.semantic.parse_option(&argument, &mut arguments)? => {}
                 _ => return Err(format!("unknown argument: {argument}")),
             }
+        }
+        if parsed.semantic.legacy_contract_pair.is_some() && non_pair_option {
+            return Err("pair mode accepts only its input and private output options".into());
         }
         if parsed.sustained_show && parsed.headless_stress_fixtures.is_some() {
             return Err(
@@ -533,5 +543,76 @@ mod tests {
             BenchmarkProfile::HardFloor.config().expectation,
             Expectation::RequiredFloor
         );
+    }
+}
+
+#[cfg(test)]
+mod legacy_pair_arguments_tests {
+    use super::*;
+    fn parse(extra: &[&str]) -> Result<ParseOutcome, String> {
+        let mut values = vec![
+            "--legacy-contract-pair",
+            "input.json",
+            "--legacy-contract-pair-output",
+            "private.json",
+        ];
+        values.extend_from_slice(extra);
+        Arguments::parse(values.into_iter().map(str::to_owned))
+    }
+    #[test]
+    fn legacy_pair_is_explicit_and_exclusive_even_for_default_valued_options() {
+        let ParseOutcome::Run(arguments) = parse(&[]).unwrap() else {
+            panic!("run expected")
+        };
+        assert_eq!(
+            arguments.semantic.legacy_contract_pair.as_deref(),
+            Some("input.json")
+        );
+        assert_eq!(
+            arguments.semantic.legacy_contract_pair_output.as_deref(),
+            Some("private.json")
+        );
+        for options in [
+            vec!["--semantic"],
+            vec!["--semantic-workload", "workload"],
+            vec!["--profile", "hard_floor"],
+            vec!["--rate-hz", "40"],
+            vec!["--output-workers", "2"],
+            vec!["--digest-ticks", "4"],
+            vec!["--start-latency"],
+            vec!["--no-publish"],
+            vec!["--mutation-gate"],
+            vec!["--patch-gate"],
+            vec!["--tracking-hz", "0"],
+            vec!["--readout-consumers", "0"],
+            vec!["--headless-stress-fixtures", "400"],
+            vec!["--legacy-contract-pair", "duplicate"],
+        ] {
+            assert!(parse(&options).is_err(), "incompatible option accepted");
+        }
+        let prefix = [
+            "--output-workers",
+            "2",
+            "--legacy-contract-pair",
+            "input",
+            "--legacy-contract-pair-output",
+            "private",
+        ];
+        assert!(Arguments::parse(prefix.into_iter().map(str::to_owned)).is_err());
+    }
+    #[test]
+    fn legacy_pair_requires_both_nonempty_paths_and_preserves_ordinary_defaults() {
+        for options in [
+            vec!["--legacy-contract-pair", "input"],
+            vec!["--legacy-contract-pair-output", "private"],
+            vec!["--legacy-contract-pair", ""],
+            vec!["--legacy-contract-pair"],
+        ] {
+            assert!(Arguments::parse(options.into_iter().map(str::to_owned)).is_err());
+        }
+        let ParseOutcome::Run(arguments) = Arguments::parse(Vec::<String>::new()).unwrap() else {
+            panic!("run expected")
+        };
+        assert_eq!(arguments, Arguments::default());
     }
 }

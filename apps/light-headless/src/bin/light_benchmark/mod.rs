@@ -2,6 +2,7 @@ mod arguments;
 mod digest;
 mod digest_lifecycle;
 mod headless_stress_show;
+mod legacy_contract_pair;
 mod loopback;
 mod metadata;
 mod mutation;
@@ -34,4 +35,8 @@ pub fn digest(arguments: &Arguments, ticks: u64) -> Result<serde_json::Value, St
 /// TL-641: `--start-latency` times one Start Now Dynamic gesture instead of a timed report.
 pub fn start_latency(arguments: &Arguments) -> Result<serde_json::Value, String> {
     start_latency::run(arguments)
+}
+
+pub fn legacy_contract_pair(arguments: &Arguments) -> Result<serde_json::Value, String> {
+    legacy_contract_pair::run(arguments)
 }

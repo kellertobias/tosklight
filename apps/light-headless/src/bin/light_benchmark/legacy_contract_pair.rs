@@ -1,8 +1,68 @@
-//! Pair A measures the enabled hybrid pipeline with equivalent legacy Intensity input.
-//! It does not measure active typed Color/Position lanes or replace the mixed576 acceptance.
-use super::*;
+//! Explicit production Live transaction comparison with equivalent Legacy Intensity input.
+//! This diagnostic excludes active typed lanes, UI, network delivery and ordered playback.
+mod cpu;
+mod input;
 mod observation;
-use light_core::AttributeKey;
+use input::Input;
+use light_core::{AttributeKey, FixtureId, ManualClock, SessionId};
+use light_dynamics::{
+    DynamicDefinition, DynamicDefinitionSnapshot, DynamicInstanceOverrides, DynamicReference,
+    DynamicRuntime, DynamicSemanticValue, Rational,
+};
+use light_engine::{Engine, EngineSnapshot, RenderOptions};
+use light_fixture::{PatchedFixture, apply_runtime_profile_compatibility};
+use light_headless_runtime::output_benchmark::{LiveOutputBench, LiveOutputFrame};
+use light_programmer::{DynamicProgrammerValueMutation, ProgrammerRegistry};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+};
+use uuid::Uuid;
+const STEP_MS: i64 = 25;
+const SLOTS: usize = 8064;
+fn repository() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+fn sha(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+fn rows<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+    value[key].as_array().expect("validated pair input array")
+}
+fn uuid(value: &Value) -> Uuid {
+    value
+        .as_str()
+        .and_then(|s| s.parse().ok())
+        .expect("validated pair input UUID")
+}
+#[derive(Clone, Copy)]
+struct ProbeFrames {
+    warmup: usize,
+    measured: usize,
+}
+impl ProbeFrames {
+    fn from_env() -> Result<Self, String> {
+        fn read(name: &str, default: usize, max: usize) -> Result<usize, String> {
+            let value = match std::env::var(name) {
+                Ok(s) => s.parse::<usize>().map_err(|_| "invalid pair frame count")?,
+                Err(std::env::VarError::NotPresent) => default,
+                Err(_) => return Err("invalid pair frame count".into()),
+            };
+            if !(1..=max).contains(&value) {
+                return Err("pair frame count outside bounded range".into());
+            }
+            Ok(value)
+        }
+        Ok(Self {
+            warmup: read("LIGHT_MIXED576_WARMUP_FRAMES", 4, 32)?,
+            measured: read("LIGHT_MIXED576_MEASURED_FRAMES", 32, 256)?,
+        })
+    }
+}
 use light_dynamics::{
     ActivationBoundary, ActivationPolicy, DynamicLane, DynamicLaneBody, DynamicLaneMode,
     DynamicRunMode, DynamicSpeed, DynamicTargetBinding, KeyframeConfiguration,
@@ -43,7 +103,7 @@ impl Authored {
             .map(|row| FixtureId(uuid(&row["target"])))
             .collect::<Vec<_>>();
         assert_eq!(targets.len(), 1184);
-        Self::new(input.fixtures(), targets)
+        Self::new(input.fixtures.clone(), targets)
     }
 }
 fn definition(index: usize, targets: Vec<FixtureId>) -> DynamicDefinition {
@@ -185,7 +245,7 @@ fn render(
     clock: &ManualClock,
     contract: u16,
     targets: usize,
-) -> super::super::super::super::LiveOutputFrame {
+) -> LiveOutputFrame {
     clock.advance_millis(STEP_MS);
     let frame = bench
         .render(RenderOptions::default(), &[])
@@ -203,7 +263,11 @@ fn oracle(authored: &Authored, frames: usize, witness: Option<&Path>) -> Vec<Val
             .enumerate()
             .map(|(contract, (bench, clock))| {
                 let frame = render(bench, clock, contract as u16, authored.target_count);
-                observe(bench, &frame.rendered, frame.hybrid)
+                let mut observed = observe(bench, &frame.rendered, frame.hybrid);
+                observed.metadata["runtime_work"] = serde_json::to_value(frame.work).unwrap();
+                observed.metadata["dynamic_samples"] = json!(frame.dynamic_samples);
+                observed.metadata["change_lead_start"] = json!(frame.change_lead_start);
+                observed
             })
             .collect::<Vec<_>>();
         evidence.push(observation::evidence(tick, &observed, witness));
@@ -215,25 +279,33 @@ fn timed(authored: &Authored, contract: u16, frames: ProbeFrames) -> Value {
     for _ in 0..frames.warmup {
         drop(render(&bench, &clock, contract, authored.target_count));
     }
-    let mut capture = Vec::new();
-    let mut transaction = Vec::new();
-    let mut publication = Vec::new();
-    let mut render_drop = Vec::new();
+    let mut capture = Vec::with_capacity(frames.measured);
+    let mut transaction = Vec::with_capacity(frames.measured);
+    let mut publication = Vec::with_capacity(frames.measured);
+    let mut render_drop = Vec::with_capacity(frames.measured);
+    let cpu_before = cpu::process_cpu_begin();
     for _ in 0..frames.measured {
         clock.advance_millis(STEP_MS);
         let started = Instant::now();
         let frame = bench
             .render(RenderOptions::default(), &[])
             .unwrap_or_else(|_| panic!("legacy_pair_render_failed"));
-        assert_eq!(frame.hybrid, contract == 1);
-        assert_eq!(frame.dynamic_samples, authored.target_count);
-        capture.push(frame.capture.as_nanos() as u64);
-        transaction.push(frame.transaction.as_nanos() as u64);
-        publication.push(frame.publication.as_nanos() as u64);
+        let durations = (
+            frame.capture.as_nanos() as u64,
+            frame.transaction.as_nanos() as u64,
+            frame.publication.as_nanos() as u64,
+        );
+        let actual = (frame.hybrid, frame.dynamic_samples);
         drop(frame);
-        render_drop.push(started.elapsed().as_nanos() as u64);
+        let elapsed = started.elapsed().as_nanos() as u64;
+        assert_eq!(actual, (contract == 1, authored.target_count));
+        capture.push(durations.0);
+        transaction.push(durations.1);
+        publication.push(durations.2);
+        render_drop.push(elapsed);
     }
-    json!({"contract":contract,"hybrid":u8::from(contract==1),"workers":2,"measured_frames":frames.measured,"capture_nanos":distribution(capture),"transaction_nanos":distribution(transaction),"publication_nanos":distribution(publication),"render_and_drop_wall_nanos":distribution(render_drop)})
+    let process_cpu = cpu::process_cpu_finish(cpu_before);
+    json!({"process_cpu":process_cpu,"contract":contract,"hybrid":u8::from(contract==1),"workers":2,"measured_frames":frames.measured,"capture_nanos":distribution(capture),"transaction_nanos":distribution(transaction),"publication_nanos":distribution(publication),"render_and_drop_wall_nanos":distribution(render_drop)})
 }
 fn distribution(mut values: Vec<u64>) -> Value {
     values.sort_unstable();
@@ -256,7 +328,15 @@ fn legacy_intensity_uses_real_hybrid_dispatch_and_identical_native_forward_outpu
         let mut profile = light_fixture::read_fixture_package(&bytes).unwrap();
         apply_runtime_profile_compatibility(&mut profile);
         let id = FixtureId(Uuid::from_u128(0x775a_5000 + index as u128));
-        let mut fixture = patched(&profile, id, 1 + index as u16 * 32);
+        let definition = profile.resolved_definition(profile.modes[0].id).unwrap();
+        let mut fixture = super::sustained_show::patched_definition(
+            id,
+            Some(index as u32 + 1),
+            "pair oracle fixture".into(),
+            definition,
+        );
+        fixture.universe = Some(1);
+        fixture.address = Some(1 + index as u16 * 32);
         fixture.fixture_number = Some(index as u32 + 1);
         targets.push(id);
         fixtures.push(fixture);
@@ -269,30 +349,35 @@ fn legacy_intensity_uses_real_hybrid_dispatch_and_identical_native_forward_outpu
         "wave_must_animate_actual_output"
     );
 }
-#[test]
-#[ignore = "private equivalent legacy576 pair; requires explicit root-authorized quiet window"]
-fn manual_legacy576_contract_zero_and_one_pipeline_tax() {
+pub(super) fn run(arguments: &super::Arguments) -> Result<Value, String> {
+    let config = &arguments.semantic;
+    let source = config
+        .legacy_contract_pair
+        .as_deref()
+        .ok_or("pair input required")?;
     let destination = PathBuf::from(
-        std::env::var("LIGHT_LEGACY_EQUIVALENCE_REPORT").expect("private evidence path required"),
+        config
+            .legacy_contract_pair_output
+            .as_deref()
+            .ok_or("pair output required")?,
     );
-    let canonical = repository().join(".artifacts").canonicalize().unwrap();
-    assert!(
-        destination.is_absolute()
-            && destination
-                .parent()
-                .unwrap()
-                .canonicalize()
-                .unwrap()
-                .starts_with(canonical)
-    );
-    assert!(!destination.exists(), "private_evidence_already_exists");
-    assert!(
-        !destination.with_extension("mismatch.json").exists(),
-        "private_mismatch_already_exists"
-    );
-    let input = Input::load();
+    let canonical = repository()
+        .join(".artifacts")
+        .canonicalize()
+        .map_err(|_| "pair artifact root unavailable")?;
+    if !destination.is_absolute()
+        || destination
+            .parent()
+            .and_then(|p| p.canonicalize().ok())
+            .is_none_or(|p| !p.starts_with(&canonical))
+        || destination.exists()
+        || destination.with_extension("mismatch.json").exists()
+    {
+        return Err("invalid private pair output destination".into());
+    }
+    let input = Input::load(Path::new(source))?;
     let authored = Authored::from_input(&input);
-    let frames = ProbeFrames::from_env();
+    let frames = ProbeFrames::from_env()?;
     let evidence = oracle(
         &authored,
         frames.warmup + frames.measured,
@@ -308,8 +393,7 @@ fn manual_legacy576_contract_zero_and_one_pipeline_tax() {
     }
     let private = json!({"input_sha256":input.digest,"authored_definitions":authored.definitions,"fixtures":authored.fixtures,"oracle":evidence,"timing":rounds});
     write_private(&destination, &private);
-    println!(
-        "{}",
-        json!({"schema_version":1,"workload_code":1,"fixtures":576,"occupied_slots":SLOTS,"legacy_intensity_addresses":authored.target_count,"controllers":authored.definitions.len(),"oracle_frames":frames.warmup+frames.measured,"oracle_passed":1,"workers":2,"step_millis":STEP_MS,"rounds":3,"captures_forward_during_timing":0,"fingerprints_during_timing":0,"active_typed_lanes":0,"full_576_acceptance_claimed":0,"cfg_test_observers_present":1,"test_harness_timing_only":1,"production_overhead_claimed":0,"publication_enabled":0,"network_delivery_included":0,"ordered_playback_included":0,"cases":rounds})
-    );
+    Ok(
+        json!({"schema_version":1,"workload_code":1,"fixtures":576,"occupied_slots":SLOTS,"legacy_intensity_addresses":authored.target_count,"controllers":authored.definitions.len(),"oracle_frames":frames.warmup+frames.measured,"oracle_passed":1,"workers":2,"step_millis":STEP_MS,"rounds":3,"captures_forward_during_timing":0,"fingerprints_during_timing":0,"active_typed_lanes":0,"full_576_acceptance_claimed":0,"cfg_test_observers_present":0,"test_harness_timing_only":0,"production_runtime_path":1,"requirements_observer_available":0,"publication_enabled":0,"network_delivery_included":0,"ordered_playback_included":0,"cases":rounds}),
+    )
 }

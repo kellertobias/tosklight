@@ -76,7 +76,7 @@ pub(super) fn observe(
             json!({"universes":universes,"patched":patched,"values":values,"heads":heads,"physical":physical,"points":sorted_debug(frame.points.iter()),"mounts":sorted_debug(frame.mounts.mounts().iter()),"routes":serde_json::to_value(frame.routes.as_ref()).unwrap()}),
         ),
         metadata: canonical(
-            json!({"generation":frame.generation,"revision":frame.revision,"sampled_at":frame.sampled_at,"diagnostics":diagnostics,"color":bench.readout_digest(frame),"hybrid":hybrid,"requirements":hybrid.then(||bench.test_take_requirement_rows())}),
+            json!({"generation":frame.generation,"revision":frame.revision,"sampled_at":frame.sampled_at,"diagnostics":diagnostics,"color":bench.readout_digest(frame),"hybrid":hybrid,"requirements_observer_available":0}),
         ),
     }
 }
