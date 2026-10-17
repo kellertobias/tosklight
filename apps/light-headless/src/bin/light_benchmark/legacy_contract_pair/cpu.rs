@@ -1,8 +1,10 @@
 //! Whole-process CPU boundaries for measured loops, excluding oracle, setup and warmup.
 //! Linux TGID stat sums all threads; USER_HZ is provided by the invoking Linux runtime.
 use serde_json::{Value, json};
+#[cfg(any(target_os = "linux", test))]
 const PROCESS_STAT_MAX_BYTES: usize = 16 * 1024;
 
+#[cfg(any(target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct ProcessCpuSnapshot {
     pid: u32,
@@ -12,6 +14,7 @@ pub(super) struct ProcessCpuSnapshot {
     thread_count: u64,
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn unsigned_stat_field(text: &str) -> Result<u64, &'static str> {
     if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err("process stat field is not an unsigned decimal");
@@ -19,6 +22,7 @@ fn unsigned_stat_field(text: &str) -> Result<u64, &'static str> {
     text.parse().map_err(|_| "process stat field overflow")
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn parse_process_stat(text: &str) -> Result<ProcessCpuSnapshot, &'static str> {
     if text.len() > PROCESS_STAT_MAX_BYTES {
         return Err("process stat byte cap exceeded");
@@ -60,6 +64,7 @@ fn parse_process_stat(text: &str) -> Result<ProcessCpuSnapshot, &'static str> {
     })
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn parse_process_user_hz(text: &str) -> Result<u64, &'static str> {
     let hz = unsigned_stat_field(text)?;
     if !(1..=1_000_000).contains(&hz) {
@@ -68,6 +73,7 @@ fn parse_process_user_hz(text: &str) -> Result<u64, &'static str> {
     Ok(hz)
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn process_cpu_delta(
     before: ProcessCpuSnapshot,
     after: ProcessCpuSnapshot,
@@ -111,6 +117,9 @@ fn linux_process_cpu_snapshot() -> ProcessCpuSnapshot {
     assert_eq!(snapshot.pid, std::process::id(), "own process PID changed");
     snapshot
 }
+
+#[cfg(not(any(target_os = "linux", test)))]
+pub(super) type ProcessCpuSnapshot = ();
 
 pub(super) fn process_cpu_begin() -> Option<(ProcessCpuSnapshot, u64)> {
     #[cfg(target_os = "linux")]
