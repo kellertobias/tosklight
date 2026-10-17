@@ -790,15 +790,27 @@ describe("Media authoritative profile homes", () => {
 	});
 	afterEach(cleanup);
 	it("mounts real Window and Surface with empty Normal and permits first Play, volume and Dimmer edits", async () => {
+		const normalRead = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(normalRead.promise);
 		const view = render(
 			createElement(MediaPaneWindow, {
 				mediaPaneState: { serverId: "server", layerId: "layer-8" },
 			}),
 		);
 		const ui = within(view.container);
-		await waitFor(() =>
-			expect(ui.getByRole("button", { name: "Play looped" })).toBeEnabled(),
-		);
+		// Prove the authority transition explicitly instead of polling the whole
+		// accessible Window while React's resolved-read commit is still queued.
+		const play = ui.getByRole("button", { name: "Play looped" });
+		expect(play).toBeDisabled();
+		expect(ui.getByRole("slider", { name: "Volume" })).toBeDisabled();
+		expect(ui.getByRole("slider", { name: "Dimmer" })).toBeDisabled();
+		expect(mediaReadout.submit).not.toHaveBeenCalled();
+		await act(async () => {
+			normalRead.resolve({ ...mediaReadout.output!, values: [] });
+		});
+		expect(play).toBeEnabled();
+		expect(ui.getByRole("slider", { name: "Volume" })).toBeEnabled();
+		expect(ui.getByRole("slider", { name: "Dimmer" })).toBeEnabled();
 		expect(ui.getByRole("slider", { name: "Dimmer" })).toHaveValue("0");
 		expect(ui.getByRole("slider", { name: "Volume" })).toHaveValue("100");
 		expect(mediaReadout.submit).not.toHaveBeenCalled();
