@@ -334,18 +334,21 @@ impl FamilySample {
             role: FamilyTraceRole::Authored,
             occurrence,
         };
-        let mut leaves = vec![trace::FamilyTraceLeaf::Source(authored)];
-        if let Some(dependency) = dependency {
-            leaves.push(trace::FamilyTraceLeaf::Current(
-                FamilyTraceSource {
-                    role: FamilyTraceRole::CalculationDependency,
-                    occurrence: dependency.occurrence,
-                    ..authored
-                },
-                dependency.clone(),
-            ));
-        }
-        self.trace_sources = Some(leaves.into());
+        let sources: Arc<[trace::FamilyTraceLeaf]> = match dependency {
+            Some(dependency) => Arc::new([
+                trace::FamilyTraceLeaf::Source(authored),
+                trace::FamilyTraceLeaf::Current(
+                    FamilyTraceSource {
+                        role: FamilyTraceRole::CalculationDependency,
+                        occurrence: dependency.occurrence,
+                        ..authored
+                    },
+                    dependency.clone(),
+                ),
+            ]),
+            None => Arc::new([trace::FamilyTraceLeaf::Source(authored)]),
+        };
+        self.trace_sources = Some(sources);
         self
     }
 
@@ -374,18 +377,20 @@ impl FamilySample {
     }
 
     fn trace_sources(&self) -> impl Iterator<Item = trace::FamilyTraceLeaf> + '_ {
+        let fallback = self.trace_sources.is_none().then(|| {
+            trace::FamilyTraceLeaf::Source(FamilyTraceSource {
+                rank: self.rank,
+                footprint: self.footprint(),
+                role: FamilyTraceRole::Authored,
+                occurrence: None,
+            })
+        });
         self.trace_sources
             .as_deref()
-            .map(|sources| sources.to_vec())
-            .unwrap_or_else(|| {
-                vec![trace::FamilyTraceLeaf::Source(FamilyTraceSource {
-                    rank: self.rank,
-                    footprint: self.footprint(),
-                    role: FamilyTraceRole::Authored,
-                    occurrence: None,
-                })]
-            })
             .into_iter()
+            .flatten()
+            .cloned()
+            .chain(fallback)
     }
 
     /// Sampled component lanes retain their compiled domain; no source prediction happens
@@ -405,14 +410,20 @@ fn sample_trace(sample: &FamilySample, trace: &mut FamilyTraceArena) -> FamilyTr
     if let Some(node) = sample.trace_node {
         return node;
     }
-    let mut leaves = sample
-        .trace_sources()
-        .map(|source| trace.leaf(source))
-        .collect::<Vec<_>>();
-    let appearance = if leaves.len() == 1 {
-        leaves.pop().expect("one source")
-    } else {
-        trace.bundle(leaves)
+    let mut sources = sample.trace_sources();
+    let appearance = match sources.next() {
+        None => trace.bundle(Vec::new()),
+        Some(first) => {
+            let first = trace.leaf(first);
+            match sources.next() {
+                None => first,
+                Some(second) => {
+                    let mut leaves = vec![first, trace.leaf(second)];
+                    leaves.extend(sources.map(|source| trace.leaf(source)));
+                    trace.bundle(leaves)
+                }
+            }
+        }
     };
     trace.control(
         sample.rank,
