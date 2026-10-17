@@ -185,6 +185,10 @@ async function waitRecord(file, kind, timeout, assertRunning) {
 export const waitStageStarted = (file,assertRunning) => waitRecord(file,"stage-started",90_000,assertRunning);
 export const waitStageComplete = (file,assertRunning) => waitRecord(file,"complete",300_000,assertRunning);
 
+const STAGE_INVALID_SCOPES = ["before", "in_window", "after", "unlocalizable"];
+const STAGE_INVALID_REASONS = ["identity", "clock", "sequence_source", "dimensions", "content"];
+const stageInvalidFields = prefix => [...STAGE_INVALID_SCOPES,...STAGE_INVALID_REASONS].map(name => `${prefix}_invalid_${name}_samples`);
+
 // A missing lane or coverage gap is numeric diagnostic evidence, not an exception that
 // discards the already-completed backend measurement. No pane identifier is exported.
 export function summarizeStageWindow(complete, start, end) {
@@ -199,8 +203,25 @@ export function summarizeStageWindow(complete, start, end) {
   const key=row => `${row.paneId}\0${row.attachmentId}`;
   const closeClock=micros => integer(micros) && Math.abs(micros/1000-start) <= 400_000;
   const inWindow=millis => millis >= start && millis <= end;
-  const frameShape=row => identity(row) && typeof row.followPreload === "boolean" && integer(row.sequence) && integer(row.sourceFrame) && closeClock(row.presentedEpochMicros) && integer(row.width) && row.width > 0 && integer(row.height) && row.height > 0 && integer(row.drawCalls) && row.drawCalls > 0;
-  const heartbeatShape=row => identity(row) && typeof row.followPreload === "boolean" && integer(row.sequence) && integer(row.lastPresentedSequence) && integer(row.sourceFrame) && closeClock(row.epochMicros) && closeClock(row.receivedEpochMicros) && integer(row.width) && integer(row.height) && typeof row.attached === "boolean" && typeof row.visible === "boolean" && typeof row.idleUnchanged === "boolean" && typeof row.drawHealthy === "boolean";
+  const frameChecks=row => ({identity:identity(row),clock:closeClock(row?.presentedEpochMicros),sequence_source:integer(row?.sequence) && integer(row?.sourceFrame),dimensions:integer(row?.width) && row?.width > 0 && integer(row?.height) && row?.height > 0,content:typeof row?.followPreload === "boolean" && integer(row?.drawCalls) && row?.drawCalls > 0});
+  const heartbeatChecks=row => ({identity:identity(row),clock:closeClock(row?.epochMicros) && closeClock(row?.receivedEpochMicros),sequence_source:integer(row?.sequence) && integer(row?.lastPresentedSequence) && integer(row?.sourceFrame),dimensions:integer(row?.width) && integer(row?.height),content:typeof row?.followPreload === "boolean" && typeof row?.attached === "boolean" && typeof row?.visible === "boolean" && typeof row?.idleUnchanged === "boolean" && typeof row?.drawHealthy === "boolean"});
+  const valid=checks => Object.values(checks).every(Boolean);
+  const frameShape=row => valid(frameChecks(row));
+  const heartbeatShape=row => valid(heartbeatChecks(row));
+  const invalidDiagnostics=(rows,check,timeField,prefix) => {
+    const counts=Object.fromEntries(stageInvalidFields(prefix).map(name => [name,0]));
+    for(const row of rows) {
+      const checks=check(row);if(valid(checks))continue;
+      // Only a known owner and valid bounded clocks can establish an out-of-window row.
+      // Missing identity/time remains a gate failure; it cannot be silently scoped away.
+      const scope=!checks.identity || !checks.clock ? "unlocalizable" : row?.[timeField]/1000 < start ? "before" : row?.[timeField]/1000 > end ? "after" : "in_window";
+      counts[`${prefix}_invalid_${scope}_samples`]++;
+      // Reason buckets may overlap. Content means draw-call evidence for presentations,
+      // or the explicit boolean state fields for heartbeats; no private values are emitted.
+      for(const reason of STAGE_INVALID_REASONS)if(!checks[reason])counts[`${prefix}_invalid_${reason}_samples`]++;
+    }
+    return counts;
+  };
   const coverage=times => {
     const ordered=[...times].sort((a,b) => a-b), inside=ordered.filter(inWindow), edges=[start,...inside,end];
     return {observed:inside.length,first:ordered.length ? ordered[0]-start : 0,last:ordered.length ? ordered.at(-1)-start : 0,begin:inside.length ? inside[0]-start : end-start,end:inside.length ? end-inside.at(-1) : end-start,max:Math.max(...edges.slice(1).map((t,i) => t-edges[i])),bracketed:Number(ordered.length > 0 && ordered[0] <= start && ordered.at(-1) >= end)};
@@ -217,6 +238,9 @@ export function summarizeStageWindow(complete, start, end) {
     const invalid=all.filter(row => !frameShape(row)).length;
     const hbRows=allHeartbeats.filter(row => heartbeatShape(row) && key(row) === selected);
     const hbInvalid=allHeartbeats.filter(row => !heartbeatShape(row)).length;
+    const invalidActivity=invalidDiagnostics(all,frameChecks,"presentedEpochMicros","activity");
+    const invalidHeartbeats=invalidDiagnostics(allHeartbeats,heartbeatChecks,"receivedEpochMicros","heartbeat");
+    const invalidWindow=invalidActivity.activity_invalid_in_window_samples+invalidActivity.activity_invalid_unlocalizable_samples+invalidHeartbeats.heartbeat_invalid_in_window_samples+invalidHeartbeats.heartbeat_invalid_unlocalizable_samples;
     let reordered=0, hbReordered=0, previous, previousHeartbeat;
     for(const row of rows) {
       if(previous && (row.sequence <= previous.sequence || row.presentedEpochMicros <= previous.presentedEpochMicros || row.sourceFrame < previous.sourceFrame)) reordered++;
@@ -243,12 +267,16 @@ export function summarizeStageWindow(complete, start, end) {
     const source=coverage(sourceChanges);
     const sourcePassed=Number(sourceChanges.length >= 2 && source.observed > 0 && source.bracketed && source.max <= 5000);
     const presentation=coverage(rows.map(row => row.presentedEpochMicros/1000)), heartbeat=coverage(eligible);
-    const ownerValid=candidates.size === 1 && !unknownLane && invalid === 0 && hbInvalid === 0 && reordered === 0 && hbReordered === 0 && !observerFailed;
+    // Bracketing and source continuity use only fully valid rows above: an invalid warmup
+    // or terminal row never supplies an anchor. Preserve its total/reason diagnostics while
+    // judging invalid evidence against the actual measured window.
+    const ownerValid=candidates.size === 1 && !unknownLane && invalidWindow === 0 && reordered === 0 && hbReordered === 0 && !observerFailed;
     const presentationPassed=Number(ownerValid && presentation.observed > 0 && presentation.bracketed && presentation.max <= 5000 && (preload || sourcePassed));
     const idlePassed=Number(ownerValid && preload && rows.length > 0 && badIdle === 0 && linkFailures === 0 && heartbeat.observed > 0 && heartbeat.bracketed && heartbeat.max <= 5000);
     return {
       available:Number(rows.length > 0),validation_passed:Number(Boolean(presentationPassed || idlePassed)),
       retained_samples:rows.length+invalid,valid_samples:rows.length,invalid_samples:invalid,
+      ...invalidActivity,...invalidHeartbeats,
       all_activity_samples:all.length,filtered_samples:reportAvailable ? filtered.filter(row => row?.followPreload === preload).length : 0,
       first_sample_offset_ms:presentation.first,last_sample_offset_ms:presentation.last,observed_samples:presentation.observed,begin_gap_ms:presentation.begin,end_gap_ms:presentation.end,max_gap_ms:presentation.max,bracketed:presentation.bracketed,
       attachment_count:candidates.size,activity_reordered_samples:reordered,presentation_continuity_passed:presentationPassed,
@@ -271,7 +299,7 @@ const FLAGS = ["complete","all_gates_passed","workload_available","measurement_a
 const METRICS = ["requested_hz","minimum_required_hz","counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","stage_max_allowed_gap_ms","wall_monotonic_difference_ms","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"];
 const SCALARS = ["schema_version","current_stage_code","failure_stage_code",...FLAGS,...METRICS];
 const RESOURCE_FIELDS = ["cpu_average_percent","cpu_max_percent","peak_resident_bytes"];
-const LANE_FIELDS = ["retained_samples","first_sample_offset_ms","last_sample_offset_ms","available","validation_passed","valid_samples","invalid_samples","observed_samples","begin_gap_ms","end_gap_ms","max_gap_ms","bracketed","all_activity_samples","filtered_samples","attachment_count","activity_reordered_samples","presentation_continuity_passed","idle_continuity_passed","heartbeat_samples","heartbeat_valid_samples","heartbeat_invalid_samples","heartbeat_reordered_samples","heartbeat_link_failures","heartbeat_ineligible_samples","idle_heartbeat_samples","heartbeat_observed_samples","heartbeat_begin_gap_ms","heartbeat_end_gap_ms","heartbeat_max_gap_ms","heartbeat_bracketed","observer_failed","source_change_samples","source_observed_advances","source_begin_gap_ms","source_end_gap_ms","source_max_gap_ms","source_bracketed","source_continuity_passed"];
+const LANE_FIELDS = [...stageInvalidFields("activity"),...stageInvalidFields("heartbeat"),"retained_samples","first_sample_offset_ms","last_sample_offset_ms","available","validation_passed","valid_samples","invalid_samples","observed_samples","begin_gap_ms","end_gap_ms","max_gap_ms","bracketed","all_activity_samples","filtered_samples","attachment_count","activity_reordered_samples","presentation_continuity_passed","idle_continuity_passed","heartbeat_samples","heartbeat_valid_samples","heartbeat_invalid_samples","heartbeat_reordered_samples","heartbeat_link_failures","heartbeat_ineligible_samples","idle_heartbeat_samples","heartbeat_observed_samples","heartbeat_begin_gap_ms","heartbeat_end_gap_ms","heartbeat_max_gap_ms","heartbeat_bracketed","observer_failed","source_change_samples","source_observed_advances","source_begin_gap_ms","source_end_gap_ms","source_max_gap_ms","source_bracketed","source_continuity_passed"];
 const RAMP_FIELDS = ["available","from_value","to_value","intermediate_values","target_delay_ms","monotonic"];
 const MEASUREMENT_FIELDS = ["counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","wall_monotonic_difference_ms"];
 function measurementPass(r) { return Boolean(r.measurement_available && r.counter_observations === 61 && r.interval_count === 60 && r.actual_window_seconds >= 60 && r.minimum_interval_hz >= 38 && r.windows_below_38hz === 0 && r.deadline_misses === 0 && r.send_errors === 0 && r.wall_monotonic_difference_ms <= 1000); }
@@ -284,7 +312,7 @@ function bit(value) { assert(value === 0 || value === 1,"invalid boolean flag");
 export function validateNumericProof(r) {
   closed(Object.fromEntries(Object.entries(r).filter(([name]) => !["resources","universes","ramps","stage_lanes"].includes(name))),SCALARS);
   assert.deepEqual(Object.keys(r).sort(),[...SCALARS,"resources","universes","ramps","stage_lanes"].sort(),"public closed shape");
-  assert.equal(r.schema_version,2); phase(r.current_stage_code);phase(r.failure_stage_code);
+  assert.equal(r.schema_version,3); phase(r.current_stage_code);phase(r.failure_stage_code);
   for(const name of FLAGS) bit(r[name]);
   assert.equal(r.requested_hz,40);assert.equal(r.minimum_required_hz,38);
   for (const [name,length,keys] of [["resources",5,RESOURCE_FIELDS],["universes",16,["packets","sequence_discontinuities","zero_sequence_packets"]],["ramps",2,RAMP_FIELDS],["stage_lanes",2,LANE_FIELDS]]) {
@@ -317,7 +345,13 @@ export function validateNumericProof(r) {
     if(row.presentation_continuity_passed) assert(row.available && row.observed_samples > 0 && row.bracketed && row.max_gap_ms <= 5000 && (laneIndex === 1 || row.source_continuity_passed));
     if(row.idle_continuity_passed) assert(laneIndex === 1 && row.available && row.heartbeat_observed_samples > 0 && row.heartbeat_bracketed && row.heartbeat_max_gap_ms <= 5000 && row.heartbeat_ineligible_samples === 0 && row.heartbeat_link_failures === 0);
     assert.equal(row.validation_passed,Number(Boolean(row.presentation_continuity_passed || row.idle_continuity_passed)));
-    if(row.validation_passed) assert(row.attachment_count === 1 && row.invalid_samples === 0 && row.heartbeat_invalid_samples === 0 && row.activity_reordered_samples === 0 && row.heartbeat_reordered_samples === 0 && row.observer_failed === 0);
+    for(const [prefix,total,cap] of [["activity",row.invalid_samples,20_000],["heartbeat",row.heartbeat_invalid_samples,10_000]]) {
+      assert(total <= cap);
+      for(const name of stageInvalidFields(prefix)){uint(row[name]);assert(row[name] <= total && row[name] <= cap);}
+      assert.equal(STAGE_INVALID_SCOPES.reduce((sum,name) => sum+row[`${prefix}_invalid_${name}_samples`],0),total,"invalid scope conservation");
+      assert(STAGE_INVALID_REASONS.reduce((sum,name) => sum+row[`${prefix}_invalid_${name}_samples`],0) >= total,"invalid reason coverage");
+    }
+    if(row.validation_passed) assert(row.attachment_count === 1 && row.activity_invalid_in_window_samples === 0 && row.activity_invalid_unlocalizable_samples === 0 && row.heartbeat_invalid_in_window_samples === 0 && row.heartbeat_invalid_unlocalizable_samples === 0 && row.activity_reordered_samples === 0 && row.heartbeat_reordered_samples === 0 && row.observer_failed === 0);
   }
   assert.equal(r.stage_validation_passed,Number(Boolean(r.stage_report_available && r.stage_lanes.every(row => row.validation_passed))));
   if(!r.stage_report_available) assert(r.stage_validation_passed === 0);
@@ -333,7 +367,7 @@ export function validateNumericProof(r) {
 }
 export function numericProof(result,progress = {}) {
   const r = Object.fromEntries(SCALARS.map(name => [name,0]));
-  Object.assign(r,{schema_version:2,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
+  Object.assign(r,{schema_version:3,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
     resources:Array.from({length:5},() => Object.fromEntries(RESOURCE_FIELDS.map(name => [name,0]))),
     universes:Array.from({length:16},() => ({packets:0,sequence_discontinuities:0,zero_sequence_packets:0})),
     ramps:Array.from({length:2},() => Object.fromEntries(RAMP_FIELDS.map(name => [name,0]))),

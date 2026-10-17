@@ -122,7 +122,7 @@ test("one-packet universe and disabled sequence cannot falsely pass full-minute 
 });
 
 
-test("schema2 Stage gaps preserve per-lane count, min/max offsets and edge diagnostics", () => {
+test("schema3 Stage gaps preserve per-lane count, min/max offsets and edge diagnostics", () => {
   const raw=stage(); raw.nativeStage.activity=raw.nativeStage.activity.filter(row => !row.followPreload);
   const diagnostic=summarizeStageWindow(raw,100_000,160_000);
   assert.equal(diagnostic.lanes[0].validation_passed,1);
@@ -139,7 +139,7 @@ test("atomic checkpoint state retains completed metrics on Stage wait failure an
   const measured=result();delete measured.proof.stage;delete measured.proof.interaction;
   Object.assign(proof.result,measured);
   await proof.enter(12);await proof.fail();await proof.enter(14);await proof.fail(14);await proof.finish(1);
-  const last=writes.at(-1);assert.equal(last.schema_version,2);assert.equal(last.failure_stage_code,12);assert.equal(last.current_stage_code,14);assert.equal(last.complete,0);assert.equal(last.cleanup_complete,1);
+  const last=writes.at(-1);assert.equal(last.schema_version,3);assert.equal(last.failure_stage_code,12);assert.equal(last.current_stage_code,14);assert.equal(last.complete,0);assert.equal(last.cleanup_complete,1);
   assert.equal(last.completed_frames,2400);assert.equal(last.measurement_available,1);assert.equal(last.udp_available,1);assert.equal(last.resources_available,1);assert.equal(last.stage_report_available,0);assert.equal(last.all_gates_passed,0);
   assert(writes.every(row => row.all_gates_passed === 0));
 });
@@ -171,8 +171,8 @@ test("result objects never imply unobserved Sheet liveness or cleanup", () => {
   assert.equal(report.complete,0);assert.equal(report.sheet_liveness_checked,0);assert.equal(report.sheet_liveness_passed,0);assert.equal(report.cleanup_complete,0);assert.equal(report.all_gates_passed,0);
   assert.equal(report.completed_frames,2400);assert.equal(report.measurement_available,1);
 });
-test("real atomic checkpoint replacement retains schema2 and leaves no temporary siblings", async () => {
-  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-proof-schema2-test-"));
+test("real atomic checkpoint replacement retains schema3 and leaves no temporary siblings", async () => {
+  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-proof-schema3-test-"));
   try {
     const file=path.join(directory,"numeric.json"),proof=new ProofCheckpoint(file);
     await proof.enter(7);await Promise.all([proof.enter(8),proof.enter(9)]);
@@ -258,4 +258,103 @@ test("actual TS observer retains pre-filter activity and separates attachment ge
   const cappedActivity=Array(20_000).fill(frame),cappedHeartbeats=Array(10_000).fill({});
   retainNativeObservations({frames:[frame],heartbeats:[{}]},cappedActivity,cappedHeartbeats,overflow);
   assert.equal(cappedActivity.length,20_000);assert.equal(cappedHeartbeats.length,10_000);assert.deepEqual(overflow,{activity:1,heartbeats:1,errors:0});
+});
+
+test("known warmup and terminal presentation errors retain diagnostics without poisoning a valid measured window", () => {
+  const raw=stage(), template=raw.nativeStage.activity.find(row => row.followPreload);
+  raw.nativeStage.activity.unshift({...template,sequence:0,sourceFrame:0,presentedEpochMicros:90_000_000,drawCalls:0});
+  raw.nativeStage.activity.push({...template,sequence:100,sourceFrame:100,presentedEpochMicros:170_000_000,width:0});
+  const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+  assert.equal(summary.validation_passed,1);assert.equal(lane.presentation_continuity_passed,1);
+  assert.equal(lane.invalid_samples,2);assert.equal(lane.activity_invalid_before_samples,1);assert.equal(lane.activity_invalid_after_samples,1);
+  assert.equal(lane.activity_invalid_in_window_samples,0);assert.equal(lane.activity_invalid_unlocalizable_samples,0);
+  assert.equal(lane.activity_invalid_content_samples,1);assert.equal(lane.activity_invalid_dimensions_samples,1);
+  const measured=result();measured.proof.stage=summary;
+  assert.equal(numericProof(measured,completedProgress()).all_gates_passed,1);
+});
+
+test("presentation errors inside the closed measured window remain strict gate failures", () => {
+  for(const millis of [100_000,130_000,160_000]) {
+    const raw=stage(),template=raw.nativeStage.activity.find(row => row.followPreload);
+    raw.nativeStage.activity.push({...template,presentedEpochMicros:millis*1000,drawCalls:0});
+    const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+    assert.equal(lane.invalid_samples,1);assert.equal(lane.activity_invalid_in_window_samples,1);
+    assert.equal(lane.activity_invalid_content_samples,1);assert.equal(lane.presentation_continuity_passed,0);assert.equal(summary.validation_passed,0);
+  }
+});
+
+test("missing owner or untrusted clocks cannot disguise invalid presentation evidence as warmup", () => {
+  for(const patch of [{paneId:"foreign-owner"},{presentedEpochMicros:NaN},{presentedEpochMicros:900_000_000}]) {
+    const raw=stage(),template=raw.nativeStage.activity.find(row => row.followPreload);
+    raw.nativeStage.activity.unshift({...template,presentedEpochMicros:90_000_000,drawCalls:0,...patch});
+    const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+    assert.equal(lane.activity_invalid_unlocalizable_samples,1);assert.equal(lane.activity_invalid_before_samples,0);assert.equal(summary.validation_passed,0);
+  }
+});
+
+test("an invalid out-of-window presentation cannot supply a missing continuity anchor", () => {
+  const raw=stage(),template=raw.nativeStage.activity.find(row => row.followPreload);
+  raw.nativeStage.activity=raw.nativeStage.activity.filter(row => !row.followPreload || row.presentedEpochMicros > 100_000_000);
+  raw.nativeStage.activity.unshift({...template,presentedEpochMicros:99_000_000,drawCalls:0});
+  const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+  assert.equal(lane.activity_invalid_before_samples,1);assert.equal(lane.observed_samples,60);assert.equal(lane.bracketed,0);assert.equal(summary.validation_passed,0);
+});
+
+test("heartbeat invalid scope is conserved and measured or unlocalizable errors still block static idle", () => {
+  for(const [millis,expectedScope,pass] of [[90_000,"before",1],[170_000,"after",1],[130_000,"in_window",0]]) {
+    const raw=staticPreloadStage(),template=raw.nativeStage.heartbeats[0];
+    raw.nativeStage.heartbeats.push({...template,epochMicros:millis*1000,receivedEpochMicros:millis*1000,sequence:-1});
+    const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+    assert.equal(lane.heartbeat_invalid_samples,1);assert.equal(lane[`heartbeat_invalid_${expectedScope}_samples`],1);
+    assert.equal(lane.heartbeat_invalid_sequence_source_samples,1);assert.equal(lane.idle_continuity_passed,pass);assert.equal(summary.validation_passed,pass);
+  }
+  const raw=staticPreloadStage();raw.nativeStage.heartbeats.push({...raw.nativeStage.heartbeats[0],epochMicros:NaN,receivedEpochMicros:90_000_000});
+  const summary=summarizeStageWindow(raw,100_000,160_000);
+  assert.equal(summary.lanes[1].heartbeat_invalid_unlocalizable_samples,1);assert.equal(summary.validation_passed,0);
+});
+
+test("one measured heartbeat link failure still blocks idle fallback independently of scoped errors", () => {
+  const raw=staticPreloadStage();raw.nativeStage.heartbeats[20].lastPresentedSequence=99;
+  const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+  assert.equal(lane.heartbeat_invalid_samples,0);assert.equal(lane.heartbeat_link_failures,1);assert.equal(lane.idle_continuity_passed,0);assert.equal(summary.validation_passed,0);
+});
+
+test("public invalid diagnostics require scope conservation and cannot silently reinterpret an older report", () => {
+  const complete=numericProof(result(),completedProgress());
+  for(const mutate of [row => {row.stage_lanes[1].activity_invalid_before_samples=1;},row => {row.stage_lanes[1].heartbeat_invalid_clock_samples=1;},row => {delete row.stage_lanes[1].activity_invalid_unlocalizable_samples;}]) {
+    const bad=structuredClone(complete);mutate(bad);assert.throws(() => validateNumericProof(bad));
+  }
+});
+
+test("null or undefined raw observations retain numeric failure without assigning a fictitious lane", () => {
+  for(const kind of ["activity","heartbeats"])for(const value of [null,undefined]) {
+    const raw=stage();raw.nativeStage[kind].push(value);
+    const summary=summarizeStageWindow(raw,100_000,160_000);
+    assert.equal(summary.report_available,1);assert.equal(summary.validation_passed,0);
+    assert(summary.lanes.every(row => row.observer_failed === 1));
+    // Missing lane identity is a report-wide observer failure, never invented ownership.
+    assert(summary.lanes.every(row => row.activity_invalid_unlocalizable_samples === 0 && row.heartbeat_invalid_unlocalizable_samples === 0));
+    const measured=result();measured.proof.stage=summary;
+    const numeric=numericProof(measured,completedProgress());
+    assert.equal(numeric.schema_version,3);assert.equal(numeric.all_gates_passed,0);
+    assert.deepEqual(validateNumericProof(JSON.parse(JSON.stringify(numeric))),numeric);
+  }
+});
+
+test("missing fields on an otherwise assigned lane retain bounded unlocalizable reason diagnostics", () => {
+  for(const [kind,prefix] of [["activity","activity"],["heartbeats","heartbeat"]]) {
+    const raw=stage();raw.nativeStage[kind].push({followPreload:true});
+    const summary=summarizeStageWindow(raw,100_000,160_000),lane=summary.lanes[1];
+    assert.equal(summary.validation_passed,0);assert.equal(lane[`${prefix}_invalid_unlocalizable_samples`],1);
+    for(const reason of ["identity","clock","sequence_source","dimensions","content"])assert.equal(lane[`${prefix}_invalid_${reason}_samples`],1);
+    const measured=result();measured.proof.stage=summary;
+    assert.equal(numericProof(measured,completedProgress()).all_gates_passed,0);
+  }
+});
+
+test("numeric schema3 explicitly rejects schema2 while native source complete records remain schemaVersion2", () => {
+  const source=stage();assert.equal(source.schemaVersion,2);
+  assert.equal(summarizeStageWindow(source,100_000,160_000).validation_passed,1);
+  const numeric=numericProof(result(),completedProgress());assert.equal(numeric.schema_version,3);
+  numeric.schema_version=2;assert.throws(() => validateNumericProof(numeric));
 });
