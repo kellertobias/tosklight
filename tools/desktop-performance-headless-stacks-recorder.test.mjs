@@ -301,7 +301,7 @@ test("stderr classifier is closed and never publishes diagnostic text, paths, sy
 		assert.doesNotMatch(JSON.stringify(value), /private|secret|symbol|pid123/);
 	}
 });
-test("schema4 numeric export retains exact failure evidence and rejects oldschema, raw and hostile enum fields", async () => {
+test("schema5 numeric export retains exact failure evidence and rejects oldschema, raw and hostile enum fields", async () => {
 	const details = recorder.recorderFailureDetails({
 		name: "sudo-control",
 		privileged: true,
@@ -319,7 +319,7 @@ test("schema4 numeric export retains exact failure evidence and rejects oldschem
 		failure_code: 1,
 		privileged: 1,
 	};
-	assert.equal(report.schema_version, 4);
+	assert.equal(report.schema_version, 5);
 	const directory = await mkdtemp(path.join(scratch, "stack-failure-public-"));
 	await exportReport(directory, report);
 	assert.deepEqual(
@@ -333,7 +333,7 @@ test("schema4 numeric export retains exact failure evidence and rejects oldschem
 	);
 	for (const patch of [
 		{ schema_version: 1 },
-		{ schema_version: 3 },
+		{ schema_version: 4 },
 		{ record_stage: 4 },
 		{ record_signal: 14 },
 		{ record_exit_code: -1 },
@@ -717,7 +717,7 @@ test("pre-record setup stages preserve binding, identity, binary and thread fail
 		});
 });
 
-test("schema4 setup evidence has a closed numeric vocabulary", async () => {
+test("schema5 setup evidence has a closed numeric vocabulary", async () => {
 	for (const patch of [
 		{ pre_record_setup_stage: null },
 		{ pre_record_setup_stage: 5 },
@@ -725,13 +725,13 @@ test("schema4 setup evidence has a closed numeric vocabulary", async () => {
 		{ pre_record_setup_stage: "hash" },
 		{ pre_record_binary_match: 2 },
 		{ pre_record_binary_match: "/private/binary" },
-		{ schema_version: 3 },
+		{ schema_version: 4 },
 		{ pre_record_binary_path: "/private/binary" },
 	]) {
 		await assert.rejects(exportReport(scratch, { ...emptyReport(), ...patch }));
 	}
 	for (const match of [null, 0, 1]) {
-		const directory = await mkdtemp(path.join(scratch, "schema4-"));
+		const directory = await mkdtemp(path.join(scratch, "schema5-"));
 		await exportReport(directory, {
 			...emptyReport(),
 			pre_record_setup_stage: 3,
@@ -740,7 +740,7 @@ test("schema4 setup evidence has a closed numeric vocabulary", async () => {
 		const report = JSON.parse(
 			await readFile(path.join(directory, "headless-stacks-numeric.json")),
 		);
-		assert.equal(report.schema_version, 4);
+		assert.equal(report.schema_version, 5);
 		assert.equal(report.pre_record_binary_match, match);
 	}
 });

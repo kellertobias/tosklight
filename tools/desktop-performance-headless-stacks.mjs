@@ -34,6 +34,16 @@ export {
 	verifyIdentity,
 } from "./desktop-performance-headless-stacks-recorder.mjs";
 
+import {
+	FUNCTION_MAPPING_VERSION,
+	functionRows,
+	functionId,
+	emptyCoverage,
+	observeCoverage,
+	validateCoverage,
+} from "./desktop-performance-headless-stack-coverage.mjs";
+export { functionId } from "./desktop-performance-headless-stack-coverage.mjs";
+
 const hash = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const require_ = (condition, message) => {
 	if (!condition) throw new Error(`Headless stacks unavailable: ${message}`);
@@ -44,41 +54,10 @@ const uint = (value) => {
 };
 const add = (a, b) => uint(a + b);
 
-// Fixed function IDs; unknown=0. No symbol, DSO, address or process identifier is public.
-// Inclusive rows overlap and are not summable. Recorder wall bounds do not join samples to frames.
-const FUNCTIONS = [
-	[1, /light_dynamics::programming::preparation::.*prepare_owner_sample/],
-	[
-		2,
-		/light_dynamics::programming::preparation::.*prepare_dynamic_family_samples/,
-	],
-	[3, /light_dynamics::programming::.*complete_deferred/],
-	[4, /light_headless_runtime::.*hybrid::staged::.*prepare_captured/],
-	[
-		5,
-		/light_headless_runtime::.*family_inputs::assemble_captured_family_inputs/,
-	],
-	[6, /light_headless_runtime::.*family_lanes::.*finish/],
-	[7, /light_dynamics::programming::composition::.*compose/],
-	[8, /light_dynamics::programming::.*classify/],
-	[9, /light_dynamics::programming::.*compile/],
-	[10, /light_engine::.*prepare_families/],
-	[11, /rayon_core::.*(?:join|execute|steal|wait)/],
-	[12, /^(?:__libc_)?malloc(?:$|\+|@)/],
-	[13, /^(?:__libc_)?free(?:$|\+|@)/],
-	[14, /^(?:__libc_)?realloc(?:$|\+|@)/],
-	[15, /^(?:__)?memcpy(?:$|\+|@|_)/],
-	[16, /^(?:__)?memmove(?:$|\+|@|_)/],
-	[17, /light_headless_runtime::.*output_scheduler::.*tick/],
-];
-export function functionId(symbol) {
-	const normalized = symbol.replace(/\[[0-9a-f]+\]/gu, "");
-	return FUNCTIONS.find(([, pattern]) => pattern.test(normalized))?.[0] ?? 0;
-}
 export function emptyReport() {
 	return {
-		schema_version: 4,
-		function_mapping_version: 1,
+		schema_version: 5,
+		function_mapping_version: FUNCTION_MAPPING_VERSION,
 		requested_frequency_hz: 49,
 		preflight_available: 0,
 		symbols_available: 0,
@@ -131,13 +110,8 @@ export function emptyReport() {
 		lost_events: 0,
 		weighted_period: 0,
 		raw_bytes: 0,
-		functions: Array.from({ length: FUNCTIONS.length + 1 }, (_, id) => ({
-			id,
-			self_samples: 0,
-			self_period: 0,
-			inclusive_samples: 0,
-			inclusive_period: 0,
-		})),
+		functions: functionRows(),
+		coverage: emptyCoverage(),
 	};
 }
 export function validateHeadlessStackOptions(
@@ -164,7 +138,14 @@ export function validateHeadlessStackOptions(
 }
 
 export class PerfScriptParser {
-	constructor(tgid, limits = LIMITS) {
+	constructor(tgid, limits = LIMITS, ownedExecutable = null) {
+		require_(
+			ownedExecutable === null ||
+				(typeof ownedExecutable === "string" &&
+					path.isAbsolute(ownedExecutable)),
+			"owned executable path",
+		);
+		this.ownedExecutable = ownedExecutable;
 		this.tgid = tgid;
 		this.limits = limits;
 		this.report = emptyReport();
@@ -240,7 +221,7 @@ export class PerfScriptParser {
 			return;
 		}
 		require_(this.current.frames.length < this.limits.frames, "frame cap");
-		this.current.frames.push(frame[1].trim());
+		this.current.frames.push({ symbol: frame[1].trim(), dso: frame[2].trim() });
 	}
 	flush() {
 		const sample = this.current;
@@ -268,26 +249,15 @@ export class PerfScriptParser {
 		if (sample.frames.length >= 2) this.report.multi_frame_samples++;
 		if (sample.frames.length === this.limits.frames)
 			this.report.depth_capped_samples++;
-		const ids = sample.frames.map((symbol) => {
-			if (/^(?:\[unknown\]|0x[0-9a-f]+)$/iu.test(symbol))
-				this.report.unresolved_frames++;
-			else this.resolved++;
-			return functionId(symbol);
-		});
-		const self = ids[0] ?? 0;
-		if (self === 0) this.report.unknown_self_samples++;
-		this.report.functions[self].self_samples++;
-		this.report.functions[self].self_period = add(
-			this.report.functions[self].self_period,
-			sample.period,
-		);
-		for (const id of new Set(ids)) {
-			this.report.functions[id].inclusive_samples++;
-			this.report.functions[id].inclusive_period = add(
-				this.report.functions[id].inclusive_period,
+		this.resolved = add(
+			this.resolved,
+			observeCoverage(
+				this.report,
+				sample.frames,
 				sample.period,
-			);
-		}
+				this.ownedExecutable,
+			),
+		);
 	}
 	finish() {
 		if (this.buffer) this.line(this.buffer);
@@ -319,8 +289,15 @@ export function validatedServerBinding(cpu) {
 	return binding;
 }
 
-async function decode(root, name, perf, filename, tgid) {
-	const parser = new PerfScriptParser(tgid);
+async function decode(
+	root,
+	name,
+	perf,
+	filename,
+	tgid,
+	ownedExecutable = null,
+) {
+	const parser = new PerfScriptParser(tgid, LIMITS, ownedExecutable);
 	const decoder = new StringDecoder("utf8");
 	// Raw file is caller-owned/private and inode-validated immediately before and after decoding.
 	await boundedCommand(
@@ -671,8 +648,8 @@ export async function exportReport(outputDirectory, report) {
 	assertNumericOnly(report);
 	const baseline = emptyReport();
 	require_(
-		report.schema_version === 4 &&
-			report.function_mapping_version === 1 &&
+		report.schema_version === 5 &&
+			report.function_mapping_version === FUNCTION_MAPPING_VERSION &&
 			report.requested_frequency_hz === 49,
 		"unknown public schema",
 	);
@@ -782,6 +759,7 @@ export async function exportReport(outputDirectory, report) {
 				report.weighted_period,
 		"public denominator mismatch",
 	);
+	validateCoverage(report);
 	await mkdir(outputDirectory, { recursive: true });
 	await writeFile(
 		path.join(outputDirectory, "headless-stacks-numeric.json"),
@@ -961,6 +939,7 @@ export class HeadlessStackCapture {
 				this.preflight.perf,
 				recording.raw.filename,
 				binding.pid,
+				binding.executable,
 			);
 			validateDisabledSamples(parsed, stopped);
 			this.report.disable_boundary_verified = 1;
@@ -977,6 +956,7 @@ export class HeadlessStackCapture {
 				"lost_events",
 				"weighted_period",
 				"functions",
+				"coverage",
 			];
 			for (const field of fields) this.report[field] = parsed.report[field];
 			this.report.raw_bytes = recording.raw.bytes;
