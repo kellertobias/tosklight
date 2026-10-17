@@ -27,6 +27,8 @@ export interface NetworkEditorProps {
 	onCancel?: () => void;
 	showActions?: boolean;
 	onChanged?: () => void;
+	/** Explicit Revert updates only restart-bound draft fields before another operator edit. */
+	revertRevision?: number;
 }
 
 /// Each listen address, with what it is for. The order is the order an operator meets them in.
@@ -66,6 +68,7 @@ export function NetworkEditor({
 	onCancel,
 	showActions = true,
 	onChanged,
+	revertRevision = 0,
 }: NetworkEditorProps) {
 	const [preset, setPreset] = useState(network.sameComputerPreset);
 	const [listeners, setListeners] = useState<Record<ListenField, string>>({
@@ -88,6 +91,25 @@ export function NetworkEditor({
 		});
 		setEndpoint(network.stored.speedGroupEndpoint ?? "");
 	}, [network]);
+	const reverted = useRef(revertRevision);
+	const reverting = reverted.current !== revertRevision;
+	useEffect(() => {
+		if (reverted.current === revertRevision) return;
+		reverted.current = revertRevision;
+		queued.current = JSON.stringify({
+			sameComputerPreset: network.activeSameComputerPreset,
+			...listeners,
+			citpListen: network.activeStored.citpListen,
+			httpListen: network.activeStored.httpListen,
+			speedGroupEndpoint: endpoint.trim() === "" ? null : endpoint.trim(),
+		});
+		setPreset(network.activeSameComputerPreset);
+		setListeners((current) => ({
+			...current,
+			citpListen: network.activeStored.citpListen,
+			httpListen: network.activeStored.httpListen,
+		}));
+	}, [revertRevision, network]);
 	// Only a draft that differs from what the server stored is saved. Comparing values rather than
 	// counting renders keeps a page load, a reload after a save, or React's development double
 	// effects from sending an edit nobody made.
@@ -98,12 +120,35 @@ export function NetworkEditor({
 				listeners[listener.field] !== network.stored[listener.field],
 		) ||
 		endpoint.trim() !== (network.stored.speedGroupEndpoint ?? "");
+	const draft = {
+		sameComputerPreset: preset,
+		...listeners,
+		speedGroupEndpoint: endpoint.trim() === "" ? null : endpoint.trim(),
+	};
+	const draftKey = JSON.stringify(draft);
+	const queued = useRef<string | null>(null);
+	const baseline = useRef(network);
+	const save = useRef({ onSave, draft });
+	save.current = { onSave, draft };
 	useEffect(() => {
-		if (showActions || !edited) return;
+		// The prop-sync effect above retires an acknowledged draft; do not enqueue its old render.
+		if (reverting) return;
+		if (baseline.current !== network) {
+			baseline.current = network;
+			queued.current = null;
+			return;
+		}
+		if (
+			showActions ||
+			(!edited && queued.current === null) ||
+			queued.current === draftKey ||
+			!form.current?.checkValidity()
+		)
+			return;
+		queued.current = draftKey;
 		onChanged?.();
-		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
-		return () => window.clearTimeout(timer);
-	}, [preset, listeners, endpoint, edited, onChanged, showActions]);
+		save.current.onSave({ requestId: requestId(), ...save.current.draft });
+	}, [network, showActions, edited, draftKey, onChanged, reverting]);
 
 	return (
 		<form

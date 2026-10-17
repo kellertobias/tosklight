@@ -12,7 +12,7 @@ import {
 	NumberField,
 	SelectField,
 } from "@tosklight/ui/controls";
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFailureToast } from "../../app/ToastContext";
 import { ApiFailure, api } from "../../shared/api/client";
@@ -31,7 +31,10 @@ interface ConfigurationResource {
 }
 
 /** Reads one independently addressed output without adding a singleton output cache. */
-function useOutputConfiguration(outputId: string, poll: boolean): ConfigurationResource {
+function useOutputConfiguration(
+	outputId: string,
+	poll: boolean,
+): ConfigurationResource {
 	const [data, setData] = useState<OutputConfigurationView>();
 	const [failure, setFailure] = useState<ApiFailure>();
 	const [revision, setRevision] = useState(0);
@@ -59,7 +62,10 @@ function useOutputConfiguration(outputId: string, poll: boolean): ConfigurationR
 	}, [outputId, revision]);
 	useEffect(() => {
 		if (!poll) return;
-		const timer = window.setInterval(() => setRevision((value) => value + 1), 1_000);
+		const timer = window.setInterval(
+			() => setRevision((value) => value + 1),
+			1_000,
+		);
 		return () => window.clearInterval(timer);
 	}, [poll]);
 
@@ -67,6 +73,36 @@ function useOutputConfiguration(outputId: string, poll: boolean): ConfigurationR
 		data,
 		failure,
 		reload: useCallback(() => setRevision((value) => value + 1), []),
+	};
+}
+
+/** Revert is an ordered barrier: earlier drafts drain first, later drafts get a new key. */
+function useOutputEditing(
+	reload: () => void,
+	outputId: string,
+	mode: string,
+	output: OutputConfigurationView | undefined,
+) {
+	const editing = useEditing(reload);
+	const generation = useRef(0);
+	const [revert, setRevert] = useState<{
+		edit: UpdateOutputConfiguration;
+		base: OutputConfigurationView | undefined;
+	}>();
+	return {
+		revertRequest: revert?.base === output ? revert?.edit : undefined,
+		...editing,
+		queue: (edit: UpdateOutputConfiguration, revert = false) => {
+			if (revert) {
+				generation.current++;
+				setRevert({ edit, base: output });
+			}
+			editing.saveLive(
+				() => api.updateOutputConfiguration(outputId, edit),
+				`${outputId}:${mode}:${generation.current}`,
+			);
+			if (revert) generation.current++;
+		},
 	};
 }
 
@@ -82,7 +118,12 @@ export function OutputSettings({
 	direct?: boolean;
 }) {
 	const configuration = useOutputConfiguration(outputId, mode === "picture");
-	const editing = useEditing(configuration.reload);
+	const editing = useOutputEditing(
+		configuration.reload,
+		outputId,
+		mode,
+		configuration.data,
+	);
 	useFailureToast(editing.failure);
 
 	if (configuration.failure && !configuration.data) {
@@ -126,7 +167,11 @@ export function OutputSettings({
 						busy={editing.busy}
 						failed={editing.failure !== undefined}
 						restartBound={pendingRestart}
-						note={mode === "picture" ? "Display moves now; other changes need a restart" : undefined}
+						note={
+							mode === "picture"
+								? "Display moves now; other changes need a restart"
+								: undefined
+						}
 					/>
 				)}
 			</div>
@@ -136,13 +181,16 @@ export function OutputSettings({
 					output={output}
 					mode={mode}
 					busy={editing.busy}
+					revertRequest={editing.revertRequest}
 					onCancel={editing.cancel}
 					showActions={!direct}
 					showCancel={!direct}
 					onSave={(edit) =>
-						void editing.save(() =>
-							api.updateOutputConfiguration(output.id, edit),
-						)
+						direct
+							? editing.queue(edit)
+							: void editing.save(() =>
+									api.updateOutputConfiguration(output.id, edit),
+								)
 					}
 				/>
 			) : (
@@ -167,7 +215,9 @@ export function OutputSettings({
 				/>
 			)}
 			{(mode === "sound" || mode === "all") && output.soundOutputInventory && (
-				<Button size="compact" onClick={configuration.reload}>Refresh audio devices</Button>
+				<Button size="compact" onClick={configuration.reload}>
+					Refresh audio devices
+				</Button>
 			)}
 			{direct && pendingRestart && (
 				<>
@@ -175,12 +225,7 @@ export function OutputSettings({
 					<div className="media-settings-actions">
 						<Button
 							onClick={() =>
-								void editing.save(() =>
-									api.updateOutputConfiguration(
-										output.id,
-										revertOutputEdit(output, mode),
-									),
-								)
+								editing.queue(revertOutputEdit(output, mode), true)
 							}
 						>
 							Revert to current settings
@@ -267,7 +312,7 @@ function RestartNotice({
 				? "A saved personality takes effect the next time this server starts. Protocol, universe and start address already apply."
 				: mode === "picture" || mode === "all"
 					? "Display selection changes take effect while Pixel is running. Other saved output changes take effect the next time this server starts."
-				: "Saved output changes take effect the next time this server starts. The output running now stays as it is."}
+					: "Saved output changes take effect the next time this server starts. The output running now stays as it is."}
 		</p>
 	);
 }
@@ -505,13 +550,22 @@ function SoundOutputFields({
 		<fieldset>
 			<legend>Sound output</legend>
 			{inventory?.state === "loading" && (
-				<p role="status">Discovering audio output devices… Settings remain available.</p>
+				<p role="status">
+					Discovering audio output devices… Settings remain available.
+				</p>
 			)}
 			{inventory?.state === "stalled" && (
-				<p role="status">Audio device discovery is taking longer than expected. Settings remain available. Refresh to check again; restart Pixel if discovery does not recover.</p>
+				<p role="status">
+					Audio device discovery is taking longer than expected. Settings remain
+					available. Refresh to check again; restart Pixel if discovery does not
+					recover.
+				</p>
 			)}
 			{inventory?.state === "failed" && (
-				<p role="status">Audio devices could not be discovered: {inventory.error}. Your selected output is retained. Refresh to try again.</p>
+				<p role="status">
+					Audio devices could not be discovered: {inventory.error}. Your
+					selected output is retained. Refresh to try again.
+				</p>
 			)}
 			<SelectField
 				label="Sound output"
@@ -532,7 +586,11 @@ function SoundOutputFields({
 				<SelectField
 					label="Device"
 					value={name}
-					options={deviceOptions(availableDevices, name, inventory === undefined || inventory?.state === "ready")}
+					options={deviceOptions(
+						availableDevices,
+						name,
+						inventory === undefined || inventory?.state === "ready",
+					)}
 					onChange={setName}
 				/>
 			)}
@@ -592,23 +650,44 @@ function outputDraftEdit(
 	return edit;
 }
 
-export function OutputEditor({
-	output,
-	busy,
-	onSave,
-	onCancel,
-	mode = "all",
-	showActions = true,
-	showCancel = true,
-}: {
-	output: OutputConfigurationView;
-	busy: boolean;
-	onSave: (edit: UpdateOutputConfiguration) => void;
-	onCancel: () => void;
-	mode?: "all" | "picture" | "sound" | "dmx";
-	showActions?: boolean;
-	showCancel?: boolean;
-}) {
+/** Queue a valid user edit before its form can disappear; the shared editor owns draining. */
+function useOutputAutosave(
+	enabled: boolean,
+	changed: boolean,
+	draftKey: string,
+	form: RefObject<HTMLFormElement | null>,
+	save: () => void,
+	revert?: { request: UpdateOutputConfiguration; draftKey: string },
+) {
+	const appliedRevert = useRef<UpdateOutputConfiguration | undefined>(
+		undefined,
+	);
+	const current = useRef(save);
+	current.current = save;
+	const queued = useRef<string | null>(null);
+	useEffect(() => {
+		if (revert && appliedRevert.current !== revert.request) {
+			appliedRevert.current = revert.request;
+			queued.current = revert.draftKey;
+			return;
+		}
+		if (
+			!enabled ||
+			(!changed && queued.current === null) ||
+			!form.current?.checkValidity() ||
+			queued.current === draftKey
+		)
+			return;
+		// A return to the stored value must replace an older queued draft too.
+		queued.current = draftKey;
+		current.current();
+	}, [enabled, changed, draftKey, form, revert]);
+}
+
+function useOutputDraft(
+	output: OutputConfigurationView,
+	revertRequest?: UpdateOutputConfiguration,
+) {
 	const [targetKind, setTargetKind] = useState(output.targetKind);
 	const [monitorBy, setMonitorBy] = useState(output.monitorBy ?? "index");
 	const [monitorValue, setMonitorValue] = useState(output.monitorValue ?? "0");
@@ -633,6 +712,30 @@ export function OutputEditor({
 	const [protocol, setProtocol] = useState(output.protocol);
 	const [universe, setUniverse] = useState(output.universe);
 	const [startAddress, setStartAddress] = useState(output.startAddress);
+	useEffect(() => {
+		if (!revertRequest) return;
+		if (revertRequest.targetKind != null)
+			setTargetKind(revertRequest.targetKind);
+		if (revertRequest.monitorBy != null) setMonitorBy(revertRequest.monitorBy);
+		if (revertRequest.monitorValue != null)
+			setMonitorValue(revertRequest.monitorValue);
+		if (revertRequest.fullscreen != null)
+			setFullscreen(revertRequest.fullscreen);
+		if (revertRequest.width != null) setWidth(revertRequest.width);
+		if (revertRequest.height != null) setHeight(revertRequest.height);
+		if (revertRequest.presentation != null)
+			setPresentation(revertRequest.presentation);
+		if (revertRequest.framesPerSecond != null)
+			setFramesPerSecond(revertRequest.framesPerSecond);
+		if (revertRequest.soundOutputKind != null)
+			setSoundOutputKind(revertRequest.soundOutputKind);
+		if (revertRequest.soundOutputName != null)
+			setSoundOutputName(revertRequest.soundOutputName);
+		if (revertRequest.personality != null)
+			setPersonality(revertRequest.personality);
+		if (revertRequest.startAddress != null)
+			setStartAddress(revertRequest.startAddress);
+	}, [revertRequest]);
 	const setResolutionMode = (mode: ResolutionMode) => {
 		setResolutionModeState(mode);
 		const dimensions = resolutionDimensions(mode, selectedMonitor);
@@ -641,22 +744,81 @@ export function OutputEditor({
 			setHeight(dimensions.height);
 		}
 	};
-	const form = useRef<HTMLFormElement>(null);
-	// Only a draft that differs from what the server stored is saved, so opening the page, a
-	// reload after a save, or React's development double effects never send an edit nobody made.
 	const picture = { targetKind, monitorBy, monitorValue, fullscreen };
 	const size = { width, height, presentation, framesPerSecond };
 	const sound = { soundOutputKind, soundOutputName };
 	const dmx = { personality, protocol, universe, startAddress };
 	const draft = { ...picture, ...size, ...sound, ...dmx };
-	const pending = draftDiffers(output, mode, draft)
-		? JSON.stringify(draft)
-		: "";
-	useEffect(() => {
-		if (showActions || pending === "") return;
-		const timer = window.setTimeout(() => form.current?.requestSubmit(), 350);
-		return () => window.clearTimeout(timer);
-	}, [showActions, pending]);
+	return {
+		draft,
+		selectedMonitor,
+		resolutionMode,
+		setResolutionMode,
+		setters: {
+			setTargetKind,
+			setMonitorBy,
+			setMonitorValue,
+			setFullscreen,
+			setWidth,
+			setHeight,
+			setPresentation,
+			setFramesPerSecond,
+			setSoundOutputKind,
+			setSoundOutputName,
+			setPersonality,
+			setProtocol,
+			setUniverse,
+			setStartAddress,
+		},
+	};
+}
+
+export function OutputEditor({
+	output,
+	revertRequest,
+	busy,
+	onSave,
+	onCancel,
+	mode = "all",
+	showActions = true,
+	showCancel = true,
+}: {
+	output: OutputConfigurationView;
+	revertRequest?: UpdateOutputConfiguration;
+	busy: boolean;
+	onSave: (edit: UpdateOutputConfiguration) => void;
+	onCancel: () => void;
+	mode?: "all" | "picture" | "sound" | "dmx";
+	showActions?: boolean;
+	showCancel?: boolean;
+}) {
+	const { draft, setters, selectedMonitor, resolutionMode, setResolutionMode } =
+		useOutputDraft(output, revertRequest);
+	const form = useRef<HTMLFormElement>(null);
+	// Only a draft that differs from what the server stored is saved, so opening the page, a
+	// reload after a save, or React's development double effects never send an edit nobody made.
+
+	useOutputAutosave(
+		!showActions,
+		draftDiffers(output, mode, draft),
+		JSON.stringify(draft),
+		form,
+		() => onSave(outputDraftEdit(mode, draft)),
+		revertRequest
+			? {
+					request: revertRequest,
+					draftKey: JSON.stringify({
+						...draft,
+						...Object.fromEntries(
+							Object.entries(revertRequest).filter(
+								([, value]) => value != null,
+							),
+						),
+						requestId: undefined,
+					}),
+				}
+			: undefined,
+	);
 
 	return (
 		<form
@@ -669,90 +831,34 @@ export function OutputEditor({
 			}}
 		>
 			{mode !== "dmx" && mode !== "sound" && (
-				<fieldset>
-					<legend>Output target</legend>
-					<SelectField
-						label="Target"
-						value={targetKind}
-						options={[
-							{ value: "off-screen", label: "Off-screen (no window)" },
-							{ value: "monitor", label: "Monitor" },
-						]}
-						onChange={setTargetKind}
-					/>
-					{targetKind === "monitor" && (
-						<>
-							<SelectField
-								label="Monitor"
-								value={`${monitorBy}:${monitorValue}`}
-								options={monitorOptions(output, monitorBy, monitorValue)}
-								onChange={(selection) => {
-									const [by, ...value] = selection.split(":");
-									const nextValue = value.join(":");
-									setMonitorBy(by);
-									setMonitorValue(nextValue);
-									if (resolutionMode === "monitor") {
-										const monitor = resolveMonitor(output, by, nextValue);
-										if (monitor) {
-											setWidth(monitor.width);
-											setHeight(monitor.height);
-										}
-									}
-								}}
-							/>
-							<CheckboxField
-								label="Full-screen"
-								stateLabel="Use the entire monitor"
-								checked={fullscreen}
-								onChange={(event) => setFullscreen(event.target.checked)}
-							/>
-						</>
-					)}
-				</fieldset>
+				<OutputTargetFields
+					{...{ output, resolutionMode, ...draft, ...setters }}
+				/>
 			)}
 
 			{mode !== "dmx" && mode !== "sound" && (
 				<PictureFields
-					{...{
-						resolutionMode,
-						canTakeFromMonitor: selectedMonitor !== undefined,
-						width,
-						height,
-						presentation,
-						framesPerSecond,
-						setWidth,
-						setHeight,
-						setPresentation,
-						setFramesPerSecond,
-						setResolutionMode,
-					}}
+					{...draft}
+					{...setters}
+					resolutionMode={resolutionMode}
+					canTakeFromMonitor={selectedMonitor !== undefined}
+					setResolutionMode={setResolutionMode}
 				/>
 			)}
 
 			{(mode === "all" || mode === "sound") && (
 				<SoundOutputFields
-					kind={soundOutputKind}
-					name={soundOutputName}
+					kind={draft.soundOutputKind}
+					name={draft.soundOutputName}
 					availableDevices={output.availableSoundOutputs}
 					inventory={output.soundOutputInventory}
-					setKind={setSoundOutputKind}
-					setName={setSoundOutputName}
+					setKind={setters.setSoundOutputKind}
+					setName={setters.setSoundOutputName}
 				/>
 			)}
 
 			{mode !== "picture" && mode !== "sound" && (
-				<DmxInputFields
-					{...{
-						personality,
-						protocol,
-						universe,
-						startAddress,
-						setPersonality,
-						setProtocol,
-						setUniverse,
-						setStartAddress,
-					}}
-				/>
+				<DmxInputFields {...draft} {...setters} />
 			)}
 
 			{showActions && (
@@ -768,6 +874,77 @@ export function OutputEditor({
 				</div>
 			)}
 		</form>
+	);
+}
+
+function OutputTargetFields({
+	output,
+	targetKind,
+	monitorBy,
+	monitorValue,
+	fullscreen,
+	resolutionMode,
+	setTargetKind,
+	setMonitorBy,
+	setMonitorValue,
+	setFullscreen,
+	setWidth,
+	setHeight,
+}: {
+	output: OutputConfigurationView;
+	targetKind: string;
+	monitorBy: string;
+	monitorValue: string;
+	fullscreen: boolean;
+	resolutionMode: ResolutionMode;
+	setTargetKind: (value: string) => void;
+	setMonitorBy: (value: string) => void;
+	setMonitorValue: (value: string) => void;
+	setFullscreen: (value: boolean) => void;
+	setWidth: (value: number) => void;
+	setHeight: (value: number) => void;
+}) {
+	return (
+		<fieldset>
+			<legend>Output target</legend>
+			<SelectField
+				label="Target"
+				value={targetKind}
+				options={[
+					{ value: "off-screen", label: "Off-screen (no window)" },
+					{ value: "monitor", label: "Monitor" },
+				]}
+				onChange={setTargetKind}
+			/>
+			{targetKind === "monitor" && (
+				<>
+					<SelectField
+						label="Monitor"
+						value={`${monitorBy}:${monitorValue}`}
+						options={monitorOptions(output, monitorBy, monitorValue)}
+						onChange={(selection) => {
+							const [by, ...value] = selection.split(":");
+							const nextValue = value.join(":");
+							setMonitorBy(by);
+							setMonitorValue(nextValue);
+							if (resolutionMode === "monitor") {
+								const monitor = resolveMonitor(output, by, nextValue);
+								if (monitor) {
+									setWidth(monitor.width);
+									setHeight(monitor.height);
+								}
+							}
+						}}
+					/>
+					<CheckboxField
+						label="Full-screen"
+						stateLabel="Use the entire monitor"
+						checked={fullscreen}
+						onChange={(event) => setFullscreen(event.target.checked)}
+					/>
+				</>
+			)}
+		</fieldset>
 	);
 }
 
@@ -919,10 +1096,19 @@ function resolveMonitor(
 	return undefined;
 }
 
-function deviceOptions(devices: string[], selected: string, discoveryComplete = true) {
+function deviceOptions(
+	devices: string[],
+	selected: string,
+	discoveryComplete = true,
+) {
 	const options = devices.map((device) => ({ value: device, label: device }));
 	if (selected && !devices.includes(selected)) {
-		options.unshift({ value: selected, label: discoveryComplete ? `${selected} · unavailable` : `${selected} · saved selection` });
+		options.unshift({
+			value: selected,
+			label: discoveryComplete
+				? `${selected} · unavailable`
+				: `${selected} · saved selection`,
+		});
 	}
 	return options;
 }
