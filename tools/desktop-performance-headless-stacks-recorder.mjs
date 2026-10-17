@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
 import {
 	constants,
@@ -7,7 +8,18 @@ import {
 	readSync,
 	writeSync,
 } from "node:fs";
-import { lstat, readFile, readdir, readlink, realpath } from "node:fs/promises";
+import {
+	chmod,
+	lstat,
+	mkdir,
+	mkdtemp,
+	open,
+	readFile,
+	readdir,
+	readlink,
+	realpath,
+	writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { parseLinuxProcessStat } from "./process-tree-resources.mjs";
 
@@ -675,9 +687,14 @@ export async function boundedCommand(
 	onOutput,
 	inputFile,
 	timeoutMs = 15000,
+	workingDirectory,
 ) {
 	require_(/^[a-z][a-z0-9-]{0,63}$/u.test(name), "private command name");
 	await privateDirectory(root);
+	require_(
+		!workingDirectory || workingDirectory === root,
+		"tool working directory escaped private root",
+	);
 	const out = new PrivateSink(path.join(root, `${name}.stdout`), cap);
 	const err = new PrivateSink(path.join(root, `${name}.stderr`), LIMITS.stderr);
 	let input = null,
@@ -706,6 +723,7 @@ export async function boundedCommand(
 		throw error;
 	}
 	const child = spawn(executable, args, {
+		cwd: workingDirectory,
 		stdio: ["ignore", "pipe", "pipe", input ?? "ignore"],
 		env: {
 			...process.env,
@@ -766,4 +784,117 @@ export async function boundedCommand(
 	if (failure) throw failure;
 	require_(status === 0, "bounded tool failed");
 	return onOutput ? null : privateText(out.filename, cap);
+}
+
+// Offline extraction of this exact built AppImage. Never weaken the later live executable hash.
+export async function pinPackagedHeadless(
+	appImage,
+	temporary,
+	extract = boundedCommand,
+) {
+	const fingerprint = (value) =>
+		`${value.dev}:${value.ino}:${value.size}:${value.mtimeMs}:${value.ctimeMs}`;
+	const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+	const readOwned = async (filename) => {
+		require_(
+			path.isAbsolute(filename) && (await realpath(filename)) === filename,
+			"binary redirect",
+		);
+		const descriptor = await open(
+			filename,
+			constants.O_RDONLY | constants.O_NOFOLLOW,
+		);
+		try {
+			const before = await descriptor.stat();
+			require_(
+				before.isFile() &&
+					before.uid === process.getuid() &&
+					before.nlink === 1 &&
+					!(before.mode & 0o022) &&
+					before.size <= 1024 * 1024 * 1024,
+				"binary ownership/size",
+			);
+			const bytes = await descriptor.readFile();
+			const after = await descriptor.stat(),
+				named = await lstat(filename);
+			require_(
+				!named.isSymbolicLink() &&
+					fingerprint(before) === fingerprint(after) &&
+					fingerprint(after) === fingerprint(named) &&
+					(await realpath(filename)) === filename,
+				"binary changed while reading",
+			);
+			require_(
+				bytes.subarray(0, 4).equals(Buffer.from([0x7f, 69, 76, 70])),
+				"binary ELF unavailable",
+			);
+			return {
+				metadata: fingerprint(after),
+				sha256: digest(bytes),
+				size_bytes: bytes.length,
+			};
+		} finally {
+			await descriptor.close();
+		}
+	};
+	const before = await readOwned(appImage);
+	await mkdir(temporary, { recursive: true });
+	require_(
+		path.isAbsolute(temporary) && (await realpath(temporary)) === temporary,
+		"temporary root redirect",
+	);
+	const parent = await lstat(temporary);
+	require_(
+		parent.isDirectory() &&
+			parent.uid === process.getuid() &&
+			!(parent.mode & 0o022),
+		"temporary root ownership",
+	);
+	const root = await mkdtemp(path.join(temporary, "packaged-headless-"));
+	await chmod(root, 0o700);
+	await extract(
+		root,
+		"appimage-extract",
+		appImage,
+		["--appimage-extract"],
+		LIMITS.raw,
+		undefined,
+		undefined,
+		30000,
+		root,
+	);
+	const after = await readOwned(appImage);
+	require_(
+		JSON.stringify(before) === JSON.stringify(after),
+		"AppImage changed during extraction",
+	);
+	const candidates = [];
+	let entries = 0;
+	const walk = async (directory, depth = 0) => {
+		require_(depth < 64, "package depth cap");
+		for (const entry of await readdir(directory, { withFileTypes: true })) {
+			require_(++entries <= 100000, "package entry cap");
+			const filename = path.join(directory, entry.name);
+			if (entry.name === "light-headless") candidates.push(filename);
+			if (entry.isDirectory()) await walk(filename, depth + 1);
+		}
+	};
+	await walk(root);
+	const binary = path.join(root, "squashfs-root/usr/bin/light-headless");
+	require_(
+		candidates.length === 1 && candidates[0] === binary,
+		"packaged headless identity",
+	);
+	const packaged = await readOwned(binary);
+	const receipt = {
+		schema: 1,
+		appimage: { path: appImage, ...before },
+		packaged: { path: binary, ...packaged },
+	};
+	const filename = path.join(root, "packaged-pin.json");
+	await writeFile(filename, JSON.stringify(receipt), {
+		flag: "wx",
+		mode: 0o600,
+	});
+	return filename;
 }

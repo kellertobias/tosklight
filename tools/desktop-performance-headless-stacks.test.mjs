@@ -521,7 +521,7 @@ test("numeric output roundtrip rejects unknown fields, raw strings, duplicated I
 		{ ...report, samples: LIMITS.samples + 1 },
 		{ ...report, raw_bytes: LIMITS.raw + 1 },
 		{ ...report, capture_complete: 2 },
-		{ ...report, schema_version: 1 },
+		{ ...report, schema_version: 3 },
 		{ ...report, multi_frame_samples: report.samples + 1 },
 		{ ...report, weighted_period: 0 },
 		{

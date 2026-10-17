@@ -150,15 +150,43 @@ jobs:
           config="$(npm run --silent artifact-path -- tmp)/tl775-diagnostic-control.json"
           node tools/write-tauri-artifact-config.mjs control "$config"
           cp "$config" "$OUT/tauri-control-config.json"
+          if [[ "$HEADLESS_STACKS" == 1 ]]; then export NO_STRIP=1; fi
           npm run --prefix apps/light-desktop tauri:build -- --target "$TARGET" \
             --config "$config" --bundles appimage 2>&1 | tee "$OUT/control-build.log"
           python3 - <<'PYTHON'
-          import hashlib, json, os, pathlib
+          import hashlib, json, os, pathlib, stat, subprocess
           root = pathlib.Path('.artifacts/build/cargo') / os.environ['TARGET'] / 'release'
           apps = sorted((root / 'bundle/appimage').glob('*.AppImage'))
           if len(apps) != 1:
               raise RuntimeError(f'Expected exactly one canonical AppImage, got {apps}')
           paths = [apps[0], root / 'light-headless', root / 'viz-renderer']
+          headless = root / 'light-headless'
+          if os.environ['HEADLESS_STACKS'] == '1':
+              result = subprocess.run(['node', 'tools/desktop-performance-headless-stacks.mjs',
+                                       '--pin-packaged', str(apps[0].resolve())],
+                                      capture_output=True, text=True, check=True, timeout=45)
+              pin = json.loads(pathlib.Path(result.stdout.strip()).read_text())
+              assert pin['schema'] == 1
+              assert pin['appimage']['sha256'] == hashlib.sha256(apps[0].read_bytes()).hexdigest()
+              packaged = pathlib.Path(pin['packaged']['path'])
+              assert not packaged.is_symlink() and packaged.resolve() == packaged
+              descriptor = os.open(packaged, os.O_RDONLY | os.O_NOFOLLOW)
+              with os.fdopen(descriptor, 'rb') as stream:
+                  identity = os.fstat(stream.fileno())
+                  assert stat.S_ISREG(identity.st_mode) and identity.st_uid == os.getuid() and identity.st_nlink == 1
+                  assert [str(identity.st_dev), str(identity.st_ino), str(identity.st_size)] == pin['packaged']['metadata'].split(':')[:3]
+                  payload = stream.read()
+                  after = os.fstat(stream.fileno())
+                  assert (identity.st_dev, identity.st_ino, identity.st_size, identity.st_mtime_ns, identity.st_ctime_ns) == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+              named = packaged.lstat()
+              assert not packaged.is_symlink() and (named.st_dev, named.st_ino, named.st_size, named.st_mtime_ns, named.st_ctime_ns) == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+              assert hashlib.sha256(payload).hexdigest() == pin['packaged']['sha256']
+              headless = root / 'tl775-packaged-light-headless'
+              with headless.open('xb') as stream:
+                  stream.write(payload)
+              headless.chmod(0o600)
+              assert hashlib.sha256(headless.read_bytes()).hexdigest() == pin['packaged']['sha256']
+              paths.append(headless)
           data = {'source_sha': os.environ['CANDIDATE_SHA'],
                   'binaries': [{'path': str(p), 'sha256': hashlib.sha256(p.read_bytes()).hexdigest(),
                                 'size_bytes': p.stat().st_size} for p in paths]}
@@ -168,7 +196,7 @@ jobs:
               stream.write('\n')
           with open(os.environ['GITHUB_ENV'], 'a') as stream:
               stream.write(f'DIAGNOSTIC_APPIMAGE={apps[0].resolve()}\n')
-              stream.write(f'DIAGNOSTIC_HEADLESS={(root / "light-headless").resolve()}\n')
+              stream.write(f'DIAGNOSTIC_HEADLESS={headless.resolve()}\n')
           PYTHON
 
       - name: Measure unchanged 576-fixture case OFF then ON for each requested worker setting

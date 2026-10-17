@@ -18,6 +18,7 @@ import {
 	LIMITS,
 	boundedCommand,
 	openRecorder,
+	pinPackagedHeadless,
 	privateDirectory,
 	privateJson,
 	privateText,
@@ -76,7 +77,7 @@ export function functionId(symbol) {
 }
 export function emptyReport() {
 	return {
-		schema_version: 3,
+		schema_version: 4,
 		function_mapping_version: 1,
 		requested_frequency_hz: 49,
 		preflight_available: 0,
@@ -85,6 +86,8 @@ export function emptyReport() {
 		recording_started: 0,
 		capture_complete: 0,
 		failure_code: 0,
+		pre_record_setup_stage: 0,
+		pre_record_binary_match: null,
 		record_stage: 0,
 		record_exit_code: null,
 		record_signal: null,
@@ -668,12 +671,19 @@ export async function exportReport(outputDirectory, report) {
 	assertNumericOnly(report);
 	const baseline = emptyReport();
 	require_(
-		report.schema_version === 3 &&
+		report.schema_version === 4 &&
 			report.function_mapping_version === 1 &&
 			report.requested_frequency_hz === 49,
 		"unknown public schema",
 	);
+	require_(
+		Number.isSafeInteger(report.pre_record_setup_stage) &&
+			report.pre_record_setup_stage >= 0 &&
+			report.pre_record_setup_stage <= 4,
+		"public setup stage bound",
+	);
 	for (const key of [
+		"pre_record_binary_match",
 		"record_privileged",
 		"record_spawn_error",
 		"record_capture_error",
@@ -873,13 +883,20 @@ export class HeadlessStackCapture {
 		const open = this.io.openRecorder ?? openRecorder;
 		const parse = this.io.decode ?? decode;
 		try {
+			this.report.pre_record_setup_stage = 1;
 			binding = validatedServerBinding(cpu);
+			this.report.pre_record_setup_stage = 2;
 			await inspect(binding);
-			require_(
+			this.report.pre_record_setup_stage = 3;
+			this.report.pre_record_binary_match = Number(
 				hash(await (this.io.readFile ?? readFile)(binding.executable)) ===
 					this.binaryHash,
+			);
+			require_(
+				this.report.pre_record_binary_match === 1,
 				"running headless binary differs from pinned binary",
 			);
+			this.report.pre_record_setup_stage = 4;
 			firstThreads = await listThreads(binding.pid);
 			this.report.initial_threads = firstThreads.length;
 			await this.retainPrivate("owned-headless-before.json", {
@@ -1022,12 +1039,16 @@ if (
 	path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
 	const [operation, perf, outputDirectory] = process.argv.slice(2);
-	require_(
-		operation === "--preflight" &&
-			path.isAbsolute(perf ?? "") &&
-			path.isAbsolute(outputDirectory ?? ""),
-		"preflight usage",
-	);
-	const receipt = await hostPreflight(perf, outputDirectory);
-	console.log(receipt);
+	if (operation === "--pin-packaged") {
+		console.log(await pinPackagedHeadless(perf, artifactPaths.tmp));
+	} else {
+		require_(
+			operation === "--preflight" &&
+				path.isAbsolute(perf ?? "") &&
+				path.isAbsolute(outputDirectory ?? ""),
+			"preflight usage",
+		);
+		const receipt = await hostPreflight(perf, outputDirectory);
+		console.log(receipt);
+	}
 }

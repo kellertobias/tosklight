@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFile, mkdtemp, rm } from "node:fs/promises";
+import {
+	readFile,
+	mkdtemp,
+	rm,
+	mkdir,
+	writeFile,
+	chmod,
+	lstat,
+	symlink,
+	link,
+	rename,
+} from "node:fs/promises";
 import path from "node:path";
 import test, { after } from "node:test";
 import vm from "node:vm";
@@ -290,7 +301,7 @@ test("stderr classifier is closed and never publishes diagnostic text, paths, sy
 		assert.doesNotMatch(JSON.stringify(value), /private|secret|symbol|pid123/);
 	}
 });
-test("schema3 numeric export retains exact failure evidence and rejects oldschema, raw and hostile enum fields", async () => {
+test("schema4 numeric export retains exact failure evidence and rejects oldschema, raw and hostile enum fields", async () => {
 	const details = recorder.recorderFailureDetails({
 		name: "sudo-control",
 		privileged: true,
@@ -308,7 +319,7 @@ test("schema3 numeric export retains exact failure evidence and rejects oldschem
 		failure_code: 1,
 		privileged: 1,
 	};
-	assert.equal(report.schema_version, 3);
+	assert.equal(report.schema_version, 4);
 	const directory = await mkdtemp(path.join(scratch, "stack-failure-public-"));
 	await exportReport(directory, report);
 	assert.deepEqual(
@@ -322,7 +333,7 @@ test("schema3 numeric export retains exact failure evidence and rejects oldschem
 	);
 	for (const patch of [
 		{ schema_version: 1 },
-		{ schema_version: 2 },
+		{ schema_version: 3 },
 		{ record_stage: 4 },
 		{ record_signal: 14 },
 		{ record_exit_code: -1 },
@@ -615,4 +626,284 @@ test("normal completion never accepts early zero, natural signal, cap STOP or mi
 			return true;
 		});
 	}
+});
+
+// Real run/export boundaries: failure evidence must identify the attempted operation,
+// without promoting a failed setup to recording success or exporting private errors.
+test("pre-record setup stages preserve binding, identity, binary and thread failures", async (t) => {
+	for (const scenario of [
+		"binding",
+		"identity",
+		"read",
+		"mismatch",
+		"threads",
+		"open",
+	])
+		await t.test(scenario, async () => {
+			const original = new Error(`/private/secret pid=1234 ${scenario}`);
+			const binding = {
+				pid: 10,
+				executable: "/private/server",
+				ancestry: [{ pid: 9 }],
+			};
+			const cpu = {
+				mode: scenario === "binding" ? "on" : "off",
+				rootPid: 9,
+				bindings: new Map([[10, binding]]),
+				receipts: [{ owned: [binding] }],
+			};
+			let exported,
+				opened = 0,
+				measured = 0;
+			const capture = new HeadlessStackCapture(
+				{
+					root: "/private",
+					outputDirectory: "/public",
+					preflight: { perf: "/usr/bin/perf", privileged: false },
+					report: emptyReport(),
+					binaryHash: createHash("sha256").update("binary").digest("hex"),
+				},
+				{
+					verifyIdentity: async () => {
+						if (scenario === "identity") throw original;
+					},
+					readFile: async () => {
+						if (scenario === "read") throw original;
+						return Buffer.from(scenario === "mismatch" ? "changed" : "binary");
+					},
+					threads: async () => {
+						if (scenario === "threads") throw original;
+						return [10];
+					},
+					writePrivate: async () => {},
+					openRecorder: async () => {
+						opened++;
+						throw original;
+					},
+					exportReport: async (_directory, value) => {
+						exported = structuredClone(value);
+					},
+				},
+			);
+			await assert.rejects(
+				capture.run(cpu, async () => {
+					measured++;
+				}),
+				(error) => {
+					if (!["binding", "mismatch"].includes(scenario))
+						assert.equal(error, original);
+					return true;
+				},
+			);
+			assert.equal(
+				exported.pre_record_setup_stage,
+				{ binding: 1, identity: 2, read: 3, mismatch: 3, threads: 4, open: 4 }[
+					scenario
+				],
+			);
+			assert.equal(
+				exported.pre_record_binary_match,
+				["threads", "open"].includes(scenario)
+					? 1
+					: scenario === "mismatch"
+						? 0
+						: null,
+			);
+			assert.equal(exported.recording_started, 0);
+			assert.equal(exported.capture_complete, 0);
+			assert.equal(opened, Number(scenario === "open"));
+			assert.equal(measured, 0);
+			assert.doesNotMatch(JSON.stringify(exported), /secret|pid=|\/private/u);
+		});
+});
+
+test("schema4 setup evidence has a closed numeric vocabulary", async () => {
+	for (const patch of [
+		{ pre_record_setup_stage: null },
+		{ pre_record_setup_stage: 5 },
+		{ pre_record_setup_stage: -1 },
+		{ pre_record_setup_stage: "hash" },
+		{ pre_record_binary_match: 2 },
+		{ pre_record_binary_match: "/private/binary" },
+		{ schema_version: 3 },
+		{ pre_record_binary_path: "/private/binary" },
+	]) {
+		await assert.rejects(exportReport(scratch, { ...emptyReport(), ...patch }));
+	}
+	for (const match of [null, 0, 1]) {
+		const directory = await mkdtemp(path.join(scratch, "schema4-"));
+		await exportReport(directory, {
+			...emptyReport(),
+			pre_record_setup_stage: 3,
+			pre_record_binary_match: match,
+		});
+		const report = JSON.parse(
+			await readFile(path.join(directory, "headless-stacks-numeric.json")),
+		);
+		assert.equal(report.schema_version, 4);
+		assert.equal(report.pre_record_binary_match, match);
+	}
+});
+
+const elf = (value) =>
+	Buffer.concat([Buffer.from([0x7f, 69, 76, 70]), Buffer.from(value)]);
+async function packageFixture(scenario = "valid") {
+	const base = await mkdtemp(path.join(scratch, "package-"));
+	const image = path.join(base, "candidate.AppImage");
+	await writeFile(image, elf("AppImage"), { mode: 0o700 });
+	const extract = async (
+		root,
+		name,
+		executable,
+		args,
+		cap,
+		output,
+		input,
+		timeout,
+		cwd,
+	) => {
+		assert.equal(executable, image);
+		assert.equal(name, "appimage-extract");
+		assert.deepEqual(args, ["--appimage-extract"]);
+		assert.equal(cap, 64 * 1024 * 1024);
+		assert.equal(output, undefined);
+		assert.equal(input, undefined);
+		assert.equal(timeout, 30000);
+		assert.equal(cwd, root);
+		assert.equal((await lstat(root)).mode & 0o777, 0o700);
+		if (scenario === "extract-failed") throw new Error("extract failed");
+		const binary = path.join(root, "squashfs-root/usr/bin/light-headless");
+		await mkdir(path.dirname(binary), { recursive: true });
+		if (scenario !== "missing")
+			await writeFile(
+				binary,
+				scenario === "not-elf"
+					? Buffer.from("not ELF")
+					: elf("packaged-sidecar"),
+				{ mode: 0o755 },
+			);
+		if (scenario === "changed") await writeFile(image, elf("mutated image"));
+		if (scenario === "replaced") {
+			await rename(image, `${image}.old`);
+			await writeFile(image, elf("AppImage"), { mode: 0o700 });
+		}
+		if (scenario === "duplicate") {
+			await mkdir(path.join(root, "other"));
+			await writeFile(path.join(root, "other/light-headless"), elf("other"));
+		}
+		if (scenario === "symlink") {
+			await rename(binary, `${binary}.real`);
+			await symlink(`${binary}.real`, binary);
+		}
+		if (scenario === "ancestor-symlink") {
+			await rename(path.dirname(binary), path.join(root, "real-bin"));
+			await symlink(path.join(root, "real-bin"), path.dirname(binary));
+		}
+		if (scenario === "hardlink") await link(binary, `${binary}.hardlink`);
+		if (scenario === "writable") await chmod(binary, 0o777);
+	};
+	return { base, image, extract };
+}
+
+test("packaged sidecar pin binds extracted bytes rather than raw build bytes", async () => {
+	const f = await packageFixture();
+	const filename = await recorder.pinPackagedHeadless(
+		f.image,
+		f.base,
+		f.extract,
+	);
+	const value = JSON.parse(await readFile(filename));
+	assert.equal(value.schema, 1);
+	assert.equal((await lstat(filename)).mode & 0o777, 0o600);
+	assert.equal(value.appimage.path, f.image);
+	assert.equal(
+		value.packaged.sha256,
+		createHash("sha256").update(elf("packaged-sidecar")).digest("hex"),
+	);
+	assert.notEqual(value.appimage.sha256, value.packaged.sha256);
+	assert.equal(
+		value.packaged.path,
+		path.join(path.dirname(filename), "squashfs-root/usr/bin/light-headless"),
+	);
+});
+
+test("packaged pin rejects changed, replaced, ambiguous and redirected sources", async () => {
+	for (const scenario of [
+		"changed",
+		"replaced",
+		"duplicate",
+		"symlink",
+		"ancestor-symlink",
+		"hardlink",
+		"writable",
+		"not-elf",
+		"missing",
+		"extract-failed",
+	]) {
+		const f = await packageFixture(scenario);
+		await assert.rejects(
+			recorder.pinPackagedHeadless(f.image, f.base, f.extract),
+			undefined,
+			scenario,
+		);
+	}
+	const f = await packageFixture();
+	const redirect = `${f.image}.link`;
+	await symlink(f.image, redirect);
+	await assert.rejects(
+		recorder.pinPackagedHeadless(redirect, f.base, f.extract),
+		/redirect/u,
+	);
+});
+
+test("bounded extraction command uses only its private owned working directory", async () => {
+	const root = await mkdtemp(path.join(scratch, "command-cwd-"));
+	await chmod(root, 0o700);
+	const output = await recorder.boundedCommand(
+		root,
+		"cwd-proof",
+		process.execPath,
+		["-e", "process.stdout.write(process.cwd())"],
+		4096,
+		undefined,
+		undefined,
+		2000,
+		root,
+	);
+	assert.equal(output, root);
+	await assert.rejects(
+		recorder.boundedCommand(
+			root,
+			"escape",
+			process.execPath,
+			[],
+			4096,
+			undefined,
+			undefined,
+			2000,
+			scratch,
+		),
+		/escaped private root/u,
+	);
+});
+
+test("workflow pins the packaged sidecar only for the explicit stack diagnostic", async () => {
+	const workflow = await readFile(
+		new URL(
+			"../.github/workflows/release-output-diagnostics.yml",
+			import.meta.url,
+		),
+		"utf8",
+	);
+	assert.match(
+		workflow,
+		/if \[\[ "\$HEADLESS_STACKS" == 1 \]\]; then export NO_STRIP=1; fi/u,
+	);
+	assert.match(workflow, /'--pin-packaged', str\(apps\[0\]\.resolve\(\)\)/u);
+	assert.match(
+		workflow,
+		/paths = \[apps\[0\], root \/ 'light-headless', root \/ 'viz-renderer'\]/u,
+	);
+	assert.match(workflow, /paths\.append\(headless\)/u);
+	assert.match(workflow, /DIAGNOSTIC_HEADLESS=\{headless\.resolve\(\)\}/u);
 });
