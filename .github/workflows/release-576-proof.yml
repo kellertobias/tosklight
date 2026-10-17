@@ -5,6 +5,9 @@ on:
     paths:
       - .github/workflows/release-576-proof.yml
       - crates/light/domain/dynamics/src/**
+      - crates/light/domain/engine/src/parallel.rs
+      - crates/light/domain/engine/src/parallel/**
+      - crates/light/domain/engine/Cargo.toml
       - crates/light/adapters/headless/src/runtime/output_scheduler/**
       - tools/desktop-performance-576-*.mjs
       - tools/run-desktop-performance-576-proof.mjs
@@ -61,9 +64,26 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
           mkdir -p "$OUT/public"
+          # This final default-policy proof requires the reviewed guest topology.
+          # Fail on a different target; never force a worker override to imitate it.
+          python3 - <<'PYTHON'
+          import os,pathlib
+          assert 'LIGHT_OUTPUT_WORKERS' not in os.environ, 'default proof must not override workers'
+          allowed=sorted(os.sched_getaffinity(0))
+          assert len(allowed)==4, 'default proof requires four allowed logical CPUs'
+          cores=set()
+          for cpu in allowed:
+              location=pathlib.Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              package=int((location/'physical_package_id').read_text().strip())
+              core=int((location/'core_id').read_text().strip())
+              assert 0<=package<=2147483647 and 0<=core<=2147483647, 'unsupported guest topology IDs'
+              cores.add((package,core))
+          assert len(cores)==2, 'default proof requires two guest topology cores'
+          PYTHON
           npm ci >"$OUT/npm-ci.log" 2>&1
           node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs
           cargo test --locked -p light-dynamics --lib
+          cargo test --locked -p light-engine --lib parallel
       - name: Build exact canonical release Control and sidecars
         run: |
           set -euo pipefail
@@ -102,64 +122,61 @@ jobs:
               pass
           proof={'source_commit':os.environ['CANDIDATE_SHA'],'workflow_commit':os.environ['GITHUB_SHA'],
                  'platform':platform.platform(),'cpu_count':os.cpu_count(),'allowed_cpu_count':len(os.sched_getaffinity(0)),**topology,
-                 'benchmark_modes':['control_worker_comparison_without_stage','stage_functional'],'control_worker_counts':[3,4,2,1],'stage_worker_count':4,'cpu_models':sorted({line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name') and ':' in line}),
+                 'benchmark_modes':['control_without_stage','stage_functional'],'expected_default_workers':2,'default_worker_override_absent':int('LIGHT_OUTPUT_WORKERS' not in os.environ),'cpu_models':sorted({line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name') and ':' in line}),
                  'rustc':subprocess.check_output(['rustc','-Vv'],text=True),
                  'source_sha256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sources if p and pathlib.Path(p).is_file()},
                  'binaries':{p.name:{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in [apps[0],root/'light-headless',root/'viz-renderer']}}
+          assert proof['default_worker_override_absent']==1 and proof['allowed_cpu_count']==4 and proof['allowed_topology_available']==1 and proof['allowed_topology_core_count']==2
           assert proof['source_sha256'] and len(proof['source_sha256']) == sum(bool(p) and pathlib.Path(p).is_file() for p in sources)
           (pathlib.Path(os.environ['OUT'])/'public'/'provenance.json').write_text(json.dumps(proof,indent=2)+'\n')
           with open(os.environ['GITHUB_ENV'],'a') as f:f.write(f'PROOF_APPIMAGE={apps[0].resolve()}\n')
           PYTHON
-      - name: Compare fixed Control worker counts on unchanged 576 workload
+      - name: Prove default-policy 40 Hz Control without Stage on unchanged 576 workload
         env:
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
         run: |
           set -euo pipefail
-          comparison_status=0
-          # Predeclared order, one attempt each, one exact binary and unchanged strict gates.
-          # Retain every outcome. This comparison does not select a production worker policy.
-          for workers in 3 4 2 1; do
-            private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-workers-$workers"
-            directory="$OUT/public/control-workers-$workers"
-            mkdir -p "$directory"
-            set +e
-            LIGHT_OUTPUT_WORKERS="$workers" timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode control --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/control-workers-$workers.stdout.log" 2>"$OUT/control-workers-$workers.stderr.log"
-            proof_status=$?
-            node --input-type=module - "$workers" "$directory" <<'JAVASCRIPT'
+          test "${LIGHT_OUTPUT_WORKERS+x}" != x
+          private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-control"
+          directory="$OUT/public/control"
+          mkdir -p "$directory"
+          set +e
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode control --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/control.stdout.log" 2>"$OUT/control.stderr.log"
+          proof_status=$?
+          node --input-type=module - "$directory" <<'JAVASCRIPT'
           import assert from 'node:assert/strict';
           import { readFile } from 'node:fs/promises';
           import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
           import { validatePhaseDiagnostics } from './tools/desktop-performance-576-phases.mjs';
           import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
-          const workers = Number(process.argv[2]), directory = process.argv[3];
-          assert([3,4,2,1].includes(workers));
+          const directory = process.argv[2];
+          assert.equal(process.env.LIGHT_OUTPUT_WORKERS, undefined);
+          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '2');
           const receipt = validateWorkerDiagnostics(JSON.parse(await readFile(`${directory}/worker-numeric.json`, 'utf8')));
-          assert.equal(receipt.expected_workers, workers);
+          assert.equal(receipt.expected_workers, 2);
           for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
           assert.equal(receipt.observations, 2);
           assert.equal(receipt.valid_observations, 2);
           assert.equal(receipt.failure_code, 0);
           const proof = validateNumericProof(JSON.parse(await readFile(`${directory}/desktop-576-proof-numeric.json`, 'utf8')));
           assert.equal(proof.proof_mode_code, 1);
-          assert.equal(proof.requested_hz, 40);
-          assert.equal(proof.minimum_required_hz, 38);
           assert.equal(proof.counter_observations, 61);
           assert.equal(proof.interval_count, 60);
           assert.equal(proof.complete, 1);
           assert.equal(proof.all_gates_passed, 1);
           validatePhaseDiagnostics(JSON.parse(await readFile(`${directory}/phase-numeric.json`, 'utf8')));
           JAVASCRIPT
-            validation_status=$?
-            set -e
-            printf 'workers=%s proof_exit=%s validation_exit=%s\n' "$workers" "$proof_status" "$validation_status" >>"$OUT/worker-comparison-status.log"
-            if [ "$proof_status" -ne 0 ] || [ "$validation_status" -ne 0 ]; then comparison_status=1; fi
-          done
-          exit "$comparison_status"
-      - name: Verify software-rendered Stage functionality on unchanged 576 workload
+          validation_status=$?
+          set -e
+          printf 'proof_exit=%s validation_exit=%s\n' "$proof_status" "$validation_status" >"$OUT/control-default-status.log"
+          test "$proof_status" -eq 0
+          test "$validation_status" -eq 0
+      - name: Verify default-policy software-rendered Stage functionality on unchanged 576 workload
         if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
         env:
           WEBKIT_DISABLE_COMPOSITING_MODE: '1'
@@ -167,12 +184,44 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
-          LIGHT_OUTPUT_WORKERS: '4'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
         run: |
           set -euo pipefail
+          test "${LIGHT_OUTPUT_WORKERS+x}" != x
           private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-stage"
-          mkdir -p "$OUT/public/stage"
-          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode stage --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$OUT/public/stage/desktop-576-proof-numeric.json" >"$OUT/stage.stdout.log" 2>"$OUT/stage.stderr.log"
+          directory="$OUT/public/stage"
+          mkdir -p "$directory"
+          set +e
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode stage --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/stage.stdout.log" 2>"$OUT/stage.stderr.log"
+          proof_status=$?
+          node --input-type=module - "$directory" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
+          import { validatePhaseDiagnostics } from './tools/desktop-performance-576-phases.mjs';
+          import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
+          const directory = process.argv[2];
+          assert.equal(process.env.LIGHT_OUTPUT_WORKERS, undefined);
+          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '2');
+          const receipt = validateWorkerDiagnostics(JSON.parse(await readFile(`${directory}/worker-numeric.json`, 'utf8')));
+          assert.equal(receipt.expected_workers, 2);
+          for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
+          assert.equal(receipt.observations, 2);
+          assert.equal(receipt.valid_observations, 2);
+          assert.equal(receipt.failure_code, 0);
+          const proof = validateNumericProof(JSON.parse(await readFile(`${directory}/desktop-576-proof-numeric.json`, 'utf8')));
+          assert.equal(proof.proof_mode_code, 2);
+          assert.equal(proof.counter_observations, 61);
+          assert.equal(proof.interval_count, 60);
+          assert.equal(proof.complete, 1);
+          assert.equal(proof.all_gates_passed, 1);
+          validatePhaseDiagnostics(JSON.parse(await readFile(`${directory}/phase-numeric.json`, 'utf8')));
+          JAVASCRIPT
+          validation_status=$?
+          set -e
+          printf 'proof_exit=%s validation_exit=%s\n' "$proof_status" "$validation_status" >"$OUT/stage-default-status.log"
+          test "$proof_status" -eq 0
+          test "$validation_status" -eq 0
       - name: Publish closed numeric proof only
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -180,18 +229,10 @@ jobs:
           name: linux-576-numeric-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/provenance.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-3/desktop-576-proof-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-3/phase-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-3/worker-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-4/desktop-576-proof-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-4/phase-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-4/worker-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-2/desktop-576-proof-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-2/phase-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-2/worker-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-1/desktop-576-proof-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-1/phase-numeric.json
-            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control-workers-1/worker-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/desktop-576-proof-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/phase-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/worker-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/desktop-576-proof-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/phase-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/worker-numeric.json
           if-no-files-found: error
