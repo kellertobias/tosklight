@@ -565,11 +565,24 @@ impl RetainedExpressionTape {
     pub(crate) fn validate_plain_leaf(
         expression: &DynamicSampleExpression,
     ) -> Option<Result<(), IntentError>> {
-        if !matches!(
-            expression,
-            DynamicSampleExpression::Programming { .. }
-                | DynamicSampleExpression::LegacyScalar { .. }
-        ) {
+        if let DynamicSampleExpression::Programming {
+            address,
+            value,
+            dependency_occurrence,
+            ..
+        } = expression
+        {
+            // Match node_summary's source checks in their original order, borrowing the
+            // current leaf instead of cloning its address/value/dependency into a tape node.
+            return Some((|| {
+                address.validate_value_shape(value)?;
+                if let Some(dependency) = dependency_occurrence {
+                    dependency.validate(address.owner())?;
+                }
+                Ok(())
+            })());
+        }
+        if !matches!(expression, DynamicSampleExpression::LegacyScalar { .. }) {
             return None;
         }
         Some(
@@ -1036,5 +1049,7 @@ fn site_matches(
 
 #[cfg(test)]
 mod numeric_tests;
+#[cfg(test)]
+mod plain_leaf_tests;
 #[cfg(test)]
 mod tests;
