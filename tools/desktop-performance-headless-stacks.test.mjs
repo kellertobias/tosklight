@@ -1,3 +1,4 @@
+import { auditPerfScript } from "./desktop-performance-headless-stack-audit.mjs";
 import * as recorderModule from "./desktop-performance-headless-stacks-recorder.mjs";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -29,6 +30,7 @@ import {
 	functionId,
 	HeadlessStackCapture,
 	runRecorderLifetimeProbe,
+	snapshotStackAuditMaps,
 	LIMITS,
 	PerfScriptParser,
 	PrivateSink,
@@ -1211,7 +1213,7 @@ test("headless observation explicitly uses120 seconds without changing generic p
 	await fixture.capture.run(fixture.cpu, async () => 1);
 });
 
-function lifetimeProbeFixture(scenario = "success") {
+function lifetimeProbeFixture(scenario = "success", injected = {}) {
 	const calls = [],
 		proof = [];
 	let clock = 0n,
@@ -1351,7 +1353,11 @@ function lifetimeProbeFixture(scenario = "success") {
 	return {
 		calls,
 		proof,
-		run: () => runRecorderLifetimeProbe("/installed/perf", "/numeric", io),
+		run: () =>
+			runRecorderLifetimeProbe("/installed/perf", "/numeric", {
+				...io,
+				...injected,
+			}),
 	};
 }
 
@@ -1430,4 +1436,188 @@ test("lifetime probe preserves all stage failures, keeps raw detail private and 
 		needsKill.calls.filter((x) => x.startsWith("SIG")),
 		["SIGTERM", "SIGKILL"],
 	);
+});
+
+function auditFor(text = sample(), pid = 10, executable = "/private/server") {
+	const expected = new PerfScriptParser(pid);
+	expected.feed(text);
+	expected.finish();
+	return auditPerfScript(text, {
+		tgid: pid,
+		ownedExecutable: executable,
+		expectedReport: expected.report,
+	});
+}
+
+test("optional audit failure preserves independent decoded counts, strict completeness and genuine cap status", async () => {
+	for (const unresolved of [false, true]) {
+		const source = unresolved
+			? sample().replace(
+					"light_dynamics::programming::preparation::Preparer<O>::prepare_owner_sample",
+					"[unknown]",
+				)
+			: sample();
+		let audited = 0;
+		const f = captureFixture({
+			auditEnabled: true,
+			verifyRuntimeSymbols: async () => ({ libraries: [] }),
+			snapshotAuditMaps: async () => "before snapshot",
+			decode: async () => parser(source),
+			auditDecoded: async () => {
+				audited++;
+				throw new Error("capture audit write cap failure");
+			},
+		});
+		await assert.rejects(f.capture.run(f.cpu, async () => 123));
+		const report = f.reports[0];
+		assert.equal(audited, 1);
+		assert.equal(report.samples, 1);
+		assert.equal(report.coverage.frame_count, 2);
+		assert.equal(report.lost_events, 0);
+		assert.equal(
+			report.unresolved_frames,
+			source.includes("[unknown]") ? 1 : 0,
+		);
+		assert.equal(report.capture_complete, source.includes("[unknown]") ? 0 : 1);
+		assert.equal(report.cap_code, 0);
+		assert.equal(report.failure_code, 3);
+	}
+});
+
+test("optional audit receives deduplicated verified aliases and cannot waive unresolved-frame completeness", async () => {
+	for (const unresolved of [false, true]) {
+		const text = unresolved
+			? sample().replace(
+					"light_dynamics::programming::preparation::Preparer<O>::prepare_owner_sample",
+					"[unknown]",
+				)
+			: sample();
+		const calls = [];
+		const f = captureFixture({
+			auditEnabled: true,
+			verifyRuntimeSymbols: async () => ({
+				libraries: [
+					{ mapped_path: "/lib/libc.so.6", runtime_path: "/lib/libc.so.6" },
+				],
+			}),
+			snapshotAuditMaps: async () => {
+				calls.push("snapshot");
+				return "snapshot";
+			},
+			openRecorder: async () => {
+				calls.push("open");
+				return f.recorder;
+			},
+			decode: async () => parser(text),
+			auditDecoded: async (_root, _name, _binding, decoded, maps, paths) => {
+				calls.push("audit");
+				assert.equal(decoded.report.samples, 1);
+				assert.equal(maps, "snapshot");
+				assert.deepEqual(paths, ["/lib/libc.so.6"]);
+				return auditFor(text);
+			},
+		});
+		if (unresolved)
+			await assert.rejects(
+				f.capture.run(f.cpu, async () => 123),
+				/partial sampling coverage/,
+			);
+		else assert.equal(await f.capture.run(f.cpu, async () => 123), 123);
+		assert.deepEqual(calls, ["snapshot", "open", "audit"]);
+		assert.equal(f.reports[0].capture_complete, Number(!unresolved));
+	}
+});
+
+test("lifetime audit is opt-in, runs after decode and retains decoded metrics when its mechanics fail", async () => {
+	for (const failed of [false, true]) {
+		const calls = [];
+		const f = lifetimeProbeFixture("success", {
+			auditEnabled: true,
+			snapshotAuditMaps: async () => {
+				calls.push("snapshot");
+				return "maps";
+			},
+			auditDecoded: async (_root, _name, _binding, decoded, maps) => {
+				calls.push("audit");
+				assert.equal(decoded.report.samples, 2);
+				assert.equal(maps, "maps");
+				if (failed) throw new Error("private audit failure");
+				return auditFor(sample(42) + sample(42), 42);
+			},
+		});
+		const report = await f.run();
+		assert.deepEqual(calls, ["snapshot", "audit"]);
+		assert.equal(report.capture_audit_requested, 1);
+		assert.equal(report.passed, Number(!failed));
+		assert.equal(report.samples, 2);
+		assert.equal(report.resolved_frames, 2);
+		assert.equal(report.unresolved_frames, 0);
+		assert.equal(report.helper_gone, 1);
+		assert.equal(report.recorder_gone, 1);
+		assert.equal(report.performance_acceptance, 0);
+		assert.deepEqual(f.proof[0].report, report);
+		if (!failed) assert.equal(report.capture_audit.audit_valid, 1);
+	}
+});
+
+test("map snapshot uses a birth-checked owned target, bounded reads, private exclusive storage and closes on errors", async () => {
+	for (const variant of ["valid", "cap", "identity", "encoding", "write"]) {
+		const calls = [];
+		let offset = 0,
+			identities = 0;
+		const bytes =
+			variant === "cap"
+				? Buffer.alloc(1024 * 1024 + 1, 65)
+				: variant === "encoding"
+					? Buffer.from([255, 10])
+					: Buffer.from("1000-2000 r-xp 0000 00:00 1 /private/server\n");
+		const io = {
+			privateDirectory: async () => calls.push("private"),
+			verifyIdentity: async () => {
+				calls.push("identity");
+				if (++identities === 2 && variant === "identity")
+					throw new Error("birth changed");
+			},
+			open: async (filename) => {
+				assert.equal(filename, "/proc/42/maps");
+				return {
+					read: async (buffer, _offset, length) => {
+						const count = Math.min(length, bytes.length - offset);
+						bytes.copy(buffer, 0, offset, offset + count);
+						offset += count;
+						return { bytesRead: count };
+					},
+					close: async () => calls.push("close"),
+				};
+			},
+			writeFile: async (filename, content, options) => {
+				calls.push("write");
+				assert.equal(filename, "/private/probe-maps-before.txt");
+				assert.equal(options.flag, "wx");
+				assert.equal(options.mode, 0o600);
+				assert.deepEqual(content, bytes);
+				if (variant === "write") throw new Error("write failed");
+			},
+		};
+		if (variant === "valid")
+			assert.equal(
+				await snapshotStackAuditMaps("/private", "probe", { pid: 42 }, io),
+				bytes.toString(),
+			);
+		else
+			await assert.rejects(
+				snapshotStackAuditMaps("/private", "probe", { pid: 42 }, io),
+			);
+		assert.equal(calls.filter((v) => v === "close").length, 1);
+		if (["identity", "cap", "encoding"].includes(variant))
+			assert(!calls.includes("write"));
+		if (variant === "valid")
+			assert.deepEqual(calls, [
+				"private",
+				"identity",
+				"close",
+				"identity",
+				"write",
+			]);
+	}
 });

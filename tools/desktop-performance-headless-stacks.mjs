@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import crypto from "node:crypto";
+import { constants } from "node:fs";
 import {
 	chmod,
 	lstat,
 	mkdir,
 	mkdtemp,
+	open,
 	readFile,
 	realpath,
 	writeFile,
@@ -14,6 +16,10 @@ import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
 import { verifyRuntimeSymbols } from "./desktop-performance-runtime-symbols.mjs";
+import {
+	auditPerfScript,
+	validateAuditReport,
+} from "./desktop-performance-headless-stack-audit.mjs";
 import { assertNumericOnly } from "./desktop-performance-cpu-stages.mjs";
 import {
 	LIMITS,
@@ -288,6 +294,99 @@ export function validatedServerBinding(cpu) {
 		"binding is outside owned application",
 	);
 	return binding;
+}
+
+// Opt-in audit output describes decoder parity and a before-capture map snapshot.
+// It never establishes symbol-file ownership, unwind completeness or performance acceptance.
+function stackAuditRequested() {
+	const value = process.env.LIGHT_HEADLESS_STACK_AUDIT ?? "0";
+	require_(["0", "1"].includes(value), "invalid stack audit opt-in");
+	return value === "1";
+}
+export async function snapshotStackAuditMaps(
+	root,
+	name,
+	binding,
+	injected = {},
+) {
+	const io = { open, privateDirectory, verifyIdentity, writeFile, ...injected };
+	require_(/^[a-z][a-z0-9-]{0,63}$/u.test(name), "private map snapshot name");
+	require_(
+		Number.isSafeInteger(binding?.pid) && binding.pid > 0,
+		"map snapshot target",
+	);
+	await io.privateDirectory(root);
+	await io.verifyIdentity(binding);
+	const descriptor = await io.open(
+		`/proc/${binding.pid}/maps`,
+		constants.O_RDONLY | constants.O_NOFOLLOW,
+	);
+	const cap = 1024 * 1024,
+		chunks = [];
+	let length = 0;
+	try {
+		while (length <= cap) {
+			const chunk = Buffer.alloc(Math.min(65536, cap + 1 - length));
+			const { bytesRead } = await descriptor.read(chunk, 0, chunk.length, null);
+			require_(
+				Number.isSafeInteger(bytesRead) &&
+					bytesRead >= 0 &&
+					bytesRead <= chunk.length,
+				"map snapshot read",
+			);
+			if (!bytesRead) break;
+			length += bytesRead;
+			require_(length <= cap, "map snapshot cap");
+			chunks.push(chunk.subarray(0, bytesRead));
+		}
+	} finally {
+		await descriptor.close();
+	}
+	await io.verifyIdentity(binding);
+	const bytes = Buffer.concat(chunks),
+		text = bytes.toString("utf8");
+	require_(
+		bytes.equals(Buffer.from(text)) && text.endsWith("\n"),
+		"map snapshot encoding",
+	);
+	await io.writeFile(path.join(root, `${name}-maps-before.txt`), bytes, {
+		flag: "wx",
+		mode: 0o600,
+	});
+	return text;
+}
+async function auditDecodedCapture(
+	root,
+	name,
+	binding,
+	parsed,
+	mapsText,
+	verifiedRuntimePaths,
+	outputDirectory,
+) {
+	const text = await privateText(path.join(root, `${name}.stdout`), LIMITS.raw);
+	const report = auditPerfScript(text, {
+		tgid: binding.pid,
+		ownedExecutable: binding.executable,
+		verifiedRuntimePaths,
+		mapsText,
+		expectedReport: parsed.report,
+	});
+	validateAuditReport(report);
+	assertNumericOnly(report);
+	await privateDirectory(root);
+	await writeFile(
+		path.join(root, `${name}-audit-proof.json`),
+		JSON.stringify({ report }),
+		{ flag: "wx", mode: 0o600 },
+	);
+	await mkdir(outputDirectory, { recursive: true });
+	await writeFile(
+		path.join(outputDirectory, "headless-stack-audit-numeric.json"),
+		JSON.stringify(report),
+		{ flag: "wx", mode: 0o600 },
+	);
+	return report;
 }
 
 async function decode(
@@ -664,6 +763,9 @@ export async function runRecorderLifetimeProbe(
 		ownedHelper,
 		openRecorder,
 		decode,
+		auditEnabled: stackAuditRequested(),
+		snapshotAuditMaps: snapshotStackAuditMaps,
+		auditDecoded: auditDecodedCapture,
 		verifyIdentity,
 		requireGone,
 		writeFile,
@@ -711,8 +813,11 @@ export async function runRecorderLifetimeProbe(
 		recorder_gone: 0,
 		private_proof_retained: 0,
 		performance_acceptance: 0,
+		capture_audit_requested: Number(io.auditEnabled),
+		capture_audit: null,
 	};
-	let helper, recording, preflightPath, stopped, parsed, failure;
+	let helper, recording, preflightPath, stopped, parsed, failure, auditMaps;
+	require_(typeof io.auditEnabled === "boolean", "invalid audit mode");
 	try {
 		await io.mkdir(io.temporary, { recursive: true });
 		root = await io.mkdtemp(
@@ -732,6 +837,8 @@ export async function runRecorderLifetimeProbe(
 		helper = await io.ownedHelper();
 		await io.verifyIdentity(helper.binding);
 		report.setup_stage = 3;
+		if (io.auditEnabled)
+			auditMaps = await io.snapshotAuditMaps(root, "lifetime", helper.binding);
 		recording = await io.openRecorder({
 			root,
 			name: "lifetime",
@@ -775,14 +882,30 @@ export async function runRecorderLifetimeProbe(
 			recording.raw.filename,
 			helper.binding.pid,
 		);
+		report.samples = uint(parsed.report.samples);
+		report.resolved_frames = uint(parsed.resolved);
+		report.unresolved_frames = uint(parsed.report.unresolved_frames);
+		if (io.auditEnabled) {
+			report.capture_audit = await io.auditDecoded(
+				root,
+				"lifetime-script",
+				helper.binding,
+				parsed,
+				auditMaps,
+				[],
+				outputDirectory,
+			);
+			validateAuditReport(report.capture_audit);
+			require_(
+				report.capture_audit.audit_valid === 1,
+				"lifetime audit invalid",
+			);
+		}
 		validateDisabledSamples(parsed, stopped, 1_000_000_000n);
 		require_(
 			parsed.report.multi_frame_samples > 0 && parsed.resolved > 0,
 			"lifetime positive decode",
 		);
-		report.samples = uint(parsed.report.samples);
-		report.resolved_frames = uint(parsed.resolved);
-		report.unresolved_frames = uint(parsed.report.unresolved_frames);
 	} catch (error) {
 		failure = error;
 		report.failure_code = report.setup_stage || 8;
@@ -1079,7 +1202,15 @@ export class HeadlessStackCapture {
 		});
 	}
 	async run(cpu, measure) {
-		let recording, binding, firstThreads, result, failure;
+		let recording,
+			binding,
+			firstThreads,
+			result,
+			failure,
+			auditMaps,
+			runtimeProof;
+		const auditEnabled = this.io.auditEnabled ?? stackAuditRequested();
+		require_(typeof auditEnabled === "boolean", "invalid audit mode");
 		const inspect = this.io.verifyIdentity ?? verifyIdentity;
 		const listThreads = this.io.threads ?? threads;
 		const open = this.io.openRecorder ?? openRecorder;
@@ -1098,13 +1229,10 @@ export class HeadlessStackCapture {
 				this.report.pre_record_binary_match === 1,
 				"running headless binary differs from pinned binary",
 			);
-			await this.retainPrivate(
-				"owned-runtime-symbols.json",
-				await (this.io.verifyRuntimeSymbols ?? verifyRuntimeSymbols)({
-					root: this.root,
-					binding,
-				}),
-			);
+			runtimeProof = await (
+				this.io.verifyRuntimeSymbols ?? verifyRuntimeSymbols
+			)({ root: this.root, binding });
+			await this.retainPrivate("owned-runtime-symbols.json", runtimeProof);
 			this.report.pre_record_setup_stage = 4;
 			firstThreads = await listThreads(binding.pid);
 			this.report.initial_threads = firstThreads.length;
@@ -1113,6 +1241,12 @@ export class HeadlessStackCapture {
 				initial_threads: firstThreads,
 				binary_hash: this.binaryHash,
 			});
+			if (auditEnabled)
+				auditMaps = await (this.io.snapshotAuditMaps ?? snapshotStackAuditMaps)(
+					this.root,
+					"headless",
+					binding,
+				);
 			recording = await open({
 				root: this.root,
 				name: "headless",
@@ -1175,6 +1309,7 @@ export class HeadlessStackCapture {
 				binding.pid,
 				binding.executable,
 			);
+
 			validateDisabledSamples(parsed, stopped);
 			this.report.disable_boundary_verified = 1;
 			const fields = [
@@ -1194,6 +1329,7 @@ export class HeadlessStackCapture {
 			];
 			for (const field of fields) this.report[field] = parsed.report[field];
 			this.report.raw_bytes = recording.raw.bytes;
+
 			this.report.cap_code = recording.capped ? 1 : 0;
 			this.report.capture_complete = Number(
 				!recording.capped &&
@@ -1213,7 +1349,42 @@ export class HeadlessStackCapture {
 					parsed.report.lost_events === 0 &&
 					cpu.receipts.length === 61,
 			);
+			let auditFailure;
+			if (auditEnabled) {
+				try {
+					const paths = [
+						...new Set(
+							runtimeProof.libraries.flatMap((library) => [
+								library.mapped_path,
+								library.runtime_path,
+							]),
+						),
+					];
+					const audit = await (this.io.auditDecoded ?? auditDecodedCapture)(
+						this.root,
+						"headless-script",
+						binding,
+						parsed,
+						auditMaps,
+						paths,
+						this.outputDirectory,
+					);
+					validateAuditReport(audit);
+					require_(audit.audit_valid === 1, "headless audit invalid");
+				} catch (error) {
+					auditFailure = new Error("private stack audit unavailable", {
+						cause: error,
+					});
+					auditFailure.stackAuditFailure = true;
+					try {
+						await this.retainPrivate("headless-audit-error.json", {
+							error: String(error.message).slice(0, 2048),
+						});
+					} catch {}
+				}
+			}
 			require_(this.report.capture_complete, "partial sampling coverage");
+			if (auditFailure) throw auditFailure;
 		} catch (error) {
 			for (const key of Object.keys(this.report))
 				if (
@@ -1224,7 +1395,8 @@ export class HeadlessStackCapture {
 			this.report.failure_code = 3;
 			if (!this.report.samples) this.report.lost_events = null;
 			if (recording?.capped) this.report.cap_code = 1;
-			else if (/cap/u.test(error.message)) this.report.cap_code = 3;
+			else if (!error.stackAuditFailure && /cap/u.test(error.message))
+				this.report.cap_code = 3;
 			failure ??= error;
 		} finally {
 			if (recording) this.report.raw_bytes = recording.raw.bytes;
