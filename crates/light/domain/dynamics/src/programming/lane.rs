@@ -1,4 +1,5 @@
 use super::*;
+mod source_free;
 use crate::*;
 use light_core::{
     FixtureId,
@@ -37,6 +38,7 @@ pub struct CompiledProgrammingLane {
     unavailable: Option<crate::NativeColorModelUnavailable>,
     address: CompiledDynamicValueAddress,
     expression_address: Arc<DynamicValueAddress>,
+    source_free_scalar: bool,
     configuration: Configuration,
     speed_multiplier: Rational,
     width: f32,
@@ -168,6 +170,8 @@ impl CompiledProgrammingLane {
             }
         };
         Ok(Self {
+            source_free_scalar: unavailable.is_none()
+                && source_free::eligible(&body.address, &body.configuration),
             unavailable,
             expression_address: Arc::new(body.address.clone()),
             address,
@@ -176,6 +180,11 @@ impl CompiledProgrammingLane {
             width: lane.width,
             transitions: HashMap::new(),
         })
+    }
+
+    /// A cold proof about this compiled definition; Size remains a per-controller guard.
+    pub(crate) fn source_free_scalar(&self) -> bool {
+        self.source_free_scalar
     }
 
     pub fn address(&self) -> &CompiledDynamicValueAddress {

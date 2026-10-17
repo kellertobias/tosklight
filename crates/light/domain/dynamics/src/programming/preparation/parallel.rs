@@ -34,6 +34,13 @@ pub trait PreparationSources: DynamicValueSourceResolver {
     /// [`PreparationWorkers::append_logs`]) when the fork could answer everything the controller
     /// asked; `None` when the frame must prepare it (its fork forgets the controller).
     fn finish_controller(&self) -> Option<(usize, usize)>;
+
+    /// Opt in to omitting the empty close for a cold-proven source-free typed lane.
+    /// Such a lane makes no source calls: a close must have no effect and retain exactly
+    /// the preceding log lengths. Other implementations keep one close per typed lane.
+    fn source_free_completion(&self) -> bool {
+        false
+    }
 }
 
 /// The caller's workers and source forks for one parallel preparation.
@@ -51,7 +58,8 @@ pub trait PreparationWorkers {
     ) -> Result<Vec<PreparedChunk>, TransitionError>;
 
     /// [`Self::run`] for a parallel deferred completion (TL-639 round 6): the same forks,
-    /// one [`PreparationSources::finish_controller`] per typed lane.
+    /// one [`PreparationSources::finish_controller`] per typed lane, except an empty close
+    /// explicitly permitted by [`PreparationSources::source_free_completion`].
     fn run_completion(
         &mut self,
         complete: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),

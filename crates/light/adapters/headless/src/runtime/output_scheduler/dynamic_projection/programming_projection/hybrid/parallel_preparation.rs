@@ -290,6 +290,13 @@ struct PreparationFork<'a, 'f> {
 }
 
 impl PreparationSources for PreparationFork<'_, '_> {
+    fn source_free_completion(&self) -> bool {
+        // Every preceding queried lane has closed its group. With no intervening source
+        // call, all memo/origin/native/log group layers remain empty; committing those
+        // layers cannot change caches, log lengths or the missed flag.
+        !self.missed.get()
+    }
+
     fn finish_controller(&self) -> Option<(usize, usize)> {
         if self.missed.get() {
             self.typed.abort_group();
