@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 export const CLOCK_LIMITS = Object.freeze({observations:61,driftMicros:1000,httpQuantizationMicros:1000,elapsedRoundingMicros:2});
 export const CLOCK_COUNTERS = Object.freeze(["frames_sent","packets_sent","deadline_misses","send_errors"]);
 const FAILURES = ["clock_metadata_failures","clock_bounds_failures","clock_monotonic_failures","clock_counter_failures","clock_elapsed_failures","clock_coherence_failures","clock_count_failures"];
-export const CLOCK_NUMERIC_FIELDS = Object.freeze(["clock_source_code","clock_observations","clock_server_samples","clock_validated_samples","clock_validation_passed","clock_failure_code",...FAILURES,"clock_max_drift_micros","clock_drift_limit_micros","clock_http_quantization_micros","clock_elapsed_rounding_micros"]);
+export const CLOCK_NUMERIC_FIELDS = Object.freeze(["clock_source_code","clock_observations","clock_server_samples","clock_validated_samples","clock_validation_passed","clock_failure_code",...FAILURES,"clock_max_drift_micros","clock_max_http_duration_micros","clock_max_http_midpoint_offset_micros","clock_max_interval_midpoint_difference_micros","clock_drift_limit_micros","clock_http_quantization_micros","clock_elapsed_rounding_micros"]);
 const uint = n => Number.isSafeInteger(n)&&n>=0;
 export function emptyClockSummary() {
  return {...Object.fromEntries(CLOCK_NUMERIC_FIELDS.map(k=>[k,0])),clock_drift_limit_micros:CLOCK_LIMITS.driftMicros,clock_http_quantization_micros:CLOCK_LIMITS.httpQuantizationMicros,clock_elapsed_rounding_micros:CLOCK_LIMITS.elapsedRoundingMicros};
@@ -50,6 +50,15 @@ export class ServerCounterClock {
   const counters=Object.fromEntries(CLOCK_COUNTERS.map(k=>[k,record.diagnostics.output?.[k]]));
   if(!Object.values(counters).every(uint)||previous&&CLOCK_COUNTERS.some(k=>counters[k]<previous.counters[k]))this.reject(5,"invalid or regressing output counter");
   const elapsedMicros=previous?sample.monotonic_micros-previous.monotonic_micros:0;
+  // Comparisons describe the replaced observer approximation only; they never gate cadence.
+  // UTC midpoint comparison retains Date.now()'s whole-millisecond floor uncertainty.
+  const comparisons={
+   clock_max_http_duration_micros:Math.ceil((monoEnd-monoStart)*1000),
+   clock_max_http_midpoint_offset_micros:Math.ceil(Math.abs((sample.sampled_at_epoch_micros-utcStart*1000)-(utcEnd-utcStart)*500)),
+   clock_max_interval_midpoint_difference_micros:previous?Math.ceil(Math.abs(elapsedMicros-((monoStart+monoEnd)-(previous.clientMonotonicStartMillis+previous.clientMonotonicEndMillis))*500)):0,
+  };
+  if(!Object.values(comparisons).every(uint))this.reject(2,"unsafe client clock comparison");
+  for(const [key,value]of Object.entries(comparisons))this.status[key]=Math.max(this.status[key],value);
   if(previous) {
    const lower=(monoStart-previous.clientMonotonicEndMillis)*1000-2,upper=(monoEnd-previous.clientMonotonicStartMillis)*1000+2;
    if(elapsedMicros<lower||elapsedMicros>upper)this.reject(6,"server elapsed time outside client request envelope");

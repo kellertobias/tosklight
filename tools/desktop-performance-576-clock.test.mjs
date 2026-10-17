@@ -12,7 +12,7 @@ test("61 same-lock server samples drive exact cadence/window and fixed numeric c
  assert(!JSON.stringify(c.summary()).includes(String(epoch)));assert.deepEqual(Object.keys(c.summary()).sort(),CLOCK_NUMERIC_FIELDS.slice().sort());
 });
 test("asymmetric slow HTTP responses cannot skew server cadence or the packet window",()=>{
- const c=complete(i=>sample(i,{requestStartOffset:i%2?-200:-5,requestEndOffset:i%2?1:250}));assert.equal(c.elapsedSeconds(),60);assert.equal(c.delta("frames_sent")/c.elapsedSeconds(),40);assert.equal(c.summary().clock_validation_passed,1);
+ const c=complete(i=>sample(i,{requestStartOffset:i%2?-200:-5,requestEndOffset:i%2?1:250}));assert.equal(c.elapsedSeconds(),60);assert.equal(c.delta("frames_sent")/c.elapsedSeconds(),40);assert.equal(c.summary().clock_validation_passed,1);assert.equal(c.summary().clock_max_http_duration_micros,255000);assert(c.summary().clock_max_http_midpoint_offset_micros>0);assert(c.summary().clock_max_interval_midpoint_difference_micros>0);
 });
 test("Date.now response floor admits actual microseconds in its one-millisecond interval only",()=>{
  const c=new ServerCounterClock();c.observe(sample(0,{requestStartOffset:0,requestEndOffset:0,serverOffset:999}));assert.equal(c.summary().clock_validated_samples,1);
