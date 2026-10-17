@@ -593,6 +593,7 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeDiagnosticsSnapshot::decl(config),
         RuntimeRouteDeliveryState::decl(config),
         RuntimeOutputDeliveryStatus::decl(config),
+        RuntimeOutputCounterSample::decl(config),
         RuntimePerformanceDiagnosticsSnapshot::decl(config),
     ]
 }

@@ -368,8 +368,19 @@ pub struct RuntimeDiagnosticsSnapshot {
     pub compatibility_reports: serde_json::Value,
 }
 
+/// Clock observations made while the same output-health lock protects the returned counters.
+/// Monotonic time is relative to one process-local origin, not a portable wall timestamp.
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+pub struct RuntimeOutputCounterSample {
+    #[ts(type = "number")]
+    pub sampled_at_epoch_micros: u64,
+    #[ts(type = "number")]
+    pub monotonic_micros: u64,
+}
+
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimePerformanceDiagnosticsSnapshot {
+    pub output_sample: RuntimeOutputCounterSample,
     pub output: RuntimeOutputHealth,
     #[ts(type = "unknown")]
     pub programmer_action_timing: serde_json::Value,

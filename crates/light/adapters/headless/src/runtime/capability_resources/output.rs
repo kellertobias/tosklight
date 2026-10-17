@@ -8,6 +8,7 @@ use light_core::programming::IntentError;
 mod activation;
 mod family_adapters;
 mod finalization;
+mod health_sample;
 /// TL-548 C4 hook: Live handles for the Pending episode worker (own file).
 mod pending_episode_sources;
 mod preload_commit;

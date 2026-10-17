@@ -144,11 +144,10 @@ pub(super) async fn performance_diagnostics(
 ) -> Result<Json<wire::RuntimePerformanceDiagnosticsSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
     let _ = state.output.resolved_values();
+    let (health, output_sample) = state.output.health_sample().map_err(ApiError::internal)?;
     Ok(Json(wire::RuntimePerformanceDiagnosticsSnapshot {
-        output: runtime_wire::output_health(
-            state.output.health_snapshot(),
-            state.output.change_lead_snapshot(),
-        ),
+        output_sample,
+        output: runtime_wire::output_health(health, state.output.change_lead_snapshot()),
         programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
             .map_err(|error| ApiError::internal(error.to_string()))?,
         visualization: runtime_visualization_diagnostics(&state),
