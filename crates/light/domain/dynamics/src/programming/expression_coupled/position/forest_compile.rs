@@ -134,6 +134,9 @@ impl PositionForestCompilation {
                 TransitionRequirement::CompatibleOwners,
             ));
         }
+        if let Some(root) = self.try_plain_angles(forest_node, lane_id, sources, &tape)? {
+            return Ok(root);
+        }
         let (imported, imported_root, original_map, imported_origins) =
             compile(&tape, root, None, &mut Vec::new())?;
         let offset = self.nodes.len() - 1;

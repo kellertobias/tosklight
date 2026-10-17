@@ -233,6 +233,19 @@ impl CoupledEvaluationObserver for Observer {
         step: CoupledEvaluationStep<'_>,
         value: &AttributeValue,
     ) -> Result<(), TransitionError> {
+        let step = match step {
+            CoupledEvaluationStep::Transition { from, to, progress } => {
+                self.0.push(format!(
+                    "{node}|transition|{from}|{to}|{progress:?}|{value:?}"
+                ));
+                return Ok(());
+            }
+            CoupledEvaluationStep::Underlay => {
+                self.0.push(format!("{node}|underlay|{value:?}"));
+                return Ok(());
+            }
+            step => step,
+        };
         let CoupledEvaluationStep::Leaf {
             address,
             value: source,
@@ -308,63 +321,288 @@ fn actual_plain_pan_tilt_uses_fixed_slots_and_matches_frozen_general_graph_and_f
         }
     }
 }
+fn compare_imports(a: &PositionForestCompilation, b: &PositionForestCompilation) {
+    fn node(node: &Node) -> String {
+        match node {
+            Node::Underlay => "underlay".into(),
+            Node::Leaf {
+                address,
+                value,
+                role,
+                occurrence,
+                dependency_occurrence,
+            } => format!(
+                "{:?}/{value:?}/{role:?}/{occurrence:?}/{dependency_occurrence:?}",
+                address.address()
+            ),
+            Node::Transition {
+                from,
+                to,
+                progress,
+                reason,
+            } => format!("{from}/{to}/{progress:?}/{reason:?}"),
+            Node::Scale {
+                value,
+                factor,
+                baseline_occurrence,
+                ..
+            } => format!("scale/{value}/{factor:?}/{baseline_occurrence:?}"),
+            _ => panic!("this oracle constructs whole leaves, transitions and scales"),
+        }
+    }
+    assert_eq!(
+        a.nodes.iter().map(node).collect::<Vec<_>>(),
+        b.nodes.iter().map(node).collect::<Vec<_>>()
+    );
+    assert_eq!(a.mapped, b.mapped);
+    assert_eq!(a.position_node_origins, b.position_node_origins);
+    assert_eq!(a.wholes.len(), b.wholes.len());
+    for (x, y) in a.wholes.iter().zip(&b.wholes) {
+        assert_eq!((x.forest_node, x.lane_id), (y.forest_node, y.lane_id));
+        assert_eq!(x.tape, y.tape);
+        assert_eq!(x.tape_to_compiled, y.tape_to_compiled);
+    }
+    assert_eq!(a.leaf_sources.len(), b.leaf_sources.len());
+    for (x, y) in a.leaf_sources.iter().zip(&b.leaf_sources) {
+        compare_sources(x, y);
+    }
+}
+fn whole_fixture() -> (
+    Arc<DynamicSampleExpression>,
+    Arc<[CoupledComponentEndpoint]>,
+) {
+    let sample = bundle(&inputs(30., 20.)).unwrap();
+    let lineage = compiled(&sample).position_forest_lineage.as_ref().unwrap();
+    let PositionForestNode::Whole {
+        expression,
+        sources,
+        ..
+    } = &lineage.nodes[0]
+    else {
+        unreachable!()
+    };
+    (Arc::clone(expression), Arc::clone(sources))
+}
 #[test]
-fn admission_checks_original_pair_identity_source_order_and_exact_plain_forest() {
-    let samples = inputs(30., 20.);
-    let prepared = bundle(&samples).unwrap();
-    let compiled = compiled(&prepared);
-    let forest = &compiled.position_forest_lineage.as_ref().unwrap().nodes;
-    assert!(admit(&samples, forest, 0).is_some());
-    for edit in 0..10 {
-        let mut changed = samples.clone();
-        match edit {
-            0 => changed[1].instance_id = Uuid::from_u128(99),
-            1 => changed[1].controller_id = Uuid::from_u128(99),
-            2 => changed[1].target = FixtureId(Uuid::from_u128(99)),
-            3 => changed[1].priority += 1,
-            4 => changed[1].activated_at_millis += 1,
-            5 => changed[1].activation_mix = 0.5,
-            6 => changed[1].lane_id = changed[0].lane_id,
-            7 => changed.reverse(),
-            8 => {
-                let DynamicSampleExpression::Programming {
-                    dependency_occurrence,
-                    ..
-                } = &mut changed[0].expression
-                else {
-                    unreachable!()
-                };
-                *dependency_occurrence = Some(crate::DynamicSourceDependency::unknown(None));
+fn one_leaf_import_preserves_arbitrary_metadata_sources_occurrences_and_nonzero_offsets() {
+    let (original, original_sources) = whole_fixture();
+    for empty in [false, true] {
+        for signed_zero in [false, true] {
+            let mut expression = original.as_ref().clone();
+            let DynamicSampleExpression::Programming {
+                value,
+                occurrence,
+                dependency_occurrence,
+                ..
+            } = &mut expression
+            else {
+                unreachable!()
+            };
+            *occurrence = Some(DynamicSourceOccurrenceId::new(Uuid::from_u128(901)).unwrap());
+            *dependency_occurrence = Some(crate::DynamicSourceDependency::unknown(None));
+            if signed_zero {
+                *value = DynamicValue::Family(AttributeValue::Position(Arc::new(
+                    PositionIntent::Angles {
+                        pan_degrees: ScalarIntent::Value(-0.),
+                        tilt_degrees: ScalarIntent::Value(0.),
+                    },
+                )));
             }
-            _ => {
-                let value = Arc::new(changed[0].expression.clone());
-                changed[0].expression = DynamicSampleExpression::Operation {
-                    origin: None,
-                    value,
-                };
+            let expression = Arc::new(expression);
+            let mut sources = original_sources.to_vec();
+            sources.reverse();
+            sources[0].lane_id = Uuid::from_u128(555);
+            let sources: Arc<[CoupledComponentEndpoint]> =
+                if empty { Arc::from([]) } else { sources.into() };
+            let mut fast = PositionForestCompilation::new(3);
+            let mut slow = PositionForestCompilation::new(3);
+            for forest_node in [0, 2] {
+                let lane = Uuid::from_u128(777 + forest_node as u128);
+                let a = fast
+                    .whole(forest_node, &expression, &lane, &sources)
+                    .unwrap();
+                let b = general(|| slow.whole(forest_node, &expression, &lane, &sources)).unwrap();
+                assert_eq!(a, b);
+                fast.mapped.push(a);
+                slow.mapped.push(b);
+                compare_imports(&fast, &slow);
+                if !empty {
+                    assert!(Arc::ptr_eq(&fast.leaf_sources[a], &sources));
+                }
+            }
+            let mut retained = inputs(1., 2.);
+            retained.reverse();
+            for (i, s) in retained.iter_mut().enumerate() {
+                s.instance_id = Uuid::from_u128(i as u128 + 11);
+                s.controller_id = Uuid::from_u128(81);
+                s.priority = 3;
+                s.activation_mix = 0.25;
+            }
+            let forest = [
+                PositionForestNode::Whole {
+                    expression: original.clone(),
+                    lane_id: Uuid::from_u128(33),
+                    sources: original_sources.clone(),
+                },
+                PositionForestNode::Whole {
+                    expression,
+                    lane_id: Uuid::from_u128(34),
+                    sources,
+                },
+                PositionForestNode::Transition {
+                    from: Some(0),
+                    to: Some(1),
+                    progress: 0.4,
+                    reason: DynamicTransitionReason::Resume {
+                        occurrence_id: Uuid::from_u128(35),
+                    },
+                },
+            ];
+            let a = CompiledCoupledExpression::from_position_forest(
+                retained.clone().into(),
+                &forest,
+                2,
+            )
+            .unwrap();
+            let b = general(|| {
+                CompiledCoupledExpression::from_position_forest(retained.clone().into(), &forest, 2)
+            })
+            .unwrap();
+            assert_eq!(a.root, b.root);
+            assert_eq!(a.position_node_origins, b.position_node_origins);
+            assert_eq!(a.node_roles, b.node_roles);
+            assert_eq!(a.base_underlay, b.base_underlay);
+            let (
+                CoupledRetainedSources::PositionForest(x),
+                CoupledRetainedSources::PositionForest(y),
+            ) = (&a.retained, &b.retained)
+            else {
+                unreachable!()
+            };
+            assert_eq!(x, y);
+            for require in [false, true] {
+                assert_eq!(evaluate(&a, require), evaluate(&b, require));
             }
         }
-        assert!(admit(&changed, forest, 0).is_none(), "edit {edit}");
     }
-    assert!(admit(&samples, forest, 1).is_none());
-    assert!(admit(&samples, &[], 0).is_none());
-    let mut more = forest.to_vec();
-    more.push(PositionForestNode::Transition {
-        from: Some(0),
-        to: None,
-        progress: 0.5,
-        reason: DynamicTransitionReason::Required {
-            requirement: TransitionRequirement::LiveJointAngles,
-        },
-    });
-    assert!(admit(&samples, &more, 1).is_none());
+}
+#[test]
+fn whole_import_keeps_nonliteral_generic_routes_and_failure_before_mutation() {
+    let (plain, sources) = whole_fixture();
+    let DynamicSampleExpression::Programming { address, value, .. } = plain.as_ref() else {
+        unreachable!()
+    };
+    let mut invalid = plain.as_ref().clone();
+    let DynamicSampleExpression::Programming { value: bad, .. } = &mut invalid else {
+        unreachable!()
+    };
+    *bad = DynamicValue::Family(AttributeValue::Position(Arc::new(PositionIntent::Angles {
+        pan_degrees: ScalarIntent::Value(f32::NAN),
+        tilt_degrees: ScalarIntent::Value(0.),
+    })));
+    let cases = [
+        Arc::new(DynamicSampleExpression::Scale {
+            address: address.clone(),
+            base: value.clone(),
+            value: plain.clone(),
+            factor: 0.5,
+            baseline_occurrence: None,
+        }),
+        Arc::new(DynamicSampleExpression::Transition {
+            from: Some(plain.clone()),
+            to: None,
+            progress: 0.4,
+            reason: DynamicTransitionReason::Resume {
+                occurrence_id: Uuid::from_u128(44),
+            },
+        }),
+        Arc::new(DynamicSampleExpression::Programming {
+            address: Arc::new(DynamicValueAddress {
+                representation: DynamicFamilyRepresentation::Target {
+                    reference: Some(TargetReference::Origin),
+                },
+                component: None,
+            }),
+            value: DynamicValue::Family(AttributeValue::Position(Arc::new(
+                PositionIntent::target(TargetReference::Origin, [1., 2., 3.]),
+            ))),
+            occurrence: None,
+            dependency_occurrence: None,
+        }),
+        Arc::new(DynamicSampleExpression::Programming {
+            address: address.clone(),
+            value: DynamicValue::Family(AttributeValue::Position(Arc::new(
+                PositionIntent::Angles {
+                    pan_degrees: ScalarIntent::Spread(vec![0., 10.]),
+                    tilt_degrees: ScalarIntent::Value(0.),
+                },
+            ))),
+            occurrence: None,
+            dependency_occurrence: None,
+        }),
+        Arc::new(DynamicSampleExpression::AngleCurrent {
+            address: address.clone(),
+        }),
+        Arc::new(invalid),
+    ];
+    for (index, expression) in cases.iter().enumerate() {
+        let mut a = PositionForestCompilation::new(2);
+        let mut b = PositionForestCompilation::new(2);
+        let lane = Uuid::from_u128(45);
+        a.whole(0, &plain, &lane, &sources).unwrap();
+        general(|| b.whole(0, &plain, &lane, &sources)).unwrap();
+        let before = (
+            a.nodes.len(),
+            a.wholes.len(),
+            a.leaf_sources.len(),
+            a.position_node_origins.len(),
+        );
+        COUNTS.with(|n| n.set((0, 0)));
+        let x = a.whole(1, expression, &lane, &sources);
+        let y = general(|| b.whole(1, expression, &lane, &sources));
+        assert_eq!(
+            x.as_ref().err().map(|e| format!("{e:?}")),
+            y.as_ref().err().map(|e| format!("{e:?}"))
+        );
+        if index < 3 {
+            assert!(x.is_ok(), "case {index}: {x:?}");
+        }
+        if index < 3 {
+            assert_eq!(COUNTS.with(std::cell::Cell::get), (0, 2));
+        } else {
+            // Original fresh-tape validation/preflight rejects these before the import seam.
+            assert_eq!(COUNTS.with(std::cell::Cell::get), (0, 0));
+        }
+        if index == 3 {
+            assert!(
+                format!("{:?}", x.as_ref().err()).contains("must be materialized for its target")
+            );
+        }
+        if x.is_err() {
+            assert_eq!(
+                before,
+                (
+                    a.nodes.len(),
+                    a.wholes.len(),
+                    a.leaf_sources.len(),
+                    a.position_node_origins.len()
+                )
+            );
+        }
+        compare_imports(&a, &b);
+        assert_eq!(
+            a.whole(2, &plain, &lane, &sources).unwrap(),
+            general(|| b.whole(2, &plain, &lane, &sources)).unwrap()
+        );
+        compare_imports(&a, &b);
+    }
 }
 #[test]
 fn malformed_and_unavailable_inputs_keep_error_precedence_and_leave_old_sources_unchanged() {
     let samples = inputs(30., 20.);
     let good = bundle(&samples).unwrap();
     let baseline = evaluate(compiled(&good), false);
-    for edit in 0..5 {
+    for edit in 0..4 {
         let mut changed = samples.clone();
         match edit {
             0 => {
@@ -384,30 +622,7 @@ fn malformed_and_unavailable_inputs_keep_error_precedence_and_leave_old_sources_
                 };
                 Arc::make_mut(address).component = Some(ProgrammingComponent::Tilt);
             }
-            _ => {
-                changed[1].expression = DynamicSampleExpression::AngleCurrent {
-                    address: Arc::new(DynamicValueAddress {
-                        representation: DynamicFamilyRepresentation::Angles,
-                        component: Some(ProgrammingComponent::Tilt),
-                    }),
-                }
-            }
-        }
-        // Current fallback intentionally reports the original query through the same reader.
-        if edit == 4 {
-            assert!(
-                admit(
-                    &changed,
-                    &compiled(&good)
-                        .position_forest_lineage
-                        .as_ref()
-                        .unwrap()
-                        .nodes,
-                    0
-                )
-                .is_none()
-            );
-            continue;
+            _ => unreachable!(),
         }
         let fast = bundle(&changed).err().map(|e| format!("{e:?}"));
         let slow = general(|| bundle(&changed)).err().map(|e| format!("{e:?}"));
