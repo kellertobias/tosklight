@@ -77,7 +77,7 @@ function mappings(bytes) {
 		ranges = new Set();
 	for (const line of text.trimEnd().split("\n")) {
 		const match =
-			/^([0-9a-f]+)-([0-9a-f]+) ([r-][w-][x-][ps]) ([0-9a-f]+) ([0-9a-f]+):([0-9a-f]+) (\d+)(?:\s+(.+))?$/u.exec(
+			/^([0-9a-f]+)-([0-9a-f]+) ([r-][w-][x-][ps]) ([0-9a-f]+) ([0-9a-f]+):([0-9a-f]+) (\d+)(?:[ \t]+(\S.*))?[ \t]*$/u.exec(
 				line,
 			);
 		require_(

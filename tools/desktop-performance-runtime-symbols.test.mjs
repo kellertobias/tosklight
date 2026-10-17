@@ -311,3 +311,32 @@ test("bigint metadata retains root ownership, write-mode and size guards", async
 		await assert.rejects(f.run(), /ownership or size/);
 	}
 });
+
+test("valid anonymous kernel rows accept a single trailing blank and ASCII whitespace without a filename", async () => {
+	for (const trailing of [" ", "\t", " \t  ", ""]) {
+		const f = fixture();
+		// Keep this row before named rows: trimming only the whole map's end must not hide it.
+		f.maps = `3000-4000 rw-p 00000000 00:00 0${trailing}\n${f.maps}`;
+		const result = await f.run();
+		assert.equal(result.library_count, 2);
+		assert.equal(result.libraries[0].mapped_path, LIBC);
+	}
+});
+
+test("anonymous whitespace does not relax range, inode, or exact unsafe named path checks", async () => {
+	for (const row of [
+		"4000-3000 rw-p 00000000 00:00 0 ",
+		"3000-3000 rw-p 00000000 00:00 0 ",
+		"3000-4000 rw-p 00000000 00:00 -1 ",
+		`3000-4000 r-xp 00000000 08:01 0 ${LIBC}`,
+		"3000-4000 r-xp 00000000 08:01 5 /lib/space dir/libc.so.6",
+		"3000-4000 r-xp 00000000 08:01 5 /lib/tab\tdir/libc.so.6",
+	]) {
+		const f = fixture();
+		f.maps = `${row}\n${f.maps}`;
+		await assert.rejects(
+			f.run(),
+			/malformed map|runtime inode absent|unsafe runtime path/,
+		);
+	}
+});
