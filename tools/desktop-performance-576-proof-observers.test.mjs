@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, mkdtemp, stat, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { artifactPaths } from "./artifact-paths.mjs";
-import { PacketAggregate, drainPacketRing, summarizeRamp, summarizeStageWindow, numericProof, validateNumericProof, verifyWorkloadFunctions, ProofCheckpoint, writeNumericProof, validateStageReady, waitStageReady } from "./desktop-performance-576-proof-observers.mjs";
+import { PacketAggregate, drainPacketRing, summarizeRamp, summarizeStageWindow, numericProof, validateNumericProof, verifyWorkloadFunctions, ProofCheckpoint, writeNumericProof, validateStageReady, waitStageReady, summarizeStageAbsence, waitProofModeAck } from "./desktop-performance-576-proof-observers.mjs";
 
 const completedProgress = () => ({complete:1,current_stage_code:0,sheet_liveness_checked:1,sheet_liveness_passed:1,cleanup_complete:1});
 
@@ -122,7 +122,7 @@ test("one-packet universe and disabled sequence cannot falsely pass full-minute 
 });
 
 
-test("schema3 Stage gaps preserve per-lane count, min/max offsets and edge diagnostics", () => {
+test("schema4 Stage gaps preserve per-lane count, min/max offsets and edge diagnostics", () => {
   const raw=stage(); raw.nativeStage.activity=raw.nativeStage.activity.filter(row => !row.followPreload);
   const diagnostic=summarizeStageWindow(raw,100_000,160_000);
   assert.equal(diagnostic.lanes[0].validation_passed,1);
@@ -139,7 +139,7 @@ test("atomic checkpoint state retains completed metrics on Stage wait failure an
   const measured=result();delete measured.proof.stage;delete measured.proof.interaction;
   Object.assign(proof.result,measured);
   await proof.enter(12);await proof.fail();await proof.enter(14);await proof.fail(14);await proof.finish(1);
-  const last=writes.at(-1);assert.equal(last.schema_version,3);assert.equal(last.failure_stage_code,12);assert.equal(last.current_stage_code,14);assert.equal(last.complete,0);assert.equal(last.cleanup_complete,1);
+  const last=writes.at(-1);assert.equal(last.schema_version,4);assert.equal(last.failure_stage_code,12);assert.equal(last.current_stage_code,14);assert.equal(last.complete,0);assert.equal(last.cleanup_complete,1);
   assert.equal(last.completed_frames,2400);assert.equal(last.measurement_available,1);assert.equal(last.udp_available,1);assert.equal(last.resources_available,1);assert.equal(last.stage_report_available,0);assert.equal(last.all_gates_passed,0);
   assert(writes.every(row => row.all_gates_passed === 0));
 });
@@ -171,8 +171,8 @@ test("result objects never imply unobserved Sheet liveness or cleanup", () => {
   assert.equal(report.complete,0);assert.equal(report.sheet_liveness_checked,0);assert.equal(report.sheet_liveness_passed,0);assert.equal(report.cleanup_complete,0);assert.equal(report.all_gates_passed,0);
   assert.equal(report.completed_frames,2400);assert.equal(report.measurement_available,1);
 });
-test("real atomic checkpoint replacement retains schema3 and leaves no temporary siblings", async () => {
-  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-proof-schema3-test-"));
+test("real atomic checkpoint replacement retains schema4 and leaves no temporary siblings", async () => {
+  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-proof-schema4-test-"));
   try {
     const file=path.join(directory,"numeric.json"),proof=new ProofCheckpoint(file);
     await proof.enter(7);await Promise.all([proof.enter(8),proof.enter(9)]);
@@ -336,7 +336,7 @@ test("null or undefined raw observations retain numeric failure without assignin
     assert(summary.lanes.every(row => row.activity_invalid_unlocalizable_samples === 0 && row.heartbeat_invalid_unlocalizable_samples === 0));
     const measured=result();measured.proof.stage=summary;
     const numeric=numericProof(measured,completedProgress());
-    assert.equal(numeric.schema_version,3);assert.equal(numeric.all_gates_passed,0);
+    assert.equal(numeric.schema_version,4);assert.equal(numeric.all_gates_passed,0);
     assert.deepEqual(validateNumericProof(JSON.parse(JSON.stringify(numeric))),numeric);
   }
 });
@@ -352,10 +352,10 @@ test("missing fields on an otherwise assigned lane retain bounded unlocalizable 
   }
 });
 
-test("numeric schema3 explicitly rejects schema2 while native source complete records remain schemaVersion2", () => {
+test("numeric schema4 explicitly rejects schema2 while native source complete records remain schemaVersion2", () => {
   const source=stage();assert.equal(source.schemaVersion,2);
   assert.equal(summarizeStageWindow(source,100_000,160_000).validation_passed,1);
-  const numeric=numericProof(result(),completedProgress());assert.equal(numeric.schema_version,3);
+  const numeric=numericProof(result(),completedProgress());assert.equal(numeric.schema_version,4);
   numeric.schema_version=2;assert.throws(() => validateNumericProof(numeric));
 });
 
@@ -492,4 +492,61 @@ test("known pre-lifecycle warmup invalid evidence does not reject later fully qu
   assert.equal(ready.observe({frames:[{...v.live,presentedEpochMicros:110_000_000,drawCalls:-1}],heartbeats:[]},100_000,117_050,false),null);
   const record=ready.observe({frames:[v.live,v.next,v.preload],heartbeats:v.heartbeats},100_000,117_800,false);
   assert(record);validateStageReady(record);
+});
+
+function noStage() {
+  return {schemaVersion:2,kind:"complete",measurementSurface:"packaged-tauri-native-stage",stageEnabled:false,config:{stageEnabled:false},activeUiSurfaces:["fixture-sheet"],nativeStage:{frames:[],activity:[],heartbeats:[],observerOverflow:{activity:0,heartbeats:0,errors:0},hostObservationCount:63,hostObservations:Array.from({length:63},(_,i) => ({recordedAt:99_000+i*1000,frames:0,heartbeats:0}))}};
+}
+const processWitnesses = () => Array.from({length:61},() => ({processes:[{command:"tosklight"},{command:"light-headless"},{command:"WebKitWebProcess"}]}));
+function splitResult(mode) {
+  const measured=result();measured.proof_mode_code=mode;measured.mode_acknowledged=1;
+  if(mode === 1) {delete measured.proof.stage;measured.proof.absence=summarizeStageAbsence(noStage(),100_000,160_000,processWitnesses());}
+  return measured;
+}
+test("Control-only requires actual zero Stage witnesses and retains strict cadence/deadline/rate gates", () => {
+  const measured=splitResult(1),r=numericProof(measured,completedProgress());
+  assert.equal(r.all_gates_passed,1);assert.equal(r.stage_absence_passed,1);assert.equal(r.stage_validation_passed,0);assert.equal(r.stage_report_available,0);
+  assert.deepEqual(validateNumericProof(JSON.parse(JSON.stringify(r))),r);
+  for(const mutate of [m => m.deadline_miss_delta=1,m => m.minimum_one_second_completed_hz=37,m => m.send_error_delta=1,m => m.mode_acknowledged=0,m => delete m.proof.absence]) {
+    const value=splitResult(1);mutate(value);
+    if(!value.proof.absence) assert.throws(() => numericProof(value,completedProgress()));
+    else assert.equal(numericProof(value,completedProgress()).all_gates_passed,0);
+  }
+});
+test("Stage-functional preserves failing rate flags while requiring integrity, liveness, Sheet and fades", () => {
+  const measured=splitResult(2);Object.assign(measured,{completed_frame_delta:1200,minimum_one_second_completed_hz:15,average_completed_hz:20,windows_below_target:60,deadline_miss_delta:900});
+  measured.proof.packets={packet_count:19200,rows:Array.from({length:16},() => ({packets:1200,sequence_discontinuities:0,zero_sequence_packets:0}))};
+  const r=numericProof(measured,completedProgress());assert.equal(r.all_gates_passed,1);assert.equal(r.measurement_passed,0);assert.equal(r.udp_passed,0);assert.equal(r.udp_integrity_passed,1);assert.equal(r.deadline_misses,900);
+  for(const mutate of [m => m.send_error_delta=1,m => m.proof.packets.rows[0].sequence_discontinuities=1,m => {m.proof.packets.packet_count-=1200;m.proof.packets.rows[0].packets=0;},m => m.proof.stage.validation_passed=0,m => m.mode_acknowledged=0,m => m.proof.interaction.accepted_commands=1]) {
+    const value=structuredClone(measured);mutate(value);
+    if(value.proof.stage.validation_passed === 0) {value.proof.stage.lanes[0].presentation_continuity_passed=0;value.proof.stage.lanes[0].validation_passed=0;}
+    assert.equal(numericProof(value,completedProgress()).all_gates_passed,0);
+  }
+  assert.equal(numericProof(measured,{...completedProgress(),sheet_liveness_passed:0}).all_gates_passed,0);
+});
+test("Stage absence cannot be inferred from configuration, empty unavailable evidence or sampled helper CPU", () => {
+  const good=noStage(),samples=processWitnesses();
+  assert.equal(summarizeStageAbsence(good,100_000,160_000,samples).passed,1);
+  for(const mutate of [r => delete r.nativeStage.hostObservations,r => r.stageEnabled=true,r => r.config.stageEnabled=true,r => r.nativeStage.observerOverflow.errors=1,r => r.nativeStage.frames.push({}),r => r.nativeStage.activity.push({}),r => r.nativeStage.heartbeats.push({}),r => r.nativeStage.hostObservations[30].frames=1,r => r.nativeStage.hostObservations[30].heartbeats=1,r => {r.nativeStage.hostObservations=r.nativeStage.hostObservations.filter(row => row.recordedAt > 100_000);r.nativeStage.hostObservationCount=r.nativeStage.hostObservations.length;},r => r.nativeStage.hostObservations[30].recordedAt=100_000,r => r.activeUiSurfaces.push("stage-native-live")]) {
+    const value=structuredClone(good);mutate(value);assert.equal(summarizeStageAbsence(value,100_000,160_000,samples).passed,0);
+  }
+  const helper=processWitnesses();helper[30].processes.push({command:"viz-renderer",cpuTicks:0});const witness=summarizeStageAbsence(good,100_000,160_000,helper);assert.equal(witness.maximum_helpers,1);assert.equal(witness.passed,0);
+  assert.equal(summarizeStageAbsence(good,100_000,160_000,samples.slice(1)).available,0);
+  const missing=processWitnesses();missing[10].processes=[];assert.equal(summarizeStageAbsence(good,100_000,160_000,missing).available,0);
+});
+test("schema4 rejects unknown modes, fabricated absence/Stage success and contradictory integrity flags", () => {
+  for(const mutate of [r => r.proof_mode_code=3,r => r.udp_integrity_passed=0,r => r.stage_absence_passed=1,r => r.schema_version=3]) {
+    const value=numericProof(splitResult(2),completedProgress());mutate(value);assert.throws(() => validateNumericProof(value));
+  }
+  const noStageReport=numericProof(splitResult(1),completedProgress());noStageReport.stage_validation_passed=1;assert.throws(() => validateNumericProof(noStageReport));
+});
+test("mode acknowledgment binds the actual app configuration before opening the window", async () => {
+  const directory=await mkdtemp(path.join(artifactPaths.tmp,"tl775-mode-ack-"));
+  try {
+    const file=path.join(directory,"report.jsonl");const started={schemaVersion:2,kind:"started",measurementSurface:"packaged-tauri-native-stage",profile:"sixteen_universe",stageEnabled:false,config:{stageEnabled:false}};
+    const ack={schemaVersion:2,kind:"stage-mode-ack",measurementSurface:started.measurementSurface,profile:started.profile,stageEnabled:false,hostObservationCount:1,recordedAt:new Date().toISOString()};
+    const {writeFile}=await import("node:fs/promises");
+    await writeFile(file,[started,ack].map(JSON.stringify).join("\n")+"\n");assert.deepEqual(await waitProofModeAck(file,false,() => {}),ack);await assert.rejects(() => waitProofModeAck(file,true,() => {}));
+    started.config.stageEnabled=true;await writeFile(file,[started,ack].map(JSON.stringify).join("\n")+"\n");await assert.rejects(() => waitProofModeAck(file,false,() => {}));
+  } finally {await rm(directory,{recursive:true,force:true});}
 });

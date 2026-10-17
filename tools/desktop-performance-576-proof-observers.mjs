@@ -317,30 +317,72 @@ export function summarizeStageWindow(complete, start, end) {
   return {report_available:Number(reportAvailable),validation_passed:Number(reportAvailable && lanes.every(row => row.validation_passed === 1)),lanes,max_allowed_gap_ms:5000,retrospective:1};
 }
 
+// Modes: zero preserves the historical combined proof; one isolates Control; two checks Stage health.
+export const PROOF_MODES = Object.freeze({combined:0,"control-no-stage":1,"stage-functional":2});
+export async function waitProofModeAck(file, enabled, assertRunning) {
+  const started = await waitRecord(file,"started",90_000,assertRunning);
+  const ack = await waitRecord(file,"stage-mode-ack",90_000,assertRunning);
+  for(const record of [started,ack]) {
+    assert(record.schemaVersion === 2 && record.measurementSurface === "packaged-tauri-native-stage");
+    assert.equal(record.stageEnabled,enabled,"benchmark mode acknowledgment mismatch");
+  }
+  assert.equal(started.config?.stageEnabled,enabled);assert.equal(ack.profile,started.profile);
+  uint(ack.hostObservationCount);assert(ack.hostObservationCount > 0);
+  assert(Number.isFinite(Date.parse(ack.recordedAt)),"invalid mode acknowledgment time");
+  return ack;
+}
+export function summarizeStageAbsence(complete,start,end,processSamples) {
+  nonnegative(start);nonnegative(end);assert(end-start >= 60_000,"short absence window");
+  const empty = {available:0,passed:0,host_observations:0,host_max_gap_ms:0,host_bracketed:0,host_reordered_samples:0,activity_samples:0,heartbeat_samples:0,helper_observations:0,maximum_helpers:0};
+  const native=complete?.nativeStage, rows=native?.hostObservations;
+  if(complete?.schemaVersion !== 2 || complete?.kind !== "complete" || complete?.stageEnabled !== false || complete?.config?.stageEnabled !== false || complete?.measurementSurface !== "packaged-tauri-native-stage" || !Array.isArray(rows) || !rows.length || rows.length > 10_000 || !Array.isArray(processSamples) || processSamples.length !== 61) return empty;
+  const arrays=[native.frames,native.activity,native.heartbeats];
+  if(arrays.some(rows => !Array.isArray(rows))) return empty;
+  if(!native.observerOverflow || ["activity","heartbeats","errors"].some(key => !Number.isSafeInteger(native.observerOverflow[key]) || native.observerOverflow[key] < 0)) return empty;
+  if(native.hostObservationCount !== rows.length || rows.some(row => !Number.isFinite(row.recordedAt) || !Number.isSafeInteger(row.frames) || row.frames < 0 || !Number.isSafeInteger(row.heartbeats) || row.heartbeats < 0)) return empty;
+  if(processSamples.some(sample => !Array.isArray(sample.processes) || !sample.processes.length || sample.processes.some(row => typeof row.command !== "string"))) return empty;
+  const ordered=rows.every((row,i) => i === 0 || row.recordedAt >= rows[i-1].recordedAt);
+  const selected=rows.filter(row => row.recordedAt >= start && row.recordedAt <= end);
+  const before=rows.filter(row => row.recordedAt <= start).at(-1),after=rows.find(row => row.recordedAt >= end);
+  const times=[before?.recordedAt,...selected.map(row => row.recordedAt),after?.recordedAt];
+  const bracketed=before && after;
+  const maxGap=bracketed ? Math.max(0,...times.slice(1).map((time,i) => time-times[i])) : 0;
+  const helpers=processSamples.map(sample => sample.processes.filter(row => row.command.includes("viz-renderer")).length);
+  const activity=arrays[0].length+arrays[1].length+rows.reduce((n,row) => n+row.frames,0),heartbeat=arrays[2].length+rows.reduce((n,row) => n+row.heartbeats,0);
+  return {available:1,passed:Number(Boolean(ordered && bracketed && maxGap <= 5000 && !activity && !heartbeat && Object.values(native.observerOverflow).every(value => value === 0) && helpers.every(value => value === 0) && complete.activeUiSurfaces?.length === 1 && complete.activeUiSurfaces[0] === "fixture-sheet")),host_observations:rows.length,host_max_gap_ms:maxGap,host_bracketed:Number(Boolean(bracketed)),host_reordered_samples:rows.filter((row,i) => i > 0 && row.recordedAt < rows[i-1].recordedAt).length,activity_samples:activity,heartbeat_samples:heartbeat,helper_observations:helpers.length,maximum_helpers:Math.max(...helpers)};
+}
+
 // Phase codes are assigned only at trusted harness checkpoints, never inferred from errors:
 // 0 finished/no exception;1 preflight;2 launch/backend;3 seed;4 routes;5 Sheet ready;
 // 6 Stage start+17s;7 measurement;8 UDP;9 fade1;10 fade2;11 Sheet live;
 // 12 Stage complete wait;13 Stage coverage;14 cleanup/evidence;15 outer failure.
 export const FAILURE_STAGE_CODES = Object.freeze(Array.from({length:16},(_,i) => i));
 function phase(value) { uint(value); assert(FAILURE_STAGE_CODES.includes(value),"unknown phase code"); return value; }
-const FLAGS = ["complete","all_gates_passed","workload_available","measurement_available","measurement_passed","resources_available","udp_available","udp_passed","interaction_available","interaction_passed","sheet_liveness_checked","sheet_liveness_passed","stage_report_available","stage_validation_passed","cleanup_complete"];
+const FLAGS = ["complete","all_gates_passed","workload_available","measurement_available","measurement_passed","resources_available","udp_available","udp_passed","interaction_available","interaction_passed","sheet_liveness_checked","sheet_liveness_passed","stage_report_available","stage_validation_passed","mode_acknowledged","udp_integrity_passed","stage_absence_available","stage_absence_passed","cleanup_complete"];
 const METRICS = ["requested_hz","minimum_required_hz","counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","packet_count","accepted_commands","stage_max_allowed_gap_ms","wall_monotonic_difference_ms","fixture_records","physical_instances","parameter_count","universe_count","animated_attributes","master_lanes"];
-const SCALARS = ["schema_version","current_stage_code","failure_stage_code",...FLAGS,...METRICS];
+const ABSENCE_FIELDS = ["host_observations","host_max_gap_ms","host_bracketed","host_reordered_samples","activity_samples","heartbeat_samples","helper_observations","maximum_helpers"];
+const SCALARS = ["schema_version","proof_mode_code",...ABSENCE_FIELDS,"current_stage_code","failure_stage_code",...FLAGS,...METRICS];
 const RESOURCE_FIELDS = ["cpu_average_percent","cpu_max_percent","peak_resident_bytes"];
 const LANE_FIELDS = [...stageInvalidFields("activity"),...stageInvalidFields("heartbeat"),"retained_samples","first_sample_offset_ms","last_sample_offset_ms","available","validation_passed","valid_samples","invalid_samples","observed_samples","begin_gap_ms","end_gap_ms","max_gap_ms","bracketed","all_activity_samples","filtered_samples","attachment_count","activity_reordered_samples","presentation_continuity_passed","idle_continuity_passed","heartbeat_samples","heartbeat_valid_samples","heartbeat_invalid_samples","heartbeat_reordered_samples","heartbeat_link_failures","heartbeat_ineligible_samples","idle_heartbeat_samples","heartbeat_observed_samples","heartbeat_begin_gap_ms","heartbeat_end_gap_ms","heartbeat_max_gap_ms","heartbeat_bracketed","observer_failed","source_change_samples","source_observed_advances","source_begin_gap_ms","source_end_gap_ms","source_max_gap_ms","source_bracketed","source_continuity_passed"];
 const RAMP_FIELDS = ["available","from_value","to_value","intermediate_values","target_delay_ms","monotonic"];
 const MEASUREMENT_FIELDS = ["counter_observations","interval_count","actual_window_seconds","completed_frames","weighted_completed_hz","minimum_interval_hz","mean_interval_hz","windows_below_38hz","deadline_misses","send_errors","wall_monotonic_difference_ms"];
 function measurementPass(r) { return Boolean(r.measurement_available && r.counter_observations === 61 && r.interval_count === 60 && r.actual_window_seconds >= 60 && r.minimum_interval_hz >= 38 && r.windows_below_38hz === 0 && r.deadline_misses === 0 && r.send_errors === 0 && r.wall_monotonic_difference_ms <= 1000); }
 // Decoded loopback only: midpoint/envelope allowance is two fewer/eight more packets.
-function udpPass(r) { return Boolean(r.udp_available && r.measurement_available && r.actual_window_seconds > 0 && r.universes.every(row => row.packets >= r.completed_frames-2 && row.packets <= r.completed_frames+8 && row.packets/r.actual_window_seconds >= 38 && row.sequence_discontinuities === 0 && row.zero_sequence_packets === 0)); }
+function udpIntegrity(r) { return Boolean(r.udp_available && r.measurement_available && r.actual_window_seconds > 0 && r.universes.every(row => row.packets > 0 && row.packets >= r.completed_frames-2 && row.packets <= r.completed_frames+8 && row.sequence_discontinuities === 0 && row.zero_sequence_packets === 0)); }
+function udpPass(r) { return Boolean(udpIntegrity(r) && r.universes.every(row => row.packets/r.actual_window_seconds >= 38)); }
 function interactionPass(r) { return Boolean(r.interaction_available && r.accepted_commands === 2 && r.ramps.every(row => row.available && row.monotonic === 1 && row.intermediate_values >= 2 && row.target_delay_ms >= 2500 && row.target_delay_ms <= 4000) && r.ramps[0].from_value === 0 && r.ramps[0].to_value === 128 && r.ramps[1].from_value === 128 && r.ramps[1].to_value === 64); }
-function gates(r) { return Boolean(r.complete && r.failure_stage_code === 0 && r.workload_available && r.measurement_passed && r.resources_available && r.udp_passed && r.interaction_passed && r.sheet_liveness_checked && r.sheet_liveness_passed && r.stage_report_available && r.stage_validation_passed && r.cleanup_complete); }
+function gates(r) {
+  const common=r.complete && r.failure_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.interaction_passed && r.sheet_liveness_checked && r.sheet_liveness_passed && r.cleanup_complete;
+  if(r.proof_mode_code === 1) return Boolean(common && r.mode_acknowledged && r.measurement_passed && r.udp_passed && r.stage_absence_passed);
+  if(r.proof_mode_code === 2) return Boolean(common && r.mode_acknowledged && r.udp_integrity_passed && r.send_errors === 0 && r.stage_report_available && r.stage_validation_passed);
+  return Boolean(common && r.measurement_passed && r.udp_passed && r.stage_report_available && r.stage_validation_passed);
+}
 function closed(row,keys) { assert(row && !Array.isArray(row)); assert.deepEqual(Object.keys(row).sort(),keys.slice().sort(),"public closed shape"); for(const [name,value] of Object.entries(row)) {if(name === "first_sample_offset_ms" || name === "last_sample_offset_ms") assert(typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 400_000,"invalid bounded offset");else nonnegative(value);} }
 function bit(value) { assert(value === 0 || value === 1,"invalid boolean flag"); }
 export function validateNumericProof(r) {
   closed(Object.fromEntries(Object.entries(r).filter(([name]) => !["resources","universes","ramps","stage_lanes"].includes(name))),SCALARS);
   assert.deepEqual(Object.keys(r).sort(),[...SCALARS,"resources","universes","ramps","stage_lanes"].sort(),"public closed shape");
-  assert.equal(r.schema_version,3); phase(r.current_stage_code);phase(r.failure_stage_code);
+  assert.equal(r.schema_version,4);assert([0,1,2].includes(r.proof_mode_code)); phase(r.current_stage_code);phase(r.failure_stage_code);
   for(const name of FLAGS) bit(r[name]);
   assert.equal(r.requested_hz,40);assert.equal(r.minimum_required_hz,38);
   for (const [name,length,keys] of [["resources",5,RESOURCE_FIELDS],["universes",16,["packets","sequence_discontinuities","zero_sequence_packets"]],["ramps",2,RAMP_FIELDS],["stage_lanes",2,LANE_FIELDS]]) {
@@ -385,17 +427,23 @@ export function validateNumericProof(r) {
   if(!r.stage_report_available) assert(r.stage_validation_passed === 0);
   if(r.stage_report_available) assert.equal(r.stage_max_allowed_gap_ms,5000);
   assert(r.sheet_liveness_passed <= r.sheet_liveness_checked);
+  for(const name of ABSENCE_FIELDS.filter(name => name !== "host_max_gap_ms")) uint(r[name]);
+  if(!r.stage_absence_available) assert(ABSENCE_FIELDS.every(name => r[name] === 0) && r.stage_absence_passed === 0);
+  if(r.stage_absence_passed) assert(r.proof_mode_code === 1 && r.stage_absence_available && r.host_observations > 1 && r.host_bracketed === 1 && r.host_reordered_samples === 0 && r.host_max_gap_ms <= 5000 && r.activity_samples === 0 && r.heartbeat_samples === 0 && r.helper_observations === 61 && r.maximum_helpers === 0);
+  if(r.proof_mode_code !== 1) assert(r.stage_absence_available === 0 && r.stage_absence_passed === 0);
+  if(r.proof_mode_code === 1) assert(r.stage_validation_passed === 0 && r.stage_report_available === 0);
+  assert.equal(r.udp_integrity_passed,Number(udpIntegrity(r)));
   assert.equal(r.measurement_passed,Number(measurementPass(r)));
   assert.equal(r.udp_passed,Number(udpPass(r)));
   assert.equal(r.interaction_passed,Number(interactionPass(r)));
   if(r.failure_stage_code) assert.equal(r.complete,0);
-  if(r.complete) assert(r.current_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.udp_available && r.interaction_available && r.sheet_liveness_checked && r.stage_report_available && r.cleanup_complete);
+  if(r.complete) assert(r.current_stage_code === 0 && r.workload_available && r.measurement_available && r.resources_available && r.udp_available && r.interaction_available && r.sheet_liveness_checked && (r.proof_mode_code === 1 ? r.stage_absence_available : r.stage_report_available) && r.cleanup_complete);
   assert.equal(r.all_gates_passed,Number(gates(r)),"public gate truth mismatch");
   return r;
 }
 export function numericProof(result,progress = {}) {
   const r = Object.fromEntries(SCALARS.map(name => [name,0]));
-  Object.assign(r,{schema_version:3,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
+  Object.assign(r,{schema_version:4,proof_mode_code:result?.proof_mode_code ?? 0,mode_acknowledged:result?.mode_acknowledged ?? 0,current_stage_code:1,requested_hz:40,minimum_required_hz:38,
     resources:Array.from({length:5},() => Object.fromEntries(RESOURCE_FIELDS.map(name => [name,0]))),
     universes:Array.from({length:16},() => ({packets:0,sequence_discontinuities:0,zero_sequence_packets:0})),
     ramps:Array.from({length:2},() => Object.fromEntries(RAMP_FIELDS.map(name => [name,0]))),
@@ -407,10 +455,11 @@ export function numericProof(result,progress = {}) {
   if(result?.proof?.packets) Object.assign(r,{udp_available:1,packet_count:result.proof.packets.packet_count,universes:result.proof.packets.rows});
   if(result?.proof?.interaction) {const v=result.proof.interaction;r.accepted_commands=v.accepted_commands;for(let i=0;i<v.ramps.length;i++)r.ramps[i]={available:1,...v.ramps[i]};r.interaction_available=Number(v.ramps.length>0);}
   if(result?.proof?.stage) {const v=result.proof.stage;Object.assign(r,{stage_report_available:v.report_available,stage_validation_passed:v.validation_passed,stage_lanes:v.lanes,stage_max_allowed_gap_ms:v.max_allowed_gap_ms});}
+  if(result?.proof?.absence) {const v=result.proof.absence;Object.assign(r,{stage_absence_available:v.available,stage_absence_passed:v.passed});for(const name of ABSENCE_FIELDS) r[name]=v[name];}
   // Completion, Sheet liveness and cleanup are trusted observations, never inferred
   // merely from a result object's presence. Callers must supply them explicitly.
   Object.assign(r,{complete:0,current_stage_code:1,sheet_liveness_checked:0,sheet_liveness_passed:0,cleanup_complete:0},progress);
-  r.measurement_passed=Number(measurementPass(r));r.udp_passed=Number(udpPass(r));r.interaction_passed=Number(interactionPass(r));r.all_gates_passed=Number(gates(r));
+  r.udp_integrity_passed=Number(udpIntegrity(r));r.measurement_passed=Number(measurementPass(r));r.udp_passed=Number(udpPass(r));r.interaction_passed=Number(interactionPass(r));r.all_gates_passed=Number(gates(r));
   return validateNumericProof(r);
 }
 async function atomicNumericWrite(file,report) {

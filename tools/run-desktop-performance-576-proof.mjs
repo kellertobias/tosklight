@@ -12,6 +12,7 @@ import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
   waitStageComplete, waitStageReady, summarizeStageWindow, ProofCheckpoint,
+  PROOF_MODES, waitProofModeAck, summarizeStageAbsence,
 } from "./desktop-performance-576-proof-observers.mjs";
 import path from "node:path";
 import { finished } from "node:stream/promises";
@@ -47,6 +48,11 @@ const LINUX_PROCESS_OPTIONS = {
 const CASES = [{ caseId: "sixteen_universe", fixtureRecords: 576 }];
 
 const options = parseArguments(process.argv.slice(2));
+const requestedMode = options.mode ?? "combined";
+assert(["control","stage","combined"].includes(requestedMode),"unknown proof mode");
+const proofMode = {control:"control-no-stage",stage:"stage-functional",combined:"combined"}[requestedMode];
+assert(Object.hasOwn(PROOF_MODES,proofMode),"unknown proof mode");
+const stageEnabled = proofMode !== "control-no-stage";
 const numericPath = path.resolve(options["numeric-report"]);
 assert(numericPath.startsWith(`${path.resolve(artifactPaths.results)}${path.sep}`), "numeric output must be beneath canonical test results");
 const phaseNumericPath = path.join(path.dirname(numericPath), "phase-numeric.json");
@@ -55,6 +61,7 @@ async function retainPhaseDiagnostics(file, window) {
   await writePhaseDiagnostics(phaseNumericPath, file, window).catch(() => {});
 }
 const checkpoint = new ProofCheckpoint(numericPath);
+checkpoint.result.proof_mode_code = PROOF_MODES[proofMode];
 await checkpoint.enter(1);
 await retainPhaseDiagnostics(null, null);
 let published;
@@ -121,6 +128,7 @@ async function runCase(performanceCase, executionMode) {
 			LIGHT_STAGE_PACKAGED_BENCH_PROFILE: performanceCase.caseId,
 			LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW: "0",
 			LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET: "1",
+      LIGHT_STAGE_PACKAGED_BENCH_STAGE: stageEnabled ? "1" : "0",
 			// The benchmark surface stops when its own duration elapses, and it defaults to
 			// thirty seconds. Tell it how long this run actually measures for, with headroom
 			// for the wait that precedes the window, or it falls silent midway through and
@@ -213,6 +221,11 @@ async function runCase(performanceCase, executionMode) {
 			},
 		);
     await checkpoint.enter(6);
+    if(proofMode !== "combined") {
+      await waitProofModeAck(reportPath,stageEnabled,() => assertRunning(child));
+      checkpoint.result.mode_acknowledged=1;
+    }
+    if(stageEnabled) {
     await waitStageStarted(reportPath, () => assertRunning(child));
     // Original surface resizes at 8s, releases live at 15s and recreates at 16s.
     // Readiness here is provisional: final per-pane telemetry validates the window retrospectively.
@@ -220,6 +233,7 @@ async function runCase(performanceCase, executionMode) {
     // A lifecycle delay is not a presentation acknowledgment. The private readiness witness
     // precedes this window; final per-pane coverage still validates the actual window.
     await waitStageReady(reportPath, () => assertRunning(child));
+    }
     assertRunning(child);
     await checkpoint.enter(7);
     packetProof.start();
@@ -274,10 +288,16 @@ async function runCase(performanceCase, executionMode) {
     await checkpoint.enter(12);
     const complete = await waitStageComplete(reportPath, () => assertRunning(child));
     await checkpoint.enter(13);
-    const stage = summarizeStageWindow(complete, measurementStartedAt, measurementEndedAt);
-    checkpoint.result.proof.stage = stage;
+    if(proofMode !== "combined") {
+      assert.equal(complete.stageEnabled,stageEnabled,"complete mode mismatch");
+      assert.equal(complete.config?.stageEnabled,stageEnabled,"complete configuration mismatch");
+    }
+    const stage = stageEnabled ? summarizeStageWindow(complete, measurementStartedAt, measurementEndedAt) : undefined;
+    const absence = stageEnabled ? undefined : summarizeStageAbsence(complete,measurementStartedAt,measurementEndedAt,evidence.samples);
+    if(stage) checkpoint.result.proof.stage = stage;
+    if(absence) checkpoint.result.proof.absence = absence;
     await checkpoint.save();
-    assert.equal(stage.validation_passed,1,"Stage retrospective coverage failed");
+    assert.equal(stageEnabled ? stage.validation_passed : absence.passed,1,stageEnabled ? "Stage retrospective coverage failed" : "Stage absence observation failed");
     if (watchdogFailure) throw watchdogFailure;
 		state.phase = "complete";
 		result = {
@@ -298,7 +318,8 @@ async function runCase(performanceCase, executionMode) {
 			measurement_seconds: DURATION_SECONDS,
 			measurement_surface: "released-tauri-desk-fixture-sheet",
 			...measured,
-      proof: {packets, interaction, stage},
+      proof_mode_code: PROOF_MODES[proofMode], mode_acknowledged: checkpoint.result.mode_acknowledged ?? 0,
+      proof: {packets, interaction, ...(stage ? {stage} : {absence})},
 		};
 	} catch (error) {
     if(checkpoint.progress.current_stage_code === 11) checkpoint.progress.sheet_liveness_checked=1;
