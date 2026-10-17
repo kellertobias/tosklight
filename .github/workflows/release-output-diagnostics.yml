@@ -70,7 +70,7 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import {spawn} from 'node:child_process';
-                    import {mkdtemp,mkdir,writeFile} from 'node:fs/promises';
+                    import {mkdtemp,mkdir,writeFile,readFile} from 'node:fs/promises';
           import {artifactPaths} from './tools/artifact-paths.mjs';
           import {processIdentity,verifyIdentity} from './tools/desktop-performance-headless-stacks-recorder.mjs';
           import {verifyRuntimeSymbols} from './tools/desktop-performance-runtime-symbols.mjs';
@@ -80,7 +80,7 @@ jobs:
           let spawnError,hasClosed=false;
           child.on('error',error=>{spawnError=error;});
           const closed=new Promise(resolve=>child.once('close',()=>{hasClosed=true;resolve();}));
-          let stage=0,passed=0,libraries=0,inObject=0,stopped=0,failureCode=0;
+          let stage=0,passed=0,libraries=0,inObject=0,stopped=0,failureCode=0,mapShape=null;
           // Closed numeric failure map: runtime100+, recorder200+, OS300+, unknown999.
           const runtimeFailures=['runtime/debug ownership or size','read cap','runtime/debug ELF','ELF changed while reading','malformed maps encoding','malformed map','duplicate map range','deleted or unsafe runtime path','runtime inode absent','conflicting runtime mappings','runtime count','libc/loader mapping absent','invalid process binding','unsafe resolved runtime path','ELF identity changed','mapped runtime identity mismatch','readelf output cap','missing/ambiguous build ID','debug path redirect','debug build ID or symtab mismatch','mapped path changed'];
           const recorderFailures=['private directory','private command name','tool working directory escaped private root','private file identity changed','bounded tool failed','private receipt','private receipt changed or exceeded cap','missing owned binding','owned birth or ancestry changed','owned executable changed'];
@@ -100,13 +100,22 @@ jobs:
             inObject=receipt.libraries.filter(x=>x.symbol_source==='runtime_elf').length;
             assert(receipt.libraries.some(x=>x.runtime_path.endsWith('/libpthread.so.0')&&x.symbol_source==='runtime_elf'));
             stage=3; passed=1;
-          } catch(error) { failureCode=classify(error); process.exitCode=1; }
+          } catch(error) {
+            failureCode=classify(error); process.exitCode=1;
+            if(failureCode===105)try{
+              const lines=(await readFile('/proc/'+child.pid+'/maps','utf8')).trimEnd().split('\n');
+              const re=/^([0-9a-f]+)-([0-9a-f]+) ([r-][w-][x-][ps]) ([0-9a-f]+) ([0-9a-f]+):([0-9a-f]+) (\d+)(?:\s+(.+))?$/u;
+              const bad=lines.filter(line=>!re.test(line));
+              mapShape={line_count:lines.length,regex_failures:bad.length,first_bad_field_count:0,first_bad_valid_fields:0,first_bad_trailing_spaces:0};
+              if(bad.length){const fields=bad[0].trim().split(/\s+/u);mapShape.first_bad_field_count=fields.length;const patterns=[/^[0-9a-f]+-[0-9a-f]+$/u,/^[r-][w-][x-][ps]$/u,/^[0-9a-f]+$/u,/^[0-9a-f]+:[0-9a-f]+$/u,/^\d+$/u];mapShape.first_bad_valid_fields=patterns.reduce((n,re,i)=>n+(re.test(fields[i]??'')?1<<i:0),0);mapShape.first_bad_trailing_spaces=(bad[0].match(/ +$/u)?.[0]??'').length;}
+            }catch{}
+          }
           finally {
             child.kill('SIGTERM');
             const waitClose=async()=>{let timer;try{return await Promise.race([closed.then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),2000);})]);}finally{clearTimeout(timer);}};
             if(!await waitClose()){child.kill('SIGKILL');await waitClose();}
             clearTimeout(timeout);stopped=Number(hasClosed);if(!stopped||spawnError){passed=0;process.exitCode=1;}
-            console.log(JSON.stringify({schema:1,passed,setup_stage:stage,libraries,in_object_symbol_sources:inObject,owned_child_stopped:stopped,samples:0,performance_acceptance:0,failure_code:failureCode}));
+            console.log(JSON.stringify({schema:1,passed,setup_stage:stage,libraries,in_object_symbol_sources:inObject,owned_child_stopped:stopped,samples:0,performance_acceptance:0,failure_code:failureCode,map_shape:mapShape}));
           }
           NODE
 
