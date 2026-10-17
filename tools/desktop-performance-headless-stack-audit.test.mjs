@@ -321,3 +321,156 @@ test("up to64 exact verified runtime aliases are bounded", () => {
 		}),
 	);
 });
+
+test("schema2 fixed spelling families classify only resolved unmapped self symbols", () => {
+	const cases = [
+		["plain_other", owned, 0],
+		["light_control::update", owned, 1],
+		["<std::thread::Thread as Trait>::run", owned, 2],
+		["core::slice::sort", owned, 3],
+		["alloc::string::String::new", owned, 4],
+		["__rust_alloc+0x10", owned, 5],
+		["other_crate::work", owned, 9],
+		["_int_malloc+0x1a", runtime, 10],
+		["__GI___libc_calloc@@GLIBC_2.2.5+0x2", runtime, 10],
+		["sin@GLIBC_2.2.5+0x10", runtime, 11],
+		["memset", runtime, 12],
+		["unclassified_libc_leaf", "/unverified/libc.so.6", 13],
+		["unclassified_libm_leaf", "libm.so.6", 13],
+	];
+	const text = cases
+		.map(([symbol, dso]) => sample([frame(symbol, dso)]))
+		.join("");
+	const report = audit(
+		text,
+		expected(cases.length, cases.length, 0, 0, cases.length),
+	);
+	assert.equal(report.schema_version, 2);
+	assert.equal(report.function_mapping_version, 2);
+	assert.equal(report.audit_valid, 1);
+	assert.equal(report.resolved_unmapped_self_families.length, 14);
+	for (let id = 0; id < 14; id++)
+		assert.equal(
+			report.resolved_unmapped_self_families[id].self_samples,
+			cases.filter((entry) => entry[2] === id).length,
+		);
+	assert.equal(report.resolved_unmapped_self_period, cases.length * 20408163);
+	// These broad namespace classes are already mapped by function map2 and stay excluded.
+	const excluded = [
+		"light_engine::render",
+		"malloc",
+		"__memcpy_avx2",
+		"hashbrown::map",
+		"rayon::work",
+		"tokio::task",
+		"[unknown]",
+		"0x0",
+	];
+	const result = audit(
+		excluded.map((symbol) => sample([frame(symbol)])).join(""),
+		expected(8, 8, 2, 0, 8),
+	);
+	assert.equal(result.resolved_unmapped_self_period, 0);
+	assert(
+		result.resolved_unmapped_self_families.every(
+			(entry) => entry.self_samples === 0 && entry.self_period === 0,
+		),
+	);
+});
+
+test("spelling boundaries, closed allowlists and observed DSO labels do not imply ownership", () => {
+	const cases = [
+		["light_corex::thing", owned, 9],
+		["light_unlisted::thing", owned, 9],
+		["stdish::thing", owned, 9],
+		["project::malloc_helper", runtime, 9],
+		["_int_malloc_helper", owned, 0],
+		["sin@NOT_GLIBC", owned, 0],
+		["sin+123", owned, 0],
+		["unclassified", "/not-libc.so.6", 0],
+		["unclassified", "/unverified/libc.so.6", 13],
+	];
+	for (const [symbol, dso, id] of cases) {
+		const report = audit(sample([frame(symbol, dso)]), expected(1, 1, 0, 0, 1));
+		assert.equal(report.resolved_unmapped_self_families[id].self_samples, 1);
+		if (id === 13)
+			assert.equal(report.classes[6].resolved_unmapped_self_samples, 1);
+	}
+});
+
+test("weighted periods use each private header once and reject overflow numerically", () => {
+	const weighted = (symbol, period) =>
+		sample([frame(symbol)]).replace("20408163", String(period));
+	const text =
+		weighted("std::one", 7) +
+		weighted("std::two", 11) +
+		weighted("sin", 23) +
+		weighted("light_engine::mapped", 99);
+	const report = audit(text, expected(4, 4, 0, 0, 4));
+	assert.equal(report.resolved_unmapped_self_period, 41);
+	assert.equal(report.resolved_unmapped_self_families[2].self_period, 18);
+	assert.equal(report.resolved_unmapped_self_families[11].self_period, 23);
+	assert.equal(report.arithmetic_overflow, 0);
+	assert.equal(report.audit_valid, 1);
+	const overflow = audit(
+		weighted("std::one", Number.MAX_SAFE_INTEGER) + weighted("sin", 1),
+		expected(2, 2, 0, 0, 2),
+	);
+	assert.equal(overflow.arithmetic_overflow, 1);
+	assert.equal(overflow.audit_valid, 0);
+	assert.equal(overflow.parser_valid, 0);
+	assert.equal(overflow.resolved_unmapped_self_period, Number.MAX_SAFE_INTEGER);
+	assert.equal(overflow.resolved_unmapped_self_families[11].self_samples, 1);
+	const unsafe = audit(
+		weighted("std::one", "9007199254740992"),
+		expected(0, 0),
+	);
+	assert.equal(unsafe.audit_valid, 0);
+	assert.equal(unsafe.rejected_lines > 0, true);
+});
+
+test("closed schema2 rejects forged family keys, totals, periods and overflow flags", () => {
+	const base = audit(sample([frame("std::one")]), expected(1, 1, 0, 0, 1));
+	for (const mutate of [
+		(r) => {
+			r.schema_version = 1;
+		},
+		(r) => {
+			r.resolved_unmapped_self_families[0].name = "private";
+		},
+		(r) => {
+			r.resolved_unmapped_self_families[2].self_samples++;
+		},
+		(r) => {
+			r.resolved_unmapped_self_families[2].self_period++;
+		},
+		(r) => {
+			r.resolved_unmapped_self_period++;
+		},
+		(r) => {
+			r.resolved_unmapped_self_families[0].self_period =
+				Number.MAX_SAFE_INTEGER;
+		},
+		(r) => {
+			r.arithmetic_overflow = 1;
+		},
+		(r) => {
+			r.resolved_unmapped_self_families[0].id = 2;
+		},
+	]) {
+		const report = structuredClone(base);
+		mutate(report);
+		assert.throws(() => validateAuditReport(report));
+	}
+});
+
+test("overflow cannot retain valid parity when other validity flags are cleared", () => {
+	const report = audit(sample([frame("std::one")]), expected(1, 1, 0, 0, 1));
+	report.arithmetic_overflow = 1;
+	report.parser_valid = 0;
+	report.audit_valid = 0;
+	assert.equal(report.parity_valid, 1);
+	assert.throws(() => validateAuditReport(report));
+	report.parity_valid = 0;
+	assert.equal(validateAuditReport(report), report);
+});

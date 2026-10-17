@@ -35,6 +35,137 @@ function category(dso, owned, runtimes) {
 		return 5;
 	return path.posix.isAbsolute(dso) ? 6 : 7;
 }
+// Fixed resolved-unmapped SELF spelling families, not callers, CPU stages or ownership:
+// 0 remainder; 1 SELECTED known project namespace; 2 std; 3 core; 4 alloc;
+// 5 Rust global allocator wrapper; 6 hashbrown; 7 rayon; 8 tokio;
+// 9 other namespace syntax (not necessarily Rust); 10 C allocator wrapper/internal;
+// 11 C math wrapper; 12 C memory/string wrapper; 13 remaining observed libc/libm label.
+// Selected names pinned from repository Cargo manifests; this is not all light_*.
+const PROJECT_NAMES = new Set([
+	"light_application",
+	"light_control",
+	"light_programmer",
+	"light_playback",
+	"light_output",
+	"light_wire",
+	"light_core",
+	"light_fixture",
+	"light_show",
+	"light_patch_wire",
+	"light_media",
+	"light_dynamics",
+	"light_engine",
+	"light_headless_runtime",
+]);
+const RUST_ALLOC = new Set([
+	"__rust_alloc",
+	"__rust_dealloc",
+	"__rust_realloc",
+	"__rust_alloc_zeroed",
+	"__rdl_alloc",
+	"__rdl_dealloc",
+	"__rdl_realloc",
+	"__rdl_alloc_zeroed",
+	"__rg_alloc",
+	"__rg_dealloc",
+	"__rg_realloc",
+	"__rg_alloc_zeroed",
+]);
+const C_ALLOC = new Set([
+	"malloc",
+	"free",
+	"realloc",
+	"calloc",
+	"__libc_malloc",
+	"__libc_free",
+	"__libc_realloc",
+	"__libc_calloc",
+	"__libc_memalign",
+	"_int_malloc",
+	"_int_free",
+	"_int_realloc",
+	"_int_memalign",
+	"malloc_consolidate",
+	"sysmalloc",
+	"systrim",
+	"malloc_trim",
+	"memalign",
+	"aligned_alloc",
+	"posix_memalign",
+	"tcache_init",
+	"tcache_thread_shutdown",
+	"unlink_chunk",
+]);
+const C_MATH = new Set([
+	"sin",
+	"sinf",
+	"cos",
+	"cosf",
+	"tan",
+	"tanf",
+	"asin",
+	"asinf",
+	"acos",
+	"acosf",
+	"atan",
+	"atanf",
+	"atan2",
+	"atan2f",
+	"pow",
+	"powf",
+	"exp",
+	"expf",
+	"log",
+	"logf",
+	"sqrt",
+	"sqrtf",
+	"floor",
+	"floorf",
+	"ceil",
+	"ceilf",
+	"fmod",
+	"fmodf",
+	"sincos",
+	"sincosf",
+]);
+const C_MEMORY = new Set([
+	"memcpy",
+	"memmove",
+	"memset",
+	"memcmp",
+	"memchr",
+	"strlen",
+	"strcmp",
+	"strncmp",
+	"strcpy",
+	"strncpy",
+	"bcmp",
+	"bzero",
+]);
+function spellingFamily(symbol, dso) {
+	const namespace = /^<?([a-zA-Z_][a-zA-Z0-9_]*)::/u.exec(symbol)?.[1];
+	if (PROJECT_NAMES.has(namespace)) return 1;
+	if (namespace === "std") return 2;
+	if (namespace === "core") return 3;
+	if (namespace === "alloc") return 4;
+	// Normalize ONLY a terminal hexadecimal perf offset and optional GLIBC version.
+	const base = symbol
+		.replace(/\+0x[0-9a-f]+$/iu, "")
+		.replace(/@@?GLIBC_\d+(?:\.\d+)*$/u, "");
+	if (RUST_ALLOC.has(base)) return 5;
+	if (namespace === "hashbrown") return 6;
+	if (namespace === "rayon" || namespace === "rayon_core") return 7;
+	if (namespace === "tokio") return 8;
+	if (symbol.includes("::")) return 9;
+	// __GI_ is a narrowly recognized glibc alias prefix, not proof of library ownership.
+	const cbase = base.replace(/^__GI_/u, "");
+	if (C_ALLOC.has(cbase)) return 10;
+	if (C_MATH.has(cbase)) return 11;
+	if (C_MEMORY.has(cbase)) return 12;
+	if (/^lib(?:c|m)\.so(?:\.\d+)*$/u.test(path.posix.basename(dso))) return 13;
+	return 0;
+}
+const familyRow = (id) => ({ id, self_samples: 0, self_period: 0 });
 const row = (id) => ({
 	id,
 	self_samples: 0,
@@ -62,6 +193,7 @@ const KEYS = [
 	"unresolved_ancestor_terminal_frames",
 	"depth1_samples",
 	"stackless_samples",
+	"arithmetic_overflow",
 	"cap_exceeded",
 	"parser_valid",
 	"parity_valid",
@@ -80,9 +212,12 @@ const KEYS = [
 	"unresolved_ancestor_dso_filename_mismatch",
 	"unresolved_ancestor_dso_filename_unavailable",
 	"classes",
+	"resolved_unmapped_self_period",
+	"resolved_unmapped_self_families",
 ];
 const ROW_KEYS = Object.keys(row(0));
 const FLAGS = [
+	"arithmetic_overflow",
 	"cap_exceeded",
 	"parser_valid",
 	"parity_valid",
@@ -172,8 +307,11 @@ export function auditPerfScript(
 	);
 	const runtimes = new Set(verifiedRuntimePaths);
 	const report = Object.fromEntries(KEYS.map((key) => [key, 0]));
-	report.schema_version = 1;
+	report.schema_version = 2;
 	report.function_mapping_version = FUNCTION_MAPPING_VERSION;
+	report.resolved_unmapped_self_families = Array.from({ length: 14 }, (_, id) =>
+		familyRow(id),
+	);
 	report.classes = Array.from({ length: 8 }, (_, id) => row(id));
 	report.decoded_bytes = Buffer.byteLength(text);
 	report.maps_requested = Number(mapsText !== null);
@@ -189,7 +327,7 @@ export function auditPerfScript(
 		headers = 0;
 	function flush() {
 		if (!current) return;
-		const { pid, frames } = current;
+		const { pid, frames, period } = current;
 		current = null;
 		if (pid !== tgid) {
 			report.foreign_samples++;
@@ -208,8 +346,23 @@ export function auditPerfScript(
 				if (missing(frame.symbol)) {
 					entry.unresolved_self_samples++;
 					report.unresolved_self_samples++;
-				} else if (functionId(frame.symbol) === 0)
+				} else if (functionId(frame.symbol) === 0) {
 					entry.resolved_unmapped_self_samples++;
+					const family =
+						report.resolved_unmapped_self_families[
+							spellingFamily(frame.symbol, frame.dso)
+						];
+					family.self_samples++;
+					if (
+						!integer(report.resolved_unmapped_self_period + period) ||
+						!integer(family.self_period + period)
+					)
+						report.arithmetic_overflow = 1;
+					else {
+						family.self_period += period;
+						report.resolved_unmapped_self_period += period;
+					}
+				}
 			} else if (missing(frame.symbol)) {
 				entry.unresolved_ancestor_frames++;
 				report.unresolved_ancestor_frames++;
@@ -291,7 +444,11 @@ export function auditPerfScript(
 					continue;
 				}
 				report.recognized_header_lines++;
-				current = { pid: Number(header[1]), frames: [] };
+				current = {
+					pid: Number(header[1]),
+					period: Number(header[4]),
+					frames: [],
+				};
 				if (!header[5]) continue;
 			}
 			const frameText = header ? header[5] : line;
@@ -318,6 +475,7 @@ export function auditPerfScript(
 	}
 	report.parser_valid = Number(
 		report.samples > 0 &&
+			!report.arithmetic_overflow &&
 			!report.cap_exceeded &&
 			!report.rejected_lines &&
 			!report.stackless_samples,
@@ -342,6 +500,7 @@ export function auditPerfScript(
 	];
 	report.parity_valid = Number(
 		report.samples > 0 &&
+			!report.arithmetic_overflow &&
 			!report.cap_exceeded &&
 			!report.rejected_lines &&
 			expected.every(
@@ -359,10 +518,12 @@ export function auditPerfScript(
 
 export function validateAuditReport(report) {
 	require_(exactKeys(report, KEYS));
-	for (const key of KEYS.filter((key) => key !== "classes"))
+	for (const key of KEYS.filter(
+		(key) => key !== "classes" && key !== "resolved_unmapped_self_families",
+	))
 		require_(integer(report[key]));
 	require_(
-		report.schema_version === 1 &&
+		report.schema_version === 2 &&
 			report.function_mapping_version === FUNCTION_MAPPING_VERSION,
 	);
 	for (const key of FLAGS) require_(report[key] <= 1);
@@ -378,6 +539,35 @@ export function validateAuditReport(report) {
 				entry.self_samples && entry.depth1_self_samples <= entry.self_samples,
 		);
 	}
+	require_(
+		Array.isArray(report.resolved_unmapped_self_families) &&
+			report.resolved_unmapped_self_families.length === 14,
+	);
+	for (const [id, entry] of report.resolved_unmapped_self_families.entries())
+		require_(
+			exactKeys(entry, ["id", "self_samples", "self_period"]) &&
+				entry.id === id &&
+				Object.values(entry).every(integer) &&
+				entry.self_samples <= CAPS.samples &&
+				(entry.self_samples > 0 || entry.self_period === 0),
+		);
+	const familySamples = report.resolved_unmapped_self_families.reduce(
+		(total, entry) => total + entry.self_samples,
+		0,
+	);
+	const familyPeriod = report.resolved_unmapped_self_families.reduce(
+		(total, entry) => total + entry.self_period,
+		0,
+	);
+	require_(
+		integer(familyPeriod) &&
+			familyPeriod === report.resolved_unmapped_self_period &&
+			familySamples ===
+				report.classes.reduce(
+					(total, entry) => total + entry.resolved_unmapped_self_samples,
+					0,
+				),
+	);
 	const sum = (key) =>
 		report.classes.reduce((total, entry) => total + entry[key], 0);
 	require_(
@@ -424,6 +614,7 @@ export function validateAuditReport(report) {
 	require_(
 		!report.parser_valid ||
 			(report.samples > 0 &&
+				!report.arithmetic_overflow &&
 				!report.cap_exceeded &&
 				!report.rejected_lines &&
 				!report.stackless_samples),
@@ -431,7 +622,10 @@ export function validateAuditReport(report) {
 	// Parity may match a stackless result; parser_valid/audit_valid still fail it.
 	require_(
 		!report.parity_valid ||
-			(report.samples > 0 && !report.cap_exceeded && !report.rejected_lines),
+			(report.samples > 0 &&
+				!report.arithmetic_overflow &&
+				!report.cap_exceeded &&
+				!report.rejected_lines),
 	);
 	require_(
 		report.unresolved_ancestor_zero_ip_frames <=
