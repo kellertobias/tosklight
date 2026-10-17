@@ -182,23 +182,42 @@ export async function verifyRuntimeSymbols({ root, binding }, injected = {}) {
 					ids[0][1].length % 2 === 0,
 				"missing/ambiguous build ID",
 			);
+			const unwindSection =
+				/\]\s+\.eh_frame\s+PROGBITS\s+[0-9a-f]+\s+[0-9a-f]+\s+([0-9a-f]+)\s+/iu.exec(
+					output,
+				);
+			const unwindSize = unwindSection ? BigInt(`0x${unwindSection[1]}`) : 0n;
 			return {
 				id: ids[0][1],
 				symbols: /\]\s+\.symtab\s+SYMTAB\b/u.test(output),
+				unwind: unwindSize > 0n && unwindSize < BigInt(ELF_CAP),
 			};
 		};
 		const elf = await inspect(runtime, "elf", binary.metadata);
-		const debugPath = `/usr/lib/debug/.build-id/${elf.id.slice(0, 2)}/${elf.id.slice(2)}.debug`;
-		require_(
-			(await io.realpath(debugPath)) === debugPath,
-			"debug path redirect",
-		);
-		const debug = await boundedRead(io, debugPath, ELF_CAP, true);
-		const symbols = await inspect(debugPath, "debug", debug.metadata);
-		require_(
-			elf.id === symbols.id && symbols.symbols,
-			"debug build ID or symtab mismatch",
-		);
+		// Some glibc compatibility DSOs (notably Ubuntu's libpthread) retain their
+		// own symbol table and CFI and intentionally have no separate debug file.
+		// The same mapped-inode/immutable-file/build-ID checks above still apply.
+		let debugPath = null;
+		let debug = null;
+		let symbolSource = "runtime_elf";
+		let symbolPath = runtime;
+		let symbolHash = createHash("sha256").update(binary.bytes).digest("hex");
+		if (!elf.symbols || !elf.unwind) {
+			debugPath = `/usr/lib/debug/.build-id/${elf.id.slice(0, 2)}/${elf.id.slice(2)}.debug`;
+			require_(
+				(await io.realpath(debugPath)) === debugPath,
+				"debug path redirect",
+			);
+			debug = await boundedRead(io, debugPath, ELF_CAP, true);
+			const symbols = await inspect(debugPath, "debug", debug.metadata);
+			require_(
+				elf.id === symbols.id && symbols.symbols,
+				"debug build ID or symtab mismatch",
+			);
+			symbolSource = "separate_debug";
+			symbolPath = debugPath;
+			symbolHash = createHash("sha256").update(debug.bytes).digest("hex");
+		}
 		await checkNamed(runtime, binary.metadata);
 		require_(
 			(await io.realpath(mappedPath)) === runtime,
@@ -210,7 +229,10 @@ export async function verifyRuntimeSymbols({ root, binding }, injected = {}) {
 			debug_path: debugPath,
 			build_id: elf.id,
 			runtime_sha256: createHash("sha256").update(binary.bytes).digest("hex"),
-			debug_sha256: createHash("sha256").update(debug.bytes).digest("hex"),
+			debug_sha256: debug ? symbolHash : null,
+			symbol_source: symbolSource,
+			symbol_path: symbolPath,
+			symbol_sha256: symbolHash,
 		});
 	}
 	await io.verifyIdentity(binding);

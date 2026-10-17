@@ -193,3 +193,62 @@ test("bounded maps read and changed mapped aliases fail closed", async () => {
 		/ELF identity changed|mapped path changed/,
 	);
 });
+
+// Ubuntu libc6_2.35-0ubuntu3.15 ships this compatibility stub with its own symtab/CFI,
+// and libc6-dbg has no separate .build-id debug member for this exact build ID.
+const PTHREAD = "/lib/x86_64-linux-gnu/libpthread.so.0";
+const PTHREAD_ID = "57dbd4443fd643e796cbf95c88dbc95ddd8167a5";
+const STUB_SYMTAB = ".symtab SYMTAB 0000000000000000 002000 000120 18 9 3 8";
+const STUB_EH_FRAME =
+	".eh_frame PROGBITS 0000000000002038 002038 000038 00 A 0 0 8";
+function pthreadFixture(sections = `${STUB_SYMTAB}\n [ 8] ${STUB_EH_FRAME}`) {
+	const f = fixture();
+	f.maps += line("3000", PTHREAD, 8);
+	f.files.set(PTHREAD, metadata(8));
+	const original = f.io.boundedCommand;
+	f.io.boundedCommand = async (...args) => {
+		if (args[3].at(-1) !== PTHREAD) return original(...args);
+		f.commands.push(args[1]);
+		return `Build ID: ${PTHREAD_ID}\n [ 7] ${sections}\n`;
+	};
+	return f;
+}
+
+test("mapped Ubuntu pthread with its own symtab and eh_frame needs no absent separate debug file", async () => {
+	const f = pthreadFixture();
+	const result = await f.run();
+	assert.equal(result.library_count, 3);
+	const stub = result.libraries.find((entry) => entry.runtime_path === PTHREAD);
+	assert.equal(stub.build_id, PTHREAD_ID);
+	assert.equal(stub.symbol_source, "runtime_elf");
+	assert.equal(stub.symbol_path, PTHREAD);
+	assert.equal(stub.symbol_sha256, stub.runtime_sha256);
+	assert.equal(stub.debug_path, null);
+	assert.equal(stub.debug_sha256, null);
+	assert(!f.commands.includes("runtime-2-debug"));
+	assert.equal(result.libraries[0].symbol_source, "separate_debug");
+	assert.equal(result.libraries[0].symbol_path, debugPath);
+});
+
+test("runtime fallback requires both symtab and real eh_frame, otherwise exact separate debug remains required", async () => {
+	for (const sections of [
+		STUB_EH_FRAME,
+		STUB_SYMTAB,
+		`${STUB_SYMTAB}\n [ 8] ${STUB_EH_FRAME.replace(".eh_frame ", ".eh_frame_hdr ")}`,
+		`${STUB_SYMTAB}\n [ 8] ${STUB_EH_FRAME.replace("PROGBITS", "NOBITS")}`,
+		`${STUB_SYMTAB}\n [ 8] ${STUB_EH_FRAME.replace("000038", "000000")}`,
+		`${STUB_SYMTAB}\n [ 8] ${STUB_EH_FRAME.replace("000038", "10000000")}`,
+		`${STUB_SYMTAB}\n [ 8] .eh_frame PROGBITS`,
+	]) {
+		const f = pthreadFixture(sections);
+		await assert.rejects(f.run(), /missing debug/);
+	}
+});
+
+test("in-object symbols do not bypass mapped identity or immutable ownership checks", async () => {
+	for (const patch of [{ uid: 1000 }, { mode: 0o100666 }, { ino: 99 }]) {
+		const f = pthreadFixture();
+		Object.assign(f.files.get(PTHREAD), patch);
+		await assert.rejects(f.run(), /ownership|mapped runtime identity/);
+	}
+});
