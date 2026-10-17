@@ -13,6 +13,7 @@ import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
+import { verifyRuntimeSymbols } from "./desktop-performance-runtime-symbols.mjs";
 import { assertNumericOnly } from "./desktop-performance-cpu-stages.mjs";
 import {
 	LIMITS,
@@ -873,6 +874,13 @@ export class HeadlessStackCapture {
 			require_(
 				this.report.pre_record_binary_match === 1,
 				"running headless binary differs from pinned binary",
+			);
+			await this.retainPrivate(
+				"owned-runtime-symbols.json",
+				await (this.io.verifyRuntimeSymbols ?? verifyRuntimeSymbols)({
+					root: this.root,
+					binding,
+				}),
 			);
 			this.report.pre_record_setup_stage = 4;
 			firstThreads = await listThreads(binding.pid);

@@ -125,6 +125,7 @@ function captureFixture(changes = {}) {
 			verifyIdentity: async () => {
 				calls.push("identity");
 			},
+			verifyRuntimeSymbols: async () => [],
 			threads: async () => [10, 11],
 			readFile: async () => Buffer.from("binary"),
 			openRecorder: async () => {
@@ -442,6 +443,11 @@ test("original benchmark failure survives recorder, decode and export failures, 
 
 test("unavailable attach, pinned executable mismatch and ownership loss cannot produce a complete report", async () => {
 	for (const changes of [
+		{
+			verifyRuntimeSymbols: async () => {
+				throw new Error("runtime symbols unavailable");
+			},
+		},
 		{
 			openRecorder: async () => {
 				throw new Error("permission denied");

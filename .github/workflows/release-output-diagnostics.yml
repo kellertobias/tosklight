@@ -78,6 +78,8 @@ jobs:
                    'tools/run-desktop-performance.mjs', 'tools/process-tree-resources.mjs',
                    'tools/desktop-performance-cpu-stages.mjs',
                    'tools/desktop-performance-headless-stacks.mjs',
+                   'tools/desktop-performance-runtime-symbols.mjs',
+                   'tools/desktop-performance-runtime-symbols.test.mjs',
                    'tools/desktop-performance-headless-stacks.test.mjs',
                    'tools/desktop-performance-headless-stacks-recorder.mjs',
                    'tools/desktop-performance-headless-stacks-recorder.test.mjs',
@@ -129,7 +131,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo timeout 900 apt-get install -y linux-tools-generic binutils
+          sudo timeout 900 apt-get install -y linux-tools-generic binutils libc6-dbg
+          test "$(dpkg-query -W -f='${Version}' libc6:amd64)" = "$(dpkg-query -W -f='${Version}' libc6-dbg:amd64)"
           mapfile -t tools < <(find /usr/lib -maxdepth 3 -type f -path '*/linux-tools*/perf' | sort -V)
           perf=/usr/bin/perf
           if [[ "${#tools[@]}" -gt 0 ]]; then perf="${tools[-1]}"; fi

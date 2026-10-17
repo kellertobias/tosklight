@@ -276,6 +276,7 @@ test("actual capture keeps unresolved strict failure and passes exact owned path
 					readFile: async () => Buffer.from("binary"),
 					threads: async () => [10],
 					writePrivate: async () => {},
+					verifyRuntimeSymbols: async () => [],
 					openRecorder: async () => ({
 						raw: { filename: "/private/raw", bytes: 128 },
 						capped: false,

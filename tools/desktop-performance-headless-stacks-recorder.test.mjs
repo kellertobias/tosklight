@@ -467,6 +467,7 @@ test("actual measurement boundary exports recorder failure while retaining origi
 			threads: async () => [10],
 			readFile: async () => Buffer.from("binary"),
 			writePrivate: async () => {},
+			verifyRuntimeSymbols: async () => [],
 			openRecorder: async () => ({
 				raw: { bytes: 4 },
 				finish: async () => {
@@ -676,6 +677,7 @@ test("pre-record setup stages preserve binding, identity, binary and thread fail
 						return [10];
 					},
 					writePrivate: async () => {},
+					verifyRuntimeSymbols: async () => [],
 					openRecorder: async () => {
 						opened++;
 						throw original;
