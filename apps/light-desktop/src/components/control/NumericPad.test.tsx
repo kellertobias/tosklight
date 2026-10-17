@@ -126,6 +126,8 @@ const commandActions = {
 };
 const commandStore = {
 	getSnapshot: () => ({ commandLine: commandProjection }),
+	captureScope: () => 0,
+	isScopeCurrent: (scope: number) => scope === 0,
 };
 let playbackDesk: {
 	active_page: number;

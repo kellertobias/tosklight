@@ -57,7 +57,10 @@ function rawChoice(
 	options: Extract<MediaControl, { kind: "choice" }>["options"],
 	value: (rawValue: number) => number | string = (rawValue) => rawValue,
 ) {
-	return ({ attribute, rawValue }: SpecializedControlContext): MediaControl => ({
+	return ({
+		attribute,
+		rawValue,
+	}: SpecializedControlContext): MediaControl => ({
 		id: attribute,
 		label,
 		kind: "choice",
@@ -66,7 +69,10 @@ function rawChoice(
 	});
 }
 
-function playbackBpmControl({ attribute, rawValue }: SpecializedControlContext) {
+function playbackBpmControl({
+	attribute,
+	rawValue,
+}: SpecializedControlContext) {
 	return rawValueControl(
 		attribute,
 		"Playback BPM",
@@ -294,7 +300,11 @@ export function normalizedValue(
 	const value = values?.find(
 		(candidate) => candidate.attribute === attribute,
 	)?.value;
-	return value?.kind === "normalized" && typeof value.value === "number"
+	return value?.kind === "normalized" &&
+		typeof value.value === "number" &&
+		Number.isFinite(value.value) &&
+		value.value >= 0 &&
+		value.value <= 1
 		? value.value
 		: undefined;
 }

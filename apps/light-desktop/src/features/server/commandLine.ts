@@ -44,6 +44,8 @@ export function createCommandLineActions(
 		dismissCommandChoice,
 		cancelCommandChoice,
 		executeCommandLine: async (value = commandLine, interaction) => {
+			const feedbackStore = model.programmingInteractionStore;
+			const feedbackScope = feedbackStore.captureScope();
 			try {
 				// Invalidate event refreshes that began while the command was being assembled. A
 				// successful execution increments this again when it installs the reset target.
@@ -107,7 +109,10 @@ export function createCommandLineActions(
 				if (!interaction) await persistCommandLine(target);
 				return true;
 			} catch (reason) {
-				reportProgrammingCommandError(reason instanceof Error ? reason : new Error(String(reason)));
+				// Every software execution surface shares this transport. Retain the actual
+				// entered command through writer reconciliation, only in its original authority.
+				if (feedbackStore.isScopeCurrent(feedbackScope))
+					reportProgrammingCommandError(reason instanceof Error ? reason : new Error(String(reason)), value);
 				return false;
 			}
 		},

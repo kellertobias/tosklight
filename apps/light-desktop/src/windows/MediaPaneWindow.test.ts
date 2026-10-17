@@ -1,5 +1,17 @@
-import { describe, expect, it } from "vitest";
 import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	waitFor,
+	within,
+} from "@testing-library/react";
+import { createElement, useCallback } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { VisualizationSnapshot } from "../api/types";
+import type { ProgrammerFixtureValue } from "../features/programmerValues/contracts";
+import {
+	MediaPaneWindow,
 	mediaCapabilitiesForLayer,
 	mediaDraftForLayer,
 	mediaFileMutations,
@@ -7,6 +19,13 @@ import {
 	mediaRightPaneIsVisible,
 	reconcileMediaPaneSelection,
 } from "./MediaPaneWindow";
+import {
+	type BuildMediaPaneModelInput,
+	buildMediaPaneModel,
+} from "./media/buildMediaPaneModel";
+import { mediaColourMutation } from "./media/mediaColour";
+import { EMPTY_MEDIA_INSPECTION } from "./media/useMediaPaneData";
+import { useMediaProgrammerValues } from "./media/useMediaProgrammerValues";
 
 describe("Media pane programmer transaction", () => {
 	it("reconciles zero, one, and stale multi-server pane selections", () => {
@@ -166,5 +185,482 @@ describe("Media pane programmer transaction", () => {
 				"layer-1",
 			),
 		).toEqual({ folderId: "1", fileId: "0" });
+	});
+});
+
+describe("Media Cue control values", () => {
+	it("falls back to accepted Cue values while preserving explicit zero overrides", async () => {
+		const { mediaProgrammerValues } = await import(
+			"./media/useMediaProgrammerValues"
+		);
+		const cue = {
+			fixtureId: "layer-8",
+			attribute: "intensity",
+			value: { kind: "normalized" as const, value: 0.32 },
+			programmerOrder: 0,
+			fade: false,
+			fadeMillis: null,
+			delayMillis: null,
+		};
+		const zero = { ...cue, value: { kind: "normalized" as const, value: 0 } };
+		expect(mediaProgrammerValues([], undefined, [cue])).toEqual([cue]);
+		expect(mediaProgrammerValues([zero], undefined, [cue])).toEqual([zero]);
+		expect(mediaProgrammerValues([cue], [zero], [cue])).toEqual([zero]);
+	});
+});
+
+const mediaReadout = vi.hoisted(() => ({
+	output: null as VisualizationSnapshot | null,
+	normal: [] as ProgrammerFixtureValue[],
+	pending: [] as ProgrammerFixtureValue[],
+	route: "normal" as "normal" | "preload",
+	ready: true,
+	error: null as Error | null,
+	authority: "server-a",
+	sessionId: "client-a",
+	read: vi.fn(),
+	dispatch: vi.fn(),
+	replace: vi.fn(),
+	submit: vi.fn(),
+}));
+vi.mock("../state/AppContext", () => ({
+	useApp: () => ({ dispatch: mediaReadout.dispatch }),
+}));
+vi.mock("../features/mediaServers/MediaServersContext", () => ({
+	useMediaServers: () => ({
+		mediaServers: [
+			{
+				fixture_id: "server",
+				name: "Pixel",
+				endpoint: null,
+				status: { online: false, last_success: null, last_error: null },
+				layers: [
+					{ fixture_id: "layer-1", head_index: 1 },
+					{ fixture_id: "layer-8", head_index: 8 },
+				],
+			},
+		],
+	}),
+}));
+vi.mock("../features/programmerValues/ProgrammerValuesView", () => ({
+	useProgrammerValuesView: () => ({ fixtureValues: mediaReadout.normal }),
+}));
+vi.mock(
+	"../features/programmerPreloadValues/ProgrammerPreloadValuesView",
+	() => ({
+		useProgrammerPreloadValuesView: () => ({
+			fixtureValues: mediaReadout.pending,
+		}),
+	}),
+);
+vi.mock(
+	"../features/programmerValues/useProgrammerValuesMutationQueue",
+	() => ({
+		useProgrammerValuesMutationQueue: () => ({
+			route: mediaReadout.route,
+			submitLatest: mediaReadout.submit,
+		}),
+	}),
+);
+vi.mock(
+	"../features/programmingInteraction/ProgrammingInteractionView",
+	() => ({
+		useProgrammingSelectionActions: () => ({ replace: mediaReadout.replace }),
+	}),
+);
+vi.mock("../features/visualizationRuntime/VisualizationRuntimeView", () => ({
+	useVisualizationRuntimeView: () => ({
+		snapshot: mediaReadout.output,
+		ready: mediaReadout.ready,
+		error: mediaReadout.error,
+	}),
+	useVisualizationRuntimeRead: (
+		lane: string,
+		options: { fixtureIds: string[] },
+	) => {
+		const ids = options.fixtureIds.join(",");
+		const authority = mediaReadout.authority;
+		const sessionId = mediaReadout.sessionId;
+		return useCallback(
+			() => mediaReadout.read(lane, ids, authority),
+			[lane, ids, authority, sessionId],
+		);
+	},
+}));
+function cueSnapshot(level = 0.32): VisualizationSnapshot {
+	return {
+		revision: 1,
+		generated_at: "2026-10-17T00:00:00Z",
+		grand_master: 1,
+		blackout: false,
+		values: [
+			{
+				fixture_id: "layer-1",
+				attribute: "intensity",
+				value: { kind: "normalized", value: 1 },
+			},
+			{
+				fixture_id: "layer-8",
+				attribute: "intensity",
+				value: { kind: "normalized", value: level },
+			},
+			{
+				fixture_id: "layer-8",
+				attribute: "media.scale.x",
+				value: { kind: "normalized", value: 0.56 },
+			},
+		],
+	};
+}
+function cueColour(): ProgrammerFixtureValue {
+	const mutation = mediaColourMutation("layer-8", "#000000");
+	if (!mutation || mutation.action !== "set_fixture")
+		throw new Error("Missing semantic colour");
+	return {
+		fixtureId: "layer-8",
+		attribute: "color",
+		value: mutation.value,
+		programmerOrder: 0,
+		fade: false,
+		fadeMillis: null,
+		delayMillis: null,
+	};
+}
+function controlModel(values: readonly ProgrammerFixtureValue[]) {
+	const server = {
+		fixture_id: "server",
+		name: "Pixel",
+		endpoint: null,
+		status: { online: false, last_success: null, last_error: null },
+		layers: [{ fixture_id: "layer-8", head_index: 8 }],
+	};
+	const input: BuildMediaPaneModelInput = {
+		inspection: EMPTY_MEDIA_INSPECTION,
+		inspectionError: null,
+		servers: [server],
+		selectedServer: server,
+		selectedServerId: "server",
+		selectedLayerId: "layer-8",
+		browserMode: "media",
+		selectedControlSectionId: "playback",
+		mainSectionId: "content",
+		rightPaneVisible: true,
+		draftFolderId: "0",
+		draftFileId: null,
+		thumbnailUrls: {},
+		previewUrls: {},
+		liveProgrammer: [],
+		controlValues: values,
+	};
+	return buildMediaPaneModel(input).controlSections.flatMap(
+		(section) => section.controls,
+	);
+}
+function selectedValues(fixtureId = "layer-8", sourceKey = "server-a") {
+	return createElement(MediaValuesHarness, { fixtureId, sourceKey });
+}
+function MediaValuesHarness({
+	fixtureId,
+	sourceKey,
+}: {
+	fixtureId: string;
+	sourceKey: string;
+}) {
+	const values = useMediaProgrammerValues(true, mediaReadout.route, {
+		fixtureId,
+		sourceKey,
+		output:
+			mediaReadout.ready && !mediaReadout.error ? mediaReadout.output : null,
+	});
+	return createElement("output", null, JSON.stringify(values ?? []));
+}
+function readValues(view: ReturnType<typeof render>) {
+	return JSON.parse(
+		view.container.querySelector("output")?.textContent ?? "[]",
+	) as ProgrammerFixtureValue[];
+}
+function deferredSnapshot() {
+	let resolve!: (value: VisualizationSnapshot) => void;
+	let reject!: (error: Error) => void;
+	const promise = new Promise<VisualizationSnapshot>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	return { promise, resolve, reject };
+}
+
+describe("Media selected Cue readouts", () => {
+	beforeEach(() => {
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				observe() {}
+				disconnect() {}
+			},
+		);
+		mediaReadout.output = cueSnapshot();
+		mediaReadout.normal = [];
+		mediaReadout.pending = [];
+		mediaReadout.ready = true;
+		mediaReadout.error = null;
+		mediaReadout.route = "normal";
+		mediaReadout.authority = "server-a";
+		mediaReadout.sessionId = "client-a";
+		mediaReadout.read.mockReset().mockResolvedValue(cueSnapshot());
+		mediaReadout.dispatch.mockClear();
+		mediaReadout.replace.mockClear();
+		mediaReadout.submit.mockClear();
+	});
+	afterEach(cleanup);
+	it("reads Cue-only selected Dimmer through the bounded logical-head transport", async () => {
+		const view = render(
+			createElement(MediaPaneWindow, {
+				mediaPaneState: { serverId: "server", layerId: "layer-8" },
+			}),
+		);
+		await waitFor(() =>
+			expect(within(view.container).getByText("32%")).toBeInTheDocument(),
+		);
+		expect(mediaReadout.read).toHaveBeenCalledWith(
+			"normal",
+			"layer-8",
+			"server-a",
+		);
+		expect(
+			mediaReadout.read.mock.calls.every((call) => call[1] === "layer-8"),
+		).toBe(true);
+		expect(mediaReadout.submit).not.toHaveBeenCalled();
+		expect(mediaReadout.replace).not.toHaveBeenCalled();
+		expect(mediaReadout.dispatch).not.toHaveBeenCalled();
+		fireEvent.click(
+			within(view.container).getByRole("button", { name: /^Layer 1 / }),
+		);
+		await waitFor(() =>
+			expect(within(view.container).getByText("100%")).toBeInTheDocument(),
+		);
+		expect(mediaReadout.read).toHaveBeenLastCalledWith(
+			"normal",
+			"layer-1",
+			"server-a",
+		);
+		expect(mediaReadout.replace).toHaveBeenCalledWith({
+			resolvedFixtures: ["layer-1"],
+		});
+	});
+	it("keeps selected Frame controls and semantic Colour alongside Cue Dimmer", async () => {
+		const colour = cueColour();
+		mediaReadout.read.mockResolvedValue({
+			...cueSnapshot(),
+			values: [
+				...cueSnapshot().values,
+				{ fixture_id: "layer-8", attribute: "color", value: colour.value },
+			],
+		});
+		const view = render(selectedValues());
+		await waitFor(() => expect(readValues(view)).toHaveLength(3));
+		expect(readValues(view)).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					attribute: "media.scale.x",
+					value: { kind: "normalized", value: 0.56 },
+				}),
+			]),
+		);
+		const controls = controlModel(readValues(view));
+		expect(controls.find((v) => v.id === "intensity")).toMatchObject({
+			kind: "value",
+			value: 32,
+			display: "32%",
+			disabled: false,
+		});
+		expect(controls.find((v) => v.id === "media.scale.x")).toMatchObject({
+			kind: "value",
+			value: expect.closeTo(2.08),
+			disabled: false,
+		});
+		expect(controls.find((v) => v.id === "color.tint")).toMatchObject({
+			kind: "color",
+			value: "#000000",
+			disabled: false,
+		});
+		expect(
+			mediaColourMutation("layer-8", "#0000ff", readValues(view)),
+		).toMatchObject({
+			value: {
+				kind: "color_program",
+				value: {
+					intent: {
+						recipe: { rgb: [0, 0, 1] },
+						white_target: { kelvin: 6500, duv: 0 },
+					},
+				},
+			},
+		});
+	});
+	it("preserves explicit normal and pending zero without changing accepted live output", async () => {
+		const value = {
+			fixtureId: "layer-8",
+			attribute: "intensity",
+			value: { kind: "normalized" as const, value: 0 },
+			programmerOrder: 1,
+			fade: false,
+			fadeMillis: null,
+			delayMillis: null,
+		};
+		mediaReadout.normal = [value];
+		const view = render(selectedValues());
+		await waitFor(() => expect(readValues(view)).toHaveLength(2));
+		expect(
+			readValues(view).find((v) => v.attribute === "intensity")?.value,
+		).toEqual(value.value);
+		mediaReadout.normal = [];
+		mediaReadout.pending = [value];
+		mediaReadout.route = "preload";
+		view.rerender(selectedValues());
+		expect(
+			readValues(view).find((v) => v.attribute === "intensity")?.value,
+		).toEqual(value.value);
+		expect(mediaReadout.output?.values[1].value).toEqual({
+			kind: "normalized",
+			value: 0.32,
+		});
+		mediaReadout.route = "normal";
+		view.rerender(selectedValues());
+		expect(
+			readValues(view).find((v) => v.attribute === "intensity")?.value,
+		).toEqual({ kind: "normalized", value: 0.32 });
+	});
+	it("coalesces pushed updates and retires old fixture and source results", async () => {
+		const old = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(old.promise);
+		const view = render(selectedValues());
+		mediaReadout.output = cueSnapshot();
+		view.rerender(selectedValues());
+		mediaReadout.output = cueSnapshot();
+		view.rerender(selectedValues());
+		expect(mediaReadout.read).toHaveBeenCalledTimes(1);
+		view.rerender(selectedValues("layer-1", "server-b"));
+		await waitFor(() => expect(readValues(view)[0]?.fixtureId).toBe("layer-1"));
+		await act(async () => old.resolve(cueSnapshot(0.99)));
+		expect(readValues(view)).toHaveLength(1);
+		expect(readValues(view)[0]?.value).toEqual({
+			kind: "normalized",
+			value: 1,
+		});
+	});
+	it("clears stale values on read failure, readiness loss and inactive view", async () => {
+		const view = render(selectedValues());
+		await waitFor(() => expect(readValues(view)).toHaveLength(2));
+		mediaReadout.read.mockRejectedValueOnce(new Error("Disconnected"));
+		mediaReadout.output = cueSnapshot();
+		view.rerender(selectedValues());
+		await waitFor(() => expect(readValues(view)).toHaveLength(0));
+		expect(
+			controlModel(readValues(view)).find((v) => v.id === "intensity"),
+		).toMatchObject({ display: "Unknown", disabled: true });
+		mediaReadout.ready = false;
+		view.rerender(selectedValues());
+		expect(readValues(view)).toHaveLength(0);
+		view.unmount();
+		const count = mediaReadout.read.mock.calls.length;
+		const inactive = render(createElement(MediaPaneWindow, { active: false }));
+		expect(mediaReadout.read).toHaveBeenCalledTimes(count);
+		expect(mediaReadout.submit).not.toHaveBeenCalled();
+		inactive.unmount();
+	});
+	it("does not adopt an old endpoint result for the same selected head", async () => {
+		const old = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(old.promise);
+		const view = render(selectedValues("layer-8", "old-endpoint"));
+		view.rerender(selectedValues("layer-8", "new-endpoint"));
+		await waitFor(() => expect(readValues(view)).toHaveLength(2));
+		await act(async () => old.resolve(cueSnapshot(0.99)));
+		expect(
+			readValues(view).find((v) => v.attribute === "intensity")?.value,
+		).toEqual({ kind: "normalized", value: 0.32 });
+	});
+	it("retires a late result when the same show changes authenticated client session", async () => {
+		const old = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(old.promise);
+		const view = render(selectedValues());
+		mediaReadout.sessionId = "client-b";
+		view.rerender(selectedValues());
+		await waitFor(() => expect(readValues(view)).toHaveLength(2));
+		await act(async () => old.resolve(cueSnapshot(0.99)));
+		expect(
+			readValues(view).find((v) => v.attribute === "intensity")?.value,
+		).toEqual({ kind: "normalized", value: 0.32 });
+	});
+	it("retires old authority errors and refuses wrong show or pending-lane replies", async () => {
+		const old = deferredSnapshot();
+		mediaReadout.read.mockReturnValueOnce(old.promise);
+		const view = render(selectedValues());
+		mediaReadout.authority = "server-b";
+		view.rerender(selectedValues());
+		await waitFor(() => expect(readValues(view)).toHaveLength(2));
+		await act(async () => old.reject(new Error("Old server retired")));
+		expect(readValues(view)).toHaveLength(2);
+		mediaReadout.output = { ...cueSnapshot(), scope: { show_id: "show-b" } };
+		mediaReadout.read.mockResolvedValueOnce({
+			...cueSnapshot(),
+			scope: { show_id: "show-a" },
+		});
+		view.rerender(selectedValues());
+		await act(async () => {});
+		expect(readValues(view)).toHaveLength(0);
+		mediaReadout.read.mockResolvedValueOnce({
+			...cueSnapshot(),
+			scope: { show_id: "show-b" },
+			preload: true,
+		});
+		mediaReadout.output = { ...mediaReadout.output };
+		view.rerender(selectedValues());
+		await act(async () => {});
+		expect(readValues(view)).toHaveLength(0);
+	});
+	it("keeps invalid normalized controls unknown and semantic Cue envelopes intact", async () => {
+		for (const value of [NaN, Infinity, -1, 1.1]) {
+			const controls = controlModel([
+				{
+					...cueColour(),
+					attribute: "intensity",
+					value: { kind: "normalized", value },
+				},
+			]);
+			expect(
+				controls.find((control) => control.id === "intensity"),
+			).toMatchObject({ display: "Unknown", disabled: true });
+		}
+		const cue = cueColour();
+		if (
+			cue.value.kind !== "color_program" ||
+			cue.value.value.kind !== "semantic"
+		)
+			throw new Error("Expected semantic Cue");
+		cue.value.value.intent.white_blend = 0.25;
+		cue.value.value.intent.recipe.amber = 0.2;
+		cue.value.value.intent.uv.amount = 0.4;
+		cue.value.value.intent.relative_output = 0.8;
+		const { mediaProgrammerValues } = await import(
+			"./media/useMediaProgrammerValues"
+		);
+		expect(
+			mediaColourMutation(
+				"layer-8",
+				"#0000ff",
+				mediaProgrammerValues([], undefined, [cue]),
+			),
+		).toMatchObject({
+			value: {
+				value: {
+					intent: {
+						white_blend: 0.25,
+						uv: { amount: 0.4 },
+						relative_output: 0.8,
+						recipe: { rgb: [0, 0, 1], amber: 0.2 },
+					},
+				},
+			},
+		});
 	});
 });

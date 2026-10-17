@@ -186,7 +186,7 @@ export function commandErrorSummary(message: string): string {
 		.slice(0, 120);
 }
 
-export function reportProgrammingCommandError(error: Error | null): void {
+export function reportProgrammingCommandError(error: Error | null, command?: string): void {
 	if (!error) return;
 	const status = "status" in error ? error.status : undefined;
 	// Websocket command responses carry plain error text, without an HTTP status.
@@ -205,6 +205,7 @@ export function reportProgrammingCommandError(error: Error | null): void {
 			detail: {
 				message: operator ? error.message : formatErrorDetails(error),
 				kind: operator ? "operator" : "unexpected",
+				...(command === undefined ? {} : { command }),
 			},
 		}),
 	);

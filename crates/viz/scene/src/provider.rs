@@ -123,6 +123,14 @@ pub trait SceneProvider: Send {
     /// Lighting desks and providers without a writable settings contract ignore this.
     fn update_renderer_settings(&mut self, _intent: crate::RendererSettingsIntent) {}
 
+    /// Opt in to passive raw receiver observations. This never changes input admission.
+    fn set_input_monitoring(&mut self, _enabled: bool) {}
+
+    /// Observe the receiver without draining it again or injecting renderer values.
+    fn input_monitor_snapshot(&self) -> Option<crate::input_monitor::MonitorSnapshot> {
+        None
+    }
+
     /// Stop the provider and release its sockets and tasks.
     fn shutdown(&mut self);
 }

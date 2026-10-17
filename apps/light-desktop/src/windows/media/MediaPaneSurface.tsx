@@ -419,10 +419,11 @@ function MediaLayerStrip({
 					const currentPreviewFailed =
 						layer.thumbnailSrc !== undefined &&
 						failedPreviews.get(layer.id) === layer.thumbnailSrc;
-					const opacity = Math.max(
-						0,
-						Math.min(100, layer.opacityPercent ?? 100),
-					);
+					const opacity =
+						typeof layer.opacityPercent === "number" && Number.isFinite(layer.opacityPercent)
+							? Math.max(0, Math.min(100, layer.opacityPercent))
+							: undefined;
+					const dimmerLabel = opacity === undefined ? "Dimmer unknown" : `Dimmer ${opacity}%`;
 					return (
 						<li key={layer.id} style={{ position: "relative" }}>
 							<Button
@@ -473,11 +474,15 @@ function MediaLayerStrip({
 									<span
 										className="media-layer-opacity"
 										role="img"
-										aria-label={`Opacity ${opacity}%`}
-										title={`Opacity ${opacity}%`}
+										aria-label={opacity === undefined ? "Opacity unknown" : `Opacity ${opacity}%`}
+										title={
+											opacity === undefined
+												? "Live desk output intensity is unavailable."
+												: `Live desk output intensity ${opacity}%`
+										}
 									>
-										<i aria-hidden="true" style={{ opacity: opacity / 100 }} />
-										<small>Dimmer {opacity}%</small>
+										<i aria-hidden="true" style={{ opacity: opacity === undefined ? 0 : opacity / 100 }} />
+										<small>{dimmerLabel}</small>
 									</span>
 									<small className="media-layer-mask">
 										<strong>Mask:</strong> {layer.maskLabel ?? "None / None"}

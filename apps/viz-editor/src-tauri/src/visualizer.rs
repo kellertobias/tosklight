@@ -1,3 +1,5 @@
+mod input_monitor;
+
 use parking_lot::Mutex;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -13,6 +15,8 @@ const VISUALIZER_PATH_ENV: &str = "TOSKLIGHT_VIZ_RENDERER";
 pub struct VisualizerLauncher {
     address: SocketAddr,
     child: Mutex<Option<Child>>,
+    feed: Mutex<Option<input_monitor::MonitorFeed>>,
+    parent: Option<input_monitor::ParentMonitor>,
 }
 
 pub type RendererSettings = viz_scene::RendererSettings;
@@ -22,6 +26,8 @@ impl VisualizerLauncher {
         Self {
             address,
             child: Mutex::new(None),
+            feed: Mutex::new(None),
+            parent: None,
         }
     }
 
@@ -57,6 +63,7 @@ impl VisualizerLauncher {
             })?;
         }
         *current = None;
+        *self.feed.lock() = None;
         Ok(())
     }
 }
@@ -70,27 +77,25 @@ impl Drop for VisualizerLauncher {
 }
 
 #[tauri::command]
-pub fn open_visualizer(launcher: tauri::State<'_, VisualizerLauncher>) -> Result<(), String> {
-    let binary = visualizer_binary()?;
-    let mut current = launcher.child.lock();
-    if let Some(child) = current.as_mut() {
-        if reuse_running_child(child.try_wait())? {
-            return Ok(());
-        }
-        *current = None;
+pub fn open_visualizer(
+    launcher: tauri::State<'_, VisualizerLauncher>,
+    monitor: tauri::State<'_, crate::dmx_input::DmxInputMonitor>,
+) -> Result<(), String> {
+    if let Some(status) = launcher.parent_running() {
+        return status.map(|_| ());
     }
+    let binary = visualizer_binary()?;
     let arguments = visualizer_arguments(launcher.address);
-    let child = visualizer_command(&binary, &arguments)
-        .spawn()
-        .map_err(|error| format!("could not open {}: {error}", binary.display()))?;
-    *current = Some(child);
-    Ok(())
+    launcher.open_command(&monitor, visualizer_command(&binary, &arguments))
 }
 
 #[tauri::command]
 pub fn visualizer_is_running(
     launcher: tauri::State<'_, VisualizerLauncher>,
 ) -> Result<bool, String> {
+    if let Some(status) = launcher.parent_running() {
+        return status;
+    }
     let mut current = launcher.child.lock();
     let Some(child) = current.as_mut() else {
         return Ok(false);
@@ -99,6 +104,7 @@ pub fn visualizer_is_running(
         return Ok(true);
     }
     *current = None;
+    *launcher.feed.lock() = None;
     Ok(false)
 }
 
@@ -165,8 +171,9 @@ fn visualizer_command(binary: &std::path::Path, arguments: &[String]) -> Command
         // child uses an accessory activation policy so it cannot add a second Dock/App Switcher
         // identity beside the editor.
         .env("TOSKLIGHT_VIZ_LAUNCHED_BY", "editor")
+        .env(viz_scene::input_monitor::MONITOR_ENV, "1")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null());
     command
 }

@@ -203,13 +203,13 @@ impl WindowedOutput {
         now: Timestamp,
         region: Option<&media_domain::display_region::DisplayRegion>,
     ) -> Result<(), SurfaceLost> {
-        let frame = self.acquire_frame()?;
-
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        self.compositor
-            .render(layers, master, master_mask, &view, self.id, now, region);
+        let frame = compose_acquired(self.acquire_frame(), |frame| {
+            let view = frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            self.compositor
+                .render(layers, master, master_mask, &view, self.id, now, region);
+        })?;
         #[cfg(not(target_os = "macos"))]
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
@@ -277,21 +277,21 @@ impl WindowedOutput {
         region: Option<&media_domain::display_region::DisplayRegion>,
         overlay: LayerDraw<'_>,
     ) -> Result<(), SurfaceLost> {
-        let frame = self.acquire_frame()?;
-
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        self.compositor.render_with_overlay(
-            layers,
-            master,
-            master_mask,
-            &view,
-            self.id,
-            now,
-            region,
-            overlay,
-        );
+        let frame = compose_acquired(self.acquire_frame(), |frame| {
+            let view = frame
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default());
+            self.compositor.render_with_overlay(
+                layers,
+                master,
+                master_mask,
+                &view,
+                self.id,
+                now,
+                region,
+                overlay,
+            );
+        })?;
         #[cfg(not(target_os = "macos"))]
         self.window.pre_present_notify();
         self.gpu.queue.present(frame);
@@ -308,6 +308,17 @@ impl WindowedOutput {
     pub fn request_redraw(&self) {
         self.window.request_redraw();
     }
+}
+
+// Both native presentation paths stop before composition if acquisition fails. Demanded captures
+// may subsequently refresh the same compositor independently of that unavailable surface.
+fn compose_acquired<T>(
+    frame: Result<T, SurfaceLost>,
+    compose: impl FnOnce(&T),
+) -> Result<T, SurfaceLost> {
+    let frame = frame?;
+    compose(&frame);
+    Ok(frame)
 }
 
 fn configure_surface(
@@ -355,6 +366,12 @@ pub fn present_format(available: &[wgpu::TextureFormat]) -> Option<wgpu::Texture
 }
 
 impl WindowedOutput {
+    /// Refreshes demanded Program pixels even when the native surface could not be acquired.
+    /// The compositor reuses a full composition already produced at this exact timestamp.
+    pub fn refresh_program(&mut self, layers: &[LayerDraw<'_>], now: Timestamp) -> bool {
+        self.compositor.refresh_program(layers, self.id, now)
+    }
+
     /// Renders the finished composite into a preview-sized target and reads it back.
     ///
     /// The composite is already on the GPU, so a smaller target scales it down with the sampler
@@ -449,6 +466,62 @@ impl SurfaceLost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_acquisition_skips_native_composition_but_demand_can_refresh_current_program() {
+        use media_domain::{LayerState, MediaAddress, SourceStatus};
+        let gpu = Gpu::off_screen().expect("surface lifecycle requires a GPU or software adapter");
+        let size = Size::new(8, 8);
+        let mut compositor = Compositor::new(&gpu, size, crate::PROGRAM_FORMAT);
+        let target = crate::OffScreenOutput::new(&gpu, size);
+        let output = OutputId::new();
+        let state = LayerState {
+            address: MediaAddress::new(3, 1),
+            source_status: SourceStatus::Ready,
+            ..Default::default()
+        };
+        let red = crate::SourceTexture::solid(&gpu, size, [220, 10, 10, 255]).unwrap();
+        let green = crate::SourceTexture::solid(&gpu, size, [10, 200, 10, 255]).unwrap();
+        let draw = |source| LayerDraw {
+            state: &state,
+            source,
+            mask: None,
+        };
+        compositor.render(
+            &[draw(&red)],
+            &MasterState::default(),
+            None,
+            target.view(),
+            output,
+            Timestamp::ZERO,
+            None,
+        );
+        let before = target.read_image();
+        for (index, failure) in [SurfaceLost::Timeout, SurfaceLost::Recovered]
+            .into_iter()
+            .enumerate()
+        {
+            let now = Timestamp::from_millis(index as u64 + 1);
+            let result = compose_acquired::<()>(Err(failure), |_| {
+                panic!("unavailable native frame must not compose")
+            });
+            assert!(result.is_err());
+            // With no demand there is no fallback or readback; the prior Program remains retained.
+            assert!(compositor.refresh_program(&[draw(&green)], output, now));
+            assert!(!compositor.refresh_program(&[draw(&green)], output, now));
+            compositor.render_master_into(&MasterState::default(), None, target.view());
+            assert!(
+                target
+                    .read_image()
+                    .chunks_exact(4)
+                    .all(|p| p[..3] == [10, 200, 10])
+            );
+        }
+        assert!(before.chunks_exact(4).all(|p| p[..3] == [220, 10, 10]));
+        let mut composed = 0;
+        assert_eq!(compose_acquired(Ok(7), |_| composed += 1).unwrap(), 7);
+        assert_eq!(composed, 1);
+    }
 
     /// Creates one hidden test window from the running event loop, then leaves it.
     #[cfg(target_os = "windows")]

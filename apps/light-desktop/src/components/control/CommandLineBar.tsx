@@ -38,10 +38,12 @@ import { useControlSurfacePolicy } from "./ControlSurfaceMode";
 import { useCommandLineShortcuts } from "./commandLine/useCommandLineShortcuts";
 import { useCommandLineSurface } from "./commandLine/useCommandLineSurface";
 import {
+	useCommandRejectionEdits,
 	useOSCCommandRejections,
 	useUnexpectedCommandHistory,
 } from "./commandLine/useCommandRejectionHistory";
 import { useRecordGesture } from "./commandLine/useRecordGesture";
+import { useProgrammingInteractionStore } from "../../features/programmingInteraction/ProgrammingInteractionView";
 import { useNumericPadController } from "./numericPad/useNumericPadController";
 import "./CommandLineHistory.css";
 import { usePlaybackSectionSettings } from "./PlaybackSectionSettingsHost";
@@ -89,7 +91,28 @@ function pendingCommandSummary(
 		.join(" · ");
 }
 
-function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
+type ExecutingCommandFeedback = {
+	command: string;
+	reported: boolean;
+	store: ReturnType<typeof useProgrammingInteractionStore>;
+	scope: number;
+};
+type ExecutingCommandRef = { current: ExecutingCommandFeedback | undefined };
+
+function currentExecution(
+	executing: ExecutingCommandRef,
+	store: ReturnType<typeof useProgrammingInteractionStore>,
+) {
+	const feedback = executing.current;
+	return feedback?.store === store && store.isScopeCurrent(feedback.scope)
+		? feedback : undefined;
+}
+
+function useCommandErrors(
+	setCompleted: Dispatch<SetStateAction<boolean>>,
+	executing: ExecutingCommandRef,
+) {
+	const store = useProgrammingInteractionStore();
 	const shellStatus = useShellStatusActions();
 	const [commandError, setCommandError] = useState<string | null>(null);
 	const commandErrorRef = useRef<string | null>(null);
@@ -121,19 +144,26 @@ function useCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
 			const detail = (
 				event as CustomEvent<string | CommandErrorFeedback | null>
 			).detail;
-			if (detail !== null) setCompleted(false);
+			const active = currentExecution(executing, store);
+			if (detail !== null) {
+				setCompleted(false);
+				if (active) active.reported = true;
+			}
 			if (detail === null) updateCommandError(null);
 			else {
 				const feedback = commandErrorFeedback(
 					detail || "The command could not be executed.",
 				);
-				updateCommandError(feedback.message, feedback.kind, feedback.command);
+				updateCommandError(
+					feedback.message, feedback.kind,
+					feedback.command ?? active?.command,
+				);
 			}
 		};
 		window.addEventListener(COMMAND_ERROR_EVENT, showCommandError);
 		return () =>
 			window.removeEventListener(COMMAND_ERROR_EVENT, showCommandError);
-	}, [setCompleted, updateCommandError]);
+	}, [setCompleted, updateCommandError, executing, store]);
 	const acknowledgeCommand = () => {
 		updateCommandError(null);
 		shellStatus?.dismissError();
@@ -238,6 +268,35 @@ function useCompletedCommand(pristine: boolean) {
 	return [completed && pristine, setCompleted] as const;
 }
 
+function useScopedCommandErrors(setCompleted: Dispatch<SetStateAction<boolean>>) {
+	const store = useProgrammingInteractionStore();
+	const executing = useRef<ExecutingCommandFeedback | undefined>(undefined);
+	if (!currentExecution(executing, store)) executing.current = undefined;
+	const errors = useCommandErrors(setCompleted, executing);
+	return { store, executing, errors };
+}
+
+async function executeWithFeedback(
+	store: ReturnType<typeof useProgrammingInteractionStore>,
+	command: { text: string; execute(value?: string): Promise<boolean> },
+	value: string | undefined,
+	executing: ExecutingCommandRef,
+) {
+	// Reconciliation can restore the entered command after a rejection. A later
+	// real edit may dismiss its feedback before this execution promise settles.
+	const feedback = currentExecution(executing, store) ?? {
+		store, scope: store.captureScope(),
+		command: value ?? command.text, reported: false,
+	};
+	executing.current = feedback;
+	try {
+		const ok = await command.execute(value);
+		return currentExecution(executing, store) === feedback ? { ok, feedback } : null;
+	} finally {
+		if (executing.current === feedback) executing.current = undefined;
+	}
+}
+
 function useCommandLineBarModel() {
 	const { state, dispatch } = useApp();
 	const hardwareAttached = useHardwareConnected();
@@ -258,7 +317,8 @@ function useCommandLineBarModel() {
 	const hardware = hardwareAttached || Boolean(state.midiProfile);
 	const [completed, setCompleted] = useCompletedCommand(command.pristine);
 	const editGeneration = useRef(0);
-	const errors = useCommandErrors(setCompleted);
+	const { store: commandStore, executing, errors } = useScopedCommandErrors(setCompleted);
+	useCommandRejectionEdits(errors);
 	useOSCCommandRejections(
 		authoritativeHistory,
 		errors.setCommandError,
@@ -294,13 +354,15 @@ function useCommandLineBarModel() {
 		)
 			return;
 		const generation = editGeneration.current;
-		const ok = await command.execute(value);
+		const result = await executeWithFeedback(commandStore, command, value, executing);
+		if (!result) return;
+		const { ok, feedback } = result;
 		setCompleted(ok && generation === editGeneration.current);
 		if (ok && state.storeArmed)
 			dispatch({ type: "SET_STORE_ARMED", value: false });
 		if (ok && state.updateArmed)
 			dispatch({ type: "SET_UPDATE_ARMED", value: false });
-		if (!ok && !errors.hasCommandError())
+		if (!ok && !feedback.reported && !errors.hasCommandError())
 			errors.setCommandError(
 				serverError ?? "The command could not be executed.",
 				"unexpected",

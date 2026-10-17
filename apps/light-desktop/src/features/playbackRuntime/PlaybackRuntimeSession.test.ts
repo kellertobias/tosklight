@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type {
 	PlaybackIdentity,
 	PlaybackRuntimeEventMessage,
+	PlaybackSnapshot,
 } from "./contracts";
 import { groupIdentity, playbackIdentity } from "./contracts";
 import { PlaybackRuntimeSession } from "./session";
@@ -428,5 +429,193 @@ describe("PlaybackRuntimeSession", () => {
 		expect(harness.loadSnapshot).toHaveBeenCalledTimes(2);
 		expect(harness.loadSnapshot.mock.calls[0][0]).toHaveLength(256);
 		expect(harness.loadSnapshot.mock.calls[1][0]).toHaveLength(44);
+	});
+	it("does not count a repair superseded by a subscription change as fresh authority", async () => {
+		const h = createHarness(null);
+		const identity = playbackIdentity(1, 1);
+		h.session.activate(identity);
+		await settle();
+		let resolve!: (value: PlaybackSnapshot) => void;
+		h.loadSnapshot.mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done;
+				}),
+		);
+		const refresh = h.session.refreshAuthority();
+		// Desk state is already hydrated, so this changes lifecycle without refreshing identity1.
+		h.session.activateDesk();
+		await settle();
+		const next = playbackSnapshot([identity], 20);
+		const target = "55555555-5555-4555-8555-555555555555";
+		next.projections = next.projections.map((projection) =>
+			projection.target === "cue_list"
+				? { ...projection, cue_list_id: target }
+				: projection,
+		);
+		h.loadSnapshot.mockResolvedValueOnce(next);
+		resolve(next);
+		await refresh;
+		expect(h.loadSnapshot).toHaveBeenCalledTimes(3);
+		expect(
+			h.store.getSnapshot().projections.get("playback:1.1")?.[0],
+		).toMatchObject({ target: "cue_list", cue_list_id: target });
+		h.session.stop();
+	});
+	it("coalesces callers across repeated subscription changes without busy retries", async () => {
+		const h = createHarness(null);
+		const first = playbackIdentity(1, 1);
+		h.session.activate(first);
+		await settle();
+		const pending: Array<{
+			identities: PlaybackIdentity[];
+			resolve(value: PlaybackSnapshot): void;
+		}> = [];
+		h.loadSnapshot.mockImplementation(
+			(identities) =>
+				new Promise((resolve) => pending.push({ identities, resolve })),
+		);
+		let completed = 0;
+		const one = h.session.refreshAuthority().then(() => {
+			completed++;
+		});
+		const two = h.session.refreshAuthority().then(() => {
+			completed++;
+		});
+		expect(pending).toHaveLength(1);
+		h.session.activateDesk();
+		await settle();
+		pending[0].resolve(playbackSnapshot(pending[0].identities, 20));
+		await vi.waitFor(() => expect(pending).toHaveLength(2));
+		expect(completed).toBe(0);
+		const second = playbackIdentity(1, 2);
+		h.session.activate(second);
+		await settle();
+		expect(pending).toHaveLength(3);
+		pending[2].resolve(playbackSnapshot(pending[2].identities, 21));
+		await settle();
+		pending[1].resolve(playbackSnapshot(pending[1].identities, 22));
+		await vi.waitFor(() => expect(pending).toHaveLength(4));
+		await settle();
+		expect(pending).toHaveLength(4);
+		expect(completed).toBe(0);
+		expect(pending[3].identities).toEqual([first, second]);
+		pending[3].resolve(playbackSnapshot(pending[3].identities, 23));
+		await Promise.all([one, two]);
+		expect(completed).toBe(2);
+		expect(h.loadSnapshot).toHaveBeenCalledTimes(5);
+		h.session.stop();
+	});
+	it.each([
+		"resolve",
+		"reject",
+	] as const)("retires a %s from an old show without changing the new authority", async (outcome) => {
+		const h = createHarness(null);
+		h.session.activate(playbackIdentity(1, 1));
+		await settle();
+		let resolve!: (snapshot: PlaybackSnapshot) => void;
+		let reject!: (error: Error) => void;
+		h.loadSnapshot.mockImplementationOnce(
+			() =>
+				new Promise((yes, no) => {
+					resolve = yes;
+					reject = no;
+				}),
+		);
+		const refresh = h.session.refreshAuthority();
+		const rejected = expect(refresh).rejects.toThrow(
+			"authority is unavailable",
+		);
+		h.store.reset(
+			"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+			DESK_ID,
+			"authority-b",
+		);
+		h.store.setReady();
+		const next = h.store.getSnapshot();
+		h.onError.mockClear();
+		if (outcome === "resolve")
+			resolve(playbackSnapshot([playbackIdentity(1, 1)], 20));
+		else reject(new Error("Retired failure"));
+		await rejected;
+		expect(h.store.getSnapshot()).toBe(next);
+		expect(h.onError).not.toHaveBeenCalled();
+		expect(h.loadSnapshot).toHaveBeenCalledTimes(2);
+		h.session.stop();
+	});
+	it("stops an in-flight freshness wait when the session is disposed", async () => {
+		const h = createHarness(null);
+		h.session.activateDesk();
+		await settle();
+		let resolve!: (snapshot: PlaybackSnapshot) => void;
+		h.loadSnapshot.mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done;
+				}),
+		);
+		const refresh = h.session.refreshAuthority();
+		const rejected = expect(refresh).rejects.toThrow(
+			"authority is unavailable",
+		);
+		h.session.stop();
+		const previous = h.store.getSnapshot();
+		resolve(playbackSnapshot([], 20));
+		await rejected;
+		expect(h.store.getSnapshot()).toBe(previous);
+		expect(h.loadSnapshot).toHaveBeenCalledTimes(2);
+	});
+	it("propagates a current snapshot error even if automatic recovery starts", async () => {
+		const h = createHarness(null);
+		h.session.activateDesk();
+		await settle();
+		const failure = new Error("Actual refresh failure");
+		h.loadSnapshot.mockRejectedValueOnce(failure);
+		await expect(h.session.refreshAuthority()).rejects.toBe(failure);
+		expect(h.onError).toHaveBeenCalledWith(failure);
+		h.session.stop();
+	});
+	it("retries a superseded request failure without reporting it against the current generation", async () => {
+		const h = createHarness(null);
+		h.session.activate(playbackIdentity(1, 1));
+		await settle();
+		let reject!: (error: Error) => void;
+		h.loadSnapshot.mockImplementationOnce(
+			() =>
+				new Promise((_yes, no) => {
+					reject = no;
+				}),
+		);
+		const refresh = h.session.refreshAuthority();
+		h.session.activateDesk();
+		await settle();
+		h.onError.mockClear();
+		reject(new Error("Superseded request failure"));
+		await refresh;
+		expect(h.loadSnapshot).toHaveBeenCalledTimes(3);
+		expect(h.onError).not.toHaveBeenCalledWith(expect.any(Error));
+		h.session.stop();
+	});
+	it("retains a concurrent current stream error after the fresh snapshot installs", async () => {
+		const h = createHarness();
+		h.session.activateDesk();
+		await settle();
+		const fresh = playbackSnapshot([], 20);
+		fresh.desk.scope.show_revision = 7;
+		h.loadSnapshot.mockResolvedValueOnce(fresh);
+		const failure = new Error("Current stream failure");
+		let fired = false;
+		const release = h.store.subscribe(() => {
+			if (!fired && h.store.getSnapshot().showRevision === 7) {
+				fired = true;
+				(h.transport as FakeTransport).subscriptions
+					.at(-1)
+					?.observer.error(failure);
+			}
+		});
+		await expect(h.session.refreshAuthority()).rejects.toBe(failure);
+		expect(fired).toBe(true);
+		release();
+		h.session.stop();
 	});
 });

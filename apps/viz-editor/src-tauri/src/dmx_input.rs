@@ -1,11 +1,8 @@
 //! What reaches this machine over Art-Net and sACN, for the DMX screen's Values tab.
 //!
-//! The Architect outputs no DMX and has no desk behind it, so received values are the only DMX it
-//! can show. It listens exactly where the Visualizer listens — the show's output routes, its Live
-//! DMX Inputs over those, and the Art-Net and sACN defaults for every patched universe when
-//! neither names any, each on the interface this machine chose for its protocol — and only while
-//! the Values tab asks. The receiver shares its ports, so a Visualizer on the same machine keeps
-//! receiving beside it.
+//! Values listens directly only without an owned Visualizer. While that renderer is alive it
+//! passively observes the same accepted UDP frames through the owned child pipe. Two reusable
+//! unicast sockets are competing consumers, not a fanout transport.
 
 use crate::session::Session;
 use parking_lot::Mutex;
@@ -13,9 +10,9 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 use viz_desk::wire::ObjectRecord;
-use viz_dmx::{DMX_SLOTS, DmxReceiver, InputMapping, ListenInterfaces};
+use viz_dmx::{DmxReceiver, InputMapping, ListenInterfaces};
 use viz_document::{LIVE_DMX_INPUT_KIND, PlanningDocument};
-use viz_scene::{InputHealth, SourceProtocol};
+pub use viz_scene::input_monitor::ReceivedDmx;
 
 /// The receiver the Values tab is reading, if it is open.
 #[derive(Default)]
@@ -28,43 +25,7 @@ struct Listening {
     receiver: DmxReceiver,
     /// The newest frame of every universe that has delivered one. A source that stops leaves its
     /// last frame here, exactly as the Visualizer holds the last look it received.
-    frames: BTreeMap<u16, [u8; DMX_SLOTS]>,
-}
-
-/// One read of everything received, for the Values tab.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReceivedDmx {
-    pub universes: Vec<ReceivedUniverse>,
-    pub inputs: Vec<ReceivingInput>,
-    pub warnings: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReceivedUniverse {
-    pub universe: u16,
-    /// Absent until the first valid frame arrived.
-    pub slots: Option<Vec<u8>>,
-    /// Whether a source is delivering this universe now, rather than having stopped.
-    pub live: bool,
-    pub rate_hz: f32,
-    pub protocol: Option<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReceivingInput {
-    pub id: String,
-    pub protocol: &'static str,
-    pub logical_universe: u16,
-    pub destination_universe: u16,
-    pub delivery: String,
-    pub bind: String,
-    pub health: &'static str,
-    pub source: Option<String>,
-    pub accepted_packets: u64,
-    pub detail: String,
+    frames: BTreeMap<u16, Vec<u8>>,
 }
 
 impl DmxInputMonitor {
@@ -100,7 +61,9 @@ impl DmxInputMonitor {
         let listening = current.as_mut().expect("the receiver was just started");
         for frame in listening.receiver.drain_changed() {
             if frame.received_micros > 0 {
-                listening.frames.insert(frame.logical_universe, frame.slots);
+                listening
+                    .frames
+                    .insert(frame.logical_universe, frame.slots.to_vec());
             }
         }
         listening.report(warnings)
@@ -116,54 +79,16 @@ impl DmxInputMonitor {
 
 impl Listening {
     fn report(&self, warnings: Vec<String>) -> ReceivedDmx {
-        let health: BTreeMap<u16, _> = self
-            .receiver
-            .universes()
-            .into_iter()
-            .map(|universe| (universe.universe, universe))
-            .collect();
-        let universes: BTreeSet<u16> = self
-            .mappings
-            .iter()
-            .filter(|mapping| mapping.enabled)
-            .map(|mapping| mapping.logical_universe)
-            .chain(self.frames.keys().copied())
-            .collect();
-        ReceivedDmx {
-            universes: universes
-                .into_iter()
-                .map(|universe| {
-                    let health = health.get(&universe);
-                    ReceivedUniverse {
-                        universe,
-                        slots: self.frames.get(&universe).map(|frame| frame.to_vec()),
-                        live: health.is_some_and(|health| !health.stale),
-                        rate_hz: health.map(|health| health.rate_hz).unwrap_or_default(),
-                        protocol: health
-                            .and_then(|health| health.protocol)
-                            .map(source_protocol),
-                    }
-                })
-                .collect(),
-            inputs: self
-                .receiver
-                .status()
-                .into_iter()
-                .map(|status| ReceivingInput {
-                    id: status.mapping_id,
-                    protocol: source_protocol(status.protocol),
-                    logical_universe: status.logical_universe,
-                    destination_universe: status.destination_universe,
-                    delivery: status.delivery,
-                    bind: status.bind,
-                    health: health_label(status.health),
-                    source: source(status.source_name, status.source_address),
-                    accepted_packets: status.accepted_packets,
-                    detail: status.detail,
-                })
-                .collect(),
+        ReceivedDmx::from_receiver(
+            &self.frames,
+            self.mappings
+                .iter()
+                .filter(|mapping| mapping.enabled)
+                .map(|mapping| mapping.logical_universe),
+            self.receiver.universes(),
+            self.receiver.status(),
             warnings,
-        }
+        )
     }
 }
 
@@ -244,36 +169,27 @@ pub(crate) fn renderer_interfaces(session: &Session) -> ListenInterfaces {
         .unwrap_or_default()
 }
 
-fn source_protocol(protocol: SourceProtocol) -> &'static str {
-    match protocol {
-        SourceProtocol::ArtNet => "artnet",
-        SourceProtocol::Sacn => "sacn",
-    }
-}
-
-fn health_label(health: InputHealth) -> &'static str {
-    health.label()
-}
-
-fn source(name: String, address: Option<String>) -> Option<String> {
-    match (name.trim(), address) {
-        ("", None) => None,
-        ("", Some(address)) => Some(address),
-        (name, None) => Some(name.to_owned()),
-        (name, Some(address)) => Some(format!("{name} · {address}")),
-    }
-}
-
 /// Listen for received DMX and report it. The first call opens the sockets.
 #[tauri::command]
 pub fn received_dmx(
     session: tauri::State<'_, Session>,
     monitor: tauri::State<'_, DmxInputMonitor>,
+    launcher: tauri::State<'_, crate::visualizer::VisualizerLauncher>,
 ) -> Result<ReceivedDmx, String> {
     let interfaces = renderer_interfaces(&session);
-    let (mappings, warnings) =
-        session.with(|document| listening_mappings(document, &interfaces))?;
-    Ok(monitor.read(mappings, warnings))
+    // One document lock binds the configuration and identity of the same open show.
+    let (mappings, warnings, show_id, revision) = session.with(|document| {
+        let (mappings, warnings) = listening_mappings(document, &interfaces)?;
+        Ok((
+            mappings,
+            warnings,
+            document.show_id().0,
+            document
+                .portable_revision()
+                .map_err(|error| error.to_string())?,
+        ))
+    })?;
+    Ok(launcher.read_received(&monitor, mappings, warnings, show_id, revision))
 }
 
 /// Stop listening. The Values tab calls this when it closes.
@@ -312,6 +228,7 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
     use std::time::Duration;
     use viz_dmx::{Delivery, Protocol};
+    use viz_scene::input_monitor::source;
 
     fn free_port() -> u16 {
         UdpSocket::bind((Ipv4Addr::LOCALHOST, 0))
@@ -393,7 +310,7 @@ mod tests {
         let values = universe.slots.as_ref().expect("received values");
         assert_eq!((values[0], values[9], values[10]), (255, 128, 0));
         assert!(universe.live);
-        assert_eq!(universe.protocol, Some("artnet"));
+        assert_eq!(universe.protocol.as_deref(), Some("artnet"));
         monitor.stop();
     }
 

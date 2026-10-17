@@ -12,6 +12,7 @@ mod effects;
 mod embedded;
 mod embedded_priority;
 mod helper_source;
+mod input_monitor;
 mod lasers;
 mod physics;
 
