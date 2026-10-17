@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { capturePerformanceSample,ServerCounterClock,validateClockSummary,emptyClockSummary,CLOCK_NUMERIC_FIELDS } from "./desktop-performance-576-clock.mjs";
+import { capturePerformanceSample,diagnosticWindowBounds,ServerCounterClock,validateClockSummary,emptyClockSummary,CLOCK_NUMERIC_FIELDS } from "./desktop-performance-576-clock.mjs";
 const epoch=1_792_231_200_000;
 function sample(i,{utcOffset=0,monoOffset=0,requestStartOffset=-2,requestEndOffset=2,serverOffset=500}={}) {
  const utc=epoch+i*1000;
@@ -8,7 +8,7 @@ function sample(i,{utcOffset=0,monoOffset=0,requestStartOffset=-2,requestEndOffs
 }
 function complete(make=i=>sample(i)){const c=new ServerCounterClock();for(let i=0;i<=60;i++)c.observe(make(i));return c;}
 test("61 same-lock server samples drive exact cadence/window and fixed numeric clock evidence",()=>{
- const c=complete();assert.equal(c.summary().clock_validation_passed,1);assert.equal(c.summary().clock_source_code,1);assert.equal(c.summary().clock_server_samples,61);assert.equal(c.elapsedSeconds(),60);assert.equal(c.delta("frames_sent"),2400);assert.deepEqual(c.window(),{startedAt:epoch+.5,endedAt:epoch+60_000+.5});assert.deepEqual(validateClockSummary(JSON.parse(JSON.stringify(c.summary()))),c.summary());
+ const c=complete();assert.equal(c.summary().clock_validation_passed,1);assert.equal(c.summary().clock_source_code,1);assert.equal(c.summary().clock_server_samples,61);assert.equal(c.elapsedSeconds(),60);assert.equal(c.delta("frames_sent"),2400);assert.deepEqual(c.window(),{startedAt:epoch+.5,endedAt:epoch+60_000+.5,startedAtMicros:epoch*1000+500,endedAtMicros:(epoch+60_000)*1000+500});assert.deepEqual(validateClockSummary(JSON.parse(JSON.stringify(c.summary()))),c.summary());
  assert(!JSON.stringify(c.summary()).includes(String(epoch)));assert.deepEqual(Object.keys(c.summary()).sort(),CLOCK_NUMERIC_FIELDS.slice().sort());
 });
 test("asymmetric slow HTTP responses cannot skew server cadence or the packet window",()=>{
@@ -65,11 +65,20 @@ test("actual runner uses server cadence while preserving separate process CPU in
  const records=[],clock=new ServerCounterClock();const result=await measure({},123,"unrestricted",records,clock);
  assert.equal(index,61);assert.equal(result.counter_window_seconds,60);assert.equal(result.completed_frame_delta,2400);assert.equal(result.minimum_one_second_completed_hz,40);assert.equal(result.windows_below_target,0);assert.equal(result.clock_validation_passed,1);
  assert.equal(records.length,61);assert.equal(cpuIntervals.length,300);assert(cpuIntervals.every(seconds=>seconds===.01));assert(records.every(r=>r.diagnosticsUtcStartMillis!==undefined&&r.diagnosticsMonotonicEndMillis!==undefined&&r.processes.length===1));
- assert.deepEqual(clock.window(),{startedAt:epoch+.5,endedAt:epoch+60_000+.5});
+ assert.deepEqual(clock.window(),{startedAt:epoch+.5,endedAt:epoch+60_000+.5,startedAtMicros:epoch*1000+500,endedAtMicros:(epoch+60_000)*1000+500});
  // Rejected raw observations survive; process evidence is not fabricated for the rejected row.
  index=0;delete captures[1].diagnostics.output_sample;const failed=[],badClock=new ServerCounterClock();await assert.rejects(()=>measure({},123,"unrestricted",failed,badClock),/timestamp/);assert.equal(failed.length,2);assert.equal(failed[1].processes,undefined);assert.equal(badClock.summary().clock_metadata_failures,1);
 });
 
 test("a different failure cannot disguise excessive UTC/monotonic drift",()=>{
  const c=new ServerCounterClock();c.observe(sample(0));const missing=sample(1);delete missing.diagnostics.output_sample;assert.throws(()=>c.observe(missing));const forged=c.summary();forged.clock_max_drift_micros=1001;assert.throws(()=>validateClockSummary(forged));
+});
+
+test("server windows retain original integer microseconds and reject partial or contradictory refinements",()=>{
+ const c=complete(i=>sample(i,{serverOffset:501})),w=c.window(),bounds=diagnosticWindowBounds(w);
+ assert.equal(w.startedAtMicros,epoch*1000+501);assert.equal(bounds.startedAtNanos,BigInt(w.startedAtMicros)*1000n);assert.equal(bounds.endedAtNanos,BigInt(w.endedAtMicros)*1000n);assert.equal(bounds.seconds,60);
+ const legacy={startedAt:w.startedAt,endedAt:w.endedAt},old=diagnosticWindowBounds(legacy);
+ assert.notEqual(old.startedAtNanos,bounds.startedAtNanos);assert.equal(old.startedAtNanos,BigInt(epoch)*1_000_000n+500977n);
+ for(const mutate of [r=>delete r.endedAtMicros,r=>r.startedAtMicros=undefined,r=>r.endedAtMicros=Number.MAX_SAFE_INTEGER+1,r=>r.startedAtMicros+=1000,r=>r.startedAtMicros=-1,r=>r.endedAtMicros=r.startedAtMicros]){const bad={...w};mutate(bad);assert.equal(diagnosticWindowBounds(bad),null);}
+ assert.equal(diagnosticWindowBounds(null),null);
 });

@@ -87,3 +87,12 @@ test("read status cannot claim a complete or available capped missing or unmeasu
   for(const status of [1,2,3,4,5,6,7,8]){const bad=structuredClone(good);bad.read_status=status;assert.throws(()=>validatePhaseDiagnostics(bad));}
   const missing=structuredClone(good);missing.log_available=0;assert.throws(()=>validatePhaseDiagnostics(missing));
 });
+
+test("integer microsecond windows classify nanosecond neighbors exactly and preserve legacy fallback",()=>{
+ const exact={startedAt:(window.startedAt*1000+501)/1000,endedAt:(window.endedAt*1000+501)/1000,startedAtMicros:window.startedAt*1000+501,endedAtMicros:window.endedAt*1000+501};
+ const at=(base,fraction,value)=>line(base,value).replace(new Date(base).toISOString(),new Date(base).toISOString().replace(".000Z",`.${fraction}Z`));
+ const text=at(window.startedAt,"000500999",10)+at(window.startedAt,"000501000",20)+at(window.endedAt,"000501000",30)+at(window.endedAt,"000501001",40);
+ const report=parsePhaseDiagnostics(text,exact);assert.equal(report.available,1);assert.deepEqual([report.samples_before_window,report.samples_in_window,report.samples_after_window],[1,2,1]);assert.equal(report.metrics[0].mean_micros,25);assert.equal(report.window_seconds,60);
+ const legacy=parsePhaseDiagnostics(text,{startedAt:exact.startedAt,endedAt:exact.endedAt});assert.equal(legacy.metrics[0].mean_micros,15);
+ for(const bad of [{...exact,endedAtMicros:undefined},{...exact,startedAtMicros:exact.startedAtMicros+1000}]){const invalid=parsePhaseDiagnostics(text,bad);assert.equal(invalid.read_status,7);assert.equal(invalid.available,0);}
+});

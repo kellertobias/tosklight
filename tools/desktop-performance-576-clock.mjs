@@ -25,6 +25,19 @@ export function validateClockSummary(r) {
  assert(r.clock_validation_passed===Number(r.clock_observations===61&&r.clock_server_samples===61&&r.clock_validated_samples===61&&!failures));
  return r;
 }
+// Exact server bounds are private. Millisecond-only callers retain their original conversion.
+export function diagnosticWindowBounds(window) {
+ const {startedAt,endedAt}=window??{};
+ if(![startedAt,endedAt].every(n=>typeof n==="number"&&Number.isFinite(n)&&n>=0)||endedAt<=startedAt)return null;
+ if(Object.hasOwn(window,"startedAtMicros")||Object.hasOwn(window,"endedAtMicros")) {
+  const {startedAtMicros,endedAtMicros}=window;
+  if(!uint(startedAtMicros)||!uint(endedAtMicros)||endedAtMicros<=startedAtMicros||endedAtMicros-startedAtMicros>400_000_000||startedAt!==startedAtMicros/1000||endedAt!==endedAtMicros/1000)return null;
+  return {startedAtNanos:BigInt(startedAtMicros)*1000n,endedAtNanos:BigInt(endedAtMicros)*1000n,seconds:(endedAtMicros-startedAtMicros)/1e6};
+ }
+ if(endedAt-startedAt>400_000)return null;
+ const nanos=n=>BigInt(Math.trunc(n))*1_000_000n+BigInt(Math.round((n-Math.trunc(n))*1_000_000));
+ return {startedAtNanos:nanos(startedAt),endedAtNanos:nanos(endedAt),seconds:(endedAt-startedAt)/1000};
+}
 export async function capturePerformanceSample(api, clocks={epoch:()=>Date.now(),monotonic:()=>performance.now()}) {
  const diagnosticsMonotonicStartMillis=clocks.monotonic(),diagnosticsUtcStartMillis=clocks.epoch();
  const diagnostics=await api.request("GET","/api/v2/diagnostics/performance");
@@ -71,7 +84,7 @@ export class ServerCounterClock {
   return {elapsedSeconds:previous?elapsedMicros/1e6:null};
  }
  summary(){const r={...this.status};r.clock_validation_passed=Number(r.clock_observations===61&&r.clock_validated_samples===61&&!r.clock_failure_code);return validateClockSummary(r);}
- window(){assert(this.summary().clock_validation_passed===1,"server clock coverage incomplete");return {startedAt:this.samples[0].sampled_at_epoch_micros/1000,endedAt:this.samples.at(-1).sampled_at_epoch_micros/1000};}
+ window(){assert(this.summary().clock_validation_passed===1,"server clock coverage incomplete");const startedAtMicros=this.samples[0].sampled_at_epoch_micros,endedAtMicros=this.samples.at(-1).sampled_at_epoch_micros;return {startedAt:startedAtMicros/1000,endedAt:endedAtMicros/1000,startedAtMicros,endedAtMicros};}
  elapsedSeconds(){assert(this.summary().clock_validation_passed===1);return (this.samples.at(-1).monotonic_micros-this.samples[0].monotonic_micros)/1e6;}
  delta(name){assert(CLOCK_COUNTERS.includes(name));assert(this.summary().clock_validation_passed===1);return this.samples.at(-1).counters[name]-this.samples[0].counters[name];}
 }

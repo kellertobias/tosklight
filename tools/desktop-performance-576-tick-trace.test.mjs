@@ -153,3 +153,12 @@ test("incomplete diagnostics cannot forge missing metric counts, cap state or fr
  assert.equal(incomplete.join_complete,0);
  for(const id of [0,25,30,31]) {const bad=structuredClone(incomplete);bad.groups[0].metrics[id]={id,count:0,min_micros:0,mean_micros:0,p50_micros:0,p95_micros:0,max_micros:0};assert.throws(()=>validateTickTraceDiagnostics(bad));}
 });
+
+test("integer microsecond completion windows preserve exact nanosecond endpoint membership",()=>{
+ const exact={startedAt:(epoch*1000+501)/1000,endedAt:((epoch+60_000)*1000+501)/1000,startedAtMicros:epoch*1000+501,endedAtMicros:(epoch+60_000)*1000+501};
+ const at=(seq,offset,fraction)=>tick(seq,{at:offset}).replace(new Date(epoch+offset).toISOString(),new Date(epoch+offset).toISOString().replace(".000Z",`.${fraction}Z`));
+ const text=at(1,0,"000500999")+at(2,0,"000501000")+at(3,60_000,"000501000")+at(4,60_000,"000501001");
+ const report=parseTickTraceDiagnostics(text,exact);assert.equal(report.available,1);assert.deepEqual([report.ticks_before_window,report.selected_ticks,report.ticks_after_window],[1,2,1]);assert.equal(report.window_seconds,60);
+ const legacy=parseTickTraceDiagnostics(text,{startedAt:exact.startedAt,endedAt:exact.endedAt});assert.deepEqual([legacy.ticks_before_window,legacy.selected_ticks,legacy.ticks_after_window],[0,2,2]);
+ for(const bad of [{...exact,endedAtMicros:undefined},{...exact,startedAtMicros:exact.startedAtMicros+1000}]){const invalid=parseTickTraceDiagnostics(text,bad);assert.equal(invalid.read_status,7);assert.equal(invalid.available,0);}
+});

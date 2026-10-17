@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { open, mkdir, writeFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { diagnosticWindowBounds } from "./desktop-performance-576-clock.mjs";
 import { PHASE_FIELDS } from "./desktop-performance-576-phases.mjs";
 
 export const TICK_TRACE_LIMITS = Object.freeze({bytes:32*1024*1024,lines:100_000,lineBytes:64*1024,ticks:16_384,micros:400_000_000});
@@ -26,10 +27,9 @@ const bounded = value => UINT(value) && value <= TICK_TRACE_LIMITS.micros;
 const keys = (value,expected) => assert.deepEqual(Object.keys(value).sort(),expected.slice().sort(),"closed numeric trace shape");
 const zeroMetric = id => ({id,count:0,min_micros:0,mean_micros:0,p50_micros:0,p95_micros:0,max_micros:0});
 const emptyGroup = id => ({id,ticks:0,nested_ticks:0,nested_accepted:0,nested_rejected:0,metrics:TICK_METRIC_FIELDS.map((_,id)=>zeroMetric(id))});
-const validWindow = w => Number.isFinite(w?.startedAt) && Number.isFinite(w?.endedAt) && w.startedAt >= 0 && w.endedAt > w.startedAt && w.endedAt-w.startedAt <= 400_000;
-const nanos = n => BigInt(Math.trunc(n))*1_000_000n+BigInt(Math.round((n-Math.trunc(n))*1_000_000));
+const validWindow = w => diagnosticWindowBounds(w)!==null;
 function blank(window,status=0,observed={}) {
- const r={...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:1,read_status:status,window_seconds:validWindow(window)?(window.endedAt-window.startedAt)/1000:0,groups:[emptyGroup(0),emptyGroup(1)],record_kinds:MESSAGES.map((_,id)=>({id,count:0})),paths:Array.from({length:4},(_,id)=>({id,count:0}))};
+ const r={...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:1,read_status:status,window_seconds:diagnosticWindowBounds(window)?.seconds??0,groups:[emptyGroup(0),emptyGroup(1)],record_kinds:MESSAGES.map((_,id)=>({id,count:0})),paths:Array.from({length:4},(_,id)=>({id,count:0}))};
  for(const [input,flag,field] of [["healthDeadlineMisses","health_deadline_available","health_deadline_misses"],["completedFrames","completed_frames_available","completed_frames"]]) {
   if(observed[input] !== undefined && observed[input] !== null) {assert(UINT(observed[input]));r[flag]=1;r[field]=observed[input];}
  }
@@ -92,7 +92,7 @@ function mismatch(entry) {
  return Number(bad);
 }
 function summarizeEntries(report,entries,window) {
- const first=nanos(window.startedAt),last=nanos(window.endedAt),all=[...entries.values()],selected=all.filter(e=>e.parts[0]&&e.parts[0].time>=first&&e.parts[0].time<=last).sort((a,b)=>a.seq<b.seq?-1:1);
+ const {startedAtNanos:first,endedAtNanos:last}=diagnosticWindowBounds(window),all=[...entries.values()],selected=all.filter(e=>e.parts[0]&&e.parts[0].time>=first&&e.parts[0].time<=last).sort((a,b)=>a.seq<b.seq?-1:1);
  report.ticks_observed=all.filter(e=>e.parts[0]).length;report.selected_ticks=selected.length;
  report.ticks_before_window=all.filter(e=>e.parts[0]&&e.parts[0].time<first).length;report.ticks_after_window=report.ticks_observed-report.ticks_before_window-selected.length;
  report.orphan_records=all.filter(e=>!e.parts[0]).reduce((n,e)=>n+e.parts.filter(Boolean).length,0);

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { open, mkdir, writeFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { diagnosticWindowBounds } from "./desktop-performance-576-clock.mjs";
 
 // Stable public numeric code -> exact Rust tracing duration field (microseconds).
 export const PHASE_FIELDS = Object.freeze([
@@ -30,10 +31,9 @@ const METRIC = ["id","count","min_micros","mean_micros","p50_micros","p95_micros
 const unsigned=value => Number.isSafeInteger(value) && value >= 0;
 const zeroMetric=id => ({id,count:0,min_micros:0,mean_micros:0,p50_micros:0,p95_micros:0,max_micros:0});
 const epochMillis=value => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
-const validWindow=window => epochMillis(window?.startedAt) && epochMillis(window?.endedAt) && window.endedAt > window.startedAt && window.endedAt-window.startedAt <= 400_000;
-const epochNanos=value => {const whole=Math.trunc(value);return BigInt(whole)*1_000_000n+BigInt(Math.round((value-whole)*1_000_000));};
+const validWindow=window => epochMillis(window?.startedAt) && epochMillis(window?.endedAt) && diagnosticWindowBounds(window)!==null;
 function blank(window,status=0) {
-  return {...Object.fromEntries(TOP.map(name=>[name,0])),schema_version:1,read_status:status,window_seconds:validWindow(window)?(window.endedAt-window.startedAt)/1000:0,duration_field_count:PHASE_FIELDS.length,metrics:PHASE_FIELDS.map((_,id)=>zeroMetric(id))};
+  return {...Object.fromEntries(TOP.map(name=>[name,0])),schema_version:1,read_status:status,window_seconds:validWindow(window)?diagnosticWindowBounds(window).seconds:0,duration_field_count:PHASE_FIELDS.length,metrics:PHASE_FIELDS.map((_,id)=>zeroMetric(id))};
 }
 function timestamp(line) {
   const match=/^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z(?:\s|$)/u.exec(line);
@@ -73,7 +73,7 @@ export function parsePhaseDiagnostics(text,window) {
   report.log_available=1;
   if(!validWindow(window)){report.read_status=7;return validatePhaseDiagnostics(report);}
   if(typeof text!=="string" || Buffer.byteLength(text)>PHASE_LIMITS.bytes){report.read_status=2;return validatePhaseDiagnostics(report);}
-  const opening=epochNanos(window.startedAt),closing=epochNanos(window.endedAt);
+  const {startedAtNanos:opening,endedAtNanos:closing}=diagnosticWindowBounds(window);
   const lines=text.split("\n");if(lines.at(-1)==="")lines.pop();
   if(lines.length>PHASE_LIMITS.lines){report.read_status=3;return validatePhaseDiagnostics(report);}
   report.lines_observed=lines.length;
