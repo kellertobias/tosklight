@@ -2,7 +2,12 @@ name: Unchanged 576 Linux intention proof
 on:
   push:
     branches: [codex/tl775-intention-slots]
-    paths: [.github/workflows/release-576-proof.yml]
+    paths:
+      - .github/workflows/release-576-proof.yml
+      - crates/light/domain/dynamics/src/**
+      - crates/light/adapters/headless/src/runtime/output_scheduler/**
+      - tools/desktop-performance-576-*.mjs
+      - tools/run-desktop-performance-576-proof.mjs
 permissions:
   contents: read
 concurrency:
