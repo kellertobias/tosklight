@@ -128,10 +128,17 @@ test('compiler-only preflight publishes separately before app build without chan
 });
 
 test('census reason is fixed bounded numeric data and coherent with failure stage',()=>{
- for(const failure_detail_code of [1,18])for(const failure_stage_code of [7,9,11]){const r=report();Object.assign(r,{available:0,failure_code:11,failure_stage_code,failure_detail_code});validateOwnedPerfHelperReport(r);}
- for(const change of [r=>r.failure_detail_code=19,r=>r.failure_detail_code=-1,r=>r.failure_detail_code=1.5,r=>r.failure_detail_code='header',r=>{r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=7;r.failure_stage_code=7;r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=11;r.failure_stage_code=6;r.failure_detail_code=1;}]){const r=report();change(r);assert.throws(()=>validateOwnedPerfHelperReport(r));}
+ for(const failure_detail_code of Array.from({length:32},(_,i)=>i+1))for(const failure_stage_code of [7,9,11]){const r=report();Object.assign(r,{available:0,failure_code:11,failure_stage_code,failure_detail_code});validateOwnedPerfHelperReport(r);}
+ for(const change of [r=>r.failure_detail_code=33,r=>r.failure_detail_code=-1,r=>r.failure_detail_code=1.5,r=>r.failure_detail_code='header',r=>{r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=7;r.failure_stage_code=7;r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=11;r.failure_stage_code=6;r.failure_detail_code=1;}]){const r=report();change(r);assert.throws(()=>validateOwnedPerfHelperReport(r));}
 });
 test('bridge preserves unavailable census detail without exposing arbitrary header values',async()=>{
  const e=envelope();Object.assign(e.report,{available:0,failure_code:11,failure_stage_code:7,failure_detail_code:15,rust_unwind_admitted:0,preflight:null,capture:null});
  const f=fixture({execute:async()=>({status:1,stdout:JSON.stringify(e),error:false,overflow:false})});await f.bridge.initialize();await f.bridge.capture(100,snapshot);const r=publicReport(f);assert.equal(r.helper_report_available,1);assert.equal(r.helper_report.failure_code,11);assert.equal(r.helper_report.failure_stage_code,7);assert.equal(r.helper_report.failure_detail_code,15);assert.equal(r.available,0);
+});
+
+test('refined unsupported sample reasons survive the bridge as closed unavailable reports',async()=>{
+ for(const failure_detail_code of [4,19,32]){
+  const e=envelope();Object.assign(e.report,{available:0,failure_code:11,failure_stage_code:7,failure_detail_code,rust_unwind_admitted:0,preflight:null,capture:null});
+  const f=fixture({execute:async()=>({status:1,stdout:JSON.stringify(e),error:false,overflow:false})});await f.bridge.initialize();await f.bridge.capture(100,snapshot);const r=publicReport(f);assert.equal(r.helper_report_available,1);assert.equal(r.helper_report.failure_detail_code,failure_detail_code);assert.equal(r.available,0);
+ }
 });

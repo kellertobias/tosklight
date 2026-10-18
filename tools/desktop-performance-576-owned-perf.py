@@ -48,7 +48,18 @@ FAILURES = {name: i + 1 for i, name in enumerate((
 # 9 record length; 10 record cap; 11 sample mode; 12 time-conv size;
 # 13 time-conv shift; 14 time-conv capabilities; 15 time-conv reserved;
 # 16 lost length; 17 unknown record; 18 sample cap.
-CENSUS_DETAIL_MAX = 18
+# Linux v5.15 include/uapi/linux/perf_event.h sample-format bit positions.
+# Details 19..32 identify the lowest known unsupported bit; 4 remains the unknown
+# fallback. These fixed names never expose an observed mask or header value.
+# READ, STREAM_ID, RAW, BRANCH_STACK, WEIGHT, DATA_SRC, TRANSACTION, REGS_INTR,
+# PHYS_ADDR, AUX, CGROUP, DATA_PAGE_SIZE, CODE_PAGE_SIZE, WEIGHT_STRUCT.
+UNSUPPORTED_SAMPLE_BITS = (4, 9, 10, 11, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24)
+CENSUS_DETAIL_MAX = 32
+
+
+def unsupported_sample_detail(bits):
+    return next((19 + index for index, bit in enumerate(UNSUPPORTED_SAMPLE_BITS)
+                 if bits & (1 << bit)), 4)
 
 
 class Refused(RuntimeError):
@@ -345,7 +356,7 @@ def census(raw):
     # v5.15 clock events have unit="msec", which enables PERF_FORMAT_ID even alone.
     require(kind == 1 and config == 0 and frequency == 49 and read_format == 4
             and 96 <= length <= attr_size, 'census', 3)
-    require(not sample_type & ~allowed, 'census', 4)
+    require(not sample_type & ~allowed, 'census', unsupported_sample_detail(sample_type & ~allowed))
     require(sample_type & required == required, 'census', 5)
     require(not flags & (1 << 1) and flags & (1 << 5) and flags & (1 << 6)
             and flags & (1 << 10) and flags & (1 << 25), 'census', 6)

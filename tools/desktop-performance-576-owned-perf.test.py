@@ -153,7 +153,7 @@ class Pure(unittest.TestCase):
         cases = [
             (b'bad', 1), (changed(raw(), 32, '<Q', 129), 2),
             (changed(raw(), 104, '<I', 2), 3), (changed(raw(), 136, '<Q', 0), 3),
-            (raw(sample_type=required | (1 << 9)), 4), (raw(sample_type=required & ~1), 5),
+            (raw(sample_type=required | (1 << 63)), 4), (raw(sample_type=required & ~1), 5),
             (raw(flags=0), 6), (changed(raw(), 196, '<i', 0), 7),
             (short_record, 8), (changed(raw(), 238, '<H', 7), 9),
             (raw((1,) * 100001), 10), (changed(raw(), 236, '<H', 1), 11),
@@ -173,13 +173,31 @@ class Pure(unittest.TestCase):
         self.assertEqual(p.census(raw((1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82, 79, 9, 2, 13))),
                          dict(samples=1, lost=2, records=15))
 
+    def test_unsupported_sample_bits_have_fixed_names_without_admission_changes(self):
+        required = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13))
+        # Independent UAPI positions, not the implementation's mapping table.
+        bits = (4, 9, 10, 11, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24)
+        for index, bit in enumerate(bits):
+            for extra in (0, 1 << 63, 1 << 24):
+                with self.subTest(bit=bit, extra=extra), self.assertRaises(p.Refused) as caught:
+                    p.census(raw(sample_type=required | (1 << bit) | extra))
+                self.assertEqual((caught.exception.code, caught.exception.detail), (11, 19 + index))
+        with self.assertRaises(p.Refused) as caught:
+            p.census(raw(sample_type=required | (1 << 63)))
+        self.assertEqual((caught.exception.code, caught.exception.detail), (11, 4))
+        # Required/allowed fields still succeed, and the earlier attr predicate wins.
+        self.assertEqual(p.census(raw(sample_type=required))['samples'], 1)
+        with self.assertRaises(p.Refused) as caught:
+            p.census(raw(sample_type=required | (1 << 4), read_format=0))
+        self.assertEqual(caught.exception.detail, 3)
+
     def test_census_details_require_census_failure_and_recording_stage(self):
         for detail in range(1, p.CENSUS_DETAIL_MAX + 1):
             for stage in (7, 9, 11):
                 value = p.failure_report(11)
                 value.update(failure_stage_code=stage, failure_detail_code=detail)
                 p.validate_numeric(value)
-        for code, stage, detail in ((0, 0, 1), (7, 7, 1), (11, 6, 1), (11, 7, 19),
+        for code, stage, detail in ((0, 0, 1), (7, 7, 1), (11, 6, 1), (11, 7, 33),
                                     (11, 7, -1), (11, 7, 0.5), (11, 7, True)):
             value = p.failure_report(code)
             value.update(failure_stage_code=stage, failure_detail_code=detail)
