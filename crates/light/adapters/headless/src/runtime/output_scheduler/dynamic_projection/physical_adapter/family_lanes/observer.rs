@@ -15,6 +15,9 @@ use super::native::project_family_native_rows;
 use super::*;
 use rustc_hash::FxHashSet;
 
+#[cfg(test)]
+mod static_presence_tests;
+
 /// Observer of one complete Live frame or one retained branch over one [`FamilyLanes`] set.
 pub(in crate::runtime) struct FamilyFrameObserver<'a> {
     lanes: &'a FamilyLanes,
@@ -80,6 +83,10 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         baseline: &light_engine::PreparedStaticFamilyFrame,
     ) -> Result<Vec<(FixtureId, ProgrammingOwner)>, TransitionError> {
         let mut targets = self.position.static_program_targets(frame, baseline)?;
+        let presence = baseline.static_family_presence();
+        if !presence.color && !presence.zoom && !presence.focus {
+            return Ok(targets);
+        }
         // TL-596: a set for membership; scanning `targets` per head was quadratic at full-rig
         // size. `targets` keeps its order.
         let mut seen = targets.iter().copied().collect::<FxHashSet<_>>();
@@ -89,48 +96,54 @@ impl HybridFrameObserver<FamilySidecar> for FamilyFrameObserver<'_> {
         // native output, the premaster values a first native edit adopts, and the per-head
         // Direct replay status. Targets without a compiled Color destination keep their
         // ordinary baseline output.
-        self.lanes.color.static_targets(
-            frame,
-            baseline,
-            ProgrammingOwner::Color,
-            |value| matches!(value, AttributeValue::ColorProgram(_)),
-            &mut targets,
-            &mut seen,
-            pool,
-        )?;
+        if presence.color {
+            self.lanes.color.static_targets(
+                frame,
+                baseline,
+                ProgrammingOwner::Color,
+                |value| matches!(value, AttributeValue::ColorProgram(_)),
+                &mut targets,
+                &mut seen,
+                pool,
+            )?;
+        }
         // TL-560: a static typed Zoom (Programmer, played Cue, committed Preload) is owned by
         // the Zoom adapter like a static Color program; the scalar path cannot render a typed
         // opening, so without this the Zoom control kept its default whenever no Dynamic sampled
         // the owner. Targets without a compiled Zoom destination keep their ordinary baseline
         // output.
-        self.lanes
-            .optics
-            .lane(light_fixture::OpticsFamily::Zoom)
-            .static_targets(
-                frame,
-                baseline,
-                ProgrammingOwner::Zoom,
-                |value| matches!(value, AttributeValue::Zoom(_)),
-                &mut targets,
-                &mut seen,
-                pool,
-            )?;
+        if presence.zoom {
+            self.lanes
+                .optics
+                .lane(light_fixture::OpticsFamily::Zoom)
+                .static_targets(
+                    frame,
+                    baseline,
+                    ProgrammingOwner::Zoom,
+                    |value| matches!(value, AttributeValue::Zoom(_)),
+                    &mut targets,
+                    &mut seen,
+                    pool,
+                )?;
+        }
         // TL-544 G10: static Focus is a typed family like Zoom. Its complete payload stays the
         // normalized 0-1 setting at `focus`; the Focus adapter fits it through the profile's
         // focus function, publishes its requested/achieved sidecar and keeps it independent of
         // Zoom. Targets without a compiled Focus destination keep their ordinary baseline output.
-        self.lanes
-            .optics
-            .lane(light_fixture::OpticsFamily::Focus)
-            .static_targets(
-                frame,
-                baseline,
-                ProgrammingOwner::Focus,
-                |value| matches!(value, AttributeValue::Normalized(_)),
-                &mut targets,
-                &mut seen,
-                pool,
-            )?;
+        if presence.focus {
+            self.lanes
+                .optics
+                .lane(light_fixture::OpticsFamily::Focus)
+                .static_targets(
+                    frame,
+                    baseline,
+                    ProgrammingOwner::Focus,
+                    |value| matches!(value, AttributeValue::Normalized(_)),
+                    &mut targets,
+                    &mut seen,
+                    pool,
+                )?;
+        }
         Ok(targets)
     }
 

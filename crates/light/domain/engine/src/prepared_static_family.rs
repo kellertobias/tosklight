@@ -68,6 +68,19 @@ pub struct PreparedStaticFamilyFrame {
     pub(crate) native_raw: crate::native_raw::NativeRawCache,
 }
 
+/// Typed family values present in this exact resolved static frame.
+/// False proves absence; true may include targets outside the captured fixture list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StaticFamilyPresence {
+    pub position: bool,
+    pub color: bool,
+    pub zoom: bool,
+    pub focus: bool,
+}
+
+#[cfg(test)]
+mod presence_tests;
+
 /// One resolved static winner, answering the same queries as [`PreparedStaticFamilyFrame`].
 #[derive(Clone, Copy)]
 pub struct StaticWinner<'a>(&'a crate::SlotWinner);
@@ -96,6 +109,34 @@ impl<'a> StaticWinner<'a> {
 }
 
 impl PreparedStaticFamilyFrame {
+    /// Inspect current resolved winners without materializing a named map or reading raw values.
+    pub fn static_family_presence(&self) -> StaticFamilyPresence {
+        let mut presence = StaticFamilyPresence::default();
+        let Some(frame) = &self.resolved.frame else {
+            return presence;
+        };
+        let mut observe = |key: &AttributeKey, value: &AttributeValue| match value {
+            AttributeValue::Position(_) => {
+                presence.position |= key == ProgrammingOwner::Position.key_ref()
+            }
+            AttributeValue::ColorProgram(_) => {
+                presence.color |= key == ProgrammingOwner::Color.key_ref()
+            }
+            AttributeValue::Zoom(_) => presence.zoom |= key == ProgrammingOwner::Zoom.key_ref(),
+            AttributeValue::Normalized(_) => {
+                presence.focus |= key == ProgrammingOwner::Focus.key_ref()
+            }
+            _ => (),
+        };
+        for (slot, winner) in frame.occupied() {
+            observe(frame.slots().pair(slot).1, &winner.value);
+        }
+        for (_, key, winner) in frame.overflowed() {
+            observe(key, &winner.value);
+        }
+        presence
+    }
+
     fn winner(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&crate::SlotWinner> {
         self.resolved.frame.as_ref()?.winner(target, attribute)
     }
