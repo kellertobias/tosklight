@@ -1,4 +1,5 @@
 use super::*;
+pub(super) mod borrowed_plain_controller;
 pub(super) mod controller_order;
 mod deferred_angle_pair;
 mod leaf_provenance;
@@ -963,4 +964,179 @@ fn serial_and_shared_cache_preparation_match_across_changed_and_unchanged_frames
             assert_eq!(parallel.cache[key].expression, expected.expression);
         }
     }
+}
+
+// Shared preparation output/trace and chunk-replay oracles. These callbacks do not claim OS-thread scheduling coverage.
+fn preparation_snapshot(view: PreparedDynamicFamilySamples<'_>) -> String {
+    let groups = view
+        .families
+        .iter()
+        .map(|group| {
+            let base = match group.owner {
+                ProgrammingOwner::Color => semantic(ColorIntent::default()),
+                _ => angles(0., 0.),
+            };
+            let samples = group
+                .samples
+                .iter()
+                .map(|sample| match sample {
+                    FamilyCompositionSample::Known(s) => format!(
+                        "{:?}/{:?}/{:?}/{:?}/{}",
+                        s.address().address(),
+                        s.materialized_value(),
+                        s.rank,
+                        s.activation_mix.to_bits(),
+                        s.is_fix_at()
+                    ),
+                    FamilyCompositionSample::WholeExpression {
+                        rank,
+                        activation_mix,
+                        ..
+                    }
+                    | FamilyCompositionSample::CoupledExpression {
+                        rank,
+                        activation_mix,
+                        ..
+                    } => format!("general/{rank:?}/{}", activation_mix.to_bits()),
+                })
+                .collect::<Vec<_>>();
+            let mut scratch = RetainedFamilyCompositionScratch::default();
+            let value = compose_retained_dynamic_family_traced(
+                group.owner,
+                &base,
+                &group.samples,
+                &FamilyCompositionContext {
+                    edit: FamilyEditContext {
+                        color_model: Some(&VirtualColorAuthoringV1),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                &Frame,
+                &mut scratch,
+            );
+            let trace = value.as_ref().ok().and_then(|value| {
+                let fields = ProgrammingFieldScope::for_value(group.owner, value).ok()?;
+                let trace = scratch.family_trace();
+                Some(format!(
+                    "{:?}",
+                    trace.query_fields_with_base(trace.root()?, &fields)
+                ))
+            });
+            format!(
+                "{:?}/{:?}/{samples:?}/{value:?}/{trace:?}",
+                group.target, group.owner
+            )
+        })
+        .collect::<Vec<_>>();
+    format!("{groups:?}/{:?}/{:?}", view.legacy, view.requirements)
+}
+struct OracleWorkers {
+    chunks: usize,
+    stop: bool,
+    closes: Cell<usize>,
+    reads: Cell<usize>,
+}
+struct OracleFork<'a> {
+    sources: Sources,
+    worker: &'a OracleWorkers,
+}
+impl DynamicValueSourceResolver for OracleFork<'_> {
+    fn current(&self, t: FixtureId, a: &DynamicValueAddress) -> Option<DynamicValue> {
+        self.worker.reads.set(self.worker.reads.get() + 1);
+        self.sources.current(t, a)
+    }
+    fn preset(
+        &self,
+        p: &DynamicPresetSourceBinding,
+        i: Uuid,
+        t: FixtureId,
+    ) -> Option<DynamicValue> {
+        self.sources.preset(p, i, t)
+    }
+}
+impl PreparationSources for OracleFork<'_> {
+    fn finish_controller(&self) -> Option<(usize, usize)> {
+        self.worker.closes.set(self.worker.closes.get() + 1);
+        (!self.worker.stop).then_some((0, 0))
+    }
+}
+impl PreparationWorkers for OracleWorkers {
+    fn chunks(&self) -> usize {
+        self.chunks
+    }
+    fn run(
+        &mut self,
+        f: &(dyn Fn(usize, &dyn PreparationSources) -> PreparedChunk + Sync),
+    ) -> Result<Vec<PreparedChunk>, TransitionError> {
+        Ok((0..self.chunks)
+            .map(|chunk| {
+                f(
+                    chunk,
+                    &OracleFork {
+                        sources: Sources {
+                            pan: Some(30.),
+                            tilt: Some(40.),
+                            ..Default::default()
+                        },
+                        worker: self,
+                    },
+                )
+            })
+            .collect())
+    }
+    fn run_completion(
+        &mut self,
+        _: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),
+    ) -> Result<Vec<crate::CompletedChunk>, TransitionError> {
+        unreachable!()
+    }
+    fn append_logs(&mut self, _: usize, from: (usize, usize), to: (usize, usize)) {
+        assert_eq!(from, (0, 0));
+        assert_eq!(to, (0, 0));
+    }
+}
+fn prepare_observed(
+    input: &[DynamicRuntimeSample],
+    requirements: &[DynamicFamilyPreparationRequirement],
+    scratch: &mut DynamicFamilyPreparationScratch,
+    chunks: usize,
+    stop: bool,
+) -> (Result<String, String>, usize, usize) {
+    let sources = Sources {
+        pan: Some(30.),
+        tilt: Some(40.),
+        ..Default::default()
+    };
+    let mut workers = OracleWorkers {
+        chunks,
+        stop,
+        closes: Cell::new(0),
+        reads: Cell::new(0),
+    };
+    let result = if chunks == 0 {
+        prepare_dynamic_family_samples_with_requirements(
+            input,
+            requirements,
+            &sources,
+            None,
+            scratch,
+        )
+    } else {
+        prepare_dynamic_family_samples_in_parallel(
+            input,
+            requirements,
+            &sources,
+            None,
+            scratch,
+            &mut workers,
+        )
+    };
+    (
+        result
+            .map(preparation_snapshot)
+            .map_err(|e| format!("{e:?}")),
+        sources.reads.get() + workers.reads.get(),
+        workers.closes.get(),
+    )
 }

@@ -250,6 +250,41 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         native_models: Option<&dyn DynamicNativeModelResolver>,
     ) -> Result<(), TransitionError> {
         self.controller.clear();
+        // Shape inspection is pure: generic pruning/validation retains its original order.
+        let borrowed_plain = indices.iter().all(|index| {
+            samples
+                .get(*index)
+                .is_some_and(|sample| plain_scalar::leaf(&sample.expression).is_some())
+        });
+        #[cfg(test)]
+        let borrowed_plain =
+            borrowed_plain && !super::tests::borrowed_plain_controller::forced_old();
+        if borrowed_plain {
+            let mut last_lane = None;
+            // Validate the entire controller before any materialization or output, as before.
+            for &index in indices {
+                let sample = &samples[index];
+                address::ensure(
+                    last_lane != Some(sample.lane_id),
+                    "duplicate Dynamic source lane",
+                )?;
+                address::ensure(
+                    sample.activation_mix.is_finite()
+                        && (0.0..=1.0).contains(&sample.activation_mix),
+                    "Dynamic activation influence must be between zero and one",
+                )?;
+                sample.expression.validate()?;
+                last_lane = Some(sample.lane_id);
+            }
+            for &index in indices {
+                let sample = &samples[index];
+                self.prepare_plain_scalar(
+                    sample,
+                    plain_scalar::leaf(&sample.expression).expect("selected Color leaf"),
+                )?;
+            }
+            return Ok(());
+        }
         let mut last_lane = None;
         let mut has_angles = false;
         for &index in indices {

@@ -145,15 +145,23 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         // Plain semantic Color scalars carry fresh numeric values, not reusable expression trees.
         // The controller validated the original leaf before reaching this lowering boundary.
         if let Some(leaf) = plain_scalar::leaf(&sample.expression) {
-            if !self.sampling_required(&sample, ProgrammingOwner::Color) {
-                let value = leaf.materialize(rank(&sample), sample.activation_mix)?;
-                self.out
-                    .append_one(sample.target, ProgrammingOwner::Color, value.into());
-            }
-            return Ok(());
+            return self.prepare_plain_scalar(&sample, leaf);
         }
         for (owner, expression) in split_owners(Arc::new(sample.expression.clone()))? {
             self.prepare_part(&sample, owner, expression, native_models)?;
+        }
+        Ok(())
+    }
+
+    fn prepare_plain_scalar(
+        &mut self,
+        sample: &DynamicRuntimeSample,
+        leaf: plain_scalar::Leaf<'_>,
+    ) -> Result<(), TransitionError> {
+        if !self.sampling_required(sample, ProgrammingOwner::Color) {
+            let value = leaf.materialize(rank(sample), sample.activation_mix)?;
+            self.out
+                .append_one(sample.target, ProgrammingOwner::Color, value.into());
         }
         Ok(())
     }
