@@ -1,0 +1,108 @@
+name: Isolated TL775 synthetic profiler preflight
+on:
+  push:
+    branches: [codex/tl775-profiler-preflight]
+permissions:
+  contents: read
+concurrency:
+  group: tl775-profiler-preflight-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-preflight:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    env:
+      CANDIDATE_SHA: ${{ github.sha }}
+      OUT: .artifacts/test/results/synthetic-profiler-${{ github.run_id }}-${{ github.run_attempt }}
+      DEBIAN_FRONTEND: noninteractive
+      NEEDRESTART_MODE: a
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Pure diagnostic tests
+        run: |
+          python3 -B tools/desktop-performance-576-owned-perf.test.py
+          node --test tools/desktop-performance-576-owned-perf.test.mjs
+      - name: Record isolated C capability with pinned packaged perf
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          umask 077
+          temporary="$(node --input-type=module -e 'import {artifactPaths} from "./tools/artifact-paths.mjs"; console.log(artifactPaths.tmp)')"
+          artifacts="$(node --input-type=module -e 'import {artifactRoot} from "./tools/artifact-paths.mjs"; console.log(artifactRoot)')"
+          mkdir -p "$temporary" "$OUT"
+          private="$(mktemp -d "$temporary/tl775-synthetic-launch-XXXXXX")"
+          export SYNTHETIC_PRIVATE="$private"
+          set +e
+          (
+          set -euo pipefail
+          sudo timeout 180 apt-get update >"$private/apt-update" 2>&1
+          sudo timeout 300 apt-get install -y build-essential binutils linux-tools-common linux-tools-generic >"$private/apt-install" 2>&1
+          python3 - <<'PYTHON'
+          import hashlib,json,os,pathlib,subprocess
+          packages=set();pending=['linux-tools-generic'];listed=set()
+          while pending:
+              package=pending.pop()
+              if package in packages: continue
+              packages.add(package)
+              assert len(packages)<=8
+              metadata=subprocess.check_output(['dpkg-query','-W','-f=${db:Status-Status}\n${Depends}',package],text=True).split('\n',1)
+              assert metadata[0]=='installed' and len(metadata)==2
+              for dependency in metadata[1].split(','):
+                  dependency=dependency.strip()
+                  if not dependency.startswith('linux-tools-'): continue
+                  assert '|' not in dependency
+                  name=dependency.split(' ',1)[0]
+                  assert all(c.isalnum() or c in '.+-' for c in name)
+                  pending.append(name)
+              listed.update(subprocess.check_output(['dpkg-query','-L',package],text=True).splitlines())
+          perf_candidates=set()
+          for name in listed:
+              file=pathlib.Path(name)
+              if file.name!='perf' or not (name.startswith('/usr/lib/linux-tools/') or name.startswith('/usr/lib/linux-tools-')): continue
+              real=file.resolve(strict=True)
+              # The canonical ELF must itself be listed in the exact dependency closure.
+              if str(real) not in listed or real.is_symlink() or not real.is_file(): continue
+              if real.name!='perf' or not str(real).startswith('/usr/lib/linux-tools-'): continue
+              if real.stat().st_uid!=0 or real.stat().st_mode&0o022: continue
+              with real.open('rb') as stream:
+                  if stream.read(4)!=b'\x7fELF': continue
+              perf_candidates.add(real)
+          assert len(perf_candidates)==1
+          perf=perf_candidates.pop()
+          destination=pathlib.Path(os.environ['SYNTHETIC_PRIVATE'])/'perf-binding.json'
+          destination.write_text(json.dumps({'perf_path':str(perf),'perf_sha256':hashlib.sha256(perf.read_bytes()).hexdigest()}))
+          destination.chmod(0o600)
+          PYTHON
+          readarray -t binding < <(python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); print(p["perf_path"]); print(p["perf_sha256"])' "$private/perf-binding.json")
+          spool="$temporary/tl775-synthetic-preflight-$(cat /proc/sys/kernel/random/uuid)"
+          sudo -n -- /usr/bin/timeout --signal=TERM --kill-after=5s 45s /usr/bin/env "LIGHT_REPOSITORY_ROOT=$(pwd -P)" "LIGHT_ARTIFACTS_DIR=$artifacts" "LIGHT_TMP_DIR=$temporary" /usr/bin/python3 -B tools/desktop-performance-576-owned-perf.py --synthetic-preflight --candidate-sha "$CANDIDATE_SHA" --perf-path "${binding[0]}" --perf-sha256 "${binding[1]}" --private-directory "$spool" >"$private/stdout" 2>"$private/stderr"
+          ) >"$private/setup.stdout" 2>"$private/setup.stderr"
+          helper_status=$?
+          set -e
+          node --input-type=module - "$OUT/public" "$private" "$helper_status" "$CANDIDATE_SHA" <<'JAVASCRIPT'
+          import fs from 'node:fs/promises';import crypto from 'node:crypto';import {execFileSync} from 'node:child_process';import assert from 'node:assert/strict';
+          const [directory,privatePath,status,candidate]=process.argv.slice(2),hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+          const source=name=>execFileSync('git',['show',`${candidate}:${name}`],{maxBuffer:1024*1024,stdio:['ignore','pipe','pipe']});
+          try{
+           assert(/^[a-f0-9]{40}$/.test(candidate));for(const name of ['tools/desktop-performance-576-owned-perf.py','tools/desktop-performance-576-owned-perf.mjs','tools/artifact-paths.mjs','tools/artifact-paths.cjs','tools/artifact-layout.conf','tools/artifact_paths.py','tools/desktop-performance-576-workers.mjs','.github/workflows/tl775-profiler-preflight.yml'])assert.equal(hash(await fs.readFile(name)),hash(source(name)));
+           const {validateSyntheticPreflightEnvelope}=await import('./tools/desktop-performance-576-owned-perf.mjs');
+           const helper=hash(source('tools/desktop-performance-576-owned-perf.py'));let envelope;
+           try{const file=`${privatePath}/stdout`,s=await fs.lstat(file);assert(s.isFile()&&!s.isSymbolicLink()&&s.size>0&&s.size<=65536);const bytes=await fs.readFile(file);assert(bytes.length<=65536);envelope=validateSyntheticPreflightEnvelope(JSON.parse(bytes));assert.equal(Number(status=== '0'),envelope.report.available);
+            const b=JSON.parse(await fs.readFile(`${privatePath}/perf-binding.json`));assert.equal(envelope.provenance.perf_sha256,b.perf_sha256);assert.equal(envelope.provenance.candidate_sha,candidate);assert.equal(envelope.provenance.helper_sha256,helper);
+           }catch{const report=Object.fromEntries(['available','source_verified','perf_verified','version_available','perf_major','perf_minor','synthetic_capable','raw_private','tools_stopped','failure_stage_code','failure_detail_code','loss_observed','byte_cap_hit','elapsed_micros','app_admission','rust_admission','cadence_proof'].map(k=>[k,0]));Object.assign(report,{schema_version:1,diagnostic_mode_code:2,failure_code:14});envelope=validateSyntheticPreflightEnvelope({report,provenance:{schema_version:1,candidate_sha:candidate,helper_sha256:helper,perf_sha256:'0'.repeat(64)}});}
+           await fs.mkdir(directory,{recursive:true});for(const [name,value] of [['synthetic-preflight-numeric.json',envelope.report],['synthetic-preflight-provenance.json',envelope.provenance]])await fs.writeFile(`${directory}/${name}`,JSON.stringify(value)+'\n',{flag:'wx',mode:0o600});process.stdout.write(JSON.stringify({schema_version:1,available:envelope.report.available,failure_code:envelope.report.failure_code})+'\n');process.exitCode=envelope.report.available?0:1;
+          }catch{process.stdout.write('{"schema_version":1,"available":0,"failure_code":16}\n');process.exitCode=1;}
+          JAVASCRIPT
+      - name: Upload only closed synthetic numeric evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tl775-synthetic-profiler-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/synthetic-profiler-${{ github.run_id }}-${{ github.run_attempt }}/public/synthetic-preflight-numeric.json
+            .artifacts/test/results/synthetic-profiler-${{ github.run_id }}-${{ github.run_attempt }}/public/synthetic-preflight-provenance.json
+          if-no-files-found: error
+          retention-days: 7

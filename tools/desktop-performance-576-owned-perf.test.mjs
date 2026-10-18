@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {OwnedPerfBridge,ownedPerfEnabled,parseOwnedIdentity,runOwnedPerfHelper,validateOwnedPerfDiagnostics,validateOwnedPerfEnvelope,validateOwnedPerfHelperReport,validateOwnedPerfProvenance} from './desktop-performance-576-owned-perf.mjs';
+import {validateSyntheticPreflightEnvelope,OwnedPerfBridge,ownedPerfEnabled,parseOwnedIdentity,runOwnedPerfHelper,validateOwnedPerfDiagnostics,validateOwnedPerfEnvelope,validateOwnedPerfHelperReport,validateOwnedPerfProvenance} from './desktop-performance-576-owned-perf.mjs';
 const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const candidate='a'.repeat(40),helper=Buffer.from('helper'),paths=Buffer.from('canonical paths');
@@ -141,4 +141,17 @@ test('refined unsupported sample reasons survive the bridge as closed unavailabl
   const e=envelope();Object.assign(e.report,{available:0,failure_code:11,failure_stage_code:7,failure_detail_code,rust_unwind_admitted:0,preflight:null,capture:null});
   const f=fixture({execute:async()=>({status:1,stdout:JSON.stringify(e),error:false,overflow:false})});await f.bridge.initialize();await f.bridge.capture(100,snapshot);const r=publicReport(f);assert.equal(r.helper_report_available,1);assert.equal(r.helper_report.failure_detail_code,failure_detail_code);assert.equal(r.available,0);
  }
+});
+
+function syntheticEnvelope(){return {report:{schema_version:1,diagnostic_mode_code:2,available:1,source_verified:1,perf_verified:1,version_available:1,perf_major:6,perf_minor:8,synthetic_capable:1,raw_private:1,tools_stopped:1,failure_code:0,failure_stage_code:0,failure_detail_code:0,loss_observed:0,byte_cap_hit:0,elapsed_micros:2200000,app_admission:0,rust_admission:0,cadence_proof:0},provenance:{schema_version:1,candidate_sha:candidate,helper_sha256:'b'.repeat(64),perf_sha256:'c'.repeat(64)}};}
+test('standalone synthetic report is closed numeric with explicit no-application scope',()=>{
+ validateSyntheticPreflightEnvelope(syntheticEnvelope());
+ for(const mutate of [e=>e.report.raw='/secret',e=>e.provenance.path='/secret',e=>e.report.app_admission=1,e=>e.report.rust_admission=1,e=>e.report.cadence_proof=1,e=>e.report.perf_major=1000,e=>e.report.perf_minor=-1,e=>e.report.version_available=0,e=>e.report.failure_detail_code=20,e=>e.report.elapsed_micros=46000001,e=>e.report.tools_stopped=0,e=>e.provenance.perf_sha256='bad']){const e=syntheticEnvelope();mutate(e);assert.throws(()=>validateSyntheticPreflightEnvelope(e));}
+ for(const failure_code of [8,9,11,14,17]){const e=syntheticEnvelope();Object.assign(e.report,{available:0,synthetic_capable:0,failure_code,failure_stage_code:7,failure_detail_code:failure_code===11?20:0,tools_stopped:Number(failure_code!==14),loss_observed:Number(failure_code===17),byte_cap_hit:Number(failure_code===9)});validateSyntheticPreflightEnvelope(e);}
+});
+test('synthetic-only workflow isolates trigger, fixed scope, source binding and exactly two uploads',async()=>{
+ const text=await readFile(path.join(ROOT,'.github/workflows/tl775-profiler-preflight.yml'),'utf8');
+ assert(text.includes('branches: [codex/tl775-profiler-preflight]'));assert(!text.includes('workflow_dispatch:'));assert(!text.includes('release-576-proof.yml'));assert(!text.includes('AppImage'));assert(!text.includes('cargo '));
+ assert(text.includes('--synthetic-preflight --candidate-sha'));assert(text.includes('45s /usr/bin/env'));assert(text.includes('linux-tools-generic'));assert(text.includes('build-essential'));assert(text.includes("real.stat().st_uid!=0"));assert(text.includes("hash(source(name))"));assert(text.includes('validateSyntheticPreflightEnvelope'));for(const name of ['tools/artifact-paths.cjs','tools/artifact-layout.conf','tools/desktop-performance-576-workers.mjs'])assert(text.slice(text.indexOf('try{'),text.indexOf('const {validateSyntheticPreflightEnvelope}')).includes(name));
+ const upload=text.slice(text.indexOf('      - name: Upload only'));const entries=upload.split('\n').filter(l=>l.includes('/public/'));assert.equal(entries.length,2);assert(entries[0].trim().endsWith('/public/synthetic-preflight-numeric.json'));assert(entries[1].trim().endsWith('/public/synthetic-preflight-provenance.json'));assert(!upload.includes('**'));assert(!text.includes('sysctl'));assert(!text.includes('setcap'));
 });

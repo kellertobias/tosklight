@@ -70,3 +70,19 @@ export class OwnedPerfBridge {
   }catch{this.report.bridge_failure_code ||=2;this.report.available=0;}finally{await this.publish().catch(()=>{});}
  }
 }
+
+// Independent synthetic C capability. Never application/Rust admission or cadence proof.
+export function validateSyntheticPreflightEnvelope(envelope){
+ closed(envelope,["report","provenance"]);const r=envelope.report,p=envelope.provenance;
+ const keys=["schema_version","diagnostic_mode_code","available","source_verified","perf_verified","version_available","perf_major","perf_minor","synthetic_capable","raw_private","tools_stopped","failure_code","failure_stage_code","failure_detail_code","loss_observed","byte_cap_hit","elapsed_micros","app_admission","rust_admission","cadence_proof"];
+ closed(r,keys);assert(Object.values(r).every(uint));
+ assert(r.schema_version===1&&r.diagnostic_mode_code===2&&r.failure_code<=17&&r.failure_stage_code<=14&&r.failure_detail_code<=32&&r.elapsed_micros<=46000000&&r.perf_major<=999&&r.perf_minor<=999);
+ for(const key of keys.filter(k=>!["schema_version","diagnostic_mode_code","failure_code","failure_stage_code","failure_detail_code","perf_major","perf_minor","elapsed_micros"].includes(k)))assert(r[key]<=1);
+ assert(r.app_admission===0&&r.rust_admission===0&&r.cadence_proof===0);
+ assert(!r.failure_detail_code||(r.failure_code===11&&r.failure_stage_code===7));
+ assert(r.version_available===bit(r.perf_major>0)&&(r.version_available||r.perf_minor===0)&&r.version_available<=r.perf_verified&&r.perf_verified<=r.source_verified);
+ assert(r.loss_observed===bit(r.failure_code===17)&&r.byte_cap_hit===bit(r.failure_code===9)&&r.tools_stopped===bit(r.failure_code!==14));
+ assert(r.available===bit(r.failure_code===0&&["source_verified","perf_verified","version_available","synthetic_capable","raw_private","tools_stopped"].every(k=>r[k]===1)));
+ assert(!r.available||r.failure_stage_code===0);
+ closed(p,["schema_version","candidate_sha","helper_sha256","perf_sha256"]);assert(p.schema_version===1&&hex(p.candidate_sha,40)&&hex(p.helper_sha256,64)&&hex(p.perf_sha256,64));return envelope;
+}

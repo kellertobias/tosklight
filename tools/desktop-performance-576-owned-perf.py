@@ -834,10 +834,95 @@ def failure_report(code):
             'loss_observed': 0, 'byte_cap_hit': 0}
 
 
+
+SYNTHETIC_KEYS = {'schema_version', 'diagnostic_mode_code', 'available', 'source_verified',
+                  'perf_verified', 'version_available', 'perf_major', 'perf_minor', 'synthetic_capable',
+                  'raw_private', 'tools_stopped', 'failure_code', 'failure_stage_code', 'failure_detail_code',
+                  'loss_observed', 'byte_cap_hit', 'elapsed_micros', 'app_admission', 'rust_admission', 'cadence_proof'}
+
+
+def perf_version(text):
+    require(type(text) is bytes and len(text) <= 256, 'tool')
+    match = re.fullmatch(rb'perf version ([0-9]{1,3})\.([0-9]{1,3})(?:[. +_a-zA-Z0-9-]*)\n?', text)
+    require(match is not None and int(match[1]) > 0, 'tool')
+    return int(match[1]), int(match[2])
+
+
+def validate_synthetic_envelope(envelope):
+    require(type(envelope) is dict and set(envelope) == {'report', 'provenance'}, 'decode')
+    r, provenance = envelope['report'], envelope['provenance']
+    require(type(r) is dict and set(r) == SYNTHETIC_KEYS and all(uint(v) for v in r.values()), 'decode')
+    require(r['schema_version'] == 1 and r['diagnostic_mode_code'] == 2 and r['failure_code'] <= 17
+            and r['failure_stage_code'] <= 14 and r['failure_detail_code'] <= 32
+            and r['elapsed_micros'] <= 46000000 and r['perf_major'] <= 999 and r['perf_minor'] <= 999, 'decode')
+    for key in SYNTHETIC_KEYS - {'schema_version', 'diagnostic_mode_code', 'failure_code', 'failure_stage_code',
+                                 'failure_detail_code', 'perf_major', 'perf_minor', 'elapsed_micros'}:
+        require(r[key] in (0, 1), 'decode')
+    require(r['app_admission'] == r['rust_admission'] == r['cadence_proof'] == 0, 'decode')
+    require(not r['failure_detail_code'] or (r['failure_code'] == 11 and r['failure_stage_code'] == 7), 'decode')
+    require(r['version_available'] == int(r['perf_major'] > 0) and (r['version_available'] or r['perf_minor'] == 0)
+            and r['version_available'] <= r['perf_verified'] <= r['source_verified'], 'decode')
+    require(r['loss_observed'] == int(r['failure_code'] == 17) and r['byte_cap_hit'] == int(r['failure_code'] == 9)
+            and r['tools_stopped'] == int(r['failure_code'] != 14), 'decode')
+    require(r['available'] == int(not r['failure_code'] and all(r[k] for k in
+            ('source_verified', 'perf_verified', 'version_available', 'synthetic_capable', 'raw_private', 'tools_stopped'))), 'decode')
+    require(not r['available'] or r['failure_stage_code'] == 0, 'decode')
+    require(type(provenance) is dict and set(provenance) == {'schema_version', 'candidate_sha', 'helper_sha256', 'perf_sha256'}
+            and type(provenance['schema_version']) is int and provenance['schema_version'] == 1, 'decode')
+    for name, length in (('candidate_sha', 40), ('helper_sha256', 64), ('perf_sha256', 64)):
+        require(type(provenance[name]) is str and re.fullmatch('[0-9a-f]{' + str(length) + '}', provenance[name]), 'decode')
+    return envelope
+
+
+def synthetic_preflight(candidate, perf_path, perf_sha, directory):
+    """Standalone C capability only: no application binding, Rust or cadence claim."""
+    r = dict.fromkeys(SYNTHETIC_KEYS, 0)
+    r.update(schema_version=1, diagnostic_mode_code=2, tools_stopped=1)
+    provenance = dict(schema_version=1, candidate_sha=candidate if type(candidate) is str and re.fullmatch('[0-9a-f]{40}', candidate) else '0' * 40,
+                      helper_sha256=digest(bounded_read(__file__)), perf_sha256=perf_sha if type(perf_sha) is str and re.fullmatch('[0-9a-f]{64}', perf_sha) else '0' * 64)
+    begin = time.monotonic(); deadline = begin + 30; anchor = None
+    try:
+        require(type(candidate) is str and re.fullmatch('[0-9a-f]{40}', candidate)
+                and type(perf_sha) is str and re.fullmatch('[0-9a-f]{64}', perf_sha), 'request')
+        require(sys.platform == 'linux' and hasattr(os, 'pidfd_open') and hasattr(signal, 'pidfd_send_signal'), 'tool')
+        root = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT'); spool = Path(directory)
+        require(spool.is_absolute() and spool.parent.resolve() == root.resolve()
+                and not spool.exists() and not spool.is_symlink(), 'private')
+        spool.mkdir(mode=0o700); anchor, spool = anchor_spool(spool); r['raw_private'] = 1
+        argv = [str(tool_path('git')), '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT)]
+        def source_check(label):
+            require(run_tool(argv + ['rev-parse', 'HEAD'], spool, label, min(deadline, time.monotonic() + 2)).decode().strip() == candidate, 'source')
+            require(digest(run_tool(argv + ['show', candidate + ':tools/desktop-performance-576-owned-perf.py'], spool,
+                                   label + '-helper', min(deadline, time.monotonic() + 2))) == provenance['helper_sha256'], 'source')
+        source_check('source'); r['source_verified'] = 1
+        request = dict(perf_path=perf_path, perf_sha256=perf_sha)
+        perf, pinned = selected_perf(request, deadline); r['perf_verified'] = 1
+        r['perf_major'], r['perf_minor'] = perf_version(run_tool([str(perf), '--version'], spool, 'version', deadline))
+        r['version_available'] = 1
+        def stage(value):
+            r['failure_stage_code'] = value
+        synthetic(perf, spool, deadline, stage); r['synthetic_capable'] = 1
+        require(selected_perf(request, deadline)[1] == pinned, 'tool'); source_check('source-after')
+        r['available'] = 1; r['failure_stage_code'] = 0
+    except (Refused, OSError, ValueError, UnicodeError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        r['failure_code'] = error.code if isinstance(error, Refused) else FAILURES['tool']
+        r['failure_detail_code'] = error.detail if isinstance(error, Refused) else 0
+    finally:
+        if anchor is not None:
+            os.close(anchor)
+    r['tools_stopped'] = int(r['failure_code'] != FAILURES['cleanup'])
+    r['loss_observed'] = int(r['failure_code'] == FAILURES['loss']); r['byte_cap_hit'] = int(r['failure_code'] == FAILURES['bytes'])
+    r['elapsed_micros'] = round((time.monotonic() - begin) * 1e6)
+    return validate_synthetic_envelope(dict(report=r, provenance=provenance))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--request', type=Path)
     parser.add_argument('--compiler-preflight', action='store_true')
+    parser.add_argument('--synthetic-preflight', action='store_true')
+    parser.add_argument('--perf-path')
+    parser.add_argument('--perf-sha256')
     parser.add_argument('--candidate-sha')
     parser.add_argument('--private-directory', type=Path, required=True)
     parser.add_argument('--preflight-only', action='store_true')
@@ -846,6 +931,12 @@ def main():
         raise Refused('deadline')
     signal.signal(signal.SIGTERM, cancelled)
     signal.signal(signal.SIGINT, cancelled)
+    if args.synthetic_preflight:
+        require(not args.compiler_preflight and args.request is None and not args.preflight_only, 'request')
+        envelope = synthetic_preflight(args.candidate_sha, args.perf_path, args.perf_sha256, args.private_directory)
+        print(json.dumps(envelope, sort_keys=True))
+        return 0 if envelope['report']['available'] else 1
+    require(args.perf_path is None and args.perf_sha256 is None, 'request')
     if args.compiler_preflight:
         require(args.request is None and not args.preflight_only, 'request')
         envelope = compiler_preflight(args.candidate_sha, args.private_directory)

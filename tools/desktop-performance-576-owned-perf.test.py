@@ -503,5 +503,57 @@ class Pure(unittest.TestCase):
             self.refused('cleanup', p.stop_owned, child, 77)
 
 
+    def test_synthetic_mode_reuses_fixed_probe_and_has_no_app_claim(self):
+        for failure in (None, p.Refused('census', 20), p.Refused('cleanup'), p.Refused('deadline')):
+            with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder:
+                spool = Path(folder) / 'private'; body = Path(p.__file__).read_bytes()
+                def run(argv, *_args, **_kwargs):
+                    if argv[-1] == '--version': return b'perf version 6.8.0-102-generic\n'
+                    if 'show' in argv: return body
+                    return b'a' * 40 + b'\n'
+                def probe(_perf, _spool, deadline, progress):
+                    self.assertLessEqual(deadline - p.time.monotonic(), 30)
+                    progress(7)
+                    if failure: raise failure
+                with mock.patch.object(p.sys, 'platform', 'linux'), mock.patch.object(p.os, 'pidfd_open', create=True), \
+                     mock.patch.object(p.signal, 'pidfd_send_signal', create=True), \
+                     mock.patch.object(p, 'artifact_path', return_value=Path(folder)), \
+                     mock.patch.object(p, 'anchor_spool', side_effect=lambda path:(None,path)), \
+                     mock.patch.object(p, 'tool_path', return_value=Path('/usr/bin/git')), \
+                     mock.patch.object(p, 'run_tool', side_effect=run), \
+                     mock.patch.object(p, 'selected_perf', return_value=(Path('/trusted/perf'),(1,2))), \
+                     mock.patch.object(p, 'synthetic', side_effect=probe) as synthetic:
+                    envelope = p.synthetic_preflight('a'*40, '/trusted/perf', 'b'*64, spool)
+                r = envelope['report'];self.assertEqual(synthetic.call_count,1)
+                self.assertEqual((r['perf_major'],r['perf_minor']),(6,8))
+                self.assertEqual((r['app_admission'],r['rust_admission'],r['cadence_proof']),(0,0,0))
+                self.assertEqual(r['available'],int(failure is None));self.assertEqual(r['synthetic_capable'],int(failure is None))
+                self.assertEqual(r['tools_stopped'],int(failure is None or failure.code!=14))
+                self.assertEqual(r['failure_detail_code'],20 if failure and failure.code==11 else 0)
+                self.assertEqual(r['raw_private'],1);p.validate_synthetic_envelope(envelope)
+
+    def test_synthetic_closed_schema_version_and_failure_coherence(self):
+        r=dict.fromkeys(p.SYNTHETIC_KEYS,0);r.update(schema_version=1,diagnostic_mode_code=2,failure_code=7,tools_stopped=1)
+        envelope=dict(report=r,provenance=dict(schema_version=1,candidate_sha='a'*40,helper_sha256='b'*64,perf_sha256='c'*64))
+        p.validate_synthetic_envelope(envelope)
+        for key,value in [('private_path','secret'),('available',1),('app_admission',1),('rust_admission',1),('cadence_proof',1),('failure_detail_code',20),('perf_major',6),('tools_stopped',0),('elapsed_micros',46000001)]:
+            bad=copy.deepcopy(envelope);bad['report'][key]=value
+            self.refused('decode',p.validate_synthetic_envelope,bad)
+        bad=copy.deepcopy(envelope);bad['provenance']['raw']='secret';self.refused('decode',p.validate_synthetic_envelope,bad)
+        for text in (b'perf version 5.15\n',b'perf version 6.8.0-102-generic\n',b'perf version 6.0\n'):
+            self.assertGreater(p.perf_version(text)[0],0)
+        for text in (b'perf version 0.1',b'perf version secret/path',b'perf version 6.8\nprivate',b'x'*257):
+            self.refused('tool',p.perf_version,text)
+
+    def test_synthetic_cli_is_explicit_and_disjoint_from_existing_modes(self):
+        value=dict(report={'available':0},provenance={})
+        args=['helper','--synthetic-preflight','--candidate-sha','a'*40,'--perf-path','/trusted/perf','--perf-sha256','b'*64,'--private-directory','/private']
+        with mock.patch.object(p.sys,'argv',args),mock.patch.object(p,'synthetic_preflight',return_value=value) as call,mock.patch('builtins.print'):
+            self.assertEqual(p.main(),1);self.assertEqual(call.call_count,1)
+        for extra in (['--compiler-preflight'],['--preflight-only'],['--request','/secret']):
+            with mock.patch.object(p.sys,'argv',args+extra):self.refused('request',p.main)
+        with mock.patch.object(p.sys,'argv',['helper','--request','/unused','--perf-path','/bad','--private-directory','/private']):
+            self.refused('request',p.main)
+
 if __name__ == '__main__':
     unittest.main()
