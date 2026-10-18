@@ -500,7 +500,7 @@ impl BranchLeaves {
             )?;
         self.pair_axes[axis] = Some(PositionAngleAxis::Numeric {
             lane_id,
-            address: Arc::new(CompiledDynamicValueAddress::new(address.clone(), None)?),
+            address: compiled_axis_address(axis)?,
             program: program.clone(),
             original,
         });
@@ -593,7 +593,7 @@ impl BranchLeaves {
         if target_current {
             self.pair_axes[axis] = Some(PositionAngleAxis::Current {
                 lane_id,
-                address: Arc::new(CompiledDynamicValueAddress::new(address.clone(), None)?),
+                address: compiled_axis_address(axis)?,
                 original: original.unwrap(),
             });
         } else {
@@ -840,4 +840,21 @@ fn capture_current(
         .transpose()?;
     *cache = Some(current.clone());
     Ok(current)
+}
+
+/// A claimed axis address is exactly Angles Pan (0) or Tilt (1), so its compiled form is
+/// immutable and shared instead of compiled per controller and frame.
+fn compiled_axis_address(axis: usize) -> Result<Arc<CompiledDynamicValueAddress>, IntentError> {
+    static ADDRESSES: [std::sync::OnceLock<Result<Arc<CompiledDynamicValueAddress>, IntentError>>;
+        2] = [const { std::sync::OnceLock::new() }; 2];
+    ADDRESSES[axis]
+        .get_or_init(|| {
+            let component = [ProgrammingComponent::Pan, ProgrammingComponent::Tilt][axis];
+            let address = DynamicValueAddress {
+                representation: DynamicFamilyRepresentation::Angles,
+                component: Some(component),
+            };
+            CompiledDynamicValueAddress::new(address, None).map(Arc::new)
+        })
+        .clone()
 }

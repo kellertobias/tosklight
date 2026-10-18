@@ -125,11 +125,8 @@ fn branch_of(
                     };
                     leaves.angle_numeric(lane_id, program, &mut reads)?
                 }
-                None => leaves.angle_numeric(
-                    lane_id,
-                    &Arc::new(program.as_ref().clone()),
-                    &mut reads,
-                )?,
+                // Without operation origins the tape copy equals the sample's program.
+                None => leaves.angle_numeric(lane_id, program, &mut reads)?,
             },
             Expression::AngleCurrent { address } => {
                 leaves.angle_current(lane_id, address, &mut reads)?
