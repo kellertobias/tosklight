@@ -10,7 +10,7 @@ mod family_adapters;
 mod finalization;
 mod health_sample;
 mod observer_projection;
-mod observer_projection_diagnostics;
+pub(in crate::runtime) mod observer_projection_diagnostics;
 /// TL-548 C4 hook: Live handles for the Pending episode worker (own file).
 mod pending_episode_sources;
 mod preload_commit;

@@ -229,3 +229,38 @@ fn observer_current_and_extra_pending_static_keep_values_and_runtime_equal() {
         rig.at(at, &extras);
     }
 }
+
+#[test]
+fn observer_inner_timings_preserve_fresh_projection_values_and_sources() {
+    use crate::runtime::capability_resources::output::observer_projection_diagnostics::observe_for_test;
+    for current in [false, true] {
+        let rig = Rig::new(current);
+        rig.activate();
+        rig.at(411, &[]);
+        let rate = AtomicU16::new(40);
+        let plain = observer_dynamic_projection(&rig.engine, &rig.old, &rig.speed, &rate, &[]);
+        let (timed, calls, idle, complete) = observe_for_test(|| {
+            observer_dynamic_projection(&rig.engine, &rig.new, &rig.speed, &rate, &[])
+        });
+        assert_eq!(calls, [1; 7]);
+        assert_eq!(idle, 0);
+        assert!(complete);
+        assert_eq!(format!("{:?}", plain.0), format!("{:?}", timed.0));
+        assert_eq!(plain.1, timed.1);
+        assert_eq!(plain.2, timed.2);
+        assert_eq!(
+            rig.engine
+                .resolved_values_with_contribution_batches(&plain.0),
+            rig.engine
+                .resolved_values_with_contribution_batches(&timed.0)
+        );
+    }
+    let rig = Rig::new(false);
+    let rate = AtomicU16::new(40);
+    let (_, calls, idle, complete) = observe_for_test(|| {
+        observer_dynamic_projection(&rig.engine, &rig.new, &rig.speed, &rate, &[])
+    });
+    assert_eq!(calls, [1, 1, 0, 1, 0, 0, 0]);
+    assert_eq!(idle, 1);
+    assert!(complete);
+}
