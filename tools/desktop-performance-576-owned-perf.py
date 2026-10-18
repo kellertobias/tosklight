@@ -42,15 +42,27 @@ FAILURES = {name: i + 1 for i, name in enumerate((
     'deadline', 'bytes', 'record', 'census', 'decode', 'unwind', 'cleanup', 'private', 'source', 'loss'))}
 
 
+# Fixed first-failed census predicates only. No observed header values are retained.
+# 1 magic/size; 2 file layout; 3 attr identity/size; 4 unsupported sample bits;
+# 5 missing sample bits; 6 scope flags; 7 clock; 8 record header bounds;
+# 9 record length; 10 record cap; 11 sample mode; 12 time-conv size;
+# 13 time-conv shift; 14 time-conv capabilities; 15 time-conv reserved;
+# 16 lost length; 17 unknown record; 18 sample cap.
+CENSUS_DETAIL_MAX = 18
+
+
 class Refused(RuntimeError):
-    def __init__(self, code):
+    def __init__(self, code, detail=0):
+        assert type(detail) is int and 0 <= detail <= CENSUS_DETAIL_MAX
+        assert code == 'census' or detail == 0
         self.code = FAILURES[code]
+        self.detail = detail
         super().__init__(code)
 
 
-def require(value, code):
+def require(value, code, detail=0):
     if not value:
-        raise Refused(code)
+        raise Refused(code, detail)
 
 
 def uint(value):
@@ -321,41 +333,44 @@ def record_args(perf, pid):
 
 
 def census(raw):
-    require(104 <= len(raw) <= CAP and raw[:8] == b'PERFILE2', 'census')
+    require(104 <= len(raw) <= CAP and raw[:8] == b'PERFILE2', 'census', 1)
     header_size, attr_size, attr_offset, attrs_bytes, offset, size = struct.unpack_from('<6Q', raw, 8)
     require(104 <= header_size <= len(raw) and 48 <= attr_size <= 4096 and attrs_bytes == attr_size
             and attr_offset >= header_size and attr_offset + attr_size <= len(raw)
-            and offset >= attr_offset + attr_size and offset + size <= len(raw), 'census')
+            and offset >= attr_offset + attr_size and offset + size <= len(raw), 'census', 2)
     kind, length, config, frequency, sample_type, read_format, flags = struct.unpack_from('<II5Q', raw, attr_offset)
     # software cpu-clock, user-only, no inheritance; DWARF requires user regs+stack.
     allowed = sum(1 << bit for bit in (0, 1, 2, 3, 5, 6, 7, 8, 12, 13, 16))
     required = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13))
-    require(kind == 1 and config == 0 and frequency == 49 and read_format == 0 and 96 <= length <= attr_size and not sample_type & ~allowed
-            and sample_type & required == required
-            and not flags & (1 << 1) and flags & (1 << 5) and flags & (1 << 6)
-            and flags & (1 << 10) and flags & (1 << 25)
-            and struct.unpack_from('<i', raw, attr_offset + 92)[0] == 1, 'census')
+    require(kind == 1 and config == 0 and frequency == 49 and read_format == 0
+            and 96 <= length <= attr_size, 'census', 3)
+    require(not sample_type & ~allowed, 'census', 4)
+    require(sample_type & required == required, 'census', 5)
+    require(not flags & (1 << 1) and flags & (1 << 5) and flags & (1 << 6)
+            and flags & (1 << 10) and flags & (1 << 25), 'census', 6)
+    require(struct.unpack_from('<i', raw, attr_offset + 92)[0] == 1, 'census', 7)
     counts = {'samples': 0, 'lost': 0, 'records': 0}
     end = offset + size
     while offset < end:
-        require(offset + 8 <= end, 'census')
+        require(offset + 8 <= end, 'census', 8)
         event, misc, length = struct.unpack_from('<IHH', raw, offset)
-        require(length >= 8 and offset + length <= end, 'census')
-        counts['records'] += 1; require(counts['records'] <= 100000, 'census')
+        require(length >= 8 and offset + length <= end, 'census', 9)
+        counts['records'] += 1; require(counts['records'] <= 100000, 'census', 10)
         if event == 9:
-            require(misc & 7 == 2, 'census')
+            require(misc & 7 == 2, 'census', 11)
             counts['samples'] += 1
         elif event == 79:
             # Linux v5.15 tools/lib/perf/include/perf/event.h: 56-byte time_conv.
-            require(length == 56 and struct.unpack_from('<Q', raw, offset + 8)[0] <= 63
-                    and raw[offset + 48] in (0, 1) and raw[offset + 49] in (0, 1)
-                    and not any(raw[offset + 50:offset + 56]), 'census')
+            require(length == 56, 'census', 12)
+            require(struct.unpack_from('<Q', raw, offset + 8)[0] <= 63, 'census', 13)
+            require(raw[offset + 48] in (0, 1) and raw[offset + 49] in (0, 1), 'census', 14)
+            require(not any(raw[offset + 50:offset + 56]), 'census', 15)
         elif event in (2, 13):  # LOST / LOST_SAMPLES: any loss makes capture unavailable.
-            require(length >= 16, 'census'); counts['lost'] += 1
+            require(length >= 16, 'census', 16); counts['lost'] += 1
         else:
-            require(event in (1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82), 'census')
+            require(event in (1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82), 'census', 17)
         offset += length
-    require(counts['samples'] <= SAMPLE_CAP, 'census')
+    require(counts['samples'] <= SAMPLE_CAP, 'census', 18)
     return counts
 
 
@@ -615,14 +630,16 @@ def compiler_preflight(candidate, directory):
 
 
 def validate_numeric(report):
-    keys = {'schema_version', 'available', 'failure_code', 'failure_stage_code', 'synthetic_capable', 'rust_unwind_admitted',
+    keys = {'schema_version', 'available', 'failure_code', 'failure_stage_code', 'failure_detail_code', 'synthetic_capable', 'rust_unwind_admitted',
             'ownership_verified', 'identity_verified', 'thread_scope_verified', 'recorders_stopped',
             'raw_private', 'sample_hz', 'requested_seconds', 'preflight_only', 'capture', 'preflight',
             'profile_phase_code', 'exact_measurement_window', 'codegen_flags_changed', 'loss_observed', 'byte_cap_hit'}
     require(type(report) is dict and set(report) == keys, 'decode')
     for key in keys - {'capture', 'preflight'}:
         require(uint(report[key]), 'decode')
-    require(report['schema_version'] == 1 and report['sample_hz'] == 49 and report['failure_code'] <= len(FAILURES) and report['failure_stage_code'] <= 14, 'decode')
+    require(report['schema_version'] == 1 and report['sample_hz'] == 49 and report['failure_code'] <= len(FAILURES) and report['failure_stage_code'] <= 14 and report['failure_detail_code'] <= CENSUS_DETAIL_MAX, 'decode')
+    require(not report['failure_detail_code'] or (report['failure_code'] == FAILURES['census']
+            and report['failure_stage_code'] in (7, 9, 11)), 'decode')
     for key in ('available', 'synthetic_capable', 'rust_unwind_admitted', 'ownership_verified',
                 'identity_verified', 'thread_scope_verified', 'recorders_stopped', 'raw_private', 'preflight_only',
                 'exact_measurement_window', 'codegen_flags_changed', 'loss_observed', 'byte_cap_hit'):
@@ -692,7 +709,7 @@ def profile(request, private_directory, preflight_only=False):
             and not spool.exists() and not spool.is_symlink(), 'private')
     spool.mkdir(mode=0o700)
     anchor, spool = anchor_spool(spool)
-    report = {'schema_version': 1, 'available': 0, 'failure_code': 0, 'failure_stage_code': 0, 'synthetic_capable': 0,
+    report = {'schema_version': 1, 'available': 0, 'failure_code': 0, 'failure_stage_code': 0, 'failure_detail_code': 0, 'synthetic_capable': 0,
               'rust_unwind_admitted': 0, 'ownership_verified': 0, 'identity_verified': 0,
               'thread_scope_verified': 0, 'recorders_stopped': 0, 'raw_private': 1, 'sample_hz': 49,
               'requested_seconds': request['duration_seconds'], 'preflight_only': int(preflight_only),
@@ -759,6 +776,7 @@ def profile(request, private_directory, preflight_only=False):
         report['failure_stage_code'] = 0
     except (Refused, OSError, ValueError, UnicodeError, KeyError, subprocess.SubprocessError) as error:
         report['failure_code'] = error.code if isinstance(error, Refused) else FAILURES['tool']
+        report['failure_detail_code'] = error.detail if isinstance(error, Refused) else 0
     finally:
         if fd is not None:
             os.close(fd)
@@ -796,7 +814,7 @@ def validate_envelope(value):
 
 
 def failure_report(code):
-    return {'schema_version': 1, 'available': 0, 'failure_code': code, 'failure_stage_code': 0, 'synthetic_capable': 0,
+    return {'schema_version': 1, 'available': 0, 'failure_code': code, 'failure_stage_code': 0, 'failure_detail_code': 0, 'synthetic_capable': 0,
             'rust_unwind_admitted': 0, 'ownership_verified': 0, 'identity_verified': 0,
             'thread_scope_verified': 0, 'recorders_stopped': 0, 'raw_private': 0, 'sample_hz': 49,
             'requested_seconds': 1, 'preflight_only': 0, 'capture': None, 'preflight': None,

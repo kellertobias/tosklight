@@ -135,6 +135,87 @@ class Pure(unittest.TestCase):
             self.refused('census', p.census, value)
         self.refused('census', p.census, raw((9,) * (p.SAMPLE_CAP + 1)))
 
+    def test_census_first_failed_predicates_have_only_fixed_details(self):
+        def changed(data, offset, fmt, value):
+            data = bytearray(data); struct.pack_into(fmt, data, offset, value)
+            return bytes(data)
+        short_record = bytearray(raw()); struct.pack_into('<Q', short_record, 48, 1)
+        short_record = bytes(short_record[:233])
+        required = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13))
+        cases = [
+            (b'bad', 1), (changed(raw(), 32, '<Q', 129), 2),
+            (changed(raw(), 104, '<I', 2), 3), (changed(raw(), 136, '<Q', 4), 3),
+            (raw(sample_type=required | (1 << 9)), 4), (raw(sample_type=required & ~1), 5),
+            (raw(flags=0), 6), (changed(raw(), 196, '<i', 0), 7),
+            (short_record, 8), (changed(raw(), 238, '<H', 7), 9),
+            (raw((1,) * 100001), 10), (changed(raw(), 236, '<H', 1), 11),
+            (changed(raw((79,)), 238, '<H', 55), 12),
+            (changed(raw((79,)), 240, '<Q', 64), 13),
+            (changed(raw((79,)), 280, '<B', 2), 14),
+            (changed(raw((79,)), 282, '<B', 1), 15),
+            (changed(raw((2,)), 238, '<H', 8), 16), (raw((999,)), 17),
+            (raw((9,) * (p.SAMPLE_CAP + 1)), 18),
+        ]
+        for data, detail in cases:
+            with self.subTest(detail=detail), self.assertRaises(p.Refused) as caught:
+                p.census(data)
+            self.assertEqual(caught.exception.code, 11)
+            self.assertEqual(caught.exception.detail, detail)
+            self.assertEqual(str(caught.exception), 'census')
+        self.assertEqual(p.census(raw((1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82, 79, 9, 2, 13))),
+                         dict(samples=1, lost=2, records=15))
+
+    def test_census_details_require_census_failure_and_recording_stage(self):
+        for detail in range(1, p.CENSUS_DETAIL_MAX + 1):
+            for stage in (7, 9, 11):
+                value = p.failure_report(11)
+                value.update(failure_stage_code=stage, failure_detail_code=detail)
+                p.validate_numeric(value)
+        for code, stage, detail in ((0, 0, 1), (7, 7, 1), (11, 6, 1), (11, 7, 19),
+                                    (11, 7, -1), (11, 7, 0.5), (11, 7, True)):
+            value = p.failure_report(code)
+            value.update(failure_stage_code=stage, failure_detail_code=detail)
+            self.refused('decode', p.validate_numeric, value)
+        self.assertEqual(p.failure_report(1)['failure_detail_code'], 0)
+        with self.assertRaises(AssertionError):
+            p.Refused('tool', 1)
+
+    def test_profile_census_catch_retains_stage_and_fixed_detail(self):
+        with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder, \
+             tempfile.TemporaryFile(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as elf:
+            spool = Path(folder); spool.rmdir()
+            real_open, real_fstat, real_readlink = p.os.open, p.os.fstat, p.os.readlink
+            bound = []
+            def opened(file, *args, **kwargs):
+                if str(file) == '/proc/30/exe':
+                    fd = os.dup(elf.fileno()); bound.append(fd); return fd
+                return real_open(file, *args, **kwargs)
+            def inspected(fd):
+                return mock.Mock(st_mode=p.stat.S_IFREG | 0o600, st_size=4, st_uid=1000) if fd in bound else real_fstat(fd)
+            def synthetic(_perf, _spool, _deadline, progress):
+                progress(7)
+                raise p.Refused('census', 17)
+            with mock.patch.object(p.os, 'getuid', return_value=1000), \
+                 mock.patch.object(p.sys, 'platform', 'linux'), \
+                 mock.patch.object(p.os, 'pidfd_open', create=True), \
+                 mock.patch.object(p.signal, 'pidfd_send_signal', create=True), \
+                 mock.patch.object(p, 'run_tool', return_value=b'a' * 40 + b'\n'), \
+                 mock.patch.object(p, 'tool_path', return_value=Path('/git')), \
+                 mock.patch.object(p, 'verify_owner', return_value={}), \
+                 mock.patch.object(p, 'anchor_spool', return_value=(None, spool)), \
+                 mock.patch.object(p.os, 'open', side_effect=opened), \
+                 mock.patch.object(p.os, 'fstat', side_effect=inspected), \
+                 mock.patch.object(p.os, 'readlink', side_effect=lambda file, *a, **kw: '/owned' if str(file) == '/proc/30/exe' else real_readlink(file, *a, **kw)), \
+                 mock.patch.object(p, 'stream_hash', return_value='b' * 64), \
+                 mock.patch.object(p, 'elf_proof', return_value='c' * 40), \
+                 mock.patch.object(p, 'maps', return_value=(b'bounded', [(0xa0, 0xb0, 0)])), \
+                 mock.patch.object(p, 'selected_perf', return_value=(Path('/perf'), ())), \
+                 mock.patch.object(p, 'synthetic', side_effect=synthetic):
+                value, provenance = p.profile(request(), spool)
+            self.assertEqual((value['failure_code'], value['failure_stage_code'], value['failure_detail_code']), (11, 7, 17))
+            self.assertEqual(value['available'], 0)
+            p.validate_envelope(dict(report=value, provenance=provenance))
+
     def test_weighted_self_inclusive_and_owned_rust_multiframe(self):
         result = decoded(sample(period=7) + sample(symbol='light_engine::render', period=11), n=2)
         self.assertEqual((result['samples'], result['period'], result['frames']), (2, 18, 4))
@@ -263,6 +344,7 @@ class Pure(unittest.TestCase):
                 numeric, provenance = p.profile(request(), spool)
             p.validate_envelope(dict(report=numeric, provenance=provenance))
             self.assertEqual(numeric['failure_code'], p.FAILURES['ownership'])
+            self.assertEqual(numeric['failure_detail_code'], 0)
             self.assertEqual(numeric['available'], 0)
             self.assertEqual(spool.stat().st_mode & 0o777, 0o700)
             self.assertEqual({file.name for file in spool.iterdir()}, {'numeric.json', 'provenance.json'})

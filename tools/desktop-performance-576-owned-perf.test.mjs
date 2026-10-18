@@ -11,7 +11,7 @@ const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const candidate='a'.repeat(40),helper=Buffer.from('helper'),paths=Buffer.from('canonical paths');
 const pins={schema_version:1,candidate_sha:candidate,helper_sha256:hash(helper),elf_sha256:'b'.repeat(64),elf_build_id:'ab'.repeat(20),perf_sha256:'c'.repeat(64),appimage_sha256:'d'.repeat(64)};
 function capture(chains=10){return {samples:10,frames:20,unresolved_self:0,unresolved_ancestor:0,depth_one:0,owned_rust_chains:chains,period:100,elapsed_micros:2000000,recording_envelope_micros:1999999,sample_span_micros:1900000,rows:Array.from({length:14},(_,id)=>({id,self_samples:id===1?10:0,self_period:id===1?100:0,inclusive_samples:id===1?10:0,inclusive_period:id===1?100:0}))};}
-function report(){return {schema_version:1,available:1,failure_code:0,failure_stage_code:0,synthetic_capable:1,rust_unwind_admitted:1,ownership_verified:1,identity_verified:1,thread_scope_verified:1,recorders_stopped:1,raw_private:1,sample_hz:49,requested_seconds:8,preflight_only:0,capture:capture(),preflight:capture(),profile_phase_code:1,exact_measurement_window:0,codegen_flags_changed:0,loss_observed:0,byte_cap_hit:0};}
+function report(){return {schema_version:1,available:1,failure_code:0,failure_stage_code:0,failure_detail_code:0,synthetic_capable:1,rust_unwind_admitted:1,ownership_verified:1,identity_verified:1,thread_scope_verified:1,recorders_stopped:1,raw_private:1,sample_hz:49,requested_seconds:8,preflight_only:0,capture:capture(),preflight:capture(),profile_phase_code:1,exact_measurement_window:0,codegen_flags_changed:0,loss_observed:0,byte_cap_hit:0};}
 function envelope(){const {appimage_sha256,...provenance}=pins;return {report:report(),provenance};}
 function stat(pid,parent,start){const f=Array(30).fill('0');f[0]='S';f[1]=String(parent);f[19]=String(start);return `${pid} (private name) ${f.join(' ')}\n`;}
 const snapshot=[{pid:100,parentPid:500,startTicks:100,command:'desk'},{pid:200,parentPid:100,startTicks:200,command:'light-headless'}];
@@ -125,4 +125,13 @@ test('compiler-only preflight publishes separately before app build without chan
  const row=id=>({id,attempted:1,compiled:0,elf_verified:0,failure_kind:2,tool_failure_code:7,elapsed_micros:10});const valid={schema_version:1,diagnostic_mode_code:1,available:1,source_verified:1,raw_private:1,tools_stopped:1,failure_code:0,attempts:[row(0),{...row(1),compiled:1,elf_verified:1,failure_kind:0,tool_failure_code:0}]};
  assert.equal(validate(valid).available,1);
  for(const mutate of [r=>r.private_path='/secret',r=>r.attempts[0].stderr='private',r=>r.attempts[0].failure_kind=7,r=>r.tools_stopped=0,r=>r.attempts[1].elapsed_micros=-1,r=>r.attempts[1].elapsed_micros=34000001,r=>r.available=0,r=>r.attempts[1].elf_verified=0,r=>r.attempts[1].failure_kind=2,r=>r.attempts[0].failure_kind=0]){const r=structuredClone(valid);mutate(r);assert.throws(()=>validate(r));}
+});
+
+test('census reason is fixed bounded numeric data and coherent with failure stage',()=>{
+ for(const failure_detail_code of [1,18])for(const failure_stage_code of [7,9,11]){const r=report();Object.assign(r,{available:0,failure_code:11,failure_stage_code,failure_detail_code});validateOwnedPerfHelperReport(r);}
+ for(const change of [r=>r.failure_detail_code=19,r=>r.failure_detail_code=-1,r=>r.failure_detail_code=1.5,r=>r.failure_detail_code='header',r=>{r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=7;r.failure_stage_code=7;r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=11;r.failure_stage_code=6;r.failure_detail_code=1;}]){const r=report();change(r);assert.throws(()=>validateOwnedPerfHelperReport(r));}
+});
+test('bridge preserves unavailable census detail without exposing arbitrary header values',async()=>{
+ const e=envelope();Object.assign(e.report,{available:0,failure_code:11,failure_stage_code:7,failure_detail_code:15,rust_unwind_admitted:0,preflight:null,capture:null});
+ const f=fixture({execute:async()=>({status:1,stdout:JSON.stringify(e),error:false,overflow:false})});await f.bridge.initialize();await f.bridge.capture(100,snapshot);const r=publicReport(f);assert.equal(r.helper_report_available,1);assert.equal(r.helper_report.failure_code,11);assert.equal(r.helper_report.failure_stage_code,7);assert.equal(r.helper_report.failure_detail_code,15);assert.equal(r.available,0);
 });
