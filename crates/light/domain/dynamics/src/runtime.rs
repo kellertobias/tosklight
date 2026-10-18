@@ -232,7 +232,7 @@ pub struct DynamicRuntimeSnapshot {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct DynamicInstanceSnapshot {
     pub id: Uuid,
-    pub definition: DynamicDefinition,
+    pub definition: Arc<DynamicDefinition>,
     pub targets: Vec<FixtureId>,
     #[serde(default)]
     pub phase_by_target: Vec<(FixtureId, f32)>,

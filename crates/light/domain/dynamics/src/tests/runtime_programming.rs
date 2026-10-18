@@ -1196,7 +1196,7 @@ fn native_runtime_retains_low_bits_and_compiles_models_only_at_cold_boundaries()
     assert!(sampled(&mut unavailable, instance, 500, &sources).is_empty());
     let mut invalid = before.clone();
     let stored = &mut invalid.instances[0];
-    stored.definition.lanes = vec![lane()];
+    Arc::make_mut(&mut stored.definition).lanes = vec![lane()];
     let crate::runtime::DynamicHeldPayload::TapeRoot { tape_root } =
         stored.last_sample_values[0].payload
     else {
@@ -1213,7 +1213,7 @@ fn native_runtime_retains_low_bits_and_compiles_models_only_at_cold_boundaries()
         "retained native values must validate their original function even after a definition edit"
     );
     assert_eq!(restored.snapshot(), before);
-    let mut random = before.instances[0].definition.clone();
+    let mut random = before.instances[0].definition.as_ref().clone();
     let group_id = Uuid::new_v4();
     random.lanes[0].random_group_id = Some(group_id);
     if let DynamicLaneBody::Programming(body) = &mut random.lanes[0].body {

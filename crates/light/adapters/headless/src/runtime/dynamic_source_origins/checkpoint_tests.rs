@@ -363,7 +363,9 @@ fn shared_tape_is_walked_once_across_many_rows_and_prune_retains_only_reachable_
     instance.expression_tape = Some(Arc::new(tape));
     let first = instance.last_sample_values[0].clone();
     let lane = instance.definition.lanes[0].clone();
-    instance.definition.lanes.clear();
+    std::sync::Arc::make_mut(&mut instance.definition)
+        .lanes
+        .clear();
     instance.last_sample_values.clear();
     for _ in 0..256 {
         let mut lane = lane.clone();
@@ -373,7 +375,9 @@ fn shared_tape_is_walked_once_across_many_rows_and_prune_retains_only_reachable_
             payload: DynamicHeldPayload::TapeRoot { tape_root: root },
             ..first.clone()
         });
-        instance.definition.lanes.push(lane);
+        std::sync::Arc::make_mut(&mut instance.definition)
+            .lanes
+            .push(lane);
     }
     instance.synchronized_hold_values = instance.last_sample_values.clone();
     let reachable = origins.runtime_reachability(&snapshot).unwrap();

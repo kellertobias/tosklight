@@ -357,7 +357,7 @@ fn destination_success_is_exact_unpinned_and_retains_surviving_current_history()
         .unwrap();
     let expected_snapshot = token.engine.snapshot_arc();
     let expected = token.restored.runtime.snapshot();
-    assert_eq!(expected.instances[0].definition, updated);
+    assert_eq!(*expected.instances[0].definition, updated);
     assert_eq!(expected.instances[0].id, saved.instances[0].id);
     assert_eq!(
         expected.instances[0].started_at_millis,

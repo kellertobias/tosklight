@@ -212,7 +212,7 @@ fn runtime_instance_projection(
         instance_id: instance.id,
         dynamic_id: instance.definition.id,
         pool_number: instance.definition.pool_number,
-        name: instance.definition.name,
+        name: instance.definition.name.clone(),
         targets: instance
             .targets
             .into_iter()

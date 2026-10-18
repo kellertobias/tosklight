@@ -282,7 +282,7 @@ fn late_projection_rejection_keeps_surviving_pinned_owner_then_success_rebinds_w
     snapshot.dynamics = vec![latest.clone()].into();
     output.replace_snapshot(snapshot).unwrap();
     let before = Before::capture(&output);
-    assert_eq!(before.runtime.instances[0].definition, original);
+    assert_eq!(*before.runtime.instances[0].definition, original);
     assert!(before.runtime.instances[0].expression_tape.is_some());
     let mut invalid_projection = projection_before(&output);
     invalid_projection[0].1.scope.show_revision += 1;
@@ -294,7 +294,7 @@ fn late_projection_rejection_keeps_surviving_pinned_owner_then_success_rebinds_w
             |snapshot, playback, candidate| {
                 called = true;
                 assert_eq!(
-                    candidate.instances[0].definition, latest,
+                    *candidate.instances[0].definition, latest,
                     "cold candidate unpins before projection validation"
                 );
                 crate::runtime::playback_service::prepared_runtime_projections(
@@ -332,7 +332,7 @@ fn late_projection_rejection_keeps_surviving_pinned_owner_then_success_rebinds_w
     assert_eq!(after.instances.len(), 1);
     let previous = &before.runtime.instances[0];
     let current = &after.instances[0];
-    assert_eq!(current.definition, latest);
+    assert_eq!(*current.definition, latest);
     assert_eq!(current.id, previous.id);
     assert_eq!(current.started_at_millis, previous.started_at_millis);
     assert_eq!(current.phase_by_lane_target, previous.phase_by_lane_target);

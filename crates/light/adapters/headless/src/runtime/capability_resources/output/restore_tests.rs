@@ -622,7 +622,8 @@ fn prepared_release_publishes_the_exact_validated_runtime_origins_and_engine_tog
     let profile = uv_profile();
     let mut checkpoint = native_checkpoint(&profile);
     let DynamicLaneBody::Programming(body) =
-        &mut checkpoint.runtime.instances[0].definition.lanes[0].body
+        &mut std::sync::Arc::make_mut(&mut checkpoint.runtime.instances[0].definition).lanes[0]
+            .body
     else {
         unreachable!()
     };
@@ -643,7 +644,7 @@ fn prepared_release_publishes_the_exact_validated_runtime_origins_and_engine_tog
     let old_engine = output.snapshot();
     let old_origins = output.dynamic_source_origins.load_full();
     let mut destination = destination_with_original(&profile);
-    destination.dynamics = vec![checkpoint.runtime.instances[0].definition.clone()].into();
+    destination.dynamics = vec![checkpoint.runtime.instances[0].definition.as_ref().clone()].into();
     let prepared = output.prepare_snapshot(destination).unwrap();
     let prepared = output
         .prepare_snapshot_restore(prepared, checkpoint)
