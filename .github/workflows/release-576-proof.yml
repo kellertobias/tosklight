@@ -10,6 +10,7 @@ on:
       - crates/light/domain/engine/Cargo.toml
       - crates/light/adapters/headless/src/runtime/output_scheduler/**
       - tools/desktop-performance-576-*.mjs
+      - tools/desktop-performance-576-owned-perf*.py
       - tools/run-desktop-performance-576-proof.mjs
       - apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx
       - apps/light-desktop/src/nativePackagedStage*.ts
@@ -81,7 +82,8 @@ jobs:
           assert len(cores)==2, 'default proof requires two guest topology cores'
           PYTHON
           npm ci >"$OUT/npm-ci.log" 2>&1
-          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs tools/desktop-performance-576-pool.test.mjs tools/desktop-performance-576-api.test.mjs tools/desktop-performance-576-observer.test.mjs tools/desktop-performance-576-thread-cpu.test.mjs
+          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs tools/desktop-performance-576-pool.test.mjs tools/desktop-performance-576-api.test.mjs tools/desktop-performance-576-observer.test.mjs tools/desktop-performance-576-thread-cpu.test.mjs tools/desktop-performance-576-owned-perf.test.mjs
+          python3 -B tools/desktop-performance-576-owned-perf.test.py
           cargo test --locked -p light-dynamics --lib
           cargo test --locked -p light-engine --lib parallel
       - name: Build exact canonical release Control and sidecars
@@ -222,6 +224,90 @@ jobs:
           printf 'proof_exit=%s validation_exit=%s\n' "$proof_status" "$validation_status" >"$OUT/stage-default-status.log"
           test "$proof_status" -eq 0
           test "$validation_status" -eq 0
+      - name: Prepare separate post-window owned-process profiler
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        continue-on-error: true
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          # Install tools only after both original acceptance runs. No perf policy changes.
+          sudo timeout 180 apt-get update
+          sudo timeout 600 apt-get install -y binutils linux-tools-common linux-tools-generic
+          temporary="$(npm run --silent artifact-path -- tmp)"
+          extraction="$(mktemp -d "$temporary/tl775-owned-perf-package-XXXXXX")"
+          chmod 700 "$extraction"
+          export OWNED_PERF_EXTRACTION="$extraction"
+          python3 - <<'PYTHON'
+          import hashlib,json,os,pathlib,subprocess
+          source=json.loads((pathlib.Path(os.environ['OUT'])/'public/provenance.json').read_text())
+          image=pathlib.Path(os.environ['PROOF_APPIMAGE']).resolve(strict=True)
+          expected=source['binaries'][image.name]['sha256']
+          assert hashlib.sha256(image.read_bytes()).hexdigest()==expected
+          extraction=pathlib.Path(os.environ['OWNED_PERF_EXTRACTION']).resolve(strict=True)
+          assert extraction.parent==pathlib.Path(subprocess.check_output(['npm','run','--silent','artifact-path','--','tmp'],text=True).strip()).resolve(strict=True)
+          # Extraction is private and bounded, never the repository root.
+          with (extraction/'extract.log').open('wb') as log:
+              subprocess.run(['/usr/bin/timeout','60',str(image),'--appimage-extract'],cwd=extraction,stdout=log,stderr=subprocess.STDOUT,check=True)
+          assert hashlib.sha256(image.read_bytes()).hexdigest()==expected
+          root=extraction/'squashfs-root'
+          assert root.is_dir() and not root.is_symlink()
+          candidates=[];entries=0
+          for location,dirs,files in os.walk(root,followlinks=False):
+              entries+=len(dirs)+len(files)
+              assert entries<=30000
+              for name in files:
+                  if name not in ('light-headless','light-headless-x86_64-unknown-linux-gnu'): continue
+                  file=pathlib.Path(location)/name
+                  assert not file.is_symlink() and file.is_file()
+                  assert file.resolve(strict=True).is_relative_to(root.resolve(strict=True))
+                  with file.open('rb') as stream: assert stream.read(4)==b'\x7fELF'
+                  candidates.append(file)
+          assert len(candidates)==1
+          elf=candidates[0]
+          notes=subprocess.check_output(['/usr/bin/readelf','-n',str(elf)],text=True,timeout=10)
+          ids=[line.split('Build ID:',1)[1].strip().lower() for line in notes.splitlines() if 'Build ID:' in line]
+          assert len(ids)==1 and 8<=len(ids[0])<=128 and all(c in '0123456789abcdef' for c in ids[0])
+          # Select a package-listed real ELF, not /usr/bin/perf's kernel wrapper.
+          packages=set();pending=['linux-tools-generic'];listed=set()
+          while pending:
+              package=pending.pop()
+              if package in packages: continue
+              packages.add(package)
+              assert len(packages)<=8
+              metadata=subprocess.check_output(['dpkg-query','-W','-f=${db:Status-Status}\n${Depends}',package],text=True).split('\n',1)
+              assert metadata[0]=='installed' and len(metadata)==2
+              for dependency in metadata[1].split(','):
+                  dependency=dependency.strip()
+                  if not dependency.startswith('linux-tools-'): continue
+                  assert '|' not in dependency
+                  name=dependency.split(' ',1)[0]
+                  assert all(c.isalnum() or c in '.+-' for c in name)
+                  pending.append(name)
+              listed.update(subprocess.check_output(['dpkg-query','-L',package],text=True).splitlines())
+          perf_candidates=set()
+          for name in listed:
+              file=pathlib.Path(name)
+              if file.name!='perf' or not (name.startswith('/usr/lib/linux-tools/') or name.startswith('/usr/lib/linux-tools-')): continue
+              real=file.resolve(strict=True)
+              # The canonical ELF must itself be listed in the exact dependency closure.
+              if str(real) not in listed or real.is_symlink() or not real.is_file(): continue
+              if real.name!='perf' or not str(real).startswith('/usr/lib/linux-tools-'): continue
+              if real.stat().st_uid!=0 or real.stat().st_mode&0o022: continue
+              with real.open('rb') as stream:
+                  if stream.read(4)!=b'\x7fELF': continue
+              perf_candidates.add(real)
+          assert len(perf_candidates)==1
+          perf=perf_candidates.pop()
+          value={'schema_version':1,'candidate_sha':os.environ['CANDIDATE_SHA'],'appimage_sha256':expected,
+                 'elf_sha256':hashlib.sha256(elf.read_bytes()).hexdigest(),'elf_build_id':ids[0],
+                 'perf_path':str(perf),'perf_sha256':hashlib.sha256(perf.read_bytes()).hexdigest()}
+          config=extraction/'bindings.json'
+          with config.open('x') as stream: json.dump(value,stream)
+          config.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as stream: stream.write(f'OWNED_PERF_BINDINGS={config}\n')
+          PYTHON
       - name: Trace default-policy Control pool coordination on unchanged 576 workload
         if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
         env:
@@ -231,6 +317,7 @@ jobs:
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: all
           LIGHT_OUTPUT_THREAD_CPU_DIAGNOSTICS: '1'
+          LIGHT_OUTPUT_OWNED_PERF_DIAGNOSTICS: '1'
           LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
           RUST_LOG: light_headless_runtime=info,light_output=info,light_engine=info,tower_http=info
         run: |
@@ -242,6 +329,7 @@ jobs:
           mkdir -p "$OUT/thread-cpu-public"
           cp "$OUT/public/provenance.json" "$OUT/thread-cpu-public/provenance.json"
           export LIGHT_OUTPUT_THREAD_CPU_REPORT="$OUT/thread-cpu-public/thread-cpu-numeric.json"
+          export LIGHT_OUTPUT_OWNED_PERF_BINDINGS="${OWNED_PERF_BINDINGS:-}"
           # Full tracing adds observer work; this separate run supplies attribution.
           # Original Control acceptance and Stage functional gates above stay unchanged.
           set +e
@@ -312,6 +400,35 @@ jobs:
           path: |
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/thread-cpu-public/thread-cpu-numeric.json
             .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/thread-cpu-public/provenance.json
+          if-no-files-found: error
+      - name: Validate separate post-window owned-process profile
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        run: |
+          set -euo pipefail
+          cmp "$OUT/public/provenance.json" "$OUT/owned-perf-public/provenance.json"
+          node --input-type=module - "$OUT/owned-perf-public" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import {readFile} from 'node:fs/promises';
+          import {validateOwnedPerfDiagnostics,validateOwnedPerfProvenance} from './tools/desktop-performance-576-owned-perf.mjs';
+          const directory=process.argv[2];
+          const report=validateOwnedPerfDiagnostics(JSON.parse(await readFile(`${directory}/owned-perf-numeric.json`,'utf8')));
+          const pins=validateOwnedPerfProvenance(JSON.parse(await readFile(`${directory}/owned-perf-provenance.json`,'utf8')));
+          const source=JSON.parse(await readFile(`${directory}/provenance.json`,'utf8'));
+          assert.equal(pins.candidate_sha,source.source_commit);
+          assert.equal(pins.helper_sha256,source.source_sha256['tools/desktop-performance-576-owned-perf.py']);
+          assert.equal(report.profile_phase_code,1);
+          assert.equal(report.exact_measurement_window,0);
+          assert.equal(report.available,1,'separate post-window profile unavailable');
+          JAVASCRIPT
+      - name: Publish separate numeric owned-process profile
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-owned-perf-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/owned-perf-public/owned-perf-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/owned-perf-public/owned-perf-provenance.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/owned-perf-public/provenance.json
           if-no-files-found: error
       - name: Publish closed numeric proof only
         if: always()

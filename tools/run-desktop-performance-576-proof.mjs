@@ -14,6 +14,7 @@ import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.
 import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
 import { writePoolDiagnostics } from "./desktop-performance-576-pool.mjs";
 import { writeApiDiagnostics } from "./desktop-performance-576-api.mjs";
+import { OwnedPerfBridge, ownedPerfEnabled } from "./desktop-performance-576-owned-perf.mjs";
 import { writeObserverDiagnostics } from "./desktop-performance-576-observer.mjs";
 import { ThreadCpuDiagnostics, threadCpuEnabled, verifiedClockTicks, writeThreadCpuDiagnostics } from "./desktop-performance-576-thread-cpu.mjs";
 import { expectedWorkerReceiptCount, WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
@@ -195,6 +196,12 @@ async function runCase(performanceCase, executionMode) {
   catch(error) { await terminateProcessTree(child.pid); throw error; }
 	evidence.closed = closed;
   if(threadCpu) evidence.threadCpu=threadCpu;
+  if(ownedPerfEnabled(process.env,proofMode)) {
+    const proofRoot=path.dirname(path.dirname(numericPath));
+    const publicDirectory=path.join(path.dirname(proofRoot),"owned-perf-public");
+    evidence.ownedPerf=await new OwnedPerfBridge({publicDirectory,requestDirectory:temporaryRoot,
+      temporaryRoot:artifactPaths.tmp,originalProvenance:path.join(proofRoot,"provenance.json"),environment:process.env}).initialize().catch(()=>null);
+  }
   const workerReceipt=expectedWorkers===null?null:new WorkerCountReceipt(expectedWorkers);
   const workerNumericPath=path.join(path.dirname(numericPath),"worker-numeric.json");
   if(workerReceipt) {
@@ -318,6 +325,7 @@ async function runCase(performanceCase, executionMode) {
     await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
     phaseDiagnosticsRetained = true;
     await writeFile(path.join(temporaryRoot,"packet-proof-private.json"), JSON.stringify(packetProof.privateState()), {flag:"wx",mode:0o600});
+    if(evidence.ownedPerf) await evidence.ownedPerf.capture(child.pid,evidence.samples.at(-1)?.processes);
 		state.phase = "fixture-sheet-liveness";
     await checkpoint.enter(11);
 		await requireFixtureSheetActive(
@@ -530,7 +538,7 @@ async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
 	files.measurement = `${evidence.prefix}-measurement.json`;
 	await writeFile(
 		files.measurement,
-		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples, ...(evidence.workerReceipt?{workerReceipt:evidence.workerReceipt.privateState()}:{}), ...(evidence.threadCpu?{threadCpu:evidence.threadCpu.privateState()}:{}) }, null, 2)}\n`,
+		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples, ...(evidence.workerReceipt?{workerReceipt:evidence.workerReceipt.privateState()}:{}), ...(evidence.threadCpu?{threadCpu:evidence.threadCpu.privateState()}:{}), ...(evidence.ownedPerf?{ownedPerf:evidence.ownedPerf.privateState()}:{}) }, null, 2)}\n`,
 		{ flag: "wx" },
 	);
 	await writeFile(
