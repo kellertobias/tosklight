@@ -178,6 +178,8 @@ class Pure(unittest.TestCase):
         # Independent UAPI positions, not the implementation's mapping table.
         bits = (4, 9, 10, 11, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24)
         for index, bit in enumerate(bits):
+            if bit == 15:  # Reserved detail24 remains stable, but DWARF now admits DATA_SRC.
+                continue
             for extra in (0, 1 << 63, 1 << 24):
                 with self.subTest(bit=bit, extra=extra), self.assertRaises(p.Refused) as caught:
                     p.census(raw(sample_type=required | (1 << bit) | extra))
@@ -185,6 +187,9 @@ class Pure(unittest.TestCase):
         with self.assertRaises(p.Refused) as caught:
             p.census(raw(sample_type=required | (1 << 63)))
         self.assertEqual((caught.exception.code, caught.exception.detail), (11, 4))
+        # DWARF's source-proven sample_address callback requests ADDR+DATA_SRC.
+        self.assertEqual(p.census(raw(sample_type=required | (1 << 3) | (1 << 15)))['samples'], 1)
+        self.assertEqual(p.unsupported_sample_detail(1 << 15), 24)
         # Required/allowed fields still succeed, and the earlier attr predicate wins.
         self.assertEqual(p.census(raw(sample_type=required))['samples'], 1)
         with self.assertRaises(p.Refused) as caught:

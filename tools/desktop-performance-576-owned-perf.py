@@ -351,7 +351,9 @@ def census(raw):
             and offset >= attr_offset + attr_size and offset + size <= len(raw), 'census', 2)
     kind, length, config, frequency, sample_type, read_format, flags = struct.unpack_from('<II5Q', raw, attr_offset)
     # software cpu-clock, user-only, no inheritance; DWARF requires user regs+stack.
-    allowed = sum(1 << bit for bit in (0, 1, 2, 3, 5, 6, 7, 8, 12, 13, 16))
+    # v5.15 builtin-record.c DWARF callback enables sample_address; evsel config
+    # consequently requests ADDR (3) and DATA_SRC (15), even for cpu-clock:u.
+    allowed = sum(1 << bit for bit in (0, 1, 2, 3, 5, 6, 7, 8, 12, 13, 15, 16))
     required = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13))
     # v5.15 clock events have unit="msec", which enables PERF_FORMAT_ID even alone.
     require(kind == 1 and config == 0 and frequency == 49 and read_format == 4
