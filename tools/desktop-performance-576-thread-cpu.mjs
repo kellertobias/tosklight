@@ -27,7 +27,7 @@ export function parseTaskStat(text){
 export function taskRole(task,pid){
  if(task.tid===pid)return 0;
  if(/^light-output-(?:0|[1-9]\d?)$/u.test(task.comm))return 1;
- if(task.comm==="tokio-runtime-w")return 2;
+ if(task.comm==="tokio-rt-worker")return 2; // Locked Tokio 1.53.1 Builder default; also used by blocking threads.
  if(task.comm==="light-programme")return 3; // Linux truncation of light-programmer-persistence.
  return 4;
 }

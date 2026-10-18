@@ -205,6 +205,7 @@ async function runCase(performanceCase, executionMode) {
 	let result;
   let packetProof;
   let phaseWindow = null;
+  let phaseDiagnosticsRetained = false;
   let watchdogFailure;
   const watchdog = setTimeout(() => {
     watchdogFailure = new Error("Owned desktop proof exceeded 400-second lifetime");
@@ -313,6 +314,9 @@ async function runCase(performanceCase, executionMode) {
     checkpoint.result.proof.interaction = interaction;
     await checkpoint.save();
     await packetProof.close();
+    // Capture the frozen window before unrelated lifecycle waits can grow the bounded log.
+    await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
+    phaseDiagnosticsRetained = true;
     await writeFile(path.join(temporaryRoot,"packet-proof-private.json"), JSON.stringify(packetProof.privateState()), {flag:"wx",mode:0o600});
 		state.phase = "fixture-sheet-liveness";
     await checkpoint.enter(11);
@@ -402,7 +406,7 @@ async function runCase(performanceCase, executionMode) {
 		temporaryRoot,
 		failure,
 	);
-  await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
+  if (!phaseDiagnosticsRetained) await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
   if(threadCpu) await writeThreadCpuDiagnostics(threadCpuNumericPath,threadCpu).catch(()=>{});
   failure = finalized.failure;
   cleanupPassed = Number(cleanupPassed && finalized.cleanupPassed);
