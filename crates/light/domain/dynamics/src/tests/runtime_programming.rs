@@ -1301,7 +1301,7 @@ fn held_scope_is_validated_and_repeated_component_resumes_remain_flat() {
     let mut invalid = saved.clone();
     invalid.instances[0].lane_selections = vec![DynamicControllerLaneSelection {
         controller_id: c.id,
-        selection: DynamicLaneSelection::Uniform { lanes: vec![] },
+        selection: std::sync::Arc::new(DynamicLaneSelection::Uniform { lanes: vec![] }),
     }];
     assert!(runtime.restore_snapshot(invalid).is_err());
     assert_eq!(runtime.snapshot(), saved);
