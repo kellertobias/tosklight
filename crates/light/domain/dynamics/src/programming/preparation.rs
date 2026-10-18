@@ -124,7 +124,8 @@ impl DynamicFamilyPreparationScratch {
 
     /// Retire the last output whole (TL-639 round 7): its groups and fragments move out with
     /// their storage, to be freed by whoever takes them ([`Self::take_retired`]); the next
-    /// output starts in buffers sized like the last one.
+    /// output starts in buffers sized like the last one. Vacant append-one groups may take
+    /// empty drained sample buffers from this retirement before it is freed.
     fn clear_output(&mut self) {
         let (groups, fragments) = (self.families.len(), self.legacy.len());
         let families = std::mem::replace(&mut self.families, Vec::with_capacity(groups));

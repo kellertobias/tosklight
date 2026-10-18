@@ -25,6 +25,7 @@ pub(super) trait PreparationOutput {
 /// The frame's own output.
 pub(super) struct FamilyOutput<'a> {
     pub(super) families: &'a mut Vec<DynamicFamilySampleGroup>,
+    pub(super) drained_storage: std::slice::IterMut<'a, DynamicFamilySampleGroup>,
     pub(super) family_indices: &'a mut HashMap<(FixtureId, ProgrammingOwner), usize>,
     pub(super) legacy: &'a mut Vec<DynamicRuntimeSample>,
     pub(super) requirements: &'a mut Vec<DynamicFamilyPreparationRequirement>,
@@ -45,7 +46,13 @@ impl PreparationOutput for FamilyOutput<'_> {
                 self.families.push(DynamicFamilySampleGroup {
                     target,
                     owner,
-                    samples: Vec::new(),
+                    // The iterator consumes each old group at most once. Nonempty output
+                    // remains retired; append(Vec) keeps its existing whole-buffer move.
+                    samples: self
+                        .drained_storage
+                        .find(|group| group.samples.is_empty() && group.samples.capacity() > 0)
+                        .map(|group| std::mem::take(&mut group.samples))
+                        .unwrap_or_default(),
                 });
                 next
             }
@@ -213,6 +220,7 @@ pub(super) fn prepare(
         position,
         families,
         family_indices,
+        retired_output,
         legacy,
         requirements,
         sampling_requirements,
@@ -220,6 +228,7 @@ pub(super) fn prepare(
         ..
     } = scratch;
     let mut out = FamilyOutput {
+        drained_storage: retired_output.families.iter_mut(),
         families,
         family_indices,
         legacy,

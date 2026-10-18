@@ -246,6 +246,7 @@ fn prepare_in_parallel(
         position,
         families,
         family_indices,
+        retired_output,
         legacy,
         requirements,
         sampling_requirements,
@@ -253,6 +254,7 @@ fn prepare_in_parallel(
         ..
     } = scratch;
     let mut out = FamilyOutput {
+        drained_storage: retired_output.families.iter_mut(),
         families,
         family_indices,
         legacy,
