@@ -11,8 +11,9 @@
 //!
 //! Ownership and lifetimes:
 //! - [`PhysicalHeadResult`] is fully owned: its `CapturedFrameToken`, native writes,
-//!   requested/achieved/quality values, metadata and immutable shared provenance never borrow
-//!   the observation, the capture, the runtime or a source catalogue. It stays valid after later
+//!   requested/achieved/quality values and provenance (a cloned
+//!   `DynamicFamilySourceProjection`, control contributions and metadata) never borrow the
+//!   observation, the capture, the runtime or a source catalogue. It stays valid after later
 //!   edits, pruning or catalogue publication.
 //! - Destination descriptors are compiled per target from the captured frame's own snapshot and
 //!   cached against its runtime generation. A different generation discards the whole cache.
@@ -314,8 +315,14 @@ pub(in crate::runtime) fn owner_requirement(owner: ProgrammingOwner) -> Transiti
     }
 }
 
-mod provenance;
-pub(in crate::runtime) use provenance::PhysicalProvenance;
+/// Owned source/control evidence for exactly the consumed fields.
+#[derive(Clone, Debug)]
+pub(in crate::runtime) struct PhysicalProvenance {
+    pub fields: ProgrammingFieldScope,
+    pub sources: DynamicFamilySourceProjection,
+    /// None when the composer has no controller trace for these fields.
+    pub controls: Option<Vec<FamilyControlContribution>>,
+}
 
 /// One owned per-head result: complete native writes, requested vs achieved physical values,
 /// passive quality, provenance and the captured token. This is the sidecar type `T` of

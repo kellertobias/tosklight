@@ -351,11 +351,14 @@ pub(super) fn fit_members(
                 Ok(PositionProgramDestination {
                     destination: peer.descriptor.instances[*instance].destination,
                     value: value.clone(),
-                    provenance: PhysicalProvenance::new(
-                        ProgrammingFieldScope::for_value(ProgrammingOwner::Position, value)?,
-                        Default::default(),
-                        None,
-                    ),
+                    provenance: PhysicalProvenance {
+                        fields: ProgrammingFieldScope::for_value(
+                            ProgrammingOwner::Position,
+                            value,
+                        )?,
+                        sources: Default::default(),
+                        controls: None,
+                    },
                 })
             })
             .collect::<Result<Vec<_>, TransitionError>>()?;

@@ -7,8 +7,6 @@ use light_engine::PreloadBranch;
 use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 
-#[cfg(test)]
-mod provenance_tests;
 mod static_targets;
 mod worker;
 pub(super) use worker::{LaneAccess, adopt_in, resolve_in};
