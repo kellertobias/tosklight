@@ -1,6 +1,8 @@
 use super::*;
 use serde_json::{Value, json};
 
+mod hash_map;
+
 fn ordering(value: Value) -> PhaseOrdering {
     serde_json::from_value(value).expect("operator phase ordering must decode")
 }

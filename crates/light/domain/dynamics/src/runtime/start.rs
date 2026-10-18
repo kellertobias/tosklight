@@ -57,7 +57,9 @@ impl DynamicRuntime {
             &request.target_scope.ordered_targets,
             &request.stage_positions,
             request.inherited_spatial_mapping.as_ref(),
-        )?;
+        )?
+        .into_iter()
+        .collect();
         let mut controllers = HashMap::new();
         controllers.insert(request.controller.id, request.controller.clone());
         let controller_transitions = HashMap::from([(
