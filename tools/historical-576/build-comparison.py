@@ -32,6 +32,9 @@ OVERLAYS = {
     'current-legacy': ('apply-startup-compatibility.py','63ad1df173cc691b63a30a490d9e372459299cefacfe546f4c89974b1465f703','crates/light/adapters/headless/src/runtime/e2e_semantic_contract.rs','78f8f1ed1c45ebf88d9c9cf75e39b385ccafbbb1b742348d916c273966c38981','a29077ffc65e4a8f404504a8bed388fac57c8004773239f55169a9fe90409c69'),
 }
 
+# Old-lock TypeScript compatibility: erased annotation only, no timer behavior change.
+OLD_TIMER_OVERLAY = ('old-runtime-timer-type.mjs','448e15b5db1bff8269dd99675c25ee5bb22846ad3cadcff989e91c5d75aacb3e','apps/light-desktop/src/api/client/runtime.ts','18db82fddd820e898995ee1ff962d27c9d43810ca7dda376cdaf882548df82f9','8dfeb552e904e1f1af78a2c4e6ec29a954f52fc3d6d768bb3d9fa33ed47a973f')
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -214,7 +217,18 @@ def apply_overlay(arm, root, helpers, expected, checkout, log, deadline):
         execute(['python3','-B',str(path),'--source-root',str(root),'--apply'], checkout, log, deadline, seconds=30)
     assert digest(regular(root/name)) == after, 'overlay output pin'
     expected[name] = after
-    return {'helper_sha256':wanted,'path':name,'before_sha256':before,'after_sha256':after}
+    metadata = {'helper_sha256':wanted,'path':name,'before_sha256':before,'after_sha256':after}
+    if arm == 'old-legacy':
+        helper, wanted, name, before, after = OLD_TIMER_OVERLAY
+        path = helpers/helper
+        assert digest(regular(path, 128*1024)) == wanted, 'secondary overlay helper pin'
+        assert expected[name] == before, 'secondary overlay manifest input pin'
+        assert digest(regular(root/name)) == before, 'secondary overlay input pin'
+        execute(['node',str(path),'--source',str(root/name),'--apply'],checkout,log,deadline,seconds=30)
+        assert digest(regular(root/name)) == after, 'secondary overlay output pin'
+        expected[name] = after
+        metadata['additional_overlays'] = [{'helper_sha256':wanted,'path':name,'before_sha256':before,'after_sha256':after}]
+    return metadata
 
 # Stages: 1 source, 2 overlay, 3 source-check, 4 toolchain, 5 npm,
 # 6 frontend, 7 sidecars, 8 config, 9 bundle, 10 extract, 11 final-check,

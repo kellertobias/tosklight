@@ -72,6 +72,46 @@ class Pure(unittest.TestCase):
             b.apply_overlay('current-legacy',root,helpers,expected,root,root/'log',1)
         execute.assert_not_called()
 
+    def test_old_secondary_overlay_is_pinned_and_preserves_primary_metadata(self):
+        root=self.temporary();helpers=self.temporary()
+        first=root/'first';second=root/'timer';first.write_bytes(b'old-first');second.write_bytes(b'old-timer')
+        (helpers/'primary.mjs').write_bytes(b'primary');(helpers/'timer.mjs').write_bytes(b'timer')
+        primary=('primary.mjs',b.digest(b'primary'),'first',b.digest(b'old-first'),b.digest(b'new-first'))
+        timer=('timer.mjs',b.digest(b'timer'),'timer',b.digest(b'old-timer'),b.digest(b'new-timer'))
+        expected={'first':primary[3],'timer':timer[3]};calls=[]
+        def apply(args,*rest,**kwargs):
+            calls.append(args)
+            if len(calls)==1:first.write_bytes(b'new-first')
+            else:second.write_bytes(b'new-timer')
+        with patch.dict(b.OVERLAYS,{'old-legacy':primary}),patch.object(b,'OLD_TIMER_OVERLAY',timer),patch.object(b,'execute',side_effect=apply):
+            result=b.apply_overlay('old-legacy',root,helpers,expected,root,root/'log',1)
+        self.assertEqual([call[1] for call in calls],[str(helpers/'primary.mjs'),str(helpers/'timer.mjs')])
+        self.assertEqual(calls[1],['node',str(helpers/'timer.mjs'),'--source',str(second),'--apply'])
+        self.assertEqual(result,{'helper_sha256':primary[1],'path':'first','before_sha256':primary[3],'after_sha256':primary[4],'additional_overlays':[{'helper_sha256':timer[1],'path':'timer','before_sha256':timer[3],'after_sha256':timer[4]}]})
+        self.assertEqual(expected,{'first':primary[4],'timer':timer[4]})
+
+    def test_secondary_overlay_refuses_helper_input_and_output_hash_forgery(self):
+        for mode in ['helper','manifest','input','output']:
+            with self.subTest(mode=mode):
+                root=self.temporary();helpers=self.temporary();(root/'first').write_bytes(b'first');(root/'timer').write_bytes(b'timer')
+                (helpers/'primary.mjs').write_bytes(b'primary');(helpers/'timer.mjs').write_bytes(b'helper')
+                primary=('primary.mjs',b.digest(b'primary'),'first',b.digest(b'first'),b.digest(b'first'))
+                timer=('timer.mjs',b.digest(b'helper'),'timer',b.digest(b'timer'),b.digest(b'new'))
+                expected={'first':primary[3],'timer':timer[3]}
+                if mode=='helper':(helpers/'timer.mjs').write_bytes(b'forged')
+                if mode=='manifest':expected['timer']=b.digest(b'forged')
+                if mode=='input':(root/'timer').write_bytes(b'forged')
+                with patch.dict(b.OVERLAYS,{'old-legacy':primary}),patch.object(b,'OLD_TIMER_OVERLAY',timer),patch.object(b,'execute') as execute,self.assertRaises(AssertionError):
+                    b.apply_overlay('old-legacy',root,helpers,expected,root,root/'log',1)
+                self.assertEqual(execute.call_count,2 if mode=='output' else 1)
+
+    def test_secondary_timer_scope_and_frozen_current_arms_unchanged(self):
+        self.assertEqual(b.OLD_TIMER_OVERLAY,('old-runtime-timer-type.mjs','448e15b5db1bff8269dd99675c25ee5bb22846ad3cadcff989e91c5d75aacb3e','apps/light-desktop/src/api/client/runtime.ts','18db82fddd820e898995ee1ff962d27c9d43810ca7dda376cdaf882548df82f9','8dfeb552e904e1f1af78a2c4e6ec29a954f52fc3d6d768bb3d9fa33ed47a973f'))
+        with patch.object(b,'execute') as execute:
+            self.assertIsNone(b.apply_overlay('current-typed',Path('/unused'),Path('/unused'),{},Path('/unused'),Path('/unused'),1))
+        execute.assert_not_called()
+        self.assertEqual(b.OVERLAYS['old-legacy'][1],'f67b9eb65a113d33ac8bd49cc16cc26c3cb742bd920e63762d4039c48957129d')
+
     def test_owned_cleanup_uses_only_created_group_and_reaps(self):
         process=Mock(pid=12345)
         def signal_owned(pid,kind):
