@@ -137,6 +137,23 @@ impl TrackingState {
         frame: HybridFrameContext<'_>,
         owners: &[TrackingOwner],
     ) -> Result<(), TransitionError> {
+        self.prepare_with(frame, || canonical_owners(owners))
+    }
+
+    /// Consume this frame's newly built census; validation still follows the token checks.
+    pub fn prepare_owned(
+        &mut self,
+        frame: HybridFrameContext<'_>,
+        owners: Vec<TrackingOwner>,
+    ) -> Result<(), TransitionError> {
+        self.prepare_with(frame, || canonical_owned_owners(owners))
+    }
+
+    fn prepare_with(
+        &mut self,
+        frame: HybridFrameContext<'_>,
+        canonicalize: impl FnOnce() -> Result<Vec<TrackingOwner>, TransitionError>,
+    ) -> Result<(), TransitionError> {
         if !self
             .staged
             .as_ref()
@@ -150,7 +167,7 @@ impl TrackingState {
                 "Position tracking dependencies use a foreign capture, geometry or staged token",
             ));
         }
-        let canonical = canonical_owners(owners)?;
+        let canonical = canonicalize()?;
         let registry = self
             .accepted
             .as_ref()
@@ -291,6 +308,10 @@ impl TrackingState {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "tracking/owned_census_tests.rs"]
+mod owned_census_tests;
 
 #[cfg(test)]
 mod tests {
@@ -571,7 +592,12 @@ fn mark_owner(dirty: &mut Vec<TrackingInstance>, owner: &TrackingOwner) {
 }
 
 fn canonical_owners(owners: &[TrackingOwner]) -> Result<Vec<TrackingOwner>, TransitionError> {
-    let mut canonical = owners.to_vec();
+    canonical_owned_owners(owners.to_vec())
+}
+
+fn canonical_owned_owners(
+    mut canonical: Vec<TrackingOwner>,
+) -> Result<Vec<TrackingOwner>, TransitionError> {
     for owner in &mut canonical {
         if owner.target.0.is_nil()
             || owner.root.0.is_nil()

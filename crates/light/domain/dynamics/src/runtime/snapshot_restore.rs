@@ -115,9 +115,12 @@ impl DynamicRuntime {
             &stored.definition,
             &stored.phase_by_target,
             &stored.phase_by_lane_target,
-        )
-        .into_iter()
-        .collect();
+        );
+        let phase_by_lane_target = Arc::new(phase_table::PhaseTable::new(
+            phase_by_lane_target,
+            &definition,
+            &stored.targets,
+        ));
         let lane_selections = restore_lane_selections(
             stored.lane_selections,
             &controllers,

@@ -25,6 +25,7 @@ mod lanes;
 mod native_capability;
 mod output_gate;
 mod owner;
+mod phase_table;
 mod preset_values;
 mod programmer_identity;
 mod programming;
@@ -366,7 +367,7 @@ struct DynamicInstance {
     preset_values: preset_values::PresetValues,
     preset_dependency_generation: Uuid,
     targets: Vec<FixtureId>,
-    phase_by_lane_target: rustc_hash::FxHashMap<(Uuid, FixtureId), f32>,
+    phase_by_lane_target: Arc<phase_table::PhaseTable>,
     controllers: HashMap<Uuid, DynamicController>,
     lane_selections: HashMap<Uuid, CompiledLaneSelection>,
     controller_transitions: HashMap<Uuid, DynamicControllerTransitionSnapshot>,
@@ -731,14 +732,19 @@ impl DynamicRuntime {
             &target_scope.ordered_targets,
             stage_positions,
             inherited_spatial_mapping,
-        )?
-        .into_iter()
-        .collect::<rustc_hash::FxHashMap<_, _>>();
+        )?;
         let changed = instance.targets != target_scope.ordered_targets
-            || instance.phase_by_lane_target != phase_by_lane_target;
+            || !instance
+                .phase_by_lane_target
+                .matches_projected(&phase_by_lane_target);
         if !changed {
             return Ok(false);
         }
+        let phase_by_lane_target = Arc::new(phase_table::PhaseTable::new(
+            phase_by_lane_target,
+            &instance.definition,
+            &target_scope.ordered_targets,
+        ));
 
         self.journal_instance(instance_id);
 

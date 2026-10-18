@@ -244,7 +244,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             .adapter()
             .tracking
             .borrow_mut()
-            .prepare(frame, &owners)?;
+            .prepare_owned(frame, owners)?;
         Ok(())
     }
 
