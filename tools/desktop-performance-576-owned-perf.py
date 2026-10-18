@@ -395,7 +395,9 @@ def census(raw):
         elif event in (2, 13):  # LOST / LOST_SAMPLES: any loss makes capture unavailable.
             require(length >= 16, 'census', 16); counts['lost'] += 1
         else:
-            require(event in (1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82), 'census', unsupported_record_detail(event))
+            # v5.15 synthesize BPF symbols emits KSYMBOL even with --no-bpf-event;
+            # this metadata does not admit kernel samples or bypass decode identity.
+            require(event in (1, 3, 4, 7, 10, 17, 68, 69, 73, 74, 78, 82), 'census', unsupported_record_detail(event))
         offset += length
     require(counts['samples'] <= SAMPLE_CAP, 'census', 18)
     return counts

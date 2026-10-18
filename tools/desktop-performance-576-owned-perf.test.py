@@ -201,6 +201,8 @@ class Pure(unittest.TestCase):
         records = (5, 6, 8, 11, 12, 14, 15, 16, 17, 18, 19, 20,
                    64, 65, 66, 67, 70, 71, 72, 75, 76, 77, 80, 81)
         for index, event in enumerate(records):
+            if event == 17:  # KSYMBOL is metadata; reserved diagnostic41 stays stable.
+                continue
             with self.subTest(event=event), self.assertRaises(p.Refused) as caught:
                 p.census(raw((event,)))
             self.assertEqual((caught.exception.code, caught.exception.detail), (11, 33 + index))
@@ -212,7 +214,14 @@ class Pure(unittest.TestCase):
         short = bytearray(raw((64,)));struct.pack_into('<H', short, 238, 7)
         with self.assertRaises(p.Refused) as caught:p.census(bytes(short))
         self.assertEqual(caught.exception.detail, 9)
-        self.assertEqual(p.census(raw((68, 9, 2, 13))), dict(samples=1, lost=2, records=4))
+        self.assertEqual(p.unsupported_record_detail(17), 41)
+        self.assertEqual(p.census(raw((17, 68, 9, 2, 13))), dict(samples=1, lost=2, records=5))
+        malformed = bytearray(raw((17, 9)));struct.pack_into('<H', malformed, 238, 7)
+        with self.assertRaises(p.Refused) as caught:p.census(bytes(malformed))
+        self.assertEqual(caught.exception.detail, 9)
+        kernel_sample = bytearray(raw((17, 9)));struct.pack_into('<H', kernel_sample, 232 + 16 + 4, 1)
+        with self.assertRaises(p.Refused) as caught:p.census(bytes(kernel_sample))
+        self.assertEqual(caught.exception.detail, 11)
 
     def test_census_details_require_census_failure_and_recording_stage(self):
         for detail in range(1, p.CENSUS_DETAIL_MAX + 1):
