@@ -322,6 +322,65 @@ class Pure(unittest.TestCase):
                     child.wait.side_effect = OSError('PRIVATE raw failure')
                 self.refused('cleanup', p.stop_owned, child, 77)
 
+    def test_compiler_failure_classes_never_return_private_text(self):
+        for text, kind in (("cc: cannot execute 'as': execvp: No such file", 1),
+                           ("collect2: cannot find 'ld'", 2), ("cc: cannot execute 'cc1'", 3),
+                           ('PRIVATE/path: Permission denied', 4),
+                           ('error while loading shared libraries: PRIVATE/path.so', 5), ('PRIVATE unknown', 6)):
+            self.assertEqual(p.compiler_failure_kind(text), kind)
+        self.assertEqual(p.compiler_failure_kind('ld: cannot find -lc'), 6)
+
+    def test_compile_probe_uses_verified_prefix_and_private_tmp_without_execution(self):
+        with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder:
+            stage = Path(folder); parent = mock.Mock(); parent.stat.return_value = mock.Mock(st_mode=p.stat.S_IFDIR | 0o755, st_uid=0)
+            subtool = mock.Mock(); subtool.parent = parent
+            def tool(name):
+                return subtool if name in ('as', 'ld') else Path('/cc')
+            def compile_only(argv, spool, name, deadline, **kwargs):
+                self.assertTrue(argv[1].startswith('-B'))
+                self.assertEqual(tuple(argv[2:6]), p.COMPILE_OPTIONS)
+                self.assertEqual(set(kwargs['extra_env']), {'TMPDIR'})
+                self.assertEqual(Path(kwargs['extra_env']['TMPDIR']).parent, stage)
+                binary = stage / 'probe'; binary.write_bytes(b'\x7fELFfake'); binary.chmod(0o700)
+            with mock.patch.object(p, 'tool_path', side_effect=tool), mock.patch.object(p, 'run_tool', side_effect=compile_only):
+                self.assertEqual(p.compile_probe(stage, 100, True), stage / 'probe')
+
+    def test_compiler_mode_two_compile_only_attempts_and_closed_result(self):
+        with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder:
+            spool = Path(folder); spool.rmdir(); calls = []
+            def compile_only(stage, deadline, trusted, temporary):
+                calls.append((trusted, temporary))
+                if not trusted:
+                    (stage / 'compile.stderr').write_text("cc: cannot execute 'as': PRIVATE/path")
+                    raise p.Refused('tool')
+            with mock.patch.object(p, 'anchor_spool', return_value=(None, spool)), \
+                 mock.patch.object(p, 'tool_path', return_value=Path('/git')), \
+                 mock.patch.object(p, 'run_tool', return_value=b'a' * 40), \
+                 mock.patch.object(p, 'compile_probe', side_effect=compile_only):
+                envelope = p.compiler_preflight('a' * 40, spool)
+            self.assertEqual([v[0] for v in calls], [False, True])
+            self.assertEqual(calls[0][1], calls[1][1])
+            self.assertEqual(envelope['report']['available'], 1)
+            self.assertEqual([v['compiled'] for v in envelope['report']['attempts']], [0, 1])
+            self.assertEqual(envelope['report']['attempts'][0]['failure_kind'], 1)
+            self.assertNotIn('PRIVATE', json.dumps(envelope))
+            for mutate in (lambda e: e['report'].update(raw='PRIVATE'),
+                           lambda e: e['report']['attempts'][1].update(failure_kind=1),
+                           lambda e: e['provenance'].update(path='PRIVATE')):
+                bad = copy.deepcopy(envelope); mutate(bad)
+                self.refused('decode', p.validate_compiler_envelope, bad)
+
+    def test_compiler_cleanup_failure_prevents_second_attempt(self):
+        with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder:
+            spool = Path(folder); spool.rmdir()
+            with mock.patch.object(p, 'anchor_spool', return_value=(None, spool)), \
+                 mock.patch.object(p, 'tool_path', return_value=Path('/git')), \
+                 mock.patch.object(p, 'run_tool', return_value=b'a' * 40), \
+                 mock.patch.object(p, 'compile_probe', side_effect=p.Refused('cleanup')) as compile_only:
+                r = p.compiler_preflight('a' * 40, spool)['report']
+            self.assertEqual(compile_only.call_count, 1)
+            self.assertEqual((r['available'], r['tools_stopped'], r['failure_code']), (0, 0, p.FAILURES['cleanup']))
+
     def test_owned_cleanup_escalates_only_same_pidfd_and_waits(self):
         child = mock.Mock(); child.poll.side_effect = [None, None, None]
         child.wait.side_effect = [p.subprocess.TimeoutExpired('owned', 2), p.subprocess.TimeoutExpired('owned', 1), 0]

@@ -86,6 +86,43 @@ jobs:
           python3 -B tools/desktop-performance-576-owned-perf.test.py
           cargo test --locked -p light-dynamics --lib
           cargo test --locked -p light-engine --lib parallel
+      - name: Diagnose isolated synthetic compiler before application build
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          umask 077
+          temporary="$(npm run --silent artifact-path -- tmp)"
+          artifacts="$(node --input-type=module -e 'import {artifactRoot} from "./tools/artifact-paths.mjs"; console.log(artifactRoot)')"
+          private="$(mktemp -d "$temporary/tl775-compiler-launch-XXXXXX")"
+          spool="$temporary/tl775-compiler-preflight-$(cat /proc/sys/kernel/random/uuid)"
+          set +e
+          sudo -n -- /usr/bin/timeout --signal=TERM --kill-after=5s 45s /usr/bin/env "LIGHT_REPOSITORY_ROOT=$(pwd -P)" "LIGHT_ARTIFACTS_DIR=$artifacts" "LIGHT_TMP_DIR=$temporary" /usr/bin/python3 -B tools/desktop-performance-576-owned-perf.py --compiler-preflight --candidate-sha "$CANDIDATE_SHA" --private-directory "$spool" >"$private/stdout" 2>"$private/stderr"
+          helper_status=$?
+          set -e
+          node --input-type=module - "$OUT/compiler-preflight-public" "$private/stdout" "$helper_status" "$CANDIDATE_SHA" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import {lstat,readFile,mkdir,writeFile} from 'node:fs/promises';
+          import {execFileSync} from 'node:child_process';
+          import {createHash} from 'node:crypto';
+          const [directory,file,status,candidate]=process.argv.slice(2),digest=b=>createHash('sha256').update(b).digest('hex');
+          const TOP=['schema_version','diagnostic_mode_code','available','source_verified','raw_private','tools_stopped','failure_code','attempts'],ROW=['id','attempted','compiled','elf_verified','failure_kind','tool_failure_code','elapsed_micros'];
+          const uint=n=>Number.isSafeInteger(n)&&n>=0,closed=(r,keys)=>assert.deepEqual(Object.keys(r).sort(),keys.slice().sort());
+          function validate(r){closed(r,TOP);assert(TOP.filter(k=>k!=='attempts').every(k=>uint(r[k])));assert(r.schema_version===1&&r.diagnostic_mode_code===1&&r.failure_code<=17);for(const k of ['available','source_verified','raw_private','tools_stopped'])assert(r[k]<=1);assert(Array.isArray(r.attempts)&&r.attempts.length===2);r.attempts.forEach((a,id)=>{closed(a,ROW);assert(Object.values(a).every(uint)&&a.id===id&&a.failure_kind<=6&&a.tool_failure_code<=17);for(const k of ['attempted','compiled','elf_verified'])assert(a[k]<=1);assert(a.elf_verified===a.compiled&&a.compiled<=a.attempted&&a.elapsed_micros<=34000000);if(a.compiled)assert(a.failure_kind===0&&a.tool_failure_code===0);else if(a.attempted)assert(a.failure_kind>=1&&a.tool_failure_code>=1);else assert(a.failure_kind===0&&a.tool_failure_code===0&&a.elapsed_micros===0);});assert(r.available===Number(r.failure_code===0&&r.source_verified===1&&r.raw_private===1&&r.tools_stopped===1&&r.attempts.every(a=>a.attempted===1)));return r;}
+          let report={schema_version:1,diagnostic_mode_code:1,available:0,source_verified:0,raw_private:0,tools_stopped:0,failure_code:1,attempts:[0,1].map(id=>({id,attempted:0,compiled:0,elf_verified:0,failure_kind:0,tool_failure_code:0,elapsed_micros:0}))};
+          const provenance={schema_version:1,candidate_sha:/^[a-f0-9]{40}$/u.test(candidate)?candidate:'0'.repeat(40),helper_sha256:'0'.repeat(64)};
+          try{assert(/^[a-f0-9]{40}$/u.test(candidate));const name='tools/desktop-performance-576-owned-perf.py',expected=execFileSync('git',['show',`${candidate}:${name}`],{maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']});provenance.helper_sha256=digest(expected);assert.equal(digest(await readFile(name)),provenance.helper_sha256);assert.equal(execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim(),candidate);const s=await lstat(file);assert(s.isFile()&&!s.isSymbolicLink()&&s.size>0&&s.size<=65536);const raw=await readFile(file);assert(raw.length<=65536);const envelope=JSON.parse(raw);closed(envelope,['report','provenance']);validate(envelope.report);closed(envelope.provenance,['schema_version','candidate_sha','helper_sha256']);assert.deepEqual(envelope.provenance,provenance);assert.equal(Number(status),envelope.report.available?0:1);report=envelope.report;}catch{process.stdout.write('{"schema_version":1,"available":0,"failure_code":1}\n');}
+          try{validate(report);await mkdir(directory,{recursive:true});for(const [name,value]of [['compiler-preflight-numeric.json',report],['compiler-preflight-provenance.json',provenance]])await writeFile(`${directory}/${name}`,JSON.stringify(value)+'\n',{flag:'wx',mode:0o600});process.exitCode=report.available?0:1;}catch{process.stdout.write('{"schema_version":1,"available":0,"failure_code":1}\n');process.exitCode=1;}
+          JAVASCRIPT
+      - name: Publish separate compiler preflight diagnostic before application build
+        continue-on-error: true
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-compiler-preflight-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/compiler-preflight-public/compiler-preflight-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/compiler-preflight-public/compiler-preflight-provenance.json
+          if-no-files-found: error
       - name: Build exact canonical release Control and sidecars
         run: |
           set -euo pipefail

@@ -112,3 +112,17 @@ test('recording and timestamp span preserve the bounded post-window phase',()=>{
  for(const span of [0,2000000]){const r=report();r.capture.sample_span_micros=span;validateOwnedPerfHelperReport(r);}
  const r=report();r.preflight.sample_span_micros=4000001;r.preflight.recording_envelope_micros=5000000;r.preflight.elapsed_micros=6000000;assert.throws(()=>validateOwnedPerfHelperReport(r));
 });
+
+test('compiler-only preflight publishes separately before app build without changing original diagnostics',async()=>{
+ const {createRequire}=await import('node:module');const yaml=createRequire(import.meta.url)('js-yaml');
+ const steps=yaml.load(await readFile(new URL('../.github/workflows/release-576-proof.yml',import.meta.url),'utf8')).jobs['linux-576'].steps;
+ const source=steps.findIndex(s=>s.name==='Verify source and observer tests'),preflight=steps.findIndex(s=>s.name==='Diagnose isolated synthetic compiler before application build'),upload=steps.findIndex(s=>s.name==='Publish separate compiler preflight diagnostic before application build'),build=steps.findIndex(s=>s.name==='Build exact canonical release Control and sidecars');
+ assert(source<preflight&&preflight<upload&&upload<build);assert.equal(steps[preflight]['continue-on-error'],true);assert.equal(steps[upload]['continue-on-error'],true);
+ const script=steps[preflight].run;assert(script.includes('--compiler-preflight --candidate-sha'));assert(script.includes('--kill-after=5s 45s'));assert(script.includes('>"$private/stdout" 2>"$private/stderr"'));assert(!/(?:HOME|PATH|LD_LIBRARY_PATH)=/u.test(script));assert(!script.includes('--request'));assert(!script.includes('--preflight-only'));assert(script.includes('s.size<=65536'));assert(script.includes('!s.isSymbolicLink()'));
+ assert.equal(steps[upload].with.path.trim().split('\n').length,2);assert(!steps[upload].with.path.includes('stdout'));assert(!steps[upload].with.path.includes('spool'));
+ const start=script.indexOf('          const TOP=')>=0?script.indexOf('          const TOP='):script.indexOf('const TOP='),end=script.indexOf('let report=');
+ const validate=new Function('assert',script.slice(start,end)+';return validate;')(assert);
+ const row=id=>({id,attempted:1,compiled:0,elf_verified:0,failure_kind:2,tool_failure_code:7,elapsed_micros:10});const valid={schema_version:1,diagnostic_mode_code:1,available:1,source_verified:1,raw_private:1,tools_stopped:1,failure_code:0,attempts:[row(0),{...row(1),compiled:1,elf_verified:1,failure_kind:0,tool_failure_code:0}]};
+ assert.equal(validate(valid).available,1);
+ for(const mutate of [r=>r.private_path='/secret',r=>r.attempts[0].stderr='private',r=>r.attempts[0].failure_kind=7,r=>r.tools_stopped=0,r=>r.attempts[1].elapsed_micros=-1,r=>r.attempts[1].elapsed_micros=34000001,r=>r.available=0,r=>r.attempts[1].elf_verified=0,r=>r.attempts[1].failure_kind=2,r=>r.attempts[0].failure_kind=0]){const r=structuredClone(valid);mutate(r);assert.throws(()=>validate(r));}
+});

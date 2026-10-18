@@ -203,14 +203,16 @@ def child_limits():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 
-def run_tool(argv, spool, name, deadline, seconds=None, guard=None, window=None):
+def run_tool(argv, spool, name, deadline, seconds=None, guard=None, window=None, extra_env=None):
     """Bound owned tool output and lifetime; recorder target is never signaled here."""
+    require(extra_env is None or (set(extra_env) == {'TMPDIR'} and Path(extra_env['TMPDIR']).is_absolute()), 'private')
+    child_env = environment(); child_env.update(extra_env or {})
     output, errors = spool / (name + '.stdout'), spool / (name + '.stderr')
     child = None; pidfd = None; timer = None
     elapsed = threading.Event()
     with os.fdopen(private_file(output), 'wb') as out, os.fdopen(private_file(errors), 'wb') as err:
         try:
-            child = subprocess.Popen(argv, cwd=spool, env=environment(), stdout=out, stderr=err,
+            child = subprocess.Popen(argv, cwd=spool, env=child_env, stdout=out, stderr=err,
                                      stdin=subprocess.DEVNULL, close_fds=True, umask=0o077, preexec_fn=child_limits)
             pidfd = os.pidfd_open(child.pid)
             if seconds is not None:
@@ -261,7 +263,7 @@ def tool_path(name):
     value = shutil.which(name, path=os.defpath)
     require(value, 'tool')
     path = Path(value).resolve(strict=True); info = path.stat()
-    require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022, 'tool')
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022 and info.st_mode & 0o111, 'tool')
     return path
 
 
@@ -468,12 +470,9 @@ PROBE = '''#include <stdint.h>\n#include <stdio.h>\nstatic volatile uint64_t tot
 
 def synthetic(perf, spool, deadline, progress=None):
     stage = spool / 'synthetic'; stage.mkdir(mode=0o700)
-    source = stage / 'probe.c'; source.write_text(PROBE); source.chmod(0o600)
-    binary = stage / 'probe'
     if progress:
         progress(6)
-    run_tool([str(tool_path('cc')), '-O1', '-g', '-fno-omit-frame-pointer',
-              '-fno-optimize-sibling-calls', str(source), '-o', str(binary)], stage, 'compile', deadline)
+    binary = compile_probe(stage, deadline, True)
     child = None; pidfd = None
     with os.fdopen(private_file(stage / 'probe.stdout'), 'wb') as out, os.fdopen(private_file(stage / 'probe.stderr'), 'wb') as err:
         try:
@@ -503,6 +502,114 @@ def synthetic(perf, spool, deadline, progress=None):
             finally:
                 if pidfd is not None:
                     os.close(pidfd)
+
+
+# The only variant is GCC's root-validated subtool prefix; source/options/TMPDIR stay fixed.
+COMPILE_OPTIONS = ('-O1', '-g', '-fno-omit-frame-pointer', '-fno-optimize-sibling-calls')
+
+
+def compile_probe(stage, deadline, trusted_prefix, temporary=None):
+    source = stage / 'probe.c'; source.write_text(PROBE); source.chmod(0o600)
+    if temporary is None:
+        temporary = stage / 'compiler-tmp'; temporary.mkdir(mode=0o700)
+    binary = stage / 'probe'; options = []
+    if trusted_prefix:
+        assembler, linker = tool_path('as'), tool_path('ld')
+        require(assembler.parent == linker.parent, 'tool')
+        info = assembler.parent.stat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and not info.st_mode & 0o022, 'tool')
+        options = ['-B' + str(assembler.parent) + '/']
+    run_tool([str(tool_path('cc')), *options, *COMPILE_OPTIONS, str(source), '-o', str(binary)],
+             stage, 'compile', deadline, extra_env={'TMPDIR': str(temporary)})
+    info = binary.lstat()
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_nlink == 1
+            and info.st_mode & 0o111 and not info.st_mode & 0o077
+            and bounded_read(binary, CAP)[:4] == b'\x7fELF', 'elf')
+    return binary
+
+
+def compiler_failure_kind(stderr):
+    # Parse only fixed C-locale error classes. No diagnostic text is ever returned.
+    if re.search(r'error while loading shared libraries|cannot open shared object file', stderr):
+        return 5
+    if re.search(r'Permission denied|Operation not permitted', stderr):
+        return 4
+    for code, name in ((1, 'as'), (2, 'ld'), (3, 'cc1')):
+        if re.search(r"(?:cannot execute|cannot find|unable to execute)\s+['\"`]?[^'\"`\s]*\b" + name + r"(?:['\"`:\s]|$)", stderr):
+            return code
+    return 6
+
+
+def validate_compiler_envelope(envelope):
+    require(type(envelope) is dict and set(envelope) == {'report', 'provenance'}, 'decode')
+    r, provenance = envelope['report'], envelope['provenance']
+    require(type(r) is dict and set(r) == {'schema_version', 'diagnostic_mode_code', 'available',
+            'source_verified', 'raw_private', 'tools_stopped', 'failure_code', 'attempts'}, 'decode')
+    require(all(uint(v) for k, v in r.items() if k != 'attempts') and r['schema_version'] == 1
+            and r['diagnostic_mode_code'] == 1 and r['failure_code'] <= len(FAILURES), 'decode')
+    require(all(r[k] in (0, 1) for k in ('available', 'source_verified', 'raw_private', 'tools_stopped'))
+            and type(r['attempts']) is list and len(r['attempts']) == 2, 'decode')
+    for i, row in enumerate(r['attempts']):
+        require(type(row) is dict and set(row) == {'id', 'attempted', 'compiled', 'elf_verified',
+                'failure_kind', 'tool_failure_code', 'elapsed_micros'} and all(uint(v) for v in row.values())
+                and row['id'] == i and all(row[k] in (0, 1) for k in ('attempted', 'compiled', 'elf_verified'))
+                and row['failure_kind'] <= 6 and row['tool_failure_code'] <= len(FAILURES)
+                and row['compiled'] == row['elf_verified'] <= row['attempted']
+                and row['elapsed_micros'] <= 34000000, 'decode')
+        require((row['compiled'] and row['failure_kind'] == row['tool_failure_code'] == 0)
+                or (not row['compiled'] and row['attempted'] and row['failure_kind'] > 0 and row['tool_failure_code'] > 0)
+                or (not row['attempted'] and all(row[k] == 0 for k in ('compiled', 'elf_verified', 'failure_kind', 'tool_failure_code', 'elapsed_micros'))), 'decode')
+    require(r['available'] == int(not r['failure_code'] and r['source_verified'] and r['raw_private']
+            and r['tools_stopped'] and all(row['attempted'] for row in r['attempts'])), 'decode')
+    require(type(provenance) is dict and set(provenance) == {'schema_version', 'candidate_sha', 'helper_sha256'}
+            and type(provenance['schema_version']) is int and provenance['schema_version'] == 1, 'decode')
+    require(type(provenance['candidate_sha']) is str and re.fullmatch('[0-9a-f]{40}', provenance['candidate_sha'])
+            and type(provenance['helper_sha256']) is str and re.fullmatch('[0-9a-f]{64}', provenance['helper_sha256']), 'decode')
+    return envelope
+
+
+def compiler_preflight(candidate, directory):
+    require(type(candidate) is str and re.fullmatch('[0-9a-f]{40}', candidate), 'request')
+    root = artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT'); spool = Path(directory)
+    require(spool.is_absolute() and spool.parent.resolve() == root.resolve()
+            and not spool.exists() and not spool.is_symlink(), 'private')
+    spool.mkdir(mode=0o700); anchor, spool = anchor_spool(spool)
+    r = dict(schema_version=1, diagnostic_mode_code=1, available=0, source_verified=0,
+             raw_private=1, tools_stopped=1, failure_code=0,
+             attempts=[dict(id=i, attempted=0, compiled=0, elf_verified=0, failure_kind=0,
+                            tool_failure_code=0, elapsed_micros=0) for i in range(2)])
+    provenance = dict(schema_version=1, candidate_sha=candidate, helper_sha256=digest(bounded_read(__file__)))
+    try:
+        deadline = time.monotonic() + 30
+        argv = [str(tool_path('git')), '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'rev-parse', 'HEAD']
+        require(run_tool(argv, spool, 'source', min(deadline, time.monotonic() + 2)).decode().strip() == candidate, 'source')
+        r['source_verified'] = 1
+        temporary = spool / 'compiler-tmp'; temporary.mkdir(mode=0o700)
+        for row in r['attempts']:
+            stage = spool / ('attempt-' + str(row['id'])); stage.mkdir(mode=0o700)
+            begin = time.monotonic(); row['attempted'] = 1
+            try:
+                compile_probe(stage, min(deadline, begin + 10), bool(row['id']), temporary)
+                row['compiled'] = row['elf_verified'] = 1
+            except (Refused, OSError, ValueError, subprocess.SubprocessError) as error:
+                row['tool_failure_code'] = error.code if isinstance(error, Refused) else FAILURES['tool']
+                row['failure_kind'] = 6
+                stderr = stage / 'compile.stderr'
+                row['failure_kind'] = compiler_failure_kind(bounded_read(stderr).decode(errors='replace')) if stderr.is_file() else 6
+                if row['tool_failure_code'] == FAILURES['cleanup']:
+                    raise Refused('cleanup')
+            finally:
+                row['elapsed_micros'] = round((time.monotonic() - begin) * 1e6)
+        require(run_tool(argv, spool, 'source-after', min(deadline, time.monotonic() + 2)).decode().strip() == candidate
+                and digest(bounded_read(__file__)) == provenance['helper_sha256'], 'source')
+        r['available'] = 1
+    except (Refused, OSError, ValueError, subprocess.SubprocessError) as error:
+        r['failure_code'] = error.code if isinstance(error, Refused) else FAILURES['tool']
+        r['tools_stopped'] = int(r['failure_code'] != FAILURES['cleanup'])
+    finally:
+        if anchor is not None:
+            os.close(anchor)
+    return validate_compiler_envelope(dict(report=r, provenance=provenance))
 
 
 def validate_numeric(report):
@@ -697,7 +804,9 @@ def failure_report(code):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--request', type=Path, required=True)
+    parser.add_argument('--request', type=Path)
+    parser.add_argument('--compiler-preflight', action='store_true')
+    parser.add_argument('--candidate-sha')
     parser.add_argument('--private-directory', type=Path, required=True)
     parser.add_argument('--preflight-only', action='store_true')
     args = parser.parse_args()
@@ -705,6 +814,12 @@ def main():
         raise Refused('deadline')
     signal.signal(signal.SIGTERM, cancelled)
     signal.signal(signal.SIGINT, cancelled)
+    if args.compiler_preflight:
+        require(args.request is None and not args.preflight_only, 'request')
+        envelope = compiler_preflight(args.candidate_sha, args.private_directory)
+        print(json.dumps(envelope, sort_keys=True))
+        return 0 if envelope['report']['available'] else 1
+    require(args.request is not None and args.candidate_sha is None, 'request')
     request = json.loads(bounded_read(args.request, 16384))
     report, provenance = profile(request, args.private_directory, args.preflight_only)
     print(json.dumps(validate_envelope({'report': report, 'provenance': provenance}), sort_keys=True))
