@@ -73,6 +73,17 @@ impl Summary {
         target.pool_timing.merge(sample.pool_timing);
         add(&mut target.calls, sample.calls);
         add(&mut target.jobs, sample.jobs);
+        for (target, sample) in target.job_kinds.iter_mut().zip(sample.job_kinds) {
+            add(&mut target.jobs, sample.jobs);
+            add(&mut target.cpu_valid_jobs, sample.cpu_valid_jobs);
+            add(
+                &mut target.cpu_unavailable_jobs,
+                sample.cpu_unavailable_jobs,
+            );
+            add(&mut target.cpu_invalid_jobs, sample.cpu_invalid_jobs);
+            add(&mut target.cpu_nanos, sample.cpu_nanos);
+            add(&mut target.counter_read_nanos, sample.counter_read_nanos);
+        }
         add(&mut target.cpu_valid_jobs, sample.cpu_valid_jobs);
         add(
             &mut target.cpu_unavailable_jobs,
@@ -93,7 +104,20 @@ impl Summary {
     }
     pub(super) fn emit(&self) {
         let values = |f: fn(&WorkerSummary) -> u64| self.workers.each_ref().map(f);
-        tracing::info!(schema_version=1u8,
+        // Fixed order: Ordered six counters, then Indexed six counters, completion only.
+        let completion = self.workers[WorkerStage::CompleteDeferred as usize].job_kinds;
+        let fields = completion.map(|k| {
+            [
+                k.jobs,
+                k.cpu_valid_jobs,
+                k.cpu_unavailable_jobs,
+                k.cpu_invalid_jobs,
+                k.cpu_nanos,
+                k.counter_read_nanos,
+            ]
+        });
+        let completion_job_kinds: [u64; 12] = std::array::from_fn(|i| fields[i / 6][i % 6]);
+        tracing::info!(schema_version=2u8,completion_job_kinds=?completion_job_kinds,
             stage_calls=?self.stage_calls,stage_cpu_valid_calls=?self.stage_valid,stage_cpu_unavailable_calls=?self.stage_unavailable,stage_cpu_invalid_calls=?self.stage_invalid,stage_cpu_nanos=?self.stage_cpu,stage_counter_read_nanos=?self.stage_read,
             substage_calls=?self.sub_calls,substage_wall_nanos=?self.sub_wall,substage_cpu_valid_calls=?self.sub_valid,substage_cpu_unavailable_calls=?self.sub_unavailable,substage_cpu_invalid_calls=?self.sub_invalid,substage_cpu_nanos=?self.sub_cpu,substage_counter_read_nanos=?self.sub_read,
             worker_calls=?values(|w|w.calls),worker_jobs=?values(|w|w.jobs),worker_cpu_valid_jobs=?values(|w|w.cpu_valid_jobs),worker_cpu_unavailable_jobs=?values(|w|w.cpu_unavailable_jobs),worker_cpu_invalid_jobs=?values(|w|w.cpu_invalid_jobs),worker_cpu_nanos=?values(|w|w.cpu_nanos),worker_counter_read_nanos=?values(|w|w.counter_read_nanos),worker_job_wall_nanos=?values(|w|w.job_wall_nanos),worker_job_wall_max_nanos=?values(|w|w.job_wall_max_nanos),worker_section_to_job_max_nanos=?values(|w|w.section_to_job_max_nanos),worker_uncovered_sort_calls=?values(|w|w.uncovered_sort_calls),
@@ -212,6 +236,22 @@ mod tests {
         assert_eq!(summary.sub_calls[1], 3);
         assert_eq!(summary.sub_wall[1], 30);
         let worker = WorkerSummary {
+            job_kinds: [
+                light_engine::parallel::diagnostics::JobKindSummary {
+                    jobs: 1,
+                    cpu_valid_jobs: 1,
+                    cpu_nanos: 3,
+                    counter_read_nanos: 1,
+                    ..Default::default()
+                },
+                light_engine::parallel::diagnostics::JobKindSummary {
+                    jobs: 1,
+                    cpu_valid_jobs: 1,
+                    cpu_nanos: 5,
+                    counter_read_nanos: 3,
+                    ..Default::default()
+                },
+            ],
             calls: 1,
             jobs: 2,
             cpu_valid_jobs: 2,
@@ -240,6 +280,11 @@ mod tests {
         summary.worker(0, worker);
         assert_eq!(summary.workers[0].calls, 2);
         assert_eq!(summary.workers[0].jobs, 4);
+        assert_eq!(summary.workers[0].job_kinds[0].jobs, 2);
+        assert_eq!(summary.workers[0].job_kinds[1].jobs, 2);
+        assert_eq!(summary.workers[0].job_kinds[0].cpu_nanos, 6);
+        assert_eq!(summary.workers[0].job_kinds[1].cpu_nanos, 10);
+        assert_eq!(summary.workers[1].job_kinds[0].jobs, 0);
         assert_eq!(summary.workers[0].job_wall_nanos, 60);
         assert_eq!(summary.workers[0].job_wall_max_nanos, 20);
         assert_eq!(summary.workers[0].section_to_job_max_nanos, 7);

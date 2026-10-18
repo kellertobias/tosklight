@@ -15,6 +15,7 @@ export const CPU_SUBSTAGE_IDS = Object.freeze(["static_discovery","assembly","pr
 export const CPU_WORKER_IDS = Object.freeze(["complete_deferred","prepare_families","owner_compose"]);
 export const CPU_ROW_METRICS = Object.freeze(["cpu_nanos","counter_read_nanos","wall_nanos"]);
 export const CPU_WORKER_METRICS = Object.freeze(["covered_cpu_nanos","counter_read_nanos","job_wall_sum_nanos","job_wall_max_nanos","section_to_job_max_nanos"]);
+export const CPU_COMPLETION_KIND_IDS = Object.freeze(["ordered","indexed"]);
 export const CPU_CLEANUP_METRICS = Object.freeze(["queue_lag_nanos","cleanup_wall_nanos","thread_cpu_nanos","counter_read_nanos"]);
 const CPU_MESSAGE = "output preparation cpu summary";
 const CLEANUP_MESSAGE = "output pool deferred cleanup";
@@ -24,14 +25,15 @@ const REFERENCES = ["bounded output scheduler tick sample","bounded live output 
 const STAGE_KEYS = ["stage_calls","stage_cpu_valid_calls","stage_cpu_unavailable_calls","stage_cpu_invalid_calls","stage_cpu_nanos","stage_counter_read_nanos"];
 const SUB_KEYS = ["substage_calls","substage_wall_nanos","substage_cpu_valid_calls","substage_cpu_unavailable_calls","substage_cpu_invalid_calls","substage_cpu_nanos","substage_counter_read_nanos"];
 const WORK_KEYS = ["worker_calls","worker_jobs","worker_cpu_valid_jobs","worker_cpu_unavailable_jobs","worker_cpu_invalid_jobs","worker_cpu_nanos","worker_counter_read_nanos","worker_job_wall_nanos","worker_job_wall_max_nanos","worker_section_to_job_max_nanos","worker_uncovered_sort_calls"];
-const CPU_KEYS = ["schema_version",...STAGE_KEYS,...SUB_KEYS,...WORK_KEYS];
+const CPU_KEYS = ["schema_version",...STAGE_KEYS,...SUB_KEYS,...WORK_KEYS,"completion_job_kinds"];
 const CLEAN_KEYS = ["schema_version","queue_lag_nanos","cleanup_wall_nanos","thread_cpu_nanos","cpu_status","counter_read_nanos"];
 const FLAGS = ["available","log_available","capture_complete","parse_complete","join_complete","cpu_complete","cpu_available","tick_trace_available","tick_trace_capture_complete","tick_trace_parse_complete","tick_trace_join_complete"];
-const COUNTS = ["lines_observed","records_observed","cpu_records_observed","cleanup_records_observed","invalid_records","unbound_records","duplicate_records","orphan_cpu_records","tick_cap_records","cleanup_cap_records","selected_ticks","selected_missed_ticks","selected_ordered_attempts","selected_cpu_summaries","selected_missing_cpu","selected_unexpected_cpu","selected_duplicate_records","selected_invalid_records","metadata_mismatches"];
+const COUNTS = ["bytes_observed","lines_observed","records_observed","cpu_records_observed","cleanup_records_observed","invalid_records","unbound_records","duplicate_records","orphan_cpu_records","tick_cap_records","cleanup_cap_records","selected_ticks","selected_missed_ticks","selected_ordered_attempts","selected_cpu_summaries","selected_missing_cpu","selected_unexpected_cpu","selected_duplicate_records","selected_invalid_records","metadata_mismatches"];
 const TOP = ["schema_version",...FLAGS,"read_status","window_seconds",...COUNTS];
 const STAT_KEYS = ["id","count","min_nanos","mean_nanos","p50_nanos","p95_nanos","max_nanos"];
 const ROW_KEYS = ["id","calls","valid_calls","unavailable_calls","invalid_calls","called_records","cpu_records","partial_cpu_records","metrics"];
 const WORKER_KEYS = ["id","calls","jobs","valid_jobs","unavailable_jobs","invalid_jobs","job_records","cpu_records","partial_cpu_records","uncovered_sort_calls","metrics"];
+const COMPLETION_KEYS = ["id","jobs","valid_jobs","unavailable_jobs","invalid_jobs","metrics"];
 const CLEANUP_KEYS = ["available","records_before_window","records_in_window","records_after_window","invalid_records","unlocalizable_records","valid_cpu_records","unavailable_cpu_records","invalid_cpu_records","metrics"];
 const uint = n => Number.isSafeInteger(n)&&n>=0;
 const countLimit = Math.floor(Number.MAX_SAFE_INTEGER/CPU_LIMITS.cleanups);
@@ -39,10 +41,11 @@ const closed = (row,keys) => assert.deepEqual(Object.keys(row).sort(),keys.slice
 const zeroStat = id => ({id,count:0,min_nanos:0,mean_nanos:0,p50_nanos:0,p95_nanos:0,max_nanos:0});
 const newRow = (id,sub=false) => ({id,calls:0,valid_calls:0,unavailable_calls:0,invalid_calls:0,called_records:0,cpu_records:0,partial_cpu_records:0,metrics:Array.from({length:sub?3:2},(_,i)=>zeroStat(i))});
 const newWorker = id => ({id,calls:0,jobs:0,valid_jobs:0,unavailable_jobs:0,invalid_jobs:0,job_records:0,cpu_records:0,partial_cpu_records:0,uncovered_sort_calls:0,metrics:CPU_WORKER_METRICS.map((_,i)=>zeroStat(i))});
-const newGroup = id => ({id,ticks:0,ordered_attempts:0,cpu_summaries:0,stages:CPU_STAGE_IDS.map((_,i)=>newRow(i)),substages:CPU_SUBSTAGE_IDS.map((_,i)=>newRow(i,true)),workers:CPU_WORKER_IDS.map((_,i)=>newWorker(i))});
+const newCompletion = id => ({id,jobs:0,valid_jobs:0,unavailable_jobs:0,invalid_jobs:0,metrics:[zeroStat(0),zeroStat(1)]});
+const newGroup = id => ({id,ticks:0,ordered_attempts:0,cpu_summaries:0,stages:CPU_STAGE_IDS.map((_,i)=>newRow(i)),substages:CPU_SUBSTAGE_IDS.map((_,i)=>newRow(i,true)),workers:CPU_WORKER_IDS.map((_,i)=>newWorker(i)),completion_kinds:[newCompletion(0),newCompletion(1)]});
 const validWindow = w => diagnosticWindowBounds(w)!==null;
 function blank(window,status=0) {
- return {...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:1,read_status:status,window_seconds:diagnosticWindowBounds(window)?.seconds??0,groups:[newGroup(0),newGroup(1)],cleanup:{...Object.fromEntries(CLEANUP_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:CPU_CLEANUP_METRICS.map((_,i)=>zeroStat(i))}};
+ return {...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:2,read_status:status,window_seconds:diagnosticWindowBounds(window)?.seconds??0,groups:[newGroup(0),newGroup(1)],cleanup:{...Object.fromEntries(CLEANUP_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:CPU_CLEANUP_METRICS.map((_,i)=>zeroStat(i))}};
 }
 function timestamp(line) {
  const m=/^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z(?:\s|$)/u.exec(line);
@@ -70,8 +73,14 @@ function array(value,length,nanos) {
  for(const n of rows)assert(uint(n)&&n<=(nanos?CPU_LIMITS.nanos:countLimit));return rows;
 }
 function parseCpu(line) {
- const id=binding(line,CPU_MESSAGE),time=timestamp(line),raw=fields(line,CPU_MESSAGE,CPU_KEYS),data={};assert(integer(raw.schema_version)===1);
- for(const key of CPU_KEYS.slice(1))data[key]=array(raw[key],key.startsWith("stage_")?14:key.startsWith("substage_")?7:3,key.endsWith("_nanos"));
+ const id=binding(line,CPU_MESSAGE),time=timestamp(line),raw=fields(line,CPU_MESSAGE,CPU_KEYS),data={};assert(integer(raw.schema_version)===2);
+ for(const key of CPU_KEYS.slice(1).filter(k=>k!=="completion_job_kinds"))data[key]=array(raw[key],key.startsWith("stage_")?14:key.startsWith("substage_")?7:3,key.endsWith("_nanos"));
+ data.completion_job_kinds=array(raw.completion_job_kinds,12,true);
+ for(let i=0;i<2;i++){
+  const v=data.completion_job_kinds.slice(i*6,i*6+6);assert(v.slice(0,4).every(n=>n<=countLimit));
+  assert(v[1]+v[2]+v[3]===v[0]);if(v[1]===0)assert(v[4]===0);if(v[0]===0)assert(v[5]===0);
+ }
+ for(const [i,key]of ["worker_jobs","worker_cpu_valid_jobs","worker_cpu_unavailable_jobs","worker_cpu_invalid_jobs","worker_cpu_nanos","worker_counter_read_nanos"].entries())assert(data.completion_job_kinds[i]+data.completion_job_kinds[i+6]===data[key][0]);
  for(const [prefix,length,calls,valid,unavailable,invalid] of [
   ["stage",14,"calls","cpu_valid_calls","cpu_unavailable_calls","cpu_invalid_calls"],
   ["substage",7,"calls","cpu_valid_calls","cpu_unavailable_calls","cpu_invalid_calls"],
@@ -122,7 +131,7 @@ function summarize(values,id) {
  let mean=0;for(let i=0;i<rows.length;i++)mean+=(rows[i]-mean)/(i+1);
  return {id,count:rows.length,min_nanos:rows[0],mean_nanos:Math.min(rows.at(-1),Math.max(rows[0],mean)),p50_nanos:at(.5),p95_nanos:at(.95),max_nanos:rows.at(-1)};
 }
-function buckets(group) {return {stages:group.stages.map(()=>[[],[]]),substages:group.substages.map(()=>[[],[],[]]),workers:group.workers.map(()=>CPU_WORKER_METRICS.map(()=>[]))};}
+function buckets(group) {return {stages:group.stages.map(()=>[[],[]]),substages:group.substages.map(()=>[[],[],[]]),workers:group.workers.map(()=>CPU_WORKER_METRICS.map(()=>[])),completion_kinds:group.completion_kinds.map(()=>[[],[]])};}
 function addRows(rows,values,data,prefix) {
  for(const [i,row]of rows.entries()){
   const get=key=>data[prefix+"_"+key][i],calls=get("calls"),valid=get("cpu_valid_calls"),unavailable=get("cpu_unavailable_calls"),invalid=get("cpu_invalid_calls");
@@ -139,12 +148,20 @@ function addWorkers(rows,values,data) {
   if(valid){row.cpu_records++;values[i][0].push(get("cpu_nanos"));if(unavailable||invalid)row.partial_cpu_records++;}
  }
 }
+function addCompletion(rows,values,data){
+ const jobs=data.worker_jobs[0],complete=data.worker_cpu_unavailable_jobs[0]===0&&data.worker_cpu_invalid_jobs[0]===0;
+ for(const [i,row]of rows.entries()){
+  const v=data.completion_job_kinds.slice(i*6,i*6+6);
+  for(const [j,key]of ["jobs","valid_jobs","unavailable_jobs","invalid_jobs"].entries())row[key]+=v[j];
+  if(jobs){values[i][1].push(v[5]);if(complete)values[i][0].push(v[4]);}
+ }
+}
 function addGroup(group,values,entry) {
  group.ticks++;if(entry.nested)group.ordered_attempts++;if(!entry.cpu)return;
- group.cpu_summaries++;addRows(group.stages,values.stages,entry.cpu.data,"stage");addRows(group.substages,values.substages,entry.cpu.data,"substage");addWorkers(group.workers,values.workers,entry.cpu.data);
+ group.cpu_summaries++;addRows(group.stages,values.stages,entry.cpu.data,"stage");addRows(group.substages,values.substages,entry.cpu.data,"substage");addWorkers(group.workers,values.workers,entry.cpu.data);addCompletion(group.completion_kinds,values.completion_kinds,entry.cpu.data);
 }
 function finishGroups(report,values) {
- for(const [i,group]of report.groups.entries())for(const kind of ["stages","substages","workers"])for(const [j,row]of group[kind].entries())row.metrics=values[i][kind][j].map(summarize);
+ for(const [i,group]of report.groups.entries())for(const kind of ["stages","substages","workers","completion_kinds"])for(const [j,row]of group[kind].entries())row.metrics=values[i][kind][j].map(summarize);
 }
 function finalize(report,entries,cleanups,window,base) {
  const {startedAtNanos:start,endedAtNanos:end}=diagnosticWindowBounds(window),values=report.groups.map(buckets);
@@ -184,6 +201,7 @@ export function parseCpuDiagnostics(text,window) {
  const report=blank(window),entries=new Map(),cleanups=[];report.log_available=1;
  if(!validWindow(window)){report.read_status=7;return validateCpuDiagnostics(report);}
  if(typeof text!=="string"||Buffer.byteLength(text)>CPU_LIMITS.bytes){report.read_status=2;return validateCpuDiagnostics(report);}
+ const bytes=Buffer.from(text,"utf8");if(bytes.toString("utf8")!==text){report.log_available=0;report.read_status=6;return validateCpuDiagnostics(report);}report.bytes_observed=bytes.length;
  const lines=text.split("\n");if(lines.at(-1)==="")lines.pop();if(lines.length>CPU_LIMITS.lines){report.read_status=3;return validateCpuDiagnostics(report);}
  const base=parseTickTraceDiagnostics(text,window);
  report.lines_observed=lines.length;report.capture_complete=Number(text.length===0||text.endsWith("\n"));if(!report.capture_complete)report.read_status=8;
@@ -234,9 +252,23 @@ function validateWorker(row,id,group) {
  if(!row.unavailable_jobs&&!row.invalid_jobs)assert(row.partial_cpu_records===0);
  assert(row.metrics.length===5);row.metrics.forEach((s,i)=>validateStat(s,i,group.cpu_summaries));assert(row.metrics[0].count===row.cpu_records);for(let i=1;i<5;i++)assert(row.metrics[i].count===row.job_records);
 }
+function validateCompletion(group){
+ const rows=group.completion_kinds,parent=group.workers[0];assert(Array.isArray(rows)&&rows.length===2);
+ for(const [id,row]of rows.entries()){
+  closed(row,COMPLETION_KEYS);assert(row.id===id&&["jobs","valid_jobs","unavailable_jobs","invalid_jobs"].every(k=>uint(row[k])));
+  assert(row.valid_jobs+row.unavailable_jobs+row.invalid_jobs===row.jobs&&row.metrics.length===2);row.metrics.forEach((s,i)=>validateStat(s,i,group.cpu_summaries));
+  if(row.valid_jobs===0)assert(row.metrics[0].max_nanos===0);if(row.jobs===0)assert(row.metrics[1].max_nanos===0);
+  assert(row.metrics[1].count===parent.job_records&&row.metrics[0].count===parent.cpu_records-parent.partial_cpu_records);
+ }
+ for(const key of ["jobs","valid_jobs","unavailable_jobs","invalid_jobs"])assert(rows[0][key]+rows[1][key]===parent[key]);
+ for(let i=0;i<2;i++){
+  const a=rows[0].metrics[i],b=rows[1].metrics[i],total=parent.metrics[i];assert(a.count===b.count);
+  if(a.count&&a.count===total.count){const tolerance=32*Number.EPSILON*a.count*Math.max(1,total.max_nanos,a.max_nanos,b.max_nanos);assert(Math.abs(a.mean_nanos+b.mean_nanos-total.mean_nanos)<=tolerance);}
+ }
+}
 function validateSubset(all,missed) {
  for(const key of ["ticks","ordered_attempts","cpu_summaries"])assert(missed[key]<=all[key]);
- for(const kind of ["stages","substages","workers"])for(const [i,row]of missed[kind].entries()){
+ for(const kind of ["stages","substages","workers","completion_kinds"])for(const [i,row]of missed[kind].entries()){
   const parent=all[kind][i];
   for(const key of Object.keys(row).filter(k=>!["id","metrics"].includes(k)))assert(row[key]<=parent[key]);
   for(const [j,metric]of row.metrics.entries()){
@@ -248,23 +280,24 @@ function validateSubset(all,missed) {
 }
 export function validateCpuDiagnostics(report) {
  closed(report,[...TOP,"groups","cleanup"]);for(const key of TOP)assert(typeof report[key]==="number"&&Number.isFinite(report[key])&&report[key]>=0);
- assert(report.schema_version===1&&uint(report.read_status)&&report.read_status<=9&&report.window_seconds<=400);
+ assert(report.schema_version===2&&uint(report.read_status)&&report.read_status<=9&&report.window_seconds<=400);
  for(const key of FLAGS)assert(report[key]===0||report[key]===1);for(const key of COUNTS)assert(uint(report[key]));
  assert(report.capture_complete<=report.log_available&&report.capture_complete===Number(report.read_status===0));
  if(report.read_status===7)assert(report.window_seconds===0);else assert(report.window_seconds>0);
  assert(report.parse_complete===Number(Boolean(report.capture_complete&&report.tick_trace_parse_complete&&!report.invalid_records)));
  assert(report.join_complete===Number(Boolean(report.tick_trace_join_complete&&report.selected_ticks>0&&![report.selected_missing_cpu,report.selected_unexpected_cpu,report.selected_duplicate_records,report.selected_invalid_records,report.metadata_mismatches].some(Boolean))));
  assert(report.tick_trace_available===Number(Boolean(report.tick_trace_capture_complete&&report.tick_trace_parse_complete&&report.tick_trace_join_complete&&report.selected_ticks>0)));
- assert(report.records_observed===report.cpu_records_observed+report.cleanup_records_observed&&report.lines_observed<=CPU_LIMITS.lines);
+ if([1,2,6,7].includes(report.read_status))assert(report.bytes_observed===0);if(report.capture_complete&&report.lines_observed)assert(report.bytes_observed>0);
+ assert(report.bytes_observed<=CPU_LIMITS.bytes&&report.records_observed===report.cpu_records_observed+report.cleanup_records_observed&&report.lines_observed<=CPU_LIMITS.lines);
  assert(report.selected_ticks<=CPU_LIMITS.ticks&&report.selected_ordered_attempts<=report.selected_ticks&&report.selected_cpu_summaries<=report.selected_ticks);
  assert(report.selected_missing_cpu<=report.selected_ordered_attempts&&report.selected_unexpected_cpu<=report.selected_cpu_summaries&&report.selected_invalid_records<=report.invalid_records&&report.selected_duplicate_records<=report.duplicate_records);
  if(report.tick_cap_records||report.cleanup_cap_records)assert(report.read_status===9&&report.capture_complete===0);if(report.read_status===9)assert(report.tick_cap_records+report.cleanup_cap_records>0);
  assert(Array.isArray(report.groups)&&report.groups.length===2);
  for(const [id,g]of report.groups.entries()){
-  closed(g,["id","ticks","ordered_attempts","cpu_summaries","stages","substages","workers"]);assert(g.id===id);
+  closed(g,["id","ticks","ordered_attempts","cpu_summaries","stages","substages","workers","completion_kinds"]);assert(g.id===id);
   for(const key of ["ticks","ordered_attempts","cpu_summaries"])assert(uint(g[key])&&g[key]<=report.selected_ticks);
   assert(g.ordered_attempts<=g.ticks&&g.cpu_summaries<=g.ticks&&g.stages.length===14&&g.substages.length===7&&g.workers.length===3);
-  g.stages.forEach((r,i)=>validateRow(r,i,g,false));g.substages.forEach((r,i)=>validateRow(r,i,g,true));g.workers.forEach((r,i)=>validateWorker(r,i,g));
+  g.stages.forEach((r,i)=>validateRow(r,i,g,false));g.substages.forEach((r,i)=>validateRow(r,i,g,true));g.workers.forEach((r,i)=>validateWorker(r,i,g));validateCompletion(g);
  }
  validateSubset(report.groups[0],report.groups[1]);
  assert(report.selected_ordered_attempts-report.selected_missing_cpu+report.selected_unexpected_cpu===report.selected_cpu_summaries);
@@ -293,7 +326,7 @@ export async function readCpuDiagnostics(file,window) {
  let handle,text,status=0;
  try{
   handle=await open(file,"r");if((await handle.stat()).size>CPU_LIMITS.bytes)status=2;
-  else{const buffer=Buffer.alloc(CPU_LIMITS.bytes+1);let used=0;while(used<buffer.length){const result=await handle.read(buffer,used,buffer.length-used,null);if(!result.bytesRead)break;used+=result.bytesRead;}if(used>CPU_LIMITS.bytes)status=2;else text=buffer.subarray(0,used).toString("utf8");}
+  else{const buffer=Buffer.alloc(CPU_LIMITS.bytes+1);let used=0;while(used<buffer.length){const result=await handle.read(buffer,used,buffer.length-used,null);if(!result.bytesRead)break;used+=result.bytesRead;}if(used>CPU_LIMITS.bytes)status=2;else text=new TextDecoder("utf-8",{fatal:true,ignoreBOM:true}).decode(buffer.subarray(0,used));}
  }catch(error){status=error.code==="ENOENT"?1:6;}finally{await handle?.close();}
  if(status){const r=blank(window,status);if(status===2)r.log_available=1;return validateCpuDiagnostics(r);}
  return parseCpuDiagnostics(text,window);

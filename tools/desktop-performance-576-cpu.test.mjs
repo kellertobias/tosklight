@@ -12,12 +12,13 @@ function line(seq,message,fields,at=100){return new Date(epoch+at).toISOString()
 function source(){
  const a=n=>Array(n).fill(1),ns=n=>Array.from({length:n},(_,i)=>1000*(i+1));
  return {
+  completion_job_kinds:[1,1,0,0,400,10,1,1,0,0,600,30],
   stage_calls:a(14),stage_cpu_valid_calls:a(14),stage_cpu_unavailable_calls:Array(14).fill(0),stage_cpu_invalid_calls:Array(14).fill(0),stage_cpu_nanos:ns(14),stage_counter_read_nanos:Array(14).fill(20),
   substage_calls:a(7),substage_wall_nanos:ns(7).map(n=>n*10),substage_cpu_valid_calls:a(7),substage_cpu_unavailable_calls:Array(7).fill(0),substage_cpu_invalid_calls:Array(7).fill(0),substage_cpu_nanos:ns(7),substage_counter_read_nanos:Array(7).fill(20),
   worker_calls:a(3),worker_jobs:Array(3).fill(2),worker_cpu_valid_jobs:Array(3).fill(2),worker_cpu_unavailable_jobs:Array(3).fill(0),worker_cpu_invalid_jobs:Array(3).fill(0),worker_cpu_nanos:ns(3),worker_counter_read_nanos:Array(3).fill(40),worker_job_wall_nanos:Array(3).fill(20_000),worker_job_wall_max_nanos:Array(3).fill(10_000),worker_section_to_job_max_nanos:Array(3).fill(2_000),worker_uncovered_sort_calls:a(3),
  };
 }
-function cpu(seq,data=source(),at=98){return line(seq,"output preparation cpu summary","schema_version=1 "+Object.entries(data).map(([key,value])=>key+"="+JSON.stringify(value)).join(" "),at);}
+function cpu(seq,data=source(),at=98){return line(seq,"output preparation cpu summary","schema_version=2 "+Object.entries(data).map(([key,value])=>key+"="+JSON.stringify(value)).join(" "),at);}
 function tick(seq=1,{at=100,miss=false,pathCode=0,data=source(),summary=true,nested=pathCode!==1}={}){
  const phase=PHASE_FIELDS.map((key,i)=>key+"="+(10+i)).join(" "),app=APPLICATION_FIELDS.map((key,i)=>key+"="+(1000+i)).join(" ");
  return [
@@ -94,9 +95,9 @@ test("fixed array shapes, bounded nanoseconds and unknown source fields fail clo
   s=>s.replace("stage_cpu_nanos=[1000","stage_cpu_nanos=[-1"),
   s=>s.replace("stage_cpu_nanos=[1000","stage_cpu_nanos=[1.5"),
   s=>s.replace("stage_cpu_nanos=[1000","stage_cpu_nanos=["+(CPU_LIMITS.nanos+1)),
-  s=>s.replace("schema_version=1 stage_calls","schema_version=2 stage_calls"),
-  s=>s.replace("schema_version=1 stage_calls","schema_version=1 private_name=secret stage_calls"),
-  s=>s.replace("schema_version=1 stage_calls","schema_version=1 schema_version=1 stage_calls"),
+  s=>s.replace("schema_version=2 completion_job_kinds","schema_version=1 completion_job_kinds"),
+  s=>s.replace("schema_version=2 completion_job_kinds","schema_version=2 private_name=secret completion_job_kinds"),
+  s=>s.replace("schema_version=2 completion_job_kinds","schema_version=2 schema_version=2 completion_job_kinds"),
   s=>s.replaceAll("output_tick{tick_seq=1}","wrong_span{tick_seq=1}"),
  ]){const r=checked(mutate(tick()));assert.equal(r.available,0);assert(r.invalid_records>0);assert(!JSON.stringify(r).includes("secret"));}
 });
@@ -201,4 +202,34 @@ test("integer microsecond endpoints join exact server boundaries without epoch f
   {startedAtMicros:startedAtMicros+10,endedAtMicros},
   {startedAtMicros,endedAtMicros:startedAtMicros},
  ]){assert.equal(parseCpuDiagnostics(text,{...window,...fields}).read_status,7);}
+});
+
+test("completion kind rows conserve actual ordered/indexed CPU without per-kind wall claims",()=>{
+ const second=source();second.worker_cpu_nanos[0]=3000;second.completion_job_kinds[4]=1000;second.completion_job_kinds[10]=2000;
+ const text=tick()+tick(2,{at:200,miss:true,data:second});const r=checked(text);assert.equal(r.schema_version,2);assert.equal(r.bytes_observed,Buffer.byteLength(text));assert.equal(r.available,1);
+ assert.deepEqual(r.groups[0].completion_kinds.map(k=>[k.id,k.jobs,k.valid_jobs,k.metrics[0].count,k.metrics[0].mean_nanos]),[[0,2,2,2,700],[1,2,2,2,1300]]);
+ assert.deepEqual(r.groups[1].completion_kinds.map(k=>k.metrics[0].mean_nanos),[1000,2000]);
+ assert.equal(r.groups[0].completion_kinds.reduce((n,k)=>n+k.metrics[0].mean_nanos,0),r.groups[0].workers[0].metrics[0].mean_nanos);
+ for(const key of ['wall_nanos','max_nanos','pid','tick_seq'])assert(!Object.hasOwn(r.groups[0].completion_kinds[0],key));
+});
+test("completion schema requires all twelve conserved fields and rejects bad versions, CPU/read/status sums",()=>{
+ for(const mutate of [d=>delete d.completion_job_kinds,d=>d.completion_job_kinds.pop(),d=>d.completion_job_kinds[0]++,d=>d.completion_job_kinds[1]=0,d=>d.completion_job_kinds[4]++,d=>d.completion_job_kinds[5]++,d=>d.completion_job_kinds[4]=CPU_LIMITS.nanos+1]){const d=source();mutate(d);const r=checked(tick(1,{data:d}));assert.equal(r.available,0);assert(r.invalid_records>0);}
+ const r=checked(tick());for(const mutate of [r=>r.schema_version=1,r=>r.bytes_observed=CPU_LIMITS.bytes+1,r=>r.groups[0].completion_kinds[0].id=1,r=>r.groups[0].completion_kinds[0].jobs++,r=>r.groups[0].completion_kinds[0].metrics[0].count=0,r=>r.groups[0].completion_kinds[0].metrics[1].mean_nanos=11,r=>r.groups[0].completion_kinds[0].private='raw']){const bad=structuredClone(r);mutate(bad);assert.throws(()=>validateCpuDiagnostics(bad));}
+});
+test("partial completion CPU keeps identical full-valid record sets without zero-filling unsupported kinds",()=>{
+ for(const status of ['unavailable','invalid']){const d=source();d.worker_cpu_valid_jobs[0]=1;d['worker_cpu_'+status+'_jobs'][0]=1;d.worker_cpu_nanos[0]=400;d.completion_job_kinds[7]=0;d.completion_job_kinds[status==='unavailable'?8:9]=1;d.completion_job_kinds[10]=0;
+ const r=checked(tick()+tick(2,{at:200,data:d}));const forged=structuredClone(r);for(const row of forged.groups[0].completion_kinds)for(const key of Object.keys(row.metrics[0]).filter(k=>k!=='id'))row.metrics[0][key]=0;assert.throws(()=>validateCpuDiagnostics(forged));assert.equal(r.parse_complete,1);assert.equal(r.available,0);assert.equal(r.groups[0].workers[0].metrics[0].count,2);for(const row of r.groups[0].completion_kinds){assert.equal(row.metrics[0].count,1);assert.equal(row.metrics[1].count,2);}}
+ const empty=source();empty.completion_job_kinds=[2,2,0,0,1000,40,0,0,0,0,0,0];const r=checked(tick(1,{data:empty}));assert.equal(r.available,1);assert.equal(r.groups[0].completion_kinds[1].metrics[0].mean_nanos,0);assert.equal(r.groups[0].completion_kinds[1].metrics[0].count,1);
+});
+test("byte headroom is trusted only for bounded valid UTF8, never replacement decoding",async()=>{
+ const text=tick()+"é\n";assert.equal(checked(text).bytes_observed,Buffer.byteLength(text));const invalid=checked(tick()+"\ud800");assert.equal(invalid.read_status,6);assert.equal(invalid.bytes_observed,0);assert.equal(invalid.available,0);
+ const dir=await mkdtemp(path.join(artifactPaths.tmp,'tl775-cpu-utf8-'));try{const file=path.join(dir,'log');await writeFile(file,Buffer.concat([Buffer.from(tick()),Buffer.from([0xff])]));const r=await readCpuDiagnostics(file,window);assert.equal(r.read_status,6);assert.equal(r.bytes_observed,0);assert.equal(r.available,0);}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test("empty completion kinds cannot acquire positive CPU/read stats by shifting the other kind",()=>{
+ const d=source();d.completion_job_kinds=[2,2,0,0,1000,40,0,0,0,0,0,0];const original=checked(tick(1,{data:d}));assert.equal(original.available,1);
+ for(const metric of [0,1]){const forged=structuredClone(original),rows=forged.groups[0].completion_kinds,total=forged.groups[0].workers[0].metrics[metric].mean_nanos;
+  for(const [id,row]of rows.entries())for(const key of ['min_nanos','mean_nanos','p50_nanos','p95_nanos','max_nanos'])row.metrics[metric][key]=id===0?total-1:1;
+  assert.equal(rows[0].metrics[metric].mean_nanos+rows[1].metrics[metric].mean_nanos,total);assert.equal(rows[1].metrics[metric].count,1);assert.equal(rows[1].jobs,0);assert.throws(()=>validateCpuDiagnostics(forged));
+ }
 });

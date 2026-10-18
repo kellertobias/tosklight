@@ -129,7 +129,7 @@ impl light_dynamics::InstanceWorkers for OutputPool {
                     Some(coverage) => timing
                         .as_ref()
                         .expect("covered install")
-                        .job(|_| coverage.job(|| run(index))),
+                        .job(|_| coverage.job(diagnostics::JobKind::Indexed, || run(index))),
                     None => run(index),
                 })
         });
@@ -202,7 +202,7 @@ pub fn run_ordered<W: Send, R: Send>(
                             let lock_started = std::time::Instant::now();
                             let mut worker = slots[index].lock();
                             timing.lock_acquired(lock_started);
-                            coverage.job(|| run(&mut worker, chunk))
+                            coverage.job(diagnostics::JobKind::Ordered, || run(&mut worker, chunk))
                         })
                     }
                     None => {

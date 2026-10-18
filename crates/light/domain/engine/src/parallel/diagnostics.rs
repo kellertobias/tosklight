@@ -105,6 +105,21 @@ fn observation(before: Counter, after: Counter, wall_nanos: u64) -> CpuObservati
     }
 }
 
+/// API identity only, not a semantic operation name. Jobs belong to exactly one kind.
+#[derive(Clone, Copy)]
+pub(super) enum JobKind {
+    Ordered,
+    Indexed,
+}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct JobKindSummary {
+    pub jobs: u64,
+    pub cpu_valid_jobs: u64,
+    pub cpu_unavailable_jobs: u64,
+    pub cpu_invalid_jobs: u64,
+    pub cpu_nanos: u64,
+    pub counter_read_nanos: u64,
+}
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorkerSummary {
     pub calls: u64,
@@ -119,6 +134,8 @@ pub struct WorkerSummary {
     pub section_to_job_max_nanos: u64,
     pub uncovered_sort_calls: u64,
     pub pool_timing: PoolTimingSummary,
+    /// Ordered, Indexed: sums of the same observations used by the aggregate.
+    pub job_kinds: [JobKindSummary; 2],
 }
 /// All-only wall frontiers of actual synchronous pool installs. Sums overlap across jobs;
 /// scheduling, preemption and result collection are included, never inferred CPU wait.
@@ -246,6 +263,28 @@ impl InstallTiming {
     }
 }
 #[derive(Default)]
+struct KindTotals {
+    jobs: AtomicU64,
+    valid: AtomicU64,
+    unavailable: AtomicU64,
+    invalid: AtomicU64,
+    cpu: AtomicU64,
+    read: AtomicU64,
+}
+impl KindTotals {
+    fn summary(&self) -> JobKindSummary {
+        let get = |a: &AtomicU64| a.load(Ordering::Relaxed);
+        JobKindSummary {
+            jobs: get(&self.jobs),
+            cpu_valid_jobs: get(&self.valid),
+            cpu_unavailable_jobs: get(&self.unavailable),
+            cpu_invalid_jobs: get(&self.invalid),
+            cpu_nanos: get(&self.cpu),
+            counter_read_nanos: get(&self.read),
+        }
+    }
+}
+#[derive(Default)]
 struct Totals {
     pool: Mutex<PoolTimingSummary>,
     jobs: AtomicU64,
@@ -258,6 +297,7 @@ struct Totals {
     wall_max: AtomicU64,
     lag_max: AtomicU64,
     sorts: AtomicU64,
+    kinds: [KindTotals; 2],
 }
 pub(super) struct Coverage {
     submitted: Instant,
@@ -294,6 +334,7 @@ pub fn covered<T>(enabled: bool, work: impl FnOnce() -> T) -> (T, Option<WorkerS
         result,
         Some(WorkerSummary {
             calls: 1,
+            job_kinds: t.kinds.each_ref().map(KindTotals::summary),
             jobs: get(&t.jobs),
             cpu_valid_jobs: get(&t.valid),
             cpu_unavailable_jobs: get(&t.unavailable),
@@ -315,11 +356,15 @@ pub(super) fn current() -> Option<Arc<Coverage>> {
     CURRENT.with(|current| current.borrow().clone())
 }
 impl Coverage {
-    pub(super) fn job<T>(&self, work: impl FnOnce() -> T) -> T {
+    pub(super) fn job<T>(&self, kind: JobKind, work: impl FnOnce() -> T) -> T {
         let lag = ns(self.submitted.elapsed());
         let timer = CpuTimer::start_if(true).expect("enabled coverage");
         let result = work();
         let observed = timer.finish();
+        self.record(kind, observed, lag);
+        result
+    }
+    fn record(&self, kind: JobKind, observed: CpuObservation, lag: u64) {
         let t = &self.totals;
         t.jobs.fetch_add(1, Ordering::Relaxed);
         match observed.cpu_status {
@@ -335,7 +380,18 @@ impl Coverage {
         t.wall.fetch_add(observed.wall_nanos, Ordering::Relaxed);
         t.wall_max.fetch_max(observed.wall_nanos, Ordering::Relaxed);
         t.lag_max.fetch_max(lag, Ordering::Relaxed);
-        result
+        let k = &t.kinds[kind as usize];
+        k.jobs.fetch_add(1, Ordering::Relaxed);
+        match observed.cpu_status {
+            1 => &k.valid,
+            0 => &k.unavailable,
+            _ => &k.invalid,
+        }
+        .fetch_add(1, Ordering::Relaxed);
+        k.cpu
+            .fetch_add(observed.thread_cpu_nanos, Ordering::Relaxed);
+        k.read
+            .fetch_add(observed.counter_read_nanos, Ordering::Relaxed);
     }
 }
 pub(super) fn uncovered_sort() {
@@ -397,6 +453,84 @@ mod tests {
     use super::*;
 
     #[test]
+    fn api_kind_counters_reuse_exact_observations_and_conserve_aggregate() {
+        let (_, summary) = covered(true, || {
+            let c = current().unwrap();
+            for (kind, status, cpu, read) in [
+                (JobKind::Ordered, 1, 7, 2),
+                (JobKind::Ordered, 2, 0, 3),
+                (JobKind::Indexed, 1, 11, 5),
+                (JobKind::Indexed, 0, 0, 0),
+            ] {
+                c.record(
+                    kind,
+                    CpuObservation {
+                        wall_nanos: 30,
+                        thread_cpu_nanos: cpu,
+                        cpu_status: status,
+                        counter_read_nanos: read,
+                    },
+                    9,
+                );
+            }
+        });
+        let s = summary.unwrap();
+        assert_eq!(
+            (
+                s.jobs,
+                s.cpu_valid_jobs,
+                s.cpu_unavailable_jobs,
+                s.cpu_invalid_jobs,
+                s.cpu_nanos,
+                s.counter_read_nanos
+            ),
+            (4, 2, 1, 1, 18, 10)
+        );
+        let [ordered, indexed] = s.job_kinds;
+        assert_eq!(
+            (
+                ordered.jobs,
+                ordered.cpu_valid_jobs,
+                ordered.cpu_invalid_jobs,
+                ordered.cpu_nanos,
+                ordered.counter_read_nanos
+            ),
+            (2, 1, 1, 7, 5)
+        );
+        assert_eq!(
+            (
+                indexed.jobs,
+                indexed.cpu_valid_jobs,
+                indexed.cpu_unavailable_jobs,
+                indexed.cpu_nanos,
+                indexed.counter_read_nanos
+            ),
+            (2, 1, 1, 11, 5)
+        );
+        assert_eq!(s.job_wall_nanos, 120);
+    }
+    #[test]
+    fn nested_panicking_callback_restores_outer_without_counting_unreturned_job() {
+        let (_, summary) = covered(true, || {
+            let outer = current().unwrap();
+            assert!(
+                std::panic::catch_unwind(|| covered(true, || {
+                    current()
+                        .unwrap()
+                        .job(JobKind::Ordered, || panic!("unreturned"))
+                }))
+                .is_err()
+            );
+            assert!(Arc::ptr_eq(&outer, &current().unwrap()));
+            outer.job(JobKind::Indexed, || 3)
+        });
+        let s = summary.unwrap();
+        assert_eq!(s.jobs, 1);
+        assert_eq!(s.job_kinds[0].jobs, 0);
+        assert_eq!(s.job_kinds[1].jobs, 1);
+        assert!(current().is_none());
+    }
+    #[test]
     fn invalid_cpu_delta_is_explicit_and_unwind_restores_coverage() {
         let counter = |value| Counter {
             value: Some(value),
@@ -444,6 +578,8 @@ mod tests {
         assert_eq!(workers.iter().sum::<usize>(), 13);
         let summary = summary.unwrap();
         assert_eq!(summary.jobs, 13);
+        assert_eq!(summary.job_kinds[0].jobs, 13);
+        assert_eq!(summary.job_kinds[1].jobs, 0);
         assert_eq!(summary.pool_timing.install_calls, 1);
         assert_eq!(summary.pool_timing.install_jobs, 13);
         assert_eq!(summary.pool_timing.scratch_lock_calls, 13);
@@ -461,9 +597,9 @@ mod tests {
         );
         assert!(current().is_none());
         let (_, outer) = covered(true, || {
-            let (_, inner) = covered(true, || current().unwrap().job(|| 1));
+            let (_, inner) = covered(true, || current().unwrap().job(JobKind::Ordered, || 1));
             assert_eq!(inner.unwrap().jobs, 1);
-            current().unwrap().job(|| 2)
+            current().unwrap().job(JobKind::Ordered, || 2)
         });
         assert_eq!(outer.unwrap().jobs, 1);
         assert!(current().is_none());
@@ -482,6 +618,11 @@ mod tests {
             assert!(seen.iter().all(|n| n.load(Ordering::Relaxed) == 1));
             let summary = summary.unwrap();
             assert_eq!(summary.pool_timing.install_calls, u64::from(count > 1));
+            assert_eq!(summary.job_kinds[0].jobs, 0);
+            assert_eq!(
+                summary.job_kinds[1].jobs,
+                if count > 1 { count as u64 } else { 0 }
+            );
             assert_eq!(
                 summary.pool_timing.install_jobs,
                 if count > 1 { count as u64 } else { 0 }
