@@ -15,6 +15,7 @@ import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
 import { writePoolDiagnostics } from "./desktop-performance-576-pool.mjs";
 import { writeApiDiagnostics } from "./desktop-performance-576-api.mjs";
 import { writeObserverDiagnostics } from "./desktop-performance-576-observer.mjs";
+import { ThreadCpuDiagnostics, threadCpuEnabled, verifiedClockTicks, writeThreadCpuDiagnostics } from "./desktop-performance-576-thread-cpu.mjs";
 import { expectedWorkerReceiptCount, WorkerCountReceipt, writeWorkerDiagnostics } from "./desktop-performance-576-workers.mjs";
 import {
   verifyWorkloadFunctions, configurePacketProof, waitStageStarted,
@@ -63,6 +64,18 @@ const stageEnabled = proofMode !== "control-no-stage";
 const numericPath = path.resolve(options["numeric-report"]);
 assert(numericPath.startsWith(`${path.resolve(artifactPaths.results)}${path.sep}`), "numeric output must be beneath canonical test results");
 const phaseNumericPath = path.join(path.dirname(numericPath), "phase-numeric.json");
+// Separate opt-in diagnostic only; ordinary Control/Stage perform no additional probes.
+const threadCpu = threadCpuEnabled(process.env,proofMode)
+  ? new ThreadCpuDiagnostics(verifiedClockTicks(spawnSync("getconf",["CLK_TCK"],{encoding:"utf8",timeout:1000}))) : null;
+let threadCpuNumericPath;
+if(threadCpu) {
+  assert(process.env.LIGHT_OUTPUT_THREAD_CPU_REPORT,"thread CPU report destination required");
+  threadCpuNumericPath=path.resolve(process.env.LIGHT_OUTPUT_THREAD_CPU_REPORT);
+  const proofRoot=path.dirname(path.dirname(numericPath));
+  assert(threadCpuNumericPath.startsWith(`${path.resolve(artifactPaths.results)}${path.sep}`),"thread CPU report must be beneath canonical results");
+  assert(!threadCpuNumericPath.startsWith(`${proofRoot}${path.sep}`),"thread CPU report must remain outside strict proof inventory");
+  await writeThreadCpuDiagnostics(threadCpuNumericPath,threadCpu).catch(()=>{});
+}
 async function retainPhaseDiagnostics(file, window) {
   // This observer is diagnostic only: unavailable data or a write error never changes Control gates.
   await writePhaseDiagnostics(phaseNumericPath, file, window, {fullFrequency:process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all"}).catch(() => {});
@@ -181,6 +194,7 @@ async function runCase(performanceCase, executionMode) {
   try { evidence = await createCaseEvidence(temporaryRoot); }
   catch(error) { await terminateProcessTree(child.pid); throw error; }
 	evidence.closed = closed;
+  if(threadCpu) evidence.threadCpu=threadCpu;
   const workerReceipt=expectedWorkers===null?null:new WorkerCountReceipt(expectedWorkers);
   const workerNumericPath=path.join(path.dirname(numericPath),"worker-numeric.json");
   if(workerReceipt) {
@@ -269,7 +283,7 @@ async function runCase(performanceCase, executionMode) {
     const counterClock = new ServerCounterClock();
     let measured;
     try {
-      measured = await measureWindow(api, child.pid, executionMode, evidence.samples, counterClock);
+      measured = await measureWindow(api, child.pid, executionMode, evidence.samples, counterClock, threadCpu);
     } finally {
       // Preserve partial clock evidence even when a server observation fails validation.
       Object.assign(checkpoint.result, counterClock.summary());
@@ -389,6 +403,7 @@ async function runCase(performanceCase, executionMode) {
 		failure,
 	);
   await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
+  if(threadCpu) await writeThreadCpuDiagnostics(threadCpuNumericPath,threadCpu).catch(()=>{});
   failure = finalized.failure;
   cleanupPassed = Number(cleanupPassed && finalized.cleanupPassed);
   await checkpoint.finish(cleanupPassed);
@@ -511,7 +526,7 @@ async function finishCaseEvidence(evidence, reportPath, preparedPath, state) {
 	files.measurement = `${evidence.prefix}-measurement.json`;
 	await writeFile(
 		files.measurement,
-		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples, ...(evidence.workerReceipt?{workerReceipt:evidence.workerReceipt.privateState()}:{}) }, null, 2)}\n`,
+		`${JSON.stringify({ schema_version: 1, state, samples: evidence.samples, ...(evidence.workerReceipt?{workerReceipt:evidence.workerReceipt.privateState()}:{}), ...(evidence.threadCpu?{threadCpu:evidence.threadCpu.privateState()}:{}) }, null, 2)}\n`,
 		{ flag: "wx" },
 	);
 	await writeFile(
@@ -730,7 +745,7 @@ async function configureScheduler(api) {
 	});
 }
 
-async function measureWindow(api, rootPid, executionMode, samples, counterClock) {
+async function measureWindow(api, rootPid, executionMode, samples, counterClock, threadCpu = null) {
 	const rates = [];
 	const resources = [];
   const observe = async (phase, second) => {
@@ -753,6 +768,7 @@ async function measureWindow(api, rootPid, executionMode, samples, counterClock)
 	let processObservationMillis =
 		(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
   Object.assign(opening.record, {processMonotonicStartMillis, processMonotonicEndMillis, processes});
+  if(threadCpu) await threadCpu.observe(processes,rootPid,opening.record);
 	for (let second = 0; second < DURATION_SECONDS; second++) {
 		await new Promise((resolve) => setTimeout(resolve, 1_000));
     const observation = await observe("measurement", second);
@@ -767,6 +783,7 @@ async function measureWindow(api, rootPid, executionMode, samples, counterClock)
 			(nextProcessObservationMillis - processObservationMillis) / 1_000;
     Object.assign(observation.record, {elapsed, processElapsed,
       processMonotonicStartMillis, processMonotonicEndMillis, processes: nextProcesses});
+    if(threadCpu) await threadCpu.observe(nextProcesses,rootPid,observation.record);
 		rates.push(
 			(nextDiagnostics.output.frames_sent - diagnostics.output.frames_sent) /
 				elapsed,
