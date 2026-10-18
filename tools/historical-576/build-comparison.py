@@ -35,6 +35,10 @@ OVERLAYS = {
 # Old-lock TypeScript compatibility: erased annotation only, no timer behavior change.
 OLD_TIMER_OVERLAY = ('old-runtime-timer-type.mjs','448e15b5db1bff8269dd99675c25ee5bb22846ad3cadcff989e91c5d75aacb3e','apps/light-desktop/src/api/client/runtime.ts','18db82fddd820e898995ee1ff962d27c9d43810ca7dda376cdaf882548df82f9','8dfeb552e904e1f1af78a2c4e6ec29a954f52fc3d6d768bb3d9fa33ed47a973f')
 
+# Normal Tauri 2.6.3 / utils 2.9.3 generated outputs; ACL JSON also feeds runtime ACL.
+TAURI_OUTPUT_FILES = tuple('apps/light-desktop/src-tauri/gen/schemas/'+name for name in ('acl-manifests.json','capabilities.json','desktop-schema.json','linux-schema.json'))
+TAURI_OUTPUT_LIMIT = 4 * 1024 * 1024
+
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -76,6 +80,52 @@ def verify(root, original, expected):
     status = git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all').decode().split('\0')
     changed = {entry[3:] for entry in status if entry}
     assert changed == {name for name in original if original[name] != expected[name]}, 'unexpected source mutation'
+
+def compact_hash(value):
+    return digest(json.dumps(value,sort_keys=True,separators=(',',':')).encode())
+
+def tauri_outputs(root):
+    result = {}
+    def invalid_constant(_):
+        raise ValueError('invalid JSON constant')
+    for name in TAURI_OUTPUT_FILES:
+        file = root/name
+        for parent in [file.parent,*file.parent.parents]:
+            if parent == root.parent:
+                break
+            assert not parent.is_symlink(), 'Tauri parent symlink'
+        descriptor = os.open(file,os.O_RDONLY|os.O_NOFOLLOW)
+        try:
+            info = os.fstat(descriptor)
+            assert stat.S_ISREG(info.st_mode) and 0 < info.st_size <= TAURI_OUTPUT_LIMIT, 'Tauri file bound'
+            data = b''
+            while len(data) <= info.st_size:
+                block = os.read(descriptor,min(65536,info.st_size+1-len(data)))
+                if not block:
+                    break
+                data += block
+            assert len(data) == info.st_size == os.fstat(descriptor).st_size, 'Tauri file changed'
+            assert isinstance(json.loads(data,parse_constant=invalid_constant),dict), 'Tauri JSON must be object'
+            result[name] = digest(data)
+        finally:
+            os.close(descriptor)
+    return result
+
+def verify_postbuild(root, original, expected, generated):
+    assert set(original) == set(expected)
+    assert set(generated) == set(TAURI_OUTPUT_FILES), 'Tauri inventory'
+    assert tauri_outputs(root) == generated, 'Tauri output drift'
+    observed = {**expected,**generated}
+    # These revisions track three generated JSON files; Linux Tauri adds exactly this fourth.
+    added = set(observed)-set(original)
+    assert added == {TAURI_OUTPUT_FILES[3]}, 'unexpected generated source inventory'
+    for name,wanted in observed.items():
+        assert BUILD_DEADLINE is None or time.monotonic() < BUILD_DEADLINE, 'whole-build deadline'
+        assert digest(regular(root/name)) == wanted, 'postbuild source/output drift'
+    status = git(root,'status','--porcelain=v1','-z','--untracked-files=all').decode().split('\0')
+    changed = {entry[3:] for entry in status if entry}
+    assert changed == {name for name in original if original[name] != observed[name]} | added, 'unexpected source mutation'
+    return observed
 
 def arm_environment(root, target, inherited):
     allowed_paths = {'LIGHT_REPOSITORY_ROOT','LIGHT_ARTIFACTS_DIR','LIGHT_TMP_DIR'}
@@ -256,7 +306,7 @@ def main():
     helpers = Path(__file__).resolve().parent
     deadline = BUILD_DEADLINE
     common = {'assets/fixture-library/'+name+'.toskfixture':git(checkout,'show',CURRENT+':assets/fixture-library/'+name+'.toskfixture') for name in PACKAGES}
-    receipt = {'schema_version':2,'old_sha':OLD,'current_sha':CURRENT,'helper_sha256':digest(regular(Path(__file__).resolve())),
+    receipt = {'schema_version':3,'old_sha':OLD,'current_sha':CURRENT,'helper_sha256':digest(regular(Path(__file__).resolve())),
                'packages':{name:digest(data) for name,data in common.items()},'arms':[],
                'inherited_selected_environment':selected_environment(os.environ),
                'whole_build_input_attested':0,'dependency_freshness_claimed':0,'runtime_or_performance_claimed':0}
@@ -318,25 +368,28 @@ def main():
         packaged_rows = packaged(image,output,root,environment,deadline)
         assert binary(image,'appimage') == image_receipt, 'AppImage changed during extraction'
         mark(arm_code,11)
-        verify(root,original,expected)
-        save(output/'source-after.json',expected)
+        generated = tauri_outputs(root)
+        observed = verify_postbuild(root,original,expected,generated)
+        save(output/'source-after.json',observed)
         after_versions = versions(root,environment,output,deadline,'after')
         assert before_versions == after_versions, 'toolchain changed'
         assert selected_environment(environment) == {**before_environment,'LIGHT_DESKTOP_SIDECAR_DIR':str(sidecars),'LIGHT_DESKTOP_SIDECAR_TARGET':TARGET}
         save(output/'environment-after.json',{'selected':selected_environment(environment),'toolchain':after_versions})
         row = {'arm':arm,'source_sha':revision,'source_files':len(original),'effective_manifest_sha256':digest(json.dumps(expected,sort_keys=True).encode()),
+               'generated_tauri_outputs':generated,'generated_tauri_outputs_count':len(generated),
+               'generated_tauri_outputs_sha256':compact_hash(generated),'postbuild_manifest_sha256':compact_hash(observed),
                'overlay':overlay,'prebundle_sidecars':raw,'appimage':image_receipt,'packaged_elfs':packaged_rows,
                'isolated_target':1,'resources_before':initial_resources}
         receipt['arms'].append(row)
         save(private/'build-provenance.json',receipt)
-        arms.append((root,original,expected))
+        arms.append((root,original,expected,generated))
         mark(arm_code,12)
         assert target.parent == output and target.name == 'cargo-target' and target.is_dir() and not target.is_symlink()
         shutil.rmtree(target)  # Only this arm's generated, owned target; saved receipts/binaries remain.
         mark(arm_code,13)
     mark(3,11)
-    for root,original,expected in arms:
-        verify(root,original,expected)
+    for root,original,expected,generated in arms:
+        verify_postbuild(root,original,expected,generated)
     receipt['all_arm_sources_reverified_final'] = 1
     save(private/'build-provenance.json',receipt)
     mark(3,14)

@@ -166,4 +166,57 @@ class Pure(unittest.TestCase):
             rows=b.packaged(root/'never-executed.AppImage',output,root,env,1)
         self.assertEqual([r['role'] for r in rows],['light-headless','viz-renderer','light-desktop'])
 
+    def tauri_fixture(self):
+        root=self.temporary();(root/'application.rs').write_bytes(b'unchanged source')
+        original={'application.rs':b.digest(b'unchanged source')}
+        for i,name in enumerate(b.TAURI_OUTPUT_FILES[:3]):
+            file=root/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_text('{"before":'+str(i)+'}')
+            original[name]=b.digest(file.read_bytes())
+        return root,original,dict(original)
+
+    def generated_fixture(self):
+        root,original,expected=self.tauri_fixture()
+        for i,name in enumerate(b.TAURI_OUTPUT_FILES):(root/name).write_text('{"generated":'+str(i)+'}')
+        generated=b.tauri_outputs(root)
+        status=b''.join(((' M ' if name in original else '?? ')+name+'\0').encode() for name in b.TAURI_OUTPUT_FILES)
+        return root,original,expected,generated,status
+
+    def test_tauri_outputs_are_separate_from_strict_input_manifest(self):
+        root,original,expected=self.tauri_fixture()
+        with patch.object(b,'git',return_value=b''):b.verify(root,original,expected)
+        # Prebuild verification still rejects even the later permitted Linux output.
+        (root/b.TAURI_OUTPUT_FILES[3]).write_text('{}')
+        with patch.object(b,'git',return_value=('?? '+b.TAURI_OUTPUT_FILES[3]+'\0').encode()),self.assertRaises(AssertionError):b.verify(root,original,expected)
+        root,original,expected,generated,status=self.generated_fixture()
+        with patch.object(b,'git',return_value=status):observed=b.verify_postbuild(root,original,expected,generated)
+        self.assertEqual(len(observed),len(original)+1)
+        self.assertEqual(set(observed)-set(original),{b.TAURI_OUTPUT_FILES[3]})
+        self.assertEqual(expected,original)
+        self.assertNotEqual(observed[b.TAURI_OUTPUT_FILES[0]],expected[b.TAURI_OUTPUT_FILES[0]])
+        self.assertEqual(b.compact_hash({'z':'last','a':'first'}),b.digest(b'{"a":"first","z":"last"}'))
+
+    def test_later_tauri_drift_or_any_other_source_mutation_is_rejected(self):
+        for mode in ['editor','source','untracked','missing inventory']:
+            with self.subTest(mode=mode):
+                root,original,expected,generated,status=self.generated_fixture()
+                if mode=='editor':(root/b.TAURI_OUTPUT_FILES[0]).write_text('{"later":true}')
+                if mode=='source':(root/'application.rs').write_bytes(b'changed')
+                if mode=='untracked':status+=b'?? unexpected.rs\0'
+                if mode=='missing inventory':generated.pop(b.TAURI_OUTPUT_FILES[0])
+                with patch.object(b,'git',return_value=status),self.assertRaises(AssertionError):b.verify_postbuild(root,original,expected,generated)
+
+    def test_exact_tauri_jsons_are_regular_bounded_objects(self):
+        for mode in ['array','invalid','nan','oversize','symlink','missing','parent symlink']:
+            with self.subTest(mode=mode):
+                root,original,expected,generated,status=self.generated_fixture();file=root/b.TAURI_OUTPUT_FILES[0]
+                if mode=='array':file.write_text('[]')
+                if mode=='invalid':file.write_text('{')
+                if mode=='nan':file.write_text('{"x":NaN}')
+                if mode=='oversize':file.write_bytes(b' '* (b.TAURI_OUTPUT_LIMIT+1))
+                if mode=='symlink':file.unlink();file.symlink_to(root/b.TAURI_OUTPUT_FILES[1])
+                if mode=='missing':file.unlink()
+                if mode=='parent symlink':
+                    directory=file.parent;held=directory.with_name('held');directory.rename(held);directory.symlink_to(held,target_is_directory=True)
+                with self.assertRaises((AssertionError,OSError,ValueError)):b.tauri_outputs(root)
+
 if __name__=='__main__':unittest.main()
