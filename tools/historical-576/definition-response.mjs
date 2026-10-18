@@ -6,10 +6,39 @@ function entries(bindings){
   for(const entry of bindings){assert.deepEqual(Object.keys(entry).sort(),['actual_id','canonical_id']);uuid(entry.canonical_id);uuid(entry.actual_id);assert.notEqual(entry.canonical_id,entry.actual_id);assert(!canonical.has(entry.canonical_id)&&!actual.has(entry.actual_id));canonical.add(entry.canonical_id);actual.add(entry.actual_id);}
   return {canonical,actual};
 }
+// Create normalizes these known f32 source fields through serde_json::to_value.
+// Its Value serializer widens the rounded f32 to f64; direct JS decimals are not the
+// resulting wire numbers. Keep all other fields, including losslessly retained
+// inherited spatial_mapping, exactly as supplied. This is only the frozen576 forms.
+function expectedWireDefinition(definition){
+  const expected=structuredClone(definition);
+  const f32=value=>{assert.equal(typeof value,'number');assert(Number.isFinite(value));const rounded=Math.fround(value);assert(Number.isFinite(rounded));return rounded;};
+  const legacySource=source=>{
+    if(source.type==='value')source.value=f32(source.value);
+    else assert.equal(source.type,'current');
+  };
+  for(const lane of expected.lanes){
+    if(lane.programming){
+      assert.equal(lane.programming.configuration.mode,'max_min');
+      const config=lane.programming.configuration.configuration;
+      for(const source of [config.minimum,config.maximum]){
+        assert.equal(source.kind,'value');assert.equal(source.value.kind,'scalar');
+        source.value.value=f32(source.value.value);
+      }
+    }else{
+      assert.equal(lane.mode,'max_min');
+      for(const point of lane.keyframes.points)legacySource(point.source);
+      legacySource(lane.max_min.minimum);legacySource(lane.max_min.maximum);
+      legacySource(lane.middle_amplitude.middle);
+      lane.middle_amplitude.amplitude=f32(lane.middle_amplitude.amplitude);
+    }
+  }
+  return expected;
+}
 export function bindCreatedDefinition(definition,response,bindings=[]){
   uuid(definition.id);assert.equal(definition.revision,1);const previous=entries(bindings);assert(bindings.length<20&&!previous.canonical.has(definition.id));
   const object=response?.object;assert(object&&typeof object==='object');assert.equal(object.kind,'dynamic');uuid(object.id);assert.notEqual(object.id,definition.id);assert.equal(object.revision,1);assert(object.validation_error==null);assert(!previous.actual.has(object.id));
-  const expected={...structuredClone(definition),id:object.id,revision:1};
+  const expected={...expectedWireDefinition(definition),id:object.id,revision:1};
   // Compare the COMPLETE returned raw definition: no lane-ID, order, config, phase or metadata filtering.
   assert.deepEqual(object.body,expected);
   return {definition:structuredClone(object.body),bindings:[...structuredClone(bindings),{canonical_id:definition.id,actual_id:object.id}]};

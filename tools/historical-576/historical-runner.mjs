@@ -18,6 +18,7 @@ import { artifactPaths } from "../artifact-paths.mjs";
 import { translateLegacyPlan } from "./legacy-plan.mjs";
 import { CONTROL_PROFILE } from "./old-benchmark-shim.mjs";
 import { installDefinitions } from "./definition-response.mjs";
+import { bindInstalledProfiles } from "./profile-response.mjs";
 import { stopOwned, applyCleanupResult } from "./owned-process-cleanup.mjs";
 export const ARMS = Object.freeze([
 	"old-legacy",
@@ -466,6 +467,7 @@ export const REPORT_FIELDS = Object.freeze([
 	"available",
 	"complete",
 	"failure_stage_code",
+	"setup_checkpoint_code",
 	"cleanup_verified",
 	"compatibility_build",
 	"schema5_acceptance_claim",
@@ -562,6 +564,7 @@ export function validateReport(r) {
 	);
 	assert.equal(r.compatibility_build, Number(r.arm_code === 2));
 	assert(r.stage_absence_scope_code <= 1);
+	assert(r.setup_checkpoint_code <= 9);
 	if (r.resource_available) assert.equal(r.resource_partial, 0);
 	if (!r.headless_cpu_available) {
 		assert.equal(r.headless_cpu_mean_percent, 0);
@@ -579,7 +582,7 @@ export function validateReport(r) {
 			assert.equal(r[`${prefix}_assignments`], 5408);
 		}
 	}
-	assert.equal(r.schema_version, 1);
+	assert.equal(r.schema_version, 2);
 	assert(uint(r.arm_code) && r.arm_code >= 1 && r.arm_code <= 3);
 	assert(uint(r.failure_stage_code) && r.failure_stage_code <= 12);
 	for (const k of [
@@ -606,6 +609,7 @@ export function validateReport(r) {
 	])
 		assert.equal(r[k], 0);
 	if (r.available) {
+		assert.equal(r.setup_checkpoint_code, 9);
 		assert(r.complete && r.cleanup_verified && r.failure_stage_code === 0);
 		assert.equal(r.fixtures, 576);
 		assert.equal(r.occupied_slots, 8064);
@@ -653,12 +657,13 @@ export const PROVENANCE_FIELDS = Object.freeze([
 	"selected_plan_sha256",
 	"target_bijection_sha256",
 	"definition_bijection_sha256",
+	"profile_bijection_sha256",
 	"runner_sha256",
 	"translator_sha256",
 ]);
 export function validateProvenance(p) {
 	closed(p, PROVENANCE_FIELDS);
-	assert.equal(p.schema_version, 2);
+	assert.equal(p.schema_version, 3);
 	assert(uint(p.arm_code) && p.arm_code >= 1 && p.arm_code <= 3);
 	assert(p.available === 0 || p.available === 1);
 	for (const k of PROVENANCE_FIELDS.filter((k) => k.endsWith("_sha256")))
@@ -691,7 +696,7 @@ export async function runArm(options) {
 	assert(arm >= 0);
 	const r = Object.fromEntries(REPORT_FIELDS.map((k) => [k, 0]));
 	Object.assign(r, {
-		schema_version: 1,
+		schema_version: 2,
 		arm_code: arm + 1,
 		compatibility_build: Number(arm === 1),
 	});
@@ -706,7 +711,7 @@ export async function runArm(options) {
 			]),
 		);
 	Object.assign(provenance, {
-		schema_version: 2,
+		schema_version: 3,
 		arm_code: arm + 1,
 		revision_sha: "0".repeat(40),
 	});
@@ -857,46 +862,48 @@ export async function runArm(options) {
 			90000,
 		);
 		stage = 3;
+		r.setup_checkpoint_code = 1;
 		api.session = await api.request("POST", "/api/v2/sessions", {
 			desk_id: null,
 		});
+		r.setup_checkpoint_code = 2;
 		const bootstrap = await api.request("GET", "/api/v2/bootstrap");
 		api.showId = bootstrap.active_show?.id;
 		assert(api.showId);
+		r.setup_checkpoint_code = 3;
 		await api.request("POST", "/api/v2/configuration/update", {
 			request_id: randomUUID(),
 			patch: { frame_rate_hz: 40 },
 		});
+		r.setup_checkpoint_code = 4;
 		const before = await api.request("GET", "/api/v2/patch"),
 			library = await api.request("GET", "/api/v2/fixture-library/profiles");
-		for (const profile of input.patch.profile_revisions) {
-			const found = library.profiles.filter(
-				(p) =>
-					p.id === profile.profile_id &&
-					p.revision === profile.profile_revision,
-			);
-			assert.equal(found.length, 1);
-			assert.equal(stable(found[0]), stable(profile.profile_snapshot));
-		}
+		r.setup_checkpoint_code = 5;
+		const { runtimeScene, runtimePatch, profileBindings } =
+			bindInstalledProfiles(input, library.profiles, arm + 1);
+		raw.profile_bindings = profileBindings;
+		r.setup_checkpoint_code = 6;
 		await api.request(
 			"POST",
 			"/api/v2/patch/fixtures",
 			{
 				request_id: randomUUID(),
-				fixtures: input.scene.fixtures,
+				fixtures: runtimeScene.fixtures,
 				remove_fixture_ids: before.fixtures.map((f) => f.fixture_id),
 				placements: [],
 			},
 			before.patch_revision,
 		);
+		r.setup_checkpoint_code = 7;
 		const actual = await api.request("GET", "/api/v2/patch"),
-			mapping = targetBijection(input.patch, actual),
+			mapping = targetBijection(runtimePatch, actual),
 			selectedPlan = remapPlan(canonicalPlan, mapping);
+		r.setup_checkpoint_code = 8;
 		const { runtimePlan: plan, definitionBindings, starts } =
 			await installDefinitions(api, selectedPlan, randomUUID);
 		raw.definition_bindings = definitionBindings;
 		provenance = {
-			schema_version: 2,
+			schema_version: 3,
 			arm_code: arm + 1,
 			available: 1,
 			revision_sha: a.revision_sha,
@@ -908,6 +915,7 @@ export async function runArm(options) {
 			canonical_plan_sha256: canonicalHash,
 			selected_plan_sha256: selectedHash,
 			definition_bijection_sha256: digest(stable(definitionBindings)),
+			profile_bijection_sha256: digest(stable(profileBindings)),
 			target_bijection_sha256: digest(
 				stable([...mapping].sort((a, b) => a[0].localeCompare(b[0]))),
 			),
@@ -918,6 +926,7 @@ export async function runArm(options) {
 				),
 			),
 		};
+		r.setup_checkpoint_code = 9;
 		stage = 4;
 		packets = await configurePacketProof(api, port);
 		await writeFile(prepared, "ready\n", { flag: "wx", mode: 0o600 });

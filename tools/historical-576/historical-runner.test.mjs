@@ -27,7 +27,7 @@ for (const file of [
 		JSON.stringify("../" + file),
 		JSON.stringify(pathToFileURL(path.join(ROOT, "tools", file)).href),
 	);
-for (const file of ["legacy-plan.mjs", "old-benchmark-shim.mjs", "definition-response.mjs", "owned-process-cleanup.mjs"])
+for (const file of ["legacy-plan.mjs", "old-benchmark-shim.mjs", "definition-response.mjs", "profile-response.mjs", "owned-process-cleanup.mjs"])
 	runnerSource = runnerSource.replace(
 		JSON.stringify("./" + file),
 		JSON.stringify(new URL("./" + file, import.meta.url).href),
@@ -61,7 +61,7 @@ import {
 } from "./old-benchmark-shim.mjs";
 const zero = () =>
 	Object.assign(Object.fromEntries(REPORT_FIELDS.map((k) => [k, 0])), {
-		schema_version: 1,
+		schema_version: 2,
 		arm_code: 1,
 	});
 const throws = (fn) => assert.throws(fn);
@@ -69,6 +69,9 @@ test("closed numeric row rejects privacy, fractional counters and false success"
 	assert.equal(validateRow(zero()).available, 0);
 	for (const change of [
 		{ pid: 123 },
+		{ setup_checkpoint_code: 10 },
+		{ setup_checkpoint_code: 0.5 },
+		{ schema_version: 1 },
 		{ arm_code: 0 },
 		{ completed_frames: 0.5 },
 		{ available: 1 },
@@ -87,7 +90,7 @@ test("HEX-only seal and exact companion filename", () => {
 		]),
 	);
 	Object.assign(p, {
-		schema_version: 2,
+		schema_version: 3,
 		arm_code: 1,
 		revision_sha: "0".repeat(40),
 	});
