@@ -75,6 +75,16 @@ pub fn chunk_range(items: usize, chunks: usize, chunk: usize) -> std::ops::Range
     start..end
 }
 
+// Coarsen only Rayon's scheduling leaves, keeping every logical callback and chunk intact.
+// Aim for roughly two leaves per worker; a leaf may contain several callbacks in order.
+fn scheduling_min_len(items: usize, workers: usize) -> usize {
+    items.div_ceil(workers.saturating_mul(2).max(1)).max(1)
+}
+
+#[cfg(test)]
+#[path = "parallel/scheduling_grain_tests.rs"]
+mod scheduling_grain_tests;
+
 /// A desk's output worker pool: persistent threads a frame's chunks run on, so a frame neither
 /// spawns threads nor warms new ones. Owned by the engine; its threads end with it.
 pub struct OutputPool {
@@ -124,7 +134,7 @@ impl light_dynamics::InstanceWorkers for OutputPool {
         self.pool.install(|| {
             (0..count)
                 .into_par_iter()
-                .with_max_len(1)
+                .with_min_len(scheduling_min_len(count, self.workers()))
                 .for_each(|index| match &coverage {
                     Some(coverage) => timing
                         .as_ref()
@@ -192,7 +202,7 @@ pub fn run_ordered<W: Send, R: Send>(
     let result = pool.pool.install(|| {
         (0..chunks)
             .into_par_iter()
-            .with_max_len(1)
+            .with_min_len(scheduling_min_len(chunks, pool.workers()))
             .map(|chunk| {
                 let index = rayon::current_thread_index().expect("a pool thread");
                 match &coverage {
