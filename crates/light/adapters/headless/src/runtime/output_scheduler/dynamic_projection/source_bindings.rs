@@ -84,10 +84,8 @@ fn bind_projected_sources(
         origins.bind(binding, resolve(row.captured_index)?)?;
         active.insert(binding);
     }
-    origins.retain_authored_bindings(|record| {
-        !owns(&record.origin)
-            || active.contains(&record.binding)
-            || binding_is_releasing(record.binding, runtime)
+    origins.retain_authored_bindings_except(&active, |record| {
+        !owns(&record.origin) || binding_is_releasing(record.binding, runtime)
     });
     Ok(())
 }
@@ -172,9 +170,8 @@ fn bind_programmer_sources(
     }
     // Drop obsolete live lookups, retaining immutable records referenced by held leaves.
     // Cold checkpoint pruning can reclaim records once neither binding nor history uses them.
-    origins.retain_authored_bindings(|record| {
+    origins.retain_authored_bindings_except(&active, |record| {
         !matches!(record.origin, DynamicSourceOrigin::Programmer { .. })
-            || active.contains(&record.binding)
             || binding_is_releasing(record.binding, runtime)
     });
     Ok(())
