@@ -209,6 +209,10 @@ impl<O: HybridFrameObserver<T>, T> PreparationWorkers for FrameWorkers<'_, '_, O
             .append_fork_logs(&requirements[from.0..to.0], &failures[from.1..to.1]);
     }
 
+    fn reuses_controller_order(&self) -> bool {
+        true
+    }
+
     fn sort_controller_keys(&self, keys: &mut [light_dynamics::ControllerSortKey]) {
         light_engine::parallel::sort_unstable_by_key(Some(self.pool), keys, |key| *key);
     }

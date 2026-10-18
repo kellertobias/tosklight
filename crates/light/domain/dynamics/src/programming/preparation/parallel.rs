@@ -69,6 +69,14 @@ pub trait PreparationWorkers {
     /// lengths, as one controller recorded them in turn.
     fn append_logs(&mut self, chunk: usize, from: (usize, usize), to: (usize, usize));
 
+    /// Opt in to retaining the canonical controller order across preparations.
+    /// Returning true promises `sort_controller_keys` uses the ascending key order
+    /// and that omitting this callback for unchanged identities has no observable effect.
+    /// Custom workers keep one callback per preparation by default.
+    fn reuses_controller_order(&self) -> bool {
+        false
+    }
+
     /// Sort the controllers' keys (distinct: each ends with its sample index); on the workers'
     /// threads if the caller has them (TL-639 round 6).
     fn sort_controller_keys(&self, keys: &mut [ControllerSortKey]) {
@@ -187,7 +195,12 @@ fn prepare_in_parallel(
     scratch: &mut DynamicFamilyPreparationScratch,
     workers: &mut dyn PreparationWorkers,
 ) -> Result<(), TransitionError> {
-    sort_controllers(samples, scratch, &|keys| workers.sort_controller_keys(keys));
+    sort_controllers(
+        samples,
+        scratch,
+        &|keys| workers.sort_controller_keys(keys),
+        workers.reuses_controller_order(),
+    );
     let chunks = workers.chunks().clamp(1, TARGET_SHARDS);
     let mut members = vec![Vec::new(); chunks];
     scratch.chunk_of_controller.clear();

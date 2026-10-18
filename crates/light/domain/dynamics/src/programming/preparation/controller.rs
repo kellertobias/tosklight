@@ -141,7 +141,32 @@ pub(super) fn sort_controllers(
     samples: &[DynamicRuntimeSample],
     scratch: &mut DynamicFamilyPreparationScratch,
     sort: &dyn Fn(&mut [ControllerSortKey]),
+    reuse_order: bool,
 ) {
+    let reusable = reuse_order
+        && scratch.sort_keys.len() == samples.len()
+        && scratch.order.len() == samples.len()
+        && if samples.is_empty() {
+            scratch.controllers.is_empty()
+        } else {
+            scratch
+                .controllers
+                .last()
+                .is_some_and(|range| range.end == samples.len())
+        }
+        && scratch.sort_keys.iter().all(|(key, lane, index)| {
+            samples
+                .get(*index)
+                .is_some_and(|sample| controller_key(sample) == *key && sample.lane_id == *lane)
+        });
+    #[cfg(test)]
+    super::tests::controller_order::record(reusable);
+    if reusable {
+        return;
+    }
+    // Invalidate the completed layout before a caller-provided sorter can panic.
+    scratch.order.clear();
+    scratch.controllers.clear();
     // TL-639 round 4: sorted by keys gathered once rather than read through the samples on every
     // comparison. The index breaks ties; equal keys only occur for a duplicate lane, which the
     // controller's preparation rejects whatever their order.
@@ -153,11 +178,9 @@ pub(super) fn sort_controllers(
             .map(|(index, sample)| (controller_key(sample), sample.lane_id, index)),
     );
     sort(&mut scratch.sort_keys);
-    scratch.order.clear();
     scratch
         .order
         .extend(scratch.sort_keys.iter().map(|(_, _, index)| *index));
-    scratch.controllers.clear();
     let mut start = 0;
     while start < scratch.order.len() {
         let first = controller_key(&samples[scratch.order[start]]);
@@ -168,6 +191,11 @@ pub(super) fn sort_controllers(
         scratch.controllers.push(start..end);
         start = end;
     }
+    // A custom/opt-out sorter may establish a noncanonical order. Never lend it to
+    // a later canonical caller, even when that caller sees identical identities.
+    if !reuse_order {
+        scratch.sort_keys.clear();
+    }
 }
 
 pub(super) fn prepare(
@@ -177,7 +205,7 @@ pub(super) fn prepare(
     previous: &mut HashMap<CacheKey, CompiledSample>,
     scratch: &mut DynamicFamilyPreparationScratch,
 ) -> Result<(), TransitionError> {
-    sort_controllers(samples, scratch, &|keys| keys.sort_unstable());
+    sort_controllers(samples, scratch, &|keys| keys.sort_unstable(), true);
     let DynamicFamilyPreparationScratch {
         order,
         controllers,
