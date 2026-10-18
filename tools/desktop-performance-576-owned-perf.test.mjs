@@ -11,8 +11,8 @@ const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const candidate='a'.repeat(40),helper=Buffer.from('helper'),paths=Buffer.from('canonical paths');
 const pins={schema_version:1,candidate_sha:candidate,helper_sha256:hash(helper),elf_sha256:'b'.repeat(64),elf_build_id:'ab'.repeat(20),perf_sha256:'c'.repeat(64),appimage_sha256:'d'.repeat(64)};
-function capture(chains=10){return {samples:10,frames:20,unresolved_self:0,unresolved_ancestor:0,depth_one:0,owned_rust_chains:chains,period:100,elapsed_micros:2000000,recording_envelope_micros:1999999,sample_span_micros:1900000,rows:Array.from({length:14},(_,id)=>({id,self_samples:id===1?10:0,self_period:id===1?100:0,inclusive_samples:id===1?10:0,inclusive_period:id===1?100:0}))};}
-function report(){return {schema_version:1,available:1,failure_code:0,failure_stage_code:0,failure_detail_code:0,synthetic_capable:1,rust_unwind_admitted:1,ownership_verified:1,identity_verified:1,thread_scope_verified:1,recorders_stopped:1,raw_private:1,sample_hz:49,requested_seconds:8,preflight_only:0,capture:capture(),preflight:capture(),profile_phase_code:1,exact_measurement_window:0,codegen_flags_changed:0,loss_observed:0,byte_cap_hit:0};}
+function capture(chains=10){return {samples:10,frames:20,unresolved_self:0,unresolved_ancestor:0,depth_one:0,owned_rust_chains:chains,mapped_owned_resolved_chains:10,known_rust_plus_other_owned_chains:0,max_frame_depth:2,max_mapped_owned_resolved_depth:2,period:100,elapsed_micros:2000000,recording_envelope_micros:1999999,sample_span_micros:1900000,rows:Array.from({length:14},(_,id)=>({id,self_samples:id===1?10:0,self_period:id===1?100:0,inclusive_samples:id===1?10:0,inclusive_period:id===1?100:0}))};}
+function report(){return {schema_version:2,available:1,failure_code:0,failure_stage_code:0,failure_detail_code:0,synthetic_capable:1,rust_unwind_admitted:1,ownership_verified:1,identity_verified:1,thread_scope_verified:1,recorders_stopped:1,raw_private:1,sample_hz:49,requested_seconds:8,preflight_only:0,capture:capture(),preflight:capture(),profile_phase_code:1,exact_measurement_window:0,codegen_flags_changed:0,loss_observed:0,byte_cap_hit:0};}
 function envelope(){const {appimage_sha256,...provenance}=pins;return {report:report(),provenance};}
 function stat(pid,parent,start){const f=Array(30).fill('0');f[0]='S';f[1]=String(parent);f[19]=String(start);return `${pid} (private name) ${f.join(' ')}\n`;}
 const snapshot=[{pid:100,parentPid:500,startTicks:100,command:'desk'},{pid:200,parentPid:100,startTicks:200,command:'light-headless'}];
@@ -167,4 +167,9 @@ test('private suite reporter emits only bounded source ordinals for malicious fa
  const node=run(1,'not ok 1 - /secret injected\n  error: /secret\nnot ok 999999 - secret');assert.deepEqual(node.failed_test_ids,[1]);assert.equal(node.failure_code,2);
  const unknown=run(0,'ERROR: test_private_injected (__main__.Pure.test_private_injected)\nTraceback /secret');assert.deepEqual(unknown.failed_test_ids,[]);assert.equal(unknown.failure_code,2);
  const startup=run(1,'/secret startup error');assert.equal(startup.failure_code,1);assert.deepEqual(startup.failed_test_ids,[]);assert(!JSON.stringify([valid,node,unknown,startup]).includes('secret'));
+});
+
+test('schema two chain diagnostics are closed and cannot replace known Rust admission',()=>{
+ for(const mutate of [r=>r.schema_version=1,r=>r.preflight.mapped_owned_resolved_chains=9,r=>r.preflight.known_rust_plus_other_owned_chains=11,r=>r.preflight.max_frame_depth=129,r=>r.preflight.max_mapped_owned_resolved_depth=3,r=>r.preflight.max_mapped_owned_resolved_depth=1,r=>r.preflight.max_frame_depth=1,r=>r.preflight.raw_symbol='private',r=>r.preflight.mapped_owned_resolved_chains=true]){const r=report();mutate(r);assert.throws(()=>validateOwnedPerfHelperReport(r));}
+ const r=report();r.preflight.owned_rust_chains=0;Object.assign(r,{available:0,failure_code:13,rust_unwind_admitted:0});validateOwnedPerfHelperReport(r);
 });

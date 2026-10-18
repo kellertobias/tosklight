@@ -3,13 +3,14 @@
 import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, unlink } from "node:fs/promises";
 import net from "node:net";
 import assert from "node:assert/strict";
 import { chmod, realpath } from "node:fs/promises";
 import { artifactPaths } from "./artifact-paths.mjs";
 import { capturePerformanceSample, ServerCounterClock } from "./desktop-performance-576-clock.mjs";
 import { writePhaseDiagnostics } from "./desktop-performance-576-phases.mjs";
+import { freezePhaseLog } from "./desktop-performance-576-phase-log.mjs";
 import { writeTickTraceDiagnostics } from "./desktop-performance-576-tick-trace.mjs";
 import { writeCpuDiagnostics } from "./desktop-performance-576-cpu.mjs";
 import { writePoolDiagnostics } from "./desktop-performance-576-pool.mjs";
@@ -79,15 +80,22 @@ if(threadCpu) {
 }
 async function retainPhaseDiagnostics(file, window) {
   // This observer is diagnostic only: unavailable data or a write error never changes Control gates.
-  await writePhaseDiagnostics(phaseNumericPath, file, window, {fullFrequency:process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all"}).catch(() => {});
-  if (process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all") {
-    await writeTickTraceDiagnostics(path.join(path.dirname(numericPath), "tick-trace-numeric.json"), file, window, {
-      healthDeadlineMisses: checkpoint.result.deadline_miss_delta, completedFrames: checkpoint.result.completed_frame_delta,
-    }).catch(() => {});
-    await writeCpuDiagnostics(path.join(path.dirname(numericPath), "cpu-numeric.json"), file, window).catch(() => {});
-    await writePoolDiagnostics(path.join(path.dirname(numericPath), "pool-numeric.json"), file, window).catch(() => {});
-    await writeObserverDiagnostics(path.join(path.dirname(numericPath), "observer-numeric.json"), file, window).catch(() => {});
+  let snapshot,diagnosticFile=file;
+  if(process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all"&&file){
+    try{snapshot=await freezePhaseLog(file,path.join(artifactPaths.tmp,`tl775-phase-log-${crypto.randomUUID()}.log`));diagnosticFile=snapshot;}
+    catch{diagnosticFile=null;} // Never fall back to the growing live file after a copy failure.
   }
+  try {
+    await writePhaseDiagnostics(phaseNumericPath, diagnosticFile, window, {fullFrequency:process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all"}).catch(() => {});
+    if (process.env.LIGHT_OUTPUT_PHASE_DIAGNOSTICS === "all") {
+      await writeTickTraceDiagnostics(path.join(path.dirname(numericPath), "tick-trace-numeric.json"), diagnosticFile, window, {
+        healthDeadlineMisses: checkpoint.result.deadline_miss_delta, completedFrames: checkpoint.result.completed_frame_delta,
+      }).catch(() => {});
+      await writeCpuDiagnostics(path.join(path.dirname(numericPath), "cpu-numeric.json"), diagnosticFile, window).catch(() => {});
+      await writePoolDiagnostics(path.join(path.dirname(numericPath), "pool-numeric.json"), diagnosticFile, window).catch(() => {});
+      await writeObserverDiagnostics(path.join(path.dirname(numericPath), "observer-numeric.json"), diagnosticFile, window).catch(() => {});
+    }
+  } finally {if(snapshot)await unlink(snapshot).catch(()=>{});}
 }
 const checkpoint = new ProofCheckpoint(numericPath);
 checkpoint.result.proof_mode_code = PROOF_MODES[proofMode];

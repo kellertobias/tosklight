@@ -108,7 +108,7 @@ class Pure(unittest.TestCase):
     def test_dwarf_single_pid_command_never_global_or_inherited(self):
         args = p.record_args('/usr/lib/linux-tools/perf', 30)
         self.assertEqual(args[args.index('--pid') + 1], '30')
-        self.assertEqual(args[args.index('--call-graph') + 1], 'dwarf,8192')
+        self.assertEqual(args[args.index('--call-graph') + 1], 'dwarf,32768')
         self.assertIn('--no-inherit', args)
         self.assertFalse(any(arg == '--synth' or arg.startswith('--synth=') for arg in args))
         self.assertEqual(args[args.index('--event') + 1], 'cpu-clock:u')
@@ -281,6 +281,47 @@ class Pure(unittest.TestCase):
         self.assertEqual(result['rows'][5]['self_period'], 11)
         self.assertEqual(result['rows'][6]['inclusive_period'], 18)
         self.assertEqual(result['owned_rust_chains'], 2)
+
+    def test_owned_chain_diagnostics_distinguish_spelling_without_relaxing_admission(self):
+        cases = [
+            (sample(symbol='vendor_leaf', ancestor='vendor_parent'), (0, 1, 0)),
+            (sample(ancestor='vendor_parent'), (0, 1, 1)),
+            (sample().rstrip() + '\n\ta3 vendor_parent (/owned)\n\n', (1, 1, 1)),
+            (sample(ancestor_ip='a1'), (0, 0, 0)),
+            (sample(ancestor='vendor_parent', ancestor_ip='a1'), (0, 0, 0)),
+            (sample(dso='/alias'), (0, 0, 0)),
+            (sample(ip='f1', ancestor_ip='f2'), (0, 0, 0)),
+            (sample(ancestor='[unknown]', ancestor_ip='0'), (0, 0, 0)),
+        ]
+        for text, expected in cases:
+            result = decoded(text)
+            self.assertEqual(tuple(result[k] for k in ('owned_rust_chains',
+                'mapped_owned_resolved_chains', 'known_rust_plus_other_owned_chains')), expected)
+        result = decoded(cases[2][0])
+        self.assertEqual((result['max_frame_depth'], result['max_mapped_owned_resolved_depth']), (3, 3))
+        result = decoded(cases[3][0])
+        self.assertEqual((result['max_frame_depth'], result['max_mapped_owned_resolved_depth']), (2, 2))
+        result = decoded('30/31 1.234: 3 cpu-clock:u: 0 [unknown] ([unknown])\n\n')
+        self.assertEqual((result['max_frame_depth'], result['max_mapped_owned_resolved_depth']), (1, 0))
+
+    def test_schema_two_chain_bounds_and_unknown_keys_are_closed(self):
+        p.validate_numeric(report())
+        mutations = [lambda r: r.update(schema_version=1),
+                     lambda r: r['preflight'].update(mapped_owned_resolved_chains=9),
+                     lambda r: r['preflight'].update(known_rust_plus_other_owned_chains=11),
+                     lambda r: r['preflight'].update(max_frame_depth=129),
+                     lambda r: r['preflight'].update(max_mapped_owned_resolved_depth=3),
+                     lambda r: r['preflight'].update(max_mapped_owned_resolved_depth=1),
+                     lambda r: r['preflight'].update(max_frame_depth=1),
+                     lambda r: r['preflight'].update(raw_symbol='private'),
+                     lambda r: r['preflight'].update(mapped_owned_resolved_chains=True)]
+        for mutate in mutations:
+            value = report(); mutate(value)
+            self.refused('decode', p.validate_numeric, value)
+        # Broad resolved ownership is NOT the known-Rust admission predicate.
+        value = report(); value['preflight']['owned_rust_chains'] = 0
+        value.update(available=0, failure_code=p.FAILURES['unwind'], rust_unwind_admitted=0)
+        p.validate_numeric(value)
 
     def test_alias_or_outside_owned_mapping_does_not_prove_source_ownership(self):
         for text in (sample(dso='/alias'), sample(ip='f1', ancestor_ip='f2')):

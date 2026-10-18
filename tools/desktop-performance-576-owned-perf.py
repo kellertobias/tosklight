@@ -350,7 +350,8 @@ def selected_perf(request, deadline):
 def record_args(perf, pid):
     # Linux v5.15 record has no --synth option. Its default synthesis follows the
     # explicit target thread map/mappings; -p, user-only and no-inherit bound samples.
-    return [str(perf), 'record', '--event', 'cpu-clock:u', '--freq', '49', '--call-graph', 'dwarf,8192',
+    # Fixed 32 KiB userspace DWARF dump experiment; caps and Rust admission are unchanged.
+    return [str(perf), 'record', '--event', 'cpu-clock:u', '--freq', '49', '--call-graph', 'dwarf,32768',
             '--timestamp', '--mmap-pages', '128', '--clockid', 'mono', '--no-inherit',
             '--no-buildid-cache', '--no-bpf-event', '--pid', str(pid),
             '--output', 'perf.data']
@@ -432,7 +433,9 @@ def category(symbol, dso, owned, ip=None, executable_maps=()):
 def decode(text, pid, tids, owned, raw_counts, interval=None, required_names=(), executable_maps=()):
     require(len(text.encode()) <= CAP, 'bytes')
     result = {'samples': 0, 'frames': 0, 'unresolved_self': 0, 'unresolved_ancestor': 0,
-              'depth_one': 0, 'owned_rust_chains': 0, 'period': 0,
+              'depth_one': 0, 'owned_rust_chains': 0,
+              'mapped_owned_resolved_chains': 0, 'known_rust_plus_other_owned_chains': 0,
+              'max_frame_depth': 0, 'max_mapped_owned_resolved_depth': 0, 'period': 0,
               'rows': [{'id': n, 'self_samples': 0, 'self_period': 0, 'inclusive_samples': 0, 'inclusive_period': 0} for n in CATEGORIES]}
     current = None; frames = []; useful = 0; first_ns = None; last_ns = None
     header = re.compile(r'^\s*(\d+)\s*/\s*(\d+)\s+(\d+\.\d{1,9}):\s+(\d+)\s+cpu-clock:u:\s*(.*)$')
@@ -452,6 +455,14 @@ def decode(text, pid, tids, owned, raw_counts, interval=None, required_names=(),
         rust_ips = {ip for (ip, _, dso), cls in zip(frames, classes) if dso == owned and cls in (*range(1, 8), 12, 13)
                     and any(start <= ip < end for start, end, _ in executable_maps)}
         result['owned_rust_chains'] += int(len(rust_ips) >= 2)
+        # Depth counts frames, including repeated IPs; chain evidence requires DISTINCT IPs.
+        # Class 8 is resolved owned code with an unrecognized spelling, not proven Rust.
+        owned_frames = [ip for (ip, _, _), cls in zip(frames, classes) if cls in (*range(1, 9), 12, 13)]
+        other_ips = {ip for (ip, _, _), cls in zip(frames, classes) if cls == 8}
+        result['mapped_owned_resolved_chains'] += int(len(set(owned_frames)) >= 2)
+        result['known_rust_plus_other_owned_chains'] += int(bool(rust_ips) and bool(other_ips - rust_ips))
+        result['max_frame_depth'] = max(result['max_frame_depth'], len(frames))
+        result['max_mapped_owned_resolved_depth'] = max(result['max_mapped_owned_resolved_depth'], len(owned_frames))
         useful += int(bool(required_names) and all(any(name in symbol for _, symbol, dso in frames if dso == owned) for name in required_names))
         row = result['rows'][classes[0]]; row['self_samples'] += 1; row['self_period'] += current
         for cls in set(classes):
@@ -666,7 +677,7 @@ def validate_numeric(report):
     require(type(report) is dict and set(report) == keys, 'decode')
     for key in keys - {'capture', 'preflight'}:
         require(uint(report[key]), 'decode')
-    require(report['schema_version'] == 1 and report['sample_hz'] == 49 and report['failure_code'] <= len(FAILURES) and report['failure_stage_code'] <= 14 and report['failure_detail_code'] <= CENSUS_DETAIL_MAX, 'decode')
+    require(report['schema_version'] == 2 and report['sample_hz'] == 49 and report['failure_code'] <= len(FAILURES) and report['failure_stage_code'] <= 14 and report['failure_detail_code'] <= CENSUS_DETAIL_MAX, 'decode')
     require(not report['failure_detail_code'] or (report['failure_code'] == FAILURES['census']
             and report['failure_stage_code'] in (7, 9, 11)), 'decode')
     for key in ('available', 'synthetic_capable', 'rust_unwind_admitted', 'ownership_verified',
@@ -676,7 +687,8 @@ def validate_numeric(report):
     require(1 <= report['requested_seconds'] <= 10 and report['profile_phase_code'] == 1
             and report['exact_measurement_window'] == report['codegen_flags_changed'] == 0, 'decode')
     capture_keys = {'samples', 'frames', 'unresolved_self', 'unresolved_ancestor', 'depth_one',
-                    'owned_rust_chains', 'period', 'rows', 'elapsed_micros', 'recording_envelope_micros', 'sample_span_micros'}
+                    'owned_rust_chains', 'mapped_owned_resolved_chains', 'known_rust_plus_other_owned_chains',
+                    'max_frame_depth', 'max_mapped_owned_resolved_depth', 'period', 'rows', 'elapsed_micros', 'recording_envelope_micros', 'sample_span_micros'}
     for name in ('capture', 'preflight'):
         item = report[name]
         if item is None:
@@ -689,6 +701,13 @@ def validate_numeric(report):
         n = item['samples']; require(0 < n <= SAMPLE_CAP and n <= item['frames'] <= n * FRAME_CAP
             and item['unresolved_self'] <= n and item['unresolved_ancestor'] <= item['frames'] - n
             and item['depth_one'] <= n and item['owned_rust_chains'] <= n, 'decode')
+        require(item['owned_rust_chains'] <= item['mapped_owned_resolved_chains'] <= n - item['depth_one']
+                and item['known_rust_plus_other_owned_chains'] <= item['mapped_owned_resolved_chains']
+                and 1 <= item['max_frame_depth'] <= min(FRAME_CAP, item['frames'] - n + 1)
+                and item['frames'] <= n * item['max_frame_depth']
+                and item['max_mapped_owned_resolved_depth'] <= item['max_frame_depth']
+                and (not item['mapped_owned_resolved_chains'] or item['max_mapped_owned_resolved_depth'] >= 2)
+                and (item['max_frame_depth'] == 1) == (item['depth_one'] == n), 'decode')
         require(type(item['rows']) is list and len(item['rows']) == len(CATEGORIES), 'decode')
         for cls, row in enumerate(item['rows']):
             require(type(row) is dict and set(row) == {'id', 'self_samples', 'self_period', 'inclusive_samples', 'inclusive_period'}
@@ -738,7 +757,7 @@ def profile(request, private_directory, preflight_only=False):
             and not spool.exists() and not spool.is_symlink(), 'private')
     spool.mkdir(mode=0o700)
     anchor, spool = anchor_spool(spool)
-    report = {'schema_version': 1, 'available': 0, 'failure_code': 0, 'failure_stage_code': 0, 'failure_detail_code': 0, 'synthetic_capable': 0,
+    report = {'schema_version': 2, 'available': 0, 'failure_code': 0, 'failure_stage_code': 0, 'failure_detail_code': 0, 'synthetic_capable': 0,
               'rust_unwind_admitted': 0, 'ownership_verified': 0, 'identity_verified': 0,
               'thread_scope_verified': 0, 'recorders_stopped': 0, 'raw_private': 1, 'sample_hz': 49,
               'requested_seconds': request['duration_seconds'], 'preflight_only': int(preflight_only),
@@ -843,7 +862,7 @@ def validate_envelope(value):
 
 
 def failure_report(code):
-    return {'schema_version': 1, 'available': 0, 'failure_code': code, 'failure_stage_code': 0, 'failure_detail_code': 0, 'synthetic_capable': 0,
+    return {'schema_version': 2, 'available': 0, 'failure_code': code, 'failure_stage_code': 0, 'failure_detail_code': 0, 'synthetic_capable': 0,
             'rust_unwind_admitted': 0, 'ownership_verified': 0, 'identity_verified': 0,
             'thread_scope_verified': 0, 'recorders_stopped': 0, 'raw_private': 0, 'sample_hz': 49,
             'requested_seconds': 1, 'preflight_only': 0, 'capture': None, 'preflight': None,

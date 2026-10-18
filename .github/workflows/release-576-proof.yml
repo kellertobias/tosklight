@@ -82,7 +82,7 @@ jobs:
           assert len(cores)==2, 'default proof requires two guest topology cores'
           PYTHON
           npm ci >"$OUT/npm-ci.log" 2>&1
-          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs tools/desktop-performance-576-pool.test.mjs tools/desktop-performance-576-api.test.mjs tools/desktop-performance-576-observer.test.mjs tools/desktop-performance-576-thread-cpu.test.mjs tools/desktop-performance-576-owned-perf.test.mjs
+          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-phase-log.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs tools/desktop-performance-576-pool.test.mjs tools/desktop-performance-576-api.test.mjs tools/desktop-performance-576-observer.test.mjs tools/desktop-performance-576-thread-cpu.test.mjs tools/desktop-performance-576-owned-perf.test.mjs
           python3 -B tools/desktop-performance-576-owned-perf.test.py
           cargo test --locked -p light-dynamics --lib
           cargo test --locked -p light-engine --lib parallel
