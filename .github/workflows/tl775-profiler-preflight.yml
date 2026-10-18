@@ -26,9 +26,48 @@ jobs:
           node-version: 22
       - name: Pure diagnostic tests
         run: |
+          set -euo pipefail
+          umask 077
           node --input-type=module -e 'import "./tools/artifact-paths.mjs"'
-          python3 -B tools/desktop-performance-576-owned-perf.test.py
-          node --test tools/desktop-performance-576-owned-perf.test.mjs
+          temporary="$(node --input-type=module -e 'import {artifactPaths} from "./tools/artifact-paths.mjs"; console.log(artifactPaths.tmp)')"
+          private="$(mktemp -d "$temporary/tl775-pure-tests-XXXXXX")"
+          set +e
+          python3 -B tools/desktop-performance-576-owned-perf.test.py >"$private/python" 2>&1
+          python_status=$?
+          node --test --test-reporter=tap tools/desktop-performance-576-owned-perf.test.mjs >"$private/node" 2>&1
+          node_status=$?
+          set -e
+          python3 -B - "$private" "$python_status" "$node_status" <<'REPORTER'
+          import ast,json,pathlib,re,sys
+          # Python IDs: sorted Pure.test_* AST names, 1-based. Node IDs: TAP source order.
+          # Only these bounded ordinals leave the private spool; never raw lines/names.
+          def summarize(suite,status,raw,python_source,node_source):
+              names=sorted(n.name for c in ast.parse(python_source).body if isinstance(c,ast.ClassDef) and c.name=='Pure' for n in c.body if isinstance(n,ast.FunctionDef) and n.name.startswith('test_'))
+              count=len(names) if suite==0 else len(re.findall(r'^test\(',node_source,re.M))
+              ids=set();invalid=False
+              for line in raw.splitlines():
+                  if suite==0 and line.startswith(('FAIL:','ERROR:')):
+                      match=re.fullmatch(r'(?:FAIL|ERROR): (test_[a-zA-Z0-9_]+) \([^\r\n]*\)',line)
+                      if match and match[1] in names:ids.add(names.index(match[1])+1)
+                      else:invalid=True
+                  elif suite==1 and line.startswith('not ok '):
+                      match=re.fullmatch(r'not ok ([1-9][0-9]*)(?: - [^\r\n]*)?',line)
+                      if match and 1<=int(match[1])<=count:ids.add(int(match[1]))
+                      else:invalid=True
+              return dict(schema_version=1,suite_id=suite,failed=1,failure_code=2 if invalid else (0 if ids else 1),failed_test_ids=sorted(ids),test_count=count)
+          if __name__=='__main__':
+              failed=False
+              for suite,status in enumerate(sys.argv[2:]):
+                  if status=='0':continue
+                  failed=True
+                  try:
+                      file=pathlib.Path(sys.argv[1])/('python' if suite==0 else 'node')
+                      assert file.is_file() and not file.is_symlink() and file.stat().st_size<=1048576
+                      result=summarize(suite,int(status),file.read_text(errors='replace'),pathlib.Path('tools/desktop-performance-576-owned-perf.test.py').read_text(),pathlib.Path('tools/desktop-performance-576-owned-perf.test.mjs').read_text())
+                  except Exception:result=dict(schema_version=1,suite_id=suite,failed=1,failure_code=3,failed_test_ids=[],test_count=0)
+                  print('::error::'+json.dumps(result,separators=(',',':')))
+              sys.exit(int(failed))
+          REPORTER
       - name: Record isolated C capability with pinned packaged perf
         continue-on-error: true
         run: |

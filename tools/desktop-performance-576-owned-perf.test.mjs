@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
+import {spawnSync} from 'node:child_process';
 import {readFile} from 'node:fs/promises';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -155,4 +156,14 @@ test('synthetic-only workflow isolates trigger, fixed scope, source binding and 
  assert(text.includes('branches: [codex/tl775-profiler-preflight]'));assert(!text.includes('workflow_dispatch:'));assert(!text.includes('release-576-proof.yml'));assert(!text.includes('AppImage'));assert(!text.includes('cargo '));
  assert(text.includes('--synthetic-preflight --candidate-sha'));assert(text.includes('45s /usr/bin/env'));assert(text.includes('linux-tools-generic'));assert(text.includes('build-essential'));assert(text.includes("real.stat().st_uid!=0"));assert(text.includes("hash(source(name))"));assert(text.includes('validateSyntheticPreflightEnvelope'));for(const name of ['tools/artifact-paths.cjs','tools/artifact-layout.conf','tools/desktop-performance-576-workers.mjs'])assert(text.slice(text.indexOf('try{'),text.indexOf('const {validateSyntheticPreflightEnvelope}')).includes(name));
  const upload=text.slice(text.indexOf('      - name: Upload only'));const entries=upload.split('\n').filter(l=>l.includes('/public/'));assert.equal(entries.length,2);assert(entries[0].trim().endsWith('/public/synthetic-preflight-numeric.json'));assert(entries[1].trim().endsWith('/public/synthetic-preflight-provenance.json'));assert(!upload.includes('**'));assert(!text.includes('sysctl'));assert(!text.includes('setcap'));
+});
+
+test('private suite reporter emits only bounded source ordinals for malicious failures',async()=>{
+ const workflow=await readFile(path.join(ROOT,'.github/workflows/tl775-profiler-preflight.yml'),'utf8');const source=/<<'REPORTER'\n([\s\S]*?)\n          REPORTER/u.exec(workflow)[1].split('\n').map(l=>l.startsWith('          ')?l.slice(10):l).join('\n');
+ const py=await readFile(path.join(ROOT,'tools/desktop-performance-576-owned-perf.test.py'),'utf8'),js=await readFile(path.join(ROOT,'tools/desktop-performance-576-owned-perf.test.mjs'),'utf8');
+ const run=(suite,raw)=>{const driver="import json,sys;v=json.load(sys.stdin);ns={'__name__':'pure'};exec(v['source'],ns);print(json.dumps(ns['summarize'](v['suite'],1,v['raw'],v['py'],v['js'])))";const r=spawnSync('python3',['-B','-c',driver],{input:JSON.stringify({source,suite,raw,py,js}),encoding:'utf8'});assert.equal(r.status,0);assert.equal(r.stderr,'');assert(!r.stdout.includes('/secret'));return JSON.parse(r.stdout);};
+ const valid=run(0,'FAIL: test_census_first_failed_predicates_have_only_fixed_details (__main__.Pure.test_census_first_failed_predicates_have_only_fixed_details)\n/secret traceback');assert.equal(valid.suite_id,0);assert.equal(valid.failure_code,0);assert.equal(valid.failed_test_ids.length,1);assert(valid.failed_test_ids[0]>=1&&valid.failed_test_ids[0]<=valid.test_count);
+ const node=run(1,'not ok 1 - /secret injected\n  error: /secret\nnot ok 999999 - secret');assert.deepEqual(node.failed_test_ids,[1]);assert.equal(node.failure_code,2);
+ const unknown=run(0,'ERROR: test_private_injected (__main__.Pure.test_private_injected)\nTraceback /secret');assert.deepEqual(unknown.failed_test_ids,[]);assert.equal(unknown.failure_code,2);
+ const startup=run(1,'/secret startup error');assert.equal(startup.failure_code,1);assert.deepEqual(startup.failed_test_ids,[]);assert(!JSON.stringify([valid,node,unknown,startup]).includes('secret'));
 });
