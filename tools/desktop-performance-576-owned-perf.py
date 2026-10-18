@@ -342,7 +342,8 @@ def census(raw):
     # software cpu-clock, user-only, no inheritance; DWARF requires user regs+stack.
     allowed = sum(1 << bit for bit in (0, 1, 2, 3, 5, 6, 7, 8, 12, 13, 16))
     required = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13))
-    require(kind == 1 and config == 0 and frequency == 49 and read_format == 0
+    # v5.15 clock events have unit="msec", which enables PERF_FORMAT_ID even alone.
+    require(kind == 1 and config == 0 and frequency == 49 and read_format == 4
             and 96 <= length <= attr_size, 'census', 3)
     require(not sample_type & ~allowed, 'census', 4)
     require(sample_type & required == required, 'census', 5)

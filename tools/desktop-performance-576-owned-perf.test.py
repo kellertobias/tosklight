@@ -45,13 +45,13 @@ def report():
     return result
 
 
-def raw(events=(9,), sample_type=None, flags=None):
+def raw(events=(9,), sample_type=None, flags=None, read_format=4):
     records = b''.join(struct.pack('<IHH', e, 2, 56 if e == 79 else 16) + b'\0' * (48 if e == 79 else 8) for e in events)
     result = bytearray(232 + len(records)); result[:8] = b'PERFILE2'
     struct.pack_into('<6Q', result, 8, 104, 128, 104, 128, 232, len(records))
     fields = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13)) if sample_type is None else sample_type
     scope = (1 << 5) | (1 << 6) | (1 << 10) | (1 << 25) if flags is None else flags
-    struct.pack_into('<II5Q', result, 104, 1, 112, 0, 49, fields, 0, scope)
+    struct.pack_into('<II5Q', result, 104, 1, 112, 0, 49, fields, read_format, scope)
     struct.pack_into('<i', result, 104 + 92, 1)
     result[232:] = records
     return bytes(result)
@@ -135,6 +135,14 @@ class Pure(unittest.TestCase):
             self.refused('census', p.census, value)
         self.refused('census', p.census, raw((9,) * (p.SAMPLE_CAP + 1)))
 
+    def test_single_clock_event_requires_exact_perf_format_id(self):
+        self.assertEqual(p.census(raw(read_format=4)), dict(samples=1, lost=0, records=1))
+        # Zero, timing, group, lost and unknown flags are not this clock event's format.
+        for read_format in (0, 1, 2, 3, 5, 6, 7, 8, 12, 16, 20, 32, 2**63):
+            with self.subTest(read_format=read_format), self.assertRaises(p.Refused) as caught:
+                p.census(raw(read_format=read_format))
+            self.assertEqual((caught.exception.code, caught.exception.detail), (11, 3))
+
     def test_census_first_failed_predicates_have_only_fixed_details(self):
         def changed(data, offset, fmt, value):
             data = bytearray(data); struct.pack_into(fmt, data, offset, value)
@@ -144,7 +152,7 @@ class Pure(unittest.TestCase):
         required = sum(1 << bit for bit in (0, 1, 2, 8, 12, 13))
         cases = [
             (b'bad', 1), (changed(raw(), 32, '<Q', 129), 2),
-            (changed(raw(), 104, '<I', 2), 3), (changed(raw(), 136, '<Q', 4), 3),
+            (changed(raw(), 104, '<I', 2), 3), (changed(raw(), 136, '<Q', 0), 3),
             (raw(sample_type=required | (1 << 9)), 4), (raw(sample_type=required & ~1), 5),
             (raw(flags=0), 6), (changed(raw(), 196, '<i', 0), 7),
             (short_record, 8), (changed(raw(), 238, '<H', 7), 9),
