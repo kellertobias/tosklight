@@ -354,6 +354,12 @@ fn thumbnail_size(request: &ThumbnailRequest, width: u32, height: u32) -> Size {
 
 fn visualizer_preview_png(kind: VisualizerKind) -> &'static [u8] {
     match kind {
+        VisualizerKind::BlackHole => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/056-black-hole.png"
+        ),
+        VisualizerKind::TextTracking => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/043-text-tracking.png"
+        ),
         VisualizerKind::EqualizerBars => include_bytes!(
             "../../../../../apps/media/src/features/visualizers/previews/000-equalizer-bars.png"
         ),
@@ -386,6 +392,9 @@ fn visualizer_preview_png(kind: VisualizerKind) -> &'static [u8] {
         ),
         VisualizerKind::Starfield => include_bytes!(
             "../../../../../apps/media/src/features/visualizers/previews/022-starfield.png"
+        ),
+        VisualizerKind::GalaxySimulator => include_bytes!(
+            "../../../../../apps/media/src/features/visualizers/previews/024-galaxy-simulator.png"
         ),
         VisualizerKind::LightningTendrils => include_bytes!(
             "../../../../../apps/media/src/features/visualizers/previews/023-lightning-tendrils.png"

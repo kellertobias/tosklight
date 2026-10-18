@@ -10,7 +10,9 @@
 //! source texture, so it is transformed, tinted, dimmed, and masked exactly like a video.
 
 mod fonts;
+mod packed;
 mod raster;
+pub use packed::{TextMask, packed_line_mask};
 
 pub use fonts::{FontError, Fonts};
 pub use raster::{Rendered, render_line};

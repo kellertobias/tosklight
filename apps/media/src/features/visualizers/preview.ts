@@ -41,6 +41,9 @@ export const BUILTIN_VISUALIZER_KINDS = [
 	{ typeId: 53, label: "Grid Landscape" },
 	{ typeId: 54, label: "Triangular Net" },
 	{ typeId: 55, label: "Flying Props" },
+	{ typeId: 24, label: "Galaxy Simulator" },
+	{ typeId: 43, label: "Text Tracking" },
+	{ typeId: 56, label: "Black Hole" },
 ] as const;
 
 /** A representative frame rendered by the actual built-in visualizer implementation. */

@@ -42,6 +42,7 @@ pub enum VisualizerKind {
     DancingSwarm = 21,
     Starfield = 22,
     LightningTendrils = 23,
+    GalaxySimulator = 24,
     RadiatingRays = 30,
     StrobeFlash = 31,
     ColorCycling = 32,
@@ -49,16 +50,18 @@ pub enum VisualizerKind {
     DigitalGlitch = 40,
     CrtScanline = 41,
     MatrixDigitalRain = 42,
+    TextTracking = 43,
     RotatingShape = 50,
     FractalMorph = 51,
     CityTunnel = 52,
     GridLandscape = 53,
     TriangularNet = 54,
     FlyingProps = 55,
+    BlackHole = 56,
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 25] = [
+pub const ALL_KINDS: [VisualizerKind; 28] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -84,6 +87,10 @@ pub const ALL_KINDS: [VisualizerKind; 25] = [
     VisualizerKind::GridLandscape,
     VisualizerKind::TriangularNet,
     VisualizerKind::FlyingProps,
+    // Append new kinds: existing default DMX assignments stay where operators stored them.
+    VisualizerKind::GalaxySimulator,
+    VisualizerKind::TextTracking,
+    VisualizerKind::BlackHole,
 ];
 
 impl VisualizerKind {
@@ -110,6 +117,7 @@ impl VisualizerKind {
             Self::DancingSwarm => "Dancing Swarm",
             Self::Starfield => "Starfield",
             Self::LightningTendrils => "Lightning Tendrils",
+            Self::GalaxySimulator => "Galaxy Simulator",
             Self::RadiatingRays => "Radiating Rays",
             Self::StrobeFlash => "Strobe Flash",
             Self::ColorCycling => "Color Cycling",
@@ -117,12 +125,14 @@ impl VisualizerKind {
             Self::DigitalGlitch => "Digital Glitch",
             Self::CrtScanline => "CRT Scanline",
             Self::MatrixDigitalRain => "Matrix Digital Rain",
+            Self::TextTracking => "Text Tracking",
             Self::RotatingShape => "Rotating 3D Shape",
             Self::FractalMorph => "Fractal Morph",
             Self::CityTunnel => "City Tunnel",
             Self::GridLandscape => "Grid Landscape",
             Self::TriangularNet => "Triangular Net",
             Self::FlyingProps => "Flying Props",
+            Self::BlackHole => "Black Hole",
         }
     }
 
@@ -139,6 +149,12 @@ impl VisualizerKind {
         // A parameter a kind gains later is appended, never inserted: the layer's channel bytes
         // follow this order, so a stored cue keeps moving the parameter it moved.
         match self {
+            Self::BlackHole => &[
+                Size, Speed, Reactivity, Decay, Curvature, Primary, Secondary,
+            ],
+            Self::TextTracking => &[
+                Count, Size, Speed, Amount, Reactivity, Curvature, Primary, Secondary, Mode,
+            ],
             Self::EqualizerBars => &[Count, Size, Primary, Secondary, Amount, Smoothing, Mirror],
             Self::WaveformOscilloscope => &[Size, Thickness, Amount, Primary, Filled, Smoothing],
             Self::CircularSpectrum => &[Radius, Count, Size, Primary, Mirror],
@@ -150,6 +166,9 @@ impl VisualizerKind {
             Self::BeatExplosions => &[Count, Speed, Lifetime, Primary, Gravity],
             Self::DancingSwarm => &[Count, Speed, Radius, Primary, Size],
             Self::Starfield => &[Count, Speed, Primary, OnBeat],
+            Self::GalaxySimulator => &[
+                Count, Speed, Size, Reactivity, Primary, Secondary, Radius, Lifetime, Burst,
+            ],
             Self::LightningTendrils => &[Count, Size, Primary, Threshold],
             Self::RadiatingRays => &[Count, Size, Thickness, Speed, Primary],
             Self::StrobeFlash => &[Primary, Threshold, Decay, Mirror],
@@ -372,6 +391,9 @@ pub struct VisualizerConfiguration {
     /// What an operator calls this configuration. Defaults to the kind's label.
     pub name: String,
     pub parameters: VisualizerParameters,
+    /// Operator text for Text Tracking. Old configurations keep the built-in phrase.
+    #[serde(default = "default_tracking_text")]
+    pub text: String,
 }
 
 impl VisualizerConfiguration {
@@ -437,6 +459,30 @@ impl VisualizerConfiguration {
             parameters.reactivity = 1.0;
             parameters.primary = Tint::new(0.92, 0.93, 0.96);
             parameters.secondary = Tint::new(1.0, 0.35, 0.12);
+        } else if kind == VisualizerKind::BlackHole {
+            parameters.size = 0.19;
+            parameters.speed = 0.55;
+            parameters.reactivity = 0.9;
+            parameters.decay = 0.45;
+            parameters.curvature = 0.72;
+            parameters.primary = Tint::new(1.0, 0.32, 0.055);
+            parameters.secondary = Tint::new(1.0, 0.88, 0.60);
+        } else if kind == VisualizerKind::GalaxySimulator {
+            parameters.count = 96;
+            parameters.speed = 0.6;
+            parameters.size = 0.018;
+            parameters.radius = 0.65;
+            parameters.lifetime = 1.4;
+            parameters.burst = 2;
+            parameters.primary = Tint::new(0.22, 0.4, 1.0);
+            parameters.secondary = Tint::new(1.0, 0.32, 0.12);
+        } else if kind == VisualizerKind::TextTracking {
+            parameters.count = 16;
+            parameters.size = 0.13;
+            parameters.amount = 0.45;
+            parameters.curvature = 0.35;
+            parameters.primary = Tint::new(0.75, 1.0, 0.84);
+            parameters.secondary = Tint::new(0.1, 0.7, 0.45);
         } else if kind == VisualizerKind::MatrixDigitalRain {
             parameters.count = 48;
             parameters.speed = 1.0;
@@ -452,8 +498,13 @@ impl VisualizerConfiguration {
             kind,
             name: kind.label().to_owned(),
             parameters,
+            text: default_tracking_text(),
         }
     }
+}
+
+pub fn default_tracking_text() -> String {
+    "TOSKLIGHT PIXEL / TRACKING SIGNAL / LOCK ON THE BEAT".to_owned()
 }
 
 /// One address a configured visualizer answers at.
@@ -641,6 +692,27 @@ mod tests {
     }
 
     #[test]
+    fn galaxy_adds_a_stable_kind_without_moving_existing_default_addresses() {
+        let catalog = GeneratedCatalog::default();
+        assert_eq!(
+            catalog.address_of(VisualizerKind::FlyingProps),
+            Some(MediaAddress::new(250, 25))
+        );
+        let configuration = VisualizerConfiguration::new(VisualizerKind::GalaxySimulator);
+        assert_eq!(configuration.kind.type_id(), 24);
+        assert_eq!(configuration.parameters.burst, 2);
+        assert!(configuration.parameters.lifetime > 0.0);
+        for parameter in [Parameter::Burst, Parameter::Lifetime, Parameter::Reactivity] {
+            assert!(configuration.kind.parameters().contains(&parameter));
+        }
+        let encoded = serde_json::to_string(&configuration).unwrap();
+        assert_eq!(
+            serde_json::from_str::<VisualizerConfiguration>(&encoded).unwrap(),
+            configuration
+        );
+    }
+
+    #[test]
     fn every_kind_declares_at_least_one_parameter_and_names_no_duplicate() {
         for kind in ALL_KINDS {
             let parameters = kind.parameters();
@@ -785,5 +857,14 @@ mod tests {
         assert!(catalog.remove(address));
         assert_eq!(catalog.resolve(address), None);
         assert!(!catalog.remove(address), "removing twice is not a change");
+    }
+    #[test]
+    fn old_visualizer_configurations_gain_text_without_changing_numeric_tuning() {
+        let original = VisualizerConfiguration::new(VisualizerKind::Starfield);
+        let mut legacy = serde_json::to_value(&original).unwrap();
+        legacy.as_object_mut().unwrap().remove("text");
+        let recovered: VisualizerConfiguration = serde_json::from_value(legacy).unwrap();
+        assert_eq!(recovered, original);
+        assert_eq!(recovered.text, default_tracking_text());
     }
 }

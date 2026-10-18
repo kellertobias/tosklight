@@ -36,6 +36,8 @@ struct Visualizer {
 // then the rhythm: smoothed levels, beat pulse, eased and whole beat counts, the flow and speed
 // clocks, and the age of each recent beat.
 @group(0) @binding(1) var analysis: texture_2d<f32>;
+// Bundled SIL OFL monospace atlas, ASCII 32..127, 16 by 6 cells.
+@group(0) @binding(2) var tracking_glyphs: texture_2d<f32>;
 
 const WAVEFORM_POINTS: i32 = 512;
 const BANDS: i32 = 64;

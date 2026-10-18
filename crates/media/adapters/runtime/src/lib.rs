@@ -15,6 +15,7 @@ mod beat_grid_wave;
 mod beat_move;
 mod beat_scale_turn;
 mod beat_scan;
+mod beat_slice_grid;
 #[cfg(all(feature = "tray", any(target_os = "macos", target_os = "windows")))]
 mod bulk_import;
 mod catalog_publication;

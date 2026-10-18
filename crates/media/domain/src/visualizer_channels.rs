@@ -135,9 +135,25 @@ impl VisualizerKind {
     /// The name this kind gives a parameter. Equalizer Bars calls its Amount "Bloom".
     pub const fn parameter_label(self, parameter: Parameter) -> &'static str {
         match (self, parameter) {
+            (Self::BlackHole, Parameter::Size) => "Shadow radius",
+            (Self::BlackHole, Parameter::Speed) => "Disc speed",
+            (Self::BlackHole, Parameter::Reactivity) => "Beat pulse",
+            (Self::BlackHole, Parameter::Decay) => "Pulse decay",
+            (Self::BlackHole, Parameter::Curvature) => "Disc inclination",
+            (Self::BlackHole, Parameter::Primary) => "Disc colour",
+            (Self::BlackHole, Parameter::Secondary) => "Ring colour",
             (Self::EqualizerBars, Parameter::Amount) => "Bloom",
             (Self::FlyingProps, Parameter::Mode) => "Flight pattern",
             (Self::FlyingProps, Parameter::Count) => "Density",
+            (Self::GalaxySimulator, Parameter::Count) => "Star density",
+            (Self::TextTracking, Parameter::Count) => "Columns",
+            (Self::TextTracking, Parameter::Amount) => "Letter spacing",
+            (Self::TextTracking, Parameter::Curvature) => "Camera motion",
+            (Self::TextTracking, Parameter::Mode) => "Palette (0 dark, 1 paper)",
+            (Self::GalaxySimulator, Parameter::Size) => "Star size",
+            (Self::GalaxySimulator, Parameter::Radius) => "Galaxy radius",
+            (Self::GalaxySimulator, Parameter::Burst) => "Supernovas per beat",
+            (Self::GalaxySimulator, Parameter::Lifetime) => "Supernova lifetime",
             _ => parameter.label(),
         }
     }
@@ -146,6 +162,12 @@ impl VisualizerKind {
     /// no longer a line, so Waveform Oscilloscope narrows Size.
     pub const fn range(self, parameter: Parameter) -> (f32, f32) {
         match (self, parameter) {
+            (Self::BlackHole, Parameter::Size) => (0.08, 0.32),
+            (Self::BlackHole, Parameter::Decay) => (0.05, 1.0),
+            (Self::BlackHole, Parameter::Curvature) => (0.0, 1.0),
+            (Self::GalaxySimulator, Parameter::Count) => (1.0, 192.0),
+            (Self::TextTracking, Parameter::Count) => (4.0, 32.0),
+            (Self::TextTracking, Parameter::Mode) => (0.0, 1.0),
             (Self::WaveformOscilloscope, Parameter::Size) => (0.005, 0.1),
             // More props than this crowd the picture into noise and cost every pixel a test each.
             (Self::FlyingProps, Parameter::Count) => (1.0, FLYING_PROPS_MOST as f32),

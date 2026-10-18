@@ -19,6 +19,7 @@ wgpu.workspace = true
 winit.workspace = true
 
 [dev-dependencies]
+media-text = { path = "../text" }
 anyhow.workspace = true
 # TL-593: the desk's semantic Color translation (shared kernel) drives the White Blend renders.
 light-core = { path = "../../../shared/core" }

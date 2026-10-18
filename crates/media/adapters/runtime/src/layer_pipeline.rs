@@ -455,10 +455,13 @@ impl LayerPipeline {
             &visualizer.parameters,
             &layer.visualizer_controls,
         );
-        match self
-            .visualizers
-            .render(index, visualizer.kind, &parameters, &frame)
-        {
+        match self.visualizers.render_with_text(
+            index,
+            visualizer.kind,
+            &parameters,
+            &frame,
+            &visualizer.text,
+        ) {
             Ok(_) => {
                 prepared
                     .statuses
@@ -576,11 +579,12 @@ impl LayerPipeline {
                 };
                 return self
                     .visualizers
-                    .render(
+                    .render_with_text(
                         generated_slot,
                         visualizer.kind,
                         &visualizer.parameters,
                         &visualizer_frame,
+                        &visualizer.text,
                     )
                     .map(|_| Slot::Generated(generated_slot))
                     .map_err(|error| {

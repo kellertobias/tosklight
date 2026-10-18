@@ -204,6 +204,19 @@ pub(super) async fn update_visualizer(
         entry.configuration = VisualizerConfiguration::new(kind);
         entry.configuration.name = name;
     }
+    if let Some(text) = body.text {
+        if text.chars().count() > 128
+            || text.chars().any(|character| {
+                !character.is_ascii() || (character.is_ascii_control() && character != '\n')
+            })
+        {
+            return Err(ApiError::bad_request(
+                "invalid-tracking-text",
+                "use up to 128 ASCII characters; line breaks are supported",
+            ));
+        }
+        entry.configuration.text = text;
+    }
     if let Some(parameters) = body.parameters {
         entry.configuration.parameters = parameters.into_parameters();
     }
@@ -226,7 +239,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         let entries = body.as_array().expect("a list");
-        assert_eq!(entries.len(), 25);
+        assert_eq!(entries.len(), media_domain::visualizer::ALL_KINDS.len());
 
         let first = &entries[0];
         assert_eq!(first["address"]["folder"], 250);
@@ -271,6 +284,45 @@ mod tests {
                 "Grid Landscape publishes {control}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn black_hole_can_be_added_to_an_existing_library_and_reopened() {
+        let bench = bench();
+        let (status, body) = send(
+            &bench.router,
+            post("/api/v2/visualizers/create".into(),
+                r#"{"requestId":"black-hole-new","folder":251,"file":7,"typeId":56,"name":"Event horizon"}"#),
+        ).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["kind"], "Black Hole");
+        let channels = body["channels"].as_array().unwrap();
+        let labels: Vec<_> = channels
+            .iter()
+            .map(|channel| channel["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            labels,
+            ["Shadow radius", "Disc speed", "Beat pulse", "Pulse decay"]
+        );
+        assert_eq!(channels[0]["maximum"], serde_json::json!(0.32));
+        let stored = bench.stored.lock().unwrap();
+        let reopened = media_application::configuration::load(
+            &media_application::configuration::save(&stored[0]),
+        )
+        .unwrap();
+        let saved = reopened
+            .visualizers
+            .resolve(media_domain::MediaAddress::new(251, 7))
+            .unwrap();
+        assert_eq!(saved.kind, VisualizerKind::BlackHole);
+        assert_eq!(saved.name, "Event horizon");
+        assert_eq!(
+            reopened
+                .visualizers
+                .address_of(VisualizerKind::TextTracking),
+            Some(media_domain::MediaAddress::new(250, 27))
+        );
     }
 
     #[tokio::test]
@@ -502,5 +554,32 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(body["code"], "empty-name");
+    }
+    #[tokio::test]
+    async fn tracking_text_is_persisted_with_request_identity_and_invalid_edits_are_atomic() {
+        let bench = bench();
+        let path = "/api/v2/visualizers/250/27/update";
+        let edit = r#"{"requestId":"tracking-words","text":"LIVE / LOCK"}"#;
+        let (status, body) = send(&bench.router, post(path.into(), edit)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["typeId"], 43);
+        assert_eq!(body["text"], "LIVE / LOCK");
+        let (status, replay) = send(&bench.router, post(path.into(), edit)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(replay, body);
+        assert_eq!(bench.stored.lock().unwrap().len(), 1);
+        let (status, _) = send(
+            &bench.router,
+            post(
+                path.into(),
+                r#"{"requestId":"invalid-words","name":"Do not save","text":"é"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        let (status, all) = send(&bench.router, get("/api/v2/visualizers".into())).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(all[26]["text"], "LIVE / LOCK");
+        assert_eq!(all[26]["name"], "Text Tracking");
     }
 }

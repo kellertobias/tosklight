@@ -49,6 +49,7 @@ fn selected_effects(
     let mut effects = current.effects.clone();
     if let Some(effect_type) = body.effect_type.as_deref() {
         effects[slot] = match effect_type {
+            media_domain::BEAT_SLICE_GRID_EFFECT => EffectSlot::beat_slice_grid(),
             ANALOG_TV_EFFECT => EffectSlot::analog_tv(),
             DIGITAL_TV_EFFECT => EffectSlot::digital_tv(),
             BLUR_EFFECT => EffectSlot::blur(),
@@ -77,6 +78,21 @@ fn selected_effects(
 }
 
 fn apply_common_edits(body: &UpdateLayer, effect: &mut EffectSlot) -> Result<(), ApiError> {
+    if let Some(text) = &body.effect_text {
+        require_effect(
+            effect,
+            media_domain::BEAT_SLICE_GRID_EFFECT,
+            "effect-text-type",
+            "Beat Slice Grid",
+        )?;
+        if text.chars().count() > media_domain::slice_grid::MAX_SLICE_TEXT_CHARS {
+            return Err(ApiError::bad_request(
+                "effect-text-too-long",
+                "effect text accepts up to 64 characters",
+            ));
+        }
+        effect.text = Some(text.clone());
+    }
     if let Some(enabled) = body.effect_enabled {
         effect.enabled = enabled;
     }

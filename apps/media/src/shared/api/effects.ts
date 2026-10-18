@@ -12,6 +12,7 @@ export const EFFECT_TYPES = [
 	{ value: "rasterize-cmyk", label: "CMYK Rasterize" },
 	{ value: "drawn-image", label: "Drawn Image Style" },
 	{ value: "outline", label: "Outline" },
+	{ value: "beat-slice-grid", label: "Beat Slice Grid" },
 ] as const;
 
 export type EffectType = (typeof EFFECT_TYPES)[number]["value"];
@@ -23,6 +24,7 @@ export interface UpdateEffectLibrarySlot {
 	effectType?: string;
 	parameters?: number[];
 	beatSource?: string;
+	text?: string;
 	clear?: boolean;
 }
 

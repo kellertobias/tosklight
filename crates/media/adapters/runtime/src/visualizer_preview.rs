@@ -143,7 +143,13 @@ impl Previewer {
         };
         let texture = self
             .renderer
-            .render(layer, visualizer.kind, &visualizer.parameters, &frame)
+            .render_with_text(
+                layer,
+                visualizer.kind,
+                &visualizer.parameters,
+                &frame,
+                &visualizer.text,
+            )
             .map_err(|error| SnapshotFailure::Unavailable(error.to_string()))?;
         let pixels = texture
             .read_rgba8(&self.gpu)

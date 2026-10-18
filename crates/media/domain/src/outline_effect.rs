@@ -119,6 +119,8 @@ impl Default for OutlineParameters {
 impl EffectSlot {
     pub fn outline() -> Self {
         Self {
+            text: None,
+            text_mask: Vec::new(),
             effect_type: Some(OUTLINE_EFFECT.to_owned()),
             enabled: true,
             seed: 0,

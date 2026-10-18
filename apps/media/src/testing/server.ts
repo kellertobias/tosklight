@@ -352,6 +352,7 @@ export function stubServer(
 					);
 				}
 				if (body.name !== undefined) found.name = body.name;
+				if (body.text !== undefined) found.text = body.text;
 				if (body.parameters !== undefined) found.parameters = body.parameters;
 				if (body.typeId !== undefined) {
 					const source = server.visualizers.find(
@@ -1644,6 +1645,7 @@ export function aVisualizer(
 		typeId: 0,
 		kind: "Equalizer Bars",
 		name: "Equalizer Bars",
+		text: "TOSKLIGHT PIXEL / TRACKING SIGNAL / LOCK ON THE BEAT",
 		uses: [
 			"count",
 			"size",

@@ -404,6 +404,88 @@ fn primary_ipv4() -> Option<std::net::Ipv4Addr> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn pixel_effect_additions_start_without_replacing_an_operators_preset() {
+        let directory = std::env::temp_dir().join("pixel-effect-additions-startup");
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("media-server.json");
+        let mut previous = MediaConfiguration::default();
+        previous.effects.remove(14);
+        previous
+            .effects
+            .assign(14, "House blur", media_domain::EffectSlot::blur())
+            .unwrap();
+        let mut document: serde_json::Value =
+            serde_json::from_str(&configuration::save(&previous)).unwrap();
+        document["version"] = serde_json::json!(8);
+        // A real earlier file has no effect text and no new generated kinds.
+        for entry in document["configuration"]["effects"]["entries"]
+            .as_array_mut()
+            .unwrap()
+        {
+            entry["effect"].as_object_mut().unwrap().remove("text");
+        }
+        document["configuration"]["visualizers"]["entries"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|entry| {
+                !matches!(
+                    entry["configuration"]["kind"].as_str(),
+                    Some("galaxy-simulator" | "text-tracking" | "black-hole")
+                )
+            });
+        for entry in document["configuration"]["visualizers"]["entries"]
+            .as_array_mut()
+            .unwrap()
+        {
+            entry["configuration"]
+                .as_object_mut()
+                .unwrap()
+                .remove("text");
+        }
+        std::fs::write(&path, document.to_string()).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let loaded = load_configuration(&ConfigurationSource::File {
+            path: path.clone(),
+            required: true,
+        })
+        .unwrap();
+        assert_eq!(loaded.effects.resolve(14).unwrap().name, "House blur");
+        assert_eq!(
+            loaded
+                .effects
+                .resolve(14)
+                .unwrap()
+                .effect
+                .effect_type
+                .as_deref(),
+            Some("blur")
+        );
+        assert_eq!(
+            loaded.visualizers.entries.len(),
+            25,
+            "existing assignments remain unchanged"
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            original,
+            "loading preserves the original file"
+        );
+
+        let fresh = load_configuration(&ConfigurationSource::Defaults).unwrap();
+        assert_eq!(
+            fresh
+                .effects
+                .resolve(14)
+                .unwrap()
+                .effect
+                .effect_type
+                .as_deref(),
+            Some("beat-slice-grid")
+        );
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
     /// A legacy installation's text document, in the shape the C++ application wrote.
     const LEGACY_TEXT: &str = r#"{
         "201": {"type": "static", "text": "Doors in five", "enabled": true,

@@ -33,6 +33,8 @@ pub struct EffectParameterView {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectSlotView {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
     pub index: usize,
     pub effect_type: Option<String>,
     pub label: String,
@@ -69,6 +71,8 @@ impl EffectPresetView {
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateEffectPreset {
+    #[serde(default)]
+    pub text: Option<String>,
     pub request_id: String,
     #[serde(default)]
     pub name: Option<String>,
@@ -84,7 +88,7 @@ pub struct UpdateEffectPreset {
 
 /// Every effect this build renders, with the name an operator reads. Anything outside this list
 /// is reported as unsupported rather than silently renamed or dropped.
-const RENDERED_EFFECTS: [(&str, &str); 14] = [
+const RENDERED_EFFECTS: [(&str, &str); 15] = [
     (ANALOG_TV_EFFECT, "Analog TV"),
     (DIGITAL_TV_EFFECT, "Digital TV"),
     (BLUR_EFFECT, "Blur"),
@@ -99,6 +103,7 @@ const RENDERED_EFFECTS: [(&str, &str); 14] = [
     (BEAT_FORM_FLASH_EFFECT, "Beat Form Flash"),
     (DRAWN_IMAGE_EFFECT, "Drawn Image"),
     (OUTLINE_EFFECT, "Outline"),
+    (media_domain::BEAT_SLICE_GRID_EFFECT, "Beat Slice Grid"),
 ];
 
 fn rendered_label(effect_type: Option<&str>) -> Option<&'static str> {
@@ -115,6 +120,7 @@ impl EffectSlotView {
         let rendered = rendered_label(effect_type);
         Self {
             index,
+            text: effect.text.clone(),
             effect_type: effect.effect_type.clone(),
             label: rendered
                 .unwrap_or_else(|| effect_type.unwrap_or("None"))
@@ -141,6 +147,12 @@ impl EffectSlotView {
 fn effect_parameters(effect: &EffectSlot) -> Vec<EffectParameterView> {
     let stored = effect.parameters.as_slice();
     match effect.effect_type.as_deref() {
+        Some(media_domain::BEAT_SLICE_GRID_EFFECT) => parameter_views(
+            &media_domain::BeatSliceGridParameters::IDS,
+            &media_domain::BeatSliceGridParameters::LABELS,
+            &media_domain::BeatSliceGridParameters::from_parameters(stored).as_array(),
+            &media_domain::BeatSliceGridParameters::default().as_array(),
+        ),
         Some(ANALOG_TV_EFFECT) => parameter_views(
             &AnalogTvParameters::IDS,
             &AnalogTvParameters::LABELS,
@@ -263,6 +275,8 @@ mod tests {
     #[test]
     fn an_unknown_persisted_effect_reports_an_actionable_capability_error() {
         let effect = EffectSlot {
+            text: None,
+            text_mask: Vec::new(),
             effect_type: Some("future-effect".to_owned()),
             enabled: true,
             mix: 1.0,

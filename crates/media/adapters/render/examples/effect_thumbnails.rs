@@ -103,6 +103,12 @@ fn render_preset(
         source: &scene,
         mask: None,
     };
+    let mut prepared = effect.clone();
+    if prepared.beat_slice_grid_parameters().is_some() {
+        prepared.text_mask =
+            media_text::packed_line_mask(prepared.text.as_deref().unwrap_or("PIXEL")).to_vec();
+    }
+    let effect = &prepared;
     let key = thumbnail_key(effect);
     match key.as_str() {
         "feedback" => {

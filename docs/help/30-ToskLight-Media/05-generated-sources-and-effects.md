@@ -55,6 +55,20 @@ Values past 3 repeat the list. **Density** sets how many props fly, from 1 to 48
 
 A new Media Server configuration assigns Flying Props to `250/025`. A configuration saved before Flying Props shipped keeps its own visualizer assignments; add Flying Props to an empty slot on the **Visualizers** page.
 
+**Galaxy Simulator** draws a rotating spiral galaxy with orbiting stars. Each beat launches expanding supernova rings that fade over **Supernova lifetime**. **Supernovas per beat** sets the number of explosions; at zero, the galaxy keeps rotating without explosions. **Star density**, **Star size**, **Galaxy radius**, the two colours, Speed and Reactivity tune its appearance. New configurations assign it to `250/026`.
+
+**Text Tracking** turns your **Text** into a typed monospace screen with glyph tracking boxes, connecting lines, a red lock flash and a moving camera, inspired by [ff-tracking](https://github.com/mrsarac/ff-tracking). Its movement follows Pixel's audio and beat analysis. Text accepts up to 128 ASCII characters, including line breaks, using a bundled monospace font. **Columns**, **Typing speed**, **Letter spacing** and **Camera motion** tune the presentation. New configurations assign it to `250/027`. Existing configurations keep their own visualizer assignments; add either new kind to a free slot on the **Visualizers** page.
+
+**Black Hole** is a generated visualizer with a dark shadow, glowing photon ring, rotating
+accretion disc and a bent arc above the shadow. Each beat swells and brightens the ring and disc;
+**Beat pulse** controls the strength and **Pulse decay** how long it takes to settle. Zero Beat
+pulse keeps the disc rotating without beat pulses. **Shadow radius**, **Disc speed**, **Disc
+inclination**, **Disc colour** and **Ring colour** tune its look. A fresh configuration assigns it
+to `250/028`; on an existing installation, add Black Hole to a free slot on **Visualizers**.
+Its first four Visualizer Parameter channels are Shadow radius, Disc speed, Beat pulse and Pulse
+decay. This is an artistic approximation inspired by Eric Bruneton's black-hole imagery, using
+original procedural graphics and no upstream code or assets.
+
 ## Effects and masks
 
 Masks are selected independently from content and can be combined with the layer's shaper and
@@ -137,12 +151,12 @@ The Master has no Flip/mirror channel. **Master scale X** and **Master scale Y**
 
 The initial catalogue includes TV/CRT/VHS Simulation, Digital Video/ Glitch Simulation, Blur
 (Gaussian, Shape, Radial, Linear, and Axial), Feedback, Beat Move, Beat Scan, Beat Scale & Turn,
-Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, Drawn Image Style, and Outline (slot
-13). Kaleidoscope
+Beat form Flash, Kaleidoscope, B/W Rasterize, CMYK Rasterize, Drawn Image Style, Outline (slot
+13), and Beat Slice Grid (slot 14). Kaleidoscope
 repetitions run from Off through 12. Feedback supports Shake and Tunnel motion and is tuned for a
 longer, smoother trail by default.
 
-Beat Move, Beat Scan, Beat Grid Wave, Beat Scale & Turn, Beat Form Flash, and Outline with Beat depth have a **React to** setting in their Library effect slot. **Detected beat** follows actual kick or snare hits heard in the audio, even when the song slows down. **Live beat (tempo pulse)** follows the current tempo-aligned pulse, including through gaps in the music. **Bass drum**, **Hi-hat**, and **Snare** follow only that instrument's detected hits. The default for existing and new beat effects is Detected beat. A missing input or a silent instrument produces no hits for that source.
+Beat Move, Beat Scan, Beat Grid Wave, Beat Scale & Turn, Beat Form Flash, Beat Slice Grid, and Outline with Beat depth have a **React to** setting in their Library effect slot. **Detected beat** follows actual kick or snare hits heard in the audio, even when the song slows down. **Live beat (tempo pulse)** follows the current tempo-aligned pulse, including through gaps in the music. **Bass drum**, **Hi-hat**, and **Snare** follow only that instrument's detected hits. The default for existing and new beat effects is Detected beat. A missing input or a silent instrument produces no hits for that source.
 
 Every slot in the Library's **Effects** tab shows a thumbnail of its effect type, and the slot
 editor's thumbnail follows the **Effect type** you choose before you save. The thumbnails are
@@ -154,6 +168,12 @@ Blur **Amount** scales with the source's height, so a 4K clip and a 720p clip so
 default amount a Gaussian blur smooths fine detail completely instead of leaving a ghost of it;
 **Shape** gives an even, lens-like disc, **Radial** a zoom smear toward the centre, **Linear** a
 horizontal motion smear, and **Axial** a rotational smear. An amount of **0** is an exact bypass.
+
+### Beat Slice Grid
+
+**Beat Slice Grid** cuts the layer's live picture into rectangular slices and interleaves them with your **Text**, stretched to fit each panel. The red-and-white typography and fine dividers follow a poster layout. **Columns** and **Rows** set the grid, **Beat movement** sets how far its boundaries move, and **Text cells** sets how much of the grid shows text. Each hit from **React to** changes the panel proportions and eases them into place; between hits the layout holds. The bank's four parameter channels follow those four controls in that order. Effect Strength blends the grid with the original layer.
+
+The text accepts up to 64 characters and uses a locally installed bold font. A new library includes the preset at slot 14. An older library receives it only when that slot is free and no Beat Slice Grid preset already exists; an intentionally emptied library stays empty.
 
 ### Outline
 
