@@ -26,19 +26,16 @@ impl OutputResource {
                 visualization_runtime.install_definitions(snapshot.dynamics.iter().cloned())
             })
             .expect("Engine snapshot contains validated Dynamic definitions");
-        // The old restore expression holds this temporary Live guard through restore/expect.
-        // Keep that lifetime: timing must not move the synchronization boundary.
-        let (live, portable) = observation.measure(Stage::LiveCapture, || {
-            let live = self.dynamics.lock();
-            let portable = live.snapshot();
-            (live, portable)
-        });
+        // The portable capture owns its state. Private restoration reads only that capture
+        // and this observer's definitions; release Live before doing the cold validation.
+        let portable = observation.measure(Stage::LiveCapture, || self.dynamics.lock().snapshot());
+        #[cfg(test)]
+        early_unlock_tests::after_capture(self, &portable);
         observation
             .measure(Stage::RestoreSnapshot, || {
                 visualization_runtime.restore_snapshot(portable)
             })
             .expect("live Dynamic runtime snapshot remains restorable");
-        drop(live);
         let visualization_runtime = Mutex::new(visualization_runtime);
         let (sampled, runtime_snapshot, runtime_samples) =
             observation.measure(Stage::DynamicProjection, || {
@@ -62,3 +59,6 @@ impl OutputResource {
         (resolved, runtime_snapshot, runtime_samples)
     }
 }
+
+#[cfg(test)]
+mod early_unlock_tests;
