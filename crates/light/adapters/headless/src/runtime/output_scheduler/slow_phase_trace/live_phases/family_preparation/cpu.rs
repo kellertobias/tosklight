@@ -3,7 +3,7 @@ use super::{ACTIVE, STAGES};
 use light_engine::parallel::diagnostics::{CpuObservation, WorkerSummary};
 use std::{marker::PhantomData, rc::Rc};
 const SUBSTAGES: usize = 7;
-const WORKERS: usize = 3;
+const WORKERS: usize = 4;
 #[derive(Clone, Copy)]
 pub(in crate::runtime::output_scheduler) enum Substage {
     StaticDiscovery,
@@ -19,6 +19,8 @@ pub(in crate::runtime::output_scheduler) enum WorkerStage {
     CompleteDeferred,
     PrepareFamilies,
     OwnerCompose,
+    /// Disjoint pool-job gaps outside the three nested named scopes; not pinning-exclusive.
+    SamplingOuterUnclassified,
 }
 #[derive(Default)]
 pub(super) struct Summary {
@@ -103,7 +105,8 @@ impl Summary {
         );
     }
     pub(super) fn emit(&self) {
-        let values = |f: fn(&WorkerSummary) -> u64| self.workers.each_ref().map(f);
+        let values =
+            |f: fn(&WorkerSummary) -> u64| std::array::from_fn::<_, 3, _>(|i| f(&self.workers[i]));
         // Fixed order: Ordered six counters, then Indexed six counters, completion only.
         let completion = self.workers[WorkerStage::CompleteDeferred as usize].job_kinds;
         let fields = completion.map(|k| {
@@ -117,13 +120,25 @@ impl Summary {
             ]
         });
         let completion_job_kinds: [u64; 12] = std::array::from_fn(|i| fields[i / 6][i % 6]);
-        tracing::info!(schema_version=2u8,completion_job_kinds=?completion_job_kinds,
+        let outer = &self.workers[WorkerStage::SamplingOuterUnclassified as usize];
+        let sampling_outer_unclassified = [
+            outer.calls,
+            outer.jobs,
+            outer.cpu_valid_jobs,
+            outer.cpu_unavailable_jobs,
+            outer.cpu_invalid_jobs,
+            outer.cpu_nanos,
+            outer.counter_read_nanos,
+            outer.job_kinds[0].jobs,
+            outer.job_kinds[1].jobs,
+        ];
+        tracing::info!(schema_version=3u8,completion_job_kinds=?completion_job_kinds,sampling_outer_unclassified=?sampling_outer_unclassified,
             stage_calls=?self.stage_calls,stage_cpu_valid_calls=?self.stage_valid,stage_cpu_unavailable_calls=?self.stage_unavailable,stage_cpu_invalid_calls=?self.stage_invalid,stage_cpu_nanos=?self.stage_cpu,stage_counter_read_nanos=?self.stage_read,
             substage_calls=?self.sub_calls,substage_wall_nanos=?self.sub_wall,substage_cpu_valid_calls=?self.sub_valid,substage_cpu_unavailable_calls=?self.sub_unavailable,substage_cpu_invalid_calls=?self.sub_invalid,substage_cpu_nanos=?self.sub_cpu,substage_counter_read_nanos=?self.sub_read,
             worker_calls=?values(|w|w.calls),worker_jobs=?values(|w|w.jobs),worker_cpu_valid_jobs=?values(|w|w.cpu_valid_jobs),worker_cpu_unavailable_jobs=?values(|w|w.cpu_unavailable_jobs),worker_cpu_invalid_jobs=?values(|w|w.cpu_invalid_jobs),worker_cpu_nanos=?values(|w|w.cpu_nanos),worker_counter_read_nanos=?values(|w|w.counter_read_nanos),worker_job_wall_nanos=?values(|w|w.job_wall_nanos),worker_job_wall_max_nanos=?values(|w|w.job_wall_max_nanos),worker_section_to_job_max_nanos=?values(|w|w.section_to_job_max_nanos),worker_uncovered_sort_calls=?values(|w|w.uncovered_sort_calls),
             "output preparation cpu summary");
         let pool = |f: fn(&light_engine::parallel::diagnostics::PoolTimingSummary) -> u64| {
-            self.workers.each_ref().map(|w| f(&w.pool_timing))
+            std::array::from_fn::<_, 3, _>(|i| f(&self.workers[i].pool_timing))
         };
         tracing::info!(schema_version=1u8,
             install_calls=?pool(|p|p.install_calls),install_jobs=?pool(|p|p.install_jobs),
@@ -210,6 +225,71 @@ pub(in crate::runtime::output_scheduler) fn covered<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn outer_pool_jobs_exclude_nested_named_scopes_and_restore_after_panic() {
+        use light_dynamics::InstanceWorkers;
+        use light_engine::parallel::{OutputPool, diagnostics as cpu};
+        // Engine is a normal dependency here: pool observations require the real opt-in.
+        let admitted = u64::from(
+            std::env::var("LIGHT_OUTPUT_PHASE_DIAGNOSTICS")
+                .ok()
+                .as_deref()
+                == Some("all"),
+        );
+        let pool = OutputPool::new(2).unwrap();
+        let mut summary = Summary::default();
+        let (result, outer) = cpu::covered(true, || {
+            pool.run_indexed(2, &|_| ());
+            for index in 0..3 {
+                let (_, named) = cpu::covered(true, || pool.run_indexed(index + 2, &|_| ()));
+                summary.worker(index, named.unwrap());
+            }
+            let failed = std::panic::catch_unwind(|| cpu::covered(true, || panic!("callback")));
+            assert!(failed.is_err());
+            let mut scratch = vec![(); 2];
+            light_engine::parallel::run_ordered(Some(&pool), &mut scratch, 3, |_, i| i);
+            Err::<(), _>(17)
+        });
+        summary.worker(
+            WorkerStage::SamplingOuterUnclassified as usize,
+            outer.unwrap(),
+        );
+        assert_eq!(result, Err(17));
+        assert_eq!(
+            summary.workers[..3]
+                .iter()
+                .map(|w| w.jobs)
+                .collect::<Vec<_>>(),
+            [2 * admitted, 3 * admitted, 4 * admitted]
+        );
+        let outer = &summary.workers[3];
+        assert_eq!(
+            (outer.calls, outer.jobs, outer.job_kinds[1].jobs),
+            (1, 5 * admitted, 2 * admitted)
+        );
+        assert_eq!(outer.job_kinds[0].jobs, 3 * admitted);
+        assert_eq!(
+            outer.cpu_valid_jobs + outer.cpu_unavailable_jobs + outer.cpu_invalid_jobs,
+            5 * admitted
+        );
+        let (_, empty) = cpu::covered(true, || pool.run_indexed(0, &|_| ()));
+        let empty = empty.unwrap();
+        assert_eq!(
+            (
+                empty.calls,
+                empty.jobs,
+                empty.cpu_nanos,
+                empty.counter_read_nanos
+            ),
+            (1, 0, 0, 0)
+        );
+        let (value, disabled) = cpu::covered(false, || {
+            pool.run_indexed(2, &|_| ());
+            29
+        });
+        assert_eq!(value, 29);
+        assert!(disabled.is_none());
+    }
     #[test]
     fn explicit_statuses_and_worker_maxima_keep_coverage_truthful() {
         let mut summary = Summary::default();

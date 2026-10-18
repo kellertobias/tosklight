@@ -13,12 +13,13 @@ function source(){
  const a=n=>Array(n).fill(1),ns=n=>Array.from({length:n},(_,i)=>1000*(i+1));
  return {
   completion_job_kinds:[1,1,0,0,400,10,1,1,0,0,600,30],
+  sampling_outer_unclassified:[1,2,2,0,0,800,40,0,2],
   stage_calls:a(14),stage_cpu_valid_calls:a(14),stage_cpu_unavailable_calls:Array(14).fill(0),stage_cpu_invalid_calls:Array(14).fill(0),stage_cpu_nanos:ns(14),stage_counter_read_nanos:Array(14).fill(20),
   substage_calls:a(7),substage_wall_nanos:ns(7).map(n=>n*10),substage_cpu_valid_calls:a(7),substage_cpu_unavailable_calls:Array(7).fill(0),substage_cpu_invalid_calls:Array(7).fill(0),substage_cpu_nanos:ns(7),substage_counter_read_nanos:Array(7).fill(20),
   worker_calls:a(3),worker_jobs:Array(3).fill(2),worker_cpu_valid_jobs:Array(3).fill(2),worker_cpu_unavailable_jobs:Array(3).fill(0),worker_cpu_invalid_jobs:Array(3).fill(0),worker_cpu_nanos:ns(3),worker_counter_read_nanos:Array(3).fill(40),worker_job_wall_nanos:Array(3).fill(20_000),worker_job_wall_max_nanos:Array(3).fill(10_000),worker_section_to_job_max_nanos:Array(3).fill(2_000),worker_uncovered_sort_calls:a(3),
  };
 }
-function cpu(seq,data=source(),at=98){return line(seq,"output preparation cpu summary","schema_version=2 "+Object.entries(data).map(([key,value])=>key+"="+JSON.stringify(value)).join(" "),at);}
+function cpu(seq,data=source(),at=98){return line(seq,"output preparation cpu summary","schema_version=3 "+Object.entries(data).map(([key,value])=>key+"="+JSON.stringify(value)).join(" "),at);}
 function tick(seq=1,{at=100,miss=false,pathCode=0,data=source(),summary=true,nested=pathCode!==1}={}){
  const phase=PHASE_FIELDS.map((key,i)=>key+"="+(10+i)).join(" "),app=APPLICATION_FIELDS.map((key,i)=>key+"="+(1000+i)).join(" ");
  return [
@@ -95,9 +96,9 @@ test("fixed array shapes, bounded nanoseconds and unknown source fields fail clo
   s=>s.replace("stage_cpu_nanos=[1000","stage_cpu_nanos=[-1"),
   s=>s.replace("stage_cpu_nanos=[1000","stage_cpu_nanos=[1.5"),
   s=>s.replace("stage_cpu_nanos=[1000","stage_cpu_nanos=["+(CPU_LIMITS.nanos+1)),
-  s=>s.replace("schema_version=2 completion_job_kinds","schema_version=1 completion_job_kinds"),
-  s=>s.replace("schema_version=2 completion_job_kinds","schema_version=2 private_name=secret completion_job_kinds"),
-  s=>s.replace("schema_version=2 completion_job_kinds","schema_version=2 schema_version=2 completion_job_kinds"),
+  s=>s.replace("schema_version=3 completion_job_kinds","schema_version=2 completion_job_kinds"),
+  s=>s.replace("schema_version=3 completion_job_kinds","schema_version=3 private_name=secret completion_job_kinds"),
+  s=>s.replace("schema_version=3 completion_job_kinds","schema_version=3 schema_version=3 completion_job_kinds"),
   s=>s.replaceAll("output_tick{tick_seq=1}","wrong_span{tick_seq=1}"),
  ]){const r=checked(mutate(tick()));assert.equal(r.available,0);assert(r.invalid_records>0);assert(!JSON.stringify(r).includes("secret"));}
 });
@@ -206,7 +207,7 @@ test("integer microsecond endpoints join exact server boundaries without epoch f
 
 test("completion kind rows conserve actual ordered/indexed CPU without per-kind wall claims",()=>{
  const second=source();second.worker_cpu_nanos[0]=3000;second.completion_job_kinds[4]=1000;second.completion_job_kinds[10]=2000;
- const text=tick()+tick(2,{at:200,miss:true,data:second});const r=checked(text);assert.equal(r.schema_version,2);assert.equal(r.bytes_observed,Buffer.byteLength(text));assert.equal(r.available,1);
+ const text=tick()+tick(2,{at:200,miss:true,data:second});const r=checked(text);assert.equal(r.schema_version,3);assert.equal(r.bytes_observed,Buffer.byteLength(text));assert.equal(r.available,1);
  assert.deepEqual(r.groups[0].completion_kinds.map(k=>[k.id,k.jobs,k.valid_jobs,k.metrics[0].count,k.metrics[0].mean_nanos]),[[0,2,2,2,700],[1,2,2,2,1300]]);
  assert.deepEqual(r.groups[1].completion_kinds.map(k=>k.metrics[0].mean_nanos),[1000,2000]);
  assert.equal(r.groups[0].completion_kinds.reduce((n,k)=>n+k.metrics[0].mean_nanos,0),r.groups[0].workers[0].metrics[0].mean_nanos);
@@ -232,4 +233,35 @@ test("empty completion kinds cannot acquire positive CPU/read stats by shifting 
   for(const [id,row]of rows.entries())for(const key of ['min_nanos','mean_nanos','p50_nanos','p95_nanos','max_nanos'])row.metrics[metric][key]=id===0?total-1:1;
   assert.equal(rows[0].metrics[metric].mean_nanos+rows[1].metrics[metric].mean_nanos,total);assert.equal(rows[1].metrics[metric].count,1);assert.equal(rows[1].jobs,0);assert.throws(()=>validateCpuDiagnostics(forged));
  }
+});
+
+test('outer unclassified coverage is separate, status-aware and selected by actual misses',()=>{
+ const missed=source();missed.sampling_outer_unclassified=[1,3,1,1,1,1500,60,1,2];
+ const r=checked(tick()+tick(2,{at:200,miss:true,data:missed}));
+ assert.equal(r.parse_complete,1);assert.equal(r.join_complete,1);assert.equal(r.cpu_complete,0);
+ const all=r.groups[0].sampling_outer_unclassified,only=r.groups[1].sampling_outer_unclassified;
+ assert.deepEqual([all.calls,all.called_records,all.jobs,all.ordered_jobs,all.indexed_jobs,all.partial_cpu_records],[2,2,5,1,4,1]);
+ assert.equal(only.metrics[0].mean_nanos,1500);assert.equal(only.metrics[1].mean_nanos,60);
+ const empty=source();empty.sampling_outer_unclassified=[1,0,0,0,0,0,0,0,0];
+ const e=checked(tick(1,{data:empty}));assert.equal(e.available,1);assert.deepEqual(e.groups[0].sampling_outer_unclassified.metrics.map(m=>m.count),[0,0]);
+ for(const outer of [[0,0,0,0,0,0,0,0,0],[2,2,2,0,0,800,40,0,2]]){
+  const d=source();d.sampling_outer_unclassified=outer;const bad=checked(tick(1,{data:d}));assert.equal(bad.parse_complete,1);assert.equal(bad.cpu_complete,0);
+ }
+});
+test('outer raw conservation, missing field, status and public forgeries fail closed',()=>{
+ for(const mutate of [d=>delete d.sampling_outer_unclassified,d=>d.sampling_outer_unclassified.pop(),d=>d.sampling_outer_unclassified[7]=1,d=>d.sampling_outer_unclassified[2]=0,d=>d.sampling_outer_unclassified[0]=0,d=>{d.sampling_outer_unclassified=[1,0,0,0,0,1,0,0,0];},d=>{d.sampling_outer_unclassified=[1,0,0,0,0,0,1,0,0];}]){
+  const d=source();mutate(d);const r=checked(tick(1,{data:d}));assert.equal(r.parse_complete,0);assert.equal(r.available,0);
+ }
+ const normal=checked(tick());
+ for(const mutate of [r=>r.schema_version=2,r=>r.groups[0].sampling_outer_unclassified.indexed_jobs++,r=>r.groups[0].sampling_outer_unclassified.called_records=0,r=>r.groups[0].sampling_outer_unclassified.metrics[0].count=0]){
+  const r=structuredClone(normal);mutate(r);assert.throws(()=>validateCpuDiagnostics(r));
+ }
+});
+
+test('complete reports cannot erase only the actual-missed outer coverage row',()=>{
+ const r=checked(tick()+tick(2,{at:200,miss:true}));assert.equal(r.cpu_complete,1);
+ const row=r.groups[1].sampling_outer_unclassified;
+ for(const key of Object.keys(row))if(key!=="metrics")row[key]=0;
+ for(const metric of row.metrics)for(const key of Object.keys(metric))if(key!=="id")metric[key]=0;
+ assert.throws(()=>validateCpuDiagnostics(r));
 });

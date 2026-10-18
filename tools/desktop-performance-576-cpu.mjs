@@ -25,7 +25,7 @@ const REFERENCES = ["bounded output scheduler tick sample","bounded live output 
 const STAGE_KEYS = ["stage_calls","stage_cpu_valid_calls","stage_cpu_unavailable_calls","stage_cpu_invalid_calls","stage_cpu_nanos","stage_counter_read_nanos"];
 const SUB_KEYS = ["substage_calls","substage_wall_nanos","substage_cpu_valid_calls","substage_cpu_unavailable_calls","substage_cpu_invalid_calls","substage_cpu_nanos","substage_counter_read_nanos"];
 const WORK_KEYS = ["worker_calls","worker_jobs","worker_cpu_valid_jobs","worker_cpu_unavailable_jobs","worker_cpu_invalid_jobs","worker_cpu_nanos","worker_counter_read_nanos","worker_job_wall_nanos","worker_job_wall_max_nanos","worker_section_to_job_max_nanos","worker_uncovered_sort_calls"];
-const CPU_KEYS = ["schema_version",...STAGE_KEYS,...SUB_KEYS,...WORK_KEYS,"completion_job_kinds"];
+const CPU_KEYS = ["schema_version",...STAGE_KEYS,...SUB_KEYS,...WORK_KEYS,"completion_job_kinds","sampling_outer_unclassified"];
 const CLEAN_KEYS = ["schema_version","queue_lag_nanos","cleanup_wall_nanos","thread_cpu_nanos","cpu_status","counter_read_nanos"];
 const FLAGS = ["available","log_available","capture_complete","parse_complete","join_complete","cpu_complete","cpu_available","tick_trace_available","tick_trace_capture_complete","tick_trace_parse_complete","tick_trace_join_complete"];
 const COUNTS = ["bytes_observed","lines_observed","records_observed","cpu_records_observed","cleanup_records_observed","invalid_records","unbound_records","duplicate_records","orphan_cpu_records","tick_cap_records","cleanup_cap_records","selected_ticks","selected_missed_ticks","selected_ordered_attempts","selected_cpu_summaries","selected_missing_cpu","selected_unexpected_cpu","selected_duplicate_records","selected_invalid_records","metadata_mismatches"];
@@ -34,6 +34,8 @@ const STAT_KEYS = ["id","count","min_nanos","mean_nanos","p50_nanos","p95_nanos"
 const ROW_KEYS = ["id","calls","valid_calls","unavailable_calls","invalid_calls","called_records","cpu_records","partial_cpu_records","metrics"];
 const WORKER_KEYS = ["id","calls","jobs","valid_jobs","unavailable_jobs","invalid_jobs","job_records","cpu_records","partial_cpu_records","uncovered_sort_calls","metrics"];
 const COMPLETION_KEYS = ["id","jobs","valid_jobs","unavailable_jobs","invalid_jobs","metrics"];
+const OUTER_KEYS = ["calls","jobs","valid_jobs","unavailable_jobs","invalid_jobs","ordered_jobs","indexed_jobs","called_records","job_records","cpu_records","partial_cpu_records","metrics"];
+const newOuter = () => ({...Object.fromEntries(OUTER_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:[zeroStat(0),zeroStat(1)]});
 const CLEANUP_KEYS = ["available","records_before_window","records_in_window","records_after_window","invalid_records","unlocalizable_records","valid_cpu_records","unavailable_cpu_records","invalid_cpu_records","metrics"];
 const uint = n => Number.isSafeInteger(n)&&n>=0;
 const countLimit = Math.floor(Number.MAX_SAFE_INTEGER/CPU_LIMITS.cleanups);
@@ -42,10 +44,10 @@ const zeroStat = id => ({id,count:0,min_nanos:0,mean_nanos:0,p50_nanos:0,p95_nan
 const newRow = (id,sub=false) => ({id,calls:0,valid_calls:0,unavailable_calls:0,invalid_calls:0,called_records:0,cpu_records:0,partial_cpu_records:0,metrics:Array.from({length:sub?3:2},(_,i)=>zeroStat(i))});
 const newWorker = id => ({id,calls:0,jobs:0,valid_jobs:0,unavailable_jobs:0,invalid_jobs:0,job_records:0,cpu_records:0,partial_cpu_records:0,uncovered_sort_calls:0,metrics:CPU_WORKER_METRICS.map((_,i)=>zeroStat(i))});
 const newCompletion = id => ({id,jobs:0,valid_jobs:0,unavailable_jobs:0,invalid_jobs:0,metrics:[zeroStat(0),zeroStat(1)]});
-const newGroup = id => ({id,ticks:0,ordered_attempts:0,cpu_summaries:0,stages:CPU_STAGE_IDS.map((_,i)=>newRow(i)),substages:CPU_SUBSTAGE_IDS.map((_,i)=>newRow(i,true)),workers:CPU_WORKER_IDS.map((_,i)=>newWorker(i)),completion_kinds:[newCompletion(0),newCompletion(1)]});
+const newGroup = id => ({id,ticks:0,ordered_attempts:0,cpu_summaries:0,stages:CPU_STAGE_IDS.map((_,i)=>newRow(i)),substages:CPU_SUBSTAGE_IDS.map((_,i)=>newRow(i,true)),workers:CPU_WORKER_IDS.map((_,i)=>newWorker(i)),completion_kinds:[newCompletion(0),newCompletion(1)],sampling_outer_unclassified:newOuter()});
 const validWindow = w => diagnosticWindowBounds(w)!==null;
 function blank(window,status=0) {
- return {...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:2,read_status:status,window_seconds:diagnosticWindowBounds(window)?.seconds??0,groups:[newGroup(0),newGroup(1)],cleanup:{...Object.fromEntries(CLEANUP_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:CPU_CLEANUP_METRICS.map((_,i)=>zeroStat(i))}};
+ return {...Object.fromEntries(TOP.map(k=>[k,0])),schema_version:3,read_status:status,window_seconds:diagnosticWindowBounds(window)?.seconds??0,groups:[newGroup(0),newGroup(1)],cleanup:{...Object.fromEntries(CLEANUP_KEYS.filter(k=>k!=="metrics").map(k=>[k,0])),metrics:CPU_CLEANUP_METRICS.map((_,i)=>zeroStat(i))}};
 }
 function timestamp(line) {
  const m=/^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z(?:\s|$)/u.exec(line);
@@ -73,8 +75,12 @@ function array(value,length,nanos) {
  for(const n of rows)assert(uint(n)&&n<=(nanos?CPU_LIMITS.nanos:countLimit));return rows;
 }
 function parseCpu(line) {
- const id=binding(line,CPU_MESSAGE),time=timestamp(line),raw=fields(line,CPU_MESSAGE,CPU_KEYS),data={};assert(integer(raw.schema_version)===2);
- for(const key of CPU_KEYS.slice(1).filter(k=>k!=="completion_job_kinds"))data[key]=array(raw[key],key.startsWith("stage_")?14:key.startsWith("substage_")?7:3,key.endsWith("_nanos"));
+ const id=binding(line,CPU_MESSAGE),time=timestamp(line),raw=fields(line,CPU_MESSAGE,CPU_KEYS),data={};assert(integer(raw.schema_version)===3);
+ for(const key of CPU_KEYS.slice(1).filter(k=>!["completion_job_kinds","sampling_outer_unclassified"].includes(k)))data[key]=array(raw[key],key.startsWith("stage_")?14:key.startsWith("substage_")?7:3,key.endsWith("_nanos"));
+ data.sampling_outer_unclassified=array(raw.sampling_outer_unclassified,9,true);
+ const o=data.sampling_outer_unclassified;assert(o.filter((_,i)=>![5,6].includes(i)).every(n=>n<=countLimit));
+ assert(o[2]+o[3]+o[4]===o[1]&&o[7]+o[8]===o[1]);
+ if(!o[0])assert(!o[1]);if(!o[2])assert(!o[5]);if(!o[1])assert(!o[6]);
  data.completion_job_kinds=array(raw.completion_job_kinds,12,true);
  for(let i=0;i<2;i++){
   const v=data.completion_job_kinds.slice(i*6,i*6+6);assert(v.slice(0,4).every(n=>n<=countLimit));
@@ -131,7 +137,7 @@ function summarize(values,id) {
  let mean=0;for(let i=0;i<rows.length;i++)mean+=(rows[i]-mean)/(i+1);
  return {id,count:rows.length,min_nanos:rows[0],mean_nanos:Math.min(rows.at(-1),Math.max(rows[0],mean)),p50_nanos:at(.5),p95_nanos:at(.95),max_nanos:rows.at(-1)};
 }
-function buckets(group) {return {stages:group.stages.map(()=>[[],[]]),substages:group.substages.map(()=>[[],[],[]]),workers:group.workers.map(()=>CPU_WORKER_METRICS.map(()=>[])),completion_kinds:group.completion_kinds.map(()=>[[],[]])};}
+function buckets(group) {return {stages:group.stages.map(()=>[[],[]]),substages:group.substages.map(()=>[[],[],[]]),workers:group.workers.map(()=>CPU_WORKER_METRICS.map(()=>[])),completion_kinds:group.completion_kinds.map(()=>[[],[]]),sampling_outer_unclassified:[[[],[]]]};}
 function addRows(rows,values,data,prefix) {
  for(const [i,row]of rows.entries()){
   const get=key=>data[prefix+"_"+key][i],calls=get("calls"),valid=get("cpu_valid_calls"),unavailable=get("cpu_unavailable_calls"),invalid=get("cpu_invalid_calls");
@@ -156,12 +162,21 @@ function addCompletion(rows,values,data){
   if(jobs){values[i][1].push(v[5]);if(complete)values[i][0].push(v[4]);}
  }
 }
+// Only jobs in disjoint gaps outside named coverage; not exclusive pinning or total pool CPU.
+// CPU statistics retain sums from valid jobs, and partial_cpu_records marks mixed-status sums.
+function addOuter(row,values,data){
+ const v=data.sampling_outer_unclassified;
+ for(const [i,key]of ["calls","jobs","valid_jobs","unavailable_jobs","invalid_jobs"].entries())row[key]+=v[i];
+ row.ordered_jobs+=v[7];row.indexed_jobs+=v[8];if(v[0])row.called_records++;
+ if(v[1]){row.job_records++;values[1].push(v[6]);}
+ if(v[2]){row.cpu_records++;values[0].push(v[5]);if(v[3]||v[4])row.partial_cpu_records++;}
+}
 function addGroup(group,values,entry) {
  group.ticks++;if(entry.nested)group.ordered_attempts++;if(!entry.cpu)return;
- group.cpu_summaries++;addRows(group.stages,values.stages,entry.cpu.data,"stage");addRows(group.substages,values.substages,entry.cpu.data,"substage");addWorkers(group.workers,values.workers,entry.cpu.data);addCompletion(group.completion_kinds,values.completion_kinds,entry.cpu.data);
+ group.cpu_summaries++;addOuter(group.sampling_outer_unclassified,values.sampling_outer_unclassified[0],entry.cpu.data);addRows(group.stages,values.stages,entry.cpu.data,"stage");addRows(group.substages,values.substages,entry.cpu.data,"substage");addWorkers(group.workers,values.workers,entry.cpu.data);addCompletion(group.completion_kinds,values.completion_kinds,entry.cpu.data);
 }
 function finishGroups(report,values) {
- for(const [i,group]of report.groups.entries())for(const kind of ["stages","substages","workers","completion_kinds"])for(const [j,row]of group[kind].entries())row.metrics=values[i][kind][j].map(summarize);
+ for(const [i,group]of report.groups.entries())for(const kind of ["stages","substages","workers","completion_kinds","sampling_outer_unclassified"])for(const [j,row]of (kind==="sampling_outer_unclassified"?[group[kind]]:group[kind]).entries())row.metrics=values[i][kind][j].map(summarize);
 }
 function finalize(report,entries,cleanups,window,base) {
  const {startedAtNanos:start,endedAtNanos:end}=diagnosticWindowBounds(window),values=report.groups.map(buckets);
@@ -190,10 +205,11 @@ function finalize(report,entries,cleanups,window,base) {
  report.cleanup.metrics=cleanupValues.map(summarize);
  report.parse_complete=Number(report.capture_complete&&report.tick_trace_parse_complete&&!report.invalid_records);
  report.join_complete=Number(base.join_complete&&selected.length>0&&selected.length===report.selected_ticks&&![report.selected_missing_cpu,report.selected_unexpected_cpu,report.selected_duplicate_records,report.selected_invalid_records,report.metadata_mismatches].some(Boolean));
+ const outer=report.groups[0].sampling_outer_unclassified;
  const rows=[...report.groups[0].stages,...report.groups[0].substages],workers=report.groups[0].workers;
- report.cpu_complete=Number(report.selected_ticks>0&&rows.every(r=>!r.unavailable_calls&&!r.invalid_calls)&&workers.every(r=>!r.unavailable_jobs&&!r.invalid_jobs));
+ report.cpu_complete=Number(report.selected_ticks>0&&rows.every(r=>!r.unavailable_calls&&!r.invalid_calls)&&workers.every(r=>!r.unavailable_jobs&&!r.invalid_jobs)&&outer.called_records===report.selected_cpu_summaries&&outer.calls===report.selected_cpu_summaries&&!outer.unavailable_jobs&&!outer.invalid_jobs);
  report.available=Number(report.capture_complete&&report.parse_complete&&report.join_complete&&report.cpu_complete&&report.selected_ordered_attempts>0);
- report.cpu_available=Number(report.available&&(rows.some(r=>r.valid_calls>0)||workers.some(r=>r.valid_jobs>0)));
+ report.cpu_available=Number(report.available&&(rows.some(r=>r.valid_calls>0)||workers.some(r=>r.valid_jobs>0)||outer.valid_jobs>0));
  report.cleanup.available=Number(report.capture_complete&&report.parse_complete&&report.cleanup.records_in_window>0&&!report.cleanup.unavailable_cpu_records&&!report.cleanup.invalid_cpu_records);
 }
 function newEntry(id){return {id,tick:null,nested:null,deadline:null,app:null,cpu:null,invalid:0,duplicates:0};}
@@ -252,6 +268,17 @@ function validateWorker(row,id,group) {
  if(!row.unavailable_jobs&&!row.invalid_jobs)assert(row.partial_cpu_records===0);
  assert(row.metrics.length===5);row.metrics.forEach((s,i)=>validateStat(s,i,group.cpu_summaries));assert(row.metrics[0].count===row.cpu_records);for(let i=1;i<5;i++)assert(row.metrics[i].count===row.job_records);
 }
+function validateOuter(row,group){
+ closed(row,OUTER_KEYS);for(const k of OUTER_KEYS.filter(k=>k!=="metrics"))assert(uint(row[k]));
+ assert(row.valid_jobs+row.unavailable_jobs+row.invalid_jobs===row.jobs&&row.ordered_jobs+row.indexed_jobs===row.jobs);
+ assert(row.called_records<=group.cpu_summaries&&row.called_records<=row.calls&&Boolean(row.called_records)===Boolean(row.calls));
+ assert(row.job_records<=row.called_records&&row.job_records<=row.jobs&&Boolean(row.job_records)===Boolean(row.jobs));
+ assert(row.cpu_records<=row.job_records&&row.cpu_records<=row.valid_jobs&&Boolean(row.cpu_records)===Boolean(row.valid_jobs)&&row.partial_cpu_records<=row.cpu_records);
+ if(!row.unavailable_jobs&&!row.invalid_jobs)assert(!row.partial_cpu_records);
+ assert(row.metrics.length===2);row.metrics.forEach((m,i)=>validateStat(m,i,group.cpu_summaries));
+ assert(row.metrics[0].count===row.cpu_records&&row.metrics[1].count===row.job_records);
+ if(!row.valid_jobs)assert(!row.metrics[0].max_nanos);if(!row.jobs)assert(!row.metrics[1].max_nanos);
+}
 function validateCompletion(group){
  const rows=group.completion_kinds,parent=group.workers[0];assert(Array.isArray(rows)&&rows.length===2);
  for(const [id,row]of rows.entries()){
@@ -268,8 +295,8 @@ function validateCompletion(group){
 }
 function validateSubset(all,missed) {
  for(const key of ["ticks","ordered_attempts","cpu_summaries"])assert(missed[key]<=all[key]);
- for(const kind of ["stages","substages","workers","completion_kinds"])for(const [i,row]of missed[kind].entries()){
-  const parent=all[kind][i];
+ for(const kind of ["stages","substages","workers","completion_kinds","sampling_outer_unclassified"])for(const [i,row]of (kind==="sampling_outer_unclassified"?[missed[kind]]:missed[kind]).entries()){
+  const parent=kind==="sampling_outer_unclassified"?all[kind]:all[kind][i];
   for(const key of Object.keys(row).filter(k=>!["id","metrics"].includes(k)))assert(row[key]<=parent[key]);
   for(const [j,metric]of row.metrics.entries()){
    const full=parent.metrics[j];assert(metric.count<=full.count);
@@ -280,7 +307,7 @@ function validateSubset(all,missed) {
 }
 export function validateCpuDiagnostics(report) {
  closed(report,[...TOP,"groups","cleanup"]);for(const key of TOP)assert(typeof report[key]==="number"&&Number.isFinite(report[key])&&report[key]>=0);
- assert(report.schema_version===2&&uint(report.read_status)&&report.read_status<=9&&report.window_seconds<=400);
+ assert(report.schema_version===3&&uint(report.read_status)&&report.read_status<=9&&report.window_seconds<=400);
  for(const key of FLAGS)assert(report[key]===0||report[key]===1);for(const key of COUNTS)assert(uint(report[key]));
  assert(report.capture_complete<=report.log_available&&report.capture_complete===Number(report.read_status===0));
  if(report.read_status===7)assert(report.window_seconds===0);else assert(report.window_seconds>0);
@@ -294,20 +321,22 @@ export function validateCpuDiagnostics(report) {
  if(report.tick_cap_records||report.cleanup_cap_records)assert(report.read_status===9&&report.capture_complete===0);if(report.read_status===9)assert(report.tick_cap_records+report.cleanup_cap_records>0);
  assert(Array.isArray(report.groups)&&report.groups.length===2);
  for(const [id,g]of report.groups.entries()){
-  closed(g,["id","ticks","ordered_attempts","cpu_summaries","stages","substages","workers","completion_kinds"]);assert(g.id===id);
+  closed(g,["id","ticks","ordered_attempts","cpu_summaries","stages","substages","workers","completion_kinds","sampling_outer_unclassified"]);assert(g.id===id);
   for(const key of ["ticks","ordered_attempts","cpu_summaries"])assert(uint(g[key])&&g[key]<=report.selected_ticks);
   assert(g.ordered_attempts<=g.ticks&&g.cpu_summaries<=g.ticks&&g.stages.length===14&&g.substages.length===7&&g.workers.length===3);
-  g.stages.forEach((r,i)=>validateRow(r,i,g,false));g.substages.forEach((r,i)=>validateRow(r,i,g,true));g.workers.forEach((r,i)=>validateWorker(r,i,g));validateCompletion(g);
+  g.stages.forEach((r,i)=>validateRow(r,i,g,false));g.substages.forEach((r,i)=>validateRow(r,i,g,true));g.workers.forEach((r,i)=>validateWorker(r,i,g));validateCompletion(g);validateOuter(g.sampling_outer_unclassified,g);
+  if(report.cpu_complete)assert(g.sampling_outer_unclassified.calls===g.cpu_summaries&&g.sampling_outer_unclassified.called_records===g.cpu_summaries);
  }
  validateSubset(report.groups[0],report.groups[1]);
  assert(report.selected_ordered_attempts-report.selected_missing_cpu+report.selected_unexpected_cpu===report.selected_cpu_summaries);
  assert(report.groups[1].ticks===report.selected_missed_ticks);
  assert(report.groups[0].ticks===report.selected_ticks&&report.groups[0].ordered_attempts===report.selected_ordered_attempts&&report.groups[0].cpu_summaries===report.selected_cpu_summaries);
+ const outer=report.groups[0].sampling_outer_unclassified;
  const rows=[...report.groups[0].stages,...report.groups[0].substages],workers=report.groups[0].workers;
- const complete=rows.every(r=>!r.unavailable_calls&&!r.invalid_calls)&&workers.every(r=>!r.unavailable_jobs&&!r.invalid_jobs);
+ const complete=rows.every(r=>!r.unavailable_calls&&!r.invalid_calls)&&workers.every(r=>!r.unavailable_jobs&&!r.invalid_jobs)&&outer.called_records===report.selected_cpu_summaries&&outer.calls===report.selected_cpu_summaries&&!outer.unavailable_jobs&&!outer.invalid_jobs;
  assert(report.cpu_complete===Number(report.selected_ticks>0&&complete));
  assert(report.available===Number(Boolean(report.capture_complete&&report.parse_complete&&report.join_complete&&report.cpu_complete&&report.selected_ordered_attempts>0)));
- assert(report.cpu_available===Number(Boolean(report.available&&(rows.some(r=>r.valid_calls>0)||workers.some(r=>r.valid_jobs>0)))));
+ assert(report.cpu_available===Number(Boolean(report.available&&(rows.some(r=>r.valid_calls>0)||workers.some(r=>r.valid_jobs>0)||outer.valid_jobs>0))));
  if(report.join_complete)assert(report.selected_ticks>0&&report.selected_ordered_attempts===report.selected_cpu_summaries&&![report.selected_missing_cpu,report.selected_unexpected_cpu,report.selected_duplicate_records,report.selected_invalid_records,report.metadata_mismatches].some(Boolean));
  if(report.invalid_records)assert(report.parse_complete===0);
  const c=report.cleanup;closed(c,CLEANUP_KEYS);for(const key of CLEANUP_KEYS.filter(k=>k!=="metrics"))assert(uint(c[key]));

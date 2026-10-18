@@ -69,51 +69,53 @@ pub(super) fn prepare_hybrid_frame<T>(
             )?;
             drop(bind_span);
             let mut sampling_span = Some(diagnostics::Span::begin(Stage::SamplingBeforeCallback));
-            runtime.sample_all_programming_staged_shared(
-                now,
-                interval,
-                inputs.speed_transports,
-                scalar_sources,
-                &authored,
-                Some(inputs.addresser),
-                sampling,
-                |legacy, deferred| {
-                    drop(sampling_span.take());
-                    compose_sampled_cohort(
-                        engine,
-                        capture,
-                        &frame_token,
-                        baseline_samples,
-                        legacy,
-                        deferred,
-                        origins,
-                        inputs,
-                        resolver,
-                        presets,
-                        observer,
-                        scalar_sources,
-                        &static_sources,
-                        static_token,
-                        models.as_ref(),
-                        fixed,
-                        controls,
-                        &endpoint_controls,
-                        output_pool.as_deref(),
-                        (
-                            scalar,
-                            legacy_owners,
-                            preparation,
-                            families,
-                            composition,
-                            position_batch_scratch,
-                            static_rows,
-                            parallel,
-                            native_current,
-                        ),
-                        &prepare_static,
-                    )
-                },
-            )
+            diagnostics::covered(diagnostics::WorkerStage::SamplingOuterUnclassified, || {
+                runtime.sample_all_programming_staged_shared(
+                    now,
+                    interval,
+                    inputs.speed_transports,
+                    scalar_sources,
+                    &authored,
+                    Some(inputs.addresser),
+                    sampling,
+                    |legacy, deferred| {
+                        drop(sampling_span.take());
+                        compose_sampled_cohort(
+                            engine,
+                            capture,
+                            &frame_token,
+                            baseline_samples,
+                            legacy,
+                            deferred,
+                            origins,
+                            inputs,
+                            resolver,
+                            presets,
+                            observer,
+                            scalar_sources,
+                            &static_sources,
+                            static_token,
+                            models.as_ref(),
+                            fixed,
+                            controls,
+                            &endpoint_controls,
+                            output_pool.as_deref(),
+                            (
+                                scalar,
+                                legacy_owners,
+                                preparation,
+                                families,
+                                composition,
+                                position_batch_scratch,
+                                static_rows,
+                                parallel,
+                                native_current,
+                            ),
+                            &prepare_static,
+                        )
+                    },
+                )
+            })
         },
     );
     native_current.borrow_mut().finish_frame();
