@@ -1,4 +1,5 @@
 use super::*;
+pub(super) mod adjacent_output;
 pub(super) mod borrowed_plain_controller;
 pub(super) mod controller_order;
 mod deferred_angle_pair;

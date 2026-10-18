@@ -38,6 +38,20 @@ impl PreparationOutput for FamilyOutput<'_> {
         owner: ProgrammingOwner,
         sample: FamilyCompositionSample,
     ) {
+        // Both append paths keep one group per key, at its first position. Adjacent
+        // writes can therefore use the last group without repeating the map lookup.
+        let adjacent = self
+            .families
+            .last_mut()
+            .filter(|group| group.target == target && group.owner == owner);
+        #[cfg(test)]
+        let adjacent = adjacent.filter(|_| !super::tests::adjacent_output::forced_map());
+        if let Some(group) = adjacent {
+            #[cfg(test)]
+            super::tests::adjacent_output::hit();
+            group.samples.push(sample);
+            return;
+        }
         let index = match self.family_indices.entry((target, owner)) {
             std::collections::hash_map::Entry::Occupied(index) => *index.get(),
             std::collections::hash_map::Entry::Vacant(index) => {
