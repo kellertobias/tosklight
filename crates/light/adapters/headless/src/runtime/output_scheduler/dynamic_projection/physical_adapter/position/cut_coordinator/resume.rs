@@ -386,11 +386,7 @@ fn fit_complete(
             destinations.push(PositionProgramDestination {
                 destination: peer.descriptor.instances[item.instance].destination,
                 value,
-                provenance: PhysicalProvenance {
-                    fields,
-                    sources: Default::default(),
-                    controls: None,
-                },
+                provenance: PhysicalProvenance::new(fields, Default::default(), None),
             });
         }
         if destinations.len() != peer.descriptor.instances.len() {

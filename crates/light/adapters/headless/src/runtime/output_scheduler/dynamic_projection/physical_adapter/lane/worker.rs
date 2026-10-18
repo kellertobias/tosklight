@@ -64,11 +64,7 @@ pub(in crate::runtime::output_scheduler::dynamic_projection::physical_adapter) f
     let mut sources = DynamicFamilySourceProjection::default();
     observation.project_fields(&fields, &mut sources)?;
     let controls = observation.controls_for_fields(&fields);
-    let provenance = PhysicalProvenance {
-        fields,
-        sources,
-        controls,
-    };
+    let provenance = PhysicalProvenance::new(fields, sources, controls);
     // Borrowed, not cloned (TL-639 round 2): the adapter never reaches this lane's state.
     let resolution = lane.with_previous((target, owner), |previous| {
         adapter.resolve(PhysicalRequest {

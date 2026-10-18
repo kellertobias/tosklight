@@ -129,11 +129,8 @@ pub(super) fn observe<'l>(
     let fields = adapter.consumed_fields(o.owner, o.value)?;
     let mut sources = DynamicFamilySourceProjection::default();
     o.project_fields(&fields, &mut sources)?;
-    let provenance = PhysicalProvenance {
-        controls: o.controls_for_fields(&fields),
-        fields,
-        sources,
-    };
+    let controls = o.controls_for_fields(&fields);
+    let provenance = PhysicalProvenance::new(fields, sources, controls);
     let metadata = adapter.projection_metadata(o.owner, &provenance);
     let previous = access.continuity(o.target, o.owner);
     access.pending().push(PendingPosition {
