@@ -312,9 +312,11 @@ def selected_perf(request, deadline):
 
 
 def record_args(perf, pid):
+    # Linux v5.15 record has no --synth option. Its default synthesis follows the
+    # explicit target thread map/mappings; -p, user-only and no-inherit bound samples.
     return [str(perf), 'record', '--event', 'cpu-clock:u', '--freq', '49', '--call-graph', 'dwarf,8192',
             '--timestamp', '--mmap-pages', '128', '--clockid', 'mono', '--no-inherit',
-            '--no-buildid-cache', '--no-bpf-event', '--synth=task,mmap', '--pid', str(pid),
+            '--no-buildid-cache', '--no-bpf-event', '--pid', str(pid),
             '--output', 'perf.data']
 
 

@@ -110,6 +110,7 @@ class Pure(unittest.TestCase):
         self.assertEqual(args[args.index('--pid') + 1], '30')
         self.assertEqual(args[args.index('--call-graph') + 1], 'dwarf,8192')
         self.assertIn('--no-inherit', args)
+        self.assertFalse(any(arg == '--synth' or arg.startswith('--synth=') for arg in args))
         self.assertEqual(args[args.index('--event') + 1], 'cpu-clock:u')
         for forbidden in ('-a', '--all-cpus', '-C', '--all-kernel', 'sleep'):
             self.assertNotIn(forbidden, args)
