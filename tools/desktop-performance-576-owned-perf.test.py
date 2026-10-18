@@ -196,13 +196,31 @@ class Pure(unittest.TestCase):
             p.census(raw(sample_type=required | (1 << 4), read_format=0))
         self.assertEqual(caught.exception.detail, 3)
 
+    def test_known_rejected_record_names_keep_admission_and_first_failure_unchanged(self):
+        # Independent fixed v5.15 UAPI/libperf record values, in diagnostic order.
+        records = (5, 6, 8, 11, 12, 14, 15, 16, 17, 18, 19, 20,
+                   64, 65, 66, 67, 70, 71, 72, 75, 76, 77, 80, 81)
+        for index, event in enumerate(records):
+            with self.subTest(event=event), self.assertRaises(p.Refused) as caught:
+                p.census(raw((event,)))
+            self.assertEqual((caught.exception.code, caught.exception.detail), (11, 33 + index))
+        with self.assertRaises(p.Refused) as caught:
+            p.census(raw((999,)))
+        self.assertEqual(caught.exception.detail, 17)
+        with self.assertRaises(p.Refused) as caught:p.census(raw((21,)))
+        self.assertEqual(caught.exception.detail, 17)  # v5.15 MAX sentinel, not a named record.
+        short = bytearray(raw((64,)));struct.pack_into('<H', short, 238, 7)
+        with self.assertRaises(p.Refused) as caught:p.census(bytes(short))
+        self.assertEqual(caught.exception.detail, 9)
+        self.assertEqual(p.census(raw((68, 9, 2, 13))), dict(samples=1, lost=2, records=4))
+
     def test_census_details_require_census_failure_and_recording_stage(self):
         for detail in range(1, p.CENSUS_DETAIL_MAX + 1):
             for stage in (7, 9, 11):
                 value = p.failure_report(11)
                 value.update(failure_stage_code=stage, failure_detail_code=detail)
                 p.validate_numeric(value)
-        for code, stage, detail in ((0, 0, 1), (7, 7, 1), (11, 6, 1), (11, 7, 33),
+        for code, stage, detail in ((0, 0, 1), (7, 7, 1), (11, 6, 1), (11, 7, 57),
                                     (11, 7, -1), (11, 7, 0.5), (11, 7, True)):
             value = p.failure_report(code)
             value.update(failure_stage_code=stage, failure_detail_code=detail)

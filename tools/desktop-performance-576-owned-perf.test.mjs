@@ -129,8 +129,8 @@ test('compiler-only preflight publishes separately before app build without chan
 });
 
 test('census reason is fixed bounded numeric data and coherent with failure stage',()=>{
- for(const failure_detail_code of Array.from({length:32},(_,i)=>i+1))for(const failure_stage_code of [7,9,11]){const r=report();Object.assign(r,{available:0,failure_code:11,failure_stage_code,failure_detail_code});validateOwnedPerfHelperReport(r);}
- for(const change of [r=>r.failure_detail_code=33,r=>r.failure_detail_code=-1,r=>r.failure_detail_code=1.5,r=>r.failure_detail_code='header',r=>{r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=7;r.failure_stage_code=7;r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=11;r.failure_stage_code=6;r.failure_detail_code=1;}]){const r=report();change(r);assert.throws(()=>validateOwnedPerfHelperReport(r));}
+ for(const failure_detail_code of Array.from({length:56},(_,i)=>i+1))for(const failure_stage_code of [7,9,11]){const r=report();Object.assign(r,{available:0,failure_code:11,failure_stage_code,failure_detail_code});validateOwnedPerfHelperReport(r);}
+ for(const change of [r=>r.failure_detail_code=57,r=>r.failure_detail_code=-1,r=>r.failure_detail_code=1.5,r=>r.failure_detail_code='header',r=>{r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=7;r.failure_stage_code=7;r.failure_detail_code=1;},r=>{r.available=0;r.failure_code=11;r.failure_stage_code=6;r.failure_detail_code=1;}]){const r=report();change(r);assert.throws(()=>validateOwnedPerfHelperReport(r));}
 });
 test('bridge preserves unavailable census detail without exposing arbitrary header values',async()=>{
  const e=envelope();Object.assign(e.report,{available:0,failure_code:11,failure_stage_code:7,failure_detail_code:15,rust_unwind_admitted:0,preflight:null,capture:null});
@@ -138,7 +138,7 @@ test('bridge preserves unavailable census detail without exposing arbitrary head
 });
 
 test('refined unsupported sample reasons survive the bridge as closed unavailable reports',async()=>{
- for(const failure_detail_code of [4,19,32]){
+ for(const failure_detail_code of [4,19,32,33,56]){
   const e=envelope();Object.assign(e.report,{available:0,failure_code:11,failure_stage_code:7,failure_detail_code,rust_unwind_admitted:0,preflight:null,capture:null});
   const f=fixture({execute:async()=>({status:1,stdout:JSON.stringify(e),error:false,overflow:false})});await f.bridge.initialize();await f.bridge.capture(100,snapshot);const r=publicReport(f);assert.equal(r.helper_report_available,1);assert.equal(r.helper_report.failure_detail_code,failure_detail_code);assert.equal(r.available,0);
  }
@@ -148,6 +148,7 @@ function syntheticEnvelope(){return {report:{schema_version:1,diagnostic_mode_co
 test('standalone synthetic report is closed numeric with explicit no-application scope',()=>{
  validateSyntheticPreflightEnvelope(syntheticEnvelope());
  for(const mutate of [e=>e.report.raw='/secret',e=>e.provenance.path='/secret',e=>e.report.app_admission=1,e=>e.report.rust_admission=1,e=>e.report.cadence_proof=1,e=>e.report.perf_major=1000,e=>e.report.perf_minor=-1,e=>e.report.version_available=0,e=>e.report.failure_detail_code=20,e=>e.report.elapsed_micros=46000001,e=>e.report.tools_stopped=0,e=>e.provenance.perf_sha256='bad']){const e=syntheticEnvelope();mutate(e);assert.throws(()=>validateSyntheticPreflightEnvelope(e));}
+ const boundary=syntheticEnvelope();Object.assign(boundary.report,{available:0,synthetic_capable:0,failure_code:11,failure_stage_code:7,failure_detail_code:56});validateSyntheticPreflightEnvelope(boundary);boundary.report.failure_detail_code=57;assert.throws(()=>validateSyntheticPreflightEnvelope(boundary));
  for(const failure_code of [8,9,11,14,17]){const e=syntheticEnvelope();Object.assign(e.report,{available:0,synthetic_capable:0,failure_code,failure_stage_code:7,failure_detail_code:failure_code===11?20:0,tools_stopped:Number(failure_code!==14),loss_observed:Number(failure_code===17),byte_cap_hit:Number(failure_code===9)});validateSyntheticPreflightEnvelope(e);}
 });
 test('synthetic-only workflow isolates trigger, fixed scope, source binding and exactly two uploads',async()=>{

@@ -54,12 +54,25 @@ FAILURES = {name: i + 1 for i, name in enumerate((
 # READ, STREAM_ID, RAW, BRANCH_STACK, WEIGHT, DATA_SRC, TRANSACTION, REGS_INTR,
 # PHYS_ADDR, AUX, CGROUP, DATA_PAGE_SIZE, CODE_PAGE_SIZE, WEIGHT_STRUCT.
 UNSUPPORTED_SAMPLE_BITS = (4, 9, 10, 11, 14, 15, 17, 18, 19, 20, 21, 22, 23, 24)
-CENSUS_DETAIL_MAX = 32
+# v5.15 UAPI perf_event.h record enums 5..20 and tools/lib/perf/event.h 64..81.
+# Fixed details 33..56: THROTTLE, UNTHROTTLE, READ, AUX, ITRACE_START, SWITCH,
+# SWITCH_CPU_WIDE, NAMESPACES, KSYMBOL, BPF_EVENT, CGROUP, TEXT_POKE,
+# HEADER_ATTR, HEADER_EVENT_TYPE, HEADER_TRACING_DATA,
+# HEADER_BUILD_ID, AUXTRACE_INFO, AUXTRACE, AUXTRACE_ERROR, STAT_CONFIG, STAT,
+# STAT_ROUND, HEADER_FEATURE, COMPRESSED. Unknown records retain detail17.
+UNSUPPORTED_RECORD_TYPES = (5, 6, 8, 11, 12, 14, 15, 16, 17, 18, 19, 20,
+                            64, 65, 66, 67, 70, 71, 72, 75, 76, 77, 80, 81)
+CENSUS_DETAIL_MAX = 56
 
 
 def unsupported_sample_detail(bits):
     return next((19 + index for index, bit in enumerate(UNSUPPORTED_SAMPLE_BITS)
                  if bits & (1 << bit)), 4)
+
+
+def unsupported_record_detail(event):
+    return next((33 + index for index, kind in enumerate(UNSUPPORTED_RECORD_TYPES)
+                 if event == kind), 17)
 
 
 class Refused(RuntimeError):
@@ -382,7 +395,7 @@ def census(raw):
         elif event in (2, 13):  # LOST / LOST_SAMPLES: any loss makes capture unavailable.
             require(length >= 16, 'census', 16); counts['lost'] += 1
         else:
-            require(event in (1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82), 'census', 17)
+            require(event in (1, 3, 4, 7, 10, 68, 69, 73, 74, 78, 82), 'census', unsupported_record_detail(event))
         offset += length
     require(counts['samples'] <= SAMPLE_CAP, 'census', 18)
     return counts
@@ -855,7 +868,7 @@ def validate_synthetic_envelope(envelope):
     r, provenance = envelope['report'], envelope['provenance']
     require(type(r) is dict and set(r) == SYNTHETIC_KEYS and all(uint(v) for v in r.values()), 'decode')
     require(r['schema_version'] == 1 and r['diagnostic_mode_code'] == 2 and r['failure_code'] <= 17
-            and r['failure_stage_code'] <= 14 and r['failure_detail_code'] <= 32
+            and r['failure_stage_code'] <= 14 and r['failure_detail_code'] <= CENSUS_DETAIL_MAX
             and r['elapsed_micros'] <= 46000000 and r['perf_major'] <= 999 and r['perf_minor'] <= 999, 'decode')
     for key in SYNTHETIC_KEYS - {'schema_version', 'diagnostic_mode_code', 'failure_code', 'failure_stage_code',
                                  'failure_detail_code', 'perf_major', 'perf_minor', 'elapsed_micros'}:

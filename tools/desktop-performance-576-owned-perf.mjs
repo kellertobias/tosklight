@@ -24,7 +24,7 @@ const CAPTURE_KEYS=["samples","frames","unresolved_self","unresolved_ancestor","
 const BIN_KEYS=["id","self_samples","self_period","inclusive_samples","inclusive_period"];
 export function validateOwnedPerfHelperReport(r){
  closed(r,HELPER_KEYS);for(const key of HELPER_KEYS.filter(k=>!["capture","preflight"].includes(k)))assert(uint(r[key]));
- assert(r.schema_version===1&&r.sample_hz===49&&r.failure_code<=17&&r.failure_stage_code<=14&&r.failure_detail_code<=32&&r.requested_seconds>=1&&r.requested_seconds<=10&&r.profile_phase_code===1&&r.exact_measurement_window===0&&r.codegen_flags_changed===0);
+ assert(r.schema_version===1&&r.sample_hz===49&&r.failure_code<=17&&r.failure_stage_code<=14&&r.failure_detail_code<=56&&r.requested_seconds>=1&&r.requested_seconds<=10&&r.profile_phase_code===1&&r.exact_measurement_window===0&&r.codegen_flags_changed===0);
  assert(!r.failure_detail_code||(r.failure_code===11&&[7,9,11].includes(r.failure_stage_code)));
  for(const key of ["available","synthetic_capable","rust_unwind_admitted","ownership_verified","identity_verified","thread_scope_verified","recorders_stopped","raw_private","preflight_only","loss_observed","byte_cap_hit"])assert(r[key]<=1);
  for(const key of ["capture","preflight"]){const c=r[key];if(c===null)continue;closed(c,CAPTURE_KEYS);for(const name of CAPTURE_KEYS.filter(k=>k!=="rows"))assert(uint(c[name]));assert(c.samples>0&&c.samples<=10000&&c.frames>=c.samples&&c.frames<=c.samples*128&&c.unresolved_self<=c.samples&&c.unresolved_ancestor<=c.frames-c.samples&&c.depth_one<=c.samples&&c.owned_rust_chains<=c.samples);assert(c.sample_span_micros<=Math.min(10,(key==="preflight"?2:r.requested_seconds)+2)*1e6&&c.sample_span_micros<=c.recording_envelope_micros+1&&c.recording_envelope_micros<=c.elapsed_micros);assert(Array.isArray(c.rows)&&c.rows.length===14);
@@ -76,7 +76,7 @@ export function validateSyntheticPreflightEnvelope(envelope){
  closed(envelope,["report","provenance"]);const r=envelope.report,p=envelope.provenance;
  const keys=["schema_version","diagnostic_mode_code","available","source_verified","perf_verified","version_available","perf_major","perf_minor","synthetic_capable","raw_private","tools_stopped","failure_code","failure_stage_code","failure_detail_code","loss_observed","byte_cap_hit","elapsed_micros","app_admission","rust_admission","cadence_proof"];
  closed(r,keys);assert(Object.values(r).every(uint));
- assert(r.schema_version===1&&r.diagnostic_mode_code===2&&r.failure_code<=17&&r.failure_stage_code<=14&&r.failure_detail_code<=32&&r.elapsed_micros<=46000000&&r.perf_major<=999&&r.perf_minor<=999);
+ assert(r.schema_version===1&&r.diagnostic_mode_code===2&&r.failure_code<=17&&r.failure_stage_code<=14&&r.failure_detail_code<=56&&r.elapsed_micros<=46000000&&r.perf_major<=999&&r.perf_minor<=999);
  for(const key of keys.filter(k=>!["schema_version","diagnostic_mode_code","failure_code","failure_stage_code","failure_detail_code","perf_major","perf_minor","elapsed_micros"].includes(k)))assert(r[key]<=1);
  assert(r.app_admission===0&&r.rust_admission===0&&r.cadence_proof===0);
  assert(!r.failure_detail_code||(r.failure_code===11&&r.failure_stage_code===7));
