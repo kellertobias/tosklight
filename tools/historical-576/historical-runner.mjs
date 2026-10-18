@@ -17,6 +17,8 @@ import { configurePacketProof } from "../desktop-performance-576-proof-observers
 import { artifactPaths } from "../artifact-paths.mjs";
 import { translateLegacyPlan } from "./legacy-plan.mjs";
 import { CONTROL_PROFILE } from "./old-benchmark-shim.mjs";
+import { installDefinitions } from "./definition-response.mjs";
+import { stopOwned, applyCleanupResult } from "./owned-process-cleanup.mjs";
 export const ARMS = Object.freeze([
 	"old-legacy",
 	"current-legacy",
@@ -650,12 +652,13 @@ export const PROVENANCE_FIELDS = Object.freeze([
 	"canonical_plan_sha256",
 	"selected_plan_sha256",
 	"target_bijection_sha256",
+	"definition_bijection_sha256",
 	"runner_sha256",
 	"translator_sha256",
 ]);
 export function validateProvenance(p) {
 	closed(p, PROVENANCE_FIELDS);
-	assert.equal(p.schema_version, 1);
+	assert.equal(p.schema_version, 2);
 	assert(uint(p.arm_code) && p.arm_code >= 1 && p.arm_code <= 3);
 	assert(p.available === 0 || p.available === 1);
 	for (const k of PROVENANCE_FIELDS.filter((k) => k.endsWith("_sha256")))
@@ -672,39 +675,6 @@ export function validateProvenance(p) {
 export function provenancePath(numericReport) {
 	assert(numericReport.endsWith(".json"));
 	return numericReport.slice(0, -5) + "-provenance.json";
-}
-async function stopOwned(child) {
-	// Signal only this newly spawned process group. This does not claim arbitrary escaped descendants.
-	if (!child) return 1;
-	const pid = child.pid;
-	if (!uint(pid) || pid === 0)
-		return Number(child.exitCode !== null || child.signalCode !== null);
-	let reaped = child.exitCode !== null || child.signalCode !== null;
-	child.once("close", () => {
-		reaped = true;
-	});
-	const closed = new Promise((resolve) => {
-		if (child.exitCode !== null || child.signalCode !== null) resolve();
-		else child.once("close", resolve);
-	});
-	for (const [signal, wait] of [
-		["SIGTERM", 2000],
-		["SIGKILL", 2000],
-	]) {
-		try {
-			process.kill(-pid, signal);
-		} catch (e) {
-			if (e.code !== "ESRCH") throw e;
-		}
-		await Promise.race([closed, sleep(wait)]);
-		try {
-			process.kill(-pid, 0);
-		} catch (e) {
-			if (e.code === "ESRCH") return Number(reaped);
-			throw e;
-		}
-	}
-	return 0;
 }
 // Each case owns fresh Tauri/WebKit preferences; HOME/runtime/D-Bus stay unchanged.
 export function caseEnvironment(output, base = process.env) {
@@ -736,7 +706,7 @@ export async function runArm(options) {
 			]),
 		);
 	Object.assign(provenance, {
-		schema_version: 1,
+		schema_version: 2,
 		arm_code: arm + 1,
 		revision_sha: "0".repeat(40),
 	});
@@ -921,39 +891,12 @@ export async function runArm(options) {
 		);
 		const actual = await api.request("GET", "/api/v2/patch"),
 			mapping = targetBijection(input.patch, actual),
-			plan = remapPlan(canonicalPlan, mapping);
-		const starts = [];
-		for (const activation of plan.activations) {
-			const created = await api.request("POST", "/api/v2/dynamics/create", {
-				request_id: randomUUID(),
-				definition: activation.definition,
-			});
-			assert.equal(created.object.id, activation.definition.id);
-			const startOutcome = await api.request(
-				"POST",
-				`/api/v2/dynamics/${encodeURIComponent(created.object.id)}/start`,
-				{
-					request_id: randomUUID(),
-					targets: activation.targets,
-					overrides: {
-						size: 1,
-						speed_multiplier: { numerator: 1, denominator: 1 },
-						phase_offset_degrees: 0,
-					},
-					timing: {},
-					undo_group: "fixture-sheet-performance",
-				},
-			);
-			starts.push({
-				dynamic_id: activation.definition.id,
-				instance_id: startOutcome.runtime_instance_id,
-				controller_id: startOutcome.controller_id,
-				started: startOutcome.started,
-				targets: startOutcome.targets,
-			});
-		}
+			selectedPlan = remapPlan(canonicalPlan, mapping);
+		const { runtimePlan: plan, definitionBindings, starts } =
+			await installDefinitions(api, selectedPlan, randomUUID);
+		raw.definition_bindings = definitionBindings;
 		provenance = {
-			schema_version: 1,
+			schema_version: 2,
 			arm_code: arm + 1,
 			available: 1,
 			revision_sha: a.revision_sha,
@@ -964,6 +907,7 @@ export async function runArm(options) {
 			input_sha256: manifest.input.sha256,
 			canonical_plan_sha256: canonicalHash,
 			selected_plan_sha256: selectedHash,
+			definition_bijection_sha256: digest(stable(definitionBindings)),
 			target_bijection_sha256: digest(
 				stable([...mapping].sort((a, b) => a[0].localeCompare(b[0]))),
 			),
@@ -1156,17 +1100,15 @@ export async function runArm(options) {
 			}
 		} catch {
 			r.complete = 0;
-			r.failure_stage_code = 11;
+			r.failure_stage_code ||= 11;
 		}
+		let cleanupVerified = 0;
 		try {
-			r.cleanup_verified = await stopOwned(child);
+			cleanupVerified = await stopOwned(child);
 		} catch {
-			r.cleanup_verified = 0;
+			// An unexpected cleanup failure never permits the next case to launch.
 		}
-		if (!r.cleanup_verified) {
-			r.complete = 0;
-			r.failure_stage_code = 12;
-		}
+		applyCleanupResult(r, cleanupVerified);
 		clearTimeout(lifetimeTimer);
 		process.removeListener("SIGTERM", interrupted);
 		process.removeListener("SIGINT", interrupted);

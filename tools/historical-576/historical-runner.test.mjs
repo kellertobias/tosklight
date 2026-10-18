@@ -27,7 +27,7 @@ for (const file of [
 		JSON.stringify("../" + file),
 		JSON.stringify(pathToFileURL(path.join(ROOT, "tools", file)).href),
 	);
-for (const file of ["legacy-plan.mjs", "old-benchmark-shim.mjs"])
+for (const file of ["legacy-plan.mjs", "old-benchmark-shim.mjs", "definition-response.mjs", "owned-process-cleanup.mjs"])
 	runnerSource = runnerSource.replace(
 		JSON.stringify("./" + file),
 		JSON.stringify(new URL("./" + file, import.meta.url).href),
@@ -87,7 +87,7 @@ test("HEX-only seal and exact companion filename", () => {
 		]),
 	);
 	Object.assign(p, {
-		schema_version: 1,
+		schema_version: 2,
 		arm_code: 1,
 		revision_sha: "0".repeat(40),
 	});
