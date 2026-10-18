@@ -291,7 +291,7 @@ async function runCase(performanceCase, executionMode) {
     const packets = packetProof.snapshot(phaseWindow);
     checkpoint.result.proof.packets = packets;
     await checkpoint.save();
-    await retainPhaseDiagnostics(evidence.sidecarLogPath, phaseWindow);
+    // Retain the frozen window after packet capture closes; parsing must not block live UDP proof.
     const interaction = await packetProof.interact(async (phase,partial) => {
       if(partial) checkpoint.result.proof.interaction = partial;
       await checkpoint.enter(phase);
