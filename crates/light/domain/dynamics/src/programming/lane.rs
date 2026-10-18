@@ -5,7 +5,8 @@ use light_core::{
     FixtureId,
     programming::{IntentError, NativeColorEditModel, TransitionError},
 };
-use std::{cell::Cell, collections::HashMap, sync::Arc};
+use rustc_hash::FxHashMap;
+use std::{cell::Cell, sync::Arc};
 
 pub struct ProgrammingEvaluationContext<'a> {
     pub instance_id: uuid::Uuid,
@@ -42,7 +43,7 @@ pub struct CompiledProgrammingLane {
     configuration: Configuration,
     speed_multiplier: Rational,
     width: f32,
-    transitions: HashMap<(uuid::Uuid, FixtureId, usize), CachedTransition>,
+    transitions: FxHashMap<(uuid::Uuid, FixtureId, usize), CachedTransition>,
 }
 
 /// A keyframe transition compiled by [`CompiledProgrammingLane::sample_with_cache`], for
@@ -178,7 +179,7 @@ impl CompiledProgrammingLane {
             configuration,
             speed_multiplier: lane.speed_multiplier,
             width: lane.width,
-            transitions: HashMap::new(),
+            transitions: FxHashMap::default(),
         })
     }
 
