@@ -44,7 +44,11 @@ impl CapturedFamilyInputScratch {
     /// Empty every group. With `pool`, the samples (holding the last references to last frame's
     /// compiled expressions) are freed on a pool thread (TL-639 round 5).
     pub fn clear(&mut self, pool: Option<&light_engine::parallel::OutputPool>) {
-        let mut garbage = Vec::new();
+        // Sized once: appending ~5k samples to an empty vector regrew and copied it per frame.
+        let mut garbage = match pool {
+            Some(_) => Vec::with_capacity(self.groups.iter().map(|e| e.group.samples.len()).sum()),
+            None => Vec::new(),
+        };
         for mut entry in self.groups.drain(..) {
             match pool {
                 Some(_) => garbage.append(&mut entry.group.samples),

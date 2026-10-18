@@ -99,7 +99,11 @@ pub(super) fn collect_dynamic_candidates_with_fixed_rows(
 ) -> FxHashMap<CandidateKey, CandidateStack> {
     // One entry per addressed attribute, rebuilt every tick: the hash is the cost, so it is the
     // cheap one rather than the DoS-resistant one nothing here needs.
-    let mut candidates = FxHashMap::<CandidateKey, CandidateStack>::default();
+    // Every runtime sample addresses at least one entry: size for them instead of rehashing.
+    let mut candidates = FxHashMap::<CandidateKey, CandidateStack>::with_capacity_and_hasher(
+        samples.len(),
+        Default::default(),
+    );
     let mut consider = |fixture_id: FixtureId,
                         attribute: &AttributeKey,
                         address: Option<light_core::FrameAddress>,
