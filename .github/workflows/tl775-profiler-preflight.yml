@@ -31,6 +31,10 @@ jobs:
           node --input-type=module -e 'import "./tools/artifact-paths.mjs"'
           temporary="$(node --input-type=module -e 'import {artifactPaths} from "./tools/artifact-paths.mjs"; console.log(artifactPaths.tmp)')"
           private="$(mktemp -d "$temporary/tl775-pure-tests-XXXXXX")"
+          if ! npm ci --ignore-scripts --no-audit --no-fund >"$private/npm-ci" 2>&1; then
+            echo '::error::{"schema_version":1,"suite_id":2,"failed":1,"failure_code":4,"failed_test_ids":[],"test_count":0}'
+            exit 1
+          fi
           set +e
           python3 -B tools/desktop-performance-576-owned-perf.test.py >"$private/python" 2>&1
           python_status=$?
