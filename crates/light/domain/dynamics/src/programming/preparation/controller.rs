@@ -263,6 +263,13 @@ pub(super) fn prepare(
     Ok(())
 }
 
+/// A successful preparation's source activity; only the exact plain Color branch proves none.
+#[derive(Clone, Copy)]
+pub(super) enum ControllerPreparation {
+    SourceFree,
+    MayQuery,
+}
+
 impl<O: PreparationOutput> Preparer<'_, O> {
     /// Prepare one controller's samples (`indices`, one instance, controller and target).
     pub(super) fn prepare_controller(
@@ -272,6 +279,17 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         sources: &dyn DynamicValueSourceResolver,
         native_models: Option<&dyn DynamicNativeModelResolver>,
     ) -> Result<(), TransitionError> {
+        self.prepare_controller_classified(samples, indices, sources, native_models)
+            .map(|_| ())
+    }
+
+    pub(super) fn prepare_controller_classified(
+        &mut self,
+        samples: &[DynamicRuntimeSample],
+        indices: &[usize],
+        sources: &dyn DynamicValueSourceResolver,
+        native_models: Option<&dyn DynamicNativeModelResolver>,
+    ) -> Result<ControllerPreparation, TransitionError> {
         self.controller.clear();
         // Shape inspection is pure: generic pruning/validation retains its original order.
         let borrowed_plain = indices.iter().all(|index| {
@@ -306,7 +324,7 @@ impl<O: PreparationOutput> Preparer<'_, O> {
                     plain_scalar::leaf(&sample.expression).expect("selected Color leaf"),
                 )?;
             }
-            return Ok(());
+            return Ok(ControllerPreparation::SourceFree);
         }
         let mut last_lane = None;
         let mut has_angles = false;
@@ -335,7 +353,7 @@ impl<O: PreparationOutput> Preparer<'_, O> {
                 self.controller.push(sample);
             }
         }
-        if has_angles {
+        let prepared = if has_angles {
             // The forest preserves original axis/lane ownership and Current dependencies even
             // for an ordinary Pan-only effect or an exact Target-to-Angle endpoint.
             self.prepare_position_controller(sources, native_models)
@@ -361,6 +379,7 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             });
             *self.controller = controller;
             prepared
-        }
+        };
+        prepared.map(|()| ControllerPreparation::MayQuery)
     }
 }

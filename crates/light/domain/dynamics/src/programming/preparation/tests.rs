@@ -8,6 +8,7 @@ mod leaf_provenance;
 mod passive_requirements;
 mod plain_leaves;
 mod position_forest;
+mod source_free_controllers;
 use crate::DynamicSampleExpression as E;
 use light_core::{AttributeKey, AttributeValue, NativeColorBinding, NativeColorIdentity};
 use std::{

@@ -41,6 +41,15 @@ pub trait PreparationSources: DynamicValueSourceResolver {
     fn source_free_completion(&self) -> bool {
         false
     }
+
+    /// Opt in to omitting a close after a controller's successful, proven source-free
+    /// preparation. The fork must start with chunk log lengths (0, 0); after any successful
+    /// close its group layers must be empty. With no intervening source calls, another close
+    /// must have no effect and return exactly the preceding lengths. Preparation errors
+    /// always receive the ordinary close. Other implementations keep every original close.
+    fn source_free_preparation(&self) -> bool {
+        false
+    }
 }
 
 /// The caller's workers and source forks for one parallel preparation.
@@ -327,6 +336,7 @@ fn prepare_chunk(
 ) -> PreparedChunk {
     let mut chunk = PreparedChunk::default();
     let (mut controller, mut position, mut keep) = (Vec::new(), Vec::new(), Vec::new());
+    let mut previous_logs = (0, 0);
     for (member, &index) in members.iter().enumerate() {
         let writes = chunk.writes.len();
         let prepared = Preparer {
@@ -337,18 +347,27 @@ fn prepare_chunk(
             keep: Keep::Log(&mut keep),
             out: &mut chunk.writes,
         }
-        .prepare_controller(
+        .prepare_controller_classified(
             samples,
             &order[controllers[index].clone()],
             fork,
             native_models,
         );
-        let Some(logs) = fork.finish_controller() else {
+        let closed = if matches!(&prepared, Ok(controller::ControllerPreparation::SourceFree))
+            && fork.source_free_preparation()
+        {
+            Some(previous_logs)
+        } else {
+            // Keep the close before inspecting any error, including missed-source precedence.
+            fork.finish_controller()
+        };
+        let Some(logs) = closed else {
             chunk.writes.truncate(writes);
             keep.clear();
             chunk.stopped = Some((member, None));
             break;
         };
+        previous_logs = logs;
         if let Err(error) = prepared {
             chunk.stopped = Some((member, Some(error)));
             break;

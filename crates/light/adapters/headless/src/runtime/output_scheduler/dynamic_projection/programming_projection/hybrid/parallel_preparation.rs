@@ -305,6 +305,14 @@ impl PreparationSources for PreparationFork<'_, '_> {
         !self.missed.get()
     }
 
+    fn source_free_preparation(&self) -> bool {
+        // Fresh forks start with zero chunk logs and empty group layers. Every queried
+        // controller closes those layers before the next controller, or stops this chunk.
+        // A successful plain controller performs no source call, so the same induction as
+        // source_free_completion permits an empty close without probing the group RefCells.
+        !self.missed.get()
+    }
+
     fn finish_controller(&self) -> Option<(usize, usize)> {
         if self.missed.get() {
             self.typed.abort_group();
