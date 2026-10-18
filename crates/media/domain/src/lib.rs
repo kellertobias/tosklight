@@ -24,6 +24,8 @@ pub mod display_region;
 pub mod dmx;
 pub mod effect_library;
 pub mod effect_parameters;
+pub mod slice_grid;
+pub use slice_grid::{BEAT_SLICE_GRID_EFFECT, BeatSliceGridParameters};
 pub mod geometry;
 pub mod layer;
 mod layer_effects;

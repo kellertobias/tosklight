@@ -33,6 +33,7 @@ const BEAT_SOURCES = [
 	{ value: "snare", label: "Snare" },
 ];
 const BEAT_EFFECTS = new Set([
+	"beat-slice-grid",
 	"beat-move",
 	"beat-scan",
 	"beat-scale-turn",
@@ -109,6 +110,7 @@ export function EffectsLibraryView({
 		effectType: string;
 		parameters: number[];
 		beatSource: string;
+		text?: string;
 	}): void;
 	onClear(): void;
 }) {
@@ -219,6 +221,8 @@ function EffectSlotEditor({
 		effect?.effect.beatSource ?? "detected-beat",
 	);
 
+	const [text, setText] = useState(effect?.effect.text ?? "PIXEL");
+
 	const save = () => {
 		const rasterMode = effectType === "rasterize-cmyk" ? 1 : 0;
 		onSave({
@@ -230,6 +234,7 @@ function EffectSlotEditor({
 				? [rasterMode, ...parameters.slice(1)]
 				: parameters,
 			beatSource,
+			...(effectType === "beat-slice-grid" ? { text } : {}),
 		});
 	};
 
@@ -255,6 +260,9 @@ function EffectSlotEditor({
 				options={[...EFFECT_TYPES]}
 				onChange={(value) => setEffectType(value as EffectType)}
 			/>
+			{effectType === "beat-slice-grid" && (
+				<TextField label="Grid text" value={text} maxLength={64} onChange={(event) => setText(event.target.value)} />
+			)}
 			{BEAT_EFFECTS.has(effectType) && (
 				<SelectField
 					label="React to"

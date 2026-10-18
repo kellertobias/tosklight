@@ -144,9 +144,11 @@ fn every_visualizer_answers_to_audio() {
     let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
     let quiet = silence();
     let busy = loud();
-    let parameters = VisualizerParameters::default();
 
     for (index, kind) in ALL_KINDS.into_iter().enumerate() {
+        // Exercise the shipped preset: generic shared defaults can expire a beat pulse before
+        // the sample even though this kind's configured decay keeps it visible.
+        let parameters = VisualizerConfiguration::new(kind).parameters;
         // The same stretch of time, twice, on two layers of their own, differing only in what the
         // analysis says. A visualizer that produces identical pixels is not reacting, whatever it
         // looks like on its own. A stretch rather than one instant, because a smoothed level or a
@@ -1027,5 +1029,480 @@ fn rebuilt_minimalist_shapes_spawn_on_a_beat_switch_type_and_expire() {
         coverage(&expired),
         0.0,
         "a shape must fade away after its lifetime without another beat"
+    );
+}
+
+#[test]
+fn galaxy_supernovas_require_a_landed_beat_and_fade_after_their_lifetime() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let quiet = silence();
+    // Freeze orbiting stars: any difference must belong to an explosion, not elapsed rotation.
+    let parameters = VisualizerParameters {
+        speed: 0.0,
+        smoothing: 0.0,
+        ..VisualizerConfiguration::new(VisualizerKind::GalaxySimulator).parameters
+    };
+    let kind = VisualizerKind::GalaxySimulator;
+    renderer
+        .render(70, kind, &parameters, &frame(&quiet, 0.0, 0.0))
+        .unwrap();
+    renderer
+        .render(71, kind, &parameters, &frame(&quiet, 0.0, 0.0))
+        .unwrap();
+    let at_rest = read_back(&gpu, renderer.target(70).unwrap());
+    assert!(
+        brightness(&at_rest) > 0.0,
+        "the galaxy remains visible between beats"
+    );
+    renderer
+        .render(70, kind, &parameters, &frame(&quiet, 0.1, 1.0))
+        .unwrap();
+    renderer
+        .render(71, kind, &parameters, &frame(&quiet, 0.1, 0.0))
+        .unwrap();
+    let struck = read_back(&gpu, renderer.target(70).unwrap());
+    let unstruck = read_back(&gpu, renderer.target(71).unwrap());
+    assert!(
+        brightness(&struck) > brightness(&unstruck) + 0.001,
+        "an actual beat must light a supernova even when the audio level is silent"
+    );
+    // The rhythm history advances in bounded frame steps, just as the live renderer does.
+    for step in 1..=24 {
+        renderer
+            .render(
+                70,
+                kind,
+                &parameters,
+                &frame(&quiet, 0.1 + step as f32 * 0.1, 0.0),
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        read_back(&gpu, renderer.target(70).unwrap()),
+        unstruck,
+        "supernovas must disappear after their lifetime; silence must never retrigger them"
+    );
+}
+
+#[test]
+fn galaxy_zero_burst_disables_only_supernovas() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let quiet = silence();
+    let parameters = VisualizerParameters {
+        speed: 0.0,
+        burst: 0,
+        ..VisualizerConfiguration::new(VisualizerKind::GalaxySimulator).parameters
+    };
+    let kind = VisualizerKind::GalaxySimulator;
+    let before = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.0, 0.0),
+    );
+    let on_beat = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.1, 1.0),
+    );
+    assert_eq!(before, on_beat);
+    assert!(brightness(&before) > 0.0);
+}
+
+#[test]
+fn black_hole_keeps_a_dark_circular_shadow_and_a_visible_disc_in_silence() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let parameters = VisualizerConfiguration::new(VisualizerKind::BlackHole).parameters;
+    let pixels = draw(
+        &gpu,
+        &mut renderer,
+        VisualizerKind::BlackHole,
+        &parameters,
+        &frame(&silence(), 0.0, 0.0),
+    );
+    // The foreground disc can cross the lower shadow; the unobscured upper centre stays black.
+    for y in 30..32 {
+        for x in 30..34 {
+            let offset = (y * OUTPUT.width as usize + x) * 4;
+            assert_eq!(
+                &pixels[offset..offset + 3],
+                &[0, 0, 0],
+                "the centre must be a black shadow even against the star field"
+            );
+        }
+    }
+    assert!(
+        brightness(&pixels) > 0.005,
+        "the disc and ring remain visible in silence"
+    );
+    assert!(
+        pixels.chunks_exact(4).any(|pixel| pixel[0] > 160),
+        "the accretion disc or photon ring must contain bright light"
+    );
+}
+
+#[test]
+fn black_hole_pulses_on_a_landed_beat_then_returns_to_rest() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let quiet = silence();
+    let kind = VisualizerKind::BlackHole;
+    let parameters = VisualizerParameters {
+        speed: 0.0,
+        smoothing: 0.0,
+        decay: 0.4,
+        ..VisualizerConfiguration::new(kind).parameters
+    };
+    let rest = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.0, 0.0),
+    );
+    let struck = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.1, 1.0),
+    );
+    assert!(
+        brightness(&struck) > brightness(&rest) + 0.005,
+        "a landed beat must brighten and swell the ring even with silent audio"
+    );
+    let easing = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.3, 0.0),
+    );
+    assert_ne!(
+        easing, rest,
+        "the pulse must ease for the selected decay duration"
+    );
+    for step in 4..=10 {
+        draw(
+            &gpu,
+            &mut renderer,
+            kind,
+            &parameters,
+            &frame(&quiet, step as f32 * 0.1, 0.0),
+        );
+    }
+    assert_eq!(
+        read_back(&gpu, renderer.target(0).unwrap()),
+        rest,
+        "with rotation stopped the pulse must settle exactly to rest"
+    );
+
+    // The detector's held value is one landed beat, not a new event on every frame.
+    renderer
+        .render(82, kind, &parameters, &frame(&quiet, 0.0, 0.0))
+        .unwrap();
+    for step in 1..=10 {
+        renderer
+            .render(
+                82,
+                kind,
+                &parameters,
+                &frame(&quiet, step as f32 * 0.1, 0.8),
+            )
+            .unwrap();
+    }
+    assert_eq!(
+        read_back(&gpu, renderer.target(82).unwrap()),
+        rest,
+        "a held beat signal must not restart a pulse after its duration"
+    );
+
+    let unreactive = VisualizerParameters {
+        reactivity: 0.0,
+        ..parameters
+    };
+    let before = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &unreactive,
+        &frame(&quiet, 1.1, 0.0),
+    );
+    let after = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &unreactive,
+        &frame(&quiet, 1.2, 1.0),
+    );
+    assert_eq!(
+        before, after,
+        "zero Reactivity must disable beat swelling and brightness"
+    );
+}
+
+#[test]
+fn black_hole_size_inclination_colours_speed_and_decay_change_the_render() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, OUTPUT);
+    let kind = VisualizerKind::BlackHole;
+    let quiet = silence();
+    let parameters = VisualizerParameters {
+        speed: 0.0,
+        ..VisualizerConfiguration::new(kind).parameters
+    };
+    let still = frame(&quiet, 0.0, 0.0);
+    let base = draw(&gpu, &mut renderer, kind, &parameters, &still);
+    for changed in [
+        VisualizerParameters {
+            size: 0.30,
+            ..parameters.clone()
+        },
+        VisualizerParameters {
+            curvature: 0.0,
+            ..parameters.clone()
+        },
+        VisualizerParameters {
+            primary: media_domain::color::Tint::new(0.0, 0.2, 1.0),
+            ..parameters.clone()
+        },
+        VisualizerParameters {
+            secondary: media_domain::color::Tint::new(0.0, 1.0, 0.2),
+            ..parameters.clone()
+        },
+    ] {
+        assert_ne!(draw(&gpu, &mut renderer, kind, &changed, &still), base);
+    }
+    let rotating = VisualizerParameters {
+        speed: 1.0,
+        ..parameters.clone()
+    };
+    let start = draw(&gpu, &mut renderer, kind, &rotating, &still);
+    let moved = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &rotating,
+        &frame(&quiet, 0.1, 0.0),
+    );
+    assert_ne!(start, moved, "Speed must rotate disc detail");
+
+    for (layer, decay) in [(80, 0.05), (81, 0.8)] {
+        let configured = VisualizerParameters {
+            decay,
+            ..parameters.clone()
+        };
+        for (seconds, beat) in [(0.0, 0.0), (0.1, 1.0), (0.2, 0.0), (0.3, 0.0)] {
+            renderer
+                .render(layer, kind, &configured, &frame(&quiet, seconds, beat))
+                .unwrap();
+        }
+    }
+    let short = read_back(&gpu, renderer.target(80).unwrap());
+    let long = read_back(&gpu, renderer.target(81).unwrap());
+    assert!(
+        brightness(&long) > brightness(&short) + 0.005,
+        "Decay must set how long the pulse remains visible"
+    );
+}
+
+#[test]
+fn black_hole_lenses_the_rear_disc_above_the_edge_on_equator() {
+    let gpu = gpu();
+    let output = Size::new(320, 180);
+    let mut renderer = VisualizerRenderer::new(&gpu, output);
+    let kind = VisualizerKind::BlackHole;
+    let parameters = VisualizerParameters {
+        speed: 0.0,
+        curvature: 1.0,
+        primary: media_domain::color::Tint::new(1.0, 1.0, 1.0),
+        secondary: media_domain::color::Tint::new(1.0, 1.0, 1.0),
+        ..VisualizerConfiguration::new(kind).parameters
+    };
+    let quiet = silence();
+    let still = frame(&quiet, 0.0, 0.0);
+    let pixels = draw(&gpu, &mut renderer, kind, &parameters, &still);
+    let sky_only = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &VisualizerParameters {
+            primary: media_domain::color::Tint::new(0.0, 0.0, 0.0),
+            secondary: media_domain::color::Tint::new(0.0, 0.0, 0.0),
+            ..parameters
+        },
+        &still,
+    );
+    let light = |image: &[u8], x: usize, y: usize| {
+        let at = (y * 320 + x) * 4;
+        (f64::from(image[at]) + f64::from(image[at + 1]) + f64::from(image[at + 2])) / 765.0
+    };
+    // The equator is y=90 and the photon ring is only about 17 pixels in radius.
+    // A broad illuminated arc higher than that must contain the bent rear-disc image.
+    // Subtracting the same scene with black disc colours excludes background stars.
+    let mut arc_light = 0.0;
+    let mut arc_pixels = 0;
+    for y in 60..72 {
+        for x in 140..180 {
+            let excess = light(&pixels, x, y) - light(&sky_only, x, y);
+            arc_light += excess;
+            arc_pixels += usize::from(excess > 0.10);
+        }
+    }
+    assert!(
+        arc_light / 480.0 > 0.10 && arc_pixels > 100,
+        "an edge-on disc must form a visible lensed rear arc above the shadow"
+    );
+    // Exclude the foreground disc crossing below the equator when testing the shadow.
+    for y in 82..88 {
+        for x in 155..165 {
+            assert!(
+                light(&pixels, x, y) < 0.01,
+                "the rear-disc image must leave a dark central shadow"
+            );
+        }
+    }
+}
+
+#[test]
+fn black_hole_disc_has_moving_detail_and_stops_with_disc_speed() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(320, 180));
+    let kind = VisualizerKind::BlackHole;
+    let parameters = VisualizerParameters {
+        curvature: 0.35,
+        primary: media_domain::color::Tint::new(1.0, 1.0, 1.0),
+        secondary: media_domain::color::Tint::new(1.0, 1.0, 1.0),
+        ..VisualizerConfiguration::new(kind).parameters
+    };
+    let quiet = silence();
+    let first = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 0.0, 0.0),
+    );
+    let moved = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &parameters,
+        &frame(&quiet, 1.0, 0.0),
+    );
+    for (inner, outer) in [(20.0, 35.0), (35.0, 60.0)] {
+        let mut count = 0;
+        let mut changed = 0;
+        let mut contrast = 0.0;
+        for y in 40..140 {
+            for x in 90..230 {
+                let radius = ((x as f64 - 159.5).powi(2) + (y as f64 - 89.5).powi(2)).sqrt();
+                let at = (y * 320 + x) * 4;
+                if radius >= inner && radius < outer && first[at] > 40 {
+                    count += 1;
+                    changed += usize::from(first[at].abs_diff(moved[at]) > 2);
+                    contrast += f64::from(first[at].abs_diff(first[at + 4])) / 255.0;
+                }
+            }
+        }
+        assert!(count > 100, "the disc must illuminate both radial bands");
+        assert!(
+            changed * 4 > count,
+            "both inner and outer disc detail must advect with Disc speed"
+        );
+        assert!(
+            contrast / count as f64 > 0.02,
+            "the disc must have visible fine detail rather than a smooth annulus"
+        );
+    }
+    let stopped = VisualizerParameters {
+        speed: 0.0,
+        ..parameters
+    };
+    let still = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &stopped,
+        &frame(&quiet, 0.0, 0.0),
+    );
+    let later = draw(
+        &gpu,
+        &mut renderer,
+        kind,
+        &stopped,
+        &frame(&quiet, 1.0, 0.0),
+    );
+    assert_eq!(still, later, "Disc speed zero must stop all disc advection");
+}
+
+#[test]
+fn tracking_draws_the_operators_glyphs_and_locks_red_on_a_beat() {
+    let gpu = gpu();
+    let mut renderer = VisualizerRenderer::new(&gpu, Size::new(320, 180));
+    let parameters = VisualizerConfiguration::new(VisualizerKind::TextTracking).parameters;
+    let analysis = silence();
+    let still = frame(&analysis, 0.0, 0.0);
+    let first = renderer
+        .render_with_text(
+            0,
+            VisualizerKind::TextTracking,
+            &parameters,
+            &still,
+            "ALPHA",
+        )
+        .unwrap()
+        .read_rgba8(&gpu)
+        .unwrap();
+    let second = renderer
+        .render_with_text(
+            1,
+            VisualizerKind::TextTracking,
+            &parameters,
+            &still,
+            "OMEGA",
+        )
+        .unwrap()
+        .read_rgba8(&gpu)
+        .unwrap();
+    assert_ne!(
+        first, second,
+        "the output must render the configured glyphs"
+    );
+    let locked = renderer
+        .render_with_text(
+            0,
+            VisualizerKind::TextTracking,
+            &parameters,
+            &frame(&analysis, 0.5, 1.0),
+            "ALPHA",
+        )
+        .unwrap()
+        .read_rgba8(&gpu)
+        .unwrap();
+    let red = |pixels: &[u8]| {
+        pixels
+            .chunks_exact(4)
+            .filter(|pixel| pixel[0] > 180 && pixel[1] < 70 && pixel[2] < 70)
+            .count()
+    };
+    assert!(
+        red(&locked) > red(&first) + 10,
+        "a landed beat locks the newest tracked box red"
+    );
+    let empty = renderer
+        .render_with_text(2, VisualizerKind::TextTracking, &parameters, &still, "")
+        .unwrap()
+        .read_rgba8(&gpu)
+        .unwrap();
+    assert!(
+        brightness(&empty) < 0.001,
+        "an intentionally empty text stays empty"
     );
 }

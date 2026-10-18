@@ -2161,3 +2161,62 @@ fn the_layer_preview_strobes_and_ignores_the_blend_mode() {
     );
     assert_eq!(capture(300), [0, 0, 0, 0], "unlit: nothing");
 }
+
+#[test]
+fn beat_slice_grid_renders_authored_glyphs_music_layout_changes_and_exact_bypass() {
+    let mut bench = Bench::new();
+    let mut pixels = Vec::new();
+    for y in 0..OUTPUT.height {
+        for x in 0..OUTPUT.width {
+            pixels.extend([x as u8 * 4, y as u8 * 4, 120, 255]);
+        }
+    }
+    let source = SourceTexture::from_rgba8(&bench.gpu, OUTPUT, &pixels).unwrap();
+    let plain = ready(LayerState::default());
+    let make = |text: &str, generation: f32, mix: f32| {
+        let mut state = plain.clone();
+        let mut effect = EffectSlot::beat_slice_grid();
+        effect.mix = mix;
+        effect.parameters.extend([generation, 1.0]);
+        effect.text_mask = media_text::packed_line_mask(text).to_vec();
+        state.effects[0] = effect;
+        state
+    };
+    let first = make("PIXEL", 0.0, 1.0);
+    let second = make("PIXEL", 1.0, 1.0);
+    let mut other_bank = first.clone();
+    other_bank.effects.swap(0, 1);
+    let changed_text = make("ON AIR", 0.0, 1.0);
+    let disabled = make("PIXEL", 0.0, 0.0);
+    let draw = |state| LayerDraw {
+        state,
+        source: &source,
+        mask: None,
+    };
+    let original = bench.render(&[draw(&plain)], &MasterState::default());
+    let first = bench.render(&[draw(&first)], &MasterState::default());
+    let second = bench.render(&[draw(&second)], &MasterState::default());
+    let changed_text = bench.render(&[draw(&changed_text)], &MasterState::default());
+    let disabled = bench.render(&[draw(&disabled)], &MasterState::default());
+    let other_bank = bench.render(&[draw(&other_bank)], &MasterState::default());
+    assert_eq!(
+        first.pixels, other_bank.pixels,
+        "either effect bank renders the same authored grid"
+    );
+    assert!(
+        changed_pixels(&first, &original) > 1_000,
+        "source is visibly sliced into text and image panels"
+    );
+    assert!(
+        changed_pixels(&first, &second) > 500,
+        "a beat resizes the cells"
+    );
+    assert!(
+        changed_pixels(&first, &changed_text) > 100,
+        "authored text changes actual rendered glyphs"
+    );
+    assert_eq!(
+        original.pixels, disabled.pixels,
+        "zero mix restores the source exactly"
+    );
+}

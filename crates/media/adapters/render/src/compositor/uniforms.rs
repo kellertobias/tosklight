@@ -35,6 +35,7 @@ pub(super) struct LayerUniform {
     pub(super) beat_scan_counts: [[f32; 4]; 16],
     pub(super) beat_event_x: [[f32; 4]; 16],
     pub(super) beat_event_y: [[f32; 4]; 16],
+    pub(super) effect_text: [[[u32; 4]; 128]; 4],
 }
 
 impl LayerUniform {
@@ -58,8 +59,18 @@ impl LayerUniform {
         let mut beat_scan_counts = [[0.0; 4]; 16];
         let mut beat_event_x = [[0.5; 4]; 16];
         let mut beat_event_y = [[0.5; 4]; 16];
+        let mut effect_text = [[[0; 4]; 128]; 4];
         for (index, effect) in layer.effects.iter().enumerate() {
-            if let Some(parameters) = effect.analog_tv_parameters() {
+            if let Some(parameters) = effect.beat_slice_grid_parameters() {
+                effect_types[index] = 11;
+                effect_mixes[index] = effect.mix;
+                effect_parameters[index] = parameters.as_array();
+                effect_parameter_tail[index] = effect.parameters.get(4).copied().unwrap_or(0.0);
+                effect_seeds[index] = effect.parameters.get(5).copied().unwrap_or(1.0);
+                for (destination, mask) in effect_text[index].iter_mut().zip(&effect.text_mask) {
+                    *destination = *mask;
+                }
+            } else if let Some(parameters) = effect.analog_tv_parameters() {
                 effect_types[index] = 1;
                 effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
                 effect_parameters[index] = parameters.as_array();
@@ -182,6 +193,7 @@ impl LayerUniform {
             beat_scan_counts,
             beat_event_x,
             beat_event_y,
+            effect_text,
         }
     }
 }

@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 8;
+pub const CURRENT_VERSION: u32 = 9;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -62,6 +62,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             5 => Ok(with_builtin_models(current)),
             6 => Ok(with_outline_preset(current)),
             7 => Ok(without_effect_visualizer_tuning(current)),
+            8 => Ok(with_slice_grid_preset(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
@@ -167,6 +168,23 @@ fn with_outline_preset(mut document: Value) -> Value {
         *stored = serde_json::to_value(library).expect("an effect library is serializable");
     }
     document["version"] = json!(7);
+    document
+}
+
+/// Version 8 → 9: add Beat Slice Grid only when the shipped slot is free.
+/// Existing empty libraries and authored presets remain intentional and are preserved.
+fn with_slice_grid_preset(mut document: Value) -> Value {
+    if let Some(stored) = document
+        .get_mut("configuration")
+        .and_then(|c| c.get_mut("effects"))
+        && let Ok(mut library) =
+            serde_json::from_value::<media_domain::EffectLibrary>(stored.clone())
+        && !library.entries.is_empty()
+    {
+        library.add_slice_grid_if_free();
+        *stored = serde_json::to_value(library).expect("an effect library is serializable");
+    }
+    document["version"] = json!(9);
     document
 }
 
@@ -454,7 +472,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 8"));
+        assert!(written.contains("\"version\": 9"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -644,8 +662,8 @@ mod tests {
     #[test]
     fn a_current_document_is_left_alone() {
         assert_eq!(
-            CURRENT_VERSION, 8,
-            "documents whose effect presets carry no visualizer tuning are version 8"
+            CURRENT_VERSION, 9,
+            "documents with the Beat Slice Grid catalog are version 9"
         );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
@@ -749,12 +767,40 @@ mod tests {
             } }
         ] }));
         let effects = super::super::load(&occupied.to_string()).unwrap().effects;
-        assert_eq!(effects.entries.len(), 1);
+        assert_eq!(effects.entries.len(), 2);
         assert_eq!(effects.resolve(13).unwrap().name, "Tunnel");
+        assert_eq!(effects.resolve(14).unwrap().name, "Beat Slice Grid");
 
         let emptied = document_with_effects(json!({ "entries": [] }));
         let effects = super::super::load(&emptied.to_string()).unwrap().effects;
         assert!(effects.entries.is_empty());
+    }
+
+    #[test]
+    fn version_eight_adds_grid_without_overwriting_custom_or_empty_library() {
+        let mut old = media_domain::EffectLibrary::default();
+        old.remove(14);
+        let stored = json!({"version": 8, "configuration": {"effects": old}});
+        let migrated = migrate_to_current(stored).unwrap();
+        assert_eq!(migrated["version"], 9);
+        let library: media_domain::EffectLibrary =
+            serde_json::from_value(migrated["configuration"]["effects"].clone()).unwrap();
+        assert_eq!(
+            library.resolve(14).unwrap().effect.text.as_deref(),
+            Some("PIXEL")
+        );
+        let mut custom = media_domain::EffectLibrary::empty();
+        custom
+            .assign(14, "House blur", media_domain::EffectSlot::blur())
+            .unwrap();
+        for library in [custom, media_domain::EffectLibrary::empty()] {
+            let stored = json!({"version":8,"configuration":{"effects":library}});
+            let migrated = migrate_to_current(stored).unwrap();
+            assert_eq!(
+                migrated["configuration"]["effects"],
+                serde_json::to_value(library).unwrap()
+            );
+        }
     }
 
     #[test]
@@ -774,7 +820,7 @@ mod tests {
         ] }));
         document["version"] = json!(7);
         let migrated = migrate_to_current(document.clone()).unwrap();
-        assert_eq!(migrated["version"], json!(8));
+        assert_eq!(migrated["version"], json!(CURRENT_VERSION));
         for entry in migrated["configuration"]["effects"]["entries"]
             .as_array()
             .unwrap()

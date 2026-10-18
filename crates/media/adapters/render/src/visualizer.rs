@@ -26,6 +26,7 @@ const PRELUDE: &str = include_str!("shaders/visualizers/prelude.wgsl");
 /// The source of one kind, ready to be appended to the prelude.
 const fn body(kind: VisualizerKind) -> &'static str {
     match kind {
+        VisualizerKind::BlackHole => include_str!("shaders/visualizers/black-hole.wgsl"),
         VisualizerKind::EqualizerBars => include_str!("shaders/visualizers/equalizer-bars.wgsl"),
         VisualizerKind::WaveformOscilloscope => {
             include_str!("shaders/visualizers/waveform-oscilloscope.wgsl")
@@ -45,6 +46,9 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::BeatExplosions => include_str!("shaders/visualizers/beat-explosions.wgsl"),
         VisualizerKind::DancingSwarm => include_str!("shaders/visualizers/dancing-swarm.wgsl"),
         VisualizerKind::Starfield => include_str!("shaders/visualizers/starfield.wgsl"),
+        VisualizerKind::GalaxySimulator => {
+            include_str!("shaders/visualizers/galaxy-simulator.wgsl")
+        }
         VisualizerKind::LightningTendrils => {
             include_str!("shaders/visualizers/lightning-tendrils.wgsl")
         }
@@ -54,6 +58,7 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::CrossingLines => include_str!("shaders/visualizers/crossing-lines.wgsl"),
         VisualizerKind::DigitalGlitch => include_str!("shaders/visualizers/digital-glitch.wgsl"),
         VisualizerKind::CrtScanline => include_str!("shaders/visualizers/crt-scanline.wgsl"),
+        VisualizerKind::TextTracking => include_str!("shaders/visualizers/text-tracking.wgsl"),
         VisualizerKind::MatrixDigitalRain => {
             include_str!("shaders/visualizers/matrix-digital-rain.wgsl")
         }
@@ -409,6 +414,7 @@ pub struct VisualizerRenderer {
     uniform: wgpu::Buffer,
     analysis: wgpu::Texture,
     analysis_view: wgpu::TextureView,
+    glyphs: SourceTexture,
     targets: HashMap<usize, SourceTexture>,
     memories: HashMap<usize, AudioMemory>,
     rhythms: HashMap<usize, RhythmMemory>,
@@ -443,6 +449,16 @@ impl VisualizerRenderer {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -469,6 +485,12 @@ impl VisualizerRenderer {
         });
         let analysis_view = analysis.create_view(&wgpu::TextureViewDescriptor::default());
 
+        let pixels: Vec<u8> = include_bytes!("../../../../../assets/media/tracking-glyphs.bin")
+            .iter()
+            .flat_map(|alpha| [255, 255, 255, *alpha])
+            .collect();
+        let glyphs = SourceTexture::from_rgba8(gpu, Size::new(256, 192), &pixels)
+            .expect("the bundled glyph atlas dimensions match its bytes");
         Self {
             gpu: gpu.clone(),
             size,
@@ -477,6 +499,7 @@ impl VisualizerRenderer {
             uniform,
             analysis,
             analysis_view,
+            glyphs,
             targets: HashMap::new(),
             memories: HashMap::new(),
             rhythms: HashMap::new(),
@@ -511,6 +534,24 @@ impl VisualizerRenderer {
         kind: VisualizerKind,
         parameters: &VisualizerParameters,
         frame: &VisualizerFrame<'_>,
+    ) -> Result<&SourceTexture, VisualizerError> {
+        self.render_with_text(
+            layer,
+            kind,
+            parameters,
+            frame,
+            &media_domain::visualizer::default_tracking_text(),
+        )
+    }
+
+    /// Draws operator text using the bundled monospace atlas; unchanged glyph pixels never upload again.
+    pub fn render_with_text(
+        &mut self,
+        layer: usize,
+        kind: VisualizerKind,
+        parameters: &VisualizerParameters,
+        frame: &VisualizerFrame<'_>,
+        text: &str,
     ) -> Result<&SourceTexture, VisualizerError> {
         self.ensure_pipeline(kind)?;
         let tuned = parameters.clamped();
@@ -567,6 +608,8 @@ impl VisualizerRenderer {
             &rhythm,
             &legacy,
             terrain_heights.as_ref(),
+            (kind == VisualizerKind::TextTracking).then_some(text),
+            tuned.count.clamp(4, 32) as usize,
         );
         self.gpu.queue.write_buffer(
             &self.uniform,
@@ -591,6 +634,10 @@ impl VisualizerRenderer {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::TextureView(&self.analysis_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&self.glyphs.view),
                 },
             ],
         });
@@ -691,6 +738,8 @@ impl VisualizerRenderer {
         rhythm: &Rhythm,
         legacy: &[f32; LEGACY_FLOATS],
         terrain: Option<&[f32; 2500]>,
+        text: Option<&str>,
+        columns: usize,
     ) {
         let mut rows = vec![0.0f32; WAVEFORM_POINTS * 7];
         for (slot, value) in rows[..WAVEFORM_POINTS]
@@ -740,6 +789,11 @@ impl VisualizerRenderer {
             rows[WAVEFORM_POINTS * 2..WAVEFORM_POINTS * 2 + heights.len()].copy_from_slice(heights);
         }
 
+        if let Some(text) = text {
+            let glyphs = tracking_codes(text, columns);
+            rows[WAVEFORM_POINTS * 6..WAVEFORM_POINTS * 6 + glyphs.len()].copy_from_slice(&glyphs);
+        }
+
         self.gpu.queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.analysis,
@@ -762,6 +816,29 @@ impl VisualizerRenderer {
     }
 }
 
+/// Text Tracking uses row six; terrain writes are untouched on all other visualizers.
+/// First texel is length, followed by ASCII.
+fn tracking_codes(text: &str, columns: usize) -> Vec<f32> {
+    let mut codes = vec![0.0];
+    for character in text.chars() {
+        if codes.len() >= 129 {
+            break;
+        }
+        if character == '\n' {
+            let remaining = columns - ((codes.len() - 1) % columns);
+            codes.extend(std::iter::repeat_n(32.0, remaining.min(129 - codes.len())));
+        } else {
+            codes.push(if character.is_ascii() && !character.is_ascii_control() {
+                character as u32 as f32
+            } else {
+                63.0
+            });
+        }
+    }
+    codes[0] = (codes.len() - 1) as f32;
+    codes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -781,6 +858,19 @@ mod tests {
             beat_phase: 0.0,
             instruments: struck(kick, 0.0, 0.0),
         }
+    }
+
+    #[test]
+    fn tracking_text_preserves_ascii_line_layout_and_bounds_untrusted_files() {
+        assert_eq!(
+            tracking_codes("A\nB", 4),
+            vec![5.0, 65.0, 32.0, 32.0, 32.0, 66.0]
+        );
+        assert_eq!(tracking_codes("é", 16), vec![1.0, 63.0]);
+        let bounded = tracking_codes(&"W".repeat(500), 16);
+        assert_eq!(bounded.len(), 129);
+        assert_eq!(bounded[0], 128.0);
+        assert_eq!(tracking_codes("", 16), vec![0.0]);
     }
 
     #[test]

@@ -9,7 +9,7 @@ import {
 	SelectField,
 	SwitchField,
 } from "@tosklight/ui/controls";
-import { NumberField } from "@tosklight/ui/forms";
+import { NumberField, LargeTextField } from "@tosklight/ui/forms";
 import { type ChangeEvent, useState } from "react";
 import { usePreviewOf } from "../../operator/PlaybackTakeoverContext";
 import { requestId } from "../../shared/api/editing";
@@ -73,6 +73,7 @@ export function VisualizerEditor({
 	busy,
 	onChange,
 }: VisualizerEditorProps) {
+	const [text, setText] = useState(visualizer.text);
 	const [parameters, setParameters] = useState(visualizer.parameters);
 	// With preview on, the visualizer plays alone on the output as it is edited.
 	const { folder, file } = visualizer.address;
@@ -107,6 +108,18 @@ export function VisualizerEditor({
 
 	return (
 		<div className="media-visualizer-editor" aria-busy={busy}>
+			{visualizer.typeId === 43 && (
+				<LargeTextField
+					label="Text (ASCII, up to 128 characters)"
+					value={text}
+					maxLength={128}
+					onChange={(event) => {
+						const value = event.target.value.slice(0, 128);
+						setText(value);
+						onChange({ requestId: requestId(), text: value });
+					}}
+				/>
+			)}
 			{[...ALWAYS_SHOWN, ...visualizer.uses].map((control) => {
 				if (
 					visualizer.kind === "Grid Landscape" &&

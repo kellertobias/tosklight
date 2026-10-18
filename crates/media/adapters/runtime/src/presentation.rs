@@ -216,6 +216,7 @@ struct HostedOutput {
     beat_scale_turn: crate::beat_scale_turn::BeatScaleTurn,
     beat_scan: crate::beat_scan::BeatScan,
     beat_grid_wave: crate::beat_grid_wave::BeatGridWave,
+    beat_slice_grid: crate::beat_slice_grid::BeatSliceGrid,
     beat_form_flash: crate::beat_form_flash::BeatFormFlash,
     outline_beat: crate::outline_beat::OutlineBeat,
     standby: Option<SourceTexture>,
@@ -560,6 +561,7 @@ impl PresentationHost {
                     beat_scale_turn: crate::beat_scale_turn::BeatScaleTurn::default(),
                     beat_scan: crate::beat_scan::BeatScan::default(),
                     beat_grid_wave: crate::beat_grid_wave::BeatGridWave::default(),
+                    beat_slice_grid: crate::beat_slice_grid::BeatSliceGrid::default(),
                     beat_form_flash: crate::beat_form_flash::BeatFormFlash::default(),
                     outline_beat: Default::default(),
                     standby,
@@ -818,6 +820,9 @@ impl HostedOutput {
         );
         let flash = &mut self.beat_form_flash;
         let effective_layers = flash.apply(&effective_layers, seconds, events);
+        let effective_layers = self
+            .beat_slice_grid
+            .apply(&effective_layers, seconds, events);
         self.outline_beat.apply(&effective_layers, seconds, events)
     }
 

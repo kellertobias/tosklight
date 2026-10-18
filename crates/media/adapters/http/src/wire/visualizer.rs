@@ -19,6 +19,9 @@ pub struct VisualizerView {
     pub kind: String,
     /// What this configuration is called, which an operator may change.
     pub name: String,
+    /// The operator text shown by Text Tracking.
+    #[serde(default = "media_domain::visualizer::default_tracking_text")]
+    pub text: String,
     /// Which of the shared parameters this kind reads. The rest are present and ignored, so an
     /// editor can show only the controls that do something.
     pub uses: Vec<String>,
@@ -180,6 +183,7 @@ impl VisualizerView {
             type_id: configuration.kind.type_id(),
             kind: configuration.kind.label().to_owned(),
             name: configuration.name.clone(),
+            text: configuration.text.clone(),
             uses: configuration
                 .kind
                 .parameters()
@@ -220,6 +224,8 @@ pub struct UpdateVisualizer {
     pub type_id: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameters: Option<VisualizerParametersView>,
 }

@@ -109,6 +109,15 @@ pub(super) async fn update_effect(
             }
         };
     }
+    if let Some(text) = body.text {
+        if text.chars().count() > media_domain::slice_grid::MAX_SLICE_TEXT_CHARS {
+            return Err(ApiError::bad_request(
+                "effect-text-too-long",
+                "effect text accepts up to 64 characters",
+            ));
+        }
+        effect.text = Some(text);
+    }
     effect.normalize();
     configuration
         .effects
@@ -135,7 +144,7 @@ mod tests {
         let (status, body) = send(&bench.router, get("/api/v2/effects".into())).await;
         assert_eq!(status, StatusCode::OK);
         let entries = body.as_array().expect("an effect list");
-        assert_eq!(entries.len(), 13);
+        assert_eq!(entries.len(), 14);
         assert_eq!(entries[0]["slot"], 1);
         assert!(
             entries
@@ -160,6 +169,53 @@ mod tests {
         assert_eq!(outline["slot"], 13);
         assert_eq!(outline["effect"]["effectType"], "outline");
         assert_eq!(outline["effect"]["supported"], true);
+    }
+
+    #[tokio::test]
+    async fn slice_grid_text_and_beat_source_survive_partial_edits_and_replays() {
+        let bench = bench();
+        let edit = r#"{"requestId":"grid-text","name":"Poster","effectType":"beat-slice-grid","text":"ON AIR Ä!","beatSource":"kick","parameters":[5,3,0.7,0.6]}"#;
+        let (status, saved) = send(
+            &bench.router,
+            post("/api/v2/effects/60/update".into(), edit),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(saved["effect"]["text"], "ON AIR Ä!");
+        assert_eq!(saved["effect"]["parameters"][0]["maximum"], 8.0);
+        let (status, replay) = send(
+            &bench.router,
+            post("/api/v2/effects/60/update".into(), edit),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(replay, saved);
+        let (status, changed) = send(
+            &bench.router,
+            post(
+                "/api/v2/effects/60/update".into(),
+                r#"{"requestId":"grid-rename","name":"Broadcast"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(changed["effect"]["text"], "ON AIR Ä!");
+        assert_eq!(changed["effect"]["beatSource"], "kick");
+        assert_eq!(
+            bench
+                .stored
+                .lock()
+                .unwrap()
+                .last()
+                .unwrap()
+                .effects
+                .resolve(60)
+                .unwrap()
+                .effect
+                .text
+                .as_deref(),
+            Some("ON AIR Ä!")
+        );
     }
 
     #[tokio::test]

@@ -72,6 +72,7 @@ pub fn effect_parameter_ids(effect_type: &str) -> &'static [&'static str] {
         RasterizeParameters,
     };
     match effect_type {
+        crate::BEAT_SLICE_GRID_EFFECT => &crate::BeatSliceGridParameters::IDS,
         ANALOG_TV_EFFECT => &AnalogTvParameters::IDS,
         DIGITAL_TV_EFFECT => &DigitalTvParameters::IDS,
         BLUR_EFFECT => &BlurParameters::IDS,
@@ -96,6 +97,10 @@ pub const FEEDBACK_PARAMETER_IDS: [&str; 3] =
 
 /// One row per parameter id reported by the effects API, in no particular order.
 const BOUNDS: &[(&str, EffectParameterBounds)] = &[
+    ("slice-columns", EffectParameterBounds::new(2.0, 8.0, 1.0)),
+    ("slice-rows", EffectParameterBounds::new(1.0, 6.0, 1.0)),
+    ("slice-movement", EffectParameterBounds::unit()),
+    ("slice-text-amount", EffectParameterBounds::unit()),
     ("tv-curvature", EffectParameterBounds::unit()),
     ("distortion", EffectParameterBounds::unit()),
     ("image-grain", EffectParameterBounds::unit()),

@@ -4052,6 +4052,7 @@ dependencies = [
  "light-fixture",
  "media-codec",
  "media-domain",
+ "media-text",
  "naga",
  "png 0.18.1",
  "pollster",

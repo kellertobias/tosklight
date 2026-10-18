@@ -2,6 +2,30 @@
 
 These scenarios are the operator acceptance contract for the capability-gated Media operating surface and the authoritative Running overview.
 
+## PIXEL-018 — Black Hole beat visualizer
+
+On **Visualizers**, add **Black Hole** to a free slot and enable preview. A dark central shadow is
+surrounded by a luminous ring, an inclined rotating disc, a bent rear arc and background stars.
+Each separate beat swells and brightens the ring and disc; the response settles over **Pulse
+decay**, while silence continues the rotation without inventing beats. A held beat does not
+restart the pulse every frame. **Beat pulse** at zero disables the pulse. Change **Shadow radius**,
+**Disc speed**, **Disc inclination**, **Disc colour** and **Ring colour** and confirm they each affect
+the picture. Recall it from a layer and via the console: the first four Visualizer Parameter
+channels control radius, speed, beat pulse and decay. Restart Pixel and verify the configuration
+and existing folder/file assignments remain intact. Inspect a representative frame separately
+from the automated render checks. The provenance record must identify any reused upstream
+material and its license; the original implementation ships no upstream material.
+
+## PIXEL-017 — beat slice grid, galaxy and tracked text
+
+In Pixel's **Effects** library, assign **Beat Slice Grid** to a free slot and enter your own text. Preview it over a layer showing a picture or video. The output is divided into rectangular cells with stretched text and slices of that layer's current image. Change the grid controls and confirm both picture and text cells follow the resulting layout. Send several separate hits from the selected **React to** source: the cell boundaries change on each hit and settle between hits. Silence does not invent new layouts. At zero Effect Strength the original layer returns. Edit the words, recall the preset in the other effect bank, then restart Pixel: both banks retain the same words and settings. A configuration saved before this effect existed keeps its existing assignments, including any operator preset occupying the new default's slot.
+
+Create **Galaxy Simulator** on the **Visualizers** page and enable preview. A rotating spiral galaxy remains visible in silence. Each beat produces bright supernovas with expanding rings that fade over their configured lifetime. Change the supernova count, lifetime, colours and reactivity and confirm each changes the picture. Zero supernovas leaves the galaxy visible without explosions. A held beat flash creates one volley, and a later separate beat creates another.
+
+Create **Text Tracking**, enter a short phrase and enable preview. Readable glyphs appear with tracking boxes and links; the active target and lock flash follow the text, with moving-camera treatment inspired by ff-tracking. Change the text and the visualizer's settings and confirm the live preview and program output agree. Music changes the tracking animation; silence remains a valid rendered state. Save and restart: the custom text remains. Existing visualizers retain their folder/file addresses and settings.
+
+Repeat effect and visualizer recall through the normal layer controls and the patched console's effect-bank and visualizer parameter channels. Both paths must render the same configured preset. Capture representative program frames of all three; record visual acceptance separately from automated test results.
+
 ## MEDIA-005 — two effect banks and shared presets
 
 Given a beat-reactive effect preset in Pixel's Effects library, changing **React to** to Detected beat, Live beat, Bass drum, Hi-hat, or Snare persists that choice and changes which counted audio events start the effect. Detected beat reacts to actual kick or snare hits when the music slows; Live beat follows the current tempo-aligned pulse. One instrument's hit does not fire an effect set to another instrument. A beat whose brief level pulse falls entirely between rendered frames still fires once, and a held level does not fire twice. Existing presets without a source use Detected beat.

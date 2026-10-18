@@ -811,6 +811,12 @@ impl AnalogTvParameters {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectSlot {
+    /// Optional authored typography. Missing in older shows and all non-text effects.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Runtime-only glyph mask; regenerated from authored text and never stored.
+    #[serde(skip)]
+    pub text_mask: Vec<[u32; 4]>,
     /// A stable typed-effect identifier. Unknown future values remain preserved in stored shows
     /// and are reported as unsupported instead of being silently discarded.
     pub effect_type: Option<String>,
@@ -841,6 +847,8 @@ impl EffectSlot {
     /// An enabled slot of one typed effect at full mix.
     fn typed(effect_type: &str, parameters: Vec<f32>) -> Self {
         Self {
+            text: None,
+            text_mask: Vec::new(),
             effect_type: Some(effect_type.to_owned()),
             enabled: true,
             seed: 0,
@@ -1000,12 +1008,23 @@ impl EffectSlot {
     }
 
     pub fn normalize(&mut self) {
+        if let Some(text) = &mut self.text {
+            *text = text
+                .chars()
+                .filter(|c| !c.is_control())
+                .take(crate::slice_grid::MAX_SLICE_TEXT_CHARS)
+                .collect();
+        }
         self.mix = if self.mix.is_finite() {
             self.mix.clamp(0.0, 1.0)
         } else {
             0.0
         };
-        if self.effect_type.as_deref() == Some(ANALOG_TV_EFFECT) {
+        if self.effect_type.as_deref() == Some(crate::BEAT_SLICE_GRID_EFFECT) {
+            self.parameters = crate::BeatSliceGridParameters::from_parameters(&self.parameters)
+                .as_array()
+                .to_vec();
+        } else if self.effect_type.as_deref() == Some(ANALOG_TV_EFFECT) {
             self.parameters = AnalogTvParameters::from_normalized(&self.parameters)
                 .as_array()
                 .to_vec();

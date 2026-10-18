@@ -37,6 +37,7 @@ describe("the effects library", () => {
 			"CMYK Rasterize",
 			"Drawn Image Style",
 			"Outline",
+			"Beat Slice Grid",
 		]);
 	});
 
@@ -100,6 +101,20 @@ describe("the effects library", () => {
 		await waitFor(() => expect(server.writes).toHaveLength(1));
 		expect(server.writes[0]?.body.beatSource).toBe("snare");
 	});
+
+	it("saves readable grid text and the selected drum source", async () => {
+        const preset = typedEffect(1, "Poster", "beat-slice-grid", "slice-columns", "Columns", 4, 2, 8);
+        preset.effect.text = "PIXEL";
+        const server = stubEffects([preset]);
+        render(<EffectsPage />);
+        await screen.findByText("1/255 assigned");
+        fireEvent.change(screen.getByLabelText("Grid text"), { target: { value: "ON AIR" } });
+        await userEvent.click(screen.getByRole("button", { name: "React to" }));
+        await userEvent.click(screen.getByRole("option", { name: "Bass drum" }));
+        await userEvent.click(screen.getByRole("button", { name: "Save effect" }));
+        await waitFor(() => expect(server.writes).toHaveLength(1));
+        expect(server.writes[0]?.body).toMatchObject({ text: "ON AIR", beatSource: "kick", effectType: "beat-slice-grid" });
+    });
 
 	it("ships one rendered thumbnail for every effect type and nothing else", () => {
 		expect(effectThumbnailTypes()).toEqual(

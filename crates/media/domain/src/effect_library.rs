@@ -87,6 +87,19 @@ impl EffectLibrary {
         }
     }
 
+    /// Introduce the shipped grid without replacing a stored operator preset.
+    pub fn add_slice_grid_if_free(&mut self) {
+        if self.resolve(14).is_none()
+            && !self.entries.iter().any(|entry| {
+                entry.effect.effect_type.as_deref() == Some(crate::BEAT_SLICE_GRID_EFFECT)
+            })
+        {
+            self.entries
+                .push(preset(14, "Beat Slice Grid", EffectSlot::beat_slice_grid()));
+            self.entries.sort_by_key(|entry| entry.slot);
+        }
+    }
+
     pub fn remove(&mut self, slot: u8) -> bool {
         let before = self.entries.len();
         self.entries.retain(|entry| entry.slot != slot);
@@ -137,6 +150,7 @@ impl Default for EffectLibrary {
             preset(9, "Kaleidoscope", EffectSlot::kaleidoscope()),
             preset(10, "B/W Rasterize", EffectSlot::rasterize()),
             preset(12, "Drawn Image Style", EffectSlot::drawn_image()),
+            preset(14, "Beat Slice Grid", EffectSlot::beat_slice_grid()),
             preset(
                 OUTLINE_PRESET_SLOT,
                 OUTLINE_PRESET_NAME,
