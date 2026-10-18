@@ -21,8 +21,12 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
       - name: Pure diagnostic tests
         run: |
+          node --input-type=module -e 'import "./tools/artifact-paths.mjs"'
           python3 -B tools/desktop-performance-576-owned-perf.test.py
           node --test tools/desktop-performance-576-owned-perf.test.mjs
       - name: Record isolated C capability with pinned packaged perf
