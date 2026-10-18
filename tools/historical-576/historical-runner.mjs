@@ -20,6 +20,13 @@ import { CONTROL_PROFILE } from "./old-benchmark-shim.mjs";
 import { installDefinitions } from "./definition-response.mjs";
 import { bindInstalledProfiles } from "./profile-response.mjs";
 import { stopOwned, applyCleanupResult } from "./owned-process-cleanup.mjs";
+import { prepareEmptyShow } from "./empty-show.mjs";
+import {
+	TICK_WORK_FIELDS,
+	TICK_WORK_BOUNDS_MICROS,
+	selectTickWorkHistogram,
+	summarizeTickWorkHistogram,
+} from "./tick-work-histogram.mjs";
 export const ARMS = Object.freeze([
 	"old-legacy",
 	"current-legacy",
@@ -468,6 +475,7 @@ export const REPORT_FIELDS = Object.freeze([
 	"complete",
 	"failure_stage_code",
 	"setup_checkpoint_code",
+	"empty_show_prepared",
 	"cleanup_verified",
 	"compatibility_build",
 	"schema5_acceptance_claim",
@@ -525,6 +533,7 @@ export const REPORT_FIELDS = Object.freeze([
 	"headless_cpu_available",
 	"headless_cpu_mean_percent",
 	"headless_peak_resident_bytes",
+	...TICK_WORK_FIELDS,
 ]);
 export function validateReport(r) {
 	closed(r, REPORT_FIELDS);
@@ -582,7 +591,7 @@ export function validateReport(r) {
 			assert.equal(r[`${prefix}_assignments`], 5408);
 		}
 	}
-	assert.equal(r.schema_version, 2);
+	assert.equal(r.schema_version, 3);
 	assert(uint(r.arm_code) && r.arm_code >= 1 && r.arm_code <= 3);
 	assert(uint(r.failure_stage_code) && r.failure_stage_code <= 12);
 	for (const k of [
@@ -599,6 +608,8 @@ export function validateReport(r) {
 		"runtime_before_checked",
 		"runtime_after_checked",
 		"headless_cpu_available",
+		"empty_show_prepared",
+		"tick_work_histogram_available",
 	])
 		assert(r[k] === 0 || r[k] === 1);
 	for (const k of [
@@ -608,7 +619,28 @@ export function validateReport(r) {
 		"exact_start_alignment",
 	])
 		assert.equal(r[k], 0);
+	if (!r.tick_work_histogram_available) {
+		for (const key of TICK_WORK_FIELDS) assert.equal(r[key], 0);
+	} else {
+		assert(r.tick_work_histogram_count > 0);
+		let previousLower = 0;
+		for (const p of ["p50", "p95", "p99"]) {
+			const lower = r[`tick_work_${p}_lower_micros`];
+			const upper = r[`tick_work_${p}_upper_micros`];
+			const bounded = r[`tick_work_${p}_upper_bounded`];
+			assert(bounded === 0 || bounded === 1);
+			const index = bounded ? TICK_WORK_BOUNDS_MICROS.indexOf(upper) : TICK_WORK_BOUNDS_MICROS.length - 1;
+			assert(index >= 0 && index < TICK_WORK_BOUNDS_MICROS.length);
+			assert.equal(bounded, Number(index < TICK_WORK_BOUNDS_MICROS.length - 1));
+			assert.equal(lower, index === 0 ? 0 : TICK_WORK_BOUNDS_MICROS[index - 1] + 1);
+			if (!bounded) assert.equal(upper, 0);
+			assert(lower >= previousLower);
+			previousLower = lower;
+		}
+	}
 	if (r.available) {
+		assert.equal(r.empty_show_prepared, 1);
+		assert.equal(r.tick_work_histogram_available, 1);
 		assert.equal(r.setup_checkpoint_code, 9);
 		assert(r.complete && r.cleanup_verified && r.failure_stage_code === 0);
 		assert.equal(r.fixtures, 576);
@@ -658,12 +690,13 @@ export const PROVENANCE_FIELDS = Object.freeze([
 	"target_bijection_sha256",
 	"definition_bijection_sha256",
 	"profile_bijection_sha256",
+	"empty_show_bijection_sha256",
 	"runner_sha256",
 	"translator_sha256",
 ]);
 export function validateProvenance(p) {
 	closed(p, PROVENANCE_FIELDS);
-	assert.equal(p.schema_version, 3);
+	assert.equal(p.schema_version, 4);
 	assert(uint(p.arm_code) && p.arm_code >= 1 && p.arm_code <= 3);
 	assert(p.available === 0 || p.available === 1);
 	for (const k of PROVENANCE_FIELDS.filter((k) => k.endsWith("_sha256")))
@@ -696,7 +729,7 @@ export async function runArm(options) {
 	assert(arm >= 0);
 	const r = Object.fromEntries(REPORT_FIELDS.map((k) => [k, 0]));
 	Object.assign(r, {
-		schema_version: 2,
+		schema_version: 3,
 		arm_code: arm + 1,
 		compatibility_build: Number(arm === 1),
 	});
@@ -711,7 +744,7 @@ export async function runArm(options) {
 			]),
 		);
 	Object.assign(provenance, {
-		schema_version: 3,
+		schema_version: 4,
 		arm_code: arm + 1,
 		revision_sha: "0".repeat(40),
 	});
@@ -867,9 +900,12 @@ export async function runArm(options) {
 			desk_id: null,
 		});
 		r.setup_checkpoint_code = 2;
-		const bootstrap = await api.request("GET", "/api/v2/bootstrap");
-		api.showId = bootstrap.active_show?.id;
-		assert(api.showId);
+		const { setupBinding: emptyShowBinding } = await prepareEmptyShow(
+			api,
+			randomUUID,
+		);
+		raw.empty_show_binding = emptyShowBinding;
+		r.empty_show_prepared = 1;
 		r.setup_checkpoint_code = 3;
 		await api.request("POST", "/api/v2/configuration/update", {
 			request_id: randomUUID(),
@@ -903,7 +939,7 @@ export async function runArm(options) {
 			await installDefinitions(api, selectedPlan, randomUUID);
 		raw.definition_bindings = definitionBindings;
 		provenance = {
-			schema_version: 3,
+			schema_version: 4,
 			arm_code: arm + 1,
 			available: 1,
 			revision_sha: a.revision_sha,
@@ -916,6 +952,7 @@ export async function runArm(options) {
 			selected_plan_sha256: selectedHash,
 			definition_bijection_sha256: digest(stable(definitionBindings)),
 			profile_bijection_sha256: digest(stable(profileBindings)),
+			empty_show_bijection_sha256: digest(stable(emptyShowBinding)),
 			target_bijection_sha256: digest(
 				stable([...mapping].sort((a, b) => a[0].localeCompare(b[0]))),
 			),
@@ -1027,6 +1064,7 @@ export async function runArm(options) {
 				end,
 				wall,
 				output: outputCounters,
+				tick_work_histogram: selectTickWorkHistogram(diagnostics.output),
 				tree,
 				resource_begin: rb,
 				resource_end: re,
@@ -1038,6 +1076,11 @@ export async function runArm(options) {
 		for (const [key, value] of Object.entries(afterAdmission))
 			r[`runtime_after_${key}`] = value;
 		Object.assign(r, summarizeCounters(raw.samples));
+		Object.assign(
+			r,
+			summarizeTickWorkHistogram(raw.samples.map(sample => sample.tick_work_histogram)),
+		);
+		assert.equal(r.tick_work_histogram_available, 1);
 		Object.assign(
 			r,
 			summarizeHeadlessResources(raw.samples, { ticksPerSecond, pageSize }),

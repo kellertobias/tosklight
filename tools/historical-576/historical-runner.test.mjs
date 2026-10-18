@@ -27,7 +27,7 @@ for (const file of [
 		JSON.stringify("../" + file),
 		JSON.stringify(pathToFileURL(path.join(ROOT, "tools", file)).href),
 	);
-for (const file of ["legacy-plan.mjs", "old-benchmark-shim.mjs", "definition-response.mjs", "profile-response.mjs", "owned-process-cleanup.mjs"])
+for (const file of ["legacy-plan.mjs", "old-benchmark-shim.mjs", "definition-response.mjs", "profile-response.mjs", "owned-process-cleanup.mjs", "empty-show.mjs", "tick-work-histogram.mjs"])
 	runnerSource = runnerSource.replace(
 		JSON.stringify("./" + file),
 		JSON.stringify(new URL("./" + file, import.meta.url).href),
@@ -61,7 +61,7 @@ import {
 } from "./old-benchmark-shim.mjs";
 const zero = () =>
 	Object.assign(Object.fromEntries(REPORT_FIELDS.map((k) => [k, 0])), {
-		schema_version: 2,
+		schema_version: 3,
 		arm_code: 1,
 	});
 const throws = (fn) => assert.throws(fn);
@@ -82,6 +82,25 @@ test("closed numeric row rejects privacy, fractional counters and false success"
 	])
 		throws(() => validateRow({ ...zero(), ...change }));
 });
+test("tick work rows preserve bounded bands, overflow and unavailable state", () => {
+	const row = { ...zero(), tick_work_histogram_available: 1, tick_work_histogram_count: 2401 };
+	for (const p of ["p50", "p95", "p99"])
+		Object.assign(row, { [`tick_work_${p}_lower_micros`]: 16001, [`tick_work_${p}_upper_micros`]: 24000, [`tick_work_${p}_upper_bounded`]: 1 });
+	validateRow(row);
+	const overflow = { ...row, tick_work_p99_lower_micros: 1000001, tick_work_p99_upper_micros: 0, tick_work_p99_upper_bounded: 0 };
+	validateRow(overflow);
+	for (const change of [
+		{ tick_work_histogram_available: 0 },
+		{ tick_work_histogram_count: 0 },
+		{ tick_work_p95_lower_micros: 16000 },
+		{ tick_work_p95_upper_micros: 25000 },
+		{ tick_work_p95_upper_bounded: 2 },
+		{ tick_work_p95_upper_micros: Number.MAX_SAFE_INTEGER },
+		{ tick_work_p50_lower_micros: 24001, tick_work_p50_upper_micros: 32000 },
+		{ empty_show_prepared: 2 },
+	]) throws(() => validateRow({ ...row, ...change }));
+	throws(() => validateRow({ ...overflow, tick_work_p99_upper_micros: 1000001 }));
+});
 test("HEX-only seal and exact companion filename", () => {
 	const p = Object.fromEntries(
 		PROVENANCE_FIELDS.map((k) => [
@@ -90,7 +109,7 @@ test("HEX-only seal and exact companion filename", () => {
 		]),
 	);
 	Object.assign(p, {
-		schema_version: 3,
+		schema_version: 4,
 		arm_code: 1,
 		revision_sha: "0".repeat(40),
 	});

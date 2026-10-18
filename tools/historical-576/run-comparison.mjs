@@ -17,16 +17,16 @@ const hex=(value,length)=>typeof value==='string'&&new RegExp(`^[a-f0-9]{${lengt
 const uint=value=>Number.isSafeInteger(value)&&value>=0;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export const ORDERS=Object.freeze([[0,1,2],[2,1,0],[0,1,2]].map(Object.freeze));
-export const SUMMARY_FIELDS=Object.freeze(['schema_version','available','failure_stage_code','build_completed_arms','build_failure_arm_code','build_failure_stage_code','build_failure_error_code','completed_cases','same_job','logical_cpu_count','guest_core_count','guest_package_count','stage_enabled','fixture_sheet_required','requested_hz','exact_typed_legacy_output_equivalence','schema5_acceptance_claim','rows']);
+export const SUMMARY_FIELDS=Object.freeze(['schema_version','available','failure_stage_code','build_completed_arms','build_failure_arm_code','build_failure_stage_code','build_failure_error_code','completed_cases','same_job','logical_cpu_count','guest_core_count','guest_package_count','stage_enabled','fixture_sheet_required','common_empty_show','tick_work_histogram_required','requested_hz','exact_typed_legacy_output_equivalence','schema5_acceptance_claim','rows']);
 export function validateSummary(row){
-  closed(row,SUMMARY_FIELDS);assert.equal(row.schema_version,1);assert([0,1].includes(row.available));
+  closed(row,SUMMARY_FIELDS);assert.equal(row.schema_version,2);assert([0,1].includes(row.available));
   for(const key of SUMMARY_FIELDS.filter(k=>k!=='rows'))assert(uint(row[key]));
   assert(row.build_failure_arm_code<=3&&row.build_failure_stage_code<=14&&row.build_failure_error_code<=5);
   if(row.available)assert.equal(row.build_failure_arm_code+row.build_failure_stage_code+row.build_failure_error_code,0);
   assert(row.failure_stage_code<=5&&row.build_completed_arms<=3&&row.completed_cases<=9);
   assert.equal(row.same_job,1);
   for(const [key,wanted] of [['logical_cpu_count',4],['guest_core_count',2],['guest_package_count',1]])assert(row[key]===0||row[key]===wanted);
-  for(const [key,wanted] of [['stage_enabled',0],['fixture_sheet_required',1],['requested_hz',40],['exact_typed_legacy_output_equivalence',0],['schema5_acceptance_claim',0]])assert.equal(row[key],wanted);
+  for(const [key,wanted] of [['stage_enabled',0],['fixture_sheet_required',1],['common_empty_show',1],['tick_work_histogram_required',1],['requested_hz',40],['exact_typed_legacy_output_equivalence',0],['schema5_acceptance_claim',0]])assert.equal(row[key],wanted);
   assert(Array.isArray(row.rows)&&row.rows.length<=9);
   row.rows.forEach((entry,index)=>{closed(entry,['round','position','result']);assert.equal(entry.round,Math.floor(index/3));assert.equal(entry.position,index%3);validateRow(entry.result);assert.equal(entry.result.arm_code,ORDERS[entry.round][entry.position]+1);});
   assert.equal(row.completed_cases,row.rows.filter(x=>x.result.available).length);
@@ -97,7 +97,7 @@ export async function runComparison(){
   assert.equal(process.platform,'linux');assert(!Object.hasOwn(process.env,'LIGHT_OUTPUT_WORKERS'));
   const suffix=`${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`;assert(/^\d+-\d+$/u.test(suffix));
   const publicRoot=path.join(artifactPaths.results,`historical-576-${suffix}`),privateRoot=path.join(artifactPaths.tmp,`historical-576-${suffix}`);await mkdir(publicRoot,{recursive:true,mode:0o700});
-  const result={schema_version:1,available:0,failure_stage_code:0,build_completed_arms:0,build_failure_arm_code:0,build_failure_stage_code:0,build_failure_error_code:0,completed_cases:0,same_job:1,logical_cpu_count:0,guest_core_count:0,guest_package_count:0,stage_enabled:0,fixture_sheet_required:1,requested_hz:40,exact_typed_legacy_output_equivalence:0,schema5_acceptance_claim:0,rows:[]};
+  const result={schema_version:2,available:0,failure_stage_code:0,build_completed_arms:0,build_failure_arm_code:0,build_failure_stage_code:0,build_failure_error_code:0,completed_cases:0,same_job:1,logical_cpu_count:0,guest_core_count:0,guest_package_count:0,stage_enabled:0,fixture_sheet_required:1,common_empty_show:1,tick_work_histogram_required:1,requested_hz:40,exact_typed_legacy_output_equivalence:0,schema5_acceptance_claim:0,rows:[]};
   const provenance={schema_version:1,old_sha:OLD,current_sha:CURRENT,input_sha256:INPUT,orchestrator_sha256:hash(await readFile(fileURLToPath(import.meta.url))),build:null,cases:[]};
   const publish=async()=>{validateSummary(result);validatePublicProvenance(provenance);await save(path.join(publicRoot,'comparison-numeric.json'),result);await save(path.join(publicRoot,'comparison-provenance.json'),provenance);};
   await publish();let stage=1;
