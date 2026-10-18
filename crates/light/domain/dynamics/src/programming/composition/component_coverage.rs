@@ -319,8 +319,11 @@ mod tests {
         };
         let retained = FamilySample::retained_component(
             Arc::new(
-                CompiledComponentExpression::new(Arc::new(expression), template.address.clone())
-                    .unwrap(),
+                CompiledComponentExpression::new(
+                    Arc::new(expression),
+                    Arc::clone(template.address.as_ref()),
+                )
+                .unwrap(),
             ),
             template.rank,
             1.0,

@@ -573,7 +573,7 @@ pub(super) fn reconstruct(
             if known.address.address().component.is_some() {
                 let expression = Arc::new(CompiledComponentExpression::new(
                     root,
-                    known.address.clone(),
+                    Arc::clone(known.address.as_ref()),
                 )?);
                 let mut conditioned = known.clone();
                 conditioned.body = FamilySampleBody::ComponentExpression(expression);

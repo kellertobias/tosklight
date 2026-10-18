@@ -374,7 +374,7 @@ fn synthetic_pair_keeps_distinct_member_paths_of_the_same_exact_cohort_slot() {
         };
         CoupledComponentEndpoint {
             lane_id: Uuid::from_u128(lane),
-            address: sample.address.clone(),
+            address: Arc::clone(sample.address.as_ref()),
             value: sample.materialized_value().unwrap().clone(),
             role: CoupledLeafRole::Authored,
             occurrence: None,

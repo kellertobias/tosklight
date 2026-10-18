@@ -207,7 +207,7 @@ pub(super) fn verified_endpoint(
 ) -> Result<FamilySample, TransitionError> {
     address.validate_value(&value)?;
     Ok(FamilySample {
-        address,
+        address: Cow::Owned(address),
         body: FamilySampleBody::Materialized(value),
         projection: None,
         fix_at: false,

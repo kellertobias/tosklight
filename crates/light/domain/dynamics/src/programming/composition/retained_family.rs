@@ -1076,7 +1076,7 @@ fn resolve_whole(
             )
         });
         let resolved = FamilySample {
-            address,
+            address: Cow::Owned(address),
             body: FamilySampleBody::Materialized(DynamicValue::Family(value)),
             projection: None,
             fix_at: false,

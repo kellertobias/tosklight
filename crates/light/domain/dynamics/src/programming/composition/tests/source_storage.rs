@@ -213,7 +213,7 @@ fn captured_rank_and_component_survive_rank_edits_and_address_rebinding() {
         old.set_rank(next);
         compare(&new, &old);
         let address = color(ColorComponent::Green, 0.4, 1).address;
-        new.address = Arc::clone(&address);
+        new.address = address.clone();
         old.address = address;
         compare(&new, &old); // The control footprint changes; captured source footprints do not.
     }

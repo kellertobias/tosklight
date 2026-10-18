@@ -564,7 +564,7 @@ fn conditioning_a_covered_whole_does_not_require_the_unselected_direct_underlay_
         Arc::new(
             CompiledComponentExpression::new(
                 resume(None, Some(uv_leaf(0.2)), 0.5, 500),
-                uv.address.clone(),
+                Arc::clone(uv.address.as_ref()),
             )
             .unwrap(),
         ),

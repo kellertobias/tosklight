@@ -32,12 +32,13 @@ impl Slot {
         }
     }
 
-    fn compiled(self) -> Result<Arc<CompiledDynamicValueAddress>, IntentError> {
+    fn compiled(self) -> Result<&'static Arc<CompiledDynamicValueAddress>, IntentError> {
         static ADDRESSES: [OnceLock<Result<Arc<CompiledDynamicValueAddress>, IntentError>>; 6] =
             [const { OnceLock::new() }; 6];
         ADDRESSES[self as usize]
             .get_or_init(|| CompiledDynamicValueAddress::new(self.address(), None).map(Arc::new))
-            .clone()
+            .as_ref()
+            .map_err(Clone::clone)
     }
 }
 
@@ -93,8 +94,8 @@ impl Leaf<'_> {
         rank: FamilySampleRank,
         activation: f32,
     ) -> Result<FamilySample, IntentError> {
-        Ok(FamilySample::new(
-            self.slot.compiled()?,
+        Ok(FamilySample::with_address(
+            std::borrow::Cow::Borrowed(self.slot.compiled()?),
             DynamicValue::Scalar(self.value),
             rank,
             activation,

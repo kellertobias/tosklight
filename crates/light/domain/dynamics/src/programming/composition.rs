@@ -8,10 +8,12 @@ use super::{
     address::ensure, extract_compatible_dynamic_value,
 };
 use light_core::{AttributeValue, programming::*};
-use std::{collections::HashMap, sync::Arc};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 mod adoption;
+#[cfg(test)]
+mod borrowed_address_tests;
 mod component_coverage;
 mod endpoint_output;
 mod native_fixed;
@@ -110,7 +112,7 @@ impl FamilySampleRank {
 /// result becomes a whole-family engine contribution. Native addresses pin the original model.
 #[derive(Clone)]
 pub struct FamilySample {
-    address: Arc<CompiledDynamicValueAddress>,
+    address: Cow<'static, Arc<CompiledDynamicValueAddress>>,
     body: FamilySampleBody,
     /// Only projections of the same immutable authored tree may share one lane rank. Their
     /// component key is a private fragment tie-breaker, never a fabricated persisted lane ID.
@@ -138,6 +140,17 @@ impl FamilySample {
     /// before retaining this sample. Composition cannot accept an unverified whole recipe.
     pub fn new(
         address: Arc<CompiledDynamicValueAddress>,
+        value: DynamicValue,
+        rank: FamilySampleRank,
+        activation_mix: f32,
+    ) -> Result<Self, IntentError> {
+        Self::with_address(Cow::Owned(address), value, rank, activation_mix)
+    }
+
+    // Only immutable process-lifetime scalar slots borrow their existing Arc. Other source
+    // boundaries retain ownership, including the exact original native-model lifetime.
+    pub(super) fn with_address(
+        address: Cow<'static, Arc<CompiledDynamicValueAddress>>,
         value: DynamicValue,
         rank: FamilySampleRank,
         activation_mix: f32,
@@ -184,7 +197,7 @@ impl FamilySample {
             "Dynamic activation influence must be between zero and one",
         )?;
         Ok(Self {
-            address: expression.address().clone(),
+            address: Cow::Owned(expression.address().clone()),
             body: FamilySampleBody::ComponentExpression(expression),
             projection: None,
             fix_at: false,

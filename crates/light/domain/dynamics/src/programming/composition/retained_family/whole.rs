@@ -494,7 +494,7 @@ fn complete_sample(
     // Calling FamilySample::new here would perform the same complete prediction a second time.
     address.validate_value(&DynamicValue::Family(value.clone()))?;
     let sample = FamilySample {
-        address,
+        address: Cow::Owned(address),
         body: FamilySampleBody::Materialized(DynamicValue::Family(value)),
         projection: None,
         fix_at: false,
