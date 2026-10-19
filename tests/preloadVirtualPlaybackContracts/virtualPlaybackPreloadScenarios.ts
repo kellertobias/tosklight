@@ -1,4 +1,4 @@
-import { paneCard } from "./uiSupport";
+import { activatePaneCard, configurePaneGrid, paneCard } from "./uiSupport";
 import {
 	type BenchContractContext,
 	type BenchUiContext,
@@ -339,6 +339,8 @@ const preload004UiSupplement = async ({
 	await setCaptureScope(api, false, {position_ranges: [{start:401,end:402}], pages:[1]}, 2_500, 8_000);
 	await desk.open(bench.baseUrl);
 	const pane = await addVirtualPlaybackPane(page);
+	// A pane fits every configured cell; show only the two cells this scenario presses.
+	await configurePaneGrid(page, pane, 1, 2);
 	await page.getByRole("button", { name: "PRELOAD", exact: true }).click();
 	await api.executeCommandLine("GROUP 1 AT 35");
 	await assignedPlaybackAction(api, { page: 1, position: 46 }, "button", {
@@ -350,10 +352,8 @@ const preload004UiSupplement = async ({
 		"QUEUE VIRTUAL CELLS",
 		"Click the real GO and TOGGLE cells; their underlying playbacks must remain unchanged.",
 	);
-	await paneCard(pane, {page:1,position:401}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
-		.click();
-	await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
-		.click();
+	await activatePaneCard(pane, {page:1,position:401});
+	await activatePaneCard(pane, {page:1,position:402});
 	await expect(
 		page.getByTitle(
 			/Pending Preload: .*GO 1\.401.*TOGGLE 1\.402/,

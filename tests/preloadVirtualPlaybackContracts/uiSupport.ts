@@ -129,8 +129,19 @@ function escapeRegExp(value: string) {
 export function paneCard(pane:Locator,address:{page:number;position:number}):Locator {
  return pane.locator(`[data-page="${address.page}"][data-playback-slot="${address.position}"]`);
 }
+/**
+ * Presses a pane cell's single action. A default pane shows each Playback as one square tile whose
+ * button carries the action as its description; a pane with playback controls shows the button.
+ */
 export async function activatePaneCard(pane:Locator,address:{page:number;position:number}) {
- await paneCard(pane,address).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/}).click();
+ const card=paneCard(pane,address);
+ const tile=card.locator(".playback-tile-action");
+ const control=card.getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/});
+ await expect(tile.or(control).first()).toBeVisible();
+ if (await tile.count()) {
+  await expect(tile).toHaveAccessibleDescription(/^(GO \+|TOGGLE|ON)( |$)/);
+  await tile.click();
+ } else await control.click();
 }
 export async function configurePaneGrid(page:Page,pane:Locator,rows:number,columns:number,pinnedPage?:number) {
  await pane.getByRole("button",{name:"Settings",exact:true}).click();
