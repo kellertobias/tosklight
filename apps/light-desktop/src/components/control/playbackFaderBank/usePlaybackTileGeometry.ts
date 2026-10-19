@@ -1,17 +1,16 @@
 import { useLayoutEffect, useState } from "react";
 import {
-	squarePlaybackGeometry,
+	fittedPlaybackGeometry,
 	type PlaybackTileViewport,
 } from "./tileGeometry";
 
-/** Follow the actual pane viewport, including scrollbars and the bank's active CSS gaps. */
+/** Follow the actual pane viewport, using the bank's active CSS gaps. */
 export function usePlaybackTileGeometry(
 	enabled: boolean,
 	viewport: HTMLElement | null,
 	bank: HTMLElement | null,
 	columns: number,
 	rows: number,
-	scrollable: boolean,
 ) {
 	const [size, setSize] = useState<PlaybackTileViewport | null>(null);
 	useLayoutEffect(() => {
@@ -44,7 +43,5 @@ export function usePlaybackTileGeometry(
 		resize?.observe(bank);
 		return () => resize?.disconnect();
 	}, [enabled, viewport, bank]);
-	return enabled && size
-		? squarePlaybackGeometry(size, columns, rows, scrollable)
-		: null;
+	return enabled && size ? fittedPlaybackGeometry(size, columns, rows) : null;
 }

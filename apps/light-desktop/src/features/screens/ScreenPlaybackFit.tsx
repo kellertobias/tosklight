@@ -54,13 +54,15 @@ export function ScreenPlaybackFit({
 				const targets = bank.querySelectorAll<HTMLElement>(
 					"article, .single-button-playback-action, .vertical-touch-fader, .vertical-touch-fader-actions button, .faderless-playback-actions button, .touch-encoder-push, .touch-encoder-number-entry",
 				);
+				// Pane tiles preserve the authored count even in a dense layout.
+				const minimumSize = bank.dataset.playbackPresentation === "tiles" ? 1 : 44;
 				const invalid = [...targets].some((target) => {
 					const box = target.getBoundingClientRect();
 					const card =
 						target.closest("article")?.getBoundingClientRect() ?? bounds;
 					return (
-						box.width < 44 ||
-						box.height < 44 ||
+						box.width < minimumSize ||
+						box.height < minimumSize ||
 						box.left < bounds.left - 0.5 ||
 						box.right > bounds.right + 0.5 ||
 						box.top < bounds.top - 0.5 ||

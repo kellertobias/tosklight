@@ -7,12 +7,11 @@ export interface PlaybackTileViewport {
 	rowGap: number;
 }
 
-/** Explicit equal tracks keep sparse rows square rather than stretching them to pane height. */
-export function squarePlaybackGeometry(
+/** Fit the authored columns and rows independently to use the complete pane viewport. */
+export function fittedPlaybackGeometry(
 	viewport: PlaybackTileViewport,
 	columns: number,
 	rows: number,
-	scrollable: boolean,
 ): CSSProperties {
 	const columnCount = Math.max(1, Math.floor(columns));
 	const rowCount = Math.max(1, Math.floor(rows));
@@ -24,14 +23,13 @@ export function squarePlaybackGeometry(
 		0,
 		viewport.height - viewport.rowGap * (rowCount - 1),
 	);
-	const cell = scrollable
-		? Math.max(112, width / columnCount)
-		: Math.min(width / columnCount, height / rowCount);
+	const columnWidth = width / columnCount;
+	const rowHeight = height / rowCount;
 	return {
-		gridTemplateColumns: `repeat(${columnCount}, ${cell}px)`,
-		gridTemplateRows: `repeat(${rowCount}, ${cell}px)`,
-		width: columnCount * cell + viewport.columnGap * (columnCount - 1),
-		height: rowCount * cell + viewport.rowGap * (rowCount - 1),
+		gridTemplateColumns: `repeat(${columnCount}, ${columnWidth}px)`,
+		gridTemplateRows: `repeat(${rowCount}, ${rowHeight}px)`,
+		width: viewport.width,
+		height: viewport.height,
 		minWidth: 0,
 		minHeight: 0,
 		padding: 0,

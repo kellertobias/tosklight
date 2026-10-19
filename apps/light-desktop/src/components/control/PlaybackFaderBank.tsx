@@ -30,7 +30,6 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			bankElement,
 			controller.columns,
 			controller.rowCount,
-			Boolean(props.scrollable),
 		);
 		const geometry =
 			props.scrollable && !controller.hardware && !props.tilePresentation
@@ -70,10 +69,9 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 				<div
 					ref={viewport}
 					className={
-						(props.scrollable && props.tilePresentation) || geometry
-							? "playback-bank-viewport"
-							: "playback-bank-fixed"
+						geometry ? "playback-bank-viewport" : "playback-bank-fixed"
 					}
+					style={props.tilePresentation ? { overflow: "hidden" } : undefined}
 				>
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 					<div
@@ -94,6 +92,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 						onKeyDownCapture={solo.keyDown}
 						onKeyUpCapture={solo.block}
 						data-playback-surface={controller.surfaceId}
+						data-playback-presentation={props.tilePresentation ? "tiles" : "controls"}
 						data-command-surface={
 							controller.playbackDesk?.selected_surface_id ===
 							controller.surfaceId

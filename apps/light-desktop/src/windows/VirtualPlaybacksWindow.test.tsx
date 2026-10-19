@@ -56,6 +56,7 @@ describe("unified Playback pane", () => {
 		mocks.registry = { "pane:pane-1": {}, main: {} };
 		const { rerender } = render(<VirtualPlaybacksWindow paneId="pane-1" />);
 		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-tiles", "true");
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-scrollable", "false");
 		mocks.pane.playbackShowControls = true;
 		rerender(<VirtualPlaybacksWindow paneId="pane-1" />);
 		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-tiles", "false");

@@ -164,7 +164,7 @@ export interface PaneModel extends GridRect {
 	/** Screen mirrors its live layout; Free region keeps this pane's rows. */
 	playbackViewMode?: "screen" | "free-region";
 	playbackScreenSurfaceId?: string;
-	/** Missing or false uses square tiles; true reveals this pane's Playback controls. */
+	/** Missing or false uses single-button tiles; true reveals this pane's Playback controls. */
 	playbackShowControls?: boolean;
 	fileManagerShowHidden?: boolean;
 	textFileRoot?: string;

@@ -2,6 +2,7 @@
 
 import { fixture } from "./bench/command-selection/selectionContract";
 import { scenario } from "./bench/core/scenario";
+import { expectPlaybackPaneFits } from "./bench/playbacks/playbackPaneGeometry";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
 import { Show } from "./bench/show/showScenario";
 import { PaneType } from "./bench/window-system/paneTypes";
@@ -55,9 +56,10 @@ scenario(
 				width: 12,
 				height: 10,
 			},
-			{ rows: 1, columns: 3 },
+			{ rows: 3, columns: 6 },
 		);
 		await desktop.apply();
+		await expectPlaybackPaneFits(pane, 3, 6);
 
 		const firstPlayback = await t.virtualPlayback.assignSource(
 			pane,
@@ -89,6 +91,14 @@ scenario(
 		]);
 		await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
 		await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
+		// Six authored columns fill the width and three rows fill the height independently.
+		// Recheck actual SVG strokes after each resize, not only member CSS classes.
+		for (const size of [{ width: 16, height: 15 }, { width: 10, height: 10 }]) {
+			await pane.resize(size);
+			await expectPlaybackPaneFits(pane, 3, 6);
+			await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
+			await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
+		}
 		// Saving the new region reconciles permanent owners by their activation order.
 		// Selection above is inert; the newer second Playback is the exact saved winner.
 		await t.virtualPlayback.expect.runtime(firstPlayback, {

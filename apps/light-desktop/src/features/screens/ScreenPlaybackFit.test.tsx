@@ -154,6 +154,14 @@ function rectangle(height: number): DOMRect {
 }
 
 describe("Screen fit geometry", () => {
+	it("keeps a dense pane tile grid visible instead of replacing its authored count with a touch-size warning", () => {
+		const harness = geometryHarness();
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(rectangle(30));
+		const mounted = render(<ScreenPlaybackFit><div className="playback-fader-bank touch-layout" data-playback-presentation="tiles" data-playback-surface="pane:dense"><article /></div></ScreenPlaybackFit>);
+		harness.flush();
+		expect(requireElement(mounted.container, ".playback-fader-bank").inert).toBe(false);
+		expect(mounted.queryByRole("status")).toBeNull();
+	});
 	it("validates the bank bounds after its required-height write changes layout", () => {
 		const harness = geometryHarness();
 		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
