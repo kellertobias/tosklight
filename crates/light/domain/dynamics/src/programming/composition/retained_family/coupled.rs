@@ -158,45 +158,42 @@ fn trace_component_sources(
     let identity = rank.dynamic_identity().ok_or_else(|| {
         IntentError("coupled Dynamic trace requires a Dynamic source identity".into())
     })?;
-    Ok(components
-        .iter()
-        .flat_map(|component| {
-            let mut sources = Vec::with_capacity(2);
-            let footprint = component
-                .address
-                .address()
-                .component
-                .map_or(FamilyTraceFootprint::Whole, FamilyTraceFootprint::Component);
-            let rank = FamilySampleRank {
-                identity: FamilySampleIdentity::Dynamic {
-                    instance_id: identity.instance_id,
-                    controller_id: identity.controller_id,
-                    lane_id: component.lane_id,
-                },
-                ..rank
-            };
-            let source = FamilyTraceSource {
-                rank,
-                footprint,
-                role: match component.role {
-                    CoupledLeafRole::Authored => FamilyTraceRole::Authored,
-                    CoupledLeafRole::Current => FamilyTraceRole::CalculationDependency,
-                },
-                occurrence: component.occurrence,
-            };
-            if component.role == CoupledLeafRole::Authored {
-                sources.push(FamilyTraceLeaf::Source(source));
-            }
-            if let Some(dependency) = component.dependency_occurrence.clone().or_else(|| {
-                (component.role == CoupledLeafRole::Current)
-                    .then(|| crate::DynamicSourceDependency::unknown(component.occurrence))
-            }) {
-                sources.push(FamilyTraceLeaf::Current(source, dependency));
-            }
-            sources
-        })
-        .collect::<Vec<_>>()
-        .into())
+    // TL-842: every leaf goes straight into one vector, in component order.
+    let mut leaves = Vec::with_capacity(components.len() * 2);
+    for component in components {
+        let footprint = component
+            .address
+            .address()
+            .component
+            .map_or(FamilyTraceFootprint::Whole, FamilyTraceFootprint::Component);
+        let rank = FamilySampleRank {
+            identity: FamilySampleIdentity::Dynamic {
+                instance_id: identity.instance_id,
+                controller_id: identity.controller_id,
+                lane_id: component.lane_id,
+            },
+            ..rank
+        };
+        let source = FamilyTraceSource {
+            rank,
+            footprint,
+            role: match component.role {
+                CoupledLeafRole::Authored => FamilyTraceRole::Authored,
+                CoupledLeafRole::Current => FamilyTraceRole::CalculationDependency,
+            },
+            occurrence: component.occurrence,
+        };
+        if component.role == CoupledLeafRole::Authored {
+            leaves.push(FamilyTraceLeaf::Source(source));
+        }
+        if let Some(dependency) = component.dependency_occurrence.clone().or_else(|| {
+            (component.role == CoupledLeafRole::Current)
+                .then(|| crate::DynamicSourceDependency::unknown(component.occurrence))
+        }) {
+            leaves.push(FamilyTraceLeaf::Current(source, dependency));
+        }
+    }
+    Ok(leaves.into())
 }
 
 pub(super) fn verified_endpoint(
