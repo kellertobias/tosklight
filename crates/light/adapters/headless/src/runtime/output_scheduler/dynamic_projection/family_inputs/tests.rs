@@ -472,6 +472,7 @@ fn consuming_handoff_does_not_add_a_compiled_address_reference() {
             .into(),
         ],
     }];
+    dynamic[0].samples.reserve(1); // room for the appended Fixed sample below
     let storage = dynamic[0].samples.as_ptr();
     let capacity = dynamic[0].samples.capacity();
     let before = Arc::strong_count(&address);
@@ -491,9 +492,78 @@ fn consuming_handoff_does_not_add_a_compiled_address_reference() {
         before,
         "handoff must move samples, not clone their immutable compiled address"
     );
+    // TL-842 C4: the prepared vector is borrowed whole, then returned without the samples the
+    // frame appended (a Fixed mask), keeping its storage for the next preparation.
     assert!(dynamic[0].samples.is_empty());
+    assert_eq!(scratch.groups[0].group.samples.as_ptr(), storage);
+    let appended = scratch.groups[0].group.samples[0].clone();
+    scratch.groups[0].group.samples.push(appended);
+    scratch.return_lent(&mut dynamic);
     assert_eq!(dynamic[0].samples.as_ptr(), storage);
     assert_eq!(dynamic[0].samples.capacity(), capacity);
+    assert_eq!(dynamic[0].samples.len(), 1);
+    assert!(scratch.groups[0].group.samples.is_empty());
+    assert_eq!(Arc::strong_count(&address), before);
+    // A second return, or one to a changed layout, changes nothing.
+    scratch.return_lent(&mut dynamic);
+    assert_eq!(dynamic[0].samples.len(), 1);
+}
+
+/// A loan that is never returned (a failed frame) leaves the prepared group empty and frees
+/// the borrowed samples with the next assembly.
+#[test]
+fn unreturned_loan_is_dropped_with_the_next_assembly() {
+    let address = Arc::new(
+        CompiledDynamicValueAddress::new(
+            DynamicValueAddress::whole_family(
+                ProgrammingOwner::Focus,
+                &AttributeValue::Normalized(0.4),
+            )
+            .unwrap(),
+            None,
+        )
+        .unwrap(),
+    );
+    let weak = Arc::downgrade(&address);
+    let mut dynamic = vec![DynamicFamilySampleGroup {
+        target: target(10),
+        owner: ProgrammingOwner::Focus,
+        samples: vec![
+            FamilySample::new(
+                address,
+                DynamicValue::Family(AttributeValue::Normalized(0.4)),
+                rank(),
+                1.0,
+            )
+            .unwrap()
+            .into(),
+        ],
+    }];
+    let mut scratch = CapturedFamilyInputScratch::default();
+    assemble_captured_family_inputs_draining(
+        DrainingPreparedDynamicFamilySamples {
+            families: &mut dynamic,
+            requirements: &[],
+        },
+        &[],
+        &mut scratch,
+        None,
+    );
+    assert!(dynamic[0].samples.is_empty());
+    let mut next: Vec<DynamicFamilySampleGroup> = Vec::new();
+    assemble_captured_family_inputs_draining(
+        DrainingPreparedDynamicFamilySamples {
+            families: &mut next,
+            requirements: &[],
+        },
+        &[],
+        &mut scratch,
+        None,
+    );
+    assert!(weak.upgrade().is_none(), "the unreturned samples are freed");
+    assert!(scratch.groups.is_empty());
+    scratch.return_lent(&mut dynamic);
+    assert!(dynamic[0].samples.is_empty(), "nothing stale returns later");
 }
 
 #[test]

@@ -234,7 +234,6 @@ fn compose_sampled_cohort<'f, T>(
     )
     .map_err(invalid)?;
     drop(prepare_span);
-    let prepared = preparation.prepared_for_drain();
     typed.check().map_err(invalid)?;
     let control = |rank| endpoint_controls.control_for(rank);
     let view = CohortView {
@@ -249,7 +248,7 @@ fn compose_sampled_cohort<'f, T>(
     };
     let (requirements, mut projections) = compose_family_cohort(
         &view,
-        prepared,
+        preparation,
         fixed,
         families,
         observer,
@@ -547,7 +546,7 @@ fn frozen_family_owners(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn compose_family_cohort<T, R: HybridFrameResolver>(
     view: &CohortView<'_, '_, PreparedFamilySources<'_>, R>,
-    prepared: light_dynamics::DrainingPreparedDynamicFamilySamples<'_>,
+    preparation: &mut DynamicFamilyPreparationScratch,
     fixed: &[PreparedFixedMask],
     families: &mut CapturedFamilyInputScratch,
     observer: &mut impl HybridFrameObserver<T>,
@@ -566,7 +565,13 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
         .map_err(invalid)?;
     drop(discovery_span);
     let assembly_span = diagnostics::Subspan::begin(diagnostics::Substage::Assembly);
-    assemble_captured_family_inputs_draining(prepared, fixed, families, pool);
+    // TL-842 C4: the groups borrow the prepared sample vectors until composition ends.
+    assemble_captured_family_inputs_draining(
+        preparation.prepared_for_drain(),
+        fixed,
+        families,
+        pool,
+    );
     if !view.frame.capture.freezes_nothing() {
         families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
     }
@@ -638,6 +643,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     )?;
     drop(owner_span);
     static_rows.finish_cohort();
+    families.return_lent(preparation.families_for_return());
     requirements.extend(view.typed.requirements().into_iter().map(|required| {
         HybridFamilyRequirement {
             target: required.target,
