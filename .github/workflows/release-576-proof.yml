@@ -161,7 +161,7 @@ jobs:
               pass
           proof={'source_commit':os.environ['CANDIDATE_SHA'],'workflow_commit':os.environ['GITHUB_SHA'],
                  'platform':platform.platform(),'cpu_count':os.cpu_count(),'allowed_cpu_count':len(os.sched_getaffinity(0)),**topology,
-                 'benchmark_modes':['control_without_stage','stage_functional'],'expected_default_workers':2,'default_worker_override_absent':int('LIGHT_OUTPUT_WORKERS' not in os.environ),'cpu_models':sorted({line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name') and ':' in line}),
+                 'benchmark_modes':['control_without_stage','stage_functional'],'expected_default_workers':1,'default_worker_override_absent':int('LIGHT_OUTPUT_WORKERS' not in os.environ),'cpu_models':sorted({line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name') and ':' in line}),
                  'rustc':subprocess.check_output(['rustc','-Vv'],text=True),
                  'source_sha256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sources if p and pathlib.Path(p).is_file()},
                  'binaries':{p.name:{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in [apps[0],root/'light-headless',root/'viz-renderer']}}
@@ -177,7 +177,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
-          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '1'
         run: |
           set -euo pipefail
           test "${LIGHT_OUTPUT_WORKERS+x}" != x
@@ -195,9 +195,9 @@ jobs:
           import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
           const directory = process.argv[2];
           assert.equal(process.env.LIGHT_OUTPUT_WORKERS, undefined);
-          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '2');
+          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '1');
           const receipt = validateWorkerDiagnostics(JSON.parse(await readFile(`${directory}/worker-numeric.json`, 'utf8')));
-          assert.equal(receipt.expected_workers, 2);
+          assert.equal(receipt.expected_workers, 1);
           for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
           assert.equal(receipt.observations, 2);
           assert.equal(receipt.valid_observations, 2);
@@ -223,7 +223,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
-          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '1'
         run: |
           set -euo pipefail
           test "${LIGHT_OUTPUT_WORKERS+x}" != x
@@ -241,9 +241,9 @@ jobs:
           import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
           const directory = process.argv[2];
           assert.equal(process.env.LIGHT_OUTPUT_WORKERS, undefined);
-          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '2');
+          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '1');
           const receipt = validateWorkerDiagnostics(JSON.parse(await readFile(`${directory}/worker-numeric.json`, 'utf8')));
-          assert.equal(receipt.expected_workers, 2);
+          assert.equal(receipt.expected_workers, 1);
           for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
           assert.equal(receipt.observations, 2);
           assert.equal(receipt.valid_observations, 2);
@@ -355,7 +355,7 @@ jobs:
           LIGHT_OUTPUT_PHASE_DIAGNOSTICS: all
           LIGHT_OUTPUT_THREAD_CPU_DIAGNOSTICS: '1'
           LIGHT_OUTPUT_OWNED_PERF_DIAGNOSTICS: '1'
-          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '2'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '1'
           RUST_LOG: light_headless_runtime=info,light_output=info,light_engine=info,tower_http=info
         run: |
           set -euo pipefail
@@ -391,7 +391,7 @@ jobs:
           for (const name of ['complete','workload_available','measurement_available','udp_integrity_passed','interaction_passed','sheet_liveness_passed','stage_absence_passed','cleanup_complete']) assert.equal(proof[name], 1, name);
           assert.equal(proof.send_errors, 0);
           const receipt = validateWorkerDiagnostics(await read('worker-numeric.json'));
-          assert.equal(receipt.expected_workers, 2);
+          assert.equal(receipt.expected_workers, 1);
           for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
           assert.equal(receipt.valid_observations, 2);
           const trace = validateTickTraceDiagnostics(await read('tick-trace-numeric.json'));

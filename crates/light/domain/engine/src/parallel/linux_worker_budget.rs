@@ -35,10 +35,18 @@ struct Budget {
 #[cfg(any(target_os = "linux", test))]
 fn apply(available: usize, detected: Option<Budget>) -> usize {
     match detected {
+        // TL-842: a two-core SMT guest runs the output frame on the caller. There the desk's
+        // UI and Stage already compete for the same cores, and two output workers measured
+        // ~35% more CPU per frame for no wall-time gain (more than 1.7x the wall time once
+        // the cores are saturated).
         Some(budget)
             if budget.logical == available && budget.cores > 0 && budget.cores < available =>
         {
-            budget.cores
+            if budget.cores <= 2 {
+                1
+            } else {
+                budget.cores
+            }
         }
         _ => available.clamp(1, MAX_DEFAULT_OUTPUT_WORKERS),
     }
@@ -200,7 +208,7 @@ mod tests {
                 cores: 2
             })
         );
-        assert_eq!(apply(4, budget), 2);
+        assert_eq!(apply(4, budget), 1); // Two SMT cores: serial on the caller (TL-842).
         assert_eq!(apply(3, budget), 3); // A later different available count invalidates reuse.
         let packages = fixture("0-3", &[(0, 0, 0), (1, 1, 0), (2, 0, 0), (3, 1, 0)]);
         assert_eq!(inspect(4, &packages), budget); // Core IDs are not globally unique.
