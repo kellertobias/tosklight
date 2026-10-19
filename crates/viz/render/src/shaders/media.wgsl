@@ -48,9 +48,9 @@ fn media_fragment(input: MediaOutput) -> @location(0) vec4<f32> {
         colour *= smoothstep(0.0, max(feather, 0.0001), edge);
         var reflected = colour * globals.params2.z;
         let tile = tile_index_for(input.clip.xy);
-        let count = min(tile_counts[tile], MAX_LIGHTS_PER_TILE);
+        let count = tile_light_count(tile);
         for (var index: u32 = 0u; index < count; index = index + 1u) {
-            let light = lights[tile_lights[tile * MAX_LIGHTS_PER_TILE + index]];
+            let light = lights[tile_light_index(tile, index)];
             // A linked projector derives its cone from this surface; it never paints or
             // shadow-masks the image back onto that surface.
             if (light.params.w > 0.5) {
@@ -63,10 +63,13 @@ fn media_fragment(input: MediaOutput) -> @location(0) vec4<f32> {
             }
             let to_light = offset / max(distance, 0.0001);
             var cone = beam_profile(light, to_light);
-            cone *= shadow_factor(light, input.world);
             let incidence = max(dot(normalize(input.normal), to_light), 0.0);
+            if (incidence <= 0.0 || cone <= 0.0) {
+                continue;
+            }
+            cone *= shadow_factor(light, input.world);
             reflected += colour * light.colour_intensity.rgb * incidence * cone
-                * distance_attenuation(distance) * 3.8;
+                * distance_attenuation(distance) * range_envelope(distance, light.position_range.w) * 3.8;
         }
         colour = reflected * gain;
     } else if kind < 1.5 {

@@ -51,6 +51,27 @@ fn culling_and_surface_shaders_share_the_uploaded_light_layout() {
     );
 }
 
+/// CPU allocation, compute storage stride, and surface addressing must agree exactly.
+#[test]
+fn tile_capacity_matches_between_cpu_and_both_shaders() {
+    for shader in [COMMON_WGSL, CULL_WGSL] {
+        let module = naga::front::wgsl::parse_str(shader).expect("tile shader parses");
+        let constant = module
+            .constants
+            .iter()
+            .find(|(_, value)| value.name.as_deref() == Some("MAX_LIGHTS_PER_TILE"))
+            .expect("tile capacity declared")
+            .1;
+        match module.global_expressions[constant.init] {
+            naga::Expression::Literal(naga::Literal::U32(value)) => {
+                assert_eq!(value, MAX_LIGHTS_PER_TILE)
+            }
+            ref other => panic!("tile capacity must be a u32 literal: {other:?}"),
+        }
+    }
+    assert!(CULL_WGSL.contains("shared_indices: array<u32, MAX_LIGHTS_PER_TILE>"));
+}
+
 /// The multisampled beam pass reads a different WGSL texture type, and it is reached by
 /// substituting one declaration. A rename in the shader would leave the substitution a silent
 /// no-op and the pipeline would fail validation on a multisampling adapter only.

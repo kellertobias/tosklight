@@ -227,9 +227,9 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let tile = tile_index_for(input.clip_position.xy);
-    let count = min(tile_counts[tile], MAX_LIGHTS_PER_TILE);
+    let count = tile_light_count(tile);
     for (var index: u32 = 0u; index < count; index = index + 1u) {
-        let light = lights[tile_lights[tile * MAX_LIGHTS_PER_TILE + index]];
+        let light = lights[tile_light_index(tile, index)];
         let offset = light.position_range.xyz - input.world_position;
         let distance = length(offset);
         if (distance > light.position_range.w) {
@@ -240,13 +240,13 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if (cone <= 0.0) {
             continue;
         }
+        let n_dot_l = max(dot(normal, to_light), 0.0);
+        if (n_dot_l <= 0.0) {
+            continue;
+        }
         // What the light cannot see, it cannot light.
         cone *= shadow_factor(light, input.world_position);
         if (cone <= 0.0) {
-            continue;
-        }
-        let n_dot_l = max(dot(normal, to_light), 0.0);
-        if (n_dot_l <= 0.0) {
             continue;
         }
         let half_vector = normalize(to_light + view_direction);
@@ -257,7 +257,7 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let specular = specular_distribution * geometry * fresnel / max(4.0 * n_dot_v * n_dot_l, 1e-4);
         let diffuse = (vec3<f32>(1.0) - fresnel) * (1.0 - metallic) * albedo / PI;
         let sheen = vec3<f32>(surface.sheen) * pow(1.0 - max(dot(normal, half_vector), 0.0), 3.0) / PI;
-        let attenuation = cone * distance_attenuation(distance);
+        let attenuation = cone * distance_attenuation(distance) * range_envelope(distance, light.position_range.w);
         radiance += (diffuse + specular + sheen) * light.colour_intensity.rgb * n_dot_l * attenuation * LIGHT_POWER;
     }
     return vec4<f32>(radiance, 1.0);

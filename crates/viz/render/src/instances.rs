@@ -239,6 +239,14 @@ pub struct GpuCurtainBlocker {
     pub half_size: [f32; 4],
 }
 
+/// A lamp-specific convex curtain shadow volume. Every plane faces the blocked interior.
+/// The first four planes pass through the lamp and cloth edges; the fifth is the cloth plane.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct GpuCurtainShadow {
+    pub planes: [[f32; 4]; 5],
+}
+
 /// Everything one frame uploads.
 #[derive(Default)]
 pub struct FrameInstances {
@@ -1039,17 +1047,19 @@ use emitter_geometry::{aperture_size, cell_states, push_aperture, push_beam, pus
 /// deck.
 pub(crate) const FLOOR_HEIGHT: f32 = 0.0;
 
-/// Throw length before the beam meets the stage floor, bounded by the maximum throw.
-/// How far the light actually reaches, which is further than the point straight below it.
-///
-/// A cone's rim lands further away than its axis does: a lamp four metres above the deck with a
-/// forty-degree field reaches its own centre at four metres and the edge of its pool at four and
-/// a half. Handing the axial distance to the shaders as the light's range culls every part of the
-/// pool except the exact centre, which is why a lamp pointing straight down showed a single dot
-/// instead of a pool.
+/// Bound the whole cone, rather than a sphere ending at its axis/floor intersection.
+/// A tilted cone's shallow rim travels much further than its centre. The guard band keeps
+/// that entire floor pool ahead of the shaders' final 20% fade; cones crossing the horizon
+/// retain a finite maximum throw instead of inventing a circular edge on the deck.
 fn beam_reach(origin: Vec3, direction: Vec3, half_angle: f32) -> f32 {
-    let axial = beam_length(origin, direction);
-    (axial / half_angle.cos().clamp(0.2, 1.0)).min(BEAM_THROW_METRES * 1.6)
+    let maximum = BEAM_THROW_METRES * 1.6;
+    let vertical = direction.y.clamp(-1.0, 1.0);
+    let shallowest = vertical * half_angle.cos()
+        + (1.0 - vertical * vertical).max(0.0).sqrt() * half_angle.sin();
+    if shallowest >= -1e-3 || origin.y <= FLOOR_HEIGHT {
+        return maximum;
+    }
+    ((origin.y - FLOOR_HEIGHT) / -shallowest * 1.25).clamp(2.0, maximum)
 }
 
 fn beam_length(origin: Vec3, direction: Vec3) -> f32 {

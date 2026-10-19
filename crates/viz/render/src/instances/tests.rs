@@ -43,13 +43,39 @@ fn a_lamp_pointing_straight_down_reaches_the_whole_pool() {
         rim.distance(origin)
     );
     // And it does not reach absurdly further than it needs to.
-    assert!(reach < rim.distance(origin) * 1.2);
+    assert!(reach <= rim.distance(origin) * 1.26);
 }
 
 #[test]
 fn a_beam_aimed_along_the_floor_still_has_a_bounded_throw() {
     let reach = beam_reach(Vec3::new(0.0, 2.0, 0.0), Vec3::X, 20.0_f32.to_radians());
     assert!(reach > 1.0 && reach <= BEAM_THROW_METRES * 1.6);
+}
+
+/// The old axis/cosine bound chopped the far half of a tilted pool into a circle.
+#[test]
+fn a_tilted_lamp_reaches_its_shallow_floor_rim_before_range_fade() {
+    let origin = Vec3::new(0.0, 4.0, 0.0);
+    let direction = Vec3::new(0.0, -1.0, 1.0).normalize();
+    let half_angle = 25.0_f32.to_radians();
+    let rim = Vec3::new(
+        0.0,
+        -20.0_f32.to_radians().sin(),
+        20.0_f32.to_radians().cos(),
+    );
+    let rim_distance = 4.0 / -rim.y;
+    let reach = beam_reach(origin, direction, half_angle);
+    assert!(reach * 0.8 >= rim_distance - 0.001);
+    assert!(reach <= BEAM_THROW_METRES * 1.6);
+}
+
+#[test]
+fn a_cone_crossing_the_horizon_keeps_its_finite_maximum_throw() {
+    let direction = Vec3::new(0.0, -0.1, 1.0).normalize();
+    assert_eq!(
+        beam_reach(Vec3::new(0.0, 4.0, 0.0), direction, 25.0_f32.to_radians()),
+        BEAM_THROW_METRES * 1.6
+    );
 }
 
 /// A moving head has to point where the desk says. The base stays bolted to the truss, the

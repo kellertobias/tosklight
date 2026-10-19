@@ -22,6 +22,8 @@ const OVERLAY_WGSL: &str = include_str!("shaders/overlay.wgsl");
 const SHADOW_WGSL: &str = include_str!("shaders/shadow.wgsl");
 
 #[cfg(test)]
+mod curtain_mask_tests;
+#[cfg(test)]
 mod curtain_optics_tests;
 #[cfg(test)]
 mod optics_tests;

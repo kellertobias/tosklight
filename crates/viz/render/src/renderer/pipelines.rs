@@ -315,7 +315,10 @@ fn beam_pipeline(
             compilation_options: Default::default(),
         }),
         primitive: wgpu::PrimitiveState {
-            cull_mode: None,
+            // The closed cone is wound inward: its visible faces are the ray's exit surface.
+            // One exit shades the complete analytic segment, even with the camera inside.
+            // Entry+exit shading used to integrate every outside-camera shaft twice.
+            cull_mode: Some(wgpu::Face::Back),
             ..Default::default()
         },
         depth_stencil: None,

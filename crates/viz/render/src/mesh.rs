@@ -241,7 +241,8 @@ pub fn unit_lens(segments: u32, rings: u32) -> MeshData {
 /// Cone whose apex sits at the origin and whose unit-radius base sits at `+Z = 1`.
 ///
 /// Beam passes scale this by `tan(half_angle)` in `X`/`Y` and by the beam length in `Z`, so one
-/// mesh covers every beam.
+/// mesh covers every beam. Its triangles intentionally face inward: the beam pass keeps the
+/// exit boundary, integrating each view ray once whether the camera is outside or inside.
 pub fn unit_cone(segments: u32) -> MeshData {
     let mut mesh = MeshData::default();
     let apex = mesh.push(Vec3::ZERO, Vec3::NEG_Z, Vec2::splat(0.5));
@@ -484,6 +485,21 @@ mod tests {
             assert!(
                 (b - a).cross(c - a).dot(normal) > 0.0,
                 "back-face culling must keep the cylinder exterior, including curtain folds"
+            );
+        }
+    }
+
+    #[test]
+    fn beam_cone_faces_inward_to_keep_exactly_the_exit_boundary() {
+        let mesh = unit_cone(24);
+        let interior = Vec3::new(0.0, 0.0, 0.5);
+        for triangle in mesh.indices.chunks_exact(3) {
+            let [a, b, c] = [triangle[0], triangle[1], triangle[2]]
+                .map(|index| Vec3::from_array(mesh.vertices[index as usize].position));
+            let outward = (a + b + c) / 3.0 - interior;
+            assert!(
+                (b - a).cross(c - a).dot(outward) < 0.0,
+                "every side and base cap must face into the closed beam volume"
             );
         }
     }

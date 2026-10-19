@@ -6,7 +6,7 @@
 use super::{Globals, MAX_LIGHTS_PER_TILE};
 use crate::buffers::DynamicBuffer;
 use crate::instances::{
-    BeamInstance, GpuCurtainBlocker, GpuLight, GpuMediaPanel, LaserInstance, LineVertex,
+    BeamInstance, GpuCurtainShadow, GpuLight, GpuMediaPanel, LaserInstance, LineVertex,
     MeshInstance, MeshKind,
 };
 use crate::targets::Targets;
@@ -51,9 +51,9 @@ impl SceneBuffers {
             device,
             "viz curtain blockers",
             BufferUsages::STORAGE,
-            (size_of::<GpuCurtainBlocker>() * 64) as u64,
+            (size_of::<GpuCurtainShadow>() * 64) as u64,
         );
-        curtain_blockers.upload(device, queue, &[GpuCurtainBlocker::zeroed()]);
+        curtain_blockers.upload(device, queue, &[GpuCurtainShadow::zeroed()]);
         curtain_blockers.length = 0;
         let mut lights = DynamicBuffer::new(
             device,

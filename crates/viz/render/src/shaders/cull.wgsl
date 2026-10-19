@@ -37,11 +37,11 @@ struct Light {
 @group(0) @binding(3) var<storage, read_write> tile_lights: array<u32>;
 
 const TILE_SIZE: u32 = 16u;
-const MAX_LIGHTS_PER_TILE: u32 = 96u;
+const MAX_LIGHTS_PER_TILE: u32 = 256u;
 const WORKGROUP: u32 = 64u;
 
 var<workgroup> shared_count: atomic<u32>;
-var<workgroup> shared_indices: array<u32, 96>;
+var<workgroup> shared_indices: array<u32, MAX_LIGHTS_PER_TILE>;
 
 struct ScreenBounds {
     min: vec2<f32>,
@@ -128,11 +128,14 @@ fn cull_main(
     }
     workgroupBarrier();
 
-    let total = min(atomicLoad(&shared_count), MAX_LIGHTS_PER_TILE);
-    for (var index = local; index < total; index = index + WORKGROUP) {
+    let count_in_tile = atomicLoad(&shared_count);
+    let stored = min(count_in_tile, MAX_LIGHTS_PER_TILE);
+    for (var index = local; index < stored; index = index + WORKGROUP) {
         tile_lights[tile * MAX_LIGHTS_PER_TILE + index] = shared_indices[index];
     }
     if (local == 0u) {
-        atomicStore(&tile_counts[tile], total);
+        // Preserve overflow. Surface shaders then evaluate all lights in a stable order,
+        // rather than dropping whichever lights lost the workgroup's atomic arrival race.
+        atomicStore(&tile_counts[tile], count_in_tile);
     }
 }

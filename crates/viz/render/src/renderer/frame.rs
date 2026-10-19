@@ -10,7 +10,7 @@ use super::{
     SHADOW_TILE_EDGE, SHADOW_TILES_PER_ROW,
 };
 use crate::camera::ResolvedCamera;
-use crate::instances::{FrameStyle, GpuCurtainBlocker, GpuLight, MeshKind};
+use crate::instances::{FrameStyle, GpuCurtainShadow, GpuLight, MeshKind};
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3};
 use std::hash::{Hash, Hasher};
@@ -374,7 +374,7 @@ impl Renderer {
         let blockers_grew = if packed_blockers.is_empty() {
             let grew = self
                 .curtain_blockers
-                .upload(device, queue, &[GpuCurtainBlocker::zeroed()]);
+                .upload(device, queue, &[GpuCurtainShadow::zeroed()]);
             self.curtain_blockers.length = 0;
             grew
         } else {

@@ -57,41 +57,29 @@ struct Light {
 // The centre sheet is finite and follows the posed curtain. Detailed fold shadows still come
 // from the atlas, but their quality budget must never make blackout cloth transmit light.
 struct CurtainBlocker {
-    world_to_local: mat4x4<f32>,
-    half_size: vec4<f32>,
+    // Four planes through the lamp and rectangle edges, then the cloth plane facing away
+    // from the lamp. Positive half-spaces form the exact finite rectangle's shadow volume.
+    planes: array<vec4<f32>, 5>,
 };
 @group(2) @binding(5) var<storage, read> curtain_blockers: array<CurtainBlocker>;
 
 fn curtain_blocks_segment(light: Light, destination: vec3<f32>) -> bool {
-    // CPU broad-phase keeps only rectangles that intersect this light's conservative beam
-    // frustum. Most lamps have no candidate curtain, so their hot surface/haze path stays cheap.
     if (globals.params4.w < 1.0 || light.gate.w < 0.0) {
         return false;
     }
-    let origin = light.position_range.xyz;
     let first = u32(light.gate.w);
-    let count = u32(curtain_blockers[first].half_size.z);
+    let count = u32(curtain_blockers[first].planes[4].z);
+    let point = vec4<f32>(destination, 1.0);
     for (var offset = 0u; offset < count; offset = offset + 1u) {
-        let index = first + 1u + offset;
-        let blocker = curtain_blockers[index];
-        let transform = blocker.world_to_local;
-        let plane = vec4<f32>(transform[0].z, transform[1].z, transform[2].z, transform[3].z);
-        let start_z = dot(plane, vec4<f32>(origin, 1.0));
-        let end_z = dot(plane, vec4<f32>(destination, 1.0));
-        // Same side, parallel, or on the sheet: no crossing. This also avoids division by zero.
-        if (start_z * end_z >= 0.0) {
+        let blocker = curtain_blockers[first + 1u + offset];
+        // Check the cloth side first; front-side receivers never need edge tests.
+        if (dot(blocker.planes[4], point) <= 0.0) {
             continue;
         }
-        let fraction = start_z / (start_z - end_z);
-        // Endpoints do not occlude themselves; use a physical epsilon rather than a fraction
-        // of the throw so a long throw still cannot leak through a thin curtain.
-        let length_metres = length(destination - origin);
-        if (min(fraction, 1.0 - fraction) * length_metres <= 0.0001) {
-            continue;
-        }
-        // Only a crossing needs the remaining transform; most curtain/light pairs reject above.
-        let crossing = (transform * vec4<f32>(mix(origin, destination, fraction), 1.0)).xy;
-        if (all(abs(crossing) <= blocker.half_size.xy)) {
+        if (dot(blocker.planes[0], point) >= 0.0
+            && dot(blocker.planes[1], point) >= 0.0
+            && dot(blocker.planes[2], point) >= 0.0
+            && dot(blocker.planes[3], point) >= 0.0) {
             return true;
         }
     }
@@ -106,6 +94,11 @@ fn shadow_lookup(light: Light, world: vec3<f32>, taps: bool) -> f32 {
     if (curtain_blocks_segment(light, world)) {
         return 0.0;
     }
+    return shadow_atlas_lookup(light, world, taps);
+}
+
+// Haze checks its precomputed curtain mask before calling the atlas-only path.
+fn shadow_atlas_lookup(light: Light, world: vec3<f32>, taps: bool) -> f32 {
     let index = light.shadow.x;
     if (index < 0.0) {
         return 1.0;
@@ -152,7 +145,7 @@ fn shadow_factor(light: Light, world: vec3<f32>) -> f32 {
 @group(0) @binding(3) var<storage, read> tile_lights: array<u32>;
 
 const TILE_SIZE: u32 = 16u;
-const MAX_LIGHTS_PER_TILE: u32 = 96u;
+const MAX_LIGHTS_PER_TILE: u32 = 256u;
 const PI: f32 = 3.14159265359;
 
 fn light_count() -> u32 {
@@ -168,6 +161,23 @@ fn tile_index_for(position: vec2<f32>) -> u32 {
     return tile.y * tiles_x() + tile.x;
 }
 
+// The compact tile list is exact until it overflows. Crowded tiles fall back to the full
+// light array; silently truncating a parallel append list changes which lamps survive each
+// frame, drawing flickering tile-sized squares. Keep ordinary tiles on the compact fast path.
+fn tile_light_count(tile: u32) -> u32 {
+    if (tile_counts[tile] > MAX_LIGHTS_PER_TILE) {
+        return light_count();
+    }
+    return tile_counts[tile];
+}
+
+fn tile_light_index(tile: u32, index: u32) -> u32 {
+    if (tile_counts[tile] > MAX_LIGHTS_PER_TILE) {
+        return index;
+    }
+    return tile_lights[tile * MAX_LIGHTS_PER_TILE + index];
+}
+
 // Inverse-square falloff normalised to a stage-sized reference throw, so a fixture six metres
 // from the floor produces a usable pool instead of a black one.
 const REFERENCE_THROW: f32 = 6.0;
@@ -175,6 +185,12 @@ const REFERENCE_THROW: f32 = 6.0;
 fn distance_attenuation(distance: f32) -> f32 {
     let ratio = distance / REFERENCE_THROW;
     return 1.0 / (1.0 + ratio * ratio);
+}
+
+// Range is a finite work bound, not a physical iris. Fade energy and its derivative to zero
+// before culling removes the light, so the bound cannot draw a hard circle on a receiver.
+fn range_envelope(distance: f32, reach: f32) -> f32 {
+    return 1.0 - smoothstep(reach * 0.8, reach, distance);
 }
 
 // Beam profile across the cone: flat through the inner cone, feathered to the field edge, with a

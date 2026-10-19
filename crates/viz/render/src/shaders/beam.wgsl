@@ -6,7 +6,9 @@
 // so the operator sees the aperture and the surface hit but no beam floating in the air.
 
 // In-scattering gain balanced against `LIGHT_POWER` so a beam and its floor pool agree.
-const SCATTER_GAIN: f32 = 0.03;
+// A single exit proxy now integrates the ray once. Twice the former per-face gain keeps
+// the established outside-camera opacity: two blends of (1-exp(-s)) equal 1-exp(-2s).
+const SCATTER_GAIN: f32 = 0.06;
 
 @group(1) @binding(0) var scene_depth: texture_depth_2d;
 @group(1) @binding(1) var haze_volume: texture_3d<f32>;
@@ -38,6 +40,10 @@ fn vertex_main(input: BeamVertexInput) -> BeamVertexOutput {
     let world = model * vec4<f32>(widened, 1.0);
     var output: BeamVertexOutput;
     output.clip_position = globals.view_projection * world;
+    // A wide cone's exit may lie beyond camera far while its near shaft is still visible.
+    // Retain that exit's XY coverage; the analytic integral already ends at scene/camera depth.
+    // This proxy pass has no depth test, so clamping only clip Z cannot hide scene geometry.
+    output.clip_position.z = min(output.clip_position.z, output.clip_position.w);
     output.colour = input.colour;
     output.params = input.params;
     return output;
@@ -183,6 +189,67 @@ fn haze_variation(position: vec3<f32>, cloudiness: f32, turbulence: f32, time: f
     return mix(1.0, shaped, cloudiness);
 }
 
+// Prefix masks avoid undefined shifts at 32 and encode every current tier (12..64 steps).
+fn step_prefix(count: u32) -> u32 {
+    if (count >= 32u) { return 0xffffffffu; }
+    return (1u << count) - 1u;
+}
+
+fn step_range(first: u32, end: u32) -> vec2<u32> {
+    return vec2<u32>(
+        step_prefix(min(end, 32u)) & ~step_prefix(min(first, 32u)),
+        step_prefix(u32(max(i32(end) - 32, 0)))
+            & ~step_prefix(u32(max(i32(first) - 32, 0))),
+    );
+}
+
+// Each curtain's convex shadow intersects a camera ray in one interval. Convert that interval
+// to sample bits once instead of repeating all curtain intersections at every march step.
+// Arbitrarily many curtains and overlaps OR into the same mask; none are truncated.
+fn curtain_blocked_steps(
+    light: Light, origin: vec3<f32>, direction: vec3<f32>,
+    first_sample: f32, segment: f32, steps: u32,
+) -> vec2<u32> {
+    var blocked = vec2<u32>(0u);
+    if (light.gate.w < 0.0 || globals.params4.w < 1.0) { return blocked; }
+    let first = u32(light.gate.w);
+    let count = u32(curtain_blockers[first].planes[4].z);
+    for (var offset = 0u; offset < count; offset = offset + 1u) {
+        let blocker = curtain_blockers[first + 1u + offset];
+        var entry = first_sample;
+        var exit = first_sample + f32(steps - 1u) * segment;
+        var hit = true;
+        for (var face = 0u; face < 5u; face = face + 1u) {
+            // Most view segments stay in front of the cloth. Reject those before edge planes.
+            let side = (face + 4u) % 5u;
+            let plane = blocker.planes[side];
+            let at_origin = dot(plane, vec4<f32>(origin, 1.0));
+            let slope = dot(plane.xyz, direction);
+            let at_entry = at_origin + slope * entry;
+            let at_exit = at_origin + slope * exit;
+            if ((at_entry < 0.0 && at_exit < 0.0)
+                || (side == 4u && at_entry <= 0.0 && at_exit <= 0.0)) {
+                hit = false;
+            } else if (at_entry < 0.0 || at_exit < 0.0) {
+                // Divide only when this plane actually clips the interval. Endpoint signs also
+                // handle arbitrarily shallow crossings without a parallel-ray epsilon leak.
+                let crossing = -at_origin / slope;
+                if (slope > 0.0) { entry = max(entry, crossing); }
+                else { exit = min(exit, crossing); }
+            }
+            if (!hit || entry > exit) { break; }
+        }
+        if (hit && entry <= exit) {
+            // Outward rounding is conservative at edges: no sample can slip through cloth
+            // because the interval intersection accumulated a floating point rounding error.
+            let begin = u32(clamp(ceil((entry - first_sample) / segment - 0.0001), 0.0, f32(steps)));
+            let end = u32(clamp(floor((exit - first_sample) / segment + 0.0001) + 1.0, 0.0, f32(steps)));
+            blocked |= step_range(begin, end);
+        }
+    }
+    return blocked;
+}
+
 @fragment
 fn fragment_main(input: BeamVertexOutput) -> @location(0) vec4<f32> {
     let density = globals.params.y;
@@ -250,8 +317,18 @@ fn fragment_main(input: BeamVertexOutput) -> @location(0) vec4<f32> {
     // Interleaved offset breaks up banding without a noise texture.
     let jitter = fract(sin(dot(input.clip_position.xy, vec2<f32>(12.9898, 78.233))) * 43758.5453);
     let reach = light.position_range.w + apex_offset;
+    // Future tiers above 64 keep the exact per-sample test rather than silently dropping bits.
+    let use_curtain_mask = steps <= 64u;
+    var blocked_steps = vec2<u32>(0u);
+    if (use_curtain_mask) {
+        blocked_steps = curtain_blocked_steps(light, origin, world_direction,
+            near + jitter * segment, segment, steps);
+    }
     var accumulated = 0.0;
     for (var step: u32 = 0u; step < steps; step = step + 1u) {
+        if (use_curtain_mask && (blocked_steps[step / 32u] & (1u << (step % 32u))) != 0u) {
+            continue;
+        }
         let t = near + (f32(step) + jitter) * segment;
         let sample_position = origin + world_direction * t;
         let offset = apex - sample_position;
@@ -266,14 +343,20 @@ fn fragment_main(input: BeamVertexOutput) -> @location(0) vec4<f32> {
         }
         // A shaft is only lit where the light actually reaches, so a truss standing in a beam
         // casts its shadow through the haze and not only onto the floor.
-        cone *= shadow_lookup(light, sample_position, false);
+        if (use_curtain_mask) {
+            cone *= shadow_atlas_lookup(light, sample_position, false);
+        } else {
+            cone *= shadow_lookup(light, sample_position, false);
+        }
         let local = haze_variation(
             sample_position,
             globals.params5.x,
             globals.params5.y,
             globals.params3.z,
         );
-        accumulated += cone * shaft_falloff(distance) * segment * local;
+        accumulated += cone * shaft_falloff(distance)
+            * range_envelope(length(sample_position - light.position_range.xyz), light.position_range.w)
+            * segment * local;
     }
     // A shaped density curve keeps a heavy hazer atmospheric instead of milky, while staying
     // monotonic: more fog output is always more visible beam.

@@ -3,9 +3,9 @@
 //! The square frustum encloses the circular field cone. Rejecting a rectangle requires all
 //! four corners to lie outside the same plane, so intersecting or enclosing cloth stays in.
 
-use crate::instances::{GpuCurtainBlocker, GpuLight};
+use crate::instances::{GpuCurtainBlocker, GpuCurtainShadow, GpuLight};
 use bytemuck::Zeroable;
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4};
 
 const PLANE_EPSILON: f32 = 0.001;
 
@@ -82,13 +82,53 @@ fn world_corners(blocker: &GpuCurtainBlocker) -> [Vec3; 4] {
     .map(|corner| local_to_world.transform_point3(corner))
 }
 
-/// Each light's gate.w addresses one header record followed by its candidate rectangles.
-/// The header has a zero matrix and half_size.z = candidate count. A gate of -1 means none.
+/// Project a finite rectangle from this lamp into its exact convex shadow volume.
+/// Constructing the planes in cloth-local space avoids subtracting large world positions when
+/// the lamp sits close to an edge. A lamp exactly on the cloth plane cannot cross that plane.
+fn shadow_volume(light: &GpuLight, blocker: &GpuCurtainBlocker) -> Option<GpuCurtainShadow> {
+    let transform = Mat4::from_cols_array_2d(&blocker.world_to_local);
+    let origin = transform.transform_point3(Vec3::from_slice(&light.position_range[..3]));
+    let [width, height, ..] = blocker.half_size;
+    if !origin.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+        || width < 0.0
+        || height < 0.0
+        || origin.z == 0.0
+    {
+        return None;
+    }
+    let side = origin.z.signum();
+    let distance = origin.z.abs();
+    let local = [
+        Vec4::new(-origin.z, 0.0, origin.x - width * side, width * distance),
+        Vec4::new(origin.z, 0.0, -origin.x - width * side, width * distance),
+        Vec4::new(0.0, -origin.z, origin.y - height * side, height * distance),
+        Vec4::new(0.0, origin.z, -origin.y - height * side, height * distance),
+        Vec4::new(0.0, 0.0, -side, 0.0),
+    ];
+    let to_world_plane = transform.transpose();
+    let planes = local.map(|plane| {
+        let world = to_world_plane * plane;
+        // A zero side plane is harmless and conservatively admits the boundary. In ordinary
+        // geometry all five normals are nonzero, including arbitrarily near-coplanar lamps.
+        let length = world.truncate().length();
+        if length > 0.0 {
+            (world / length).to_array()
+        } else {
+            [0.0; 4]
+        }
+    });
+    Some(GpuCurtainShadow { planes })
+}
+
+/// Each light's gate.w addresses one header followed by its projected shadow volumes.
+/// The header has planes[4][2] = candidate count. A gate of -1 means none.
 /// Offsets count 80-byte records, matching the shader's storage array indexing.
 pub(super) fn pack(
     lights: &mut [GpuLight],
     blockers: &[GpuCurtainBlocker],
-) -> Vec<GpuCurtainBlocker> {
+) -> Vec<GpuCurtainShadow> {
     let corners: Vec<_> = blockers.iter().map(world_corners).collect();
     let mut packed = Vec::new();
     for light in lights {
@@ -102,13 +142,16 @@ pub(super) fn pack(
             {
                 continue;
             }
+            let Some(shadow) = shadow_volume(light, blocker) else {
+                continue;
+            };
             if packed.len() == header_index {
-                packed.push(GpuCurtainBlocker::zeroed());
+                packed.push(GpuCurtainShadow::zeroed());
             }
-            packed.push(*blocker);
+            packed.push(shadow);
         }
         if packed.len() > header_index {
-            packed[header_index].half_size[2] = (packed.len() - header_index - 1) as f32;
+            packed[header_index].planes[4][2] = (packed.len() - header_index - 1) as f32;
             light.gate[3] = header_index as f32;
         }
     }
@@ -192,8 +235,11 @@ mod tests {
         let blocker = curtain(Vec3::new(0.0, 0.0, 4.0), [0.5, 0.5], Quat::IDENTITY);
         let packed = pack(&mut lights, &[blocker]);
         assert_eq!(packed.len(), 2);
-        assert_eq!(packed[0].half_size[2], 1.0);
-        assert_eq!(packed[1].world_to_local, blocker.world_to_local);
+        assert_eq!(packed[0].planes[4][2], 1.0);
+        assert_eq!(
+            packed[1].planes,
+            shadow_volume(&lights[0], &blocker).unwrap().planes
+        );
         assert_eq!(lights[0].gate[3], 0.0);
         assert_eq!(lights[1].gate[3], -1.0);
         assert!(pack(&mut lights, &[]).is_empty());
@@ -208,5 +254,76 @@ mod tests {
             lights[0].direction_cos_outer[3] = cosine;
             assert_eq!(pack(&mut lights, &[blocker]).len(), 2);
         }
+    }
+
+    fn projected_blocks(shadow: &GpuCurtainShadow, destination: Vec3) -> bool {
+        let point = destination.extend(1.0);
+        Vec4::from_array(shadow.planes[4]).dot(point) > 0.0
+            && shadow.planes[..4]
+                .iter()
+                .all(|plane| Vec4::from_array(*plane).dot(point) >= 0.0)
+    }
+
+    fn reference_blocks(light: &GpuLight, blocker: &GpuCurtainBlocker, destination: Vec3) -> bool {
+        let transform = Mat4::from_cols_array_2d(&blocker.world_to_local);
+        let start = transform.transform_point3(Vec3::from_slice(&light.position_range[..3]));
+        let end = transform.transform_point3(destination);
+        if start.z * end.z >= 0.0 {
+            return false;
+        }
+        let fraction = start.z / (start.z - end.z);
+        let crossing = start.lerp(end, fraction);
+        crossing.x.abs() <= blocker.half_size[0] && crossing.y.abs() <= blocker.half_size[1]
+    }
+
+    #[test]
+    fn projected_planes_match_finite_segment_intersections_for_posed_cloth() {
+        // Deterministic non-grid samples exercise both cloth sides, lamps beyond the cloth
+        // edges, and destinations inside the sheet, outside its opening and behind the lamp.
+        let mut seed = 0xa91e_683du32;
+        let mut random = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            ((seed >> 8) as f32 / 16777216.0) * 20.0 - 10.0
+        };
+        for rotation in [
+            Quat::IDENTITY,
+            Quat::from_euler(glam::EulerRot::XYZ, 0.6, 1.2, -0.4),
+        ] {
+            let blocker = curtain(Vec3::new(2.0, -1.0, 4.0), [1.7, 2.3], rotation);
+            for _ in 0..24 {
+                let mut light = light();
+                light.position_range[..3].copy_from_slice(&[random(), random(), random()]);
+                let shadow = shadow_volume(&light, &blocker).unwrap();
+                for _ in 0..512 {
+                    let destination = Vec3::new(random(), random(), random());
+                    assert_eq!(
+                        projected_blocks(&shadow, destination),
+                        reference_blocks(&light, &blocker, destination)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn handles_coplanar_near_coplanar_and_long_throw_lamps() {
+        let blocker = curtain(Vec3::ZERO, [1.0, 1.0], Quat::IDENTITY);
+        let mut light = light();
+        assert!(shadow_volume(&light, &blocker).is_none());
+        for z in [-1e-8, 1e-8, -1e5, 1e5] {
+            light.position_range[2] = z;
+            let shadow = shadow_volume(&light, &blocker).unwrap();
+            for point in [
+                Vec3::new(0.0, 0.0, -z),
+                Vec3::new(10.0, 0.0, -z),
+                Vec3::new(0.0, 0.0, z),
+            ] {
+                assert_eq!(
+                    projected_blocks(&shadow, point),
+                    reference_blocks(&light, &blocker, point)
+                );
+            }
+        }
+        assert_eq!(std::mem::size_of::<GpuCurtainShadow>(), 80);
     }
 }

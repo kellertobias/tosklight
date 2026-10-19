@@ -5,7 +5,9 @@ use wgpu::{Device, Extent3d, TextureDescriptor, TextureDimension, TextureUsages,
 pub const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 pub const TILE_SIZE: u32 = 16;
-pub const MAX_LIGHTS_PER_TILE: u32 = 96;
+// Keep typical full concert rigs on the compact path; overflow still evaluates every light.
+// At 3200x1800 this uses 23,142,400 bytes, within the renderer's storage-buffer limit.
+pub const MAX_LIGHTS_PER_TILE: u32 = 256;
 
 pub struct Targets {
     pub width: u32,
