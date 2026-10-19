@@ -7,6 +7,13 @@ use std::collections::BTreeMap;
 pub(crate) struct BeatSliceGrid {
     tracker: BeatTracker,
     layouts: BTreeMap<(usize, usize), (u32, f32)>,
+    rasters: BTreeMap<
+        (usize, usize),
+        (
+            media_domain::slice_grid::SliceGridTypography,
+            std::sync::Arc<media_domain::slice_grid::SliceTextAtlas>,
+        ),
+    >,
 }
 impl BeatSliceGrid {
     pub(crate) fn apply(
@@ -33,13 +40,24 @@ impl BeatSliceGrid {
                         layout.0 = (layout.0 + 1) % 1_000_000;
                         layout.1 = seconds;
                     }
-                    effect.text_mask = media_text::packed_line_mask(
-                        effect
-                            .text
-                            .as_deref()
-                            .unwrap_or(media_domain::slice_grid::DEFAULT_SLICE_TEXT),
-                    )
-                    .to_vec();
+                    let typography = effect.slice_typography();
+                    if self
+                        .rasters
+                        .get(&key)
+                        .is_none_or(|(stored, _)| stored != &typography)
+                    {
+                        self.rasters.insert(
+                            key,
+                            (
+                                typography.clone(),
+                                media_text::slice_text_atlas(&typography),
+                            ),
+                        );
+                    }
+                    effect.text_atlas = self
+                        .rasters
+                        .get(&key)
+                        .map(|(_, atlas)| std::sync::Arc::clone(atlas));
                     effect.parameters = parameters.as_array().to_vec();
                     effect.parameters.extend([
                         layout.0 as f32,
@@ -50,6 +68,7 @@ impl BeatSliceGrid {
             })
             .collect();
         self.layouts.retain(|key, _| active.contains(key));
+        self.rasters.retain(|key, _| active.contains(key));
         result
     }
 }
@@ -67,9 +86,21 @@ mod tests {
         assert_eq!(first[0].effects[0].parameters[4..], [1.0, 0.0]);
         let held = effect.apply(&layers, 0.25, 1.0.into());
         assert_eq!(held[0].effects[0].parameters[4..], [1.0, 1.0]);
+        assert!(
+            std::sync::Arc::ptr_eq(
+                first[0].effects[0].text_atlas.as_ref().unwrap(),
+                held[0].effects[0].text_atlas.as_ref().unwrap()
+            ),
+            "steady frames reuse the same CPU atlas"
+        );
         effect.apply(&layers, 0.5, 0.0.into());
         let second = effect.apply(&layers, 1.0, 1.0.into());
         assert_eq!(second[0].effects[0].parameters[4], 2.0);
         assert_eq!(layers[0].effects[0].parameters.len(), 4);
+        effect.apply(&[], 2.0, 0.0.into());
+        assert!(
+            effect.rasters.is_empty(),
+            "inactive layer atlases are released"
+        );
     }
 }

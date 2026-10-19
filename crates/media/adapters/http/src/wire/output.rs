@@ -703,6 +703,8 @@ pub struct UpdateLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_typography: Option<crate::wire::SliceGridTypographyView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_mix: Option<f32>,
@@ -819,7 +821,8 @@ impl UpdateLayer {
     }
 
     pub const fn changes_effect(&self) -> bool {
-        self.effect_text.is_some()
+        self.effect_typography.is_some()
+            || self.effect_text.is_some()
             || self.effect_type.is_some()
             || self.effect_enabled.is_some()
             || self.effect_mix.is_some()

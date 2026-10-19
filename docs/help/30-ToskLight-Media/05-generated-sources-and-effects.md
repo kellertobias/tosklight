@@ -12,6 +12,10 @@ A countdown comes in three kinds. **Countdown of a length** starts when the laye
 
 ## Generated visualizers
 
+Galaxy Simulator has been retired. Older configurations still open; their Galaxy assignments
+become unassigned and no Galaxy shader runs. All other source addresses stay unchanged, including
+Text Tracking at `250/027` and Black Hole at `250/028` in a fresh configuration.
+
 Generated visualizers occupy folders `250`–`255`. Each visualizer has a stable kind and only exposes parameters that affect that kind. Examples include spectra, waveforms, geometric motion, particles, rays, glitch treatments, digital rain, tunnels, landscapes, and nets.
 
 On the **Visualizers** page the picture above a visualizer's settings is live: the Media Server draws it from the stored settings and the audio it hears, so every change shows at once. Settings save as they change; there is no separate save step. A server that cannot draw the preview shows the visualizer kind's reference picture instead.
@@ -55,9 +59,7 @@ Values past 3 repeat the list. **Density** sets how many props fly, from 1 to 48
 
 A new Media Server configuration assigns Flying Props to `250/025`. A configuration saved before Flying Props shipped keeps its own visualizer assignments; add Flying Props to an empty slot on the **Visualizers** page.
 
-**Galaxy Simulator** draws a rotating spiral galaxy with orbiting stars. Each beat launches expanding supernova rings that fade over **Supernova lifetime**. **Supernovas per beat** sets the number of explosions; at zero, the galaxy keeps rotating without explosions. **Star density**, **Star size**, **Galaxy radius**, the two colours, Speed and Reactivity tune its appearance. New configurations assign it to `250/026`.
-
-**Text Tracking** turns your **Text** into a typed monospace screen with glyph tracking boxes, connecting lines, a red lock flash and a moving camera, inspired by [ff-tracking](https://github.com/mrsarac/ff-tracking). Its movement follows Pixel's audio and beat analysis. Text accepts up to 128 ASCII characters, including line breaks, using a bundled monospace font. **Columns**, **Typing speed**, **Letter spacing** and **Camera motion** tune the presentation. New configurations assign it to `250/027`. Existing configurations keep their own visualizer assignments; add either new kind to a free slot on the **Visualizers** page.
+**Text Tracking** turns your **Text** into a typed monospace screen with glyph tracking boxes, connecting lines, a red lock flash and a moving camera, inspired by [ff-tracking](https://github.com/mrsarac/ff-tracking). Its movement follows Pixel's audio and beat analysis. Text accepts up to 128 ASCII characters, including line breaks, using a bundled monospace font. **Columns**, **Typing speed**, **Letter spacing** and **Camera motion** tune the presentation. New configurations assign it to `250/027`. Existing configurations keep their own visualizer assignments; add the new kind to a free slot on the **Visualizers** page.
 
 **Black Hole** is a generated visualizer with a dark shadow, glowing photon ring, rotating
 accretion disc and a bent arc above the shadow. Each beat swells and brightens the ring and disc;
@@ -194,6 +196,17 @@ colour the lines; saturation **0** draws white lines whatever the hue. **Edge se
 how soft a contrast still counts as an edge: raise it for low-contrast footage, lower it to keep only
 strong shapes. The edge of a cut-out picture counts too, and its line stays visible over what is
 beneath the layer.
+
+**Beat Slice Grid** divides the layer image into rectangular slices and mixes them with text
+cells. Its cell boundaries change on the selected beat or instrument and settle between hits.
+Set **Text colour**, **Background colour**, and **Font** in the preset. The font must be available
+on the Pixel server; the editor reports the resolved font or fallback.
+
+Add up to eight text entries, each with up to 512 characters and 16 lines. Line breaks are kept,
+and text cells cycle through the entries across the grid. Each entry stays proportional and
+scales to fit inside its cell with padding, including while the cell changes size on a beat.
+Colours, font, and all entries belong to the preset, so both effect banks and later recalls use
+the same presentation. Older presets keep their existing text as the first entry.
 
 Outline can follow the music. **Beat depth** above **0** makes every beat the Media Server detects
 push Intensity toward **1** by that amount, and **Beat decay** is how many seconds it takes to fall

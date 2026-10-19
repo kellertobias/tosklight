@@ -25,7 +25,11 @@ export interface UpdateEffectLibrarySlot {
 	parameters?: number[];
 	beatSource?: string;
 	text?: string;
+	typography?: SliceGridTypographyView;
 	clear?: boolean;
 }
 
-import type { EffectPresetView } from "./generated/media-wire";
+import type {
+	EffectPresetView,
+	SliceGridTypographyView,
+} from "./generated/media-wire";

@@ -2,6 +2,16 @@
 
 These scenarios are the operator acceptance contract for the capability-gated Media operating surface and the authoritative Running overview.
 
+## PIXEL-019 — retiring Galaxy Simulator
+
+Galaxy Simulator is absent from the Visualizers chooser, built-in catalogue, previews and shader
+pipeline. A version 9 configuration containing a renamed or reassigned Galaxy source still opens:
+only entries whose kind is `galaxy-simulator` are removed, without moving any other source.
+An unrelated source at `250/026` is preserved. Fresh configurations leave `250/026` empty and
+retain Text Tracking at `250/027` and Black Hole at `250/028`. Loading preserves the original
+configuration file. A layer recalling a removed Galaxy address reports the normal missing-source
+state instead of running the retired effect.
+
 ## PIXEL-018 — Black Hole beat visualizer
 
 On **Visualizers**, add **Black Hole** to a free slot and enable preview. A dark central shadow is
@@ -16,15 +26,13 @@ and existing folder/file assignments remain intact. Inspect a representative fra
 from the automated render checks. The provenance record must identify any reused upstream
 material and its license; the original implementation ships no upstream material.
 
-## PIXEL-017 — beat slice grid, galaxy and tracked text
+## PIXEL-017 — beat slice grid and tracked text
 
-In Pixel's **Effects** library, assign **Beat Slice Grid** to a free slot and enter your own text. Preview it over a layer showing a picture or video. The output is divided into rectangular cells with stretched text and slices of that layer's current image. Change the grid controls and confirm both picture and text cells follow the resulting layout. Send several separate hits from the selected **React to** source: the cell boundaries change on each hit and settle between hits. Silence does not invent new layouts. At zero Effect Strength the original layer returns. Edit the words, recall the preset in the other effect bank, then restart Pixel: both banks retain the same words and settings. A configuration saved before this effect existed keeps its existing assignments, including any operator preset occupying the new default's slot.
-
-Create **Galaxy Simulator** on the **Visualizers** page and enable preview. A rotating spiral galaxy remains visible in silence. Each beat produces bright supernovas with expanding rings that fade over their configured lifetime. Change the supernova count, lifetime, colours and reactivity and confirm each changes the picture. Zero supernovas leaves the galaxy visible without explosions. A held beat flash creates one volley, and a later separate beat creates another.
+In Pixel's **Effects** library, assign **Beat Slice Grid** to a free slot and enter your own text. Preview it over a layer showing a picture or video. The output is divided into rectangular cells with proportionally fitted text and slices of that layer's current image. Change the grid controls and confirm both picture and text cells follow the resulting layout. Send several separate hits from the selected **React to** source: the cell boundaries change on each hit and settle between hits. Silence does not invent new layouts. At zero Effect Strength the original layer returns. Set a text colour and a different background colour, then choose a font installed on the Pixel server. Confirm the editor reports the selected font; an unavailable name must report its fallback. Add several text entries, including a long line, multiple lines, accented letters, and descenders. Confirm the entries appear across text cells, line breaks remain, and the entire text stays inside each cell without stretching or clipping as cells resize on beats. Check both a wide and a tall output. Edit the words, recall the preset in the other effect bank, then restart Pixel: both banks retain all entries, line breaks, colours, font, and settings. An older single-text preset opens with that text as its first entry. A configuration saved before this effect existed keeps its existing assignments, including any operator preset occupying the new default's slot.
 
 Create **Text Tracking**, enter a short phrase and enable preview. Readable glyphs appear with tracking boxes and links; the active target and lock flash follow the text, with moving-camera treatment inspired by ff-tracking. Change the text and the visualizer's settings and confirm the live preview and program output agree. Music changes the tracking animation; silence remains a valid rendered state. Save and restart: the custom text remains. Existing visualizers retain their folder/file addresses and settings.
 
-Repeat effect and visualizer recall through the normal layer controls and the patched console's effect-bank and visualizer parameter channels. Both paths must render the same configured preset. Capture representative program frames of all three; record visual acceptance separately from automated test results.
+Repeat effect and visualizer recall through the normal layer controls and the patched console's effect-bank and visualizer parameter channels. Both paths must render the same configured preset. Capture representative program frames of both; record visual acceptance separately from automated test results.
 
 ## MEDIA-005 — two effect banks and shared presets
 

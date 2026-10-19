@@ -45,7 +45,10 @@ pub use dmx::{
     DmxChannelGroupView, DmxChannelView, DmxIngressView, DmxMapView, DmxPersonalityView,
     DmxResolutionView, DmxValueSetView,
 };
-pub use effect::{EffectParameterView, EffectPresetView, EffectSlotView, UpdateEffectPreset};
+pub use effect::{
+    EffectParameterView, EffectPresetView, EffectSlotView, SliceGridTypographyView,
+    UpdateEffectPreset,
+};
 pub use health::{
     AddressView, Health, PRODUCT, RunningOutputView, RunningServerView, SourceStatusView,
 };

@@ -3979,6 +3979,7 @@ dependencies = [
  "http-body-util",
  "media-application",
  "media-domain",
+ "media-text",
  "mime_guess",
  "rust-embed",
  "serde",

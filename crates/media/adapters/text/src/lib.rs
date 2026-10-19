@@ -10,9 +10,9 @@
 //! source texture, so it is transformed, tinted, dimmed, and masked exactly like a video.
 
 mod fonts;
-mod packed;
 mod raster;
-pub use packed::{TextMask, packed_line_mask};
+mod slice_atlas;
+pub use slice_atlas::{slice_font_status, slice_text_atlas};
 
 pub use fonts::{FontError, Fonts};
 pub use raster::{Rendered, render_line};

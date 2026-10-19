@@ -2178,7 +2178,12 @@ fn beat_slice_grid_renders_authored_glyphs_music_layout_changes_and_exact_bypass
         let mut effect = EffectSlot::beat_slice_grid();
         effect.mix = mix;
         effect.parameters.extend([generation, 1.0]);
-        effect.text_mask = media_text::packed_line_mask(text).to_vec();
+        let typography = media_domain::slice_grid::SliceGridTypography {
+            texts: vec![text.to_owned()],
+            ..Default::default()
+        };
+        effect.text_atlas = Some(media_text::slice_text_atlas(&typography));
+        effect.typography = Some(typography);
         state.effects[0] = effect;
         state
     };
@@ -2219,4 +2224,103 @@ fn beat_slice_grid_renders_authored_glyphs_music_layout_changes_and_exact_bypass
         original.pixels, disabled.pixels,
         "zero mix restores the source exactly"
     );
+}
+
+#[test]
+fn slice_multiline_entries_fit_proportionally_with_authored_colours_and_font() {
+    let gpu = Gpu::off_screen().expect("a GPU adapter renders fitted multiline typography");
+    let size = Size::new(512, 256);
+    let mut renderer = OutputRenderer::off_screen(
+        &gpu,
+        OutputId::new(),
+        size,
+        PresentationMode::DisplaySynchronized,
+    )
+    .unwrap();
+    let source = SourceTexture::solid(&gpu, size, BLACK).unwrap();
+    let mut effect = EffectSlot::beat_slice_grid();
+    effect.parameters = vec![2.0, 1.0, 0.0, 1.0];
+    let typography = media_domain::slice_grid::SliceGridTypography {
+        texts: vec!["WWWW".into(), "W\nW".into()],
+        font: "serif".into(),
+        text_color: [0, 255, 0],
+        background_color: [0, 0, 255],
+    };
+    effect.text_atlas = Some(media_text::slice_text_atlas(&typography));
+    effect.typography = Some(typography.clone());
+    let mut state = ready(LayerState::default());
+    state.effects[0] = effect;
+    let render = |renderer: &mut OutputRenderer, state: &LayerState| {
+        renderer.present(
+            &[LayerDraw {
+                state,
+                source: &source,
+                mask: None,
+            }],
+            &MasterState::default(),
+            None,
+            Timestamp::ZERO,
+            None,
+        );
+        renderer.read_image()
+    };
+    let first = render(&mut renderer, &state);
+    let bounds = |panel: u32| {
+        let mut b = (512, 256, 0, 0);
+        let mut count = 0;
+        for y in 0..256 {
+            for x in panel * 256..(panel + 1) * 256 {
+                let p = ((y * 512 + x) * 4) as usize;
+                if first[p + 1] > 200 && first[p + 2] < 30 {
+                    b.0 = b.0.min(x);
+                    b.1 = b.1.min(y);
+                    b.2 = b.2.max(x);
+                    b.3 = b.3.max(y);
+                    count += 1;
+                }
+            }
+        }
+        assert!(count > 100);
+        assert!(
+            b.0 > panel * 256 + 8 && b.2 < (panel + 1) * 256 - 8 && b.1 > 8 && b.3 < 248,
+            "all ink fits with padding"
+        );
+        (b.2 - b.0 + 1, b.3 - b.1 + 1)
+    };
+    let wide = bounds(0);
+    let multiline = bounds(1);
+    assert!(
+        wide.0 > wide.1 * 3,
+        "wide text retains its natural proportions"
+    );
+    assert!(
+        multiline.1 > multiline.0,
+        "multiline text is genuinely stacked, not squashed"
+    );
+    assert!(
+        first
+            .chunks_exact(4)
+            .filter(|p| p[2] > 250 && p[1] < 2)
+            .count()
+            > 20_000,
+        "authored background colour fills text cells"
+    );
+    let mut changed = typography;
+    changed.font = "monospace".into();
+    state.effects[0].text_atlas = Some(media_text::slice_text_atlas(&changed));
+    state.effects[0].typography = Some(changed);
+    let second = render(&mut renderer, &state);
+    if media_text::slice_font_status("serif").starts_with("Using ")
+        && media_text::slice_font_status("monospace").starts_with("Using ")
+    {
+        assert!(
+            first
+                .chunks_exact(4)
+                .zip(second.chunks_exact(4))
+                .filter(|(a, b)| a != b)
+                .count()
+                > 500,
+            "available font choices change rendered glyphs"
+        );
+    }
 }

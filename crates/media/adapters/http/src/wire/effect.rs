@@ -17,6 +17,35 @@ use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
+pub struct SliceGridTypographyView {
+    pub texts: Vec<String>,
+    pub font: String,
+    pub text_color: [u8; 3],
+    pub background_color: [u8; 3],
+}
+impl From<media_domain::slice_grid::SliceGridTypography> for SliceGridTypographyView {
+    fn from(value: media_domain::slice_grid::SliceGridTypography) -> Self {
+        Self {
+            texts: value.texts,
+            font: value.font,
+            text_color: value.text_color,
+            background_color: value.background_color,
+        }
+    }
+}
+impl From<SliceGridTypographyView> for media_domain::slice_grid::SliceGridTypography {
+    fn from(value: SliceGridTypographyView) -> Self {
+        Self {
+            texts: value.texts,
+            font: value.font,
+            text_color: value.text_color,
+            background_color: value.background_color,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase")]
 pub struct EffectParameterView {
     pub id: String,
     pub label: String,
@@ -33,6 +62,10 @@ pub struct EffectParameterView {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectSlotView {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typography: Option<SliceGridTypographyView>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     pub index: usize,
@@ -71,6 +104,8 @@ impl EffectPresetView {
 #[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateEffectPreset {
+    #[serde(default)]
+    pub typography: Option<SliceGridTypographyView>,
     #[serde(default)]
     pub text: Option<String>,
     pub request_id: String,
@@ -121,6 +156,10 @@ impl EffectSlotView {
         Self {
             index,
             text: effect.text.clone(),
+            typography: (effect_type == Some(media_domain::BEAT_SLICE_GRID_EFFECT))
+                .then(|| effect.slice_typography().into()),
+            font_status: (effect_type == Some(media_domain::BEAT_SLICE_GRID_EFFECT))
+                .then(|| media_text::slice_font_status(&effect.slice_typography().font)),
             effect_type: effect.effect_type.clone(),
             label: rendered
                 .unwrap_or_else(|| effect_type.unwrap_or("None"))
@@ -276,7 +315,8 @@ mod tests {
     fn an_unknown_persisted_effect_reports_an_actionable_capability_error() {
         let effect = EffectSlot {
             text: None,
-            text_mask: Vec::new(),
+            text_atlas: None,
+            typography: None,
             effect_type: Some("future-effect".to_owned()),
             enabled: true,
             mix: 1.0,

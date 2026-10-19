@@ -811,12 +811,14 @@ impl AnalogTvParameters {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EffectSlot {
-    /// Optional authored typography. Missing in older shows and all non-text effects.
+    /// Legacy single text, used as the first entry when authored typography is absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// Runtime-only glyph mask; regenerated from authored text and never stored.
     #[serde(skip)]
-    pub text_mask: Vec<[u32; 4]>,
+    pub text_atlas: Option<std::sync::Arc<crate::slice_grid::SliceTextAtlas>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typography: Option<crate::slice_grid::SliceGridTypography>,
     /// A stable typed-effect identifier. Unknown future values remain preserved in stored shows
     /// and are reported as unsupported instead of being silently discarded.
     pub effect_type: Option<String>,
@@ -848,7 +850,8 @@ impl EffectSlot {
     fn typed(effect_type: &str, parameters: Vec<f32>) -> Self {
         Self {
             text: None,
-            text_mask: Vec::new(),
+            text_atlas: None,
+            typography: None,
             effect_type: Some(effect_type.to_owned()),
             enabled: true,
             seed: 0,
@@ -1011,7 +1014,7 @@ impl EffectSlot {
         if let Some(text) = &mut self.text {
             *text = text
                 .chars()
-                .filter(|c| !c.is_control())
+                .filter(|c| !c.is_control() || *c == '\n')
                 .take(crate::slice_grid::MAX_SLICE_TEXT_CHARS)
                 .collect();
         }
