@@ -133,8 +133,11 @@ fn shared_axis_fit_reuse_requires_every_peers_same_accepted_memo() {
         let mut candidate = previous.clone();
         match mode {
             0 => {}
-            1 => candidate[1].instances[0].fit_memo = None,
-            2 => candidate[1].instances[0].fit_memo = Some(Arc::clone(independently_accepted)),
+            1 => Arc::make_mut(&mut candidate[1].instances)[0].fit_memo = None,
+            2 => {
+                Arc::make_mut(&mut candidate[1].instances)[0].fit_memo =
+                    Some(Arc::clone(independently_accepted))
+            }
             _ => unreachable!(),
         }
         let requests = (0..2)

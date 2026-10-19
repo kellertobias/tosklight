@@ -529,7 +529,7 @@ impl SuppressedDesk {
                         "a fresh lane can only accept an actually observed parked baseline",
                     );
                     assert!(row.quality.held);
-                    for instance in &accepted.instances {
+                    for instance in accepted.instances.iter() {
                         for &(index, _, captured_raw, accepted_raw) in &instance.controls {
                             assert_eq!(
                                 accepted_raw, captured_raw,

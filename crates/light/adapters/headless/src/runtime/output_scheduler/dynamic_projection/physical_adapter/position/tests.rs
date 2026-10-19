@@ -964,6 +964,18 @@ fn accept_angles(rig: &Rig, value: AttributeValue) -> PositionContinuity {
         .unwrap()
 }
 
+/// TL-842: every frame reads a head's committed Position continuity several times (Current
+/// cohorts, cut peers, each composed program). Reading shares the committed instances.
+#[test]
+fn committed_position_continuity_is_read_without_copying_its_instances() {
+    let rig = Rig::single();
+    let accepted = accept_angles(&rig, angles(450., 30.));
+    assert!(!accepted.instances.is_empty());
+    let again = accepted.clone();
+    assert!(Arc::ptr_eq(&accepted.instances, &again.instances));
+    assert_eq!(accepted, again);
+}
+
 #[test]
 fn fresh_native_edit_invalidates_accepted_branch_and_hold_never_replays_old_motor_commands() {
     let rig = Rig::single();

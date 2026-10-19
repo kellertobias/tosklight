@@ -58,7 +58,8 @@ struct PositionScratch {
 }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(in crate::runtime) struct PositionContinuity {
-    pub instances: Vec<PositionInstanceContinuity>,
+    /// Shared: every frame reads a head's committed continuity several times.
+    pub instances: Arc<Vec<PositionInstanceContinuity>>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::runtime) struct PositionInstanceContinuity {
@@ -954,22 +955,20 @@ fn publish_fitted_instance(
                 raw,
             ));
         }
-        resolved
-            .continuity
-            .instances
-            .push(PositionInstanceContinuity {
-                destination: fitted.instance.destination,
-                compatibility: fitted.instance.compatibility,
-                joints: fitted
-                    .instance
-                    .model
-                    .axes()
-                    .iter()
-                    .map(|a| (a.node_id, fitted.achieved_axes[a.command_index]))
-                    .collect(),
-                controls,
-                fit_memo: fitted.memo.clone(),
-            });
+        // A resolution builds its own instances; nothing else holds them yet.
+        Arc::make_mut(&mut resolved.continuity.instances).push(PositionInstanceContinuity {
+            destination: fitted.instance.destination,
+            compatibility: fitted.instance.compatibility,
+            joints: fitted
+                .instance
+                .model
+                .axes()
+                .iter()
+                .map(|a| (a.node_id, fitted.achieved_axes[a.command_index]))
+                .collect(),
+            controls,
+            fit_memo: fitted.memo.clone(),
+        });
     }
 }
 impl PhysicalFamilyAdapter for PositionAdapter {
