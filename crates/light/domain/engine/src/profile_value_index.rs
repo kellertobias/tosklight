@@ -81,18 +81,22 @@ impl<'a> ProfileValueIndex<'a> {
         attribute: &AttributeKey,
     ) -> Option<&'a AttributeValue> {
         match self {
-            Self::Dense { frame, .. } => frame
-                .overflow(fixture_id)
-                .iter()
-                .rev()
-                .find(|(candidate, _)| candidate == attribute)
-                .map(|(_, winner)| &winner.value)
-                .or_else(|| {
-                    frame
-                        .slots()
-                        .slot(fixture_id, attribute)
-                        .and_then(|slot| frame.value(slot))
-                }),
+            Self::Dense { frame, .. } => {
+                #[cfg(test)]
+                NAMED_HEAD_READS.with(|reads| reads.set(reads.get().map(|count| count + 1)));
+                frame
+                    .overflow(fixture_id)
+                    .iter()
+                    .rev()
+                    .find(|(candidate, _)| candidate == attribute)
+                    .map(|(_, winner)| &winner.value)
+                    .or_else(|| {
+                        frame
+                            .slots()
+                            .slot(fixture_id, attribute)
+                            .and_then(|slot| frame.value(slot))
+                    })
+            }
             Self::Scanned { values, .. } => values
                 .get(&fixture_id)?
                 .iter()
@@ -243,6 +247,24 @@ pub(crate) struct HeadRead<'a> {
 pub(crate) struct HeadCommon<'a> {
     pub(crate) intensity: Option<&'a AttributeValue>,
     pub(crate) color: Option<&'a AttributeValue>,
+}
+
+// Counts the head reads that hash an attribute name into a numbered frame, so a test can prove a
+// render path reads through the patch's compiled channel addresses instead.
+#[cfg(test)]
+thread_local! {
+    static NAMED_HEAD_READS: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// Runs `work` and reports how many numbered-frame head reads it made by attribute name.
+#[cfg(test)]
+pub(crate) fn count_named_head_reads<T>(work: impl FnOnce() -> T) -> (T, usize) {
+    NAMED_HEAD_READS.with(|reads| reads.set(Some(0)));
+    let result = work();
+    let count = NAMED_HEAD_READS
+        .with(|reads| reads.take())
+        .unwrap_or_default();
+    (result, count)
 }
 
 #[cfg(test)]

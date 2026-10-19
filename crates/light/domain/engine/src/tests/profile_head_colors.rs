@@ -242,3 +242,61 @@ fn every_sunstrip_pixel_renders_its_own_additive_colour() {
         );
     }
 }
+
+/// A head asked for an XYZ colour resolves its channels outside the overlay-free fast path. Those
+/// channels still read the frame through the addresses the patch compiled, never by hashing an
+/// attribute name per channel per frame, and the output stays what the named reads produced.
+#[test]
+fn colour_heads_read_their_channels_through_compiled_addresses() {
+    let profile = shipped_sunstrip();
+    let mode = &profile.modes[0];
+    let (mut fixture, _) = fixture();
+    fixture.definition = profile.resolved_definition(mode.id).unwrap();
+    fixture.logical_heads = mode
+        .heads
+        .iter()
+        .enumerate()
+        .filter(|(_, head)| !head.master_shared)
+        .map(|(index, head)| PatchedHead {
+            profile_head_id: Some(head.id),
+            head_index: index as u16,
+            fixture_id: FixtureId::new(),
+        })
+        .collect();
+    let programmers = ProgrammerRegistry::default();
+    let session = SessionId::new();
+    programmers.start(session);
+    for (index, head) in fixture.logical_heads.iter().enumerate() {
+        programmers.set(
+            session,
+            head.fixture_id,
+            AttributeKey::intensity(),
+            AttributeValue::Normalized(0.5 + index as f32 * 0.05),
+        );
+        programmers.set(
+            session,
+            head.fixture_id,
+            AttributeKey("color".into()),
+            AttributeValue::ColorXyz(light_fixture::srgb_to_xyz(1.0, index as f32 / 10.0, 0.25)),
+        );
+    }
+    let engine = Engine::new(programmers);
+    engine
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![fixture].into(),
+            ..Default::default()
+        })
+        .unwrap();
+    let (rendered, named) = crate::profile_value_index::count_named_head_reads(|| {
+        engine.render(RenderOptions::default()).unwrap()
+    });
+    assert_eq!(named, 0, "colour head channels hashed attribute names");
+    let lit = rendered.universes[&1][..30]
+        .iter()
+        .filter(|value| **value > 0)
+        .count();
+    assert!(
+        lit >= 20,
+        "the colour heads rendered dark: {lit} of 30 channels lit"
+    );
+}

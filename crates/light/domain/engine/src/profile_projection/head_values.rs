@@ -7,7 +7,7 @@
 //! name wins over a numbered one, the later of two unnumbered values wins), and keep only what a
 //! head writes itself: overlays, safe values, a requested colour's channels.
 use crate::ProfileValueIndex;
-use crate::profile_value_index::HeadRead;
+use crate::profile_value_index::{HeadCommon, HeadRead};
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 
 /// A head's own writes, by name; `None` removes the frame's value of that name.
@@ -82,6 +82,8 @@ impl LocalValues {
 /// The values of one head: its own writes over the frame's row of its fixture.
 pub(crate) struct HeadValueView<'v, 'a> {
     base: Option<(&'v ProfileValueIndex<'a>, HeadRead<'a>)>,
+    /// The frame's colour and level for the head, found from its row once, not by name.
+    common: Option<HeadCommon<'a>>,
     local: LocalValues,
 }
 
@@ -90,6 +92,7 @@ impl<'v, 'a> HeadValueView<'v, 'a> {
     pub(crate) fn over(values: &'v ProfileValueIndex<'a>, owner: FixtureId) -> Self {
         Self {
             base: Some((values, values.head_read(owner))),
+            common: Some(values.common(owner)),
             local: LocalValues::default(),
         }
     }
@@ -98,6 +101,7 @@ impl<'v, 'a> HeadValueView<'v, 'a> {
     pub(crate) fn local() -> Self {
         Self {
             base: None,
+            common: None,
             local: LocalValues::default(),
         }
     }
@@ -108,6 +112,44 @@ impl<'v, 'a> HeadValueView<'v, 'a> {
             None => self
                 .base
                 .and_then(|(values, read)| values.head_value(read.owner, attribute)),
+        }
+    }
+
+    /// One of a channel's attributes: the head's own write first, then the frame through the
+    /// address the patch compiled for that channel, as `get` would answer by name.
+    pub(crate) fn channel_value(
+        &self,
+        channel_index: usize,
+        which: light_fixture::ChannelAttribute,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
+        match self.local.get(attribute) {
+            Some(local) => local.as_ref(),
+            None => self
+                .base
+                .and_then(|(values, read)| values.value_at(read, channel_index, which, attribute)),
+        }
+    }
+
+    /// `get(intensity)`, read from the head's row unless unnumbered values could shadow it.
+    pub(crate) fn intensity(&self) -> Option<&AttributeValue> {
+        self.common_value(AttributeKey::intensity_ref(), |common| common.intensity)
+    }
+
+    /// `get(color)`, read from the head's row unless unnumbered values could shadow it.
+    pub(crate) fn color(&self) -> Option<&AttributeValue> {
+        self.common_value(AttributeKey::color_ref(), |common| common.color)
+    }
+
+    fn common_value(
+        &self,
+        attribute: &AttributeKey,
+        pick: impl FnOnce(HeadCommon<'a>) -> Option<&'a AttributeValue>,
+    ) -> Option<&AttributeValue> {
+        match (self.local.get(attribute), self.base, self.common) {
+            (Some(local), _, _) => local.as_ref(),
+            (None, Some((_, read)), Some(common)) if !read.overflowed => pick(common),
+            (None, _, _) => self.get(attribute),
         }
     }
 
@@ -172,3 +214,6 @@ impl HeadValueStore for HeadValueView<'_, '_> {
         self.insert(attribute, value);
     }
 }
+
+#[cfg(test)]
+mod tests;

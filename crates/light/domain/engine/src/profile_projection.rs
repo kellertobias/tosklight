@@ -711,18 +711,16 @@ fn apply_hazardous_blackout(
 fn virtual_intensity(inputs: &ProfileHeadInputs<'_, '_>, default: f32) -> f32 {
     inputs
         .values
-        .get(AttributeKey::intensity_ref())
+        .intensity()
         .and_then(AttributeValue::normalized)
         .unwrap_or(default)
 }
 
 fn requested_color(values: &HeadValueView<'_, '_>) -> Option<Xyz> {
-    values
-        .get(AttributeKey::color_ref())
-        .and_then(|value| match value {
-            AttributeValue::ColorXyz(color) => Some(*color),
-            _ => None,
-        })
+    values.color().and_then(|value| match value {
+        AttributeValue::ColorXyz(color) => Some(*color),
+        _ => None,
+    })
 }
 
 fn resolve_requested_color(
@@ -745,14 +743,28 @@ fn resolve_requested_color(
     }
     .map_err(|error| EngineError::Invalid(error.to_string()))?;
     for (channel_id, raw) in resolved {
-        let Some(channel) = mode
+        let Some((channel_index, channel)) = mode
             .channels
             .iter()
-            .find(|channel| channel.id == channel_id)
+            .enumerate()
+            .find(|(_, channel)| channel.id == channel_id)
         else {
             continue;
         };
-        if inputs.values.contains_key(&channel.attribute) {
+        // The patch compiled addresses only for this head's own channels.
+        let present = if channel.head_id == inputs.head_id {
+            inputs
+                .values
+                .channel_value(
+                    channel_index,
+                    ChannelAttribute::Canonical,
+                    &channel.attribute,
+                )
+                .is_some()
+        } else {
+            inputs.values.contains_key(&channel.attribute)
+        };
+        if present {
             continue;
         }
         if channel.behavior != light_fixture::ChannelBehavior::Static
@@ -829,7 +841,7 @@ fn resolve_channels(
         };
         let resolved = context.resolution.resolve_channel_with(
             *channel_index,
-            |_, attribute| inputs.value(attribute),
+            |which, attribute| inputs.value(*channel_index, which, attribute),
             inputs.legacy_raw_highlight(),
             context
                 .fixture
@@ -877,9 +889,14 @@ enum ChannelInputs<'i, 'a> {
 }
 
 impl ChannelInputs<'_, '_> {
-    fn value(&self, attribute: &AttributeKey) -> Option<&AttributeValue> {
+    fn value(
+        &self,
+        channel_index: usize,
+        which: ChannelAttribute,
+        attribute: &AttributeKey,
+    ) -> Option<&AttributeValue> {
         match self {
-            Self::Head(inputs) => inputs.values.get(attribute),
+            Self::Head(inputs) => inputs.values.channel_value(channel_index, which, attribute),
             Self::Native(native) => native.value(attribute),
         }
     }
