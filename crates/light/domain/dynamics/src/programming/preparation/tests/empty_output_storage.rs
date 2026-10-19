@@ -1,26 +1,31 @@
 use super::*;
 
 #[test]
-fn drained_append_one_reuses_storage_before_retirement_is_freed() {
+fn retained_groups_rewrite_their_storage_in_place() {
     let mut scratch = DynamicFamilyPreparationScratch::default();
     let sources = Sources::default();
     let mut input = sample(1, color(ColorComponent::Red, 0.2));
     prepare_dynamic_family_samples(&[input.clone()], &sources, None, &mut scratch).unwrap();
     let pointer = scratch.families[0].samples.as_ptr();
-    let capacity = scratch.families[0].samples.capacity();
-    assert!(capacity > 0);
-    let mut moved = Vec::new();
-    moved.append(&mut scratch.prepared_for_drain().families[0].samples);
     input.expression = color(ColorComponent::Red, 0.8);
     input.priority += 1;
-    prepare_dynamic_family_samples(&[input], &sources, None, &mut scratch).unwrap();
+    let fresh = prepare_dynamic_family_samples(
+        &[input.clone()],
+        &sources,
+        None,
+        &mut DynamicFamilyPreparationScratch::default(),
+    )
+    .map(preparation_snapshot)
+    .unwrap();
+    let retained = prepare_dynamic_family_samples(&[input], &sources, None, &mut scratch)
+        .map(preparation_snapshot)
+        .unwrap();
+    assert_eq!(retained, fresh);
     assert_eq!(
         scratch.families[0].samples.as_ptr(),
         pointer,
-        "reuse the drained buffer while retirement still owns every non-reused buffer"
+        "an unchanged layout keeps its group storage (TL-842 C4)"
     );
-    assert_eq!(scratch.families[0].samples.capacity(), capacity);
-    assert_eq!(moved.len(), 1);
 }
 
 fn drain(scratch: &mut DynamicFamilyPreparationScratch) -> Vec<FamilyCompositionSample> {
@@ -105,61 +110,7 @@ fn drained_and_borrowed_outputs_match_values_traces_source_calls_and_chunk_repla
 }
 
 #[test]
-fn reuse_skips_nonempty_output_and_preserves_legacy_retirement_and_append_vec_move() {
-    let mut scratch = DynamicFamilyPreparationScratch::default();
-    prepare_dynamic_family_samples(
-        &inputs(0),
-        &Sources {
-            tilt: Some(40.),
-            ..Default::default()
-        },
-        None,
-        &mut scratch,
-    )
-    .unwrap();
-    let empty_pointer = scratch.families[0].samples.as_ptr();
-    scratch.families[0].samples.clear();
-    let retained = scratch.families[1].samples.as_ptr();
-    let retained_len = scratch.families[1].samples.len();
-    let mut incoming = vec![scratch.families[1].samples[0].clone()];
-    incoming.reserve(10);
-    let incoming_pointer = incoming.as_ptr();
-    let leaf = incoming[0].clone();
-    // The search must skip a live payload before reaching the empty storage.
-    scratch.families.swap(0, 1);
-    scratch.clear_output();
-    let mut out = FamilyOutput {
-        families: &mut scratch.families,
-        family_indices: &mut scratch.family_indices,
-        legacy: &mut scratch.legacy,
-        requirements: &mut scratch.requirements,
-        drained_storage: scratch.retired_output.families.iter_mut(),
-    };
-    let target = FixtureId(Uuid::from_u128(999));
-    out.append(target, ProgrammingOwner::Color, incoming);
-    out.append_one(
-        FixtureId(Uuid::from_u128(998)),
-        ProgrammingOwner::Color,
-        leaf,
-    );
-    assert_eq!(scratch.families[0].samples.as_ptr(), incoming_pointer);
-    assert_eq!(scratch.families[1].samples.as_ptr(), empty_pointer);
-    assert_eq!(
-        scratch.retired_output.families[0].samples.as_ptr(),
-        retained
-    );
-    assert_eq!(
-        scratch.retired_output.families[0].samples.len(),
-        retained_len
-    );
-    assert_eq!(scratch.retired_output.legacy.len(), 1);
-    let retired = scratch.take_retired();
-    assert_eq!(retired.1.families[0].samples.len(), retained_len);
-    assert_eq!(retired.1.legacy.len(), 1);
-}
-
-#[test]
-fn nonempty_payload_lives_until_retirement_drop_but_empty_buffer_is_reused() {
+fn unwritten_groups_and_samples_are_dropped_when_the_frame_finishes() {
     let input = sample(1, color(ColorComponent::Red, 0.2));
     let address = Arc::new(
         CompiledDynamicValueAddress::new(
@@ -173,7 +124,7 @@ fn nonempty_payload_lives_until_retirement_drop_but_empty_buffer_is_reused() {
         .unwrap(),
     );
     let weak = Arc::downgrade(&address);
-    let retained = FamilySample::new(
+    let stale = FamilySample::new(
         address,
         DynamicValue::Family(AttributeValue::Normalized(0.4)),
         rank(&input),
@@ -183,23 +134,22 @@ fn nonempty_payload_lives_until_retirement_drop_but_empty_buffer_is_reused() {
     let mut scratch = DynamicFamilyPreparationScratch::default();
     prepare_dynamic_family_samples(&[input.clone()], &Sources::default(), None, &mut scratch)
         .unwrap();
-    let pointer = scratch.families[0].samples.as_ptr();
-    drop(drain(&mut scratch));
+    // Last frame's sample beyond what this frame writes, and a group this frame does not write.
+    scratch.families[0].samples.push(stale.clone().into());
     scratch.families.push(DynamicFamilySampleGroup {
-        target: input.target,
+        target: FixtureId(Uuid::from_u128(77)),
         owner: ProgrammingOwner::Focus,
-        samples: vec![retained.into()],
+        samples: vec![stale.into()],
     });
-    prepare_dynamic_family_samples(&[input], &Sources::default(), None, &mut scratch).unwrap();
-    assert_eq!(scratch.families[0].samples.as_ptr(), pointer);
-    assert!(weak.upgrade().is_some());
-    let retirement = scratch.take_retired();
-    assert!(weak.upgrade().is_some());
-    drop(retirement);
+    let prepared =
+        prepare_dynamic_family_samples(&[input], &Sources::default(), None, &mut scratch).unwrap();
+    assert_eq!(prepared.families.len(), 1);
+    assert_eq!(prepared.families[0].samples.len(), 1);
     assert!(
         weak.upgrade().is_none(),
-        "nonempty samples retain exactly the existing retirement lifetime"
+        "unwritten samples must not outlive the frame that dropped them"
     );
+    assert_eq!(scratch.family_indices.len(), 1);
 }
 
 #[test]
@@ -231,7 +181,6 @@ fn failed_preparation_double_clear_and_retry_match_borrowed_reference() {
             }
             let retired = reused.take_retired();
             let reference_retired = borrowed.take_retired();
-            assert_eq!(retired.1.families.len(), reference_retired.1.families.len());
             assert_eq!(retired.1.legacy.len(), reference_retired.1.legacy.len());
             assert_eq!(
                 prepare_observed(&inputs(2), &[], &mut reused, chunks, false),

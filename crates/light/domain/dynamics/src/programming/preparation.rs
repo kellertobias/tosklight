@@ -84,17 +84,21 @@ pub struct DynamicFamilyPreparationScratch {
     /// Last frame's compiled samples this preparation did not reuse (TL-639 round 6), for the
     /// caller to free off the frame's thread ([`Self::take_retired`]).
     retired: HashMap<CacheKey, CompiledSample>,
-    /// Last frame's output, cleared by this preparation (TL-639 round 7), freed the same way.
+    /// Samples written to each retained group this frame, and whether a group was created
+    /// (TL-842 C4): groups and their order persist, so only changes restore the order.
+    family_cursors: Vec<usize>,
+    families_created: bool,
+    /// Last frame's legacy fragments, cleared by this preparation (TL-639 round 7), freed
+    /// the same way.
     retired_output: RetiredOutput,
     /// Materialized leaf provenance shared with the next frame (TL-842 C2).
     provenance: super::composition::LeafProvenanceCache,
 }
 
-/// A cleared preparation output: its groups (with their samples) and legacy fragments.
+/// A cleared preparation output's legacy fragments.
 #[derive(Default)]
 #[allow(dead_code)] // held only to be dropped
 struct RetiredOutput {
-    families: Vec<DynamicFamilySampleGroup>,
     legacy: Vec<DynamicRuntimeSample>,
 }
 
@@ -117,6 +121,9 @@ impl DynamicFamilyPreparationScratch {
     /// Drop retained compiled sources at a show/dependency boundary.
     pub fn clear(&mut self) {
         self.clear_output();
+        self.families.clear();
+        self.family_indices.clear();
+        self.family_cursors.clear();
         self.cache.clear();
         self.provenance.clear();
         self.controller.clear();
@@ -130,13 +137,44 @@ impl DynamicFamilyPreparationScratch {
     /// output starts in buffers sized like the last one. Vacant append-one groups may take
     /// empty drained sample buffers from this retirement before it is freed.
     fn clear_output(&mut self) {
-        let (groups, fragments) = (self.families.len(), self.legacy.len());
-        let families = std::mem::replace(&mut self.families, Vec::with_capacity(groups));
+        let fragments = self.legacy.len();
         let legacy = std::mem::replace(&mut self.legacy, Vec::with_capacity(fragments));
-        self.retired_output = RetiredOutput { families, legacy };
-        self.family_indices.clear();
+        self.retired_output = RetiredOutput { legacy };
+        // TL-842 C4: groups stay in place; this frame rewrites each from its first slot.
+        self.family_cursors.clear();
+        self.family_cursors.resize(self.families.len(), 0);
+        self.families_created = false;
         self.requirements.clear();
         self.sampling_requirements.clear();
+    }
+
+    /// Trim every group to what this frame wrote, drop groups it did not write, and restore
+    /// the `family_order` and index only when the set of groups changed. The output then
+    /// equals a fresh preparation's: the same groups, samples and order.
+    pub(super) fn finish_families(&mut self, sort: impl FnOnce(&mut [DynamicFamilySampleGroup])) {
+        for (group, &written) in self.families.iter_mut().zip(&self.family_cursors) {
+            group.samples.truncate(written);
+        }
+        let removed = self.family_cursors.contains(&0);
+        if removed {
+            let mut written = self.family_cursors.iter();
+            self.families
+                .retain(|_| written.next().is_some_and(|&written| written > 0));
+        }
+        if self.families_created {
+            sort(&mut self.families);
+        }
+        if removed || self.families_created {
+            self.family_indices.clear();
+            self.family_indices.extend(
+                self.families
+                    .iter()
+                    .enumerate()
+                    .map(|(index, group)| ((group.target, group.owner), index)),
+            );
+        }
+        self.family_cursors.clear();
+        self.families_created = false;
     }
 }
 
@@ -547,7 +585,7 @@ pub fn prepare_dynamic_family_samples_with_requirements<'a>(
         scratch.clear();
         return Err(error);
     }
-    scratch.families.sort_unstable_by_key(family_order);
+    scratch.finish_families(|families| families.sort_unstable_by_key(family_order));
     Ok(PreparedDynamicFamilySamples {
         families: &scratch.families,
         legacy: &scratch.legacy,

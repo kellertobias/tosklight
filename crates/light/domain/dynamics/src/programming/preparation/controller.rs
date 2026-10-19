@@ -22,35 +22,34 @@ pub(super) trait PreparationOutput {
     fn require(&mut self, requirement: DynamicFamilyPreparationRequirement);
 }
 
-/// The frame's own output.
+/// The frame's own output. Groups, their index and their sorted order persist between frames
+/// (TL-842 C4): each frame writes a group's samples from its first slot on, overwriting last
+/// frame's in place, and the preparation then trims what was not rewritten.
 pub(super) struct FamilyOutput<'a> {
     pub(super) families: &'a mut Vec<DynamicFamilySampleGroup>,
-    pub(super) drained_storage: std::slice::IterMut<'a, DynamicFamilySampleGroup>,
     pub(super) family_indices: &'a mut HashMap<(FixtureId, ProgrammingOwner), usize>,
+    /// Samples written to each group this frame.
+    pub(super) cursors: &'a mut Vec<usize>,
+    /// Whether this frame created a group (its order must be restored).
+    pub(super) created: &'a mut bool,
+    /// The group written last, for adjacent writes without a map lookup.
+    pub(super) last: Option<usize>,
     pub(super) legacy: &'a mut Vec<DynamicRuntimeSample>,
     pub(super) requirements: &'a mut Vec<DynamicFamilyPreparationRequirement>,
 }
 
-impl PreparationOutput for FamilyOutput<'_> {
-    fn append_one(
-        &mut self,
-        target: FixtureId,
-        owner: ProgrammingOwner,
-        sample: FamilyCompositionSample,
-    ) {
-        // Both append paths keep one group per key, at its first position. Adjacent
-        // writes can therefore use the last group without repeating the map lookup.
-        let adjacent = self
-            .families
-            .last_mut()
-            .filter(|group| group.target == target && group.owner == owner);
+impl FamilyOutput<'_> {
+    fn group(&mut self, target: FixtureId, owner: ProgrammingOwner) -> usize {
+        let adjacent = self.last.filter(|&index| {
+            let group = &self.families[index];
+            group.target == target && group.owner == owner
+        });
         #[cfg(test)]
         let adjacent = adjacent.filter(|_| !super::tests::adjacent_output::forced_map());
-        if let Some(group) = adjacent {
+        if let Some(index) = adjacent {
             #[cfg(test)]
             super::tests::adjacent_output::hit();
-            group.samples.push(sample);
-            return;
+            return index;
         }
         let index = match self.family_indices.entry((target, owner)) {
             std::collections::hash_map::Entry::Occupied(index) => *index.get(),
@@ -60,18 +59,37 @@ impl PreparationOutput for FamilyOutput<'_> {
                 self.families.push(DynamicFamilySampleGroup {
                     target,
                     owner,
-                    // The iterator consumes each old group at most once. Nonempty output
-                    // remains retired; append(Vec) keeps its existing whole-buffer move.
-                    samples: self
-                        .drained_storage
-                        .find(|group| group.samples.is_empty() && group.samples.capacity() > 0)
-                        .map(|group| std::mem::take(&mut group.samples))
-                        .unwrap_or_default(),
+                    samples: Vec::new(),
                 });
+                self.cursors.push(0);
+                *self.created = true;
                 next
             }
         };
-        self.families[index].samples.push(sample);
+        self.last = Some(index);
+        index
+    }
+
+    fn write(&mut self, index: usize, sample: FamilyCompositionSample) {
+        let written = &mut self.cursors[index];
+        let samples = &mut self.families[index].samples;
+        match samples.get_mut(*written) {
+            Some(slot) => *slot = sample,
+            None => samples.push(sample),
+        }
+        *written += 1;
+    }
+}
+
+impl PreparationOutput for FamilyOutput<'_> {
+    fn append_one(
+        &mut self,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+        sample: FamilyCompositionSample,
+    ) {
+        let index = self.group(target, owner);
+        self.write(index, sample);
     }
 
     fn append(
@@ -83,19 +101,9 @@ impl PreparationOutput for FamilyOutput<'_> {
         if samples.is_empty() {
             return;
         }
-        // TL-639 round 7: a new group takes the controller's samples with their storage.
-        match self.family_indices.entry((target, owner)) {
-            std::collections::hash_map::Entry::Occupied(index) => {
-                self.families[*index.get()].samples.extend(samples);
-            }
-            std::collections::hash_map::Entry::Vacant(index) => {
-                index.insert(self.families.len());
-                self.families.push(DynamicFamilySampleGroup {
-                    target,
-                    owner,
-                    samples,
-                });
-            }
+        let index = self.group(target, owner);
+        for sample in samples {
+            self.write(index, sample);
         }
     }
 
@@ -235,7 +243,8 @@ pub(super) fn prepare(
         position,
         families,
         family_indices,
-        retired_output,
+        family_cursors,
+        families_created,
         legacy,
         requirements,
         sampling_requirements,
@@ -244,9 +253,11 @@ pub(super) fn prepare(
         ..
     } = scratch;
     let mut out = FamilyOutput {
-        drained_storage: retired_output.families.iter_mut(),
         families,
         family_indices,
+        cursors: family_cursors,
+        created: families_created,
+        last: None,
         legacy,
         requirements,
     };

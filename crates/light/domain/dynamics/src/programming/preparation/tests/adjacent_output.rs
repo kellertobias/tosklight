@@ -63,29 +63,32 @@ fn adjacent_hits_preserve_first_map_position_and_interleaved_whole_vector_append
     ];
     let run = |force| {
         observed(force, || {
-            let (mut families, mut retired, mut indices, mut legacy, mut requirements) = (
-                Vec::new(),
+            let (mut families, mut indices, mut cursors, mut created, mut legacy, mut requirements) = (
                 Vec::new(),
                 HashMap::default(),
+                Vec::new(),
+                false,
                 Vec::new(),
                 Vec::new(),
             );
             let mut output = FamilyOutput {
                 families: &mut families,
-                drained_storage: retired.iter_mut(),
                 family_indices: &mut indices,
+                cursors: &mut cursors,
+                created: &mut created,
+                last: None,
                 legacy: &mut legacy,
                 requirements: &mut requirements,
             };
             output.append_one(a, color, values[0].clone());
             output.append_one(a, color, values[1].clone()); // adjacent hit
             output.append_one(a, position, values[2].clone()); // same target, different owner
-            output.append_one(a, color, values[0].clone()); // old nonlast group
+            output.append_one(a, color, values[0].clone()); // earlier group, by map
             output.append(b, color, vec![values[1].clone()]); // Vec creates last group
             output.append_one(b, color, values[0].clone()); // adjacent hit after Vec
             output.append(a, position, vec![]); // no group or last-key change
             output.append(a, color, vec![values[1].clone()]); // existing nonlast
-            output.append_one(b, color, values[1].clone()); // still last group
+            output.append_one(b, color, values[1].clone()); // last written was (a, color)
             assert_eq!(indices[&(a, color)], 0);
             assert_eq!(indices[&(a, position)], 1);
             assert_eq!(indices[&(b, color)], 2);
@@ -100,60 +103,10 @@ fn adjacent_hits_preserve_first_map_position_and_interleaved_whole_vector_append
     let (actual, hits) = run(false);
     assert_eq!(actual, expected);
     assert_eq!(misses, 0);
-    assert_eq!(hits, 3, "the exact append_one branch must be admitted");
-}
-#[test]
-fn adjacent_occupied_write_does_not_consume_more_retired_storage() {
-    let target = FixtureId(Uuid::from_u128(1));
-    let owner = ProgrammingOwner::Color;
-    let value = payload(owner, 10);
-    let run = |force| {
-        observed(force, || {
-            let mut spare = Vec::with_capacity(8);
-            let pointer = spare.as_ptr();
-            let mut retired = vec![
-                DynamicFamilySampleGroup {
-                    target,
-                    owner,
-                    samples: std::mem::take(&mut spare),
-                },
-                DynamicFamilySampleGroup {
-                    target,
-                    owner,
-                    samples: vec![value.clone()],
-                },
-                DynamicFamilySampleGroup {
-                    target,
-                    owner,
-                    samples: Vec::with_capacity(7),
-                },
-            ];
-            let retained_pointer = retired[1].samples.as_ptr();
-            let untouched_pointer = retired[2].samples.as_ptr();
-            let (mut groups, mut indices, mut legacy, mut requirements) =
-                (Vec::new(), HashMap::default(), Vec::new(), Vec::new());
-            let mut output = FamilyOutput {
-                families: &mut groups,
-                drained_storage: retired.iter_mut(),
-                family_indices: &mut indices,
-                legacy: &mut legacy,
-                requirements: &mut requirements,
-            };
-            output.append_one(target, owner, value.clone());
-            output.append_one(target, owner, value.clone());
-            assert_eq!(groups[0].samples.as_ptr(), pointer);
-            assert_eq!(groups[0].samples.capacity(), 8);
-            assert_eq!(retired[1].samples.as_ptr(), retained_pointer);
-            assert_eq!(retired[1].samples.len(), 1);
-            assert_eq!(retired[2].samples.as_ptr(), untouched_pointer);
-            assert_eq!(retired[2].samples.capacity(), 7);
-            view(&groups)
-        })
-    };
-    let (expected, _) = run(true);
-    let (actual, hits) = run(false);
-    assert_eq!(actual, expected);
-    assert_eq!(hits, 1);
+    assert_eq!(
+        hits, 2,
+        "adjacent writes to the last written group skip the map"
+    );
 }
 fn inputs(frame: u128) -> Vec<DynamicRuntimeSample> {
     let mut input = Vec::new();

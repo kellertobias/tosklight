@@ -191,7 +191,7 @@ pub fn prepare_dynamic_family_samples_in_parallel<'a>(
         scratch.clear();
         return Err(error);
     }
-    workers.sort_families(&mut scratch.families);
+    scratch.finish_families(|families| workers.sort_families(families));
     Ok(PreparedDynamicFamilySamples {
         families: &scratch.families,
         legacy: &scratch.legacy,
@@ -261,7 +261,8 @@ fn prepare_in_parallel(
         position,
         families,
         family_indices,
-        retired_output,
+        family_cursors,
+        families_created,
         legacy,
         requirements,
         sampling_requirements,
@@ -270,9 +271,11 @@ fn prepare_in_parallel(
         ..
     } = scratch;
     let mut out = FamilyOutput {
-        drained_storage: retired_output.families.iter_mut(),
         families,
         family_indices,
+        cursors: family_cursors,
+        created: families_created,
+        last: None,
         legacy,
         requirements,
     };

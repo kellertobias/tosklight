@@ -26,6 +26,13 @@ impl DynamicFamilyPreparationScratch {
             requirements: &self.requirements,
         }
     }
+
+    /// The prepared groups again, so a consumer that took their sample vectors from
+    /// [`Self::prepared_for_drain`] by swapping can swap them back (TL-842 C4). Returned
+    /// vectors still hold this frame's samples; the next preparation rewrites them in place.
+    pub fn families_for_return(&mut self) -> &mut [DynamicFamilySampleGroup] {
+        &mut self.families
+    }
 }
 
 #[cfg(test)]
