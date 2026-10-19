@@ -20,6 +20,7 @@ describe("PlaybackTileView", () => {
 		const button = screen.getByRole("button", { name: "Playback 3.402: Opening Look" });
 		expect(screen.getAllByRole("button")).toHaveLength(1);
 		expect(screen.queryByText("GO +")).toBeNull();
+		expect(screen.getByRole("button")).toHaveAccessibleDescription("GO +");
 		const image = container.querySelector("img")!;
 		expect(image).toHaveAttribute("src", "cue.png");
 		for (const target of [screen.getByText("Opening Look"), screen.getByText("3.402"), image, screen.getByText("Cue 2"), screen.getByText("Blue and Amber")]) {

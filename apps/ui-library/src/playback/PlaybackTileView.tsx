@@ -55,7 +55,7 @@ export function PlaybackTileView({ model, action, callbacks = {}, slots = {} }: 
 				style={style}
 				disabled={Boolean(model.disabled || action?.disabled || !action)}
 				aria-label={`Playback ${model.page}.${model.slot}: ${model.name}`}
-				aria-description={model.description}
+				aria-description={[action?.label, model.description].filter(Boolean).join(" · ") || undefined}
 				title={model.description}
 				onClick={action?.onClick ?? callbacks.onActivate}
 			>

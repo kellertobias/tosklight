@@ -23,8 +23,12 @@ export class BrowserVirtualPlaybacks {
             expect(this.pane(pane).locator("[data-playback-slot]")).toHaveCount(count),
         mountedCellsBelow: async (pane: VirtualPlaybackPane, maximum: number) =>
             expect.poll(() => this.pane(pane).locator("[data-playback-slot]").count()).toBeLessThan(maximum),
-        button: async (pane: VirtualPlaybackPane, cell: number, label: string, page = 1) =>
-            expect(this.cell(pane, cell, undefined, page)).toContainText(label),
+        button: async (pane: VirtualPlaybackPane, cell: number, label: string, page = 1) => {
+            const card = this.cell(pane, cell, undefined, page);
+            const tile = card.locator(".playback-tile-action");
+            if (await tile.count()) await expect(tile).toHaveAccessibleDescription(new RegExp(label));
+            else await expect(card).toContainText(label);
+        },
         effectivePage: async (pane: VirtualPlaybackPane, page: number) =>
             expect(this.pane(pane).locator("[data-playback-slot]").first()).toHaveAttribute("data-page", String(validPage(page))),
 		fence: async (
@@ -287,7 +291,7 @@ export class BrowserVirtualPlaybacks {
 		cell: number,
 		page = 1,
 	): Promise<void> {
-		await this.desk.click(this.cell(pane, cell, undefined, page).getByRole("button", { name: /^(GO|TOGGLE|TEMP|ON|Toggle|On)/ }).first());
+		await this.desk.click(this.cell(pane, cell, undefined, page).getByRole("button", { name: /^(Playback \d+\.\d+:|GO|TOGGLE|TEMP|ON|Toggle|On)/ }).first());
 	}
 
     async setMainPage(page: number): Promise<void> {
