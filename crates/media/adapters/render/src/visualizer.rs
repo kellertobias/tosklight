@@ -46,9 +46,6 @@ const fn body(kind: VisualizerKind) -> &'static str {
         VisualizerKind::BeatExplosions => include_str!("shaders/visualizers/beat-explosions.wgsl"),
         VisualizerKind::DancingSwarm => include_str!("shaders/visualizers/dancing-swarm.wgsl"),
         VisualizerKind::Starfield => include_str!("shaders/visualizers/starfield.wgsl"),
-        VisualizerKind::GalaxySimulator => {
-            include_str!("shaders/visualizers/galaxy-simulator.wgsl")
-        }
         VisualizerKind::LightningTendrils => {
             include_str!("shaders/visualizers/lightning-tendrils.wgsl")
         }

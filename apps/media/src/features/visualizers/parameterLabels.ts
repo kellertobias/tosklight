@@ -6,7 +6,6 @@
 
 const EQUALIZER_BARS = 0;
 const STARFIELD = 22;
-const GALAXY_SIMULATOR = 24;
 const MATRIX_DIGITAL_RAIN = 42;
 const FRACTAL_MORPH = 51;
 
@@ -31,20 +30,21 @@ export function visualizerParameterLabel(
 		return labels[parameter] ?? fallback;
 	}
 	if (typeId === 43) {
-		const labels: Record<string, string> = { count: "Columns", amount: "Letter spacing", curvature: "Camera motion", speed: "Typing speed", mode: "Palette (0 dark, 1 paper)" };
-		return labels[parameter] ?? fallback;
-	}
-	if (typeId === GALAXY_SIMULATOR) {
 		const labels: Record<string, string> = {
-			count: "Star density", size: "Star size", radius: "Galaxy radius",
-			burst: "Supernovas per beat", lifetime: "Supernova lifetime",
+			count: "Columns",
+			amount: "Letter spacing",
+			curvature: "Camera motion",
+			speed: "Typing speed",
+			mode: "Palette (0 dark, 1 paper)",
 		};
 		return labels[parameter] ?? fallback;
 	}
+
 	if (typeId === EQUALIZER_BARS && parameter === "amount") return "Bloom";
 	if (typeId === MATRIX_DIGITAL_RAIN && parameter === "burst")
 		return "Streaks per beat";
-	if (typeId === FRACTAL_MORPH && parameter === "primary") return "Start colour";
+	if (typeId === FRACTAL_MORPH && parameter === "primary")
+		return "Start colour";
 	if (typeId === FRACTAL_MORPH && parameter === "secondary")
 		return "End colour";
 	if (parameter === ON_BEAT)

@@ -42,7 +42,6 @@ pub enum VisualizerKind {
     DancingSwarm = 21,
     Starfield = 22,
     LightningTendrils = 23,
-    GalaxySimulator = 24,
     RadiatingRays = 30,
     StrobeFlash = 31,
     ColorCycling = 32,
@@ -61,7 +60,7 @@ pub enum VisualizerKind {
 }
 
 /// Every kind, in the order the shipped catalog assigns them.
-pub const ALL_KINDS: [VisualizerKind; 28] = [
+pub const ALL_KINDS: [VisualizerKind; 27] = [
     VisualizerKind::EqualizerBars,
     VisualizerKind::WaveformOscilloscope,
     VisualizerKind::CircularSpectrum,
@@ -88,7 +87,6 @@ pub const ALL_KINDS: [VisualizerKind; 28] = [
     VisualizerKind::TriangularNet,
     VisualizerKind::FlyingProps,
     // Append new kinds: existing default DMX assignments stay where operators stored them.
-    VisualizerKind::GalaxySimulator,
     VisualizerKind::TextTracking,
     VisualizerKind::BlackHole,
 ];
@@ -117,7 +115,6 @@ impl VisualizerKind {
             Self::DancingSwarm => "Dancing Swarm",
             Self::Starfield => "Starfield",
             Self::LightningTendrils => "Lightning Tendrils",
-            Self::GalaxySimulator => "Galaxy Simulator",
             Self::RadiatingRays => "Radiating Rays",
             Self::StrobeFlash => "Strobe Flash",
             Self::ColorCycling => "Color Cycling",
@@ -166,9 +163,6 @@ impl VisualizerKind {
             Self::BeatExplosions => &[Count, Speed, Lifetime, Primary, Gravity],
             Self::DancingSwarm => &[Count, Speed, Radius, Primary, Size],
             Self::Starfield => &[Count, Speed, Primary, OnBeat],
-            Self::GalaxySimulator => &[
-                Count, Speed, Size, Reactivity, Primary, Secondary, Radius, Lifetime, Burst,
-            ],
             Self::LightningTendrils => &[Count, Size, Primary, Threshold],
             Self::RadiatingRays => &[Count, Size, Thickness, Speed, Primary],
             Self::StrobeFlash => &[Primary, Threshold, Decay, Mirror],
@@ -467,15 +461,6 @@ impl VisualizerConfiguration {
             parameters.curvature = 0.72;
             parameters.primary = Tint::new(1.0, 0.32, 0.055);
             parameters.secondary = Tint::new(1.0, 0.88, 0.60);
-        } else if kind == VisualizerKind::GalaxySimulator {
-            parameters.count = 96;
-            parameters.speed = 0.6;
-            parameters.size = 0.018;
-            parameters.radius = 0.65;
-            parameters.lifetime = 1.4;
-            parameters.burst = 2;
-            parameters.primary = Tint::new(0.22, 0.4, 1.0);
-            parameters.secondary = Tint::new(1.0, 0.32, 0.12);
         } else if kind == VisualizerKind::TextTracking {
             parameters.count = 16;
             parameters.size = 0.13;
@@ -547,7 +532,11 @@ impl Default for GeneratedCatalog {
                 .enumerate()
                 .map(|(index, kind)| GeneratedEntry {
                     // Files start at one: file zero is blank in every bank.
-                    address: MediaAddress::new(DEFAULT_BANK, index as u8 + 1),
+                    // Slot 26 belonged to retired Galaxy Simulator; never shift stored cues.
+                    address: MediaAddress::new(
+                        DEFAULT_BANK,
+                        index as u8 + 1 + u8::from(index >= 25),
+                    ),
                     configuration: VisualizerConfiguration::new(kind),
                 })
                 .collect(),
@@ -692,24 +681,17 @@ mod tests {
     }
 
     #[test]
-    fn galaxy_adds_a_stable_kind_without_moving_existing_default_addresses() {
+    fn retiring_galaxy_leaves_its_address_empty_and_preserves_other_sources() {
         let catalog = GeneratedCatalog::default();
-        assert_eq!(
-            catalog.address_of(VisualizerKind::FlyingProps),
-            Some(MediaAddress::new(250, 25))
-        );
-        let configuration = VisualizerConfiguration::new(VisualizerKind::GalaxySimulator);
-        assert_eq!(configuration.kind.type_id(), 24);
-        assert_eq!(configuration.parameters.burst, 2);
-        assert!(configuration.parameters.lifetime > 0.0);
-        for parameter in [Parameter::Burst, Parameter::Lifetime, Parameter::Reactivity] {
-            assert!(configuration.kind.parameters().contains(&parameter));
+        assert_eq!(VisualizerKind::from_type_id(24), None);
+        assert!(catalog.resolve(MediaAddress::new(250, 26)).is_none());
+        for (kind, file) in [
+            (VisualizerKind::FlyingProps, 25),
+            (VisualizerKind::TextTracking, 27),
+            (VisualizerKind::BlackHole, 28),
+        ] {
+            assert_eq!(catalog.address_of(kind), Some(MediaAddress::new(250, file)));
         }
-        let encoded = serde_json::to_string(&configuration).unwrap();
-        assert_eq!(
-            serde_json::from_str::<VisualizerConfiguration>(&encoded).unwrap(),
-            configuration
-        );
     }
 
     #[test]

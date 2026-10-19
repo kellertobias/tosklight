@@ -145,15 +145,10 @@ impl VisualizerKind {
             (Self::EqualizerBars, Parameter::Amount) => "Bloom",
             (Self::FlyingProps, Parameter::Mode) => "Flight pattern",
             (Self::FlyingProps, Parameter::Count) => "Density",
-            (Self::GalaxySimulator, Parameter::Count) => "Star density",
             (Self::TextTracking, Parameter::Count) => "Columns",
             (Self::TextTracking, Parameter::Amount) => "Letter spacing",
             (Self::TextTracking, Parameter::Curvature) => "Camera motion",
             (Self::TextTracking, Parameter::Mode) => "Palette (0 dark, 1 paper)",
-            (Self::GalaxySimulator, Parameter::Size) => "Star size",
-            (Self::GalaxySimulator, Parameter::Radius) => "Galaxy radius",
-            (Self::GalaxySimulator, Parameter::Burst) => "Supernovas per beat",
-            (Self::GalaxySimulator, Parameter::Lifetime) => "Supernova lifetime",
             _ => parameter.label(),
         }
     }
@@ -165,7 +160,6 @@ impl VisualizerKind {
             (Self::BlackHole, Parameter::Size) => (0.08, 0.32),
             (Self::BlackHole, Parameter::Decay) => (0.05, 1.0),
             (Self::BlackHole, Parameter::Curvature) => (0.0, 1.0),
-            (Self::GalaxySimulator, Parameter::Count) => (1.0, 192.0),
             (Self::TextTracking, Parameter::Count) => (4.0, 32.0),
             (Self::TextTracking, Parameter::Mode) => (0.0, 1.0),
             (Self::WaveformOscilloscope, Parameter::Size) => (0.005, 0.1),

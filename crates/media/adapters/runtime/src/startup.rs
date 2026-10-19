@@ -405,6 +405,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn startup_loads_a_legacy_galaxy_assignment_without_rewriting_the_file() {
+        let directory = std::env::temp_dir().join("pixel-retired-galaxy-startup");
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("media-server.json");
+        let mut document: serde_json::Value =
+            serde_json::from_str(&configuration::save(&MediaConfiguration::default())).unwrap();
+        document["version"] = serde_json::json!(9);
+        let mut source = serde_json::to_value(media_domain::VisualizerConfiguration::new(
+            media_domain::VisualizerKind::Starfield,
+        ))
+        .unwrap();
+        source["kind"] = serde_json::json!("galaxy-simulator");
+        document["configuration"]["visualizers"]["entries"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"address":{"folder":250,"file":26},"configuration":source}));
+        let original = document.to_string();
+        std::fs::write(&path, &original).unwrap();
+        let loaded = load_configuration(&ConfigurationSource::File {
+            path: path.clone(),
+            required: true,
+        })
+        .unwrap();
+        assert!(
+            loaded
+                .visualizers
+                .resolve(media_domain::MediaAddress::new(250, 26))
+                .is_none()
+        );
+        assert_eq!(
+            loaded
+                .visualizers
+                .address_of(media_domain::VisualizerKind::TextTracking),
+            Some(media_domain::MediaAddress::new(250, 27))
+        );
+        assert_eq!(
+            loaded
+                .visualizers
+                .address_of(media_domain::VisualizerKind::BlackHole),
+            Some(media_domain::MediaAddress::new(250, 28))
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
     fn pixel_effect_additions_start_without_replacing_an_operators_preset() {
         let directory = std::env::temp_dir().join("pixel-effect-additions-startup");
         std::fs::create_dir_all(&directory).unwrap();

@@ -287,6 +287,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn retired_galaxy_cannot_be_created_or_selected_as_a_kind() {
+        let bench = bench();
+        for (path, body) in [
+            (
+                "/api/v2/visualizers/create",
+                r#"{"requestId":"retired-create","folder":251,"file":7,"typeId":24}"#,
+            ),
+            (
+                "/api/v2/visualizers/250/1/update",
+                r#"{"requestId":"retired-replace","typeId":24}"#,
+            ),
+        ] {
+            let (status, _) = send(&bench.router, post(path.into(), body)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST);
+        }
+        assert!(bench.stored.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn black_hole_can_be_added_to_an_existing_library_and_reopened() {
         let bench = bench();
         let (status, body) = send(
@@ -579,7 +598,13 @@ mod tests {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         let (status, all) = send(&bench.router, get("/api/v2/visualizers".into())).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(all[26]["text"], "LIVE / LOCK");
-        assert_eq!(all[26]["name"], "Text Tracking");
+        let tracking = all
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["typeId"] == 43)
+            .unwrap();
+        assert_eq!(tracking["text"], "LIVE / LOCK");
+        assert_eq!(tracking["name"], "Text Tracking");
     }
 }
