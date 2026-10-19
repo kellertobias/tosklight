@@ -14,6 +14,7 @@ use crate::texture::SourceTexture;
 mod blend;
 mod model_mapping;
 mod pipelines;
+mod text_atlas;
 mod uniforms;
 pub use model_mapping::ModelGeometries;
 
@@ -74,6 +75,7 @@ pub struct Compositor {
     /// Stands in wherever a mask is not selected. Opaque white: read as luminance or as alpha it
     /// says "let everything through", so a shader needs no branch for the common case.
     no_mask: SourceTexture,
+    text_atlases: Vec<text_atlas::Cache>,
     /// Layers mapped onto 3D models. See [`model_mapping`].
     models: model_mapping::ModelMapper,
 }
@@ -182,6 +184,9 @@ impl Compositor {
             master_uniform,
             feedback: FeedbackProcessor::new(gpu),
             no_mask,
+            text_atlases: (0..MAX_LAYERS)
+                .map(|_| text_atlas::Cache::default())
+                .collect(),
             models: model_mapping::ModelMapper::new(gpu),
         }
     }
@@ -323,6 +328,9 @@ impl Compositor {
         region: Option<&DisplayRegion>,
         overlay: Option<LayerDraw<'_>>,
     ) {
+        for (index, atlas) in self.text_atlases.iter_mut().enumerate() {
+            atlas.prepare(&self.gpu, layers.get(index).map(|layer| layer.state));
+        }
         let mut encoder = self
             .gpu
             .device
@@ -420,6 +428,7 @@ impl Compositor {
                 sampler: &self.sampler,
                 feedback: &self.feedback,
                 no_mask: &self.no_mask,
+                text_atlases: &self.text_atlases,
                 output: self.size,
                 output_id,
                 now,
@@ -522,6 +531,7 @@ impl Compositor {
             self.feedback.source(layer),
             &self.sampler,
             &layer.mask.unwrap_or(&self.no_mask).view,
+            self.text_atlases[index].view(&self.no_mask),
         )
     }
 
@@ -612,6 +622,7 @@ impl Compositor {
             &overlay.source.view,
             &self.sampler,
             &overlay.mask.unwrap_or(&self.no_mask).view,
+            &self.no_mask.view,
         );
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("media-operator-overlay"),
@@ -683,6 +694,7 @@ impl Compositor {
             &self.program_view,
             &self.sampler,
             &master_mask.unwrap_or(&self.no_mask).view,
+            &self.no_mask.view,
         );
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("media-master"),

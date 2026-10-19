@@ -85,6 +85,7 @@ fn declarations(config: &Config) -> Vec<String> {
         SourceStatusView::decl(config),
         MaskView::decl(config),
         EffectParameterView::decl(config),
+        crate::wire::SliceGridTypographyView::decl(config),
         EffectSlotView::decl(config),
         EffectPresetView::decl(config),
         EffectBankView::decl(config),

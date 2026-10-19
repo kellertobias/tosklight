@@ -78,6 +78,19 @@ fn selected_effects(
 }
 
 fn apply_common_edits(body: &UpdateLayer, effect: &mut EffectSlot) -> Result<(), ApiError> {
+    if let Some(typography) = &body.effect_typography {
+        require_effect(
+            effect,
+            media_domain::BEAT_SLICE_GRID_EFFECT,
+            "effect-typography-type",
+            "Beat Slice Grid",
+        )?;
+        let typography: media_domain::slice_grid::SliceGridTypography = typography.clone().into();
+        typography
+            .validate()
+            .map_err(|message| ApiError::bad_request("invalid-effect-typography", message))?;
+        effect.typography = Some(typography);
+    }
     if let Some(text) = &body.effect_text {
         require_effect(
             effect,
@@ -90,6 +103,9 @@ fn apply_common_edits(body: &UpdateLayer, effect: &mut EffectSlot) -> Result<(),
                 "effect-text-too-long",
                 "effect text accepts up to 64 characters",
             ));
+        }
+        if let Some(typography) = &mut effect.typography {
+            typography.texts[0] = text.clone();
         }
         effect.text = Some(text.clone());
     }

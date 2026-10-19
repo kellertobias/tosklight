@@ -44,7 +44,8 @@ minimum: number, maximum: number,
  * A step of one or more marks a whole-number parameter.
  */
 step: number, };
-export type EffectSlotView = { text?: string | null, index: number, effectType: string | null, label: string, enabled: boolean, mix: number, beatSource: string, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, };
+export type SliceGridTypographyView = { texts: Array<string>, font: string, textColor: [number, number, number], backgroundColor: [number, number, number], };
+export type EffectSlotView = { typography?: SliceGridTypographyView | null, fontStatus?: string | null, text?: string | null, index: number, effectType: string | null, label: string, enabled: boolean, mix: number, beatSource: string, supported: boolean, capabilityDetail: string | null, parameters: Array<EffectParameterView>, };
 export type EffectPresetView = { slot: number, name: string, effect: EffectSlotView, };
 export type EffectBankView = { index: number, select: number, strength: number,
 /**
@@ -715,7 +716,7 @@ effectSlot?: number | null,
 /**
  * `analog-tv` or `digital-tv` selects the effect; `none` clears the slot.
  */
-effectType?: string | null, effectText?: string | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null, blurAmount?: number | null, feedbackAmount?: number | null, feedbackMotion?: number | null, feedbackDirection?: string | null,
+effectType?: string | null, effectText?: string | null, effectTypography?: SliceGridTypographyView | null, effectEnabled?: boolean | null, effectMix?: number | null, tvCurvature?: number | null, effectDistortion?: number | null, imageGrain?: number | null, compressionDamage?: number | null, blockSize?: number | null, tileDisplacement?: number | null, chromaDamage?: number | null, effectGlitching?: number | null, blurAmount?: number | null, feedbackAmount?: number | null, feedbackMotion?: number | null, feedbackDirection?: string | null,
 /**
  * `every-beat`, `every-half-beat`, or `every-second` for the opacity cycle effect.
  */
@@ -734,7 +735,7 @@ export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tin
  * Layer Opacity Cycle beat multiplier/divider encoded by the personality's published bands.
  */
 opacityCycleDmx?: number | null, flipMirror?: string | null, maskFolder?: number | null, maskFile?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, shaperLeft?: number | null, shaperRight?: number | null, shaperTop?: number | null, shaperBottom?: number | null, shaperLeftRotation?: number | null, shaperRightRotation?: number | null, shaperTopRotation?: number | null, shaperBottomRotation?: number | null, shaperRotation?: number | null, };
-export type UpdateEffectPreset = { text: string | null, requestId: string, name: string | null, effectType: string | null, parameters: Array<number> | null, beatSource: string | null, clear: boolean | null, };
+export type UpdateEffectPreset = { typography: SliceGridTypographyView | null, text: string | null, requestId: string, name: string | null, effectType: string | null, parameters: Array<number> | null, beatSource: string | null, clear: boolean | null, };
 export type UpdateOutputConfiguration = { requestId: string, targetKind?: string | null, monitorBy?: string | null, monitorValue?: string | null, fullscreen?: boolean | null, width?: number | null, height?: number | null, presentation?: string | null, framesPerSecond?: number | null, soundOutputKind?: string | null, soundOutputName?: string | null, personality?: string | null, protocol?: string | null, universe?: number | null, startAddress?: number | null,
 /**
  * The whole pixel map, replaced at once. A zone is meaningless on its own — its address has

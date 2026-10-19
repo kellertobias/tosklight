@@ -291,7 +291,8 @@ impl EffectSlot {
     pub fn drawn_image() -> Self {
         Self {
             text: None,
-            text_mask: Vec::new(),
+            text_atlas: None,
+            typography: None,
             effect_type: Some(DRAWN_IMAGE_EFFECT.to_owned()),
             enabled: true,
             seed: 0,

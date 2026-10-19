@@ -105,8 +105,18 @@ fn render_preset(
     };
     let mut prepared = effect.clone();
     if prepared.beat_slice_grid_parameters().is_some() {
-        prepared.text_mask =
-            media_text::packed_line_mask(prepared.text.as_deref().unwrap_or("PIXEL")).to_vec();
+        let typography = media_domain::slice_grid::SliceGridTypography {
+            texts: vec![
+                "PIXEL\nLIVE".into(),
+                "ON AIR".into(),
+                "MUSIC\nIN MOTION".into(),
+            ],
+            font: "Arial Black".into(),
+            text_color: [90, 245, 220],
+            background_color: [12, 20, 35],
+        };
+        prepared.typography = Some(typography.clone());
+        prepared.text_atlas = Some(media_text::slice_text_atlas(&typography));
     }
     let effect = &prepared;
     let key = thumbnail_key(effect);

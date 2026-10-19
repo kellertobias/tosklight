@@ -56,8 +56,8 @@ fn the_layer_uniform_matches_the_geometry_the_domain_computed() {
 
 #[test]
 fn the_uniforms_are_the_size_the_shaders_declare() {
-    // Four packed 256x64 monochrome text masks add 8192 bytes to the layer block.
-    assert_eq!(std::mem::size_of::<LayerUniform>(), 1280 + 8192);
+    // Typography metadata, proportional-fit aspects and two colours; glyph pixels live in a texture.
+    assert_eq!(std::mem::size_of::<LayerUniform>(), 1600);
     assert!(
         std::mem::size_of::<LayerUniform>() <= 16_384,
         "fits the baseline uniform binding limit"

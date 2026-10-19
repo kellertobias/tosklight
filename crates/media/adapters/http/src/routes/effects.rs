@@ -109,12 +109,29 @@ pub(super) async fn update_effect(
             }
         };
     }
+    if let Some(typography) = body.typography {
+        let typography: media_domain::slice_grid::SliceGridTypography = typography.into();
+        typography
+            .validate()
+            .map_err(|message| ApiError::bad_request("invalid-effect-typography", message))?;
+        if effect.effect_type.as_deref() != Some(media_domain::BEAT_SLICE_GRID_EFFECT) {
+            return Err(ApiError::bad_request(
+                "effect-typography-type",
+                "typography requires the Beat Slice Grid effect",
+            ));
+        }
+        effect.text = typography.texts.first().cloned();
+        effect.typography = Some(typography);
+    }
     if let Some(text) = body.text {
         if text.chars().count() > media_domain::slice_grid::MAX_SLICE_TEXT_CHARS {
             return Err(ApiError::bad_request(
                 "effect-text-too-long",
                 "effect text accepts up to 64 characters",
             ));
+        }
+        if let Some(typography) = &mut effect.typography {
+            typography.texts[0] = text.clone();
         }
         effect.text = Some(text);
     }
@@ -216,6 +233,98 @@ mod tests {
                 .as_deref(),
             Some("ON AIR Ä!")
         );
+    }
+
+    #[tokio::test]
+    async fn slice_typography_multiline_colours_font_and_entries_persist_and_validate() {
+        let bench = bench();
+        let edit = r#"{"requestId":"typography-60","effectType":"beat-slice-grid","typography":{"texts":["HELLO\nWORLD","SECOND\nENTRY"],"font":"serif","textColor":[0,220,120],"backgroundColor":[22,3,44]}}"#;
+        let (status, first) = send(
+            &bench.router,
+            post("/api/v2/effects/60/update".into(), edit),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(first["effect"]["typography"]["texts"][0], "HELLO\nWORLD");
+        assert_eq!(
+            first["effect"]["typography"]["textColor"],
+            serde_json::json!([0, 220, 120])
+        );
+        assert!(
+            first["effect"]["fontStatus"]
+                .as_str()
+                .unwrap()
+                .contains("serif")
+        );
+        let (_, replay) = send(
+            &bench.router,
+            post("/api/v2/effects/60/update".into(), edit),
+        )
+        .await;
+        assert_eq!(first, replay);
+        let (status, renamed) = send(
+            &bench.router,
+            post(
+                "/api/v2/effects/60/update".into(),
+                r#"{"requestId":"typography-rename","name":"My poster"}"#,
+            ),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            first["effect"]["typography"],
+            renamed["effect"]["typography"]
+        );
+        let stored = bench
+            .stored
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .effects
+            .resolve(60)
+            .unwrap()
+            .effect
+            .clone();
+        assert_eq!(
+            stored.typography.unwrap().texts,
+            vec!["HELLO\nWORLD", "SECOND\nENTRY"]
+        );
+        let (status,_)=send(&bench.router,post("/api/v2/effects/60/update".into(),r#"{"requestId":"typography-invalid","typography":{"texts":[],"font":"serif","textColor":[0,220,120],"backgroundColor":[22,3,44]}}"#)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn long_multiline_first_entry_and_missing_font_are_reported_without_truncating_typography()
+     {
+        let bench = bench();
+        let text = format!("{}\nSECOND LINE", "LONG ".repeat(30));
+        let edit=serde_json::json!({"requestId":"long-grid","effectType":"beat-slice-grid","typography":{"texts":[text],"font":"ToskLight Missing Font 2026","textColor":[220,20,100],"backgroundColor":[1,2,3]}}).to_string();
+        let (status, saved) = send(
+            &bench.router,
+            post("/api/v2/effects/61/update".into(), &edit),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(saved["effect"]["typography"]["texts"][0], text);
+        assert!(
+            saved["effect"]["fontStatus"]
+                .as_str()
+                .unwrap()
+                .contains("unavailable")
+        );
+        let stored = bench
+            .stored
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .effects
+            .resolve(61)
+            .unwrap()
+            .effect
+            .clone();
+        assert_eq!(stored.slice_typography().texts[0], text);
     }
 
     #[tokio::test]

@@ -35,6 +35,8 @@ pub enum EffectLibraryError {
     EmptyName { slot: u8 },
     #[error("effect slot {slot} needs a supported effect type")]
     EmptyEffect { slot: u8 },
+    #[error("effect slot {slot}: {message}")]
+    InvalidTypography { slot: u8, message: String },
 }
 
 impl EffectLibrary {
@@ -125,6 +127,14 @@ fn validate_entry(slot: u8, name: &str, effect: &EffectSlot) -> Result<(), Effec
     }
     if name.trim().is_empty() {
         return Err(EffectLibraryError::EmptyName { slot });
+    }
+    if let Some(typography) = &effect.typography {
+        typography
+            .validate()
+            .map_err(|message| EffectLibraryError::InvalidTypography {
+                slot,
+                message: message.to_owned(),
+            })?;
     }
     if effect.effect_type.is_none() {
         return Err(EffectLibraryError::EmptyEffect { slot });

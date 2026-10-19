@@ -132,6 +132,7 @@ pub(super) struct MappingContext<'a> {
     pub sampler: &'a wgpu::Sampler,
     pub feedback: &'a FeedbackProcessor,
     pub no_mask: &'a SourceTexture,
+    pub text_atlases: &'a [super::text_atlas::Cache],
     pub output: Size,
     pub output_id: OutputId,
     pub now: Timestamp,
@@ -353,6 +354,7 @@ impl ModelMapper {
                 context.feedback.source(layer),
                 context.sampler,
                 &layer.mask.unwrap_or(context.no_mask).view,
+                context.text_atlases[index].view(context.no_mask),
             );
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

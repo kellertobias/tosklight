@@ -103,18 +103,101 @@ describe("the effects library", () => {
 	});
 
 	it("saves readable grid text and the selected drum source", async () => {
-        const preset = typedEffect(1, "Poster", "beat-slice-grid", "slice-columns", "Columns", 4, 2, 8);
-        preset.effect.text = "PIXEL";
-        const server = stubEffects([preset]);
-        render(<EffectsPage />);
-        await screen.findByText("1/255 assigned");
-        fireEvent.change(screen.getByLabelText("Grid text"), { target: { value: "ON AIR" } });
-        await userEvent.click(screen.getByRole("button", { name: "React to" }));
-        await userEvent.click(screen.getByRole("option", { name: "Bass drum" }));
-        await userEvent.click(screen.getByRole("button", { name: "Save effect" }));
-        await waitFor(() => expect(server.writes).toHaveLength(1));
-        expect(server.writes[0]?.body).toMatchObject({ text: "ON AIR", beatSource: "kick", effectType: "beat-slice-grid" });
-    });
+		const preset = typedEffect(
+			1,
+			"Poster",
+			"beat-slice-grid",
+			"slice-columns",
+			"Columns",
+			4,
+			2,
+			8,
+		);
+		preset.effect.text = "PIXEL";
+		const server = stubEffects([preset]);
+		render(<EffectsPage />);
+		await screen.findByText("1/255 assigned");
+		fireEvent.change(screen.getByLabelText("Grid text 1"), {
+			target: { value: "ON AIR" },
+		});
+		await userEvent.click(screen.getByRole("button", { name: "React to" }));
+		await userEvent.click(screen.getByRole("option", { name: "Bass drum" }));
+		await userEvent.click(screen.getByRole("button", { name: "Save effect" }));
+		await waitFor(() => expect(server.writes).toHaveLength(1));
+		expect(server.writes[0]?.body).toMatchObject({
+			typography: {
+				texts: ["ON AIR"],
+				font: "Arial Black",
+				textColor: [242, 4, 6],
+				backgroundColor: [250, 250, 250],
+			},
+			beatSource: "kick",
+			effectType: "beat-slice-grid",
+		});
+	});
+
+	it("edits multiple multiline entries, font and touch colour controls", async () => {
+		const preset = typedEffect(
+			1,
+			"Poster",
+			"beat-slice-grid",
+			"slice-columns",
+			"Columns",
+			4,
+			2,
+			8,
+		);
+		preset.effect.typography = {
+			texts: ["OLD\nPOSTER"],
+			font: "Arial Black",
+			textColor: [242, 4, 6],
+			backgroundColor: [250, 250, 250],
+		};
+		preset.effect.fontStatus = "Using Arial Black";
+		const server = stubEffects([preset]);
+		render(<EffectsPage />);
+		await screen.findByText("1/255 assigned");
+		fireEvent.change(screen.getByLabelText("Grid text 1"), {
+			target: { value: "HELLO\nWORLD" },
+		});
+		await userEvent.click(screen.getByRole("button", { name: "Add text" }));
+		fireEvent.change(screen.getByLabelText("Grid text 2"), {
+			target: { value: "SECOND\nENTRY" },
+		});
+		fireEvent.change(screen.getByLabelText("Font family"), {
+			target: { value: "serif" },
+		});
+		expect(screen.getByRole("button", { name: /#F20406/i })).toHaveAttribute(
+			"aria-haspopup",
+			"listbox",
+		);
+		await userEvent.click(screen.getByRole("button", { name: /#F20406/i }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Custom hex" }), {
+			target: { value: "#00ff00" },
+		});
+		await userEvent.click(
+			screen.getByRole("button", { name: "Use custom color" }),
+		);
+		await userEvent.click(screen.getByRole("button", { name: /#FAFAFA/i }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Custom hex" }), {
+			target: { value: "#0000ff" },
+		});
+		await userEvent.click(
+			screen.getByRole("button", { name: "Use custom color" }),
+		);
+		await userEvent.click(screen.getByRole("button", { name: "Save effect" }));
+		await waitFor(() => expect(server.writes).toHaveLength(1));
+		expect(server.writes[0]?.body.typography).toEqual({
+			texts: ["HELLO\nWORLD", "SECOND\nENTRY"],
+			font: "serif",
+			textColor: [0, 255, 0],
+			backgroundColor: [0, 0, 255],
+		});
+		await userEvent.click(
+			screen.getByRole("button", { name: "Remove text 2" }),
+		);
+		expect(screen.queryByLabelText("Grid text 2")).not.toBeInTheDocument();
+	});
 
 	it("ships one rendered thumbnail for every effect type and nothing else", () => {
 		expect(effectThumbnailTypes()).toEqual(
@@ -249,6 +332,7 @@ function stubEffects(initial: EffectLibrarySlot[]) {
 					slot,
 					name: String(body.name),
 					effect: {
+						typography: body.typography,
 						index: 0,
 						effectType: String(body.effectType),
 						beatSource: String(body.beatSource ?? "detected-beat"),

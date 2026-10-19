@@ -41,13 +41,17 @@ struct Layer {
     beat_scan_counts: array<vec4<f32>, 16>,
     beat_event_x: array<vec4<f32>, 16>,
     beat_event_y: array<vec4<f32>, 16>,
-    effect_text: array<array<vec4<u32>, 128>, 4>,
+    effect_text_meta: array<vec4<f32>,4>,
+    effect_text_aspects: array<vec4<f32>,8>,
+    effect_text_colors: array<vec4<f32>,4>,
+    effect_background_colors: array<vec4<f32>,4>,
 };
 
 @group(0) @binding(0) var<uniform> layer: Layer;
 @group(0) @binding(1) var source: texture_2d<f32>;
 @group(0) @binding(2) var source_sampler: sampler;
 @group(0) @binding(3) var mask: texture_2d<f32>;
+@group(0) @binding(4) var text_atlas: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -708,7 +712,7 @@ fn slice_weight(index: f32, generation: f32, axis: f32, movement: f32) -> f32 {
     return 1.0 + movement * sin(index * 2.31 + generation * 1.73 + axis * 4.17) * 0.82;
 }
 // Returns cell index and normalized coordinate inside the resized cell.
-fn slice_coordinate(value: f32, count: u32, generation: f32, transition: f32, axis: f32, movement: f32) -> vec2<f32> {
+fn slice_coordinate(value: f32, count: u32, generation: f32, transition: f32, axis: f32, movement: f32) -> vec3<f32> {
     var total = 0.0;
     for (var i=0u; i<8u; i+=1u) {
         if i<count { total += mix(slice_weight(f32(i), max(generation-1.0, 0.0), axis, movement), slice_weight(f32(i), generation, axis, movement), transition); }
@@ -717,17 +721,21 @@ fn slice_coordinate(value: f32, count: u32, generation: f32, transition: f32, ax
     for (var i=0u; i<8u; i+=1u) {
         if i<count {
             let width = mix(slice_weight(f32(i), max(generation-1.0, 0.0), axis, movement), slice_weight(f32(i), generation, axis, movement), transition) / total;
-            if value <= left+width || i==count-1u { return vec2<f32>(f32(i), clamp((value-left)/width, 0.0, 1.0)); }
+            if value <= left+width || i==count-1u { return vec3<f32>(f32(i), clamp((value-left)/width, 0.0, 1.0),width); }
             left += width;
         }
     }
-    return vec2<f32>(0.0);
+    return vec3<f32>(0.0,0.0,1.0);
 }
-fn slice_text_coverage(uv: vec2<f32>, slot: u32) -> f32 {
+fn slice_text_coverage(local: vec2<f32>, cell_aspect: f32, entry: u32, slot: u32) -> f32 {
+    let aspect = max(layer.effect_text_aspects[slot*2u+entry/4u][entry%4u],0.001);
+    let fit = 0.9*vec2<f32>(min(1.0,aspect/cell_aspect),min(1.0,cell_aspect/aspect));
+    let uv=(local-vec2<f32>(0.5))/fit+vec2<f32>(0.5);
     if any(uv<vec2<f32>(0.0)) || any(uv>=vec2<f32>(1.0)) { return 0.0; }
-    let p = vec2<u32>(uv*vec2<f32>(256.0,64.0));
-    let bit = p.y*256u+p.x;
-    return f32((layer.effect_text[slot][bit/128u][(bit/32u)%4u] >> (bit%32u)) & 1u);
+    let dimensions=vec2<f32>(textureDimensions(text_atlas));
+    let address=u32(layer.effect_text_meta[slot].y)+entry;
+    let atlas_uv=(vec2<f32>(f32(address/8u),f32(address%8u))+uv)*vec2<f32>(512.0,256.0)/dimensions;
+    return textureSampleLevel(text_atlas,source_sampler,atlas_uv,0.0).a;
 }
 fn beat_slice_grid_source(original: vec4<f32>, uv: vec2<f32>, slot: u32) -> vec4<f32> {
     let parameters = layer.effect_parameters[slot];
@@ -744,9 +752,14 @@ fn beat_slice_grid_source(original: vec4<f32>, uv: vec2<f32>, slot: u32) -> vec4
     let cell = u32(x.x)+u32(y.x)*columns;
     let rank = f32((cell*7u+u32(y.x)*3u)%16u)/16.0;
     if rank < parameters.w {
-        let text_uv = (local-vec2<f32>(0.055,0.075))/vec2<f32>(0.89,0.85);
-        let ink = slice_text_coverage(text_uv, slot);
-        colour = vec4<f32>(mix(vec3<f32>(0.98),vec3<f32>(0.95,0.015,0.025),ink),1.0);
+        let count=u32(layer.effect_text_meta[slot].x);
+        var ink=0.0;
+        if count>0u {
+            let entry=(cell+u32(generation))%count;
+            let cell_aspect=max(layer.size.x*x.z,0.001)/max(layer.size.y*y.z,0.001);
+            ink=slice_text_coverage(local,cell_aspect,entry,slot);
+        }
+        colour = vec4<f32>(mix(layer.effect_background_colors[slot].rgb,layer.effect_text_colors[slot].rgb,ink),1.0);
     }
     // Fine poster-panel dividers keep even very narrow moving cells legible.
     if min(min(local.x,1.0-local.x),min(local.y,1.0-local.y)) < 0.004 {

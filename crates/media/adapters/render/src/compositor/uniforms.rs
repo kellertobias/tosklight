@@ -35,7 +35,10 @@ pub(super) struct LayerUniform {
     pub(super) beat_scan_counts: [[f32; 4]; 16],
     pub(super) beat_event_x: [[f32; 4]; 16],
     pub(super) beat_event_y: [[f32; 4]; 16],
-    pub(super) effect_text: [[[u32; 4]; 128]; 4],
+    pub(super) effect_text_meta: [[f32; 4]; 4],
+    pub(super) effect_text_aspects: [[f32; 4]; 8],
+    pub(super) effect_text_colors: [[f32; 4]; 4],
+    pub(super) effect_background_colors: [[f32; 4]; 4],
 }
 
 impl LayerUniform {
@@ -59,7 +62,11 @@ impl LayerUniform {
         let mut beat_scan_counts = [[0.0; 4]; 16];
         let mut beat_event_x = [[0.5; 4]; 16];
         let mut beat_event_y = [[0.5; 4]; 16];
-        let mut effect_text = [[[0; 4]; 128]; 4];
+        let mut effect_text_meta = [[0.0; 4]; 4];
+        let mut effect_text_aspects = [[1.0; 4]; 8];
+        let mut effect_text_colors = [[1.0; 4]; 4];
+        let mut effect_background_colors = [[1.0; 4]; 4];
+        let mut atlas_base = 0;
         for (index, effect) in layer.effects.iter().enumerate() {
             if let Some(parameters) = effect.beat_slice_grid_parameters() {
                 effect_types[index] = 11;
@@ -67,8 +74,26 @@ impl LayerUniform {
                 effect_parameters[index] = parameters.as_array();
                 effect_parameter_tail[index] = effect.parameters.get(4).copied().unwrap_or(0.0);
                 effect_seeds[index] = effect.parameters.get(5).copied().unwrap_or(1.0);
-                for (destination, mask) in effect_text[index].iter_mut().zip(&effect.text_mask) {
-                    *destination = *mask;
+                let typography = effect.slice_typography();
+                effect_text_colors[index] = [
+                    f32::from(typography.text_color[0]) / 255.0,
+                    f32::from(typography.text_color[1]) / 255.0,
+                    f32::from(typography.text_color[2]) / 255.0,
+                    1.0,
+                ];
+                effect_background_colors[index] = [
+                    f32::from(typography.background_color[0]) / 255.0,
+                    f32::from(typography.background_color[1]) / 255.0,
+                    f32::from(typography.background_color[2]) / 255.0,
+                    1.0,
+                ];
+                if let Some(atlas) = &effect.text_atlas {
+                    effect_text_meta[index] =
+                        [atlas.aspects.len() as f32, atlas_base as f32, 0.0, 0.0];
+                    for (entry, aspect) in atlas.aspects.iter().take(8).enumerate() {
+                        effect_text_aspects[index * 2 + entry / 4][entry % 4] = *aspect;
+                    }
+                    atlas_base += atlas.aspects.len();
                 }
             } else if let Some(parameters) = effect.analog_tv_parameters() {
                 effect_types[index] = 1;
@@ -193,7 +218,10 @@ impl LayerUniform {
             beat_scan_counts,
             beat_event_x,
             beat_event_y,
-            effect_text,
+            effect_text_meta,
+            effect_text_aspects,
+            effect_text_colors,
+            effect_background_colors,
         }
     }
 }

@@ -100,6 +100,17 @@ pub(super) fn uniform_and_texture_layout(
                 },
                 count: None,
             },
+            // Runtime text atlas, or a stand-in for layers without typography.
+            wgpu::BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
         ],
     })
 }
@@ -111,6 +122,7 @@ pub(super) fn bind_group(
     texture: &wgpu::TextureView,
     sampler: &wgpu::Sampler,
     mask: &wgpu::TextureView,
+    text_atlas: &wgpu::TextureView,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: None,
@@ -131,6 +143,10 @@ pub(super) fn bind_group(
             wgpu::BindGroupEntry {
                 binding: 3,
                 resource: wgpu::BindingResource::TextureView(mask),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::TextureView(text_atlas),
             },
         ],
     })

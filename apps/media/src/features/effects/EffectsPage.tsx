@@ -17,11 +17,13 @@ import {
 	type EffectLibrarySlot,
 	type EffectType,
 } from "../../shared/api/effects";
+import type { SliceGridTypographyView } from "../../shared/api/generated/media-wire";
 import { useEffects } from "../../shared/api/queries";
 import {
 	type LibrarySourceType,
 	librarySourceGroups,
 } from "../media-library/GeneratedLibraryBrowserView";
+import { SliceGridTypographyEditor } from "./SliceGridTypographyEditor";
 import { effectThumbnailUrl } from "./thumbnails";
 
 const EFFECT_SLOT_COUNT = 255;
@@ -111,6 +113,7 @@ export function EffectsLibraryView({
 		parameters: number[];
 		beatSource: string;
 		text?: string;
+		typography?: SliceGridTypographyView;
 	}): void;
 	onClear(): void;
 }) {
@@ -221,7 +224,14 @@ function EffectSlotEditor({
 		effect?.effect.beatSource ?? "detected-beat",
 	);
 
-	const [text, setText] = useState(effect?.effect.text ?? "PIXEL");
+	const [typography, setTypography] = useState<SliceGridTypographyView>(
+		effect?.effect.typography ?? {
+			texts: [effect?.effect.text ?? "PIXEL"],
+			font: "Arial Black",
+			textColor: [242, 4, 6],
+			backgroundColor: [250, 250, 250],
+		},
+	);
 
 	const save = () => {
 		const rasterMode = effectType === "rasterize-cmyk" ? 1 : 0;
@@ -234,7 +244,7 @@ function EffectSlotEditor({
 				? [rasterMode, ...parameters.slice(1)]
 				: parameters,
 			beatSource,
-			...(effectType === "beat-slice-grid" ? { text } : {}),
+			...(effectType === "beat-slice-grid" ? { typography } : {}),
 		});
 	};
 
@@ -261,7 +271,16 @@ function EffectSlotEditor({
 				onChange={(value) => setEffectType(value as EffectType)}
 			/>
 			{effectType === "beat-slice-grid" && (
-				<TextField label="Grid text" value={text} maxLength={64} onChange={(event) => setText(event.target.value)} />
+				<SliceGridTypographyEditor
+					value={typography}
+					onChange={setTypography}
+					fontStatus={
+						typography.font ===
+						(effect?.effect.typography?.font ?? "Arial Black")
+							? (effect?.effect.fontStatus ?? undefined)
+							: undefined
+					}
+				/>
 			)}
 			{BEAT_EFFECTS.has(effectType) && (
 				<SelectField

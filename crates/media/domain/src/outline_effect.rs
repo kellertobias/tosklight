@@ -120,7 +120,8 @@ impl EffectSlot {
     pub fn outline() -> Self {
         Self {
             text: None,
-            text_mask: Vec::new(),
+            text_atlas: None,
+            typography: None,
             effect_type: Some(OUTLINE_EFFECT.to_owned()),
             enabled: true,
             seed: 0,
