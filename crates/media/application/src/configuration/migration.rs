@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 9;
+pub const CURRENT_VERSION: u32 = 10;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -63,6 +63,7 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             6 => Ok(with_outline_preset(current)),
             7 => Ok(without_effect_visualizer_tuning(current)),
             8 => Ok(with_slice_grid_preset(current)),
+            9 => Ok(without_galaxy_simulator(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
@@ -185,6 +186,21 @@ fn with_slice_grid_preset(mut document: Value) -> Value {
         *stored = serde_json::to_value(library).expect("an effect library is serializable");
     }
     document["version"] = json!(9);
+    document
+}
+
+/// Version 9 → 10: retire Galaxy Simulator without moving any other source's address.
+/// Filter its wire identity before typed deserialization so earlier files still open.
+fn without_galaxy_simulator(mut document: Value) -> Value {
+    if let Some(entries) = document
+        .get_mut("configuration")
+        .and_then(|configuration| configuration.get_mut("visualizers"))
+        .and_then(|visualizers| visualizers.get_mut("entries"))
+        .and_then(Value::as_array_mut)
+    {
+        entries.retain(|entry| entry["configuration"]["kind"] != "galaxy-simulator");
+    }
+    document["version"] = json!(10);
     document
 }
 
@@ -472,7 +488,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 9"));
+        assert!(written.contains("\"version\": 10"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -662,11 +678,53 @@ mod tests {
     #[test]
     fn a_current_document_is_left_alone() {
         assert_eq!(
-            CURRENT_VERSION, 9,
-            "documents with the Beat Slice Grid catalog are version 9"
+            CURRENT_VERSION, 10,
+            "documents without the retired Galaxy kind are version 10"
         );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
+    }
+
+    #[test]
+    fn version_nine_retires_only_galaxy_and_preserves_authored_addresses() {
+        use crate::configuration::{MediaConfiguration, save};
+        use media_domain::{MediaAddress, VisualizerConfiguration, VisualizerKind};
+        let baseline = MediaConfiguration::default();
+        let mut document: Value = serde_json::from_str(&save(&baseline)).unwrap();
+        document["version"] = json!(9);
+        let mut retired =
+            serde_json::to_value(VisualizerConfiguration::new(VisualizerKind::Starfield)).unwrap();
+        retired["kind"] = json!("galaxy-simulator");
+        retired["name"] = json!("Renamed space scene");
+        let entries = document["configuration"]["visualizers"]["entries"]
+            .as_array_mut()
+            .unwrap();
+        entries.push(json!({"address":{"folder":251,"file":7},"configuration":retired}));
+        let mut other =
+            serde_json::to_value(VisualizerConfiguration::new(VisualizerKind::Starfield)).unwrap();
+        other["name"] = json!("Galaxy Simulator");
+        entries.push(json!({"address":{"folder":250,"file":26},"configuration":other}));
+        let loaded = load(&document.to_string()).unwrap();
+        assert!(
+            loaded
+                .visualizers
+                .resolve(MediaAddress::new(251, 7))
+                .is_none()
+        );
+        assert_eq!(
+            loaded
+                .visualizers
+                .resolve(MediaAddress::new(250, 26))
+                .unwrap()
+                .name,
+            "Galaxy Simulator"
+        );
+        for entry in &baseline.visualizers.entries {
+            assert_eq!(
+                loaded.visualizers.resolve(entry.address),
+                Some(&entry.configuration)
+            );
+        }
     }
 
     /// A stored document of `version` with this build's default outputs and the given library.
@@ -782,7 +840,7 @@ mod tests {
         old.remove(14);
         let stored = json!({"version": 8, "configuration": {"effects": old}});
         let migrated = migrate_to_current(stored).unwrap();
-        assert_eq!(migrated["version"], 9);
+        assert_eq!(migrated["version"], 10);
         let library: media_domain::EffectLibrary =
             serde_json::from_value(migrated["configuration"]["effects"].clone()).unwrap();
         assert_eq!(

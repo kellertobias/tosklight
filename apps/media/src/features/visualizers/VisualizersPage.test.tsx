@@ -21,8 +21,22 @@ afterEach(() => {
 describe("the visualizers page", () => {
 	it("exposes Black Hole beat controls and saves a disabled pulse", async () => {
 		const server = stubServer({
-			visualizers: [aVisualizer({ typeId: 56, kind: "Black Hole", name: "Black Hole",
-				uses: ["size", "speed", "reactivity", "decay", "curvature", "primary", "secondary"] })],
+			visualizers: [
+				aVisualizer({
+					typeId: 56,
+					kind: "Black Hole",
+					name: "Black Hole",
+					uses: [
+						"size",
+						"speed",
+						"reactivity",
+						"decay",
+						"curvature",
+						"primary",
+						"secondary",
+					],
+				}),
+			],
 		});
 		render(<VisualizersPage />);
 		await screen.findByLabelText("Shadow radius");
@@ -32,7 +46,9 @@ describe("the visualizers page", () => {
 		const pulse = screen.getByLabelText("Beat pulse");
 		await userEvent.clear(pulse);
 		await userEvent.type(pulse, "0");
-		await waitFor(() => expect(server.visualizers[0].parameters.reactivity).toBe(0));
+		await waitFor(() =>
+			expect(server.visualizers[0].parameters.reactivity).toBe(0),
+		);
 	});
 	it("shows each visualizer with the address a desk reaches it by", async () => {
 		stubServer();
@@ -58,7 +74,10 @@ describe("the visualizers page", () => {
 	});
 
 	it("has an actual renderer frame for every shipped built-in kind", () => {
-		expect(BUILTIN_VISUALIZER_KINDS).toHaveLength(28);
+		expect(BUILTIN_VISUALIZER_KINDS).toHaveLength(27);
+		expect(
+			BUILTIN_VISUALIZER_KINDS.some(({ typeId }) => Number(typeId) === 24),
+		).toBe(false);
 		expect(
 			BUILTIN_VISUALIZER_KINDS.every(({ typeId }) =>
 				hasRenderedVisualizerPreview(typeId),
@@ -67,9 +86,21 @@ describe("the visualizers page", () => {
 	});
 
 	it("edits Text Tracking words independently from numeric tuning", async () => {
-		const server = stubServer({ visualizers: [aVisualizer({ typeId: 43, kind: "Text Tracking", name: "Text Tracking", text: "LOCK", uses: ["count", "amount", "curvature"] })] });
+		const server = stubServer({
+			visualizers: [
+				aVisualizer({
+					typeId: 43,
+					kind: "Text Tracking",
+					name: "Text Tracking",
+					text: "LOCK",
+					uses: ["count", "amount", "curvature"],
+				}),
+			],
+		});
 		render(<VisualizersPage />);
-		const words = await screen.findByLabelText("Text (ASCII, up to 128 characters)");
+		const words = await screen.findByLabelText(
+			"Text (ASCII, up to 128 characters)",
+		);
 		expect(screen.getByLabelText("Columns")).toBeInTheDocument();
 		expect(screen.getByLabelText("Camera motion")).toBeInTheDocument();
 		await userEvent.clear(words);
