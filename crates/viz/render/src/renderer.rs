@@ -22,6 +22,8 @@ const OVERLAY_WGSL: &str = include_str!("shaders/overlay.wgsl");
 const SHADOW_WGSL: &str = include_str!("shaders/shadow.wgsl");
 
 #[cfg(test)]
+mod curtain_optics_tests;
+#[cfg(test)]
 mod optics_tests;
 /// Bindings the depth-only pass needs, kept beside it rather than in the shared prelude, which
 /// the passes that sample the atlas use instead.
@@ -225,6 +227,7 @@ pub struct Renderer {
     laser_instances: DynamicBuffer,
     line_vertices: DynamicBuffer,
     lights: DynamicBuffer,
+    curtain_blockers: DynamicBuffer,
     tile_counts: DynamicBuffer,
     tile_lights: DynamicBuffer,
     globals_buffer: wgpu::Buffer,
@@ -401,6 +404,7 @@ impl Renderer {
             laser_instances: buffers.laser_instances,
             line_vertices: buffers.line_vertices,
             lights: buffers.lights,
+            curtain_blockers: buffers.curtain_blockers,
             tile_counts: buffers.tile_counts,
             tile_lights: buffers.tile_lights,
             globals_buffer: buffers.globals,
@@ -762,6 +766,7 @@ impl Renderer {
             &self.shadow_matrices,
             &self.gobo_atlas.view,
             &self.gobo_sampler,
+            &self.curtain_blockers,
         );
         self.shadow_draw_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viz shadow draw"),
@@ -930,6 +935,7 @@ impl Renderer {
 }
 
 mod buffers;
+mod curtain_occlusion;
 mod frame;
 mod groups;
 mod layouts;

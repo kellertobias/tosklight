@@ -10,7 +10,7 @@ use super::{
     SHADOW_TILE_EDGE, SHADOW_TILES_PER_ROW,
 };
 use crate::camera::ResolvedCamera;
-use crate::instances::{FrameStyle, GpuLight, MeshKind};
+use crate::instances::{FrameStyle, GpuCurtainBlocker, GpuLight, MeshKind};
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3};
 use std::hash::{Hash, Hasher};
@@ -369,6 +369,21 @@ impl Renderer {
 
     /// Everything this frame draws, uploaded to the buffers the passes read.
     fn upload_frame(&mut self, scene: &Scene, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let packed_blockers =
+            super::curtain_occlusion::pack(&mut self.frame.lights, &self.frame.curtain_blockers);
+        let blockers_grew = if packed_blockers.is_empty() {
+            let grew = self
+                .curtain_blockers
+                .upload(device, queue, &[GpuCurtainBlocker::zeroed()]);
+            self.curtain_blockers.length = 0;
+            grew
+        } else {
+            self.curtain_blockers
+                .upload(device, queue, &packed_blockers)
+        };
+        if blockers_grew {
+            self.rebuild_shadow_groups();
+        }
         let mut invalidated = false;
         if self.frame.lights.is_empty() {
             invalidated |= self.lights.upload(device, queue, &[GpuLight::zeroed()]);
@@ -471,7 +486,7 @@ impl Renderer {
                 f32::from(u8::from(view.quality.draws_gobos())),
                 f32::from(u8::from(view.quality.draws_beam_falloff())),
                 f32::from(u8::from(plan.plot || !view.mode.simulates_light())),
-                0.0,
+                self.curtain_blockers.length as f32,
             ],
             params5: {
                 let fog = view.fog_variation.for_quality(view.quality);

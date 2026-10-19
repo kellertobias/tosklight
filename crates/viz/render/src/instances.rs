@@ -142,7 +142,7 @@ pub struct GpuLight {
     pub shaper_angles: [f32; 4],
     /// `x` the artwork layer this slot projects, or `-1` for a slot with none — which is every
     /// slot of a profile that declares no wheel, and is what selects the drawn patterns instead.
-    /// `yzw` spare.
+    /// `yz` spare; `w` packed curtain-blocker header offset, or -1 for none.
     pub gate: [f32; 4],
     /// `x` shadow-map index or `-1`, `yz` its tile origin in the atlas, `w` the tile size.
     pub shadow: [f32; 4],
@@ -230,11 +230,21 @@ pub struct EmitterPose {
     pub orientation: Quat,
 }
 
+/// A posed fabric rectangle that blocks light independently of the shadow-map budget.
+/// The transform is rigid: local X/Y are the curtain width/height and local Z its normal.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Pod, Zeroable)]
+pub struct GpuCurtainBlocker {
+    pub world_to_local: [[f32; 4]; 4],
+    pub half_size: [f32; 4],
+}
+
 /// Everything one frame uploads.
 #[derive(Default)]
 pub struct FrameInstances {
     pub meshes: Vec<(MeshKind, Vec<MeshInstance>)>,
     pub lights: Vec<GpuLight>,
+    pub curtain_blockers: Vec<GpuCurtainBlocker>,
     pub beams: Vec<BeamInstance>,
     pub lasers: Vec<LaserInstance>,
     pub lines: Vec<LineVertex>,

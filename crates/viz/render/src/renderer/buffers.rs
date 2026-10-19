@@ -6,7 +6,8 @@
 use super::{Globals, MAX_LIGHTS_PER_TILE};
 use crate::buffers::DynamicBuffer;
 use crate::instances::{
-    BeamInstance, GpuLight, GpuMediaPanel, LaserInstance, LineVertex, MeshInstance, MeshKind,
+    BeamInstance, GpuCurtainBlocker, GpuLight, GpuMediaPanel, LaserInstance, LineVertex,
+    MeshInstance, MeshKind,
 };
 use crate::targets::Targets;
 use bytemuck::Zeroable;
@@ -18,6 +19,7 @@ pub(super) struct SceneBuffers {
     pub globals: wgpu::Buffer,
     pub post_settings: wgpu::Buffer,
     pub lights: DynamicBuffer,
+    pub curtain_blockers: DynamicBuffer,
     pub tile_counts: DynamicBuffer,
     pub tile_lights: DynamicBuffer,
     /// One instance buffer per procedural mesh, plus the ones the beams, lasers, plan lines and
@@ -45,6 +47,14 @@ impl SceneBuffers {
             mapped_at_creation: false,
         });
 
+        let mut curtain_blockers = DynamicBuffer::new(
+            device,
+            "viz curtain blockers",
+            BufferUsages::STORAGE,
+            (size_of::<GpuCurtainBlocker>() * 64) as u64,
+        );
+        curtain_blockers.upload(device, queue, &[GpuCurtainBlocker::zeroed()]);
+        curtain_blockers.length = 0;
         let mut lights = DynamicBuffer::new(
             device,
             "viz lights",
@@ -85,6 +95,7 @@ impl SceneBuffers {
             globals: globals_buffer,
             post_settings,
             lights,
+            curtain_blockers,
             tile_counts,
             tile_lights,
             mesh_instances,

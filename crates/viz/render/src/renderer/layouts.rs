@@ -325,6 +325,16 @@ fn shadow_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
         ],
     })
 }
@@ -393,6 +403,7 @@ pub(super) fn build_shadow_group(
     shadow_matrices: &DynamicBuffer,
     gobo_atlas: &wgpu::TextureView,
     gobo_sampler: &wgpu::Sampler,
+    curtain_blockers: &DynamicBuffer,
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("viz shadow"),
@@ -417,6 +428,10 @@ pub(super) fn build_shadow_group(
             wgpu::BindGroupEntry {
                 binding: 4,
                 resource: wgpu::BindingResource::Sampler(gobo_sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: curtain_blockers.buffer.as_entire_binding(),
             },
         ],
     })

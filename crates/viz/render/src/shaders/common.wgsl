@@ -9,7 +9,7 @@ struct Globals {
     params: vec4<f32>,            // exposure, fog density, near, far
     params2: vec4<f32>,           // light count, volumetric steps, ambient, tiles_x
     params3: vec4<f32>,           // plot flag, fog detail, time, laser brightness
-    params4: vec4<f32>,           // gobos flag, beam fall-off flag, flat-ink flag, spare
+    params4: vec4<f32>,           // gobos flag, beam fall-off flag, flat-ink flag, opaque curtain count
     params5: vec4<f32>,           // lamp cloudiness/turbulence, laser cloudiness/turbulence
 };
 
@@ -41,7 +41,7 @@ struct Light {
     optics: vec4<f32>,            // gobo slot, gobo rotation, prism facets, prism rotation
     shapers: vec4<f32>,           // blade insertions: +u, -u, +v, -v
     shaper_angles: vec4<f32>,     // per-blade rotation in radians
-    gate: vec4<f32>,              // first artwork layer or -1, gobo wheel count, prism wheel count, spare
+    gate: vec4<f32>,              // first artwork layer or -1, gobo wheel count, prism wheel count, curtain header or -1
     shadow: vec4<f32>,            // atlas tile index or -1, tile origin u, v, tile size
     gobo_wheels: array<vec4<f32>, 8>, // slot, rotation, artwork layer or -1, spare
     prism_wheels: array<vec4<f32>, 8>, // facets, rotation, linear flag, spread
@@ -53,11 +53,59 @@ struct Light {
 @group(2) @binding(3) var gobo_artwork: texture_2d_array<f32>;
 @group(2) @binding(4) var gobo_sampler: sampler;
 
+// Opaque drapes must block every lamp, including those outside the shadow-map budget.
+// The centre sheet is finite and follows the posed curtain. Detailed fold shadows still come
+// from the atlas, but their quality budget must never make blackout cloth transmit light.
+struct CurtainBlocker {
+    world_to_local: mat4x4<f32>,
+    half_size: vec4<f32>,
+};
+@group(2) @binding(5) var<storage, read> curtain_blockers: array<CurtainBlocker>;
+
+fn curtain_blocks_segment(light: Light, destination: vec3<f32>) -> bool {
+    // CPU broad-phase keeps only rectangles that intersect this light's conservative beam
+    // frustum. Most lamps have no candidate curtain, so their hot surface/haze path stays cheap.
+    if (globals.params4.w < 1.0 || light.gate.w < 0.0) {
+        return false;
+    }
+    let origin = light.position_range.xyz;
+    let first = u32(light.gate.w);
+    let count = u32(curtain_blockers[first].half_size.z);
+    for (var offset = 0u; offset < count; offset = offset + 1u) {
+        let index = first + 1u + offset;
+        let blocker = curtain_blockers[index];
+        let transform = blocker.world_to_local;
+        let plane = vec4<f32>(transform[0].z, transform[1].z, transform[2].z, transform[3].z);
+        let start_z = dot(plane, vec4<f32>(origin, 1.0));
+        let end_z = dot(plane, vec4<f32>(destination, 1.0));
+        // Same side, parallel, or on the sheet: no crossing. This also avoids division by zero.
+        if (start_z * end_z >= 0.0) {
+            continue;
+        }
+        let fraction = start_z / (start_z - end_z);
+        // Endpoints do not occlude themselves; use a physical epsilon rather than a fraction
+        // of the throw so a long throw still cannot leak through a thin curtain.
+        let length_metres = length(destination - origin);
+        if (min(fraction, 1.0 - fraction) * length_metres <= 0.0001) {
+            continue;
+        }
+        // Only a crossing needs the remaining transform; most curtain/light pairs reject above.
+        let crossing = (transform * vec4<f32>(mix(origin, destination, fraction), 1.0)).xy;
+        if (all(abs(crossing) <= blocker.half_size.xy)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /// How much of `world` this light can actually see, `1.0` being fully lit.
 ///
 /// A light with no map in this frame's budget is not darkened: a missing shadow reads as an
 /// unshadowed light, never as a black stage.
 fn shadow_lookup(light: Light, world: vec3<f32>, taps: bool) -> f32 {
+    if (curtain_blocks_segment(light, world)) {
+        return 0.0;
+    }
     let index = light.shadow.x;
     if (index < 0.0) {
         return 1.0;

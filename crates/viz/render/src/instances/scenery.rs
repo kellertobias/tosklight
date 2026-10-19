@@ -5,7 +5,7 @@
 //! live: nothing in it answers a DMX frame directly. The one thing that moves it is a 3D Point an
 //! object is slaved to, whose pose arrives with the values, so the pass reads the posed objects.
 
-use super::{FrameInstances, FrameStyle, MeshInstance, MeshKind, Surface};
+use super::{FrameInstances, FrameStyle, GpuCurtainBlocker, MeshInstance, MeshKind, Surface};
 use glam::{Mat4, Quat, Vec3};
 use std::collections::HashMap;
 use viz_scene::{
@@ -278,6 +278,12 @@ fn push_curtain(
 ) {
     let size = object.size.max(Vec3::splat(0.02));
     let width = size.x;
+    frame.curtain_blockers.push(GpuCurtainBlocker {
+        world_to_local: Mat4::from_rotation_translation(orientation, object.position)
+            .inverse()
+            .to_cols_array_2d(),
+        half_size: [width * 0.5, size.y * 0.5, 0.0, 0.0],
+    });
     // Serge hung at fullness gathers into folds about 30 cm apart.
     let folds = ((width / 0.32).round() as usize).clamp(2, 120);
     let fold_width = width / folds as f32;

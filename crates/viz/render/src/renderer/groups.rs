@@ -59,6 +59,7 @@ impl Groups {
             &shadow.matrices,
             &gobo_atlas.view,
             &gobo_sampler,
+            &buffers.curtain_blockers,
         );
         let shadow_draw_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viz shadow draw"),

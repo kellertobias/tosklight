@@ -139,16 +139,16 @@ pub fn unit_cylinder(segments: u32) -> MeshData {
         mesh.push(p2, n1, Vec2::new(1.0, 1.0));
         mesh.push(p3, n0, Vec2::new(0.0, 1.0));
         mesh.indices
-            .extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+            .extend_from_slice(&[base, base + 2, base + 1, base, base + 3, base + 2]);
         // Caps.
         let top = mesh.push(Vec3::new(0.0, half, 0.0), Vec3::Y, Vec2::splat(0.5));
         let t0 = mesh.push(p3, Vec3::Y, Vec2::splat(0.5));
         let t1 = mesh.push(p2, Vec3::Y, Vec2::splat(0.5));
-        mesh.indices.extend_from_slice(&[top, t0, t1]);
+        mesh.indices.extend_from_slice(&[top, t1, t0]);
         let bottom = mesh.push(Vec3::new(0.0, -half, 0.0), Vec3::NEG_Y, Vec2::splat(0.5));
         let b0 = mesh.push(p1, Vec3::NEG_Y, Vec2::splat(0.5));
         let b1 = mesh.push(p0, Vec3::NEG_Y, Vec2::splat(0.5));
-        mesh.indices.extend_from_slice(&[bottom, b0, b1]);
+        mesh.indices.extend_from_slice(&[bottom, b1, b0]);
     }
     mesh
 }
@@ -469,6 +469,23 @@ mod tests {
         }
         assert!(procedural(MeshKind::ModelPart(0, 0)).is_none());
         assert!(procedural(MeshKind::PlanArtwork(0)).is_none());
+    }
+
+    #[test]
+    fn cylinder_triangles_face_the_same_way_as_their_outward_normals() {
+        let mesh = unit_cylinder(20);
+        for triangle in mesh.indices.chunks_exact(3) {
+            let vertices =
+                [triangle[0], triangle[1], triangle[2]].map(|index| &mesh.vertices[index as usize]);
+            let [a, b, c] = vertices.map(|vertex| Vec3::from_array(vertex.position));
+            let normal = vertices.iter().fold(Vec3::ZERO, |sum, vertex| {
+                sum + Vec3::from_array(vertex.normal)
+            });
+            assert!(
+                (b - a).cross(c - a).dot(normal) > 0.0,
+                "back-face culling must keep the cylinder exterior, including curtain folds"
+            );
+        }
     }
 
     #[test]
