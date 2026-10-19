@@ -88,20 +88,20 @@ fn write_inputs(
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FamilyTraceNodeId(pub usize);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum FamilyTraceFootprint {
     Whole,
     Component(ProgrammingComponent),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum FamilyTraceRole {
     Authored,
     /// A generated Current partner, the original pre-Dynamic family, or a live frame input.
     CalculationDependency,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct FamilyTraceSource {
     pub rank: FamilySampleRank,
     pub footprint: FamilyTraceFootprint,

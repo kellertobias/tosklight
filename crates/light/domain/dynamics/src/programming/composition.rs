@@ -16,11 +16,15 @@ mod adoption;
 mod borrowed_address_tests;
 mod component_coverage;
 mod endpoint_output;
+mod leaf_provenance;
 mod native_fixed;
 mod position_segment;
 mod retained_family;
 mod segment;
 mod trace;
+pub(crate) use leaf_provenance::{
+    LeafProvenance, LeafProvenanceCache, LeafProvenanceLog, LeafProvenanceMap,
+};
 mod whole_activation;
 use adoption::{adopt, requirement};
 pub use endpoint_output::{FamilyEndpointOutputContext, FamilyEndpointOutputControl};
@@ -61,7 +65,7 @@ pub struct FamilyDynamicSampleIdentity {
 
 /// Existing priority/recency order, including Cue precision within a millisecond. Fixed row
 /// attribution remains the optional source occurrence carried by the trace, not this rank.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct FamilySampleRank {
     pub priority: i16,
     pub changed_at_millis: u64,
@@ -334,9 +338,42 @@ impl FamilySample {
     /// roles stay distinct; Current keeps its own field transfer. Absent evidence stays
     /// absent: an unattributed leaf keeps the Unknown authored fallback without allocating.
     pub(crate) fn with_leaf_provenance(
+        self,
+        occurrence: Option<crate::DynamicSourceOccurrenceId>,
+        dependency: Option<&crate::DynamicSourceDependency>,
+    ) -> Self {
+        self.with_interned_leaf_provenance(occurrence, dependency, &mut LeafProvenance::Fresh)
+    }
+
+    /// The shared leaf provenance storage and its sources, for interning tests (TL-842 C2).
+    #[cfg(test)]
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn leaf_provenance_for_test(
+        &self,
+    ) -> Option<(
+        *const (),
+        Vec<(FamilyTraceSource, Option<crate::DynamicSourceDependency>)>,
+    )> {
+        self.trace_sources.as_ref().map(|sources| {
+            let leaves = sources
+                .iter()
+                .map(|leaf| match leaf {
+                    trace::FamilyTraceLeaf::Source(source) => (*source, None),
+                    trace::FamilyTraceLeaf::Current(source, dependency) => {
+                        (*source, Some(dependency.clone()))
+                    }
+                })
+                .collect();
+            (Arc::as_ptr(sources) as *const (), leaves)
+        })
+    }
+
+    /// [`Self::with_leaf_provenance`] reusing last frame's equal leaves (TL-842 C2).
+    pub(crate) fn with_interned_leaf_provenance(
         mut self,
         occurrence: Option<crate::DynamicSourceOccurrenceId>,
         dependency: Option<&crate::DynamicSourceDependency>,
+        provenance: &mut LeafProvenance<'_>,
     ) -> Self {
         if occurrence.is_none() && dependency.is_none() {
             return self;
@@ -347,21 +384,7 @@ impl FamilySample {
             role: FamilyTraceRole::Authored,
             occurrence,
         };
-        let sources: Arc<[trace::FamilyTraceLeaf]> = match dependency {
-            Some(dependency) => Arc::new([
-                trace::FamilyTraceLeaf::Source(authored),
-                trace::FamilyTraceLeaf::Current(
-                    FamilyTraceSource {
-                        role: FamilyTraceRole::CalculationDependency,
-                        occurrence: dependency.occurrence,
-                        ..authored
-                    },
-                    dependency.clone(),
-                ),
-            ]),
-            None => Arc::new([trace::FamilyTraceLeaf::Source(authored)]),
-        };
-        self.trace_sources = Some(sources);
+        self.trace_sources = Some(provenance.intern(authored, dependency));
         self
     }
 

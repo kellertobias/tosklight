@@ -122,6 +122,8 @@ pub struct PreparedChunk {
     controllers: Vec<(usize, (usize, usize))>,
     /// Compiled samples this chunk keeps.
     keep: Vec<(CacheKey, CompiledSample)>,
+    /// Leaf provenance this chunk materialized (TL-842 C2).
+    provenance: Vec<super::super::composition::LeafProvenanceLog>,
     /// The first controller the frame prepares itself with every later one of the chunk, and
     /// the worker's error there, if any.
     stopped: Option<(usize, Option<TransitionError>)>,
@@ -175,6 +177,7 @@ pub fn prepare_dynamic_family_samples_in_parallel<'a>(
         .requirements
         .extend_from_slice(sampling_requirements);
     let mut previous = std::mem::take(&mut scratch.cache);
+    scratch.provenance.begin_frame();
     let result = prepare_in_parallel(
         samples,
         sources,
@@ -223,9 +226,11 @@ fn prepare_in_parallel(
         let (order, controllers) = (&scratch.order, &scratch.controllers);
         let sampling_requirements = &scratch.sampling_requirements;
         let shared: &HashMap<CacheKey, CompiledSample> = previous;
+        let provenance = scratch.provenance.previous();
         workers.run(&|chunk, fork| {
             prepare_chunk(
                 samples,
+                provenance,
                 order,
                 controllers,
                 &members[chunk],
@@ -239,6 +244,7 @@ fn prepare_in_parallel(
     let mut cursors = Vec::with_capacity(prepared.len());
     for mut chunk in prepared {
         scratch.cache.extend(chunk.keep.drain(..));
+        scratch.provenance.keep(chunk.provenance.drain(..));
         cursors.push(ChunkCursor {
             writes: chunk.writes.into_iter(),
             controllers: chunk.controllers.into_iter(),
@@ -260,6 +266,7 @@ fn prepare_in_parallel(
         requirements,
         sampling_requirements,
         cache,
+        provenance,
         ..
     } = scratch;
     let mut out = FamilyOutput {
@@ -285,6 +292,7 @@ fn prepare_in_parallel(
                 sampling_requirements,
                 previous: Previous::Owned(&mut *previous),
                 keep: Keep::Cache(&mut *cache),
+                provenance: provenance.owned(),
                 out: &mut out,
             };
             preparer.prepare_controller(samples, &order[range.clone()], sources, native_models)?;
@@ -326,6 +334,7 @@ struct ChunkCursor {
 #[allow(clippy::too_many_arguments)]
 fn prepare_chunk(
     samples: &[DynamicRuntimeSample],
+    provenance: &super::super::composition::LeafProvenanceMap,
     order: &[usize],
     controllers: &[std::ops::Range<usize>],
     members: &[usize],
@@ -345,6 +354,10 @@ fn prepare_chunk(
             sampling_requirements,
             previous: Previous::Shared(previous),
             keep: Keep::Log(&mut keep),
+            provenance: super::super::composition::LeafProvenance::Shared {
+                previous: provenance,
+                log: &mut chunk.provenance,
+            },
             out: &mut chunk.writes,
         }
         .prepare_controller_classified(

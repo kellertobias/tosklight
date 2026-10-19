@@ -148,6 +148,7 @@ pub(super) struct Preparer<'a, O> {
     pub(super) sampling_requirements: &'a [DynamicFamilyPreparationRequirement],
     pub(super) previous: Previous<'a>,
     pub(super) keep: Keep<'a>,
+    pub(super) provenance: super::super::composition::LeafProvenance<'a>,
     pub(super) out: &'a mut O,
 }
 
@@ -239,6 +240,7 @@ pub(super) fn prepare(
         requirements,
         sampling_requirements,
         cache,
+        provenance,
         ..
     } = scratch;
     let mut out = FamilyOutput {
@@ -254,6 +256,7 @@ pub(super) fn prepare(
         sampling_requirements,
         previous: Previous::Owned(previous),
         keep: Keep::Cache(cache),
+        provenance: provenance.owned(),
         out: &mut out,
     };
     for range in controllers.iter() {

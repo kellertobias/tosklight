@@ -42,6 +42,7 @@ fn witness(input: &[DynamicRuntimeSample], force_old: bool) -> (Result<(), Strin
             sampling_requirements: &[],
             previous: Previous::Owned(&mut previous),
             keep: Keep::Cache(&mut cache),
+            provenance: crate::programming::composition::LeafProvenance::Fresh,
             out: &mut output,
         }
         .prepare_controller(input, &indices, &Sources::default(), None)

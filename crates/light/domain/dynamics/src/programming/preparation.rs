@@ -86,6 +86,8 @@ pub struct DynamicFamilyPreparationScratch {
     retired: HashMap<CacheKey, CompiledSample>,
     /// Last frame's output, cleared by this preparation (TL-639 round 7), freed the same way.
     retired_output: RetiredOutput,
+    /// Materialized leaf provenance shared with the next frame (TL-842 C2).
+    provenance: super::composition::LeafProvenanceCache,
 }
 
 /// A cleared preparation output: its groups (with their samples) and legacy fragments.
@@ -116,6 +118,7 @@ impl DynamicFamilyPreparationScratch {
     pub fn clear(&mut self) {
         self.clear_output();
         self.cache.clear();
+        self.provenance.clear();
         self.controller.clear();
         self.position.clear();
         self.order.clear();
@@ -160,7 +163,8 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         leaf: plain_scalar::Leaf<'_>,
     ) -> Result<(), TransitionError> {
         if !self.sampling_required(sample, ProgrammingOwner::Color) {
-            let value = leaf.materialize(rank(sample), sample.activation_mix)?;
+            let value =
+                leaf.materialize(rank(sample), sample.activation_mix, &mut self.provenance)?;
             self.out
                 .append_one(sample.target, ProgrammingOwner::Color, value.into());
         }
@@ -522,6 +526,7 @@ pub fn prepare_dynamic_family_samples_with_requirements<'a>(
         .requirements
         .extend_from_slice(sampling_requirements);
     let mut previous = std::mem::take(&mut scratch.cache);
+    scratch.provenance.begin_frame();
     let result = prepare(samples, sources, native_models, &mut previous, scratch);
     scratch.retired = previous;
     if let Err(error) = result {

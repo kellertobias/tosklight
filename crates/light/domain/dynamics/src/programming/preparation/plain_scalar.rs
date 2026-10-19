@@ -93,6 +93,7 @@ impl Leaf<'_> {
         self,
         rank: FamilySampleRank,
         activation: f32,
+        provenance: &mut super::super::composition::LeafProvenance<'_>,
     ) -> Result<FamilySample, IntentError> {
         Ok(FamilySample::with_address(
             std::borrow::Cow::Borrowed(self.slot.compiled()?),
@@ -100,7 +101,7 @@ impl Leaf<'_> {
             rank,
             activation,
         )?
-        .with_leaf_provenance(self.occurrence, self.dependency))
+        .with_interned_leaf_provenance(self.occurrence, self.dependency, provenance))
     }
 }
 
