@@ -113,10 +113,22 @@ export function reducePaneOptions(
 				...pane,
 				runningFilter: action.filter,
 			}));
+		case "SET_PANE_PLAYBACK_CONTROLS":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				playbackShowControls: action.showControls,
+			}));
 		case "SET_PANE_PLAYBACK_VIEW":
-			return updateActivePane(state, action.id, pane => ({...pane, playbackViewMode: action.mode, playbackScreenSurfaceId: action.screenSurfaceId}));
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				playbackViewMode: action.mode,
+				playbackScreenSurfaceId: action.screenSurfaceId,
+			}));
 		case "SET_PANE_PLAYBACK_SURFACE":
-			return updateActivePane(state, action.id, pane => ({...pane, surface_id: action.surfaceId}));
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				surface_id: action.surfaceId,
+			}));
 		default:
 			return undefined;
 	}

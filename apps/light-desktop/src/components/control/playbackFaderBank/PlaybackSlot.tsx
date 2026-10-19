@@ -123,7 +123,7 @@ export function PlaybackSlot({
 	const { summary, running: transportRunning, error: transportError } = timecodePlaybackSummary(
 		playback, baseSummary, controller.timecodeRuntime, active?.loaded_cue_number,
 	);
-	const { actions, faderActions } = buildPlaybackActions({
+	const { actions, faderActions, primaryAction } = buildPlaybackActions({
 		controller,
 		playback,
 		active,
@@ -214,6 +214,7 @@ export function PlaybackSlot({
 			hasFader={hasFader}
 			value={value}
 			touchActions={touchActions}
+			primaryAction={primaryAction}
 			className={className}
 			cardStyle={cardStyle}
 			commandTarget={commandTarget}

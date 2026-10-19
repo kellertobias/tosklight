@@ -3165,3 +3165,44 @@ it.each(["macro", "timecode"] as const)(
 			.toBeGreaterThanOrEqual(2);
 	},
 );
+
+
+describe("Playback pane single-action tiles", () => {
+	beforeEach(resetPlaybackFaderMocks);
+	it("uses one GO button across title and current cue despite a three-control assignment", () => {
+		assignPlayback({ buttons: ["go_minus", "go", "flash"] });
+		const { container } = render(<PlaybackFaderBank count={1} tilePresentation />);
+		const tile = container.querySelector("article")!;
+		expect(within(tile).getAllByRole("button")).toHaveLength(1);
+		expect(within(tile).queryByRole("slider")).toBeNull();
+		for (const target of [tile.querySelector(".playback-tile-title")!, tile.querySelector(".playback-tile-summary")!, within(tile).getByRole("button")]) {
+			fireEvent.click(target);
+		}
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledTimes(3);
+		for (const call of mocks.poolPlaybackAction.mock.calls) expect(call).toEqual([
+			{ page: 1, position: 1 }, "button", expect.objectContaining({ button: 2, pressed: true }),
+		]);
+	});
+	it("switches back to the saved separate controls without changing assignments", () => {
+		assignPlayback();
+		const { container, rerender } = render(<PlaybackFaderBank count={1} tilePresentation />);
+		expect(container.querySelector(".playback-tile-card")).not.toBeNull();
+		rerender(<PlaybackFaderBank count={1} tilePresentation={false} />);
+		expect(container.querySelector(".playback-tile-card")).toBeNull();
+		expect(screen.getByRole("slider")).toBeEnabled();
+		expect(screen.getByRole("button", { name: "GO +" })).toBeEnabled();
+		expect(mocks.savePlaybackSlot).not.toHaveBeenCalled();
+	});
+	it("retains Record interception on an empty tile", async () => {
+		mocks.state.cueListSetTarget = null;
+		mocks.state.cueListSetArmed = false;
+		mocks.state.storeArmed = true;
+		const { container } = render(<PlaybackFaderBank count={1} tilePresentation />);
+		const tile = container.querySelector("article")!;
+		const button = within(tile).getByRole("button");
+		expect(button).toBeEnabled();
+		fireEvent.click(button);
+		await waitFor(() => expect(mocks.recordCue).toHaveBeenCalledTimes(1));
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
+	});
+});

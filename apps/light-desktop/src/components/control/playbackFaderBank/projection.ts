@@ -21,6 +21,7 @@ export function projectPlaybackSlots({
 	columns,
 	firstSlot,
 	pageSize,
+	ignoreFootprints = false,
 }: {
 	cueLists: readonly ShowObject<"cue_list">[];
 	groups: readonly PlaybackGroup[];
@@ -29,6 +30,7 @@ export function projectPlaybackSlots({
 	columns: number;
 	firstSlot: number;
 	pageSize: number;
+	ignoreFootprints?: boolean;
 }): PlaybackSlotProjection[] {
 	const cells = playbackLayout
 		? playbackLayout.rows.flatMap((row, rowIndex) =>
@@ -45,7 +47,7 @@ export function projectPlaybackSlots({
 				rowIndex: Math.floor(index / columns),
 				columnIndex: index % columns,
 			}));
-	const footprints = projectPlaybackFootprints({
+	const footprints = ignoreFootprints ? { cells: [] } : projectPlaybackFootprints({
 		page,
 		playbackLayout,
 		columns,

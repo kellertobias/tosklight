@@ -5,6 +5,7 @@ import {
 	type PlaybackCardSummary,
 	type PlaybackCardViewModel,
 	TouchPlaybackCardView,
+	PlaybackTileView,
 } from "@tosklight/ui/playback";
 import type {
 	CSSProperties,
@@ -41,6 +42,7 @@ type TouchPlaybackCardProps = {
 	hasFader: boolean;
 	value: number;
 	touchActions: VerticalTouchFaderAction[];
+	primaryAction?: VerticalTouchFaderAction;
 	className: string;
 	cardStyle: CSSProperties | undefined;
 	commandTarget: "record" | "set" | "off" | null;
@@ -60,6 +62,7 @@ export function TouchPlaybackCard({
 	hasFader,
 	value,
 	touchActions,
+	primaryAction,
 	className,
 	cardStyle,
 	commandTarget,
@@ -67,7 +70,7 @@ export function TouchPlaybackCard({
 	interceptClick,
 }: TouchPlaybackCardProps) {
 	const { playback, cue, slot, row, rowIndex } = slotData;
-	const rowUnits = row ? playbackRowUnits(row, controller.hardware) : 1;
+	const rowUnits = controller.tilePresentation ? 1 : row ? playbackRowUnits(row, controller.hardware) : 1;
 	const display = playbackFaderReadout(
 		playback,
 		active,
@@ -103,11 +106,13 @@ export function TouchPlaybackCard({
 		faderMode: playbackFaderModeFeedback(playback, active),
 		summary,
 		disabled:
-			controller.assignmentPending || !playback || !controller.runtimeActions,
+			controller.assignmentPending || (!playback && commandTarget !== "record") || !controller.runtimeActions,
 		actions: touchActions,
 	};
+	const Card = controller.tilePresentation ? PlaybackTileView : TouchPlaybackCardView;
 	return (
-		<TouchPlaybackCardView
+		<Card
+			action={primaryAction}
 			hardware={controller.hardware}
 			model={model}
 			slots={{
@@ -116,10 +121,10 @@ export function TouchPlaybackCard({
 						{commandTarget === "record" ? (
 							<PlaybackCommandTargetBadge command="record" />
 						) : null}
-						<ExpandedPlaybackControls
+						{!controller.tilePresentation && <ExpandedPlaybackControls
 							controller={controller}
 							slotData={slotData}
-						/>
+						/>}
 						<PlaybackAssignmentTarget controller={controller} slot={slot} />
 						<PlaybackConfigurationTarget
 							controller={controller}

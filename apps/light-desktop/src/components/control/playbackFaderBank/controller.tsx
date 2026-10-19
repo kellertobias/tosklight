@@ -40,6 +40,8 @@ import type { PlaybackConfigurationState } from "./types";
 
 export interface PlaybackFaderBankProps {
 	surfaceId?: string;
+	/** Square, single-action software pane tiles. */
+	tilePresentation?: boolean;
 	/** Live screen layout reference; page and control ownership stay on this pane. */
 	layoutSourceSurfaceId?: string;
 	/** Preserve readable touch geometry by scrolling fixed pane rows. */
@@ -55,6 +57,7 @@ export interface PlaybackFaderBankProps {
 
 export function usePlaybackBankController({
 	surfaceId = "main",
+	tilePresentation = false,
 	layoutSourceSurfaceId,
 	pageNumber,
 	firstSlot = 1,
@@ -79,7 +82,7 @@ export function usePlaybackBankController({
 	const programmingUpdate = useProgrammingUpdate();
 	const setInteraction = useSetInteraction();
 	const { state, dispatch } = useApp();
-	const hardware = Boolean(hardwareConnected || state.midiProfile);
+	const hardware = !tilePresentation && Boolean(hardwareConnected || state.midiProfile);
 	const pageSize = count ?? state.playbackColumns * state.playbackRows;
 	const rowCount = playbackLayout?.rows.length ?? rows ?? state.playbackRows;
 	const columns = Math.max(
@@ -103,6 +106,7 @@ export function usePlaybackBankController({
 		columns,
 		firstSlot,
 		pageSize,
+		tilePresentation,
 	});
 	const projectionAuthority = useVisiblePlaybackProjections(
 		slots,
@@ -130,9 +134,12 @@ export function usePlaybackBankController({
 		[runtimeActions],
 	);
 	useEffect(() => heldActions.listen(window), [heldActions]);
-	const rowTracks = playbackRowTracks(playbackLayout, hardware, rowCount);
+	const rowTracks = tilePresentation
+		? `repeat(${rowCount}, minmax(0, 1fr))`
+		: playbackRowTracks(playbackLayout, hardware, rowCount);
 	return {
 		surfaceId,
+		tilePresentation,
 		controlSourceId,
 		selectSurface: () => surfaces?.selectSurface(surfaceId),
 		topology,
@@ -215,6 +222,7 @@ export type PlaybackBankController = ReturnType<
 >;
 
 interface ProjectedSlotsOptions {
+	tilePresentation: boolean;
 	topology: ReturnType<typeof usePlaybackTopologyView>;
 	pageObject:
 		| ReturnType<typeof usePlaybackTopologyView>["pages"][number]
@@ -226,11 +234,12 @@ interface ProjectedSlotsOptions {
 }
 
 function useProjectedSlots(options: ProjectedSlotsOptions) {
-	const { topology, pageObject, playbackLayout, columns, firstSlot, pageSize } =
+	const { topology, pageObject, playbackLayout, columns, firstSlot, pageSize, tilePresentation } =
 		options;
 	const current = useMemo(
 		() => ({
 			topology,
+			tilePresentation,
 			pageObject,
 			playbackLayout,
 			columns,
@@ -239,6 +248,7 @@ function useProjectedSlots(options: ProjectedSlotsOptions) {
 		}),
 		[
 			columns,
+			tilePresentation,
 			firstSlot,
 			pageObject,
 			pageSize,
@@ -275,6 +285,7 @@ function projectSlots(
 		columns: options.columns,
 		firstSlot: options.firstSlot,
 		pageSize: options.pageSize,
+		ignoreFootprints: options.tilePresentation,
 	});
 }
 

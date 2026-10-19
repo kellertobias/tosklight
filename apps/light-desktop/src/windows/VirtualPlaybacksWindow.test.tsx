@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 		surface_id: undefined as string | undefined,
 		playbackViewMode: undefined as "screen" | "free-region" | undefined,
 		playbackScreenSurfaceId: undefined as string | undefined,
+		playbackShowControls: undefined as boolean | undefined,
 	},
 }));
 vi.mock("../features/screens/ScreensContext", () => ({
@@ -34,8 +35,8 @@ vi.mock("../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../components/control/PlaybackFaderBank", () => ({
-	PlaybackFaderBank: ({ surfaceId, layoutSourceSurfaceId, scrollable }: { surfaceId: string; layoutSourceSurfaceId?: string; scrollable?: boolean }) => (
-		<div data-testid="shared-bank" data-layout-source={layoutSourceSurfaceId} data-scrollable={Boolean(scrollable)}>{surfaceId}</div>
+	PlaybackFaderBank: ({ surfaceId, layoutSourceSurfaceId, scrollable, tilePresentation }: { surfaceId: string; layoutSourceSurfaceId?: string; scrollable?: boolean; tilePresentation?: boolean }) => (
+		<div data-testid="shared-bank" data-tiles={Boolean(tilePresentation)} data-layout-source={layoutSourceSurfaceId} data-scrollable={Boolean(scrollable)}>{surfaceId}</div>
 	),
 }));
 afterEach(cleanup);
@@ -45,9 +46,20 @@ beforeEach(() => {
 	mocks.registry = {};
 	mocks.pane.surface_id = undefined;
 	mocks.pane.playbackViewMode = undefined;
+	mocks.pane.playbackShowControls = undefined;
 	mocks.pane.playbackScreenSurfaceId = undefined;
 });
 describe("unified Playback pane", () => {
+	it.each(["screen", "free-region"] as const)("defaults %s panes to tiles and permits explicit controls", (mode) => {
+		mocks.pane.surface_id = "pane:pane-1";
+		mocks.pane.playbackViewMode = mode;
+		mocks.registry = { "pane:pane-1": {}, main: {} };
+		const { rerender } = render(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-tiles", "true");
+		mocks.pane.playbackShowControls = true;
+		rerender(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-tiles", "false");
+	});
 	it("renders the existing central surface through the shared bank", () => {
 		mocks.pane.surface_id = "screen-linked";
 		mocks.registry = { "screen-linked": {} };

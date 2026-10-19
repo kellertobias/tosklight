@@ -10,6 +10,7 @@ import {
 import { SoloFenceOverlay } from "./playbackFaderBank/SoloFenceOverlay";
 import { playbackCellKey } from "./playbackFaderBank/projection";
 import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
+import { usePlaybackTileGeometry } from "./playbackFaderBank/usePlaybackTileGeometry";
 import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
 import { usePlaybackGridSolo } from "./playbackFaderBank/usePlaybackGridSolo";
 import { usePlaybackBankConfiguration } from "./playbackFaderBank/usePlaybackBankConfiguration";
@@ -23,8 +24,16 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 		const interactionSurfaceId = useId();
 		usePlaybackBankConfiguration(controller, interactionSurfaceId);
 		const solo = usePlaybackGridSolo(controller);
+		const tileGeometry = usePlaybackTileGeometry(
+			Boolean(props.tilePresentation),
+			viewport.current,
+			bankElement,
+			controller.columns,
+			controller.rowCount,
+			Boolean(props.scrollable),
+		);
 		const geometry =
-			props.scrollable && !controller.hardware
+			props.scrollable && !controller.hardware && !props.tilePresentation
 				? scrollablePlaybackGeometry(
 						controller.rowTracks,
 						controller.columns,
@@ -58,11 +67,12 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 			);
 		return (
 			<section className="playback-surface-controls">
-
 				<div
 					ref={viewport}
 					className={
-						geometry ? "playback-bank-viewport" : "playback-bank-fixed"
+						(props.scrollable && props.tilePresentation) || geometry
+							? "playback-bank-viewport"
+							: "playback-bank-fixed"
 					}
 				>
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
@@ -104,15 +114,17 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 								slot,
 							});
 						}}
-						style={{
-							gridTemplateColumns:
-								geometry?.gridTemplateColumns ??
-								`repeat(${controller.columns}, minmax(0, 1fr))`,
-							gridTemplateRows:
-								geometry?.gridTemplateRows ?? controller.rowTracks,
-							minWidth: geometry?.minWidth,
-							minHeight: geometry?.minHeight,
-						}}
+						style={
+							tileGeometry ?? {
+								gridTemplateColumns:
+									geometry?.gridTemplateColumns ??
+									`repeat(${controller.columns}, minmax(0, 1fr))`,
+								gridTemplateRows:
+									geometry?.gridTemplateRows ?? controller.rowTracks,
+								minWidth: geometry?.minWidth,
+								minHeight: geometry?.minHeight,
+							}
+						}
 					>
 						<PlaybackArtworkProvider candidates={controller.slots}>
 							{controller.slots.map((slotData) => (
@@ -153,6 +165,7 @@ function equalPlaybackFaderBankProps(
 		(left.surfaceId ?? "main") === (right.surfaceId ?? "main") &&
 		left.layoutSourceSurfaceId === right.layoutSourceSurfaceId &&
 		Boolean(left.scrollable) === Boolean(right.scrollable) &&
+		Boolean(left.tilePresentation) === Boolean(right.tilePresentation) &&
 		(left.pageNumber ?? null) === (right.pageNumber ?? null) &&
 		(left.firstSlot ?? 1) === (right.firstSlot ?? 1) &&
 		(left.count ?? null) === (right.count ?? null) &&

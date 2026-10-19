@@ -118,8 +118,14 @@ export type Action =
 			id: string;
 			filter: "all" | "cue_list" | "dynamic" | "timecode" | "macro";
 	  }
+	| { type: "SET_PANE_PLAYBACK_CONTROLS"; id: string; showControls: boolean }
 	| { type: "SET_PANE_PLAYBACK_SURFACE"; id: string; surfaceId: string }
-	| { type: "SET_PANE_PLAYBACK_VIEW"; id: string; mode: "screen" | "free-region"; screenSurfaceId?: string }
+	| {
+			type: "SET_PANE_PLAYBACK_VIEW";
+			id: string;
+			mode: "screen" | "free-region";
+			screenSurfaceId?: string;
+	  }
 	| { type: "SET_FILE_MANAGER_SHOW_HIDDEN"; id: string; value: boolean }
 	| { type: "SET_TEXT_EDITOR_FILE"; id: string; root: string; path: string }
 	| {
@@ -173,7 +179,10 @@ export type Action =
 			showType?: boolean;
 			includedHeads?: AppState["fixtureSheetIncludedHeads"];
 	  }
-	| { type: "SET_PATCH_HIDDEN_COLUMNS"; columns: AppState["patchHiddenColumns"] }
+	| {
+			type: "SET_PATCH_HIDDEN_COLUMNS";
+			columns: AppState["patchHiddenColumns"];
+	  }
 	| {
 			type: "SET_BUILTIN_GROUPS_VISIBLE";
 			window: "fixtures" | "presets";
