@@ -34,14 +34,12 @@ struct PositionFitKey {
     lane: CapturedFrameLane,
     compatibility: [u8; 32],
     owners: Vec<(FixtureId, Vec<usize>)>,
-    inputs: Vec<usize>,
-    /// Native values, availability and native baseline at `inputs` only.
-    current_raw: Vec<u32>,
-    available: Vec<bool>,
+    /// Each input channel with its native value, availability and native baseline, in input
+    /// order: one vector instead of four (TL-842).
+    channels: Vec<(usize, u32, bool, u32)>,
     requests: Vec<Option<PositionFitRequest>>,
     previous: Vec<Option<f64>>,
     mount: RigidTransform,
-    native_baseline: Vec<u32>,
 }
 #[derive(Debug, PartialEq)]
 pub(super) struct PositionFitMemo {
@@ -102,13 +100,21 @@ impl PositionFitMemo {
                     .iter()
                     .map(|(owner, emitters)| (*owner, emitters.to_vec()))
                     .collect(),
-                inputs: input.inputs.to_vec(),
-                current_raw: at(input.fit.current_raw, input.inputs).collect(),
-                available: at(input.fit.available, input.inputs).collect(),
+                channels: input
+                    .inputs
+                    .iter()
+                    .map(|&index| {
+                        (
+                            index,
+                            input.fit.current_raw[index],
+                            input.fit.available[index],
+                            input.native_baseline[index],
+                        )
+                    })
+                    .collect(),
                 requests: input.fit.requests.to_vec(),
                 previous: input.fit.previous.to_vec(),
                 mount: input.fit.mount,
-                native_baseline: at(input.native_baseline, input.inputs).collect(),
             },
             output: output.to_vec(),
             proposed_raw: proposed_raw.to_vec(),
@@ -137,15 +143,25 @@ impl PositionFitMemo {
                     owner == other && emitters.as_slice() == *indices
                 })
             && input.raw_accepted
-            && key.inputs == input.inputs
+            && key.channels.len() == input.inputs.len()
+            && key
+                .channels
+                .iter()
+                .zip(input.inputs)
+                .all(|(&(index, ..), &input)| index == input)
             && input.fit.current_raw.len() == input.fit.available.len()
             && input.fit.current_raw.len() == input.native_baseline.len()
-            && at(input.fit.current_raw, input.inputs).eq(key.current_raw.iter().copied())
-            && at(input.fit.available, input.inputs).eq(key.available.iter().copied())
+            && key
+                .channels
+                .iter()
+                .all(|&(index, raw, available, baseline)| {
+                    input.fit.current_raw[index] == raw
+                        && input.fit.available[index] == available
+                        && input.native_baseline[index] == baseline
+                })
             && key.requests == input.fit.requests
             && key.previous == input.fit.previous
             && key.mount == input.fit.mount
-            && at(input.native_baseline, input.inputs).eq(key.native_baseline.iter().copied())
     }
     pub fn output(&self) -> &[PositionFitResult] {
         &self.output
@@ -157,11 +173,6 @@ impl PositionFitMemo {
         &self.achieved_axes
     }
 }
-/// Values of `values` at the (validated, in-range) input channels.
-fn at<'v, T: Copy>(values: &'v [T], inputs: &'v [usize]) -> impl Iterator<Item = T> + 'v {
-    inputs.iter().map(move |&index| values[index])
-}
-
 fn cacheable(input: &PositionFitMemoInput<'_>) -> bool {
     if input.missing_mount
         || !input.raw_accepted

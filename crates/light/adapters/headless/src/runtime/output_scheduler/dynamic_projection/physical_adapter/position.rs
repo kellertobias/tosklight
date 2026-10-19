@@ -47,6 +47,8 @@ pub(in crate::runtime) struct PositionInstance {
     scratch: parking_lot::Mutex<PositionScratch>,
 }
 struct PositionScratch {
+    /// This instance's native capture, kept between frames for its storage (TL-842).
+    native: CapturedNativeRaw,
     workspace: PositionFitWorkspace,
     output: Vec<PositionFitResult>,
     raw: Vec<u32>,
@@ -353,6 +355,7 @@ impl PositionAdapter {
             )
             .into();
             let scratch = PositionScratch {
+                native: CapturedNativeRaw::default(),
                 workspace: model.create_workspace(),
                 output: model.create_output(),
                 raw: vec![0; profile.mode(mode).unwrap().channels.len()],
@@ -511,14 +514,28 @@ fn resolve_root(
 ) -> Result<(), TransitionError> {
     group.sort_by_key(|(_, request)| request.target.0);
     let group = &*group;
-    let cohort_owners = group
-        .iter()
-        .map(|(_, request)| (request.target, request.descriptor.emitters.as_ref()))
-        .collect::<Vec<_>>();
-    let mut native = CapturedNativeRaw::default();
+    // TL-842: a lone owner (the usual cohort) needs no owner vector.
+    fn owner<'r>(
+        (_, request): &(usize, &'r PhysicalRequest<'_, PositionAdapter>),
+    ) -> (FixtureId, &'r [usize]) {
+        (request.target, request.descriptor.emitters.as_ref())
+    }
+    let (single, several);
+    let cohort_owners: &[(FixtureId, &[usize])] = match group.as_slice() {
+        [only] => {
+            single = [owner(only)];
+            &single
+        }
+        _ => {
+            several = group.iter().map(owner).collect::<Vec<_>>();
+            &several
+        }
+    };
     for instance in &group[0].1.descriptor.instances {
-        capture_instance_native(first, root, instance, &mut native)?;
         let mut scratch = instance.scratch.lock();
+        // TL-842: each instance keeps its native capture buffer between frames.
+        let mut native = std::mem::take(&mut scratch.native);
+        capture_instance_native(first, root, instance, &mut native)?;
         scratch.raw.copy_from_slice(native.raw());
         scratch.previous.fill(None);
         scratch.requests.fill(None);
@@ -544,6 +561,7 @@ fn resolve_root(
             available,
             previous,
             requests: goals,
+            ..
         } = &mut *scratch;
         let geometry_dirty = tracking.dirty_instance(root, instance.destination);
         let fit_input = fit_cache::PositionFitMemoInput {
@@ -552,7 +570,7 @@ fn resolve_root(
             generation: first.frame.token.generation(),
             lane: first.frame.token.lane(),
             compatibility: &instance.compatibility,
-            owners: &cohort_owners,
+            owners: cohort_owners,
             fit: PositionFitInput {
                 current_raw: raw,
                 available,
@@ -602,6 +620,7 @@ fn resolve_root(
                 protected,
             },
         );
+        scratch.native = native;
     }
     Ok(())
 }
