@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
 use media_domain::display_region::{DisplayRegion, RegionRotation};
 use media_domain::geometry::{Size, layer_transform};
 use media_domain::{
-    LayerState, MaskSource, MasterState, MediaColor, OutputId, Timestamp, geometry,
+    EffectSlot, LayerState, MaskSource, MasterState, MediaColor, OutputId, Timestamp, geometry,
 };
 
 use crate::texture::SourceTexture;
@@ -53,125 +53,7 @@ impl LayerUniform {
         let transform = layer_transform(layer, source, output);
         let color = MediaColor::of_layer(layer);
         let (sin, cos) = transform.rotation_degrees.to_radians().sin_cos();
-        let mut effect_types = [0; 4];
-        let mut effect_mixes = [0.0; 4];
-        let mut effect_parameters = [[0.0; 4]; 4];
-        let mut effect_parameter_tail = [0.0; 4];
-        let mut effect_seeds = [0.0; 4];
-        let mut beat_scan_positions = [[-2.0; 4]; 16];
-        let mut beat_scan_counts = [[0.0; 4]; 16];
-        let mut beat_event_x = [[0.5; 4]; 16];
-        let mut beat_event_y = [[0.5; 4]; 16];
-        let mut effect_text_meta = [[0.0; 4]; 4];
-        let mut effect_text_aspects = [[1.0; 4]; 8];
-        let mut effect_text_colors = [[1.0; 4]; 4];
-        let mut effect_background_colors = [[1.0; 4]; 4];
-        let mut atlas_base = 0;
-        for (index, effect) in layer.effects.iter().enumerate() {
-            if let Some(parameters) = effect.beat_slice_grid_parameters() {
-                effect_types[index] = 11;
-                effect_mixes[index] = effect.mix;
-                effect_parameters[index] = parameters.as_array();
-                effect_parameter_tail[index] = effect.parameters.get(4).copied().unwrap_or(0.0);
-                effect_seeds[index] = effect.parameters.get(5).copied().unwrap_or(1.0);
-                let typography = effect.slice_typography();
-                effect_text_colors[index] = [
-                    f32::from(typography.text_color[0]) / 255.0,
-                    f32::from(typography.text_color[1]) / 255.0,
-                    f32::from(typography.text_color[2]) / 255.0,
-                    1.0,
-                ];
-                effect_background_colors[index] = [
-                    f32::from(typography.background_color[0]) / 255.0,
-                    f32::from(typography.background_color[1]) / 255.0,
-                    f32::from(typography.background_color[2]) / 255.0,
-                    1.0,
-                ];
-                if let Some(atlas) = &effect.text_atlas {
-                    effect_text_meta[index] =
-                        [atlas.aspects.len() as f32, atlas_base as f32, 0.0, 0.0];
-                    for (entry, aspect) in atlas.aspects.iter().take(8).enumerate() {
-                        effect_text_aspects[index * 2 + entry / 4][entry % 4] = *aspect;
-                    }
-                    atlas_base += atlas.aspects.len();
-                }
-            } else if let Some(parameters) = effect.analog_tv_parameters() {
-                effect_types[index] = 1;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = parameters.as_array();
-                effect_seeds[index] = effect_seed(output_id, effect.seed, index);
-            } else if let Some(parameters) = effect.digital_tv_parameters() {
-                let values = parameters.as_array();
-                effect_types[index] = 2;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index].copy_from_slice(&values[..4]);
-                effect_parameter_tail[index] = values[4];
-                effect_seeds[index] = effect_seed(output_id, effect.seed, index);
-            } else if let Some(parameters) = effect.blur_parameters() {
-                effect_types[index] = 3;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = parameters.amount;
-                effect_parameters[index][1] = parameters.blur_type.parameter();
-            } else if let Some(parameters) = effect.kaleidoscope_parameters() {
-                effect_types[index] = 4;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = f32::from(parameters.repetitions);
-                effect_parameters[index][1] = parameters.angle_degrees;
-            } else if let Some(parameters) = effect.rasterize_parameters() {
-                effect_types[index] = 5;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index][0] = parameters.mode.parameter();
-                effect_parameters[index][1] = parameters.dot_size;
-            } else if let Some(parameters) = effect.beat_scan_parameters() {
-                effect_types[index] = 6;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = parameters.as_array();
-                let (events, _) = effect.parameters[4..].as_chunks::<2>();
-                for (event, values) in events.iter().take(16).enumerate() {
-                    beat_scan_positions[event][index] = values[0];
-                    beat_scan_counts[event][index] = values[1];
-                }
-            } else if let Some(parameters) = effect.beat_grid_wave_parameters() {
-                let values = parameters.as_array();
-                effect_types[index] = 7;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index].copy_from_slice(&values[..4]);
-                effect_parameter_tail[index] = values[4];
-                effect_seeds[index] = values[5];
-                let (events, _) = effect.parameters[6..].as_chunks::<2>();
-                for (event, values) in events.iter().take(16).enumerate() {
-                    beat_scan_positions[event][index] = values[0];
-                    beat_scan_counts[event][index] = values[1];
-                }
-            } else if let Some(parameters) = effect.beat_form_flash_parameters() {
-                effect_types[index] = 8;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = parameters.as_array();
-                let (events, _) = effect.parameters[4..].as_chunks::<4>();
-                for (event, values) in events.iter().take(16).enumerate() {
-                    beat_scan_positions[event][index] = values[0];
-                    beat_event_x[event][index] = values[1];
-                    beat_event_y[event][index] = values[2];
-                    beat_scan_counts[event][index] = values[3];
-                }
-            } else if let Some(parameters) = effect.drawn_image_parameters() {
-                effect_types[index] = 9;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                let values = parameters.as_array();
-                effect_parameters[index][0] = values[0];
-                effect_parameters[index][1] = values[1];
-            } else if let Some(parameters) = effect.outline_parameters() {
-                // Line colour and the (beat-modulated) intensity, then thickness and sensitivity
-                // in the spare per-slot rows this effect has no other use for.
-                let [red, green, blue] = parameters.colour();
-                effect_types[index] = 10;
-                effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
-                effect_parameters[index] = [red, green, blue, parameters.intensity];
-                effect_parameter_tail[index] = parameters.thickness;
-                effect_seeds[index] = parameters.sensitivity;
-            }
-        }
-        Self {
+        let mut uniform = Self {
             center: [transform.center.x, transform.center.y],
             size: [transform.size.0, transform.size.1],
             rotation: [cos, sin],
@@ -203,25 +85,142 @@ impl LayerUniform {
                 layer.mask.position_y,
                 0.0,
             ],
-            effect_types,
-            effect_mixes,
-            effect_parameters,
-            effect_parameter_tail,
-            effect_seeds,
+            effect_types: [0; 4],
+            effect_mixes: [0.0; 4],
+            effect_parameters: [[0.0; 4]; 4],
+            effect_parameter_tail: [0.0; 4],
+            effect_seeds: [0.0; 4],
             effect_clock: [
                 (now.as_micros() as f64 / 1_000_000.0) as f32,
                 output.width as f32,
                 output.height as f32,
                 0.0,
             ],
-            beat_scan_positions,
-            beat_scan_counts,
-            beat_event_x,
-            beat_event_y,
-            effect_text_meta,
-            effect_text_aspects,
-            effect_text_colors,
-            effect_background_colors,
+            beat_scan_positions: [[-2.0; 4]; 16],
+            beat_scan_counts: [[0.0; 4]; 16],
+            beat_event_x: [[0.5; 4]; 16],
+            beat_event_y: [[0.5; 4]; 16],
+            effect_text_meta: [[0.0; 4]; 4],
+            effect_text_aspects: [[1.0; 4]; 8],
+            effect_text_colors: [[1.0; 4]; 4],
+            effect_background_colors: [[1.0; 4]; 4],
+        };
+        uniform.set_effects(layer, output_id);
+        uniform
+    }
+
+    /// Pack the four ordered domain effects into the shader's parallel slot arrays.
+    fn set_effects(&mut self, layer: &LayerState, output_id: OutputId) {
+        let mut atlas_base = 0;
+        for (index, effect) in layer.effects.iter().enumerate() {
+            if let Some(parameters) = effect.beat_slice_grid_parameters() {
+                self.effect_types[index] = 11;
+                self.effect_mixes[index] = effect.mix;
+                self.effect_parameters[index] = parameters.as_array();
+                self.effect_parameter_tail[index] =
+                    effect.parameters.get(4).copied().unwrap_or(0.0);
+                self.effect_seeds[index] = effect.parameters.get(5).copied().unwrap_or(1.0);
+                self.set_slice_typography(index, effect, &mut atlas_base);
+            } else if let Some(parameters) = effect.analog_tv_parameters() {
+                self.effect_types[index] = 1;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index] = parameters.as_array();
+                self.effect_seeds[index] = effect_seed(output_id, effect.seed, index);
+            } else if let Some(parameters) = effect.digital_tv_parameters() {
+                let values = parameters.as_array();
+                self.effect_types[index] = 2;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index].copy_from_slice(&values[..4]);
+                self.effect_parameter_tail[index] = values[4];
+                self.effect_seeds[index] = effect_seed(output_id, effect.seed, index);
+            } else if let Some(parameters) = effect.blur_parameters() {
+                self.effect_types[index] = 3;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index][0] = parameters.amount;
+                self.effect_parameters[index][1] = parameters.blur_type.parameter();
+            } else if let Some(parameters) = effect.kaleidoscope_parameters() {
+                self.effect_types[index] = 4;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index][0] = f32::from(parameters.repetitions);
+                self.effect_parameters[index][1] = parameters.angle_degrees;
+            } else if let Some(parameters) = effect.rasterize_parameters() {
+                self.effect_types[index] = 5;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index][0] = parameters.mode.parameter();
+                self.effect_parameters[index][1] = parameters.dot_size;
+            } else if let Some(parameters) = effect.beat_scan_parameters() {
+                self.effect_types[index] = 6;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index] = parameters.as_array();
+                let (events, _) = effect.parameters[4..].as_chunks::<2>();
+                for (event, values) in events.iter().take(16).enumerate() {
+                    self.beat_scan_positions[event][index] = values[0];
+                    self.beat_scan_counts[event][index] = values[1];
+                }
+            } else if let Some(parameters) = effect.beat_grid_wave_parameters() {
+                let values = parameters.as_array();
+                self.effect_types[index] = 7;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index].copy_from_slice(&values[..4]);
+                self.effect_parameter_tail[index] = values[4];
+                self.effect_seeds[index] = values[5];
+                let (events, _) = effect.parameters[6..].as_chunks::<2>();
+                for (event, values) in events.iter().take(16).enumerate() {
+                    self.beat_scan_positions[event][index] = values[0];
+                    self.beat_scan_counts[event][index] = values[1];
+                }
+            } else if let Some(parameters) = effect.beat_form_flash_parameters() {
+                self.effect_types[index] = 8;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index] = parameters.as_array();
+                let (events, _) = effect.parameters[4..].as_chunks::<4>();
+                for (event, values) in events.iter().take(16).enumerate() {
+                    self.beat_scan_positions[event][index] = values[0];
+                    self.beat_event_x[event][index] = values[1];
+                    self.beat_event_y[event][index] = values[2];
+                    self.beat_scan_counts[event][index] = values[3];
+                }
+            } else if let Some(parameters) = effect.drawn_image_parameters() {
+                self.effect_types[index] = 9;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                let values = parameters.as_array();
+                self.effect_parameters[index][0] = values[0];
+                self.effect_parameters[index][1] = values[1];
+            } else if let Some(parameters) = effect.outline_parameters() {
+                // Line colour and the (beat-modulated) intensity, then thickness and sensitivity
+                // in the spare per-slot rows this effect has no other use for.
+                let [red, green, blue] = parameters.colour();
+                self.effect_types[index] = 10;
+                self.effect_mixes[index] = effect.mix.clamp(0.0, 1.0);
+                self.effect_parameters[index] = [red, green, blue, parameters.intensity];
+                self.effect_parameter_tail[index] = parameters.thickness;
+                self.effect_seeds[index] = parameters.sensitivity;
+            }
+        }
+    }
+
+    /// Each slice slot owns eight aspect entries, while atlas images share a running base.
+    fn set_slice_typography(&mut self, index: usize, effect: &EffectSlot, atlas_base: &mut usize) {
+        let typography = effect.slice_typography();
+        self.effect_text_colors[index] = [
+            f32::from(typography.text_color[0]) / 255.0,
+            f32::from(typography.text_color[1]) / 255.0,
+            f32::from(typography.text_color[2]) / 255.0,
+            1.0,
+        ];
+        self.effect_background_colors[index] = [
+            f32::from(typography.background_color[0]) / 255.0,
+            f32::from(typography.background_color[1]) / 255.0,
+            f32::from(typography.background_color[2]) / 255.0,
+            1.0,
+        ];
+        if let Some(atlas) = &effect.text_atlas {
+            self.effect_text_meta[index] =
+                [atlas.aspects.len() as f32, *atlas_base as f32, 0.0, 0.0];
+            for (entry, aspect) in atlas.aspects.iter().take(8).enumerate() {
+                self.effect_text_aspects[index * 2 + entry / 4][entry % 4] = *aspect;
+            }
+            *atlas_base += atlas.aspects.len();
         }
     }
 }

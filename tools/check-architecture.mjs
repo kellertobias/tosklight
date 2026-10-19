@@ -613,12 +613,14 @@ const MEDIA_ALLOWED_WORKSPACE_DEPENDENCIES = new Map([
   ["media-audio", new Set(["media-application", "media-domain"])],
   ["media-citp", new Set(["media-domain"])],
   ["media-codec", new Set(["media-domain"])],
-  ["media-http", new Set(["media-domain", "media-application"])],
+  // HTTP reports machine font substitution; rendering stays in the text adapter.
+  ["media-http", new Set(["media-domain", "media-application", "media-text"])],
   ["media-library", new Set(["media-domain", "media-codec"])],
   ["media-net", new Set(["media-domain"])],
   ["media-pixel", new Set(["media-application", "media-domain"])],
   ["media-playback", new Set(["media-domain", "media-codec", "media-library", "media-render"])],
-  ["media-render", new Set(["media-domain", "media-codec"])],
+  // Reference renders and thumbnail examples prepare real font atlases via a dev-dependency.
+  ["media-render", new Set(["media-domain", "media-codec", "media-text"])],
   ["media-text", new Set(["media-domain"])],
   ["media-runtime", new Set(["media-application", "media-audio", "media-citp", "media-codec", "media-domain", "media-http", "media-library", "media-net", "media-pixel", "media-playback", "media-render", "media-text"])],
   ["media-server", new Set(["media-runtime"])],
