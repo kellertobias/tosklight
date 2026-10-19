@@ -636,7 +636,9 @@ fn capture_instance_native(
 ) -> Result<(), TransitionError> {
     first
         .frame
-        .native_position_raw_into(root, instance.destination.0, native)?;
+        // A fit reads native values only at its axis drivers (`inputs`); its whole-vector range
+        // check cannot fail on the unresolved zeros (TL-842).
+        .native_position_channels_into(root, instance.destination.0, &instance.inputs, native)?;
     if native.token() != Some(first.frame.token)
         || native.destination() != Some(root)
         || native.instance_id() != Some(instance.destination.0)
