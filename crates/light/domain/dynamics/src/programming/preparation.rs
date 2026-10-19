@@ -295,6 +295,22 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         if self.position.is_empty() {
             return Ok(());
         }
+        // TL-842 P1: authored Pan/Tilt leaves rewrite last frame's compiled sample in place.
+        let position = &self.position;
+        let refreshed = self.out.rewrite_one(
+            position[0].target,
+            ProgrammingOwner::Position,
+            &mut |slot| {
+                Ok(
+                    crate::programming::expression_angles::refresh_plain_position_sample(
+                        slot, position, sources,
+                    ),
+                )
+            },
+        )?;
+        if refreshed {
+            return Ok(());
+        }
         let checked = CheckedCurrentSources::new(sources);
         let sources = RequiredPositionSources {
             sources: &checked,

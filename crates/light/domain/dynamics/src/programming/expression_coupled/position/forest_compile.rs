@@ -4,6 +4,37 @@ use super::*;
 
 mod plain_angles;
 
+/// The compiled leaf, provenance and tape of a Whole branch that is one plain whole-Angles leaf,
+/// with the same tape import and owner preflight as [`PositionForestCompilation::compile_node`];
+/// `None` for any other branch.
+#[allow(clippy::type_complexity)]
+pub(super) fn plain_whole(
+    expression: &Arc<DynamicSampleExpression>,
+    lane_id: &uuid::Uuid,
+    sources: &Arc<[CoupledComponentEndpoint]>,
+) -> Result<
+    Option<(
+        Node,
+        Arc<[CoupledComponentEndpoint]>,
+        Arc<RetainedExpressionTape>,
+    )>,
+    TransitionError,
+> {
+    let tape = Arc::new(RetainedExpressionTape::from_roots(std::slice::from_ref(
+        expression,
+    ))?);
+    let root = tape.roots[0];
+    let mut owner = None;
+    preflight(&tape, root, &mut owner)?;
+    if owner != Some(ProgrammingOwner::Position) {
+        return Err(TransitionError::Requires(
+            TransitionRequirement::CompatibleOwners,
+        ));
+    }
+    Ok(plain_angles::plain_angles_leaf(lane_id, sources, &tape)?
+        .map(|(node, provenance)| (node, provenance, tape)))
+}
+
 /// Graph under construction. `mapped` holds each compiled forest node's graph root, so a
 /// Transition can only reference earlier original nodes (already checked by the shape pass).
 pub(super) struct PositionForestCompilation {

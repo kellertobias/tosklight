@@ -12,6 +12,9 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::sync::Arc;
 use uuid::Uuid;
 mod forest;
+#[cfg(test)]
+pub(crate) use forest::POSITION_REFRESHES;
+pub(crate) use forest::refresh_plain_position_sample;
 pub use forest::{
     PositionComponentForestBundle, bundle_position_component_forest, set_plan_verification,
 };

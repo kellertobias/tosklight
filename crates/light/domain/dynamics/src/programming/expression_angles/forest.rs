@@ -89,6 +89,59 @@ pub fn bundle_position_component_forest(
     })
 }
 
+/// TL-842 P1: rewrite `sample`, last frame's compiled Position sample of this controller, with
+/// `samples` in place, exactly as [`bundle_position_component_forest`] would build it. Only a
+/// controller of authored Pan/Tilt Angle leaves qualifies: it reads no Current, so declining
+/// leaves nothing observable for the fresh build to repeat. `false` leaves `sample` untouched.
+pub(crate) fn refresh_plain_position_sample(
+    sample: &mut FamilyCompositionSample,
+    samples: &[DynamicRuntimeSample],
+    sources: &dyn DynamicValueSourceResolver,
+) -> bool {
+    let FamilyCompositionSample::CoupledExpression {
+        expression,
+        rank,
+        activation_mix,
+    } = sample
+    else {
+        return false;
+    };
+    let Some(first) = samples.first() else {
+        return false;
+    };
+    let authored_axes = samples.iter().all(|sample| {
+        matches!(&sample.expression, Expression::Programming { address, .. }
+            if address.representation == DynamicFamilyRepresentation::Angles
+                && address.component.is_some())
+    });
+    if !authored_axes
+        || plain::verifying()
+        || ensure_one_position_controller(samples, first).is_err()
+    {
+        return false;
+    }
+    let Some(compiled) = Arc::get_mut(expression) else {
+        return false;
+    };
+    let Some(Ok((forest, Some(root)))) = plain::forest(samples, first.target, sources) else {
+        return false;
+    };
+    if !compiled.refresh_plain_whole(samples, &forest, root) {
+        return false;
+    }
+    *rank = coupled_rank(first, samples.iter().map(|sample| sample.lane_id).max());
+    *activation_mix = first.activation_mix;
+    #[cfg(test)]
+    POSITION_REFRESHES.with(|count| count.set(count.get() + 1));
+    true
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Position samples rewritten in place, for tests.
+    pub(crate) static POSITION_REFRESHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// The general walk: import the lanes into one tape and walk their correlated root sets.
 #[allow(clippy::type_complexity)]
 fn general_forest(
@@ -130,26 +183,30 @@ fn coupled_sample(
     root: usize,
     lane_id: Option<Uuid>,
 ) -> Result<FamilyCompositionSample, TransitionError> {
-    let lane_id = lane_id.expect("Position source");
     Ok(FamilyCompositionSample::CoupledExpression {
         expression: Arc::new(CompiledCoupledExpression::from_position_forest(
             Arc::from(samples),
             forest,
             root,
         )?),
-        rank: FamilySampleRank {
-            priority: first.priority,
-            changed_at_millis: first.activated_at_millis,
-            changed_at_submillis_nanos: 0,
-            stable_order: first.controller_id.as_u128(),
-            identity: crate::FamilySampleIdentity::Dynamic {
-                instance_id: first.instance_id,
-                controller_id: first.controller_id,
-                lane_id,
-            },
-        },
+        rank: coupled_rank(first, lane_id),
         activation_mix: first.activation_mix,
     })
+}
+
+/// The arbitration rank of a controller's compiled Position sample.
+fn coupled_rank(first: &DynamicRuntimeSample, lane_id: Option<Uuid>) -> FamilySampleRank {
+    FamilySampleRank {
+        priority: first.priority,
+        changed_at_millis: first.activated_at_millis,
+        changed_at_submillis_nanos: 0,
+        stable_order: first.controller_id.as_u128(),
+        identity: crate::FamilySampleIdentity::Dynamic {
+            instance_id: first.instance_id,
+            controller_id: first.controller_id,
+            lane_id: lane_id.expect("Position source"),
+        },
+    }
 }
 
 fn ensure_one_position_controller(

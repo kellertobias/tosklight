@@ -21,63 +21,18 @@ impl PositionForestCompilation {
         let enabled = !GENERAL_ONLY.with(std::cell::Cell::get);
         #[cfg(not(test))]
         let enabled = true;
-        let leaf = match tape.nodes.as_slice() {
-            [
-                RetainedExpressionNode::Programming {
-                    address,
-                    value: value @ DynamicValue::Family(AttributeValue::Position(position)),
-                    occurrence,
-                    dependency_occurrence,
-                },
-            ] if enabled
-                && tape.roots == [RetainedNodeId(0)]
-                && address.representation == DynamicFamilyRepresentation::Angles
-                && address.component.is_none()
-                && matches!(
-                    position.as_ref(),
-                    PositionIntent::Angles {
-                        pan_degrees: ScalarIntent::Value(_),
-                        tilt_degrees: ScalarIntent::Value(_),
-                    }
-                ) =>
-            {
-                Some((address, value, occurrence, dependency_occurrence))
-            }
-            _ => None,
+        let leaf = if enabled {
+            plain_angles_leaf(lane_id, sources, tape)?
+        } else {
+            None
         };
-        let Some((address, value, occurrence, dependency_occurrence)) = leaf else {
+        let Some((node, provenance)) = leaf else {
             #[cfg(test)]
             COUNTS.with(|n| {
                 let (fast, general) = n.get();
                 n.set((fast, general + 1));
             });
             return Ok(None);
-        };
-        // Exact original leaf validation and occurrence copy, before any graph mutation.
-        let mut node = compile_leaf(address, value, None, &mut Vec::new())?;
-        let Node::Leaf {
-            address,
-            value,
-            role,
-            occurrence: slot,
-            dependency_occurrence: dependency_slot,
-        } = &mut node
-        else {
-            unreachable!("compiled whole Angles leaf");
-        };
-        *slot = *occurrence;
-        *dependency_slot = dependency_occurrence.clone();
-        let provenance = if sources.is_empty() {
-            Arc::from([CoupledComponentEndpoint {
-                lane_id: *lane_id,
-                address: Arc::clone(address),
-                value: value.clone(),
-                role: *role,
-                occurrence: *slot,
-                dependency_occurrence: dependency_slot.clone(),
-            }])
-        } else {
-            Arc::clone(sources)
         };
         let next = self.nodes.len();
         self.wholes.push(PositionForestWholeLineage {
@@ -100,6 +55,68 @@ impl PositionForestCompilation {
         });
         Ok(Some(next))
     }
+}
+
+/// The compiled leaf and provenance of a Whole branch whose tape is one plain whole-Angles leaf,
+/// or `None` for any other tape. Validates exactly as the general import would.
+pub(super) fn plain_angles_leaf(
+    lane_id: &uuid::Uuid,
+    sources: &Arc<[CoupledComponentEndpoint]>,
+    tape: &RetainedExpressionTape,
+) -> Result<Option<(Node, Arc<[CoupledComponentEndpoint]>)>, TransitionError> {
+    let leaf = match tape.nodes.as_slice() {
+        [
+            RetainedExpressionNode::Programming {
+                address,
+                value: value @ DynamicValue::Family(AttributeValue::Position(position)),
+                occurrence,
+                dependency_occurrence,
+            },
+        ] if tape.roots == [RetainedNodeId(0)]
+            && address.representation == DynamicFamilyRepresentation::Angles
+            && address.component.is_none()
+            && matches!(
+                position.as_ref(),
+                PositionIntent::Angles {
+                    pan_degrees: ScalarIntent::Value(_),
+                    tilt_degrees: ScalarIntent::Value(_),
+                }
+            ) =>
+        {
+            Some((address, value, occurrence, dependency_occurrence))
+        }
+        _ => None,
+    };
+    let Some((address, value, occurrence, dependency_occurrence)) = leaf else {
+        return Ok(None);
+    };
+    // Exact original leaf validation and occurrence copy, before any graph mutation.
+    let mut node = compile_leaf(address, value, None, &mut Vec::new())?;
+    let Node::Leaf {
+        address,
+        value,
+        role,
+        occurrence: slot,
+        dependency_occurrence: dependency_slot,
+    } = &mut node
+    else {
+        unreachable!("compiled whole Angles leaf");
+    };
+    *slot = *occurrence;
+    *dependency_slot = dependency_occurrence.clone();
+    let provenance = if sources.is_empty() {
+        Arc::from([CoupledComponentEndpoint {
+            lane_id: *lane_id,
+            address: Arc::clone(address),
+            value: value.clone(),
+            role: *role,
+            occurrence: *slot,
+            dependency_occurrence: dependency_slot.clone(),
+        }])
+    } else {
+        Arc::clone(sources)
+    };
+    Ok(Some((node, provenance)))
 }
 
 #[cfg(test)]

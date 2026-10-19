@@ -8,6 +8,7 @@ use crate::programming::expression_family::{
 use forest_compile::PositionForestCompilation;
 
 mod forest_compile;
+mod refresh;
 
 #[derive(Clone)]
 pub(crate) enum PositionForestNode {
