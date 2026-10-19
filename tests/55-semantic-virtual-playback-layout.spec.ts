@@ -2,6 +2,7 @@
 
 import { expect } from "@playwright/test";
 import { scenario } from "./bench/core/scenario";
+import { expectPlaybackPaneFits } from "./bench/playbacks/playbackPaneGeometry";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
 import { panePlaybackAddress } from "./bench/playbacks/virtualPlaybackScenario";
 import { Show } from "./bench/show/showScenario";
@@ -62,7 +63,7 @@ scenario(
 				width: 12,
 				height: 5,
 			},
-			{ rows: 20, columns: 15, pageMode: "follow_main" },
+			{ rows: 2, columns: 6, pageMode: "follow_main" },
 		);
 		const pinnedPane = desktop.addPane(
 			PaneType.VirtualPlaybacks,
@@ -73,12 +74,13 @@ scenario(
 				width: 12,
 				height: 5,
 			},
-			{ rows: 10, columns: 15, pageMode: "pinned", pinnedPage: 2 },
+			{ rows: 2, columns: 6, pageMode: "pinned", pinnedPage: 2 },
 		);
 		await desktop.apply();
-		await t.virtualPlayback.expect.logicalCells(followPane, 300);
+		// Each pane fits its authored grid with touch-sized tiles; nothing covers the cells.
+		await expectPlaybackPaneFits(followPane, 2, 6);
+		await expectPlaybackPaneFits(pinnedPane, 2, 6);
 		await t.virtualPlayback.expect.effectivePage(followPane, 1);
-		await t.virtualPlayback.expect.logicalCells(pinnedPane, 150);
 		await t.virtualPlayback.expect.effectivePage(pinnedPane, 2);
 
 		const firstPlayback = await t.virtualPlayback.assignSource(
@@ -133,8 +135,8 @@ scenario(
 		await t.virtualPlayback.expect.effectivePage(pinnedPane, 2);
 
 		await t.virtualPlayback.reload(followPane);
-		await t.virtualPlayback.expect.logicalCells(followPane, 300);
-		await t.virtualPlayback.expect.logicalCells(pinnedPane, 150);
+		await t.virtualPlayback.expect.logicalCells(followPane, 12);
+		await t.virtualPlayback.expect.logicalCells(pinnedPane, 12);
 		await t.virtualPlayback.expect.button(followPane, 1, "GO", 1);
 		await t.virtualPlayback.expect.button(pinnedPane, 1, "TOGGLE", 2);
 		await t.virtualPlayback.expect.assignment(firstPlayback, {

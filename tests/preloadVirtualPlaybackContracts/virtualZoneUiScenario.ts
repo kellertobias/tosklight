@@ -1,4 +1,4 @@
-import { configurePaneGrid, paneCard } from "./uiSupport";
+import { activatePaneCard, configurePaneGrid, paneCard } from "./uiSupport";
 import type { Locator, Page } from "@playwright/test";
 import { type BenchUiContext, expect, test } from "../bench/core/fixtures";
 import {
@@ -31,6 +31,8 @@ const virtualZoneUiSupplement = async ({
 	await copyPageAssignments(api, 1, { 401: 74, 402: 75, 403: 76 });
 	await desk.open(bench.baseUrl);
 	let pane = await addVirtualPlaybackPane(page);
+	// A pane fits every configured cell; show only the three cells this scenario uses.
+	await configurePaneGrid(page, pane, 1, 3);
 	await desk.recordStep(
 		"SELECT EXCLUSION MEMBERS",
 		"Hold Shift and choose cells 1 and 2. Selection must not operate either playback.",
@@ -59,10 +61,8 @@ const virtualZoneUiSupplement = async ({
 		"NEW ACTIVATION WINS",
 		"Turn on cell 1, then cell 2. Cell 2 remains On and cell 1 is released by the server.",
 	);
-	await paneCard(pane, {page:1,position:401}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
-		.click();
-	await paneCard(pane, {page:1,position:402}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})
-		.click();
+	await activatePaneCard(pane, {page:1,position:401});
+	await activatePaneCard(pane, {page:1,position:402});
 	await expect
 		.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 401}))?.enabled)
 		.toBe(false);
@@ -70,7 +70,7 @@ const virtualZoneUiSupplement = async ({
 		.poll(async () => (await activeAssignedPlayback(api, {page: 1, position: 402}))?.enabled)
 		.toBe(true);
 
-	await configurePaneGrid(page,pane,14,20,2);
+	await configurePaneGrid(page,pane,1,3,2);
 
 	let settings = await openSoloManager(page, pane);
 	await settings.getByRole("button", { name: "Touring pair", exact: true }).click();
