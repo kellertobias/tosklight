@@ -1,0 +1,25 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {prepareEmptyShow,EMPTY_SHOW_NAME} from './empty-show.mjs';
+const ID='8880d36c-98e4-4935-87e2-7c3078ed3af6',OTHER='0405c20b-6160-4c67-83c0-a56c48c64b64';
+// Same tagged result/RuntimeShowEntry shape as the real current in-process open response.
+// Frozen old f67 show_http_support and ShowLibraryActionResult::Show use this identical shape.
+const show=()=>({created_at:'2026-10-18T21:17:33.848486+00:00',id:ID,is_base_show:false,last_loaded_at:'2026-10-18T21:17:33.852760+00:00',name:EMPTY_SHOW_NAME,path:'/private/test-only.show',revision:1,updated_at:'2026-10-18T21:17:33.848486+00:00'});
+function fixture(change=()=>{}){
+ const replies=[{request_id:'request-1',replayed:false,result:{type:'show',show:show()}},{request_id:'request-2',replayed:false,result:{type:'show',show:show()}},{active_show:{...show()},active_show_error:null},{fixtures:[],profile_revisions:[],patch_revision:0},{definitions:[],instances:[],global_paused:false}];change(replies);
+ const calls=[];const api={showId:OTHER,async request(method,route,body){calls.push({method,route,body:structuredClone(body),showId:this.showId});const response=replies[calls.length-1];if(response instanceof Error)throw response;return response;}};
+ let n=0;return {api,replies,calls,run:()=>prepareEmptyShow(api,()=>`request-${++n}`)};
+}
+test('normal create/open sequence selects actual UUID and proves empty patch/runtime without inherited show header',async()=>{
+ const f=fixture(),r=await f.run();assert.equal(r.showId,ID);assert.equal(f.api.showId,ID);
+ assert.deepEqual(f.calls,[{method:'POST',route:'/api/v2/shows',body:{request_id:'request-1',action:{type:'create',name:EMPTY_SHOW_NAME,data_base64:null,overwrite:false}},showId:null},{method:'POST',route:'/api/v2/shows',body:{request_id:'request-2',action:{type:'open',show_id:ID,transition:'hold_current',transition_millis:null}},showId:null},{method:'GET',route:'/api/v2/bootstrap',body:undefined,showId:ID},{method:'GET',route:'/api/v2/patch',body:undefined,showId:ID},{method:'GET',route:'/api/v2/dynamics/runtime',body:undefined,showId:ID}]);
+ assert.deepEqual(Object.keys(r.setupBinding).sort(),['schema_version','setup_code','show_id','create_action_sha256','open_action_sha256','patch_revision','fixture_count','profile_count','dynamic_definition_count','dynamic_instance_count'].sort());assert.equal(r.setupBinding.setup_code,1);assert.match(r.setupBinding.create_action_sha256,/^[0-9a-f]{64}$/);assert.match(r.setupBinding.open_action_sha256,/^[0-9a-f]{64}$/);assert(!JSON.stringify(r).includes('/private/'));
+});
+test('response objects remain immutable and binding hashes are deterministic',async()=>{const a=fixture(),before=JSON.stringify(a.replies),b=fixture();assert.deepEqual(await a.run(),await b.run());assert.equal(JSON.stringify(a.replies),before);});
+test('every API failure stops further requests and restores the previous scoped header',async()=>{for(let i=0;i<5;i++){const f=fixture(r=>r[i]=Error('private error'));await assert.rejects(f.run());assert.equal(f.calls.length,i+1);assert.equal(f.api.showId,OTHER);}});
+test('create and open require matching request ID, fresh response, typed show and valid identity',async()=>{for(const i of [0,1])for(const mutate of [r=>r.request_id='wrong',r=>r.replayed=true,r=>r.result.type='document_updated',r=>r.result.show.id='invalid',r=>r.result.show.is_base_show=true,r=>r.result.show.name='wrong']){const f=fixture(r=>mutate(r[i]));await assert.rejects(f.run());assert.equal(f.calls.length,i+1);assert.equal(f.api.showId,OTHER);}});
+test('open cannot silently select a different show',async()=>{const f=fixture(r=>r[1].result.show.id=OTHER);await assert.rejects(f.run());assert.equal(f.calls.length,2);assert.equal(f.api.showId,OTHER);});
+test('bootstrap must confirm chosen active show and cleared recovery',async()=>{for(const change of [r=>r[2].active_show.id=OTHER,r=>r[2].active_show=null,r=>r[2].active_show_error='recovery']){const f=fixture(change);await assert.rejects(f.run());assert.equal(f.calls.length,3);assert.equal(f.api.showId,OTHER);}});
+test('older bootstrap without optional recovery field is accepted only with the chosen show',async()=>{const f=fixture(r=>delete r[2].active_show_error);assert.equal((await f.run()).showId,ID);});
+test('nonempty missing or revised patch is rejected rather than cleared or normalized',async()=>{for(const change of [r=>r[3].fixtures=[{}],r=>r[3].profile_revisions=[{}],r=>r[3].patch_revision=1,r=>delete r[3].fixtures,r=>delete r[3].profile_revisions]){const f=fixture(change);await assert.rejects(f.run());assert.equal(f.calls.length,4);}});
+test('nonempty or malformed Dynamics baseline is refused',async()=>{for(const change of [r=>r[4].definitions=[{}],r=>r[4].instances=[{}],r=>delete r[4].instances]){const f=fixture(change);await assert.rejects(f.run());assert.equal(f.api.showId,OTHER);}});
+test('duplicate request identities cannot be replayed as a fresh empty setup',async()=>{const f=fixture();await assert.rejects(prepareEmptyShow(f.api,()=> 'request-1'));assert.equal(f.calls.length,1);assert.equal(f.api.showId,OTHER);});

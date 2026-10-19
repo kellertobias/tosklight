@@ -1,9 +1,16 @@
 use super::*;
+pub(super) mod adjacent_output;
+pub(super) mod borrowed_plain_controller;
+pub(super) mod controller_order;
 mod deferred_angle_pair;
+mod empty_output_storage;
+mod interned_provenance;
 mod leaf_provenance;
 mod passive_requirements;
 mod plain_leaves;
 mod position_forest;
+mod retained_layout;
+mod source_free_controllers;
 use crate::DynamicSampleExpression as E;
 use light_core::{AttributeKey, AttributeValue, NativeColorBinding, NativeColorIdentity};
 use std::{
@@ -12,7 +19,7 @@ use std::{
 };
 
 #[derive(Default)]
-struct Sources {
+pub(super) struct Sources {
     pan: Option<f32>,
     tilt: Option<f32>,
     reads: Cell<usize>,
@@ -45,7 +52,7 @@ impl DynamicValueSourceResolver for Sources {
     }
 }
 
-struct Frame;
+pub(super) struct Frame;
 impl WholeFamilyExpressionFrameResolver for Frame {
     fn resolve(
         &self,
@@ -58,7 +65,7 @@ impl WholeFamilyExpressionFrameResolver for Frame {
     }
 }
 
-fn sample(lane: u128, expression: E) -> DynamicRuntimeSample {
+pub(super) fn sample(lane: u128, expression: E) -> DynamicRuntimeSample {
     DynamicRuntimeSample {
         instance_id: Uuid::from_u128(1),
         controller_id: Uuid::from_u128(2),
@@ -77,7 +84,7 @@ fn angle_address(component: ProgrammingComponent) -> Arc<DynamicValueAddress> {
         component: Some(component),
     })
 }
-fn angle(component: ProgrammingComponent, value: f32) -> E {
+pub(super) fn angle(component: ProgrammingComponent, value: f32) -> E {
     E::Programming {
         address: angle_address(component),
         value: DynamicValue::Scalar(value),
@@ -93,7 +100,7 @@ fn current(component: ProgrammingComponent) -> E {
 fn angles(pan: f32, tilt: f32) -> AttributeValue {
     AttributeValue::Position(Arc::new(PositionIntent::angles(pan, tilt)))
 }
-fn whole(owner: ProgrammingOwner, value: AttributeValue) -> E {
+pub(super) fn whole(owner: ProgrammingOwner, value: AttributeValue) -> E {
     E::Programming {
         address: Arc::new(DynamicValueAddress::whole_family(owner, &value).unwrap()),
         value: DynamicValue::Family(value),
@@ -101,7 +108,7 @@ fn whole(owner: ProgrammingOwner, value: AttributeValue) -> E {
         dependency_occurrence: None,
     }
 }
-fn color(component: ColorComponent, value: f32) -> E {
+pub(super) fn color(component: ColorComponent, value: f32) -> E {
     let basis = match component {
         ColorComponent::Red
         | ColorComponent::Green
@@ -122,7 +129,7 @@ fn color(component: ColorComponent, value: f32) -> E {
         dependency_occurrence: None,
     }
 }
-fn resume(from: Option<E>, to: Option<E>, progress: f32) -> E {
+pub(super) fn resume(from: Option<E>, to: Option<E>, progress: f32) -> E {
     E::Transition {
         from: from.map(Arc::new),
         to: to.map(Arc::new),
@@ -132,10 +139,10 @@ fn resume(from: Option<E>, to: Option<E>, progress: f32) -> E {
         },
     }
 }
-fn semantic(intent: ColorIntent) -> AttributeValue {
+pub(super) fn semantic(intent: ColorIntent) -> AttributeValue {
     AttributeValue::ColorProgram(Arc::new(ColorProgram::Semantic { intent }))
 }
-fn compose(
+pub(super) fn compose(
     group: &DynamicFamilySampleGroup,
     base: &AttributeValue,
 ) -> Result<AttributeValue, TransitionError> {
@@ -728,6 +735,8 @@ fn unchanged_tree_reuses_owned_cache_but_activation_progress_and_membership_rema
         .unwrap();
     let original = scratch.cache.values().next().unwrap().expression.clone();
     input.activation_mix = 0.2;
+    input.priority = 11;
+    input.activated_at_millis = 200;
     {
         let prepared = prepare_dynamic_family_samples(
             &[input.clone()],
@@ -740,6 +749,7 @@ fn unchanged_tree_reuses_owned_cache_but_activation_progress_and_membership_rema
             panic!()
         };
         assert_eq!(value.activation_mix, 0.2);
+        assert_eq!(value.rank, rank(&input));
     }
     assert!(Arc::ptr_eq(
         &original,
@@ -754,4 +764,384 @@ fn unchanged_tree_reuses_owned_cache_but_activation_progress_and_membership_rema
     prepare_dynamic_family_samples(&[], &Sources::default(), None, &mut scratch).unwrap();
     assert!(scratch.cache.is_empty());
     assert!(scratch.families.is_empty());
+}
+
+thread_local! {
+    static COMPILED_SAMPLE_CLONES: Cell<usize> = const { Cell::new(0) };
+}
+
+// Mirror the production derive without adding a production counter or allocator hook.
+impl Clone for CompiledSample {
+    fn clone(&self) -> Self {
+        COMPILED_SAMPLE_CLONES.with(|count| count.set(count.get() + 1));
+        Self {
+            expression: self.expression.clone(),
+            samples: self.samples.clone(),
+        }
+    }
+}
+
+fn cached_color_sample() -> (HashMap<CacheKey, CompiledSample>, CacheKey) {
+    let input = sample(10, resume(Some(color(ColorComponent::Uv, 0.8)), None, 0.25));
+    let mut scratch = DynamicFamilyPreparationScratch::default();
+    prepare_dynamic_family_samples(&[input], &Sources::default(), None, &mut scratch).unwrap();
+    assert_eq!(scratch.cache.len(), 1);
+    let key = *scratch.cache.keys().next().unwrap();
+    (scratch.cache, key)
+}
+
+fn assert_cached_samples_equal(actual: &CompiledSample, expected: &CompiledSample) {
+    assert!(Arc::ptr_eq(&actual.expression, &expected.expression));
+    assert_eq!(actual.samples.len(), expected.samples.len());
+    assert!(!actual.samples.is_empty());
+    for (actual, expected) in actual.samples.iter().zip(&expected.samples) {
+        let (FamilyCompositionSample::Known(actual), FamilyCompositionSample::Known(expected)) =
+            (actual, expected)
+        else {
+            panic!("expected compiled Color component samples")
+        };
+        assert_eq!(actual.rank, expected.rank);
+        assert_eq!(actual.activation_mix, expected.activation_mix);
+    }
+    let group = |samples| DynamicFamilySampleGroup {
+        target: FixtureId(Uuid::from_u128(3)),
+        owner: ProgrammingOwner::Color,
+        samples,
+    };
+    let base = semantic(ColorIntent::default());
+    assert_eq!(
+        compose(&group(actual.samples.clone()), &base).unwrap(),
+        compose(&group(expected.samples.clone()), &base).unwrap()
+    );
+}
+
+#[test]
+fn shared_cache_mismatch_does_not_clone_discarded_samples() {
+    let (cache, key) = cached_color_sample();
+    let changed = Arc::new(resume(Some(color(ColorComponent::Uv, 0.8)), None, 0.5));
+    COMPILED_SAMPLE_CLONES.with(|count| count.set(0));
+    let result = controller::Previous::Shared(&cache).take_matching(&key, &changed);
+    assert!(result.is_none());
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 0));
+    assert_eq!(cache.len(), 1);
+}
+
+#[test]
+fn shared_cache_hit_clones_once_and_preserves_compiled_samples() {
+    let (cache, key) = cached_color_sample();
+    let expected = &cache[&key];
+    COMPILED_SAMPLE_CLONES.with(|count| count.set(0));
+    let result = controller::Previous::Shared(&cache)
+        .take_matching(&key, &expected.expression)
+        .unwrap();
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 1));
+    assert_cached_samples_equal(&result, expected);
+    assert_eq!(cache.len(), 1);
+}
+
+#[test]
+fn owned_cache_hit_moves_samples_and_mismatch_consumes_entry_without_cloning() {
+    let (mut cache, key) = cached_color_sample();
+    let expression = cache[&key].expression.clone();
+    let sample_storage = cache[&key].samples.as_ptr();
+    COMPILED_SAMPLE_CLONES.with(|count| count.set(0));
+    let result = controller::Previous::Owned(&mut cache)
+        .take_matching(&key, &expression)
+        .unwrap();
+    assert_eq!(result.samples.as_ptr(), sample_storage);
+    assert!(cache.is_empty());
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 0));
+    cache.insert(key, result);
+    let changed = Arc::new(resume(Some(color(ColorComponent::Uv, 0.8)), None, 0.5));
+    assert!(
+        controller::Previous::Owned(&mut cache)
+            .take_matching(&key, &changed)
+            .is_none()
+    );
+    assert!(cache.is_empty());
+    COMPILED_SAMPLE_CLONES.with(|count| assert_eq!(count.get(), 0));
+}
+
+impl PreparationSources for Sources {
+    fn finish_controller(&self) -> Option<(usize, usize)> {
+        Some((0, 0))
+    }
+}
+
+pub(super) struct FourChunks;
+impl PreparationWorkers for FourChunks {
+    fn chunks(&self) -> usize {
+        4
+    }
+
+    fn run(
+        &mut self,
+        prepare: &(dyn Fn(usize, &dyn PreparationSources) -> PreparedChunk + Sync),
+    ) -> Result<Vec<PreparedChunk>, TransitionError> {
+        // Exercise production chunk preparation/replay without claiming thread scheduling coverage.
+        Ok((0..4)
+            .map(|chunk| prepare(chunk, &Sources::default()))
+            .collect())
+    }
+
+    fn run_completion(
+        &mut self,
+        _: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),
+    ) -> Result<Vec<crate::CompletedChunk>, TransitionError> {
+        panic!("this test exercises family preparation, not deferred completion")
+    }
+
+    fn append_logs(&mut self, _: usize, from: (usize, usize), to: (usize, usize)) {
+        assert_eq!(from, (0, 0));
+        assert_eq!(to, (0, 0));
+    }
+}
+
+#[test]
+fn serial_and_shared_cache_preparation_match_across_changed_and_unchanged_frames() {
+    let mut serial = DynamicFamilyPreparationScratch::default();
+    let mut parallel = DynamicFamilyPreparationScratch::default();
+    let base = semantic(ColorIntent::default());
+    for (frame, progress) in [0.25, 0.5, 0.5].into_iter().enumerate() {
+        let mut inputs = Vec::new();
+        for index in 0..8 {
+            let mut input = sample(
+                10 + index,
+                resume(Some(color(ColorComponent::Uv, 0.8)), None, progress),
+            );
+            input.target = FixtureId(Uuid::from_u128(100 + index));
+            input.priority += frame as i16;
+            input.activation_mix = 1.0 - frame as f32 * 0.2;
+            inputs.push(input);
+        }
+        inputs.push(sample(
+            30,
+            E::LegacyScalar {
+                attribute: AttributeKey::intensity(),
+                value: 0.4,
+                occurrence: None,
+                dependency_occurrence: None,
+            },
+        ));
+        let expected =
+            prepare_dynamic_family_samples(&inputs, &Sources::default(), None, &mut serial)
+                .unwrap();
+        let actual = prepare_dynamic_family_samples_in_parallel(
+            &inputs,
+            &[],
+            &Sources::default(),
+            None,
+            &mut parallel,
+            &mut FourChunks,
+        )
+        .unwrap();
+        assert_eq!(actual.requirements, expected.requirements);
+        assert_eq!(actual.legacy.len(), expected.legacy.len());
+        for (actual, expected) in actual.legacy.iter().zip(expected.legacy) {
+            assert_eq!(actual.expression, expected.expression);
+            assert_eq!(rank(actual), rank(expected));
+            assert_eq!(actual.activation_mix, expected.activation_mix);
+        }
+        assert_eq!(actual.families.len(), 8);
+        assert_eq!(actual.families.len(), expected.families.len());
+        for (actual, expected) in actual.families.iter().zip(expected.families) {
+            assert_eq!(actual.target, expected.target);
+            assert_eq!(actual.owner, expected.owner);
+            assert_eq!(actual.samples.len(), expected.samples.len());
+            for (actual, expected) in actual.samples.iter().zip(&expected.samples) {
+                let (
+                    FamilyCompositionSample::Known(actual),
+                    FamilyCompositionSample::Known(expected),
+                ) = (actual, expected)
+                else {
+                    panic!("expected retained Color samples")
+                };
+                assert_eq!(actual.rank, expected.rank);
+                assert_eq!(actual.activation_mix, expected.activation_mix);
+            }
+            assert_eq!(
+                compose(actual, &base).unwrap(),
+                compose(expected, &base).unwrap()
+            );
+        }
+        assert_eq!(serial.cache.len(), parallel.cache.len());
+        for (key, expected) in &serial.cache {
+            assert_eq!(parallel.cache[key].expression, expected.expression);
+        }
+    }
+}
+
+// Shared preparation output/trace and chunk-replay oracles. These callbacks do not claim OS-thread scheduling coverage.
+fn preparation_snapshot(view: PreparedDynamicFamilySamples<'_>) -> String {
+    let groups = view
+        .families
+        .iter()
+        .map(|group| {
+            let base = match group.owner {
+                ProgrammingOwner::Color => semantic(ColorIntent::default()),
+                _ => angles(0., 0.),
+            };
+            let samples = group
+                .samples
+                .iter()
+                .map(|sample| match sample {
+                    FamilyCompositionSample::Known(s) => format!(
+                        "{:?}/{:?}/{:?}/{:?}/{}",
+                        s.address().address(),
+                        s.materialized_value(),
+                        s.rank,
+                        s.activation_mix.to_bits(),
+                        s.is_fix_at()
+                    ),
+                    FamilyCompositionSample::WholeExpression {
+                        rank,
+                        activation_mix,
+                        ..
+                    }
+                    | FamilyCompositionSample::CoupledExpression {
+                        rank,
+                        activation_mix,
+                        ..
+                    } => format!("general/{rank:?}/{}", activation_mix.to_bits()),
+                })
+                .collect::<Vec<_>>();
+            let mut scratch = RetainedFamilyCompositionScratch::default();
+            let value = compose_retained_dynamic_family_traced(
+                group.owner,
+                &base,
+                &group.samples,
+                &FamilyCompositionContext {
+                    edit: FamilyEditContext {
+                        color_model: Some(&VirtualColorAuthoringV1),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                &Frame,
+                &mut scratch,
+            );
+            let trace = value.as_ref().ok().and_then(|value| {
+                let fields = ProgrammingFieldScope::for_value(group.owner, value).ok()?;
+                let trace = scratch.family_trace();
+                Some(format!(
+                    "{:?}",
+                    trace.query_fields_with_base(trace.root()?, &fields)
+                ))
+            });
+            format!(
+                "{:?}/{:?}/{samples:?}/{value:?}/{trace:?}",
+                group.target, group.owner
+            )
+        })
+        .collect::<Vec<_>>();
+    format!("{groups:?}/{:?}/{:?}", view.legacy, view.requirements)
+}
+struct OracleWorkers {
+    chunks: usize,
+    stop: bool,
+    closes: Cell<usize>,
+    reads: Cell<usize>,
+}
+struct OracleFork<'a> {
+    sources: Sources,
+    worker: &'a OracleWorkers,
+}
+impl DynamicValueSourceResolver for OracleFork<'_> {
+    fn current(&self, t: FixtureId, a: &DynamicValueAddress) -> Option<DynamicValue> {
+        self.worker.reads.set(self.worker.reads.get() + 1);
+        self.sources.current(t, a)
+    }
+    fn preset(
+        &self,
+        p: &DynamicPresetSourceBinding,
+        i: Uuid,
+        t: FixtureId,
+    ) -> Option<DynamicValue> {
+        self.sources.preset(p, i, t)
+    }
+}
+impl PreparationSources for OracleFork<'_> {
+    fn finish_controller(&self) -> Option<(usize, usize)> {
+        self.worker.closes.set(self.worker.closes.get() + 1);
+        (!self.worker.stop).then_some((0, 0))
+    }
+}
+impl PreparationWorkers for OracleWorkers {
+    fn chunks(&self) -> usize {
+        self.chunks
+    }
+    fn run(
+        &mut self,
+        f: &(dyn Fn(usize, &dyn PreparationSources) -> PreparedChunk + Sync),
+    ) -> Result<Vec<PreparedChunk>, TransitionError> {
+        Ok((0..self.chunks)
+            .map(|chunk| {
+                f(
+                    chunk,
+                    &OracleFork {
+                        sources: Sources {
+                            pan: Some(30.),
+                            tilt: Some(40.),
+                            ..Default::default()
+                        },
+                        worker: self,
+                    },
+                )
+            })
+            .collect())
+    }
+    fn run_completion(
+        &mut self,
+        _: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),
+    ) -> Result<Vec<crate::CompletedChunk>, TransitionError> {
+        unreachable!()
+    }
+    fn append_logs(&mut self, _: usize, from: (usize, usize), to: (usize, usize)) {
+        assert_eq!(from, (0, 0));
+        assert_eq!(to, (0, 0));
+    }
+}
+fn prepare_observed(
+    input: &[DynamicRuntimeSample],
+    requirements: &[DynamicFamilyPreparationRequirement],
+    scratch: &mut DynamicFamilyPreparationScratch,
+    chunks: usize,
+    stop: bool,
+) -> (Result<String, String>, usize, usize) {
+    let sources = Sources {
+        pan: Some(30.),
+        tilt: Some(40.),
+        ..Default::default()
+    };
+    let mut workers = OracleWorkers {
+        chunks,
+        stop,
+        closes: Cell::new(0),
+        reads: Cell::new(0),
+    };
+    let result = if chunks == 0 {
+        prepare_dynamic_family_samples_with_requirements(
+            input,
+            requirements,
+            &sources,
+            None,
+            scratch,
+        )
+    } else {
+        prepare_dynamic_family_samples_in_parallel(
+            input,
+            requirements,
+            &sources,
+            None,
+            scratch,
+            &mut workers,
+        )
+    };
+    (
+        result
+            .map(preparation_snapshot)
+            .map_err(|e| format!("{e:?}")),
+        sources.reads.get() + workers.reads.get(),
+        workers.closes.get(),
+    )
 }

@@ -1,0 +1,81 @@
+name: Historical 576 Linux comparison
+on:
+  push:
+    branches: [codex/tl775-intention-slots]
+    paths:
+      - .github/workflows/historical-576-comparison.yml
+      - tools/historical-576/**
+permissions:
+  contents: read
+concurrency:
+  group: historical-576-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  compare:
+    if: github.repository == 'kellertobias/tosklight'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+      - uses: ./.github/actions/package-mirror
+      - name: Install the same canonical Linux dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          sudo timeout 180 apt-get update
+          sudo timeout 900 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb libgl1-mesa-dri
+      - name: Verify comparison helpers and target topology
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PYTHON'
+          import os,pathlib
+          assert 'LIGHT_OUTPUT_WORKERS' not in os.environ
+          allowed=sorted(os.sched_getaffinity(0))
+          assert len(allowed)==4
+          topology=[]
+          for cpu in allowed:
+              root=pathlib.Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              topology.append((int((root/'physical_package_id').read_text()),int((root/'core_id').read_text())))
+          assert len(set(topology))==2
+          assert len({package for package,_ in topology})==1
+          PYTHON
+          temporary="$(npm run --silent artifact-path -- tmp)"
+          mkdir -p "$temporary"
+          timeout --signal=TERM --kill-after=5s 600 npm ci > "$temporary/historical-576-npm-ci-private.log" 2>&1
+          node tools/mixed576-live-probe-input.mjs tl775-mixed576-live-input-01.json > "$temporary/historical-576-input-private.log"
+          input="$(npm run --silent artifact-path -- tmp)/tl775-mixed576-live-input-01.json"
+          echo "LIGHT_HISTORICAL_INPUT=$input" >> "$GITHUB_ENV"
+          export LIGHT_HISTORICAL_INPUT="$input"
+          node --test tools/historical-576/*.test.mjs
+          python3 -B tools/historical-576/apply-startup-compatibility.test.py
+          python3 -B tools/historical-576/build-comparison.test.py
+      - name: Build and compare the three immutable revisions on this one runner
+        run: |
+          set -euo pipefail
+          umask 077
+          node tools/historical-576/run-comparison.mjs
+      - name: Publish only the closed numeric comparison
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: historical-576-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/historical-576-${{ github.run_id }}-${{ github.run_attempt }}/comparison-numeric.json
+            .artifacts/test/results/historical-576-${{ github.run_id }}-${{ github.run_attempt }}/comparison-provenance.json
+          if-no-files-found: error

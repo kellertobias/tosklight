@@ -32,6 +32,12 @@ fn main() {
     if std::env::var("LIGHT_VERIFY_PLANS").is_ok_and(|value| value == "1") {
         light_dynamics::set_plan_verification(true);
     }
+    if arguments.semantic.legacy_contract_pair.is_some() {
+        let report = light_benchmark::legacy_contract_pair(&arguments)
+            .unwrap_or_else(|error| exit_with_error(&error, 1));
+        println!("{report}");
+        return;
+    }
     if let Some(ticks) = arguments.semantic.digest_ticks {
         let digest = light_benchmark::digest(&arguments, ticks).unwrap_or_else(|error| {
             exit_with_error(&error, 1);

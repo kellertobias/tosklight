@@ -27,7 +27,7 @@ pub(in crate::runtime) struct PositionFrameObserver<'a> {
     pub(super) program_index: rustc_hash::FxHashMap<FixtureId, usize>,
     pub(super) active_programs: Arc<[FixtureId]>,
     /// Physical ownership in this observer's capture, including roots without DMX heads.
-    pub(super) roots: BTreeMap<Uuid, usize>,
+    pub(super) roots: Arc<BTreeMap<Uuid, usize>>,
     /// The frame's output pool, for per-target work whose results merge in program order
     /// (TL-639 round 6). `None` keeps everything on the frame's thread.
     pub(in crate::runtime) pool: Option<Arc<light_engine::parallel::OutputPool>>,
@@ -212,13 +212,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
         }
         self.active_programs = active_programs.into();
         let snapshot = frame.capture.snapshot();
-        self.roots.clear();
-        for (index, fixture) in snapshot.fixtures.iter().enumerate() {
-            self.roots.insert(fixture.fixture_id.0, index);
-            for head in &fixture.logical_heads {
-                self.roots.insert(head.fixture_id.0, index);
-            }
-        }
+        self.roots = self.lane.adapter().root_index.get(&snapshot.fixtures);
         let mut owners = Vec::with_capacity(self.programs.len());
         for program in &self.programs {
             let census = program.captured.registry().point_dependencies();
@@ -250,7 +244,7 @@ impl HybridFrameObserver<PhysicalHeadResult<PositionAdapter>> for PositionFrameO
             .adapter()
             .tracking
             .borrow_mut()
-            .prepare(frame, &owners)?;
+            .prepare_owned(frame, owners)?;
         Ok(())
     }
 

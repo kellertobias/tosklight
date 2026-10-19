@@ -541,7 +541,7 @@ fn hot_edited_held_history_keeps_the_original_pinned_definition_evidence() {
     let held = rig.sample(700);
     assert_eq!(held[0].expression, fresh[0].expression);
     let snapshot = rig.runtime.snapshot();
-    assert_eq!(snapshot.instances[0].definition, edited);
+    assert_eq!(snapshot.instances[0].definition.as_ref(), &edited);
     let restored = {
         let mut runtime = DynamicRuntime::default();
         runtime

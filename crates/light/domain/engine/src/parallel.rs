@@ -9,6 +9,9 @@
 //! The threads persist in an [`OutputPool`] the engine owns; a frame's chunks borrow its inputs
 //! only for the call (`rayon`'s scoped install), and a panic in any chunk resumes on the caller.
 
+pub mod diagnostics;
+mod linux_worker_budget;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The default never exceeds this many threads: beyond it the frame's serial share dominates
@@ -18,14 +21,21 @@ pub const MAX_DEFAULT_OUTPUT_WORKERS: usize = 8;
 /// Process-wide default for engines created after it is set; 0 means "not set".
 static DEFAULT_OUTPUT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 
-/// The output worker count a new engine starts with: the configured default, or the available
-/// parallelism capped at [`MAX_DEFAULT_OUTPUT_WORKERS`].
+/// The output worker count a new engine starts with: an explicit setting, or a bounded
+/// automatic budget. Small Linux SMT guests can use their observed guest core count;
+/// unavailable or inconsistent topology preserves the available-parallelism cap.
 pub fn default_output_workers() -> usize {
-    match DEFAULT_OUTPUT_WORKERS.load(Ordering::Relaxed) {
-        0 => std::thread::available_parallelism()
-            .map_or(1, |count| count.get())
-            .clamp(1, MAX_DEFAULT_OUTPUT_WORKERS),
-        configured => configured,
+    configured_or_default(DEFAULT_OUTPUT_WORKERS.load(Ordering::Relaxed), || {
+        linux_worker_budget::automatic(
+            std::thread::available_parallelism().map_or(1, |count| count.get()),
+        )
+    })
+}
+fn configured_or_default(configured: usize, automatic: impl FnOnce() -> usize) -> usize {
+    if configured == 0 {
+        automatic()
+    } else {
+        configured
     }
 }
 
@@ -65,6 +75,16 @@ pub fn chunk_range(items: usize, chunks: usize, chunk: usize) -> std::ops::Range
     start..end
 }
 
+// Coarsen only Rayon's scheduling leaves, keeping every logical callback and chunk intact.
+// Aim for roughly two leaves per worker; a leaf may contain several callbacks in order.
+fn scheduling_min_len(items: usize, workers: usize) -> usize {
+    items.div_ceil(workers.saturating_mul(2).max(1)).max(1)
+}
+
+#[cfg(test)]
+#[path = "parallel/scheduling_grain_tests.rs"]
+mod scheduling_grain_tests;
+
 /// A desk's output worker pool: persistent threads a frame's chunks run on, so a frame neither
 /// spawns threads nor warms new ones. Owned by the engine; its threads end with it.
 pub struct OutputPool {
@@ -92,7 +112,10 @@ impl OutputPool {
     /// Free `garbage` on a pool thread while the frame goes on: what a frame drops (last frame's
     /// compiled samples) is a long tail of frees nothing waits for.
     pub fn drop_later<T: Send + 'static>(&self, garbage: T) {
-        self.pool.spawn(move || drop(garbage));
+        match diagnostics::cleanup() {
+            Some(trace) => self.pool.spawn(move || trace.run(|| drop(garbage))),
+            None => self.pool.spawn(move || drop(garbage)),
+        }
     }
 }
 
@@ -104,8 +127,25 @@ impl light_dynamics::InstanceWorkers for OutputPool {
             (0..count).for_each(run);
             return;
         }
-        self.pool
-            .install(|| (0..count).into_par_iter().with_max_len(1).for_each(run));
+        let coverage = diagnostics::current();
+        let timing = coverage
+            .as_ref()
+            .map(|_| diagnostics::InstallTiming::begin());
+        self.pool.install(|| {
+            (0..count)
+                .into_par_iter()
+                .with_min_len(scheduling_min_len(count, self.workers()))
+                .for_each(|index| match &coverage {
+                    Some(coverage) => timing
+                        .as_ref()
+                        .expect("covered install")
+                        .job(|_| coverage.job(diagnostics::JobKind::Indexed, || run(index))),
+                    None => run(index),
+                })
+        });
+        if let Some(timing) = timing {
+            timing.finish(coverage.as_ref().expect("covered install"));
+        }
     }
 }
 
@@ -121,9 +161,11 @@ pub fn sort_unstable_by_key<T: Send, K: Ord>(
 ) {
     use rayon::prelude::*;
     match pool.filter(|pool| pool.workers() > 1 && items.len() >= MIN_PARALLEL_SORT) {
-        Some(pool) => pool
-            .pool
-            .install(|| items.par_sort_unstable_by_key(|item| key(item))),
+        Some(pool) => {
+            diagnostics::uncovered_sort();
+            pool.pool
+                .install(|| items.par_sort_unstable_by_key(|item| key(item)))
+        }
         None => items.sort_unstable_by_key(key),
     }
 }
@@ -149,21 +191,42 @@ pub fn run_ordered<W: Send, R: Send>(
         workers.len() >= pool.workers(),
         "one scratch entry per output worker"
     );
+    let coverage = diagnostics::current();
     let slots = workers
         .iter_mut()
         .map(parking_lot::Mutex::new)
         .collect::<Vec<_>>();
-    pool.pool.install(|| {
+    let timing = coverage
+        .as_ref()
+        .map(|_| diagnostics::InstallTiming::begin());
+    let result = pool.pool.install(|| {
         (0..chunks)
             .into_par_iter()
-            .with_max_len(1)
+            .with_min_len(scheduling_min_len(chunks, pool.workers()))
             .map(|chunk| {
                 let index = rayon::current_thread_index().expect("a pool thread");
-                let mut worker = slots[index].lock();
-                run(&mut worker, chunk)
+                match &coverage {
+                    Some(coverage) => {
+                        let timing = timing.as_ref().expect("covered install");
+                        timing.job(|_| {
+                            let lock_started = std::time::Instant::now();
+                            let mut worker = slots[index].lock();
+                            timing.lock_acquired(lock_started);
+                            coverage.job(diagnostics::JobKind::Ordered, || run(&mut worker, chunk))
+                        })
+                    }
+                    None => {
+                        let mut worker = slots[index].lock();
+                        run(&mut worker, chunk)
+                    }
+                }
             })
             .collect()
-    })
+    });
+    if let Some(timing) = timing {
+        timing.finish(coverage.as_ref().expect("covered install"));
+    }
+    result
 }
 
 #[cfg(test)]
@@ -213,10 +276,22 @@ mod tests {
     }
 
     #[test]
+    fn explicit_worker_configuration_bypasses_automatic_budget() {
+        assert_eq!(
+            configured_or_default(7, || panic!("explicit setting must win")),
+            7
+        );
+        assert_eq!(configured_or_default(0, || 2), 2);
+    }
+
+    #[test]
     fn worker_settings_parse() {
         assert_eq!(parse_output_workers("3"), Some(3));
         assert_eq!(parse_output_workers("0"), None);
-        assert!(parse_output_workers("max").is_some_and(|count| count >= 1));
+        assert_eq!(
+            parse_output_workers("max"),
+            Some(std::thread::available_parallelism().map_or(1, |count| count.get()))
+        );
         assert_eq!(parse_output_workers("x"), None);
     }
 }

@@ -1,0 +1,493 @@
+name: Unchanged 576 Linux intention proof
+on:
+  push:
+    branches: [codex/tl775-intention-slots]
+    paths:
+      - .github/workflows/release-576-proof.yml
+      - crates/light/domain/dynamics/src/**
+      - crates/light/domain/engine/src/parallel.rs
+      - crates/light/domain/engine/src/parallel/**
+      - crates/light/domain/engine/Cargo.toml
+      - crates/light/adapters/headless/src/runtime/output_scheduler/**
+      - tools/desktop-performance-576-*.mjs
+      - tools/desktop-performance-576-owned-perf*.py
+      - tools/run-desktop-performance-576-proof.mjs
+      - apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx
+      - apps/light-desktop/src/nativePackagedStage*.ts
+      - apps/light-desktop/src/nativePackagedBenchmarkMode.ts
+      - apps/light-desktop/src/platform/desktop/types.ts
+      - apps/light-desktop/src-tauri/src/packaged_benchmark.rs
+permissions:
+  contents: read
+concurrency:
+  group: linux-576-proof-${{ github.run_id }}
+  cancel-in-progress: false
+jobs:
+  linux-576:
+    if: github.repository == 'kellertobias/tosklight'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+      OUT: .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}
+      CANDIDATE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae
+        with:
+          key: tl775-linux576
+          workspaces: . -> .artifacts/build/cargo
+          cache-workspace-crates: false
+          cache-on-failure: true
+      - uses: ./.github/actions/package-mirror
+      - name: Install canonical Linux bundle dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          sudo timeout 180 apt-get update
+          sudo timeout 900 apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libsoup-3.0-dev libudev-dev libasound2-dev libxdo-dev libxkbcommon-x11-0 mesa-vulkan-drivers vulkan-tools build-essential xvfb libgl1-mesa-dri
+      - name: Verify source and observer tests
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          mkdir -p "$OUT/public"
+          # This final default-policy proof requires the reviewed guest topology.
+          # Fail on a different target; never force a worker override to imitate it.
+          python3 - <<'PYTHON'
+          import os,pathlib
+          assert 'LIGHT_OUTPUT_WORKERS' not in os.environ, 'default proof must not override workers'
+          allowed=sorted(os.sched_getaffinity(0))
+          assert len(allowed)==4, 'default proof requires four allowed logical CPUs'
+          cores=set()
+          for cpu in allowed:
+              location=pathlib.Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+              package=int((location/'physical_package_id').read_text().strip())
+              core=int((location/'core_id').read_text().strip())
+              assert 0<=package<=2147483647 and 0<=core<=2147483647, 'unsupported guest topology IDs'
+              cores.add((package,core))
+          assert len(cores)==2, 'default proof requires two guest topology cores'
+          PYTHON
+          npm ci >"$OUT/npm-ci.log" 2>&1
+          node --test tools/desktop-performance-576-proof-observers.test.mjs tools/desktop-performance-576-phases.test.mjs tools/desktop-performance-576-phase-log.test.mjs tools/desktop-performance-576-tick-trace.test.mjs tools/desktop-performance-576-clock.test.mjs tools/desktop-performance-576-cpu.test.mjs tools/desktop-performance-576-workers.test.mjs tools/desktop-performance-576-pool.test.mjs tools/desktop-performance-576-api.test.mjs tools/desktop-performance-576-observer.test.mjs tools/desktop-performance-576-thread-cpu.test.mjs tools/desktop-performance-576-owned-perf.test.mjs
+          python3 -B tools/desktop-performance-576-owned-perf.test.py
+          cargo test --locked -p light-dynamics --lib
+          cargo test --locked -p light-engine --lib parallel
+      - name: Diagnose isolated synthetic compiler before application build
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          umask 077
+          temporary="$(npm run --silent artifact-path -- tmp)"
+          artifacts="$(node --input-type=module -e 'import {artifactRoot} from "./tools/artifact-paths.mjs"; console.log(artifactRoot)')"
+          private="$(mktemp -d "$temporary/tl775-compiler-launch-XXXXXX")"
+          spool="$temporary/tl775-compiler-preflight-$(cat /proc/sys/kernel/random/uuid)"
+          set +e
+          sudo -n -- /usr/bin/timeout --signal=TERM --kill-after=5s 45s /usr/bin/env "LIGHT_REPOSITORY_ROOT=$(pwd -P)" "LIGHT_ARTIFACTS_DIR=$artifacts" "LIGHT_TMP_DIR=$temporary" /usr/bin/python3 -B tools/desktop-performance-576-owned-perf.py --compiler-preflight --candidate-sha "$CANDIDATE_SHA" --private-directory "$spool" >"$private/stdout" 2>"$private/stderr"
+          helper_status=$?
+          set -e
+          node --input-type=module - "$OUT/compiler-preflight-public" "$private/stdout" "$helper_status" "$CANDIDATE_SHA" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import {lstat,readFile,mkdir,writeFile} from 'node:fs/promises';
+          import {execFileSync} from 'node:child_process';
+          import {createHash} from 'node:crypto';
+          const [directory,file,status,candidate]=process.argv.slice(2),digest=b=>createHash('sha256').update(b).digest('hex');
+          const TOP=['schema_version','diagnostic_mode_code','available','source_verified','raw_private','tools_stopped','failure_code','attempts'],ROW=['id','attempted','compiled','elf_verified','failure_kind','tool_failure_code','elapsed_micros'];
+          const uint=n=>Number.isSafeInteger(n)&&n>=0,closed=(r,keys)=>assert.deepEqual(Object.keys(r).sort(),keys.slice().sort());
+          function validate(r){closed(r,TOP);assert(TOP.filter(k=>k!=='attempts').every(k=>uint(r[k])));assert(r.schema_version===1&&r.diagnostic_mode_code===1&&r.failure_code<=17);for(const k of ['available','source_verified','raw_private','tools_stopped'])assert(r[k]<=1);assert(Array.isArray(r.attempts)&&r.attempts.length===2);r.attempts.forEach((a,id)=>{closed(a,ROW);assert(Object.values(a).every(uint)&&a.id===id&&a.failure_kind<=6&&a.tool_failure_code<=17);for(const k of ['attempted','compiled','elf_verified'])assert(a[k]<=1);assert(a.elf_verified===a.compiled&&a.compiled<=a.attempted&&a.elapsed_micros<=34000000);if(a.compiled)assert(a.failure_kind===0&&a.tool_failure_code===0);else if(a.attempted)assert(a.failure_kind>=1&&a.tool_failure_code>=1);else assert(a.failure_kind===0&&a.tool_failure_code===0&&a.elapsed_micros===0);});assert(r.available===Number(r.failure_code===0&&r.source_verified===1&&r.raw_private===1&&r.tools_stopped===1&&r.attempts.every(a=>a.attempted===1)));return r;}
+          let report={schema_version:1,diagnostic_mode_code:1,available:0,source_verified:0,raw_private:0,tools_stopped:0,failure_code:1,attempts:[0,1].map(id=>({id,attempted:0,compiled:0,elf_verified:0,failure_kind:0,tool_failure_code:0,elapsed_micros:0}))};
+          const provenance={schema_version:1,candidate_sha:/^[a-f0-9]{40}$/u.test(candidate)?candidate:'0'.repeat(40),helper_sha256:'0'.repeat(64)};
+          try{assert(/^[a-f0-9]{40}$/u.test(candidate));const name='tools/desktop-performance-576-owned-perf.py',expected=execFileSync('git',['show',`${candidate}:${name}`],{maxBuffer:1024*1024,stdio:['ignore','pipe','ignore']});provenance.helper_sha256=digest(expected);assert.equal(digest(await readFile(name)),provenance.helper_sha256);assert.equal(execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim(),candidate);const s=await lstat(file);assert(s.isFile()&&!s.isSymbolicLink()&&s.size>0&&s.size<=65536);const raw=await readFile(file);assert(raw.length<=65536);const envelope=JSON.parse(raw);closed(envelope,['report','provenance']);validate(envelope.report);closed(envelope.provenance,['schema_version','candidate_sha','helper_sha256']);assert.deepEqual(envelope.provenance,provenance);assert.equal(Number(status),envelope.report.available?0:1);report=envelope.report;}catch{process.stdout.write('{"schema_version":1,"available":0,"failure_code":1}\n');}
+          try{validate(report);await mkdir(directory,{recursive:true});for(const [name,value]of [['compiler-preflight-numeric.json',report],['compiler-preflight-provenance.json',provenance]])await writeFile(`${directory}/${name}`,JSON.stringify(value)+'\n',{flag:'wx',mode:0o600});process.exitCode=report.available?0:1;}catch{process.stdout.write('{"schema_version":1,"available":0,"failure_code":1}\n');process.exitCode=1;}
+          JAVASCRIPT
+      - name: Publish separate compiler preflight diagnostic before application build
+        continue-on-error: true
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-compiler-preflight-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/compiler-preflight-public/compiler-preflight-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/compiler-preflight-public/compiler-preflight-provenance.json
+          if-no-files-found: error
+      - name: Build exact canonical release Control and sidecars
+        run: |
+          set -euo pipefail
+          npm run build --prefix apps/light-desktop >"$OUT/frontend-build.log" 2>&1
+          cargo build --release --locked --target "$TARGET" -p light-headless --bin light-headless -p viz-renderer --bin viz-renderer >"$OUT/sidecar-build.log" 2>&1
+          sidecars="$(npm run --silent artifact-path -- tmp)/linux-576-sidecars"
+          mkdir -p "$sidecars"
+          cp ".artifacts/build/cargo/$TARGET/release/light-headless" "$sidecars/light-headless-$TARGET"
+          cp ".artifacts/build/cargo/$TARGET/release/viz-renderer" "$sidecars/viz-renderer-$TARGET"
+          export LIGHT_DESKTOP_SIDECAR_DIR="$sidecars"
+          export LIGHT_DESKTOP_SIDECAR_TARGET="$TARGET"
+          config="$(npm run --silent artifact-path -- tmp)/linux-576-control.json"
+          node tools/write-tauri-artifact-config.mjs control "$config"
+          npm run --prefix apps/light-desktop tauri:build -- --target "$TARGET" --config "$config" --bundles appimage >"$OUT/control-build.log" 2>&1
+          git diff --exit-code
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, platform, subprocess
+          root=pathlib.Path('.artifacts/build/cargo')/os.environ['TARGET']/'release'
+          apps=list((root/'bundle/appimage').glob('*.AppImage'))
+          assert len(apps)==1
+          sources=subprocess.check_output(['git','ls-files','-z']).decode().split('\0')
+          # Guest-reported topology for allowed logical CPUs, not physical-host topology.
+          topology={'allowed_topology_available':0,'allowed_topology_core_count':0,'allowed_topology_package_count':0}
+          try:
+              allowed=sorted(os.sched_getaffinity(0))
+              entries=[]
+              for cpu in allowed:
+                  location=pathlib.Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+                  package=int((location/'physical_package_id').read_text().strip())
+                  core=int((location/'core_id').read_text().strip())
+                  if package < 0 or core < 0: raise ValueError('unavailable guest topology')
+                  entries.append((package,core))
+              if not entries: raise ValueError('empty allowed CPU topology')
+              topology={'allowed_topology_available':1,'allowed_topology_core_count':len(set(entries)),'allowed_topology_package_count':len({package for package,_ in entries})}
+          except (OSError,ValueError):
+              pass
+          proof={'source_commit':os.environ['CANDIDATE_SHA'],'workflow_commit':os.environ['GITHUB_SHA'],
+                 'platform':platform.platform(),'cpu_count':os.cpu_count(),'allowed_cpu_count':len(os.sched_getaffinity(0)),**topology,
+                 'benchmark_modes':['control_without_stage','stage_functional'],'expected_default_workers':1,'default_worker_override_absent':int('LIGHT_OUTPUT_WORKERS' not in os.environ),'cpu_models':sorted({line.split(':',1)[1].strip() for line in pathlib.Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('model name') and ':' in line}),
+                 'rustc':subprocess.check_output(['rustc','-Vv'],text=True),
+                 'source_sha256':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in sources if p and pathlib.Path(p).is_file()},
+                 'binaries':{p.name:{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size} for p in [apps[0],root/'light-headless',root/'viz-renderer']}}
+          assert proof['default_worker_override_absent']==1 and proof['allowed_cpu_count']==4 and proof['allowed_topology_available']==1 and proof['allowed_topology_core_count']==2
+          assert proof['source_sha256'] and len(proof['source_sha256']) == sum(bool(p) and pathlib.Path(p).is_file() for p in sources)
+          (pathlib.Path(os.environ['OUT'])/'public'/'provenance.json').write_text(json.dumps(proof,indent=2)+'\n')
+          with open(os.environ['GITHUB_ENV'],'a') as f:f.write(f'PROOF_APPIMAGE={apps[0].resolve()}\n')
+          PYTHON
+      - name: Prove default-policy 40 Hz Control without Stage on unchanged 576 workload
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '1'
+        run: |
+          set -euo pipefail
+          test "${LIGHT_OUTPUT_WORKERS+x}" != x
+          private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-control"
+          directory="$OUT/public/control"
+          mkdir -p "$directory"
+          set +e
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode control --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/control.stdout.log" 2>"$OUT/control.stderr.log"
+          proof_status=$?
+          node --input-type=module - "$directory" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
+          import { validatePhaseDiagnostics } from './tools/desktop-performance-576-phases.mjs';
+          import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
+          const directory = process.argv[2];
+          assert.equal(process.env.LIGHT_OUTPUT_WORKERS, undefined);
+          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '1');
+          const receipt = validateWorkerDiagnostics(JSON.parse(await readFile(`${directory}/worker-numeric.json`, 'utf8')));
+          assert.equal(receipt.expected_workers, 1);
+          for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
+          assert.equal(receipt.observations, 2);
+          assert.equal(receipt.valid_observations, 2);
+          assert.equal(receipt.failure_code, 0);
+          const proof = validateNumericProof(JSON.parse(await readFile(`${directory}/desktop-576-proof-numeric.json`, 'utf8')));
+          assert.equal(proof.proof_mode_code, 1);
+          assert.equal(proof.counter_observations, 61);
+          assert.equal(proof.interval_count, 60);
+          assert.equal(proof.complete, 1);
+          assert.equal(proof.all_gates_passed, 1);
+          validatePhaseDiagnostics(JSON.parse(await readFile(`${directory}/phase-numeric.json`, 'utf8')));
+          JAVASCRIPT
+          validation_status=$?
+          set -e
+          printf 'proof_exit=%s validation_exit=%s\n' "$proof_status" "$validation_status" >"$OUT/control-default-status.log"
+          test "$proof_status" -eq 0
+          test "$validation_status" -eq 0
+      - name: Verify default-policy software-rendered Stage functionality on unchanged 576 workload
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: 'true'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '1'
+        run: |
+          set -euo pipefail
+          test "${LIGHT_OUTPUT_WORKERS+x}" != x
+          private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-stage"
+          directory="$OUT/public/stage"
+          mkdir -p "$directory"
+          set +e
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode stage --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/stage.stdout.log" 2>"$OUT/stage.stderr.log"
+          proof_status=$?
+          node --input-type=module - "$directory" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
+          import { validatePhaseDiagnostics } from './tools/desktop-performance-576-phases.mjs';
+          import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
+          const directory = process.argv[2];
+          assert.equal(process.env.LIGHT_OUTPUT_WORKERS, undefined);
+          assert.equal(process.env.LIGHT_OUTPUT_WORKER_PROOF_EXPECTED, '1');
+          const receipt = validateWorkerDiagnostics(JSON.parse(await readFile(`${directory}/worker-numeric.json`, 'utf8')));
+          assert.equal(receipt.expected_workers, 1);
+          for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
+          assert.equal(receipt.observations, 2);
+          assert.equal(receipt.valid_observations, 2);
+          assert.equal(receipt.failure_code, 0);
+          const proof = validateNumericProof(JSON.parse(await readFile(`${directory}/desktop-576-proof-numeric.json`, 'utf8')));
+          assert.equal(proof.proof_mode_code, 2);
+          assert.equal(proof.counter_observations, 61);
+          assert.equal(proof.interval_count, 60);
+          assert.equal(proof.complete, 1);
+          assert.equal(proof.all_gates_passed, 1);
+          validatePhaseDiagnostics(JSON.parse(await readFile(`${directory}/phase-numeric.json`, 'utf8')));
+          JAVASCRIPT
+          validation_status=$?
+          set -e
+          printf 'proof_exit=%s validation_exit=%s\n' "$proof_status" "$validation_status" >"$OUT/stage-default-status.log"
+          test "$proof_status" -eq 0
+          test "$validation_status" -eq 0
+      - name: Prepare separate post-window owned-process profiler
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        continue-on-error: true
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
+        run: |
+          set -euo pipefail
+          # Install tools only after both original acceptance runs. No perf policy changes.
+          sudo timeout 180 apt-get update
+          sudo timeout 600 apt-get install -y binutils linux-tools-common linux-tools-generic
+          temporary="$(npm run --silent artifact-path -- tmp)"
+          extraction="$(mktemp -d "$temporary/tl775-owned-perf-package-XXXXXX")"
+          chmod 700 "$extraction"
+          export OWNED_PERF_EXTRACTION="$extraction"
+          python3 - <<'PYTHON'
+          import hashlib,json,os,pathlib,subprocess
+          source=json.loads((pathlib.Path(os.environ['OUT'])/'public/provenance.json').read_text())
+          image=pathlib.Path(os.environ['PROOF_APPIMAGE']).resolve(strict=True)
+          expected=source['binaries'][image.name]['sha256']
+          assert hashlib.sha256(image.read_bytes()).hexdigest()==expected
+          extraction=pathlib.Path(os.environ['OWNED_PERF_EXTRACTION']).resolve(strict=True)
+          assert extraction.parent==pathlib.Path(subprocess.check_output(['npm','run','--silent','artifact-path','--','tmp'],text=True).strip()).resolve(strict=True)
+          # Extraction is private and bounded, never the repository root.
+          with (extraction/'extract.log').open('wb') as log:
+              subprocess.run(['/usr/bin/timeout','60',str(image),'--appimage-extract'],cwd=extraction,stdout=log,stderr=subprocess.STDOUT,check=True)
+          assert hashlib.sha256(image.read_bytes()).hexdigest()==expected
+          root=extraction/'squashfs-root'
+          assert root.is_dir() and not root.is_symlink()
+          candidates=[];entries=0
+          for location,dirs,files in os.walk(root,followlinks=False):
+              entries+=len(dirs)+len(files)
+              assert entries<=30000
+              for name in files:
+                  if name not in ('light-headless','light-headless-x86_64-unknown-linux-gnu'): continue
+                  file=pathlib.Path(location)/name
+                  assert not file.is_symlink() and file.is_file()
+                  assert file.resolve(strict=True).is_relative_to(root.resolve(strict=True))
+                  with file.open('rb') as stream: assert stream.read(4)==b'\x7fELF'
+                  candidates.append(file)
+          assert len(candidates)==1
+          elf=candidates[0]
+          notes=subprocess.check_output(['/usr/bin/readelf','-n',str(elf)],text=True,timeout=10)
+          ids=[line.split('Build ID:',1)[1].strip().lower() for line in notes.splitlines() if 'Build ID:' in line]
+          assert len(ids)==1 and 8<=len(ids[0])<=128 and all(c in '0123456789abcdef' for c in ids[0])
+          # Select a package-listed real ELF, not /usr/bin/perf's kernel wrapper.
+          packages=set();pending=['linux-tools-generic'];listed=set()
+          while pending:
+              package=pending.pop()
+              if package in packages: continue
+              packages.add(package)
+              assert len(packages)<=8
+              metadata=subprocess.check_output(['dpkg-query','-W','-f=${db:Status-Status}\n${Depends}',package],text=True).split('\n',1)
+              assert metadata[0]=='installed' and len(metadata)==2
+              for dependency in metadata[1].split(','):
+                  dependency=dependency.strip()
+                  if not dependency.startswith('linux-tools-'): continue
+                  assert '|' not in dependency
+                  name=dependency.split(' ',1)[0]
+                  assert all(c.isalnum() or c in '.+-' for c in name)
+                  pending.append(name)
+              listed.update(subprocess.check_output(['dpkg-query','-L',package],text=True).splitlines())
+          perf_candidates=set()
+          for name in listed:
+              file=pathlib.Path(name)
+              if file.name!='perf' or not (name.startswith('/usr/lib/linux-tools/') or name.startswith('/usr/lib/linux-tools-')): continue
+              real=file.resolve(strict=True)
+              # The canonical ELF must itself be listed in the exact dependency closure.
+              if str(real) not in listed or real.is_symlink() or not real.is_file(): continue
+              if real.name!='perf' or not str(real).startswith('/usr/lib/linux-tools-'): continue
+              if real.stat().st_uid!=0 or real.stat().st_mode&0o022: continue
+              with real.open('rb') as stream:
+                  if stream.read(4)!=b'\x7fELF': continue
+              perf_candidates.add(real)
+          assert len(perf_candidates)==1
+          perf=perf_candidates.pop()
+          value={'schema_version':1,'candidate_sha':os.environ['CANDIDATE_SHA'],'appimage_sha256':expected,
+                 'elf_sha256':hashlib.sha256(elf.read_bytes()).hexdigest(),'elf_build_id':ids[0],
+                 'perf_path':str(perf),'perf_sha256':hashlib.sha256(perf.read_bytes()).hexdigest()}
+          config=extraction/'bindings.json'
+          with config.open('x') as stream: json.dump(value,stream)
+          config.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as stream: stream.write(f'OWNED_PERF_BINDINGS={config}\n')
+          PYTHON
+      - name: Trace default-policy Control pool coordination on unchanged 576 workload
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        env:
+          WEBKIT_DISABLE_COMPOSITING_MODE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: '1'
+          LIGHT_OUTPUT_PHASE_DIAGNOSTICS: all
+          LIGHT_OUTPUT_THREAD_CPU_DIAGNOSTICS: '1'
+          LIGHT_OUTPUT_OWNED_PERF_DIAGNOSTICS: '1'
+          LIGHT_OUTPUT_WORKER_PROOF_EXPECTED: '1'
+          RUST_LOG: light_headless_runtime=info,light_output=info,light_engine=info,tower_http=info
+        run: |
+          set -euo pipefail
+          test "${LIGHT_OUTPUT_WORKERS+x}" != x
+          private="$(npm run --silent artifact-path -- tmp)/linux-576-${{ github.run_id }}-${{ github.run_attempt }}-trace"
+          directory="$OUT/public/trace"
+          mkdir -p "$directory"
+          mkdir -p "$OUT/thread-cpu-public"
+          cp "$OUT/public/provenance.json" "$OUT/thread-cpu-public/provenance.json"
+          export LIGHT_OUTPUT_THREAD_CPU_REPORT="$OUT/thread-cpu-public/thread-cpu-numeric.json"
+          export LIGHT_OUTPUT_OWNED_PERF_BINDINGS="${OWNED_PERF_BINDINGS:-}"
+          # Full tracing adds observer work; this separate run supplies attribution.
+          # Original Control acceptance and Stage functional gates above stay unchanged.
+          set +e
+          timeout 480 xvfb-run -a node tools/run-desktop-performance-576-proof.mjs --mode control --application "$PROOF_APPIMAGE" --output-dir "$private" --demo-show assets/demo.show --numeric-report "$directory/desktop-576-proof-numeric.json" >"$OUT/trace.stdout.log" 2>"$OUT/trace.stderr.log"
+          trace_status=$?
+          set -e
+          test "$trace_status" -le 1
+          node --input-type=module - "$directory" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { validateNumericProof } from './tools/desktop-performance-576-proof-observers.mjs';
+          import { validateTickTraceDiagnostics } from './tools/desktop-performance-576-tick-trace.mjs';
+          import { validateCpuDiagnostics } from './tools/desktop-performance-576-cpu.mjs';
+          import { validatePoolDiagnostics } from './tools/desktop-performance-576-pool.mjs';
+          import { validateObserverDiagnostics } from './tools/desktop-performance-576-observer.mjs';
+          import { validateApiDiagnostics } from './tools/desktop-performance-576-api.mjs';
+          import { validateWorkerDiagnostics } from './tools/desktop-performance-576-workers.mjs';
+          const directory = process.argv[2];
+          const read = async name => JSON.parse(await readFile(`${directory}/${name}`, 'utf8'));
+          const proof = validateNumericProof(await read('desktop-576-proof-numeric.json'));
+          assert.equal(proof.proof_mode_code, 1);
+          for (const name of ['complete','workload_available','measurement_available','udp_integrity_passed','interaction_passed','sheet_liveness_passed','stage_absence_passed','cleanup_complete']) assert.equal(proof[name], 1, name);
+          assert.equal(proof.send_errors, 0);
+          const receipt = validateWorkerDiagnostics(await read('worker-numeric.json'));
+          assert.equal(receipt.expected_workers, 1);
+          for (const name of ['available','capture_complete']) assert.equal(receipt[name], 1, name);
+          assert.equal(receipt.valid_observations, 2);
+          const trace = validateTickTraceDiagnostics(await read('tick-trace-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','join_complete','health_deadline_comparison_available','completed_frames_comparison_available']) assert.equal(trace[name], 1, name);
+          assert(Math.abs(trace.completed_frame_delta) <= 1);
+          assert(Math.abs(trace.health_deadline_delta) <= 1);
+          const cpu = validateCpuDiagnostics(await read('cpu-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','join_complete','cpu_complete','cpu_available']) assert.equal(cpu[name], 1, name);
+          const pool = validatePoolDiagnostics(await read('pool-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','join_complete']) assert.equal(pool[name], 1, name);
+          const observer = validateObserverDiagnostics(await read('observer-numeric.json'));
+          for (const name of ['available','capture_complete','parse_complete','cpu_complete']) assert.equal(observer[name], 1, name);
+          assert.equal(observer.window_seconds, cpu.window_seconds);
+          const api = validateApiDiagnostics(await read('api-numeric.json'));
+          assert.equal(api.available, 1);
+          assert.equal(api.clock_validation_passed, 1);
+          assert.equal(api.observations, 61);
+          assert(Math.abs(api.window_seconds - proof.actual_window_seconds) <= 0.000002);
+          assert.equal(api.completed_frames, proof.completed_frames);
+          assert.equal(api.deadline_misses, proof.deadline_misses);
+          assert.equal(api.send_errors, proof.send_errors);
+          JAVASCRIPT
+      - name: Validate separate thread CPU diagnostic
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        run: |
+          set -euo pipefail
+          cmp "$OUT/public/provenance.json" "$OUT/thread-cpu-public/provenance.json"
+          node --input-type=module - "$OUT/thread-cpu-public/thread-cpu-numeric.json" "$OUT/public/trace/desktop-576-proof-numeric.json" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import { validateThreadCpuDiagnostics } from './tools/desktop-performance-576-thread-cpu.mjs';
+          const report=validateThreadCpuDiagnostics(JSON.parse(await readFile(process.argv[2],'utf8')));
+          const proof=JSON.parse(await readFile(process.argv[3],'utf8'));
+          assert.equal(report.available,1,'separate thread CPU diagnostic unavailable');
+          assert.equal(report.observations,61);
+          assert(Math.abs(report.server_window_micros-proof.actual_window_seconds*1e6)<=2);
+          JAVASCRIPT
+      - name: Publish separate numeric thread CPU diagnostic
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-thread-cpu-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/thread-cpu-public/thread-cpu-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/thread-cpu-public/provenance.json
+          if-no-files-found: error
+      - name: Validate separate post-window owned-process profile
+        if: ${{ !cancelled() && env.PROOF_APPIMAGE != '' }}
+        run: |
+          set -euo pipefail
+          cmp "$OUT/public/provenance.json" "$OUT/owned-perf-public/provenance.json"
+          node --input-type=module - "$OUT/owned-perf-public" <<'JAVASCRIPT'
+          import assert from 'node:assert/strict';
+          import {readFile} from 'node:fs/promises';
+          import {validateOwnedPerfDiagnostics,validateOwnedPerfProvenance} from './tools/desktop-performance-576-owned-perf.mjs';
+          const directory=process.argv[2];
+          const report=validateOwnedPerfDiagnostics(JSON.parse(await readFile(`${directory}/owned-perf-numeric.json`,'utf8')));
+          const pins=validateOwnedPerfProvenance(JSON.parse(await readFile(`${directory}/owned-perf-provenance.json`,'utf8')));
+          const source=JSON.parse(await readFile(`${directory}/provenance.json`,'utf8'));
+          assert.equal(pins.candidate_sha,source.source_commit);
+          assert.equal(pins.helper_sha256,source.source_sha256['tools/desktop-performance-576-owned-perf.py']);
+          assert.equal(report.profile_phase_code,1);
+          assert.equal(report.exact_measurement_window,0);
+          assert.equal(report.available,1,'separate post-window profile unavailable');
+          JAVASCRIPT
+      - name: Publish separate numeric owned-process profile
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-owned-perf-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/owned-perf-public/owned-perf-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/owned-perf-public/owned-perf-provenance.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/owned-perf-public/provenance.json
+          if-no-files-found: error
+      - name: Publish closed numeric proof only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-576-numeric-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/provenance.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/desktop-576-proof-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/phase-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/api-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/control/worker-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/desktop-576-proof-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/phase-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/api-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/stage/worker-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/desktop-576-proof-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/phase-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/api-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/worker-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/tick-trace-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/cpu-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/pool-numeric.json
+            .artifacts/test/results/linux-576-${{ github.run_id }}-${{ github.run_attempt }}/public/trace/observer-numeric.json
+          if-no-files-found: error

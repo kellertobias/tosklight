@@ -110,11 +110,46 @@ pub(in crate::runtime) struct LiveFamilyAdapters {
 #[cfg(test)]
 pub(in crate::runtime) struct PublishedFamilyWrites {
     pub token: light_engine::CapturedFrameToken,
+    /// Full accepted requirements retained only for private test equivalence checks.
+    pub requirements: Vec<String>,
     pub writes: Vec<(
         light_core::programming::ProgrammingOwner,
         light_core::FixtureId,
         super::super::physical_adapter::NativeControlWrite,
     )>,
+}
+
+/// Preserve every requirement field without widening the production types' visibility.
+#[cfg(test)]
+fn test_requirement_rows(
+    rows: &[super::super::programming_projection::hybrid::HybridFamilyRequirement],
+) -> Vec<String> {
+    use super::super::family_inputs::CapturedFamilyRequirement as Input;
+    use super::super::programming_projection::hybrid::HybridFamilyRequirementReason as Reason;
+    rows.iter()
+        .map(|row| {
+            let reason = match &row.reason {
+                Reason::Input(Input::Dynamic(required)) => format!("Dynamic:{required:?}"),
+                Reason::Input(Input::Fixed {
+                    rank,
+                    occurrence,
+                    mask,
+                    activation_mix,
+                    reason,
+                }) => {
+                    format!("Fixed:{rank:?}:{occurrence:?}:{mask:?}:{activation_mix:?}:{reason:?}")
+                }
+                Reason::Current {
+                    address,
+                    requirement,
+                } => format!("Current:{address:?}:{requirement:?}"),
+                Reason::Composition(requirement) => format!("Composition:{requirement:?}"),
+                Reason::LegacyOwnerOverlap => "LegacyOwnerOverlap".to_owned(),
+                Reason::ScalarBaselineChanged => "ScalarBaselineChanged".to_owned(),
+            };
+            format!("{:?}:{:?}:{reason}", row.target, row.owner)
+        })
+        .collect()
 }
 
 impl Default for LiveFamilyAdapters {
@@ -226,6 +261,7 @@ pub(super) fn family_output_frame<T>(
     {
         *family.published.lock() = Some(PublishedFamilyWrites {
             token: published.token.clone(),
+            requirements: test_requirement_rows(&published.requirements),
             writes: published
                 .results
                 .iter()

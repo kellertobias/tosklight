@@ -13,6 +13,7 @@ const CONTROL_DURATION_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_
 const PROFILE_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_PROFILE";
 const PREPARED_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_PREPARED";
 const ADDITIONAL_STAGE_WINDOW_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW";
+const STAGE_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_STAGE";
 const FIXTURE_SHEET_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET";
 const EXPECTED_FIXTURE_RECORDS_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_FIXTURE_RECORDS";
 
@@ -23,6 +24,7 @@ pub(crate) struct PackagedStageBenchmarkConfig {
     control_duration_seconds: u64,
     profile: String,
     additional_stage_window: bool,
+    stage_enabled: bool,
     fixture_sheet: bool,
     expected_fixture_records: Option<usize>,
 }
@@ -30,14 +32,17 @@ pub(crate) struct PackagedStageBenchmarkConfig {
 #[tauri::command]
 pub(crate) fn packaged_stage_benchmark_config(
     window: tauri::WebviewWindow,
-) -> Option<PackagedStageBenchmarkConfig> {
+) -> Result<Option<PackagedStageBenchmarkConfig>, String> {
     if window.label() != "main" {
-        return None;
+        return Ok(None);
     }
-    report_path()?;
+    if report_path().is_none() {
+        return Ok(None);
+    }
+    let stage_enabled = stage_enabled(std::env::var(STAGE_ENV).ok().as_deref())?;
     let _ = window.show();
     let _ = window.set_focus();
-    Some(PackagedStageBenchmarkConfig {
+    Ok(Some(PackagedStageBenchmarkConfig {
         duration_seconds: std::env::var(DURATION_ENV)
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
@@ -49,13 +54,36 @@ pub(crate) fn packaged_stage_benchmark_config(
             .filter(|value| *value > 0)
             .unwrap_or(30),
         profile: std::env::var(PROFILE_ENV).unwrap_or_else(|_| "default-stage".to_string()),
-        additional_stage_window: env_enabled_by_default(ADDITIONAL_STAGE_WINDOW_ENV),
+        additional_stage_window: stage_enabled
+            && env_enabled_by_default(ADDITIONAL_STAGE_WINDOW_ENV),
+        stage_enabled,
         fixture_sheet: env_enabled_by_default(FIXTURE_SHEET_ENV),
         expected_fixture_records: std::env::var(EXPECTED_FIXTURE_RECORDS_ENV)
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
             .filter(|value| *value > 0),
-    })
+    }))
+}
+
+fn stage_enabled(value: Option<&str>) -> Result<bool, String> {
+    match value {
+        None | Some("1") => Ok(true),
+        Some("0") => Ok(false),
+        Some(_) => Err(format!("{STAGE_ENV} must be 0 or 1")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn stage_mode_defaults_enabled_and_rejects_unknown_values() {
+        assert_eq!(super::stage_enabled(None), Ok(true));
+        assert_eq!(super::stage_enabled(Some("1")), Ok(true));
+        assert_eq!(super::stage_enabled(Some("0")), Ok(false));
+        for value in ["", "false", "yes", "2"] {
+            assert!(super::stage_enabled(Some(value)).is_err());
+        }
+    }
 }
 
 fn env_enabled_by_default(name: &str) -> bool {

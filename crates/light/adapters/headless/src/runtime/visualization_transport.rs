@@ -412,14 +412,7 @@ impl ClientPublicationState {
             sent_frame = true;
             self.last_heartbeat = Instant::now();
         }
-        if !enqueue_publication_responses(
-            outgoing,
-            &state.output,
-            &responses,
-            &replacement_responses,
-        )
-        .await
-        {
+        if !enqueue_publication_responses(outgoing, responses, replacement_responses).await {
             return false;
         }
         if sent_frame {
@@ -513,18 +506,26 @@ async fn project_subscribed_lanes(
 
 async fn enqueue_publication_responses(
     outgoing: &LatestOutgoing,
-    output: &super::OutputResource,
-    responses: &[VisualizationServerMessage],
-    replacement_responses: &[VisualizationServerMessage],
+    responses: Vec<VisualizationServerMessage>,
+    replacement_responses: Vec<VisualizationServerMessage>,
 ) -> bool {
     responses.is_empty()
-        || enqueue(
-            outgoing,
-            output,
-            responses.iter(),
-            replacement_responses.iter(),
-        )
-        .await
+        || outgoing
+            .replace(
+                owned_publication_messages(responses),
+                owned_publication_messages(replacement_responses),
+            )
+            .await
+}
+
+// Publication owns these payloads; the smaller borrowed enqueue callers retain their inputs.
+fn owned_publication_messages(
+    messages: Vec<VisualizationServerMessage>,
+) -> Vec<VisualizationOutgoingMessage> {
+    messages
+        .into_iter()
+        .map(VisualizationOutgoingMessage::Server)
+        .collect()
 }
 
 struct SubscriptionClaims {

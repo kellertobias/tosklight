@@ -1,5 +1,6 @@
 //! Opt-in scheduler-only inclusive phase diagnostics, bounded independently of startup logs.
 //! `LIGHT_OUTPUT_PHASE_DIAGNOSTICS=1` (or `true`) samples at most 1024 frames, at least 1s apart.
+//! `LIGHT_OUTPUT_PHASE_DIAGNOSTICS=all` records every attempt, with a hard 16384-attempt cap.
 //! Wall durations include preemption. Acquisition fields measure the lock call on this thread,
 //! including contention and scheduling; they do not isolate parked time or other worker waits.
 use std::{
@@ -12,8 +13,15 @@ pub(in crate::runtime::output_scheduler) mod family_preparation;
 
 const PERIOD: Duration = Duration::from_secs(1);
 const LIMIT: u16 = 1024;
-static ENABLED: LazyLock<bool> = LazyLock::new(|| {
-    enabled(
+const ALL_LIMIT: u16 = 16_384;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    Disabled,
+    Periodic,
+    All,
+}
+static MODE: LazyLock<Mode> = LazyLock::new(|| {
+    mode(
         std::env::var("LIGHT_OUTPUT_PHASE_DIAGNOSTICS")
             .ok()
             .as_deref(),
@@ -25,8 +33,16 @@ static SAMPLER: Mutex<Sampler> = Mutex::new(Sampler {
 });
 static ORIGIN: LazyLock<Instant> = LazyLock::new(Instant::now);
 
-fn enabled(value: Option<&str>) -> bool {
-    matches!(value, Some("1" | "true"))
+fn mode(value: Option<&str>) -> Mode {
+    match value {
+        Some("1" | "true") => Mode::Periodic,
+        Some("all") => Mode::All,
+        _ => Mode::Disabled,
+    }
+}
+
+pub(super) fn full_frequency_enabled() -> bool {
+    *MODE == Mode::All
 }
 
 struct Sampler {
@@ -34,11 +50,16 @@ struct Sampler {
     last: Option<Duration>,
 }
 impl Sampler {
-    fn admit(&mut self, elapsed: Duration) -> bool {
-        if self.emitted == LIMIT
+    fn admit(&mut self, elapsed: Duration, mode: Mode) -> bool {
+        let (period, limit) = match mode {
+            Mode::Disabled => return false,
+            Mode::Periodic => (PERIOD, LIMIT),
+            Mode::All => (Duration::ZERO, ALL_LIMIT),
+        };
+        if self.emitted >= limit
             || self
                 .last
-                .is_some_and(|last| elapsed.saturating_sub(last) < PERIOD)
+                .is_some_and(|last| elapsed.saturating_sub(last) < period)
         {
             return false;
         }
@@ -77,14 +98,14 @@ pub(in crate::runtime::output_scheduler) struct Scope {
 }
 impl Scope {
     pub(in crate::runtime::output_scheduler) fn begin() -> Option<Self> {
-        if !*ENABLED || ACTIVE.with(|active| active.borrow().is_some()) {
+        if *MODE == Mode::Disabled || ACTIVE.with(|active| active.borrow().is_some()) {
             return None;
         }
         let now = Instant::now();
         if !SAMPLER
             .lock()
             .unwrap_or_else(|error| error.into_inner())
-            .admit(now.saturating_duration_since(*ORIGIN))
+            .admit(now.saturating_duration_since(*ORIGIN), *MODE)
         {
             return None;
         }
@@ -159,6 +180,7 @@ impl Drop for Scope {
             family_counts = ?frame.family.counts,
             "bounded live output nested phase sample"
         );
+        frame.family.emit_cpu();
     }
 }
 
@@ -211,11 +233,14 @@ mod tests {
             Some("-1"),
             Some("256"),
             Some(" true "),
+            Some(" all "),
+            Some("ALL"),
         ] {
-            assert!(!enabled(value));
+            assert_eq!(mode(value), Mode::Disabled);
         }
-        assert!(enabled(Some("1")));
-        assert!(enabled(Some("true")));
+        assert_eq!(mode(Some("1")), Mode::Periodic);
+        assert_eq!(mode(Some("true")), Mode::Periodic);
+        assert_eq!(mode(Some("all")), Mode::All);
     }
     #[test]
     fn startup_burst_cannot_exhaust_later_periodic_samples() {
@@ -223,13 +248,13 @@ mod tests {
             emitted: 0,
             last: None,
         };
-        assert!(sampler.admit(Duration::ZERO));
+        assert!(sampler.admit(Duration::ZERO, Mode::Periodic));
         for _ in 0..10_000 {
-            assert!(!sampler.admit(Duration::from_millis(1)));
+            assert!(!sampler.admit(Duration::from_millis(1), Mode::Periodic));
         }
-        assert!(sampler.admit(PERIOD));
+        assert!(sampler.admit(PERIOD, Mode::Periodic));
         assert_eq!(sampler.emitted, 2);
-        assert!(!sampler.admit(Duration::from_millis(999))); // non-monotonic input is conservative
+        assert!(!sampler.admit(Duration::from_millis(999), Mode::Periodic)); // non-monotonic input is conservative
     }
     #[test]
     fn preparation_and_measurement_window_remain_inside_budget() {
@@ -239,10 +264,45 @@ mod tests {
         };
         // 480s preparation, 60s measurement and 120s margin, fresh process per case.
         for second in 0..=660 {
-            assert!(sampler.admit(Duration::from_secs(second)));
+            assert!(sampler.admit(Duration::from_secs(second), Mode::Periodic));
         }
         assert_eq!(sampler.emitted, 661);
         assert!(sampler.emitted < LIMIT);
+    }
+    #[test]
+    fn full_frequency_admits_every_attempt_until_its_hard_cap() {
+        let mut sampler = Sampler {
+            emitted: 0,
+            last: None,
+        };
+        // Equal instants represent arbitrarily close ordered attempts, without a 1 Hz filter.
+        for _ in 0..ALL_LIMIT {
+            assert!(sampler.admit(Duration::ZERO, Mode::All));
+        }
+        assert!(!sampler.admit(Duration::ZERO, Mode::All));
+        assert!(!sampler.admit(Duration::from_secs(1000), Mode::All));
+        assert_eq!(sampler.emitted, ALL_LIMIT);
+    }
+    #[test]
+    fn full_frequency_budget_covers_240_seconds_at_40_hz_with_startup_margin() {
+        let mut sampler = Sampler {
+            emitted: 0,
+            last: None,
+        };
+        for attempt in 0..(240 + 60) * 40 {
+            assert!(sampler.admit(Duration::from_millis(attempt * 25), Mode::All));
+        }
+        assert!(sampler.emitted < ALL_LIMIT);
+    }
+    #[test]
+    fn disabled_admission_neither_records_time_nor_consumes_the_budget() {
+        let mut sampler = Sampler {
+            emitted: 0,
+            last: None,
+        };
+        assert!(!sampler.admit(Duration::from_secs(10), Mode::Disabled));
+        assert_eq!(sampler.emitted, 0);
+        assert_eq!(sampler.last, None);
     }
     #[test]
     fn actual_nested_spans_accumulate_without_parent_double_add() {
@@ -283,9 +343,9 @@ mod tests {
             last: None,
         };
         for index in 0..LIMIT {
-            assert!(sampler.admit(PERIOD * u32::from(index)));
+            assert!(sampler.admit(PERIOD * u32::from(index), Mode::Periodic));
         }
-        assert!(!sampler.admit(PERIOD * u32::from(LIMIT)));
+        assert!(!sampler.admit(PERIOD * u32::from(LIMIT), Mode::Periodic));
         assert_eq!(sampler.emitted, LIMIT);
     }
     #[test]
@@ -324,3 +384,6 @@ mod tests {
         assert!(ACTIVE.with(|active| active.borrow().is_none()));
     }
 }
+
+#[cfg(test)]
+mod mixed576_tests;

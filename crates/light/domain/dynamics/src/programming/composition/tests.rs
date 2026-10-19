@@ -6,6 +6,7 @@ mod native_functions;
 mod projected;
 mod rank;
 mod retained;
+mod source_storage;
 mod whole_appearance;
 mod whole_retained;
 use light_core::{NativeColorBinding, NativeColorIdentity, NativeColorValue, PhysicalDataQuality};

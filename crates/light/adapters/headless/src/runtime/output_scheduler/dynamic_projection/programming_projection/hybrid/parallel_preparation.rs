@@ -90,15 +90,17 @@ fn prepare_families_on<T>(
     }
     diagnostics::count(Count::PreparationParallel, 1);
     let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
-    let result = light_dynamics::prepare_dynamic_family_samples_in_parallel(
-        samples,
-        sampling_requirements,
-        typed,
-        Some(native_models),
-        scratch,
-        &mut workers,
-    )
-    .map(drop);
+    let result = diagnostics::covered(diagnostics::WorkerStage::PrepareFamilies, || {
+        light_dynamics::prepare_dynamic_family_samples_in_parallel(
+            samples,
+            sampling_requirements,
+            typed,
+            Some(native_models),
+            scratch,
+            &mut workers,
+        )
+        .map(drop)
+    });
     let stagings = workers.stagings;
     for staging in stagings {
         observer.merge_parallel(frame.token, staging)?;
@@ -135,7 +137,9 @@ pub(super) fn complete_deferred<'frame, T>(
     }
     diagnostics::count(Count::DeferredParallel, 1);
     let mut workers = FrameWorkers::new(typed, frame, &*observer, pool);
-    let result = deferred.complete_in_parallel(typed, &mut workers);
+    let result = diagnostics::covered(diagnostics::WorkerStage::CompleteDeferred, || {
+        deferred.complete_in_parallel(typed, &mut workers)
+    });
     let stagings = workers.stagings;
     for staging in stagings {
         observer
@@ -203,6 +207,10 @@ impl<O: HybridFrameObserver<T>, T> PreparationWorkers for FrameWorkers<'_, '_, O
         let (requirements, failures) = &self.logs[chunk];
         self.typed
             .append_fork_logs(&requirements[from.0..to.0], &failures[from.1..to.1]);
+    }
+
+    fn reuses_controller_order(&self) -> bool {
+        true
     }
 
     fn sort_controller_keys(&self, keys: &mut [light_dynamics::ControllerSortKey]) {
@@ -290,6 +298,21 @@ struct PreparationFork<'a, 'f> {
 }
 
 impl PreparationSources for PreparationFork<'_, '_> {
+    fn source_free_completion(&self) -> bool {
+        // Every preceding queried lane has closed its group. With no intervening source
+        // call, all memo/origin/native/log group layers remain empty; committing those
+        // layers cannot change caches, log lengths or the missed flag.
+        !self.missed.get()
+    }
+
+    fn source_free_preparation(&self) -> bool {
+        // Fresh forks start with zero chunk logs and empty group layers. Every queried
+        // controller closes those layers before the next controller, or stops this chunk.
+        // A successful plain controller performs no source call, so the same induction as
+        // source_free_completion permits an empty close without probing the group RefCells.
+        !self.missed.get()
+    }
+
     fn finish_controller(&self) -> Option<(usize, usize)> {
         if self.missed.get() {
             self.typed.abort_group();

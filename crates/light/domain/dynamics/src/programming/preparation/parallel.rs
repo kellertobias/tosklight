@@ -34,6 +34,22 @@ pub trait PreparationSources: DynamicValueSourceResolver {
     /// [`PreparationWorkers::append_logs`]) when the fork could answer everything the controller
     /// asked; `None` when the frame must prepare it (its fork forgets the controller).
     fn finish_controller(&self) -> Option<(usize, usize)>;
+
+    /// Opt in to omitting the empty close for a cold-proven source-free typed lane.
+    /// Such a lane makes no source calls: a close must have no effect and retain exactly
+    /// the preceding log lengths. Other implementations keep one close per typed lane.
+    fn source_free_completion(&self) -> bool {
+        false
+    }
+
+    /// Opt in to omitting a close after a controller's successful, proven source-free
+    /// preparation. The fork must start with chunk log lengths (0, 0); after any successful
+    /// close its group layers must be empty. With no intervening source calls, another close
+    /// must have no effect and return exactly the preceding lengths. Preparation errors
+    /// always receive the ordinary close. Other implementations keep every original close.
+    fn source_free_preparation(&self) -> bool {
+        false
+    }
 }
 
 /// The caller's workers and source forks for one parallel preparation.
@@ -51,7 +67,8 @@ pub trait PreparationWorkers {
     ) -> Result<Vec<PreparedChunk>, TransitionError>;
 
     /// [`Self::run`] for a parallel deferred completion (TL-639 round 6): the same forks,
-    /// one [`PreparationSources::finish_controller`] per typed lane.
+    /// one [`PreparationSources::finish_controller`] per typed lane, except an empty close
+    /// explicitly permitted by [`PreparationSources::source_free_completion`].
     fn run_completion(
         &mut self,
         complete: &(dyn Fn(usize, &dyn PreparationSources) -> crate::CompletedChunk + Sync),
@@ -60,6 +77,14 @@ pub trait PreparationWorkers {
     /// Append chunk `chunk`'s fork logs between two [`PreparationSources::finish_controller`]
     /// lengths, as one controller recorded them in turn.
     fn append_logs(&mut self, chunk: usize, from: (usize, usize), to: (usize, usize));
+
+    /// Opt in to retaining the canonical controller order across preparations.
+    /// Returning true promises `sort_controller_keys` uses the ascending key order
+    /// and that omitting this callback for unchanged identities has no observable effect.
+    /// Custom workers keep one callback per preparation by default.
+    fn reuses_controller_order(&self) -> bool {
+        false
+    }
 
     /// Sort the controllers' keys (distinct: each ends with its sample index); on the workers'
     /// threads if the caller has them (TL-639 round 6).
@@ -83,6 +108,7 @@ pub fn family_order(group: &DynamicFamilySampleGroup) -> (Uuid, &'static str) {
 
 /// One write of a controller's preparation, in order.
 enum Prepared {
+    AppendOne(FixtureId, ProgrammingOwner, FamilyCompositionSample),
     Append(FixtureId, ProgrammingOwner, Vec<FamilyCompositionSample>),
     Legacy(DynamicRuntimeSample),
     Require(DynamicFamilyPreparationRequirement),
@@ -96,12 +122,23 @@ pub struct PreparedChunk {
     controllers: Vec<(usize, (usize, usize))>,
     /// Compiled samples this chunk keeps.
     keep: Vec<(CacheKey, CompiledSample)>,
+    /// Leaf provenance this chunk materialized (TL-842 C2).
+    provenance: Vec<super::super::composition::LeafProvenanceLog>,
     /// The first controller the frame prepares itself with every later one of the chunk, and
     /// the worker's error there, if any.
     stopped: Option<(usize, Option<TransitionError>)>,
 }
 
 impl PreparationOutput for Vec<Prepared> {
+    fn append_one(
+        &mut self,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+        sample: FamilyCompositionSample,
+    ) {
+        self.push(Prepared::AppendOne(target, owner, sample));
+    }
+
     fn append(
         &mut self,
         target: FixtureId,
@@ -140,6 +177,7 @@ pub fn prepare_dynamic_family_samples_in_parallel<'a>(
         .requirements
         .extend_from_slice(sampling_requirements);
     let mut previous = std::mem::take(&mut scratch.cache);
+    scratch.provenance.begin_frame();
     let result = prepare_in_parallel(
         samples,
         sources,
@@ -153,7 +191,7 @@ pub fn prepare_dynamic_family_samples_in_parallel<'a>(
         scratch.clear();
         return Err(error);
     }
-    workers.sort_families(&mut scratch.families);
+    scratch.finish_families(|families| workers.sort_families(families));
     Ok(PreparedDynamicFamilySamples {
         families: &scratch.families,
         legacy: &scratch.legacy,
@@ -169,7 +207,12 @@ fn prepare_in_parallel(
     scratch: &mut DynamicFamilyPreparationScratch,
     workers: &mut dyn PreparationWorkers,
 ) -> Result<(), TransitionError> {
-    sort_controllers(samples, scratch, &|keys| workers.sort_controller_keys(keys));
+    sort_controllers(
+        samples,
+        scratch,
+        &|keys| workers.sort_controller_keys(keys),
+        workers.reuses_controller_order(),
+    );
     let chunks = workers.chunks().clamp(1, TARGET_SHARDS);
     let mut members = vec![Vec::new(); chunks];
     scratch.chunk_of_controller.clear();
@@ -183,9 +226,11 @@ fn prepare_in_parallel(
         let (order, controllers) = (&scratch.order, &scratch.controllers);
         let sampling_requirements = &scratch.sampling_requirements;
         let shared: &HashMap<CacheKey, CompiledSample> = previous;
+        let provenance = scratch.provenance.previous();
         workers.run(&|chunk, fork| {
             prepare_chunk(
                 samples,
+                provenance,
                 order,
                 controllers,
                 &members[chunk],
@@ -199,6 +244,7 @@ fn prepare_in_parallel(
     let mut cursors = Vec::with_capacity(prepared.len());
     for mut chunk in prepared {
         scratch.cache.extend(chunk.keep.drain(..));
+        scratch.provenance.keep(chunk.provenance.drain(..));
         cursors.push(ChunkCursor {
             writes: chunk.writes.into_iter(),
             controllers: chunk.controllers.into_iter(),
@@ -215,15 +261,21 @@ fn prepare_in_parallel(
         position,
         families,
         family_indices,
+        family_cursors,
+        families_created,
         legacy,
         requirements,
         sampling_requirements,
         cache,
+        provenance,
         ..
     } = scratch;
     let mut out = FamilyOutput {
         families,
         family_indices,
+        cursors: family_cursors,
+        created: families_created,
+        last: None,
         legacy,
         requirements,
     };
@@ -243,6 +295,7 @@ fn prepare_in_parallel(
                 sampling_requirements,
                 previous: Previous::Owned(&mut *previous),
                 keep: Keep::Cache(&mut *cache),
+                provenance: provenance.owned(),
                 out: &mut out,
             };
             preparer.prepare_controller(samples, &order[range.clone()], sources, native_models)?;
@@ -255,6 +308,7 @@ fn prepare_in_parallel(
         let (writes_from, logs_from) = cursor.taken;
         for write in cursor.writes.by_ref().take(writes_to - writes_from) {
             match write {
+                Prepared::AppendOne(target, owner, sample) => out.append_one(target, owner, sample),
                 Prepared::Append(target, owner, samples) => out.append(target, owner, samples),
                 Prepared::Legacy(sample) => out.legacy(sample),
                 Prepared::Require(requirement) => out.require(requirement),
@@ -283,6 +337,7 @@ struct ChunkCursor {
 #[allow(clippy::too_many_arguments)]
 fn prepare_chunk(
     samples: &[DynamicRuntimeSample],
+    provenance: &super::super::composition::LeafProvenanceMap,
     order: &[usize],
     controllers: &[std::ops::Range<usize>],
     members: &[usize],
@@ -293,6 +348,7 @@ fn prepare_chunk(
 ) -> PreparedChunk {
     let mut chunk = PreparedChunk::default();
     let (mut controller, mut position, mut keep) = (Vec::new(), Vec::new(), Vec::new());
+    let mut previous_logs = (0, 0);
     for (member, &index) in members.iter().enumerate() {
         let writes = chunk.writes.len();
         let prepared = Preparer {
@@ -301,20 +357,33 @@ fn prepare_chunk(
             sampling_requirements,
             previous: Previous::Shared(previous),
             keep: Keep::Log(&mut keep),
+            provenance: super::super::composition::LeafProvenance::Shared {
+                previous: provenance,
+                log: &mut chunk.provenance,
+            },
             out: &mut chunk.writes,
         }
-        .prepare_controller(
+        .prepare_controller_classified(
             samples,
             &order[controllers[index].clone()],
             fork,
             native_models,
         );
-        let Some(logs) = fork.finish_controller() else {
+        let closed = if matches!(&prepared, Ok(controller::ControllerPreparation::SourceFree))
+            && fork.source_free_preparation()
+        {
+            Some(previous_logs)
+        } else {
+            // Keep the close before inspecting any error, including missed-source precedence.
+            fork.finish_controller()
+        };
+        let Some(logs) = closed else {
             chunk.writes.truncate(writes);
             keep.clear();
             chunk.stopped = Some((member, None));
             break;
         };
+        previous_logs = logs;
         if let Err(error) = prepared {
             chunk.stopped = Some((member, Some(error)));
             break;

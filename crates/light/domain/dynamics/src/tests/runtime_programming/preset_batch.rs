@@ -334,7 +334,7 @@ fn preset_readiness_follows_dependency_changes_restore_and_definition_rebinding(
     assert_eq!(restored.pending_preset_source_instances().len(), 2);
     assert!(!runtime.has_pending_preset_sources());
 
-    let mut definition = runtime.snapshot().instances[0].definition.clone();
+    let mut definition = runtime.snapshot().instances[0].definition.as_ref().clone();
     definition.revision += 1;
     definition.name = "Recompiled dependency".into();
     runtime.install_definitions([definition]).unwrap();

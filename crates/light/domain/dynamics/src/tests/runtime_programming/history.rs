@@ -207,9 +207,9 @@ impl History {
             instance.lane_selections,
             vec![DynamicControllerLaneSelection {
                 controller_id: self.controller.id,
-                selection: DynamicLaneSelection::Uniform {
+                selection: std::sync::Arc::new(DynamicLaneSelection::Uniform {
                     lanes: vec![self.lane]
-                },
+                }),
             }]
         );
         let resume = instance.synchronized_resume_transition.unwrap();
@@ -521,9 +521,9 @@ fn whole_target_runtime_history_keeps_point_references_live_after_many_interrupt
         stored.lane_selections,
         vec![DynamicControllerLaneSelection {
             controller_id: controller.id,
-            selection: DynamicLaneSelection::Uniform {
+            selection: std::sync::Arc::new(DynamicLaneSelection::Uniform {
                 lanes: vec![authored_lane]
-            },
+            }),
         }]
     );
     let mut observed_points = HashSet::new();

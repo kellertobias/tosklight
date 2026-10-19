@@ -183,7 +183,7 @@ fn pending_preview_follows_registry_without_replacing_live_pins_or_held_history(
         definition.revision
     );
     let mut expected = before.clone();
-    expected.instances[0].definition = definition.clone();
+    expected.instances[0].definition = Arc::new(definition.clone());
     assert_eq!(
         pending.snapshot(),
         expected,

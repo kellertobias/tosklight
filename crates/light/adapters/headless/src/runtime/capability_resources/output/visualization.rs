@@ -2,6 +2,10 @@ use super::super::visualization_frame;
 use super::*;
 
 impl OutputResource {
+    pub(in crate::runtime) fn refresh_resolved_state(&self) {
+        self.engine.refresh_resolved_state();
+    }
+
     pub(in crate::runtime) fn latest_visualization_frame(
         &self,
     ) -> Option<Arc<visualization_frame::PublishedVisualizationFrame>> {

@@ -2,7 +2,7 @@
   "version": 1,
   "limits": {"file":1200,"function":150},
   "files": {
-    "apps/light-desktop/src-tauri/src/stage_pane.rs": 1246,
+    "apps/light-desktop/src-tauri/src/stage_pane.rs": 1240,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1325,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1588,
     "crates/media/adapters/library/src/storage.rs": 1215
@@ -14,7 +14,7 @@
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 343,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimelineOverview:16fafd302031:1": 211,
-    "apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx::javascript:function:NativeBenchmark:42a50ebfaeb7:1": 206,
+    "apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx::javascript:function:NativeBenchmark:42a50ebfaeb7:1": 201,
     "apps/light-desktop/src/windows/cuelistWindow/CuelistPool.tsx::javascript:function:useCuelistPoolActions:58fe5a3d2a5d:1": 164,
     "apps/light-desktop/src/windows/cuelistWindow/CueProperties.tsx::javascript:function:CuePropertyModal:960359513099:1": 243,
     "apps/light-desktop/src/windows/fileManagerWindow/FileManagerHeader.tsx::javascript:function:FileManagerHeader:b653d019e7cf:1": 164,
@@ -37,7 +37,6 @@
     "apps/viz-editor/src/cad/CadApp.tsx::javascript:function:CadApp:5277956b9a1d:1": 353,
     "apps/viz-editor/src/LiveDmxInputsPanel.tsx::javascript:function:LiveDmxInputsPanel:2d7ff4eb6072:1": 202,
     "apps/viz-editor/src/MediaWorkspace.tsx::javascript:function:MediaWorkspace:ffd720049fd9:1": 392,
-    "apps/viz-renderer/src/embedded.rs::rust:function:run:acf29d5ab127:1": 156,
     "apps/viz-renderer/src/physics.rs::rust:function:run:962689db0059:1": 203,
     "apps/viz-renderer/src/ui/quick_settings.rs::rust:function:adjust:4bba6c4637c2:1": 194,
     "apps/viz-renderer/src/ui/quick_settings.rs::rust:function:build_quick_settings:141defb9c9b7:1": 183,

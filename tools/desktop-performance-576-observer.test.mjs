@@ -1,0 +1,440 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+	mkdtemp,
+	writeFile,
+	readFile,
+	stat,
+	readdir,
+	rm,
+	open,
+} from "node:fs/promises";
+import path from "node:path";
+import { artifactPaths } from "./artifact-paths.mjs";
+import {
+	OBSERVER_LIMITS,
+	STAGE_IDS,
+	SUBSTAGE_IDS,
+	OBSERVER_METRICS,
+	parseObserverDiagnostics,
+	validateObserverDiagnostics,
+	readObserverDiagnostics,
+	writeObserverDiagnostics,
+} from "./desktop-performance-576-observer.mjs";
+const epoch = Date.parse("2026-10-17T10:00:00Z"),
+	window = { startedAt: epoch, endedAt: epoch + 60000 };
+function data() {
+	return {
+		schema_version: 2,
+		complete: 1,
+		idle: 0,
+		inner_complete: 1,
+		substage_calls: Array(7).fill(1),
+		substage_finished: Array(7).fill(1),
+		substage_wall_nanos: Array(7).fill(50),
+		substage_thread_cpu_nanos: Array(7).fill(30),
+		substage_cpu_status: Array(7).fill(1),
+		substage_counter_read_nanos: Array(7).fill(2),
+		total_wall_nanos: 1000000,
+		total_thread_cpu_nanos: 700000,
+		total_cpu_status: 1,
+		total_counter_read_nanos: 100,
+		stage_calls: [1, 1, 1, 1, 1, 1],
+		stage_wall_nanos: [1000, 2000, 3000, 4000, 5000, 6000],
+		stage_thread_cpu_nanos: [800, 1800, 2800, 3800, 4800, 5800],
+		stage_cpu_status: [1, 1, 1, 1, 1, 1],
+		stage_counter_read_nanos: [20, 20, 20, 20, 20, 20],
+	};
+}
+function line(value = data(), at = epoch + 100) {
+	return (
+		"\x1b[2m" +
+		new Date(at).toISOString() +
+		"\x1b[0m INFO private::route: bounded observational dynamic projection sample " +
+		Object.entries(value)
+			.map(([k, v]) => k + "=" + (Array.isArray(v) ? JSON.stringify(v) : v))
+			.join(" ") +
+		"\n"
+	);
+}
+function cap(fields = "schema_version=2 sample_limit=1024") {
+	return (
+		new Date(epoch + 200).toISOString() +
+		" INFO engine: observational dynamic projection sample cap reached " +
+		fields +
+		"\n"
+	);
+}
+const parse = (text) => parseObserverDiagnostics(text, window);
+test("total and six fixed stages retain independent CPU/wall/read distributions, numeric only", () => {
+	const d = data();
+	d.total_wall_nanos = 2000000;
+	d.stage_thread_cpu_nanos[3] = 7800;
+	const r = parse(line() + line(d));
+	assert.deepEqual(
+		[r.available, r.capture_complete, r.parse_complete, r.cpu_complete],
+		[1, 1, 1, 1],
+	);
+	assert.equal(r.valid_samples_in_window, 2);
+	assert.equal(r.complete_samples_in_window, 2);
+	assert.equal(r.total.metrics[0].mean_nanos, 1500000);
+	assert.equal(r.stages[3].metrics[1].mean_nanos, 5800);
+	assert.deepEqual(r.total.metrics[1], {
+		id: 1,
+		count: 2,
+		min_nanos: 700000,
+		mean_nanos: 700000,
+		p50_nanos: 700000,
+		p95_nanos: 700000,
+		max_nanos: 700000,
+	});
+	assert.equal(r.stages.length, 6);
+	assert.deepEqual(STAGE_IDS, [
+		"install_definitions",
+		"live_capture",
+		"restore_snapshot",
+		"dynamic_projection",
+		"resolved_values",
+		"teardown",
+	]);
+	assert.deepEqual(OBSERVER_METRICS, [
+		"wall_nanos",
+		"thread_cpu_nanos",
+		"counter_read_nanos",
+	]);
+	assert.deepEqual(
+		validateObserverDiagnostics(JSON.parse(JSON.stringify(r))),
+		r,
+	);
+	for (const value of ["private", "2026-", "route", "source_frame", "/Users/"])
+		assert(!JSON.stringify(r).includes(value));
+});
+test("emission-time membership preserves inclusive exact microsecond window and nanosecond neighbors", () => {
+	const w = {
+		startedAt: (epoch * 1000 + 501) / 1000,
+		endedAt: ((epoch + 60000) * 1000 + 501) / 1000,
+		startedAtMicros: epoch * 1000 + 501,
+		endedAtMicros: (epoch + 60000) * 1000 + 501,
+	};
+	const at = (base, suffix) =>
+		line(data(), base).replace(
+			new Date(base).toISOString(),
+			new Date(base).toISOString().replace(".000Z", "." + suffix + "Z"),
+		);
+	const r = parseObserverDiagnostics(
+		at(epoch, "000500999") +
+			at(epoch, "000501000") +
+			at(epoch + 60000, "000501000") +
+			at(epoch + 60000, "000501001"),
+		w,
+	);
+	assert.equal(r.available, 1);
+	assert.deepEqual(
+		[r.samples_before_window, r.samples_in_window, r.samples_after_window],
+		[1, 2, 1],
+	);
+	assert.equal(r.total.metrics[0].count, 2);
+	assert.equal(
+		parseObserverDiagnostics(line(), {
+			...w,
+			endedAtMicros: w.endedAtMicros + 1,
+		}).read_status,
+		7,
+	);
+});
+test("unsupported or invalid total/stage CPU cannot manufacture zero CPU samples", () => {
+	for (const status of [0, 2])
+		for (const scope of ["total", "stage"]) {
+			const d = data();
+			if (scope === "total") {
+				d.total_cpu_status = status;
+				d.total_thread_cpu_nanos = 0;
+			} else {
+				d.stage_cpu_status[2] = status;
+				d.stage_thread_cpu_nanos[2] = 0;
+			}
+			const r = parse(line(d));
+			assert.equal(r.capture_complete, 1);
+			assert.equal(r.parse_complete, 1);
+			assert.equal(r.cpu_complete, 0);
+			assert.equal(r.available, 0);
+			const row = scope === "total" ? r.total : r.stages[2];
+			assert.equal(row.metrics[0].count, 1);
+			assert.equal(row.metrics[1].count, 0);
+			assert.equal(row.metrics[2].count, 1);
+			assert.equal(
+				row[status === 0 ? "unavailable_cpu_samples" : "invalid_cpu_samples"],
+				1,
+			);
+		}
+});
+test("incomplete scopes preserve partial observations and cannot claim complete CPU coverage", () => {
+	const d = data();
+	d.complete = 0;
+	d.stage_calls[5] = 0;
+	d.stage_wall_nanos[5] =
+		d.stage_thread_cpu_nanos[5] =
+		d.stage_counter_read_nanos[5] =
+		d.stage_cpu_status[5] =
+			0;
+	const r = parse(line(d));
+	assert.equal(r.available, 0);
+	assert.equal(r.parse_complete, 1);
+	assert.equal(r.incomplete_samples_in_window, 1);
+	assert.equal(r.cpu_complete, 0);
+	assert.equal(r.total.metrics[0].count, 1);
+	assert.equal(r.stages[5].called_samples, 0);
+	assert(r.stages[5].metrics.every((m) => m.count === 0));
+	const invalid = data();
+	invalid.stage_calls[5] = 0;
+	assert.equal(parse(line(invalid)).invalid_in_window, 1);
+});
+test("all source fields and arrays are strict bounded unsigned values", () => {
+	for (const mutate of [
+		(d) => (d.schema_version = 1),
+		(d) => (d.complete = 2),
+		(d) => (d.total_cpu_status = 3),
+		(d) => (d.total_wall_nanos = -1),
+		(d) => (d.total_wall_nanos = OBSERVER_LIMITS.nanos + 1),
+		(d) => (d.total_thread_cpu_nanos = NaN),
+		(d) => d.stage_calls.pop(),
+		(d) => (d.stage_calls[0] = 2),
+		(d) => (d.stage_wall_nanos[0] = 1.5),
+		(d) => (d.stage_cpu_status[0] = 3),
+		(d) => (d.stage_counter_read_nanos[0] = Infinity),
+		(d) => (d.total_cpu_status = 0),
+		(d) => (d.stage_cpu_status[0] = 0),
+		(d) => delete d.total_counter_read_nanos,
+		(d) => (d.private = 42),
+	]) {
+		const d = data();
+		mutate(d);
+		const r = parse(line(d));
+		assert.equal(r.available, 0);
+		assert.equal(r.parse_complete, 0);
+		assert.equal(r.invalid_samples, 1);
+		assert(r.total.metrics.every((m) => m.count === 0));
+	}
+	assert.equal(
+		parse(
+			line().replace("schema_version=2", "schema_version=2 schema_version=2"),
+		).invalid_samples,
+		1,
+	);
+});
+test("bad outside-window or unlocalizable samples prevent any valid statistics claim", () => {
+	const bad = line().replace(
+		"2026-10-17T10:00:00.100Z",
+		"2026-02-30T10:00:00.100Z",
+	);
+	const before = line(data(), epoch - 1).replace("complete=1", "complete=2"),
+		after = line(data(), epoch + 60001).replace("complete=1", "complete=2");
+	const r = parse(bad + before + line() + after);
+	assert.equal(r.unlocalizable_samples, 1);
+	assert.equal(r.invalid_before_window, 1);
+	assert.equal(r.invalid_after_window, 1);
+	assert.equal(r.valid_samples_in_window, 1);
+	assert.equal(r.available, 0);
+	assert.equal(r.parse_complete, 0);
+	assert(r.total.metrics.every((m) => m.count === 0));
+});
+test("no samples and unrelated logs cannot synthesize complete projection coverage", () => {
+	for (const text of [
+		"",
+		"unrelated private route\n",
+		line(data(), epoch - 1) + line(data(), epoch + 60001),
+	]) {
+		const r = parse(text);
+		assert.equal(r.available, 0);
+		assert.equal(r.capture_complete, 1);
+		assert.equal(r.parse_complete, 1);
+		assert.equal(r.cpu_complete, 0);
+		assert.equal(r.total.metrics[0].count, 0);
+	}
+	assert.equal(parseObserverDiagnostics(line(), null).read_status, 7);
+});
+test("fixed1024 admission and explicit cap markers remain unavailable regardless of field validity", () => {
+	const full = parse(line().repeat(1024));
+	assert.equal(full.available, 1);
+	assert.equal(full.total.metrics[0].count, 1024);
+	const overflow = parse(line().repeat(1025));
+	assert.equal(overflow.read_status, 5);
+	assert.equal(overflow.available, 0);
+	assert.equal(overflow.sample_lines_observed, 1024);
+	for (const text of [
+		line() + cap(),
+		cap() + line(),
+		line() + cap("schema_version=1 sample_limit=1024"),
+		line() + cap("private=42"),
+		line().repeat(1024) + cap(),
+	]) {
+		const r = parse(text);
+		assert.equal(r.available, 0);
+		assert.equal(r.read_status, 9);
+		assert.equal(r.cap_records, 1);
+		assert(r.total.metrics.every((m) => m.count === 0));
+	}
+	assert.equal(
+		parse(line() + cap("schema_version=2 sample_limit=1025"))
+			.invalid_cap_records,
+		1,
+	);
+});
+test("byte, line, per-line and partial trailing bounds preserve explicit unavailable output", () => {
+	for (const [text, status] of [
+		["x".repeat(OBSERVER_LIMITS.bytes + 1), 2],
+		["\n".repeat(OBSERVER_LIMITS.lines + 1), 3],
+		["x".repeat(OBSERVER_LIMITS.lineBytes + 1) + "\n", 4],
+		[line().trimEnd(), 8],
+	]) {
+		const r = parse(text);
+		assert.equal(r.read_status, status);
+		assert.equal(r.available, 0);
+		assert.equal(r.capture_complete, 0);
+		assert(r.total.metrics.every((m) => m.count === 0));
+	}
+});
+test("closed numeric validation rejects invented completeness, statuses and privacy values", () => {
+	const good = parse(line());
+	for (const mutate of [
+		(r) => (r.source_frame = 123),
+		(r) => (r.lines_observed = 0),
+		(r) => (r.log_available = 0),
+		(r) => (r.sample_limit = 2048),
+		(r) => (r.stage_count = 7),
+		(r) => (r.total.metrics[0].path = "private"),
+		(r) => (r.total.metrics[0].count = 2),
+		(r) => (r.complete_samples_in_window = 0),
+		(r) => (r.stages[0].called_samples = 0),
+		(r) => (r.total.valid_cpu_samples = 0),
+		(r) => (r.cpu_complete = 0),
+		(r) => (r.available = 0),
+		(r) => (r.parse_complete = 0),
+		(r) => (r.total.metrics[1].max_nanos = Infinity),
+	]) {
+		const r = structuredClone(good);
+		mutate(r);
+		assert.throws(() => validateObserverDiagnostics(r));
+	}
+});
+test("bounded file readers and atomic0600 output preserve unavailable reports", async () => {
+	const dir = await mkdtemp(
+		path.join(artifactPaths.tmp, "observer-diagnostics-"),
+	);
+	try {
+		const input = path.join(dir, "private.log"),
+			out = path.join(dir, "numeric.json");
+		await writeFile(input, line());
+		const r = await writeObserverDiagnostics(out, input, window);
+		assert.equal(r.available, 1);
+		assert.deepEqual(JSON.parse(await readFile(out, "utf8")), r);
+		assert.equal((await stat(out)).mode & 0o777, 0o600);
+		assert.equal(
+			(await readObserverDiagnostics(path.join(dir, "missing"), window))
+				.read_status,
+			1,
+		);
+		assert.equal((await readObserverDiagnostics(null, window)).read_status, 1);
+		assert.equal((await readObserverDiagnostics(input, null)).read_status, 7);
+		await writeObserverDiagnostics(out, path.join(dir, "missing"), window);
+		assert.equal(JSON.parse(await readFile(out, "utf8")).available, 0);
+		const h = await open(input, "w");
+		await h.truncate(OBSERVER_LIMITS.bytes + 1);
+		await h.close();
+		assert.equal((await readObserverDiagnostics(input, window)).read_status, 2);
+		assert.deepEqual((await readdir(dir)).sort(), [
+			"numeric.json",
+			"private.log",
+		]);
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
+
+test("seven inner stages preserve active/idle coverage without fabricated missing CPU", () => {
+	assert.deepEqual(SUBSTAGE_IDS, [
+		"input_capture",
+		"before_snapshot",
+		"reconcile",
+		"sample_callback",
+		"after_snapshot",
+		"transition_events",
+		"candidate_projection",
+	]);
+	const idle = data();
+	idle.idle = 1;
+	for (const i of [2, 4, 5, 6])
+		for (const key of [
+			"substage_calls",
+			"substage_finished",
+			"substage_wall_nanos",
+			"substage_thread_cpu_nanos",
+			"substage_cpu_status",
+			"substage_counter_read_nanos",
+		])
+			idle[key][i] = 0;
+	const r = parse(line() + line(idle));
+	assert.equal(r.available, 1);
+	assert.deepEqual(
+		[r.active_samples, r.idle_samples, r.unknown_idle_samples],
+		[1, 1, 0],
+	);
+	assert.equal(r.substages[0].called_samples, 2);
+	assert.equal(r.substages[2].called_samples, 1);
+	const missing = data();
+	missing.complete = 0;
+	missing.inner_complete = 0;
+	missing.substage_finished[3] = 0;
+	for (const key of [
+		"substage_wall_nanos",
+		"substage_thread_cpu_nanos",
+		"substage_cpu_status",
+		"substage_counter_read_nanos",
+	])
+		missing[key][3] = 0;
+	const partial = parse(line(missing));
+	assert.equal(partial.available, 0);
+	assert.equal(partial.parse_complete, 1);
+	assert.equal(partial.substages[3].called_samples, 0);
+	assert.equal(partial.substages[3].metrics[1].count, 0);
+	const unknown = data();
+	unknown.complete = 0;
+	unknown.inner_complete = 0;
+	unknown.idle = 2;
+	assert.equal(parse(line(unknown)).unknown_idle_samples, 1);
+});
+test("inner schemas reject forged coverage and retain unsupported CPU as unavailable", () => {
+	for (const mutate of [
+		(d) => (d.inner_complete = 0),
+		(d) => d.substage_calls.pop(),
+		(d) => (d.substage_finished[0] = 2),
+		(d) => (d.idle = 3),
+		(d) => (d.substage_wall_nanos[0] = -1),
+		(d) => (d.substage_calls[0] = 0),
+	]) {
+		const d = data();
+		mutate(d);
+		assert.equal(parse(line(d)).invalid_samples, 1);
+	}
+	for (const status of [0, 2]) {
+		const d = data();
+		d.substage_cpu_status[3] = status;
+		d.substage_thread_cpu_nanos[3] = 0;
+		const r = parse(line(d));
+		assert.equal(r.parse_complete, 1);
+		assert.equal(r.cpu_complete, 0);
+		assert.equal(r.substages[3].metrics[1].count, 0);
+	}
+	const good = parse(line());
+	for (const mutate of [
+		(r) => (r.substage_count = 6),
+		(r) => (r.substages[0].path = "private"),
+		(r) => (r.substages[3].called_samples = 0),
+		(r) => (r.idle_samples = 1),
+		(r) => (r.schema_version = 1),
+	]) {
+		const r = structuredClone(good);
+		mutate(r);
+		assert.throws(() => validateObserverDiagnostics(r));
+	}
+});

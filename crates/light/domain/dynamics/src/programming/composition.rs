@@ -8,19 +8,23 @@ use super::{
     address::ensure, extract_compatible_dynamic_value,
 };
 use light_core::{AttributeValue, programming::*};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 mod adoption;
+#[cfg(test)]
+mod borrowed_address_tests;
+mod component_coverage;
 mod endpoint_output;
+mod leaf_provenance;
 mod native_fixed;
 mod position_segment;
 mod retained_family;
 mod segment;
 mod trace;
+pub(crate) use leaf_provenance::{
+    LeafProvenance, LeafProvenanceCache, LeafProvenanceLog, LeafProvenanceMap,
+};
 mod whole_activation;
 use adoption::{adopt, requirement};
 pub use endpoint_output::{FamilyEndpointOutputContext, FamilyEndpointOutputControl};
@@ -61,7 +65,7 @@ pub struct FamilyDynamicSampleIdentity {
 
 /// Existing priority/recency order, including Cue precision within a millisecond. Fixed row
 /// attribution remains the optional source occurrence carried by the trace, not this rank.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct FamilySampleRank {
     pub priority: i16,
     pub changed_at_millis: u64,
@@ -112,7 +116,7 @@ impl FamilySampleRank {
 /// result becomes a whole-family engine contribution. Native addresses pin the original model.
 #[derive(Clone)]
 pub struct FamilySample {
-    address: Arc<CompiledDynamicValueAddress>,
+    address: Cow<'static, Arc<CompiledDynamicValueAddress>>,
     body: FamilySampleBody,
     /// Only projections of the same immutable authored tree may share one lane rank. Their
     /// component key is a private fragment tie-breaker, never a fabricated persisted lane ID.
@@ -144,6 +148,17 @@ impl FamilySample {
         rank: FamilySampleRank,
         activation_mix: f32,
     ) -> Result<Self, IntentError> {
+        Self::with_address(Cow::Owned(address), value, rank, activation_mix)
+    }
+
+    // Only immutable process-lifetime scalar slots borrow their existing Arc. Other source
+    // boundaries retain ownership, including the exact original native-model lifetime.
+    pub(super) fn with_address(
+        address: Cow<'static, Arc<CompiledDynamicValueAddress>>,
+        value: DynamicValue,
+        rank: FamilySampleRank,
+        activation_mix: f32,
+    ) -> Result<Self, IntentError> {
         rank.validate()?;
         address.validate_source_value(&value)?;
         ensure(
@@ -161,6 +176,54 @@ impl FamilySample {
             rank,
             activation_mix,
         })
+    }
+
+    /// TL-842 C6: rewrite a plain materialized sample in place with the next frame's value.
+    /// Only a sample of exactly the plain shape that `with_address` builds from `address` (the
+    /// same borrowed slot, no projection, Fix At, exemption or trace node) is rewritten;
+    /// otherwise this returns false unchanged. The checks run first, in the same order, so a
+    /// rejected value leaves the sample untouched and fails exactly like a fresh build.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn refresh_plain(
+        &mut self,
+        address: &'static Arc<CompiledDynamicValueAddress>,
+        value: DynamicValue,
+        rank: FamilySampleRank,
+        activation_mix: f32,
+        occurrence: Option<crate::DynamicSourceOccurrenceId>,
+        dependency: Option<&crate::DynamicSourceDependency>,
+        provenance: &mut LeafProvenance<'_>,
+    ) -> Result<bool, IntentError> {
+        let plain = matches!(&self.address, Cow::Borrowed(current) if std::ptr::eq(*current, address))
+            && matches!(self.body, FamilySampleBody::Materialized(_))
+            && self.projection.is_none()
+            && !self.fix_at
+            && !self.endpoint_output_exempt
+            && self.trace_node.is_none();
+        if !plain {
+            return Ok(false);
+        }
+        rank.validate()?;
+        address.validate_source_value(&value)?;
+        ensure(
+            activation_mix.is_finite() && (0.0..=1.0).contains(&activation_mix),
+            "Dynamic activation influence must be between zero and one",
+        )?;
+        self.body = FamilySampleBody::Materialized(value);
+        self.rank = rank;
+        self.activation_mix = activation_mix;
+        self.trace_sources = if occurrence.is_none() && dependency.is_none() {
+            None
+        } else {
+            let authored = FamilyTraceSource {
+                rank,
+                footprint: self.footprint(),
+                role: FamilyTraceRole::Authored,
+                occurrence,
+            };
+            Some(provenance.intern(authored, dependency))
+        };
+        Ok(true)
     }
 
     pub fn address(&self) -> &CompiledDynamicValueAddress {
@@ -186,7 +249,7 @@ impl FamilySample {
             "Dynamic activation influence must be between zero and one",
         )?;
         Ok(Self {
-            address: expression.address().clone(),
+            address: Cow::Owned(expression.address().clone()),
             body: FamilySampleBody::ComponentExpression(expression),
             projection: None,
             fix_at: false,
@@ -323,9 +386,42 @@ impl FamilySample {
     /// roles stay distinct; Current keeps its own field transfer. Absent evidence stays
     /// absent: an unattributed leaf keeps the Unknown authored fallback without allocating.
     pub(crate) fn with_leaf_provenance(
+        self,
+        occurrence: Option<crate::DynamicSourceOccurrenceId>,
+        dependency: Option<&crate::DynamicSourceDependency>,
+    ) -> Self {
+        self.with_interned_leaf_provenance(occurrence, dependency, &mut LeafProvenance::Fresh)
+    }
+
+    /// The shared leaf provenance storage and its sources, for interning tests (TL-842 C2).
+    #[cfg(test)]
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn leaf_provenance_for_test(
+        &self,
+    ) -> Option<(
+        *const (),
+        Vec<(FamilyTraceSource, Option<crate::DynamicSourceDependency>)>,
+    )> {
+        self.trace_sources.as_ref().map(|sources| {
+            let leaves = sources
+                .iter()
+                .map(|leaf| match leaf {
+                    trace::FamilyTraceLeaf::Source(source) => (*source, None),
+                    trace::FamilyTraceLeaf::Current(source, dependency) => {
+                        (*source, Some(dependency.clone()))
+                    }
+                })
+                .collect();
+            (Arc::as_ptr(sources) as *const (), leaves)
+        })
+    }
+
+    /// [`Self::with_leaf_provenance`] reusing last frame's equal leaves (TL-842 C2).
+    pub(crate) fn with_interned_leaf_provenance(
         mut self,
         occurrence: Option<crate::DynamicSourceOccurrenceId>,
         dependency: Option<&crate::DynamicSourceDependency>,
+        provenance: &mut LeafProvenance<'_>,
     ) -> Self {
         if occurrence.is_none() && dependency.is_none() {
             return self;
@@ -336,18 +432,7 @@ impl FamilySample {
             role: FamilyTraceRole::Authored,
             occurrence,
         };
-        let mut leaves = vec![trace::FamilyTraceLeaf::Source(authored)];
-        if let Some(dependency) = dependency {
-            leaves.push(trace::FamilyTraceLeaf::Current(
-                FamilyTraceSource {
-                    role: FamilyTraceRole::CalculationDependency,
-                    occurrence: dependency.occurrence,
-                    ..authored
-                },
-                dependency.clone(),
-            ));
-        }
-        self.trace_sources = Some(leaves.into());
+        self.trace_sources = Some(provenance.intern(authored, dependency));
         self
     }
 
@@ -376,18 +461,20 @@ impl FamilySample {
     }
 
     fn trace_sources(&self) -> impl Iterator<Item = trace::FamilyTraceLeaf> + '_ {
+        let fallback = self.trace_sources.is_none().then(|| {
+            trace::FamilyTraceLeaf::Source(FamilyTraceSource {
+                rank: self.rank,
+                footprint: self.footprint(),
+                role: FamilyTraceRole::Authored,
+                occurrence: None,
+            })
+        });
         self.trace_sources
             .as_deref()
-            .map(|sources| sources.to_vec())
-            .unwrap_or_else(|| {
-                vec![trace::FamilyTraceLeaf::Source(FamilyTraceSource {
-                    rank: self.rank,
-                    footprint: self.footprint(),
-                    role: FamilyTraceRole::Authored,
-                    occurrence: None,
-                })]
-            })
             .into_iter()
+            .flatten()
+            .cloned()
+            .chain(fallback)
     }
 
     /// Sampled component lanes retain their compiled domain; no source prediction happens
@@ -407,14 +494,20 @@ fn sample_trace(sample: &FamilySample, trace: &mut FamilyTraceArena) -> FamilyTr
     if let Some(node) = sample.trace_node {
         return node;
     }
-    let mut leaves = sample
-        .trace_sources()
-        .map(|source| trace.leaf(source))
-        .collect::<Vec<_>>();
-    let appearance = if leaves.len() == 1 {
-        leaves.pop().expect("one source")
-    } else {
-        trace.bundle(leaves)
+    let mut sources = sample.trace_sources();
+    let appearance = match sources.next() {
+        None => trace.bundle(Vec::new()),
+        Some(first) => {
+            let first = trace.leaf(first);
+            match sources.next() {
+                None => first,
+                Some(second) => {
+                    let mut leaves = vec![first, trace.leaf(second)];
+                    leaves.extend(sources.map(|source| trace.leaf(source)));
+                    trace.bundle(leaves)
+                }
+            }
+        }
     };
     trace.control(
         sample.rank,
@@ -525,7 +618,7 @@ struct ComponentCompositionScratch {
     components: Vec<(ProgrammingComponent, DynamicValue)>,
     angle_order: Vec<usize>,
     angle_address: Option<Arc<CompiledDynamicValueAddress>>,
-    covered_components: HashSet<ProgrammingComponent>,
+    covered_components: component_coverage::ComponentCoverage,
     covered_native_functions: HashMap<Uuid, Uuid>,
     covered: Vec<bool>,
     pending_native_model: Option<Arc<dyn NativeColorEditModel + Send + Sync>>,

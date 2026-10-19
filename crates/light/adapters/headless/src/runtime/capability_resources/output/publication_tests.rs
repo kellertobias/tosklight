@@ -121,7 +121,7 @@ fn rejected_preload_install_keeps_pins_and_success_retires_obsolete_owner() {
     output.replace_snapshot(changed).unwrap();
     let snapshot = output.snapshot();
     let before = output.dynamic_runtime_snapshot();
-    assert_eq!(before.instances[0].definition, original);
+    assert_eq!(*before.instances[0].definition, original);
     let (cold, controls) = output
         .dynamic_snapshot
         .begin_retained_history(

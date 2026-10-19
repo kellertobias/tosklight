@@ -280,7 +280,7 @@ impl DynamicSampleExpression {
         if let Some(result) = RetainedExpressionTape::validate_plain_leaf(self) {
             return result;
         }
-        RetainedExpressionTape::from_roots(&[Arc::new(self.clone())]).map(|_| ())
+        RetainedExpressionTape::from_borrowed_roots(&[self]).map(|_| ())
     }
 
     pub fn contains_angles(&self) -> bool {

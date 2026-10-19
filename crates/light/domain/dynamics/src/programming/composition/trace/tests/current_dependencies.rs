@@ -14,8 +14,11 @@ fn compose_color(
     component: ColorComponent,
 ) -> RetainedFamilyCompositionScratch {
     let template = color_sample(Some(component), DynamicValue::Scalar(0.4), 1, 1.0);
-    let compiled =
-        CompiledComponentExpression::new(Arc::new(expression), template.address.clone()).unwrap();
+    let compiled = CompiledComponentExpression::new(
+        Arc::new(expression),
+        Arc::clone(template.address.as_ref()),
+    )
+    .unwrap();
     let sample = FamilySample::retained_component(Arc::new(compiled), template.rank, 1.0).unwrap();
     let mut scratch = RetainedFamilyCompositionScratch::default();
     compose_retained_dynamic_family_traced(

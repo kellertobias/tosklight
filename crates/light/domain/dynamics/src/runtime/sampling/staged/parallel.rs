@@ -12,6 +12,7 @@
 //! requirements, keyframe caches and source logs are those of the single-threaded loop for any
 //! worker count.
 use super::resolve::{Evaluated, evaluate};
+mod source_free;
 use super::*;
 use crate::{PreparationSources, PreparationWorkers, shard_chunk, target_shard};
 
@@ -203,10 +204,19 @@ fn evaluate_chunk(
         evaluated: Vec::with_capacity(members.len()),
         stopped: None,
     };
+    let mut previous_logs = (0, 0);
     for (member, &index) in members.iter().enumerate() {
         let item = &items[index];
         let plan = &plans[item.plan];
         let work = &plan.controllers[item.work];
+        if item.compiled.source_free_scalar()
+            && fork.source_free_completion()
+            && let Some(evaluated) =
+                source_free::evaluate(item.compiled, plan, work, &work.lanes[item.lane])
+        {
+            chunk.evaluated.push((evaluated, previous_logs));
+            continue;
+        }
         let sources = super::super::super::preset_values::RetainedPresetSources {
             current: fork,
             instance_id: plan.instance_id,
@@ -224,6 +234,7 @@ fn evaluate_chunk(
             chunk.stopped = Some(member);
             break;
         };
+        previous_logs = logs;
         chunk.evaluated.push((evaluated, logs));
     }
     chunk

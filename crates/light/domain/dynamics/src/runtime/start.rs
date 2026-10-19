@@ -58,6 +58,11 @@ impl DynamicRuntime {
             &request.stage_positions,
             request.inherited_spatial_mapping.as_ref(),
         )?;
+        let phase_by_lane_target = Arc::new(phase_table::PhaseTable::new(
+            phase_by_lane_target,
+            &definition,
+            &request.target_scope.ordered_targets,
+        ));
         let mut controllers = HashMap::new();
         controllers.insert(request.controller.id, request.controller.clone());
         let controller_transitions = HashMap::from([(

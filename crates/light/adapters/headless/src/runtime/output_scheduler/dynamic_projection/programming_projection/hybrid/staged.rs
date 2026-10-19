@@ -69,51 +69,53 @@ pub(super) fn prepare_hybrid_frame<T>(
             )?;
             drop(bind_span);
             let mut sampling_span = Some(diagnostics::Span::begin(Stage::SamplingBeforeCallback));
-            runtime.sample_all_programming_staged_shared(
-                now,
-                interval,
-                inputs.speed_transports,
-                scalar_sources,
-                &authored,
-                Some(inputs.addresser),
-                sampling,
-                |legacy, deferred| {
-                    drop(sampling_span.take());
-                    compose_sampled_cohort(
-                        engine,
-                        capture,
-                        &frame_token,
-                        baseline_samples,
-                        legacy,
-                        deferred,
-                        origins,
-                        inputs,
-                        resolver,
-                        presets,
-                        observer,
-                        scalar_sources,
-                        &static_sources,
-                        static_token,
-                        models.as_ref(),
-                        fixed,
-                        controls,
-                        &endpoint_controls,
-                        output_pool.as_deref(),
-                        (
-                            scalar,
-                            legacy_owners,
-                            preparation,
-                            families,
-                            composition,
-                            position_batch_scratch,
-                            static_rows,
-                            parallel,
-                            native_current,
-                        ),
-                        &prepare_static,
-                    )
-                },
-            )
+            diagnostics::covered(diagnostics::WorkerStage::SamplingOuterUnclassified, || {
+                runtime.sample_all_programming_staged_shared(
+                    now,
+                    interval,
+                    inputs.speed_transports,
+                    scalar_sources,
+                    &authored,
+                    Some(inputs.addresser),
+                    sampling,
+                    |legacy, deferred| {
+                        drop(sampling_span.take());
+                        compose_sampled_cohort(
+                            engine,
+                            capture,
+                            &frame_token,
+                            baseline_samples,
+                            legacy,
+                            deferred,
+                            origins,
+                            inputs,
+                            resolver,
+                            presets,
+                            observer,
+                            scalar_sources,
+                            &static_sources,
+                            static_token,
+                            models.as_ref(),
+                            fixed,
+                            controls,
+                            &endpoint_controls,
+                            output_pool.as_deref(),
+                            (
+                                scalar,
+                                legacy_owners,
+                                preparation,
+                                families,
+                                composition,
+                                position_batch_scratch,
+                                static_rows,
+                                parallel,
+                                native_current,
+                            ),
+                            &prepare_static,
+                        )
+                    },
+                )
+            })
         },
     );
     native_current.borrow_mut().finish_frame();
@@ -232,7 +234,6 @@ fn compose_sampled_cohort<'f, T>(
     )
     .map_err(invalid)?;
     drop(prepare_span);
-    let prepared = preparation.prepared();
     typed.check().map_err(invalid)?;
     let control = |rank| endpoint_controls.control_for(rank);
     let view = CohortView {
@@ -247,7 +248,7 @@ fn compose_sampled_cohort<'f, T>(
     };
     let (requirements, mut projections) = compose_family_cohort(
         &view,
-        &prepared,
+        preparation,
         fixed,
         families,
         observer,
@@ -332,11 +333,17 @@ fn finish_cohort<T>(
     projections: &mut Vec<OwnedHybridProjection<T>>,
     requirements: &[HybridFamilyRequirement],
 ) -> Result<(), DynamicRuntimeError> {
+    let observer_span = diagnostics::Subspan::begin(diagnostics::Substage::ObserverFinish);
     observer
         .finish(frame, projections, requirements)
         .map_err(invalid)?;
+    drop(observer_span);
+    let bindings_span = diagnostics::Subspan::begin(diagnostics::Substage::SourceBindings);
     typed.finish_source_bindings().map_err(invalid)?;
+    drop(bindings_span);
+    let drop_span = diagnostics::Subspan::begin(diagnostics::Substage::SourcesDrop);
     drop(typed);
+    drop(drop_span);
     Ok(())
 }
 
@@ -539,7 +546,7 @@ fn frozen_family_owners(
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn compose_family_cohort<T, R: HybridFrameResolver>(
     view: &CohortView<'_, '_, PreparedFamilySources<'_>, R>,
-    prepared: &light_dynamics::PreparedDynamicFamilySamples<'_>,
+    preparation: &mut DynamicFamilyPreparationScratch,
     fixed: &[PreparedFixedMask],
     families: &mut CapturedFamilyInputScratch,
     observer: &mut impl HybridFrameObserver<T>,
@@ -552,10 +559,19 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     ),
 ) -> Result<(Vec<HybridFamilyRequirement>, Vec<OwnedHybridProjection<T>>), DynamicRuntimeError> {
     let setup_span = diagnostics::Span::begin(Stage::CohortSetup);
+    let discovery_span = diagnostics::Subspan::begin(diagnostics::Substage::StaticDiscovery);
     let static_targets = observer
         .static_program_targets(view.frame, view.static_token)
         .map_err(invalid)?;
-    assemble_captured_family_inputs(prepared, fixed, families, pool);
+    drop(discovery_span);
+    let assembly_span = diagnostics::Subspan::begin(diagnostics::Substage::Assembly);
+    // TL-842 C4: the groups borrow the prepared sample vectors until composition ends.
+    assemble_captured_family_inputs_draining(
+        preparation.prepared_for_drain(),
+        fixed,
+        families,
+        pool,
+    );
     if !view.frame.capture.freezes_nothing() {
         families.hold_frozen(&frozen_family_owners(&view.frame.capture.snapshot()));
     }
@@ -570,9 +586,13 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     // list of thousands of rows by doubling allocated and copied it about a dozen times.
     let (mut requirements, mut projections) = (Vec::new(), Vec::with_capacity(groups.len()));
     let protected_current = protected_current_targets(view, groups);
+    drop(assembly_span);
+    let current_span = diagnostics::Subspan::begin(diagnostics::Substage::PrepareCurrent);
     observer
         .prepare_current(view.frame, view.static_token, &protected_current)
         .map_err(invalid)?;
+    drop(current_span);
+    let programs_span = diagnostics::Subspan::begin(diagnostics::Substage::PreparePrograms);
     let programs = groups
         .iter()
         .filter_map(|entry| {
@@ -592,6 +612,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     observer
         .prepare_programs(view.frame, &programs)
         .map_err(invalid)?;
+    drop(programs_span);
     let eligible_position_groups = eligible_position_groups(view, groups, static_only);
     diagnostics::count(Count::PositionGroups, eligible_position_groups.len());
     drop(setup_span);
@@ -622,6 +643,7 @@ fn compose_family_cohort<T, R: HybridFrameResolver>(
     )?;
     drop(owner_span);
     static_rows.finish_cohort();
+    families.return_lent(preparation.families_for_return());
     requirements.extend(view.typed.requirements().into_iter().map(|required| {
         HybridFamilyRequirement {
             target: required.target,

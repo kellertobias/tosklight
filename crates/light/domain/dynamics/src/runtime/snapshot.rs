@@ -67,7 +67,7 @@ impl DynamicRuntime {
                     );
                 DynamicInstanceSnapshot {
                     id: instance.id,
-                    definition: instance.definition.as_ref().clone(),
+                    definition: Arc::clone(&instance.definition),
                     targets: instance.targets.clone(),
                     phase_by_target,
                     phase_by_lane_target,
@@ -122,7 +122,7 @@ impl DynamicRuntime {
                 controller_transitions.sort_by_key(|transition| transition.controller_id);
                 DynamicInstanceSnapshot {
                     id: instance.id,
-                    definition: instance.definition.as_ref().clone(),
+                    definition: Arc::clone(&instance.definition),
                     targets: instance.targets.clone(),
                     phase_by_target: Vec::new(),
                     phase_by_lane_target: Vec::new(),

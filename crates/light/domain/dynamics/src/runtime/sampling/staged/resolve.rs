@@ -104,15 +104,29 @@ pub(super) fn resolve_deferred(
             };
             let lane = &plan.frame.definition.lanes[pinned.lane_index];
             let key = (controller.id, pinned.target, lane.id);
-            let compiled = instance
-                .programming_lanes
-                .get_mut(&lane.id)
-                .expect("pinned compiled lane");
             let evaluated = match recorded() {
                 Some(evaluated) => evaluated,
-                None => evaluate(compiled, plan, work, pinned, sources, checked),
+                None => {
+                    #[cfg(test)]
+                    completion_lookup(true);
+                    let compiled = instance
+                        .programming_lanes
+                        .get(&lane.id)
+                        .expect("pinned compiled lane");
+                    evaluate(compiled, plan, work, pinned, sources, checked)
+                }
             };
-            compiled.keep_transition(evaluated.compiled);
+            // Recorded MaxMin values have no transition to install. Their worker already
+            // captured the compiled lane, so applying them needs no per-target lane lookup.
+            if let Some(transition) = evaluated.compiled {
+                #[cfg(test)]
+                completion_lookup(false);
+                instance
+                    .programming_lanes
+                    .get_mut(&lane.id)
+                    .expect("pinned compiled lane")
+                    .keep_transition(Some(transition));
+            }
             let target = pinned.target;
             let preserve_angle_branches = pinned.preserve_angle_branches;
             let value = match evaluated.result {
@@ -283,4 +297,23 @@ fn retain_position_cohort(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+thread_local! {
+    static COMPLETION_LOOKUPS: std::cell::Cell<(usize, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+#[cfg(test)]
+fn completion_lookup(read: bool) {
+    COMPLETION_LOOKUPS.with(|counts| {
+        let (reads, writes) = counts.get();
+        counts.set((reads + usize::from(read), writes + usize::from(!read)));
+    });
+}
+#[cfg(test)]
+impl DynamicRuntime {
+    /// Apply-thread map accesses only, excluding the workers' initial compiled-lane capture.
+    pub(crate) fn take_completion_lane_lookups() -> (usize, usize) {
+        COMPLETION_LOOKUPS.with(|counts| counts.replace((0, 0)))
+    }
 }

@@ -1,0 +1,647 @@
+// Synchronous observational-projection samples, classified by UTC emission time.
+// Total and stages overlap. Thread CPU is not process CPU; these are not whole HTTP timings.
+import assert from "node:assert/strict";
+import { open, mkdir, writeFile, rename, unlink } from "node:fs/promises";
+import path from "node:path";
+import crypto from "node:crypto";
+import { diagnosticWindowBounds } from "./desktop-performance-576-clock.mjs";
+export const OBSERVER_LIMITS = Object.freeze({
+	bytes: 32 * 1024 * 1024,
+	lines: 100_000,
+	lineBytes: 64 * 1024,
+	samples: 1024,
+	nanos: 400_000_000_000,
+});
+export const STAGE_IDS = Object.freeze([
+	"install_definitions",
+	"live_capture",
+	"restore_snapshot",
+	"dynamic_projection",
+	"resolved_values",
+	"teardown",
+]);
+export const SUBSTAGE_IDS = Object.freeze([
+	"input_capture",
+	"before_snapshot",
+	"reconcile",
+	"sample_callback",
+	"after_snapshot",
+	"transition_events",
+	"candidate_projection",
+]);
+export const OBSERVER_METRICS = Object.freeze([
+	"wall_nanos",
+	"thread_cpu_nanos",
+	"counter_read_nanos",
+]);
+const MESSAGE = "bounded observational dynamic projection sample",
+	CAP = "observational dynamic projection sample cap reached";
+const FIELDS = [
+	"schema_version",
+	"complete",
+	"total_wall_nanos",
+	"total_thread_cpu_nanos",
+	"total_cpu_status",
+	"total_counter_read_nanos",
+	"stage_calls",
+	"stage_wall_nanos",
+	"stage_thread_cpu_nanos",
+	"stage_cpu_status",
+	"stage_counter_read_nanos",
+	"idle",
+	"inner_complete",
+	"substage_calls",
+	"substage_finished",
+	"substage_wall_nanos",
+	"substage_thread_cpu_nanos",
+	"substage_cpu_status",
+	"substage_counter_read_nanos",
+];
+const FLAGS = [
+	"available",
+	"log_available",
+	"capture_complete",
+	"parse_complete",
+	"cpu_complete",
+];
+const COUNTS = [
+	"lines_observed",
+	"sample_lines_observed",
+	"samples_before_window",
+	"samples_in_window",
+	"samples_after_window",
+	"valid_samples_in_window",
+	"complete_samples_in_window",
+	"incomplete_samples_in_window",
+	"invalid_samples",
+	"invalid_before_window",
+	"invalid_in_window",
+	"invalid_after_window",
+	"unlocalizable_samples",
+	"cap_records",
+	"invalid_cap_records",
+	"active_samples",
+	"idle_samples",
+	"unknown_idle_samples",
+];
+const TOP = [
+	"schema_version",
+	...FLAGS,
+	"read_status",
+	"window_seconds",
+	"sample_limit",
+	"stage_count",
+	"substage_count",
+	...COUNTS,
+];
+const ROW = [
+	"id",
+	"called_samples",
+	"valid_cpu_samples",
+	"unavailable_cpu_samples",
+	"invalid_cpu_samples",
+	"metrics",
+];
+const STAT = [
+	"id",
+	"count",
+	"min_nanos",
+	"mean_nanos",
+	"p50_nanos",
+	"p95_nanos",
+	"max_nanos",
+];
+const uint = (n) => Number.isSafeInteger(n) && n >= 0;
+const closed = (r, keys) =>
+	assert.deepEqual(Object.keys(r).sort(), keys.slice().sort());
+const zero = (id) => ({
+	id,
+	count: 0,
+	min_nanos: 0,
+	mean_nanos: 0,
+	p50_nanos: 0,
+	p95_nanos: 0,
+	max_nanos: 0,
+});
+const row = (id) => ({
+	id,
+	called_samples: 0,
+	valid_cpu_samples: 0,
+	unavailable_cpu_samples: 0,
+	invalid_cpu_samples: 0,
+	metrics: OBSERVER_METRICS.map((_, i) => zero(i)),
+});
+function blank(window, status = 0) {
+	return {
+		...Object.fromEntries(TOP.map((k) => [k, 0])),
+		schema_version: 2,
+		read_status: status,
+		window_seconds: diagnosticWindowBounds(window)?.seconds ?? 0,
+		sample_limit: OBSERVER_LIMITS.samples,
+		stage_count: 6,
+		substage_count: 7,
+		total: row(0),
+		stages: STAGE_IDS.map((_, id) => row(id)),
+		substages: SUBSTAGE_IDS.map((_, id) => row(id)),
+	};
+}
+function timestamp(line) {
+	const m =
+		/^\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z(?:\s|$)/u.exec(
+			line,
+		);
+	assert(m);
+	const seconds = Date.parse(m[1] + "Z");
+	assert(
+		uint(seconds) && new Date(seconds).toISOString().slice(0, 19) === m[1],
+	);
+	return BigInt(seconds) * 1_000_000n + BigInt((m[2] ?? "").padEnd(9, "0"));
+}
+function rawFields(line, message, keys) {
+	const at = line.indexOf(message);
+	assert(at >= 0 && line.indexOf(message, at + message.length) < 0);
+	const body = line.slice(at + message.length),
+		headers = [...body.matchAll(/(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=/gu)],
+		out = {};
+	assert(
+		headers.length === keys.length &&
+			body.slice(0, headers[0]?.index).trim() === "",
+	);
+	for (let i = 0; i < headers.length; i++) {
+		const h = headers[i],
+			key = h[1];
+		assert(keys.includes(key) && !Object.hasOwn(out, key));
+		out[key] = body
+			.slice(
+				h.index + h[0].length,
+				i + 1 < headers.length ? headers[i + 1].index : body.length,
+			)
+			.trim();
+	}
+	return out;
+}
+function integer(s, max) {
+	assert(/^\d+$/u.test(s));
+	const value = Number(s);
+	assert(uint(value) && value <= max);
+	return value;
+}
+function sample(line) {
+	const raw = rawFields(line, MESSAGE, FIELDS),
+		out = {};
+	assert(raw.schema_version === "2");
+	out.complete = integer(raw.complete, 1);
+	out.idle = integer(raw.idle, 2);
+	out.inner_complete = integer(raw.inner_complete, 1);
+	for (const k of FIELDS.filter((k) => k.startsWith("total_")))
+		out[k] = integer(raw[k], k.endsWith("_status") ? 2 : OBSERVER_LIMITS.nanos);
+	for (const k of FIELDS.filter(
+		(k) => k.startsWith("stage_") || k.startsWith("substage_"),
+	)) {
+		assert(/^\[\d+(?:,\s*\d+)*\]$/u.test(raw[k]));
+		const array = JSON.parse(raw[k]);
+		const limit =
+			k.endsWith("_calls") || k.endsWith("_finished")
+				? 1
+				: k.endsWith("_status")
+					? 2
+					: OBSERVER_LIMITS.nanos;
+		assert(
+			array.length === (k.startsWith("substage_") ? 7 : 6) &&
+				array.every((n) => uint(n) && n <= limit),
+		);
+		out[k] = array;
+	}
+	if (out.total_cpu_status !== 1) assert(out.total_thread_cpu_nanos === 0);
+	for (const [prefix, count] of [
+		["stage", 6],
+		["substage", 7],
+	])
+		for (let i = 0; i < count; i++) {
+			const get = (k) => out[prefix + "_" + k][i];
+			if (get("cpu_status") !== 1) assert(get("thread_cpu_nanos") === 0);
+			if (!get("calls"))
+				assert(
+					get("wall_nanos") === 0 &&
+						get("thread_cpu_nanos") === 0 &&
+						get("counter_read_nanos") === 0 &&
+						get("cpu_status") === 0,
+				);
+			if (prefix === "substage") {
+				assert(get("finished") <= get("calls"));
+				if (!get("finished"))
+					assert(
+						get("wall_nanos") === 0 &&
+							get("thread_cpu_nanos") === 0 &&
+							get("counter_read_nanos") === 0 &&
+							get("cpu_status") === 0,
+					);
+			}
+		}
+	const expected = SUBSTAGE_IDS.map((_, i) =>
+		Number(out.idle === 0 || [0, 1, 3].includes(i)),
+	);
+	assert(
+		out.inner_complete ===
+			Number(
+				out.idle < 2 &&
+					out.substage_calls.every(
+						(n, i) =>
+							n === expected[i] && out.substage_finished[i] === expected[i],
+					),
+			),
+	);
+	if (out.complete)
+		assert(out.stage_calls.every((n) => n === 1) && out.inner_complete === 1);
+	return out;
+}
+function stat(values, id) {
+	if (!values.length) return zero(id);
+	const sorted = values.slice().sort((a, b) => a - b),
+		at = (p) => sorted[Math.ceil(sorted.length * p) - 1];
+	let mean = 0;
+	for (let i = 0; i < sorted.length; i++) mean += (sorted[i] - mean) / (i + 1);
+	return {
+		id,
+		count: sorted.length,
+		min_nanos: sorted[0],
+		mean_nanos: Math.max(sorted[0], Math.min(sorted.at(-1), mean)),
+		p50_nanos: at(0.5),
+		p95_nanos: at(0.95),
+		max_nanos: sorted.at(-1),
+	};
+}
+function add(target, values, wall, cpu, status, read) {
+	target.called_samples++;
+	target[
+		status === 1
+			? "valid_cpu_samples"
+			: status === 0
+				? "unavailable_cpu_samples"
+				: "invalid_cpu_samples"
+	]++;
+	values[0].push(wall);
+	if (status === 1) values[1].push(cpu);
+	values[2].push(read);
+}
+export function parseObserverDiagnostics(text, window) {
+	const r = blank(window),
+		bounds = diagnosticWindowBounds(window),
+		values = Array.from({ length: 14 }, () => OBSERVER_METRICS.map(() => []));
+	r.log_available = 1;
+	if (!bounds) {
+		r.read_status = 7;
+		return validateObserverDiagnostics(r);
+	}
+	if (
+		typeof text !== "string" ||
+		Buffer.byteLength(text) > OBSERVER_LIMITS.bytes
+	) {
+		r.read_status = 2;
+		return validateObserverDiagnostics(r);
+	}
+	const lines = text.split("\n");
+	if (lines.at(-1) === "") lines.pop();
+	if (lines.length > OBSERVER_LIMITS.lines) {
+		r.read_status = 3;
+		return validateObserverDiagnostics(r);
+	}
+	r.lines_observed = lines.length;
+	r.capture_complete = Number(!text.length || text.endsWith("\n"));
+	if (!r.capture_complete) r.read_status = 8;
+	for (const raw of lines) {
+		if (Buffer.byteLength(raw) > OBSERVER_LIMITS.lineBytes) {
+			r.capture_complete = 0;
+			r.read_status = 4;
+			break;
+		}
+		const line = raw.replace(/\x1B\[[0-?]*[ -/]*[@-~]/gu, "");
+		if (line.includes(CAP)) {
+			r.cap_records++;
+			try {
+				const cap = rawFields(line, CAP, ["schema_version", "sample_limit"]);
+				assert(cap.schema_version === "2" && cap.sample_limit === "1024");
+			} catch {
+				r.invalid_cap_records++;
+			}
+			continue;
+		}
+		if (!line.includes(MESSAGE)) continue;
+		if (r.sample_lines_observed === OBSERVER_LIMITS.samples) {
+			r.capture_complete = 0;
+			r.read_status = 5;
+			break;
+		}
+		r.sample_lines_observed++;
+		let time;
+		try {
+			time = timestamp(line);
+		} catch {
+			r.invalid_samples++;
+			r.unlocalizable_samples++;
+			continue;
+		}
+		const scope =
+			time < bounds.startedAtNanos
+				? "before_window"
+				: time > bounds.endedAtNanos
+					? "after_window"
+					: "in_window";
+		r["samples_" + scope]++;
+		let data;
+		try {
+			data = sample(line);
+		} catch {
+			r.invalid_samples++;
+			r["invalid_" + scope]++;
+			continue;
+		}
+		if (scope !== "in_window") continue;
+		r.valid_samples_in_window++;
+		r[
+			data.complete
+				? "complete_samples_in_window"
+				: "incomplete_samples_in_window"
+		]++;
+		r[
+			data.idle === 0
+				? "active_samples"
+				: data.idle === 1
+					? "idle_samples"
+					: "unknown_idle_samples"
+		]++;
+		add(
+			r.total,
+			values[0],
+			data.total_wall_nanos,
+			data.total_thread_cpu_nanos,
+			data.total_cpu_status,
+			data.total_counter_read_nanos,
+		);
+		for (let i = 0; i < 6; i++)
+			if (data.stage_calls[i])
+				add(
+					r.stages[i],
+					values[i + 1],
+					data.stage_wall_nanos[i],
+					data.stage_thread_cpu_nanos[i],
+					data.stage_cpu_status[i],
+					data.stage_counter_read_nanos[i],
+				);
+		for (let i = 0; i < 7; i++)
+			if (data.substage_finished[i])
+				add(
+					r.substages[i],
+					values[i + 7],
+					data.substage_wall_nanos[i],
+					data.substage_thread_cpu_nanos[i],
+					data.substage_cpu_status[i],
+					data.substage_counter_read_nanos[i],
+				);
+	}
+	if (r.cap_records) {
+		r.capture_complete = 0;
+		r.read_status = 9;
+	}
+	r.parse_complete = Number(
+		r.capture_complete && !r.invalid_samples && !r.invalid_cap_records,
+	);
+	const rows = [r.total, ...r.stages, ...r.substages];
+	r.cpu_complete = Number(
+		r.valid_samples_in_window > 0 &&
+			!r.incomplete_samples_in_window &&
+			rows.every((v) => !v.unavailable_cpu_samples && !v.invalid_cpu_samples),
+	);
+	if (r.parse_complete)
+		rows.forEach((v, i) => (v.metrics = values[i].map(stat)));
+	r.available = Number(
+		r.parse_complete &&
+			r.cpu_complete &&
+			r.complete_samples_in_window > 0 &&
+			!r.incomplete_samples_in_window,
+	);
+	return validateObserverDiagnostics(r);
+}
+export function validateObserverDiagnostics(r) {
+	closed(r, [...TOP, "total", "stages", "substages"]);
+	assert(
+		r.schema_version === 2 &&
+			r.sample_limit === 1024 &&
+			r.stage_count === 6 &&
+			r.substage_count === 7,
+	);
+	for (const k of FLAGS) assert(r[k] === 0 || r[k] === 1);
+	for (const k of COUNTS) assert(uint(r[k]));
+	assert(
+		uint(r.read_status) &&
+			r.read_status <= 9 &&
+			typeof r.window_seconds === "number" &&
+			Number.isFinite(r.window_seconds) &&
+			r.window_seconds >= 0 &&
+			r.window_seconds <= 400,
+	);
+	assert(
+		r.capture_complete === Number(r.read_status === 0) &&
+			r.capture_complete <= r.log_available,
+	);
+	if (r.read_status === 7) assert(r.window_seconds === 0);
+	else assert(r.window_seconds > 0);
+	assert(r.sample_lines_observed <= r.lines_observed);
+	if ([0, 2, 3, 4, 5, 8, 9].includes(r.read_status))
+		assert(r.log_available === 1);
+	if ([1, 6].includes(r.read_status)) assert(r.log_available === 0);
+	assert(
+		r.lines_observed <= OBSERVER_LIMITS.lines &&
+			r.sample_lines_observed <= OBSERVER_LIMITS.samples &&
+			r.cap_records <= r.lines_observed &&
+			r.invalid_cap_records <= r.cap_records,
+	);
+	assert(
+		r.sample_lines_observed ===
+			r.samples_before_window +
+				r.samples_in_window +
+				r.samples_after_window +
+				r.unlocalizable_samples,
+	);
+	assert(
+		r.invalid_samples ===
+			r.invalid_before_window +
+				r.invalid_in_window +
+				r.invalid_after_window +
+				r.unlocalizable_samples,
+	);
+	for (const s of ["before_window", "in_window", "after_window"])
+		assert(r["invalid_" + s] <= r["samples_" + s]);
+	assert(
+		r.valid_samples_in_window === r.samples_in_window - r.invalid_in_window &&
+			r.complete_samples_in_window + r.incomplete_samples_in_window ===
+				r.valid_samples_in_window,
+	);
+	if (r.read_status === 5) assert(r.sample_lines_observed === 1024);
+	if (r.cap_records) assert(r.read_status === 9 && r.capture_complete === 0);
+	if (r.read_status === 9) assert(r.cap_records > 0);
+	if ([1, 6, 7].includes(r.read_status))
+		assert(r.sample_lines_observed === 0 && r.lines_observed === 0);
+	assert(
+		r.parse_complete ===
+			Number(
+				Boolean(
+					r.capture_complete && !r.invalid_samples && !r.invalid_cap_records,
+				),
+			),
+	);
+	assert(
+		Array.isArray(r.stages) &&
+			r.stages.length === 6 &&
+			Array.isArray(r.substages) &&
+			r.substages.length === 7,
+	);
+	assert(
+		r.active_samples + r.idle_samples + r.unknown_idle_samples ===
+			r.valid_samples_in_window,
+	);
+	assert(r.unknown_idle_samples <= r.incomplete_samples_in_window);
+	for (const [index, v] of [r.total, ...r.stages, ...r.substages].entries()) {
+		closed(v, ROW);
+		assert(v.id === (index > 6 ? index - 7 : index ? index - 1 : 0));
+		for (const k of [
+			"called_samples",
+			"valid_cpu_samples",
+			"unavailable_cpu_samples",
+			"invalid_cpu_samples",
+		])
+			assert(uint(v[k]));
+		assert(
+			v.called_samples <= r.valid_samples_in_window &&
+				v.valid_cpu_samples +
+					v.unavailable_cpu_samples +
+					v.invalid_cpu_samples ===
+					v.called_samples,
+		);
+		if (!index) assert(v.called_samples === r.valid_samples_in_window);
+		else if (index <= 6)
+			assert(v.called_samples >= r.complete_samples_in_window);
+		else {
+			const always = [0, 1, 3].includes(index - 7);
+			assert(
+				v.called_samples >=
+					(always
+						? r.complete_samples_in_window
+						: Math.max(0, r.complete_samples_in_window - r.idle_samples)),
+			);
+			if (!r.incomplete_samples_in_window)
+				assert(
+					v.called_samples ===
+						(always ? r.valid_samples_in_window : r.active_samples),
+				);
+		}
+		assert(v.metrics.length === 3);
+		for (const [id, s] of v.metrics.entries()) {
+			closed(s, STAT);
+			assert(
+				s.id === id &&
+					s.count ===
+						(r.parse_complete
+							? id === 1
+								? v.valid_cpu_samples
+								: v.called_samples
+							: 0),
+			);
+			for (const k of STAT.slice(2))
+				assert(
+					typeof s[k] === "number" &&
+						Number.isFinite(s[k]) &&
+						s[k] >= 0 &&
+						s[k] <= OBSERVER_LIMITS.nanos,
+				);
+			for (const k of [
+				"count",
+				"min_nanos",
+				"p50_nanos",
+				"p95_nanos",
+				"max_nanos",
+			])
+				assert(uint(s[k]));
+			assert(
+				s.min_nanos <= s.p50_nanos &&
+					s.p50_nanos <= s.p95_nanos &&
+					s.p95_nanos <= s.max_nanos &&
+					s.min_nanos <= s.mean_nanos &&
+					s.mean_nanos <= s.max_nanos,
+			);
+			if (!s.count) assert(STAT.slice(2).every((k) => s[k] === 0));
+		}
+	}
+	assert(
+		r.cpu_complete ===
+			Number(
+				r.valid_samples_in_window > 0 &&
+					!r.incomplete_samples_in_window &&
+					[r.total, ...r.stages, ...r.substages].every(
+						(v) => !v.unavailable_cpu_samples && !v.invalid_cpu_samples,
+					),
+			),
+	);
+	assert(
+		r.available ===
+			Number(
+				Boolean(
+					r.parse_complete &&
+						r.cpu_complete &&
+						r.complete_samples_in_window > 0 &&
+						!r.incomplete_samples_in_window,
+				),
+			),
+	);
+	return r;
+}
+export async function readObserverDiagnostics(file, window) {
+	if (!diagnosticWindowBounds(window))
+		return validateObserverDiagnostics(blank(window, 7));
+	if (!file) return validateObserverDiagnostics(blank(window, 1));
+	let h,
+		text,
+		status = 0;
+	try {
+		h = await open(file, "r");
+		const info = await h.stat();
+		if (!info.isFile()) status = 6;
+		else if (info.size > OBSERVER_LIMITS.bytes) status = 2;
+		else {
+			const buffer = Buffer.alloc(OBSERVER_LIMITS.bytes + 1);
+			let used = 0;
+			while (used < buffer.length) {
+				const part = await h.read(buffer, used, buffer.length - used, null);
+				if (!part.bytesRead) break;
+				used += part.bytesRead;
+			}
+			if (used > OBSERVER_LIMITS.bytes) status = 2;
+			else text = buffer.subarray(0, used).toString("utf8");
+		}
+	} catch (error) {
+		status = error.code === "ENOENT" ? 1 : 6;
+	} finally {
+		await h?.close();
+	}
+	if (status) {
+		const r = blank(window, status);
+		if (status === 2) r.log_available = 1;
+		return validateObserverDiagnostics(r);
+	}
+	return parseObserverDiagnostics(text, window);
+}
+export async function writeObserverDiagnostics(destination, file, window) {
+	const report = await readObserverDiagnostics(file, window);
+	await mkdir(path.dirname(destination), { recursive: true });
+	const temporary = destination + "." + crypto.randomUUID() + ".partial";
+	try {
+		await writeFile(temporary, JSON.stringify(report, null, 2) + "\n", {
+			flag: "wx",
+			mode: 0o600,
+		});
+		await rename(temporary, destination);
+	} finally {
+		await unlink(temporary).catch(() => {});
+	}
+	return report;
+}

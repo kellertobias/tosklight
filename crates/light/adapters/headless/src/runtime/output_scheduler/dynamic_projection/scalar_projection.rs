@@ -13,6 +13,8 @@ use rustc_hash::FxHashSet;
 #[derive(Default)]
 pub(super) struct HybridScalarProjectionScratch {
     excluded: FxHashSet<(FamilyFixedSampleSource, usize)>,
+    /// Last frame's candidate stacks, refilled in place (TL-842 C1).
+    candidates: rustc_hash::FxHashMap<CandidateKey, CandidateStack>,
 }
 
 /// `fixed` must be the successfully validated compilation of these same captured input arrays.
@@ -34,7 +36,12 @@ pub(super) fn project_hybrid_scalar_samples(
         };
         (source, row_index)
     }));
-    let candidates = collect_dynamic_candidates_with_fixed_rows(
+    let HybridScalarProjectionScratch {
+        excluded,
+        candidates,
+    } = scratch;
+    collect_dynamic_candidates_with_fixed_rows(
+        candidates,
         inputs.addresser,
         inputs.programmer_values,
         inputs.cue_values,
@@ -44,12 +51,16 @@ pub(super) fn project_hybrid_scalar_samples(
         controls.cues,
         sources,
         u64::try_from(inputs.now.timestamp_millis()).unwrap_or_default(),
-        |source, index| !scratch.excluded.contains(&(source, index)),
+        |source, index| !excluded.contains(&(source, index)),
     );
     if candidates.is_empty() {
         Vec::new()
     } else {
-        vec![dynamic_contribution_batch(candidates, sources, inputs.now)]
+        vec![dynamic_contribution_batch_from(
+            candidates.values_mut(),
+            sources,
+            inputs.now,
+        )]
     }
 }
 

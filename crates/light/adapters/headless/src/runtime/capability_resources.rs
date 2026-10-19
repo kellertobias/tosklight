@@ -655,7 +655,7 @@ mod installation;
 mod integrations;
 mod lifecycle;
 mod media_replay;
-mod output;
+pub(in crate::runtime) mod output;
 mod playback_highlight;
 mod programming;
 mod session;

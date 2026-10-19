@@ -141,7 +141,7 @@ impl PreparedStaticFamilyFrame {
         target: FixtureId,
         out: &mut CapturedNativeRaw,
     ) -> Result<(), EngineError> {
-        self.capture_native_raw_into(capture, token, target, None, out)
+        self.capture_native_raw_into(capture, token, target, None, None, out)
     }
 
     /// Pre-master Position baseline for one physical root or multipatch copy. Installation
@@ -162,7 +162,32 @@ impl PreparedStaticFamilyFrame {
         instance_id: Uuid,
         out: &mut CapturedNativeRaw,
     ) -> Result<(), EngineError> {
-        self.capture_native_raw_into(capture, token, target, Some(instance_id), out)
+        self.capture_native_raw_into(capture, token, target, Some(instance_id), None, out)
+    }
+
+    /// [`Self::native_position_raw_into`] resolving only `channels` (sorted, unique mode
+    /// channel indices), each exactly as the complete capture holds it; every other entry reads
+    /// 0 (TL-842). For a reader that uses no other entry, such as a Position fit, which reads
+    /// native values only at its axis drivers. Resolved values never exceed a channel's range,
+    /// so a whole-vector range check sees no difference. Never shares the complete-vector cache.
+    pub fn native_position_channels_into(
+        &self,
+        capture: &PreparedOutputFrame,
+        token: &CapturedFrameToken,
+        target: FixtureId,
+        instance_id: Uuid,
+        channels: &[usize],
+        out: &mut CapturedNativeRaw,
+    ) -> Result<(), EngineError> {
+        debug_assert!(channels.windows(2).all(|pair| pair[0] < pair[1]));
+        self.capture_native_raw_into(
+            capture,
+            token,
+            target,
+            Some(instance_id),
+            Some(channels),
+            out,
+        )
     }
 
     /// The pre-master native raw values of only `channels` (sorted mode channel indices) of the
@@ -248,6 +273,7 @@ impl PreparedStaticFamilyFrame {
         token: &CapturedFrameToken,
         target: FixtureId,
         instance_id: Option<Uuid>,
+        channels: Option<&[usize]>,
         out: &mut CapturedNativeRaw,
     ) -> Result<(), EngineError> {
         out.token = None;
@@ -309,7 +335,7 @@ impl PreparedStaticFamilyFrame {
             destination,
             instance_id.filter(|_| inversion.pan || inversion.tilt),
         );
-        if self.native_raw.copy_into(&key, &mut out.raw) {
+        if channels.is_none() && self.native_raw.copy_into(&key, &mut out.raw) {
             out.token = Some(token.clone());
             out.destination = Some(destination);
             out.instance_id = instance_id;
@@ -335,7 +361,13 @@ impl PreparedStaticFamilyFrame {
             channels: generation.channel_slots(),
         };
         out.raw.resize(mode.channels.len(), 0);
+        let wanted = |channel: &usize| {
+            channels.is_none_or(|channels| channels.binary_search(channel).is_ok())
+        };
         for head in projection.heads() {
+            if !head.channel_indices.iter().any(wanted) {
+                continue;
+            }
             let read = values.head_read(head.owner);
             // Mirror the renderer's input transformation, including canonical aliases, role-bound
             // Position motor aliases of this head and selected channel functions. Reflecting a finished raw value would be incorrect
@@ -345,7 +377,11 @@ impl PreparedStaticFamilyFrame {
                 crate::profile_projection::apply_axis_inversion(inversion, head, &mut head_values);
                 head_values
             });
-            for &channel_index in head.channel_indices.iter() {
+            for &channel_index in head
+                .channel_indices
+                .iter()
+                .filter(|channel| wanted(channel))
+            {
                 let resolved = resolution.resolve_channel_with(
                     channel_index,
                     |which, attribute| match &inverted {
@@ -359,7 +395,9 @@ impl PreparedStaticFamilyFrame {
                 out.raw[channel_index] = resolved.raw;
             }
         }
-        self.native_raw.insert(key, &out.raw);
+        if channels.is_none() {
+            self.native_raw.insert(key, &out.raw);
+        }
         out.token = Some(token.clone());
         out.destination = Some(destination);
         out.instance_id = instance_id;

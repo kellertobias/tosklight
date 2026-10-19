@@ -68,6 +68,19 @@ pub struct PreparedStaticFamilyFrame {
     pub(crate) native_raw: crate::native_raw::NativeRawCache,
 }
 
+/// Typed family values present in this exact resolved static frame.
+/// False proves absence; true may include targets outside the captured fixture list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StaticFamilyPresence {
+    pub position: bool,
+    pub color: bool,
+    pub zoom: bool,
+    pub focus: bool,
+}
+
+#[cfg(test)]
+mod presence_tests;
+
 /// One resolved static winner, answering the same queries as [`PreparedStaticFamilyFrame`].
 #[derive(Clone, Copy)]
 pub struct StaticWinner<'a>(&'a crate::SlotWinner);
@@ -95,13 +108,72 @@ impl<'a> StaticWinner<'a> {
     }
 }
 
+/// One attribute's static values, read by number. See
+/// [`PreparedStaticFamilyFrame::attribute_values`].
+#[derive(Clone, Copy)]
+pub struct StaticAttributeValues<'a> {
+    frame: Option<&'a crate::contribution::ResolvedFrame>,
+    id: Option<light_core::AttributeId>,
+    attribute: &'a AttributeKey,
+}
+
+impl<'a> StaticAttributeValues<'a> {
+    /// Exactly `PreparedStaticFamilyFrame::value(target, attribute)`.
+    pub fn value(&self, target: FixtureId) -> Option<&'a AttributeValue> {
+        self.frame?
+            .winner_numbered(target, self.id, self.attribute)
+            .map(|winner| &winner.value)
+    }
+}
+
 impl PreparedStaticFamilyFrame {
+    /// Inspect current resolved winners without materializing a named map or reading raw values.
+    pub fn static_family_presence(&self) -> StaticFamilyPresence {
+        let mut presence = StaticFamilyPresence::default();
+        let Some(frame) = &self.resolved.frame else {
+            return presence;
+        };
+        let mut observe = |key: &AttributeKey, value: &AttributeValue| match value {
+            AttributeValue::Position(_) => {
+                presence.position |= key == ProgrammingOwner::Position.key_ref()
+            }
+            AttributeValue::ColorProgram(_) => {
+                presence.color |= key == ProgrammingOwner::Color.key_ref()
+            }
+            AttributeValue::Zoom(_) => presence.zoom |= key == ProgrammingOwner::Zoom.key_ref(),
+            AttributeValue::Normalized(_) => {
+                presence.focus |= key == ProgrammingOwner::Focus.key_ref()
+            }
+            _ => (),
+        };
+        for (slot, winner) in frame.occupied() {
+            observe(frame.slots().pair(slot).1, &winner.value);
+        }
+        for (_, key, winner) in frame.overflowed() {
+            observe(key, &winner.value);
+        }
+        presence
+    }
+
     fn winner(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&crate::SlotWinner> {
         self.resolved.frame.as_ref()?.winner(target, attribute)
     }
 
     pub fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
         self.winner(target, attribute).map(|winner| &winner.value)
+    }
+
+    /// [`Self::value`] for many targets of one attribute, hashing the name once (TL-842).
+    pub fn attribute_values<'a>(
+        &'a self,
+        attribute: &'a AttributeKey,
+    ) -> StaticAttributeValues<'a> {
+        let frame = self.resolved.frame.as_ref();
+        StaticAttributeValues {
+            id: frame.and_then(|frame| frame.attribute_id(attribute)),
+            frame,
+            attribute,
+        }
     }
 
     /// The raw parameter of the static baseline, before the output-parameter masters (Freeze

@@ -379,8 +379,11 @@ fn retained_orthogonal_endpoint_blends_after_release_evaluation_and_keeps_compon
     let current = Current::new(uv(0.1));
     let endpoint = color(ColorComponent::Uv, 0.8, 3);
     let expression = Arc::new(
-        CompiledComponentExpression::new(resume(leaf(&endpoint), None), endpoint.address.clone())
-            .unwrap(),
+        CompiledComponentExpression::new(
+            resume(leaf(&endpoint), None),
+            Arc::clone(endpoint.address.as_ref()),
+        )
+        .unwrap(),
     );
     let endpoint = FamilySample::retained_component(expression, endpoint.rank, 0.5).unwrap();
     let samples = [

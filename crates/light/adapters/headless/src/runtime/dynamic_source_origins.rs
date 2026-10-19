@@ -730,6 +730,33 @@ impl DynamicSourceOrigins {
         removed.len()
     }
 
+    /// [`Self::retain_authored_bindings`] that keeps every binding in `active` without a record
+    /// lookup. A record always names the binding it was created for, so `keep` would only see
+    /// `record.binding` outside `active`.
+    pub fn retain_authored_bindings_except(
+        &mut self,
+        active: &rustc_hash::FxHashSet<DynamicSourceBinding>,
+        mut keep: impl FnMut(&DynamicSourceRecord) -> bool,
+    ) -> usize {
+        let removed = self
+            .bindings
+            .iter()
+            .filter(|(binding, _)| {
+                matches!(binding, DynamicSourceBinding::Authored { .. })
+                    && !active.contains(binding)
+            })
+            .filter_map(|(binding, occurrence_id)| {
+                let record = self
+                    .records
+                    .get(occurrence_id)
+                    .expect("active Dynamic binding has an immutable source record");
+                (!keep(record)).then_some(*binding)
+            })
+            .collect::<Vec<_>>();
+        self.remove_bindings(&removed);
+        removed.len()
+    }
+
     fn remove_bindings(&mut self, removed: &[DynamicSourceBinding]) {
         if !removed.is_empty() {
             let bindings = Arc::make_mut(&mut self.bindings);

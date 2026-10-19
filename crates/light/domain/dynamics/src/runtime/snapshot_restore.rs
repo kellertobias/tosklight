@@ -84,7 +84,7 @@ impl DynamicRuntime {
             .flatten();
         let definition = installed
             .cloned()
-            .unwrap_or_else(|| Arc::new(stored.definition.clone()));
+            .unwrap_or_else(|| Arc::clone(&stored.definition));
         let bound = !matches!(definition.target_binding, DynamicTargetBinding::Targetless);
         let programming_lanes = if installed.is_some() {
             self.compiled_lanes[&definition.id].clone()
@@ -116,6 +116,11 @@ impl DynamicRuntime {
             &stored.phase_by_target,
             &stored.phase_by_lane_target,
         );
+        let phase_by_lane_target = Arc::new(phase_table::PhaseTable::new(
+            phase_by_lane_target,
+            &definition,
+            &stored.targets,
+        ));
         let lane_selections = restore_lane_selections(
             stored.lane_selections,
             &controllers,

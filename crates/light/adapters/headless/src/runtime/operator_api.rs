@@ -66,7 +66,7 @@ pub(super) async fn diagnostics(
     // Refresh derived runtime state at the same application timestamp before exposing it. This is
     // especially important under the manually advanced Playwright clock, where no output frame is
     // guaranteed to have rendered between two exact MIB checkpoints.
-    let _ = state.output.resolved_values();
+    state.output.refresh_resolved_state();
     let route_send_errors = state.output.route_send_errors();
     let output_routes = NetworkOutput::route_diagnostics(&state.output.snapshot().routes);
     let output_bind_ip = state.installation.configuration().output_bind_ip;
@@ -143,12 +143,11 @@ pub(super) async fn performance_diagnostics(
     headers: HeaderMap,
 ) -> Result<Json<wire::RuntimePerformanceDiagnosticsSnapshot>, ApiError> {
     let _session = authenticate(&state, &headers)?;
-    let _ = state.output.resolved_values();
+    state.output.refresh_resolved_state();
+    let (health, output_sample) = state.output.health_sample().map_err(ApiError::internal)?;
     Ok(Json(wire::RuntimePerformanceDiagnosticsSnapshot {
-        output: runtime_wire::output_health(
-            state.output.health_snapshot(),
-            state.output.change_lead_snapshot(),
-        ),
+        output_sample,
+        output: runtime_wire::output_health(health, state.output.change_lead_snapshot()),
         programmer_action_timing: serde_json::to_value(state.action_timing.snapshot())
             .map_err(|error| ApiError::internal(error.to_string()))?,
         visualization: runtime_visualization_diagnostics(&state),
@@ -295,13 +294,14 @@ pub(super) async fn visualization_snapshot(
     let projection_started = Instant::now();
     let mut snapshot = if query.dynamic_stack_only {
         let ordinary = fixture_sheet_ordinary_values(&state, &session, query.preload);
-        let mut snapshot = visualization_snapshot_for_session_content_from_resolved(
+        let mut snapshot = resolved_visualization_content(
             &state,
             &session,
             query.preload,
             true,
             true,
             None,
+            VisualizationValueContent::FixtureSheet,
         )?;
         let fixture_ids = requested_visualization_fixture_ids(query.fixture_ids.as_deref());
         project_fixture_sheet_snapshot(&mut snapshot, ordinary.as_ref(), fixture_ids.as_ref());
@@ -508,140 +508,7 @@ fn retain_visualization_fixtures(snapshot: &mut serde_json::Value, fixture_ids: 
 }
 
 #[cfg(test)]
-mod scoped_visualization_tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn normal_snapshot_filter_keeps_only_requested_fixture_values() {
-        let included = Uuid::from_u128(1);
-        let excluded = Uuid::from_u128(2);
-        let mut snapshot = json!({
-            "values": [
-                {"fixture_id": included, "attribute": "intensity", "value": 0.5},
-                {"fixture_id": excluded, "attribute": "intensity", "value": 1.0}
-            ],
-            "profile_output_values": [
-                {"fixture_id": included, "attribute": "intensity", "value": 0.4},
-                {"fixture_id": excluded, "attribute": "intensity", "value": 0.9}
-            ],
-            "dynamic_stack": [
-                {"fixture_id": included, "attribute": "intensity"},
-                {"fixture_id": excluded, "attribute": "intensity"}
-            ],
-            "revision": 7
-        });
-        retain_visualization_fixtures(&mut snapshot, &HashSet::from([included]));
-        for field in ["values", "profile_output_values", "dynamic_stack"] {
-            assert_eq!(snapshot[field].as_array().unwrap().len(), 1);
-            assert_eq!(snapshot[field][0]["fixture_id"], included.to_string());
-        }
-        assert_eq!(snapshot["revision"], 7);
-    }
-
-    #[test]
-    fn fixture_sheet_projection_keeps_stable_bases_and_individual_dynamic_identities() {
-        let included = light_core::FixtureId(Uuid::from_u128(1));
-        let excluded = light_core::FixtureId(Uuid::from_u128(2));
-        let first_dynamic = Uuid::from_u128(10);
-        let second_dynamic = Uuid::from_u128(11);
-        let mut snapshot = json!({
-            "values": [
-                {"fixture_id": included.0, "attribute": "intensity", "value": 0.95}
-            ],
-            "profile_output_values": [
-                {"fixture_id": included.0, "attribute": "intensity", "value": 0.9}
-            ],
-            "dynamic_stack": [
-                {
-                    "fixture_id": included.0,
-                    "attribute": "intensity",
-                    "entry_type": "ordinary_static",
-                    "name": "Static base"
-                },
-                {
-                    "fixture_id": included.0,
-                    "attribute": "shaper_1_a",
-                    "entry_type": "dynamic",
-                    "dynamic_id": first_dynamic,
-                    "pool_number": 7,
-                    "name": "Fan",
-                    "paused": false,
-                    "pending": false,
-                    "hidden": false,
-                    "winning": true,
-                    "value": 0.42,
-                    "resolved_value": 0.73
-                },
-                {
-                    "fixture_id": included.0,
-                    "attribute": "shaper_1_a",
-                    "entry_type": "dynamic",
-                    "dynamic_id": second_dynamic,
-                    "pool_number": 8,
-                    "name": "Pulse",
-                    "paused": true,
-                    "pending": false,
-                    "hidden": true,
-                    "winning": false,
-                    "value": 0.12,
-                    "resolved_value": 0.73
-                },
-                {
-                    "fixture_id": excluded.0,
-                    "attribute": "media_file",
-                    "entry_type": "dynamic",
-                    "dynamic_id": Uuid::from_u128(12),
-                    "pool_number": 9,
-                    "name": "Excluded"
-                }
-            ]
-        });
-        let ordinary = light_engine::ResolvedValues::from_iter([
-            (
-                (included, light_core::AttributeKey("intensity".into())),
-                light_core::AttributeValue::Normalized(0.25),
-            ),
-            (
-                (included, light_core::AttributeKey("media.file".into())),
-                light_core::AttributeValue::Discrete("4".into()),
-            ),
-            (
-                (excluded, light_core::AttributeKey("intensity".into())),
-                light_core::AttributeValue::Normalized(0.5),
-            ),
-        ]);
-
-        project_fixture_sheet_snapshot(
-            &mut snapshot,
-            &ordinary,
-            Some(&HashSet::from([included.0])),
-        );
-
-        let values = snapshot["values"].as_array().unwrap();
-        assert_eq!(values.len(), 2);
-        assert!(values.iter().any(|value| {
-            value["attribute"] == "intensity"
-                && value["value"] == serde_json::json!({"kind": "normalized", "value": 0.25})
-        }));
-        assert!(values.iter().any(|value| {
-            value["attribute"] == "media.file"
-                && value["value"] == serde_json::json!({"kind": "discrete", "value": "4"})
-        }));
-        assert_eq!(snapshot["profile_output_values"], json!([]));
-        let dynamic_stack = snapshot["dynamic_stack"].as_array().unwrap();
-        assert_eq!(dynamic_stack.len(), 2);
-        assert_eq!(dynamic_stack[0]["dynamic_id"], first_dynamic.to_string());
-        assert_eq!(dynamic_stack[1]["dynamic_id"], second_dynamic.to_string());
-        assert_eq!(dynamic_stack[0]["attribute"], "shaper_1_a");
-        assert_eq!(dynamic_stack[1]["attribute"], "shaper_1_a");
-        assert!(dynamic_stack.iter().all(|entry| {
-            entry.get("value").is_none()
-                && entry.get("resolved_value").is_none()
-                && entry.get("summary_count").is_none()
-        }));
-    }
-}
+mod scoped_visualization_tests;
 
 pub(super) fn visualization_snapshot_for_session_content_from_resolved(
     state: &AppState,
@@ -669,7 +536,22 @@ pub(super) fn visualization_snapshot_for_session_content_from_resolved(
         include_dynamic_stack,
         summarize_dynamic_stack,
         authoritative_frame,
+        VisualizationValueContent::Full,
     )
+}
+
+#[derive(Clone, Copy)]
+enum VisualizationValueContent {
+    Full,
+    FixtureSheet,
+}
+impl VisualizationValueContent {
+    fn wire_values(self, values: &light_engine::ResolvedValues) -> Vec<serde_json::Value> {
+        match self {
+            Self::Full => visualization_wire_values(values),
+            Self::FixtureSheet => Vec::new(),
+        }
+    }
 }
 
 fn resolved_visualization_content(
@@ -679,6 +561,7 @@ fn resolved_visualization_content(
     include_dynamic_stack: bool,
     summarize_dynamic_stack: bool,
     authoritative_frame: Option<&super::visualization_frame::PublishedVisualizationFrame>,
+    value_content: VisualizationValueContent,
 ) -> Result<serde_json::Value, ApiError> {
     let authoritative_frame = authoritative_frame.filter(|_| !preload);
     let snapshot = authoritative_frame.map_or_else(
@@ -760,17 +643,17 @@ fn resolved_visualization_content(
             .engine()
             .profile_visualization_projection_at(resolved.as_ref(), options, Some(&snapshot))
             .map_err(|error| ApiError::internal(error.to_string()))?;
-        visualization_wire_values(&projected.values)
+        value_content.wire_values(&projected.values)
     } else if let Some(frame) = authoritative_frame {
-        visualization_wire_values(frame.profile_visualization_values.as_ref())
+        value_content.wire_values(frame.profile_visualization_values.as_ref())
     } else {
         let projected = state
             .output
             .profile_visualization_values(resolved.as_ref(), options)
             .map_err(|error| ApiError::internal(error.to_string()))?;
-        visualization_wire_values(&projected)
+        value_content.wire_values(&projected)
     };
-    let values = visualization_wire_values(resolved.as_ref());
+    let values = value_content.wire_values(resolved.as_ref());
     // Only unretained observer/Preload projections may acquire current sources here.
     let observer_programmer = (authoritative_frame.is_none() && include_dynamic_stack)
         .then(|| state.output.dynamic_programmer_values());

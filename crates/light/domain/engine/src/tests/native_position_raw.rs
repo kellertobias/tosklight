@@ -417,3 +417,76 @@ fn repeated_native_captures_of_one_token_equal_fresh_captures() {
         previous = Some(first.to_vec());
     }
 }
+
+/// TL-842: a channel-filtered Position capture holds exactly the complete capture's values at
+/// the requested channels and zero elsewhere, for the root and an inverted copy, and leaves
+/// the complete-vector cache to complete captures only.
+#[test]
+fn filtered_position_capture_matches_complete_capture_at_its_channels() {
+    let rig = rig();
+    let capture = rig.engine.prepare_output_frame(RenderOptions::default());
+    let token = capture.frame_token();
+    let frame = rig.engine.prepare_static_family_frame(&capture, &[]);
+    for instance in [rig.root.0, rig.copy] {
+        let mut complete = CapturedNativeRaw::default();
+        frame
+            .native_position_raw_into(&capture, &token, rig.root, instance, &mut complete)
+            .unwrap();
+        let width = complete.raw().len();
+        let nonzero = (0..width)
+            .filter(|&channel| complete.raw()[channel] != 0)
+            .collect::<Vec<_>>();
+        assert!(
+            nonzero.len() >= 2,
+            "the rig must resolve nonzero native values"
+        );
+        for channels in [
+            vec![nonzero[0]],
+            vec![nonzero[1], width - 1],
+            nonzero.clone(),
+            (0..width).collect::<Vec<_>>(),
+            vec![],
+        ] {
+            let mut filtered = CapturedNativeRaw::default();
+            frame
+                .native_position_channels_into(
+                    &capture,
+                    &token,
+                    rig.root,
+                    instance,
+                    &channels,
+                    &mut filtered,
+                )
+                .unwrap();
+            assert_eq!(filtered.token(), Some(&token));
+            assert_eq!(filtered.destination(), Some(rig.root));
+            assert_eq!(filtered.instance_id(), Some(instance));
+            assert_eq!(filtered.raw().len(), width);
+            for (channel, (&got, &full)) in filtered.raw().iter().zip(complete.raw()).enumerate() {
+                let expected = if channels.contains(&channel) { full } else { 0 };
+                assert_eq!(got, expected, "instance {instance} channel {channel}");
+            }
+        }
+        // On a fresh token, a filtered capture first must not leave a partial vector for a
+        // later complete capture (of this instance or the family-agnostic domain).
+        let fresh = rig.engine.prepare_output_frame(RenderOptions::default());
+        let fresh_token = fresh.frame_token();
+        let fresh_frame = rig.engine.prepare_static_family_frame(&fresh, &[]);
+        let mut partial = CapturedNativeRaw::default();
+        fresh_frame
+            .native_position_channels_into(
+                &fresh,
+                &fresh_token,
+                rig.root,
+                instance,
+                &[0],
+                &mut partial,
+            )
+            .unwrap();
+        let mut again = CapturedNativeRaw::default();
+        fresh_frame
+            .native_position_raw_into(&fresh, &fresh_token, rig.root, instance, &mut again)
+            .unwrap();
+        assert_eq!(again.raw(), complete.raw());
+    }
+}

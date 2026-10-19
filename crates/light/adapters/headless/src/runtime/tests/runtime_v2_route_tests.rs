@@ -449,3 +449,55 @@ async fn native_cross_origin_cue_previews_expose_their_empty_and_identity_header
     }
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[tokio::test]
+async fn performance_diagnostics_attest_the_actual_counter_sample_clock() {
+    let (state, data_dir) = test_state();
+    let app = router(state);
+    let (token, _) = login(&app, "Operator").await;
+    let mut previous = None;
+    for _ in 0..2 {
+        let before = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get("/api/v2/diagnostics/performance")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let after = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json(response).await;
+        let sample = response["output_sample"]
+            .as_object()
+            .expect("typed output counter sample");
+        assert_eq!(sample.len(), 2);
+        let epoch = sample["sampled_at_epoch_micros"].as_u64().unwrap();
+        let monotonic = sample["monotonic_micros"].as_u64().unwrap();
+        assert!(
+            (before..=after).contains(&epoch),
+            "the timestamp belongs to the request, not HTTP completion or an old counter read"
+        );
+        assert!(response["output"]["frames_sent"].as_u64().is_some());
+        if let Some(previous) = previous {
+            assert!(monotonic >= previous);
+        }
+        previous = Some(monotonic);
+    }
+    let (_, bootstrap) = get_json(&app, "/api/v2/bootstrap").await;
+    assert!(
+        bootstrap.get("output_sample").is_none(),
+        "metadata is additive only on performance diagnostics"
+    );
+    assert!(bootstrap["output_health"].get("output_sample").is_none());
+    let _ = std::fs::remove_dir_all(data_dir);
+}

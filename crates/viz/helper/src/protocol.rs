@@ -372,6 +372,19 @@ pub enum FromHelper {
         width: u32,
         height: u32,
     },
+    /// Passive main-loop evidence, emitted only for the packaged benchmark. This is not a
+    /// presentation acknowledgement. Old helpers that do not emit it provide no idle evidence.
+    BenchmarkHeartbeat {
+        epoch_micros: u64,
+        sequence: u64,
+        last_presented_sequence: u64,
+        source_frame: u64,
+        follow_preload: bool,
+        width: u32,
+        height: u32,
+        idle_unchanged: bool,
+        draw_healthy: bool,
+    },
 }
 
 /// A GPU surface named in a way the other process can open.
@@ -825,5 +838,61 @@ mod scene_plane {
             "the empty bounds arrived as they were set"
         );
         assert!(arrived.fixtures.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod benchmark_heartbeat_tests {
+    use super::*;
+
+    #[test]
+    fn appended_benchmark_variant_preserves_existing_postcard_tags() {
+        assert_eq!(
+            encode(&FromHelper::Camera {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                pan: 0.0,
+                tilt: 0.0,
+                distance: 1.0
+            })
+            .unwrap()[0],
+            5
+        );
+        assert_eq!(
+            encode(&FromHelper::Capabilities {
+                transports: Vec::new()
+            })
+            .unwrap()[0],
+            7
+        );
+        assert_eq!(
+            encode(&FromHelper::Surface {
+                handle: SharedSurfaceHandle::IoSurfaceId(1),
+                width: 1,
+                height: 1
+            })
+            .unwrap()[0],
+            8
+        );
+    }
+
+    #[test]
+    fn passive_heartbeat_round_trips_without_presentation() {
+        let heartbeat = FromHelper::BenchmarkHeartbeat {
+            epoch_micros: 123,
+            sequence: 4,
+            last_presented_sequence: 2,
+            source_frame: 7,
+            follow_preload: true,
+            width: 800,
+            height: 600,
+            idle_unchanged: true,
+            draw_healthy: true,
+        };
+        assert_eq!(
+            decode::<FromHelper>(&encode(&heartbeat).unwrap()).unwrap(),
+            heartbeat
+        );
     }
 }

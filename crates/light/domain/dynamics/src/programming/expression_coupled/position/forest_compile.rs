@@ -2,6 +2,8 @@
 //! while recording the cold lineage that maps each original node onto its compiled root.
 use super::*;
 
+mod plain_angles;
+
 /// Graph under construction. `mapped` holds each compiled forest node's graph root, so a
 /// Transition can only reference earlier original nodes (already checked by the shape pass).
 pub(super) struct PositionForestCompilation {
@@ -131,6 +133,9 @@ impl PositionForestCompilation {
             return Err(TransitionError::Requires(
                 TransitionRequirement::CompatibleOwners,
             ));
+        }
+        if let Some(root) = self.try_plain_angles(forest_node, lane_id, sources, &tape)? {
+            return Ok(root);
         }
         let (imported, imported_root, original_map, imported_origins) =
             compile(&tape, root, None, &mut Vec::new())?;

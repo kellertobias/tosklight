@@ -531,6 +531,7 @@ mod snapshot_groups;
 mod spread_recall;
 
 mod move_in_black;
+mod refresh_resolved;
 
 mod programmer_fades;
 mod programmer_memo;

@@ -32,6 +32,7 @@ export interface PackagedStageBenchmarkConfig {
 	controlDurationSeconds: number;
 	profile: string;
 	additionalStageWindow: boolean;
+	stageEnabled: boolean;
 	fixtureSheet: boolean;
 	expectedFixtureRecords: number | null;
 }
@@ -93,6 +94,8 @@ export interface StagePanePicture {
 
 export interface StagePaneBenchmarkSample {
 	paneId: string;
+	/** Host-minted identity for this renderer attachment. */
+	attachmentId: string;
 	sequence: number;
 	sourceFrame: number;
 	sourceInputEpochMicros: number;
@@ -108,6 +111,30 @@ export interface StagePaneBenchmarkSample {
 	followPreload: boolean;
 	width: number;
 	height: number;
+}
+
+/** Passive main-loop observation, never a rendered-frame or FPS counter. */
+export interface StagePaneBenchmarkHeartbeat {
+	paneId: string;
+	attachmentId: string;
+	sequence: number;
+	epochMicros: number;
+	receivedEpochMicros: number;
+	lastPresentedSequence: number;
+	/** Exact unchanged-state redraw skip after the last valid presentation. */
+	idleUnchanged: boolean;
+	drawHealthy: boolean;
+	sourceFrame: number;
+	followPreload: boolean;
+	width: number;
+	height: number;
+	attached: boolean;
+	visible: boolean;
+}
+
+export interface StagePaneBenchmarkObservations {
+	frames: StagePaneBenchmarkSample[];
+	heartbeats: StagePaneBenchmarkHeartbeat[];
 }
 
 export interface DesktopBridge {
@@ -153,7 +180,7 @@ export interface DesktopBridge {
 	setStagePaneSelection(paneId: string, fixtures: string[]): Promise<void>;
 	/** What is drawing the pane, and whatever last went wrong with it. */
 	stagePaneStatus(paneId?: string): Promise<[string | null, string | null]>;
-	takeStagePaneBenchmarkSamples(): Promise<StagePaneBenchmarkSample[]>;
+	takeStagePaneBenchmarkSamples(): Promise<StagePaneBenchmarkObservations>;
 	/**
 	 * What the operator pointed at in the pane since this was last asked, as `[fixtureId, additive]`.
 	 * A null fixture is a click on nothing, which clears the selection.

@@ -1,6 +1,8 @@
 use super::*;
 mod instances;
+mod recorded_completion;
 mod requirements;
+mod source_free;
 
 fn transports(at: u64) -> [DynamicSpeedTransport; 5] {
     [DynamicSpeedTransport {

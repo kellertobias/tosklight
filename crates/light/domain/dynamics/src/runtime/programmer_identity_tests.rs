@@ -103,7 +103,7 @@ fn instance(owner: ProgrammerId, link: Uuid, instance_id: u128) -> DynamicInstan
     };
     DynamicInstanceSnapshot {
         id: Uuid::from_u128(instance_id),
-        definition,
+        definition: Arc::new(definition),
         targets: vec![target],
         phase_by_target: vec![],
         phase_by_lane_target: vec![(lane_id, target, 0.25)],
@@ -122,9 +122,9 @@ fn instance(owner: ProgrammerId, link: Uuid, instance_id: u128) -> DynamicInstan
         }],
         lane_selections: vec![DynamicControllerLaneSelection {
             controller_id: link,
-            selection: DynamicLaneSelection::Uniform {
+            selection: std::sync::Arc::new(DynamicLaneSelection::Uniform {
                 lanes: vec![lane_id],
-            },
+            }),
         }],
         controller_transitions: vec![DynamicControllerTransitionSnapshot {
             controller_id: link,

@@ -1,4 +1,7 @@
 use super::*;
+use crate::runtime::capability_resources::output::observer_projection_diagnostics::{
+    InnerSpan, Substage, measure_inner, note_idle,
+};
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::sync::OnceLock;
@@ -513,7 +516,9 @@ fn sample_captured_dynamic_inputs_with_context<T>(
     >,
 ) -> Result<(CapturedDynamicSample, T), light_dynamics::DynamicRuntimeError> {
     let now_millis = u64::try_from(inputs.now.timestamp_millis()).unwrap_or_default();
-    let before_runtime = dynamics.output_projection_snapshot();
+    let before_runtime = measure_inner(Substage::BeforeSnapshot, || {
+        dynamics.output_projection_snapshot()
+    });
     let active_dynamic_playbacks = inputs.dynamic_playbacks;
     let interval = (1_000 / u64::from(inputs.rate.max(1))).max(1);
     if dynamic_tick_is_idle(
@@ -527,20 +532,22 @@ fn sample_captured_dynamic_inputs_with_context<T>(
         // Let the source owner retire obsolete active bindings even when no Dynamic remains.
         let playback_controls = HashMap::new();
         let cue_controls = HashMap::new();
-        let (samples, context) = sample(
-            dynamics,
-            now_millis,
-            interval,
-            CapturedSourceAssignments {
-                programmer: Some(&[]),
-                cues: &[],
-                playbacks: &[],
-            },
-            CapturedDynamicOutputControls {
-                playbacks: &playback_controls,
-                cues: &cue_controls,
-            },
-        )?;
+        let (samples, context) = measure_inner(Substage::SampleCallback, || {
+            sample(
+                dynamics,
+                now_millis,
+                interval,
+                CapturedSourceAssignments {
+                    programmer: Some(&[]),
+                    cues: &[],
+                    playbacks: &[],
+                },
+                CapturedDynamicOutputControls {
+                    playbacks: &playback_controls,
+                    cues: &cue_controls,
+                },
+            )
+        })?;
         return Ok((
             CapturedDynamicSample {
                 native_models: dynamics.captured_native_color_models(),
@@ -558,6 +565,7 @@ fn sample_captured_dynamic_inputs_with_context<T>(
 
     // Reconciliation runs before sampling, so a bool transport request has no input-dependent
     // failure. A misplaced call after a provisional sample is still rejected transactionally.
+    let inner_reconciliation = InnerSpan::begin(Substage::Reconcile);
     let reconciliation_span = super::slow_phase_trace::live_phases::Span::begin(
         super::slow_phase_trace::live_phases::Phase::Reconciliation,
     );
@@ -602,20 +610,23 @@ fn sample_captured_dynamic_inputs_with_context<T>(
     let cue_controls = cue_dynamic_output_controls(inputs.cue_values, inputs.snapshot);
     super::start_path_timing::reconciled_since(reconciliation_started);
     drop(reconciliation_span);
-    let (mut samples, context) = sample(
-        dynamics,
-        now_millis,
-        interval,
-        CapturedSourceAssignments {
-            programmer: reconcile_programmer.then_some(assignments.as_slice()),
-            cues: &cue_assignments,
-            playbacks: &playback_assignments,
-        },
-        CapturedDynamicOutputControls {
-            playbacks: &playback_controls,
-            cues: &cue_controls,
-        },
-    )?;
+    inner_reconciliation.finish();
+    let (mut samples, context) = measure_inner(Substage::SampleCallback, || {
+        sample(
+            dynamics,
+            now_millis,
+            interval,
+            CapturedSourceAssignments {
+                programmer: reconcile_programmer.then_some(assignments.as_slice()),
+                cues: &cue_assignments,
+                playbacks: &playback_assignments,
+            },
+            CapturedDynamicOutputControls {
+                playbacks: &playback_controls,
+                cues: &cue_controls,
+            },
+        )
+    })?;
     // Suppression is an output mask. Reconciliation and sampling above still advance the
     // retained runtime so releasing Swap reveals the same continuing clock.
     samples.retain(|sample| {
@@ -628,7 +639,9 @@ fn sample_captured_dynamic_inputs_with_context<T>(
             native_models: dynamics.captured_native_color_models(),
             idle: false,
             before_runtime,
-            after_runtime: dynamics.output_projection_snapshot(),
+            after_runtime: measure_inner(Substage::AfterSnapshot, || {
+                dynamics.output_projection_snapshot()
+            }),
             samples,
             playback_controls,
             start_receipts,
@@ -817,6 +830,31 @@ pub(in crate::runtime) fn dynamic_projection(
     (batches, samples)
 }
 
+/// Observational projection with the post-sampling runtime already captured by that call.
+/// The private observer runtime is unchanged between this capture and returning its batches.
+pub(in crate::runtime) fn observer_dynamic_projection(
+    engine: &Engine,
+    dynamics: &Mutex<light_dynamics::DynamicRuntime>,
+    speed_groups: &Mutex<[light_control::speed::SpeedGroupController; 5]>,
+    rate: &AtomicU16,
+    extra_programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
+) -> (
+    Vec<ContributionBatch>,
+    light_dynamics::DynamicRuntimeSnapshot,
+    Vec<light_dynamics::DynamicRuntimeSample>,
+) {
+    let (batches, _, _, after_runtime, samples) = dynamic_contributions_with_auto_off(
+        engine,
+        dynamics,
+        speed_groups,
+        rate,
+        extra_programmer_values,
+        None,
+        false,
+    );
+    (batches, after_runtime, samples)
+}
+
 pub(super) fn dynamic_contributions_with_auto_off(
     engine: &Engine,
     dynamics: &Mutex<light_dynamics::DynamicRuntime>,
@@ -897,6 +935,7 @@ fn dynamic_contributions_inner(
     light_dynamics::DynamicRuntimeSnapshot,
     Vec<light_dynamics::DynamicRuntimeSample>,
 ) {
+    let input_capture = InnerSpan::begin(Substage::InputCapture);
     let now = prepared.map_or_else(|| engine.application_time(), |frame| frame.sampled_at());
     let now_millis = u64::try_from(now.timestamp_millis()).unwrap_or_default();
     // Most ticks have no Dynamic source that needs an underlay value. Keep the whole-show
@@ -942,6 +981,7 @@ fn dynamic_contributions_inner(
         programmer_reconciliation_cache,
         force_source_reconciliation: false,
     };
+    input_capture.finish();
     let sampled = {
         let mut dynamics = dynamics.lock();
         let sampled = sample_captured_dynamic_inputs(&mut dynamics, &inputs, &sources);
@@ -952,6 +992,7 @@ fn dynamic_contributions_inner(
         }
         sampled
     };
+    note_idle(sampled.idle);
     if sampled.idle {
         return (
             Vec::new(),
@@ -961,8 +1002,9 @@ fn dynamic_contributions_inner(
             Vec::new(),
         );
     }
-    let dynamic_events =
-        dynamic_transition_events(&sampled.before_runtime, &sampled.after_runtime, now_millis);
+    let dynamic_events = measure_inner(Substage::TransitionEvents, || {
+        dynamic_transition_events(&sampled.before_runtime, &sampled.after_runtime, now_millis)
+    });
     let auto_offs = if apply_auto_off {
         let fully_controlled = match prepared {
             Some(frame) => fully_controlled_dynamic_playbacks_from(
@@ -989,7 +1031,9 @@ fn dynamic_contributions_inner(
     };
 
     (
-        project_captured_dynamic_sample(&inputs, &sampled, &sources),
+        measure_inner(Substage::CandidateProjection, || {
+            project_captured_dynamic_sample(&inputs, &sampled, &sources)
+        }),
         auto_offs,
         dynamic_events,
         sampled.after_runtime,
@@ -998,17 +1042,25 @@ fn dynamic_contributions_inner(
 }
 
 fn dynamic_contribution_batch(
-    candidates: FxHashMap<CandidateKey, CandidateStack>,
+    mut candidates: FxHashMap<CandidateKey, CandidateStack>,
     sources: &impl DynamicTickSource,
     now: chrono::DateTime<chrono::Utc>,
 ) -> ContributionBatch {
-    ContributionBatch::new(candidates.into_values().map(|entry| {
-        let CandidateStack {
-            fixture_id,
-            attribute,
-            address,
-            candidates: mut stack,
-        } = entry;
+    dynamic_contribution_batch_from(candidates.values_mut(), sources, now)
+}
+
+/// Resolves every stack into one contribution. Stacks are sorted in place and left in the
+/// caller's (possibly retained) map.
+fn dynamic_contribution_batch_from<'s>(
+    stacks: impl Iterator<Item = &'s mut CandidateStack>,
+    sources: &impl DynamicTickSource,
+    now: chrono::DateTime<chrono::Utc>,
+) -> ContributionBatch {
+    ContributionBatch::new(stacks.map(|entry| {
+        let fixture_id = entry.fixture_id;
+        let attribute = entry.attribute.clone();
+        let address = entry.address;
+        let stack = &mut entry.candidates;
         stack.sort_by_key(|candidate| {
             (
                 candidate.priority,
@@ -1021,7 +1073,7 @@ fn dynamic_contribution_batch(
         });
         let has_dynamic = stack.iter().any(|candidate| candidate.dynamic);
         let resolved =
-            resolve_dynamic_stack(&stack, || sources.value(fixture_id, &attribute).cloned());
+            resolve_dynamic_stack(stack, || sources.value(fixture_id, &attribute).cloned());
         let candidate = stack
             .last()
             .expect("one Dynamic/FAT candidate exists for every stack");
@@ -1100,3 +1152,6 @@ fn dynamic_tick_is_idle_from_presence(
 
 #[cfg(test)]
 mod tick_source_tests;
+
+#[cfg(test)]
+mod observer_projection_tests;

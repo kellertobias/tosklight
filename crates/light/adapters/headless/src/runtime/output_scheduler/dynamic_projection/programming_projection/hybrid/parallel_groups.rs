@@ -163,14 +163,19 @@ pub(super) fn compose_owner_groups<T, R: HybridFrameResolver>(
         let partition = partition(groups, chunks);
         observer.with_parallel_lanes(&mut |lanes| {
             if let Some(lanes) = lanes {
-                parallel = Some(compose_in_parallel(
-                    view,
-                    groups,
-                    &partition,
-                    (static_only, handled_position),
-                    lanes,
-                    (static_rows, scratch),
-                    pool,
+                parallel = Some(diagnostics::covered(
+                    diagnostics::WorkerStage::OwnerCompose,
+                    || {
+                        compose_in_parallel(
+                            view,
+                            groups,
+                            &partition,
+                            (static_only, handled_position),
+                            lanes,
+                            (static_rows, scratch),
+                            pool,
+                        )
+                    },
                 ));
             }
         });

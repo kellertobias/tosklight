@@ -526,7 +526,7 @@ fn finalization_keeps_random_advancement_controller_edits_and_pause_after_prepar
         assert!(!expected.instances[0].synchronized_hold_values.is_empty());
         (expected, held)
     };
-    expected.instances[0].definition = definition;
+    expected.instances[0].definition = std::sync::Arc::new(definition);
     output
         .finalize_snapshot(&playback(), prepared, || Ok(()))
         .unwrap();

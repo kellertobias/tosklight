@@ -38,17 +38,17 @@ where
         pool: Option<&light_engine::parallel::OutputPool>,
     ) -> Result<(), TransitionError> {
         let fixtures = &frame.capture.snapshot().fixtures;
+        // TL-842: one name lookup per scan instead of one per fixture and head.
+        let values = baseline.attribute_values(owner.key_ref());
         let scanned = pool
             .filter(|_| fixtures.len() >= MIN_PARALLEL_FIXTURES)
-            .and_then(|pool| self.scan_on(pool, frame, baseline, owner, has_family));
+            .and_then(|pool| self.scan_on(pool, frame, values, owner, has_family));
         let Some(found) = scanned else {
             for fixture in fixtures.iter() {
                 for target in std::iter::once(fixture.fixture_id)
                     .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
                 {
-                    if !baseline
-                        .value(target, owner.key_ref())
-                        .is_some_and(has_family)
+                    if !values.value(target).is_some_and(has_family)
                         || seen.contains(&(target, owner))
                     {
                         continue;
@@ -87,7 +87,7 @@ where
         &self,
         pool: &light_engine::parallel::OutputPool,
         frame: HybridFrameContext<'_>,
-        baseline: &light_engine::PreparedStaticFamilyFrame,
+        values: light_engine::StaticAttributeValues<'_>,
         owner: ProgrammingOwner,
         has_family: fn(&AttributeValue) -> bool,
     ) -> Option<Vec<Found>> {
@@ -105,10 +105,7 @@ where
                     for target in std::iter::once(fixture.fixture_id)
                         .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
                     {
-                        if !baseline
-                            .value(target, owner.key_ref())
-                            .is_some_and(has_family)
-                        {
+                        if !values.value(target).is_some_and(has_family) {
                             continue;
                         }
                         match lane.descriptor(frame, target, owner) {

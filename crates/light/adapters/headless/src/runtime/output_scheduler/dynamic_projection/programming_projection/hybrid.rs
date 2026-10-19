@@ -18,7 +18,8 @@
 use super::super::{
     endpoint_controls::CapturedFamilyEndpointControls,
     family_inputs::{
-        CapturedFamilyInputScratch, CapturedFamilyRequirement, assemble_captured_family_inputs,
+        CapturedFamilyInputScratch, CapturedFamilyRequirement,
+        assemble_captured_family_inputs_draining,
     },
     fixed_masks::{
         CapturedFixedMaskRows, FixedMaskCompilationScratch, compile_captured_fixed_masks,
@@ -111,6 +112,26 @@ impl HybridFrameContext<'_> {
     ) -> Result<(), TransitionError> {
         self.scalar
             .native_position_raw_into(self.capture, self.token, target, instance_id, out)
+            .map_err(|error| IntentError(error.to_string()).into())
+    }
+
+    /// [`Self::native_position_raw_into`] resolving only `channels` (TL-842).
+    pub fn native_position_channels_into(
+        &self,
+        target: FixtureId,
+        instance_id: uuid::Uuid,
+        channels: &[usize],
+        out: &mut light_engine::CapturedNativeRaw,
+    ) -> Result<(), TransitionError> {
+        self.scalar
+            .native_position_channels_into(
+                self.capture,
+                self.token,
+                target,
+                instance_id,
+                channels,
+                out,
+            )
             .map_err(|error| IntentError(error.to_string()).into())
     }
 }

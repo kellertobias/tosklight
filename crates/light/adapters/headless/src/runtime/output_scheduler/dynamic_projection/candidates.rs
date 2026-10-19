@@ -70,7 +70,9 @@ pub(super) fn collect_dynamic_candidates(
     sources: &impl DynamicTickSource,
     now_millis: u64,
 ) -> FxHashMap<CandidateKey, CandidateStack> {
+    let mut candidates = FxHashMap::default();
     collect_dynamic_candidates_with_fixed_rows(
+        &mut candidates,
         addresser,
         programmer_values,
         cue_values,
@@ -81,11 +83,13 @@ pub(super) fn collect_dynamic_candidates(
         sources,
         now_millis,
         |_, _| true,
-    )
+    );
+    candidates
 }
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn collect_dynamic_candidates_with_fixed_rows(
+    candidates: &mut FxHashMap<CandidateKey, CandidateStack>,
     addresser: &dyn light_core::FrameAddressResolver,
     programmer_values: &[(Uuid, i16, light_dynamics::DynamicAddressValue)],
     cue_values: &[light_playback::ActiveCueDynamicValue],
@@ -96,10 +100,15 @@ pub(super) fn collect_dynamic_candidates_with_fixed_rows(
     sources: &impl DynamicTickSource,
     now_millis: u64,
     include_fixed_row: impl Fn(light_dynamics::FamilyFixedSampleSource, usize) -> bool,
-) -> FxHashMap<CandidateKey, CandidateStack> {
-    // One entry per addressed attribute, rebuilt every tick: the hash is the cost, so it is the
-    // cheap one rather than the DoS-resistant one nothing here needs.
-    let mut candidates = FxHashMap::<CandidateKey, CandidateStack>::default();
+) {
+    // One entry per addressed attribute: the hash is the cost, so it is the cheap one rather
+    // than the DoS-resistant one nothing here needs. A retained map keeps last frame's stacks
+    // (TL-842 C1): their candidate lists empty here, refill below, and an address no longer
+    // addressed leaves the map afterwards, so no stack or map grows from scratch each frame.
+    for stack in candidates.values_mut() {
+        stack.candidates.clear();
+    }
+    candidates.reserve(samples.len());
     let mut consider = |fixture_id: FixtureId,
                         attribute: &AttributeKey,
                         address: Option<light_core::FrameAddress>,
@@ -141,7 +150,7 @@ pub(super) fn collect_dynamic_candidates_with_fixed_rows(
         &include_fixed_row,
         now_millis,
     );
-    candidates
+    candidates.retain(|_, stack| !stack.candidates.is_empty());
 }
 
 /// Casts one candidate per legacy contribution of every live, enabled Dynamic sample.

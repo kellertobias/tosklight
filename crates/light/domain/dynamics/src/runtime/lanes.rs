@@ -26,7 +26,8 @@ pub struct DynamicTargetLanes {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DynamicControllerLaneSelection {
     pub controller_id: Uuid,
-    pub selection: DynamicLaneSelection,
+    /// Shared with the compiled selection: projection snapshots are taken twice per frame.
+    pub selection: Arc<DynamicLaneSelection>,
 }
 
 impl DynamicLaneSelection {
@@ -121,7 +122,7 @@ impl DynamicLaneSelection {
 
 #[derive(Clone)]
 pub(super) struct CompiledLaneSelection {
-    authored: DynamicLaneSelection,
+    authored: Arc<DynamicLaneSelection>,
     /// Fx-hashed (TL-639 round 4): pinning asks once per target and lane each frame. Only
     /// membership is read; `authored` keeps the order.
     uniform: rustc_hash::FxHashSet<Uuid>,
@@ -130,7 +131,7 @@ pub(super) struct CompiledLaneSelection {
 
 impl CompiledLaneSelection {
     fn new(
-        authored: DynamicLaneSelection,
+        authored: Arc<DynamicLaneSelection>,
         definition: &DynamicDefinition,
     ) -> Result<Self, DynamicRuntimeError> {
         let lanes = |ids: &[Uuid]| {
@@ -146,7 +147,7 @@ impl CompiledLaneSelection {
         let mut uniform = rustc_hash::FxHashSet::default();
         let mut targets = rustc_hash::FxHashMap::default();
         // Validate before closure; normalization must not hide malformed duplicate IDs.
-        match &authored {
+        match authored.as_ref() {
             DynamicLaneSelection::All => {}
             DynamicLaneSelection::Uniform { lanes: ids } => uniform = lanes(ids)?,
             DynamicLaneSelection::PerTarget { targets: selected } => {
@@ -163,7 +164,7 @@ impl CompiledLaneSelection {
                 }
             }
         }
-        let mut effective = authored.clone();
+        let mut effective = authored.as_ref().clone();
         effective.complete_angle_pair(definition);
         match effective {
             DynamicLaneSelection::All => {}
@@ -185,7 +186,7 @@ impl CompiledLaneSelection {
     }
 
     pub(super) fn allows(&self, target: FixtureId, lane: Uuid) -> bool {
-        match self.authored {
+        match *self.authored {
             DynamicLaneSelection::All => true,
             DynamicLaneSelection::Uniform { .. } => self.uniform.contains(&lane),
             DynamicLaneSelection::PerTarget { .. } => self
@@ -243,8 +244,9 @@ impl CompiledLaneSelection {
 impl DynamicInstance {
     pub(super) fn rebind_angle_lane_selections(&mut self) {
         for selection in self.lane_selections.values_mut() {
-            *selection = CompiledLaneSelection::new(selection.authored.clone(), &self.definition)
-                .expect("previously validated lane selection");
+            *selection =
+                CompiledLaneSelection::new(Arc::clone(&selection.authored), &self.definition)
+                    .expect("previously validated lane selection");
         }
     }
 
@@ -261,7 +263,7 @@ impl DynamicInstance {
             .map(
                 |(controller_id, selection)| DynamicControllerLaneSelection {
                     controller_id: *controller_id,
-                    selection: selection.authored.clone(),
+                    selection: Arc::clone(&selection.authored),
                 },
             )
             .collect::<Vec<_>>();
@@ -330,12 +332,12 @@ impl DynamicRuntime {
             .lane_selections
             .get(&controller)
             .map_or(matches!(selection, DynamicLaneSelection::All), |existing| {
-                existing.authored == selection
+                *existing.authored == selection
             })
         {
             return Ok(false);
         }
-        let compiled = CompiledLaneSelection::new(selection, &instance.definition)?;
+        let compiled = CompiledLaneSelection::new(Arc::new(selection), &instance.definition)?;
         if let Some(undo) = &mut self.output_frame_undo {
             undo.record_instance(instance.id, Some(instance));
         }

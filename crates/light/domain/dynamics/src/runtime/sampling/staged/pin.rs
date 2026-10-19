@@ -200,7 +200,11 @@ impl LanePinning<'_> {
         let phase = facts
             .random_phases
             .and_then(|phases| phases.get(&target))
-            .or_else(|| instance.phase_by_lane_target.get(&(lane.id, target)))
+            .or_else(|| {
+                instance
+                    .phase_by_lane_target
+                    .get_indexed(lane_index, lane.id, target_index, target)
+            })
             .copied()
             .unwrap_or(0.0)
             + controller.phase_offset_degrees;

@@ -21,6 +21,7 @@ const config = {
 	durationSeconds: 240,
 	controlDurationSeconds: 30,
 	additionalStageWindow: false,
+	stageEnabled: true,
 };
 const rows = [{ parentFixtureId: "one" }, { parentFixtureId: "two" }];
 const state = {

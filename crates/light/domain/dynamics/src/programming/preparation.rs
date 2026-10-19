@@ -8,6 +8,9 @@ use rustc_hash::FxHashMap as HashMap;
 use std::{cell::Cell, sync::Arc};
 use uuid::Uuid;
 
+mod handoff;
+pub use handoff::DrainingPreparedDynamicFamilySamples;
+
 pub struct DynamicFamilySampleGroup {
     pub target: FixtureId,
     pub owner: ProgrammingOwner,
@@ -50,7 +53,7 @@ struct CacheKey {
     owner: ProgrammingOwner,
 }
 
-#[derive(Clone)]
+#[cfg_attr(not(test), derive(Clone))]
 struct CompiledSample {
     // Own the original expression, never a raw pointer key with an unrelated lifetime.
     expression: Arc<DynamicSampleExpression>,
@@ -81,15 +84,21 @@ pub struct DynamicFamilyPreparationScratch {
     /// Last frame's compiled samples this preparation did not reuse (TL-639 round 6), for the
     /// caller to free off the frame's thread ([`Self::take_retired`]).
     retired: HashMap<CacheKey, CompiledSample>,
-    /// Last frame's output, cleared by this preparation (TL-639 round 7), freed the same way.
+    /// Samples written to each retained group this frame, and whether a group was created
+    /// (TL-842 C4): groups and their order persist, so only changes restore the order.
+    family_cursors: Vec<usize>,
+    families_created: bool,
+    /// Last frame's legacy fragments, cleared by this preparation (TL-639 round 7), freed
+    /// the same way.
     retired_output: RetiredOutput,
+    /// Materialized leaf provenance shared with the next frame (TL-842 C2).
+    provenance: super::composition::LeafProvenanceCache,
 }
 
-/// A cleared preparation output: its groups (with their samples) and legacy fragments.
+/// A cleared preparation output's legacy fragments.
 #[derive(Default)]
 #[allow(dead_code)] // held only to be dropped
 struct RetiredOutput {
-    families: Vec<DynamicFamilySampleGroup>,
     legacy: Vec<DynamicRuntimeSample>,
 }
 
@@ -109,19 +118,14 @@ impl DynamicFamilyPreparationScratch {
         )
     }
 
-    /// The last preparation's result.
-    pub fn prepared(&self) -> PreparedDynamicFamilySamples<'_> {
-        PreparedDynamicFamilySamples {
-            families: &self.families,
-            legacy: &self.legacy,
-            requirements: &self.requirements,
-        }
-    }
-
     /// Drop retained compiled sources at a show/dependency boundary.
     pub fn clear(&mut self) {
         self.clear_output();
+        self.families.clear();
+        self.family_indices.clear();
+        self.family_cursors.clear();
         self.cache.clear();
+        self.provenance.clear();
         self.controller.clear();
         self.position.clear();
         self.order.clear();
@@ -130,15 +134,47 @@ impl DynamicFamilyPreparationScratch {
 
     /// Retire the last output whole (TL-639 round 7): its groups and fragments move out with
     /// their storage, to be freed by whoever takes them ([`Self::take_retired`]); the next
-    /// output starts in buffers sized like the last one.
+    /// output starts in buffers sized like the last one. Vacant append-one groups may take
+    /// empty drained sample buffers from this retirement before it is freed.
     fn clear_output(&mut self) {
-        let (groups, fragments) = (self.families.len(), self.legacy.len());
-        let families = std::mem::replace(&mut self.families, Vec::with_capacity(groups));
+        let fragments = self.legacy.len();
         let legacy = std::mem::replace(&mut self.legacy, Vec::with_capacity(fragments));
-        self.retired_output = RetiredOutput { families, legacy };
-        self.family_indices.clear();
+        self.retired_output = RetiredOutput { legacy };
+        // TL-842 C4: groups stay in place; this frame rewrites each from its first slot.
+        self.family_cursors.clear();
+        self.family_cursors.resize(self.families.len(), 0);
+        self.families_created = false;
         self.requirements.clear();
         self.sampling_requirements.clear();
+    }
+
+    /// Trim every group to what this frame wrote, drop groups it did not write, and restore
+    /// the `family_order` and index only when the set of groups changed. The output then
+    /// equals a fresh preparation's: the same groups, samples and order.
+    pub(super) fn finish_families(&mut self, sort: impl FnOnce(&mut [DynamicFamilySampleGroup])) {
+        for (group, &written) in self.families.iter_mut().zip(&self.family_cursors) {
+            group.samples.truncate(written);
+        }
+        let removed = self.family_cursors.contains(&0);
+        if removed {
+            let mut written = self.family_cursors.iter();
+            self.families
+                .retain(|_| written.next().is_some_and(|&written| written > 0));
+        }
+        if self.families_created {
+            sort(&mut self.families);
+        }
+        if removed || self.families_created {
+            self.family_indices.clear();
+            self.family_indices.extend(
+                self.families
+                    .iter()
+                    .enumerate()
+                    .map(|(index, group)| ((group.target, group.owner), index)),
+            );
+        }
+        self.family_cursors.clear();
+        self.families_created = false;
     }
 }
 
@@ -148,8 +184,40 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         sample: DynamicRuntimeSample,
         native_models: Option<&dyn DynamicNativeModelResolver>,
     ) -> Result<(), TransitionError> {
+        // Plain semantic Color scalars carry fresh numeric values, not reusable expression trees.
+        // The controller validated the original leaf before reaching this lowering boundary.
+        if let Some(leaf) = plain_scalar::leaf(&sample.expression) {
+            return self.prepare_plain_scalar(&sample, leaf);
+        }
         for (owner, expression) in split_owners(Arc::new(sample.expression.clone()))? {
             self.prepare_part(&sample, owner, expression, native_models)?;
+        }
+        Ok(())
+    }
+
+    fn prepare_plain_scalar(
+        &mut self,
+        sample: &DynamicRuntimeSample,
+        leaf: plain_scalar::Leaf<'_>,
+    ) -> Result<(), TransitionError> {
+        if !self.sampling_required(sample, ProgrammingOwner::Color) {
+            let (sample_rank, activation) = (rank(sample), sample.activation_mix);
+            let provenance = &mut self.provenance;
+            let rewritten = self.out.rewrite_one(
+                sample.target,
+                ProgrammingOwner::Color,
+                &mut |slot| match slot {
+                    FamilyCompositionSample::Known(known) => {
+                        leaf.refresh(known, sample_rank, activation, provenance)
+                    }
+                    _ => Ok(false),
+                },
+            )?;
+            if !rewritten {
+                let value = leaf.materialize(sample_rank, activation, &mut self.provenance)?;
+                self.out
+                    .append_one(sample.target, ProgrammingOwner::Color, value.into());
+            }
         }
         Ok(())
     }
@@ -193,6 +261,20 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             }
         }
         for index in 0..self.controller.len() {
+            // TL-842 C3: a plain Position leaf is its own only projection (`split_owners`).
+            let plain_position = {
+                let sample = &self.controller[index];
+                (plain_leaf_owner(&sample.expression) == Some(ProgrammingOwner::Position))
+                    .then(|| self.sampling_required(sample, ProgrammingOwner::Position))
+            };
+            if let Some(required) = plain_position {
+                if !required {
+                    let mut position = self.controller[index].clone();
+                    position.address = None;
+                    self.position.push(position);
+                }
+                continue;
+            }
             let sample = self.controller[index].clone();
             for (owner, expression) in split_owners(Arc::new(sample.expression.clone()))? {
                 if owner == Some(ProgrammingOwner::Position) {
@@ -339,8 +421,7 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             .as_ref()
             .map(|models| models as &dyn DynamicNativeModelResolver);
         let compiled = if !shape.native
-            && let Some(cached) = self.previous.take(&key)
-            && cached.expression == expression
+            && let Some(cached) = self.previous.take_matching(&key, &expression)
         {
             cached
         } else {
@@ -510,13 +591,14 @@ pub fn prepare_dynamic_family_samples_with_requirements<'a>(
         .requirements
         .extend_from_slice(sampling_requirements);
     let mut previous = std::mem::take(&mut scratch.cache);
+    scratch.provenance.begin_frame();
     let result = prepare(samples, sources, native_models, &mut previous, scratch);
     scratch.retired = previous;
     if let Err(error) = result {
         scratch.clear();
         return Err(error);
     }
-    scratch.families.sort_unstable_by_key(family_order);
+    scratch.finish_families(|families| families.sort_unstable_by_key(family_order));
     Ok(PreparedDynamicFamilySamples {
         families: &scratch.families,
         legacy: &scratch.legacy,
@@ -909,6 +991,16 @@ fn is_plain_leaf(expression: &DynamicSampleExpression) -> bool {
     )
 }
 
+/// The single owner of a plain leaf; `None` for legacy scalars and every non-plain tree.
+fn plain_leaf_owner(expression: &DynamicSampleExpression) -> Option<ProgrammingOwner> {
+    match expression {
+        DynamicSampleExpression::Programming { address, .. } => Some(address.owner()),
+        DynamicSampleExpression::AngleNumeric { .. }
+        | DynamicSampleExpression::AngleCurrent { .. } => Some(ProgrammingOwner::Position),
+        _ => None,
+    }
+}
+
 fn split_owners(
     expression: Arc<DynamicSampleExpression>,
 ) -> Result<Vec<(Option<ProgrammingOwner>, Arc<DynamicSampleExpression>)>, TransitionError> {
@@ -1024,6 +1116,7 @@ fn split_owners(
 }
 
 mod controller;
+mod plain_scalar;
 use controller::*;
 mod parallel;
 pub use parallel::{

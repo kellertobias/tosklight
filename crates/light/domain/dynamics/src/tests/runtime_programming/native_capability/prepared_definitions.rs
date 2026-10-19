@@ -120,7 +120,7 @@ fn install_keeps_latest_clock_pause_controls_random_and_held_history() {
     let mut expected = live.snapshot();
     assert!(!expected.instances[0].random_streams.is_empty());
     assert!(!expected.instances[0].synchronized_hold_values.is_empty());
-    expected.instances[0].definition = dynamic;
+    expected.instances[0].definition = Arc::new(dynamic);
     live.install_prepared_definitions(prepared);
     assert_eq!(live.snapshot(), expected);
     assert_eq!(sample_all(&mut live, 900), held);

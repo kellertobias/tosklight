@@ -24,6 +24,9 @@ impl TrackingScenario {
 pub struct SemanticArguments {
     /// `--semantic`: the headless-stress or sustained-show capacity workload with typed lanes.
     pub typed_lanes: bool,
+    /// Explicit equivalent Legacy Intensity comparison through the production Live transaction.
+    pub legacy_contract_pair: Option<String>,
+    pub legacy_contract_pair_output: Option<String>,
     /// `--semantic-workload DIR`: a TL-564 workload input directory.
     pub workload_dir: Option<String>,
     /// `--tracking-hz N`: Point stream rate; absent or 0 installs no tracking.
@@ -61,6 +64,8 @@ impl Default for SemanticArguments {
     fn default() -> Self {
         Self {
             typed_lanes: false,
+            legacy_contract_pair: None,
+            legacy_contract_pair_output: None,
             workload_dir: None,
             tracking_hz: None,
             tracking_scenario: TrackingScenario::StaticPoints,
@@ -96,6 +101,20 @@ impl SemanticArguments {
         };
         match option {
             "--semantic" => self.typed_lanes = true,
+            "--legacy-contract-pair" | "--legacy-contract-pair-output" => {
+                let path = value()?;
+                if path.trim().is_empty() {
+                    return Err("pair path must not be empty".into());
+                }
+                let field = if option == "--legacy-contract-pair" {
+                    &mut self.legacy_contract_pair
+                } else {
+                    &mut self.legacy_contract_pair_output
+                };
+                if field.replace(path).is_some() {
+                    return Err("duplicate pair option".into());
+                }
+            }
             "--semantic-workload" => {
                 let path = value()?;
                 if path.trim().is_empty() {
@@ -147,6 +166,18 @@ impl SemanticArguments {
     }
 
     pub fn validate(&self, stress_or_sustained: bool) -> Result<(), String> {
+        if self.legacy_contract_pair.is_some() != self.legacy_contract_pair_output.is_some() {
+            return Err("pair input and private output must be supplied together".into());
+        }
+        if self.legacy_contract_pair.is_some() {
+            let mut rest = self.clone();
+            rest.legacy_contract_pair = None;
+            rest.legacy_contract_pair_output = None;
+            if rest != Self::default() || stress_or_sustained {
+                return Err("pair mode is exclusive of all other benchmark modes".into());
+            }
+            return Ok(());
+        }
         if self.typed_lanes && self.workload_dir.is_some() {
             return Err("--semantic and --semantic-workload are mutually exclusive".into());
         }
@@ -187,6 +218,8 @@ impl SemanticArguments {
     }
 
     pub const HELP: &'static str = "\
+  --legacy-contract-pair FILE   Compare production contract 0/1 with equivalent Legacy Intensity\n\
+  --legacy-contract-pair-output FILE  Required private JSON evidence under .artifacts\n\
   --semantic                   Typed semantic lanes through the production Live transaction\n\
   --semantic-workload DIR      Render a TL-564 workload directory (manifest, workload, patch)\n\
   --tracking-hz N              Inject the workload's Point stream at N Hz (0-240)\n\

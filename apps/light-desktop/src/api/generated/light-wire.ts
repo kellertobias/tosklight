@@ -1529,7 +1529,8 @@ export type RuntimeDiagnosticsSnapshot = { output: RuntimeOutputHealth, output_b
 output_delivery_status?: Array<RuntimeOutputDeliveryStatus>, output_routes: unknown, route_send_errors: unknown, active_programmers: unknown, active_playbacks: unknown, move_in_black: unknown, timecode_source: string | null, media_servers: unknown, snapshot_revision: number, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, extensions: unknown, compatibility_reports: unknown, };
 export type RuntimeRouteDeliveryState = "awaiting_first_send" | "sending" | "send_failed";
 export type RuntimeOutputDeliveryStatus = { protocol: string, universe: number, destination: string, delivery_state: RuntimeRouteDeliveryState, current_error: string | null, };
-export type RuntimePerformanceDiagnosticsSnapshot = { output: RuntimeOutputHealth, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, };
+export type RuntimeOutputCounterSample = { sampled_at_epoch_micros: number, monotonic_micros: number, };
+export type RuntimePerformanceDiagnosticsSnapshot = { output_sample: RuntimeOutputCounterSample, output: RuntimeOutputHealth, programmer_action_timing: unknown, visualization: RuntimeVisualizationDiagnostics, };
 export type ScheduleDefinition = { id: string, name: string, enabled: boolean, trigger: ScheduleTrigger, target: ScheduleTarget, };
 export type ScheduleTrigger = { "type": "interval", every_seconds: number,
 /**

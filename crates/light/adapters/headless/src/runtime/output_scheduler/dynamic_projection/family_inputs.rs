@@ -7,12 +7,14 @@
 use super::fixed_masks::{CompiledFixedMaskState, FixedMaskRequirement, PreparedFixedMask};
 use light_core::{FixtureId, programming::ProgrammingOwner};
 use light_dynamics::{
-    DynamicFamilyPreparationRequirement, DynamicFamilySampleGroup, DynamicSourceOccurrenceId,
-    FamilySampleRank, PreparedDynamicFamilySamples, ProgrammingFamilyFixAt,
+    DrainingPreparedDynamicFamilySamples, DynamicFamilyPreparationRequirement,
+    DynamicFamilySampleGroup, DynamicSourceOccurrenceId, FamilySampleRank,
+    PreparedDynamicFamilySamples, ProgrammingFamilyFixAt,
 };
 use rustc_hash::FxHashMap;
 
 #[derive(Clone)]
+#[cfg_attr(test, derive(Debug, PartialEq))]
 pub(super) enum CapturedFamilyRequirement {
     Dynamic(DynamicFamilyPreparationRequirement),
     Fixed {
@@ -26,6 +28,9 @@ pub(super) enum CapturedFamilyRequirement {
 
 pub(super) struct CapturedFamilyInput {
     pub group: DynamicFamilySampleGroup,
+    /// The prepared group whose sample vector this group holds, and how many samples it
+    /// brought, until [`CapturedFamilyInputScratch::return_lent`] swaps it back (TL-842 C4).
+    lent: Option<(usize, usize)>,
     /// A group with only requirements is intentional. Dropping it would silently lose the
     /// operator's Fixed mask or make an unavailable complete Angle pair look like no input.
     pub requirements: Vec<CapturedFamilyRequirement>,
@@ -42,8 +47,15 @@ impl CapturedFamilyInputScratch {
     /// Empty every group. With `pool`, the samples (holding the last references to last frame's
     /// compiled expressions) are freed on a pool thread (TL-639 round 5).
     pub fn clear(&mut self, pool: Option<&light_engine::parallel::OutputPool>) {
-        let mut garbage = Vec::new();
+        // Sized once: appending ~5k samples to an empty vector regrew and copied it per frame.
+        let mut garbage = match pool {
+            Some(_) => Vec::with_capacity(self.groups.iter().map(|e| e.group.samples.len()).sum()),
+            None => Vec::new(),
+        };
         for mut entry in self.groups.drain(..) {
+            // An unreturned loan (a failed frame) is dropped here; its prepared group was left
+            // with this group's empty vector and simply refills next frame.
+            entry.lent = None;
             match pool {
                 Some(_) => garbage.append(&mut entry.group.samples),
                 None => entry.group.samples.clear(),
@@ -54,6 +66,24 @@ impl CapturedFamilyInputScratch {
         self.indices.clear();
         if let Some(pool) = pool.filter(|_| !garbage.is_empty()) {
             pool.drop_later(garbage);
+        }
+    }
+
+    /// Give every borrowed prepared vector back, without the samples this frame appended to it
+    /// (Fixed masks), so the next preparation can rewrite it in place (TL-842 C4).
+    pub fn return_lent(&mut self, prepared: &mut [DynamicFamilySampleGroup]) {
+        for entry in &mut self.groups {
+            let Some((index, brought)) = entry.lent.take() else {
+                continue;
+            };
+            entry.group.samples.truncate(brought);
+            if let Some(group) = prepared.get_mut(index).filter(|group| {
+                group.target == entry.group.target
+                    && group.owner == entry.group.owner
+                    && group.samples.is_empty()
+            }) {
+                std::mem::swap(&mut entry.group.samples, &mut group.samples);
+            }
         }
     }
 
@@ -96,6 +126,7 @@ impl CapturedFamilyInputScratch {
                     samples: Vec::new(),
                 },
                 requirements: Vec::new(),
+                lent: None,
             });
             group.group.target = target;
             group.group.owner = owner;
@@ -126,7 +157,37 @@ pub(super) fn assemble_captured_family_inputs<'a>(
             .samples
             .extend(group.samples.iter().cloned());
     }
-    for requirement in dynamic.requirements {
+    finish_assembly(dynamic.requirements, fixed, scratch)
+}
+
+/// Production's single consumer takes prepared output samples without duplicating immutable
+/// addresses/expressions. The borrowed assembler remains available for callers retaining output.
+pub(super) fn assemble_captured_family_inputs_draining<'a>(
+    dynamic: DrainingPreparedDynamicFamilySamples<'_>,
+    fixed: &[PreparedFixedMask],
+    scratch: &'a mut CapturedFamilyInputScratch,
+    pool: Option<&light_engine::parallel::OutputPool>,
+) -> &'a [CapturedFamilyInput] {
+    scratch.clear(pool);
+    for (index, group) in dynamic.families.iter_mut().enumerate() {
+        let entry = scratch.group(group.target, group.owner);
+        if entry.group.samples.is_empty() && entry.lent.is_none() {
+            // TL-842 C4: borrow the prepared vector whole instead of moving every sample.
+            std::mem::swap(&mut entry.group.samples, &mut group.samples);
+            entry.lent = Some((index, entry.group.samples.len()));
+        } else {
+            entry.group.samples.append(&mut group.samples);
+        }
+    }
+    finish_assembly(dynamic.requirements, fixed, scratch)
+}
+
+fn finish_assembly<'a>(
+    requirements: &[DynamicFamilyPreparationRequirement],
+    fixed: &[PreparedFixedMask],
+    scratch: &'a mut CapturedFamilyInputScratch,
+) -> &'a [CapturedFamilyInput] {
+    for requirement in requirements {
         scratch
             .group(requirement.target, requirement.owner)
             .requirements

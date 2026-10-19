@@ -68,14 +68,14 @@ pub(super) fn sample_values_snapshot(
     Vec<DynamicHeldSampleSnapshot>,
     Vec<DynamicHeldSampleSnapshot>,
 ) {
-    let sorted = |values: &SampleValueMap| {
+    fn sorted(values: &SampleValueMap) -> Vec<((Uuid, FixtureId, Uuid), &DynamicSampleExpression)> {
         let mut values = values
             .iter()
-            .map(|(key, value)| (*key, Arc::new(value.clone())))
+            .map(|(key, value)| (*key, value))
             .collect::<Vec<_>>();
         values.sort_by_key(|((controller, target, lane), _)| (*controller, target.0, *lane));
         values
-    };
+    }
     let mut values = sorted(last);
     let last_len = values.len();
     values.extend(sorted(held));
@@ -84,12 +84,21 @@ pub(super) fn sample_values_snapshot(
     }
     let roots = values
         .iter()
-        .map(|(_, expression)| expression.clone())
+        .map(|(_, expression)| *expression)
         .collect::<Vec<_>>();
-    let tape = Arc::new(
-        crate::RetainedExpressionTape::from_roots(&roots)
-            .expect("validated runtime samples form an acyclic retained graph"),
-    );
+    // Runtime fields are distinct maps. Preserve the old distinct owning-root identities
+    // even for the private helper's aliasing case (the same map supplied twice).
+    let imported = if std::ptr::eq(last, held) {
+        let owning = roots
+            .iter()
+            .map(|root| Arc::new((*root).clone()))
+            .collect::<Vec<_>>();
+        crate::RetainedExpressionTape::from_roots(&owning)
+    } else {
+        crate::RetainedExpressionTape::from_borrowed_roots(&roots)
+    };
+    let tape =
+        Arc::new(imported.expect("validated runtime samples form an acyclic retained graph"));
     let mut rows = values
         .into_iter()
         .zip(&tape.roots)
@@ -626,3 +635,6 @@ pub(super) fn reconcile_pause(
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod borrowed_snapshot_tests;

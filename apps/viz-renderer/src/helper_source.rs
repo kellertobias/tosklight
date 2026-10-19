@@ -174,6 +174,32 @@ impl HelperSource {
         });
     }
 
+    /// The caller's benchmark clock is created only under the explicit report environment gate.
+    /// Keeping this separate from FramePresented never turns an idle loop into a rendered frame.
+    pub fn send_benchmark_heartbeat(&mut self, heartbeat: viz_helper::protocol::FromHelper) {
+        self.send_benchmark_heartbeat_when(
+            benchmark_reporting_enabled(
+                std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").as_deref(),
+            ),
+            heartbeat,
+        );
+    }
+
+    fn send_benchmark_heartbeat_when(
+        &mut self,
+        enabled: bool,
+        heartbeat: viz_helper::protocol::FromHelper,
+    ) {
+        if enabled
+            && matches!(
+                heartbeat,
+                viz_helper::protocol::FromHelper::BenchmarkHeartbeat { .. }
+            )
+        {
+            self.send(&heartbeat);
+        }
+    }
+
     /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
     /// finishing for that reason.
     fn send(&mut self, message: &viz_helper::protocol::FromHelper) {
@@ -482,6 +508,40 @@ mod tests {
     }
 
     #[test]
+    fn passive_benchmark_gate_writes_no_extra_bytes_in_ordinary_mode() {
+        let answer = Recorder::new();
+        let mut source = HelperSource::start(
+            std::io::Cursor::new(desk_channel(&[])),
+            answer.clone(),
+            "test renderer".to_owned(),
+        )
+        .unwrap();
+        let heartbeat = FromHelper::BenchmarkHeartbeat {
+            epoch_micros: 1,
+            sequence: 1,
+            last_presented_sequence: 0,
+            source_frame: 0,
+            follow_preload: false,
+            width: 800,
+            height: 600,
+            idle_unchanged: false,
+            draw_healthy: false,
+        };
+        let greeting_len = answer.written().len();
+        source.send_benchmark_heartbeat_when(false, heartbeat.clone());
+        assert_eq!(answer.written().len(), greeting_len);
+        source.send_benchmark_heartbeat_when(true, heartbeat.clone());
+        let written = answer.written();
+        let mut reader = &written[greeting_len..];
+        let frame = viz_helper::framing::read_frame(&mut reader).unwrap();
+        assert_eq!(
+            viz_helper::protocol::decode::<FromHelper>(&frame).unwrap(),
+            heartbeat
+        );
+        assert!(reader.is_empty());
+    }
+
+    #[test]
     fn the_greeting_yields_the_title_the_desk_asked_for() {
         let channel = desk_channel(&[]);
         let answer = Recorder::new();
@@ -637,5 +697,22 @@ mod tests {
             !source.capabilities().uses_network_input,
             "the desk decodes DMX, not this"
         );
+    }
+}
+
+/// The supervisor inherits this environment: it adds its own variables without clearing it.
+/// Match the desk command's existing presence-based packaged-report gate.
+pub(crate) fn benchmark_reporting_enabled(value: Option<&std::ffi::OsStr>) -> bool {
+    value.is_some()
+}
+
+#[cfg(test)]
+mod benchmark_gate_tests {
+    #[test]
+    fn ordinary_launch_has_no_benchmark_clock() {
+        assert!(!super::benchmark_reporting_enabled(None));
+        assert!(super::benchmark_reporting_enabled(Some(
+            std::ffi::OsStr::new("private-report")
+        )));
     }
 }

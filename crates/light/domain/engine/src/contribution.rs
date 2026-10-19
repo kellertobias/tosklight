@@ -402,6 +402,28 @@ impl ResolvedFrame {
         }
     }
 
+    /// [`Self::winner`] with the attribute's number already looked up (TL-842): `id` must be
+    /// `self.slots.attribute_id(attribute)`. Takes exactly `winner`'s slot and overflow paths.
+    pub(crate) fn winner_numbered(
+        &self,
+        fixture: FixtureId,
+        id: Option<light_core::AttributeId>,
+        attribute: &AttributeKey,
+    ) -> Option<&EngineWinner> {
+        match id.and_then(|id| self.slots.slot_of(fixture, id)) {
+            Some(slot) => self.state.as_ref()?.get(slot),
+            None => self
+                .overflow(fixture)
+                .iter()
+                .find(|(key, _)| key == attribute)
+                .map(|(_, winner)| winner),
+        }
+    }
+
+    pub(crate) fn attribute_id(&self, attribute: &AttributeKey) -> Option<light_core::AttributeId> {
+        self.slots.attribute_id(attribute)
+    }
+
     /// A prepared family projection replaces the resolved payload without rerunning arbitration.
     pub(crate) fn project_family(
         &mut self,
