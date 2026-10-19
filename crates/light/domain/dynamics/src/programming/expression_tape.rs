@@ -590,7 +590,15 @@ impl RetainedExpressionTape {
                 Ok(())
             })());
         }
-        if !matches!(expression, DynamicSampleExpression::LegacyScalar { .. }) {
+        // TL-842 C3: an Angle leaf without operation origins also imports as one current-version
+        // node with no operation table, so the same node checks are its whole validation.
+        let node_only = match expression {
+            DynamicSampleExpression::LegacyScalar { .. }
+            | DynamicSampleExpression::AngleCurrent { .. } => true,
+            DynamicSampleExpression::AngleNumeric { program } => program.operations.is_empty(),
+            _ => false,
+        };
+        if !node_only {
             return None;
         }
         Some(

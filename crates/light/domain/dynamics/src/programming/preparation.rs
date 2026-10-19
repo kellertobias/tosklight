@@ -210,6 +210,20 @@ impl<O: PreparationOutput> Preparer<'_, O> {
             }
         }
         for index in 0..self.controller.len() {
+            // TL-842 C3: a plain Position leaf is its own only projection (`split_owners`).
+            let plain_position = {
+                let sample = &self.controller[index];
+                (plain_leaf_owner(&sample.expression) == Some(ProgrammingOwner::Position))
+                    .then(|| self.sampling_required(sample, ProgrammingOwner::Position))
+            };
+            if let Some(required) = plain_position {
+                if !required {
+                    let mut position = self.controller[index].clone();
+                    position.address = None;
+                    self.position.push(position);
+                }
+                continue;
+            }
             let sample = self.controller[index].clone();
             for (owner, expression) in split_owners(Arc::new(sample.expression.clone()))? {
                 if owner == Some(ProgrammingOwner::Position) {
@@ -924,6 +938,16 @@ fn is_plain_leaf(expression: &DynamicSampleExpression) -> bool {
             | DynamicSampleExpression::AngleNumeric { .. }
             | DynamicSampleExpression::AngleCurrent { .. }
     )
+}
+
+/// The single owner of a plain leaf; `None` for legacy scalars and every non-plain tree.
+fn plain_leaf_owner(expression: &DynamicSampleExpression) -> Option<ProgrammingOwner> {
+    match expression {
+        DynamicSampleExpression::Programming { address, .. } => Some(address.owner()),
+        DynamicSampleExpression::AngleNumeric { .. }
+        | DynamicSampleExpression::AngleCurrent { .. } => Some(ProgrammingOwner::Position),
+        _ => None,
+    }
 }
 
 fn split_owners(

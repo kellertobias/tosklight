@@ -169,3 +169,69 @@ fn borrowed_leaf_rejects_wrong_value_shape_and_hot_address_edits() {
     };
     assert!(RetainedExpressionTape::validate_plain_leaf(&wrapped).is_none());
 }
+
+/// TL-842 C3: origin-free Angle leaves validate by reference, so every case, including the
+/// invalid ones, must agree with the owned graph import.
+#[test]
+fn borrowed_angle_leaves_match_owned_checks() {
+    use crate::{AngleNumericNode, AngleNumericProgram};
+    let angles = |component| DynamicValueAddress {
+        representation: DynamicFamilyRepresentation::Angles,
+        component: Some(component),
+    };
+    let color = DynamicValueAddress {
+        representation: DynamicFamilyRepresentation::SemanticColor {
+            basis: DynamicSemanticColorBasis::Recipe,
+        },
+        component: Some(ProgrammingComponent::Color(ColorComponent::Red)),
+    };
+    let numeric = |address: DynamicValueAddress, nodes: Vec<AngleNumericNode>, root| {
+        DynamicSampleExpression::AngleNumeric {
+            program: Arc::new(AngleNumericProgram {
+                address,
+                occurrence: None,
+                nodes,
+                root,
+                operations: Default::default(),
+            }),
+        }
+    };
+    let offset = |value| AngleNumericNode::Materialized {
+        value: DynamicValue::Scalar(value),
+        dependency_occurrence: None,
+    };
+    let transition = |from, to| AngleNumericNode::Transition {
+        from,
+        to,
+        progress: 0.25,
+    };
+    let valid = || vec![AngleNumericNode::Current, offset(5.), transition(0, 1)];
+    let cases = [
+        numeric(angles(ProgrammingComponent::Pan), valid(), 2),
+        numeric(angles(ProgrammingComponent::Tilt), vec![offset(-3.)], 0),
+        numeric(angles(ProgrammingComponent::Pan), valid(), 9),
+        numeric(
+            angles(ProgrammingComponent::Pan),
+            vec![transition(1, 2), offset(1.)],
+            0,
+        ),
+        numeric(angles(ProgrammingComponent::Pan), vec![offset(f32::NAN)], 0),
+        numeric(color.clone(), valid(), 2),
+        numeric(angles(ProgrammingComponent::Pan), vec![], 0),
+        DynamicSampleExpression::AngleCurrent {
+            address: Arc::new(angles(ProgrammingComponent::Tilt)),
+        },
+        DynamicSampleExpression::AngleCurrent {
+            address: Arc::new(color),
+        },
+    ];
+    let mut rejected = 0;
+    for case in &cases {
+        assert_oracle(case);
+        rejected += usize::from(result(case).is_err());
+    }
+    assert!(
+        rejected >= 4,
+        "the invalid programs and addresses must stay rejected"
+    );
+}
