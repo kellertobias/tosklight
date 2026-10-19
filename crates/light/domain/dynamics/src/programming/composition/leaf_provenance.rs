@@ -22,6 +22,35 @@ fn leaf_provenance(
     }
 }
 
+/// Whether `leaves` are exactly what [`leaf_provenance`] builds from these inputs, so a sample
+/// rewritten in place can keep its own without a cache lookup.
+pub(super) fn describes(
+    leaves: &[trace::FamilyTraceLeaf],
+    authored: &FamilyTraceSource,
+    dependency: Option<&crate::DynamicSourceDependency>,
+) -> bool {
+    match (leaves, dependency) {
+        ([trace::FamilyTraceLeaf::Source(source)], None) => source == authored,
+        (
+            [
+                trace::FamilyTraceLeaf::Source(source),
+                trace::FamilyTraceLeaf::Current(current, kept),
+            ],
+            Some(dependency),
+        ) => {
+            source == authored
+                && kept == dependency
+                && *current
+                    == FamilyTraceSource {
+                        role: FamilyTraceRole::CalculationDependency,
+                        occurrence: dependency.occurrence,
+                        ..*authored
+                    }
+        }
+        _ => false,
+    }
+}
+
 /// One interned leaf provenance: its dependency input and the shared leaves.
 pub(crate) struct LeafProvenanceEntry(
     Option<crate::DynamicSourceDependency>,
@@ -91,6 +120,8 @@ impl LeafProvenance<'_> {
         authored: FamilyTraceSource,
         dependency: Option<&crate::DynamicSourceDependency>,
     ) -> Arc<[trace::FamilyTraceLeaf]> {
+        #[cfg(test)]
+        INTERNS.with(|count| count.set(count.get() + 1));
         let matches = |entry: &&LeafProvenanceEntry| entry.0.as_ref() == dependency;
         match self {
             Self::Fresh => leaf_provenance(authored, dependency),
@@ -124,4 +155,10 @@ impl LeafProvenance<'_> {
             }
         }
     }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Every lookup a preparation made in the provenance cache, for tests.
+    pub(crate) static INTERNS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }

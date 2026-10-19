@@ -17,6 +17,8 @@ mod borrowed_address_tests;
 mod component_coverage;
 mod endpoint_output;
 mod leaf_provenance;
+#[cfg(test)]
+pub(crate) use leaf_provenance::INTERNS;
 mod native_fixed;
 mod position_segment;
 mod retained_family;
@@ -221,7 +223,13 @@ impl FamilySample {
                 role: FamilyTraceRole::Authored,
                 occurrence,
             };
-            Some(provenance.intern(authored, dependency))
+            // Unchanged inputs keep this sample's own leaves; only a change asks the cache.
+            match self.trace_sources.take() {
+                Some(leaves) if leaf_provenance::describes(&leaves, &authored, dependency) => {
+                    Some(leaves)
+                }
+                _ => Some(provenance.intern(authored, dependency)),
+            }
         };
         Ok(true)
     }

@@ -129,3 +129,81 @@ fn unchanged_leaf_inputs_share_provenance_and_any_change_rebuilds_it() {
         assert_eq!(scratch.provenance.len(), (0, 0), "parallel={parallel}");
     }
 }
+
+/// TL-842: a Color lane rewritten in place keeps its own provenance when every leaf input is
+/// unchanged, without a cache lookup per lane per frame; a changed input still rebuilds it.
+#[test]
+fn unchanged_refreshed_leaves_keep_provenance_without_a_lookup() {
+    use crate::programming::composition::INTERNS;
+    let interns = || INTERNS.with(|count| count.get());
+    let refreshes = || super::super::plain_scalar::tests::REFRESHES.with(|count| count.get());
+    let mut scratch = DynamicFamilyPreparationScratch::default();
+    let lane = |value, priority, dependency| {
+        let mut sample = sample(10, attributed(value, 7, dependency));
+        sample.priority = priority;
+        sample
+    };
+    let first = prepare(&[lane(0.2, 10, Some(8))], &mut scratch, false).unwrap();
+    let (looked_up, refreshed) = (interns(), refreshes());
+    let second = prepare(&[lane(0.6, 10, Some(8))], &mut scratch, false).unwrap();
+    assert_eq!(refreshes() - refreshed, 1, "the lane is rewritten in place");
+    assert_eq!(
+        interns() - looked_up,
+        0,
+        "unchanged provenance needs no lookup"
+    );
+    assert_eq!(second, first, "the same leaves, in the same storage");
+    // Any changed input still goes through the cache and rebuilds.
+    let looked_up = interns();
+    let ranked = prepare(&[lane(0.6, 20, Some(8))], &mut scratch, false).unwrap();
+    assert_eq!(interns() - looked_up, 1);
+    assert_ne!(ranked.0, second.0);
+    assert_eq!(ranked.1[0].0.rank.priority, 20);
+    let moved = prepare(&[lane(0.6, 20, Some(9))], &mut scratch, false).unwrap();
+    assert_ne!(moved.0, ranked.0);
+    assert_eq!(
+        moved.1[1].1,
+        Some(DynamicSourceDependency::identity(Some(id(9))))
+    );
+    let removed = prepare(&[lane(0.6, 20, None)], &mut scratch, false).unwrap();
+    assert_eq!(
+        removed.1.len(),
+        1,
+        "a removed dependency drops its Current leaf"
+    );
+    let added = prepare(&[lane(0.6, 20, Some(9))], &mut scratch, false).unwrap();
+    assert_eq!(
+        added.1.len(),
+        2,
+        "an added dependency adds its Current leaf"
+    );
+    let mut reattributed = sample(10, attributed(0.6, 5, Some(9)));
+    reattributed.priority = 20;
+    let reattributed = prepare(&[reattributed], &mut scratch, false).unwrap();
+    assert_eq!(reattributed.1[0].0.occurrence, Some(id(5)));
+    // The same Current occurrence with a different transfer is a different dependency.
+    let mut unknown = sample(10, attributed(0.6, 5, Some(9)));
+    unknown.priority = 20;
+    let E::Programming {
+        dependency_occurrence,
+        ..
+    } = &mut unknown.expression
+    else {
+        unreachable!()
+    };
+    *dependency_occurrence = Some(DynamicSourceDependency::unknown(Some(id(9))));
+    let transferred = prepare(&[unknown], &mut scratch, false).unwrap();
+    assert_eq!(
+        transferred.1[1].1,
+        Some(DynamicSourceDependency::unknown(Some(id(9))))
+    );
+    // Without a dependency, a new rank still rebuilds the single authored leaf.
+    let plain = |priority| {
+        let mut sample = sample(10, attributed(0.6, 5, None));
+        sample.priority = priority;
+        sample
+    };
+    prepare(&[plain(20)], &mut scratch, false).unwrap();
+    let reranked = prepare(&[plain(30)], &mut scratch, false).unwrap();
+    assert_eq!(reranked.1[0].0.rank.priority, 30);
+}
