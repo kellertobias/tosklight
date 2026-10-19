@@ -71,7 +71,7 @@ pub use preload_frame::{
 pub use prepared_frame::PreparedOutputFrame;
 pub use prepared_static_family::{
     FamilyProjectionEvidence, FamilyProjectionMetadata, PreparedStaticFamilyFrame,
-    StaticFamilyPresence, StaticWinner,
+    StaticAttributeValues, StaticFamilyPresence, StaticWinner,
 };
 pub mod parallel;
 mod profile_blackout;

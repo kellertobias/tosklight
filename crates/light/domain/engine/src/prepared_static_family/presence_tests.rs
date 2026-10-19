@@ -172,3 +172,77 @@ fn fresh_epochs_missing_dense_frame_and_old_held_frame_are_independent() {
         StaticFamilyPresence::default()
     );
 }
+
+/// TL-842: the numbered reader must answer exactly what the per-call named lookup answers,
+/// for dense slots, overflow pairs, names the show never numbered, foreign targets and a
+/// missing frame, returning the very same winner.
+#[test]
+fn numbered_attribute_reader_matches_named_lookup() {
+    for overflow in [false, true] {
+        let (_, mut frame, dense) = frame();
+        let target = if overflow { FixtureId::new() } else { dense };
+        let slots = Arc::new(crate::SlotTable::compile(
+            1,
+            &[crate::frame_slots::legacy_test_fixture(
+                dense,
+                &["position", "color", "zoom", "focus"],
+            )],
+        ));
+        let mut resolver = crate::contribution::EngineContributionResolver::unpooled(&slots);
+        resolver.extend(
+            values()
+                .into_iter()
+                .map(|(owner, _)| owner.key())
+                .chain([AttributeKey("unrelated".into())])
+                .map(|attribute| {
+                    crate::contribution::EngineContribution::unscaled(light_core::TimedValue {
+                        fixture_id: target,
+                        attribute,
+                        value: AttributeValue::Discrete("seed".into()),
+                        priority: 0,
+                        changed_at: Utc::now(),
+                        programmer_order: 0,
+                        merge_mode: light_core::MergeMode::Ltp,
+                        fade: false,
+                        fade_millis: None,
+                        delay_millis: None,
+                    })
+                }),
+        );
+        frame.resolved = resolver.finish();
+        for (owner, value) in values() {
+            frame
+                .resolved
+                .override_value(target, owner.key_ref(), value, None);
+        }
+        let attributes = values()
+            .into_iter()
+            .map(|(owner, _)| owner.key())
+            .chain([
+                AttributeKey("unrelated".into()),
+                AttributeKey("never-named".into()),
+            ])
+            .collect::<Vec<_>>();
+        let mut answered = 0;
+        for attribute in &attributes {
+            let reader = frame.attribute_values(attribute);
+            for candidate in [dense, target, FixtureId::new()] {
+                let (numbered, named) =
+                    (reader.value(candidate), frame.value(candidate, attribute));
+                assert_eq!(
+                    numbered.map(|v| v as *const _),
+                    named.map(|v| v as *const _)
+                );
+                answered += usize::from(named.is_some());
+            }
+        }
+        assert!(answered >= 5, "owners and the unrelated row must be found");
+        frame.resolved.frame = None;
+        assert!(
+            frame
+                .attribute_values(&attributes[0])
+                .value(target)
+                .is_none()
+        );
+    }
+}

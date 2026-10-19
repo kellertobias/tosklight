@@ -108,6 +108,24 @@ impl<'a> StaticWinner<'a> {
     }
 }
 
+/// One attribute's static values, read by number. See
+/// [`PreparedStaticFamilyFrame::attribute_values`].
+#[derive(Clone, Copy)]
+pub struct StaticAttributeValues<'a> {
+    frame: Option<&'a crate::contribution::ResolvedFrame>,
+    id: Option<light_core::AttributeId>,
+    attribute: &'a AttributeKey,
+}
+
+impl<'a> StaticAttributeValues<'a> {
+    /// Exactly `PreparedStaticFamilyFrame::value(target, attribute)`.
+    pub fn value(&self, target: FixtureId) -> Option<&'a AttributeValue> {
+        self.frame?
+            .winner_numbered(target, self.id, self.attribute)
+            .map(|winner| &winner.value)
+    }
+}
+
 impl PreparedStaticFamilyFrame {
     /// Inspect current resolved winners without materializing a named map or reading raw values.
     pub fn static_family_presence(&self) -> StaticFamilyPresence {
@@ -143,6 +161,19 @@ impl PreparedStaticFamilyFrame {
 
     pub fn value(&self, target: FixtureId, attribute: &AttributeKey) -> Option<&AttributeValue> {
         self.winner(target, attribute).map(|winner| &winner.value)
+    }
+
+    /// [`Self::value`] for many targets of one attribute, hashing the name once (TL-842).
+    pub fn attribute_values<'a>(
+        &'a self,
+        attribute: &'a AttributeKey,
+    ) -> StaticAttributeValues<'a> {
+        let frame = self.resolved.frame.as_ref();
+        StaticAttributeValues {
+            id: frame.and_then(|frame| frame.attribute_id(attribute)),
+            frame,
+            attribute,
+        }
     }
 
     /// The raw parameter of the static baseline, before the output-parameter masters (Freeze
