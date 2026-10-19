@@ -1109,3 +1109,47 @@ fn hybrid_retains_final_move_in_black_underlay_when_scalar_intensity_changes_pos
         Some(&position(0., 15.))
     );
 }
+
+/// TL-842: missing bases resolve an exact row rank only for rows that can decide a base: the
+/// harness's running Position Dynamic and a whole-family FixAT over nothing. Static values (the
+/// level and the Position AT here) never do, and the FixAT still installs its base.
+#[test]
+fn missing_fixed_bases_rank_only_rows_that_can_decide_a_base() {
+    let mut h = Harness::new();
+    h.programmers.set(
+        h.session,
+        h.mount,
+        AttributeKey::intensity(),
+        AttributeValue::Normalized(0.5),
+    );
+    set_fixed(
+        &h.programmers,
+        h.session,
+        h.mount,
+        ProgrammingOwner::Focus,
+        AttributeValue::Normalized(0.7),
+        0,
+    );
+    h.clock.advance_millis(10);
+    let frame = h.capture(15., false);
+    let (prepared, ranked) = count_resolved_ranks(|| {
+        simple_prepare(&h.engine, &frame, &mut h.runtime, frame.sampled_at()).unwrap()
+    });
+    assert_eq!(
+        ranked, 2,
+        "only the Position Dynamic and the FixAT need their ranks"
+    );
+    let output = h
+        .engine
+        .render_static_family_frame(&frame, prepared.token)
+        .unwrap();
+    let focus = output
+        .resolved_values
+        .value(h.mount, &ProgrammingOwner::Focus.key());
+    assert!(
+        focus
+            .and_then(AttributeValue::normalized)
+            .is_some_and(|focus| (focus - 0.7).abs() < 1e-6),
+        "the FixAT renders over its installed base: {focus:?}"
+    );
+}

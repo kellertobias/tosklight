@@ -46,6 +46,8 @@ use light_engine::{
 use rustc_hash::FxHashSet;
 
 mod fixed_bases;
+#[cfg(test)]
+pub(super) use fixed_bases::count_resolved_ranks;
 mod parallel_groups;
 mod parallel_preparation;
 use super::super::physical_adapter::family_lanes::FamilyStaging;

@@ -38,8 +38,31 @@ struct Row<'a> {
     attribute: &'a AttributeKey,
     value: &'a DynamicSemanticValue,
     changed_at_millis: u64,
-    rank: (i16, DateTime<Utc>, u64),
+    rank: RowRank,
     enabled: bool,
+}
+
+/// A row's arbitration rank. A Programmer row's edit time is converted only when the row can
+/// decide a base: most rows are plain values that never do, every frame.
+#[derive(Clone, Copy)]
+enum RowRank {
+    Programmer { priority: i16, order: u64 },
+    Cue((i16, DateTime<Utc>, u64)),
+}
+
+impl Row<'_> {
+    fn rank(&self, now: DateTime<Utc>) -> (i16, DateTime<Utc>, u64) {
+        match self.rank {
+            RowRank::Programmer { priority, order } => {
+                #[cfg(test)]
+                RESOLVED_RANKS.with(|count| count.set(count.get() + 1));
+                let changed_at = i64::try_from(self.changed_at_millis).unwrap_or(i64::MAX);
+                let changed_at = DateTime::from_timestamp_millis(changed_at).unwrap_or(now);
+                (priority, changed_at, order)
+            }
+            RowRank::Cue(rank) => rank,
+        }
+    }
 }
 
 /// The static baselines missing under participating whole-family FixAT masks and under running
@@ -96,10 +119,6 @@ fn missing_fixed_mask_bases(
 ) -> FxHashMap<(FixtureId, ProgrammingOwner), Base> {
     let position_key = ProgrammingOwner::Position.key();
     let now = u64::try_from(inputs.now.timestamp_millis()).unwrap_or_default();
-    let at = |millis: u64| {
-        DateTime::from_timestamp_millis(i64::try_from(millis).unwrap_or(i64::MAX))
-            .unwrap_or(inputs.now)
-    };
     let programmer = inputs
         .programmer_values
         .iter()
@@ -109,7 +128,10 @@ fn missing_fixed_mask_bases(
             attribute: &row.attribute,
             value: &row.value,
             changed_at_millis: row.changed_at_millis,
-            rank: (*priority, at(row.changed_at_millis), row.programmer_order),
+            rank: RowRank::Programmer {
+                priority: *priority,
+                order: row.programmer_order,
+            },
             enabled: true,
         });
     let cues = inputs.cue_values.iter().map(|row| Row {
@@ -117,7 +139,7 @@ fn missing_fixed_mask_bases(
         attribute: &row.attribute,
         value: &row.value,
         changed_at_millis: row.changed_at_millis,
-        rank: (row.priority, row.changed_at, row.transition_ordinal),
+        rank: RowRank::Cue((row.priority, row.changed_at, row.transition_ordinal)),
         enabled: row.output_enabled,
     });
     let mut bases = FxHashMap::<(FixtureId, ProgrammingOwner), Base>::default();
@@ -132,9 +154,10 @@ fn missing_fixed_mask_bases(
             _ => continue,
         };
         if row.enabled && *row.attribute == position_key {
-            let entry = dynamics.entry(row.fixture_id).or_insert((row.rank, on));
-            if row.rank >= entry.0 {
-                *entry = (row.rank, on);
+            let rank = row.rank(inputs.now);
+            let entry = dynamics.entry(row.fixture_id).or_insert((rank, on));
+            if rank >= entry.0 {
+                *entry = (rank, on);
             }
         }
     }
@@ -151,14 +174,15 @@ fn missing_fixed_mask_bases(
             | DynamicSemanticValue::FixAt { timing, .. } => *timing,
             _ => continue,
         };
+        if !row.enabled || authored_activation_mix(row.changed_at_millis, timing, now) <= 0.0 {
+            continue;
+        }
         // Invalid captures are refused by the authoritative Fixed compiler of this frame.
         let Ok(Some(mask)) = captured_programming_fixed_mask(row.attribute, row.value) else {
             continue;
         };
         let owner = mask.address.owner();
-        if !row.enabled
-            || mask.address.component.is_some()
-            || authored_activation_mix(row.changed_at_millis, timing, now) <= 0.0
+        if mask.address.component.is_some()
             || static_token
                 .value(row.fixture_id, owner.key_ref())
                 .is_some()
@@ -166,7 +190,7 @@ fn missing_fixed_mask_bases(
             continue;
         }
         let base = Base {
-            rank: row.rank,
+            rank: row.rank(inputs.now),
             owner,
             value: mask.family,
         };
@@ -208,4 +232,23 @@ fn batch(
             .at(address)
         }))
     })
+}
+
+// Counts the Programmer row ranks a frame resolved, so a test can prove only rows that can
+// decide a base pay for one.
+#[cfg(test)]
+thread_local! {
+    static RESOLVED_RANKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Runs `work` and reports how many Programmer row ranks missing bases resolved during it.
+#[cfg(test)]
+pub(in crate::runtime::output_scheduler::dynamic_projection::programming_projection) fn count_resolved_ranks<
+    T,
+>(
+    work: impl FnOnce() -> T,
+) -> (T, usize) {
+    let before = RESOLVED_RANKS.with(std::cell::Cell::get);
+    let result = work();
+    (result, RESOLVED_RANKS.with(std::cell::Cell::get) - before)
 }
