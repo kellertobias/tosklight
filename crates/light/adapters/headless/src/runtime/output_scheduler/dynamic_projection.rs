@@ -1042,17 +1042,25 @@ fn dynamic_contributions_inner(
 }
 
 fn dynamic_contribution_batch(
-    candidates: FxHashMap<CandidateKey, CandidateStack>,
+    mut candidates: FxHashMap<CandidateKey, CandidateStack>,
     sources: &impl DynamicTickSource,
     now: chrono::DateTime<chrono::Utc>,
 ) -> ContributionBatch {
-    ContributionBatch::new(candidates.into_values().map(|entry| {
-        let CandidateStack {
-            fixture_id,
-            attribute,
-            address,
-            candidates: mut stack,
-        } = entry;
+    dynamic_contribution_batch_from(candidates.values_mut(), sources, now)
+}
+
+/// Resolves every stack into one contribution. Stacks are sorted in place and left in the
+/// caller's (possibly retained) map.
+fn dynamic_contribution_batch_from<'s>(
+    stacks: impl Iterator<Item = &'s mut CandidateStack>,
+    sources: &impl DynamicTickSource,
+    now: chrono::DateTime<chrono::Utc>,
+) -> ContributionBatch {
+    ContributionBatch::new(stacks.map(|entry| {
+        let fixture_id = entry.fixture_id;
+        let attribute = entry.attribute.clone();
+        let address = entry.address;
+        let stack = &mut entry.candidates;
         stack.sort_by_key(|candidate| {
             (
                 candidate.priority,
@@ -1065,7 +1073,7 @@ fn dynamic_contribution_batch(
         });
         let has_dynamic = stack.iter().any(|candidate| candidate.dynamic);
         let resolved =
-            resolve_dynamic_stack(&stack, || sources.value(fixture_id, &attribute).cloned());
+            resolve_dynamic_stack(stack, || sources.value(fixture_id, &attribute).cloned());
         let candidate = stack
             .last()
             .expect("one Dynamic/FAT candidate exists for every stack");

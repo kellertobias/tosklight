@@ -464,3 +464,60 @@ fn unavailable_direct_fixed_remains_in_family_requirements_without_scalar_fallba
         ));
     });
 }
+
+/// TL-842 C1: the retained candidate map refills last frame's stacks. An address no longer
+/// sampled must leave the map, and no stack may keep last frame's candidates.
+#[test]
+fn retained_candidate_stacks_drop_stale_addresses_and_candidates() {
+    let project = |samples: &[DynamicRuntimeSample],
+                   scratch: &mut HybridScalarProjectionScratch| {
+        with_inputs(vec![], vec![], vec![], |inputs| {
+            let playbacks = HashMap::new();
+            let cues = HashMap::new();
+            project_hybrid_scalar_samples(
+                inputs,
+                samples,
+                controls(&playbacks, &cues),
+                &Sources,
+                &[],
+                scratch,
+            )
+            .iter()
+            .flat_map(|batch| batch.samples())
+            .map(|sample| {
+                (
+                    sample.value().attribute.0.to_string(),
+                    sample.value().clone(),
+                )
+            })
+            .collect::<Vec<_>>()
+        })
+    };
+    let mut retained = HybridScalarProjectionScratch::default();
+    let first = project(
+        &[legacy("intensity", 0.3, 1), legacy("focus", 0.65, 2)],
+        &mut retained,
+    );
+    assert_eq!(first.len(), 2);
+    let next = [legacy("intensity", 0.8, 1)];
+    let reused = project(&next, &mut retained);
+    let fresh = project(&next, &mut HybridScalarProjectionScratch::default());
+    assert_eq!(reused, fresh, "a retained map must match a fresh one");
+    assert_eq!(
+        reused.len(),
+        1,
+        "the unsampled focus address must not survive"
+    );
+    assert_eq!(reused[0].1.value, AttributeValue::Normalized(0.8));
+    assert_eq!(retained.candidates.len(), 1);
+    assert!(
+        retained
+            .candidates
+            .values()
+            .all(|stack| stack.candidates.len() == 1),
+        "last frame's candidates must not accumulate"
+    );
+    let empty = project(&[], &mut retained);
+    assert!(empty.is_empty());
+    assert!(retained.candidates.is_empty());
+}
