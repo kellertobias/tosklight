@@ -87,6 +87,30 @@ pub(super) fn leaf(expression: &DynamicSampleExpression) -> Option<Leaf<'_>> {
 }
 
 impl Leaf<'_> {
+    /// TL-842 C6: [`Self::materialize`] into an existing plain sample of this slot, in place.
+    pub(super) fn refresh(
+        &self,
+        sample: &mut FamilySample,
+        rank: FamilySampleRank,
+        activation: f32,
+        provenance: &mut super::super::composition::LeafProvenance<'_>,
+    ) -> Result<bool, IntentError> {
+        let refreshed = sample.refresh_plain(
+            self.slot.compiled()?,
+            DynamicValue::Scalar(self.value),
+            rank,
+            activation,
+            self.occurrence,
+            self.dependency,
+            provenance,
+        )?;
+        #[cfg(test)]
+        if refreshed {
+            tests::REFRESHES.with(|count| count.set(count.get() + 1));
+        }
+        Ok(refreshed)
+    }
+
     /// The unchanged source constructor checks each current rank, numeric value and influence.
     /// Original dependency validation is retained at the controller's expression boundary.
     pub(super) fn materialize(
@@ -106,7 +130,10 @@ impl Leaf<'_> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
+    thread_local! {
+        pub(crate) static REFRESHES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
     use super::super::tests::{FourChunks, Sources, color, compose, sample, semantic};
     use super::*;
     use crate::DynamicSampleExpression as E;

@@ -201,10 +201,23 @@ impl<O: PreparationOutput> Preparer<'_, O> {
         leaf: plain_scalar::Leaf<'_>,
     ) -> Result<(), TransitionError> {
         if !self.sampling_required(sample, ProgrammingOwner::Color) {
-            let value =
-                leaf.materialize(rank(sample), sample.activation_mix, &mut self.provenance)?;
-            self.out
-                .append_one(sample.target, ProgrammingOwner::Color, value.into());
+            let (sample_rank, activation) = (rank(sample), sample.activation_mix);
+            let provenance = &mut self.provenance;
+            let rewritten = self.out.rewrite_one(
+                sample.target,
+                ProgrammingOwner::Color,
+                &mut |slot| match slot {
+                    FamilyCompositionSample::Known(known) => {
+                        leaf.refresh(known, sample_rank, activation, provenance)
+                    }
+                    _ => Ok(false),
+                },
+            )?;
+            if !rewritten {
+                let value = leaf.materialize(sample_rank, activation, &mut self.provenance)?;
+                self.out
+                    .append_one(sample.target, ProgrammingOwner::Color, value.into());
+            }
         }
         Ok(())
     }

@@ -10,7 +10,7 @@ fn frame(index: usize) -> Vec<DynamicRuntimeSample> {
         1 => &[2],
         2 => &[2, 1, 3, 0],
         3 => &[],
-        _ => &[1, 3],
+        _ => &[1, 3, 2],
     };
     let mut inputs = Vec::new();
     for &target in targets {
@@ -21,10 +21,12 @@ fn frame(index: usize) -> Vec<DynamicRuntimeSample> {
             if index == 2 && target == 3 && lane == 1 {
                 continue; // a shorter group than last frame
             }
-            let mut input = sample(
-                10 + lane as u128,
-                color(component, 0.1 + index as f32 * 0.15 + target as f32 * 0.01),
-            );
+            let value = if index == 5 && target == 3 && lane == 0 {
+                1.5 // outside the slot domain: rejected in place exactly like a fresh build
+            } else {
+                0.1 + (index % 5) as f32 * 0.15 + target as f32 * 0.01
+            };
+            let mut input = sample(10 + lane as u128, color(component, value));
             input.target = FixtureId(Uuid::from_u128(100 + target));
             input.priority += (index % 2) as i16;
             input.activation_mix = 1.0 - index as f32 * 0.1;
@@ -47,7 +49,8 @@ fn retained_layout_matches_fresh_preparation_over_changing_frames() {
         for stop in [false, true] {
             for drained in [false, true] {
                 let mut retained = DynamicFamilyPreparationScratch::default();
-                for index in 0..6 {
+                let refreshes = super::super::plain_scalar::tests::REFRESHES.with(|n| n.get());
+                for index in 0..8 {
                     let input = frame(index);
                     let expected = prepare_observed(
                         &input,
@@ -74,6 +77,16 @@ fn retained_layout_matches_fresh_preparation_over_changing_frames() {
                             group.samples.clear();
                         }
                     }
+                    assert_eq!(actual.0.is_err(), index == 5);
+                }
+                // TL-842 C6: serial output over retained samples rewrites them in place; a
+                // drained group has no sample to rewrite.
+                let refreshed =
+                    super::super::plain_scalar::tests::REFRESHES.with(|n| n.get()) - refreshes;
+                if drained {
+                    assert_eq!(refreshed, 0, "chunks {chunks}");
+                } else if chunks == 0 {
+                    assert!(refreshed > 0, "stop {stop}");
                 }
             }
         }

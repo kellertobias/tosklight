@@ -178,6 +178,54 @@ impl FamilySample {
         })
     }
 
+    /// TL-842 C6: rewrite a plain materialized sample in place with the next frame's value.
+    /// Only a sample of exactly the plain shape that `with_address` builds from `address` (the
+    /// same borrowed slot, no projection, Fix At, exemption or trace node) is rewritten;
+    /// otherwise this returns false unchanged. The checks run first, in the same order, so a
+    /// rejected value leaves the sample untouched and fails exactly like a fresh build.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn refresh_plain(
+        &mut self,
+        address: &'static Arc<CompiledDynamicValueAddress>,
+        value: DynamicValue,
+        rank: FamilySampleRank,
+        activation_mix: f32,
+        occurrence: Option<crate::DynamicSourceOccurrenceId>,
+        dependency: Option<&crate::DynamicSourceDependency>,
+        provenance: &mut LeafProvenance<'_>,
+    ) -> Result<bool, IntentError> {
+        let plain = matches!(&self.address, Cow::Borrowed(current) if std::ptr::eq(*current, address))
+            && matches!(self.body, FamilySampleBody::Materialized(_))
+            && self.projection.is_none()
+            && !self.fix_at
+            && !self.endpoint_output_exempt
+            && self.trace_node.is_none();
+        if !plain {
+            return Ok(false);
+        }
+        rank.validate()?;
+        address.validate_source_value(&value)?;
+        ensure(
+            activation_mix.is_finite() && (0.0..=1.0).contains(&activation_mix),
+            "Dynamic activation influence must be between zero and one",
+        )?;
+        self.body = FamilySampleBody::Materialized(value);
+        self.rank = rank;
+        self.activation_mix = activation_mix;
+        self.trace_sources = if occurrence.is_none() && dependency.is_none() {
+            None
+        } else {
+            let authored = FamilyTraceSource {
+                rank,
+                footprint: self.footprint(),
+                role: FamilyTraceRole::Authored,
+                occurrence,
+            };
+            Some(provenance.intern(authored, dependency))
+        };
+        Ok(true)
+    }
+
     pub fn address(&self) -> &CompiledDynamicValueAddress {
         &self.address
     }

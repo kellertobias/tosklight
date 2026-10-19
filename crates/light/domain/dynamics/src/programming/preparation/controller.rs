@@ -20,6 +20,17 @@ pub(super) trait PreparationOutput {
     );
     fn legacy(&mut self, sample: DynamicRuntimeSample);
     fn require(&mut self, requirement: DynamicFamilyPreparationRequirement);
+    /// Offer the slot the group's next sample would overwrite to `rewrite`; when it rewrites
+    /// it in place, that slot counts as written (TL-842 C6). Outputs without retained slots
+    /// never rewrite.
+    fn rewrite_one(
+        &mut self,
+        _target: FixtureId,
+        _owner: ProgrammingOwner,
+        _rewrite: &mut dyn FnMut(&mut FamilyCompositionSample) -> Result<bool, IntentError>,
+    ) -> Result<bool, IntentError> {
+        Ok(false)
+    }
 }
 
 /// The frame's own output. Groups, their index and their sorted order persist between frames
@@ -109,6 +120,24 @@ impl PreparationOutput for FamilyOutput<'_> {
 
     fn legacy(&mut self, sample: DynamicRuntimeSample) {
         self.legacy.push(sample);
+    }
+
+    fn rewrite_one(
+        &mut self,
+        target: FixtureId,
+        owner: ProgrammingOwner,
+        rewrite: &mut dyn FnMut(&mut FamilyCompositionSample) -> Result<bool, IntentError>,
+    ) -> Result<bool, IntentError> {
+        let index = self.group(target, owner);
+        let written = &mut self.cursors[index];
+        let Some(slot) = self.families[index].samples.get_mut(*written) else {
+            return Ok(false);
+        };
+        let rewritten = rewrite(slot)?;
+        if rewritten {
+            *written += 1;
+        }
+        Ok(rewritten)
     }
 
     fn require(&mut self, requirement: DynamicFamilyPreparationRequirement) {
