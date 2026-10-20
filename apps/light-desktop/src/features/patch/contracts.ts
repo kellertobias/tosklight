@@ -2,6 +2,7 @@ import type {
 	InstalledColorCalibration,
 	InstalledPositionCalibration,
 	NativeColorIdentity,
+	VenueArchitecture,
 } from "@tosklight/patch";
 /** Feature-owned Patch models. Serialized wire DTOs are mapped at the API boundary. */
 import type { FixtureProfile } from "../../api/types";
@@ -102,6 +103,7 @@ export interface PatchScenerySize {
 
 /** A generated Venue object's colour and a chain's ends; absent choices are the kind's defaults. */
 export interface PatchSceneryOptions {
+	architecture?: VenueArchitecture | null;
 	colourSrgb?: string | null;
 	chainTop?: "motor" | "direct" | "steelflex_loop" | null;
 	chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
