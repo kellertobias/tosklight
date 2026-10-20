@@ -258,3 +258,34 @@ fn connected_wall_geometry_tracks_neighbour_move_and_delete_without_changing_ide
     assert!(moved[0].venue_geometry.is_none());
     assert!(with_ceilings(vec![a])[0].venue_geometry.is_none());
 }
+
+#[test]
+fn showcase_scale_native_euler_poses_do_not_leave_diagonal_miter_caps() {
+    let mut walls = vec![
+        wall(1, [0, 8000, 0], 0.0, 24000.0),
+        wall(2, [0, -22000, 0], 180.0, 24000.0),
+        wall(3, [-12000, -7000, 0], 90.0, 30000.0),
+        wall(4, [12000, -7000, 0], 270.0, 30000.0),
+    ];
+    for wall in &mut walls {
+        wall.size_millimetres[2] = 8000.0;
+    }
+    let result = with_ceilings(walls);
+    for wall in result.iter().filter(|e| e.selectable) {
+        let geometry = wall.venue_geometry.as_ref().unwrap();
+        assert!(geometry.joined_wall);
+        assert_eq!(
+            geometry.plan.len(),
+            2,
+            "only inner/outer wall contours, no ownership caps: {}",
+            wall.name
+        );
+        for line in &geometry.plan {
+            assert!(
+                (line[0][0] - line[1][0]).abs() < 0.01 || (line[0][1] - line[1][1]).abs() < 0.01,
+                "diagonal ownership cap on {}: {line:?}",
+                wall.name
+            );
+        }
+    }
+}

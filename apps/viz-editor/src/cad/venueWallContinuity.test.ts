@@ -380,3 +380,48 @@ it("paints and exports native exterior edges without restoring collinear ownersh
 		-101 / 100000,
 	);
 });
+
+it("never leaks the native mesh miter ownership diagonal into the top CAD or PDF plan", () => {
+	const entity = horizontal();
+	// Native joined top-face triangles terminate on the miter ownership plane. That diagonal
+	// is a real triangle boundary, but only native plan contours belong on the printed top view.
+	entity.venueGeometry = {
+		...entity.venueGeometry!,
+		joinedWall: true,
+		triangles: [
+			[
+				[-2000, 3000, -100],
+				[2100, 3000, -100],
+				[1900, 3000, 100],
+			],
+			[
+				[-2000, 3000, -100],
+				[1900, 3000, 100],
+				[-2000, 3000, 100],
+			],
+		],
+		exterior: [
+			[
+				[2100, 0, -100],
+				[1900, 0, 100],
+			],
+			[
+				[2100, 3000, -100],
+				[1900, 3000, 100],
+			],
+		],
+	};
+	const entities = [entity, vertical()];
+	const projected = entityPlanGeometry(entity, undefined, "top_down");
+	expect(projected.triangles).toEqual([]);
+	expect(projected.outlines).toEqual([]);
+	const ink = painted(new EntityLayerCache(), entities);
+	expect(ink).toHaveLength(expectedCorner.length);
+	for (const line of expectedCorner) expect(ink).toContainEqual(line);
+	const pdf = pdfStrokes(entities);
+	expect(pdf).toHaveLength(expectedCorner.length);
+	for (let i = 0; i < expectedCorner.length; i++)
+		for (let p = 0; p < 2; p++)
+			for (let axis = 0; axis < 2; axis++)
+				expect(pdf[i][p][axis]).toBeCloseTo(expectedCorner[i][p][axis], 0);
+});

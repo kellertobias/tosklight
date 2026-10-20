@@ -12,7 +12,7 @@ struct Plane {
     offset: f64,
     faces: Vec<Face>,
 }
-const EPS: f64 = 0.001;
+const EPS: f64 = 0.01;
 pub(super) fn apply(walls: &[Wall], meshes: &mut BTreeMap<Uuid, VenueGeometry>) {
     let mut planes: Vec<Plane> = Vec::new();
     for wall in walls {

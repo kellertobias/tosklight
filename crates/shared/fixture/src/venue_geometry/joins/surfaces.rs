@@ -1,4 +1,7 @@
 use super::{Wall, deform_x, math::*};
+// Poses originate in f32 native/render matrices. At venue scale their rigid round-trip
+// introduces micrometres of error; these must not turn a shared cap into an exposed surface.
+const PLANE_EPS: f64 = 0.01;
 #[derive(Clone)]
 pub(super) struct Solid {
     planes: Vec<([f64; 3], f64)>,
@@ -33,7 +36,7 @@ impl Solid {
     }
     pub(super) fn same_surface(&self, triangle: &[[f64; 3]; 3], normal: [f64; 3]) -> bool {
         self.planes.iter().any(|&(n, d)| {
-            dot(n, normal) > 0.999999 && triangle.iter().all(|&p| (dot(n, p) + d).abs() < 1e-4)
+            dot(n, normal) > 0.999999 && triangle.iter().all(|&p| (dot(n, p) + d).abs() < PLANE_EPS)
         })
     }
     pub(super) fn subtract(&self, mut inside: Vec<[f64; 3]>) -> Vec<Vec<[f64; 3]>> {
@@ -56,10 +59,10 @@ impl Solid {
         for &(n, d) in &self.planes {
             let a = dot(n, line[0]) + d;
             let b = dot(n, line[1]) + d;
-            if a > 1e-5 && b > 1e-5 {
+            if a > PLANE_EPS && b > PLANE_EPS {
                 return vec![line];
             }
-            if (a > 1e-5) != (b > 1e-5) {
+            if (a > PLANE_EPS) != (b > PLANE_EPS) {
                 let t = a / (a - b);
                 if a > b {
                     entry = entry.max(t)
@@ -95,13 +98,13 @@ impl Solid {
         outward = mul(outward, 1.0 / l);
         self.planes.iter().any(|&(n, d)| {
             dot(n, outward) > 0.999999
-                && (dot(n, line[0]) + d).abs() < 1e-4
-                && (dot(n, line[1]) + d).abs() < 1e-4
+                && (dot(n, line[0]) + d).abs() < PLANE_EPS
+                && (dot(n, line[1]) + d).abs() < PLANE_EPS
         })
     }
 }
 fn clip(poly: &[[f64; 3]], n: [f64; 3], d: f64, inside: bool) -> Vec<[f64; 3]> {
-    if !inside && poly.iter().all(|&p| dot(n, p) + d <= 1e-7) {
+    if !inside && poly.iter().all(|&p| dot(n, p) + d <= PLANE_EPS) {
         return Vec::new();
     }
     let sign = if inside { 1.0 } else { -1.0 };
@@ -111,7 +114,7 @@ fn clip(poly: &[[f64; 3]], n: [f64; 3], d: f64, inside: bool) -> Vec<[f64; 3]> {
         let b = poly[(i + 1) % poly.len()];
         let da = (dot(n, a) + d) * sign;
         let db = (dot(n, b) + d) * sign;
-        if da <= 1e-7 {
+        if da <= PLANE_EPS {
             result.push(a);
         }
         if (da < 0.0 && db > 0.0) || (da > 0.0 && db < 0.0) {
