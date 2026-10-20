@@ -295,3 +295,44 @@ pub(super) fn push_beam(
         params: [light_index as f32, length, apex_offset, 0.0],
     });
 }
+
+/// Decorative lens cells share one logical beam and never allocate extra GPU lights/shadows.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn push_cell_apertures(
+    frame: &mut FrameInstances,
+    emitter: &EmitterInstance,
+    origin: Vec3,
+    pose: EmitterPose,
+    aperture: Vec2,
+    intensity: f32,
+    colour: Vec3,
+) {
+    if emitter.cells.aperture_offsets.is_empty() {
+        push_aperture(
+            frame,
+            origin,
+            pose,
+            aperture,
+            emitter.optics.source.form,
+            intensity,
+            colour,
+        );
+    } else {
+        let size = emitter
+            .cells
+            .aperture_size
+            .map(|size| size * 0.5)
+            .unwrap_or(aperture);
+        for offset in &emitter.cells.aperture_offsets {
+            push_aperture(
+                frame,
+                origin + pose.orientation * *offset,
+                pose,
+                size,
+                emitter.optics.source.form,
+                intensity,
+                colour,
+            );
+        }
+    }
+}

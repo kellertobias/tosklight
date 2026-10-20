@@ -15,6 +15,10 @@ pub struct PhysicalPositionPlan {
     /// Scene emitter -> shared graph lens output. Repeated lenses are deliberately distinct.
     pub emitters: Vec<(usize, usize)>,
     pub model_part_nodes: Vec<Option<usize>>,
+    /// Renderer-owned default bodies use their actual glass in the same neutral frame as their
+    /// mesh. Parallel to `emitters`; custom models retain the authored physical lens unchanged.
+    #[serde(default)]
+    pub model_lens_rest: Vec<Option<(usize, Mat4)>>,
     pub lens_axes: Box<[Box<[usize]>]>,
     pub model_scale: f32,
 }
@@ -204,7 +208,7 @@ impl SceneValues {
                     .node_delta(&runtime.workspace, index)
                     .map(|(_, m)| rigid_matrix(m));
             }
-            for &(emitter, lens) in &plan.emitters {
+            for (mapped, &(emitter, lens)) in plan.emitters.iter().enumerate() {
                 let Some(value) = self.emitters.get_mut(emitter) else {
                     continue;
                 };
@@ -218,8 +222,17 @@ impl SceneValues {
                 let nominal_motion = dependencies
                     .iter()
                     .any(|&i| state.axes.get(i).is_some_and(|a| a.nominal_limits));
+                let local = match plan.model_lens_rest.get(mapped).copied().flatten() {
+                    Some((node, rest)) => state
+                        .node_deltas
+                        .get(node)
+                        .copied()
+                        .flatten()
+                        .map(|delta| delta * rest),
+                    None => pose.local.map(rigid_matrix),
+                };
                 value.physical_pose = Some(PhysicalPoseState {
-                    local: pose.local.map(rigid_matrix),
+                    local,
                     flags: pose.flags.0 | if unknown { 4 } else { 0 },
                     nominal_motion,
                 });

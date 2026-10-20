@@ -30,7 +30,7 @@ impl EmitterMount {
             z: 1.0,
         };
         (node.parent_id.is_none()
-            && node.glb_node.is_none()
+            && (node.glb_node.is_none() || node.glb_node.as_deref() == Some("lens"))
             && node.motion.is_none()
             && node.pivot == zero
             && node.transform.translation == zero

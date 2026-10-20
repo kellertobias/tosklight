@@ -907,12 +907,12 @@ fn push_emitters(
                         || fixture_appearance::scanner_mirror_pivot(model).is_some()
                 })
             {
-                push_aperture(
+                emitter_geometry::push_cell_apertures(
                     frame,
+                    emitter,
                     origin,
                     pose,
                     aperture,
-                    emitter.optics.source.form,
                     cell_intensity,
                     cell_colour,
                 );
@@ -1042,7 +1042,7 @@ fn push_gpu_light(
 mod emitter_geometry;
 mod media;
 pub use emitter_geometry::{SemanticLight, semantic_lights};
-use emitter_geometry::{aperture_size, cell_states, push_aperture, push_beam, push_laser_emitter};
+use emitter_geometry::{aperture_size, cell_states, push_beam, push_laser_emitter};
 /// Stage floor height in metres. Beams and aim lines stop here instead of running through the
 /// deck.
 pub(crate) const FLOOR_HEIGHT: f32 = 0.0;

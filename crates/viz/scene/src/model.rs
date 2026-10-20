@@ -56,6 +56,10 @@ pub struct FixtureModel {
     pub warnings: Vec<String>,
 }
 
+#[path = "model/emitting_surfaces.rs"]
+mod emitting_surfaces;
+pub use emitting_surfaces::EmittingSurface;
+
 impl FixtureModel {
     pub fn is_empty(&self) -> bool {
         self.parts.iter().all(|part| part.indices.is_empty())

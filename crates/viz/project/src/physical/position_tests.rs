@@ -281,9 +281,46 @@ fn native_commands_keep_unwrapped_motion_and_bracketed_lens_on_display_clock() {
     let local = pose.local.unwrap();
     let reference = glam::Quat::from_rotation_x(135_f32.to_radians());
     assert!((local.transform_vector3(Vec3::NEG_Y) - reference * Vec3::NEG_Y).length() < 1e-5);
+    // The physical solver retains the authored lens and the exact bracketed, unwrapped pose.
+    // A renderer-owned fallback body has its own real glass; display attachment must not rewrite
+    // this authoritative Position geometry just to make the generic mesh fit it.
+    let physical = &plan.scene.physical_positions[0];
+    let axes = values.physical_positions[0]
+        .axes
+        .iter()
+        .map(|axis| Some(f64::from(axis.motion.position_degrees)))
+        .collect::<Vec<_>>();
+    let mut workspace = physical.graph.create_workspace();
+    let mut authored = physical.graph.create_output();
+    physical
+        .graph
+        .evaluate_pose(
+            &axes,
+            light_core::spatial::RigidTransform::IDENTITY,
+            &mut workspace,
+            &mut authored,
+        )
+        .unwrap();
+    let authoritative = authored[0].local.unwrap();
     assert!(
-        (local.transform_point3(Vec3::ZERO) - reference * Vec3::new(0., -0.6, 0.1)).length() < 1e-5
+        (Vec3::from_array(authoritative.point([0.; 3]).map(|v| v as f32))
+            - reference * Vec3::new(0., -0.6, 0.1))
+        .length()
+            < 1e-5
     );
+    assert!(
+        (Vec3::from_array(authoritative.direction([0., -1., 0.]).map(|v| v as f32))
+            - reference * Vec3::NEG_Y)
+            .length()
+            < 1e-5
+    );
+    // This is also the transform used for the drawn head mesh, so the displayed light leaves
+    // the GLB lens after the same bracket, pan and tilt motion, without applying the bracket twice.
+    let model = &plan.scene.models[plan.scene.fixtures[0].model.unwrap() as usize];
+    let (node, _) = physical.model_lens_rest[0].unwrap();
+    let head_delta = values.physical_positions[0].node_deltas[node].unwrap();
+    let glass = head_delta.transform_point3(model.emitter_anchor.unwrap());
+    assert!((local.transform_point3(Vec3::ZERO) - glass).length() < 1e-5);
     // A provider snapshot carries targets; it cannot reset renderer-owned settling.
     let mut next = viz_scene::SceneValues::default();
     decoder.apply(

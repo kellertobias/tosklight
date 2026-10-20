@@ -61,3 +61,23 @@ pub(super) fn tilt_axis(motion: &MotionAxes, binding: &EmitterBinding) -> Option
         })
     })
 }
+
+/// Geometry supplies the aperture directionality; effects and atmosphere keep their own type.
+pub(super) fn authored_emitter_kind(
+    class: OpticalClass,
+    binding: &EmitterBinding,
+    directional: bool,
+) -> viz_scene::EmitterKind {
+    use viz_scene::EmitterKind;
+    if class.is_laser() {
+        EmitterKind::Laser
+    } else if class.is_effect() {
+        EmitterKind::Effect
+    } else if class == OpticalClass::Atmosphere || binding.fog.is_some() {
+        EmitterKind::Atmosphere
+    } else if directional && class.is_directional() {
+        EmitterKind::Beam
+    } else {
+        EmitterKind::Emissive
+    }
+}

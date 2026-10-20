@@ -577,7 +577,7 @@ fn register_position(
     let lenses = model.create_output();
     let graph = model.pose_graph();
     let geometry = fixture.profile.mode_geometry(mode);
-    let emitter_map = scene.emitters[emitter_start..]
+    let emitter_map: Vec<_> = scene.emitters[emitter_start..]
         .iter()
         .enumerate()
         .filter_map(|(offset, e)| {
@@ -627,6 +627,15 @@ fn register_position(
                 })
                 .collect()
         });
+    let model_lens_rest = default_model_lenses(
+        fixture,
+        scene,
+        fixture_index,
+        &geometry,
+        &graph,
+        &emitter_map,
+        &lenses,
+    );
     scene
         .physical_positions
         .push(viz_scene::PhysicalPositionPlan {
@@ -639,6 +648,7 @@ fn register_position(
             axis_nodes: model.create_commands().iter().map(|a| a.node_id).collect(),
             emitters: emitter_map,
             model_part_nodes: part_nodes,
+            model_lens_rest,
             model_scale: instance.model_scale,
         });
     index
@@ -671,3 +681,11 @@ mod tests;
 
 #[cfg(test)]
 mod position_tests;
+
+#[path = "physical/default_model_lenses.rs"]
+mod default_model_lenses;
+use default_model_lenses::default_model_lenses;
+
+#[cfg(test)]
+#[path = "physical/default_model_tests.rs"]
+mod default_model_tests;

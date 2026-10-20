@@ -156,6 +156,8 @@ fn installed_optics(
     class: OpticalClass,
 ) -> EmitterOptics {
     let mut instance_optics = optics.clone();
+    instance_optics.source.width *= instance.model_scale;
+    instance_optics.source.height *= instance.model_scale;
     if let Some(output) = instance
         .installed_appearance
         .luminous_output_lumens

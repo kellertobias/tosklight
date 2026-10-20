@@ -12,10 +12,10 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Plan artwork gained drawn edge lines alongside its filled silhouette. That changes the postcard
-// shape of a scene, so a stale helper must be refused instead of accepting a message it cannot
-// decode.
-pub const PROTOCOL_MAJOR: u16 = 5;
+// Scene emitters now carry separate visible lens cells, and calibrated default bodies carry
+// their model-lens rest frames. These change the postcard scene shape, so stale helpers must
+// be refused before decoding a scene from this build.
+pub const PROTOCOL_MAJOR: u16 = 6;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 

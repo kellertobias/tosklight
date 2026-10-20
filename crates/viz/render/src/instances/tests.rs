@@ -882,6 +882,7 @@ fn the_cells_of_a_bar_keep_their_own_lenses() {
         offsets: (0..8)
             .map(|index| Vec3::new(index as f32 * spacing - 0.35, 0.0, 0.0))
             .collect(),
+        ..viz_scene::EmitterLayoutCells::single()
     };
     scene.emitters.push(bar);
     let beam = beam_of(&scene);
@@ -1897,4 +1898,38 @@ fn predicted_source_xyz_is_not_tinted_again_by_nominal_profile_temperature() {
     let frame = build(&scene, &values, &FrameStyle::default());
     assert!((Vec3::from_slice(&frame.beams[0].colour[..3]) - expected).length() < 1e-6);
     assert!((semantic_lights(&scene, &values)[0].colour - expected).length() < 1e-6);
+}
+
+#[test]
+fn decorative_wash_ring_glass_does_not_multiply_optical_lights_or_shadows() {
+    let mut scene = Scene::default();
+    scene.fixtures.push(fixture());
+    let mut wash = emitter();
+    wash.cells.aperture_offsets = (0..12)
+        .map(|index| {
+            let angle = index as f32 * std::f32::consts::TAU / 12.0;
+            Vec3::new(angle.cos() * 0.1, 0.0, angle.sin() * 0.1)
+        })
+        .collect();
+    wash.cells.aperture_size = Some(Vec2::splat(0.035));
+    scene.emitters.push(wash);
+    let mut values = SceneValues::default();
+    values.resize(1);
+    values.emitters[0].intensity = 1.0;
+    let frame = build(&scene, &values, &FrameStyle::default());
+    let (_, lenses) = frame
+        .meshes
+        .iter()
+        .find(|(kind, _)| *kind == MeshKind::Lens)
+        .unwrap();
+    assert_eq!(lenses.len(), 12);
+    assert_eq!(frame.lights.len(), 1);
+    assert_eq!(frame.beams.len(), 1);
+    assert_eq!(semantic_lights(&scene, &values).len(), 1);
+    for lens in lenses {
+        let (size, _, centre) =
+            glam::Mat4::from_cols_array_2d(&lens.model).to_scale_rotation_translation();
+        assert!((size.x - 0.035).abs() < 0.0001);
+        assert!((glam::Vec2::new(centre.x, centre.z).length() - 0.1).abs() < 0.0001);
+    }
 }

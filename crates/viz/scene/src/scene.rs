@@ -647,12 +647,20 @@ pub enum EmitterKind {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterLayoutCells {
     pub offsets: Vec<Vec3>,
+    /// Decorative glass cells sharing this logical emitter's colour and level. These never
+    /// allocate extra optical lights or shadows; independently controlled pixels use offsets.
+    #[serde(default)]
+    pub aperture_offsets: Vec<Vec3>,
+    #[serde(default)]
+    pub aperture_size: Option<glam::Vec2>,
 }
 
 impl EmitterLayoutCells {
     pub fn single() -> Self {
         Self {
             offsets: vec![Vec3::ZERO],
+            aperture_offsets: Vec::new(),
+            aperture_size: None,
         }
     }
 

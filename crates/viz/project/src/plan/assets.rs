@@ -7,6 +7,9 @@
 
 use viz_scene::Scene;
 
+#[path = "assets/physical_default.rs"]
+mod physical_default;
+
 /// Parse the generator's safe move/line SVG subset into physical local-space triangles.
 pub(super) fn read_plan_artwork(
     projection: &light_fixture::ProfileProjectionAsset,
@@ -125,7 +128,22 @@ pub(super) fn default_plan_artwork(
     scale: f32,
     warnings: &mut Vec<String>,
 ) -> Vec<viz_scene::PlanArtwork> {
-    let mut artwork = crate::plan_drawing::model_drawing_artwork(name, scale);
+    // A physical default is baked into fitted metres, but the shipped line drawing remains in
+    // original GLB metres. Keep both the line drawing and the generated views at the drawn size.
+    let drawing_scale = if model
+        .parts
+        .iter()
+        .any(|part| part.geometry_node_id.is_some())
+    {
+        crate::default_model::by_name(name)
+            .and_then(|source| crate::read_shipped_model(source).ok())
+            .map_or(scale, |source| {
+                (model.extent / source.extent).min_element() * scale
+            })
+    } else {
+        scale
+    };
+    let mut artwork = crate::plan_drawing::model_drawing_artwork(name, drawing_scale);
     for view in light_fixture::ProfileProjectionView::ALL {
         if artwork.iter().any(|drawn| drawn.view == plan_view(view)) {
             continue;
@@ -463,7 +481,7 @@ pub(super) fn resolve_model(
                         &fixture.profile.fixture_type,
                         super::traits(mode),
                     );
-                    match defaults.entry(chosen.name) {
+                    let original = match defaults.entry(chosen.name) {
                         std::collections::hash_map::Entry::Occupied(cached) => Some(*cached.get()),
                         std::collections::hash_map::Entry::Vacant(cached) => {
                             match crate::read_shipped_model(chosen) {
@@ -480,7 +498,8 @@ pub(super) fn resolve_model(
                                 }
                             }
                         }
-                    }
+                    };
+                    original.map(|index| physical_default::bind(fixture, mode, scene, index))
                 }
             };
             *entry.insert(resolved)

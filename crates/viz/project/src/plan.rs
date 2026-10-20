@@ -228,7 +228,13 @@ impl EmitterMount {
         let scale = model.scale_to(body_size);
         Self {
             // The model is drawn at the fixture's size, so its lens scales with it.
-            face: model.emitter_size.map(|size| size * scale),
+            face: model
+                .emitting_surfaces()
+                .iter()
+                .map(|face| face.size)
+                .reduce(glam::Vec2::min)
+                .or(model.emitter_size)
+                .map(|size| size * scale),
             origin: anchor * scale,
             // Only a model with something that tilts has trunnions worth turning about.
             pivot: if model.has_head {
@@ -747,6 +753,8 @@ fn build_emitters(
 
     let head_channels = group_by_head(mode, channels);
     let model_mount = mount.for_placeholder(fixture, geometry);
+    let model_cells = model_mount
+        .and_then(|mount| model_cells::layout(scene, fixture, fixture_index, class, 1, mount));
     for emitter in &geometry.emitters {
         // Every emitter left here is one this personality drives; the rest are already gone.
         let Some(head_id) = emitter.head_id else {
@@ -762,35 +770,29 @@ fn build_emitters(
             .iter()
             .position(|head| head.id == head_id)
             .unwrap_or(0) as u16;
-        let cells = layout_cells(emitter);
+        let geometry_scale = model_cells::geometry_scale(geometry, instance.model_scale);
+        let cells: Vec<_> = layout_cells(emitter)
+            .into_iter()
+            .map(|cell| cell * geometry_scale)
+            .collect();
         if cells.len() > 1 {
             binding.cells = cell_bindings(owned, cells.len());
         }
-        let directional = emitter.directional && class.is_directional();
-        // A laser's geometry describes where its window is, not a field it projects, so the class
-        // decides the kind here exactly as it does for a head with no geometry at all.
-        let kind = if class.is_laser() {
-            EmitterKind::Laser
-        } else if class.is_effect() {
-            EmitterKind::Effect
-        } else if class == OpticalClass::Atmosphere || binding.fog.is_some() {
-            EmitterKind::Atmosphere
-        } else if directional {
-            EmitterKind::Beam
-        } else {
-            EmitterKind::Emissive
-        };
+        let kind = head_geometry::authored_emitter_kind(class, &binding, emitter.directional);
         let (narrow, wide) = zoom_refined(
             emitter.beam_angle_degrees,
             emitter.field_angle_degrees,
             &binding,
         );
         scene.emitter_ids.push(emitter.id);
-        scene.emitters.push(EmitterInstance {
+        let mut compiled = EmitterInstance {
             fixture_index,
             head_index,
             label: emitter.name.clone(),
-            local_origin: model_mount.map_or_else(|| millimetres(emitter.origin), |m| m.origin),
+            local_origin: model_mount.map_or_else(
+                || millimetres(emitter.origin) * geometry_scale,
+                |m| m.origin,
+            ),
             tilt_pivot: model_mount.map_or(Vec3::ZERO, |m| m.pivot),
             local_orientation_degrees: model_mount.map_or_else(
                 || vector(emitter.orientation_degrees),
@@ -810,7 +812,10 @@ fn build_emitters(
                 ..optics.clone()
             },
             kind,
-            cells: EmitterLayoutCells { offsets: cells },
+            cells: EmitterLayoutCells {
+                offsets: cells,
+                ..EmitterLayoutCells::single()
+            },
             laser: (kind == EmitterKind::Laser)
                 .then(|| laser.clone())
                 .flatten(),
@@ -825,7 +830,9 @@ fn build_emitters(
                     || binding.shaper_blade_angles[index].is_some()
             }),
             live_shaper_rotation_role: binding.shaper_rotation.is_some(),
-        });
+        };
+        model_cells::apply_placeholder(&mut compiled, model_cells.as_ref(), mount);
+        scene.emitters.push(compiled);
         binding.laser_window = laser_window.clone();
         binding.effect_window = effect_window.clone();
         bindings.push(binding);
@@ -880,9 +887,19 @@ fn build_fallback_emitters(
         .fixtures
         .get(fixture_index as usize)
         .map_or_else(|| head_span(class), |fixture| fixture.body.size.x);
+    // An invented row belongs on the emitting glass, which can be narrower than its housing.
+    let body_width = mount.face.map_or(body_width, |face| face.x.min(body_width));
     // The layout below is invented, so the faces it places have to be trimmed to it: a row of
     // lamp lenses wider than the pitch they are spread at would merge into one smear.
     let head_optics = fitted_to_head_pitch(&optics, physical_head_count, body_width);
+    let model_cells = model_cells::layout(
+        scene,
+        fixture,
+        fixture_index,
+        class,
+        physical_head_count,
+        mount,
+    );
     // Fallback: one emitter per logical head, aimed along the head's rest direction.
     for (physical_index, head_index) in physical_heads.into_iter().enumerate() {
         let head = &mode.heads[head_index];
@@ -894,19 +911,21 @@ fn build_fallback_emitters(
             .unwrap_or(&[]);
         let mut binding = build_binding(owned, instance, mode, head.id, channels);
         let kind = emitter_kind(class, &binding);
+        let (head_optics, origin, cells) = model_cells::head_layout(
+            model_cells.as_ref(),
+            physical_index,
+            physical_head_count,
+            body_width,
+            mount,
+            &head_optics,
+        );
         let (narrow, wide) = cone_angles(class, &binding);
         scene.emitter_ids.push(head.id);
         scene.emitters.push(EmitterInstance {
             fixture_index,
             head_index: head_index as u16,
             label: head.name.clone(),
-            local_origin: mount.origin
-                + head_offset(
-                    physical_index,
-                    physical_head_count,
-                    head_optics.source.width,
-                    body_width,
-                ),
+            local_origin: origin,
             tilt_pivot: mount.pivot,
             local_orientation_degrees: mount.rest_orientation(),
             pan: steered.then(|| pan_axis(motion, &binding)).flatten(),
@@ -915,7 +934,7 @@ fn build_fallback_emitters(
             field_angle_degrees: wide,
             optics: head_optics.clone(),
             kind,
-            cells: EmitterLayoutCells::single(),
+            cells,
             laser: (kind == EmitterKind::Laser)
                 .then(|| laser.clone())
                 .flatten(),
@@ -1075,6 +1094,7 @@ pub(crate) mod bindings;
 mod compile_instances;
 mod geometry_pose;
 mod head_geometry;
+mod model_cells;
 mod placeholder_mount;
 mod reference_bindings;
 mod script_programs;
@@ -1096,3 +1116,6 @@ mod model_tests;
 mod primitive_tests;
 #[cfg(test)]
 mod riser_tests;
+
+#[cfg(test)]
+mod emitter_surface_tests;

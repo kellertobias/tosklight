@@ -367,9 +367,9 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
         );
         assert!(blinder.geometry.emitters.iter().all(|emitter| {
             !emitter.directional
-                && emitter.orientation_degrees.x == 90.0
-                && emitter.origin.z == -126.0
-                && matches!(emitter.layout, EmitterLayout::ExplicitPixels { .. })
+                && emitter.orientation_degrees == crate::Vector3::default()
+                && emitter.origin.y < 0.0
+                && matches!(emitter.layout, EmitterLayout::Point)
         }));
         for mode in &blinder.modes {
             assert!(mode.heads.iter().all(|head| !head.master_shared));
@@ -382,28 +382,23 @@ fn requested_generic_and_venue_packages_have_exact_portable_contracts() {
             }));
         }
     }
-    // The four-lamp grid is the one the demo show is built on, and it did not move in the split.
-    let lens_centres = shipped_profile("generic--blinder-4.toskfixture")
+    // These are physical glass centres in fixture-local mm, with unchanged row/head order.
+    let blinder = shipped_profile("generic--blinder-4.toskfixture");
+    let centres = blinder
         .geometry
         .emitters
         .iter()
-        .flat_map(|emitter| match &emitter.layout {
-            EmitterLayout::ExplicitPixels { positions } => positions
-                .iter()
-                .map(|position| (position.x, -position.z))
-                .collect::<Vec<_>>(),
-            _ => Vec::new(),
-        })
+        .map(|emitter| emitter.origin)
         .collect::<Vec<_>>();
-    assert_eq!(
-        lens_centres,
-        [
-            (-115.0, 290.0),
-            (115.0, 290.0),
-            (-115.0, 70.0),
-            (115.0, 70.0)
-        ]
-    );
+    assert_eq!(centres.len(), 4);
+    for (centre, (x, z)) in centres
+        .iter()
+        .zip([(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)])
+    {
+        assert!((centre.x - x * 94.95835).abs() < 0.001);
+        assert!((centre.z - z * 94.95835).abs() < 0.001);
+        assert!((centre.y + 411.49136).abs() < 0.001);
+    }
 
     let fogger = shipped_profile("generic--fogger.toskfixture");
     assert_eq!(
@@ -765,9 +760,10 @@ fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
     assert!(acl.model_asset.is_none());
     assert!(acl.projection_assets.is_none());
     assert_eq!(acl.geometry.nodes.len(), 1);
-    assert_eq!(acl.geometry.nodes[0].glb_node.as_deref(), Some("acl-body"));
+    assert_eq!(acl.geometry.nodes[0].glb_node.as_deref(), Some("lens"));
+    assert_eq!(acl.body_model.as_deref(), Some("acl-par-16"));
     assert_eq!(acl.geometry.emitters.len(), 1);
-    assert_eq!(acl.geometry.emitters[0].origin.y, -192.0);
+    assert_eq!(acl.geometry.emitters[0].origin, crate::Vector3::default());
     assert!(
         acl.modes
             .iter()
@@ -777,13 +773,10 @@ fn stage_lamp_packages_leave_body_models_to_visualizer_defaults() {
     let fresnel = shipped_profile("generic--dimmer-fresnel.toskfixture");
     assert_eq!(fresnel.model_units, ModelUnits::Metres);
     assert_eq!(fresnel.geometry.nodes.len(), 1);
-    assert_eq!(
-        fresnel.geometry.nodes[0].glb_node.as_deref(),
-        Some("fresnel-body")
-    );
+    assert_eq!(fresnel.geometry.nodes[0].glb_node.as_deref(), Some("lens"));
     assert!(fresnel.modes.iter().all(|mode| {
         fresnel.mode_geometry(mode).emitters.len() == 1
-            && fresnel.geometry.emitters[0].origin.y == -694.0
+            && fresnel.geometry.emitters[0].origin == crate::Vector3::default()
             && fresnel.geometry.emitters[0].orientation_degrees == crate::Vector3::default()
     }));
 
