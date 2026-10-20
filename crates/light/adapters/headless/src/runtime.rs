@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod process_runtime;
+pub use process_runtime::build_tokio_runtime;
 mod bootstrap;
 #[path = "command_http.rs"]
 mod command_http;

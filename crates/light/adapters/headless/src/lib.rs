@@ -6,7 +6,7 @@ pub use light_application::programming_update as update;
 mod runtime;
 mod tolerant_json;
 
-pub use runtime::run;
+pub use runtime::{build_tokio_runtime, run};
 
 /// TL-596: narrow released-benchmark seam over the production Live output transaction
 /// (`dynamic_output_frame` with the all-family adapters), for `light-benchmark` only.
