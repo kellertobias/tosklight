@@ -10,7 +10,7 @@ import {validateSyntheticPreflightEnvelope,OwnedPerfBridge,ownedPerfEnabled,pars
 const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const candidate='a'.repeat(40),helper=Buffer.from('helper'),paths=Buffer.from('canonical paths');
-const pins={schema_version:1,candidate_sha:candidate,helper_sha256:hash(helper),elf_sha256:'b'.repeat(64),elf_build_id:'ab'.repeat(20),perf_sha256:'c'.repeat(64),appimage_sha256:'d'.repeat(64)};
+const pins={schema_version:1,candidate_sha:candidate,helper_sha256:hash(helper),elf_sha256:'b'.repeat(64),elf_build_id:'ab'.repeat(20),perf_sha256:'c'.repeat(64),decoder_sha256:'e'.repeat(64),appimage_sha256:'d'.repeat(64)};
 function capture(chains=10){return {samples:10,frames:20,unresolved_self:0,unresolved_ancestor:0,depth_one:0,owned_rust_chains:chains,mapped_owned_resolved_chains:10,known_rust_plus_other_owned_chains:0,max_frame_depth:2,max_mapped_owned_resolved_depth:2,period:100,elapsed_micros:2000000,recording_envelope_micros:1999999,sample_span_micros:1900000,rows:Array.from({length:14},(_,id)=>({id,self_samples:id===1?10:0,self_period:id===1?100:0,inclusive_samples:id===1?10:0,inclusive_period:id===1?100:0}))};}
 function report(){return {schema_version:2,available:1,failure_code:0,failure_stage_code:0,failure_detail_code:0,synthetic_capable:1,rust_unwind_admitted:1,ownership_verified:1,identity_verified:1,thread_scope_verified:1,recorders_stopped:1,raw_private:1,sample_hz:49,requested_seconds:8,preflight_only:0,capture:capture(),preflight:capture(),profile_phase_code:1,exact_measurement_window:0,codegen_flags_changed:0,loss_observed:0,byte_cap_hit:0};}
 function envelope(){const {appimage_sha256,...provenance}=pins;return {report:report(),provenance};}
@@ -18,7 +18,7 @@ function stat(pid,parent,start){const f=Array(30).fill('0');f[0]='S';f[1]=String
 const snapshot=[{pid:100,parentPid:500,startTicks:100,command:'desk'},{pid:200,parentPid:100,startTicks:200,command:'light-headless'}];
 function fixture(options={}){
  const files=new Map(),writes=[],reads=[],executions=[];let clock=0,sequence=0;
- const config={schema_version:1,candidate_sha:candidate,appimage_sha256:pins.appimage_sha256,elf_sha256:pins.elf_sha256,elf_build_id:pins.elf_build_id,perf_path:'/usr/lib/linux-tools/6.8/perf',perf_sha256:pins.perf_sha256};
+ const config={schema_version:1,candidate_sha:candidate,appimage_sha256:pins.appimage_sha256,elf_sha256:pins.elf_sha256,elf_build_id:pins.elf_build_id,perf_path:'/usr/lib/linux-tools/5.15/perf',perf_sha256:pins.perf_sha256,decoder_path:'/usr/lib/linux-hwe-6.8-tools/perf',decoder_sha256:pins.decoder_sha256};
  const original={source_commit:candidate,workflow_commit:candidate,source_sha256:{'tools/desktop-performance-576-owned-perf.py':hash(helper),'tools/artifact_paths.py':hash(paths)},binaries:{'Control.AppImage':{sha256:pins.appimage_sha256,bytes:123}}};
  files.set('/out/public/provenance.json',Buffer.from(JSON.stringify(original)));
  files.set('/private/config.json',Buffer.from(JSON.stringify(config)));
@@ -45,7 +45,7 @@ test('Rust admission matches Python threshold at zero, one, nine and ten chains'
 });
 test('hash envelope refuses wrong bindings, raw fields and fabricated unbound success',()=>{
  validateOwnedPerfEnvelope(envelope(),pins);validateOwnedPerfProvenance(pins);
- for(const change of [e=>e.provenance.elf_sha256='e'.repeat(64),e=>delete e.provenance.perf_sha256,e=>e.provenance.path='/private',e=>e.report.profile_phase_code=0,e=>e.provenance=null]){const e=envelope();change(e);assert.throws(()=>validateOwnedPerfEnvelope(e,pins));}
+ for(const change of [e=>e.provenance.elf_sha256='e'.repeat(64),e=>delete e.provenance.perf_sha256,e=>delete e.provenance.decoder_sha256,e=>e.provenance.decoder_sha256='f'.repeat(64),e=>e.provenance.path='/private',e=>e.report.profile_phase_code=0,e=>e.provenance=null]){const e=envelope();change(e);assert.throws(()=>validateOwnedPerfEnvelope(e,pins));}
  const e=envelope();e.report.available=0;e.report.failure_code=2;e.provenance=null;validateOwnedPerfEnvelope(e,pins);
 });
 test('stat identity parser uses exact pid and start ticks with bounded malformed rejection',()=>{
@@ -64,7 +64,7 @@ test('successful capture is once-only after quiet settle, with private exact own
  const r=validateOwnedPerfDiagnostics(publicReport(f));assert.equal(r.available,1);assert.equal(r.actual_settle_millis,12000);assert.equal(r.profile_elapsed_millis,9000);assert.equal(r.exact_measurement_window,0);assert.equal(f.executions.length,1);
  const request=JSON.parse(f.files.get('/private/request/owned-perf-request.json'));
  assert.deepEqual([request.runner_pid,request.runner_start_ticks,request.root_pid,request.root_start_ticks,request.target_pid,request.target_start_ticks,request.uid],[500,500,100,100,200,200,1001]);
- assert.equal(request.elf_sha256,pins.elf_sha256);assert.equal(request.perf_sha256,pins.perf_sha256);assert.equal(request.duration_seconds,8);assert.equal(request.allow_root,1);
+ assert.equal(request.elf_sha256,pins.elf_sha256);assert.equal(request.perf_sha256,pins.perf_sha256);assert.equal(request.decoder_sha256,pins.decoder_sha256);assert.equal(request.decoder_path,'/usr/lib/linux-hwe-6.8-tools/perf');assert.equal(request.duration_seconds,8);assert.equal(request.allow_root,1);
  assert.equal(path.dirname(f.executions[0][1]),'/private/tmp');assert(!f.files.has(f.executions[0][1]));
  assert.equal([...f.files.keys()].filter(p=>p.startsWith('/out/owned-perf-public/')).length,3);
  assert(!/private name|\/proc\/|runner_pid|target_pid|perf_path|symbol/.test(JSON.stringify(r)));

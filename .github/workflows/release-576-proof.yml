@@ -271,7 +271,8 @@ jobs:
           set -euo pipefail
           # Install tools only after both original acceptance runs. No perf policy changes.
           sudo timeout 180 apt-get update
-          sudo timeout 600 apt-get install -y binutils linux-tools-common linux-tools-generic
+          # The recorder keeps the GA perf; the HWE perf only decodes its record (it can unwind lld Rust).
+          sudo timeout 600 apt-get install -y binutils linux-tools-common linux-tools-generic linux-tools-generic-hwe-22.04
           temporary="$(npm run --silent artifact-path -- tmp)"
           extraction="$(mktemp -d "$temporary/tl775-owned-perf-package-XXXXXX")"
           chmod 700 "$extraction"
@@ -307,39 +308,44 @@ jobs:
           ids=[line.split('Build ID:',1)[1].strip().lower() for line in notes.splitlines() if 'Build ID:' in line]
           assert len(ids)==1 and 8<=len(ids[0])<=128 and all(c in '0123456789abcdef' for c in ids[0])
           # Select a package-listed real ELF, not /usr/bin/perf's kernel wrapper.
-          packages=set();pending=['linux-tools-generic'];listed=set()
-          while pending:
-              package=pending.pop()
-              if package in packages: continue
-              packages.add(package)
-              assert len(packages)<=8
-              metadata=subprocess.check_output(['dpkg-query','-W','-f=${db:Status-Status}\n${Depends}',package],text=True).split('\n',1)
-              assert metadata[0]=='installed' and len(metadata)==2
-              for dependency in metadata[1].split(','):
-                  dependency=dependency.strip()
-                  if not dependency.startswith('linux-tools-'): continue
-                  assert '|' not in dependency
-                  name=dependency.split(' ',1)[0]
-                  assert all(c.isalnum() or c in '.+-' for c in name)
-                  pending.append(name)
-              listed.update(subprocess.check_output(['dpkg-query','-L',package],text=True).splitlines())
-          perf_candidates=set()
-          for name in listed:
-              file=pathlib.Path(name)
-              if file.name!='perf' or not (name.startswith('/usr/lib/linux-tools/') or name.startswith('/usr/lib/linux-tools-')): continue
-              real=file.resolve(strict=True)
-              # The canonical ELF must itself be listed in the exact dependency closure.
-              if str(real) not in listed or real.is_symlink() or not real.is_file(): continue
-              if real.name!='perf' or not str(real).startswith('/usr/lib/linux-tools-'): continue
-              if real.stat().st_uid!=0 or real.stat().st_mode&0o022: continue
-              with real.open('rb') as stream:
-                  if stream.read(4)!=b'\x7fELF': continue
-              perf_candidates.add(real)
-          assert len(perf_candidates)==1
-          perf=perf_candidates.pop()
+          def select_perf(root_package,dependency_prefixes,real_prefix):
+              packages=set();pending=[root_package];listed=set()
+              while pending:
+                  package=pending.pop()
+                  if package in packages: continue
+                  packages.add(package)
+                  assert len(packages)<=8
+                  metadata=subprocess.check_output(['dpkg-query','-W','-f=${db:Status-Status}\n${Depends}',package],text=True).split('\n',1)
+                  assert metadata[0]=='installed' and len(metadata)==2
+                  for dependency in metadata[1].split(','):
+                      dependency=dependency.strip()
+                      if not dependency.startswith(dependency_prefixes): continue
+                      assert '|' not in dependency
+                      name=dependency.split(' ',1)[0]
+                      assert all(c.isalnum() or c in '.+-' for c in name)
+                      pending.append(name)
+                  listed.update(subprocess.check_output(['dpkg-query','-L',package],text=True).splitlines())
+              perf_candidates=set()
+              for name in listed:
+                  file=pathlib.Path(name)
+                  if file.name!='perf' or not (name.startswith('/usr/lib/linux-tools/') or name.startswith(real_prefix)): continue
+                  real=file.resolve(strict=True)
+                  # The canonical ELF must itself be listed in the exact dependency closure.
+                  if str(real) not in listed or real.is_symlink() or not real.is_file(): continue
+                  if real.name!='perf' or not str(real).startswith(real_prefix): continue
+                  if real.stat().st_uid!=0 or real.stat().st_mode&0o022: continue
+                  with real.open('rb') as stream:
+                      if stream.read(4)!=b'\x7fELF': continue
+                  perf_candidates.add(real)
+              assert len(perf_candidates)==1
+              return perf_candidates.pop()
+          perf=select_perf('linux-tools-generic',('linux-tools-',),'/usr/lib/linux-tools-')
+          decoder=select_perf('linux-tools-generic-hwe-22.04',('linux-tools-','linux-hwe-'),'/usr/lib/linux-hwe-')
+          assert decoder!=perf
           value={'schema_version':1,'candidate_sha':os.environ['CANDIDATE_SHA'],'appimage_sha256':expected,
                  'elf_sha256':hashlib.sha256(elf.read_bytes()).hexdigest(),'elf_build_id':ids[0],
-                 'perf_path':str(perf),'perf_sha256':hashlib.sha256(perf.read_bytes()).hexdigest()}
+                 'perf_path':str(perf),'perf_sha256':hashlib.sha256(perf.read_bytes()).hexdigest(),
+                 'decoder_path':str(decoder),'decoder_sha256':hashlib.sha256(decoder.read_bytes()).hexdigest()}
           config=extraction/'bindings.json'
           with config.open('x') as stream: json.dump(value,stream)
           config.chmod(0o600)

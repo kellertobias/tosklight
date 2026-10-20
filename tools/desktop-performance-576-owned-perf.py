@@ -36,7 +36,8 @@ TASK_CAP, SAMPLE_CAP, FRAME_CAP, LINE_CAP = 256, 10000, 128, 4096
 CATEGORIES = tuple(range(14))
 REQUEST_KEYS = {'schema', 'candidate_sha', 'runner_pid', 'runner_start_ticks',
                 'root_pid', 'root_start_ticks', 'target_pid', 'target_start_ticks',
-                'uid', 'elf_sha256', 'elf_build_id', 'duration_seconds', 'allow_root', 'perf_path', 'perf_sha256'}
+                'uid', 'elf_sha256', 'elf_build_id', 'duration_seconds', 'allow_root', 'perf_path', 'perf_sha256',
+                'decoder_path', 'decoder_sha256'}
 FAILURES = {name: i + 1 for i, name in enumerate((
     'request', 'ownership', 'identity', 'threads', 'maps', 'elf', 'tool',
     'deadline', 'bytes', 'record', 'census', 'decode', 'unwind', 'cleanup', 'private', 'source', 'loss'))}
@@ -130,10 +131,12 @@ def validate_request(request):
             and type(request['allow_root']) is int, 'request')
     require(type(request['duration_seconds']) is int and 1 <= request['duration_seconds'] <= 10, 'request')
     for key, pattern in (('candidate_sha', '[0-9a-f]{40}'), ('elf_sha256', '[0-9a-f]{64}'),
-                         ('elf_build_id', '[0-9a-f]{8,128}'), ('perf_sha256', '[0-9a-f]{64}')):
+                         ('elf_build_id', '[0-9a-f]{8,128}'), ('perf_sha256', '[0-9a-f]{64}'),
+                         ('decoder_sha256', '[0-9a-f]{64}')):
         require(type(request[key]) is str and re.fullmatch(pattern, request[key]), 'request')
-    require(type(request['perf_path']) is str and len(request['perf_path']) <= 4096
-            and Path(request['perf_path']).is_absolute(), 'request')
+    for key in ('perf_path', 'decoder_path'):
+        require(type(request[key]) is str and len(request[key]) <= 4096
+                and Path(request[key]).is_absolute(), 'request')
     require(os.getuid() == request['uid'] or (os.getuid() == 0 and request['allow_root'] == 1), 'ownership')
     return request
 
@@ -331,8 +334,9 @@ def stream_hash(fd, deadline, cap=512 * 1024 * 1024):
     return value.hexdigest()
 
 
-def selected_perf(request, deadline):
-    path = Path(request['perf_path'])
+def selected_perf(request, deadline, role='perf'):
+    # 'perf' records; 'decoder' (a newer perf that unwinds lld-linked Rust) only reads that record.
+    path = Path(request[role + '_path'])
     require(path.resolve(strict=True) == path and path.name == 'perf', 'tool')
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
     try:
@@ -340,7 +344,7 @@ def selected_perf(request, deadline):
         require(stat.S_ISREG(before.st_mode) and before.st_uid == 0 and not before.st_mode & 0o022
                 and before.st_mode & 0o111 and 0 < before.st_size <= CAP
                 and os.pread(fd, 4, 0) == b'\x7fELF', 'tool')
-        require(stream_hash(fd, deadline, CAP) == request['perf_sha256']
+        require(stream_hash(fd, deadline, CAP) == request[role + '_sha256']
                 and file_identity(os.fstat(fd)) == file_identity(before), 'tool')
         return path, file_identity(before)
     finally:
@@ -499,7 +503,38 @@ def decode(text, pid, tids, owned, raw_counts, interval=None, required_names=(),
     return result
 
 
-def capture(perf, pid, tids, owned, spool, duration, deadline, guard, required_names=(), executable_maps=(), stage=None, phases=(0, 0)):
+# perf builds that can unwind lld-linked Rust (v6.x) print Rust v0 symbols mangled. Frames are
+# demangled by binutils' c++filt (libiberty, v0-capable) so categories still read symbol paths;
+# LLVM's ".llvm.<hash>" local-symbol suffix is not part of the Rust name. A name c++filt cannot
+# demangle stays mangled and therefore unrecognized, never promoted to a Rust category.
+RUST_FRAME = re.compile(r'(\s[0-9a-fA-F]+\s+)(_R[0-9A-Za-z_]+)((?:\.llvm\.[0-9]+)?)(\s+\()')
+# libiberty spells each crate with its 64-bit disambiguator ("light_dynamics[b6d1476a5a254282]");
+# the path categories use the plain crate name, as perf v5.15's own demangler printed it.
+CRATE_DISAMBIGUATOR = re.compile(r'\[[0-9a-f]{16}\]')
+DEMANGLE_BATCH = 256
+
+
+def demangle_rust(text, demangle):
+    names = sorted({match[2] for match in RUST_FRAME.finditer(text)})
+    if not names:
+        return text
+    demangled = {}
+    for start in range(0, len(names), DEMANGLE_BATCH):
+        batch = names[start:start + DEMANGLE_BATCH]
+        result = demangle(batch)
+        require(type(result) is list and len(result) == len(batch)
+                and all(type(name) is str and name and len(name.encode()) <= LINE_CAP for name in result), 'decode')
+        demangled.update(zip(batch, (CRATE_DISAMBIGUATOR.sub('', name) for name in result)))
+    return RUST_FRAME.sub(lambda match: match[1] + demangled[match[2]] + match[4], text)
+
+
+def cxxfilt(names, spool, deadline):
+    tool = tool_path('c++filt')
+    index = len(list(spool.glob('demangle-*.stdout')))
+    return run_tool([str(tool), '--', *names], spool, f'demangle-{index}', deadline).decode().splitlines()
+
+
+def capture(perf, pid, tids, owned, spool, duration, deadline, guard, required_names=(), executable_maps=(), stage=None, phases=(0, 0), decoder=None):
     spool.mkdir(mode=0o700)
     if stage:
         stage(phases[0])
@@ -511,9 +546,11 @@ def capture(perf, pid, tids, owned, spool, duration, deadline, guard, required_n
     require(counts['lost'] == 0, 'loss')
     if stage:
         stage(phases[1])
-    text = run_tool([str(perf), 'script', '--ns', '--no-inline', '--demangle', '--show-kernel-path',
+    text = run_tool([str(decoder or perf), 'script', '--ns', '--no-inline', '--demangle', '--show-kernel-path',
                      '-F', 'pid,tid,time,period,event,ip,sym,dso', '-i', 'perf.data'],
                     spool, 'decode', deadline).decode()
+    guard()
+    text = demangle_rust(text, lambda names: cxxfilt(names, spool, deadline))
     guard()
     report = decode(text, pid, tids, owned, counts, (begin, end), required_names, executable_maps)
     require(report['sample_span_micros'] <= min(10, duration + 2) * 1000000, 'deadline')
@@ -798,22 +835,25 @@ def profile(request, private_directory, preflight_only=False):
         stage(5)
         perf, perf_identity = selected_perf(request, min(overall, time.monotonic() + 5))
         provenance['perf_sha256'] = request['perf_sha256']
+        decoder, decoder_identity = selected_perf(request, min(overall, time.monotonic() + 5), 'decoder')
+        provenance['decoder_sha256'] = request['decoder_sha256']
         synthetic(perf, spool, min(overall, time.monotonic() + 50), stage); report['synthetic_capable'] = 1
         frozen_threads = threads(request['target_pid'], request['uid'])
         stable_until = time.monotonic() + 1
         while time.monotonic() < stable_until:
             guard(); time.sleep(.05)
         guard()
-        report['preflight'] = capture(perf, request['target_pid'], frozen_threads, link, spool / 'rust-preflight', 2, min(overall, time.monotonic() + 12), guard, executable_maps=executable_maps, stage=stage, phases=(9, 10))
+        report['preflight'] = capture(perf, request['target_pid'], frozen_threads, link, spool / 'rust-preflight', 2, min(overall, time.monotonic() + 12), guard, executable_maps=executable_maps, stage=stage, phases=(9, 10), decoder=decoder)
         require(report['preflight']['owned_rust_chains'] >= 10, 'unwind')
         report['rust_unwind_admitted'] = 1
         if not preflight_only:
-            report['capture'] = capture(perf, request['target_pid'], frozen_threads, link, spool / 'capture', request['duration_seconds'], min(overall, time.monotonic() + request['duration_seconds'] + 10), guard, executable_maps=executable_maps, stage=stage, phases=(11, 12))
+            report['capture'] = capture(perf, request['target_pid'], frozen_threads, link, spool / 'capture', request['duration_seconds'], min(overall, time.monotonic() + request['duration_seconds'] + 10), guard, executable_maps=executable_maps, stage=stage, phases=(11, 12), decoder=decoder)
         stage(13)
         guard()
         require(elf_proof(fd, spool, min(overall, time.monotonic() + 8), 'application-after') == request['elf_build_id'], 'elf')
         require(stream_hash(fd, min(overall, time.monotonic() + 8)) == request['elf_sha256'], 'elf')
         require(selected_perf(request, min(overall, time.monotonic() + 5))[1] == perf_identity, 'tool')
+        require(selected_perf(request, min(overall, time.monotonic() + 5), 'decoder')[1] == decoder_identity, 'tool')
         require(digest(bounded_read(__file__)) == provenance['helper_sha256'], 'source')
         source_after = run_tool([str(tool_path('git')), '-c', 'safe.directory=' + str(ROOT), '-C', str(ROOT), 'rev-parse', 'HEAD'], spool, 'source-after', min(overall, time.monotonic() + 2)).decode().strip()
         require(source_after == request['candidate_sha'], 'source')
@@ -843,7 +883,7 @@ def profile(request, private_directory, preflight_only=False):
 
 def validate_provenance(value):
     keys = {'schema_version', 'candidate_sha', 'helper_sha256', 'elf_sha256', 'elf_build_id'}
-    require(type(value) is dict and set(value) in (keys, keys | {'perf_sha256'})
+    require(type(value) is dict and set(value) in (keys, keys | {'perf_sha256'}, keys | {'perf_sha256', 'decoder_sha256'})
             and type(value['schema_version']) is int and value['schema_version'] == 1, 'decode')
     for key in set(value) - {'schema_version'}:
         length = '{40}' if key == 'candidate_sha' else '{8,128}' if key == 'elf_build_id' else '{64}'
