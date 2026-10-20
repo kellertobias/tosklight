@@ -483,7 +483,7 @@ pub fn initialise_show(path: impl AsRef<Path>, name: &str) -> Result<ShowId, Sto
 /// Checks the portable reader capability without opening writable or scanning show objects.
 pub fn validate_show_reader_version(path: impl AsRef<Path>) -> Result<(), StoreError> {
     let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    portable::validate_schema_version(&conn)
+    portable::validate_reader_version(&conn)
 }
 
 pub fn validate_show_file(path: impl AsRef<Path>) -> Result<(ShowId, String), StoreError> {

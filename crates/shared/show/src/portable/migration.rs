@@ -91,10 +91,19 @@ fn validate_integrity(conn: &Connection) -> Result<(), StoreError> {
     }
 }
 
-pub(crate) fn validate_schema_version(conn: &Connection) -> Result<(), StoreError> {
-    let version: i64 = conn
-        .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
+/// A preflight rejects only a genuinely newer readable version. Corrupt/missing schema data
+/// stays a SQL/read error so startup's ordinary corruption recovery remains authoritative.
+pub(crate) fn validate_reader_version(conn: &Connection) -> Result<(), StoreError> {
+    validate_supported_schema_version(schema_version(conn)?)
+}
+
+fn validate_schema_version(conn: &Connection) -> Result<(), StoreError> {
+    let version = schema_version(conn)
         .map_err(|_| StoreError::Invalid("not a Light show file: schema_info is missing".into()))?;
+    validate_supported_schema_version(version)
+}
+
+fn validate_supported_schema_version(version: i64) -> Result<(), StoreError> {
     if version <= SHOW_SCHEMA_VERSION {
         Ok(())
     } else {

@@ -34,7 +34,7 @@ pub use sync_requests::{SYNC_APPLIED_REQUEST_RETENTION, SyncAppliedRequest, Sync
 pub use transaction::{PortableShowCommit, PortableShowTransaction};
 
 pub(crate) use migration::{
-    BASE_SHOW_SCHEMA_VERSION, migrate_show, validate_schema_version, validate_show_connection,
+    BASE_SHOW_SCHEMA_VERSION, migrate_show, validate_reader_version, validate_show_connection,
     validate_show_connection_observed,
 };
 pub(crate) use repository::{

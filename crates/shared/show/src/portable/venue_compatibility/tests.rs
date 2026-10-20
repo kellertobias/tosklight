@@ -150,3 +150,67 @@ fn future_schema_refusal_keeps_original_content_and_separate_recovery_is_availab
     std::fs::remove_file(fresh_path).unwrap();
     std::fs::remove_file(path).unwrap();
 }
+
+#[test]
+fn reader_version_preflight_preserves_sql_errors_for_malformed_or_missing_schema() {
+    let (path, store) = create();
+    drop(store);
+    std::fs::write(&path, b"not a show").unwrap();
+    let original = std::fs::read(&path).unwrap();
+    assert!(matches!(
+        crate::validate_show_reader_version(&path),
+        Err(crate::StoreError::Sql(_))
+    ));
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    std::fs::remove_file(path).unwrap();
+    for schema in [
+        "CREATE TABLE operator_data(value TEXT)",
+        "CREATE TABLE schema_info(version INTEGER NOT NULL)",
+        "CREATE TABLE schema_info(version TEXT); INSERT INTO schema_info VALUES ('unreadable')",
+    ] {
+        let (path, store) = create();
+        drop(store);
+        std::fs::remove_file(&path).unwrap();
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(schema).unwrap();
+        drop(conn);
+        let original = std::fs::read(&path).unwrap();
+        assert!(
+            matches!(
+                crate::validate_show_reader_version(&path),
+                Err(crate::StoreError::Sql(_))
+            ),
+            "{schema}"
+        );
+        // Full file validation keeps its existing actionable missing-schema error.
+        assert!(
+            matches!(crate::validate_show_file(&path),Err(crate::StoreError::Invalid(message)) if message.contains("schema_info is missing")),
+            "{schema}"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        std::fs::remove_file(path).unwrap();
+    }
+}
+
+#[test]
+fn reader_version_preflight_rejects_only_newer_versions_without_touching_the_show() {
+    for version in [10, 11, 12] {
+        let (path, store) = create();
+        store
+            .conn
+            .execute("UPDATE schema_info SET version=?1", [version])
+            .unwrap();
+        drop(store);
+        let original = std::fs::read(&path).unwrap();
+        let result = crate::validate_show_reader_version(&path);
+        if version > 11 {
+            assert!(
+                matches!(result,Err(crate::StoreError::Invalid(message)) if message.contains("show schema 12 is newer than supported schema 11"))
+            );
+        } else {
+            result.unwrap();
+        }
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        std::fs::remove_file(path).unwrap();
+    }
+}
