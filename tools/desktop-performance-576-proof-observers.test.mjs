@@ -94,12 +94,17 @@ test("public report roundtrip is closed, numeric, workload exact and free of pri
   for(const mutate of [
     row => {row.pid=123;},row => {row.universes[0].destination="127.0.0.1";},
     row => {row.completed_frames=NaN;},row => {row.stage_lanes[0].paneId="secret";},
-    row => {row.complete=0;},row => {row.fixture_records=575;},row => {row.deadline_misses=1;},
+    row => {row.complete=0;},row => {row.fixture_records=575;},row => {row.windows_below_38hz=1;},
     row => {row.packet_count--;},row => {row.weighted_completed_hz=50;},
   ]) { const bad=structuredClone(report);mutate(bad);assert.throws(() => validateNumericProof(bad)); }
 });
-test("cadence deadline or sender errors fail proof without rewriting measured results", () => {
-  for(const [name,value] of [["deadline_miss_delta",1],["send_error_delta",1],["minimum_one_second_completed_hz",37]]) {
+test("deadline misses are reported but do not fail a proof whose every second holds 38 Hz", () => {
+  const measured = result();measured.deadline_miss_delta=2;
+  const report=numericProof(measured,completedProgress());assert.equal(report.deadline_misses,2);assert.equal(report.measurement_passed,1);assert.equal(report.all_gates_passed,1);
+  assert.deepEqual(validateNumericProof(JSON.parse(JSON.stringify(report))),report);
+});
+test("cadence or sender errors fail proof without rewriting measured results", () => {
+  for(const [name,value] of [["send_error_delta",1],["minimum_one_second_completed_hz",37]]) {
     const measured = result();measured[name]=value;
     const report=numericProof(measured,completedProgress());assert.equal(report.complete,1);assert.equal(report.all_gates_passed,0);assert.equal(report.completed_frames,2400);
   }
@@ -510,11 +515,11 @@ function splitResult(mode) {
   if(mode === 1) {delete measured.proof.stage;measured.proof.absence=summarizeStageAbsence(noStage(),100_000,160_000,processWitnesses());}
   return measured;
 }
-test("Control-only requires actual zero Stage witnesses and retains strict cadence/deadline/rate gates", () => {
+test("Control-only requires actual zero Stage witnesses and retains strict per-second cadence and rate gates", () => {
   const measured=splitResult(1),r=numericProof(measured,completedProgress());
   assert.equal(r.all_gates_passed,1);assert.equal(r.stage_absence_passed,1);assert.equal(r.stage_validation_passed,0);assert.equal(r.stage_report_available,0);
   assert.deepEqual(validateNumericProof(JSON.parse(JSON.stringify(r))),r);
-  for(const mutate of [m => m.deadline_miss_delta=1,m => m.minimum_one_second_completed_hz=37,m => m.send_error_delta=1,m => m.mode_acknowledged=0,m => delete m.proof.absence]) {
+  for(const mutate of [m => m.windows_below_target=1,m => m.minimum_one_second_completed_hz=37,m => m.send_error_delta=1,m => m.mode_acknowledged=0,m => delete m.proof.absence]) {
     const value=splitResult(1);mutate(value);
     if(!value.proof.absence) assert.throws(() => numericProof(value,completedProgress()));
     else assert.equal(numericProof(value,completedProgress()).all_gates_passed,0);
