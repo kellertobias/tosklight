@@ -121,6 +121,35 @@ describe("native window controls", () => {
 		expect(await screen.findByRole("button", { name: "Move window" })).toHaveAttribute("data-tauri-drag-region");
 	});
 
+	it("tracks delayed native fullscreen transitions and releases its resize listener", async () => {
+		let fullscreen = false;
+		let resized: (() => void) | undefined;
+		const stop = vi.fn();
+		const bridge = nativeShell({
+			currentWindowFullscreen: vi.fn(async () => fullscreen),
+			onCurrentWindowResized: vi.fn(async (handler) => { resized = handler; return stop; }),
+		});
+		const { unmount } = render(<DesktopProvider bridge={bridge}><NativeDragStrip compactFullscreen /></DesktopProvider>);
+		await waitFor(() => expect(bridge.onCurrentWindowResized).toHaveBeenCalledOnce());
+		await screen.findByRole("button", { name: "Enter fullscreen" });
+		// Native transition completes after initial mounting; Exit must replace stale controls.
+		fullscreen = true; resized?.();
+		await screen.findByRole("button", { name: "Exit fullscreen" });
+		fullscreen = false; resized?.();
+		await screen.findByRole("button", { name: "Move window" });
+		unmount();
+		expect(stop).toHaveBeenCalledOnce();
+	});
+
+	it("unsubscribes a native listener that arrives after the screen closes", async () => {
+		let finish: ((stop: () => void) => void) | undefined;
+		const stop = vi.fn();
+		const bridge = nativeShell({ onCurrentWindowResized: () => new Promise(resolve => { finish = resolve; }) });
+		const { unmount } = render(<DesktopProvider bridge={bridge}><NativeDragStrip /></DesktopProvider>);
+		unmount(); finish?.(stop);
+		await waitFor(() => expect(stop).toHaveBeenCalledOnce());
+	});
+
 	it("closes only its own window on a screen", () => {
 		const closeCurrentWindow = vi.fn().mockResolvedValue(undefined);
 		const exitApplication = vi.fn().mockResolvedValue(undefined);

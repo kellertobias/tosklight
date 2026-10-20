@@ -9,6 +9,7 @@
 	min-width: 0;
 	min-height: 0;
 	aspect-ratio: auto;
+	container: playback-tile / size;
 	align-self: stretch;
 	gap: 0;
 	padding: 0;
@@ -119,4 +120,39 @@
 	color: #ffcfbf;
 	font-style: normal;
 	overflow-wrap: anywhere;
+}
+
+/* Shallow authored rows keep the action and current cue on one bottom line. */
+@container playback-tile (max-height: 100px) {
+	.playback-tile-card > .playback-tile-action {
+		gap: 3px;
+		padding: 5px 6px;
+	}
+
+	.playback-tile-title {
+		-webkit-line-clamp: 1;
+	}
+
+	.playback-tile-footer {
+		flex-direction: row;
+		align-items: center;
+		gap: 5px;
+	}
+
+	.playback-tile-action-label {
+		order: 1;
+		flex: none;
+		align-self: center;
+		max-width: 45%;
+		margin-left: auto;
+	}
+
+	.playback-tile-summary {
+		flex: 1;
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.playback-tile-summary > small {
+		display: none;
+	}
 }

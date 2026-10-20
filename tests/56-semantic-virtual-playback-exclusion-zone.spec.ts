@@ -2,7 +2,7 @@
 
 import { fixture } from "./bench/command-selection/selectionContract";
 import { scenario } from "./bench/core/scenario";
-import { expectPlaybackPaneFits } from "./bench/playbacks/playbackPaneGeometry";
+import { expectPlaybackPaneFits, expectShallowPlaybackFooter } from "./bench/playbacks/playbackPaneGeometry";
 import { PlaybackButton } from "./bench/playbacks/playbackScenario";
 import { Show } from "./bench/show/showScenario";
 import { PaneType } from "./bench/window-system/paneTypes";
@@ -99,6 +99,11 @@ scenario(
 			await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
 			await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
 		}
+		await pane.resize({ width: 16, height: 7 });
+		await expectPlaybackPaneFits(pane, 3, 6);
+		await expectShallowPlaybackFooter(pane);
+		await t.virtualPlayback.expect.fence(pane, 1, "top bottom left");
+		await t.virtualPlayback.expect.fence(pane, 2, "top right bottom");
 		// Saving the new region reconciles permanent owners by their activation order.
 		// Selection above is inert; the newer second Playback is the exact saved winner.
 		await t.virtualPlayback.expect.runtime(firstPlayback, {

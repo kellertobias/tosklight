@@ -1,5 +1,5 @@
 import { Button } from "@tosklight/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 
 /**
@@ -15,17 +15,30 @@ export function NativeDragStrip({
 } = {}) {
 	const desktop = useDesktopBridge();
 	const [fullscreen, setFullscreen] = useState(false);
+	const fullscreenRead = useRef(0);
 	const closeLabel =
 		closes === "application" ? "Quit ToskLight" : "Close window";
 
 	useEffect(() => {
 		if (!desktop.available) return;
 		let active = true;
-		void desktop.currentWindowFullscreen().then((next) => {
-			if (active) setFullscreen(next);
-		});
+		let unsubscribe: (() => void) | undefined;
+		const refresh = () => {
+			const read = ++fullscreenRead.current;
+			void desktop.currentWindowFullscreen().then((next) => {
+				if (active && read === fullscreenRead.current) setFullscreen(next);
+			}).catch(() => undefined);
+		};
+		refresh();
+		// macOS completes native fullscreen asynchronously, after the webview may mount.
+		void desktop.onCurrentWindowResized(refresh).then((stop) => {
+			if (!active) { stop(); return; }
+			unsubscribe = stop;
+			refresh();
+		}).catch(() => undefined);
 		return () => {
 			active = false;
+			unsubscribe?.();
 		};
 	}, [desktop]);
 
@@ -38,12 +51,14 @@ export function NativeDragStrip({
 	const enterFullscreen = () => {
 		if (!desktop.available) return;
 		void desktop.setCurrentWindowFullscreen(true).then(() => {
+			fullscreenRead.current += 1;
 			setFullscreen(true);
 		});
 	};
 	const exitFullscreen = () => {
 		if (!desktop.available) return;
 		void desktop.setCurrentWindowFullscreen(false).then(() => {
+			fullscreenRead.current += 1;
 			setFullscreen(false);
 		});
 	};

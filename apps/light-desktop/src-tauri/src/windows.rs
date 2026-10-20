@@ -2,6 +2,9 @@ use serde::Serialize;
 use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{LogicalPosition, LogicalSize, Manager};
 
+#[cfg(any(target_os = "macos", test))]
+mod child_viewport;
+
 #[tauri::command]
 pub(crate) fn current_window_fullscreen(window: tauri::Window) -> Result<bool, String> {
     window.is_fullscreen().map_err(|error| error.to_string())
@@ -205,6 +208,10 @@ pub(crate) fn open_console_screen(
         if !window.is_visible().map_err(|error| error.to_string())? {
             window.show().map_err(|error| error.to_string())?;
         }
+        #[cfg(target_os = "macos")]
+        if let Some(webview) = app.get_webview(&label) {
+            child_viewport::fit(&window, &webview).map_err(|error| error.to_string())?;
+        }
         return Ok(());
     }
     let monitors = app
@@ -232,10 +239,8 @@ pub(crate) fn open_console_screen(
         let position = monitor.position();
         builder = builder.position(f64::from(position.x) + 20.0, f64::from(position.y) + 20.0);
     }
-    let window = builder
-        .fullscreen(fullscreen)
-        .build()
-        .map_err(|error| error.to_string())?;
+    // Attach the child before native fullscreen begins its asynchronous content resize.
+    let window = builder.build().map_err(|error| error.to_string())?;
     let size = window.inner_size().map_err(|error| error.to_string())?;
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
     let logical = size.to_logical::<f64>(scale);
@@ -260,6 +265,11 @@ pub(crate) fn open_console_screen(
             LogicalPosition::new(0.0, 0.0),
             LogicalSize::new(logical.width, logical.height),
         )
+        .map_err(|error| error.to_string())?;
+    #[cfg(target_os = "macos")]
+    child_viewport::install(&window, &webview).map_err(|error| error.to_string())?;
+    window
+        .set_fullscreen(fullscreen)
         .map_err(|error| error.to_string())?;
     #[cfg(target_os = "macos")]
     let _ = webview.with_webview(|webview| {

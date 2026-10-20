@@ -50,3 +50,27 @@ export async function expectPlaybackPaneFits(
 		noVerticalScroll: true,
 	});
 }
+
+/** The action type and cue insert share a visible bottom line in shallow authored rows. */
+export async function expectShallowPlaybackFooter(
+	pane: PaneHandle<PaneType.VirtualPlaybacks>,
+): Promise<void> {
+	await expect.poll(() => pane.root().evaluate(root => {
+		const tile = [...root.querySelectorAll<HTMLElement>(".playback-tile-card")]
+			.find(card => card.querySelector(".playback-tile-summary") && card.querySelector(".playback-tile-action-label"));
+		const action = tile?.querySelector<HTMLElement>(".playback-tile-action-label");
+		const cue = tile?.querySelector<HTMLElement>(".playback-tile-summary");
+		const label = tile?.querySelector<HTMLElement>(".playback-tile-cue-label");
+		if (!tile || !action || !cue || !label) return null;
+		const outer = tile.getBoundingClientRect();
+		const a = action.getBoundingClientRect();
+		const c = cue.getBoundingClientRect();
+		return {
+			shallow: outer.height <= 100,
+			cueTextHasSpace: label.getBoundingClientRect().width > 0,
+			sameLine: Math.abs((a.top + a.bottom) / 2 - (c.top + c.bottom) / 2) <= 1,
+			separateText: c.right <= a.left,
+			visible: c.top >= outer.top && c.bottom <= outer.bottom && a.right <= outer.right,
+		};
+	})).toEqual({ shallow: true, cueTextHasSpace: true, sameLine: true, separateText: true, visible: true });
+}
