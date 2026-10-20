@@ -732,11 +732,20 @@ right of the drawing.
 
 ## Rough venue tools
 
-**Venue tools** in the CAD title opens the venue builder. Choose **Wall**, **Pillar**,
-**Floor / roof / balcony**, **Stairs**, **Table**, **Chair** or **Bar**, give it a name and dimensions, then press
-**Place**. Dimensions and positions are in metres; **Angle** turns the object around the vertical
-axis. Position X/Y is the centre of a wall or furniture footprint, and Position Z is its floor
-height. Nothing is written until **Place**. A refused shape stays in the dialog with the reason.
+**Draw wall**, beside **Draw line**, draws connected wall segments. Click the first endpoint,
+then each corner; finish the run with Escape. Near a wall corner, the pointer snaps to that
+corner. Elsewhere along a wall, it snaps to the wall centreline so a new run can start or end
+at a T-junction. Segments snap to horizontal, vertical and 45° diagonal directions. Hold Shift
+for free placement: corner, wall, angle and automatic loop-closure snapping are all disabled. The dropdown
+beside Draw wall offers windows, doors, pillars and stairs. Choose a window or door, move over a
+wall to preview its position, then click to attach it. Escape ends repeated placement.
+
+Select a wall or click an opening to configure it in **Info → Placement**. Wall colour, dimensions
+and construction settings are edited there, alongside position and rotation. Opening settings
+include width, height and, for a door, single/double leaves, inward/outward swing and hinge side.
+Dimensions and positions are in metres; **Angle** turns the object around the vertical axis.
+Position X/Y is the centre of a wall or furniture footprint, and Position Z is its floor height.
+The venue builder also provides floor, roof and balcony slabs, tables, chairs and bar sections.
 
 A **Wall** has length, height and thickness. Its centre, length and angle determine its endpoints.
 **Snap endpoints to nearby walls (25 cm)** is on initially: placing or applying a wall moves the
@@ -776,13 +785,14 @@ lower floor datum. A staircase intersecting a floor or balcony creates its openi
 Architect, exported plans and 3D; moving or resizing the stairs updates that opening. No separate
 cutout object is needed.
 
-Select a venue construction and open **Info → Placement → Edit venue element** to change these
-choices later. **Apply** stores the complete assembly as one operation. The normal CAD selection,
+Select a venue construction and open **Info → Placement** to change these choices directly.
+Each committed edit stores the complete assembly as one undoable operation. The normal CAD selection,
 move, rotate, duplicate, delete, **Undo** and **Redo** tools also work on these objects. The show
 keeps their construction details when saved, reopened or synchronized with Control.
 
-Architect views and exported plan pages show the complete venue, including door swing symbols and
-all balcony levels. In 3D, a camera outside an enclosed room hides the near walls and ceiling that
+Top plans show wall outlines. In side views, front walls that obscure other elements are drawn
+as outlines so the venue interior remains visible and selectable; far walls retain their faces.
+Exported plan pages retain the complete venue, including door swing symbols and all balcony levels. In 3D, a camera outside an enclosed room hides the near walls and ceiling that
 would obstruct the interior; a camera inside keeps the enclosing walls visible. Independent balcony
 levels remain visible. Hidden walls and ceilings still block light and cast shadows, so moving the
 camera does not change the venue's lighting. Windows and doors are genuine openings in both the

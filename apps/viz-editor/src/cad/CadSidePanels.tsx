@@ -411,6 +411,20 @@ function InfoSection({
 	);
 }
 
+function useVenuePlacementTab(
+	placements: readonly CadEntity[],
+	focusedId: string | null,
+	tools: CadTools,
+	setTab: (tab: InfoTab) => void,
+) {
+	const selected = selectedEntity(placements, focusedId);
+	const venueId = selected?.scenery?.architecture ? selected.logicalFixtureId : null;
+	const openingId = tools.selectedOpening?.fixtureId === venueId ? tools.selectedOpening?.openingId : null;
+	useEffect(() => {
+		if (venueId) setTab("placement");
+	}, [venueId, openingId, setTab]);
+}
+
 /** The text the Select tool has picked, which has Info of its own while no element is selected. */
 function pickedTextOf(tools: CadTools) {
 	return tools.annotations.find((each) => each.id === tools.selectedTextId && each.kind === "text");
@@ -469,6 +483,7 @@ export function CadSidePanels({
 	});
 	const selectionCount = scene?.selectedIds.length ?? 0;
 	const placements = selectedPlacements(scene);
+	useVenuePlacementTab(placements, focusedEntityId, tools, setInfoTab);
 	const elements = scene ? selectedElements(scene.entities, scene.selectedIds) : [];
 	const deletion = useDeleteSelection({
 		elements,

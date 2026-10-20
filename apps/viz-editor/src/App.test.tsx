@@ -11,6 +11,7 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import * as venuePersistence from "./cad/venueDrawPersistence";
 import type { DocumentSummary } from "./document/session";
 import { ShowScreen } from "./ShowScreen";
 import "./styles.css";
@@ -1914,6 +1915,108 @@ describe("the Viz editor window", () => {
 		}
 	});
 
+	it("keeps the canvas unobstructed while drawing connected walls and opens Placement after Escape", async () => {
+		const normal = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, args?: any) => {
+			if (command === "cad_scene_snapshot")
+				return Promise.resolve({
+					showId: SHOW_ID,
+					sceneRevision: 1,
+					selectionRevision: 0,
+					entities: [],
+					drawings: [],
+					selectedIds: [],
+					attachments: [],
+				});
+			if (command === "cad_replace_selection")
+				return Promise.resolve({
+					selectionRevision: 1,
+					selectedIds: args.intent.selectedIds,
+				});
+			return normal?.(command, args);
+		});
+		let count = 0;
+		const place = vi
+			.spyOn(venuePersistence, "placeWallSegment")
+			.mockImplementation(async () => {
+				const id = `drawn-wall-${++count}`;
+				eventHandlers.get("cad-scene-delta")?.({
+					payload: {
+						sceneRevision: count + 1,
+						upserted: [
+							{
+								...cadEntity,
+								id,
+								logicalFixtureId: id,
+								name: "Wall",
+								kind: "venue",
+								sizeMillimetres: [8000, 200, 3000],
+								scenery: {
+									kind: "box",
+									chords: 0,
+									pattern: "standard",
+									architecture: { kind: "wall", openings: [] },
+								},
+							},
+						],
+						removedIds: [],
+						drawings: [],
+						attachments: [],
+					},
+				});
+				return [id];
+			});
+		renderApp();
+		fireEvent.click(await screen.findByRole("button", { name: "CAD" }));
+		fireEvent.click(await screen.findByRole("button", { name: "Draw wall" }));
+		const canvas = await screen.findByLabelText("CAD top down viewport");
+		Object.defineProperty(canvas, "getBoundingClientRect", {
+			value: () => ({ left: 0, top: 0, width: 1440, height: 900 }),
+		});
+		const click = (x: number, y: number) => {
+			fireEvent.pointerDown(canvas, {
+				button: 0,
+				pointerId: 1,
+				clientX: x,
+				clientY: y,
+			});
+			fireEvent.pointerUp(canvas, {
+				button: 0,
+				pointerId: 1,
+				clientX: x,
+				clientY: y,
+			});
+		};
+		click(400, 450);
+		click(1040, 450);
+		await waitFor(() => expect(place).toHaveBeenCalledTimes(1));
+		await act(async () => {});
+		expect(
+			screen.queryByRole("complementary", { name: "Info" }),
+		).not.toBeInTheDocument();
+		expect(
+			invoke.mock.calls.filter(
+				([command]) => command === "cad_replace_selection",
+			),
+		).toHaveLength(0);
+		click(1040, 200);
+		await waitFor(() => expect(place).toHaveBeenCalledTimes(2));
+		expect(
+			screen.queryByRole("complementary", { name: "Info" }),
+		).not.toBeInTheDocument();
+		fireEvent.keyDown(window, { key: "Escape" });
+		expect(
+			await screen.findByRole("complementary", { name: "Info" }),
+		).toBeVisible();
+		await waitFor(() =>
+			expect(screen.getByRole("tab", { name: "Placement" })).toHaveAttribute(
+				"aria-selected",
+				"true",
+			),
+		);
+		place.mockRestore();
+	});
+
 	it("adds venue objects and picks a drawing tool from icon buttons in the CAD title", async () => {
 		renderApp();
 		fireEvent.click(await screen.findByRole("button", { name: "CAD" }));
@@ -1947,6 +2050,8 @@ describe("the Viz editor window", () => {
 			"Add venue element",
 			"Select",
 			"Draw line",
+			"Draw wall",
+			"Draw wall options",
 			"Draw box",
 			"Place text",
 			"Measure",
@@ -1976,6 +2081,29 @@ describe("the Viz editor window", () => {
 		).toHaveAttribute("data-shortcut", "L");
 		expect(shortcutOf("Undo")).toBeNull();
 		expect(shortcutOf("Add truss")).toBeNull();
+
+		fireEvent.click(
+			within(toolbar).getByRole("button", { name: "Draw wall options" }),
+		);
+		const wallMenu = await screen.findByRole("menu", { name: "Wall tools" });
+		expect(within(wallMenu).getAllByRole("button").map(named)).toEqual([
+			"Draw wall",
+			"Place window",
+			"Place door",
+			"Place pillar",
+			"Place stairs",
+		]);
+		fireEvent.click(
+			within(wallMenu).getByRole("button", { name: "Place window" }),
+		);
+		expect(
+			screen.queryByRole("menu", { name: "Wall tools" }),
+		).not.toBeInTheDocument();
+		expect(
+			within(toolbar).getByRole("button", { name: "Draw wall" }),
+		).toHaveClass("is-active");
+		expect(screen.getByRole("status")).toHaveTextContent("Move onto a wall");
+		fireEvent.click(within(toolbar).getByRole("button", { name: "Select" }));
 
 		// Each part button is split: a caret in its corner chooses the part the button places.
 		expect(

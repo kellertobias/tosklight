@@ -23,8 +23,9 @@ import type {
 } from "@tosklight/patch";
 import { type ReactNode, useEffect, useState } from "react";
 import { documentSession, type ProfileUpdate } from "../document/session";
-import { TauriPatchTransport } from "../document/transport";
-import { CadArchitectureModal } from "./CadArchitectureModal";
+import { persistInfoFixture } from "./infoPlacementWrite";
+import { CadVenuePlacementSettings } from "./CadVenuePlacementSettings";
+import { useCadTools } from "./cadTools";
 import {
 	MountingFields,
 	PatchFields,
@@ -38,7 +39,6 @@ import {
 	sizeMeasures,
 	storedSize,
 } from "./sceneryAxes";
-import { cadSession } from "./session";
 import type { CadEntity } from "./types";
 import { venueObjectLabel } from "./venueObjectLabel";
 
@@ -82,8 +82,6 @@ export function withPlacement(
 		),
 	};
 }
-
-const transport = new TauriPatchTransport();
 
 /** The selected fixture as the patch holds it, with its note and what its profile generates. */
 function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
@@ -299,40 +297,16 @@ export function CadInfoPanel({
 		);
 	const editedEntityId = entity.id;
 	async function write(next: PatchFixtureProjection, numeric = false) {
-		if (!fixture) return;
+		if (!fixture) return false;
 		const before = fixture;
 		setFixture(next);
 		try {
-			if (numeric) {
-				const pose =
-					editedEntityId === next.fixtureId
-						? next
-						: next.multipatch.find((copy) => copy.id === editedEntityId);
-				if (!pose) throw new Error("The selected placement no longer exists");
-				await cadSession.setNumericTransforms(sceneRevision, [
-					{
-						id: editedEntityId,
-						positionMillimetres: [
-							pose.location.x,
-							pose.location.y,
-							pose.location.z,
-						],
-						rotationDegrees: [
-							pose.rotation.x,
-							pose.rotation.y,
-							pose.rotation.z,
-						],
-					},
-				]);
-			} else
-				await transport.patchFixtures("", 0, {
-					requestId: crypto.randomUUID(),
-					fixtures: [next],
-					removeFixtureIds: [],
-				});
+			await persistInfoFixture(next, editedEntityId, sceneRevision, numeric);
+			return true;
 		} catch (reason) {
 			setFixture(before);
 			onError(reason);
+			return false;
 		}
 	}
 	const copyId = entity.id === entity.logicalFixtureId ? null : entity.id;
@@ -401,7 +375,7 @@ export function CadInfoPanel({
 					placement={placement}
 					shared={shared}
 					place={place}
-					write={(next) => void write(next)}
+					write={(next) => write(next)}
 				/>
 			)}
 		</section>
@@ -488,9 +462,9 @@ function PlacementFields({
 	placement: Placement | null;
 	shared: string;
 	place(change: Partial<Placement>): void;
-	write(next: PatchFixtureProjection): void;
+	write(next: PatchFixtureProjection): Promise<boolean>;
 }) {
-	const [editingVenue, setEditingVenue] = useState(false);
+	const tools = useCadTools();
 	const architecture = fixture?.sceneryOptions?.architecture;
 	const position = placement?.location ?? {
 		x: entity.positionMillimetres[0],
@@ -505,21 +479,18 @@ function PlacementFields({
 	return (
 		<fieldset disabled={!placement}>
 			{architecture && fixture ? (
-				<>
-					<button
-						type="button"
-						className="ui-button"
-						onClick={() => setEditingVenue(true)}
-					>
-						Edit venue element
-					</button>
-					{editingVenue ? (
-						<CadArchitectureModal
-							fixture={fixture}
-							onClose={() => setEditingVenue(false)}
-						/>
-					) : null}
-				</>
+				<CadVenuePlacementSettings
+					fixture={fixture}
+					selectedOpeningId={tools.selectOpening
+						? (tools.selectedOpening?.fixtureId === fixture.fixtureId
+							? tools.selectedOpening.openingId : null)
+						: undefined}
+					onSelectOpening={tools.selectOpening
+						? (id) => tools.selectOpening?.(id
+							? { fixtureId: fixture.fixtureId, openingId: id } : null)
+						: undefined}
+					onWrite={write}
+				/>
 			) : null}
 			{entity.positionReference ? (
 				<p className="cad-info-reference" role="note">
@@ -577,7 +548,7 @@ function PlacementFields({
 					onError={onError}
 				/>
 			) : null}
-			{fixture && scenery ? (
+			{!architecture && fixture && scenery ? (
 				<SceneryParameters
 					scenery={scenery}
 					options={fixture.sceneryOptions}

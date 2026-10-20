@@ -25,6 +25,13 @@ import type { CadEntity, CadViewDirection, TileCamera } from "./types";
 
 /** How near, in screen pixels, a click must be to close a line or to erase an item. */
 const CATCH_PIXELS = 8;
+const ANNOTATION_TOOLS = new Set([
+	"polyline",
+	"box",
+	"text",
+	"measure",
+	"erase",
+]);
 
 /** How far, in screen pixels, a drag must travel to draw a box or a measurement. */
 const DRAG_PIXELS = 3;
@@ -99,8 +106,10 @@ function planPointOf(viewport: DrawingViewport, event: Pointer): PlanPoint {
 	const bounds = viewport.canvas.current?.getBoundingClientRect();
 	if (!bounds) return [0, 0];
 	return [
-		(event.clientX - bounds.left - bounds.width / 2) / camera.zoom - camera.pan[0],
-		-(event.clientY - bounds.top - bounds.height / 2) / camera.zoom - camera.pan[1],
+		(event.clientX - bounds.left - bounds.width / 2) / camera.zoom -
+			camera.pan[0],
+		-(event.clientY - bounds.top - bounds.height / 2) / camera.zoom -
+			camera.pan[1],
 	];
 }
 
@@ -109,24 +118,50 @@ function planPointOf(viewport: DrawingViewport, event: Pointer): PlanPoint {
  * `snapDrawingPoint` says — unless snapping is off or Shift is held, and the marker that shows a
  * corner fit under the pointer. `anchor` is a line's last point, which its next one levels with.
  */
-function usePointSnap(viewport: DrawingViewport, tool: CadDrawTool, anchor: StoredPoint | null) {
+function usePointSnap(
+	viewport: DrawingViewport,
+	tool: CadDrawTool,
+	anchor: StoredPoint | null,
+) {
 	const { view, rotationQuarterTurns } = viewport;
 	const [marker, setMarker] = useState<PlanPoint | null>(null);
-	const corners = useMemo(() => drawingCorners(viewport.entities ?? []), [viewport.entities]);
-	const snap = (event: Pointer): { point: PlanPoint; marker: PlanPoint | null } => {
+	const corners = useMemo(
+		() => drawingCorners(viewport.entities ?? []),
+		[viewport.entities],
+	);
+	const snap = (
+		event: Pointer,
+	): { point: PlanPoint; marker: PlanPoint | null } => {
 		const point = planPointOf(viewport, event);
 		if (!viewport.snapping || event.shiftKey) return { point, marker: null };
 		const threshold = snapThreshold(viewport.camera.zoom);
 		if (tool === "measure") {
-			const fit = snapPlanPoint(viewport.entities ?? [], point, view, rotationQuarterTurns, threshold);
+			const fit = snapPlanPoint(
+				viewport.entities ?? [],
+				point,
+				view,
+				rotationQuarterTurns,
+				threshold,
+			);
 			return { point: fit ?? point, marker: fit };
 		}
 		if (tool !== "polyline" && tool !== "box") return { point, marker: null };
-		const from = tool === "polyline" && anchor ? viewPoint(view, anchor, rotationQuarterTurns) : null;
-		return snapDrawingPoint(corners, point, view, rotationQuarterTurns, threshold, from);
+		const from =
+			tool === "polyline" && anchor
+				? viewPoint(view, anchor, rotationQuarterTurns)
+				: null;
+		return snapDrawingPoint(
+			corners,
+			point,
+			view,
+			rotationQuarterTurns,
+			threshold,
+			from,
+		);
 	};
 	const show = (point: PlanPoint | null) => {
-		if (point?.[0] !== marker?.[0] || point?.[1] !== marker?.[1]) setMarker(point);
+		if (point?.[0] !== marker?.[0] || point?.[1] !== marker?.[1])
+			setMarker(point);
 	};
 	return { marker, snap, show };
 }
@@ -151,7 +186,9 @@ function draftOf(
 	points: StoredPoint[],
 ): CadAnnotation | null {
 	const drawn = tool === "polyline" || tool === "box" || tool === "measure";
-	return drawn && points.length >= 2 ? { ...newAnnotation(view, tool, points), id: "draft" } : null;
+	return drawn && points.length >= 2
+		? { ...newAnnotation(view, tool, points), id: "draft" }
+		: null;
 }
 
 /** Enter and Escape while a tool is in hand, except while a field is being typed in. */
@@ -159,7 +196,8 @@ function useDrawingKeys(active: boolean, onKey: (key: string) => void) {
 	useEffect(() => {
 		if (!active) return;
 		const key = (event: KeyboardEvent) => {
-			if ((event.target as Element | null)?.closest?.("input, textarea")) return;
+			if ((event.target as Element | null)?.closest?.("input, textarea"))
+				return;
 			onKey(event.key);
 		};
 		window.addEventListener("keydown", key);
@@ -170,7 +208,7 @@ function useDrawingKeys(active: boolean, onKey: (key: string) => void) {
 export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 	const tools = useCadTools();
 	const { view, rotationQuarterTurns, camera } = viewport;
-	const active = viewport.enabled && tools.tool !== "select";
+	const active = viewport.enabled && ANNOTATION_TOOLS.has(tools.tool);
 	const [points, setPoints] = useState<StoredPoint[]>([]);
 	const [cursor, setCursor] = useState<StoredPoint | null>(null);
 	const [pendingText, setPendingText] = useState<StoredPoint | null>(null);
@@ -199,7 +237,9 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 		reset();
 		if (line.length >= 2)
 			void tools.save(
-				newAnnotation(view, "polyline", line, { closed: closed && line.length >= 3 }),
+				newAnnotation(view, "polyline", line, {
+					closed: closed && line.length >= 3,
+				}),
 			);
 	}
 
@@ -221,7 +261,8 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 	function pointerDown(event: Pointer) {
 		if (!active) return false;
 		// A right-click (or a Control-click) belongs to the context menu, which finishes a line.
-		if (event.button === 2 || (event.button === 0 && event.ctrlKey)) return true;
+		if (event.button === 2 || (event.button === 0 && event.ctrlKey))
+			return true;
 		if (event.button !== 0 || event.altKey) return false;
 		const point = stored(event);
 		switch (tools.tool) {
@@ -264,7 +305,8 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 	function pointerMove(event: Pointer) {
 		if (!active) return;
 		const drawing = tools.tool === "polyline" || tools.tool === "box";
-		if (drawing || tools.tool === "measure") pointSnap.show(pointSnap.snap(event).marker);
+		if (drawing || tools.tool === "measure")
+			pointSnap.show(pointSnap.snap(event).marker);
 		if (dragging.current || (drawing && points.length))
 			setCursor(stored(event));
 	}
@@ -283,12 +325,15 @@ export function useCadDrawingTool(viewport: DrawingViewport): CadDrawingTool {
 	function commitText(text: string) {
 		const anchor = pendingText;
 		setPendingText(null);
-		if (anchor && text.trim()) void tools.save(textAnnotation(view, anchor, text, camera.zoom));
+		if (anchor && text.trim())
+			void tools.save(textAnnotation(view, anchor, text, camera.zoom));
 	}
 
 	return {
 		active,
-		draft: active ? draftOf(view, tools.tool, cursor ? [...points, cursor] : points) : null,
+		draft: active
+			? draftOf(view, tools.tool, cursor ? [...points, cursor] : points)
+			: null,
 		pendingText: pendingText
 			? viewPoint(view, pendingText, rotationQuarterTurns)
 			: null,

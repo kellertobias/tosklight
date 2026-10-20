@@ -7,6 +7,7 @@
  */
 import type { TitleAction, TitleActionGroup } from "@tosklight/ui";
 import boxSvg from "../../../../assets/icons/drawing/box.svg?raw";
+import wallSvg from "../../../../assets/icons/drawing/wall.svg?raw";
 import eraseSvg from "../../../../assets/icons/drawing/erase.svg?raw";
 import measureSvg from "../../../../assets/icons/drawing/measure.svg?raw";
 import polylineSvg from "../../../../assets/icons/drawing/polyline.svg?raw";
@@ -46,6 +47,7 @@ const DRAW_TOOLS: readonly { tool: CadDrawTool; label: string; svg: string }[] =
 	[
 		{ tool: "select", label: "Select", svg: selectSvg },
 		{ tool: "polyline", label: "Draw line", svg: polylineSvg },
+		{ tool: "wall", label: "Draw wall", svg: wallSvg },
 		{ tool: "box", label: "Draw box", svg: boxSvg },
 		{ tool: "text", label: "Place text", svg: textSvg },
 		{ tool: "measure", label: "Measure", svg: measureSvg },
@@ -155,8 +157,48 @@ export function cadTitleGroups(
 							icon: <ToolIcon svg={svg} />,
 							ariaLabel: label,
 							shortcut: CAD_TOOL_SHORTCUTS[tool],
-							active: tools.tool === tool,
+							active:
+								tool === "wall"
+									? ["wall", "window", "door", "pillar", "stairs"].includes(
+											tools.tool,
+										)
+									: tools.tool === tool,
 							onPress: () => tools.setTool(tool),
+							...(tool === "wall"
+								? {
+										dropdownPlacement: "corner" as const,
+										dropdown: {
+											kind: "content" as const,
+											ariaLabel: "Wall tools",
+											render: ({ close }: { close(): void }) => (
+												<div className="cad-wall-tool-menu">
+													{(
+														[
+															["wall", "Draw wall"],
+															["window", "Place window"],
+															["door", "Place door"],
+															["pillar", "Place pillar"],
+															["stairs", "Place stairs"],
+														] as const
+													).map(([kind, label]) => (
+														<button
+															type="button"
+															className="ui-button"
+															key={kind}
+															aria-pressed={tools.tool === kind}
+															onClick={() => {
+																tools.setTool(kind);
+																close();
+															}}
+														>
+															{label}
+														</button>
+													))}
+												</div>
+											),
+										},
+									}
+								: {}),
 						})),
 					},
 				]

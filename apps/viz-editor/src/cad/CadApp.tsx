@@ -20,6 +20,7 @@ import type { CadObjectMenuRequest } from "./CadObjectMenu";
 import { useCadObjectMenu } from "./useCadObjectMenu";
 import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
+import { VENUE_DRAW_KINDS } from "./venueDrawingGeometry";
 import { shortcutTile, useCadShortcuts } from "./cadShortcuts";
 import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
 import { loadPrintFonts } from "./printFonts";
@@ -287,12 +288,12 @@ export function CadApp() {
 		},
 	});
 
-	// An object an add button just placed is selected as soon as the drawing shows it, which opens Info.
+	// Defer Info until venue drawing ends: opening it mid-chain changes the canvas and pointer origin.
 	const handledPlacement = useRef(tools.placed?.request ?? 0);
 	useEffect(() => {
 		const placed = tools.placed;
 		if (!placed || placed.request === handledPlacement.current || !scene) return;
-		// A wizard places a whole field at once, and the drawing shows it all together.
+		if (VENUE_DRAW_KINDS.includes(tools.tool)) return;
 		const drawn = new Set(scene.entities.map((entity) => entity.logicalFixtureId));
 		if (!placed.fixtureIds.every((id) => drawn.has(id))) return;
 		handledPlacement.current = placed.request;

@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import { directionIndicator, planeDelta, projectPoint } from "./types";
 import { venueWorldCentre } from "./venueGeometryPoints";
+import { outlineVenueGeometry, outlineVenueIds } from "./venueViewVisibility";
 
 /** The axis a move is constrained to while a drag is in flight. */
 export type MoveAxis = "plane" | "horizontal" | "vertical";
@@ -384,6 +385,7 @@ export function pickEntity(
 	rotationQuarterTurns: number,
 	camera: TileCamera,
 ): CadEntity | null {
+	const outlined = outlineVenueIds(entities, view);
 	const ordered = [...entities].sort(
 		(left, right) => viewDepth(right, view) - viewDepth(left, view),
 	);
@@ -395,12 +397,26 @@ export function pickEntity(
 			view,
 			rotationQuarterTurns,
 		);
+		const local = entityPlanGeometry(
+			entity,
+			drawings.get(entity.drawingId),
+			view,
+		);
 		const geometry = worldGeometry(
 			entity,
-			entityPlanGeometry(entity, drawings.get(entity.drawingId), view),
+			outlined.has(entity.id) ? outlineVenueGeometry(local) : local,
 			view,
 			rotationQuarterTurns,
 		);
+		if (outlined.has(entity.id)) {
+			const distance = Math.min(
+				...geometry.lines.map((line) =>
+					pointSegmentDistance(point, line.points),
+				),
+			);
+			if (distance <= Math.max(90, 8 / camera.zoom)) return entity;
+			continue;
+		}
 		if (
 			[...geometry.triangles, ...(geometry.pickTriangles ?? [])].some(
 				(triangle) => pointInTriangle(point, triangle.points),

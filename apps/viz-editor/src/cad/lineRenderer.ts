@@ -10,25 +10,24 @@
  * and rebuilt only when the rig, the selection or the view changes, and a drag rebuilds just the
  * elements it moves.
  */
-import {
-	entityPlanGeometry,
-	isPositionPoint,
-	type PlanGeometry,
-	type PlanPoint,
-} from "./projection";
+
+import { annotationRuns } from "./annotationGeometry";
+import type { CadAnnotation } from "./annotations";
 import { rotateArc } from "./gizmoRotation";
 import {
 	gizmoGeometry,
 	type MoveAxis,
 	viewDepth,
 	viewPositionDepth,
-	worldGeometry,
 	viewportGuideRange,
+	worldGeometry,
 } from "./planGeometry";
-import { annotationRuns } from "./annotationGeometry";
-import type { CadAnnotation } from "./annotations";
-import { placedPolylines } from "./underlayGeometry";
-import type { CadUnderlay } from "./underlays";
+import {
+	entityPlanGeometry,
+	isPositionPoint,
+	type PlanGeometry,
+	type PlanPoint,
+} from "./projection";
 import type {
 	CadDrawing,
 	CadEntity,
@@ -43,6 +42,9 @@ import {
 	projectPoint,
 	viewAxes,
 } from "./types";
+import { placedPolylines } from "./underlayGeometry";
+import type { CadUnderlay } from "./underlays";
+import { outlineVenueGeometry, outlineVenueIds } from "./venueViewVisibility";
 
 /** Red, green, blue and an optional opacity, which defaults to opaque. */
 export type LineColor =
@@ -303,6 +305,7 @@ function paintEntities(
 	frame: CadFrame,
 	geometryCache: Map<string, PlanGeometry>,
 	venueGeometryCache: VenueGeometryCache,
+	outlined: ReadonlySet<string>,
 ) {
 	const { view, rotationQuarterTurns, drawings, selected, preview } = frame;
 	const ordered = [...frame.entities].sort(
@@ -336,7 +339,7 @@ function paintEntities(
 		}
 		const projected = worldGeometry(
 			entity,
-			geometry,
+			outlined.has(entity.id) ? outlineVenueGeometry(geometry) : geometry,
 			view,
 			rotationQuarterTurns,
 			entityPreview,
@@ -439,9 +442,9 @@ function paintGizmo(
 		[origin[0] + square, origin[1] + square],
 		[origin[0] - square, origin[1] + square],
 	];
-	corners.forEach((corner, index) =>
-		painter.line(corner, corners[(index + 1) % corners.length], handle),
-	);
+	corners.forEach((corner, index) => {
+		painter.line(corner, corners[(index + 1) % corners.length], handle);
+	});
 	drawGizmoArrow(
 		painter,
 		origin,
@@ -493,14 +496,14 @@ function paintSnapMarkers(painter: Painter, frame: CadFrame) {
 			[x, y - size],
 			[x - size, y],
 		];
-		corners.forEach((corner, index) =>
+		corners.forEach((corner, index) => {
 			painter.stroke(
 				corner,
 				corners[(index + 1) % corners.length],
 				color,
 				2 * painter.pixel,
-			),
-		);
+			);
+		});
 	}
 }
 
@@ -530,6 +533,7 @@ function buildEntityLayer(
 		{ ...frame, entities },
 		geometryCache,
 		venueGeometryCache,
+		outlineVenueIds(frame.entities, frame.view),
 	);
 	return {
 		fill: new Float32Array(painter.fillVertices),
@@ -785,11 +789,9 @@ function paintRotateHandle(
 	width: number,
 ) {
 	const arc = rotateArc(origin, length);
-	arc
-		.slice(1)
-		.forEach((point, index) =>
-			painter.stroke(arc[index], point, ROTATE_HANDLE, width),
-		);
+	arc.slice(1).forEach((point, index) => {
+		painter.stroke(arc[index], point, ROTATE_HANDLE, width);
+	});
 	for (const [end, before] of [
 		[arc[arc.length - 1], arc[arc.length - 2]],
 		[arc[0], arc[1]],

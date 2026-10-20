@@ -50,7 +50,7 @@ not simply its distance to the camera. Keep independent stacked balconies visibl
 Separate visible geometry from physical light blockers. A cutaway wall or roof remains in shadow
 and beam occlusion, so moving the viewing camera does not change the lighting inside the venue.
 Open doors and windows differ: they are genuine openings in both passes. Apply the same policy in
-all 3D rendering qualities. CAD and exported plans retain the complete venue drawing.
+all 3D rendering qualities. CAD orthographic views outline near walls that would hide the interior; wall edges and opening symbols remain selectable. Exported plans retain the complete venue drawing.
 
 ## Implementation and verification
 
@@ -89,3 +89,24 @@ the existing portable scenery finish and follow the same undoable transaction as
 Top plans draw paired glazing between jambs. Elevations use clean rectangular, circular and
 flat-bottom arched frame contours instead of the physical wall mesh's subtraction-strip seams.
 Drawing symbols do not add opaque glass to the renderer's physical light blockers.
+
+
+## Direct drawing and Placement workflow
+
+Draw Wall sits beside Draw Line in the drawing tools. It creates connected wall segments from
+successive plan clicks. Nearby corners take snapping priority over wall-centreline projections,
+which allow T-junctions. Segments use global 45-degree angular increments, including right angles;
+nearby ray/segment intersections combine wall and angle constraints without distant jumps.
+Shift disables corner, wall-segment, angle and loop-closure snaps. Escape finishes the run.
+Its adjacent dropdown selects window, door, pillar and stair placement. Window and door previews
+follow the nearest wall before committing, and their stable opening IDs route selection to the
+owning wall's Placement inspector.
+
+Construction properties live directly in Info / Placement. Wall finish and dimensions, opening
+width/height/sill/shape, door leaf count, swing and hinge side use the existing complete-assembly
+transaction and Undo/Redo. The inspector must retain the selected opening after each redraw.
+
+Orthographic views show camera-facing walls as outlines when their solid faces obscure the
+interior. Picking follows that visible drawing, so the operator can select an interior fixture
+through an outlined wall and still select the wall's edges or openings. This is a CAD display
+policy; physical renderer occlusion and complete plan exports retain their existing geometry.

@@ -6,9 +6,15 @@ import { CommitNumber, CommitText } from "./cadFields";
 export function CadArchitectureFields({
 	draft,
 	onChange,
+    showName = true,
+    showPlacement = true,
+    showOpenings = true,
 }: {
 	draft: ArchitectureDraft;
 	onChange(next: ArchitectureDraft): void;
+    showName?: boolean;
+    showPlacement?: boolean;
+    showOpenings?: boolean;
 }) {
 	const architecture = draft.architecture;
 	const set = (next: VenueArchitecture) =>
@@ -18,11 +24,13 @@ export function CadArchitectureFields({
 		(architecture.kind === "table" && architecture.shape === "round");
 	return (
 		<>
+            {showName ? (
 			<CommitText
 				label="Name"
 				value={draft.name}
 				onCommit={(name) => onChange({ ...draft, name })}
 			/>
+            ) : null}
 			{architecture.kind !== "slab" ? (
 				<fieldset className="cad-architecture-grid" aria-label="Dimensions">
 					{(["x", "y", "z"] as const).map((axis) => (
@@ -59,32 +67,7 @@ export function CadArchitectureFields({
 					))}
 				</fieldset>
 			) : null}
-			<fieldset className="cad-architecture-grid" aria-label="Placement">
-				{(["x", "y", "z"] as const).map((axis) => (
-					<CommitNumber
-						key={axis}
-						label={`Position ${axis.toUpperCase()}`}
-						unit="m"
-						value={draft.position[axis] / 1000}
-						onCommit={(value) =>
-							onChange({
-								...draft,
-								position: {
-									...draft.position,
-									[axis]: Math.round(value * 1000),
-								},
-							})
-						}
-					/>
-				))}
-				<CommitNumber
-					label="Angle"
-					unit="°"
-					digits={1}
-					value={draft.angle}
-					onCommit={(angle) => onChange({ ...draft, angle })}
-				/>
-			</fieldset>
+            {showPlacement ? <ArchitecturePlacement draft={draft} onChange={onChange} /> : null}
 			{architecture.kind === "wall" ? (
 				<>
 					<WallColour draft={draft} onChange={onChange} />
@@ -106,10 +89,10 @@ export function CadArchitectureFields({
 						Closed wall loops generate a ceiling. Wall position is its centre;
 						length and angle determine both endpoints.
 					</p>
-					<CadWallOpenings
+                    {showOpenings ? <CadWallOpenings
 						openings={architecture.openings}
 						onChange={(openings) => set({ ...architecture, openings })}
-					/>
+                    /> : null}
 				</>
 			) : null}
 			{architecture.kind === "stairs" ? (
@@ -353,4 +336,35 @@ function SlabFields({
 			</button>
 		</section>
 	);
+}
+
+function ArchitecturePlacement({draft,onChange}:{draft:ArchitectureDraft;onChange(next:ArchitectureDraft):void}) {
+    return (
+			<fieldset className="cad-architecture-grid" aria-label="Placement">
+				{(["x", "y", "z"] as const).map((axis) => (
+					<CommitNumber
+						key={axis}
+						label={`Position ${axis.toUpperCase()}`}
+						unit="m"
+						value={draft.position[axis] / 1000}
+						onCommit={(value) =>
+							onChange({
+								...draft,
+								position: {
+									...draft.position,
+									[axis]: Math.round(value * 1000),
+								},
+							})
+						}
+					/>
+				))}
+				<CommitNumber
+					label="Angle"
+					unit="°"
+					digits={1}
+					value={draft.angle}
+					onCommit={(angle) => onChange({ ...draft, angle })}
+				/>
+			</fieldset>
+    );
 }

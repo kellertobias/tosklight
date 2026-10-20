@@ -36,9 +36,19 @@ export type CadDrawTool =
 	| "box"
 	| "text"
 	| "measure"
-	| "erase";
+	| "erase"
+	| "wall"
+	| "window"
+	| "door"
+	| "pillar"
+	| "stairs";
 
 export interface CadTools {
+	selectedOpening?: { fixtureId: string; openingId: string } | null;
+	selectOpening?(
+		selection: { fixtureId: string; openingId: string } | null,
+	): void;
+	reportError?(reason: unknown): void;
 	/**
 	 * Adds a kind of object: the named profile, or else the part the button places now (a Venue
 	 * element opens its picture list). With `several`, the part's bulk wizard opens instead of one
@@ -140,6 +150,8 @@ export function CadToolProvider({
 	onAdd: (kind: CadAddKind, profileId?: string, several?: boolean) => void;
 	children: ReactNode;
 }) {
+	const [selectedOpening, selectOpening] =
+		useState<CadTools["selectedOpening"]>(null);
 	const [placed, setPlaced] = useState<CadPlaced | null>(null);
 	const [tool, setTool] = useState<CadDrawTool>("select");
 	const [annotations, setAnnotations] = useState<CadAnnotation[]>([]);
@@ -177,11 +189,15 @@ export function CadToolProvider({
 				request: (current?.request ?? 0) + 1,
 			}));
 		return {
+			selectedOpening,
+			selectOpening,
+			reportError: report,
 			onAdd,
 			tool,
 			// Picking up another tool puts the element being placed down.
 			setTool: (next) => {
 				setPlacing(null);
+				selectOpening(null);
 				setTool(next);
 			},
 			annotations,
@@ -230,6 +246,7 @@ export function CadToolProvider({
 		};
 	}, [
 		onAdd,
+		selectedOpening,
 		tool,
 		annotations,
 		error,

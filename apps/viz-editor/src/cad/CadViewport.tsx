@@ -1,4 +1,13 @@
-import { type WheelEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useCadVenueTool } from "./useCadVenueTool";
+import { CadVenueToolOverlay } from "./CadVenueToolOverlay";
+import {
+	type WheelEvent,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+} from "react";
 import { flushSync } from "react-dom";
 import { annotationsForView } from "./annotationGeometry";
 import { CadGrid, type CadGridSettings, DEFAULT_GRID } from "./cadGrid";
@@ -93,9 +102,14 @@ interface CadViewportProps {
 		snap: boolean,
 	): Promise<void>;
 	/** Commits a turn of the gizmo's rotate handle; absent, the handle is not offered. */
-	onTransforms?(placements: NonNullable<CadTransformPreview["placements"]>): Promise<void>;
+	onTransforms?(
+		placements: NonNullable<CadTransformPreview["placements"]>,
+	): Promise<void>;
 	/** Places moved copies of a drag made with the duplicate modifier; absent, a drag only moves. */
-	onDuplicateMove?(deltaMillimetres: [number, number, number], entityIds: readonly string[]): Promise<void>;
+	onDuplicateMove?(
+		deltaMillimetres: [number, number, number],
+		entityIds: readonly string[],
+	): Promise<void>;
 }
 
 interface CadRigOverviewProps {
@@ -163,7 +177,6 @@ export function CadRigOverview({
 	);
 }
 
-
 /**
  * Draws a frame now and whenever the canvas changes size, through one renderer per canvas.
  *
@@ -191,7 +204,10 @@ function useViewportRedraw(
 
 /** Zooms from a wheel gesture, mounted on the viewport rather than the canvas: print page frames
  * are siblings of the canvas, so a wheel over one never reached it and print mode did nothing. */
-function zoomFromWheel(latest: () => TileCamera, settle: (c: TileCamera) => void) {
+function zoomFromWheel(
+	latest: () => TileCamera,
+	settle: (c: TileCamera) => void,
+) {
 	return (event: WheelEvent<HTMLDivElement>) => {
 		event.preventDefault();
 		const camera = latest();
@@ -204,7 +220,9 @@ function zoomFromWheel(latest: () => TileCamera, settle: (c: TileCamera) => void
 /** The drawing tool and the pointer gestures of one viewport, and the snapped fits both mark. */
 function useViewportGestures(context: CadViewportContext) {
 	const tools = useCadTools();
-	const { canvas, view, rotationQuarterTurns, camera, entities, snapping } = context;
+	const venue = useCadVenueTool(context);
+	const { canvas, view, rotationQuarterTurns, camera, entities, snapping } =
+		context;
 	const drawing = useCadDrawingTool({
 		canvas,
 		view,
@@ -226,7 +244,9 @@ function useViewportGestures(context: CadViewportContext) {
 	const annotations = useMemo(() => {
 		// Text being dragged is drawn where the drag has it until the move is written.
 		const onView = annotationsForView(tools.annotations, view).map((each) =>
-			textPreview?.id === each.id ? { ...each, points: textPreview.points } : each,
+			textPreview?.id === each.id
+				? { ...each, points: textPreview.points }
+				: each,
 		);
 		return drawing.draft ? [...onView, drawing.draft] : onView;
 	}, [tools.annotations, view, drawing.draft, textPreview]);
@@ -240,7 +260,8 @@ function useViewportGestures(context: CadViewportContext) {
 	});
 	const moveMarkers = interaction.snapMarkers;
 	const snapMarkers = useMemo(
-		() => (drawing.snapMarker ? [...moveMarkers, drawing.snapMarker] : moveMarkers),
+		() =>
+			drawing.snapMarker ? [...moveMarkers, drawing.snapMarker] : moveMarkers,
 		[moveMarkers, drawing.snapMarker],
 	);
 	// The drawing tool is asked first; what it leaves goes to selection, moves and panning.
@@ -249,6 +270,7 @@ function useViewportGestures(context: CadViewportContext) {
 		"data-snap-markers": snapMarkers.length,
 		"data-snap-guides": interaction.snapGuides.length,
 		onPointerDown: (event: React.PointerEvent<HTMLCanvasElement>) =>
+			venue.pointerDown(event) ||
 			placement.pointerDown(event) ||
 			drawing.pointerDown(event) ||
 			text.pointerDown(event) ||
@@ -257,19 +279,57 @@ function useViewportGestures(context: CadViewportContext) {
 			// A pointer move is not urgent to React and would render after the next frame;
 			// rendering it inside the event puts the pan or drag on screen in that frame.
 			flushSync(() => {
+				venue.pointerMove(event);
 				drawing.pointerMove(event);
 				if (!text.pointerMove(event)) interaction.pointerMove(event);
 			}),
 		onPointerUp: (event: React.PointerEvent<HTMLCanvasElement>) => {
-			if (!drawing.pointerUp(event) && !text.pointerUp(event)) void interaction.pointerUp(event);
+			if (
+				!venue.pointerUp() &&
+				!drawing.pointerUp(event) &&
+				!text.pointerUp(event)
+			)
+				void interaction.pointerUp(event);
 		},
-		onPointerCancel: interaction.cancel,
-		onDoubleClick: drawing.doubleClick,
+		onPointerCancel: () => {
+			venue.finish();
+			interaction.cancel();
+		},
+		onDoubleClick: () => {
+			venue.doubleClick();
+			drawing.doubleClick();
+		},
 		// With a drawing tool in hand a right-click finishes the line; with Select it opens the menu.
 		onContextMenu: (event: React.MouseEvent<HTMLCanvasElement>) =>
-			drawing.active ? drawing.contextMenu(event) : interaction.contextMenu(event),
+			venue.contextMenu(event) ||
+			(drawing.active
+				? drawing.contextMenu(event)
+				: interaction.contextMenu(event)),
 	};
-	return { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers, text };
+	return {
+		venue,
+		drawing,
+		annotations,
+		interaction,
+		placement,
+		snapMarkers,
+		canvasHandlers,
+		text,
+	};
+}
+
+function useRegisteredViewport(
+	onViewportElement: CadViewportProps["onViewportElement"],
+) {
+	const canvas = useRef<HTMLCanvasElement>(null);
+	const register = useCallback(
+		(element: HTMLCanvasElement | null) => {
+			canvas.current = element;
+			onViewportElement?.(element);
+		},
+		[onViewportElement],
+	);
+	return [canvas, register] as const;
 }
 
 export function CadViewport({
@@ -299,11 +359,7 @@ export function CadViewport({
 	// What the gestures report back: selection, focus, the preview, the menu, moves and turns.
 	...gestureCallbacks
 }: CadViewportProps) {
-	const canvas = useRef<HTMLCanvasElement>(null);
-	const registerCanvas = useCallback((element: HTMLCanvasElement | null) => {
-		canvas.current = element;
-		onViewportElement?.(element);
-	}, [onViewportElement]);
+	const [canvas, registerCanvas] = useRegisteredViewport(onViewportElement);
 	// Everything drawn below — canvas, grid, labels, scale bar, print frames — reads this one camera,
 	// which is the pan or zoom in flight, so they all move together.
 	const liveCamera = useAnchoredCamera(canvas, committedCamera, onCamera);
@@ -317,8 +373,7 @@ export function CadViewport({
 		() => new Map(drawings.map((drawing) => [drawing.id, drawing])),
 		[drawings],
 	);
-	const { drawing, annotations, interaction, placement, snapMarkers, canvasHandlers, text } =
-		useViewportGestures({
+	const gestures = useViewportGestures({
 		canvas,
 		entities,
 		drawingById,
@@ -334,6 +389,8 @@ export function CadViewport({
 		expandSelection,
 		...gestureCallbacks,
 	});
+	const { venue, drawing } = gestures;
+	const { interaction, placement, text } = gestures;
 	const { guide, selectionBox } = interaction;
 
 	useViewportRedraw(canvas, {
@@ -350,8 +407,8 @@ export function CadViewport({
 		selectionBox,
 		showCoordinateOrigins,
 		underlays,
-		annotations,
-		snapMarkers,
+		annotations: gestures.annotations,
+		snapMarkers: gestures.snapMarkers,
 		snapGuides: interaction.snapGuides,
 		textGizmo: text.gizmo,
 	});
@@ -360,7 +417,7 @@ export function CadViewport({
 
 	return (
 		<div
-			className={`cad-viewport ${drawing.active ? "is-drawing" : ""}`.trim()}
+			className={`cad-viewport ${drawing.active || venue.active ? "is-drawing" : ""}`.trim()}
 			onWheel={zoomFromWheel(liveCamera.latest, liveCamera.settle)}
 		>
 			<canvas
@@ -369,8 +426,9 @@ export function CadViewport({
 				aria-label={`CAD ${view.replaceAll("_", " ")} viewport`}
 				data-floor-datum={view === "top_down" ? "hidden" : "visible"}
 				data-coordinate-origins={showCoordinateOrigins ? "visible" : "hidden"}
-				{...canvasHandlers}
+				{...gestures.canvasHandlers}
 			/>
+			<CadVenueToolOverlay {...venue} camera={camera} onDone={venue.stop} />
 			<CadGrid
 				camera={camera}
 				settings={grid}
@@ -390,10 +448,13 @@ export function CadViewport({
 			/>
 			<CadMoveReadout readout={interaction.readout} camera={camera} />
 			{placement.active && placement.placing ? (
-				<CadPlacingBanner name={placement.placing.name} onDone={placement.stop} />
+				<CadPlacingBanner
+					name={placement.placing.name}
+					onDone={placement.stop}
+				/>
 			) : null}
 			<CadAnnotationLayer
-				annotations={annotations}
+				annotations={gestures.annotations}
 				rotationQuarterTurns={rotationQuarterTurns}
 				camera={camera}
 				pendingText={drawing.pendingText}
@@ -401,26 +462,64 @@ export function CadViewport({
 				onCommitText={drawing.commitText}
 				onCancelText={drawing.cancelText}
 			/>
-			{printMode && printPages.length ? (
-				<div className="cad-print-frames">
-					{printPages.map((page) => (
-						<PrintFrame
-							key={page.id}
-							underlays={underlays}
-							page={page}
-							entities={entities}
-							camera={camera}
-							selected={page.id === selectedPrintPageId}
-							onSelect={() => onSelectPrintPage?.(page.id)}
-							onChange={(change) => onChangePrintPage?.(page.id, change)}
-							onCamera={(next) => flushSync(() => liveCamera.settle(next))}
-							documentInfo={documentInfo}
-						/>
-					))}
-				</div>
-			) : null}
+			<CadViewportPrintFrames
+				{...{
+					printMode,
+					printPages,
+					entities,
+					underlays,
+					camera,
+					selectedPrintPageId,
+					onSelectPrintPage,
+					onChangePrintPage,
+					documentInfo,
+				}}
+				onCamera={(next) => flushSync(() => liveCamera.settle(next))}
+			/>
 		</div>
 	);
+}
+
+function CadViewportPrintFrames({
+	printMode,
+	printPages = [],
+	entities,
+	underlays = NO_UNDERLAYS,
+	camera,
+	selectedPrintPageId,
+	onSelectPrintPage,
+	onChangePrintPage,
+	documentInfo,
+	onCamera,
+}: Pick<
+	CadViewportProps,
+	| "printMode"
+	| "printPages"
+	| "entities"
+	| "underlays"
+	| "selectedPrintPageId"
+	| "onSelectPrintPage"
+	| "onChangePrintPage"
+	| "documentInfo"
+> & { camera: TileCamera; onCamera(camera: TileCamera): void }) {
+	return printMode && printPages.length ? (
+		<div className="cad-print-frames">
+			{printPages.map((page) => (
+				<PrintFrame
+					key={page.id}
+					underlays={underlays}
+					page={page}
+					entities={entities}
+					camera={camera}
+					selected={page.id === selectedPrintPageId}
+					onSelect={() => onSelectPrintPage?.(page.id)}
+					onChange={(change) => onChangePrintPage?.(page.id, change)}
+					onCamera={onCamera}
+					documentInfo={documentInfo}
+				/>
+			))}
+		</div>
+	) : null;
 }
 
 export interface CadViewportScale {
@@ -464,5 +563,3 @@ function formatMetricNumber(value: number) {
 		? String(value)
 		: value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
-
-
