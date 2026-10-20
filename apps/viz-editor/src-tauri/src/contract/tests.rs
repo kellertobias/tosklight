@@ -181,6 +181,7 @@ fn a_venue_object_keeps_its_scenery_options_through_the_sheet() {
             chain_top: Some(ChainTopEnd::Direct),
             chain_bottom: Some(ChainBottomEnd::SteelflexLoop),
             handrails: Some(light_fixture::StairHandrails::Right),
+            ..SceneryOptions::default()
         }
     );
     assert_eq!(
@@ -316,4 +317,51 @@ fn position_calibration_survives_architect_patch_read_edit_write() {
         90.0
     );
     assert_eq!(returned["multipatch"][0]["invertPan"], true);
+}
+
+#[test]
+fn venue_construction_survives_the_architect_fixture_dto_and_patch_candidate() {
+    let architecture = light_fixture::VenueArchitecture::Wall {
+        openings: vec![light_fixture::WallOpening {
+            id: Uuid::from_u128(843),
+            offset_millimetres: 100,
+            sill_millimetres: 0,
+            width_millimetres: 900,
+            height_millimetres: 2100,
+            opening: light_fixture::WallOpeningKind::Door {
+                leaves: light_fixture::VenueDoorLeaves::Single,
+                swing: light_fixture::VenueDoorSwing::Inward,
+                hinge: light_fixture::VenueDoorHinge::Right,
+            },
+        }],
+        ceiling_height_millimetres: Some(3200),
+    };
+    let payload = serde_json::json!({
+        "fixtureId": Uuid::new_v4(),
+        "fixtureNumber": null,
+        "virtualFixtureNumber": 9,
+        "name": "Wall",
+        "profileId": Uuid::new_v4(),
+        "profileRevision": 1,
+        "modeId": Uuid::new_v4(),
+        "splitPatches": [],
+        "layerId": "default",
+        "location": { "x": 1000, "y": 0, "z": 0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "sceneryOptions": { "architecture": architecture }
+    });
+    let fixture: FixtureDto = serde_json::from_value(payload.clone()).expect("venue fixture DTO");
+    assert!(!fixture.scenery_options.is_empty());
+    assert_eq!(
+        serde_json::to_value(&fixture).unwrap()["sceneryOptions"],
+        payload["sceneryOptions"]
+    );
+    let options = PatchFixtureCandidate::from(fixture).patch.scenery_options;
+    assert_eq!(options.architecture, Some(architecture));
+    let dto = SceneryOptionsDto::from(&options);
+    assert_eq!(
+        serde_json::to_value(&dto).unwrap(),
+        payload["sceneryOptions"]
+    );
+    assert_eq!(SceneryOptions::from(dto), options);
 }

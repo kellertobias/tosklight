@@ -139,6 +139,9 @@ fn wire_vector(size: fixture::FixtureVector) -> wire::PatchFixtureLocation {
 
 fn application_scenery_options(input: wire::PatchSceneryOptions) -> fixture::SceneryOptions {
     fixture::SceneryOptions {
+        // Venue construction is not exposed through the wire until the typed editor contract
+        // and reader capability gate land together. Existing fixture edits keep prior behavior.
+        architecture: None,
         colour_srgb: input.colour_srgb,
         chain_top: input.chain_top.map(|end| match end {
             wire::PatchChainTopEnd::Motor => fixture::ChainTopEnd::Motor,

@@ -301,6 +301,8 @@ where
 #[serde(rename_all = "camelCase")]
 pub struct SceneryOptionsDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<light_fixture::VenueArchitecture>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour_srgb: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chain_top: Option<ChainTopEnd>,
@@ -312,7 +314,8 @@ pub struct SceneryOptionsDto {
 
 impl SceneryOptionsDto {
     fn is_empty(&self) -> bool {
-        self.colour_srgb.is_none()
+        self.architecture.is_none()
+            && self.colour_srgb.is_none()
             && self.chain_top.is_none()
             && self.chain_bottom.is_none()
             && self.handrails.is_none()
@@ -322,6 +325,7 @@ impl SceneryOptionsDto {
 impl From<&SceneryOptions> for SceneryOptionsDto {
     fn from(options: &SceneryOptions) -> Self {
         Self {
+            architecture: options.architecture.clone(),
             colour_srgb: options.colour_srgb.clone(),
             chain_top: options.chain_top,
             chain_bottom: options.chain_bottom,
@@ -333,6 +337,7 @@ impl From<&SceneryOptions> for SceneryOptionsDto {
 impl From<SceneryOptionsDto> for SceneryOptions {
     fn from(dto: SceneryOptionsDto) -> Self {
         Self {
+            architecture: dto.architecture,
             colour_srgb: dto.colour_srgb,
             chain_top: dto.chain_top,
             chain_bottom: dto.chain_bottom,

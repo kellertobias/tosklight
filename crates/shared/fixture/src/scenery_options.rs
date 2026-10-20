@@ -25,6 +25,9 @@ pub struct SceneryOptions {
     /// Which sides of a flight of stairs carry a handrail. Absent keeps what the profile declares.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handrails: Option<StairHandrails>,
+    /// Rough venue construction carried with this visual-only placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<crate::VenueArchitecture>,
 }
 
 impl SceneryOptions {
@@ -33,6 +36,7 @@ impl SceneryOptions {
             && self.chain_top.is_none()
             && self.chain_bottom.is_none()
             && self.handrails.is_none()
+            && self.architecture.is_none()
     }
 
     /// The handrails this flight carries: the placement's choice, else the profile's own — both
@@ -53,6 +57,9 @@ impl SceneryOptions {
             return Err(format!(
                 "scenery colour {colour:?} must be a #RRGGBB sRGB colour"
             ));
+        }
+        if let Some(architecture) = &self.architecture {
+            architecture.validate()?;
         }
         Ok(())
     }

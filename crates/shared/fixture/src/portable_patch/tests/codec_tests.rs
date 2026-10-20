@@ -44,6 +44,7 @@ fn scenery_options_round_trip_through_the_patch_record_exactly() {
         chain_top: Some(ChainTopEnd::Direct),
         chain_bottom: Some(ChainBottomEnd::SteelflexLoop),
         handrails: Some(crate::StairHandrails::Left),
+        ..SceneryOptions::default()
     };
     let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
     let body = serde_json::to_value(&record).unwrap();
@@ -794,4 +795,31 @@ fn tl738_portable_patch_retains_custom_http_endpoint_and_reads_legacy_without_on
         None
     );
     assert_eq!(serde_json::to_value(&record).unwrap(), legacy);
+}
+
+#[test]
+fn venue_architecture_round_trips_in_the_actual_portable_patch_record() {
+    let profile = profile();
+    let mut fixture = fixture(&profile);
+    fixture.scenery_options.architecture = Some(crate::VenueArchitecture::Wall {
+        openings: vec![crate::WallOpening {
+            id: uuid::Uuid::from_u128(42),
+            offset_millimetres: 100,
+            sill_millimetres: 900,
+            width_millimetres: 800,
+            height_millimetres: 800,
+            opening: crate::WallOpeningKind::Window {
+                shape: crate::VenueWindowShape::Round,
+            },
+        }],
+        ceiling_height_millimetres: Some(3200),
+    });
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&fixture).unwrap();
+    let body = serde_json::to_value(&record).unwrap();
+    let decoded = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+    assert_eq!(
+        decoded.patch().unwrap().scenery_options,
+        fixture.scenery_options
+    );
+    assert_eq!(serde_json::to_value(decoded).unwrap(), body);
 }

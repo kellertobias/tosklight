@@ -21,6 +21,7 @@ mod position_calibration;
 mod position_freeze;
 mod profile;
 mod scenery_options;
+mod venue_architecture;
 
 pub use color_calibration::*;
 pub use compiled_interner::{CompiledModelInterner, SharedByIdentity};
@@ -39,6 +40,7 @@ pub use position_calibration::*;
 pub use position_freeze::*;
 pub use profile::*;
 pub use scenery_options::*;
+pub use venue_architecture::*;
 
 #[cfg(test)]
 mod tests;
