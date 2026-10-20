@@ -427,7 +427,6 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             .and_then(|index| scene.models.get(index as usize))
             .map(|body| EmitterMount::from_model(body, body_size))
             .unwrap_or_default();
-        apply_model_source_face(&mut optics, fixture, mount, body_size);
         compile_instances(
             &mut scene,
             &mut bindings,
@@ -747,6 +746,7 @@ fn build_emitters(
     }
 
     let head_channels = group_by_head(mode, channels);
+    let model_mount = mount.for_placeholder(fixture, geometry);
     for emitter in &geometry.emitters {
         // Every emitter left here is one this personality drives; the rest are already gone.
         let Some(head_id) = emitter.head_id else {
@@ -790,9 +790,12 @@ fn build_emitters(
             fixture_index,
             head_index,
             label: emitter.name.clone(),
-            local_origin: millimetres(emitter.origin),
-            tilt_pivot: Vec3::ZERO,
-            local_orientation_degrees: vector(emitter.orientation_degrees),
+            local_origin: model_mount.map_or_else(|| millimetres(emitter.origin), |m| m.origin),
+            tilt_pivot: model_mount.map_or(Vec3::ZERO, |m| m.pivot),
+            local_orientation_degrees: model_mount.map_or_else(
+                || vector(emitter.orientation_degrees),
+                |m| m.rest_orientation(),
+            ),
             pan: steered.then(|| pan_axis(motion, &binding)).flatten(),
             tilt: steered.then(|| tilt_axis(motion, &binding)).flatten(),
             beam_angle_degrees: narrow,
@@ -1072,6 +1075,7 @@ pub(crate) mod bindings;
 mod compile_instances;
 mod geometry_pose;
 mod head_geometry;
+mod placeholder_mount;
 mod reference_bindings;
 mod script_programs;
 

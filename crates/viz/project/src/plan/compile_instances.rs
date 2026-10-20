@@ -36,17 +36,12 @@ pub(super) fn compile_instances(
         .find(|addresses| !addresses.is_empty())
         .unwrap_or_default();
     for instance in &fixture.instances {
-        let mut instance_optics = optics.clone();
-        if let Some(output) = instance
-            .installed_appearance
-            .luminous_output_lumens
-            .and_then(|lumens| fallback::output_for_lumens(class, lumens))
-        {
-            instance_optics.output = output;
-        }
+        let mut instance_optics = installed_optics(&optics, instance, class);
         let generated_scenery = generated_scenery(fixture, instance);
         let fixture_index = scene.fixtures.len() as u32;
         let size = body_size * instance.model_scale;
+        let instance_mount = mount.scaled(instance.model_scale);
+        apply_model_source_face(&mut instance_optics, fixture, instance_mount, size);
         // The hinge sits in the model at the scale the model is drawn, as the lens does.
         let bracket_hinge = model
             .and_then(|index| scene.models.get(index as usize))
@@ -127,7 +122,7 @@ pub(super) fn compile_instances(
             fixture_index,
             &channels,
             instance_optics,
-            mount.scaled(instance.model_scale),
+            instance_mount,
             laser.clone(),
             effect.clone(),
         );
@@ -152,6 +147,23 @@ pub(super) fn compile_instances(
             });
         }
     }
+}
+
+/// Apply the installed output override without changing the shared profile optics.
+fn installed_optics(
+    optics: &EmitterOptics,
+    instance: &PhysicalInstance,
+    class: OpticalClass,
+) -> EmitterOptics {
+    let mut instance_optics = optics.clone();
+    if let Some(output) = instance
+        .installed_appearance
+        .luminous_output_lumens
+        .and_then(|lumens| fallback::output_for_lumens(class, lumens))
+    {
+        instance_optics.output = output;
+    }
+    instance_optics
 }
 
 /// Keep camera routing disabled after conflicting or invalid camera declarations.
