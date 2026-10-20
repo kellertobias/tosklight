@@ -593,6 +593,7 @@ fn push_demo_pixel_bars(scene: &mut Scene) {
                 offsets: (0..10)
                     .map(|cell| Vec3::new(-0.45 + cell as f32 * 0.1, 0.0, 0.0))
                     .collect(),
+                ..EmitterLayoutCells::single()
             },
             live_shaper_angle_roles: [false; 4],
             shaper_roles: [false; 4],
