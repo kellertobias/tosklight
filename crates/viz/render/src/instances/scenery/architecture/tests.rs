@@ -131,3 +131,67 @@ fn openings_are_real_and_cutaway_keeps_identical_light_blockers_at_every_quality
         );
     }
 }
+
+#[test]
+fn open_door_centre_passes_light_but_actual_leaf_blocks_it() {
+    use bytemuck::Zeroable;
+    use light_fixture::{
+        VenueDoorHinge, VenueDoorLeaves, VenueDoorSwing, WallOpening, WallOpeningKind,
+    };
+    for swing in [VenueDoorSwing::Inward, VenueDoorSwing::Outward] {
+        for leaves in [VenueDoorLeaves::Single, VenueDoorLeaves::Double] {
+            let object = SceneryObject {
+                size: Vec3::new(4.0, 3.0, 0.2),
+                position: Vec3::new(0.0, 1.5, 0.0),
+                architecture: Some(VenueArchitecture::Wall {
+                    openings: vec![WallOpening {
+                        id: uuid::Uuid::new_v4(),
+                        offset_millimetres: 1000,
+                        sill_millimetres: 0,
+                        width_millimetres: 1600,
+                        height_millimetres: 2100,
+                        opening: WallOpeningKind::Door {
+                            leaves,
+                            swing,
+                            hinge: VenueDoorHinge::Left,
+                        },
+                    }],
+                    ceiling_height_millimetres: None,
+                }),
+                ..Default::default()
+            };
+            let mut frame = FrameInstances::default();
+            push(&mut frame, &object, &FrameStyle::default(), true);
+            let blocked = |origin: Vec3, destination: Vec3| {
+                let direction = (destination - origin).normalize();
+                let mut light = [super::super::super::GpuLight {
+                    position_range: origin.extend(20.0).to_array(),
+                    direction_cos_outer: direction.extend(0.1).to_array(),
+                    ..Zeroable::zeroed()
+                }];
+                let packed =
+                    crate::renderer::curtain_occlusion::pack(&mut light, &frame.curtain_blockers);
+                let p = destination.extend(1.0);
+                packed.iter().skip(1).any(|b| {
+                    glam::Vec4::from_array(b.planes[4]).dot(p) > 0.0
+                        && b.planes[..4]
+                            .iter()
+                            .all(|plane| glam::Vec4::from_array(*plane).dot(p) >= -1e-6)
+                })
+            };
+            assert!(
+                !blocked(Vec3::new(-0.2, 1.0, -3.0), Vec3::new(-0.2, 1.0, 3.0)),
+                "open centre stays clear: {leaves:?}, {swing:?}"
+            );
+            let z = if swing == VenueDoorSwing::Inward {
+                0.4
+            } else {
+                -0.4
+            };
+            assert!(
+                blocked(Vec3::new(-2.0, 1.0, z), Vec3::new(0.0, 1.0, z)),
+                "open leaf remains physical: {leaves:?}, {swing:?}"
+            );
+        }
+    }
+}

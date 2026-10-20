@@ -284,7 +284,13 @@ fn unscaled_entity_size(
         });
     match placed {
         Some(size) if [size.x, size.y, size.z].iter().all(|value| *value > 0.0) => {
-            placed_millimetres(size)
+            if fixture.scenery_options.architecture.is_some() {
+                // Authored construction is already dimension-validated; do not widen thin walls
+                // to the legacy generic-symbol minimum used for fixtures.
+                [size.x, size.z, size.y]
+            } else {
+                placed_millimetres(size)
+            }
         }
         _ => profile.map_or([500.0; 3], dimensions),
     }
@@ -454,6 +460,18 @@ mod tests {
             entity_size(Some(&hall), &broken, id),
             [20000.0, 10000.0, 4000.0]
         );
+    }
+
+    #[test]
+    fn authored_wall_thickness_is_not_widened_to_the_legacy_symbol_minimum() {
+        let id = Uuid::new_v4();
+        let patch: PatchedFixturePatch = serde_json::from_value(json!({
+            "fixture_id": id,
+            "scenery_size_metres": { "x": 6000.0, "y": 3000.0, "z": 10.0 },
+            "scenery_options": { "architecture": { "kind": "wall", "openings": [] } }
+        }))
+        .unwrap();
+        assert_eq!(entity_size(None, &patch, id), [6000.0, 10.0, 3000.0]);
     }
 
     fn placed(

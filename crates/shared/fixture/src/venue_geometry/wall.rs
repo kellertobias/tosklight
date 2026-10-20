@@ -54,7 +54,7 @@ pub(super) fn build(g: &mut VenueGeometry, s: [f64; 3], openings: &[WallOpening]
         panel(g, x0, x1, low, [s[1] / 2.0; 2], s[2]);
     }
     for o in openings {
-        door_plan(g, o, s);
+        door_assembly(g, o, s);
     }
     // Top plan retains genuine door/window gaps rather than replacing them with a solid box.
     let mut plan_cuts = vec![-s[0] / 2.0, s[0] / 2.0];
@@ -117,7 +117,8 @@ fn panel(g: &mut VenueGeometry, x0: f64, x1: f64, b: [f64; 2], t: [f64; 2], dept
         g.quad([front[i], back[i], back[j], front[j]]);
     }
 }
-fn door_plan(g: &mut VenueGeometry, o: &WallOpening, s: [f64; 3]) {
+/// The same hinge and swing author both the plan symbol and a thin, 90-degree open leaf.
+fn door_assembly(g: &mut VenueGeometry, o: &WallOpening, s: [f64; 3]) {
     let WallOpeningKind::Door {
         leaves,
         swing,

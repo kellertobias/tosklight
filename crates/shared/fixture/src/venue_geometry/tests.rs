@@ -123,3 +123,98 @@ fn connected_room_ceiling_is_deterministic_when_walls_are_reordered() {
     walls.reverse();
     assert_eq!(venue_rooms(&walls)[0].height_millimetres, 3000.0);
 }
+
+#[test]
+fn open_door_leaves_keep_physical_swing_hinges_and_custom_dimensions() {
+    let size = [4000.0, 3000.0, 200.0];
+    let make = |kind| VenueArchitecture::Wall {
+        openings: vec![WallOpening {
+            id: uuid::Uuid::new_v4(),
+            offset_millimetres: 1000,
+            sill_millimetres: 0,
+            width_millimetres: 1600,
+            height_millimetres: 2100,
+            opening: kind,
+        }],
+        ceiling_height_millimetres: None,
+    };
+    let aperture = venue_geometry(
+        &make(WallOpeningKind::Window {
+            shape: VenueWindowShape::Rectangular,
+        }),
+        size,
+    )
+    .unwrap();
+    for leaves in [VenueDoorLeaves::Single, VenueDoorLeaves::Double] {
+        for swing in [VenueDoorSwing::Inward, VenueDoorSwing::Outward] {
+            for hinge in [VenueDoorHinge::Left, VenueDoorHinge::Right] {
+                let geometry = venue_geometry(
+                    &make(WallOpeningKind::Door {
+                        leaves,
+                        swing,
+                        hinge,
+                    }),
+                    size,
+                )
+                .unwrap();
+                let count = if leaves == VenueDoorLeaves::Double {
+                    2
+                } else {
+                    1
+                };
+                assert_eq!(
+                    geometry.triangles.len(),
+                    aperture.triangles.len() + count * 12
+                );
+                let leaf_vertices: Vec<_> = geometry.triangles[aperture.triangles.len()..]
+                    .iter()
+                    .flatten()
+                    .collect();
+                let radius = 1600.0 / count as f64;
+                let z_bounds = leaf_vertices
+                    .iter()
+                    .fold([f64::INFINITY, f64::NEG_INFINITY], |[min, max], p| {
+                        [min.min(p[2]), max.max(p[2])]
+                    });
+                assert_eq!(
+                    z_bounds,
+                    if swing == VenueDoorSwing::Inward {
+                        [0.0, radius]
+                    } else {
+                        [-radius, 0.0]
+                    }
+                );
+                assert!(
+                    leaf_vertices
+                        .iter()
+                        .all(|p| p[1] >= -1500.0 && p[1] <= 600.0)
+                );
+                let hinge_positions: &[f64] = if count == 2 {
+                    &[-1000.0, 600.0]
+                } else if hinge == VenueDoorHinge::Left {
+                    &[-1000.0]
+                } else {
+                    &[600.0]
+                };
+                assert!(
+                    leaf_vertices
+                        .iter()
+                        .all(|p| hinge_positions.iter().any(|x| (p[0] - x).abs() == 17.5))
+                );
+                for x in hinge_positions {
+                    assert!(geometry.plan.contains(&[
+                        [*x, 0.0],
+                        [
+                            *x,
+                            if swing == VenueDoorSwing::Inward {
+                                radius
+                            } else {
+                                -radius
+                            }
+                        ]
+                    ]));
+                }
+            }
+        }
+    }
+}
