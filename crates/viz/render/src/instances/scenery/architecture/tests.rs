@@ -283,3 +283,55 @@ fn legacy_floor_conversion_keeps_support_floor_and_cuts_the_reached_floor_only()
     ));
     assert!(objects[3].architecture.is_none());
 }
+
+#[test]
+fn joined_corner_blocks_diagonal_light_with_camera_cutaway_at_every_quality() {
+    use bytemuck::Zeroable;
+    let objects = room();
+    for quality in [
+        viz_scene::RenderQuality::Draft,
+        viz_scene::RenderQuality::Standard,
+        viz_scene::RenderQuality::High,
+        viz_scene::RenderQuality::Ultra,
+    ] {
+        let mut previous = None;
+        for camera in [Vec3::new(0.0, 1.5, 0.0), Vec3::new(8.0, 6.0, 8.0)] {
+            let mut frame = FrameInstances::default();
+            push_all(
+                &mut frame,
+                &objects,
+                &FrameStyle {
+                    quality,
+                    camera_position: Some(camera),
+                    ..Default::default()
+                },
+            );
+            let bytes = bytemuck::cast_slice::<_, u8>(&frame.curtain_blockers).to_vec();
+            if let Some(previous) = previous {
+                assert_eq!(
+                    bytes, previous,
+                    "camera must not remove joined wall blockers"
+                );
+            }
+            previous = Some(bytes);
+            let mut lights = [super::super::super::GpuLight {
+                position_range: [6.0, 1.5, 5.0, 20.0],
+                direction_cos_outer: [-0.707, 0.0, -0.707, 0.01],
+                ..Zeroable::zeroed()
+            }];
+            let packed =
+                crate::renderer::curtain_occlusion::pack(&mut lights, &frame.curtain_blockers);
+            let p = Vec3::new(2.0, 1.5, 1.0).extend(1.0);
+            assert!(
+                packed
+                    .iter()
+                    .skip(1)
+                    .any(|b| glam::Vec4::from_array(b.planes[4]).dot(p) > 0.0
+                        && b.planes[..4]
+                            .iter()
+                            .all(|plane| glam::Vec4::from_array(*plane).dot(p) >= -1e-6)),
+                "diagonal light must not leak through room corner at {quality:?}"
+            );
+        }
+    }
+}

@@ -1,7 +1,8 @@
 //! Scene context is projected after all authored objects and automatic ceilings exist.
 use super::{super::CadEntity, CadVenueGeometry};
 use light_fixture::{
-    VenueArchitecture, venue_floor_slab, venue_geometry_in_context, venue_stair_volume,
+    VenueArchitecture, VenueWallPlacement, venue_floor_slab, venue_geometry_in_context,
+    venue_joined_walls, venue_stair_volume,
 };
 use viz_scene::glam::{Mat4, Vec3};
 
@@ -19,7 +20,47 @@ pub(super) fn apply(entities: &mut [CadEntity]) {
         })
         .map(|entity| venue_stair_volume(size(entity), pose(entity, true)))
         .collect();
+    let walls: Vec<_> = entities
+        .iter()
+        .filter_map(|entity| {
+            let VenueArchitecture::Wall { openings, .. } =
+                entity.scenery.as_ref()?.architecture.as_ref()?
+            else {
+                return None;
+            };
+            Some(VenueWallPlacement {
+                id: entity.id,
+                size_millimetres: size(entity),
+                local_to_world: pose(entity, true),
+                openings: openings.clone(),
+            })
+        })
+        .collect();
+    let mut joined = venue_joined_walls(&walls);
     for entity in entities {
+        if let Some(geometry) = joined.remove(&entity.id) {
+            let lift = f64::from(entity.size_millimetres[2]) / 2.0;
+            entity.venue_geometry = Some(CadVenueGeometry {
+                joined_wall: true,
+                exterior: geometry
+                    .exterior
+                    .into_iter()
+                    .map(|line| line.map(|p| [p[0], p[1] + lift, p[2]]))
+                    .collect(),
+                triangles: geometry
+                    .triangles
+                    .into_iter()
+                    .map(|triangle| triangle.map(|p| [p[0], p[1] + lift, p[2]]))
+                    .collect(),
+                plan: geometry.plan,
+                elevation: geometry
+                    .elevation
+                    .into_iter()
+                    .map(|line| line.map(|p| [p[0], p[1] + lift, p[2]]))
+                    .collect(),
+            });
+            continue;
+        }
         let Some(scenery) = &entity.scenery else {
             continue;
         };
@@ -40,6 +81,8 @@ pub(super) fn apply(entities: &mut [CadEntity]) {
             continue;
         }
         entity.venue_geometry = Some(CadVenueGeometry {
+            joined_wall: false,
+            exterior: vec![],
             triangles: geometry.triangles,
             plan: geometry.plan,
             elevation: vec![],

@@ -235,3 +235,26 @@ fn legacy_floors_are_adapted_only_while_stairs_actually_intersect_them() {
     assert!(scene[0].venue_geometry.is_none());
     assert!(scene[0].scenery.as_ref().unwrap().architecture.is_none());
 }
+
+#[test]
+fn connected_wall_geometry_tracks_neighbour_move_and_delete_without_changing_identity() {
+    let a = wall(101, [-1000, 0, 0], 0.0, 2000.0);
+    let b = wall(102, [0, -1000, 0], -90.0, 2000.0);
+    let joined = with_ceilings(vec![a.clone(), b.clone()]);
+    assert_eq!(joined[0].id, a.id);
+    assert!(
+        joined
+            .iter()
+            .all(|e| e.venue_geometry.as_ref().unwrap().joined_wall)
+    );
+    assert_eq!(
+        heights(joined[0].venue_geometry.as_ref().unwrap()),
+        [0.0, 4000.0]
+    );
+    let mut moved = b;
+    moved.position_millimetres[0] += 100;
+    let moved = with_ceilings(vec![a.clone(), moved]);
+    // Base projection comes from fresh fixture snapshots in production; this fixture helper has none.
+    assert!(moved[0].venue_geometry.is_none());
+    assert!(with_ceilings(vec![a])[0].venue_geometry.is_none());
+}

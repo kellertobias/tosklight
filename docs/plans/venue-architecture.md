@@ -110,3 +110,12 @@ Orthographic views show camera-facing walls as outlines when their solid faces o
 interior. Picking follows that visible drawing, so the operator can select an interior fixture
 through an outlined wall and still select the wall's edges or openings. This is a CAD display
 policy; physical renderer occlusion and complete plan exports retain their existing geometry.
+
+## Continuous wall junctions
+
+Wall junctions are derived from the complete scene rather than stored by changing authored wall
+lengths or opening offsets. CAD plans, PDF exports and 3D consume the same joined contours and
+solids, suppressing internal caps and seams at connected corners. Individual wall IDs, finish,
+openings and editing remain intact. Moving or deleting a neighbour regenerates the derived shape;
+isolated walls retain their real end caps. Physical occlusion follows the joined solid even when
+camera cutaway hides its visible surfaces.

@@ -227,3 +227,200 @@ it("places frame endpoints on the nearest physical wall face with actual view de
 		1000 - Math.cos(Math.PI / 6) * 100,
 	);
 });
+
+it("retains a joined wall's actual miter contour alongside its opening frames", () => {
+	if (!wall.venueGeometry) throw new Error("Missing native wall");
+	const joined: CadEntity = {
+		...wall,
+		venueGeometry: {
+			...wall.venueGeometry,
+			joinedWall: true,
+			exterior: [
+				[
+					[-2000, 0, -100],
+					[2100, 0, -100],
+				],
+				[
+					[2100, 0, -100],
+					[2100, 3000, -100],
+				],
+				[
+					[2100, 3000, -100],
+					[-2000, 3000, -100],
+				],
+				[
+					[-2000, 3000, -100],
+					[-2000, 0, -100],
+				],
+			],
+			elevation: wall.venueGeometry.elevation?.slice(4),
+			triangles: wall.venueGeometry.triangles.map(
+				(triangle) =>
+					triangle.map(([x, y, z]) => [x === 2000 ? 2100 : x, y, z]) as [
+						number[],
+						number[],
+						number[],
+					],
+			),
+		},
+	};
+	const geometry = entityPlanGeometry(joined, undefined, "front_to_back");
+	expect(
+		geometry.lines.some((line) =>
+			line.points.some((point) => point[0] === 2100),
+		),
+	).toBe(true);
+	const frames = geometry.lines.slice(-4);
+	expect(frames.map((line) => line.points)).toEqual([
+		[
+			[-500, 1000],
+			[500, 1000],
+		],
+		[
+			[500, 1000],
+			[500, 2000],
+		],
+		[
+			[500, 2000],
+			[-500, 2000],
+		],
+		[
+			[-500, 2000],
+			[-500, 1000],
+		],
+	]);
+	expect(
+		frames.every((line) => line.depths?.every((depth) => depth === -100)),
+	).toBe(true);
+	expect(
+		pickEntity([1100, 2100], [joined], new Map(), "front_to_back", 0, {
+			pan: [0, 0],
+			zoom: 1,
+		}),
+	).toBeNull();
+	expect(
+		pickEntity([3090, 2100], [joined], new Map(), "front_to_back", 0, {
+			pan: [0, 0],
+			zoom: 1,
+		})?.id,
+	).toBe(joined.id);
+});
+it("suppresses coplanar aperture-strip seams in joined wall elevations", () => {
+	const joined: CadEntity = {
+		...wall,
+		venueGeometry: {
+			...wall.venueGeometry!,
+			joinedWall: true,
+			elevation: [],
+			exterior: [
+				[
+					[-2000, 0, -100],
+					[2000, 0, -100],
+				],
+				[
+					[-2000, 3000, -100],
+					[2000, 3000, -100],
+				],
+			],
+		},
+	};
+	const lines = entityPlanGeometry(joined, undefined, "front_to_back").lines;
+	expect(lines.length).toBeGreaterThan(0);
+	expect(
+		lines.some(
+			({ points: [a, b] }) =>
+				Math.abs(a[0]) === 500 &&
+				a[0] === b[0] &&
+				Math.min(a[1], b[1]) === 0 &&
+				Math.max(a[1], b[1]) === 1000,
+		),
+	).toBe(false);
+	expect(
+		lines.some(
+			({ points: [a, b] }) =>
+				Math.abs(a[0]) === 500 &&
+				a[0] === b[0] &&
+				Math.min(a[1], b[1]) === 2000 &&
+				Math.max(a[1], b[1]) === 3000,
+		),
+	).toBe(false);
+});
+it("preserves a door's floor gap from the native joined exterior", () => {
+	const joined: CadEntity = {
+		...wall,
+		venueGeometry: {
+			joinedWall: true,
+			plan: [],
+			elevation: [],
+			exterior: [
+				[
+					[-2000, 0, -100],
+					[-500, 0, -100],
+				],
+				[
+					[500, 0, -100],
+					[2000, 0, -100],
+				],
+				[
+					[-500, 2100, -100],
+					[500, 2100, -100],
+				],
+			],
+			triangles: [
+				...strip(-2000, -500, 0, 3000),
+				...strip(500, 2000, 0, 3000),
+				...strip(-500, 500, 2100, 3000),
+			],
+		},
+	};
+	const lines = entityPlanGeometry(joined, undefined, "front_to_back").lines;
+	expect(
+		lines.some(
+			({ points: [a, b] }) =>
+				a[1] === 0 &&
+				b[1] === 0 &&
+				Math.min(a[0], b[0]) < 0 &&
+				Math.max(a[0], b[0]) > 0,
+		),
+	).toBe(false);
+	expect(
+		lines.some(({ points: [a, b] }) => a[1] === 2100 && b[1] === 2100),
+	).toBe(true);
+});
+it("keeps actual partial-height steps instead of replacing them with a bounding rectangle", () => {
+	const joined: CadEntity = {
+		...wall,
+		venueGeometry: {
+			joinedWall: true,
+			plan: [],
+			elevation: [],
+			exterior: [
+				[
+					[0, 1500, -100],
+					[0, 3000, -100],
+				],
+				[
+					[0, 1500, -100],
+					[2000, 1500, -100],
+				],
+			],
+			triangles: [...strip(-2000, 0, 0, 3000), ...strip(0, 2000, 0, 1500)],
+		},
+	};
+	const lines = entityPlanGeometry(joined, undefined, "front_to_back").lines;
+	expect(
+		lines.some(
+			({ points: [a, b] }) =>
+				a[0] === 0 &&
+				b[0] === 0 &&
+				Math.min(a[1], b[1]) === 1500 &&
+				Math.max(a[1], b[1]) === 3000,
+		),
+	).toBe(true);
+	expect(
+		lines.some(
+			({ points: [a, b] }) =>
+				a[0] === 0 && b[0] === 0 && Math.max(a[1], b[1]) <= 1500,
+		),
+	).toBe(false);
+});

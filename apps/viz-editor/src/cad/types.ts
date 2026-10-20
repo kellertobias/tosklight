@@ -44,6 +44,10 @@ export interface CadEntity {
 	/** How a generated Venue object is built; absent for fixtures and modelled objects. */
 	scenery?: CadScenery;
 	venueGeometry?: {
+		/** Contextual wall mesh; semantic elevations contain opening frames only. */
+		joinedWall?: boolean;
+		/** Actual joined exterior edges at the floor datum, with physical depth. */
+		exterior?: [[number, number, number], [number, number, number]][];
 		triangles: [number[], number[], number[]][];
 		plan: [[number, number], [number, number]][];
 		elevation?: [[number, number, number], [number, number, number]][];

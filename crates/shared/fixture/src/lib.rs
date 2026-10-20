@@ -45,8 +45,8 @@ pub use scenery_options::*;
 pub use venue_architecture::*;
 pub use venue_drawing::venue_wall_drawing;
 pub use venue_geometry::{
-    VenueGeometry, VenueRoom, VenueStairVolume, VenueWallRun, venue_floor_slab, venue_geometry,
-    venue_geometry_in_context, venue_rooms, venue_stair_volume,
+    VenueGeometry, VenueRoom, VenueStairVolume, VenueWallPlacement, VenueWallRun, venue_floor_slab,
+    venue_geometry, venue_geometry_in_context, venue_joined_walls, venue_rooms, venue_stair_volume,
 };
 
 #[cfg(test)]

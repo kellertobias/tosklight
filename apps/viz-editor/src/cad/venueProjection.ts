@@ -7,6 +7,7 @@ import {
 	rotateModelPoint,
 } from "./projection";
 import type { CadDrawing, CadEntity, CadViewDirection } from "./types";
+import { projectVenueLines } from "./venueProjectionLines";
 export function venuePlanGeometry(
 	entity: CadEntity,
 	view: CadViewDirection,
@@ -63,7 +64,12 @@ export function venuePlanGeometry(
 			) as [PlanPoint, PlanPoint],
 		}));
 	}
-	if (view !== "top_down" && geometry.elevation?.length) {
+	if (view !== "top_down" && geometry.joinedWall && geometry.exterior)
+		result.lines = projectVenueLines(entity, view, geometry.exterior);
+	if (
+		view !== "top_down" &&
+		(geometry.elevation?.length || geometry.joinedWall)
+	) {
 		const horizontal = projectModelPoint(
 			rotateModelPoint([1, 0, 0], entity.rotationDegrees),
 			view,
@@ -82,22 +88,15 @@ export function venuePlanGeometry(
 				view,
 			);
 			const faceZ = ((normalDepth <= 0 ? 1 : -1) * thickness) / 2;
-			result.lines = geometry.elevation.map((line) => {
-				const points = line.map(([x, y, z]) =>
-					rotateModelPoint([x, y, z + faceZ], entity.rotationDegrees),
-				) as [[number, number, number], [number, number, number]];
-				return {
-					points: points.map((point) => projectModelPoint(point, view)) as [
-						PlanPoint,
-						PlanPoint,
-					],
-					depths: points.map((point) => modelDepth(point, view)) as [
-						number,
-						number,
-					],
-				};
-			});
-			result.outlines = [];
+			const physicalLines = geometry.joinedWall ? result.lines : [];
+			const semanticLines = projectVenueLines(
+				entity,
+				view,
+				geometry.elevation ?? [],
+				faceZ,
+			);
+			result.lines = [...physicalLines, ...semanticLines];
+			if (!geometry.joinedWall) result.outlines = [];
 		}
 	}
 	return result;

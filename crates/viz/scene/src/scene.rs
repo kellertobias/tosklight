@@ -102,7 +102,6 @@ impl Scene {
             bounds
         }
     }
-
     pub fn recompute_bounds(&mut self) {
         let mut bounds = Aabb::empty();
         for fixture in self.fixtures.iter().filter(|fixture| !fixture.invisible) {
@@ -115,6 +114,7 @@ impl Scene {
             bounds.expand(object.position - object.size * 0.5);
             bounds.expand(object.position + object.size * 0.5);
         }
+        crate::venue_bounds::expand_joined(&mut bounds, &self.scenery);
         for object in &self.physics_scenery {
             bounds.expand(object.scenery.position - object.scenery.size * 0.5);
             bounds.expand(object.scenery.position + object.scenery.size * 0.5);

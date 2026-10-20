@@ -8,7 +8,7 @@ pub(crate) fn push(
     style: &FrameStyle,
     hidden: bool,
 ) {
-    push_context(frame, object, style, hidden, &[]);
+    push_context(frame, object, style, hidden, &[], None);
 }
 fn push_context(
     frame: &mut FrameInstances,
@@ -16,18 +16,36 @@ fn push_context(
     style: &FrameStyle,
     hidden: bool,
     stairs: &[light_fixture::VenueStairVolume],
+    joined: Option<&light_fixture::VenueGeometry>,
 ) {
     let Some(architecture) = &object.architecture else {
         return;
     };
-    let Ok(geometry) = light_fixture::venue_geometry_in_context(
-        architecture,
-        object.size.as_dvec3().to_array().map(|v| v * 1000.0),
-        millimetre_pose(object),
-        stairs,
-    ) else {
-        return;
+    let generated;
+    let geometry = if let Some(joined) = joined {
+        joined
+    } else {
+        let Ok(result) = light_fixture::venue_geometry_in_context(
+            architecture,
+            object.size.as_dvec3().to_array().map(|v| v * 1000.0),
+            millimetre_pose(object),
+            stairs,
+        ) else {
+            return;
+        };
+        generated = result;
+        &generated
     };
+    push_geometry(frame, object, style, hidden, architecture, geometry);
+}
+fn push_geometry(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    style: &FrameStyle,
+    hidden: bool,
+    architecture: &VenueArchitecture,
+    geometry: &light_fixture::VenueGeometry,
+) {
     let pose =
         Mat4::from_rotation_translation(euler_degrees(object.rotation_degrees), object.position);
     if !style.scenery_surfaces {
@@ -46,6 +64,16 @@ fn push_context(
                                 0.0,
                                 p[1] as f32 * 0.001,
                             ))
+                        })
+                    })
+                    .collect()
+            } else if geometry.joined_wall {
+                geometry
+                    .exterior
+                    .iter()
+                    .map(|edge| {
+                        edge.map(|p| {
+                            pose.transform_point3(Vec3::from_array(p.map(|v| v as f32 * 0.001)))
                         })
                     })
                     .collect()
@@ -158,6 +186,7 @@ fn push_context(
         );
     }
 }
+
 fn draw_triangle(
     frame: &mut FrameInstances,
     triangle: [[f64; 3]; 3],
@@ -261,6 +290,7 @@ pub(crate) fn push_all(frame: &mut FrameInstances, objects: &[SceneryObject], st
             )
         })
         .collect();
+    let joined = joins::resolve(objects);
     let rooms = rooms(objects);
     let mut hidden = std::collections::HashSet::new();
     if let Some(camera) = style.camera_position {
@@ -306,6 +336,7 @@ pub(crate) fn push_all(frame: &mut FrameInstances, objects: &[SceneryObject], st
             style,
             hidden.contains(&index) || roof_hidden,
             &stairs,
+            joined.get(&joins::key(index, object)),
         );
     }
     for room in rooms {
@@ -341,7 +372,7 @@ pub(crate) fn push_all(frame: &mut FrameInstances, objects: &[SceneryObject], st
         let roof_hidden = style.camera_position.is_some_and(|p| {
             p.y > room.floor + room.height || !inside(glam::Vec2::new(p.x, p.z), &room.outline)
         });
-        push_context(frame, &roof, style, roof_hidden, &stairs);
+        push_context(frame, &roof, style, roof_hidden, &stairs, None);
     }
 }
 #[cfg(test)]
@@ -384,3 +415,5 @@ pub(crate) fn apply_floor_cutouts(objects: &mut [SceneryObject]) {
         }
     }
 }
+
+mod joins;

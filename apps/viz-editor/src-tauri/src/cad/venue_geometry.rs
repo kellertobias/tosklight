@@ -5,6 +5,9 @@ use serde::Serialize;
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CadVenueGeometry {
+    pub joined_wall: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub exterior: Vec<[[f64; 3]; 2]>,
     pub triangles: Vec<[[f64; 3]; 3]>,
     pub plan: Vec<[[f64; 2]; 2]>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -22,6 +25,8 @@ pub fn for_fixture(patch: &PatchedFixturePatch, size: [f32; 3]) -> Option<CadVen
         f64::from(size[2]) / 2.0
     };
     Some(CadVenueGeometry {
+        joined_wall: false,
+        exterior: vec![],
         triangles: geometry
             .triangles
             .into_iter()
@@ -89,6 +94,8 @@ pub fn with_ceilings(mut entities: Vec<super::CadEntity>) -> Vec<super::CadEntit
         ceiling.position_millimetres = [0; 3];
         ceiling.rotation_degrees = [0.0; 3];
         ceiling.venue_geometry = Some(CadVenueGeometry {
+            joined_wall: false,
+            exterior: vec![],
             triangles: geometry.triangles,
             plan: geometry.plan,
             elevation: vec![],

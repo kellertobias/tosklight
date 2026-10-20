@@ -53,6 +53,7 @@ pub(super) fn build(g: &mut VenueGeometry, s: [f64; 3], openings: &[WallOpening]
         }
         panel(g, x0, x1, low, [s[1] / 2.0; 2], s[2]);
     }
+    g.wall_body_triangles = g.triangles.len();
     for o in openings {
         door_assembly(g, o, s);
         if matches!(o.opening, WallOpeningKind::Window { .. }) {
@@ -64,6 +65,7 @@ pub(super) fn build(g: &mut VenueGeometry, s: [f64; 3], openings: &[WallOpening]
             }
         }
     }
+    g.wall_plan_symbols = g.plan.len();
     // Top plan retains genuine door/window gaps rather than replacing them with a solid box.
     let mut plan_cuts = vec![-s[0] / 2.0, s[0] / 2.0];
     for o in openings {

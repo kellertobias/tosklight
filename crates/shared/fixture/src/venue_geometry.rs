@@ -4,6 +4,13 @@ use crate::*;
 
 #[derive(Clone, Debug, Default)]
 pub struct VenueGeometry {
+    pub(crate) wall_plan_symbols: usize,
+    pub(crate) wall_body_triangles: usize,
+    pub joined_wall: bool,
+    /// Physical exterior edges in local coordinates; omits coplanar ownership/triangulation seams.
+    pub exterior: Vec<[[f64; 3]; 2]>,
+    /// Semantic centre-plane window/door frames for a joined wall.
+    pub elevation: Vec<[[f64; 3]; 2]>,
     /// Context removed physical floor area; false preserves a legacy floor unchanged.
     pub has_stair_cutouts: bool,
     pub triangles: Vec<[[f64; 3]; 3]>,
@@ -188,6 +195,8 @@ fn triangulate(p: &[[f64; 2]]) -> Vec<[usize; 3]> {
     result
 }
 mod furniture;
+mod joins;
+pub use joins::{VenueWallPlacement, venue_joined_walls};
 mod rooms;
 mod stairs;
 pub use rooms::{VenueRoom, VenueWallRun, venue_rooms};

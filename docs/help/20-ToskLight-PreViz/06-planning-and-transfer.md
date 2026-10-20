@@ -752,6 +752,10 @@ A **Wall** has length, height and thickness. Its centre, length and angle determ
 nearest endpoint onto another endpoint within that distance, keeping its length and heading.
 Turn it off for a deliberate gap. **Wall colour** offers a colour picker and a six-digit **Wall colour hex** value; the colour is
 kept with that wall and its Undo/Redo history. New walls start neutral grey.
+Connected wall segments form a continuous corner in CAD plans, exported PDFs and 3D.
+Internal end caps are hidden at joins; doors and windows keep their own openings. Each
+segment remains individually selectable and keeps its own colour and construction settings.
+Moving or removing a neighbour rebuilds the join automatically.
 **Room ceiling height** sets the height used when walls enclose
 a room. If enclosing walls request different ceiling heights, the lowest requested height is used.
 
