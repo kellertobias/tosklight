@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 	withholdRuntime: false,
 	quitRequested: undefined as (() => void) | undefined,
 	cancelQuit: vi.fn(async () => undefined),
+	setCurrentWindowFullscreen: vi.fn(async () => undefined),
 	quitUnsubscribe: vi.fn(),
 	saveScreen: vi.fn(async () => undefined),
 	screens: null as {
@@ -59,6 +60,9 @@ vi.mock("./platform/desktop", () => ({
 }));
 const desktop = {
 	available: true,
+	currentWindowFullscreen: async () => true,
+	onCurrentWindowResized: async () => () => undefined,
+	setCurrentWindowFullscreen: mocks.setCurrentWindowFullscreen,
 	cancelQuit: mocks.cancelQuit,
 	onQuitCancelled: async () => () => undefined,
 	onQuitRequested: async (handler: () => void) => {
@@ -86,9 +90,6 @@ vi.mock("./components/shell/LeftDock", () => ({
 }));
 vi.mock("./components/shell/WorkspaceView", () => ({
 	WorkspaceView: () => <div data-testid="workspace" />,
-}));
-vi.mock("./components/shell/NativeDragStrip", () => ({
-	NativeDragStrip: () => null,
 }));
 vi.mock("./features/screens/ScreenPlaybackSection", () => ({
 	ScreenPlaybackSection: () => <div data-testid="screen-playbacks" />,
@@ -150,6 +151,7 @@ describe("ScreenApp", () => {
 		mocks.withholdRuntime = false;
 		mocks.quitRequested = undefined;
 		mocks.cancelQuit.mockClear();
+		mocks.setCurrentWindowFullscreen.mockClear();
 		mocks.quitUnsubscribe.mockClear();
 		mocks.saveScreen.mockClear();
 		mocks.screens = null;
@@ -205,6 +207,33 @@ describe("ScreenApp", () => {
 			"removed or this browser link is not authorized",
 		);
 		expect(screen.queryByTestId("screen-surface")).not.toBeInTheDocument();
+	});
+
+	it.each([true, false])("places fullscreen exit with the dock when show_dock=%s", async (showDock) => {
+		mocks.screens = {
+			screens: [configuredScreen({ content: { type: "desktop" }, show_dock: showDock })],
+			programmer_control_surface: { owner_screen_id: null, visible_encoders: 6 },
+		};
+		const { container, rerender } = render(<ScreenApp id="screen-1" />);
+		const exit = await screen.findByRole("button", { name: "Exit fullscreen" });
+		const strip = container.querySelector(".native-drag-strip")!;
+		expect(strip.classList.contains("native-drag-strip-compact-fullscreen")).toBe(!showDock);
+		expect(exit.textContent).toBe(showDock ? "Exit fullscreen" : "");
+		expect(!!screen.queryByTestId("left-dock")).toBe(showDock);
+		expect(screen.getAllByRole("button", { name: "Exit fullscreen" })).toHaveLength(1);
+		mocks.screens.screens[0] = { ...mocks.screens.screens[0], show_dock: !showDock };
+		rerender(<ScreenApp id="screen-1" />);
+		expect(strip.classList.contains("native-drag-strip-compact-fullscreen")).toBe(showDock);
+		expect(exit.textContent).toBe(showDock ? "" : "Exit fullscreen");
+		expect(mocks.setCurrentWindowFullscreen).not.toHaveBeenCalled();
+		fireEvent.click(exit);
+		expect(mocks.setCurrentWindowFullscreen).toHaveBeenCalledWith(false);
+		await screen.findByRole("button", { name: "Enter fullscreen" });
+		// Changing dock visibility must preserve the current native window state.
+		mocks.screens.screens[0] = { ...mocks.screens.screens[0], show_dock: !showDock };
+		rerender(<ScreenApp id="screen-1" />);
+		expect(screen.getByRole("button", { name: "Move window" })).toBeVisible();
+		expect(mocks.setCurrentWindowFullscreen).toHaveBeenCalledTimes(1);
 	});
 
 	it("renders fixed content without hydrating a Desktop or exposing Desktop chrome", () => {

@@ -77,7 +77,9 @@ the main screen: the Dock reaches down to it and no further.
 
 Each optional screen can also select a physical display and enter native fullscreen. Native
 fullscreen controls the application window on the physical display; **Fixed full-screen pane**
-controls the content inside that window. Its **Playbacks** tab provides the same row controls as
+controls the content inside that window. With **Show Dock** enabled, **Exit fullscreen** sits at
+the top of the Dock, as on the main screen. With the Dock hidden, a compact **Exit fullscreen**
+control stays in the upper-right corner. Its **Playbacks** tab provides the same row controls as
 the default screen's **Configure Playbacks** dialog and also selects its **Page source**.
 **Own page** keeps an independently changeable page, **Pinned page** stays on the chosen page, and
 **Follow surface** tracks another named surface. Follow chains cannot contain a cycle. All surfaces

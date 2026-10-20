@@ -80,7 +80,7 @@ function DesktopScreenSurface({
 		<div
 			className={`screen-shell ${screen.show_dock ? "with-dock" : ""} ${showScreenControls ? "with-playbacks" : ""} ${programmerOwner ? "with-control" : ""}`}
 		>
-			<NativeDragStrip compactFullscreen />
+			<NativeDragStrip compactFullscreen={!screen.show_dock} />
 			{screen.show_dock && <LeftDock />}
 			<WorkspaceView />
 			{(showScreenControls || programmerOwner) && (
