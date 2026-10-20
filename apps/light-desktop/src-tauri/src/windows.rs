@@ -15,6 +15,12 @@ pub(crate) fn set_current_window_fullscreen(
     window: tauri::Window,
     fullscreen: bool,
 ) -> Result<(), String> {
+    // A second queued borderless entry can clear AppKit's FullScreen style while the
+    // previous transition is still active. Tao already records the requested state.
+    #[cfg(target_os = "macos")]
+    if window.is_fullscreen().map_err(|error| error.to_string())? == fullscreen {
+        return Ok(());
+    }
     #[cfg(target_os = "windows")]
     let monitor = if fullscreen {
         window
@@ -78,6 +84,21 @@ fn window_bounds(value: &serde_json::Value) -> Option<WindowBounds> {
         width: value.get("width")?.as_f64()?.max(640.0),
         height: value.get("height")?.as_f64()?.max(480.0),
     })
+}
+
+#[derive(Debug, PartialEq)]
+struct WindowUpdate {
+    apply_placement: bool,
+    fullscreen: Option<bool>,
+}
+
+/// Metadata/attachment reconciliation must be inert for an already-fullscreen window.
+/// On exit, let AppKit restore its saved window frame before any later placement update.
+fn window_update(current_fullscreen: bool, requested_fullscreen: bool) -> WindowUpdate {
+    WindowUpdate {
+        apply_placement: !current_fullscreen,
+        fullscreen: (current_fullscreen != requested_fullscreen).then_some(requested_fullscreen),
+    }
 }
 
 /// Where a screen window finds the desk it joins; read by the web interface of that window.
@@ -170,41 +191,46 @@ pub(crate) fn open_console_screen(
         window
             .set_title(&title)
             .map_err(|error| error.to_string())?;
-        if window.is_fullscreen().map_err(|error| error.to_string())? {
-            window
-                .set_fullscreen(false)
-                .map_err(|error| error.to_string())?;
-        }
-        if let Some(value) = bounds {
-            if let Some(bounds) = window_bounds(&value) {
+        let update = window_update(
+            window.is_fullscreen().map_err(|error| error.to_string())?,
+            fullscreen,
+        );
+        // Fullscreen bounds are persisted by the screen itself. Applying them as new
+        // windowed placement must not exit and re-enter fullscreen on every resize save.
+        if update.apply_placement {
+            if let Some(value) = bounds {
+                if let Some(bounds) = window_bounds(&value) {
+                    window
+                        .set_position(LogicalPosition::new(bounds.x, bounds.y))
+                        .map_err(|error| error.to_string())?;
+                    window
+                        .set_size(LogicalSize::new(bounds.width, bounds.height))
+                        .map_err(|error| error.to_string())?;
+                }
+            } else if let Some(monitor) = app
+                .available_monitors()
+                .map_err(|error| error.to_string())?
+                .iter()
+                .find(|monitor| {
+                    display_id
+                        .as_ref()
+                        .is_some_and(|id| monitor_id(monitor) == *id)
+                })
+            {
+                let position = monitor.position();
                 window
-                    .set_position(LogicalPosition::new(bounds.x, bounds.y))
-                    .map_err(|error| error.to_string())?;
-                window
-                    .set_size(LogicalSize::new(bounds.width, bounds.height))
+                    .set_position(LogicalPosition::new(
+                        f64::from(position.x) + 20.0,
+                        f64::from(position.y) + 20.0,
+                    ))
                     .map_err(|error| error.to_string())?;
             }
-        } else if let Some(monitor) = app
-            .available_monitors()
-            .map_err(|error| error.to_string())?
-            .iter()
-            .find(|monitor| {
-                display_id
-                    .as_ref()
-                    .is_some_and(|id| monitor_id(monitor) == *id)
-            })
-        {
-            let position = monitor.position();
+        }
+        if let Some(fullscreen) = update.fullscreen {
             window
-                .set_position(LogicalPosition::new(
-                    f64::from(position.x) + 20.0,
-                    f64::from(position.y) + 20.0,
-                ))
+                .set_fullscreen(fullscreen)
                 .map_err(|error| error.to_string())?;
         }
-        window
-            .set_fullscreen(fullscreen)
-            .map_err(|error| error.to_string())?;
         if !window.is_visible().map_err(|error| error.to_string())? {
             window.show().map_err(|error| error.to_string())?;
         }
@@ -282,7 +308,7 @@ pub(crate) fn open_console_screen(
 
 #[cfg(test)]
 mod tests {
-    use super::{WindowBounds, attachment_script, window_bounds};
+    use super::{WindowBounds, WindowUpdate, attachment_script, window_bounds, window_update};
     use serde_json::json;
 
     fn attachment() -> serde_json::Value {
@@ -328,6 +354,48 @@ mod tests {
         assert_eq!(
             attachment_script(&json!({"server_url": "http://desk", "session": {}}), true),
             None
+        );
+    }
+
+    #[test]
+    fn fullscreen_resize_and_attachment_reconciliation_never_queues_an_exit_or_reentry() {
+        for _ in 0..4 {
+            assert_eq!(
+                window_update(true, true),
+                WindowUpdate {
+                    apply_placement: false,
+                    fullscreen: None,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn leaving_fullscreen_queues_one_exit_without_mutating_the_frame_during_transition() {
+        assert_eq!(
+            window_update(true, false),
+            WindowUpdate {
+                apply_placement: false,
+                fullscreen: Some(false),
+            }
+        );
+        assert_eq!(
+            window_update(false, false),
+            WindowUpdate {
+                apply_placement: true,
+                fullscreen: None,
+            }
+        );
+    }
+
+    #[test]
+    fn entering_fullscreen_places_the_window_then_queues_only_one_entry() {
+        assert_eq!(
+            window_update(false, true),
+            WindowUpdate {
+                apply_placement: true,
+                fullscreen: Some(true),
+            }
         );
     }
 
